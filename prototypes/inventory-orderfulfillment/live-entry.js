@@ -6,6 +6,7 @@ import { mountSalesConfirmationTransport } from './sales-confirmation-transport.
 import { fulfillmentCardQueries, readItemPage } from './paged-source.mjs';
 import { mountOrganizationFilter, organizationSelection } from './organization-filter.js';
 import { configuredQueryFreshAfter } from '../../business/shared/query-cache.ts';
+import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
 import { ready, call, publish, reportElements, action } from '../../business/shared/channel.js';
 import { keepPageObservation } from '../../business/shared/page-observation.js';
 import { quotePage } from '../../src/page-interaction/quote.ts';
@@ -234,7 +235,7 @@ for (const button of document.querySelectorAll('[role="tab"][aria-controls]'))
     activateTab(button);
     saveView();
     if (connected && (button.dataset.fulfillmentDimension || button.dataset.itemProgressTab)) void load();
-    else if(connected&&activeRead?.complete&&currentResults)renderGrantedDetails(currentResults);
+    else if(connected&&activeRead?.current()&&currentResults)renderGrantedDetails(currentResults);
   });
 function saveView() {
   view.update({
@@ -906,7 +907,7 @@ let itemController;
 const itemPages={inventory:{page:1,size:20},coordination:{page:1,size:20,base:null,search:null}};
 let itemPageKey='';
 async function loadItemPage(kind, patch={}) {
-  if(!activeRead?.complete||!activeRead.current())return;
+  if(!activeRead?.pageReady||!activeRead.current())return;
   Object.assign(itemPages[kind],patch);
   const selected=selectedFilters(), options=itemPages[kind];
   const key=JSON.stringify([selected,kind,options]);
@@ -915,12 +916,14 @@ async function loadItemPage(kind, patch={}) {
   itemController?.abort();
   const controller=itemController=new AbortController();
   const signal=AbortSignal.any([controller.signal,activeRead.signal]);
+  const timing = startDashboardTiming('order-fulfillment-item', signal);
   const body=kind==='inventory'?$('itemInventoryPanel').querySelector('tbody'):$('itemCoordinationTable').tBodies[0];
   placeholder(body,'正在读取当前页…');
   try {
     const paint=(result,ages=null,owners=null)=>{
       if(signal.aborted||!activeRead.current())return;
       if(result.configVersion!==activeRead.version)throw Error('QUERY_CONFIG_CHANGED');
+      timing.mark('page-ready');
       if(kind==='inventory')renderInventory(result,ages,owners);
       else renderCoordination({...result,baseOptions:[...new Set([...filterCatalog.values()].map(row=>row.belong_base).filter(Boolean))]});
       const analysis=document.querySelector('.item-analysis');
@@ -931,8 +934,10 @@ async function loadItemPage(kind, patch={}) {
     const page=await readItemPage(reader,selected,{...options,signal,inventory:kind==='inventory',onPage:result=>paint(result)});
     if(signal.aborted||!activeRead.current())return;
     paint(page.result,page.ages?.status==='fulfilled'?page.ages.value:null,page.owners?.status==='fulfilled'?page.owners.value:null);
+    timing.finish();
     if(snapshot){snapshot={...snapshot,dimension,detailPage:{kind,page:page.result.page,size:page.result.size,total:page.result.total,rows:page.result.rows,scope:'当前授权与筛选范围的一页；不用于全量卡片计算'}};void publish(snapshot,{signal}).catch(()=>{});}
   } catch(error) {
+    timing.finish(signal.aborted ? 'cancelled' : 'failed');
     if(!signal.aborted){itemPageKey='';placeholder(body,issue(error));}
   }
 }
@@ -954,13 +959,15 @@ async function loadFutureProduction(){
 async function load() {
   const selected = selectedFilters();
   const key = JSON.stringify(selected);
-  if (activeRead?.key === key && activeRead.current()) {if(activeRead.complete&&currentResults){currentDetailData=null;renderGrantedDetails(currentResults);}return ensureItemPage();}
+  if (activeRead?.key === key && activeRead.current()) {if(currentResults){currentDetailData=null;renderGrantedDetails(currentResults);}return ensureItemPage();}
   const task = owner.begin();
+  const timing = startDashboardTiming('order-fulfillment', task.signal);
   itemController?.abort();itemPageKey='';currentResults=null;
   for(const value of Object.values(itemPages))value.page=1;
-  activeRead = { key, current: task.current, signal:task.signal, complete:false };
+  activeRead = { key, current: task.current, signal:task.signal, complete:false, timing };
   clear();
   if (!connected || !reader) {
+    timing.finish('unavailable');
     status.textContent = reader ? '等待工作台连接' : '缺少受控查询配置';
     return;
   }
@@ -968,14 +975,14 @@ async function load() {
   const ids = fulfillmentCardQueries;
   const optionFilters = {...selected,base:null,region:null,province:null,sales_group:null,channel:null,customer:null,order:null,sku:null,carrier:null};
   if(!filterCatalogLoaded && JSON.stringify(optionFilters)!==JSON.stringify(selected)) {
-    void reader.all('orders.filters',optionFilters,{signal:task.signal}).then(result=>{if(task.current()){updateSourceFilters(result.rows);filterCatalogLoaded=true;}}).catch(()=>{});
+    void reader.all('orders.filters',optionFilters,{signal:task.signal,priority:-10}).then(result=>{if(task.current()){updateSourceFilters(result.rows);filterCatalogLoaded=true;}}).catch(()=>{});
   } else if(JSON.stringify(optionFilters)===JSON.stringify(selected)) filterCatalogLoaded=true;
   const progressive = {};
   const settled = await Promise.allSettled(
     ids.map(async (id) => {
       try {
         const value = await (id==='orders.facts'||id==='execution.trace'||id==='trace.detail'||id==='shortage.detail'||id==='sku.detail'||id==='sku.age'||id==='sku.owners'
-          ? reader.all(id,selected,{signal:task.signal}) : id.endsWith('.summary')
+          ? reader.all(id,selected,{signal:task.signal,priority:id==='orders.facts'?10:0}) : id.endsWith('.summary')
           ? reader.summary(id, selected, task.signal)
           : reader.collection(id, selected, {
               signal: task.signal,
@@ -997,8 +1004,18 @@ async function load() {
           clear('配置已变化，请重新查询');
           return value;
         }
-        if (progressive['orders.summary'])
+        activeRead.version = versions[0];
+        activeRead.pageReady = true;
+        currentResults = progressive;
+        if (progressive['orders.summary']) {
           renderSummary(progressive, selected);
+          timing.mark('summary-ready');
+        }
+        if (progressive['orders.facts']) {
+          renderGrantedDetails(progressive);
+          timing.mark('orders-ready');
+        }
+        void ensureItemPage();
         return value;
       } catch (reason) {
         if (task.current()) progressive[id] = { status: 'rejected', reason };
@@ -1015,6 +1032,7 @@ async function load() {
     .filter((x) => x.status === 'fulfilled')
     .map((x) => x.value.configVersion);
   if (new Set(versions).size > 1) {
+    owner.invalidate();
     clear('配置已变化，请重新查询');
     return;
   }
@@ -1022,6 +1040,7 @@ async function load() {
   renderSummary(results, selected);
   const {facts,comparison}=renderGrantedDetails(results);
   activeRead.complete=true;activeRead.version=versions[0];
+  activeRead.pageReady=true;
   void ensureItemPage();
   snapshot = {
     source: localPreview ? 'direct-doris' : 'gea-governed-sql',
@@ -1066,6 +1085,7 @@ async function load() {
     sourceGaps: config.sourceGaps,
   };
   const failures = settled.filter((x) => x.status === 'rejected');
+  timing.finish(failures.length ? 'partial' : 'complete');
   status.textContent =
     (localPreview
       ? '数据库真实数据 · 本地只读 · 未验GEA用户权限'

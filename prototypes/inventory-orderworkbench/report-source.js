@@ -1,6 +1,7 @@
-import { applyPeriodAttributions } from './period-attributions.mjs';
+import { applyPeriodAttributions, collectDirectorMembers } from './period-attributions.mjs';
 import { createAgentQueries } from '../../business/shared/agent-query.ts';
 import { workbenchQueries } from '../../business/inventory-orderworkbench/queries.mjs';
+import { decodeScalarArray, unpackRowPackets } from '../../business/shared/row-packets.mjs';
 import {
   computeWorkbenchMetrics, dayOffset, reportPeriods, metricCalculationVersion,
 } from './metric-model.mjs';
@@ -56,11 +57,28 @@ export function decodeWorkbenchTuple(value, count) {
 export async function loadWorkbenchReport(start, end, signal, options = {}) {
   const client = createAgentQueries(config, options.execute);
   const specs = reportPeriods(start, end, options.now);
-  const read = async (name, values) => {
+  const reads = new Map();
+  const read = async (name, values, priority = 0) => {
+    signal?.throwIfAborted();
+    const key = JSON.stringify([name, Object.entries(values).sort(([a], [b]) => a.localeCompare(b))]);
+    if (!reads.has(key)) {
+      const pending = readSource(name, values, priority).catch(error => {
+        reads.delete(key);
+        throw error;
+      });
+      reads.set(key, pending);
+    }
+    const rows = await reads.get(key);
+    signal?.throwIfAborted();
+    return structuredClone(rows);
+  };
+  const readSource = async (name, values, priority) => {
     signal?.throwIfAborted();
     const definition = workbenchQueries[name],
-      id = 'workbench.' + name.toLowerCase()+(options.summary && ['orders','stock','ages','ontime'].includes(name)?'.summary':'');
-    const summarized=id.endsWith('.summary');
+      logicalId = 'workbench.' + name.toLowerCase()+(options.summary && ['orders','stock','ages','ontime'].includes(name)?'.summary':'');
+    const summarized=logicalId.endsWith('.summary');
+    const packeted = (summarized && name === 'stock') || (options.summary && name === 'directors');
+    const id = logicalId + (packeted ? '.packets' : '');
     if(summarized)values={...values,period_start:values.period_start??values.start,period_end:values.period_end??values.end_exclusive,owner_start:values.period_start??values.start,owner_end:values.period_end??values.end_exclusive};
     const result = definition.keys
       ? await client.readAll(
@@ -68,17 +86,21 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
           { ...values, report_base: options.base ?? '', page_size: 200, offset: 0 },
           {
             signal,
-            keyFields: summarized?(name==='ontime'?['base','invalid','ontime']:['base','category','item','director','names']):definition.keys,
-            requiredColumns: summarized?config.queries[id].resultColumns:definition.columns,
+            priority,
+            keyFields: packeted?['packet_index']:summarized?(name==='ontime'?['base','invalid','ontime']:['base','category','item','director','names']):definition.keys,
+            requiredColumns: packeted||summarized?config.queries[id].resultColumns:definition.columns,
             singlePageFirst: true,
           },
         )
       : await client.read(
           id,
           { ...values, report_base: options.base ?? '' },
-          { signal, requiredColumns: definition.columns },
+          { signal, priority, requiredColumns: definition.columns },
         );
-    const rows = name === 'ontime' && summarized ? result.rows.flatMap((row) => {
+    const sourceRows = packeted ? unpackRowPackets(result.rows,
+      config.queries[name === 'directors'?'workbench.directormembers':logicalId].resultColumns,
+      name === 'directors' ? ['base','sku','director_value','item_value'] : ['base','category','item','director','names']) : result.rows;
+    const rows = name === 'ontime' && summarized ? sourceRows.flatMap((row) => {
       const packed = typeof row.packed_orders === 'string' ? JSON.parse(row.packed_orders) : row.packed_orders;
       if (!Array.isArray(packed)) throw Object.assign(Error('准交订单分组不完整'), {code:'INVALID_ORDER_PACKETS'});
       return packed.map(order => {
@@ -87,7 +109,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
         const [order_no,customer,arrival_date,...member] = tuple;
         return {order_no,customer,arrival_date,invalid:row.invalid,ontime:row.ontime,members:[member]};
       });
-    }) : result.rows;
+    }) : sourceRows;
     const normalized = rows.map((row) =>
       Object.fromEntries(
         Object.entries(row).map(([key, value]) => [
@@ -101,6 +123,9 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
         ]),
       ),
     );
+    if (name === 'directors' && packeted) return collectDirectorMembers(normalized);
+    if (name === 'directors') return normalized.map(row => row.director_encoding === 'nullable-utf8-v1'
+      ? {...row,directors:decodeScalarArray(row.directors)} : row);
     if (name !== 'ontime') return normalized;
     return normalized.flatMap((row) => {
       let members;
@@ -137,11 +162,11 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   // Share only a fully validated collection inside this one identity-bound load.
   // Each period gets its own rows because its product-item mapping may differ.
   const batchSnapshots = new Map();
-  const readBatchSnapshot = async (values) => {
+  const readBatchSnapshot = async (values, priority) => {
     signal?.throwIfAborted();
     const key = JSON.stringify(values);
     if (!batchSnapshots.has(key)) {
-      const pending = read('ages', values).catch((error) => {
+      const pending = read('ages', values, priority).catch((error) => {
         batchSnapshots.delete(key);
         throw error;
       });
@@ -153,6 +178,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   };
   const load = async (spec, name) => {
     const values = { start: spec.start, end_exclusive: spec.end };
+    const priority = name === specs.selected ? 10 : -10;
     if (spec.start >= spec.end)
       return { ...spec, sections: [], metrics: computeWorkbenchMetrics({ ...spec, sections: [] }) };
     const pending = ['orders', 'ontime', 'changes', 'stock', 'ages', 'directors'].map((id) => ({
@@ -175,18 +201,18 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
             return read(id, {
               start: dayOffset(spec.end, -1).slice(0, 7) + '-01',
               end_exclusive: spec.end,
-            });
-          if (id !== 'ages') return read(id, values);
+            }, priority);
+          if (id !== 'ages') return read(id, values, priority);
           const dates = await read('ageDate', {
             start: spec.start.replaceAll('-', ''),
             end_exclusive: (spec.inventoryEnd ?? spec.end).replaceAll('-', ''),
-          });
+          }, priority);
           const raw = dates[0]?.day;
           if (!raw) return [];
           if (!/^\d{8}$/.test(raw))
             throw Object.assign(Error('快照日期无效'), { code: 'INVALID_SNAPSHOT' });
           const snapshot = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
-          return readBatchSnapshot({ start: raw, age_cutoff: dayOffset(snapshot, -60), snapshot,mapping_start:snapshot.slice(0,7)+'-01',mapping_end:dayOffset(snapshot,1),...(options.summary?{period_start:spec.start,period_end:spec.end}: {}) });
+          return readBatchSnapshot({ start: raw, snapshot,mapping_start:snapshot.slice(0,7)+'-01',mapping_end:dayOffset(snapshot,1),...(options.summary?{period_start:spec.start,period_end:spec.end}: {}) }, priority);
         }).then(part => { pending[pending.findIndex(item => item.id === id)] = part; update(); return part; }),
       ),
     ), options.summary ? null : section('directors', () => read('directors', values)),
@@ -220,10 +246,9 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   });
   const progress = () => {
     signal?.throwIfAborted();
-    options.onProgress?.(snapshot());
+    if (periods[selected]) options.onProgress?.(snapshot());
   };
-  periods[selected] = await load(specs[selected], selected);
-  progress();
+  const selectedLoad = load(specs[selected], selected).then(period => {periods[selected]=period;progress();});
   const entries = Object.entries(specs).filter(
     ([name]) => name !== 'selected' && name !== selected,
   );
@@ -231,8 +256,9 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   const loadMetadata = async () =>
     Promise.all(
       ['directors', 'customers', 'customerManagers'].map(async (id) => {
+        const range = id === 'directors' ? specs.month : specs[selected];
         metadata[id] = await section(id, () =>
-          read(
+          range.start >= range.end ? [] : read(
             id,
             id === 'directors'
               ? { start: specs.month.start, end_exclusive: specs.month.end }
@@ -244,6 +270,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     );
   let next = 0;
   await Promise.all([
+    selectedLoad,
     loadMetadata(),
     ...Array.from({ length: 2 }, async () => {
       while (next < entries.length) {
@@ -259,18 +286,21 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
 export async function loadWorkbenchSkuPage(start,end,category,page,signal,base='',options={}) {
  const client=createAgentQueries(config,options.execute);
  const periods=reportPeriods(start,end,options.now);
- const dates=await client.read('workbench.agedate',{start:start.replaceAll('-',''),end_exclusive:(periods[periods.selected].inventoryEnd??end).replaceAll('-',''),report_base:base},{signal,requiredColumns:['day']});
+ const dates=await client.read('workbench.agedate',{start:start.replaceAll('-',''),end_exclusive:(periods[periods.selected].inventoryEnd??end).replaceAll('-',''),report_base:base},{signal,priority:20,requiredColumns:['day']});
  const raw=dates.rows[0]?.day??'';
  if(raw&&!/^\d{8}$/.test(raw))throw Error('INVALID_SNAPSHOT');
  const snapshot=raw?`${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`:start;
- const values={start,end_exclusive:end,report_base:base,period_start:start,period_end:end,owner_start:start,owner_end:end,batch_start:raw||'00000000',age_cutoff:dayOffset(snapshot,-60),snapshot,mapping_start:snapshot.slice(0,7)+'-01',mapping_end:dayOffset(snapshot,1),category,page_size:20,offset:page*20,sku_page_size:20,sku_offset:page*20};
+ const values={start,end_exclusive:end,report_base:base,period_start:start,period_end:end,owner_start:start,owner_end:end,batch_start:raw||'00000000',snapshot,mapping_start:snapshot.slice(0,7)+'-01',mapping_end:dayOffset(snapshot,1),category,page_size:20,offset:page*20,sku_page_size:20,sku_offset:page*20};
  const pick=(id,input=values)=>Object.fromEntries(Object.values(config.queries[id].parameterSpec).map(spec=>[spec.name,input[spec.name]]));
- const keys=await client.read('workbench.sku.keys',pick('workbench.sku.keys'),{signal,requiredColumns:['base','sku']});
- const count=await client.read('workbench.sku.keys.count',pick('workbench.sku.keys.count'),{signal,requiredColumns:['total']});
+ const [keys,count]=await Promise.all([
+  client.read('workbench.sku.keys',pick('workbench.sku.keys'),{signal,priority:20,requiredColumns:['base','sku']}),
+  client.read('workbench.sku.keys.count',pick('workbench.sku.keys.count'),{signal,priority:20,requiredColumns:['total']}),
+ ]);
  const total=Number(count.rows[0]?.total);
  if(!Number.isSafeInteger(total)||total<0||keys.rows.length!==Math.max(0,Math.min(20,total-page*20))||keys.configVersion!==count.configVersion)throw Error('SKU_PAGE_INCOMPLETE');
+ if(dates.configVersion!==keys.configVersion)throw Error('QUERY_CONFIG_CHANGED');
  const sections=await Promise.all(['orders','stock','ages'].map(async id=>{
-  const result=await client.readAll('workbench.'+id+'.page',pick('workbench.'+id+'.page',{...values,page_size:200,offset:0}),{signal,keyFields:workbenchQueries[id].keys,requiredColumns:workbenchQueries[id].columns,singlePageFirst:true});
+  const result=await client.readAll('workbench.'+id+'.page',pick('workbench.'+id+'.page',{...values,page_size:200,offset:0}),{signal,priority:20,keyFields:workbenchQueries[id].keys,requiredColumns:workbenchQueries[id].columns,singlePageFirst:true});
   if(result.configVersion!==keys.configVersion)throw Error('QUERY_CONFIG_CHANGED');
   return{id,status:'ready',rows:result.rows};
  }));

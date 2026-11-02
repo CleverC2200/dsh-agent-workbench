@@ -123,11 +123,11 @@ test('all inventory is the numerator, never silently replaced with available sto
   assert.match(workbenchQueries.stock.sql, /b.inventory IS NULL/);
 });
 
-test('factory and rented warehouses share the age scope and unknown production dates invalidate age', () => {
+test('factory and rented warehouses share the Hive age scope and unknown source ages invalidate age', () => {
   assert.match(workbenchQueries.ages.sql, /warehouse_classify IN \('01','02'\)/);
   assert.match(workbenchQueries.ageDate.sql, /warehouse_classify IN \('01','02'\)/);
-  assert.match(workbenchQueries.ages.sql, /SUM\(b.live_qty\) AS stock_qty/);
-  assert.match(workbenchQueries.ages.sql, /CAST\(b.prod_date AS DATE\) IS NULL OR/);
+  assert.match(workbenchQueries.ages.sql, /SUM\(b.inv_qty\) AS stock_qty/);
+  assert.match(workbenchQueries.ages.sql, /b.age_days IS NULL OR b.age_days<0/);
   assert.match(
     workbenchQueries.ages.sql,
     /MAX\(s.names\)>1 THEN NULL ELSE COALESCE\(MAX\(s.item\),MAX\(m.item\)\)/,
@@ -136,7 +136,7 @@ test('factory and rented warehouses share the age scope and unknown production d
   assert.equal(workbenchQueries.ages.scoped, true);
   assert.match(
     workbenchQueries.ages.sql,
-    /WHERE \(:gea_p900='' OR b.belong_base=:gea_p900\) AND b.month_date/,
+    /WHERE \(:gea_p900='' OR b.belong_base=:gea_p900\) AND b.dt/,
   );
 });
 
@@ -232,7 +232,9 @@ test('complete explicit shared responsibility survives multiple source names but
   );
   assert.deepEqual(directorNames([{ ...mapping, directors: '["甲"]' }], row), ['归属待补全']);
   assert.match(workbenchQueries.directors.sql, /agents_scm_execute_detail_hourly_d/);
-  assert.match(workbenchQueries.directors.sql, /ARRAY_AGG\(DISTINCT/);
+  assert.doesNotMatch(workbenchQueries.directors.sql, /ARRAY_AGG\(DISTINCT/);
+  assert.match(workbenchQueries.directors.sql, /SELECT DISTINCT d\.belong_base,d\.material_code/);
+  assert.match(workbenchQueries.directors.sql, /COUNT\(DISTINCT NULLIF\(TRIM\(d\.director\)/);
 });
 
 test('unmapped dimensions retain a field-specific hover explanation', () => {

@@ -101,6 +101,35 @@ async function fixture(
               sqlRows = rows.filter((row) => codes.includes(row.cust_code));
             }
           }
+          if (data.method === 'sql' && data.parameters.sql.includes('packet_numbered')) {
+            const columns = [
+              ...new Set(
+                [...data.parameters.sql.matchAll(/CAST\(([a-z][a-z0-9_]*) AS VARCHAR\)/g)].map(
+                  (match) => match[1],
+                ),
+              ),
+            ].filter((name) => name !== 'packet_position');
+            const sourceRows = sqlRows;
+            sqlRows = Array.from({ length: Math.ceil(sourceRows.length / 64) }, (_, group) => ({
+              packet_index: group,
+              packet_count: Math.min(64, sourceRows.length - group * 64),
+              packet_scope_total: sourceRows.length,
+              packet_rows: sourceRows
+                .slice(group * 64, group * 64 + 64)
+                .map((row, index) =>
+                  [
+                    String(group * 64 + index + 1),
+                    ...columns.map((name) => (row[name] == null ? null : String(row[name]))),
+                  ]
+                    .map((value) =>
+                      value === null
+                        ? 'N'
+                        : 'V' + new TextEncoder().encode(value).length + ':' + value,
+                    )
+                    .join(''),
+                ),
+            }));
+          }
           const respond = () =>
             pair.port1.postMessage({
               type: 'response',

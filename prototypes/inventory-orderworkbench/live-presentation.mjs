@@ -84,23 +84,30 @@ function summaryRows(periods, field, directorMap, loading = false) {
     ),
   ].filter((row) => field !== 'base' || workbenchBaseIncluded(row.base));
   let groups;
+  const ownerSources = new Map(), ownerNames = new Map();
+  const periodOwners = key => {
+    if (!ownerSources.has(key)) {
+      const part=periods[key]?.sections.find(section=>section.id==='directors');
+      const source=part ? part.status==='ready'?part.rows:[] : ['month','week'].includes(key)?[...directorMap.values()]:[];
+      const index=new Map();
+      for(const mapping of source){
+        const id=JSON.stringify([mapping.base,mapping.base==='郑州'?mapping.sku:'']);
+        if(!index.has(id))index.set(id,[]);
+        index.get(id).push(mapping);
+      }
+      ownerSources.set(key,index);
+    }
+    return ownerSources.get(key);
+  };
   const directors = (row, key = periods.month ? 'month' : 'week') => {
     const mapping =
       Number(row.summary) === 1 || row.periodAttribution === true
         ? row
         : directorMap?.get(JSON.stringify([row.base, row.sku]));
     if (!row.periodAttribution && Number(row.summary) !== 1) {
-      const part = periods[key]?.sections.find((section) => section.id === 'directors');
-      return directorNames(
-        part
-          ? part.status === 'ready'
-            ? part.rows
-            : []
-          : ['month', 'week'].includes(key)
-            ? [...directorMap.values()]
-            : [],
-        row,
-      );
+      const id=JSON.stringify([key,row.base,row.base==='郑州'?row.sku:'']);
+      if(!ownerNames.has(id))ownerNames.set(id,directorNames(periodOwners(key),row));
+      return ownerNames.get(id);
     }
     return mapping?.names === 1 && mapping.director
       ? mapping.director

@@ -50,6 +50,23 @@ async function fixture(t, respond) {
   return { ...module.exports, calls, controller };
 }
 
+test('compact reads preserve row/count/permission metadata and do not share a different wire shape', async (t) => {
+  const f = await fixture(t, () => ({
+    rows: [{ sku: 'one' }],
+    total: 1,
+    returnedColumns: ['sku'],
+    rejectedColumns: [],
+  }));
+  const [regular, compact] = await Promise.all([
+    f.executeGeaSqlPage('SELECT sku FROM fixture', 1, 200),
+    f.executeGeaSqlPage('SELECT sku FROM fixture', 1, 200, { rowsOnly: true }),
+  ]);
+  assert.deepEqual(compact, regular);
+  assert.equal(f.calls.length, 2);
+  assert.equal(f.calls[0].resultShape, undefined);
+  assert.equal(f.calls[1].resultShape, 'rows');
+});
+
 test('both row-array interfaces return all 501 rows in stable page order', async (t) => {
   const f = await fixture(t, ({ pageNo }) => {
     const offset = (pageNo - 1) * 200;

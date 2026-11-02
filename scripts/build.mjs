@@ -13,7 +13,11 @@ execFileSync(process.execPath, ['scripts/generate-plugin-package-version.mjs'], 
 });
 await import('./build-static-authors.mjs');
 await mkdir('lib', { recursive: true });
-for (const file of ['configured-query-client.mjs', 'configured-query-client.d.mts'])
+for (const file of [
+  'configured-query-client.mjs',
+  'configured-query-client.d.mts',
+  'query-scheduler.js',
+])
   await copyFile(`business/shared/${file}`, `lib/${file}`);
 await copyFile('business/shared/configured-facts.d.mts', 'lib/configured-facts.d.mts');
 await build({
