@@ -36,10 +36,14 @@ test('customer card names, units and low coverage semantics cannot drift to simi
 });
 
 test('partial freshness keeps the actual card value and its estimate rather than an independent total denominator', () => {
-  const context = customerPageContext({ summary: {
-    normalRatio: 87.25, freshnessEstimated: true, normalCoverageCount: 7,
-    customerCodes: Array.from({ length: 10 }, (_, i) => String(i)),
-  } });
+  const context = customerPageContext({
+    summary: {
+      normalRatio: 87.25,
+      freshnessEstimated: true,
+      normalCoverageCount: 7,
+      customerCodes: Array.from({ length: 10 }, (_, i) => String(i)),
+    },
+  });
   assert.equal(context.metricContract.freshness.value, 87.25);
   assert.equal(context.metricContract.freshness.estimated, true);
   assert.equal(context.metrics[3].coveredCount, 7);
