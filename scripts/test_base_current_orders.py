@@ -77,9 +77,10 @@ class BaseCurrentOrders(unittest.TestCase):
   spec=spec_from_file_location('base_detail',ROOT/'scripts/update-base-detail-metrics.py');module=module_from_spec(spec);spec.loader.exec_module(module)
   def canonical(sql):
    tree=sqlglot.parse_one(sql,read='postgres')
-   for node in list(tree.find_all(exp.Not)):
-    if isinstance(node.this,exp.Is) and isinstance(node.this.expression,exp.Null):
-     predicate=sqlglot.parse_one('placeholder IS NOT NULL',read='postgres');predicate.set('this',node.this.this.copy());node.replace(predicate)
+   for node in list(tree.find_all(exp.Is)):
+    negated = node.args.get('negate') is True or (isinstance(node.expression, exp.Not) and isinstance(node.expression.this, exp.Null))
+    if negated:
+     node.replace(exp.Not(this=exp.Is(this=node.this.copy(),expression=exp.Null())))
    return tree
   before={key:canonical(q['request']['sql']) for key,q in self.config['queries'].items()};module.update(self.config)
   for key,q in self.config['queries'].items():self.assertEqual(canonical(q['request']['sql']),before[key],key)

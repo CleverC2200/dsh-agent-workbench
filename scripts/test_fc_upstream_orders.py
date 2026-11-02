@@ -28,7 +28,8 @@ CREATE TABLE agents_scm_material_in_out_summary_d(material_code TEXT,product_cat
   import sqlglot
   tree=sqlglot.parse_one((W/'business/inventory-fc/upstream-orders-source.sql').read_text(),read='postgres')
   result=sqlglot.parse_one("SELECT l.warehouse_code AS warehouse_code,l.order_no AS order_no,l.demand AS demand,l.preparing_allocated AS preparing_allocated,l.remaining AS remaining,l.available AS available,l.shortage AS shortage,l.invalid AS invalid FROM upstream_current AS l ORDER BY l.order_no",read='postgres')
-  result.set('with_',tree.args['with_']);sql=result.sql(dialect='sqlite')
+  with_key = 'with_' if 'with_' in sqlglot.exp.Select.arg_types else 'with'
+  result.set(with_key,tree.args[with_key]);sql=result.sql(dialect='sqlite')
   return {r['order_no']:dict(r) for r in self.db.execute(sql)}
  def test_incoming_direction_and_status(self):
   self.add('BR1','DEALER','2026-10-01',9000,0,order_type='ZO10')
