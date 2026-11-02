@@ -70,9 +70,7 @@ test('MPS processing applies category exclusions to source-derived rows and CSV 
   }
   assert.match(csv, /汤圆/);
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
-  await expect(frame.getByRole('region', { name: '产销存报告', exact: true })).toContainText(
-    '饺子',
-  );
+  await expect(frame.locator('section.dc-card[aria-label="产销存报告"]')).toContainText('饺子');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await expect(
     frame.getByRole('region', { name: '产品明细', exact: true }).locator('tbody tr'),
