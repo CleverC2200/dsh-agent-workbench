@@ -50,6 +50,16 @@ test('MPS seven steps share the selected evaluation without legacy simulation co
   assert.match(csv, /缺|未|待/);
 });
 
+async function monthlyScope(frame) {
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: '当月范围.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,产品甲,汤圆,系列甲,物料组甲,1,1\n2026-11,郑州,A,产品甲,汤圆,系列甲,物料组甲,1,1',
+    ),
+  });
+}
+
 test('MPS shipment closing inventory feeds the same-version assessment and report and is revoked on scope change', async (t) => {
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('mps', 1200));
@@ -65,6 +75,7 @@ test('MPS shipment closing inventory feeds the same-version assessment and repor
       '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,物料组甲,,',
     ),
   });
+  await monthlyScope(frame);
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
     name: '发货核对.csv',
@@ -110,6 +121,7 @@ test('MPS missing reasons remain readable in two-line rows at a 600px document w
       '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,组甲,,',
     ),
   });
+  await monthlyScope(frame);
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
   const table = frame.getByRole('table', { name: '产销存报告', exact: true });
   const row = table.locator('tbody tr').first();

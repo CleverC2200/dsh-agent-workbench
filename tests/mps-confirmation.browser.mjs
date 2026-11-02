@@ -227,7 +227,7 @@ test('MPS annual grid retains July to June and unresolved business calculations 
   );
   const results = frame.getByRole('region', { name: '大类预估需求数量' });
   await expect(results.getByRole('row')).toHaveCount(2);
-  await expect(results).toContainText('人工调整尚未接入');
+  await expect(results).toContainText('本地调整不代表正式保存');
   await expect(results.getByRole('cell', { name: '-', exact: true })).toHaveCount(4);
 });
 

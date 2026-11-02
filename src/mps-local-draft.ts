@@ -115,7 +115,13 @@ export const mpsLocalDraftSchema = z.strictObject({
     z.strictObject({ base: text, month: text, days: quantity.nullable() }),
   ).optional(),
   unitWeights: list(
-    z.strictObject({ base: text, code: text, tonsPerPiece: quantity.nullable() }),
+    z.strictObject({
+      base: text,
+      code: text,
+      tonsPerPiece: quantity.nullable(),
+      channels: text.optional(),
+      source: z.strictObject({ configVersion: text, readAt: z.iso.datetime() }).optional(),
+    }),
   ).optional(),
   resources: list(
     z.strictObject({

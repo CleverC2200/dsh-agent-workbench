@@ -539,13 +539,19 @@ test('regional mounted author restores and republishes after its existing channe
 
 // MPS reception observes the existing authored iframe and current channel output.
 async function addMpsProduct(frame) {
-  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
-    name: 'context-product.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(
-      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
-    ),
-  });
+  const expand = frame.getByRole('button', { name: '展开产品明细', exact: true });
+  if (await expand.isVisible()) await expand.click();
+  await frame.getByRole('button', { name: '新增产品', exact: true }).click();
+  const dialog = frame.getByRole('dialog', { name: '新增产品', exact: true });
+  for (const [name, value] of Object.entries({
+    产品编码: 'A',
+    产品名称: '产品甲',
+    大类: '汤圆',
+    系列: '系列',
+    物料组: '组',
+  }))
+    await dialog.getByLabel(name, { exact: true }).fill(value);
+  await dialog.getByRole('button', { name: '新增', exact: true }).click();
 }
 test('received MPS publishes committed source edits and removes the previous step context', async (t) => {
   const page = await fixture(t, ['mps']);
@@ -767,7 +773,7 @@ test('received MPS context covers the seven current steps and preserves unassess
   assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
 });
 
-test('received MPS restores navigation and isolates local inputs before publishing into a rebound Session', async (t) => {
+test('received MPS commits restored navigation and isolates restored local inputs across Sessions', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.clock.setFixedTime(new Date('2026-10-20T04:00:00Z'));
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
@@ -837,8 +843,9 @@ test('received MPS restores navigation and isolates local inputs before publishi
   assert.ok(returning.length > 0);
   for (const row of returning) {
     assert.deepEqual(Object.keys(row.context.parts).sort(), ['navigation', 'process']);
+    assert.equal(row.context.parts.process.rows.length, 1);
     assert.ok(
-      row.context.parts.process.rows.some(
+      row.context.parts.process.rows.every(
         (item) => item.reportQuantity === 18 && item.demand === null,
       ),
     );
@@ -1200,7 +1207,7 @@ test('MPS Host context remains unavailable after identity withdrawal even when a
   assert.equal(await readHost(), undefined);
 });
 
-test('received MPS isolates local files and cancels in-flight reads across Sessions, then restores committed input', async (t) => {
+test('received MPS isolates local files, rejects in-flight reads and restores the original Session inputs', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   const frame = page.frameLocator('iframe');
@@ -1210,10 +1217,10 @@ test('received MPS isolates local files and cancels in-flight reads across Sessi
   await creating.getByRole('button', { name: '创建本地版本', exact: true }).click();
   const csv =
     '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,P1,产品,汤圆,系列,组,8,9';
-  const upload = () =>
+  const upload = (contents = csv) =>
     frame
       .getByLabel('选择计划提报CSV')
-      .setInputFiles({ name: 'local.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+      .setInputFiles({ name: 'local.csv', mimeType: 'text/csv', buffer: Buffer.from(contents) });
   await upload();
   await expect
     .poll(() =>
@@ -1232,7 +1239,7 @@ test('received MPS isolates local files and cancels in-flight reads across Sessi
       });
     };
   });
-  await upload();
+  await upload(csv.replace(',8,9', ',88,99'));
   await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('正在读取…');
   await page.evaluate(() =>
     window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),
@@ -1264,7 +1271,7 @@ test('received MPS isolates local files and cancels in-flight reads across Sessi
       ),
     )
     .toBe(1);
-  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('当前期间1条');
+  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('数量合计8件');
 });
 
 for (const boundary of ['Session', 'identity']) {

@@ -112,3 +112,41 @@ export function decodeLocalDrafts(value, makeDraft, fallback) {
     }),
   };
 }
+export function changeAdjustment(adjustments, kind, input, undo = false) {
+  const state = adjustments ?? emptyAdjustments();
+  const key =
+    kind === 'categoryDemand' ? JSON.stringify([input.month, input.category]) : input.rowId;
+  const keyOf = (entry) =>
+    kind === 'categoryDemand' ? JSON.stringify([entry.month, entry.category]) : entry.rowId;
+  const previous = state[kind].find((entry) => keyOf(entry) === key);
+  if (undo && !previous) return state;
+  const entry = undo
+    ? previous
+    : {
+        ...input,
+        reason: String(input.reason ?? '').trim(),
+        at: new Date().toISOString(),
+      };
+  const value = kind === 'categoryDemand' ? entry.quantity : entry.share;
+  if (
+    !undo &&
+    (!entry.reason || !Number.isFinite(value) || value < 0 || (kind === 'shares' && value > 1))
+  )
+    throw Error('调整值须为非负有限数，占比不得超过1，并填写调整原因。');
+  return {
+    ...state,
+    [kind]: [...state[kind].filter((entry) => keyOf(entry) !== key), ...(undo ? [] : [entry])],
+    history: [
+      ...state.history,
+      {
+        kind,
+        key,
+        action: undo ? 'undo' : 'set',
+        systemValue: entry.systemValue ?? null,
+        value: undo ? (input.effectiveValue ?? null) : value,
+        reason: entry.reason,
+        at: new Date().toISOString(),
+      },
+    ],
+  };
+}
