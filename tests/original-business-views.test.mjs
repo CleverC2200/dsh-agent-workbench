@@ -29,7 +29,7 @@ test('FC replenishment keeps every original business column in its original orde
     Object.values(views.REPLENISHMENT_COLUMNS).map(
       (label) =>
         ({
-          备单中量: '当前未备单需求',
+          备单中量: '当前待收货需求',
           本月调拨未发: '当前调拨备单',
           本月调拨在途: '当前调拨在途',
           安全库存天数: '目标覆盖天数',
@@ -38,10 +38,7 @@ test('FC replenishment keeps every original business column in its original orde
     ),
   );
   const labels = views.originalFcView(c, 'replenishment').columns.map((column) => column.label);
-  assert.deepEqual(labels.slice(labels.indexOf('30日日均') + 1, labels.indexOf('30日日均') + 3), [
-    '上月实际出库量',
-    '本月日均出库量',
-  ]);
+  assert.deepEqual(labels.slice(-2), ['上月实际出库量', '本月日均出库量']);
 });
 test('QLL organization uses the original structure columns, with pieces for company stock and boxes for dealer stock', async () => {
   const c = await config('qll');

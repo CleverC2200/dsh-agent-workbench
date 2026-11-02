@@ -28,6 +28,11 @@ for (const agent of ['fc', 'qll', 'dealer'])
           summaryOnly: true,
           execute: async (_, o) => {
             calls.push(o.queryId);
+            if (o.queryId === 'calendar.target_versions')
+              return {
+                configVersion: 'v1',
+                rows: [{ month: '2026-10-01', inventory_version: '月初' }],
+              };
             const cols = config.queries[o.queryId].resultColumns;
             return {
               configVersion: 'v1',
@@ -45,7 +50,12 @@ for (const agent of ['fc', 'qll', 'dealer'])
       );
       assert.equal(result.total, 42);
       assert.deepEqual(
-        calls.filter((q) => q !== view.snapshotQuery && !q.startsWith('source.')),
+        calls.filter(
+          (q) =>
+            q !== view.snapshotQuery &&
+            !q.startsWith('source.') &&
+            q !== 'calendar.target_versions',
+        ),
         [view.overviewSummaryId ?? view.summaryId],
       );
       assert.equal(result.consistency, 'single_statement_aggregate');

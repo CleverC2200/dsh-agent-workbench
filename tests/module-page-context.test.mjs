@@ -8,6 +8,7 @@ test('customer card names, units and low coverage semantics cannot drift to simi
     summary: {
       totalValue: 123,
       quantity: 456,
+      stockedCustomerCount: 2,
       structureScore: 67,
       normalRatio: 89,
       turnover: 12,
@@ -19,6 +20,7 @@ test('customer card names, units and low coverage semantics cannot drift to simi
     [
       ['库存价值', 123, '万元'],
       ['库存数量', 456, '箱'],
+      ['有库存的客户数', 2, '个'],
       ['结构合理性', 67, '分'],
       ['库存新鲜度', 89, '%'],
       ['周转天数', 12, '天'],
@@ -27,6 +29,29 @@ test('customer card names, units and low coverage semantics cannot drift to simi
   );
   assert.match(context.metricSemantics.lowCoverageCount, /低于60天.*不是缺失/);
   assert.ok(context.metrics.every((m) => m.definition.length));
+  assert.equal(
+    context.metricContract.freshness.value,
+    context.metrics.find((m) => m.key === 'freshness').value,
+  );
+  assert.equal(context.metricContract.largeDate.thresholdDays, 90);
+  assert.equal(context.metricContract.largeDate.operator, '>');
+  assert.equal(context.metricContract.largeDate.ruleRevision, '434');
+});
+
+test('partial freshness keeps the actual card value and its estimate rather than an independent total denominator', () => {
+  const context = customerPageContext({
+    summary: {
+      normalRatio: 87.25,
+      freshnessEstimated: true,
+      normalCoverageCount: 7,
+      customerCodes: Array.from({ length: 10 }, (_, i) => String(i)),
+    },
+  });
+  assert.equal(context.metricContract.freshness.value, 87.25);
+  assert.equal(context.metricContract.freshness.estimated, true);
+  assert.equal(context.metrics.find((m) => m.key === 'freshness').coveredCount, 7);
+  assert.equal(context.metrics.find((m) => m.key === 'freshness').missingCount, 3);
+  assert.match(context.metricContract.freshness.interpretation, /上限/);
 });
 
 test('heartbeat reads current ownership each tick and disposes on page exit', async () => {

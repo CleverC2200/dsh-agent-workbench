@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import {
   computeWorkbenchMetrics,
   metricDelta,
+  metricCalculationVersion,
+  reusableWorkbenchFacts,
+  compatibleWorkbenchFacts,
 } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 import {
   workbenchPresentation,
@@ -85,6 +88,25 @@ const make = () => ({
   ],
 });
 
+test('historical cache retries failed sources and invalidates earlier query versions', () => {
+  const facts = {
+    complete: true,
+    attributionVersion: 2,
+    metricCalculationVersion,
+    periods: { week: { sections: [{ id: 'changes', status: 'ready', rows: [] }] } },
+  };
+  assert.equal(reusableWorkbenchFacts(facts), true);
+  facts.periods.week.sections[0].status = 'error';
+  assert.equal(compatibleWorkbenchFacts(facts), true);
+  assert.equal(reusableWorkbenchFacts(facts), false);
+  facts.periods.week.sections[0].status = 'loading';
+  assert.equal(reusableWorkbenchFacts(facts), false);
+  facts.periods.week.sections[0].status = 'ready';
+  facts.metricCalculationVersion--;
+  assert.equal(compatibleWorkbenchFacts(facts), false);
+  assert.equal(reusableWorkbenchFacts(facts), false);
+});
+
 test('partial rates use independently validated quantities and show exact candidate coverage', () => {
   const p = make();
   const m = computeWorkbenchMetrics(p);
@@ -115,6 +137,18 @@ test('all-unknown, absent sample fields, query errors and zero denominators do n
   p.sections[0].status = 'error';
   p.sections[0].code = 'FIELD_NOT_PUBLISHED';
   assert.match(computeWorkbenchMetrics(p)['作废率'].missingReason, /FIELD_NOT_PUBLISHED/);
+  p.metrics = computeWorkbenchMetrics(p);
+  const presentation = workbenchPresentation({
+    selected: 'week',
+    complete: true,
+    periods: Object.fromEntries(
+      ['week', 'month', 'previousWeek', 'previousMonth', 'yearWeek', 'yearMonth'].map((key) => [
+        key,
+        p,
+      ]),
+    ),
+  });
+  assert.equal(presentation.cards[0].status, '查询失败');
 });
 test('cards, six tables, evidence and comparisons expose sample scope without green full-result badges', () => {
   const p = make();
@@ -139,7 +173,7 @@ test('cards, six tables, evidence and comparisons expose sample scope without gr
   const result = workbenchPresentation(facts);
   assert.match(result.cards[0].status, /样本/);
   assert.notEqual(result.cards[0].status, '健康');
-  assert.match(result.cards[2].comparison[0], /10.00pp\*/);
+  assert.match(result.cards[2].comparison[0], /10.00%\*/);
   assert.match(result.cards[2].comparisonNotes[0], /不代表全量/);
   assert.match(result.performance['base-performance'].month[0][1].text, /\*/);
   assert.match(result.performance['base-performance'].month[0][1].title, /6\/10/);

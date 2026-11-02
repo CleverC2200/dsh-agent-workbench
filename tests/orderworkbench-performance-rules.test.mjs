@@ -35,18 +35,18 @@ test('red status uses unrounded current values and leaves unknown inputs unmarke
 test('highest age excludes totals and unknowns, preserves ties and never colors comparisons', () => {
   const age = (v) => performanceCurrentCell('货龄（>60天库存占比）', v, `${v}%`);
   const rows = [
-    ['甲', age(8), '+30pp'],
-    ['乙', age(8), '-1pp'],
-    ['丙', age(3), '+100pp'],
+    ['甲', age(8), '+30%'],
+    ['乙', age(8), '-1%'],
+    ['丙', age(3), '+100%'],
     ['丁', '—', '—'],
-    ['合计', age(90), '+2pp'],
+    ['合计', age(90), '+2%'],
   ];
   highlightAgePeak(rows, 1);
   assert.deepEqual(
     rows.map((r) => r[1]?.state),
     ['warning', 'warning', 'good', undefined, 'good'],
   );
-  assert.equal(rows[0][2], '+30pp');
+  assert.equal(rows[0][2], '+30%');
 });
 test('all six live tables carry current-value states and separate monthly and weekly age peaks', () => {
   const make = (reverse) => {

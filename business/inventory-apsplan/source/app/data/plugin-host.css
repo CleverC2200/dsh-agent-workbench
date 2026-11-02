@@ -226,9 +226,46 @@ html.aps-plugin-host #cross-analysis .matrix {
   overflow-x: auto;
 }
 html.aps-plugin-host #cross-analysis .matrix-row {
+  display: grid;
   width: 100%;
-  min-width: 560px;
-  grid-template-columns: 64px repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+html.aps-plugin-host #cross-analysis .matrix-row > button {
+  min-width: 0;
+  height: 52px;
+  padding: 8px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+html.aps-plugin-host #cross-analysis .matrix-row > .matrix-unavailable,
+html.aps-plugin-host #cross-analysis .matrix-row > .matrix-observation {
+  background: var(--workbench-muted-surface, #f5f6f8);
+  color: var(--workbench-body, #555d68);
+}
+html.aps-plugin-host #cross-analysis .matrix-row > .matrix-unavailable {
+  color: var(--workbench-muted, #858c96);
+  cursor: default;
+}
+html.aps-plugin-host #cross-analysis .matrix-row > .matrix-unavailable:hover {
+  transform: none;
+  box-shadow: none;
+}
+html.aps-plugin-host #cross-analysis .matrix-empty-state {
+  padding: 24px 0;
+  color: var(--workbench-muted, #858c96);
+  font-size: 12px;
+  line-height: 1.7;
+}
+html.aps-plugin-host #cross-analysis .level-observation {
+  background: var(--workbench-muted-surface, #f5f6f8);
+  color: var(--workbench-body, #555d68);
+}
+html.aps-plugin-host #cross-analysis .matrix-inventory-list .matrix-risk-row {
+  grid-template-columns: 48px minmax(180px, 2fr) repeat(3, minmax(100px, 1fr));
+  min-width: 620px;
 }
 
 /* APS board has a single left-aligned return action, without a duplicate title. */

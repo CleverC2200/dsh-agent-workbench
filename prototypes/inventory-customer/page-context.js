@@ -7,6 +7,7 @@ export function customerPageContext(value) {
   const metrics = [
     ['value', '库存价值', s.totalValue, '万元', s.missingValueCount],
     ['quantity', '库存数量', s.quantity, '箱', s.missingQuantityCount],
+    ['stockedCustomers', '有库存的客户数', s.stockedCustomerCount, '个', Number.isFinite(total) ? total-s.missingQuantityCount : null],
     ['structure', '结构合理性', s.structureScore, '分', s.structureCoverageCount],
     ['freshness', '库存新鲜度', s.normalRatio, '%', s.normalCoverageCount],
     ['turnover', '周转天数', s.turnover, '天', s.turnoverCoverageCount],
@@ -17,11 +18,22 @@ export function customerPageContext(value) {
     definition: customerMetricDefinitions[key]?.formula ?? [],
     sourceNotes: customerMetricDefinitions[key]?.notes ?? [],
   }));
-  return { ...value, metrics, metricSemantics: {
-    scopes: '顶部六张卡片与summary覆盖当前角色/组织范围；列表的状态、区域、搜索筛选仅收窄totalFilteredRows和filteredCustomerCodes，不改变卡片汇总。Cube核对当前列表必须用filteredCustomerCodes，不把卡片全量当作筛选后数值。',
+  return { ...value, metrics, metricContract: {
+    source: 'current-page',
+    freshness: {
+      value: s.normalRatio ?? null,
+      unit: '%',
+      coverage: '仅纳入同日且分子分母有效的客户；以卡片coveredCount和missingCount为准',
+      estimated: s.freshnessEstimated === true,
+      interpretation: s.freshnessEstimated === true ? '部分覆盖的测算上限，不代表全量确定值' : '按页面已发布覆盖解释，不外推未覆盖范围',
+    },
+    largeDate: { field: 'big_final_qty', operator: '>', thresholdDays: 90, ruleRevision: '434', scope: '本客户库存页面；上游批次过程未独立复算' },
+    precedence: '本页卡片、公式和规则版本用于回答当前页面；独立Cube和知识结果分列核对，不能替换卡片分母或套用其他层级的货龄阈值',
+  }, metricSemantics: {
+    scopes: '顶部卡片与summary覆盖当前角色/组织范围；列表的状态、区域、搜索筛选仅收窄totalFilteredRows和filteredCustomerCodes，不改变卡片汇总。Cube核对当前列表必须用filteredCustomerCodes，不把卡片全量当作筛选后数值。',
     lowCoverageCount: '有有效周转天数且周转天数低于60天的客户数，不是缺失输入的客户数',
     riskCount: '页面规则归类为高风险、关注或异常的客户数；不同于仅有大日期库存的客户数',
-    normalRatio: '库存新鲜度统一使用计划表同日全部SKU的stock_qty和big_final_qty；覆盖不足保持未知，不是normal_stock_qty/stock_qty，不回退旧日期。',
+    normalRatio: '库存新鲜度使用计划表同日stock_qty和big_final_qty，按页面有效覆盖客户的分子分母汇总；部分SKU大日期已知时仅为测算上限，全部未知或分母无效时不可计算。不是normal_stock_qty/stock_qty，不回退旧日期，也不以Cube全范围库存改写本页分母。',
     turnover: '仅对有效覆盖客户按库存及有效在途合计/近30日日均销量计算；在途缺失时为现货估算',
     value: '库存价值=Σ(计划表同日stock_qty×cif_price)÷10000，单位万元。要求全部SKU的数量和单价完整；空值不补0，不回退旧库存表，预算不能替代。',
     regionalInventoryValues: '按大区拆分价值读取regionalInventoryValues。groupsByName是summary.customerCodes全部客户的互斥分组，不是当前6行；knownValueTotal是全量已知合计，与summary.totalValue同次数据。missingCount须披露，整组未知为null。仅看到的组数等于groupCount才可声称逐组加总完整；partial投影不得当全量。来源是页面受控SQL，不是Cube度量；不同capturedAt不作精确对账。',

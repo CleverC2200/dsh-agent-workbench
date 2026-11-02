@@ -79,7 +79,7 @@ test('dashboard restores saved inputs without rendering the storage controls', a
     delete globalThis.fcPanelFixture;
   }
 });
-test('saved plans merge untouched SKUs; failed recalculation retries application, then another save creates a new version', async () => {
+test('saved plans replace the complete warehouse/month package; failed recalculation retries application, then another save creates a new version', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
@@ -146,7 +146,7 @@ test('saved plans merge untouched SKUs; failed recalculation retries application
     await click('保存人工计划');
     assert.equal(writes, 1);
     assert.equal(reads, 1);
-    assert.deepEqual(stored.plans.map((x) => x.sku).sort(), ['NEW', 'OLD']);
+    assert.deepEqual(stored.plans.map((x) => x.sku).sort(), ['NEW']);
     assert.match(document.body.textContent, /计算读取失败/);
     fail = false;
     await click('保存人工计划');

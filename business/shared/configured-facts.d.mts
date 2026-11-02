@@ -19,3 +19,16 @@ export function readConfiguredFacts(
     detailsOnly?: boolean;
   },
 ): Promise<unknown>;
+
+/** Shared base/orchestration monthly metrics; unknown coverage remains explicit. */
+export function readBaseInventoryMetrics(
+  config: unknown,
+  input: { asOf: string; base?: string; category?: string; compare: boolean },
+  options: {
+    signal: AbortSignal;
+    execute: (
+      request: unknown,
+      options: { queryId: string; values: Record<string, unknown> },
+    ) => Promise<unknown>;
+  },
+): Promise<unknown>;

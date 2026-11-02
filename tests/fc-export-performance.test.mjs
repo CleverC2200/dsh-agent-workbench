@@ -172,3 +172,27 @@ test('confirmation within the transport limit reads all rows in a single detail 
   assert.equal(pages[0].values.page_size, 200);
   assert.equal(pages[0].values.warehouse_code, 'A020');
 });
+
+test('template download preserves fuzzy warehouse filter with exact submission scope', async () => {
+  calls.length = 0;
+  mode = 'small';
+  await readFcActionRows(
+    {
+      config,
+      viewId: 'plan',
+      input: {
+        asOf: '2026-10-28',
+        filters: {
+          warehouse_code: 'A020',
+          warehouse_search: ' 长沙%_ ',
+        },
+      },
+    },
+    new AbortController().signal,
+  );
+  assert.ok(calls.length > 0);
+  for (const call of calls) {
+    assert.equal(call.values.warehouse_code, 'A020');
+    assert.equal(call.values.warehouse_search_pattern, '%长沙\\%\\_%');
+  }
+});

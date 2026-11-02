@@ -49,7 +49,7 @@ test('authored controls apply only validated view changes and register filter ac
   );
   const { customerControls } = await import(
     'data:text/javascript;base64,' +
-      Buffer.from(source.replace(/^import .*\n/, '')).toString('base64')
+      Buffer.from(source.replace(/^import [^\r\n]*\r?\n/, '')).toString('base64')
   );
   const changes = {};
   const setters = Object.fromEntries(

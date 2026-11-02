@@ -161,7 +161,7 @@ test('actual trend panel switches analysis, keeps missing days and zeros, withdr
     await click('查询趋势');
     assert.equal(api.pageContext().parts.trendView.state, 'error');
     assert.equal(api.pageContext().parts.trendView.data, undefined);
-    assert.match(document.querySelector('[role=alert]').textContent, /拒绝/);
+    assert.match(document.querySelector('[role=alert]').textContent, /部分数据读取失败/);
     globalThis.fetch = async () => response();
     await click('重试当前范围');
     assert.equal(api.pageContext().parts.trendView.state, 'ready');

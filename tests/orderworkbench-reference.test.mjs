@@ -1,11 +1,17 @@
 import { createReportPersistence } from '../prototypes/inventory-orderworkbench/report-persistence.mjs';
+import { createFrameProgress } from '../business/shared/frame-progress.js';
+import { startDashboardTiming } from '../business/shared/dashboard-timing.js';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { validHtmlViewState } from '../src/html-view-state.ts';
 import { model, fixturePeriod } from './orderworkbench-data.test.mjs';
-import { metricCalculationVersion } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
+import {
+  metricCalculationVersion,
+  reusableWorkbenchFacts,
+  compatibleWorkbenchFacts,
+} from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 import {
   shippableDaysTarget,
   performanceStyleVersion,
@@ -19,6 +25,8 @@ test('order workbench reference interactions', async () => {
   const { window } = dom;
   window.structuredClone = structuredClone;
   window.createReportPersistence = createReportPersistence;
+  window.createFrameProgress = createFrameProgress;
+  window.startDashboardTiming = startDashboardTiming;
   window.encodeReportRequest = async (request) => request;
   window.savedReports = new Map();
   window.savedEdits = new Map();
@@ -56,6 +64,8 @@ test('order workbench reference interactions', async () => {
   period.metrics = model.computeWorkbenchMetrics(period);
   window.liveFixture = {
     complete: true,
+    attributionVersion: 2,
+    metricCalculationVersion,
     selected: 'month',
     periods: Object.fromEntries(
       ['month', 'week', 'previousMonth', 'yearMonth', 'previousWeek', 'yearWeek'].map((key) => [
@@ -67,12 +77,15 @@ test('order workbench reference interactions', async () => {
     customers: { rows: [] },
   };
   window.workbenchPresentation = model.workbenchPresentation;
+  window.workbenchBaseIncluded = model.workbenchBaseIncluded;
   window.workbenchEvidence = model.workbenchEvidence;
   window.workbenchMetricDetail = model.workbenchMetricDetail;
   window.workbenchCellMissingReason = model.workbenchCellMissingReason;
   window.shippableDaysTarget = shippableDaysTarget;
   window.performanceStyleVersion = performanceStyleVersion;
   window.metricCalculationVersion = metricCalculationVersion;
+  window.reusableWorkbenchFacts = reusableWorkbenchFacts;
+  window.compatibleWorkbenchFacts = compatibleWorkbenchFacts;
   window.Date = class extends Date {
     constructor(...args) {
       super(...(args.length ? args : ['2026-09-18T00:00:00Z']));
@@ -102,6 +115,10 @@ test('order workbench reference interactions', async () => {
     assert.equal(window.pageSnapshot.metrics[2].value, '—%');
     assert.equal(window.pageSnapshot.dimension.key, 'base-performance');
     assert.equal(window.pageSnapshot.dimension.unmet.length, 0);
+    assert.equal(window.savedView.mode, 'week');
+    assert.equal(window.savedView.week, '2026-09-14');
+    assert.equal(window.requestedPeriod.start, '2026-09-14');
+    assert.equal(window.requestedPeriod.end, '2026-09-21');
     assert.ok(window.pageSnapshot.improvements.length);
     assert.equal(document.querySelector('.assistant'), null);
     const click = (selector) => {
@@ -237,6 +254,7 @@ test('order workbench reference interactions', async () => {
     };
     await new Promise((resolve) => setTimeout(resolve, 0));
     window.pendingReads[0].progress(partial);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(document.querySelector('.wb-kpi-main strong').textContent, '10.00');
     assert.match(document.querySelector('.wb-kpi-compare').textContent, /加载中/);
     assert.equal(window.pageSnapshot.evidence.complete, false);

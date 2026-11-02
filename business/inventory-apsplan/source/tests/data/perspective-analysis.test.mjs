@@ -50,3 +50,105 @@ test('matrix recomputes percentages from quantities and ranks an existing combin
   assert.doesNotMatch(analysis.copy, /缺失|待接入/);
   assert.deepEqual(matrixCellsFromData(data, '生产计划达成率'), []);
 });
+
+test('matrix retains configured inventory totals despite unrelated plan gaps', () => {
+  const data = {
+    missingValuePolicy: 'zero',
+    sections: [
+      {
+        id: 'stock',
+        status: 'ready',
+        rows: [
+          { base: '华东', category: '汤圆', inventory: 100, available: 80, demand: 5, invalid: 2 },
+          { base: '华南', category: '水饺', inventory: 0, available: 0, demand: 2, invalid: 1 },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(
+    matrixCellsFromData(data, '库存量').map(({ scope, value }) => ({ scope, value })),
+    [
+      { scope: '华东 × 汤圆', value: 0.01 },
+      { scope: '华南 × 水饺', value: 0 },
+    ],
+  );
+});
+
+test('shippable matrix divides available quantity by summed demand and preserves zero denominators', () => {
+  const data = {
+    missingValuePolicy: 'zero',
+    sections: [
+      {
+        id: 'shippable',
+        status: 'ready',
+        rows: [
+          { base: '华东', category: '汤圆', inventory: 100, available: 30, demand: 2, invalid: 1 },
+          { base: '华东', category: '汤圆', inventory: 200, available: 50, demand: 6, invalid: 1 },
+          { base: '华南', category: '水饺', inventory: 100, available: 100, demand: 0, invalid: 0 },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(
+    matrixCellsFromData(data, '可发货天数').map(({ scope, value }) => ({ scope, value })),
+    [{ scope: '华东 × 汤圆', value: 10 }],
+  );
+  data.sections[0].status = 'error';
+  data.sections.push({
+    id: 'stock',
+    status: 'ready',
+    rows: [
+      { base: '华东', category: '汤圆', inventory: 100, available: 80, demand: 10, invalid: 0 },
+    ],
+  });
+  assert.deepEqual(matrixCellsFromData(data, '可发货天数'), []);
+});
+
+test('empty matrix analysis stays with its selected metric', () => {
+  const result = analyzeProductionMatrix('生产计划达成率', '10月', []);
+  assert.match(result.title, /生产计划达成率暂无可评价组合/);
+  assert.match(result.copy, /不依据公司汇总推断组合表现/);
+  assert.equal(result.total, 0);
+});
+
+test('production matrix uses grouped MES quantities, with the same zero-fill rule as its headline', () => {
+  const data = {
+    missingValuePolicy: 'zero',
+    sections: [
+      {
+        id: 'production',
+        status: 'ready',
+        rows: [
+          {
+            base: '华东',
+            category: '汤圆',
+            planned: 100,
+            actual: 110,
+            source_basis: 'MES_QUANTITY',
+            invalid: 1,
+          },
+          {
+            base: '华东',
+            category: '汤圆',
+            planned: 900,
+            actual: 810,
+            source_basis: 'MES_QUANTITY',
+            invalid: 0,
+          },
+          {
+            base: '华南',
+            category: '水饺',
+            planned: 0,
+            actual: 0,
+            source_basis: 'MES_QUANTITY',
+            invalid: 0,
+          },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(
+    matrixCellsFromData(data, '生产计划达成率').map(({ scope, value }) => ({ scope, value })),
+    [{ scope: '华东 × 汤圆', value: 92 }],
+  );
+});

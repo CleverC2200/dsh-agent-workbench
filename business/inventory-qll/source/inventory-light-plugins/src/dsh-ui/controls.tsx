@@ -508,7 +508,7 @@ export function Table<_T = any>({
   return (
     <div aria-busy={loading}>
       {loading ? (
-        <DashboardTableSkeleton label="表格加载中" />
+        <DashboardTableSkeleton label="表格加载中" embedded />
       ) : (
         <div className={css.tableRegion}>
           <div className={`${css.tableScroll} dsh-table-body`} style={{ maxHeight: scroll?.y }}>

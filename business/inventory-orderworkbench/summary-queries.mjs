@@ -1,3 +1,5 @@
+import { ontimeSummarySql } from './document-queries.mjs';
+import { rowPacketSql } from '../shared/row-packets.mjs';
 /** Derive summaries and bounded SKU pages from the same scoped, validated SKU queries. */
 export function addWorkbenchSummaryQueries(config) {
   const names = ['orders', 'stock', 'ages'];
@@ -42,6 +44,42 @@ export function addWorkbenchSummaryQueries(config) {
       pagination: { countQuery: id + '.count' },
     };
   }
+  const directors = config.queries['workbench.directormembers'];
+  if (directors?.pagination?.countQuery) {
+    const directorPackets = rowPacketSql(raw('directormembers'), directors.resultColumns, [
+      'base',
+      'sku',
+      'director_value',
+      'item_value',
+    ]);
+    const directorCount = config.queries[directors.pagination.countQuery];
+    config.queries['workbench.directors.packets.count'] = {
+      ...directorCount,
+      request: {
+        ...directorCount.request,
+        sql: 'SELECT COUNT(*) AS total FROM (' + directorPackets + ') counted',
+      },
+    };
+    config.queries['workbench.directors.packets'] = {
+      ...directors,
+      request: {
+        ...directors.request,
+        sql: directorPackets + ' LIMIT :gea_p1001 OFFSET :gea_p1002',
+      },
+      resultColumns: ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],
+      pagination: { countQuery: 'workbench.directors.packets.count' },
+    };
+  }
+  // Keep every whole-order verdict and its dimensions, but transport them in
+  // a few packets instead of re-running the same arrival query for 200 orders per page.
+  if (config.queries['workbench.ontime'])
+    register(
+      'workbench.ontime.summary',
+      ontimeSummarySql,
+      config.queries['workbench.ontime'],
+      ['base', 'invalid', 'ontime', 'packed_orders'],
+      ['base', 'invalid', 'ontime'],
+    );
   for (const name of names) {
     const original = config.queries['workbench.' + name];
     const item = name === 'ages' ? mappedItem : "COALESCE(NULLIF(q.item,'')," + mappedItem + ')';
@@ -106,6 +144,21 @@ export function addWorkbenchSummaryQueries(config) {
       [...original.resultColumns, 'director', 'names', 'summary', ...extra],
       ['base', 'category', 'item', 'director', 'names'],
     );
+    if (name === 'stock') {
+      // A 200-row gateway page otherwise re-runs this stock join and its count
+      // for every dimension group. Pack complete groups without changing totals.
+      register(
+        'workbench.stock.summary.packets',
+        rowPacketSql(
+          sql,
+          [...original.resultColumns, 'director', 'names', 'summary', ...extra],
+          ['base', 'category', 'item', 'director', 'names'],
+        ),
+        original,
+        ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],
+        ['packet_index'],
+      );
+    }
   }
   const rawAges = raw('ages').replace(/:gea_p1\b/g, ':gea_p705');
   const keys = `SELECT DISTINCT base,sku FROM (SELECT base,sku,category FROM (${raw('orders')}) ko UNION ALL SELECT base,sku,category FROM (${raw('stock')}) ks UNION ALL SELECT base,sku,category FROM (${rawAges}) ka WHERE COALESCE(stock_qty,0)<>0 OR COALESCE(invalid,0)<>0) all_keys WHERE COALESCE(NULLIF(category,''),'未映射')=:gea_p706`;

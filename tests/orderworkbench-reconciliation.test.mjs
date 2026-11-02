@@ -23,6 +23,76 @@ const stock = {
   invalid: 0,
 };
 
+test('base tables and cross comparisons omit Puyang and exclude it from current and historical base totals', () => {
+  const period = (shortage) => {
+    const value = {
+      sections: [
+        {
+          id: 'orders',
+          status: 'ready',
+          rows: [
+            {
+              base: '郑州',
+              category: '食品',
+              item: '水饺',
+              sku: 'A',
+              demand: 100,
+              shortage,
+              invalid: 0,
+            },
+            {
+              base: '濮阳',
+              category: '食品',
+              item: '水饺',
+              sku: 'B',
+              demand: 100,
+              shortage: 90,
+              invalid: 0,
+            },
+          ],
+        },
+      ],
+    };
+    value.metrics = computeWorkbenchMetrics(value);
+    return value;
+  };
+  const current = period(10),
+    previous = period(20);
+  const presentation = workbenchPresentation({
+    selected: 'month',
+    periods: {
+      month: current,
+      week: current,
+      previousMonth: previous,
+      previousWeek: previous,
+      yearMonth: previous,
+      yearWeek: previous,
+    },
+    directors: { rows: [] },
+    customers: { rows: [] },
+  });
+  for (const key of ['month', 'week']) {
+    const table = presentation.performance['base-performance'][key];
+    assert.deepEqual(
+      table.map((row) => row[0]),
+      ['郑州', '合计'],
+    );
+    const total = table.find((row) => row[0] === '合计');
+    assert.equal(total[1].raw, 90);
+    assert.equal(total[2], '+10.00%');
+  }
+  for (const key of ['base-category', 'base-category-days'])
+    assert.deepEqual(
+      presentation.dimensions[key].rows.map((row) => row[0]),
+      ['郑州'],
+    );
+  assert.equal(
+    presentation.cards[2].value,
+    '50.00',
+    'base-only exclusion does not change nationwide overview scope',
+  );
+});
+
 test('one negative stock row remains in the valid nationwide net quantity', () => {
   const p = stockPeriod([stock, { ...stock, inventory: -1, sales_plan: 0 }]);
   assert.equal(computeWorkbenchMetrics(p)['周转天数'].value, 9.9);
@@ -53,11 +123,11 @@ test('all inventory is the numerator, never silently replaced with available sto
   assert.match(workbenchQueries.stock.sql, /b.inventory IS NULL/);
 });
 
-test('factory and rented warehouses share the age scope and unknown production dates invalidate age', () => {
+test('factory and rented warehouses share the Hive age scope and unknown source ages invalidate age', () => {
   assert.match(workbenchQueries.ages.sql, /warehouse_classify IN \('01','02'\)/);
   assert.match(workbenchQueries.ageDate.sql, /warehouse_classify IN \('01','02'\)/);
-  assert.match(workbenchQueries.ages.sql, /SUM\(b.live_qty\) AS stock_qty/);
-  assert.match(workbenchQueries.ages.sql, /CAST\(b.prod_date AS DATE\) IS NULL OR/);
+  assert.match(workbenchQueries.ages.sql, /SUM\(b.inv_qty\) AS stock_qty/);
+  assert.match(workbenchQueries.ages.sql, /b.age_days IS NULL OR b.age_days<0/);
   assert.match(
     workbenchQueries.ages.sql,
     /MAX\(s.names\)>1 THEN NULL ELSE COALESCE\(MAX\(s.item\),MAX\(m.item\)\)/,
@@ -66,7 +136,7 @@ test('factory and rented warehouses share the age scope and unknown production d
   assert.equal(workbenchQueries.ages.scoped, true);
   assert.match(
     workbenchQueries.ages.sql,
-    /WHERE \(:gea_p900='' OR b.belong_base=:gea_p900\) AND b.month_date/,
+    /WHERE \(:gea_p900='' OR b.belong_base=:gea_p900\) AND b.dt/,
   );
 });
 
@@ -162,7 +232,9 @@ test('complete explicit shared responsibility survives multiple source names but
   );
   assert.deepEqual(directorNames([{ ...mapping, directors: '["甲"]' }], row), ['归属待补全']);
   assert.match(workbenchQueries.directors.sql, /agents_scm_execute_detail_hourly_d/);
-  assert.match(workbenchQueries.directors.sql, /ARRAY_AGG\(DISTINCT/);
+  assert.doesNotMatch(workbenchQueries.directors.sql, /ARRAY_AGG\(DISTINCT/);
+  assert.match(workbenchQueries.directors.sql, /SELECT DISTINCT d\.belong_base,d\.material_code/);
+  assert.match(workbenchQueries.directors.sql, /COUNT\(DISTINCT NULLIF\(TRIM\(d\.director\)/);
 });
 
 test('unmapped dimensions retain a field-specific hover explanation', () => {

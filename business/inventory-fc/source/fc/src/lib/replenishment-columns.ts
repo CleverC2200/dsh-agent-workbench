@@ -146,6 +146,9 @@ const DECIMAL_COLUMNS = new Set([
 /** Presentation only: keep the unrounded source values for calculations and ordering. */
 export function formatReplenishmentCell(row: ReplenishmentRow, key: string): string {
   const value = replenishmentCellValue(row, key);
+  return formatReplenishmentValue(value, key);
+}
+export function formatReplenishmentValue(value: string | number, key: string): string {
   if (typeof value !== 'number') return value;
   if (!Number.isFinite(value)) return '待核实';
   if (CEILING_COLUMNS.has(key)) return Math.ceil(value).toLocaleString('zh-CN');

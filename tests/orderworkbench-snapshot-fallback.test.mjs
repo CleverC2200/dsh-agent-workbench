@@ -49,6 +49,16 @@ test('daily history survives an empty hourly refresh and hourly exclusions suppr
     assert.equal(events.length, 3);
     assert.equal(events.filter((row) => row.cust_code === 'C' && row.orderstatus === 90).length, 1);
     assert.equal(products('华南').length, 1, 'base is part of precedence key');
+
+    db.exec(`INSERT INTO agents_scm_execute_detail_d VALUES
+      (NULL,'NULLKEY','E','郑州','old',10,'1','水饺','','','','2026-10-20','2026-10-25',10,NULL,NULL),
+      ('','NULLKEY','E','郑州','empty',10,'1','水饺','','','','2026-10-20','2026-10-25',10,NULL,NULL),
+      ('N','NULLKEY','E','郑州','literal',10,'1','水饺','','','','2026-10-20','2026-10-25',10,NULL,NULL);
+      INSERT INTO agents_scm_execute_detail_hourly_d VALUES
+      (NULL,'NULLKEY','E','郑州','new',10,'1','水饺','','','','2026-10-20','2026-10-25',10,NULL,NULL),
+      (NULL,'NULLKEY','E','郑州','new',10,'1','水饺','','','','2026-10-20','2026-10-25',10,NULL,NULL);`);
+    const nullKeys = products('郑州').filter((row) => row.cust_order_no === 'NULLKEY');
+    assert.deepEqual(nullKeys.map((row) => row.material_code).sort(), ['empty', 'literal', 'new']);
   } finally {
     db.close();
   }

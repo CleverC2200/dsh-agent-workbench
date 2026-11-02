@@ -933,9 +933,12 @@ export function mountCompanyUI(
                               disabled={disabled}
                               title={reason}
                               data-gea-business-entry={pageId ?? id}
-                              aria-current={activePanel === pageId ? 'page' : undefined}
+                              aria-current={
+                                !disabled && pageId && activePanel === pageId ? 'page' : undefined
+                              }
                               className={
-                                'gea-shell-nav-child' + (activePanel === pageId ? ' is-active' : '')
+                                'gea-shell-nav-child' +
+                                (!disabled && pageId && activePanel === pageId ? ' is-active' : '')
                               }
                               onClick={() => {
                                 if (pageId) void workbench.open(pageId as MainPanelId);

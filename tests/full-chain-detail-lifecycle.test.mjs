@@ -30,6 +30,7 @@ test('tree details release on collapse/unmount without erasing another tree, and
     },
     bundle: true,
     write: false,
+    loader: { '.css': 'empty', '.module.css': 'empty' },
     format: 'esm',
     platform: 'node',
     external: ['react', 'react/jsx-runtime'],

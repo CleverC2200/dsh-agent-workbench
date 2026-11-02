@@ -34,6 +34,10 @@ const sum = (values: (number | null)[]) =>
   values.length && values.every((value) => value !== null)
     ? values.reduce<number>((total, value) => total + value!, 0)
     : null;
+const knownDailySum = (values: (number | null)[]) => {
+  const known = values.filter((value): value is number => value !== null && value >= 0);
+  return known.length ? known.reduce((total, value) => total + value, 0) : null;
+};
 const qty = (value: number) =>
   Math.abs(value) >= 10000
     ? `${(value / 10000).toFixed(1)}万箱`
@@ -122,7 +126,7 @@ export function buildInventoryInsight(input: {
       future14: ages?.length
         ? sum(ages.map((row) => numeric(row['inventory_age.future_14_overage'])))
         : null,
-      dailyDemand: sum(rows.map((row) => row.dailyDemand)),
+      dailyDemand: knownDailySum(rows.map((row) => row.dailyDemand)),
       last30d: sum(rows.map((row) => row.last30d)),
     };
   });
@@ -207,8 +211,12 @@ export function buildInventoryInsight(input: {
           key(String(row['inventory_age.base_name']), String(row['inventory_age.material_code'])),
         ) && numeric(row['inventory_age.age_60_plus']) !== null,
     );
-  const daily = sum(skus.map((row) => row.dailyDemand)),
+  const daily = knownDailySum(skus.map((row) => row.dailyDemand)),
     sales = sum(skus.map((row) => row.last30d));
+  const dailyKnownCount = skus.filter(
+    (row) => row.dailyDemand !== null && row.dailyDemand >= 0,
+  ).length;
+  const dailyComplete = dailyKnownCount === skus.length;
   const overlap = (top.length ? top : shortageGroups).some(
     (row) => (row.age60 ?? 0) > 0 || (row.gap ?? 0) > 0,
   );
@@ -234,6 +242,7 @@ export function buildInventoryInsight(input: {
             ? '未来新增超龄风险已触发，不等同当前大日期存量'
             : gap !== null &&
                 gap > 0 &&
+                dailyComplete &&
                 daily !== null &&
                 daily > 0 &&
                 sales !== null &&
@@ -257,6 +266,10 @@ export function buildInventoryInsight(input: {
       if (target === null) missing.push('目标不全');
     }
   }
+  if (!dailyComplete)
+    missing.push(
+      `${skus.length - dailyKnownCount}/${skus.length}个基地/SKU缺日均计划，已知合计覆盖${dailyKnownCount}/${skus.length}`,
+    );
   if (shortage === null) missing.push('当前缺口未核实');
   if (!completeRanking || !names || top.length < 3) missing.push('不足以确认完整前三对象');
   if (!completeAge) missing.push('货龄明细不全');
@@ -281,6 +294,7 @@ export function buildInventoryInsight(input: {
       future14,
       fulfillment: input.fulfillment,
       dailyDemand: daily,
+      dailyDemandCoverage: { known: dailyKnownCount, total: skus.length, complete: dailyComplete },
       last30d: sales,
     },
     completeAge,
@@ -289,10 +303,15 @@ export function buildInventoryInsight(input: {
 }
 
 /** Exact engine evidence published to the page interpreter; no model-side recomputation. */
-export type InventoryRiskEvidence = Pick<
-  ReturnType<typeof buildInventoryInsight>,
-  'text' | 'ranking' | 'top' | 'completeRanking' | 'metrics' | 'completeAge' | 'missing'
+export type InventoryRiskEvidence = Omit<
+  Pick<
+    ReturnType<typeof buildInventoryInsight>,
+    'text' | 'ranking' | 'top' | 'completeRanking' | 'metrics' | 'completeAge' | 'missing'
+  >,
+  'metrics'
 > & {
+  metrics: Omit<ReturnType<typeof buildInventoryInsight>['metrics'], 'dailyDemandCoverage'> &
+    Partial<Pick<ReturnType<typeof buildInventoryInsight>['metrics'], 'dailyDemandCoverage'>>;
   sources: {
     consumerCode: 'base-safety-stock';
     bases: string[];

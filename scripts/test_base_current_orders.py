@@ -15,7 +15,7 @@ class BaseCurrentOrders(unittest.TestCase):
   self.db.create_function('CONCAT',-1,lambda *x:''.join('' if a is None else str(a) for a in x))
   self.db.execute('CREATE TABLE agents_scm_inventory_sku_data_d(month_date TEXT,warehouseid TEXT,warehouse_name TEXT,belong_base TEXT,material_code TEXT,material_name TEXT,prod_date TEXT,sap_warehouseid TEXT,plant TEXT,quality_batch TEXT,is_good_prod TEXT,warehouse_classify TEXT,available_qty REAL)')
   self.db.execute('CREATE TABLE agents_scm_material_in_out_summary_d(warehouseid TEXT,pickup_point TEXT,material_code TEXT,product_categ_name TEXT,material_group_name TEXT)')
-  self.db.execute('CREATE TABLE agents_scm_execute_detail_d(cust_order_no TEXT,cust_code TEXT,material_code TEXT,material_name TEXT,pickup_point TEXT,pickup_point_name TEXT,belong_base TEXT,bizunitconvertrate REAL,qtyshipped REAL,qtyordered REAL,adjust_order_qty REAL,qtyallocated REAL,delivery_qty REAL,bizflowstatus TEXT,detailstatus INTEGER,order_close_time TEXT,wms_close_time TEXT,canceltime TEXT)')
+  self.db.execute('CREATE TABLE agents_scm_execute_detail_d(cust_order_no TEXT,cust_code TEXT,material_code TEXT,material_name TEXT,pickup_point TEXT,pickup_point_name TEXT,belong_base TEXT,bizunitconvertrate REAL,qtyshipped REAL,qtyordered REAL,adjust_order_qty REAL,qtyallocated REAL,delivery_qty REAL,bizflowstatus TEXT,detailstatus INTEGER,order_close_time TEXT,wms_close_time TEXT,canceltime TEXT, dmscanceltime TEXT, bdwctime TEXT, prapare_order_status TEXT)')
   for w,p,kind,base in [('W1','P1','01','郑州'),('W2','P2','02','郑州'),('F','PF','20','郑州'),('S','PS','01','遂平')]:
    self.stock(w,'SKU1',0,kind,base)
    self.db.execute('INSERT INTO agents_scm_material_in_out_summary_d VALUES(?,?,?,?,?)',(w,p,'SKU1','面点','馒头'))
@@ -32,7 +32,7 @@ class BaseCurrentOrders(unittest.TestCase):
   return [dict(r) for r in self.db.execute(sql,p)]
  def base(self,**values):return next(r for r in self.read(**values) if r['base']=='郑州')
  def test_same_piece_cohort_includes_prepared_and_partial_orders_excludes_finished_cancelled_closed(self):
-  self.add('OPEN');self.add('PREPARED',bizflowstatus='OCP已下发',qtyallocated=100)
+  self.add('OPEN');self.add('PREPARED',bizflowstatus='OCP已下发',qtyallocated=100,prapare_order_status='备单完成')
   self.add('PART',material_code='S2',qtyordered=30,qtyallocated=30,delivery_qty=30)
   self.add('PART',material_code='S3',qtyordered=40,qtyallocated=20,delivery_qty=10)
   for order,values in [('VOID',dict(detailstatus=20)),('CANCEL',dict(canceltime='2026-10-28')),('CLOSED',dict(order_close_time='2026-10-28')),('WMS',dict(wms_close_time='2026-10-28')),('DONE',dict(delivery_qty=100)),('BRANCH',dict(pickup_point='PF'))]:self.add(order,**values)
@@ -41,6 +41,13 @@ class BaseCurrentOrders(unittest.TestCase):
   for key in ['current-shortage.summary','current-shortage.categories','current-shortage.skus']:
    rows=self.read(key,**({'skus':['SKU1']} if key.endswith('skus') else {}))
    self.assertEqual(sum(r['demand'] for r in rows),200 if key.endswith('skus') else 270,key)
+ def test_open_order_with_unknown_shipped_quantity_keeps_known_demand(self):
+  self.add('OPEN',qtyordered=100,qtyshipped=None)
+  self.assertEqual(self.base()['demand'],100)
+ def test_prepared_uses_allocation_and_source_stages_not_expected_quantity(self):
+  self.add('PREPARED',qtyordered=100,qtyallocated=65,prapare_order_status='备单完毕')
+  self.add('DMS_CANCELLED',qtyordered=999,dmscanceltime='2026-10-30')
+  row=self.base();self.assertEqual((row['demand'],row['allocated'],row['remaining']),(65,65,0))
  def test_order_sku_clip_then_base_sku_inventory_deduction_once_no_cross_sku_offset(self):
   self.add('A',qtyordered=3,qtyallocated=5);self.add('A',qtyordered=5,qtyallocated=0)
   self.add('B',pickup_point='P2',qtyordered=10,qtyallocated=0)

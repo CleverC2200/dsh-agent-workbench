@@ -3,7 +3,7 @@ import {
   workbenchMetricMissingReason,
   metricComparisonNote,
 } from './metric-model.mjs';
-import { directorNames } from './live-presentation.mjs';
+import { directorNames, workbenchBaseIncluded } from './live-presentation.mjs';
 
 export function workbenchCellMissingReason(
   facts,
@@ -16,7 +16,7 @@ export function workbenchCellMissingReason(
       return '源数据未提供或归属不唯一：当前周期 agents_scm_execute_detail_hourly_d.director 无完整责任名单；郑州按基地＋material_code匹配，其他基地按基地匹配，未用其他周期负责人替代。';
     if (dimension.startsWith('item'))
       return '源数据未提供或归属冲突：同快照 agents_scm_stock_detail_d.product_item、同周期 agents_order_execute_isontime_mi.pinxiang 未能唯一匹配该SKU；物料组不等于业务品项，未猜测归属。';
-    return '源数据未提供：当前记录的 belong_base 为空，无法确定基地归属；记录仍保留在合计内。';
+    return '归属待补全：当前记录的 belong_base 为空，无法确定基地归属；该组有库存等可计算数据时仍展示指标及环比，记录仍保留在合计内。';
   }
   const name =
     dimension === 'base-category-days'
@@ -48,8 +48,8 @@ export function workbenchCellMissingReason(
         : 'previousMonth'
     : null;
   const makeFilter = (key) => {
-    let filter = () => true;
-    if (row[0] !== '合计') {
+    let filter = (item) => dimension !== 'base-performance' || workbenchBaseIncluded(item.base);
+    if (row.length && row[0] !== '合计') {
       const field = dimension.startsWith('base')
         ? 'base'
         : dimension.startsWith('item')

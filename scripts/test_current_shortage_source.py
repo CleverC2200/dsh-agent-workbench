@@ -16,6 +16,9 @@ class SourceFormula(unittest.TestCase):
    cl=opt[0] if opt else '01';batch=opt[1] if len(opt)>1 else 'a';date=opt[2] if len(opt)>2 else '20261021'
    c.execute('INSERT INTO agents_scm_inventory_sku_data_d VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',(date,w,w,'B',sku,sku,'20260101','sap','plant',batch,'1',cl,qty))
   c.executemany('INSERT INTO agents_scm_material_in_out_summary_d (warehouseid,pickup_point) VALUES (?,?)',mapping)
+  for column,kind in [('cust_code',"TEXT DEFAULT 'FIXTURE'"),('qtyshipped','REAL DEFAULT 0'),('delivery_qty','REAL DEFAULT 0'),('detailstatus','INTEGER DEFAULT 10'),('order_close_time','TEXT'),('wms_close_time','TEXT'),('canceltime','TEXT'),('dmscanceltime','TEXT'),('bdwctime','TEXT'),('prapare_order_status','TEXT')]:
+   c.execute('ALTER TABLE agents_scm_execute_detail_d ADD COLUMN '+column+' '+kind)
+  c.execute("UPDATE agents_scm_execute_detail_d SET canceltime='2026-10-01' WHERE bizflowstatus='作废'")
   return [dict(r) for r in c.execute(statement,{'gea_p1':None,'gea_p2':None,'gea_p3':None,'gea_p6':None})]
  def total(self,rows):return sum(r['shortage_qty'] for r in rows if r['shortage_qty'] is not None)
  def test_order_rows_accumulate_before_clip(self):

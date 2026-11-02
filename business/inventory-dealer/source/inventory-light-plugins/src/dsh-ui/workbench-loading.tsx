@@ -54,10 +54,16 @@ export function DashboardOverviewSkeleton({
   );
 }
 
-export function DashboardTableSkeleton({ label }: { label: string }) {
+export function DashboardTableSkeleton({
+  label,
+  embedded = false,
+}: {
+  label: string;
+  embedded?: boolean;
+}) {
   return (
     <div
-      className={`${styles.tableCard} ${styles.tableSkeleton}`}
+      className={`${styles.tableCard} ${styles.tableSkeleton} ${embedded ? styles.embeddedTable : ''}`}
       role="status"
       aria-live="polite"
       aria-label={label}

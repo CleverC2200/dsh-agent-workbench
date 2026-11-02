@@ -36,6 +36,8 @@ function source(c, adapt = () => {}) {
       if (/^source\.(?:stock|health|branch-stock)-date$/.test(call.queryId))
         r.rows = [{ day: '2026-10-14' }];
       if (call.queryId === 'source.dealer-stock-date') r.rows = [{ day: '2026-09-22' }];
+      if (call.queryId === 'calendar.target_versions')
+        r.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
       adapt(call, r);
       return r;
     },
@@ -47,7 +49,7 @@ test('overview uses whole-scope aggregates without count or detail round trips',
     await readConfiguredOverview(configs[a], '2026-10-15', '', io);
     assert.ok(
       io.calls.every((c) =>
-        /^overview\.(?:quick-stock|orders-by-pickup)$|summary|\.cards$|\.inventory$|source\.(?:(?:dealer-|branch-)?stock|health)-date/.test(
+        /^calendar\.target_versions$|^overview\.(?:quick-stock|orders-by-pickup)$|summary|\.cards$|\.inventory$|source\.(?:(?:dealer-|branch-)?stock|health)-date/.test(
           c.queryId,
         ),
       ),
@@ -80,17 +82,17 @@ test('unknown remains unknown; overview does not fabricate empty numeric values'
 });
 test('an authorization failure stays local to its domain and is never retried', async () => {
   const io = source(configs.fc, (call) => {
-    if (call.queryId === 'orders.summary') throw Error('denied');
+    if (call.queryId === 'branch-supply.summary') throw Error('denied');
   });
   const r = await readConfiguredOverview(configs.fc, '2026-10-15', '', io);
-  assert.equal(r.orders.error, 'denied');
+  assert.equal(r['branch-supply'].error, 'denied');
   assert.ok(r.replenishment.summary);
   assert.equal(io.calls.filter((c) => c.queryId === 'replenishment.summary').length, 1);
-  assert.equal(io.calls.filter((c) => c.queryId === 'orders.summary').length, 1);
+  assert.equal(io.calls.filter((c) => c.queryId === 'branch-supply.summary').length, 2);
 });
 test('config changes across overview domains reject the combined overview', async () => {
   const io = source(configs.fc, (call, r) => {
-    if (call.queryId.startsWith('orders.')) r.configVersion = 'v2';
+    if (call.queryId.startsWith('branch-supply.')) r.configVersion = 'v2';
   });
   await assert.rejects(readConfiguredOverview(configs.fc, '2026-10-15', '', io), {
     code: 'QUERY_CONFIG_CHANGED',

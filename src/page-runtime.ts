@@ -15,10 +15,57 @@ import {
   compressForModel,
 } from './page-interaction/shared/payload-budget.ts';
 
-function compressPageContext(result: unknown, options: { focus?: string }): unknown {
+function compressPageContext(
+  result: unknown,
+  options: { focus?: string; pageId?: string },
+): unknown {
   if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
   const value = result as Record<string, unknown>;
-  const source = value.context as { parts?: Record<string, unknown> } | null;
+  const source = value.context as
+    | (Record<string, unknown> & { parts?: Record<string, unknown> })
+    | null;
+  // Card facts are not detail rows: a focus or row limit must not change their count or order.
+  const preserveMetrics = [
+    'inventory-customer',
+    'inventory-orderfulfillment',
+    'inventory-orderworkbench',
+  ].includes(options.pageId ?? '');
+  const metrics =
+    preserveMetrics && Array.isArray(source?.metrics)
+      ? source.metrics.map((metric: Record<string, unknown>) =>
+          Object.fromEntries(
+            [
+              'key',
+              'label',
+              'value',
+              'display',
+              'unit',
+              'coveredCount',
+              'missingCount',
+              'status',
+              'target',
+              'coverageNote',
+              'missingReason',
+              'definition',
+              'sourceNotes',
+            ]
+              .filter((key) => metric?.[key] !== undefined)
+              .map((key) => [key, metric[key]]),
+          ),
+        )
+      : undefined;
+  const cardFacts = metrics
+    ? {
+        metrics,
+        ...(source?.metricContract ? { metricContract: source.metricContract } : {}),
+        ...(source?.metricSemantics ? { metricSemantics: source.metricSemantics } : {}),
+      }
+    : undefined;
+  if (
+    cardFacts &&
+    Buffer.byteLength(JSON.stringify(cardFacts), 'utf8') > MODEL_PAYLOAD_BUDGET - 1000
+  )
+    throw Error('PAGE_METRIC_CONTEXT_TOO_LARGE');
   // Preserve query choices and computed scope facts; focus narrows result rows, including top objects.
   const controls =
     source?.parts?.pageFilters === undefined
@@ -32,7 +79,7 @@ function compressPageContext(result: unknown, options: { focus?: string }): unkn
     evidence && typeof evidence === 'object' && !Array.isArray(evidence)
       ? compressForModel({ ...evidence, top: undefined }, { budgetBytes: 4000 })
       : undefined;
-  const payload =
+  const contextual =
     controls || riskFacts
       ? {
           ...source,
@@ -45,9 +92,19 @@ function compressPageContext(result: unknown, options: { focus?: string }): unkn
           },
         }
       : (value.context ?? null);
+  const payload =
+    cardFacts && contextual && typeof contextual === 'object'
+      ? {
+          ...contextual,
+          metrics: undefined,
+          metricContract: undefined,
+          metricSemantics: undefined,
+          metricDefinitions: source?.metrics,
+        }
+      : contextual;
   const metadataBytes = [controls, riskFacts].reduce(
     (total, item) => total + (item ? Buffer.byteLength(item.json, 'utf8') + 100 : 0),
-    0,
+    cardFacts ? Buffer.byteLength(JSON.stringify(cardFacts), 'utf8') + 100 : 0,
   );
   const compressed = compressForModel(payload, {
     budgetBytes: MODEL_PAYLOAD_BUDGET - metadataBytes,
@@ -77,6 +134,8 @@ function compressPageContext(result: unknown, options: { focus?: string }): unkn
     }
     context = { ...record, parts };
   }
+  if (cardFacts && context && typeof context === 'object' && !Array.isArray(context))
+    context = { ...cardFacts, ...context, ...cardFacts };
   const actions = Array.isArray(value.actions) ? value.actions : [];
   return {
     ...value,
@@ -261,7 +320,10 @@ export class PageRuntime {
                     ? parameters.focus
                     : undefined;
               const payload = JSON.stringify(
-                compressPageContext(result, focus === undefined ? {} : { focus }),
+                compressPageContext(result, {
+                  pageId: owner.page.id,
+                  ...(focus === undefined ? {} : { focus }),
+                }),
               );
               if (owner.lastContext === payload)
                 return JSON.stringify({

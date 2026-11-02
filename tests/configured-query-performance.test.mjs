@@ -118,6 +118,39 @@ const registry = {
 const pageRows = (offset, total = 1001) =>
   Array.from({ length: Math.min(200, total - offset) }, (_, i) => ({ value: offset + i }));
 
+test('visible collections overtake queued background counts and pages without increasing concurrency', async () => {
+  const config = structuredClone(registry);
+  config.queries.visible = structuredClone(config.queries.list);
+  config.queries.visible.pagination.countQuery = 'visibleCount';
+  config.queries.visibleCount = structuredClone(config.queries.count);
+  const calls = [],
+    releases = [];
+  let blockers = 0;
+  const client = createQueryClient(config, async (_, { queryId }) => {
+    calls.push(queryId);
+    if (queryId === 'count' && blockers++ < 4)
+      return new Promise((resolve) => releases.push(() => resolve({ rows: [{ total: 0 }] })));
+    return { rows: queryId.toLowerCase().includes('count') ? [{ total: 0 }] : [] };
+  });
+  const occupied = Array.from({ length: 4 }, () => client.read('count', {}));
+  await new Promise(setImmediate);
+  const background = client.readAll(
+    'list',
+    { page_size: 200, offset: 0 },
+    { keyFields: ['value'], priority: -10 },
+  );
+  const visible = client.readAll(
+    'visible',
+    { page_size: 200, offset: 0 },
+    { keyFields: ['value'], priority: 10 },
+  );
+  releases[0]();
+  await visible;
+  assert.equal(calls[4], 'visibleCount');
+  releases.slice(1).forEach((release) => release());
+  await Promise.all([...occupied, background]);
+});
+
 test('concurrent pages preserve row order despite responses arriving in reverse order', async () => {
   let pending = [],
     timer;
@@ -193,36 +226,43 @@ test('short intermediate pages reject the collection instead of silently skippin
   );
 });
 
-test('all cards share four transport slots and an aborted queued read is never sent', async () => {
-  const active = new Map(),
-    sent = [];
-  let peak = 0;
-  const client = createQueryClient(registry, async (_, o) => {
-    const at = o.values.offset;
-    sent.push(at);
-    return new Promise((resolve) => {
-      active.set(at, () => {
-        active.delete(at);
-        resolve({ rows: [] });
+for (const [agentId, slots] of [
+  [undefined, 4],
+  ['inventory-orderworkbench', 6],
+])
+  test(`${agentId ?? 'default'}: cards share ${slots} slots and an aborted queued read is never sent`, async () => {
+    const active = new Map(),
+      sent = [];
+    let peak = 0;
+    const client = createQueryClient({ ...registry, agentId }, async (_, o) => {
+      const at = o.values.offset;
+      sent.push(at);
+      return new Promise((resolve) => {
+        active.set(at, () => {
+          active.delete(at);
+          resolve({ rows: [] });
+        });
+        peak = Math.max(peak, active.size);
       });
-      peak = Math.max(peak, active.size);
     });
+    const jobs = Array.from({ length: slots }, (_, i) =>
+      client.read('list', { page_size: 10, offset: i }),
+    );
+    await new Promise(setImmediate);
+    assert.equal(active.size, slots);
+    const stop = new AbortController();
+    const queued = client.read('list', { page_size: 10, offset: slots }, { signal: stop.signal });
+    const rejected = assert.rejects(queued, { name: 'AbortError' });
+    stop.abort();
+    await rejected;
+    for (const done of active.values()) done();
+    await Promise.all(jobs);
+    assert.equal(peak, slots);
+    assert.deepEqual(
+      sent,
+      Array.from({ length: slots }, (_, i) => i),
+    );
   });
-  const jobs = Array.from({ length: 4 }, (_, i) =>
-    client.read('list', { page_size: 10, offset: i }),
-  );
-  await new Promise(setImmediate);
-  assert.equal(active.size, 4);
-  const stop = new AbortController();
-  const queued = client.read('list', { page_size: 10, offset: 4 }, { signal: stop.signal });
-  const rejected = assert.rejects(queued, { name: 'AbortError' });
-  stop.abort();
-  await rejected;
-  for (const done of active.values()) done();
-  await Promise.all(jobs);
-  assert.equal(peak, 4);
-  assert.deepEqual(sent, [0, 1, 2, 3]);
-});
 
 test('short aggregate result is complete in one statement; full page keeps counted collection checks', async () => {
   for (const total of [0, 42, 200, 201]) {

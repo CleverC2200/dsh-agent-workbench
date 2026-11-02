@@ -5,6 +5,7 @@ import type {
 import { salesPlanCanResubmit } from './models/salesPlanSubmitModel.ts';
 import { InlineSkuDetails } from './InlineSkuDetails.tsx';
 import { GroupSkuSummary } from './GroupSkuSummary.tsx';
+import { DashboardTableSkeleton } from './workbench-loading.tsx';
 import type { GeaSalesPlanListItem } from '../../contracts.ts';
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import { salesPlanQueueStatusText, salesPlanStatusText } from './regionalApprovalQueryModel.ts';
@@ -3594,280 +3595,284 @@ const RegionalApprovalWorkbench: React.FC<{
             ) : null}
           </section>
           <div ref={tableViewportRef} className={styles.tableViewport}>
-            {
-              <Spin
-                loading={liveQuery.queueState.status === 'loading'}
-                className={styles.querySpin}
-              >
-                {liveQuery.queueState.status === 'error' ? (
-                  <Alert
-                    className={styles.queryAlert}
-                    type="error"
-                    showIcon
-                    title={t('common.assistantSurface.regionalApproval.query.queueErrorTitle')}
-                    content={t(queryErrorKey(liveQuery.queueState.error))}
-                    action={
-                      <Button size="small" onClick={refreshLiveAuthority}>
-                        {t('common.assistantSurface.regionalApproval.query.retry')}
-                      </Button>
-                    }
-                  />
-                ) : null}
-                {liveQuery.queueState.status === 'success' && liveRows.length === 0 ? (
-                  <Empty
-                    description={
-                      <div>
-                        <strong>
-                          {t('common.assistantSurface.regionalApproval.query.emptyQueue')}
-                        </strong>
-                        <br />
-                        <small>
-                          {t('common.assistantSurface.regionalApproval.query.emptyQueueHint')}
-                        </small>
-                      </div>
-                    }
-                  />
-                ) : (
-                  <Table
-                    rowKey="tableRowId"
-                    onRow={(record) => ({
-                      'data-page-target': (record.kind === 'plan' && record.members
-                        ? record.members
-                        : [record.plan]
-                      )
-                        .map((plan) => `row:${plan.planId}`)
-                        .join('\n'),
-                      'data-page-label': [
-                        projectRegionalApprovalLiveDimension(record.plan, dimension).name ??
-                          record.plan.planId,
-                        record.kind === 'category' ? record.category.categoryName : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' · '),
-                    })}
-                    columns={liveColumns}
-                    data={liveTableRows}
-                    className={styles.organizationTable}
-                    tableLayoutFixed
-                    indentSize={20}
-                    expandedRowRender={(record) => {
-                      if (record.kind === 'plan' && record.members)
+            <div
+              className={styles.querySpin}
+              aria-busy={liveQuery.queueState.status === 'loading' || liveCategoriesLoading}
+            >
+              {liveQuery.queueState.status === 'loading' || liveCategoriesLoading ? (
+                <DashboardTableSkeleton label="销售计划加载中" embedded />
+              ) : (
+                <>
+                  {liveQuery.queueState.status === 'error' ? (
+                    <Alert
+                      className={styles.queryAlert}
+                      type="error"
+                      showIcon
+                      title={t('common.assistantSurface.regionalApproval.query.queueErrorTitle')}
+                      content={t(queryErrorKey(liveQuery.queueState.error))}
+                      action={
+                        <Button size="small" onClick={refreshLiveAuthority}>
+                          {t('common.assistantSurface.regionalApproval.query.retry')}
+                        </Button>
+                      }
+                    />
+                  ) : null}
+                  {liveQuery.queueState.status === 'success' && liveRows.length === 0 ? (
+                    <Empty
+                      description={
+                        <div>
+                          <strong>
+                            {t('common.assistantSurface.regionalApproval.query.emptyQueue')}
+                          </strong>
+                          <br />
+                          <small>
+                            {t('common.assistantSurface.regionalApproval.query.emptyQueueHint')}
+                          </small>
+                        </div>
+                      }
+                    />
+                  ) : (
+                    <Table
+                      rowKey="tableRowId"
+                      onRow={(record) => ({
+                        'data-page-target': (record.kind === 'plan' && record.members
+                          ? record.members
+                          : [record.plan]
+                        )
+                          .map((plan) => `row:${plan.planId}`)
+                          .join('\n'),
+                        'data-page-label': [
+                          projectRegionalApprovalLiveDimension(record.plan, dimension).name ??
+                            record.plan.planId,
+                          record.kind === 'category' ? record.category.categoryName : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' · '),
+                      })}
+                      columns={liveColumns}
+                      data={liveTableRows}
+                      className={styles.organizationTable}
+                      tableLayoutFixed
+                      indentSize={20}
+                      expandedRowRender={(record) => {
+                        if (record.kind === 'plan' && record.members)
+                          return (
+                            <GroupSkuSummary
+                              key={`${record.tableRowId}:${inlineComparison?.primaryOffset ?? 0}:${liveStageFilter ?? 'all'}`}
+                              members={record.members.map((member) => ({
+                                ...member,
+                                versionId:
+                                  versionMetrics[member.planId]?.versionId ?? member.versionId,
+                                status: versionMetrics[member.planId]?.status ?? member.status,
+                                skuCount:
+                                  primarySkusByPlan[member.planId]?.length ?? member.skuCount,
+                              }))}
+                              skusByPlan={primarySkusByPlan}
+                              comparedSkusByPlan={comparedSkusByPlan}
+                              comparison={Boolean(inlineComparison)}
+                              loading={liveCategoriesLoading}
+                              failed={liveCategoriesError}
+                              onRetry={refreshLiveAuthority}
+                              approvalRole={liveStageFilter}
+                              pendingValues={
+                                inlineComparison?.primaryOffset ? undefined : livePendingValues
+                              }
+                              editablePlans={
+                                new Set(
+                                  record.members
+                                    .filter(
+                                      (member) =>
+                                        inlineSkuAccess(member).canEdit &&
+                                        !sourceTypeReadOnly(member),
+                                    )
+                                    .map((member) => member.planId),
+                                )
+                              }
+                              detailsByPlan={Object.fromEntries(
+                                record.members.flatMap((member) => {
+                                  const detail = inlineSkuAccess(member).detail;
+                                  return detail ? [[member.planId, detail]] : [];
+                                }),
+                              )}
+                              onPendingValuesChange={handleGroupPendingValues}
+                              onValidityChange={(invalid) =>
+                                setInvalidGroupInputs((current) => {
+                                  const next = { ...current };
+                                  if (invalid)
+                                    next[record.tableRowId] = record.members!.map(
+                                      (member) => member.planId,
+                                    );
+                                  else delete next[record.tableRowId];
+                                  return next;
+                                })
+                              }
+                              t={t}
+                            />
+                          );
+                        const access = inlineSkuAccess(record.plan);
                         return (
-                          <GroupSkuSummary
-                            key={`${record.tableRowId}:${inlineComparison?.primaryOffset ?? 0}:${liveStageFilter ?? 'all'}`}
-                            members={record.members.map((member) => ({
-                              ...member,
-                              versionId:
-                                versionMetrics[member.planId]?.versionId ?? member.versionId,
-                              status: versionMetrics[member.planId]?.status ?? member.status,
-                              skuCount: primarySkusByPlan[member.planId]?.length ?? member.skuCount,
-                            }))}
-                            skusByPlan={primarySkusByPlan}
-                            comparedSkusByPlan={comparedSkusByPlan}
+                          <InlineSkuDetails
+                            orderType={orderType}
                             comparison={Boolean(inlineComparison)}
                             loading={liveCategoriesLoading}
-                            failed={liveCategoriesError}
-                            onRetry={refreshLiveAuthority}
-                            approvalRole={liveStageFilter}
-                            pendingValues={
-                              inlineComparison?.primaryOffset ? undefined : livePendingValues
+                            comparedSkus={comparedSkusByPlan[record.plan.planId]}
+                            unavailable={
+                              !liveCategoriesLoading && !primarySkusByPlan[record.plan.planId]
                             }
-                            editablePlans={
-                              new Set(
-                                record.members
-                                  .filter(
-                                    (member) =>
-                                      inlineSkuAccess(member).canEdit &&
-                                      !sourceTypeReadOnly(member),
+                            selectedSkus={primarySkusByPlan[record.plan.planId]}
+                            key={
+                              conversationId
+                                ? liveInputKey(
+                                    conversationId,
+                                    record.plan.planId,
+                                    versionMetrics[record.plan.planId]?.versionId ??
+                                      record.plan.versionId,
+                                    access.role,
                                   )
-                                  .map((member) => member.planId),
-                              )
+                                : `${record.plan.planId}:${versionMetrics[record.plan.planId]?.versionId ?? record.plan.versionId}:${access.role ?? 'view'}`
                             }
-                            detailsByPlan={Object.fromEntries(
-                              record.members.flatMap((member) => {
-                                const detail = inlineSkuAccess(member).detail;
-                                return detail ? [[member.planId, detail]] : [];
-                              }),
-                            )}
-                            onPendingValuesChange={handleGroupPendingValues}
-                            onValidityChange={(invalid) =>
-                              setInvalidGroupInputs((current) => {
-                                const next = { ...current };
-                                if (invalid)
-                                  next[record.tableRowId] = record.members!.map(
-                                    (member) => member.planId,
-                                  );
-                                else delete next[record.tableRowId];
-                                return next;
-                              })
+                            initialInputValues={
+                              conversationId
+                                ? viewState.liveInputs?.[
+                                    liveInputKey(
+                                      conversationId,
+                                      record.plan.planId,
+                                      versionMetrics[record.plan.planId]?.versionId ??
+                                        record.plan.versionId,
+                                      access.role,
+                                    )
+                                  ]
+                                : undefined
                             }
+                            onInputChange={
+                              conversationId
+                                ? (changes) => {
+                                    const key = liveInputKey(
+                                      conversationId,
+                                      record.plan.planId,
+                                      versionMetrics[record.plan.planId]?.versionId ??
+                                        record.plan.versionId,
+                                      access.role,
+                                    );
+                                    setViewState((current) => ({
+                                      ...current,
+                                      liveInputs: {
+                                        ...current.liveInputs,
+                                        [key]: { ...current.liveInputs?.[key], ...changes },
+                                      },
+                                    }));
+                                  }
+                                : undefined
+                            }
+                            row={{
+                              ...record.plan,
+                              status:
+                                versionMetrics[record.plan.planId]?.status ?? record.plan.status,
+                              versionId:
+                                versionMetrics[record.plan.planId]?.versionId ??
+                                record.plan.versionId,
+                            }}
                             t={t}
+                            detail={sourceTypeReadOnly(record.plan) ? undefined : access.detail}
+                            approvalRole={access.role}
+                            canEdit={
+                              record.kind === 'plan' &&
+                              access.canEdit &&
+                              !sourceTypeReadOnly(record.plan)
+                            }
+                            categoryName={
+                              record.kind === 'category' ? record.category.categoryName : undefined
+                            }
+                            onMetricsChange={
+                              record.kind === 'plan' &&
+                              !record.members &&
+                              !sourceTypeReadOnly(record.plan)
+                                ? (metrics) =>
+                                    handleLiveAdjustmentMetrics(record.plan.planId, metrics)
+                                : undefined
+                            }
+                            onPendingValuesChange={
+                              record.kind === 'plan' &&
+                              !record.members &&
+                              !sourceTypeReadOnly(record.plan)
+                                ? (values) => handleLivePendingValues(record.plan.planId, values)
+                                : undefined
+                            }
+                            draftPatch={
+                              draftPatch && draftPatch.planId === record.plan.planId
+                                ? draftPatch
+                                : undefined
+                            }
+                            onElementsChange={(fields, collection) =>
+                              handleInlineElements(record.plan.planId, fields, collection)
+                            }
                           />
                         );
-                      const access = inlineSkuAccess(record.plan);
-                      return (
-                        <InlineSkuDetails
-                          orderType={orderType}
-                          comparison={Boolean(inlineComparison)}
-                          loading={liveCategoriesLoading}
-                          comparedSkus={comparedSkusByPlan[record.plan.planId]}
-                          unavailable={
-                            !liveCategoriesLoading && !primarySkusByPlan[record.plan.planId]
+                      }}
+                      // V1.8 #10：去掉行首独立展开箭头，展开/收起统一走组织名称；这里只保留展开能力。
+                      // 宽度必须给非 0 值：Arco 计算固定列偏移时用 `width || 40`，给 0 会被当成 40，左列会压掉 40px。
+                      expandProps={{ width: 1, icon: () => null }}
+                      expandedRowKeys={expandedLiveRowKeys}
+                      onExpandedRowsChange={setExpandedLiveGroups}
+                      rowClassName={(row) =>
+                        row.kind === 'category'
+                          ? styles.categoryComparisonRow
+                          : row.members
+                            ? styles.organizationGroupRow
+                            : ''
+                      }
+                      rowSelection={{
+                        type: 'checkbox',
+                        checkAll: false,
+                        fixed: pinLiveColumns,
+                        columnWidth: 40,
+                        selectedRowKeys: selectedLiveTableRowIds,
+                        onChange: (keys) => {
+                          // 分组行的勾选状态是「组内成员全部选中」的派生结果，不能按 key 是否存在直接重算：
+                          // 取消分组时只去掉分组 key，成员计划还在选，下一次渲染又把分组派生成勾选，表现为取消不掉。
+                          const next = new Set(keys.map(String));
+                          const displayed = new Set(selectedLiveTableRowIds);
+                          const planIds = new Set(selectedRowIds);
+                          const coveredPlans = (row: RegionalApprovalLiveTableRow | undefined) =>
+                            row?.kind !== 'plan'
+                              ? []
+                              : row.members?.length
+                                ? row.members.map((member) => member.planId)
+                                : [row.plan.planId];
+                          for (const key of next)
+                            if (!displayed.has(key))
+                              coveredPlans(liveTableRowById.get(key)).forEach((planId) =>
+                                planIds.add(planId),
+                              );
+                          for (const key of displayed) {
+                            if (next.has(key)) continue;
+                            const row = liveTableRowById.get(key);
+                            // 分组行只有在成员仍全部保留时才是「用户取消了整个分组」；
+                            // 否则它只是成员变化引起的派生取消，交给成员自己的 key 处理。
+                            if (row?.kind === 'plan' && row.members?.length) {
+                              const members = row.members.map((member) => member.planId);
+                              if (!members.every((planId) => next.has(planId))) continue;
+                              members.forEach((planId) => planIds.delete(planId));
+                              continue;
+                            }
+                            coveredPlans(row).forEach((planId) => planIds.delete(planId));
                           }
-                          selectedSkus={primarySkusByPlan[record.plan.planId]}
-                          key={
-                            conversationId
-                              ? liveInputKey(
-                                  conversationId,
-                                  record.plan.planId,
-                                  versionMetrics[record.plan.planId]?.versionId ??
-                                    record.plan.versionId,
-                                  access.role,
-                                )
-                              : `${record.plan.planId}:${versionMetrics[record.plan.planId]?.versionId ?? record.plan.versionId}:${access.role ?? 'view'}`
-                          }
-                          initialInputValues={
-                            conversationId
-                              ? viewState.liveInputs?.[
-                                  liveInputKey(
-                                    conversationId,
-                                    record.plan.planId,
-                                    versionMetrics[record.plan.planId]?.versionId ??
-                                      record.plan.versionId,
-                                    access.role,
-                                  )
-                                ]
-                              : undefined
-                          }
-                          onInputChange={
-                            conversationId
-                              ? (changes) => {
-                                  const key = liveInputKey(
-                                    conversationId,
-                                    record.plan.planId,
-                                    versionMetrics[record.plan.planId]?.versionId ??
-                                      record.plan.versionId,
-                                    access.role,
-                                  );
-                                  setViewState((current) => ({
-                                    ...current,
-                                    liveInputs: {
-                                      ...current.liveInputs,
-                                      [key]: { ...current.liveInputs?.[key], ...changes },
-                                    },
-                                  }));
-                                }
-                              : undefined
-                          }
-                          row={{
-                            ...record.plan,
-                            status:
-                              versionMetrics[record.plan.planId]?.status ?? record.plan.status,
-                            versionId:
-                              versionMetrics[record.plan.planId]?.versionId ??
-                              record.plan.versionId,
-                          }}
-                          t={t}
-                          detail={sourceTypeReadOnly(record.plan) ? undefined : access.detail}
-                          approvalRole={access.role}
-                          canEdit={
-                            record.kind === 'plan' &&
-                            access.canEdit &&
-                            !sourceTypeReadOnly(record.plan)
-                          }
-                          categoryName={
-                            record.kind === 'category' ? record.category.categoryName : undefined
-                          }
-                          onMetricsChange={
-                            record.kind === 'plan' &&
-                            !record.members &&
-                            !sourceTypeReadOnly(record.plan)
-                              ? (metrics) =>
-                                  handleLiveAdjustmentMetrics(record.plan.planId, metrics)
-                              : undefined
-                          }
-                          onPendingValuesChange={
-                            record.kind === 'plan' &&
-                            !record.members &&
-                            !sourceTypeReadOnly(record.plan)
-                              ? (values) => handleLivePendingValues(record.plan.planId, values)
-                              : undefined
-                          }
-                          draftPatch={
-                            draftPatch && draftPatch.planId === record.plan.planId
-                              ? draftPatch
-                              : undefined
-                          }
-                          onElementsChange={(fields, collection) =>
-                            handleInlineElements(record.plan.planId, fields, collection)
-                          }
-                        />
-                      );
-                    }}
-                    // V1.8 #10：去掉行首独立展开箭头，展开/收起统一走组织名称；这里只保留展开能力。
-                    // 宽度必须给非 0 值：Arco 计算固定列偏移时用 `width || 40`，给 0 会被当成 40，左列会压掉 40px。
-                    expandProps={{ width: 1, icon: () => null }}
-                    expandedRowKeys={expandedLiveRowKeys}
-                    onExpandedRowsChange={setExpandedLiveGroups}
-                    loading={liveCategoriesLoading}
-                    rowClassName={(row) =>
-                      row.kind === 'category'
-                        ? styles.categoryComparisonRow
-                        : row.members
-                          ? styles.organizationGroupRow
-                          : ''
-                    }
-                    rowSelection={{
-                      type: 'checkbox',
-                      checkAll: false,
-                      fixed: pinLiveColumns,
-                      columnWidth: 40,
-                      selectedRowKeys: selectedLiveTableRowIds,
-                      onChange: (keys) => {
-                        // 分组行的勾选状态是「组内成员全部选中」的派生结果，不能按 key 是否存在直接重算：
-                        // 取消分组时只去掉分组 key，成员计划还在选，下一次渲染又把分组派生成勾选，表现为取消不掉。
-                        const next = new Set(keys.map(String));
-                        const displayed = new Set(selectedLiveTableRowIds);
-                        const planIds = new Set(selectedRowIds);
-                        const coveredPlans = (row: RegionalApprovalLiveTableRow | undefined) =>
-                          row?.kind !== 'plan'
-                            ? []
-                            : row.members?.length
-                              ? row.members.map((member) => member.planId)
-                              : [row.plan.planId];
-                        for (const key of next)
-                          if (!displayed.has(key))
-                            coveredPlans(liveTableRowById.get(key)).forEach((planId) =>
-                              planIds.add(planId),
-                            );
-                        for (const key of displayed) {
-                          if (next.has(key)) continue;
-                          const row = liveTableRowById.get(key);
-                          // 分组行只有在成员仍全部保留时才是「用户取消了整个分组」；
-                          // 否则它只是成员变化引起的派生取消，交给成员自己的 key 处理。
-                          if (row?.kind === 'plan' && row.members?.length) {
-                            const members = row.members.map((member) => member.planId);
-                            if (!members.every((planId) => next.has(planId))) continue;
-                            members.forEach((planId) => planIds.delete(planId));
-                            continue;
-                          }
-                          coveredPlans(row).forEach((planId) => planIds.delete(planId));
-                        }
-                        setSelectedRowIds([...planIds]);
-                      },
-                      checkboxProps: (row) => ({
-                        // 只要行里有能提交或退回的计划就允许勾选；整行都不可操作才置灰，
-                        // 保证「能勾上的行，按钮一定点得动」。
-                        disabled: !liveRowSelectable(row),
-                      }),
-                    }}
-                    pagination={false}
-                    size="small"
-                    scroll={{ x: liveTableWidth }}
-                  />
-                )}
-              </Spin>
-            }
+                          setSelectedRowIds([...planIds]);
+                        },
+                        checkboxProps: (row) => ({
+                          // 只要行里有能提交或退回的计划就允许勾选；整行都不可操作才置灰，
+                          // 保证「能勾上的行，按钮一定点得动」。
+                          disabled: !liveRowSelectable(row),
+                        }),
+                      }}
+                      pagination={false}
+                      size="small"
+                      scroll={{ x: liveTableWidth }}
+                    />
+                  )}
+                </>
+              )}
+            </div>
             <footer className={styles.queueFooter} data-testid="regional-approval-queue-footer">
               <span className={styles.footerTotal}>
                 {t('common.assistantSurface.regionalApproval.pagination.total', {

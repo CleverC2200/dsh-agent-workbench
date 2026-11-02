@@ -1,5 +1,23 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 5;
+export const metricCalculationVersion = 9;
+export function compatibleWorkbenchFacts(facts) {
+  return (
+    facts?.complete === true &&
+    facts.attributionVersion === 2 &&
+    facts.metricCalculationVersion === metricCalculationVersion &&
+    Object.values(facts.periods ?? {}).length > 0
+  );
+}
+export function reusableWorkbenchFacts(facts) {
+  return (
+    compatibleWorkbenchFacts(facts) &&
+    Object.values(facts.periods).every(
+      (period) =>
+        Array.isArray(period.sections) &&
+        period.sections.every((section) => section.status === 'ready'),
+    )
+  );
+}
 export const metricNames = [
   '作废率',
   '改单率',
@@ -134,7 +152,7 @@ export function computeWorkbenchMetrics(
     !invalid(ages) && total > 0 && aged !== null && aged >= 0 && aged <= total
       ? (aged / total) * 100
       : null,
-    '工厂仓＋工厂外租仓批次≥60天库存 ÷ 同范围现存量；非零库存缺生产日期时不发布占比，不当作新鲜库存',
+    'Hive货龄快照：工厂仓＋工厂外租仓内 age_days≥60 的 inv_qty ÷ 同范围 inv_qty 合计；周、月均取各自截止日内最新业务日快照，不累计每日库存；非零库存缺货龄时不发布占比',
   );
   put(
     '周转天数',
@@ -252,19 +270,27 @@ export function computeWorkbenchMetrics(
         Object.assign(result[name], { value: null, note: '查询未完成：' + part.code });
     else if (!rows(id).length)
       for (const name of names)
-        Object.assign(result[name], { value: null, note: '所选周期及授权范围内无来源数据' });
+        Object.assign(result[name], { value: null, noRows: true, note: '所选周期及授权范围内无来源数据' });
   }
+  if (period.start && period.end && period.start >= period.end)
+    for (const name of metricNames)
+      Object.assign(result[name], { value: null, loading: false, emptyPeriod: true });
   for (const name of metricNames)
-    if (result[name]?.value == null)
+    if (result[name]?.value == null) {
       result[name].missingReason = workbenchMetricMissingReason(
         period,
         name,
         filter,
         result[name].note,
       );
+      if (period.start >= period.end && !period.sections.length)
+        result[name].note = result[name].missingReason;
+    }
   return result;
 }
 export function workbenchMetricMissingReason(period, name, filter = () => true, note = '') {
+  if (period?.start && period?.end && period.start >= period.end)
+    return '当前周期尚无已结束日期：按已结束日期统计，暂不计算本周期指标；不是数据仍在加载。';
   const id = ['作废率', '改单率'].includes(name)
     ? 'changes'
     : name === '周转天数'
@@ -275,10 +301,12 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
           ? 'ontime'
           : 'orders';
   const part = period?.sections?.find((section) => section.id === id);
+  if (period && period.start >= period.end && Array.isArray(period.sections) && !period.sections.length)
+    return '本周期暂无已结束统计日：订单按T-1累计，当前区间起止相同，未发起空区间查询。不是仍在加载，也不代表整张源表无数据；库存指标仍需筛选内的有效快照，缺失保持未知，不用其他周期替代。';
   if (!part || part.status === 'loading')
     return '系统尚未完成读取：所选周期数据未加载完成，暂不能判定源表缺数据。';
   if (part.status !== 'ready')
-    return `系统读取未成功：${part.code ?? part.status}；需核对查询或字段发布，不是0。`;
+    return `系统读取未成功：${part.code ?? part.status}；${part.detail ? part.detail + '；' : ''}需核对查询或字段发布，不是0。`;
   const source = part.rows.filter(filter);
   if (!source.length)
     return `源数据未提供：所选周期及当前授权、分组范围的 ${id} 查询结果无记录；不代表整张表为空。`;
@@ -339,7 +367,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
   )
     return '系统未能计算：同范围月度计划日均需求合计不大于0，可发货天数没有有效分母。';
   if (name === '货龄（>60天库存占比）' && total('stock_qty') <= 0)
-    return '系统未能计算：agents_scm_inventory_sku_data_d 当前分组有效批次库存合计不大于0，货龄占比没有有效分母。';
+    return '系统未能计算：hive.dw.dwd_scm_material_age_his 当前分组 inv_qty 合计不大于0，货龄占比没有有效分母。';
   return `系统未能计算：${name}的有效分母、数量范围或判定条件不满足；${note || '缺失不补0，零分母不计算比率。'}`;
 }
 export function metricState(name, value, { base = '' } = {}) {
@@ -356,7 +384,7 @@ export function metricDelta(current, previous, name) {
     b = metricValue(previous, name);
   return a === null || b === null
     ? '—'
-    : `${a - b >= 0 ? '+' : ''}${(a - b).toFixed(2)}${name === '周转天数' ? '天' : 'pp'}${current?.[name]?.sample || previous?.[name]?.sample ? '*' : ''}`;
+    : `${a - b >= 0 ? '+' : ''}${(a - b).toFixed(2)}${name === '周转天数' ? '天' : '%'}${current?.[name]?.sample || previous?.[name]?.sample ? '*' : ''}`;
 }
 
 export function metricComparisonNote(current, previous, name) {

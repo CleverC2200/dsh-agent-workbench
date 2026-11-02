@@ -61,7 +61,9 @@ async function mount(t, restore = { version: 1 }, live = false) {
         data,
       }),
     );
-  for (const script of dom.window.document.querySelectorAll('script'))
+  for (const script of dom.window.document.querySelectorAll(
+    'script:not([type="application/json"])',
+  ))
     dom.window.eval(script.textContent);
   const port = {
     onmessage: null,

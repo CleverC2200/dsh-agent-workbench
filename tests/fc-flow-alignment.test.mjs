@@ -31,6 +31,8 @@ const row = {
   inventory_qty: 50,
   open_transfer_reported_qty: 40,
   current_order_remaining: 80,
+  current_order_shortage: 40,
+  calculation_order_remaining: 0,
   month_ship_positive: 30,
   period_next_out: 300,
   cycle_days: 7,
@@ -38,11 +40,12 @@ const row = {
 const plans = [
   { warehouseCode: 'W1', sku: 'S1', month: '2026-10', outboundQty: 310, transferQty: 20 },
 ];
-test('net demand subtracts remaining demand once and transfer once; derived columns follow imported plan', () => {
+test('incoming order demand never consumes branch stock and transfer supply is deducted once', () => {
   const r = applyFcPlan(row, plans, '2026-10-26', 7);
-  assert.equal(r.recommended_qty, 115);
+  assert.equal(r.recommended_qty, 35);
+  assert.equal(r.current_order_shortage, 40);
   assert.equal(r.target_inventory_qty, 100);
-  assert.equal(r.order_adjusted_available_qty, -55);
+  assert.equal(r.order_adjusted_available_qty, 25);
   assert.equal(r.daily_plan, 10);
   assert.equal(r.forecast_turnover_days, 5);
   assert.equal(r.period_current_daily, 10);
@@ -73,7 +76,7 @@ test('natural-month ceil and tomorrow-start horizon cover month-end, leap year a
     assert.equal(r.period_current_daily, Math.ceil(out / (month === '2024-02' ? 29 : 31)));
   }
 });
-test('zero remains known; absent order or transfer blocks recommendation', () => {
+test('zero remains known; missing source eligibility or transfer blocks recommendation', () => {
   assert.equal(
     applyFcPlan(
       { ...row, current_order_remaining: 0 },
@@ -83,7 +86,11 @@ test('zero remains known; absent order or transfer blocks recommendation', () =>
     ).recommended_qty,
     0,
   );
-  for (const field of ['current_order_remaining', 'open_transfer_reported_qty', 'available_qty'])
+  for (const field of [
+    'calculation_order_remaining',
+    'open_transfer_reported_qty',
+    'available_qty',
+  ])
     assert.equal(
       applyFcPlan({ ...row, [field]: null }, plans, '2026-10-26', 7).recommended_qty,
       null,

@@ -328,6 +328,16 @@
         "tests/qll-category-tree.browser.mjs",
         "tests/agent-sql-config.test.mjs"
       ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-(?:qll/current-orders-source|fc/upstream-(?:orders|supply)-source)\\.sql$|^scripts/(?:add-fc-monthly-inbound|apply-base-target-fallback|compact-fc-sort|complete-fc-business-filter|fix-base-daily-demand|fix-base-target-versions|fix-shipped-fulfillment|optimize_base_scoped_queries|update-fc-list-interactions|update-fc-quick-filters|update-fc-upstream-orders|update-fc-warehouse-exceptions)\\.py$",
+      "tests": [
+        "tests/agent-sql-direct.test.mjs",
+        "tests/agent-sql-config.test.mjs",
+        "tests/fc-upstream-orders.test.mjs",
+        "tests/fc-upstream-supply.test.mjs"
+      ]
     }
   ],
   "sourceTools": {

@@ -316,3 +316,31 @@ test('newly connected list fields are present in the default visible columns', a
     }
   }
 });
+
+test('the composite personal page binds immutable templates without assuming one adjacent Agent config', async () => {
+  const { build } = await import('esbuild');
+  const { sqlConfigPlugin } = await import('../scripts/sql-config-build.mjs');
+  const result = await build({
+    stdin: {
+      contents: `import base from './business/inventory-aqkc/sql.config.json'; import branch from './business/inventory-fc/sql.config.json'; export {base,branch};`,
+      resolveDir: process.cwd(),
+      loader: 'js',
+    },
+    bundle: true,
+    write: false,
+    format: 'esm',
+    platform: 'node',
+    plugins: [sqlConfigPlugin({ inlineTemplates: true })],
+  });
+  const { base, branch } = await import(
+    'data:text/javascript;base64,' + Buffer.from(result.outputFiles[0].text).toString('base64')
+  );
+  for (const [config, id] of [
+    [base, 'inventory-aqkc'],
+    [branch, 'inventory-fc'],
+  ]) {
+    assert.equal(config.agentId, id);
+    assert.ok(Object.keys(config.templates).length > 0);
+    assert.deepEqual(config.queries, {});
+  }
+});

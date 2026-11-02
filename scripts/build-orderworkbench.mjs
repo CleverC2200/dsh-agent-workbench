@@ -8,7 +8,7 @@ import { orderWorkbenchSourceConfig } from '../business/inventory-orderworkbench
 const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'prototypes/inventory-orderworkbench');
 const out = resolve(root, 'lib/business/inventory-orderworkbench');
-const theme = await readFile(resolve(root, 'theme/tokens.css'), 'utf8');
+const theme = (await readFile(resolve(root, 'theme/tokens.css'), 'utf8')).replace(/\r\n/g, '\n');
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 const apsConfig = JSON.parse(
   await readFile(resolve(root, 'business/inventory-apsplan/sql.config.json'), 'utf8'),

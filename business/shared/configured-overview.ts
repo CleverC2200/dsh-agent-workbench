@@ -1,6 +1,6 @@
 import { createAgentQueries } from './agent-query';
 import type { FcCycleRule } from './fc-cycle-rules';
-import { readConfiguredFacts } from './configured-facts';
+import { readConfiguredFacts, type FactInput } from './configured-facts';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readCurrentShortage } from './current-shortage';
 import { readGroupedOrderOverview } from './grouped-order-overview';
@@ -25,7 +25,7 @@ export function completeCount(summary: any, field: string, missingFields: string
     ? value
     : null;
 }
-/** orders.summary returns (demand-shortage)/demand, a fraction. */
+/** Fulfillment summaries return a fraction; display converts it once. */
 export function fulfillmentPercent(summary: any) {
   const value = completeValue(summary, 'fulfillment_rate');
   return value == null ? null : value * 100;
@@ -89,7 +89,7 @@ export async function readConfiguredOverview(
   };
   const fromResult = (result: any) =>
     result.summaryError
-      ? { error: result.summaryError.message }
+      ? { error: result.summaryError.message, errorCode: result.summaryError.code }
       : {
           summary: result.summary,
           total: result.total,
@@ -144,7 +144,8 @@ export async function readConfiguredOverview(
         if (options.signal?.aborted || error.code === 'QUERY_CONFIG_CHANGED') throw error;
         quickStockFailed = true;
         for (const id of ['health', 'branch-stock'])
-          if (ids.includes(id)) publish(id, { error: error.message, partial: true });
+          if (ids.includes(id))
+            publish(id, { error: error.message, errorCode: error.code, partial: true });
       }
     }
   })();
@@ -180,7 +181,7 @@ export async function readConfiguredOverview(
           groupedOrders ??= readGroupedOrderOverview(config, asOf, options);
           part = (await groupedOrders)[id];
         } else {
-          const input = {
+          const input: FactInput = {
             asOf,
             customer,
             cycleDays: options.cycleDays,
@@ -208,7 +209,7 @@ export async function readConfiguredOverview(
       } catch (e: any) {
         if (options.signal?.aborted) throw e;
         if (e.code === 'QUERY_CONFIG_CHANGED') invalid = e;
-        part = { ...parts[id], error: e.message, partial: true };
+        part = { ...parts[id], error: e.message, errorCode: e.code, partial: true };
       }
       publish(id, part);
     }),

@@ -38,12 +38,21 @@ const source = await readFile(
   new URL('../prototypes/inventory-customer/data-source.js', import.meta.url),
   'utf8',
 );
+const mockReaderSource = `let executeAllGeaSqlPages; export const setReader=read=>{
+  executeAllGeaSqlPages=async(sql,options)=>{
+    const rows=await read(sql,options);
+    const columns=[...new Set([...sql.matchAll(/CAST\\(([a-z][a-z0-9_]*) AS VARCHAR\\)/g)].map(match=>match[1]))].filter(name=>name!=='packet_position');
+    return rows.length?[{packet_index:0,packet_count:rows.length,packet_scope_total:rows.length,
+      packet_rows:rows.map((row,index)=>[String(index+1),...columns.map(name=>row[name]==null?null:String(row[name]))]
+        .map(value=>value===null?'N':'V'+Buffer.byteLength(value)+':'+value).join(''))}]:[];
+  };
+};`;
 
-test('customer detail pages stay within the validated index and reject changed snapshots or identities', async () => {
+test('customer pages reuse only this validated load, preserve row order and expire with identity', async () => {
   const moduleSource = source
     .replace(
       "import { executeAllGeaSqlPages } from '../../business/shared/sql-reader.ts';",
-      'let executeAllGeaSqlPages; export const setReader=read=>{executeAllGeaSqlPages=read;};',
+      mockReaderSource,
     )
     .replace(
       /from '([^']+)'/g,
@@ -67,7 +76,8 @@ test('customer detail pages stay within the validated index and reject changed s
   loader.setReader(async (sql, options) => {
     calls.push({ sql, options });
     if (sql.includes('cust_code IN')) return [{ ...raw, stock_qty: changed ? 30 : 20 }];
-    if (sql.includes('/*customer-inventory:latest*/')) return [raw];
+    if (sql.includes('/*customer-inventory:latest*/'))
+      return [{ ...raw, stock_qty: changed ? 30 : 20 }];
     return [];
   });
   const load = new AbortController(),
@@ -79,16 +89,27 @@ test('customer detail pages stay within the validated index and reject changed s
   load.abort();
   assert.deepEqual(await inventory.readDetails(['A']), inventory.rows);
   const pageCalls = calls.filter((call) => call.sql.includes('cust_code IN'));
-  assert.equal(pageCalls.length, 1);
-  assert.equal(pageCalls[0].options.parameters.list_1_0, 'A');
-  assert.ok(
-    !pageCalls[0].options.signal.aborted,
-    'finished initial-load timeout does not expire later page reads',
+  assert.equal(pageCalls.length, 0, 'pagination must not re-query an already complete index');
+  const page = await inventory.readDetails(['A']);
+  page[0].quantity = 999;
+  assert.equal(
+    (await inventory.readDetails(['A']))[0].quantity,
+    20,
+    'callers cannot mutate the load',
   );
   await assert.rejects(inventory.readDetails(['outside']), /SCOPE_INVALID/);
-  const next = await loader.loadCustomerInventory({ pageSignal: pageLifetime.signal });
+  await assert.rejects(inventory.readDetails(['A', 'A']), /SCOPE_INVALID/);
   changed = true;
-  await assert.rejects(next.readDetails(['A']), /SNAPSHOT_CHANGED/);
+  const next = await loader.loadCustomerInventory({ pageSignal: pageLifetime.signal });
+  assert.equal((await next.readDetails(['A']))[0].quantity, 30, 'refresh reads new source facts');
+  assert.equal(
+    (await inventory.readDetails(['A']))[0].quantity,
+    20,
+    'old cards and pages stay consistent',
+  );
+  const cancelled = new AbortController();
+  cancelled.abort(Error('page cancelled'));
+  await assert.rejects(next.readDetails(['A'], { signal: cancelled.signal }), /page cancelled/);
   pageLifetime.abort(Error('identity changed'));
   await assert.rejects(inventory.readDetails(['A']), /identity changed/);
 });
@@ -97,7 +118,7 @@ test('inventory and optional plans start together without weakening failures or 
   const moduleSource = source
     .replace(
       "import { executeAllGeaSqlPages } from '../../business/shared/sql-reader.ts';",
-      'let executeAllGeaSqlPages; export const setReader=read=>{executeAllGeaSqlPages=read;};',
+      mockReaderSource,
     )
     .replace(
       /from '([^']+)'/g,
@@ -152,6 +173,13 @@ test('inventory and optional plans start together without weakening failures or 
     { cust_code: 'B', dealer_receive_addr: '[{"cust_name":"客户（郑州市）卸货地"}]' },
     { cust_code: 'outside', dealer_receive_addr: '[]' },
   ]);
+  await new Promise(setImmediate);
+  assert.deepEqual(
+    first.rows.find((row) => row.code === 'B').cities,
+    ['郑州市'],
+    'address completion must not wait for plans or managers',
+  );
+  assert.equal(first.managerState, 'loading');
   calls[2].resolve([]);
   calls[3].resolve([
     { cust_code: 'B', customer_manager: '张三' },
@@ -203,7 +231,7 @@ test('inventory loading copy distinguishes permission, resource, session and que
 });
 
 test('metric dialogs separate formulas, state rules and data caveats', () => {
-  assert.equal(Object.keys(customerMetricDefinitions).length, 6);
+  assert.equal(Object.keys(customerMetricDefinitions).length, 7);
   for (const metric of Object.values(customerMetricDefinitions)) {
     assert.ok(metric.formula.length > 0);
     assert.ok(metric.rules.length > 0);

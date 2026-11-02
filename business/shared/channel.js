@@ -67,7 +67,7 @@ window.addEventListener('message', (event) => {
     event.data?.protocol !== 'gea-html-v2' ||
     event.data?.type !== 'connect' ||
     !event.ports[0] ||
-    (channel && context?.session === event.data.context.session)
+    channel === event.ports[0]
   )
     return;
   if (channel) {
@@ -82,8 +82,12 @@ window.addEventListener('message', (event) => {
     pending.clear();
   }
   context = event.data.context;
-  channel = event.ports[0];
-  channel.onmessage = (event) => {
+  // A renewed Host lease can keep its Session ID. The transferred port, not
+  // that ID, identifies its generation; the old port's final reset may be lost.
+  const port = event.ports[0];
+  channel = port;
+  port.onmessage = (event) => {
+    if (channel !== port) return;
     const message = event.data;
     if (message.type === 'context') {
       const previousSession = context?.session;
@@ -190,8 +194,9 @@ window.addEventListener('message', (event) => {
         })
         .catch((error) => ({ applied: false, error: error.message }))
         .then((result) => {
-          applying.delete(message.toolCallId);
-          channel.postMessage({
+          if (applying.get(message.toolCallId) === task) applying.delete(message.toolCallId);
+          if (channel !== port) return;
+          port.postMessage({
             type: 'applied',
             toolCallId: message.toolCallId,
             session,

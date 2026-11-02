@@ -49,7 +49,7 @@ export async function buildInventory(id, sourceCommit) {
       }),
     },
     plugins: [
-      sqlConfigPlugin(),
+      sqlConfigPlugin({ inlineTemplates: id === 'personal' }),
       {
         name: 'inventory-browser',
         setup(api) {

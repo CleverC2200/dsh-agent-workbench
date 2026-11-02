@@ -21,8 +21,8 @@ class LandingInventoryTests(unittest.TestCase):
   for table,columns in fields.items():self.db.execute('CREATE TABLE '+table+' ('+','.join(c+' '+('REAL' if any(k in c for k in ['stock','qty','demand','inventory','produce_plan','avg_']) and c not in ['inventory_version'] else 'TEXT') for c in columns)+')')
  def insert(self,table,**values):
   self.db.execute('INSERT INTO '+table+' ('+','.join(values)+') VALUES ('+','.join('?' for _ in values)+')',list(values.values()))
- def read(self,agent,id):
-  q=config_for(agent)['queries'][id];values={s['name']:q['request']['parameters'][k] for k,s in q['parameterSpec'].items()};values.update({k:v for k,v in dict(month='2026-10-01',stock_month='2026-10-01',stock_date='2026-10-22',inventory_version='滚动',exclude_category='饺鲜说',page_size=200,offset=0).items() if k in values});params=validate_parameters(q,values,id)
+ def read(self,agent,id,overrides=None):
+  q=config_for(agent)['queries'][id];values={s['name']:q['request']['parameters'][k] for k,s in q['parameterSpec'].items()};values.update({k:v for k,v in dict(month='2026-10-01',stock_month='2026-10-01',stock_date='2026-10-22',inventory_version='滚动',exclude_category='饺鲜说',page_size=200,offset=0).items() if k in values});values.update(overrides or {});params=validate_parameters(q,values,id)
   tree=sqlglot.parse_one(q['request']['sql'],read='postgres')
   for cast in list(tree.find_all(exp.Cast)):
    if cast.args['to'].this==exp.DataType.Type.DATE:cast.replace(cast.this.copy())
@@ -31,6 +31,23 @@ class LandingInventoryTests(unittest.TestCase):
    if isinstance(value,list):
     names=[key+'_'+str(i) for i in range(len(value))];sql=re.sub(':'+key+r'\b',','.join(':'+n for n in names),sql);params.pop(key);params.update(zip(names,value))
   return [dict(r) for r in self.db.execute(sql,params)]
+ def test_base_subset_matches_national_without_mixing_same_sku_or_stock_only_keys(self):
+  for base,qty in [('郑州',10),('华东',20),('华南',30)]:
+   self.insert('agents_scm_inventory_sku_data_d',month_date='20261022',warehouse_classify='01',belong_base=base,material_code='SHARED',live_qty=qty,prod_date='2026-10-01')
+   self.insert('agents_scm_goods_inventory_turnover_data_m',year_month='2026-10-01',inventory_version='滚动',belong_base=base,material_code='SHARED',product_categ_name='汤圆')
+  self.insert('agents_scm_inventory_sku_data_d',month_date='20261022',warehouse_classify='02',belong_base='郑州',material_code='STOCK-ONLY',live_qty=7,prod_date='2026-10-01')
+  self.insert('agents_scm_material_in_out_summary_d',material_code='STOCK-ONLY',product_categ_name='馄饨')
+  self.insert('agents_scm_goods_inventory_turnover_data_m',year_month='2026-10-01',inventory_version='滚动',belong_base='华南',material_code='TARGET-ONLY',product_categ_name='汤圆')
+  for query_id in ['page.dashboard-groups','page.inventory-groups']:
+   national=self.read('aqkc',query_id)
+   self.assertEqual(sum(row['inventory'] or 0 for row in national),67)
+   for selected,total in [(['郑州'],17),(['郑州','华东'],37)]:
+    with self.subTest(query=query_id,bases=selected):
+     actual=self.read('aqkc',query_id,{'bases_enabled':True,'bases':selected})
+     expected=[row for row in national if row['base'] in selected]
+     self.assertEqual(actual,expected)
+     self.assertEqual(sum(row['inventory'] or 0 for row in actual),total)
+
  def test_inventory_only_projection_matches_full_summary_with_bad_and_target_only_skus(self):
   for sku,qty,category in [('A',100,'汤圆'),('B',30,None),('C',80,None),('D',7,'汤圆')]:
    self.insert('agents_scm_stock_detail_d',data_month='2026-10-01',the_date='2026-10-22',belong_base='郑州',material_code=sku,current_stock=qty)

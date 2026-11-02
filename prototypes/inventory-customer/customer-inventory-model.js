@@ -206,6 +206,10 @@ export function summarizeCustomerInventory(rows) {
   return {
     totalValue: sum('value'),
     customerCodes: rows.map((row) => row.code).filter(Boolean),
+    stockedCustomerCount: new Set(
+      rows.filter((row) => Number.isFinite(row.quantity) && row.quantity > 0)
+        .map((row) => row.code).filter(Boolean),
+    ).size,
     quantity,
     sales30,
     targetValue: sum('targetValue'),

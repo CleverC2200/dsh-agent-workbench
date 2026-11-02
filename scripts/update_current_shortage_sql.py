@@ -45,11 +45,11 @@ def update_agents(agents):
   path=ROOT/f'business/inventory-{agent}/sql.config.json';text=path.read_text()
   if '"modelQueries"' in text:
    match=re.search(r',\n  "modelQueries": ',text);start=match.end();_,size=json.JSONDecoder().raw_decode(text[start:]);text=text[:match.start()]+text[start+size:]
-  scoped_source=ROOT/f'business/inventory-{agent}'/('current-orders-source.sql' if agent=='aqkc' else 'current-shortage-source.sql')
-  source=scoped_source.read_text().strip() if agent in ['aqkc','fc'] else SOURCE
+  scoped_source=ROOT/f'business/inventory-{agent}'/('current-orders-source.sql' if agent in ['aqkc','qll'] else 'current-shortage-source.sql')
+  source=scoped_source.read_text().strip() if agent in ['aqkc','fc','qll'] else SOURCE
   scope='基地' if agent=='aqkc' else '分仓' if agent=='fc' else None
   data={'current-shortage.summary':definition(['stat_date','location_type'],scope,source=source),'current-shortage.locations':definition(['stat_date','location_type','location_code','location_name','belong_base','warehouseid'],scope,source=source),'current-shortage.categories':definition(['stat_date','location_type','belong_base','product_categ_name'],scope,source=source),'current-shortage.detail':definition(list(DIMS),scope,True,source=source),'current-shortage.skus':definition(['stat_date','location_type','belong_base','material_code'],scope,sku_page=True,source=source)}
-  if agent=='aqkc':
+  if agent in ['aqkc','qll']:
    for value in data.values():
     value['title']='当前未发货完成订单三层缺货'
     value['notes']='仅统一GEA受控SQL。有效且未关闭、未取消、未发货完成订单，包含已备单和部分发货；qtyordered和qtyallocated逐行除以bizunitconvertrate统一为件，同一订单SKU先截零，基地SKU汇总后扣一次可用库存；缺失数量不按0，当前状态不可重建历史。'

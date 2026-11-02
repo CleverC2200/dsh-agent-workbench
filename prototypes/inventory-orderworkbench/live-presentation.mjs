@@ -8,6 +8,7 @@ import {
   metricValue,
   stockDaily,
   dayOffset,
+  workbenchMetricMissingReason,
 } from './metric-model.mjs';
 import {
   performanceCurrentCell,
@@ -24,6 +25,8 @@ const rows = (period, id) =>
 const distinct = (values) =>
   [...new Set(values)].sort((a, b) => String(a).localeCompare(String(b), 'zh'));
 const dimensionValue = (value) => value || '未映射';
+export const workbenchBaseIncluded = (base) =>
+  !['濮阳', '濮阳基地'].includes(String(base ?? '').trim());
 export function directorNames(mappings, row) {
   const relevant =
     mappings instanceof Map
@@ -80,25 +83,32 @@ function summaryRows(periods, field, directorMap, loading = false) {
         Number(row.stock_qty) !== 0 ||
         Number(row.invalid) !== 0,
     ),
-  ];
+  ].filter((row) => field !== 'base' || workbenchBaseIncluded(row.base));
   let groups;
+  const ownerSources = new Map(), ownerNames = new Map();
+  const periodOwners = key => {
+    if (!ownerSources.has(key)) {
+      const part=periods[key]?.sections.find(section=>section.id==='directors');
+      const source=part ? part.status==='ready'?part.rows:[] : ['month','week'].includes(key)?[...directorMap.values()]:[];
+      const index=new Map();
+      for(const mapping of source){
+        const id=JSON.stringify([mapping.base,mapping.base==='郑州'?mapping.sku:'']);
+        if(!index.has(id))index.set(id,[]);
+        index.get(id).push(mapping);
+      }
+      ownerSources.set(key,index);
+    }
+    return ownerSources.get(key);
+  };
   const directors = (row, key = periods.month ? 'month' : 'week') => {
     const mapping =
       Number(row.summary) === 1 || row.periodAttribution === true
         ? row
         : directorMap?.get(JSON.stringify([row.base, row.sku]));
     if (!row.periodAttribution && Number(row.summary) !== 1) {
-      const part = periods[key]?.sections.find((section) => section.id === 'directors');
-      return directorNames(
-        part
-          ? part.status === 'ready'
-            ? part.rows
-            : []
-          : ['month', 'week'].includes(key)
-            ? [...directorMap.values()]
-            : [],
-        row,
-      );
+      const id=JSON.stringify([key,row.base,row.base==='郑州'?row.sku:'']);
+      if(!ownerNames.has(id))ownerNames.set(id,directorNames(periodOwners(key),row));
+      return ownerNames.get(id);
     }
     return mapping?.names === 1 && mapping.director
       ? mapping.director
@@ -125,7 +135,11 @@ function summaryRows(periods, field, directorMap, loading = false) {
       labels: [label],
       filter: (row) => dimensionValue(row[field]) === label,
     }));
-  if (field !== 'director') groups.push({ labels: ['合计'], filter: () => true });
+  if (field !== 'director')
+    groups.push({
+      labels: ['合计'],
+      filter: (row) => field !== 'base' || workbenchBaseIncluded(row.base),
+    });
   const tables = {};
   for (const [key, previous, year] of [
     ['month', 'previousMonth', 'yearMonth'],
@@ -208,38 +222,56 @@ export function workbenchPresentation(facts, options = {}) {
     current = periods[selected];
   const previous = periods[selected === 'month' ? 'previousMonth' : 'previousWeek'],
     year = periods[selected === 'month' ? 'yearMonth' : 'yearWeek'];
-  const metrics = current.metrics;
+  const metrics = periods.month?.metrics ?? Object.fromEntries(metricNames.map(name => [name, {
+    value: null, loading: true, note: '正在读取本期数据',
+    missingReason: '系统尚未完成读取：本期数据尚未返回。',
+  }]));
   const loading = facts.complete === false;
   const comparison = (a, b, name) =>
-    loading &&
+    periods[a]?.metrics[name]?.emptyPeriod ? '—' : loading &&
     (!periods[a] ||
       !periods[b] ||
       periods[a].metrics[name]?.loading ||
       periods[b].metrics[name]?.loading)
       ? '加载中'
       : metricDelta(periods[a]?.metrics, periods[b]?.metrics, name);
+  const comparisonNote = (a, b, name) => {
+    if (metricValue(periods[a]?.metrics, name) === null)
+      return periods[a]?.metrics[name]?.missingReason ?? workbenchMetricMissingReason(periods[a], name);
+    if (metricValue(periods[b]?.metrics, name) === null)
+      return '比较期：' + (periods[b]?.metrics[name]?.missingReason ?? workbenchMetricMissingReason(periods[b], name));
+    return metricComparisonNote(periods[a]?.metrics, periods[b]?.metrics, name);
+  };
   const cards = metricNames.map((name) => ({
     key: name,
     value:
       metricValue(metrics, name) === null
         ? '—'
         : metricValue(metrics, name).toFixed(name === '周转天数' ? 1 : 2),
-    status: metrics[name]?.loading
+    status: metrics[name]?.emptyPeriod
+      ? '暂无已结束日期'
+      : metrics[name]?.loading
       ? '加载中'
-      : metrics[name]?.sample
-        ? `样本 ${metrics[name].sample.coverage.toFixed(1)}%`
-        : metricState(name, metricValue(metrics, name)),
+      : metrics[name]?.value == null && metrics[name]?.missingReason?.startsWith('系统读取未成功')
+        ? '查询失败'
+        : metrics[name]?.noRows
+          ? '暂无数据'
+          : metrics[name]?.sample
+          ? `样本 ${metrics[name].sample.coverage.toFixed(1)}%`
+          : metricState(name, metricValue(metrics, name)),
     coverageNote: metrics[name]?.coverageNote ?? '',
     comparisonNotes: [
-      metricComparisonNote(periods.month?.metrics, periods.previousMonth?.metrics, name),
-      metricComparisonNote(periods.month?.metrics, periods.yearMonth?.metrics, name),
-      metricComparisonNote(periods.week?.metrics, periods.previousWeek?.metrics, name),
-      metricComparisonNote(periods.week?.metrics, periods.yearWeek?.metrics, name),
+      comparisonNote('month', 'previousMonth', name),
+      comparisonNote('month', 'yearMonth', name),
+      comparisonNote('week', 'previousWeek', name),
+      comparisonNote('week', 'yearWeek', name),
     ],
     formula: metrics[name].note,
     missingReason: metrics[name].missingReason,
     footer: `本周${name === '货龄（>60天库存占比）' ? '货龄占比' : name === '周转天数' ? '可发货天数' : name === '订单满足率' ? '满足率' : name} ${loading && !periods.week ? '加载中' : text(metricValue(periods.week?.metrics, name), name === '周转天数' ? '天' : '%', name === '周转天数' ? 1 : 2)}${periods.week?.metrics[name]?.sample ? '（可判定样本）' : ''}`,
-    footerNote: periods.week?.metrics[name]?.coverageNote ?? '',
+    footerNote: metricValue(periods.week?.metrics, name) === null
+      ? periods.week?.metrics[name]?.missingReason ?? '本周数据尚未返回。'
+      : periods.week?.metrics[name]?.coverageNote ?? '',
     comparison: [
       comparison('month', 'previousMonth', name),
       comparison('month', 'yearMonth', name),
@@ -277,7 +309,9 @@ export function workbenchPresentation(facts, options = {}) {
     ),
   ];
   const categories = distinct(all.map((row) => dimensionValue(row.category))),
-    bases = distinct(all.map((row) => dimensionValue(row.base)));
+    bases = distinct(
+      all.filter((row) => workbenchBaseIncluded(row.base)).map((row) => dimensionValue(row.base)),
+    );
   const metric = (period, filter) => (period ? computeWorkbenchMetrics(period, filter) : {});
   const fill = (options.dimension && options.dimension !== 'category-fill' ? [] : categories).map(
     (category) => {
@@ -464,13 +498,21 @@ export function workbenchEvidence(facts) {
           start: period.start,
           endExclusive: period.end,
           inventoryEndExclusive: period.inventoryEnd ?? period.end,
+          orderWindow: {
+            basis: 'T-1累计；结束边界不含当日，比较期保留相同已结束时长，不延长到未来周期末',
+            state: period.start >= period.end ? 'no-completed-days' : 'elapsed-days',
+          },
           metrics: Object.fromEntries(
             Object.entries(period.metrics).map(([key, metric]) => [
               key,
               {
                 value: metric.value,
                 unit: metric.unit,
-                ...(metric.value === null || metric.sample ? { note: metric.note } : {}),
+                ...(metric.value === null || metric.sample ? {
+                  note: metric.value === null && period.start >= period.end && !period.sections.length
+                    ? workbenchMetricMissingReason(period, key)
+                    : metric.note,
+                } : {}),
                 ...(metric.sample ? { sample: metric.sample } : {}),
               },
             ]),

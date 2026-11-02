@@ -6,6 +6,7 @@ import { keepPageObservation } from '../../business/shared/page-observation.js';
 import { customerPageContext } from './page-context.js';
 import { showCustomerObservation, customerObservationChange } from './observation.js';
 import { customerRegionalValues } from './regional-values.js';
+import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
 
 let snapshot;
 let inventorySnapshot;
@@ -146,6 +147,7 @@ async function reloadCustomerInventory() {
   loadController?.abort();
   const controller = new AbortController();
   loadController = controller;
+  const timing = startDashboardTiming('customer-inventory', controller.signal);
   try {
     attached = true;
     clearTimeout(connectionTimer);
@@ -160,6 +162,7 @@ async function reloadCustomerInventory() {
       pageSignal: controller.signal,
       onInventory(inventory) {
         if (!attached || generation !== loadGeneration) return;
+        timing.mark('inventory-ready');
         inventorySnapshot = inventory.snapshot;
         dataCapturedAt = new Date().toISOString();
         observationRows = inventory.rows;
@@ -178,7 +181,9 @@ async function reloadCustomerInventory() {
     syncStatus('');
     showLoadState(inventory.rows.length ? 'ready' : 'empty');
     presentation.update(inventory);
+    timing.finish();
   } catch (error) {
+    timing.finish(controller.signal.aborted ? 'cancelled' : 'failed');
     if (attached && generation === loadGeneration && !controller.signal.aborted)
       showLoadState(customerLoadFailure(error),error);
   }

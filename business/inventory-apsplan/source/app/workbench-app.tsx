@@ -655,19 +655,19 @@ const matrixHelp: Record<MatrixMode, { storageKey: string; label: string; defaul
     storageKey: 'plan-cross-ai-help-stock',
     label: '查看并编辑可发货天数矩阵研判说明',
     defaultText:
-      '按基地与品类交叉分析可发货天数，同时参考剔除大日期后的结果，识别结构性高库存及异常日期的影响。',
+      '按基地与品类交叉分析可发货天数，以同一快照的可用库存合计除以计划日均需求合计；健康区间为8至12天（不含边界），低覆盖和高周转天数分别关注。零分母保持未知。',
   },
   plan: {
     storageKey: 'plan-cross-ai-help-plan',
     label: '查看并编辑生产计划达成率矩阵研判说明',
     defaultText:
-      '按基地与品类交叉分析生产计划达成率。当前基地×品类明细尚未接入，页面保留统一入口并明确展示数据缺口。',
+      '按基地与品类汇总同期MES实际产出量与计划量，再计算生产计划达成率，不平均明细百分比。仅解释已返回的组合，不将公司合计分摊至缺失组合。',
   },
   inventory: {
     storageKey: 'plan-cross-ai-help-inventory',
     label: '查看并编辑库存量矩阵研判说明',
     defaultText:
-      '按基地与品类交叉分析库存量。库存量属于无目标观察指标，当前基地×品类明细尚未接入，不自动判定达标状态。',
+      '按基地与品类汇总当前库存快照，观察库存数量及集中分布。库存量属于无目标观察指标，不自动判定达标状态；未返回的组合保持未知。',
   },
   delivery: {
     storageKey: 'plan-cross-ai-help-delivery',
@@ -1651,10 +1651,11 @@ function answerQuestion(question: string) {
   return '本周 13 项核心指标中，12 项设有目标，其中 3 项达标：作废率、可发货天数和产品新鲜度；大日期数量为无目标数量观察项。销售预算达成率、销售提报准确率、销售预测达成率、需求预测准确率、需求预测达成率、生产计划达成率及其余订单指标仍需改善。首要矛盾是水饺和预制食材缺货、郑州准交率偏低，以及火锅料库存偏高。';
 }
 
-function matrixClass(value: number, mode: 'rate' | 'stock') {
-  if (mode === 'rate')
-    return value < 90 ? 'heat-critical' : value <= 95 ? 'heat-watch' : 'heat-good';
-  return value > 15 ? 'heat-critical' : value >= 12 || value <= 8 ? 'heat-watch' : 'heat-good';
+function matrixClass(value: number, mode: MatrixMode) {
+  if (!Number.isFinite(value)) return 'matrix-unavailable';
+  if (mode === 'inventory') return 'matrix-observation';
+  const level = matrixRiskLevel(mode, value);
+  return level === '严重' ? 'heat-critical' : level === '预警' ? 'heat-watch' : 'heat-good';
 }
 
 const matrixListMeta: Record<
@@ -1662,8 +1663,8 @@ const matrixListMeta: Record<
   { label: string; target: string; unit: '%' | '天' | '万箱' }
 > = {
   rate: { label: '订单满足率', target: '> 95%', unit: '%' },
-  stock: { label: '可发货天数', target: '< 12天', unit: '天' },
-  plan: { label: '生产计划达成率', target: '≥ 100%', unit: '%' },
+  stock: { label: '可发货天数', target: '8–12天（不含边界）', unit: '天' },
+  plan: { label: '生产计划达成率', target: '> 99%', unit: '%' },
   inventory: { label: '库存量', target: '无目标', unit: '万箱' },
   delivery: { label: '准交率', target: '> 98.5%', unit: '%' },
   change: { label: '改单率', target: '< 2%', unit: '%' },
@@ -5365,9 +5366,18 @@ export default function Home({
     )
       .map((row) => {
         const ratio = matrixPeriodRatio(mode);
-        const value = Math.max(0, row.value * ratio);
+        const value = liveData ? row.value : Math.max(0, row.value * ratio);
         const adjusted = row.adjusted === undefined ? undefined : Math.max(0, row.adjusted * ratio);
-        const target = mode === 'stock' ? 12 : mode === 'rate' ? 95 : mode === 'plan' ? 100 : 0;
+        const target =
+          mode === 'stock'
+            ? value <= 8
+              ? 8
+              : 12
+            : mode === 'rate'
+              ? 95
+              : mode === 'plan'
+                ? 99
+                : 0;
         return {
           ...row,
           value,
@@ -5381,28 +5391,40 @@ export default function Home({
     analysisScope === 'production' && productionDimension === 'cross'
       ? buildPeriodMatrixRiskRows(activeCrossMode)
       : [];
-  const matrixAnalysis = matrixRiskRows.length
-    ? analyzeProductionMatrix(
-        activeMatrixListMeta.label,
-        activeAnalysisPeriod,
-        matrixRiskRows.map((row) => ({ scope: row.scope, value: row.value })),
+  const matrixAnalysis = analyzeProductionMatrix(
+    activeMatrixListMeta.label,
+    activeAnalysisPeriod,
+    matrixRiskRows.map((row) => ({ scope: row.scope, value: row.value })),
+  );
+  // Keep the returned dimension universe stable across metric tabs, including
+  // combinations whose current ratio is unavailable. Never derive axes from risk ranking.
+  const matrixDimensions =
+    live.data?.sections
+      .filter(
+        (section) =>
+          ['stock', 'shippable', 'production', 'orders'].includes(section.id) &&
+          section.status === 'ready',
       )
-    : analyzePerspective(
-        'production',
-        activeAnalysisPeriod,
-        activeProductionMetricNames.map((name) => ({
-          name,
-          value: activeComparison[name].current,
-          unit: overviewMetricMeta.find((meta) => meta.name === name)?.unit ?? '',
-          previous: activeComparison[name].previous,
-        })),
-      );
+      .flatMap((section) => section.rows)
+      .flatMap((row) => {
+        const base = typeof row.base === 'string' ? row.base.trim() : '';
+        const category = typeof row.category === 'string' ? row.category.trim() : '';
+        return base && category ? [{ base, category }] : [];
+      }) ?? [];
   const matrixBaseNames = liveData
-    ? [...new Set(matrixRiskRows.map((row) => row.scope.split(' × ')[0]))]
+    ? [...new Set(matrixDimensions.map((row) => row.base))].sort((a, b) =>
+        a.localeCompare(b, 'zh-CN'),
+      )
     : [];
   const matrixCategoryNames = liveData
-    ? [...new Set(matrixRiskRows.map((row) => row.scope.split(' × ')[1]))]
+    ? [...new Set(matrixDimensions.map((row) => row.category))].sort((a, b) =>
+        a.localeCompare(b, 'zh-CN'),
+      )
     : categories;
+  const matrixRowStyle = {
+    gridTemplateColumns: `64px repeat(${Math.max(1, matrixCategoryNames.length)}, minmax(80px, 1fr))`,
+    minWidth: 64 + Math.max(1, matrixCategoryNames.length) * 83,
+  };
   const sourceMatrix = liveData
     ? matrixBaseNames.map((base) => ({
         base,
@@ -5419,7 +5441,9 @@ export default function Home({
   const matrix = sourceMatrix?.length
     ? sourceMatrix.map((row) => ({
         ...row,
-        values: row.values.map((value) => Math.max(0, value * matrixPeriodRatio(activeCrossMode))),
+        values: row.values.map((value) =>
+          liveData ? value : Math.max(0, value * matrixPeriodRatio(activeCrossMode)),
+        ),
       }))
     : null;
   const planRiskItems = activeCrossMatrixModes
@@ -5748,6 +5772,12 @@ export default function Home({
           <strong>{Number.isFinite(displayValue) ? formatNumber(displayValue, 2) : '-'}</strong>
           {Number.isFinite(displayValue) && <span>{kpi.unit}</span>}
         </div>
+        {liveData &&
+          kpi.name === '需求预测准确率' &&
+          !readFailed &&
+          liveMetricNotes[kpi.name]?.detail && (
+            <p className="kpi-source-note">{liveMetricNotes[kpi.name].detail}</p>
+          )}
         <div className="kpi-comparison-head">
           <span>{'对比指标'}</span>
           <span>{'变化量'}</span>
@@ -8623,8 +8653,12 @@ export default function Home({
                       <small>
                         {'数据范围：'}
                         {periodMeta.range}
-                        {' · 快照指标截至'}
-                        {dataCutoff}
+                        {['stock', 'inventory'].includes(activeCrossMode) && (
+                          <>
+                            {' · 快照指标截至'}
+                            {snapshotDateLabel('库存量')}
+                          </>
+                        )}
                       </small>
                     </div>
                     <div className="segmented cross-tabs" aria-label="矩阵指标切换">
@@ -8643,76 +8677,79 @@ export default function Home({
                     <div className="matrix panel">
                       {activeCrossMode === 'stock' && (
                         <div className="matrix-format-note">
-                          {'格式：可发货天数 / 剔除大日期 · 目标 ≤12天，挑战 ≤10天 · '}
-                          {periodMeta.label}
+                          {liveData
+                            ? '可发货天数 = 可用库存 ÷ 计划日均需求 · 快照指标'
+                            : `格式：可发货天数 / 剔除大日期 · 目标 ≤12天，挑战 ≤10天 · ${periodMeta.label}`}
                         </div>
                       )}
-                      <div className="matrix-row matrix-header">
+                      <div className="matrix-row matrix-header" style={matrixRowStyle}>
                         <span>{'基地'}</span>
                         {matrixCategoryNames.map((c) => (
                           <span key={c}>{c}</span>
                         ))}
                       </div>
-                      {matrix
-                        ? matrix.map((row) => (
-                            <div className="matrix-row" key={row.base}>
-                              <strong>{row.base}</strong>
-                              {row.values.map((value, i) => {
-                                const displayValue = liveData
-                                  ? productionMetricDisplay(
-                                      crossMetricByMode[
-                                        activeCrossMode as keyof typeof crossMetricByMode
-                                      ],
-                                      value,
-                                    )
-                                  : activeCrossMode === 'stock'
-                                    ? `${formatNumber(value, 1)}天 / 剔除大日期 ${formatNumber(adjustedStockValue(row.base, i) * matrixPeriodRatio(activeCrossMode), 1)}天`
-                                    : `${formatNumber(value, 2)}%`;
-                                return (
-                                  <button
-                                    data-context-id={`cross-metric-${activeCrossMode}-${row.base}-${matrixCategoryNames[i]}`}
-                                    data-context-scope="交叉分析单值"
-                                    data-context-label={`${row.base} × ${matrixCategoryNames[i]} · ${activeMatrixListMeta.label}`}
-                                    data-context-summary={`${activeAnalysisPeriod}，当前值${displayValue}，目标${activeMatrixListMeta.target}。`}
-                                    title={`${row.base} × ${matrixCategoryNames[i]} · ${activeAnalysisPeriod}`}
-                                    key={matrixCategoryNames[i]}
-                                    className={
-                                      liveData
-                                        ? 'matrix-unavailable'
-                                        : matrixClass(
-                                            value,
-                                            activeCrossMode === 'rate' ? 'rate' : 'stock',
-                                          )
-                                    }
-                                    onClick={() => {
-                                      setSelectedBase(row.base);
-                                      setToast(`已筛选 ${row.base} ${activeAnalysisPeriod}风险项`);
-                                    }}
-                                  >
-                                    {liveData
-                                      ? displayValue
-                                      : activeCrossMode === 'stock'
-                                        ? formatNumber(value, 1) +
-                                          ' / ' +
-                                          formatNumber(
-                                            adjustedStockValue(row.base, i) *
-                                              matrixPeriodRatio(activeCrossMode),
-                                            1,
-                                          )
-                                        : formatNumber(value, 2) + '%'}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ))
-                        : base830.map((row) => (
-                            <div className="matrix-row matrix-unavailable" key={row.name}>
-                              <strong>{row.name}</strong>
-                              {matrixCategoryNames.map((category) => (
-                                <span key={category}>{'—'}</span>
-                              ))}
-                            </div>
-                          ))}
+                      {matrix ? (
+                        matrix.map((row) => (
+                          <div className="matrix-row" style={matrixRowStyle} key={row.base}>
+                            <strong>{row.base}</strong>
+                            {row.values.map((value, i) => {
+                              const displayValue = liveData
+                                ? productionMetricDisplay(
+                                    crossMetricByMode[
+                                      activeCrossMode as keyof typeof crossMetricByMode
+                                    ],
+                                    value,
+                                  )
+                                : activeCrossMode === 'stock'
+                                  ? `${formatNumber(value, 1)}天 / 剔除大日期 ${formatNumber(adjustedStockValue(row.base, i) * matrixPeriodRatio(activeCrossMode), 1)}天`
+                                  : `${formatNumber(value, 2)}%`;
+                              return (
+                                <button
+                                  data-context-id={`cross-metric-${activeCrossMode}-${row.base}-${matrixCategoryNames[i]}`}
+                                  data-context-scope="交叉分析单值"
+                                  data-context-label={`${row.base} × ${matrixCategoryNames[i]} · ${activeMatrixListMeta.label}`}
+                                  data-context-summary={`${activeAnalysisPeriod}，当前值${displayValue}，目标${activeMatrixListMeta.target}。`}
+                                  title={`${row.base} × ${matrixCategoryNames[i]} · ${activeAnalysisPeriod}`}
+                                  key={matrixCategoryNames[i]}
+                                  className={matrixClass(value, activeCrossMode)}
+                                  disabled={!Number.isFinite(value)}
+                                  onClick={() => {
+                                    setSelectedBase(row.base);
+                                    setToast(`已筛选 ${row.base} ${activeAnalysisPeriod}风险项`);
+                                  }}
+                                >
+                                  {liveData
+                                    ? displayValue
+                                    : activeCrossMode === 'stock'
+                                      ? formatNumber(value, 1) +
+                                        ' / ' +
+                                        formatNumber(
+                                          adjustedStockValue(row.base, i) *
+                                            matrixPeriodRatio(activeCrossMode),
+                                          1,
+                                        )
+                                      : formatNumber(value, 2) + '%'}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ))
+                      ) : liveData ? (
+                        <p className="matrix-empty-state">{matrixAnalysis.copy}</p>
+                      ) : (
+                        base830.map((row) => (
+                          <div
+                            className="matrix-row matrix-unavailable"
+                            style={matrixRowStyle}
+                            key={row.name}
+                          >
+                            <strong>{row.name}</strong>
+                            {matrixCategoryNames.map((category) => (
+                              <span key={category}>{'—'}</span>
+                            ))}
+                          </div>
+                        ))
+                      )}
                     </div>
                     <aside className="panel matrix-note">
                       <EditableHelp
@@ -8759,7 +8796,11 @@ export default function Home({
                         <span>{'指标清单'}</span>
                         <h3 id="matrix-risk-list-title">
                           {activeMatrixListMeta.label}
-                          {matrix ? '风险状态排序' : '明细'}
+                          {activeCrossMode === 'inventory'
+                            ? '分布明细'
+                            : matrix
+                              ? '风险状态排序'
+                              : '明细'}
                         </h3>
                       </div>
                       <p>
@@ -8771,18 +8812,24 @@ export default function Home({
                       </p>
                     </header>
                     <div
-                      className="matrix-risk-table"
+                      className={`matrix-risk-table ${activeCrossMode === 'inventory' ? 'matrix-inventory-list' : ''}`}
                       role="table"
-                      aria-label={`${activeMatrixListMeta.label}风险排序清单`}
+                      aria-label={`${activeMatrixListMeta.label}${activeCrossMode === 'inventory' ? '分布明细' : '风险排序清单'}`}
                     >
                       <div className="matrix-risk-row matrix-risk-head" role="row">
                         <span role="columnheader">{'排序'}</span>
                         <span role="columnheader">{'分析范围'}</span>
                         <span role="columnheader">{'当前值'}</span>
-                        <span role="columnheader">{'目标差距'}</span>
-                        <span role="columnheader">{'风险状态'}</span>
+                        {activeCrossMode !== 'inventory' && (
+                          <span role="columnheader">{'目标差距'}</span>
+                        )}
+                        <span role="columnheader">
+                          {activeCrossMode === 'inventory' ? '观察状态' : '风险状态'}
+                        </span>
                         <span role="columnheader">{'数据粒度'}</span>
-                        <span role="columnheader">{'任务派发'}</span>
+                        {activeCrossMode !== 'inventory' && (
+                          <span role="columnheader">{'任务派发'}</span>
+                        )}
                       </div>
                       <div className="matrix-risk-body">
                         {matrixRiskRows.length ? (
@@ -8805,27 +8852,29 @@ export default function Home({
                                   </small>
                                 ) : null}
                               </span>
-                              <span
-                                role="cell"
-                                className={
-                                  item.gap === 0
-                                    ? 'watch'
-                                    : activeCrossMode === 'stock'
-                                      ? item.gap > 0
-                                        ? 'bad'
-                                        : 'good'
-                                      : item.gap < 0
-                                        ? 'bad'
-                                        : 'good'
-                                }
-                              >
-                                {activeCrossMode === 'inventory'
-                                  ? '—'
-                                  : `${item.gap > 0 ? '+' : ''}${formatNumber(item.gap, 2)}${activeMatrixListMeta.unit === '%' ? 'pp' : activeMatrixListMeta.unit}`}
-                              </span>
+                              {activeCrossMode !== 'inventory' && (
+                                <span
+                                  role="cell"
+                                  className={
+                                    item.gap === 0
+                                      ? 'watch'
+                                      : activeCrossMode === 'stock'
+                                        ? item.level === '健康'
+                                          ? 'good'
+                                          : item.level === '预警'
+                                            ? 'watch'
+                                            : 'bad'
+                                        : item.gap < 0
+                                          ? 'bad'
+                                          : 'good'
+                                  }
+                                >
+                                  {`${item.gap > 0 ? '+' : ''}${formatNumber(item.gap, 2)}${activeMatrixListMeta.unit === '%' ? 'pp' : activeMatrixListMeta.unit}`}
+                                </span>
+                              )}
                               <em
                                 role="cell"
-                                className={`matrix-risk-level level-${riskLevelClass[item.level]}`}
+                                className={`matrix-risk-level ${activeCrossMode === 'inventory' ? 'level-observation' : `level-${riskLevelClass[item.level]}`}`}
                               >
                                 {activeCrossMode === 'inventory' ? '观察' : item.level}
                               </em>

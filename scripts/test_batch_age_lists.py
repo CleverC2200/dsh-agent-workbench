@@ -92,7 +92,7 @@ class BatchAgeLists(unittest.TestCase):
     self.assertEqual(card['weighted_age_sum'],11023)
     self.assertEqual(card['unknown_age_qty'],520)
     self.assertEqual(card['max_age'],1033)
-  detail=self.read(agent='fc')[0]
+  detail=self.read(agent='fc',stat_date='2026-10-22')[0]
   self.assertAlmostEqual(detail['average_age'],11.023)
   self.assertEqual(detail['max_age'],1033)
  def test_all_card_paths_reject_invalid_dates_without_losing_inventory(self):
@@ -162,7 +162,13 @@ class BatchAgeLists(unittest.TestCase):
     for cast in list(query.find_all(sqlglot.exp.Cast)):
      if cast.args['to'].this==sqlglot.exp.DataType.Type.DATE:cast.replace(cast.this.copy())
     parameters={key:('2026-10-22' if spec['name']=='stock_date' else q['request']['parameters'][key]) for key,spec in q['parameterSpec'].items()}
-    rows=[dict(r) for r in self.db.execute(query.sql(dialect='sqlite'),{k:v for k,v in parameters.items() if not isinstance(v,list)})]
+    sql=query.sql(dialect='sqlite')
+    for key,value in list(parameters.items()):
+     if isinstance(value,list):
+      keys=[key+'_'+str(i) for i in range(len(value))]
+      sql=re.sub(':'+key+r'\b',','.join(':'+k for k in keys),sql)
+      parameters.pop(key);parameters.update(zip(keys,value))
+    rows=[dict(r) for r in self.db.execute(sql,parameters)]
     actual={(r['base'],r['sku']):r['inventory'] for r in rows}
     self.assertEqual(actual,{('郑州','S'):100,('郑州','NEG'):-242,('濮阳','P'):4277})
 if __name__=='__main__':unittest.main()

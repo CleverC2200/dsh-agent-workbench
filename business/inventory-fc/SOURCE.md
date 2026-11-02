@@ -1,5 +1,7 @@
 # 分仓库存页面来源
 
+分仓向基地的当前订单采用未收货完成的 ASN，关联基地出库占用；月度履约另用执行侧统计。整合及验证边界见 [2026-10-30 记录](../../docs/collaboration/changes/2026-10-30-inventory-integration.md)。
+
 从隔离资源库 `dsh-agent-fc-plugin` 的固定提交 `906b3b08947b71cecf627073c0b0e9a389b692bf` 迁入。交付 HTML 版本为 `0.2.6-preview.9`；旧源码快照标记 `preview.7`，因此验收分别对照该提交的已交付 HTML 与源码，不能仅凭版本字符串判断等价。
 
 只保留构建所需源码和原有定向测试，未引入旧 node_modules 软链、旧发行脚本或其它业务入口。`scripts/build-inventory-fc.mjs` 是工作台侧构建入口。Agent Skill 与会话提示词由同级 Agent Manage 提供；看板专用 AI 洞察提示词由本页面单独维护。
