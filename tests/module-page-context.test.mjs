@@ -29,7 +29,10 @@ test('customer card names, units and low coverage semantics cannot drift to simi
   );
   assert.match(context.metricSemantics.lowCoverageCount, /低于60天.*不是缺失/);
   assert.ok(context.metrics.every((m) => m.definition.length));
-  assert.equal(context.metricContract.freshness.value, context.metrics[3].value);
+  assert.equal(
+    context.metricContract.freshness.value,
+    context.metrics.find((m) => m.key === 'freshness').value,
+  );
   assert.equal(context.metricContract.largeDate.thresholdDays, 90);
   assert.equal(context.metricContract.largeDate.operator, '>');
   assert.equal(context.metricContract.largeDate.ruleRevision, '434');
@@ -46,8 +49,8 @@ test('partial freshness keeps the actual card value and its estimate rather than
   });
   assert.equal(context.metricContract.freshness.value, 87.25);
   assert.equal(context.metricContract.freshness.estimated, true);
-  assert.equal(context.metrics[3].coveredCount, 7);
-  assert.equal(context.metrics[3].missingCount, 3);
+  assert.equal(context.metrics.find((m) => m.key === 'freshness').coveredCount, 7);
+  assert.equal(context.metrics.find((m) => m.key === 'freshness').missingCount, 3);
   assert.match(context.metricContract.freshness.interpretation, /上限/);
 });
 

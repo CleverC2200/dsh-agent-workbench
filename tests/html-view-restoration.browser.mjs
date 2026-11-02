@@ -9,7 +9,7 @@ import { chromium, expect } from '@playwright/test';
 import { temporaryReferenceStorage } from './helpers/reference-storage.mjs';
 const { outputFiles } = await build({
   stdin: {
-    contents: `import{WorkbenchController}from'./src/workbench.ts';import{connectHtmlViewState}from'./src/html-view-channel.ts';import{validatePageCatalog}from'./src/page-bridge/catalog.ts';import{htmlPageCatalog}from'./src/html-page-catalog.ts';import{isBusinessViewPage}from'./src/html-view-state.ts';window.mockSession='session-11111111-1111-4111-8111-111111111111';let viewSession='mock-session';window.setViewSession=scope=>{viewSession=scope;};const viewScope=id=>isBusinessViewPage(id)?id==='plan-category-production'?viewSession:window.mockSession:undefined;window.mockContexts={};window.mockCatalogs={};window.mockChannels={};window.mockReplies={};window.mockErrors=[];window.contextMessages=[];const owner=new WorkbenchController({panel:()=>{},document:()=>{}});for(const[id,name]of[['workbench-html-table','sample'],['gea-regional-plan','regional'],['plan-region-category','category'],['plan-category-production','mps'],['inventory-customer','customer'],['inventory-orderworkbench','orderworkbench'],['inventory-orderfulfillment','fulfillment']])owner.registerFrame({id,kind:'html',src:'/'+name});let stop=()=>{},frame;window.openPage=async(id,name)=>{stop();frame?.remove();delete window.mockContexts[id];delete window.mockCatalogs[id];await owner.open(id);frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.style='width:1480px;height:920px;border:0';document.body.append(frame);stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);frame.src='/'+name;};window.hidePage=()=>{owner.leaveDocument();stop();frame?.remove();};window.rebindSession=async session=>{const id=owner.getSnapshot().selectedDocument.id;stop();window.mockSession=session;delete window.mockContexts[id];stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockChannels[id].postMessage({type:'context',context:{session,plugin:id}});};window.readState=id=>owner.readHtmlViewState(id,viewScope(id));window.seedState=(id,state)=>owner.saveHtmlViewState(id,viewScope(id),state);window.addEventListener('message',event=>{if(event.source!==frame?.contentWindow||event.data?.protocol!=='gea-html-v2'||event.data.type!=='ready')return;const id=owner.getSnapshot().selectedDocument.id;const channel=new MessageChannel();window.mockChannels[id]=channel.port1;window.switchViewSession=scope=>{viewSession=scope;stop();stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockSession=scope;channel.port1.postMessage({type:'context',context:{session:scope,plugin:id}});};let applied;window.applyMock=args=>new Promise(resolve=>{applied=resolve;channel.port1.postMessage({type:'apply',toolCallId:'fixture-apply',session:window.mockSession,args});});channel.port1.onmessage=({data})=>{if(data.type==='cancel')window.cancelContextTransport?.(data.id);if(data.type==='applied'){window.mockReplies[data.toolCallId]=data;applied?.(data);}if(data.type==='request'){if(id==='inventory-orderworkbench'&&['sql','workspace'].includes(data.method)){void window.orderRestoreFixture(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else if(data.method==='sql'&&id==='inventory-orderfulfillment'){const query=data.parameters.queryId;const rows=query.endsWith('.count')?[{total:0}]:query.endsWith('.summary')?[{source_orders:0,source_rows:0,matched_orders:0,overdue_orders:0,warning_orders:0}]:[];channel.port1.postMessage({type:'response',id:data.id,result:{rows,configVersion:'v1',returnedColumns:Object.keys(rows[0]??{}),rejectedColumns:[]}});}else if(data.method==='sql'&&id==='inventory-customer'){const rows=[{snapshot_date:'2026-10-17',cust_code:'10154963',cust_name:'郑州佳特商贸有限公司',region_name:'华中大区',province_name:'河南省',stock_qty:300,stock_amt:60000,sales_qty_30days:150,normal_stock_qty:270,no_sales_sku:2,sku_rows:3,stock_coverage:3,value_coverage:3,sales_coverage:3,normal_coverage:3}];channel.port1.postMessage({type:'response',id:data.id,result:{rows,total:rows.length,returnedColumns:Object.keys(rows[0]),rejectedColumns:[]}});}else{if(data.method!=='context')window.mockErrors.push(data.method);window.mockContexts[id]=data.parameters;window.contextMessages.push({session:data.session,context:data.parameters});if(window.hostContextTransport){void window.hostContextTransport(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else channel.port1.postMessage({type:'response',id:data.id,result:{ok:true}});}}if(data.type==='catalog'){try{const catalog=htmlPageCatalog({surface:'gea-html-'+id,tool:'gea_plugin_page_apply',label:'Mock reception',elements:data.elements});if(catalog)validatePageCatalog(catalog);window.mockCatalogs[id]=data.elements;}catch(error){window.mockErrors.push(error.message);}}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:window.mockSession,plugin:id}},'*',[channel.port2]);});`,
+    contents: `import{WorkbenchController}from'./src/workbench.ts';import{connectHtmlViewState}from'./src/html-view-channel.ts';import{validatePageCatalog}from'./src/page-bridge/catalog.ts';import{htmlPageCatalog}from'./src/html-page-catalog.ts';import{isBusinessViewPage}from'./src/html-view-state.ts';window.mockSession='session-11111111-1111-4111-8111-111111111111';let viewSession='mock-session';window.setViewSession=scope=>{viewSession=scope;};const viewScope=id=>isBusinessViewPage(id)?id==='plan-category-production'?viewSession:window.mockSession:undefined;window.mockContexts={};window.mockCatalogs={};window.mockChannels={};window.mockReplies={};window.mockErrors=[];window.contextMessages=[];const owner=new WorkbenchController({panel:()=>{},document:()=>{}});for(const[id,name]of[['workbench-html-table','sample'],['gea-regional-plan','regional'],['plan-region-category','category'],['plan-category-production','mps'],['inventory-customer','customer'],['inventory-orderworkbench','orderworkbench'],['inventory-orderfulfillment','fulfillment']])owner.registerFrame({id,kind:'html',src:'/'+name});let stop=()=>{},frame;window.openPage=async(id,name)=>{stop();frame?.remove();delete window.mockContexts[id];delete window.mockCatalogs[id];await owner.open(id);frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.style='width:1480px;height:920px;border:0';document.body.append(frame);stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);frame.src='/'+name;};window.hidePage=()=>{owner.leaveDocument();stop();frame?.remove();};window.rebindSession=async session=>{const id=owner.getSnapshot().selectedDocument.id;stop();window.mockSession=session;delete window.mockContexts[id];stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockChannels[id].postMessage({type:'context',context:{session,plugin:id}});};window.readState=id=>owner.readHtmlViewState(id,viewScope(id));window.seedState=(id,state)=>owner.saveHtmlViewState(id,viewScope(id),state);window.addEventListener('message',event=>{if(event.source!==frame?.contentWindow||event.data?.protocol!=='gea-html-v2'||event.data.type!=='ready')return;const id=owner.getSnapshot().selectedDocument.id;const channel=new MessageChannel();window.mockChannels[id]=channel.port1;window.switchViewSession=scope=>{viewSession=scope;stop();stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockSession=scope;channel.port1.postMessage({type:'context',context:{session:scope,plugin:id}});};let applied;window.applyMock=args=>new Promise(resolve=>{applied=resolve;channel.port1.postMessage({type:'apply',toolCallId:'fixture-apply',session:window.mockSession,args});});channel.port1.onmessage=({data})=>{if(data.type==='cancel')window.cancelContextTransport?.(data.id);if(data.type==='applied'){window.mockReplies[data.toolCallId]=data;applied?.(data);}if(data.type==='request'){if(id==='inventory-orderworkbench'&&['sql','workspace'].includes(data.method)){void window.orderRestoreFixture(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else if(data.method==='sql'&&id==='inventory-orderfulfillment'){const query=data.parameters.queryId;const rows=query.endsWith('.count')?[{total:0}]:query.endsWith('.summary')?[{source_orders:0,source_rows:0,matched_orders:0,overdue_orders:0,warning_orders:0}]:[];channel.port1.postMessage({type:'response',id:data.id,result:{rows,configVersion:'v1',returnedColumns:Object.keys(rows[0]??{}),rejectedColumns:[]}});}else if(data.method==='sql'&&id==='inventory-customer'){void window.customerRestoreFixture(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else{if(data.method!=='context')window.mockErrors.push(data.method);window.mockContexts[id]=data.parameters;window.contextMessages.push({session:data.session,context:data.parameters});if(window.hostContextTransport){void window.hostContextTransport(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else channel.port1.postMessage({type:'response',id:data.id,result:{ok:true}});}}if(data.type==='catalog'){try{const catalog=htmlPageCatalog({surface:'gea-html-'+id,tool:'gea_plugin_page_apply',label:'Mock reception',elements:data.elements});if(catalog)validatePageCatalog(catalog);window.mockCatalogs[id]=data.elements;}catch(error){window.mockErrors.push(error.message);}}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:window.mockSession,plugin:id}},'*',[channel.port2]);});`,
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -22,6 +22,38 @@ async function fixture(t, includedAssets) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
+  if (includedAssets?.includes('mps'))
+    await page.clock.setFixedTime(new Date('2026-10-20T04:00:00Z'));
+  await page.exposeFunction('customerRestoreFixture', ({ parameters }) => {
+    const columns = parameters.sql.match(/SELECT ([a-z0-9_,]+), ROW_NUMBER\(\)/)?.[1].split(',');
+    assert.ok(columns, 'customer fixture follows the registered row packet columns');
+    const customer = {
+      snapshot_date: '2026-10-17',
+      inventory_snapshot_date: '2026-10-17',
+      cust_code: '10154963',
+      cust_name: '郑州佳特商贸有限公司',
+      region_name: '华中大区',
+      province_name: '河南省',
+      stock_qty: 300,
+      stock_amt: 60000,
+      sales_qty_30days: 150,
+      normal_stock_qty: 270,
+      no_sales_sku: 2,
+      sku_rows: 3,
+      inventory_sku_rows: 3,
+      stock_coverage: 3,
+      value_coverage: 3,
+      sales_coverage: 3,
+      normal_coverage: 3,
+    };
+    const tuple = [1, ...columns.map((key) => customer[key] ?? null)]
+      .map((value) => (value === null ? 'N' : `V${Buffer.byteLength(String(value))}:${value}`))
+      .join('');
+    const rows = [
+      { packet_index: 0, packet_count: 1, packet_scope_total: 1, packet_rows: [tuple] },
+    ];
+    return { rows, total: 1, returnedColumns: Object.keys(rows[0]), rejectedColumns: [] };
+  });
   const assetPaths = {
     sample: 'lib/samples/index.html',
     regional: 'lib/static/regional/index.html',
@@ -506,6 +538,22 @@ test('regional mounted author restores and republishes after its existing channe
 });
 
 // MPS reception observes the existing authored iframe and current channel output.
+async function addMpsProduct(frame) {
+  const expand = frame.getByRole('button', { name: '展开产品明细', exact: true });
+  if (await expand.isVisible()) await expand.click();
+  await frame.getByRole('button', { name: '新增产品', exact: true }).click();
+  const dialog = frame.getByRole('dialog', { name: '新增产品', exact: true });
+  for (const [name, value] of Object.entries({
+    基地名称: '郑州',
+    产品编码: 'A',
+    产品名称: '产品甲',
+    大类: '汤圆',
+    系列: '系列',
+    物料组: '组',
+  }))
+    await dialog.getByLabel(name, { exact: true }).fill(value);
+  await dialog.getByRole('button', { name: '新增', exact: true }).click();
+}
 test('received MPS publishes committed source edits and removes the previous step context', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
@@ -514,13 +562,7 @@ test('received MPS publishes committed source edits and removes the previous ste
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-10');
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
-  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
-    name: 'products.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(
-      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
-    ),
-  });
+  await addMpsProduct(frame);
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: 'report.csv',
     mimeType: 'text/csv',
@@ -668,7 +710,9 @@ test('received MPS context covers the seven current steps and preserves unassess
         [
           'navigation',
           key,
-          ...(key === 'check' ? ['source-inputs-basic', 'source-inputs-parameters'] : []),
+          ...(key === 'check'
+            ? ['category-demand', 'source-inputs-basic', 'source-inputs-parameters']
+            : []),
         ].sort(),
       );
     await expect
@@ -680,7 +724,9 @@ test('received MPS context covers the seven current steps and preserves unassess
         ),
       )
       .toEqual([
-        ...(key === 'check' ? ['step:source-inputs-parameters', 'step:source-inputs-basic'] : []),
+        ...(key === 'check'
+          ? ['step:source-inputs-parameters', 'step:source-inputs-basic', 'step:category-demand']
+          : []),
         'step:' + key,
       ]);
     const data = await page.evaluate(
@@ -733,13 +779,7 @@ test('received MPS commits restored navigation and clears local inputs before pu
   await page.clock.setFixedTime(new Date('2026-10-20T04:00:00Z'));
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   const frame = page.frameLocator('iframe');
-  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
-    name: 'products.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(
-      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
-    ),
-  });
+  await addMpsProduct(frame);
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: 'session-a.csv',
     mimeType: 'text/csv',
