@@ -2,6 +2,31 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { customerCardStatusLabel } from '../prototypes/inventory-customer/card-display.js';
+import { summarizeCustomerInventory } from '../prototypes/inventory-customer/customer-inventory-model.js';
+import { customerPageContext } from '../prototypes/inventory-customer/page-context.js';
+
+test('stocked customers count distinct positive-stock customers in the supplied scope', () => {
+  const rows = [
+    { code: 'a', quantity: 2 },
+    { code: 'a', quantity: 2 },
+    { code: 'b', quantity: 0 },
+    { code: 'c', quantity: -1 },
+    { code: 'd', quantity: null },
+    { code: 'e', quantity: 3 },
+  ];
+  const summary = summarizeCustomerInventory(rows);
+  assert.equal(summary.stockedCustomerCount, 2);
+  assert.equal(
+    summarizeCustomerInventory(rows.filter((row) => row.code === 'b')).stockedCustomerCount,
+    0,
+  );
+  assert.equal(summarizeCustomerInventory([]).stockedCustomerCount, 0);
+  const metric = customerPageContext({ summary }).metrics.find(
+    (metric) => metric.key === 'stockedCustomers',
+  );
+  assert.equal(metric.value, 2);
+  assert.equal(metric.unit, '个');
+});
 
 test('only unassessed card labels become current scope', () => {
   assert.equal(customerCardStatusLabel('unassessed', '判定标准未定义'), '当前范围');

@@ -270,8 +270,11 @@ export function computeWorkbenchMetrics(
         Object.assign(result[name], { value: null, note: '查询未完成：' + part.code });
     else if (!rows(id).length)
       for (const name of names)
-        Object.assign(result[name], { value: null, note: '所选周期及授权范围内无来源数据' });
+        Object.assign(result[name], { value: null, noRows: true, note: '所选周期及授权范围内无来源数据' });
   }
+  if (period.start && period.end && period.start >= period.end)
+    for (const name of metricNames)
+      Object.assign(result[name], { value: null, loading: false, emptyPeriod: true });
   for (const name of metricNames)
     if (result[name]?.value == null) {
       result[name].missingReason = workbenchMetricMissingReason(
@@ -286,6 +289,8 @@ export function computeWorkbenchMetrics(
   return result;
 }
 export function workbenchMetricMissingReason(period, name, filter = () => true, note = '') {
+  if (period?.start && period?.end && period.start >= period.end)
+    return '当前周期尚无已结束日期：按已结束日期统计，暂不计算本周期指标；不是数据仍在加载。';
   const id = ['作废率', '改单率'].includes(name)
     ? 'changes'
     : name === '周转天数'

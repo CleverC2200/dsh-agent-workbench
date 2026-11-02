@@ -64,7 +64,7 @@ export function customerLoadFailure(error) {
 export function customerShellMarkup() {
   return (
     '<section class="customer-static-shell" aria-label="客户库存"><div class="customer-static-metrics">' +
-    ['库存价值', '库存数量', '结构合理性', '库存新鲜度', '周转天数', '大日期情况']
+    ['库存价值', '库存数量', '有库存的客户数', '结构合理性', '库存新鲜度', '周转天数', '大日期情况']
       .map((label) => '<article><h3>' + label + '</h3><strong>—</strong></article>')
       .join('') +
     '</div><p>客户库存数据尚未读取</p><table><thead><tr><th>经销商</th><th>所属区域</th><th>库存价值</th><th>库存数量</th><th>综合状态</th></tr></thead><tbody><tr><td colspan="5">暂无已读取的数据</td></tr></tbody></table></section>'

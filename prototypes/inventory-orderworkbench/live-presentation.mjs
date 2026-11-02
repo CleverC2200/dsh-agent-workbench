@@ -222,40 +222,56 @@ export function workbenchPresentation(facts, options = {}) {
     current = periods[selected];
   const previous = periods[selected === 'month' ? 'previousMonth' : 'previousWeek'],
     year = periods[selected === 'month' ? 'yearMonth' : 'yearWeek'];
-  const metrics = current.metrics;
+  const metrics = periods.month?.metrics ?? Object.fromEntries(metricNames.map(name => [name, {
+    value: null, loading: true, note: '正在读取本期数据',
+    missingReason: '系统尚未完成读取：本期数据尚未返回。',
+  }]));
   const loading = facts.complete === false;
   const comparison = (a, b, name) =>
-    loading &&
+    periods[a]?.metrics[name]?.emptyPeriod ? '—' : loading &&
     (!periods[a] ||
       !periods[b] ||
       periods[a].metrics[name]?.loading ||
       periods[b].metrics[name]?.loading)
       ? '加载中'
       : metricDelta(periods[a]?.metrics, periods[b]?.metrics, name);
+  const comparisonNote = (a, b, name) => {
+    if (metricValue(periods[a]?.metrics, name) === null)
+      return periods[a]?.metrics[name]?.missingReason ?? workbenchMetricMissingReason(periods[a], name);
+    if (metricValue(periods[b]?.metrics, name) === null)
+      return '比较期：' + (periods[b]?.metrics[name]?.missingReason ?? workbenchMetricMissingReason(periods[b], name));
+    return metricComparisonNote(periods[a]?.metrics, periods[b]?.metrics, name);
+  };
   const cards = metricNames.map((name) => ({
     key: name,
     value:
       metricValue(metrics, name) === null
         ? '—'
         : metricValue(metrics, name).toFixed(name === '周转天数' ? 1 : 2),
-    status: metrics[name]?.loading
+    status: metrics[name]?.emptyPeriod
+      ? '暂无已结束日期'
+      : metrics[name]?.loading
       ? '加载中'
       : metrics[name]?.value == null && metrics[name]?.missingReason?.startsWith('系统读取未成功')
         ? '查询失败'
-        : metrics[name]?.sample
+        : metrics[name]?.noRows
+          ? '暂无数据'
+          : metrics[name]?.sample
           ? `样本 ${metrics[name].sample.coverage.toFixed(1)}%`
           : metricState(name, metricValue(metrics, name)),
     coverageNote: metrics[name]?.coverageNote ?? '',
     comparisonNotes: [
-      metricComparisonNote(periods.month?.metrics, periods.previousMonth?.metrics, name),
-      metricComparisonNote(periods.month?.metrics, periods.yearMonth?.metrics, name),
-      metricComparisonNote(periods.week?.metrics, periods.previousWeek?.metrics, name),
-      metricComparisonNote(periods.week?.metrics, periods.yearWeek?.metrics, name),
+      comparisonNote('month', 'previousMonth', name),
+      comparisonNote('month', 'yearMonth', name),
+      comparisonNote('week', 'previousWeek', name),
+      comparisonNote('week', 'yearWeek', name),
     ],
     formula: metrics[name].note,
     missingReason: metrics[name].missingReason,
     footer: `本周${name === '货龄（>60天库存占比）' ? '货龄占比' : name === '周转天数' ? '可发货天数' : name === '订单满足率' ? '满足率' : name} ${loading && !periods.week ? '加载中' : text(metricValue(periods.week?.metrics, name), name === '周转天数' ? '天' : '%', name === '周转天数' ? 1 : 2)}${periods.week?.metrics[name]?.sample ? '（可判定样本）' : ''}`,
-    footerNote: periods.week?.metrics[name]?.coverageNote ?? '',
+    footerNote: metricValue(periods.week?.metrics, name) === null
+      ? periods.week?.metrics[name]?.missingReason ?? '本周数据尚未返回。'
+      : periods.week?.metrics[name]?.coverageNote ?? '',
     comparison: [
       comparison('month', 'previousMonth', name),
       comparison('month', 'yearMonth', name),

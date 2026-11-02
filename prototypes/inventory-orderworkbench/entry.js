@@ -2249,11 +2249,11 @@ const topMetricCards = [
     footer: '本周可发货天数 14.5天',
   },
 ];
-function clearLiveMetrics() {
+function clearLiveMetrics({failed=false,reason='系统尚未完成读取：正在读取所选周期数据。'}={}) {
   liveSkuDetails = {};
   liveSkuPagination={};workbenchSkuPages.clear();
   workbenchDimensions['region-change'].customerDetails = [];
-  for (const metric of topMetricCards) Object.assign(metric,{value:'—',status:'数据不足',footer:'按文档口径；缺失依据不估算',comparison:['—','—','—','—']});
+  for (const metric of topMetricCards) Object.assign(metric,{value:'—',status:failed?'查询失败':'加载中',missingReason:reason,footer:failed?'查询失败':'正在读取所选周期数据…',footerNote:reason,comparison:['—','—','—','—'],comparisonNotes:[reason,reason,reason,reason]});
   for (const metric of metricDefinitions) Object.assign(metric,{value:'—',display:'—',previous:'上期 —',same:'同期 —',change:'—',sameChange:'—',gap:'—',trend:'—',status:'数据不足',note:'当前缺少完整口径或同范围证据，不使用演示结果。'});
   for (const dimension of Object.values(workbenchDimensions)) Object.assign(dimension,{rows:[],risks:{},summary:'缺少同范围可核验数据',note:'缺失值保持未知'});
   for (const dimension of Object.values(workbenchPerformance)) {
@@ -2407,7 +2407,7 @@ async function readCurrentPeriod() {
     if(!entry.dirty)periodReports.delete(key);
     if (!controller.signal.aborted && activePeriodReport===entry) {
       reportLoaded=false;
-      clearLiveMetrics();
+      clearLiveMetrics({failed:true,reason:`系统读取未成功：${error.code??'QUERY_FAILED'}；请重试或核对查询权限。`});
       document.getElementById('periodMeta').textContent='数据读取失败或未获授权';
       renderWorkbench();
       updateReport();
@@ -2430,7 +2430,7 @@ function renderWorkbench() {
   document.getElementById('wbKpis').innerHTML = topMetricCards
     .map((metric) => {
       const statusClass = ['未达', '严重'].includes(metric.status) ? 'bad' : metric.status === '预警' ? 'warn' : metric.status === '健康' ? '' : 'unknown';
-      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.label)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:liveFacts?.selected??"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
+      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.label)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
     })
     .join('');
   document.querySelectorAll('#wbKpis .wb-kpi').forEach((card,index)=>{
@@ -2584,7 +2584,7 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
                 : '';
             return `<td${title} class="${value.state ? `performance-${escapeHtml(value.state)}` : ''}">${marker}${escapeHtml(value.text)}</td>`;
           }
-          return `<td${title}>${escapeHtml(unmapped?'—':String(value))}</td>`;
+          return `<td${title}>${escapeHtml(unmapped?'归属待补全':String(value))}</td>`;
         })
         .join('');
       return `<tr>${cells}</tr>`;
