@@ -1,6 +1,13 @@
 // Source: 客户库存知识库, revision 431, 2026-10-20.
 // Formula and business classification stay separate from implementation caveats.
 export const customerMetricDefinitions = {
+  stockedCustomers: {
+    title: '有库存的客户数',
+    purpose: '当前角色及组织范围内有现库存的客户数。',
+    formula: ['有库存的客户数＝现库存合计大于0的去重客户数'],
+    rules: ['零库存、负库存及库存未知的客户不计入；不含在途。'],
+    notes: ['与顶部其他卡片使用相同计划表快照和组织范围，不受下方列表筛选影响。'],
+  },
   value: {
     title: '库存价值',
     purpose: '客户库存总金额。',
@@ -139,6 +146,7 @@ export function customerMetricCaption(key, summary, _format) {
   return {
     value: `${inventoryScope}；覆盖 ${Number.isFinite(customers) ? customers-summary.missingValueCount : '—'}/${customers} 客户`,
     quantity: '现库存，不含在途',
+    stockedCustomers: '现库存合计大于0，按客户去重',
     structure: '健康≥80分；关注≥65分',
     freshness: `${inventoryScope}；${summary.freshnessEstimated?'部分数据测算上限；':''}覆盖 ${summary.normalCoverageCount??'—'}/${customers} 客户`,
     turnover: summary.turnoverEstimated ? '在途不全，按现库存估算' : '按近30日动销，含在途',
