@@ -188,6 +188,7 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
     return { status: response.status, value: await response.json() };
   };
   return {
+    pages,
     call,
     grant,
     open,
@@ -207,6 +208,65 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
   };
 }
 const readDealerMock = await configuredWire('dealer');
+
+test('page card facts keep their complete order and units even when detail compression has an unrelated focus', async (t) => {
+  const h = await mount(t);
+  h.pages.registerBusinessPage(
+    {
+      id: 'inventory-customer',
+      pluginId: 'inventory-customer',
+      label: '客户库存',
+      kind: 'html',
+      resourceId: 'test-resource',
+      catalog: { surface: 'gea-html-inventory-customer', tool: 'gea_plugin_page_apply' },
+    },
+    async () => h.grant,
+  );
+  const {
+    value: { owner },
+  } = await h.open({ pageId: 'inventory-customer' });
+  const metrics = Array.from({ length: 6 }, (_, i) => ({
+    key: String(i),
+    label: '指标' + i,
+    value: i === 5 ? null : i + 0.125,
+    unit: i === 1 ? '箱' : '%',
+    coveredCount: 7,
+    missingCount: 3,
+    definition: ['该指标的完整口径说明'],
+    sourceNotes: ['当前取数是上游汇总字段；上游业务公式未独立复算。'],
+  }));
+  const contract = { source: 'current-page', ruleRevision: '434' };
+  const response = await h.call('context', {
+    owner,
+    parameters: {
+      metrics,
+      metricContract: contract,
+      filters: { date: '2026-11-02' },
+      rows: Array.from({ length: 200 }, (_, i) => ({ name: '客户' + i, details: 'x'.repeat(200) })),
+    },
+  });
+  assert.equal(response.status, 200);
+  for (const focus of [undefined, '前三张 卡片']) {
+    const result = JSON.parse(
+      (await h.execute('gea_page', { action: 'context', ...(focus ? { focus } : {}) })).value,
+    );
+    assert.deepEqual(
+      result.context.metrics.map((m) => [m.label, m.value, m.unit]),
+      metrics.map((m) => [m.label, m.value, m.unit]),
+    );
+    assert.deepEqual(result.context.metricContract, contract);
+    assert.equal(result.context.metrics[0].coveredCount, 7);
+    assert.equal(result.context.metrics[0].missingCount, 3);
+    assert.deepEqual(
+      result.context.metrics.map((m) => m.definition),
+      metrics.map((m) => m.definition),
+    );
+    assert.deepEqual(
+      result.context.metrics.map((m) => m.sourceNotes),
+      metrics.map((m) => m.sourceNotes),
+    );
+  }
+});
 
 async function authorCatalog(t, id) {
   const dom = new JSDOM(

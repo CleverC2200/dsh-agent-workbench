@@ -498,13 +498,21 @@ export function workbenchEvidence(facts) {
           start: period.start,
           endExclusive: period.end,
           inventoryEndExclusive: period.inventoryEnd ?? period.end,
+          orderWindow: {
+            basis: 'T-1累计；结束边界不含当日，比较期保留相同已结束时长，不延长到未来周期末',
+            state: period.start >= period.end ? 'no-completed-days' : 'elapsed-days',
+          },
           metrics: Object.fromEntries(
             Object.entries(period.metrics).map(([key, metric]) => [
               key,
               {
                 value: metric.value,
                 unit: metric.unit,
-                ...(metric.value === null || metric.sample ? { note: metric.note } : {}),
+                ...(metric.value === null || metric.sample ? {
+                  note: metric.value === null && period.start >= period.end && !period.sections.length
+                    ? workbenchMetricMissingReason(period, key)
+                    : metric.note,
+                } : {}),
                 ...(metric.sample ? { sample: metric.sample } : {}),
               },
             ]),

@@ -7,11 +7,13 @@ import { fulfillmentCardQueries, readItemPage } from './paged-source.mjs';
 import { mountOrganizationFilter, organizationSelection } from './organization-filter.js';
 import { configuredQueryFreshAfter } from '../../business/shared/query-cache.ts';
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
-import { ready, call, publish, reportElements, action } from '../../business/shared/channel.js';
+import { ready, call, publish as publishContext, reportElements, action } from '../../business/shared/channel.js';
+import { fulfillmentPageContext } from './page-context.mjs';
 import { keepPageObservation } from '../../business/shared/page-observation.js';
 import { quotePage } from '../../src/page-interaction/quote.ts';
 import { createPageViewState } from '../../business/shared/view-state.js';
 import { computeOrderMetrics, comparisonMetrics } from './order-metrics.mjs';
+const publish = (value, options) => publishContext(fulfillmentPageContext(value), options);
 import {attachExecutionTrace,assessTraceArrivals} from './execution-trace.mjs';
 import {renderCharts,renderCoordination,clearPanels,bindPanelControls} from './live-panels.js';
 import {
@@ -1184,7 +1186,7 @@ document.addEventListener('click', async (event) => {
 });
 action('context', '读取当前授权订单履约数据', () => {
   if (!snapshot || !connected) throw Error('PAGE_CONTEXT_NOT_READY');
-  return snapshot;
+  return fulfillmentPageContext(snapshot);
 });
 keepPageObservation(() => connected && snapshot, (value) => publish(value));
 function invalidate(event) {
