@@ -23,8 +23,8 @@ class BranchOrderSources(unittest.TestCase):
         for table in FORBIDDEN:
             self.assertNotIn(table, document)
         for key, query in self.config['queries'].items():
-            for ref in query.get('pagination', {}).values():
-                if ref not in {'sql_limit_offset', 'atomic'} and '.' in str(ref):
+            for field, ref in query.get('pagination', {}).items():
+                if field in {'countQuery', 'atomicQuery'}:
                     self.assertTrue(ref in self.config['queries'], key)
 
     def test_inventory_detail_and_paging_work_without_any_dealer_order_table(self):

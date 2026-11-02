@@ -79,7 +79,7 @@ class BaseCurrentOrders(unittest.TestCase):
    tree=sqlglot.parse_one(sql,read='postgres')
    for node in list(tree.find_all(exp.Not)):
     if isinstance(node.this,exp.Is) and isinstance(node.this.expression,exp.Null):
-     node.replace(exp.Is(this=node.this.this.copy(),expression=exp.Not(this=exp.Null())))
+     predicate=sqlglot.parse_one('placeholder IS NOT NULL',read='postgres');predicate.set('this',node.this.this.copy());node.replace(predicate)
    return tree
   before={key:canonical(q['request']['sql']) for key,q in self.config['queries'].items()};module.update(self.config)
   for key,q in self.config['queries'].items():self.assertEqual(canonical(q['request']['sql']),before[key],key)
