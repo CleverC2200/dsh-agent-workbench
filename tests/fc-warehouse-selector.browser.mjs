@@ -1088,12 +1088,14 @@ test('replenishment quick filters use server scope, product links expand inline 
   await page.getByRole('spinbutton', { name: 'SKU2实际补货量' }).fill('5');
   await needed.check();
   await expect(page.getByRole('button', { name: 'SKU2', exact: true })).toBeVisible();
-  assert.ok(
-    calls
-      .filter((c) => c.id === 'replenishment.detail.atomic')
-      .at(-1)
-      .values.positive_actual_keys.includes('2:W1SKU2'),
-  );
+  await expect
+    .poll(() =>
+      calls
+        .filter((c) => c.id === 'replenishment.detail.atomic')
+        .at(-1)
+        .values.positive_actual_keys.includes('2:W1SKU2'),
+    )
+    .toBe(true);
   await page.getByRole('checkbox', { name: '有业务', exact: true }).check();
   await expect
     .poll(
