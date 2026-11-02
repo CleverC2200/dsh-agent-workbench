@@ -64,7 +64,18 @@ for (const agent of ['fc', 'aqkc', 'qll', 'dealer', 'apsplan'])
       );
       values.page_size = 10;
       values.offset = 0;
-      const port = { onmessage: null, start() {}, close() {}, postMessage: (m) => sent.push(m) };
+      const port = {
+        onmessage: null,
+        start() {},
+        close() {},
+        postMessage(m) {
+          if (m.type === 'request' && m.parameters.queryId === 'summary.snapshot') {
+            queueMicrotask(() =>
+              port.onmessage({ data: { type: 'response', id: m.id, result: { rows: [] } } }),
+            );
+          } else sent.push(m);
+        },
+      };
       const first = client.read(id, values);
       for (let i = 0; i < 100 && !listeners.has('message'); i++) await tick();
       assert.ok(listeners.has('message'));

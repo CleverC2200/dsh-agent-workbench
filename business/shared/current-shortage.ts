@@ -40,20 +40,34 @@ export async function readCurrentShortage(
   const active = agentSqlConfig(config),
     client = createAgentQueries(active, options.execute);
   const definition = active.queries[queryId];
-  const inputs = currentShortageValues(filters, options.page, options.pageSize);
+  const collection =
+    /\.(locations|categories|skus)$/.test(queryId) && definition.pagination?.countQuery;
+  const inputs = currentShortageValues(
+    filters,
+    collection ? 1 : options.page,
+    collection ? 50 : options.pageSize,
+  );
   const values = Object.fromEntries(
     Object.values(definition.parameterSpec).map((spec: any) => [
       spec.name,
       Object.entries(inputs).find(([name]) => name === spec.name)?.[1],
     ]),
   );
-  const result = await client.read(queryId, values, {
+  const readOptions = {
     signal: options.signal,
     requiredColumns: definition.resultColumns.filter(
       (column: string) =>
         queryId !== 'current-shortage.overview' || column !== 'replenishment_shortage_sku_count',
     ),
-  });
+  };
+  const result = collection
+    ? await client.readAll(queryId, values, {
+        ...readOptions,
+        keyFields: definition.pagination.keyFields,
+        atomicPages: true,
+        maxRows: 100000,
+      })
+    : await client.read(queryId, values, readOptions);
   if (queryId.endsWith('.detail')) {
     const total = Number(result.rows[0]?.page_scope_total);
     if (!Number.isSafeInteger(total) || total < 0) throw Error('CURRENT_SHORTAGE_PAGE_INVALID');

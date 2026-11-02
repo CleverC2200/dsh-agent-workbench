@@ -47,8 +47,11 @@ export default function ConfiguredWorkbench() {
   }, [savedTab, tab, setTab]);
   useEffect(() => setDraft(date), [date]);
   const overviewViews = React.useMemo(
-    () => config.overviewViewIds.filter((id) => id !== 'orders'),
-    [],
+    () =>
+      config.overviewViewIds.filter(
+        (id) => id !== 'orders' && (channel || id !== 'channel-overview'),
+      ),
+    [channel],
   );
   const { parts, errors, busy } = useConfiguredOverview(
     config,

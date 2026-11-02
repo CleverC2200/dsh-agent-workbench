@@ -1246,7 +1246,7 @@ for (const id of ['qll', 'dealer'])
   });
 
 for (const id of ['aqkc', 'fc', 'qll', 'dealer'])
-  test(`${id}: source warnings retain diagnostics and a friendly partial-data notice`, async (t) => {
+  test(`${id}: source warnings retain diagnostics without a partial-data banner`, async (t) => {
     const { frame, errors, diagnostics } = await mount(t, id, 1280);
     const root = frame.locator('#app');
     await expect(root).not.toBeEmpty();
@@ -1261,10 +1261,8 @@ for (const id of ['aqkc', 'fc', 'qll', 'dealer'])
       .poll(() => diagnostics.some((message) => message.includes('缺少批次货龄')))
       .toBe(true);
     await expect(root).not.toContainText('缺少批次货龄与生产日期');
-    await expect(
-      root.getByRole('alert').filter({ hasText: '部分数据暂不可用' }).first(),
-    ).toBeVisible();
-    await expect(root.getByRole('alert').first()).toContainText('缺失项不代表零值');
+    await expect(root).not.toContainText('部分数据暂不可用');
+    await expect(root).not.toContainText('缺失项不代表零值');
     assert.deepEqual(errors, []);
   });
 
