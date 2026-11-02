@@ -1,3 +1,4 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -14,8 +15,8 @@ const { readConfiguredFacts } = await import(
 );
 for (const agent of ['fc', 'qll', 'dealer'])
   test(`${agent}: overview reads one atomic aggregate without scanning detail/count`, async () => {
-    const config = JSON.parse(
-      await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'),
+    const config = sourceDetailConfig(
+      JSON.parse(await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8')),
     );
     for (const id of config.overviewViewIds) {
       const view = config.sourceViews.views.find((v) => v.id === id),
@@ -64,7 +65,9 @@ for (const agent of ['fc', 'qll', 'dealer'])
 
 for (const filters of [{ warehouse_code: 'W1' }, { warehouse_code: 'W1', material_code: 'SKU1' }])
   test(`filtered inventory summary preserves its scope: ${JSON.stringify(filters)}`, async () => {
-    const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+    const config = sourceDetailConfig(
+      JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8')),
+    );
     const calls = [];
     await readConfiguredFacts(
       config,

@@ -1,3 +1,4 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -17,7 +18,9 @@ const configs = Object.fromEntries(
   await Promise.all(
     ['fc', 'qll', 'dealer'].map(async (id) => [
       id,
-      JSON.parse(await readFile(`business/inventory-${id}/sql.config.json`, 'utf8')),
+      sourceDetailConfig(
+        JSON.parse(await readFile(`business/inventory-${id}/sql.config.json`, 'utf8')),
+      ),
     ]),
   ),
 );
@@ -408,7 +411,9 @@ test('production base defaults are kept only on compatible source views', async 
   const { initialFiltersForView } = await import(
     'data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64')
   );
-  const aps = JSON.parse(await readFile('business/inventory-apsplan/sql.config.json', 'utf8'));
+  const aps = sourceDetailConfig(
+    JSON.parse(await readFile('business/inventory-apsplan/sql.config.json', 'utf8')),
+  );
   assert.deepEqual(
     initialFiltersForView(aps, 'base-shipments', { base: '华东', warehouse_id: 'wrong' }),
     { base: '华东' },
@@ -424,8 +429,8 @@ test('production base defaults are kept only on compatible source views', async 
 });
 test('all four Agent views carry their count, atomic page and snapshot query dependencies', async () => {
   for (const agent of ['aqkc', 'fc', 'qll', 'apsplan']) {
-    const config = JSON.parse(
-      await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'),
+    const config = sourceDetailConfig(
+      JSON.parse(await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8')),
     );
     for (const view of config.sourceViews.views)
       for (const key of ['queryId', 'summaryId', 'snapshotQuery'])
@@ -518,7 +523,9 @@ test('FC cycle setting reaches quantity calculations while unfiltered counts rem
 
 for (const productionCase of ['ready', 'denied', 'changed'])
   test(`base production ${productionCase} preserves independent stock and selected-day scope`, async () => {
-    const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+    const config = sourceDetailConfig(
+      JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8')),
+    );
     const values = [];
     const result = await readConfiguredFacts(
       config,
@@ -579,7 +586,9 @@ for (const productionCase of ['ready', 'denied', 'changed'])
   });
 
 test('FC aging reads only the displayed page and keeps risk scopes separate', async () => {
-  const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+  const config = sourceDetailConfig(
+    JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8')),
+  );
   const calls = [],
     cache = new Map();
   let scans = 0;

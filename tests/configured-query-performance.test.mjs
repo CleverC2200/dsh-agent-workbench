@@ -1,3 +1,4 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -13,7 +14,9 @@ const bundled = await build({
 const { readWorkspaceQuery } = await import(
   'data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].text).toString('base64')
 );
-const config = JSON.parse(await readFile('business/inventory-apsplan/sql.config.json', 'utf8'));
+const config = sourceDetailConfig(
+  JSON.parse(await readFile('business/inventory-apsplan/sql.config.json', 'utf8')),
+);
 const [name, binding] = Object.entries(config.workspaceBindings).find(
   ([, b]) => b.queryId.includes('sales-accuracy') || b.queryId.includes('sales_accuracy'),
 );
@@ -359,7 +362,9 @@ test('expanded product stock uses same-statement counts and never downloads the 
 });
 
 test('base order helpers return complete base groups in one query without extra counts', async () => {
-  const base = JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8'));
+  const base = sourceDetailConfig(
+    JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8')),
+  );
   const b = base.workspaceBindings['workbench-support-by-base'],
     q = base.queries[b.queryId],
     calls = [];
@@ -387,22 +392,29 @@ test('base order helpers return complete base groups in one query without extra 
 });
 
 for (const agentId of ['inventory-apsplan', 'inventory-aqkc', 'inventory-fc', 'inventory-qll'])
-  test(`${agentId}: cards and lists share two query slots and cancelled queued work is never sent`, async () => {
+  test(`${agentId}: cards and lists share bounded slots and cancelled queued work is never sent`, async () => {
     const active = new Map(),
       sent = [];
+    const slots = 2;
+    let startedSlots;
+    const firstSlotsStarted = new Promise((resolve) => {
+      startedSlots = resolve;
+    });
     const client = createQueryClient({ ...registry, agentId }, async (_, o) => {
       sent.push(o.values.offset);
-      return new Promise((resolve) =>
+      const result = new Promise((resolve) =>
         active.set(o.values.offset, () => {
           active.delete(o.values.offset);
           resolve({ rows: [] });
         }),
       );
+      if (sent.length === slots) startedSlots();
+      return result;
     });
     const jobs = Array.from({ length: 4 }, (_, i) =>
       client.read('list', { page_size: 10, offset: i }),
     );
-    await new Promise(setImmediate);
+    await firstSlotsStarted;
     const initial = active.size;
     const stop = new AbortController();
     const reject = assert.rejects(
@@ -416,9 +428,43 @@ for (const agentId of ['inventory-apsplan', 'inventory-aqkc', 'inventory-fc', 'i
       await new Promise(setImmediate);
     }
     await Promise.all(jobs);
-    assert.equal(initial, 2);
+    assert.equal(initial, slots);
     assert.deepEqual(sent, [0, 1, 2, 3]);
   });
+
+test('FC first-screen queries start by priority without changing submission concurrency', async () => {
+  const sent = [],
+    releases = [];
+  const queries = Object.fromEntries(
+    [
+      ['heavy', 0],
+      ['stock', 40],
+      ['fulfillment', 35],
+    ].map(([id, priority]) => [id, { ...registry.queries.list, priority, maxConcurrency: 1 }]),
+  );
+  const client = createQueryClient(
+    { ...registry, agentId: 'inventory-fc', queries },
+    async (_, o) => {
+      sent.push(o.queryId);
+      return new Promise((resolve) => releases.push(() => resolve({ rows: [] })));
+    },
+  );
+  const jobs = ['heavy', 'stock', 'fulfillment'].map((id) =>
+    client.read(id, { page_size: 10, offset: 0 }),
+  );
+  for (const expected of ['stock', 'fulfillment', 'heavy']) {
+    while (!releases.length) await new Promise((resolve) => setTimeout(resolve, 1));
+    assert.equal(releases.length, 1);
+    assert.equal(sent.at(-1), expected);
+    releases.shift()();
+  }
+  await Promise.all(jobs);
+  const fc = sourceDetailConfig(
+    JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8')),
+  );
+  assert.equal(fc.queries['replenishment.detail.atomic'].maxConcurrency, 2);
+  assert.equal(fc.queries['replenishment-suggestions.detail.atomic'].maxConcurrency, undefined);
+});
 
 test('complete stock never waits for slow optional inventory and late partials cannot replace it', async () => {
   const calls = [],

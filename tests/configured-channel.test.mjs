@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
-const tick = () => new Promise((r) => setImmediate(r));
+async function waitFor(condition) {
+  const deadline = Date.now() + 5000;
+  while (!condition() && Date.now() < deadline)
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.ok(condition(), 'the channel must reach the expected state before the deadline');
+}
 for (const agent of ['fc', 'aqkc', 'qll', 'dealer', 'apsplan'])
   test(
     agent +
@@ -64,9 +69,20 @@ for (const agent of ['fc', 'aqkc', 'qll', 'dealer', 'apsplan'])
       );
       values.page_size = 10;
       values.offset = 0;
-      const port = { onmessage: null, start() {}, close() {}, postMessage: (m) => sent.push(m) };
+      const port = {
+        onmessage: null,
+        start() {},
+        close() {},
+        postMessage(m) {
+          if (m.type === 'request' && m.parameters.queryId === 'summary.snapshot') {
+            queueMicrotask(() =>
+              port.onmessage({ data: { type: 'response', id: m.id, result: { rows: [] } } }),
+            );
+          } else sent.push(m);
+        },
+      };
       const first = client.read(id, values);
-      for (let i = 0; i < 100 && !listeners.has('message'); i++) await tick();
+      await waitFor(() => listeners.has('message'));
       assert.ok(listeners.has('message'));
       listeners.get('message')({
         source: parent,
@@ -79,8 +95,7 @@ for (const agent of ['fc', 'aqkc', 'qll', 'dealer', 'apsplan'])
         ports: [port],
       });
       async function request(n) {
-        for (let i = 0; i < 100 && sent.filter((m) => m.type === 'request').length < n; i++)
-          await tick();
+        await waitFor(() => sent.filter((m) => m.type === 'request').length >= n);
         const all = sent.filter((m) => m.type === 'request');
         assert.equal(all.length, n);
         return all.at(-1);

@@ -1,4 +1,5 @@
 import { refreshConfiguredQueries } from './query-cache';
+import { useQueryIdentity } from './use-query-identity';
 import type { FcCycleRule } from './fc-cycle-rules';
 import { QueryErrors } from './query-errors';
 import { OriginalBusinessList } from './original-business-list';
@@ -137,7 +138,7 @@ export function ConfiguredFactsPage({
   const [replenishment, setReplenishment] = useState<FactInput['replenishment']>(() =>
     config.agentId === 'inventory-fc' && viewId === 'replenishment'
       ? (initialState?.replenishment ?? {
-          neededOnly: true,
+          neededOnly: false,
           businessOnly: false,
           positiveActualKeys: [],
         })
@@ -193,8 +194,19 @@ export function ConfiguredFactsPage({
   const columns = chosenColumns
     .map((field: string) => view.columns.find((c: any) => c.field === field))
     .filter(Boolean);
+  const readReplenishment = replenishment
+    ? {
+        ...replenishment,
+        positiveActualKeys: replenishment.neededOnly ? replenishment.positiveActualKeys : [],
+        positivePlanKeys: replenishment.neededOnly ? replenishment.positivePlanKeys : [],
+        zeroPlanKeys: replenishment.neededOnly ? replenishment.zeroPlanKeys : [],
+        businessPlanKeys: replenishment.businessOnly ? replenishment.businessPlanKeys : [],
+      }
+    : undefined;
   const snapshot = useRef<{ key: string; context: any } | undefined>(undefined);
+  const identity = useQueryIdentity();
   const scopeKey = JSON.stringify([
+    identity,
     config.agentId,
     viewId,
     asOf,
@@ -205,7 +217,7 @@ export function ConfiguredFactsPage({
     filters,
     scopeFilters,
     revision,
-    replenishment,
+    readReplenishment,
   ]);
   useEffect(() => {
     const controller = new AbortController();
@@ -213,7 +225,10 @@ export function ConfiguredFactsPage({
     setError(null);
     setLoading(true);
     onRead?.({ plugin: config.agentId, viewId, status: 'loading', summary: null });
-    const readContext = snapshot.current?.key === scopeKey ? snapshot.current.context : undefined;
+    const readContext =
+      config.agentId === 'inventory-fc' || snapshot.current?.key === scopeKey
+        ? snapshot.current?.context
+        : undefined;
     snapshot.current = undefined;
     const read = (freshAfter?: number) =>
       readFacts(
@@ -228,7 +243,7 @@ export function ConfiguredFactsPage({
           cycleDays,
           fcCycleRules,
           fcCycleWarehouse,
-          replenishment,
+          replenishment: readReplenishment,
           readContext: freshAfter ? undefined : readContext,
         },
         // Business lists display rows; their independent overview owns card totals.
@@ -327,6 +342,10 @@ export function ConfiguredFactsPage({
         appliedFilters={filters}
         onFilter={(name: string, value: string) => setDraft((old) => ({ ...old, [name]: value }))}
         onQuickFilter={(name: string, value: string) => {
+          if (config.agentId === 'inventory-fc' && name === 'list_mode')
+            setReplenishment((current) =>
+              current ? { ...current, neededOnly: false, businessOnly: false } : current,
+            );
           const sort =
             config.agentId === 'inventory-fc' &&
             name === 'list_mode' &&
@@ -359,13 +378,12 @@ export function ConfiguredFactsPage({
           event.preventDefault();
           setFilters({ ...draft });
           setPage(1);
-          if (!(config.agentId === 'inventory-fc' && viewId === 'inventory'))
-            refreshConfiguredQueries();
+          if (config.agentId !== 'inventory-fc') refreshConfiguredQueries();
           refresh((n) => n + 1);
         }}
         reset={() => {
           setReplenishment((current) =>
-            current ? { ...current, neededOnly: true, businessOnly: false } : current,
+            current ? { ...current, neededOnly: false, businessOnly: false } : current,
           );
           const defaults = defaultsFor(viewId);
           if (

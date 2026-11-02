@@ -15,3 +15,11 @@
 同步数据的剩余字段统一维护在[缺失字段清单](../../docs/agent-missing-fields.md)，页面仅保留数值范围与必要查询错误。布局继续沿用本页原始样式，指标卡按业务窗口宽度换行，宽表格在表格区域滚动。
 
 原版可见结构和新版查询的分工见[界面恢复记录](../../docs/agent-original-layout-restoration-20261020.md)。
+
+同一快照、仓库、SKU、生产日期及原查询业务范围内，先汇总有符号批次数量，再以净正批次计算货龄、分段和风险。完全冲销批次不再贡献旧货龄；不能用其它 SKU、仓库或生产日期抵消。`negative_qty` 表示汇总后仍为负的批次余额，库存总量继续保留有符号净额。原始明细不作改写。
+
+重新生成库存 SQL 后，使用 `scripts/net-inventory-batches.py` 对交付配置应用同批次净额步骤；执行 `scripts/test_batch_net_balances.py` 和 `scripts/test_batch_age_lists.py` 核对冲销、货龄、风险及分页。SQL 配置仍是页面读取和打包的唯一查询来源。
+
+全链看板通过公共 Host 的 `insight` 动作生成洞察。业务规则唯一来源为 Manage 的 `business-resources/inventory-qll/skills/qll/insight-rules.md`，构建时复制到 `insight-prompt.md` 并记录摘要。页面按当前证据和渠道观测选项刷新洞察；权限、会话归属、缺失值和渠道不计入公司主值的约束沿用公共实现。
+
+同月、版本、基地和 SKU 的目标记录逐字段核一致性：全非空且唯一值取一次，不对重复目标求和；冲突或空值混合保持未知。初始/管理/最终目标作为同一优先级决策校验，冲突不得借空值回退到另一目标；日均计划仅全量缺失时按本版本既有计划公式补算，冲突不得回退。聚合输入在内部派生表只计算一次，再判断一致性；缺失和真实 0 分开。重新生成查询后执行 `scripts/normalize-target-consensus.py`，回归见 `scripts/test_base_target_versions.py`。

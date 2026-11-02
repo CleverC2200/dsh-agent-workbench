@@ -1,8 +1,18 @@
-// One HTML document shares transport slots across its legacy SQL and named
-// queries. Priorities affect queued work only; active reads are never preempted.
+// One HTML document shares this queue across its cards and collections. Avoid
+// multiplying collection concurrency by the number of independently loaded cards.
 let runningQueries = 0;
 const waitingQueries = [];
-export function scheduledQuery(task, signal, priority = 0, concurrency = 4) {
+let queueTimer;
+function drainQueries() {
+  if (queueTimer) return;
+  // Allow dependent reads to join the queue before choosing the next priority.
+  queueTimer = setTimeout(() => {
+    queueTimer = undefined;
+    while (waitingQueries.length && runningQueries < waitingQueries[0].concurrency)
+      waitingQueries.shift()();
+  }, 0);
+}
+export function scheduledQuery(task, signal, priority = 0, concurrency = 4, batchStart = false) {
   return new Promise((resolve, reject) => {
     const abort = () => {
       const index = waitingQueries.indexOf(start);
@@ -20,17 +30,20 @@ export function scheduledQuery(task, signal, priority = 0, concurrency = 4) {
         .then(resolve, reject)
         .finally(() => {
           runningQueries--;
-          waitingQueries.shift()?.();
+          drainQueries();
         });
     };
     if (signal?.aborted) return reject(signal.reason);
-    if (runningQueries < concurrency) start();
-    else {
-      start.priority = priority;
-      const index = waitingQueries.findIndex((job) => job.priority < priority);
-      if (index < 0) waitingQueries.push(start);
-      else waitingQueries.splice(index, 0, start);
-      signal?.addEventListener('abort', abort, { once: true });
+    if (!batchStart && runningQueries < concurrency && waitingQueries.length === 0) {
+      start();
+      return;
     }
+    start.priority = priority;
+    start.concurrency = concurrency;
+    const index = waitingQueries.findIndex((job) => job.priority < priority);
+    if (index < 0) waitingQueries.push(start);
+    else waitingQueries.splice(index, 0, start);
+    signal?.addEventListener('abort', abort, { once: true });
+    drainQueries();
   });
 }

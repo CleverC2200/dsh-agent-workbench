@@ -2448,7 +2448,12 @@ async function loadConfiguredSummaryDashboard(
   let support: CubeRow[] = [];
   let health: any = { rows: [], summary: null };
   let current: any = { rows: undefined };
-  const snapshot = () => configuredSummaryWorkspace(stock, support, health, current, selectedBases);
+  const readErrors: string[] = [];
+  const snapshot = () => {
+    const value = configuredSummaryWorkspace(stock, support, health, current, selectedBases);
+    if (value.workbench) value.workbench.readErrors = [...readErrors];
+    return value;
+  };
   const publish = () => {
     signal?.throwIfAborted();
     onProgress?.(snapshot());
@@ -2466,6 +2471,7 @@ async function loadConfiguredSummaryDashboard(
       })
       .catch((e) => {
         if (signal?.aborted) throw e;
+        readErrors.push(`库存与目标：${e.code || ''} ${e.message}`);
       })
       .then(publish),
     loadWorkbenchSqlQuery(
@@ -2479,6 +2485,7 @@ async function loadConfiguredSummaryDashboard(
       })
       .catch((e) => {
         if (signal?.aborted) throw e;
+        readErrors.push(`当月履约：${e.code || ''} ${e.message}`);
       })
       .then(publish),
     readConfiguredHealthSummary(selectedBases, signal)
@@ -2488,15 +2495,22 @@ async function loadConfiguredSummaryDashboard(
       .catch((e) => {
         if (signal?.aborted) throw e;
         health = { error: e.message };
+        readErrors.push(`批次货龄：${e.code || ''} ${e.message}`);
       })
       .then(publish),
-    readCurrentShortage(sqlConfiguration, 'current-shortage.locations', {}, { signal })
+    readCurrentShortage(
+      sqlConfiguration,
+      'current-shortage.locations',
+      selectedBases?.length === 1 ? { base: selectedBases[0] } : {},
+      { signal },
+    )
       .then((value) => {
         current = value;
       })
       .catch((e) => {
         if (signal?.aborted) throw e;
         current = { rows: undefined, error: e.message };
+        readErrors.push(`当前订单：${e.code || ''} ${e.message}`);
       })
       .then(publish),
   ]);

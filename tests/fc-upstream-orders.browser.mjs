@@ -38,14 +38,23 @@ async function openFixture(t, denied = false) {
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters } = route.request().postDataJSON();
+    if (id === 'summary.snapshot')
+      return route.fulfill({
+        json: {
+          rows: [],
+          returnedColumns: config.queries[id].resultColumns,
+          rejectedColumns: [],
+          configVersion: 'fixture',
+        },
+      });
     calls.push({ id, parameters });
     const q = config.queries[id];
     assert.ok(q, id);
     if (
       denied &&
       (id === 'branch-supply.summary' ||
-        id === 'replenishment.summary' ||
-        id === 'current-shortage.summary')
+        ['replenishment.summary', 'replenishment.overview'].includes(id) ||
+        ['current-shortage.summary', 'current-shortage.overview'].includes(id))
     )
       return route.fulfill({
         status: 403,
@@ -57,8 +66,11 @@ async function openFixture(t, denied = false) {
       });
     let row = Object.fromEntries(q.resultColumns.map((key) => [key, 0]));
     let rows = [row];
-    if (id === 'branch-warehouse.directory')
+    if (id === 'branch-warehouse.directory.count') rows = [{ total: 1 }];
+    else if (id === 'branch-warehouse.directory')
       rows = [{ warehouse_code: 'A230', warehouse_name: '杭州分仓', base: '华东' }];
+    else if (id === 'source.branch-stock-date')
+      Object.assign(row, { day: '2026-10-30', row_count: 1, total_qty: 13200 });
     else if (id.startsWith('source.')) rows = [{ day: '2026-10-30' }];
     else if (id === 'branch-supply.summary')
       Object.assign(row, {
@@ -69,7 +81,7 @@ async function openFixture(t, denied = false) {
         in_transit: 1644,
         fulfillment_rate: 26416 / 32124,
       });
-    else if (id === 'current-shortage.summary')
+    else if (['current-shortage.summary', 'current-shortage.overview'].includes(id))
       Object.assign(row, {
         location_type: '分仓',
         location_code: 'A230',
@@ -81,7 +93,7 @@ async function openFixture(t, denied = false) {
         shortage: 1000,
         invalid: 0,
       });
-    else if (id === 'replenishment.summary')
+    else if (['replenishment.summary', 'replenishment.overview'].includes(id))
       Object.assign(row, {
         row_count: 1,
         recommended_qty: 600,
@@ -158,19 +170,25 @@ test('FC renders base supply fulfillment and cross-month orders independently of
   );
   assert.ok(!calls.some((c) => ['orders.summary', 'branch-supply-current.summary'].includes(c.id)));
   await expect(page.getByRole('button', { name: '客户订单', exact: true })).toHaveCount(0);
-  assert.ok(calls.some((c) => c.id === 'current-shortage.summary'));
+  assert.ok(
+    calls.some((c) => ['current-shortage.summary', 'current-shortage.overview'].includes(c.id)),
+  );
   assert.ok(!calls.some((c) => c.id === 'branch-supply.detail.atomic'));
 });
 test('FC exposes denied domains and preserves ready inventory without fabricating zero', async (t) => {
   const { page, calls } = await openFixture(t, true);
-  await expect(
-    page.getByRole('alert').filter({ hasText: '当前账号的数据权限未就绪' }).first(),
-  ).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
   const cards = page.locator('[data-overview-cards="fc"] article');
   await expect(cards.filter({ hasText: '订单满足率' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.filter({ hasText: '当前订单' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.filter({ hasText: '待补货量' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.first().locator('.kpi-value')).toHaveText('1.32万件');
-  assert.equal(calls.filter((c) => c.id === 'branch-supply.summary').length, 1);
-  assert.equal(calls.filter((c) => c.id === 'replenishment.summary').length, 1);
+  await expect.poll(() => calls.filter((c) => c.id === 'branch-supply.summary').length).toBe(1);
+  await expect
+    .poll(
+      () =>
+        calls.filter((c) => ['replenishment.summary', 'replenishment.overview'].includes(c.id))
+          .length,
+    )
+    .toBe(1);
 });

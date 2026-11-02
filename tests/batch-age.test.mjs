@@ -1,8 +1,11 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { readFile } from 'node:fs/promises';
-const config = JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8'));
+const config = sourceDetailConfig(
+  JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8')),
+);
 const built = await build({
   entryPoints: ['business/shared/batch-age.ts'],
   bundle: true,

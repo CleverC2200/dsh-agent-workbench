@@ -75,8 +75,15 @@ class BaseCurrentOrders(unittest.TestCase):
  def test_sku_page_and_count_refresh_the_embedded_source_and_are_idempotent(self):
   from importlib.util import spec_from_file_location,module_from_spec
   spec=spec_from_file_location('base_detail',ROOT/'scripts/update-base-detail-metrics.py');module=module_from_spec(spec);spec.loader.exec_module(module)
-  before={key:sqlglot.parse_one(q['request']['sql'],read='postgres') for key,q in self.config['queries'].items()};module.update(self.config)
-  for key,q in self.config['queries'].items():self.assertEqual(sqlglot.parse_one(q['request']['sql'],read='postgres'),before[key],key)
+  def canonical(sql):
+   tree=sqlglot.parse_one(sql,read='postgres')
+   for node in list(tree.find_all(exp.Is)):
+    negated = node.args.get('negate') is True or (isinstance(node.expression, exp.Not) and isinstance(node.expression.this, exp.Null))
+    if negated:
+     node.replace(exp.Not(this=exp.Is(this=node.this.copy(),expression=exp.Null())))
+   return tree
+  before={key:canonical(q['request']['sql']) for key,q in self.config['queries'].items()};module.update(self.config)
+  for key,q in self.config['queries'].items():self.assertEqual(canonical(q['request']['sql']),before[key],key)
   rendered=json.dumps(self.config,ensure_ascii=False,sort_keys=True);module.update(self.config)
   self.assertEqual(json.dumps(self.config,ensure_ascii=False,sort_keys=True),rendered)
   for key in ['page.sku-detail','page.sku-detail.count','page.sku-detail.atomic']:
