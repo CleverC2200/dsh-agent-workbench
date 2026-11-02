@@ -55,6 +55,8 @@ test('built live page renders granted records, hides denied fields, and clears f
   const queryIds = [];
   let completeInventory;
   let inventoryReleased = false;
+  let completeShortage;
+  let shortageReleased = false;
   let port = {
     start() {},
     close() {},
@@ -213,6 +215,16 @@ test('built live page renders granted records, hides denied fields, and clears f
         );
       if (
         !deny &&
+        !shortageReleased &&
+        message.method === 'sql' &&
+        message.parameters.queryId === 'shortage.detail'
+      ) {
+        completeShortage = () => {
+          shortageReleased = true;
+          respond();
+        };
+      } else if (
+        !deny &&
         !inventoryReleased &&
         message.method === 'sql' &&
         message.parameters.queryId === 'sku.page'
@@ -247,6 +259,21 @@ test('built live page renders granted records, hides denied fields, and clears f
   );
   assert.ok(!window.document.body.textContent.includes('DENIED-CUSTOMER'));
   assert.ok(!window.document.body.textContent.includes('6,320'));
+  await until(() => completeShortage);
+  assert.equal(
+    shortageReleased,
+    false,
+    'validated order rows must render while shortage is pending',
+  );
+  window.document.querySelector('[data-fulfillment-dimension="itemDimensionPanel"]').click();
+  await until(() => completeInventory);
+  assert.equal(
+    shortageReleased,
+    false,
+    'the visible SKU page must start before all card inputs finish',
+  );
+  window.document.querySelector('[data-fulfillment-dimension="deliveryDimensionPanel"]').click();
+  completeShortage();
   await until(() =>
     window.document
       .querySelector('.summary.fulfillment-summary .metric .metric-head strong')

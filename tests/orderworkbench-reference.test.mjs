@@ -1,4 +1,6 @@
 import { createReportPersistence } from '../prototypes/inventory-orderworkbench/report-persistence.mjs';
+import { createFrameProgress } from '../business/shared/frame-progress.js';
+import { startDashboardTiming } from '../business/shared/dashboard-timing.js';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,6 +25,8 @@ test('order workbench reference interactions', async () => {
   const { window } = dom;
   window.structuredClone = structuredClone;
   window.createReportPersistence = createReportPersistence;
+  window.createFrameProgress = createFrameProgress;
+  window.startDashboardTiming = startDashboardTiming;
   window.encodeReportRequest = async (request) => request;
   window.savedReports = new Map();
   window.savedEdits = new Map();
@@ -250,6 +254,7 @@ test('order workbench reference interactions', async () => {
     };
     await new Promise((resolve) => setTimeout(resolve, 0));
     window.pendingReads[0].progress(partial);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(document.querySelector('.wb-kpi-main strong').textContent, '10.00');
     assert.match(document.querySelector('.wb-kpi-compare').textContent, /加载中/);
     assert.equal(window.pageSnapshot.evidence.complete, false);

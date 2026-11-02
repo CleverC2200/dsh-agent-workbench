@@ -35,6 +35,241 @@ export const model = await import(
   'data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64')
 );
 
+test('stock packets preserve nonempty summary rows and metrics; a truncated packet stays an error', async () => {
+  const columns = config.queries['workbench.stock.summary'].resultColumns;
+  const values = {
+    base: '郑州',
+    category: '水饺',
+    item: '小水饺',
+    director: '负责人',
+    names: 1,
+    summary: 1,
+    inventory: 100,
+    available: 80,
+    sales_plan: 310,
+    transfer_plan: 0,
+    invalid: 0,
+    national_inventory: 100,
+    national_sales_plan: 310,
+    national_stock_records: 1,
+    national_plan_records: 1,
+    national_stock_invalid: 0,
+    national_plan_invalid: 0,
+  };
+  const row = Object.fromEntries(columns.map((name) => [name, values[name] ?? null]));
+  const encoded = ['1', ...columns.map((name) => (row[name] === null ? null : String(row[name])))]
+    .map((value) => (value === null ? 'N' : 'V' + Buffer.byteLength(value) + ':' + value))
+    .join('');
+  const load = (broken) =>
+    model.loadWorkbenchReport('2026-10-01', '2026-10-24', undefined, {
+      now: new Date('2026-10-24T00:00:00Z'),
+      summary: true,
+      execute: async (_request, { queryId }) => ({
+        configVersion: 'fixture',
+        rows:
+          queryId === 'workbench.stock.summary.packets'
+            ? [
+                {
+                  packet_index: 0,
+                  packet_count: broken ? 2 : 1,
+                  packet_scope_total: 1,
+                  packet_rows: [encoded],
+                },
+              ]
+            : queryId === 'workbench.agedate'
+              ? [{ day: null }]
+              : queryId.endsWith('.count')
+                ? [{ total: 0 }]
+                : [],
+      }),
+    });
+  const facts = await load(false),
+    period = facts.periods.month;
+  const stock = period.sections.find((part) => part.id === 'stock');
+  assert.equal(stock.status, 'ready');
+  const scalarText = (row) =>
+    Object.fromEntries(
+      Object.entries(row).map(([name, value]) => [name, value === null ? null : String(value)]),
+    );
+  assert.deepEqual(stock.rows.map(scalarText), [scalarText(row)]);
+  assert.deepEqual(
+    model.computeWorkbenchMetrics(period),
+    model.computeWorkbenchMetrics({
+      ...period,
+      sections: period.sections.map((part) =>
+        part.id === 'stock' ? { ...part, rows: [row] } : part,
+      ),
+    }),
+  );
+  const rejected = await load(true);
+  assert.equal(
+    rejected.periods.month.sections.find((part) => part.id === 'stock').code,
+    'GEA_SQL_RESULT_INCOMPLETE',
+  );
+});
+
+test('scalar director packets reconstruct complete shared ownership and keep no-owner rows explicit', async () => {
+  const columns = config.queries['workbench.directormembers'].resultColumns;
+  const rows = [
+    { base: '郑州', sku: 'A', director: '乙', director_value: '乙', item_value: '水饺' },
+    { base: '郑州', sku: 'A', director: '乙', director_value: '甲', item_value: '水饺' },
+    { base: '郑州', sku: 'B', director: null, director_value: null, item_value: '汤圆' },
+  ];
+  const packet = {
+    packet_index: 0,
+    packet_count: rows.length,
+    packet_scope_total: rows.length,
+    packet_rows: rows.map((row, index) =>
+      [String(index + 1), ...columns.map((name) => row[name])]
+        .map((value) => (value === null ? 'N' : 'V' + Buffer.byteLength(value) + ':' + value))
+        .join(''),
+    ),
+  };
+  const facts = await model.loadWorkbenchReport('2026-10-01', '2026-10-24', undefined, {
+    summary: true,
+    now: new Date('2026-10-24T00:00:00Z'),
+    execute: async (_request, { queryId }) => ({
+      configVersion: 'fixture',
+      rows:
+        queryId === 'workbench.directors.packets'
+          ? [packet]
+          : queryId === 'workbench.agedate'
+            ? [{ day: null }]
+            : queryId.endsWith('.count')
+              ? [{ total: 0 }]
+              : [],
+    }),
+  });
+  assert.equal(facts.directors.status, 'ready');
+  assert.deepEqual(facts.directors.rows, [
+    {
+      base: '郑州',
+      sku: 'A',
+      director: '乙',
+      names: 2,
+      directors: ['乙', '甲'],
+      item: '水饺',
+      items: 1,
+    },
+    { base: '郑州', sku: 'B', director: null, names: 0, directors: [], item: '汤圆', items: 1 },
+  ]);
+  for (const period of Object.values(facts.periods)) {
+    const part = period.sections.find((section) => section.id === 'directors');
+    if (part) assert.equal(part.status, 'ready');
+  }
+});
+
+test('a week without completed days does not issue empty-range customer metadata reads', async () => {
+  const calls = [];
+  const facts = await model.loadWorkbenchReport('2026-11-02', '2026-11-02', undefined, {
+    summary: true,
+    now: new Date('2026-11-02T00:00:00Z'),
+    execute: async (_request, { queryId, values }) => {
+      calls.push({ queryId, values });
+      if (values.end_exclusive) assert.ok(values.start < values.end_exclusive);
+      return {
+        configVersion: 'fixture',
+        rows:
+          queryId === 'workbench.agedate'
+            ? [{ day: null }]
+            : queryId.endsWith('.count')
+              ? [{ total: 0 }]
+              : [],
+      };
+    },
+  });
+  assert.equal(facts.customers.status, 'ready');
+  assert.equal(facts.customerManagers.status, 'ready');
+  assert.deepEqual(facts.customers.rows, []);
+  assert.ok(
+    !calls.some((call) =>
+      ['workbench.customers', 'workbench.customermanagers'].includes(call.queryId),
+    ),
+  );
+});
+
+test('director resolution is reused per period and key without carrying ownership to another report', () => {
+  let lookups = 0;
+  const mapping = {
+    base: '郑州',
+    sku: 'sku-1',
+    names: 1,
+    get director() {
+      lookups++;
+      return '负责人';
+    },
+  };
+  const period = fixturePeriod();
+  period.sections.find((part) => part.id === 'orders').rows = Array.from({ length: 100 }, () => ({
+    ...fixturePeriod().sections[0].rows[0],
+  }));
+  period.sections.push({ id: 'directors', status: 'ready', rows: [mapping] });
+  period.metrics = model.computeWorkbenchMetrics(period);
+  const facts = {
+    selected: 'month',
+    complete: true,
+    periods: Object.fromEntries(
+      ['month', 'week', 'previousMonth', 'previousWeek', 'yearMonth', 'yearWeek'].map((key) => [
+        key,
+        period,
+      ]),
+    ),
+    directors: { status: 'ready', rows: [mapping] },
+  };
+  const first = model.workbenchPresentation(facts, {
+    dimension: 'director-performance',
+    skuCategories: [],
+  });
+  assert.ok(first.performance['director-performance'].month.some((row) => row[0] === '负责人'));
+  assert.ok(lookups < 50, 'each filtered metric must not rescan all owner mappings');
+  const changed = structuredClone({ ...facts, directors: { status: 'ready', rows: [] } });
+  for (const part of Object.values(changed.periods))
+    part.sections.find((section) => section.id === 'directors').rows = [];
+  const next = model.workbenchPresentation(changed, {
+    dimension: 'director-performance',
+    skuCategories: [],
+  });
+  assert.ok(!next.performance['director-performance'].month.some((row) => row[0] === '负责人'));
+});
+
+test('visible SKU keys and count overlap while snapshot configuration remains checked', async () => {
+  let release;
+  const keysReady = new Promise((resolve) => {
+    release = resolve;
+  });
+  let countStarted = false;
+  const execute = async (_, { queryId }) => {
+    if (queryId === 'workbench.sku.keys') await keysReady;
+    if (queryId === 'workbench.sku.keys.count') countStarted = true;
+    return {
+      configVersion: 'v1',
+      rows: queryId.endsWith('.count')
+        ? [{ total: 0 }]
+        : queryId === 'workbench.agedate'
+          ? [{ day: null }]
+          : [],
+    };
+  };
+  const loading = model.loadWorkbenchSkuPage('2026-10-19', '2026-10-26', '水饺', 0, undefined, '', {
+    execute,
+    now: new Date('2026-10-24T00:00:00Z'),
+  });
+  await new Promise(setImmediate);
+  assert.equal(countStarted, true, 'count must not wait for SKU keys');
+  release();
+  assert.equal((await loading).total, 0);
+  await assert.rejects(
+    model.loadWorkbenchSkuPage('2026-10-19', '2026-10-26', '水饺', 0, undefined, '', {
+      now: new Date('2026-10-24T00:00:00Z'),
+      execute: async (request, options) => ({
+        ...(await execute(request, options)),
+        configVersion: options.queryId === 'workbench.agedate' ? 'old' : 'v1',
+      }),
+    }),
+    /QUERY_CONFIG_CHANGED/,
+  );
+});
+
 test('arrival packets preserve whole-order counts, unknown verdicts and UTF-8 dimensions', async () => {
   const tuple = (fields) => fields.map((value) => Buffer.byteLength(value) + ':' + value).join('');
   const members = [
@@ -314,7 +549,8 @@ test('progress publishes validated cards before slower sections and reuses compl
   assert.equal(monthReady.periods.month.sections.find((s) => s.id === 'ages').rows.length, 201);
   const firstView = model.workbenchPresentation(progress[0]);
   assert.ok(firstView.cards.every((card) => card.comparison.every((value) => value === '加载中')));
-  assert.equal(firstView.performance['director-performance'].month.length, 0);
+  if (progress[0].directors.status === 'loading')
+    assert.equal(firstView.performance['director-performance'].month.length, 0);
   assert.equal(model.workbenchEvidence(progress[0]).complete, false);
   assert.equal(result.complete, true);
   assert.deepEqual(result.pendingPeriods, []);
@@ -323,6 +559,12 @@ test('progress publishes validated cards before slower sections and reuses compl
   assert.equal(result.periods.week.sections.find((s) => s.id === 'ages').rows[0].item, '周品项');
   assert.equal(calls.filter((c) => c.queryId === 'workbench.ages').length, 3);
   assert.equal(calls.filter((c) => c.queryId === 'workbench.ages.count').length, 2);
+  const directorReads = calls.filter((c) => c.queryId === 'workbench.directors');
+  assert.equal(
+    directorReads.length,
+    new Set(directorReads.map((c) => JSON.stringify(c.values))).size,
+    'same-period owner facts are shared by report sections and metadata',
+  );
   await run();
   assert.equal(calls.filter((c) => c.queryId === 'workbench.ages').length, 6);
 });
@@ -405,7 +647,16 @@ test('failed completeness checks are not cached as good data; cancellation stops
   }
   assert.equal(
     broken.calls.filter((c) => c.queryId === 'workbench.ages' && c.values.offset === 200).length,
+    1,
+  );
+  await model.loadWorkbenchReport('2026-10-01', '2026-11-01', undefined, {
+    execute: broken.execute,
+    now: new Date('2026-10-24T00:00:00Z'),
+  });
+  assert.equal(
+    broken.calls.filter((c) => c.queryId === 'workbench.ages' && c.values.offset === 200).length,
     2,
+    'concurrent periods may share an in-flight failure; a new load must retry it',
   );
   const source = progressiveSource(),
     controller = new AbortController();
@@ -549,7 +800,7 @@ test('configured sources keep formal field rules and safe pagination', () => {
   );
   assert.match(
     config.queries['workbench.ages'].request.sql,
-    /b.live_qty<>0 AND \(CAST\(b.prod_date AS DATE\) IS NULL OR CAST\(b.prod_date AS DATE\)>/,
+    /b.inv_qty<>0 AND \(b.age_days IS NULL OR b.age_days<0/,
   );
   for (const name of ['orders', 'ontime', 'stock', 'changes', 'ages', 'customers', 'directors']) {
     assert.ok(config.queries[config.queries['workbench.' + name].pagination.countQuery]);

@@ -1,3 +1,23 @@
+/** Scalar memberships avoid nested ARRAY casts on the governed SQL endpoint. */
+export function collectDirectorMembers(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const key = JSON.stringify([row.base,row.sku]);
+    if (!groups.has(key)) groups.set(key,{base:row.base,sku:row.sku,director:row.director,directors:new Set(),items:new Set()});
+    const group=groups.get(key);
+    if (group.director!==row.director) throw Object.assign(Error('总监映射在读取期间发生变化'),{code:'SOURCE_CHANGED'});
+    if (row.director_value!==null) group.directors.add(row.director_value);
+    if (row.item_value!==null) group.items.add(row.item_value);
+  }
+  return [...groups.values()].map(group=>{
+    const directors=[...group.directors],items=[...group.items];
+    if ((directors.length===0&&group.director!==null)||(directors.length>0&&!group.directors.has(group.director)))
+      throw Object.assign(Error('总监映射成员不完整'),{code:'RESULT_INCOMPLETE'});
+    return {base:group.base,sku:group.sku,director:group.director,names:directors.length,
+      directors,item:items.length===1?items[0]:null,items:items.length};
+  });
+}
+
 // Attributes describe this period only, keyed by both base and SKU.
 export function applyPeriodAttributions(sections, mappings, sharedItems = []) {
   const byKey = new Map(mappings.filter(row => row.base && row.sku)

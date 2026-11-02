@@ -2031,6 +2031,7 @@ test('FC actual quantity can clear zero, type a replacement and retain decimal d
   const input = frame.getByRole('spinbutton', { name: /实际补货量/ }).first();
   await expect(input).toHaveValue('0');
   await input.focus();
+  await input.press('ControlOrMeta+A');
   await input.press('Backspace');
   await expect(input).toHaveValue('');
   await input.pressSequentially('100');
@@ -2042,6 +2043,7 @@ test('FC actual quantity can clear zero, type a replacement and retain decimal d
   await expect(input).toHaveValue('12.5');
   await input.fill('');
   await expect(input).toHaveValue('');
+  await input.focus();
   await input.blur();
   await expect(input).toHaveValue('');
   await input.fill('0');

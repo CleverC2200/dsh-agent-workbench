@@ -1,5 +1,6 @@
 // Configuration-driven caller. The trusted host supplies execute and owns all
 // identity, data-source and authorization context. This module contains no SQL.
+import { scheduledQuery } from './query-scheduler.js';
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const immutableRegistries = new WeakSet();
 export function immutableQueryConfig(config) {
@@ -13,42 +14,6 @@ export function immutableQueryConfig(config) {
   freeze(snapshot);
   immutableRegistries.add(snapshot);
   return snapshot;
-}
-// One HTML document shares this queue across its cards and collections. Avoid
-// multiplying collection concurrency by the number of independently loaded cards.
-let runningQueries = 0;
-const waitingQueries = [];
-function scheduledQuery(task, signal, priority = 0, concurrency = 4) {
-  return new Promise((resolve, reject) => {
-    const abort = () => {
-      const index = waitingQueries.indexOf(start);
-      if (index >= 0) waitingQueries.splice(index, 1);
-      reject(signal.reason);
-    };
-    const start = () => {
-      signal?.removeEventListener('abort', abort);
-      runningQueries++;
-      Promise.resolve()
-        .then(() => {
-          signal?.throwIfAborted();
-          return task();
-        })
-        .then(resolve, reject)
-        .finally(() => {
-          runningQueries--;
-          waitingQueries.shift()?.();
-        });
-    };
-    if (signal?.aborted) return reject(signal.reason);
-    if (runningQueries < concurrency) start();
-    else {
-      start.priority = priority;
-      const index = waitingQueries.findIndex((job) => job.priority < priority);
-      if (index < 0) waitingQueries.push(start);
-      else waitingQueries.splice(index, 0, start);
-      signal?.addEventListener('abort', abort, { once: true });
-    }
-  });
 }
 export class QueryContractError extends Error {
   constructor(code, message, metadata = {}) {
@@ -216,15 +181,17 @@ export function createQueryClient(config, execute) {
     'inventory-qll',
   ].includes(config.agentId)
     ? 2
-    : 4;
-  async function read(id, values, { signal, requiredColumns = [] } = {}) {
+    : config.agentId === 'inventory-orderworkbench'
+      ? 6
+      : 4;
+  async function read(id, values, { signal, requiredColumns = [], priority } = {}) {
     signal?.throwIfAborted();
     const request = makeRequest(config, id, values);
     // No retry or alternate-source fallback, including authorization failures.
     const result = await scheduledQuery(
       () => execute(request, { signal, queryId: id, values: structuredClone(values) }),
       signal,
-      query(config, id).priority ?? 0,
+      priority ?? query(config, id).priority ?? 0,
       concurrency,
     );
     signal?.throwIfAborted();
@@ -254,6 +221,7 @@ export function createQueryClient(config, execute) {
       signal,
       singlePageFirst = false,
       atomicPages = false,
+      priority,
     } = {},
   ) {
     const q = query(config, id),
@@ -288,6 +256,7 @@ export function createQueryClient(config, execute) {
         { ...values, offset: 0 },
         {
           signal,
+          priority,
           requiredColumns: [...new Set([...keyFields, ...requiredColumns])],
         },
       );
@@ -324,7 +293,11 @@ export function createQueryClient(config, execute) {
       version = result.configVersion;
     };
     const count = async () => {
-      const result = await read(countId, countValues, { signal, requiredColumns: ['total'] });
+      const result = await read(countId, countValues, {
+        signal,
+        priority,
+        requiredColumns: ['total'],
+      });
       checkVersion(result);
       const raw = result.rows[0]?.total;
       if (
@@ -339,7 +312,11 @@ export function createQueryClient(config, execute) {
       return total;
     };
     const firstAtomic = atomicId
-      ? await read(atomicId, { ...values, offset: 0 }, { signal, requiredColumns: pageColumns })
+      ? await read(
+          atomicId,
+          { ...values, offset: 0 },
+          { signal, priority, requiredColumns: pageColumns },
+        )
       : undefined;
     const firstPage = firstAtomic ? unpackAtomicPage(firstAtomic, 1, pageSize) : undefined;
     const total = firstPage ? firstPage.total : await count();
@@ -390,7 +367,7 @@ export function createQueryClient(config, execute) {
             const result = await read(
               readId,
               { ...values, offset: at },
-              { signal: pageSignal, requiredColumns: pageColumns },
+              { signal: pageSignal, priority, requiredColumns: pageColumns },
             );
             if (!atomicId) return result;
             const page = unpackAtomicPage(result, at / pageSize + 1, pageSize);

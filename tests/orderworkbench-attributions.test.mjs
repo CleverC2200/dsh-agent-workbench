@@ -5,7 +5,10 @@ import {
   workbenchQueries,
   addWorkbenchQueries,
 } from '../business/inventory-orderworkbench/queries.mjs';
-import { applyPeriodAttributions } from '../prototypes/inventory-orderworkbench/period-attributions.mjs';
+import {
+  applyPeriodAttributions,
+  collectDirectorMembers,
+} from '../prototypes/inventory-orderworkbench/period-attributions.mjs';
 
 test('attributions remain scoped to the period and base/SKU, reject ambiguity and use business items', () => {
   const db = new DatabaseSync(':memory:');
@@ -34,6 +37,23 @@ test('attributions remain scoped to the period and base/SKU, reject ambiguity an
     const read = (start, end) => db.prepare(sql).all({ gea_p1: start, gea_p2: end });
     const current = read('2026-10-01', '2026-11-01');
     const historical = read('2026-09-01', '2026-10-01');
+    const memberships = db
+      .prepare(workbenchQueries.directorMembers.sql)
+      .all({ gea_p900: '', gea_p1: '2026-10-01', gea_p2: '2026-11-01' });
+    const collected = collectDirectorMembers(memberships);
+    const scalars = (rows) =>
+      rows
+        .map((row) =>
+          JSON.stringify(
+            ['base', 'sku', 'director', 'names', 'item', 'items'].map((key) => row[key]),
+          ),
+        )
+        .sort();
+    assert.deepEqual(scalars(collected), scalars(current));
+    assert.deepEqual(
+      collected.find((row) => row.base === '华东' && row.sku === 'B').directors.sort(),
+      ['乙', '甲'].sort(),
+    );
     assert.equal(historical.find((r) => r.sku === 'A').director, '旧负责人');
     assert.equal(current.find((r) => r.base === '华东' && r.sku === 'A').director, '新负责人');
     assert.equal(current.find((r) => r.sku === 'B').names, 2);

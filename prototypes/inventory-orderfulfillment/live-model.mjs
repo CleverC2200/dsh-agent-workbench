@@ -101,17 +101,17 @@ export function visibleResult(result) {
 /** Each collection keeps count/page/config and permission checks separate from other cards. */
 export function createFulfillmentReader(config, execute) {
   const client = createQueryClient(config, execute);
-  async function collection(id, filters, { signal, page = 1, size = 20 } = {}) {
+  async function collection(id, filters, { signal, page = 1, size = 20, priority = 10 } = {}) {
     const countId = config.queries[id].pagination.countQuery;
-    const before = await client.read(countId, filters, { signal, requiredColumns: ['total'] });
+    const before = await client.read(countId, filters, { signal, priority, requiredColumns: ['total'] });
     const rawTotal = before.rows.length === 1 ? before.rows[0].total : null;
     if (!/^(0|[1-9]\d*)$/.test(String(rawTotal)) || !Number.isSafeInteger(Number(rawTotal)))
       throw new QueryContractError('INVALID_COUNT', '订单分页计数无效');
     const total = Number(rawTotal);
     const currentPage = Math.min(page, Math.max(1, Math.ceil(total / size)));
     const offset = (currentPage - 1) * size;
-    const result = await client.read(id, { ...filters, page_size: size, offset }, { signal });
-    const after = await client.read(countId, filters, { signal, requiredColumns: ['total'] });
+    const result = await client.read(id, { ...filters, page_size: size, offset }, { signal, priority });
+    const after = await client.read(countId, filters, { signal, priority, requiredColumns: ['total'] });
     if (
       before.configVersion !== result.configVersion ||
       after.configVersion !== result.configVersion
@@ -133,11 +133,11 @@ export function createFulfillmentReader(config, execute) {
   }
   return {
     collection,
-    async all(id,filters,{signal}={}) {
+    async all(id,filters,{signal,priority=0}={}) {
       const countId=config.queries[id].pagination.countQuery;
       const [before,result]=await Promise.all([
-        client.read(countId,filters,{signal,requiredColumns:['total']}),
-        client.read(id,{...filters,page_size:200,offset:0},{signal}),
+        client.read(countId,filters,{signal,priority,requiredColumns:['total']}),
+        client.read(id,{...filters,page_size:200,offset:0},{signal,priority}),
       ]);
       const rawTotal=before.rows.length===1?before.rows[0].total:null;
       if(!/^(0|[1-9]\d*)$/.test(String(rawTotal))||!Number.isSafeInteger(Number(rawTotal)))
@@ -152,7 +152,7 @@ export function createFulfillmentReader(config, execute) {
       for(let page=2;page<=pages;page+=4) {
         const batch=await Promise.all(Array.from({length:Math.min(4,pages-page+1)},(_,index)=>{
           const offset=(page+index-1)*200;
-          return client.read(id,{...filters,page_size:200,offset},{signal}).then(result=>({result:visibleResult(result),offset}));
+          return client.read(id,{...filters,page_size:200,offset},{signal,priority}).then(result=>({result:visibleResult(result),offset}));
         }));
         for(const {result,offset} of batch) {
           if(result.configVersion!==first.configVersion||JSON.stringify([result.returnedColumns,result.rejectedColumns])!==columns||result.rows.length!==Math.min(200,first.total-offset))
@@ -161,14 +161,14 @@ export function createFulfillmentReader(config, execute) {
         }
       }
       {
-        const after=await client.read(config.queries[id].pagination.countQuery,filters,{signal,requiredColumns:['total']});
+        const after=await client.read(config.queries[id].pagination.countQuery,filters,{signal,priority,requiredColumns:['total']});
         if(after.configVersion!==first.configVersion||after.rows.length!==1||Number(after.rows[0].total)!==first.total||rows.length!==first.total)
           throw new QueryContractError('RESULT_INCOMPLETE','指标总数在分页期间发生变化');
       }
       return {...first,rows,scope:'当前筛选与授权范围完整输入'};
     },
     async summary(id, filters, signal) {
-      const result = await client.read(id, filters, { signal });
+      const result = await client.read(id, filters, { signal, priority: 10 });
       if (result.rows.length !== 1)
         throw new QueryContractError('INVALID_QUERY_RESPONSE', '汇总结果不完整');
       return visibleResult(result);

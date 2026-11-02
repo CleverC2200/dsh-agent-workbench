@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
+import { prepareFulfillmentPresentation } from '../prototypes/inventory-orderfulfillment/prepare-presentation.mjs';
 
 test('live fulfillment keeps granted rows and clears denied, filtered and previous-identity facts', async (t) => {
   const browser = await chromium.launch({
@@ -128,10 +129,32 @@ test('live fulfillment keeps granted rows and clears denied, filtered and previo
   await original.route('https://reference.test/', async (route) =>
     route.fulfill({
       contentType: 'text/html',
-      body: await readFile('prototypes/inventory-orderfulfillment/presentation.html', 'utf8'),
+      body: prepareFulfillmentPresentation(
+        await readFile('prototypes/inventory-orderfulfillment/presentation.html', 'utf8'),
+      ).replace(
+        '</head>',
+        '<style>' +
+          (await readFile('theme/tokens.css', 'utf8')) +
+          '\n' +
+          (await readFile('prototypes/inventory-orderfulfillment/theme.css', 'utf8')) +
+          '</style></head>',
+      ),
     }),
   );
   await original.goto('https://reference.test/');
+  // Compare author styles using the same fixture row and the scroll wrapper
+  // installed by orderPage; the retained presentation has no sample rows.
+  await original.evaluate(
+    (markup) => {
+      const table = document.querySelector('.delivery-order-table');
+      table.tBodies[0].innerHTML = markup;
+      const scroll = document.createElement('div');
+      scroll.className = 'fulfillment-table-scroll';
+      table.before(scroll);
+      scroll.append(table);
+    },
+    await page.locator('#deliveryOrderDetailRows').innerHTML(),
+  );
   const appearance = () =>
     Object.fromEntries(
       [
@@ -141,10 +164,10 @@ test('live fulfillment keeps granted rows and clears denied, filtered and previo
         '.delivery-order-table',
         '.delivery-order-table th',
         '.delivery-order-table td',
-        '.author-questions',
       ].map((selector) => {
-        const node = document.querySelector(selector),
-          style = getComputedStyle(node),
+        const node = document.querySelector(selector);
+        if (!node) throw Error('Missing appearance fixture: ' + selector + ' at ' + location.href);
+        const style = getComputedStyle(node),
           rect = node.getBoundingClientRect();
         return [
           selector,
@@ -159,6 +182,7 @@ test('live fulfillment keeps granted rows and clears denied, filtered and previo
       }),
     );
   assert.deepEqual(await page.evaluate(appearance), await original.evaluate(appearance));
+  await expect(page.locator('.author-questions')).toHaveCount(0);
   await original.close();
   await expect(page.locator('body')).not.toContainText('PRIVATE-CUSTOMER');
   await expect(page.locator('body')).not.toContainText('6,320');

@@ -4,6 +4,8 @@ import { createReportPersistence } from './report-persistence.mjs';
 import { createPageViewState } from '../../business/shared/view-state.js';
 import { draft, ready, call } from '../../business/shared/channel.js';
 import { loadWorkbenchFacts, loadWorkbenchSkuPage } from './live-source.js';
+import { createFrameProgress } from '../../business/shared/frame-progress.js';
+import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
 import { workbenchPresentation, workbenchEvidence, workbenchMetricDetail, workbenchBaseIncluded } from './live-presentation.mjs';
 import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
 import { reusableWorkbenchFacts, compatibleWorkbenchFacts } from './metric-model.mjs';
@@ -2109,7 +2111,8 @@ function renderSelectedPeriod() {
       ? `${selectedPeriodLabel()} 暂无对应周报数据。目前已收录截至 2026-09-06 的周报，不能将其他周次或月度报告数值移用至本周。`
       : `${selectedPeriodLabel()} 暂无月度报告数据；目前仅收录截至 2026-09-13 的 9 月报告。`;
   if (reportAvailable && activePage === 'workbench') renderWorkbench();
-  document.getElementById('periodMeta').textContent = liveFacts ? 'GEA受控数据 · '+selectedPeriodLabel()+' · 订单截至 '+addDays(liveFacts.periods[liveFacts.selected].end,-1)+'；库存以来源快照日为准'+(liveFacts.complete===false?'；对比数据及明细加载中…':'') : '正在加载受控数据…';
+  const range = period => period ? period.start>=period.end ? '暂无已结束日期' : period.start+' 至 '+addDays(period.end,-1) : '加载中';
+  document.getElementById('periodMeta').textContent = liveFacts ? 'GEA受控数据 · 本期：'+range(liveFacts.periods.month)+'；本周：'+range(liveFacts.periods.week)+'；订单按已结束日期统计，库存以来源快照日为准'+(liveFacts.complete===false?'；对比数据及明细加载中…':'') : '正在加载受控数据…';
 }
 const periodPicker = document.getElementById('periodPicker');
 const periodPickerTrigger = document.getElementById('periodPickerTrigger');
@@ -2356,6 +2359,7 @@ async function readCurrentPeriod() {
     return;
   }
   entry.started=true;
+  const timing = startDashboardTiming('order-workbench', controller.signal);
   try {
     let saved;
     try {
@@ -2365,12 +2369,32 @@ async function readCurrentPeriod() {
     } catch (error) { controller.signal.throwIfAborted(); }
 
     controller.signal.throwIfAborted();
-    if(compatibleWorkbenchFacts(saved?.facts)) entry.apply(saved.facts,saved.presentation);
+    if(compatibleWorkbenchFacts(saved?.facts)) {
+      entry.apply(saved.facts,saved.presentation);
+      timing.mark('saved-report-ready');
+    }
     if (reusableWorkbenchFacts(saved?.facts) && end <= new Date(Date.now()+8*3600000).toISOString().slice(0,10)) {
       entry.apply(saved.facts, saved.presentation);entry.finished=Date.now();
+      timing.finish('cached-complete');
       return;
     }
-    const facts=await loadWorkbenchFacts(start,end,controller.signal,{onProgress:(facts)=>{if(!entry.facts?.complete)entry.apply(facts);},base:entry.persistence.scope()?.base,summary:true});
+    const progress = createFrameProgress(facts => {
+      if (!reusableWorkbenchFacts(entry.facts)) {
+        entry.apply(facts);
+        if (Object.values(facts.periods[facts.selected]?.metrics??{}).some(metric=>typeof metric.value==='number'&&Number.isFinite(metric.value)))
+          timing.mark('selected-period-ready');
+      }
+    }, controller.signal);
+    let facts;
+    try {
+      facts=await loadWorkbenchFacts(start,end,controller.signal,{onProgress:progress.push,base:entry.persistence.scope()?.base,summary:true});
+      const partial = Object.values(facts.periods).some(period => period.sections.some(section => section.status === 'error')) ||
+        ['directors','customers','customerManagers'].some(name => facts[name]?.status === 'error');
+      timing.finish(partial ? 'partial' : 'complete');
+    } catch (error) {
+      timing.finish(controller.signal.aborted ? 'cancelled' : 'failed');
+      throw error;
+    } finally { progress.cancel(); }
     entry.apply(facts);entry.finished=Date.now();
     if(entry.loaded){
       if(activePeriodReport===entry)entry.edits=structuredClone(reportEdits());
@@ -2378,6 +2402,7 @@ async function readCurrentPeriod() {
     }
     for(const [cachedKey,cached] of periodReports)if(periodReports.size>6&&cached!==activePeriodReport&&cached.finished&&!cached.dirty&&!cached.persistence.pending()){cached.controller.abort();periodReports.delete(cachedKey);}
   } catch (error) {
+    timing.finish(controller.signal.aborted ? 'cancelled' : 'failed');
     entry.started=false;entry.facts=null;entry.loaded=false;
     if(!entry.dirty)periodReports.delete(key);
     if (!controller.signal.aborted && activePeriodReport===entry) {

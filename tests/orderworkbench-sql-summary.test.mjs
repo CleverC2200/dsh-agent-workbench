@@ -28,7 +28,10 @@ test('gateway-compatible stock join preserves the full-join result including unm
     const sql = workbenchQueries.stock.sql;
     assert.doesNotMatch(sql, /FULL\s+(?:OUTER\s+)?JOIN|<=>/i);
     const firstArm = sql.split(' UNION ALL ')[0];
-    const original = firstArm.replace(') s LEFT JOIN (', ') s FULL OUTER JOIN (');
+    const original = firstArm.replace(
+      'stock_plans s LEFT JOIN stock_batches b',
+      'stock_plans s FULL OUTER JOIN stock_batches b',
+    );
     assert.notEqual(firstArm, original);
     const params = { gea_p1: '2026-10-19', gea_p2: '2026-10-26' };
     const read = (query) =>

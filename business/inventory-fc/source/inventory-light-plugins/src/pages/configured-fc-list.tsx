@@ -495,6 +495,7 @@ export function FcConfiguredList(
             onChange={(event) => updateQuantity(row, event.target.value)}
             onBlur={() =>
               setQuantityInputs((current) => {
+                if (current[key] === '') return current;
                 const next = { ...current };
                 delete next[key];
                 return next;

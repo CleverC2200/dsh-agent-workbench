@@ -43,11 +43,19 @@ const stockBatches = `SELECT belong_base,material_code,MAX(material_name) AS nam
 const stockJoin = (inventoryOnly = false) =>
   stockProjection +
   (inventoryOnly
-    ? ` FROM (${stockBatches}) b LEFT JOIN (${stockPlans}) s`
-    : ` FROM (${stockPlans}) s LEFT JOIN (${stockBatches}) b`) +
+    ? ` FROM stock_batches b LEFT JOIN stock_plans s`
+    : ` FROM stock_plans s LEFT JOIN stock_batches b`) +
   ` ON b.belong_base=s.belong_base AND b.material_code=s.material_code
-      LEFT JOIN (${dictionary}) d ON d.sku=COALESCE(s.material_code,b.material_code)` +
+      LEFT JOIN stock_dictionary d ON d.sku=COALESCE(s.material_code,b.material_code)` +
   (inventoryOnly ? ' WHERE s.source_rows IS NULL' : '');
+
+// Gateway logical resources must map to hive.dw.dwd_scm_material_age_his and
+// hive.dw.dim_bas_warehouse; qualified physical names are rejected by the gateway.
+// The age read view deduplicates complete source records before projecting its
+// six fields; DISTINCT here would incorrectly merge different stock batches.
+const ageWarehouses = `SELECT DISTINCT warehouse_id FROM dim_bas_warehouse
+  WHERE warehouse_classify IN ('01','02')
+    AND warehouse_classify_name IN ('工厂成品仓','工厂外租库')`;
 
 export const workbenchQueries = {
   orders: {
@@ -135,12 +143,19 @@ export const workbenchQueries = {
       'national_stock_invalid',
       'national_plan_invalid',
     ],
-    sql: stockJoin() + ' UNION ALL ' + stockJoin(true),
+    sql:
+      `WITH stock_plans AS (${stockPlans}), stock_batches AS (${stockBatches}),
+      stock_dictionary AS (${dictionary}) ` +
+      stockJoin() +
+      ' UNION ALL ' +
+      stockJoin(true),
   },
   ageDate: {
+    scoped: true,
     columns: ['day'],
-    sql: `SELECT MAX(month_date) AS day FROM agents_scm_inventory_sku_data_d
-      WHERE warehouse_classify IN ('01','02') AND warehouse_classify_name IN ('工厂成品仓','工厂外租库') AND month_date>=:gea_p1 AND month_date<:gea_p2`,
+    sql: `SELECT MAX(b.dt) AS day FROM dwd_scm_material_age_his b
+      INNER JOIN (${ageWarehouses}) w ON w.warehouse_id=b.warehouseid
+      WHERE (:gea_p900='' OR b.belong_base=:gea_p900) AND b.dt>=:gea_p1 AND b.dt<:gea_p2`,
   },
   ages: {
     scoped: true,
@@ -159,12 +174,14 @@ export const workbenchQueries = {
     ],
     sql: `SELECT b.belong_base AS base,b.material_code AS sku,MAX(d.category) AS category,
         CASE WHEN MAX(s.names)>1 THEN NULL ELSE COALESCE(MAX(s.item),MAX(m.item)) END AS item,
-      MAX(b.month_date) AS snapshot_date,
-      SUM(b.live_qty) AS stock_qty,
-      SUM(CASE WHEN CAST(b.prod_date AS DATE)<=:gea_p3 AND b.live_qty<>0 THEN b.live_qty ELSE 0 END) AS aged_qty,
-      COUNT(*) AS records,SUM(CASE WHEN b.live_qty=0 THEN 1 ELSE 0 END) AS excluded,
-      SUM(CASE WHEN b.live_qty IS NULL OR (b.live_qty<>0 AND (CAST(b.prod_date AS DATE) IS NULL OR CAST(b.prod_date AS DATE)>:gea_p4)) THEN 1 ELSE 0 END) AS invalid
-      FROM agents_scm_inventory_sku_data_d b LEFT JOIN (${dictionary}) d ON d.sku=b.material_code
+      MAX(b.dt) AS snapshot_date,
+      SUM(b.inv_qty) AS stock_qty,
+      SUM(CASE WHEN b.age_days>=60 THEN b.inv_qty ELSE 0 END) AS aged_qty,
+      COUNT(*) AS records,SUM(CASE WHEN b.inv_qty=0 THEN 1 ELSE 0 END) AS excluded,
+      SUM(CASE WHEN b.inv_qty IS NULL OR (b.inv_qty<>0 AND (b.age_days IS NULL OR b.age_days<0)) THEN 1 ELSE 0 END) AS invalid
+      FROM dwd_scm_material_age_his b
+      INNER JOIN (${ageWarehouses}) w ON w.warehouse_id=b.warehouseid
+      LEFT JOIN (${dictionary}) d ON d.sku=b.material_code
       LEFT JOIN (SELECT material_code AS sku,
         COUNT(DISTINCT NULLIF(TRIM(product_item),'')) AS names,
         CASE WHEN COUNT(DISTINCT NULLIF(TRIM(product_item),''))=1 THEN MAX(NULLIF(TRIM(product_item),'')) END AS item
@@ -173,11 +190,10 @@ export const workbenchQueries = {
         CASE WHEN COUNT(DISTINCT NULLIF(TRIM(pinxiang),''))=1 THEN MAX(NULLIF(TRIM(pinxiang),'')) END AS item
         FROM agents_order_execute_isontime_mi WHERE fromorderno_month>=:gea_p5 AND fromorderno_month<:gea_p6
         GROUP BY new_material_code) m ON m.sku=b.material_code
-      WHERE (:gea_p900='' OR b.belong_base=:gea_p900) AND b.month_date=:gea_p1 AND b.warehouse_classify IN ('01','02') AND b.warehouse_classify_name IN ('工厂成品仓','工厂外租库')
+      WHERE (:gea_p900='' OR b.belong_base=:gea_p900) AND b.dt=:gea_p1
       GROUP BY b.belong_base,b.material_code`,
     omitEnd: true,
     extra: {
-      gea_p3: { name: 'age_cutoff', type: 'string', required: true, format: 'YYYY-MM-DD' },
       gea_p4: { name: 'snapshot', type: 'string', required: true, format: 'YYYY-MM-DD' },
       gea_p5: { name: 'mapping_start', type: 'string', required: true, format: 'YYYY-MM-DD' },
       gea_p6: { name: 'mapping_end', type: 'string', required: true, format: 'YYYY-MM-DD' },
@@ -185,18 +201,44 @@ export const workbenchQueries = {
   },
   directors: {
     keys: ['base', 'sku'],
-    columns: ['base', 'sku', 'director', 'names', 'item', 'items', 'directors'],
+    columns: [
+      'base',
+      'sku',
+      'director',
+      'names',
+      'item',
+      'items',
+      'directors',
+      'director_encoding',
+    ],
     sql: `SELECT d.belong_base AS base,d.material_code AS sku,
       MIN(NULLIF(TRIM(d.director),'')) AS director,
       COUNT(DISTINCT NULLIF(TRIM(d.director),'')) AS names,
-      ARRAY_AGG(DISTINCT NULLIF(TRIM(d.director),'')) AS directors,
+      ARRAY_AGG(CASE WHEN d.director IS NULL THEN 'N' ELSE CONCAT('V',CAST(LENGTH(d.director) AS VARCHAR),':',d.director) END) AS directors,
+      'nullable-utf8-v1' AS director_encoding,
       CASE WHEN COUNT(DISTINCT NULLIF(TRIM(d.product_item),''))=1 THEN MAX(NULLIF(TRIM(d.product_item),'')) END AS item,
       COUNT(DISTINCT NULLIF(TRIM(d.product_item),'')) AS items
-      FROM (
-        ${attributionSources}
-      ) d WHERE NULLIF(TRIM(d.belong_base),'') IS NOT NULL AND NULLIF(TRIM(d.material_code),'') IS NOT NULL
+      FROM (SELECT DISTINCT d.belong_base,d.material_code,
+        NULLIF(TRIM(d.director),'') AS director,NULLIF(TRIM(d.product_item),'') AS product_item
+        FROM (${attributionSources}) d
+        WHERE NULLIF(TRIM(d.belong_base),'') IS NOT NULL AND NULLIF(TRIM(d.material_code),'') IS NOT NULL
         AND d.attribution_date>=:gea_p1 AND d.attribution_date<:gea_p2
+      ) d
       GROUP BY d.belong_base,d.material_code`,
+  },
+  directorMembers: {
+    scoped: true,
+    keys: ['base', 'sku', 'director_value', 'item_value'],
+    columns: ['base', 'sku', 'director', 'director_value', 'item_value'],
+    sql: `SELECT base,sku,MIN(director_value) OVER (PARTITION BY base,sku) AS director,
+      director_value,item_value FROM (
+        SELECT DISTINCT d.belong_base AS base,d.material_code AS sku,
+          NULLIF(TRIM(d.director),'') AS director_value,NULLIF(TRIM(d.product_item),'') AS item_value
+        FROM (${attributionSources}) d
+        WHERE (:gea_p900='' OR d.belong_base=:gea_p900)
+          AND NULLIF(TRIM(d.belong_base),'') IS NOT NULL AND NULLIF(TRIM(d.material_code),'') IS NOT NULL
+          AND d.attribution_date>=:gea_p1 AND d.attribution_date<:gea_p2
+      ) members`,
   },
   items: {
     keys: ['sku'],
