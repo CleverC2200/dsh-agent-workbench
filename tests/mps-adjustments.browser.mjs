@@ -23,7 +23,7 @@ test('MPS local product inputs recover after Document replacement and release cl
       ),
     )
     .toBe('恢复产品');
-  await page.locator('iframe').evaluate((element) => (element.src = element.src));
+  await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   frame = page.frameLocator('iframe');
   await expect(products().getByRole('cell', { name: '恢复产品', exact: true })).toBeVisible();
   const saved = await page.evaluate(() => window.readView().localDrafts);
@@ -59,7 +59,7 @@ test('MPS category override records a reason and time, survives reload and undo 
       ),
     )
     .toBe(120);
-  await page.locator('iframe').evaluate((element) => (element.src = element.src));
+  await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await expect(
     frame
       .getByRole('region', { name: '逐月测算', exact: true })
@@ -127,7 +127,7 @@ test('MPS shipment local overrides and remaining intake survive a business-sourc
       ),
     )
     .toBe('business');
-  await page.locator('iframe').evaluate((element) => (element.src = element.src));
+  await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await frame.getByLabel('发货数据来源', { exact: true }).selectOption('local-file');
   await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
   await expect(forecast).toHaveValue('301');
