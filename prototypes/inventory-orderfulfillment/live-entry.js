@@ -514,6 +514,7 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
             quantity:quantityText(quantity,'original_qty',quantities),shortage:quantityText(quantity,'source_short_qty',quantities),
             rate:['—','无权限'].includes(ratio)?ratio:Number(ratio).toFixed(1)+'%',
             rawQuantity:['—','无权限'].includes(raw)?null:Number(raw),
+            rawShortage:(()=>{const shortage=value(quantity,'source_short_qty',quantities);return ['—','无权限'].includes(shortage)?null:Number(shortage);})(),
           };}),
         },confirmButton);
       });
