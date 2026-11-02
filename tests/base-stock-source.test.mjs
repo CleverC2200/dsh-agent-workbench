@@ -146,6 +146,7 @@ test('missing-base retry uses the governed source with a named base parameter', 
 });
 
 test('age structure aggregates current inventory through the dashboard tab', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-20T04:00:00Z') });
   const previousHost = globalThis.stockSourceHost;
   t.after(() => {
     if (previousHost === undefined) delete globalThis.stockSourceHost;
