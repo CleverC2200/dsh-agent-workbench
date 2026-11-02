@@ -16,9 +16,14 @@ test('stocked customers count distinct positive-stock customers in the supplied 
   ];
   const summary = summarizeCustomerInventory(rows);
   assert.equal(summary.stockedCustomerCount, 2);
-  assert.equal(summarizeCustomerInventory(rows.filter(row => row.code === 'b')).stockedCustomerCount, 0);
+  assert.equal(
+    summarizeCustomerInventory(rows.filter((row) => row.code === 'b')).stockedCustomerCount,
+    0,
+  );
   assert.equal(summarizeCustomerInventory([]).stockedCustomerCount, 0);
-  const metric = customerPageContext({ summary }).metrics.find(metric => metric.key === 'stockedCustomers');
+  const metric = customerPageContext({ summary }).metrics.find(
+    (metric) => metric.key === 'stockedCustomers',
+  );
   assert.equal(metric.value, 2);
   assert.equal(metric.unit, '个');
 });
