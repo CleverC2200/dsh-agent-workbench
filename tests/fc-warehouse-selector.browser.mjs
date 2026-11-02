@@ -38,6 +38,15 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
+    if (id === 'summary.snapshot')
+      return route.fulfill({
+        json: {
+          rows: [],
+          returnedColumns: config.queries[id].resultColumns,
+          rejectedColumns: [],
+          configVersion: 'fixture',
+        },
+      });
     calls.push({ id, values });
     if (id === 'replenishment.detail.atomic' && values.page_size === 200)
       await new Promise((resolve) => {
@@ -46,7 +55,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     const q = config.queries[id];
     assert.ok(q, id);
     let rows;
-    if (id === 'branch-warehouse.directory')
+    if (id === 'branch-warehouse.directory.count') rows = [{ total: 2 }];
+    else if (id === 'branch-warehouse.directory')
       rows = [
         { warehouse_code: 'A170', warehouse_name: '成都分仓', base: '西南' },
         { warehouse_code: 'N417', warehouse_name: '郑州配送中心', base: '郑州' },
@@ -391,6 +401,15 @@ test('FC aging exposes immediate risk filters, leading risk column and ten-row s
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
+    if (id === 'summary.snapshot')
+      return route.fulfill({
+        json: {
+          rows: [],
+          returnedColumns: config.queries[id].resultColumns,
+          rejectedColumns: [],
+          configVersion: 'fixture',
+        },
+      });
     calls.push({ id, values });
     const q = config.queries[id];
     let rows;
@@ -519,6 +538,15 @@ test('FC shows system plans before import and downloads every authorized row thr
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
+    if (id === 'summary.snapshot')
+      return route.fulfill({
+        json: {
+          rows: [],
+          returnedColumns: config.queries[id].resultColumns,
+          rejectedColumns: [],
+          configVersion: 'fixture',
+        },
+      });
     calls.push({ id, values });
     const query = config.queries[id];
     let rows;
@@ -607,10 +635,20 @@ test('FC upstream transfer orders show supply bases, exact SKUs and preserve rec
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
+    if (id === 'summary.snapshot')
+      return route.fulfill({
+        json: {
+          rows: [],
+          returnedColumns: config.queries[id].resultColumns,
+          rejectedColumns: [],
+          configVersion: 'fixture',
+        },
+      });
     calls.push({ id, values });
     const query = config.queries[id];
     let rows;
-    if (id === 'branch-warehouse.directory')
+    if (id === 'branch-warehouse.directory.count') rows = [{ total: 1 }];
+    else if (id === 'branch-warehouse.directory')
       rows = [{ warehouse_code: 'A020', warehouse_name: '长沙分仓', base: '遂平' }];
     else if (id === 'branch-current-orders.page')
       rows = [
@@ -754,6 +792,15 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
+    if (id === 'summary.snapshot')
+      return route.fulfill({
+        json: {
+          rows: [],
+          returnedColumns: config.queries[id].resultColumns,
+          rejectedColumns: [],
+          configVersion: 'fixture',
+        },
+      });
     requests.push({ id, values });
     const q = config.queries[id];
     let rows = [];
@@ -762,7 +809,8 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
         status: 403,
         json: { code: 'RESOURCE_NOT_IN_DATASET', message: '调拨资源未加入当前数据集' },
       });
-    if (id === 'branch-warehouse.directory')
+    if (id === 'branch-warehouse.directory.count') rows = [{ total: 1 }];
+    else if (id === 'branch-warehouse.directory')
       rows = [{ warehouse_code: 'N436', warehouse_name: '郑州DC仓', base: '郑州' }];
     else if (id.startsWith('source.')) rows = [{ day: '2026-10-29' }];
     else if (id === 'replenishment.detail.atomic') {
@@ -936,11 +984,21 @@ test('replenishment quick filters use server scope, product links expand inline 
         body: `<style>${css}</style><div id="app"></div><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
+    if (id === 'summary.snapshot')
+      return route.fulfill({
+        json: {
+          rows: [],
+          returnedColumns: config.queries[id].resultColumns,
+          rejectedColumns: [],
+          configVersion: 'fixture',
+        },
+      });
     calls.push({ id, values });
     const q = config.queries[id];
     assert.ok(q, id);
     let rows = [];
-    if (id === 'branch-warehouse.directory')
+    if (id === 'branch-warehouse.directory.count') rows = [{ total: 1 }];
+    else if (id === 'branch-warehouse.directory')
       rows = [{ warehouse_code: 'W1', warehouse_name: '测试分仓', base: '华东' }];
     else if (id.startsWith('source.')) rows = [{ day: '2026-10-30' }];
     else if (id === 'replenishment.detail.atomic') {
@@ -1087,6 +1145,15 @@ test('identity changes reload cards and lists even when both accounts select all
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id } = route.request().postDataJSON();
+    if (id === 'summary.snapshot')
+      return route.fulfill({
+        json: {
+          rows: [],
+          returnedColumns: config.queries[id].resultColumns,
+          rejectedColumns: [],
+          configVersion: 'fixture',
+        },
+      });
     const identity = account;
     calls.push({ id, identity });
     const q = config.queries[id];

@@ -3,10 +3,21 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
 test('ASN SQL links execution occupations once, excludes closed documents and allocates base stock in FIFO order', () => {
-  const result = spawnSync('python3', ['scripts/test_fc_upstream_orders.py'], {
-    encoding: 'utf8',
-    timeout: 30000,
-  });
+  const result = spawnSync(
+    'uv',
+    [
+      'run',
+      '--no-project',
+      '--with-requirements',
+      'scripts/requirements-sql.txt',
+      'python',
+      'scripts/test_fc_upstream_orders.py',
+    ],
+    {
+      encoding: 'utf8',
+      timeout: 30000,
+    },
+  );
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stderr, /Ran 22 tests/);

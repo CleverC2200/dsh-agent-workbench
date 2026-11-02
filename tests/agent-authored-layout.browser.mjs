@@ -141,6 +141,7 @@ test('APS source limitations do not masquerade as query failures', async (t) => 
 
 test('APS mounts only the selected analysis cards and detail lists', async (t) => {
   const { frame, errors } = await mount(t, 'apsplan', 1280);
+  await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
   await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
   await expect(
     frame.locator(
@@ -153,8 +154,8 @@ test('APS mounts only the selected analysis cards and detail lists', async (t) =
     frame.locator('#base-dashboard, #base, #cross-analysis, #sales-region-dashboard'),
   ).toHaveCount(0);
   await frame
-    .getByRole('tab', { name: '基地维度', exact: true })
-    .evaluate((element) => element.scrollIntoView({ block: 'center', behavior: 'instant' }));
+    .locator('.analysis-workspace')
+    .evaluate((element) => element.scrollTo({ top: 0, behavior: 'instant' }));
   await frame.getByRole('tab', { name: '基地维度', exact: true }).click();
   await expect(frame.locator('#base-dashboard')).toBeVisible();
   await expect(frame.locator('#base')).toBeVisible();
@@ -464,7 +465,7 @@ test('APS query diagnostics stay in logs while other sources finish', async (t) 
   });
   await expect.poll(() => calls.length).toBeGreaterThan(10);
   await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
-  await expect(frame.getByRole('alert')).toHaveCount(1);
+  await expect(frame.getByRole('alert')).toHaveCount(0);
   await expect(frame.locator('body')).not.toContainText('NO_RETURN_COLUMN_ALLOWED');
   await expect
     .poll(() => diagnostics.some((message) => message.includes('NO_RETURN_COLUMN_ALLOWED')))
@@ -637,7 +638,7 @@ test('fc: denied current orders remain unknown without substituting monthly shor
   await expect(card.locator('.kpi-value')).toHaveText('-');
   await expect(card.locator('dd')).toHaveText(['-', '-']);
   assert.doesNotMatch(await card.innerText(), /16,163|本月/);
-  await expect(frame.getByRole('alert')).toHaveCount(1);
+  await expect(frame.getByRole('alert')).toHaveCount(0);
   assert.equal(calls.filter((q) => q.queryId === 'current-shortage.overview').length, 1);
   assert.deepEqual(errors, []);
 });

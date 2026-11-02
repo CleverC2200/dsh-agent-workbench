@@ -32,6 +32,15 @@ test(
           body: `<html><head><style>${css}</style></head><body><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-qll/query","token":"fixture"}</script><div id="root"></div><script>${js}</script></body></html>`,
         });
       const { queryId, parameters: p } = route.request().postDataJSON();
+      if (queryId === 'summary.snapshot')
+        return route.fulfill({
+          json: {
+            rows: [],
+            returnedColumns: config.queries[queryId].resultColumns,
+            rejectedColumns: [],
+            configVersion: 'fixture',
+          },
+        });
       calls.push({ queryId, ...p });
       if (queryId === 'category-tree.branch' && failBranch) {
         failBranch = false;

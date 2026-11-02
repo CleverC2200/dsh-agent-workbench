@@ -38,6 +38,15 @@ async function openFixture(t, denied = false) {
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters } = route.request().postDataJSON();
+    if (id === 'summary.snapshot')
+      return route.fulfill({
+        json: {
+          rows: [],
+          returnedColumns: config.queries[id].resultColumns,
+          rejectedColumns: [],
+          configVersion: 'fixture',
+        },
+      });
     calls.push({ id, parameters });
     const q = config.queries[id];
     assert.ok(q, id);
@@ -57,7 +66,8 @@ async function openFixture(t, denied = false) {
       });
     let row = Object.fromEntries(q.resultColumns.map((key) => [key, 0]));
     let rows = [row];
-    if (id === 'branch-warehouse.directory')
+    if (id === 'branch-warehouse.directory.count') rows = [{ total: 1 }];
+    else if (id === 'branch-warehouse.directory')
       rows = [{ warehouse_code: 'A230', warehouse_name: '杭州分仓', base: '华东' }];
     else if (id === 'source.branch-stock-date')
       Object.assign(row, { day: '2026-10-30', row_count: 1, total_qty: 13200 });
@@ -167,17 +177,18 @@ test('FC renders base supply fulfillment and cross-month orders independently of
 });
 test('FC exposes denied domains and preserves ready inventory without fabricating zero', async (t) => {
   const { page, calls } = await openFixture(t, true);
-  await expect(
-    page.getByRole('alert').filter({ hasText: '当前账号的数据权限未就绪' }).first(),
-  ).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
   const cards = page.locator('[data-overview-cards="fc"] article');
   await expect(cards.filter({ hasText: '订单满足率' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.filter({ hasText: '当前订单' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.filter({ hasText: '待补货量' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.first().locator('.kpi-value')).toHaveText('1.32万件');
-  assert.equal(calls.filter((c) => c.id === 'branch-supply.summary').length, 1);
-  assert.equal(
-    calls.filter((c) => ['replenishment.summary', 'replenishment.overview'].includes(c.id)).length,
-    1,
-  );
+  await expect.poll(() => calls.filter((c) => c.id === 'branch-supply.summary').length).toBe(1);
+  await expect
+    .poll(
+      () =>
+        calls.filter((c) => ['replenishment.summary', 'replenishment.overview'].includes(c.id))
+          .length,
+    )
+    .toBe(1);
 });

@@ -101,7 +101,9 @@ export async function sourceChecks(result, phase) {
       (repo === 'dsh-agent-manage' && selected.files.some((file) => file.endsWith('.ts'))),
     upstreams,
     joint,
-    pythonSql: selected.files.includes('tests/agent-sql-direct.test.mjs'),
+    pythonSql: selected.files.some((file) =>
+      ['tests/agent-sql-direct.test.mjs', 'tests/fc-upstream-orders.test.mjs'].includes(file),
+    ),
   };
   mkdirSync('.runtime', { recursive: true });
   writeFileSync('.runtime/source-checks-plan.json', JSON.stringify(plan, null, 2) + '\n');
