@@ -67,11 +67,24 @@ test('built live page renders granted records, hides denied fields, and clears f
       if (message.method === 'sql') {
         const id = message.parameters.queryId;
         queryIds.push(id);
+        if (id === 'orders.summary' || id === 'orders.facts') {
+          const today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+          assert.equal(
+            message.parameters.parameters.start,
+            today,
+            'stale source metadata must not select historical orders',
+          );
+        }
         if (deny)
           result = {
             success: false,
             errorCode: 'RETURN_PERMISSION_DENIED',
             message: 'Denied',
+          };
+        else if (id === 'orders.source-period')
+          result = {
+            rows: [{ latest_created: '2026-10-21 12:00:00', latest_load: '2026-10-21 12:05:00' }],
+            configVersion: 'v1',
           };
         else if (id.endsWith('.count'))
           result = {
