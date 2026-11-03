@@ -100,11 +100,19 @@ export default function ConfiguredWorkbench() {
       },
     },
     fulfillment: {
-      factory: { rate: fulfillmentPercent(parts['factory-overview']?.summary) },
-      branch: { rate: fulfillmentPercent(parts['branch-overview']?.summary) },
+      factory: {
+        rate: fulfillmentPercent(parts['factory-overview']?.summary),
+        shippedQty: knownNumber(parts['factory-overview']?.summary?.fulfillment_shipped_quantity),
+      },
+      branch: {
+        rate: fulfillmentPercent(parts['branch-overview']?.summary),
+        shippedQty: knownNumber(parts['branch-overview']?.summary?.fulfillment_shipped_quantity),
+      },
     },
     orderExecution: {
       currentOrderQty: currentShortageSum(parts['current-shortage']?.rows, 'demand'),
+      currentBaseOrderQty: currentShortageSum(parts['current-shortage']?.rows, 'demand', '基地'),
+      currentBranchOrderQty: currentShortageSum(parts['current-shortage']?.rows, 'demand', '分仓'),
       currentBaseShortageQty: currentShortageSum(
         parts['current-shortage']?.rows,
         'shortage',
@@ -127,8 +135,7 @@ export default function ConfiguredWorkbench() {
       turnover: {
         current: stockMetrics.turnover,
         unit: '天',
-        explanation:
-          '对应范围库存合计÷近30日日均动销合计；含渠道时纳入客户在仓，客户周转仅使用库存、动销均有效的同一批记录。各层天数不相加、不平均。',
+        explanation: '库存合计÷近30日日均动销合计。',
       },
       aging: {
         current: companyAverageAge(parts.health, parts['branch-stock']),
@@ -140,8 +147,7 @@ export default function ConfiguredWorkbench() {
       orderGap: {
         current: currentShortageSum(parts['current-shortage']?.rows, 'demand'),
         unit: '件',
-        explanation:
-          '基地为有效未发货完成订单（未备单需求＋已备单未发货占用）；分仓为向下游经销商供货的有效未完成订单；分别扣占用后，在所属基地或分仓SKU内扣一次可用库存。',
+        explanation: '基地与分仓当前未完成客户订单。',
       },
     },
   };

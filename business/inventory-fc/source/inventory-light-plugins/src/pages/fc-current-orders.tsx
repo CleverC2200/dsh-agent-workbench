@@ -275,10 +275,10 @@ export function FcCurrentOrders({
           </label>
         )}
         <label>
-          客户订单号／经销商／SKU
+          客户订单号／下游客户／SKU
           <input
-            aria-label="客户订单号或经销商"
-            placeholder="客户订单号／经销商／SKU／产品名称"
+            aria-label="客户订单号或下游客户"
+            placeholder="客户订单号／下游客户／SKU／产品名称"
             value={draft.search}
             onChange={(event) => {
               setListSearch(event.target.value);
@@ -333,7 +333,8 @@ export function FcCurrentOrders({
                 <tr>
                   {[
                     '订单号',
-                    '经销商',
+                    '分仓',
+                    '下游客户',
                     '订单日期',
                     'SKU个数',
                     '需求量（件）',
@@ -369,6 +370,7 @@ export function FcCurrentOrders({
                           {row.order_no}
                         </button>
                       </td>
+                      <td>{text(row.warehouse_name || row.warehouse_code)}</td>
                       <td>{text(row.customer_name || row.customer_code)}</td>
                       <td>{text(row.created_at?.slice(0, 10) ?? null)}</td>
                       <td>{qty(row.sku_count)}</td>
@@ -398,7 +400,7 @@ export function FcCurrentOrders({
                     </tr>
                     {expanded.has(orderKey(row)) && (
                       <tr>
-                        <td colSpan={9}>
+                        <td colSpan={10}>
                           <OrderLines config={config} order={row} revision={revision} />
                         </td>
                       </tr>

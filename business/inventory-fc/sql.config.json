@@ -11203,7 +11203,8 @@
       "maxConcurrency": 2,
       "summaryRoute": {
         "queryId": "snapshot.source.branch-stock-date",
-        "kind": "dates"
+        "kind": "dates",
+        "required": true
       }
     },
     "base_resources.detail.atomic": {
@@ -14079,7 +14080,8 @@
       "summaryRoute": {
         "queryId": "snapshot.replenishment.detail",
         "kind": "branch-period",
-        "defaultQueryId": "snapshot-default.replenishment.detail"
+        "defaultQueryId": "snapshot-default.replenishment.detail",
+        "required": true
       }
     },
     "replenishment.count": {
@@ -14796,7 +14798,8 @@
       "summaryRoute": {
         "queryId": "snapshot.replenishment.count",
         "kind": "branch-period",
-        "defaultQueryId": "snapshot-default.replenishment.count"
+        "defaultQueryId": "snapshot-default.replenishment.count",
+        "required": true
       }
     },
     "replenishment.summary": {
@@ -15542,7 +15545,8 @@
       ],
       "summaryRoute": {
         "queryId": "snapshot.replenishment.summary",
-        "kind": "branch-period"
+        "kind": "branch-period",
+        "required": true
       }
     },
     "replenishment.detail.atomic": {
@@ -16412,7 +16416,8 @@
       "summaryRoute": {
         "queryId": "snapshot.replenishment.detail.atomic",
         "kind": "branch-period",
-        "defaultQueryId": "snapshot-default.replenishment.detail.atomic"
+        "defaultQueryId": "snapshot-default.replenishment.detail.atomic",
+        "required": true
       }
     },
     "current-shortage.summary": {
@@ -16465,7 +16470,7 @@
         "known_shortage",
         "known_shortage_count"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.summary",
         "kind": "current"
@@ -16534,7 +16539,7 @@
         "page_row_present",
         "page_scope_total"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "pagination": {
         "countQuery": "current-shortage.locations.count",
         "atomicQuery": "current-shortage.locations",
@@ -16613,7 +16618,7 @@
         "page_row_present",
         "page_scope_total"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "pagination": {
         "countQuery": "current-shortage.categories.count",
         "atomicQuery": "current-shortage.categories",
@@ -16691,7 +16696,7 @@
         "page_scope_total",
         "page_row_present"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.detail",
         "kind": "current"
@@ -16765,7 +16770,7 @@
         "page_row_present",
         "page_scope_total"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "pagination": {
         "countQuery": "current-shortage.skus.count",
         "atomicQuery": "current-shortage.skus",
@@ -18088,7 +18093,8 @@
       "summaryRoute": {
         "queryId": "snapshot.replenishment-suggestions.detail",
         "kind": "branch-period",
-        "defaultQueryId": "snapshot-default.replenishment-suggestions.detail"
+        "defaultQueryId": "snapshot-default.replenishment-suggestions.detail",
+        "required": true
       }
     },
     "replenishment-suggestions.count": {
@@ -18782,7 +18788,8 @@
       "summaryRoute": {
         "queryId": "snapshot.replenishment-suggestions.count",
         "kind": "branch-period",
-        "defaultQueryId": "snapshot-default.replenishment-suggestions.count"
+        "defaultQueryId": "snapshot-default.replenishment-suggestions.count",
+        "required": true
       }
     },
     "replenishment-suggestions.detail.atomic": {
@@ -19570,7 +19577,8 @@
       "summaryRoute": {
         "queryId": "snapshot.replenishment-suggestions.detail.atomic",
         "kind": "branch-period",
-        "defaultQueryId": "snapshot-default.replenishment-suggestions.detail.atomic"
+        "defaultQueryId": "snapshot-default.replenishment-suggestions.detail.atomic",
+        "required": true
       }
     },
     "health.cards": {
@@ -19840,7 +19848,7 @@
     "branch-current-orders.page": {
       "title": "分仓当前未发货完成订单",
       "grain": "warehouse + customer order",
-      "notes": "分仓下游经销商订单；按有效执行行归属实际发货仓。缺口按仓库SKU共享库存分配一次，不使用ASN。",
+      "notes": "分仓下游客户订单；按有效执行行归属实际发货仓。缺口按仓库SKU共享库存分配一次，不使用ASN。",
       "parameterSpec": {
         "gea_p1": {
           "name": "warehouse_code",
@@ -19889,7 +19897,7 @@
         }
       },
       "request": {
-        "sql": "WITH open_lines AS (WITH customer_stock_date AS (SELECT MAX(i.month_date) AS month_date FROM agents_scm_inventory_sku_data_d AS i WHERE i.warehouse_classify IN ('01', '02', '20')), customer_stock AS (SELECT i.warehouseid AS warehouseid, i.warehouse_name AS warehouse_name, i.belong_base AS belong_base, i.material_code AS sku, i.available_qty AS available_qty, i.prod_date AS prod_date, i.sap_warehouseid AS sap_warehouseid, i.plant AS plant, i.quality_batch AS quality_batch, i.is_good_prod AS is_good_prod, i.warehouse_classify AS warehouse_classify FROM agents_scm_inventory_sku_data_d AS i INNER JOIN customer_stock_date AS s ON i.month_date = s.month_date WHERE i.warehouse_classify = '20' OR i.warehouseid = 'N436'), customer_warehouses AS (SELECT i.warehouseid AS warehouse_code, MAX(i.warehouse_name) AS warehouse_name, CASE WHEN COUNT(DISTINCT i.belong_base) = 1 THEN MAX(i.belong_base) END AS base FROM customer_stock AS i GROUP BY i.warehouseid), customer_execution_latest AS (SELECT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, MAX(e.load_time) AS load_time FROM agents_scm_execute_detail_d AS e INNER JOIN customer_warehouses AS w ON e.warehouseid = w.warehouse_code WHERE NULLIF(TRIM(e.executeorderno), '') IS NOT NULL AND e.executeorderlineno IS NOT NULL GROUP BY e.executeorderno, e.executeorderlineno), customer_execution AS (SELECT DISTINCT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, e.warehouseid AS warehouseid, e.cust_order_no AS cust_order_no, e.cust_code AS cust_code, e.cust_name AS cust_name, e.material_code AS material_code, e.material_name AS material_name, e.header_addtime AS header_addtime, e.requireddeliverytime AS requireddeliverytime, e.qtyordered AS qtyordered, e.qtyallocated AS qtyallocated, e.qtyshipped AS qtyshipped, e.bizunitconvertrate AS bizunitconvertrate, e.bdwctime AS bdwctime, e.prapare_order_status AS prapare_order_status, e.bizflowstatus AS bizflowstatus, e.detailstatus AS detailstatus, e.order_close_time AS order_close_time, e.wms_close_time AS wms_close_time, e.canceltime AS canceltime, e.dmscanceltime AS dmscanceltime, e.order_type AS order_type FROM agents_scm_execute_detail_d AS e INNER JOIN customer_execution_latest AS k ON e.executeorderno = k.executeorderno AND e.executeorderlineno = k.executeorderlineno AND (e.load_time = k.load_time OR (e.load_time IS NULL AND k.load_time IS NULL))), customer_execution_keys AS (SELECT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, COUNT(*) AS versions FROM customer_execution AS e GROUP BY e.executeorderno, e.executeorderlineno), customer_valid_lines AS (SELECT w.warehouse_code AS warehouse_code, w.warehouse_name AS warehouse_name, w.base AS base, e.cust_order_no AS order_no, e.cust_code AS customer_code, e.cust_name AS customer_name, e.material_code AS sku, e.material_name AS material_name, e.header_addtime AS created_at, e.requireddeliverytime AS requested_at, e.bizflowstatus AS order_status, e.qtyordered / e.bizunitconvertrate AS ordered, CASE WHEN NULLIF(TRIM(CAST(e.bdwctime AS TEXT)), '') IS NOT NULL OR e.prapare_order_status IN ('备单完成', '备单完毕') THEN e.qtyallocated / e.bizunitconvertrate ELSE e.qtyordered / e.bizunitconvertrate END AS demand, e.qtyallocated / e.bizunitconvertrate AS allocated, e.qtyshipped / e.bizunitconvertrate AS shipped, CASE WHEN e.qtyshipped < e.qtyordered THEN 1 ELSE 0 END AS unshipped FROM customer_execution AS e INNER JOIN customer_execution_keys AS k ON e.executeorderno = k.executeorderno AND e.executeorderlineno = k.executeorderlineno INNER JOIN customer_warehouses AS w ON e.warehouseid = w.warehouse_code WHERE k.versions = 1 AND e.detailstatus = 10 AND e.order_close_time IS NULL AND e.wms_close_time IS NULL AND NULLIF(TRIM(e.canceltime), '') IS NULL AND NULLIF(TRIM(CAST(e.dmscanceltime AS TEXT)), '') IS NULL AND (e.prapare_order_status IS NULL OR NOT e.prapare_order_status IN ('作废', '已签收')) AND NULLIF(TRIM(e.cust_order_no), '') IS NOT NULL AND NULLIF(TRIM(e.material_code), '') IS NOT NULL AND e.bizunitconvertrate > 0 AND e.qtyordered >= 0 AND e.qtyallocated >= 0 AND e.qtyshipped >= 0 AND (e.order_type IS NULL OR NOT e.order_type IN ('ZUB', 'ZO14', 'TT', 'TT1', 'TT2', 'STO'))), customer_open_orders AS (SELECT l.warehouse_code AS warehouse_code, l.order_no AS order_no, l.customer_code AS customer_code FROM customer_valid_lines AS l GROUP BY l.warehouse_code, l.order_no, l.customer_code HAVING MAX(l.unshipped) = 1), customer_open_lines AS (SELECT l.warehouse_code AS warehouse_code, l.warehouse_name AS warehouse_name, l.base AS base, l.order_no AS order_no, l.customer_code AS customer_code, CASE WHEN COUNT(DISTINCT l.customer_name) = 1 THEN MAX(l.customer_name) END AS customer_name, l.sku AS sku, CASE WHEN COUNT(DISTINCT l.material_name) = 1 THEN MAX(l.material_name) END AS material_name, MIN(l.created_at) AS created_at, MIN(l.requested_at) AS requested_at, CASE WHEN COUNT(DISTINCT l.order_status) = 1 THEN MAX(l.order_status) END AS order_status, SUM(l.ordered) AS ordered, SUM(l.demand) AS demand, SUM(l.allocated) AS allocated, SUM(l.shipped) AS shipped, CASE WHEN SUM(l.demand) > SUM(l.allocated) THEN SUM(l.demand) - SUM(l.allocated) ELSE 0 END AS remaining FROM customer_valid_lines AS l INNER JOIN customer_open_orders AS o ON l.warehouse_code = o.warehouse_code AND l.order_no = o.order_no AND (l.customer_code = o.customer_code OR (l.customer_code IS NULL AND o.customer_code IS NULL)) GROUP BY l.warehouse_code, l.warehouse_name, l.base, l.order_no, l.customer_code, l.sku), customer_stock_batches AS (SELECT i.warehouseid AS warehouse_code, i.sku AS sku, CASE WHEN COUNT(i.available_qty) = COUNT(*) AND (COUNT(*) = 1 OR (MIN(i.available_qty) = 0 AND MAX(i.available_qty) = 0)) THEN SUM(i.available_qty) END AS available FROM customer_stock AS i GROUP BY i.warehouseid, i.sku, i.prod_date, i.sap_warehouseid, i.plant, i.quality_batch, i.is_good_prod, i.warehouse_classify), customer_sku_stock AS (SELECT b.warehouse_code AS warehouse_code, b.sku AS sku, CASE WHEN COUNT(b.available) > 0 THEN SUM(b.available) END AS available FROM customer_stock_batches AS b GROUP BY b.warehouse_code, b.sku), customer_prior AS (SELECT l.warehouse_code AS warehouse_code, l.order_no AS order_no, l.customer_code AS customer_code, l.sku AS sku, COALESCE(SUM(p.remaining), 0) AS prior_remaining FROM customer_open_lines AS l LEFT JOIN customer_open_lines AS p ON l.warehouse_code = p.warehouse_code AND l.sku = p.sku AND p.remaining > 0 AND (COALESCE(CAST(p.created_at AS TEXT), '') < COALESCE(CAST(l.created_at AS TEXT), '') OR (COALESCE(CAST(p.created_at AS TEXT), '') = COALESCE(CAST(l.created_at AS TEXT), '') AND p.order_no < l.order_no) OR (COALESCE(CAST(p.created_at AS TEXT), '') = COALESCE(CAST(l.created_at AS TEXT), '') AND p.order_no = l.order_no AND COALESCE(p.customer_code, '') < COALESCE(l.customer_code, ''))) WHERE l.remaining > 0 GROUP BY l.warehouse_code, l.order_no, l.customer_code, l.sku), customer_current_lines AS (SELECT l.warehouse_code AS warehouse_code, l.warehouse_name AS warehouse_name, l.base AS base, l.order_no AS order_no, l.customer_code AS customer_code, l.customer_name AS customer_name, l.sku AS sku, l.material_name AS material_name, l.created_at AS created_at, l.requested_at AS requested_at, l.order_status AS order_status, l.ordered AS ordered, l.demand AS demand, l.allocated AS allocated, l.shipped AS shipped, l.remaining AS remaining, CASE WHEN l.remaining = 0 THEN 0 WHEN i.sku IS NULL OR i.available IS NOT NULL THEN CASE WHEN COALESCE(i.available, 0) <= COALESCE(p.prior_remaining, 0) THEN l.remaining WHEN i.available >= COALESCE(p.prior_remaining, 0) + l.remaining THEN 0 ELSE l.remaining - i.available + COALESCE(p.prior_remaining, 0) END END AS shortage FROM customer_open_lines AS l LEFT JOIN customer_prior AS p ON l.warehouse_code = p.warehouse_code AND l.order_no = p.order_no AND l.sku = p.sku AND (l.customer_code = p.customer_code OR (l.customer_code IS NULL AND p.customer_code IS NULL)) LEFT JOIN customer_sku_stock AS i ON l.warehouse_code = i.warehouse_code AND l.sku = i.sku) SELECT r.warehouse_code AS warehouse_code, r.warehouse_name AS warehouse_name, r.base AS base, r.order_no AS order_no, r.customer_code AS customer_code, r.customer_name AS customer_name, r.sku AS sku, r.material_name AS material_name, r.created_at AS created_at, r.requested_at AS requested_at, r.order_status AS order_status, r.ordered AS ordered, r.demand AS demand, r.allocated AS allocated, r.shipped AS shipped, r.remaining AS remaining, r.shortage AS shortage FROM customer_current_lines AS r WHERE :gea_p1 IS NULL OR r.warehouse_code = :gea_p1), order_groups AS (SELECT l.warehouse_code AS warehouse_code, MAX(l.warehouse_name) AS warehouse_name, l.order_no AS order_no, l.customer_code AS customer_code, CASE WHEN COUNT(DISTINCT l.customer_name) = 1 THEN MAX(l.customer_name) ELSE NULL END AS customer_name, MIN(l.requested_at) AS requested_at, MIN(l.created_at) AS created_at, CASE WHEN COUNT(l.ordered) = COUNT(*) THEN SUM(l.ordered) ELSE NULL END AS ordered, CASE WHEN COUNT(l.demand) = COUNT(*) THEN SUM(l.demand) ELSE NULL END AS demand, CASE WHEN COUNT(l.allocated) = COUNT(*) THEN SUM(l.allocated) ELSE NULL END AS allocated, CASE WHEN COUNT(l.shipped) = COUNT(*) THEN SUM(l.shipped) ELSE NULL END AS shipped, CASE WHEN COUNT(l.remaining) = COUNT(*) THEN SUM(l.remaining) ELSE NULL END AS remaining, CASE WHEN COUNT(l.shortage) = COUNT(*) THEN SUM(l.shortage) END AS shortage, COUNT(DISTINCT l.sku) AS sku_count, CASE WHEN COUNT(l.demand) = COUNT(*) AND COUNT(l.allocated) = COUNT(*) AND SUM(l.demand) > 0 THEN SUM(CASE WHEN l.allocated > l.demand THEN l.demand WHEN l.allocated < 0 THEN 0 ELSE l.allocated END) * 1.0 / SUM(l.demand) ELSE NULL END AS satisfaction, CASE WHEN COUNT(DISTINCT l.order_status) = 1 THEN MAX(l.order_status) ELSE NULL END AS order_status FROM open_lines AS l WHERE (:gea_p2 IS NULL OR l.customer_code = :gea_p2) GROUP BY l.warehouse_code, l.order_no, l.customer_code HAVING (:gea_p4 = FALSE OR (COUNT(l.demand) = COUNT(*) AND COUNT(l.shortage) = COUNT(*) AND SUM(l.demand) > 0 AND SUM(l.shortage) >= SUM(l.demand) * 0.2)) AND (:gea_p3 IS NULL OR MAX(CASE WHEN LOWER(l.order_no) LIKE LOWER(:gea_p3) OR LOWER(l.customer_name) LIKE LOWER(:gea_p3) OR LOWER(l.sku) LIKE LOWER(:gea_p3) OR LOWER(l.material_name) LIKE LOWER(:gea_p3) THEN 1 ELSE 0 END) = 1)), page_count AS (SELECT COUNT(*) AS page_scope_total FROM order_groups AS g), page_rows AS (SELECT g.warehouse_code AS warehouse_code, g.warehouse_name AS warehouse_name, g.order_no AS order_no, g.customer_code AS customer_code, g.customer_name AS customer_name, g.requested_at AS requested_at, g.created_at AS created_at, g.ordered AS ordered, g.demand AS demand, g.allocated AS allocated, g.shipped AS shipped, g.remaining AS remaining, g.shortage AS shortage, g.sku_count AS sku_count, g.satisfaction AS satisfaction, g.order_status AS order_status, 1 AS page_row_present FROM order_groups AS g ORDER BY g.created_at DESC, g.warehouse_code, g.order_no, g.customer_code LIMIT :gea_p5 OFFSET :gea_p6), customer_parameter_contract AS (SELECT :gea_p7 AS bind_gea_p7) SELECT p.warehouse_code AS warehouse_code, p.warehouse_name AS warehouse_name, p.order_no AS order_no, p.customer_code AS customer_code, p.customer_name AS customer_name, p.requested_at AS requested_at, p.created_at AS created_at, p.ordered AS ordered, p.demand AS demand, p.allocated AS allocated, p.shipped AS shipped, p.remaining AS remaining, p.shortage AS shortage, p.sku_count AS sku_count, p.satisfaction AS satisfaction, p.order_status AS order_status, p.page_row_present AS page_row_present, n.page_scope_total AS page_scope_total FROM page_count AS n LEFT JOIN page_rows AS p ON TRUE ORDER BY p.created_at DESC, p.warehouse_code, p.order_no, p.customer_code",
+        "sql": "WITH open_lines AS (WITH customer_stock_date AS (SELECT MAX(i.month_date) AS month_date FROM agents_scm_inventory_sku_data_d AS i WHERE i.warehouse_classify IN ('01', '02', '20')), customer_stock AS (SELECT i.warehouseid AS warehouseid, i.warehouse_name AS warehouse_name, i.belong_base AS belong_base, i.material_code AS sku, i.available_qty AS available_qty, i.prod_date AS prod_date, i.sap_warehouseid AS sap_warehouseid, i.plant AS plant, i.quality_batch AS quality_batch, i.is_good_prod AS is_good_prod, i.warehouse_classify AS warehouse_classify FROM agents_scm_inventory_sku_data_d AS i INNER JOIN customer_stock_date AS s ON i.month_date = s.month_date WHERE i.warehouse_classify = '20' OR i.warehouseid = 'N436'), customer_warehouses AS (SELECT i.warehouseid AS warehouse_code, MAX(i.warehouse_name) AS warehouse_name, CASE WHEN COUNT(DISTINCT i.belong_base) = 1 THEN MAX(i.belong_base) END AS base FROM customer_stock AS i GROUP BY i.warehouseid), customer_execution_latest AS (SELECT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, MAX(e.load_time) AS load_time FROM agents_scm_execute_detail_d AS e INNER JOIN customer_warehouses AS w ON e.warehouseid = w.warehouse_code WHERE NULLIF(TRIM(e.executeorderno), '') IS NOT NULL AND e.executeorderlineno IS NOT NULL GROUP BY e.executeorderno, e.executeorderlineno), customer_execution AS (SELECT DISTINCT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, e.warehouseid AS warehouseid, e.cust_order_no AS cust_order_no, e.cust_code AS cust_code, e.cust_name AS cust_name, e.material_code AS material_code, e.material_name AS material_name, e.header_addtime AS header_addtime, e.requireddeliverytime AS requireddeliverytime, e.qtyordered AS qtyordered, e.qtyallocated AS qtyallocated, e.qtyshipped AS qtyshipped, e.bizunitconvertrate AS bizunitconvertrate, e.bdwctime AS bdwctime, e.prapare_order_status AS prapare_order_status, e.bizflowstatus AS bizflowstatus, e.detailstatus AS detailstatus, e.order_close_time AS order_close_time, e.wms_close_time AS wms_close_time, e.canceltime AS canceltime, e.dmscanceltime AS dmscanceltime, e.order_type AS order_type FROM agents_scm_execute_detail_d AS e INNER JOIN customer_execution_latest AS k ON e.executeorderno = k.executeorderno AND e.executeorderlineno = k.executeorderlineno AND (e.load_time = k.load_time OR (e.load_time IS NULL AND k.load_time IS NULL))), customer_execution_keys AS (SELECT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, COUNT(*) AS versions FROM customer_execution AS e GROUP BY e.executeorderno, e.executeorderlineno), customer_valid_lines AS (SELECT w.warehouse_code AS warehouse_code, w.warehouse_name AS warehouse_name, w.base AS base, e.cust_order_no AS order_no, e.cust_code AS customer_code, e.cust_name AS customer_name, e.material_code AS sku, e.material_name AS material_name, e.header_addtime AS created_at, e.requireddeliverytime AS requested_at, e.bizflowstatus AS order_status, e.qtyordered / e.bizunitconvertrate AS ordered, CASE WHEN NULLIF(TRIM(CAST(e.bdwctime AS TEXT)), '') IS NOT NULL OR e.prapare_order_status IN ('备单完成', '备单完毕') THEN e.qtyallocated / e.bizunitconvertrate ELSE e.qtyordered / e.bizunitconvertrate END AS demand, e.qtyallocated / e.bizunitconvertrate AS allocated, e.qtyshipped / e.bizunitconvertrate AS shipped, CASE WHEN e.qtyshipped < e.qtyordered THEN 1 ELSE 0 END AS unshipped FROM customer_execution AS e INNER JOIN customer_execution_keys AS k ON e.executeorderno = k.executeorderno AND e.executeorderlineno = k.executeorderlineno INNER JOIN customer_warehouses AS w ON e.warehouseid = w.warehouse_code WHERE k.versions = 1 AND e.detailstatus = 10 AND e.order_close_time IS NULL AND e.wms_close_time IS NULL AND NULLIF(TRIM(e.canceltime), '') IS NULL AND NULLIF(TRIM(CAST(e.dmscanceltime AS TEXT)), '') IS NULL AND (e.prapare_order_status IS NULL OR NOT e.prapare_order_status IN ('作废', '已签收')) AND NULLIF(TRIM(e.cust_order_no), '') IS NOT NULL AND NULLIF(TRIM(e.material_code), '') IS NOT NULL AND e.bizunitconvertrate > 0 AND e.qtyordered >= 0 AND e.qtyallocated >= 0 AND e.qtyshipped >= 0 AND (e.order_type IS NULL OR NOT e.order_type IN ('ZUB', 'ZO14', 'TT', 'TT1', 'TT2', 'STO'))), customer_open_orders AS (SELECT l.warehouse_code AS warehouse_code, l.order_no AS order_no, l.customer_code AS customer_code FROM customer_valid_lines AS l GROUP BY l.warehouse_code, l.order_no, l.customer_code HAVING MAX(l.unshipped) = 1), customer_open_lines AS (SELECT l.warehouse_code AS warehouse_code, l.warehouse_name AS warehouse_name, l.base AS base, l.order_no AS order_no, l.customer_code AS customer_code, CASE WHEN COUNT(DISTINCT l.customer_name) = 1 THEN MAX(l.customer_name) END AS customer_name, l.sku AS sku, CASE WHEN COUNT(DISTINCT l.material_name) = 1 THEN MAX(l.material_name) END AS material_name, MIN(l.created_at) AS created_at, MIN(l.requested_at) AS requested_at, CASE WHEN COUNT(DISTINCT l.order_status) = 1 THEN MAX(l.order_status) END AS order_status, SUM(l.ordered) AS ordered, SUM(l.demand) AS demand, SUM(l.allocated) AS allocated, SUM(l.shipped) AS shipped, CASE WHEN SUM(l.demand) > SUM(l.allocated) THEN SUM(l.demand) - SUM(l.allocated) ELSE 0 END AS remaining FROM customer_valid_lines AS l INNER JOIN customer_open_orders AS o ON l.warehouse_code = o.warehouse_code AND l.order_no = o.order_no AND (l.customer_code = o.customer_code OR (l.customer_code IS NULL AND o.customer_code IS NULL)) GROUP BY l.warehouse_code, l.warehouse_name, l.base, l.order_no, l.customer_code, l.sku), customer_stock_batches AS (SELECT i.warehouseid AS warehouse_code, i.sku AS sku, CASE WHEN COUNT(i.available_qty) = COUNT(*) AND (COUNT(*) = 1 OR (MIN(i.available_qty) = 0 AND MAX(i.available_qty) = 0)) THEN SUM(i.available_qty) END AS available FROM customer_stock AS i GROUP BY i.warehouseid, i.sku, i.prod_date, i.sap_warehouseid, i.plant, i.quality_batch, i.is_good_prod, i.warehouse_classify), customer_sku_stock AS (SELECT b.warehouse_code AS warehouse_code, b.sku AS sku, CASE WHEN COUNT(b.available) > 0 THEN SUM(b.available) END AS available FROM customer_stock_batches AS b GROUP BY b.warehouse_code, b.sku), customer_prior AS (SELECT l.warehouse_code AS warehouse_code, l.order_no AS order_no, l.customer_code AS customer_code, l.sku AS sku, COALESCE(SUM(p.remaining), 0) AS prior_remaining FROM customer_open_lines AS l LEFT JOIN customer_open_lines AS p ON l.warehouse_code = p.warehouse_code AND l.sku = p.sku AND p.remaining > 0 AND (COALESCE(CAST(p.created_at AS TEXT), '') < COALESCE(CAST(l.created_at AS TEXT), '') OR (COALESCE(CAST(p.created_at AS TEXT), '') = COALESCE(CAST(l.created_at AS TEXT), '') AND p.order_no < l.order_no) OR (COALESCE(CAST(p.created_at AS TEXT), '') = COALESCE(CAST(l.created_at AS TEXT), '') AND p.order_no = l.order_no AND COALESCE(p.customer_code, '') < COALESCE(l.customer_code, ''))) WHERE l.remaining > 0 GROUP BY l.warehouse_code, l.order_no, l.customer_code, l.sku), customer_current_lines AS (SELECT l.warehouse_code AS warehouse_code, l.warehouse_name AS warehouse_name, l.base AS base, l.order_no AS order_no, l.customer_code AS customer_code, l.customer_name AS customer_name, l.sku AS sku, l.material_name AS material_name, l.created_at AS created_at, l.requested_at AS requested_at, l.order_status AS order_status, l.ordered AS ordered, l.demand AS demand, l.allocated AS allocated, l.shipped AS shipped, l.remaining AS remaining, CASE WHEN l.remaining = 0 THEN 0 WHEN i.sku IS NULL OR i.available IS NOT NULL THEN CASE WHEN COALESCE(i.available, 0) <= COALESCE(p.prior_remaining, 0) THEN l.remaining WHEN i.available >= COALESCE(p.prior_remaining, 0) + l.remaining THEN 0 ELSE l.remaining - i.available + COALESCE(p.prior_remaining, 0) END END AS shortage FROM customer_open_lines AS l LEFT JOIN customer_prior AS p ON l.warehouse_code = p.warehouse_code AND l.order_no = p.order_no AND l.sku = p.sku AND (l.customer_code = p.customer_code OR (l.customer_code IS NULL AND p.customer_code IS NULL)) LEFT JOIN customer_sku_stock AS i ON l.warehouse_code = i.warehouse_code AND l.sku = i.sku) SELECT r.warehouse_code AS warehouse_code, r.warehouse_name AS warehouse_name, r.base AS base, r.order_no AS order_no, r.customer_code AS customer_code, r.customer_name AS customer_name, r.sku AS sku, r.material_name AS material_name, r.created_at AS created_at, r.requested_at AS requested_at, r.order_status AS order_status, r.ordered AS ordered, r.demand AS demand, r.allocated AS allocated, r.shipped AS shipped, r.remaining AS remaining, r.shortage AS shortage FROM customer_current_lines AS r WHERE :gea_p1 IS NULL OR r.warehouse_code = :gea_p1), order_groups AS (SELECT l.warehouse_code AS warehouse_code, MAX(l.warehouse_name) AS warehouse_name, l.order_no AS order_no, l.customer_code AS customer_code, CASE WHEN COUNT(DISTINCT l.customer_name) = 1 THEN MAX(l.customer_name) ELSE NULL END AS customer_name, MIN(l.requested_at) AS requested_at, MIN(l.created_at) AS created_at, CASE WHEN COUNT(l.ordered) = COUNT(*) THEN SUM(l.ordered) ELSE NULL END AS ordered, CASE WHEN COUNT(l.demand) = COUNT(*) THEN SUM(l.demand) ELSE NULL END AS demand, CASE WHEN COUNT(l.allocated) = COUNT(*) THEN SUM(l.allocated) ELSE NULL END AS allocated, CASE WHEN COUNT(l.shipped) = COUNT(*) THEN SUM(l.shipped) ELSE NULL END AS shipped, CASE WHEN COUNT(l.remaining) = COUNT(*) THEN SUM(l.remaining) ELSE NULL END AS remaining, SUM(l.shortage) AS shortage, COUNT(DISTINCT l.sku) AS sku_count, CASE WHEN COUNT(l.demand) = COUNT(*) AND COUNT(l.allocated) = COUNT(*) AND SUM(l.demand) > 0 THEN SUM(CASE WHEN l.allocated > l.demand THEN l.demand WHEN l.allocated < 0 THEN 0 ELSE l.allocated END) * 1.0 / SUM(l.demand) ELSE NULL END AS satisfaction, CASE WHEN COUNT(DISTINCT l.order_status) = 1 THEN MAX(l.order_status) ELSE NULL END AS order_status FROM open_lines AS l WHERE (:gea_p2 IS NULL OR l.customer_code = :gea_p2) AND (:gea_p7 IS NULL OR LOWER(l.warehouse_code) LIKE LOWER(:gea_p7) OR LOWER(l.warehouse_name) LIKE LOWER(:gea_p7)) GROUP BY l.warehouse_code, l.order_no, l.customer_code HAVING (:gea_p4 = FALSE OR (SUM(l.shortage) > 0)) AND (:gea_p3 IS NULL OR MAX(CASE WHEN LOWER(l.order_no) LIKE LOWER(:gea_p3) OR LOWER(l.customer_name) LIKE LOWER(:gea_p3) OR LOWER(l.sku) LIKE LOWER(:gea_p3) OR LOWER(l.material_name) LIKE LOWER(:gea_p3) THEN 1 ELSE 0 END) = 1)), page_count AS (SELECT COUNT(*) AS page_scope_total FROM order_groups AS g), page_rows AS (SELECT g.warehouse_code AS warehouse_code, g.warehouse_name AS warehouse_name, g.order_no AS order_no, g.customer_code AS customer_code, g.customer_name AS customer_name, g.requested_at AS requested_at, g.created_at AS created_at, g.ordered AS ordered, g.demand AS demand, g.allocated AS allocated, g.shipped AS shipped, g.remaining AS remaining, g.shortage AS shortage, g.sku_count AS sku_count, g.satisfaction AS satisfaction, g.order_status AS order_status, 1 AS page_row_present FROM order_groups AS g ORDER BY g.created_at DESC, g.warehouse_code, g.order_no, g.customer_code LIMIT :gea_p5 OFFSET :gea_p6), customer_parameter_contract AS (SELECT :gea_p7 AS bind_gea_p7) SELECT p.warehouse_code AS warehouse_code, p.warehouse_name AS warehouse_name, p.order_no AS order_no, p.customer_code AS customer_code, p.customer_name AS customer_name, p.requested_at AS requested_at, p.created_at AS created_at, p.ordered AS ordered, p.demand AS demand, p.allocated AS allocated, p.shipped AS shipped, p.remaining AS remaining, p.shortage AS shortage, p.sku_count AS sku_count, p.satisfaction AS satisfaction, p.order_status AS order_status, p.page_row_present AS page_row_present, n.page_scope_total AS page_scope_total FROM page_count AS n LEFT JOIN page_rows AS p ON TRUE ORDER BY p.created_at DESC, p.warehouse_code, p.order_no, p.customer_code",
         "parameters": {
           "gea_p1": null,
           "gea_p2": null,
@@ -19929,7 +19937,7 @@
     "branch-current-orders.lines": {
       "title": "分仓订单SKU明细",
       "grain": "warehouse + customer order + SKU",
-      "notes": "分仓下游经销商订单；按有效执行行归属实际发货仓。缺口按仓库SKU共享库存分配一次，不使用ASN。",
+      "notes": "分仓下游客户订单；按有效执行行归属实际发货仓。缺口按仓库SKU共享库存分配一次，不使用ASN。",
       "parameterSpec": {
         "gea_p1": {
           "name": "warehouse_code",
@@ -21758,7 +21766,8 @@
       "summaryRoute": {
         "queryId": "snapshot.replenishment.overview",
         "kind": "branch-period",
-        "defaultQueryId": "snapshot-default.replenishment.overview"
+        "defaultQueryId": "snapshot-default.replenishment.overview",
+        "required": true
       }
     },
     "current-shortage.overview": {
@@ -21812,7 +21821,7 @@
         "known_shortage_count",
         "replenishment_shortage_sku_count"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.overview",
         "kind": "current"
@@ -21853,7 +21862,7 @@
         "includeTotal": false
       },
       "resultColumns": ["total"],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.locations.count",
         "kind": "current"
@@ -21894,7 +21903,7 @@
         "includeTotal": false
       },
       "resultColumns": ["total"],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.categories.count",
         "kind": "current"
@@ -21942,7 +21951,7 @@
         "includeTotal": false
       },
       "resultColumns": ["total"],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.skus.count",
         "kind": "current"
@@ -27600,7 +27609,7 @@
         "known_shortage",
         "known_shortage_count"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
     },
     "snapshot.current-shortage.locations": {
       "title": "当前未备单订单三层缺货",
@@ -27672,7 +27681,7 @@
         "page_row_present",
         "page_scope_total"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "pagination": {
         "countQuery": "snapshot.current-shortage.locations.count",
         "atomicQuery": "snapshot.current-shortage.locations",
@@ -27754,7 +27763,7 @@
         "page_row_present",
         "page_scope_total"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "pagination": {
         "countQuery": "snapshot.current-shortage.categories.count",
         "atomicQuery": "snapshot.current-shortage.categories",
@@ -27835,7 +27844,7 @@
         "page_scope_total",
         "page_row_present"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
     },
     "snapshot.current-shortage.skus": {
       "title": "当前未备单订单三层缺货",
@@ -27912,7 +27921,7 @@
         "page_row_present",
         "page_scope_total"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。",
       "pagination": {
         "countQuery": "snapshot.current-shortage.skus.count",
         "atomicQuery": "snapshot.current-shortage.skus",
@@ -30814,7 +30823,7 @@
     "snapshot.branch-current-orders.page": {
       "title": "分仓当前未发货完成订单",
       "grain": "warehouse + customer order",
-      "notes": "分仓下游经销商订单；按有效执行行归属实际发货仓。缺口按仓库SKU共享库存分配一次，不使用ASN。",
+      "notes": "分仓下游客户订单；按有效执行行归属实际发货仓。缺口按仓库SKU共享库存分配一次，不使用ASN。",
       "parameterSpec": {
         "gea_p1": {
           "name": "warehouse_code",
@@ -30869,7 +30878,7 @@
         }
       },
       "request": {
-        "sql": "WITH open_lines AS (SELECT m.warehouseid AS warehouse_code, m.location_name AS warehouse_name, m.belong_base AS base, m.order_no AS order_no, m.customer_code AS customer_code, m.customer_name AS customer_name, m.sku AS sku, m.material_name AS material_name, m.created_at AS created_at, m.order_date AS requested_at, m.order_status AS order_status, m.current_ordered AS ordered, m.current_demand AS demand, m.current_allocated AS allocated, m.current_shipped AS shipped, m.current_remaining AS remaining, m.current_shortage AS shortage FROM agents_inv_order_summary_day AS m WHERE (m.inv_batch_id = :gea_p90001 AND m.inv_variant_id = 'BRANCH_CUSTOMER_LINES') AND (:gea_p1 IS NULL OR m.warehouseid = :gea_p1)), order_groups AS (SELECT l.warehouse_code AS warehouse_code, MAX(l.warehouse_name) AS warehouse_name, l.order_no AS order_no, l.customer_code AS customer_code, CASE WHEN COUNT(DISTINCT l.customer_name) = 1 THEN MAX(l.customer_name) ELSE NULL END AS customer_name, MIN(l.requested_at) AS requested_at, MIN(l.created_at) AS created_at, CASE WHEN COUNT(l.ordered) = COUNT(*) THEN SUM(l.ordered) ELSE NULL END AS ordered, CASE WHEN COUNT(l.demand) = COUNT(*) THEN SUM(l.demand) ELSE NULL END AS demand, CASE WHEN COUNT(l.allocated) = COUNT(*) THEN SUM(l.allocated) ELSE NULL END AS allocated, CASE WHEN COUNT(l.shipped) = COUNT(*) THEN SUM(l.shipped) ELSE NULL END AS shipped, CASE WHEN COUNT(l.remaining) = COUNT(*) THEN SUM(l.remaining) ELSE NULL END AS remaining, CASE WHEN COUNT(l.shortage) = COUNT(*) THEN SUM(l.shortage) END AS shortage, COUNT(DISTINCT l.sku) AS sku_count, CASE WHEN COUNT(l.demand) = COUNT(*) AND COUNT(l.allocated) = COUNT(*) AND SUM(l.demand) > 0 THEN SUM(CASE WHEN l.allocated > l.demand THEN l.demand WHEN l.allocated < 0 THEN 0 ELSE l.allocated END) * 1.0 / SUM(l.demand) ELSE NULL END AS satisfaction, CASE WHEN COUNT(DISTINCT l.order_status) = 1 THEN MAX(l.order_status) ELSE NULL END AS order_status FROM open_lines AS l WHERE (:gea_p2 IS NULL OR l.customer_code = :gea_p2) GROUP BY l.warehouse_code, l.order_no, l.customer_code HAVING (:gea_p4 = FALSE OR (COUNT(l.demand) = COUNT(*) AND COUNT(l.shortage) = COUNT(*) AND SUM(l.demand) > 0 AND SUM(l.shortage) >= SUM(l.demand) * 0.2)) AND (:gea_p3 IS NULL OR MAX(CASE WHEN LOWER(l.order_no) LIKE LOWER(:gea_p3) OR LOWER(l.customer_name) LIKE LOWER(:gea_p3) OR LOWER(l.sku) LIKE LOWER(:gea_p3) OR LOWER(l.material_name) LIKE LOWER(:gea_p3) THEN 1 ELSE 0 END) = 1)), page_count AS (SELECT COUNT(*) AS page_scope_total FROM order_groups AS g), page_rows AS (SELECT g.warehouse_code AS warehouse_code, g.warehouse_name AS warehouse_name, g.order_no AS order_no, g.customer_code AS customer_code, g.customer_name AS customer_name, g.requested_at AS requested_at, g.created_at AS created_at, g.ordered AS ordered, g.demand AS demand, g.allocated AS allocated, g.shipped AS shipped, g.remaining AS remaining, g.shortage AS shortage, g.sku_count AS sku_count, g.satisfaction AS satisfaction, g.order_status AS order_status, 1 AS page_row_present FROM order_groups AS g ORDER BY g.created_at DESC, g.warehouse_code, g.order_no, g.customer_code LIMIT :gea_p5 OFFSET :gea_p6), customer_parameter_contract AS (SELECT :gea_p1 AS bind_gea_p1, :gea_p7 AS bind_gea_p7) SELECT p.warehouse_code AS warehouse_code, p.warehouse_name AS warehouse_name, p.order_no AS order_no, p.customer_code AS customer_code, p.customer_name AS customer_name, p.requested_at AS requested_at, p.created_at AS created_at, p.ordered AS ordered, p.demand AS demand, p.allocated AS allocated, p.shipped AS shipped, p.remaining AS remaining, p.shortage AS shortage, p.sku_count AS sku_count, p.satisfaction AS satisfaction, p.order_status AS order_status, p.page_row_present AS page_row_present, n.page_scope_total AS page_scope_total FROM page_count AS n LEFT JOIN page_rows AS p ON TRUE ORDER BY p.created_at DESC, p.warehouse_code, p.order_no, p.customer_code",
+        "sql": "WITH open_lines AS (SELECT m.warehouseid AS warehouse_code, m.location_name AS warehouse_name, m.belong_base AS base, m.order_no AS order_no, m.customer_code AS customer_code, m.customer_name AS customer_name, m.sku AS sku, m.material_name AS material_name, m.created_at AS created_at, m.order_date AS requested_at, m.order_status AS order_status, m.current_ordered AS ordered, m.current_demand AS demand, m.current_allocated AS allocated, m.current_shipped AS shipped, m.current_remaining AS remaining, m.current_shortage AS shortage FROM agents_inv_order_summary_day AS m WHERE (m.inv_batch_id = :gea_p90001 AND m.inv_variant_id = 'BRANCH_CUSTOMER_LINES') AND (:gea_p1 IS NULL OR m.warehouseid = :gea_p1)), order_groups AS (SELECT l.warehouse_code AS warehouse_code, MAX(l.warehouse_name) AS warehouse_name, l.order_no AS order_no, l.customer_code AS customer_code, CASE WHEN COUNT(DISTINCT l.customer_name) = 1 THEN MAX(l.customer_name) ELSE NULL END AS customer_name, MIN(l.requested_at) AS requested_at, MIN(l.created_at) AS created_at, CASE WHEN COUNT(l.ordered) = COUNT(*) THEN SUM(l.ordered) ELSE NULL END AS ordered, CASE WHEN COUNT(l.demand) = COUNT(*) THEN SUM(l.demand) ELSE NULL END AS demand, CASE WHEN COUNT(l.allocated) = COUNT(*) THEN SUM(l.allocated) ELSE NULL END AS allocated, CASE WHEN COUNT(l.shipped) = COUNT(*) THEN SUM(l.shipped) ELSE NULL END AS shipped, CASE WHEN COUNT(l.remaining) = COUNT(*) THEN SUM(l.remaining) ELSE NULL END AS remaining, SUM(l.shortage) AS shortage, COUNT(DISTINCT l.sku) AS sku_count, CASE WHEN COUNT(l.demand) = COUNT(*) AND COUNT(l.allocated) = COUNT(*) AND SUM(l.demand) > 0 THEN SUM(CASE WHEN l.allocated > l.demand THEN l.demand WHEN l.allocated < 0 THEN 0 ELSE l.allocated END) * 1.0 / SUM(l.demand) ELSE NULL END AS satisfaction, CASE WHEN COUNT(DISTINCT l.order_status) = 1 THEN MAX(l.order_status) ELSE NULL END AS order_status FROM open_lines AS l WHERE (:gea_p2 IS NULL OR l.customer_code = :gea_p2) AND (:gea_p7 IS NULL OR LOWER(l.warehouse_code) LIKE LOWER(:gea_p7) OR LOWER(l.warehouse_name) LIKE LOWER(:gea_p7)) GROUP BY l.warehouse_code, l.order_no, l.customer_code HAVING (:gea_p4 = FALSE OR (SUM(l.shortage) > 0)) AND (:gea_p3 IS NULL OR MAX(CASE WHEN LOWER(l.order_no) LIKE LOWER(:gea_p3) OR LOWER(l.customer_name) LIKE LOWER(:gea_p3) OR LOWER(l.sku) LIKE LOWER(:gea_p3) OR LOWER(l.material_name) LIKE LOWER(:gea_p3) THEN 1 ELSE 0 END) = 1)), page_count AS (SELECT COUNT(*) AS page_scope_total FROM order_groups AS g), page_rows AS (SELECT g.warehouse_code AS warehouse_code, g.warehouse_name AS warehouse_name, g.order_no AS order_no, g.customer_code AS customer_code, g.customer_name AS customer_name, g.requested_at AS requested_at, g.created_at AS created_at, g.ordered AS ordered, g.demand AS demand, g.allocated AS allocated, g.shipped AS shipped, g.remaining AS remaining, g.shortage AS shortage, g.sku_count AS sku_count, g.satisfaction AS satisfaction, g.order_status AS order_status, 1 AS page_row_present FROM order_groups AS g ORDER BY g.created_at DESC, g.warehouse_code, g.order_no, g.customer_code LIMIT :gea_p5 OFFSET :gea_p6), customer_parameter_contract AS (SELECT :gea_p1 AS bind_gea_p1, :gea_p7 AS bind_gea_p7) SELECT p.warehouse_code AS warehouse_code, p.warehouse_name AS warehouse_name, p.order_no AS order_no, p.customer_code AS customer_code, p.customer_name AS customer_name, p.requested_at AS requested_at, p.created_at AS created_at, p.ordered AS ordered, p.demand AS demand, p.allocated AS allocated, p.shipped AS shipped, p.remaining AS remaining, p.shortage AS shortage, p.sku_count AS sku_count, p.satisfaction AS satisfaction, p.order_status AS order_status, p.page_row_present AS page_row_present, n.page_scope_total AS page_scope_total FROM page_count AS n LEFT JOIN page_rows AS p ON TRUE ORDER BY p.created_at DESC, p.warehouse_code, p.order_no, p.customer_code",
         "parameters": {
           "gea_p1": null,
           "gea_p2": null,
@@ -30906,7 +30915,7 @@
     "snapshot.branch-current-orders.lines": {
       "title": "分仓订单SKU明细",
       "grain": "warehouse + customer order + SKU",
-      "notes": "分仓下游经销商订单；按有效执行行归属实际发货仓。缺口按仓库SKU共享库存分配一次，不使用ASN。",
+      "notes": "分仓下游客户订单；按有效执行行归属实际发货仓。缺口按仓库SKU共享库存分配一次，不使用ASN。",
       "parameterSpec": {
         "gea_p1": {
           "name": "warehouse_code",
@@ -31232,7 +31241,7 @@
         "known_shortage_count",
         "replenishment_shortage_sku_count"
       ],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
     },
     "snapshot.current-shortage.locations.count": {
       "title": "当前未备单订单三层缺货",
@@ -31276,7 +31285,7 @@
         "includeTotal": false
       },
       "resultColumns": ["total"],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
     },
     "snapshot.current-shortage.categories.count": {
       "title": "当前未备单订单三层缺货",
@@ -31320,7 +31329,7 @@
         "includeTotal": false
       },
       "resultColumns": ["total"],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
     },
     "snapshot.current-shortage.skus.count": {
       "title": "当前未备单订单三层缺货",
@@ -31371,7 +31380,7 @@
         "includeTotal": false
       },
       "resultColumns": ["total"],
-      "notes": "分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
+      "notes": "分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。"
     },
     "snapshot.source.stock-date": {
       "title": "所选月份内最新库存业务日",
@@ -38875,7 +38884,8 @@
       "summaryRoute": {
         "queryId": "snapshot.replenishment.detail",
         "kind": "branch-period",
-        "defaultQueryId": "snapshot-default.replenishment.detail"
+        "defaultQueryId": "snapshot-default.replenishment.detail",
+        "required": true
       }
     },
     "replenishment-confirmation.detail.atomic": {
@@ -39751,7 +39761,8 @@
           "list_mode": "all",
           "sort_field": "key",
           "sort_direction": "asc"
-        }
+        },
+        "required": true
       }
     },
     "snapshot.orders.detail": {
@@ -46836,7 +46847,7 @@
         "id": "replenishment",
         "title": "补货建议",
         "queryId": "replenishment.detail",
-        "description": "沿gea-agent-fc净需求口径：计划日均向上取整，订单未占用需求扣净后计算目标缺口，再扣调拨中量。未知输入不按0；人工计划按分仓月份整包覆盖。 订单相关显示只取分仓向基地的有效未发货调拨订单；缺货按基地与SKU共享可用库存并依下单时间先后分配。上游订单剩余需求不再作为分仓出库需求扣减分仓可用库存。",
+        "description": "按客户订单需求、分仓可用库存、计划及调拨中量计算补货。",
         "columns": [
           {
             "field": "warehouse_code",
@@ -46869,14 +46880,14 @@
             "label": "客户订单需求",
             "valueField": "current_order_demand",
             "format": "decimal2",
-            "reason": "分仓向基地下单的ASN有效未收货需求，按收货分仓与SKU汇总；不把经销商订单或已收货数量计入当前需求。"
+            "reason": "当前未完成客户订单需求。"
           },
           {
             "field": "missing_shortageQty",
             "label": "缺货量",
             "valueField": "current_order_shortage",
             "format": "decimal2",
-            "reason": "分仓向基地的调拨订单先在订单与SKU层减基地已占用量并截零，再依订单创建时间先后分配基地与SKU共享可用库存；卡片、明细、筛选及导出使用同一结果。"
+            "reason": "客户订单未占用需求扣减分仓可用库存后的缺口。"
           },
           {
             "field": "historical_turnover_days",
@@ -47488,7 +47499,7 @@
         "id": "orders",
         "title": "订单执行",
         "queryId": "orders.detail",
-        "description": "分仓发往下游经销商的订单；满足率仅计算已发货订单池。",
+        "description": "分仓发往下游客户的订单；满足率仅计算已发货订单池。",
         "columns": [
           {
             "field": "from_order",
@@ -49487,7 +49498,7 @@
         "id": "replenishment-confirmation",
         "title": "补货确认读取",
         "queryId": "replenishment-confirmation.detail",
-        "description": "沿gea-agent-fc净需求口径：计划日均向上取整，订单未占用需求扣净后计算目标缺口，再扣调拨中量。未知输入不按0；人工计划按分仓月份整包覆盖。 订单相关显示只取分仓向基地的有效未发货调拨订单；缺货按基地与SKU共享可用库存并依下单时间先后分配。上游订单剩余需求不再作为分仓出库需求扣减分仓可用库存。",
+        "description": "按客户订单需求、分仓可用库存、计划及调拨中量计算补货。",
         "columns": [
           {
             "field": "warehouse_code",
@@ -49520,14 +49531,14 @@
             "label": "客户订单需求",
             "valueField": "current_order_demand",
             "format": "decimal2",
-            "reason": "分仓向基地下单的ASN有效未收货需求，按收货分仓与SKU汇总；不把经销商订单或已收货数量计入当前需求。"
+            "reason": "当前未完成客户订单需求。"
           },
           {
             "field": "missing_shortageQty",
             "label": "缺货量",
             "valueField": "current_order_shortage",
             "format": "decimal2",
-            "reason": "分仓向基地的调拨订单先在订单与SKU层减基地已占用量并截零，再依订单创建时间先后分配基地与SKU共享可用库存；卡片、明细、筛选及导出使用同一结果。"
+            "reason": "客户订单未占用需求扣减分仓可用库存后的缺口。"
           },
           {
             "field": "historical_turnover_days",
@@ -50550,9 +50561,9 @@
     "preparationDays": 3,
     "source": "原分仓BRANCH_RULESET固化规则",
     "transferQuantityUnit": "件",
-    "transferUnitBasis": "用户确认基地、分仓及提货点库存和调拨数量按件；源值不换算",
+    "transferUnitBasis": "基地、分仓及提货点库存和调拨数量按件；源值不换算",
     "fallbackDemandBasis": "历史动销仅用于回顾周转；本月计划未知时补货建议待核实",
-    "orderScope": "ASN_TO_BASE_EXECUTION_FIFO_20261030"
+    "orderScope": "DOWNSTREAM_CUSTOMER_EXECUTION_FIFO_20261103"
   },
   "dailySummary": {
     "snapshotQueryId": "summary.snapshot",

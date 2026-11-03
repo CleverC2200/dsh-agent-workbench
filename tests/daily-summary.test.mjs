@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 const out = await build({
   stdin: {
     contents:
-      "export * from './business/shared/daily-summary.ts'; export * from './business/shared/agent-query.ts';",
+      "export * from './business/shared/daily-summary.ts'; export * from './business/shared/agent-query.ts'; export {refreshConfiguredQueries} from './business/shared/query-cache.ts';",
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -13,7 +13,12 @@ const out = await build({
   format: 'esm',
   platform: 'node',
 });
-const { dailySummaryQuery, parseDailySummarySnapshot, createAgentQueries } = await import(
+const {
+  dailySummaryQuery,
+  parseDailySummarySnapshot,
+  createAgentQueries,
+  refreshConfiguredQueries,
+} = await import(
   'data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64')
 );
 const row = {
@@ -387,4 +392,109 @@ test('confirmation fast path preserves custom cycles and unsupported filter/sort
   );
   for (const change of [{ business_only: true }, { sort_field: 'sku' }, { list_mode: 'urgent' }])
     assert.equal(dailySummaryQuery(query, snapshot, { ...values, ...change }), null);
+});
+
+test('required summary never substitutes live detail when the daily batch is missing or uncovered', async () => {
+  for (const metadata of [[], [row]]) {
+    const cfg = config();
+    cfg.queries.fact.summaryRoute = {
+      queryId: 'snapshot.fact',
+      kind: 'branch-period',
+      required: true,
+    };
+    const calls = [];
+    const execute = async (_, options) => {
+      calls.push(options.queryId);
+      return { rows: options.queryId === 'summary.snapshot' ? metadata : [{ value: 999 }] };
+    };
+    await assert.rejects(createAgentQueries(cfg, execute).read('fact', { month: '2026-12-01' }), {
+      code: metadata.length ? 'SUMMARY_SCOPE_NOT_COVERED' : 'SUMMARY_NOT_AVAILABLE',
+    });
+    assert.deepEqual(calls, ['summary.snapshot']);
+  }
+});
+
+test('cards and later lists retain the same daily batch beyond cache TTL until explicit refresh', async (t) => {
+  const now = Date.now();
+  let clock = now;
+  t.mock.method(Date, 'now', () => clock);
+  let batch = row.batch_id;
+  const execute = async (request, options) => ({
+    rows:
+      options.queryId === 'summary.snapshot'
+        ? [{ ...row, batch_id: batch }]
+        : [{ value: request.parameters.gea_p1 }],
+  });
+  const cfg = config();
+  const card = await createAgentQueries(cfg, execute).read('fact', {});
+  clock += 21 * 60 * 1000;
+  batch = '20261102190000000000';
+  const list = await createAgentQueries(cfg, execute).read('fact', {});
+  assert.deepEqual(list.rows, card.rows);
+  const refreshed = await createAgentQueries(cfg, execute, { freshAfter: clock }).read('fact', {});
+  assert.equal(refreshed.rows[0].value, batch);
+});
+
+test('separate authorized users and cold entries calculate the same fixed batch without sharing rows', async () => {
+  const cfg = config();
+  const values = [];
+  for (let principal = 0; principal < 3; principal++) {
+    const calls = [];
+    const execute = async (request, options) => {
+      calls.push(options.queryId);
+      return {
+        rows:
+          options.queryId === 'summary.snapshot' ? [row] : [{ value: request.parameters.gea_p1 }],
+      };
+    };
+    values.push((await createAgentQueries(cfg, execute).read('fact', {})).rows);
+    assert.deepEqual(calls, ['summary.snapshot', 'snapshot.fact']);
+  }
+  assert.deepEqual(values[0], values[1]);
+  assert.deepEqual(values[1], values[2]);
+});
+
+test('every FC replenishment entry and its stock date require the validated daily batch', async () => {
+  const cfg = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+  const names = Object.keys(cfg.queries).filter(
+    (id) => id.startsWith('replenishment') || id === 'source.branch-stock-date',
+  );
+  assert.ok(names.length >= 11);
+  for (const id of names) assert.equal(cfg.queries[id].summaryRoute?.required, true, id);
+});
+
+test('an in-flight reader keeps its refresh cohort while a new reader advances', async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  let batch = row.batch_id;
+  const execute = async (request, options) => ({
+    rows:
+      options.queryId === 'summary.snapshot'
+        ? [{ ...row, batch_id: batch }]
+        : [{ value: request.parameters.gea_p1 }],
+  });
+  const cfg = config();
+  const old = createAgentQueries(cfg, execute);
+  const first = await old.read('fact', {});
+  batch = '20261102200000000000';
+  now += 1000;
+  refreshConfiguredQueries();
+  assert.deepEqual((await old.read('fact', {})).rows, first.rows);
+  assert.equal((await createAgentQueries(cfg, execute).read('fact', {})).rows[0].value, batch);
+});
+
+test('Shanghai business-day rollover selects a new batch without a manual refresh', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-03T15:59:59Z').getTime() });
+  let batch = '20261103083642623642';
+  const execute = async (request, options) => ({
+    rows:
+      options.queryId === 'summary.snapshot'
+        ? [{ ...row, batch_id: batch }]
+        : [{ value: request.parameters.gea_p1 }],
+  });
+  const cfg = config();
+  assert.equal((await createAgentQueries(cfg, execute).read('fact', {})).rows[0].value, batch);
+  t.mock.timers.tick(2000);
+  batch = '20261104083642623642';
+  assert.equal((await createAgentQueries(cfg, execute).read('fact', {})).rows[0].value, batch);
 });

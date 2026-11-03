@@ -82,13 +82,14 @@ test('unknown remains unknown; overview does not fabricate empty numeric values'
 });
 test('an authorization failure stays local to its domain and is never retried', async () => {
   const io = source(configs.fc, (call) => {
-    if (call.queryId === 'branch-supply.summary') throw Error('denied');
+    if (call.queryId === 'orders.summary')
+      throw Object.assign(Error('denied'), { code: 'ROW_SCOPE_DENIED' });
   });
   const r = await readConfiguredOverview(configs.fc, '2026-10-15', '', io);
-  assert.equal(r['branch-supply'].error, 'denied');
+  assert.equal(r.orders.error, 'denied');
   assert.ok(r.replenishment.summary);
   assert.equal(io.calls.filter((c) => c.queryId === 'replenishment.overview').length, 1);
-  assert.equal(io.calls.filter((c) => c.queryId === 'branch-supply.summary').length, 2);
+  assert.equal(io.calls.filter((c) => c.queryId === 'orders.summary').length, 1);
 });
 test('config changes across overview domains reject the combined overview', async () => {
   const io = source(configs.fc, (call, r) => {

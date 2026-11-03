@@ -132,6 +132,21 @@ async function openFixture(t, denied = false) {
         pending: 5,
         in_transit: 5,
       });
+    else if (id === 'branch-current-orders.lines')
+      Object.assign(row, {
+        warehouse_code: 'A230',
+        order_no: 'CUSTOMER-ORDER-1',
+        customer_code: 'CUSTOMER-1',
+        order_status: '00',
+        page_scope_total: 1,
+        page_row_present: 1,
+        sku: 'SKU1',
+        material_name: '客户订货商品',
+        demand: 20,
+        allocated: 10,
+        remaining: 10,
+        shortage: 5,
+      });
     else if (id.includes('atomic') || id.endsWith('.detail')) rows = [];
     else
       Object.assign(row, {
@@ -164,6 +179,30 @@ test('FC renders downstream customer fulfillment and open orders independently o
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   await expect(page.locator('table')).toContainText('CUSTOMER-ORDER-1');
   await expect(page.locator('table')).toContainText('测试经销商');
+  await expect(page.getByRole('columnheader', { name: '分仓', exact: true })).toBeVisible();
+  await expect(page.locator('table')).toContainText('杭州分仓');
+  await page.getByRole('button', { name: '展开订单CUSTOMER-ORDER-1', exact: true }).click();
+  const lines = page.getByRole('region', { name: 'CUSTOMER-ORDER-1订单明细' });
+  await expect(lines).toContainText('客户订货商品');
+  await expect(lines.getByRole('cell', { name: '5', exact: true })).toBeVisible();
+  assert.ok(
+    calls.some(
+      (c) =>
+        c.id === 'branch-current-orders.lines' &&
+        c.parameters.warehouse_code === 'A230' &&
+        c.parameters.order_no === 'CUSTOMER-ORDER-1' &&
+        c.parameters.customer_code === 'CUSTOMER-1',
+    ),
+  );
+  await page.getByLabel('订单状态', { exact: true }).selectOption('缺口');
+  await expect
+    .poll(() =>
+      calls.some(
+        (c) => c.id === 'branch-current-orders.page' && c.parameters.shortage_only === true,
+      ),
+    )
+    .toBe(true);
+
   await expect(page.getByRole('button', { name: '选择分仓' })).toContainText('A230');
   assert.ok(
     calls.some(

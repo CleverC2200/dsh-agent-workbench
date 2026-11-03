@@ -822,6 +822,32 @@ class DealerMatchedAnalysisTests(unittest.TestCase):
             self.assertEqual((rows[0]['material_name'],rows[0]['inventory'],rows[0]['page_scope_total']),('清单商品1',5,3))
             self.assertEqual(sum(row['inventory'] for row in rows),25)
 
+    def test_large_date_source_keeps_valid_rows_without_inventing_expiry_or_targets(self):
+        self.db.execute("UPDATE agents_scm_cust_jxc_ai_daliy_d SET big_final_qty=CASE material_code WHEN 'S1' THEN 2 WHEN 'S2' THEN -3 ELSE NULL END")
+        for _ in range(2):
+            self.db.execute("INSERT INTO agents_scm_cust_jxc_ai_daliy_d(stat_date,cust_code,material_code,stock_qty,big_final_qty) VALUES('2026-10-20','C1','S4',7,4)")
+        detail=self.read('dealer','dealer.stock.detail.atomic')
+        self.assertEqual([(r['sku'],r['large_date_inventory']) for r in detail],[('S1',2),('S2',None),('S3',None),('S4',None)])
+        for name in ['dealer.stock.summary','dealer.stock.customer.atomic','dealer.stock.category.atomic']:
+            row=self.read('dealer',name)[0]
+            self.assertEqual((row['inventory'],row['large_date_inventory'],row['valid_large_date_inventory']),(25,2,1))
+        self.db.execute("UPDATE agents_scm_cust_jxc_ai_daliy_d SET big_final_qty=0 WHERE material_code='S1'")
+        row=self.read('dealer','dealer.stock.summary')[0]
+        self.assertEqual((row['large_date_inventory'],row['valid_large_date_inventory']),(0,1))
+        self.db.execute("UPDATE agents_scm_cust_jxc_ai_daliy_d SET big_final_qty=NULL")
+        self.assertIsNone(self.read('dealer','dealer.stock.summary')[0]['large_date_inventory'])
+
+    def test_dealer_category_fills_missing_source_from_unique_product_reference(self):
+        self.db.executemany('INSERT INTO agents_dim_material_prod_sales_info_d VALUES(?,?,?,?)', [('S1','汤圆',None,None),('S1','汤圆',None,None),('S2','面点',None,None),('S2','水饺',None,None),('S3','水饺',None,None)])
+        self.db.execute("UPDATE agents_scm_cust_jxc_ai_daliy_d SET product_range_name='源品类' WHERE material_code='S3'")
+        rows=self.read('dealer','dealer.stock.detail.atomic')
+        self.assertEqual([(r['sku'],r['category']) for r in rows],[('S1','汤圆'),('S2',None),('S3','源品类')])
+        self.assertEqual(sum(r['inventory'] for r in rows),25)
+        filtered=self.read('dealer','dealer.stock.category.atomic',category_mode='equal',category='汤圆')
+        self.assertEqual((filtered[0]['category'],filtered[0]['inventory'],filtered[0]['page_scope_total']),('汤圆',5,1))
+        self.assertEqual(self.read('dealer','dealer.stock.count',category_mode='equal',category='汤圆')[0]['total'],1)
+        self.assertEqual(self.read('dealer','dealer.stock.category.count')[0]['total'],3)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -165,7 +165,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     .filter({ hasText: '待补货量' });
   await expect(replenishmentCard).toContainText('70');
   await expect(replenishmentCard).toContainText('110.36万件');
-  await expect(replenishmentCard).toContainText('按有效记录计算；已忽略 2 项异常或缺失记录');
+  await expect(replenishmentCard).not.toContainText('已忽略');
+  await expect(replenishmentCard).toHaveAttribute('title', /已忽略 2 项异常或缺失记录/);
   const toolbar = page.locator('form[data-business-filters="fc"]');
   for (const width of [1280, 900, 640]) {
     await page.setViewportSize({ width, height: 900 });
@@ -352,10 +353,10 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   const orderPanel = page.getByRole('region', { name: '当前订单', exact: true });
   await expect(
-    orderPanel.getByRole('textbox', { name: '客户订单号或经销商', exact: true }),
+    orderPanel.getByRole('textbox', { name: '客户订单号或下游客户', exact: true }),
   ).toHaveValue('');
   await orderPanel
-    .getByRole('textbox', { name: '客户订单号或经销商', exact: true })
+    .getByRole('textbox', { name: '客户订单号或下游客户', exact: true })
     .fill('CE-SHARED');
   await page.getByRole('button', { name: '补货确认', exact: true }).click();
   const replenishmentPanel = page.getByRole('region', { name: '补货确认', exact: true });
@@ -718,7 +719,8 @@ test('FC downstream customer orders show dealers, exact SKUs and preserve shippi
   await expect(list.getByText('遂平', { exact: true })).toBeVisible();
   await expect(list.locator('thead').first().locator('th')).toHaveText([
     '订单号',
-    '经销商',
+    '分仓',
+    '下游客户',
     '订单日期',
     'SKU个数',
     '需求量（件）',
@@ -758,7 +760,9 @@ test('FC downstream customer orders show dealers, exact SKUs and preserve shippi
   assert.equal(detailCall.values.order_no, 'CE2600000190');
   assert.equal(detailCall.values.customer_code, 'C1');
   assert.ok(!calls.some((call) => call.id === 'current-shortage.detail'));
-  await list.getByRole('textbox', { name: '客户订单号或经销商', exact: true }).fill('CE2600000190');
+  await list
+    .getByRole('textbox', { name: '客户订单号或下游客户', exact: true })
+    .fill('CE2600000190');
   await list.getByRole('button', { name: '查询', exact: true }).click();
   await expect
     .poll(

@@ -2445,9 +2445,9 @@ test('base dashboard model failure leaves cards and detail rows visible', async 
   const { frame, errors } = await mount(t, 'aqkc', 1280, undefined, () => {
     throw Error('MODEL_UNAVAILABLE');
   });
-  await expect(frame.getByRole('region', { name: 'AI 洞察', exact: true })).toContainText(
-    'AI 洞察暂不可用',
-  );
+  const panel = frame.getByRole('region', { name: 'AI 洞察', exact: true });
+  await expect(panel.locator('p')).toHaveText('-');
+  await expect(panel).not.toContainText('暂不可用');
   await expect(frame.locator('[data-overview-cards="aqkc"]')).toBeVisible();
   await expect(frame.locator('tbody tr').first()).toBeVisible();
   assert.deepEqual(errors, []);

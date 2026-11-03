@@ -34,4 +34,37 @@ class BranchCurrentOrders(unittest.TestCase):
   rows=self.read(search_pattern='%O1%');self.assertEqual(rows[0]['page_scope_total'],1)
   line=self.read('branch-current-orders.lines',order_no='O1',customer_code='C1')[0]
   self.assertEqual((line['demand'],line['allocated'],line['shortage']),(70,20,0))
+ def load_snapshot(self):
+  rows=self.fixture.read('customer_current_lines')
+  mapped=[{customer.mod.LINES_MAP.get(k,k):v for k,v in r.items()} for r in rows]
+  cols=list(mapped[0]);numeric={'current_'+k for k in ['ordered','demand','allocated','shipped','remaining','shortage']}
+  self.db.execute('CREATE TABLE agents_inv_order_summary_day (inv_batch_id TEXT, inv_variant_id TEXT, '+', '.join(c+(' REAL' if c in numeric else ' TEXT') for c in cols)+')')
+  for row in mapped:self.fixture.add('agents_inv_order_summary_day',inv_batch_id='UNPUBLISHED_BATCH',inv_variant_id='BRANCH_CUSTOMER_LINES',**row)
+ def test_small_shortages_are_included_in_raw_and_snapshot_filters(self):
+  self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=49 WHERE warehouseid='BR1'")
+  self.load_snapshot()
+  for key in ['branch-current-orders.page','snapshot.branch-current-orders.page']:
+   with self.subTest(key=key):
+    rows=self.read(key,shortage_only=True)
+    self.assertEqual(rows[0]['page_scope_total'],1)
+    self.assertEqual((rows[0]['order_no'],rows[0]['shortage']),('O1',1))
+ def test_warehouse_name_and_code_filters_apply_to_raw_and_snapshot(self):
+  self.load_snapshot()
+  for key in ['branch-current-orders.page','snapshot.branch-current-orders.page']:
+   for term in ['%乙%','%br2%']:
+    with self.subTest(key=key,term=term):
+     rows=self.read(key,warehouse_code=None,warehouse_search_pattern=term)
+     self.assertEqual(rows[0]['page_scope_total'],1)
+     self.assertEqual(rows[0]['warehouse_code'],'BR2')
+   self.assertEqual(self.read(key,warehouse_code=None,warehouse_search_pattern='%不存在%')[0]['page_scope_total'],0)
+ def test_unknown_line_shortage_does_not_erase_valid_line_in_same_order(self):
+  self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=49 WHERE warehouseid='BR1'")
+  for qty in [1,2]:
+   self.fixture.add('agents_scm_inventory_sku_data_d',month_date='20261102',warehouseid='BR1',warehouse_name='分仓甲',belong_base='基地甲',material_code='BAD',available_qty=qty,prod_date='20261001',warehouse_classify='20')
+  self.fixture.order('O1-BAD',cust_order_no='O1',material_code='BAD')
+  self.load_snapshot()
+  for key in ['branch-current-orders.page','snapshot.branch-current-orders.page']:
+   with self.subTest(key=key):
+    row=self.read(key,shortage_only=True)[0]
+    self.assertEqual((row['order_no'],row['shortage'],row['sku_count']),('O1',1,2))
 if __name__=='__main__':unittest.main()

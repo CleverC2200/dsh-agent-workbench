@@ -1103,7 +1103,7 @@ export function InventoryOperationsWorkbench() {
                     {modelInsight.status === 'loading' ? (
                       <p>正在生成 AI 洞察…</p>
                     ) : modelInsight.status === 'error' ? (
-                      <p>AI 洞察暂不可用，当前指标与明细可正常查看。</p>
+                      <p>-</p>
                     ) : (
                       modelInsight.answer
                         ?.split(/\n+/)

@@ -54,6 +54,16 @@ def snapshot_query(config,key,source_name,variant,mapping,kind='current',window=
   route['materializedInputs']={s['name']:q['request']['parameters'][k] for k,s in q['parameterSpec'].items() if s['name'] in ['date_basis','exp_flag','positive_orders_only']}
  config['queries'][key]['summaryRoute']=route
 
+def customer_page_filters(tree):
+ # Every positive shortage belongs in the shortage list, including small gaps.
+ sql=render(tree).replace('COUNT(l.demand) = COUNT(*) AND COUNT(l.shortage) = COUNT(*) AND SUM(l.demand) > 0 AND SUM(l.shortage) >= SUM(l.demand) * 0.2', 'SUM(l.shortage) > 0')
+ sql=sql.replace('CASE WHEN COUNT(l.shortage) = COUNT(*) THEN SUM(l.shortage) END AS shortage', 'SUM(l.shortage) AS shortage')
+ tree=parse(sql)
+ group=next(c for c in tree.find_all(exp.CTE) if c.alias=='order_groups').this
+ if ':gea_p7' not in render(group):
+  group.where(':gea_p7 IS NULL OR LOWER(l.warehouse_code) LIKE LOWER(:gea_p7) OR LOWER(l.warehouse_name) LIKE LOWER(:gea_p7)',copy=False)
+ return tree
+
 def main():
  paths={a:ROOT/f'business/inventory-{a}/sql.config.json' for a in ['fc','qll']}
  configs={a:json.loads(p.read_text()) for a,p in paths.items()}
@@ -64,7 +74,7 @@ def main():
   if not key.startswith('current-shortage.'):continue
   if key=='current-shortage.overview':continue
   t=replace_cte(parse(q['request']['sql']),'current_source',current)
-  q['notes']='分仓向经销商供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。'
+  q['notes']='分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。'
   persist_query(q,t)
   snapshot_query(fc,key,'current_source','BRANCH_CUSTOMER_CURRENT',CURRENT_MAP)
  # The card summary and SKU-location count share exactly the same current customer source.
@@ -81,7 +91,8 @@ def main():
   # Warehouse filtering previously lived inside the removed ASN source.
   c=next(c for c in t.find_all(exp.CTE) if c.alias=='open_lines')
   c.this.where(':gea_p1 IS NULL OR r.warehouse_code=:gea_p1',copy=False)
-  q['notes']='分仓下游经销商订单；按有效执行行归属实际发货仓。缺口按仓库SKU共享库存分配一次，不使用ASN。'
+  if key=='branch-current-orders.page':t=customer_page_filters(t)
+  q['notes']='分仓下游客户订单；按有效执行行归属实际发货仓。缺口按仓库SKU共享库存分配一次，不使用ASN。'
   persist_query(q,t);snapshot_query(fc,key,'open_lines','BRANCH_CUSTOMER_LINES',LINES_MAP)
   # Keep warehouse selection outside the cached source, including per-order detail calls.
   sq=fc['queries']['snapshot.'+key];st=parse(sq['request']['sql']);c=next(c for c in st.find_all(exp.CTE) if c.alias=='open_lines')
@@ -90,7 +101,7 @@ def main():
  for key,q in list(qll['queries'].items()):
   if not key.startswith('current-shortage.'):continue
   t=replace_cte(parse(q['request']['sql']),'branch_current_source',current)
-  q['notes']='基地保持原有效客户订单口径；分仓为下游经销商订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。'
+  q['notes']='基地保持原有效客户订单口径；分仓为下游客户订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。'
   persist_query(q,t)
   sq=qll['queries']['snapshot.'+key];st=replace_cte(parse(sq['request']['sql']),'branch_current_source',snapshot('BRANCH_CUSTOMER_CURRENT',current.named_selects,CURRENT_MAP));persist_query(sq,st)
  # Replenishment consumes downstream customer demand, while upstream transfer quantities stay separate.
@@ -203,7 +214,7 @@ def main():
   export.append({'variant':variant,'table':'agents_inv_order_summary_day','sourceSql':render(tree),'sourceColumns':tree.named_selects,'targetMapping':{mapping.get(n,n):n for n in tree.named_selects},'parameterSpec':q['parameterSpec'],'parameters':q['request']['parameters']})
  (ROOT/'business/inventory-fc/customer-order-materializations.json').write_text(json.dumps(export,ensure_ascii=False,indent=2)+'\n')
  orders=next(v for v in qll['sourceViews']['views'] if v['id']=='orders')
- v=copy.deepcopy(orders);v['overrides']={'pickup_type_mode':'equal','pickup_type':'分仓'};v['filters'].append({'name':'warehouse_code','label':'分仓编码'});v['description']='分仓发往下游经销商的订单；满足率仅计算已发货订单池。'
+ v=copy.deepcopy(orders);v['overrides']={'pickup_type_mode':'equal','pickup_type':'分仓'};v['filters'].append({'name':'warehouse_code','label':'分仓编码'});v['description']='分仓发往下游客户的订单；满足率仅计算已发货订单池。'
  fc['sourceViews']['views']=[v if x['id']=='orders' else x for x in fc['sourceViews']['views']]
  fc['overviewViewIds']=[x for x in fc['overviewViewIds'] if x!='branch-supply']
  if 'orders' not in fc['overviewViewIds']:fc['overviewViewIds'].append('orders')
@@ -217,6 +228,15 @@ def main():
    if view['id']!='upstream-orders':
     for col in view.get('columns',[]):
      if col.get('label')=='当前待收货需求':col['label']='客户订单需求'
+  for view in c['sourceViews']['views']:
+   if view['id'] in ['replenishment','replenishment-confirmation','branch-replenishment']:
+    view['description']='按客户订单需求、分仓可用库存、计划及调拨中量计算补货。'
+    for col in view.get('columns',[]):
+     if col['field']=='missing_preparingQty':col['reason']='当前未完成客户订单需求。'
+     if col['field']=='missing_shortageQty':col['reason']='客户订单未占用需求扣减分仓可用库存后的缺口。'
+  c['replenishmentPolicy']['orderScope']='DOWNSTREAM_CUSTOMER_EXECUTION_FIFO_20261103'
+  c['replenishmentPolicy']['transferQuantityUnit']='件'
+  c['replenishmentPolicy']['transferUnitBasis']='基地、分仓及提货点库存和调拨数量按件；源值不换算'
   c['queries']['summary.snapshot']['request']['sql']=c['queries']['summary.snapshot']['request']['sql'].replace('inventory-daily-v2-20261102','inventory-daily-v3-20261103')
   paths[a].write_text(json.dumps(c,ensure_ascii=False,indent=2)+'\n')
  print('Customer order contracts and three materialization variants generated')

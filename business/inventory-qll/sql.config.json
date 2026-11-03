@@ -21069,7 +21069,7 @@
         "shortage",
         "invalid"
       ],
-      "notes": "基地保持原有效客户订单口径；分仓为下游经销商订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
+      "notes": "基地保持原有效客户订单口径；分仓为下游客户订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
       "plugins": ["qll"],
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.summary",
@@ -21139,7 +21139,7 @@
         "page_row_present",
         "page_scope_total"
       ],
-      "notes": "基地保持原有效客户订单口径；分仓为下游经销商订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
+      "notes": "基地保持原有效客户订单口径；分仓为下游客户订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
       "plugins": ["qll"],
       "pagination": {
         "countQuery": "current-shortage.locations.count",
@@ -21219,7 +21219,7 @@
         "page_row_present",
         "page_scope_total"
       ],
-      "notes": "基地保持原有效客户订单口径；分仓为下游经销商订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
+      "notes": "基地保持原有效客户订单口径；分仓为下游客户订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
       "plugins": ["qll"],
       "pagination": {
         "countQuery": "current-shortage.categories.count",
@@ -21298,7 +21298,7 @@
         "page_scope_total",
         "page_row_present"
       ],
-      "notes": "基地保持原有效客户订单口径；分仓为下游经销商订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
+      "notes": "基地保持原有效客户订单口径；分仓为下游客户订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
       "plugins": ["qll"],
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.detail",
@@ -21373,7 +21373,7 @@
         "page_row_present",
         "page_scope_total"
       ],
-      "notes": "基地保持原有效客户订单口径；分仓为下游经销商订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
+      "notes": "基地保持原有效客户订单口径；分仓为下游客户订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
       "plugins": ["qll"],
       "pagination": {
         "countQuery": "current-shortage.skus.count",
@@ -27847,7 +27847,7 @@
         "includeTotal": false
       },
       "resultColumns": ["total"],
-      "notes": "基地保持原有效客户订单口径；分仓为下游经销商订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
+      "notes": "基地保持原有效客户订单口径；分仓为下游客户订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
       "plugins": ["qll"],
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.locations.count",
@@ -27889,7 +27889,7 @@
         "includeTotal": false
       },
       "resultColumns": ["total"],
-      "notes": "基地保持原有效客户订单口径；分仓为下游经销商订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
+      "notes": "基地保持原有效客户订单口径；分仓为下游客户订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
       "plugins": ["qll"],
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.categories.count",
@@ -27938,7 +27938,7 @@
         "includeTotal": false
       },
       "resultColumns": ["total"],
-      "notes": "基地保持原有效客户订单口径；分仓为下游经销商订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
+      "notes": "基地保持原有效客户订单口径；分仓为下游客户订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。",
       "plugins": ["qll"],
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.skus.count",
@@ -49505,7 +49505,7 @@
         "id": "branch-replenishment",
         "title": "分仓库存与补货测算",
         "queryId": "replenishment.detail",
-        "description": "沿gea-agent-fc净需求口径：计划日均向上取整，订单未占用需求扣净后计算目标缺口，再扣调拨中量。未知输入不按0；人工计划按分仓月份整包覆盖。 订单相关显示只取分仓向基地的有效未发货调拨订单；缺货按基地与SKU共享可用库存并依下单时间先后分配。上游订单剩余需求不再作为分仓出库需求扣减分仓可用库存。",
+        "description": "按客户订单需求、分仓可用库存、计划及调拨中量计算补货。",
         "columns": [
           {
             "field": "warehouse_code",
@@ -49538,14 +49538,14 @@
             "label": "客户订单需求",
             "valueField": "current_order_demand",
             "format": "decimal2",
-            "reason": "分仓向基地下单的ASN有效未收货需求，按收货分仓与SKU汇总；不把经销商订单或已收货数量计入当前需求。"
+            "reason": "当前未完成客户订单需求。"
           },
           {
             "field": "missing_shortageQty",
             "label": "缺货量",
             "valueField": "current_order_shortage",
             "format": "decimal2",
-            "reason": "分仓向基地的调拨订单先在订单与SKU层减基地已占用量并截零，再依订单创建时间先后分配基地与SKU共享可用库存；卡片、明细、筛选及导出使用同一结果。"
+            "reason": "客户订单未占用需求扣减分仓可用库存后的缺口。"
           },
           {
             "field": "historical_turnover_days",
@@ -50451,9 +50451,10 @@
     "defaultCycleDays": 7,
     "preparationDays": 3,
     "source": "原分仓BRANCH_RULESET固化规则",
-    "transferQuantityUnit": "箱",
-    "transferUnitBasis": "用户于2026-10-20确认：调拨备单、调拨在途、调拨中量均为箱，1件=1箱",
-    "fallbackDemandBasis": "近30日正向发货日均测算；有效计划优先"
+    "transferQuantityUnit": "件",
+    "transferUnitBasis": "基地、分仓及提货点库存和调拨数量按件；源值不换算",
+    "fallbackDemandBasis": "近30日正向发货日均测算；有效计划优先",
+    "orderScope": "DOWNSTREAM_CUSTOMER_EXECUTION_FIFO_20261103"
   },
   "overviewQuickStock": "overview.quick-stock",
   "overviewOrderGroups": {

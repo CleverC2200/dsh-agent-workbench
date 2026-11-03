@@ -129,7 +129,7 @@ export function branchDashboardEvidence(input: {
       alreadyDeductedFromRecommendation: true,
     },
     customerOrders: {
-      direction: '分仓向下游经销商供货',
+      direction: '分仓向下游客户供货',
       monthlyDemandQty: number(summary('orders').demand),
       monthlyShippedQty: number(summary('orders').shipped),
       monthlyFulfillmentRate: number(summary('orders').fulfillment_rate),
@@ -137,7 +137,7 @@ export function branchDashboardEvidence(input: {
       pendingQty: currentSum('remaining'),
       currentBranchAllocatedQty: currentSum('allocated'),
       coverage:
-        '月度履约取分仓向下游经销商供货的已发货订单池；当前订单与缺货取分仓有效未完成客户订单。ASN仅用于上游补货备单与在途，不能替代客户订单。',
+        '月度履约取分仓向下游客户供货的已发货订单池；当前订单与缺货取分仓有效未完成客户订单。ASN仅用于上游补货备单与在途，不能替代客户订单。',
     },
     sales: {
       last30DaysQty: number(plan.rolling_ship_positive),

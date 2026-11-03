@@ -1,4 +1,5 @@
 import { executeDailyBundle } from './daily-summary-bundle';
+import { businessDay } from './business-day';
 import { inFlightQueries } from './in-flight-query';
 import { configuredQueryFreshAfter } from './query-cache';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
@@ -25,7 +26,7 @@ type SummaryRead = {
   snapshot: DailySummarySnapshot;
   preloaded?: { at: number; result: any };
 };
-type SummaryReads = Map<string, { at: number; result: Promise<SummaryRead> }>;
+type SummaryReads = Map<string, { result: Promise<SummaryRead> }>;
 const pageSummaries: SummaryReads = new Map();
 const suppliedSummaries = new WeakMap<ConfiguredExecution, SummaryReads>();
 
@@ -36,6 +37,7 @@ export function createAgentQueries(
   freshness: { freshAfter?: number } = {},
 ) {
   const config = agentSqlConfig(fallback);
+  const freshAfter = freshness.freshAfter ?? configuredQueryFreshAfter();
   const run: ConfiguredExecution =
     execute ??
     (async (request, options) => {
@@ -98,7 +100,7 @@ export function createAgentQueries(
         {
           queryId: options.queryId,
           parameters: options.values,
-          freshAfter: freshness.freshAfter ?? configuredQueryFreshAfter(),
+          freshAfter,
         },
         { signal: options.signal },
       );
@@ -113,7 +115,7 @@ export function createAgentQueries(
       execute,
       request,
       options,
-      freshness.freshAfter ?? configuredQueryFreshAfter(),
+      freshAfter,
       preloaded,
     ),
   );
@@ -143,10 +145,12 @@ export function createAgentQueries(
       identityGeneration,
       config.agentId,
       config.queries[snapshotId],
-      freshness.freshAfter ?? configuredQueryFreshAfter(),
+      businessDay(),
+      freshAfter,
     ]);
+    // Keep cards and later pages on one daily batch until the whole view refreshes.
     let snapshot = summaryReads.get(key);
-    if (!snapshot || Date.now() - snapshot.at >= 20 * 60 * 1000) {
+    if (!snapshot) {
       const metadataColumns = config.queries[config.dailySummary.snapshotQueryId].resultColumns;
       const result = client
         .read(snapshotId, {}, { requiredColumns: metadataColumns })
@@ -183,7 +187,7 @@ export function createAgentQueries(
             },
           };
         });
-      snapshot = { at: Date.now(), result };
+      snapshot = { result };
       summaryReads.set(key, snapshot);
       result.catch((error) => {
         const code = error?.failure?.reasonCode ?? error?.code ?? '';
@@ -201,6 +205,13 @@ export function createAgentQueries(
     selectedSnapshot = selectedRead.snapshot;
     preloaded = selectedRead.preloaded;
     const selected = dailySummaryQuery(config.queries[id], selectedSnapshot, values);
+    if (!selected && config.queries[id].summaryRoute.required === true)
+      throw Object.assign(Error('当前范围的汇总数据尚未就绪'), {
+        code:
+          selectedSnapshot.kind === 'unavailable'
+            ? 'SUMMARY_NOT_AVAILABLE'
+            : 'SUMMARY_SCOPE_NOT_COVERED',
+      });
     return selected ? { id: selected.queryId, values: selected.values } : { id, values };
   };
   return {
@@ -214,7 +225,7 @@ export function createAgentQueries(
         config.queries[id],
         values,
         options.requiredColumns,
-        freshness.freshAfter ?? configuredQueryFreshAfter(),
+        freshAfter,
       ]);
       return shared(
         key,

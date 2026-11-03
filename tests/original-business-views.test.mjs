@@ -25,11 +25,11 @@ test('FC replenishment keeps every original business column in its original orde
     views
       .originalFcView(c, 'replenishment')
       .columns.map((c) => c.label)
-      .filter((label) => !['上月实际出库量', '本月日均出库量'].includes(label)),
+      .filter((label) => !['上月实际出库量', '本月日均出库量', '分仓', '分仓编码'].includes(label)),
     Object.values(views.REPLENISHMENT_COLUMNS).map(
       (label) =>
         ({
-          备单中量: '当前待收货需求',
+          备单中量: '客户订单需求',
           本月调拨未发: '当前调拨备单',
           本月调拨在途: '当前调拨在途',
           安全库存天数: '目标覆盖天数',
@@ -98,5 +98,23 @@ test('presentation selection never changes SQL, parameters, permissions or sourc
       );
     }
     assert.deepEqual(c, before);
+  }
+});
+
+test('branch stock, aging and plan rows retain their warehouse identity in the table and CSV contract', async () => {
+  const c = await config('fc');
+  for (const tab of ['replenishment', 'structure', 'plan']) {
+    const column = views.originalFcView(c, tab).columns.find((c) => c.field === 'warehouse_name');
+    assert.ok(column, tab + ': warehouse identity missing');
+    assert.equal(column.label, '分仓');
+    assert.ok(
+      views
+        .originalFcView(c, tab)
+        .columns.some(
+          (c) =>
+            c.field === (tab === 'structure' ? 'warehouseid' : 'warehouse_code') &&
+            c.label === '分仓编码',
+        ),
+    );
   }
 });

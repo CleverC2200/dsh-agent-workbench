@@ -270,7 +270,7 @@ function WorkbenchBody() {
   const cards = [
     {
       title: '当前库存',
-      description: '周转指标按有效记录计算；展望周转的库存与计划取同一批记录，异常或缺失项不参与。',
+      description: '周转按同一批有效库存与动销或计划计算。',
       value: knownNumber(branchStock?.total_qty),
       unit: '件',
       color: 'blue',
@@ -297,7 +297,7 @@ function WorkbenchBody() {
     },
     {
       title: '订单满足率',
-      description: '当月分仓向经销商供货的已发货订单池；逐行限额发货量÷同池订货量，沿用基地口径。',
+      description: '当月已发货客户订单。',
       value: fulfillmentPercent(order),
       unit: '%',
       color: 'green',
@@ -322,8 +322,7 @@ function WorkbenchBody() {
       partial: currentDemand.partial,
       unit: '件',
       color: 'amber',
-      description:
-        '分仓向下游经销商供货的有效未完成订单；需求先减订单占用，再按分仓与SKU扣一次可用库存。异常记录不影响正常记录汇总。',
+      description: '当前未完成客户订单。',
       details: [
         ['缺货量', currentGap.value, '件'],
         ['分仓已占用', currentAllocated.value, '件'],
@@ -443,11 +442,19 @@ function WorkbenchBody() {
                 <article
                   key={c.title}
                   className={`kpi-card ${c.color}`}
-                  title={
+                  title={[
                     c.title === '平均货龄'
                       ? '按有效批次库存数量加权；批次货龄为库存快照日减生产日。最大货龄见货龄结构明细。'
-                      : c.description
-                  }
+                      : c.description,
+                    c.title === '待补货量' && missingRecommendations > 0
+                      ? `已忽略 ${missingRecommendations} 项异常或缺失记录。`
+                      : null,
+                    c.title === '当前订单' && c.partial
+                      ? '按有效记录计算，明细中缺失项显示 -。'
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                 >
                   <div className="kpi-title">
                     <span>{c.title}</span>
@@ -458,18 +465,6 @@ function WorkbenchBody() {
                       <small>{formatChainValueParts(c.value, c.unit).unit}</small>
                     )}
                   </div>
-                  {c.title === '待补货量' && missingRecommendations > 0 && (
-                    <small>
-                      {c.value !== null ? '按有效记录计算；' : ''}
-                      已忽略 {missingRecommendations} 项异常或缺失记录
-                    </small>
-                  )}
-                  {c.title === '当前订单' &&
-                    Number(parts['current-shortage']?.rows?.[0]?.invalid) > 0 && (
-                      <small>
-                        {c.partial ? '已核实部分；' : ''}部分占用或缺货待核实，请查看订单明细。
-                      </small>
-                    )}
                   <dl>
                     {c.details.map(([label, value, unit]) => (
                       <div key={String(label)}>
@@ -543,9 +538,9 @@ function WorkbenchBody() {
                           (currentShortageSum(parts['current-shortage']?.rows, 'shortage') ?? 0) > 0
                             ? '高'
                             : '低',
-                        title: '待处理调拨订单缺口',
-                        detail: `分仓向基地的当前调拨缺货 ${show(currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '件')}；优先核对基地占用及共享可用库存。`,
-                        suggestedAction: '按订单创建先后核查基地配单及补货。',
+                        title: '客户订单缺货',
+                        detail: `当前客户订单缺货 ${show(currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '件')}。`,
+                        suggestedAction: '核对分仓配货及补货。',
                       },
                     ]}
                   />
