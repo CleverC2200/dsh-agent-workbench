@@ -260,10 +260,7 @@
         "example": "order_month",
         "required": true,
         "nullable": false,
-        "enum": [
-          "order_month",
-          "created"
-        ]
+        "enum": ["order_month", "created"]
       },
       "gea_p4": {
         "name": "exp_flag",
@@ -289,9 +286,7 @@
       "gea_p7": {
         "name": "bases",
         "type": "array",
-        "example": [
-          "郑州"
-        ],
+        "example": ["郑州"],
         "required": true,
         "nullable": false,
         "items": "string",
@@ -303,11 +298,7 @@
         "example": "all",
         "required": true,
         "nullable": false,
-        "enum": [
-          "all",
-          "equal",
-          "missing"
-        ]
+        "enum": ["all", "equal", "missing"]
       },
       "gea_p9": {
         "name": "pickup_type",
@@ -322,11 +313,7 @@
         "example": "all",
         "required": true,
         "nullable": false,
-        "enum": [
-          "all",
-          "equal",
-          "missing"
-        ]
+        "enum": ["all", "equal", "missing"]
       },
       "gea_p11": {
         "name": "pickup_code",
@@ -341,11 +328,7 @@
         "example": "all",
         "required": true,
         "nullable": false,
-        "enum": [
-          "all",
-          "equal",
-          "missing"
-        ]
+        "enum": ["all", "equal", "missing"]
       },
       "gea_p13": {
         "name": "customer",
@@ -360,11 +343,7 @@
         "example": "all",
         "required": true,
         "nullable": false,
-        "enum": [
-          "all",
-          "equal",
-          "missing"
-        ]
+        "enum": ["all", "equal", "missing"]
       },
       "gea_p15": {
         "name": "sku",
@@ -379,11 +358,7 @@
         "example": "all",
         "required": true,
         "nullable": false,
-        "enum": [
-          "all",
-          "equal",
-          "missing"
-        ]
+        "enum": ["all", "equal", "missing"]
       },
       "gea_p17": {
         "name": "category",
@@ -398,11 +373,7 @@
         "example": "all",
         "required": true,
         "nullable": false,
-        "enum": [
-          "all",
-          "equal",
-          "missing"
-        ]
+        "enum": ["all", "equal", "missing"]
       },
       "gea_p19": {
         "name": "item",
@@ -417,11 +388,7 @@
         "example": "all",
         "required": true,
         "nullable": false,
-        "enum": [
-          "all",
-          "equal",
-          "missing"
-        ]
+        "enum": ["all", "equal", "missing"]
       },
       "gea_p21": {
         "name": "series",
@@ -436,11 +403,7 @@
         "example": "all",
         "required": true,
         "nullable": false,
-        "enum": [
-          "all",
-          "equal",
-          "missing"
-        ]
+        "enum": ["all", "equal", "missing"]
       },
       "gea_p23": {
         "name": "region",
@@ -455,11 +418,7 @@
         "example": "all",
         "required": true,
         "nullable": false,
-        "enum": [
-          "all",
-          "equal",
-          "missing"
-        ]
+        "enum": ["all", "equal", "missing"]
       },
       "gea_p25": {
         "name": "province",
@@ -474,11 +433,7 @@
         "example": "all",
         "required": true,
         "nullable": false,
-        "enum": [
-          "all",
-          "equal",
-          "missing"
-        ]
+        "enum": ["all", "equal", "missing"]
       },
       "gea_p27": {
         "name": "sales_group",
@@ -525,12 +480,7 @@
         "example": "key",
         "required": true,
         "nullable": false,
-        "enum": [
-          "key",
-          "ordered",
-          "demand",
-          "shortage"
-        ]
+        "enum": ["key", "ordered", "demand", "shortage"]
       },
       "gea_p33": {
         "name": "sort_direction",
@@ -538,10 +488,7 @@
         "example": "asc",
         "required": true,
         "nullable": false,
-        "enum": [
-          "asc",
-          "desc"
-        ]
+        "enum": ["asc", "desc"]
       },
       "gea_p91": {
         "name": "warehouse_code",
@@ -557,9 +504,7 @@
       "gea_p4": "否",
       "gea_p5": true,
       "gea_p6": false,
-      "gea_p7": [
-        "郑州"
-      ],
+      "gea_p7": ["郑州"],
       "gea_p8": "all",
       "gea_p9": null,
       "gea_p10": "all",
