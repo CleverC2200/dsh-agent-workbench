@@ -397,6 +397,62 @@ test('ordinary documentation skips source tests without selecting the full pool'
   assert.equal(plan.fullSuite, 'not-run');
   assert.equal(plan.runtime, false);
 });
+test('selection reasons distinguish policy, direct and transitive consumers after owner deduplication', (t) => {
+  const f = fixture(t);
+  f.policy.rules.push({
+    pattern: '^src/value\\.ts$',
+    tests: ['tests/affected.test.mjs', 'tests/direct.test.mjs', 'tests/child.test.mjs'],
+  });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'tests/direct.test.mjs', 'import "../src/value.js";');
+  f.put(f.root, 'tests/child.test.mjs', 'import "../src/value.js";');
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan({ 'tests/child.test.mjs': 'tests/direct.test.mjs' });
+  assert.deepEqual(plan.reasons['dsh-agent-workbench/src/value.ts'], [
+    'tests/affected.test.mjs',
+    'tests/direct.test.mjs',
+  ]);
+  assert.deepEqual(plan.reasonDetails['dsh-agent-workbench/src/value.ts'], {
+    rules: ['^src/value\\.ts$'],
+    rule: 2,
+    direct: 1,
+    transitive: 2,
+  });
+});
+
+test('source and exclusive rule summaries record only the selection branches actually used', (t) => {
+  for (const sourceOnly of [true, false]) {
+    const f = fixture(t);
+    f.policy.rules.push(
+      {
+        pattern: '^src/value\\.ts$',
+        tests: ['tests/required.test.mjs'],
+        ...(sourceOnly ? { sourceTests: ['tests/peer.test.mjs'] } : { exclusive: true }),
+      },
+      { pattern: '^src/', tests: ['tests/unrelated.test.mjs'] },
+    );
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    f.checkpoint();
+    f.put(f.root, 'src/value.ts', 'export const value = 2;');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan(undefined, { sourceOnly });
+    assert.deepEqual(
+      plan.reasons['dsh-agent-workbench/src/value.ts'],
+      sourceOnly
+        ? ['tests/peer.test.mjs']
+        : ['tests/required.test.mjs', 'tests/unrelated.test.mjs'],
+    );
+    assert.deepEqual(plan.reasonDetails['dsh-agent-workbench/src/value.ts'], {
+      rules: sourceOnly ? ['^src/value\\.ts$'] : ['^src/value\\.ts$', '^src/'],
+      rule: sourceOnly ? 1 : 2,
+      direct: 0,
+      transitive: 0,
+    });
+  }
+});
+
 test('transitive authored imports select the affected file and exclude unrelated tests', (t) => {
   const f = fixture(t);
   f.put(f.root, 'src/value.ts', 'export const value = 2;');

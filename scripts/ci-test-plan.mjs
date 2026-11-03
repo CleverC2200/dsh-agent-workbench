@@ -620,7 +620,8 @@ export function selectCiTests({
       ? versionOnlyFiles(root, diffBase, companionPeerOnly)
       : new Set();
   const selected = new Set(docsOnly ? [] : required),
-    reasons = {};
+    reasons = {},
+    reasonDetails = {};
   for (const change of changes) {
     if (change.repo === repo && change.file === 'package.json' && companionPeerOnly) {
       change.companionPeerOnly = true;
@@ -646,17 +647,20 @@ export function selectCiTests({
               new RegExp(rule.pattern).test(change.file),
           );
     const sourceRules = sourceOnly ? rules.filter((rule) => rule.sourceTests !== undefined) : [];
-    const mapped = sourceRules.length
-      ? sourceRules.flatMap((rule) => expand(rule.sourceTests))
-      : rules.flatMap((rule) => expand(rule.tests));
+    const ruleSelections = (sourceRules.length ? sourceRules : rules).map((rule) => ({
+      pattern: rule.pattern,
+      files: expand(sourceRules.length ? rule.sourceTests : rule.tests),
+    }));
+    const mapped = ruleSelections.flatMap((rule) => rule.files);
     const ownTestInput =
       change.repo === repo &&
       (pool.includes(change.file) || /^(?:tests|scripts\/fixtures)\//.test(change.file));
-    const matched =
+    const consumers =
       (sourceRules.length && !pool.includes(change.file)) ||
       (rules.some((rule) => rule.exclusive === true) && !ownTestInput)
-        ? mapped
-        : [...mapped, ...pool.filter((file) => reaches(resolve(root, file), change.path))];
+        ? []
+        : pool.filter((file) => reaches(resolve(root, file), change.path));
+    const matched = [...mapped, ...consumers];
     const files = [...new Set(matched.map(directFile))].sort();
     // Source with no known consumer must be mapped explicitly, rather than silently receiving a green result.
     if (
@@ -673,6 +677,31 @@ export function selectCiTests({
       throw Error(`CI_TEST_IMPACT_UNMAPPED: ${change.repo}/${change.file}`);
     if (!docsOnly) for (const file of files) selected.add(file);
     reasons[`${change.repo}/${change.file}`] = files;
+    reasonDetails[`${change.repo}/${change.file}`] = {
+      rules: [
+        ...new Set(ruleSelections.filter((rule) => rule.files.length).map((rule) => rule.pattern)),
+      ],
+      rule: new Set(mapped.map(directFile)).size,
+      direct: new Set(
+        consumers
+          .filter(
+            (file) =>
+              resolve(root, file) === change.path ||
+              dependencies(resolve(root, file), false).has(change.path),
+          )
+          .map(directFile),
+      ).size,
+      transitive: new Set(
+        consumers
+          .filter((file) =>
+            [...dependencies(resolve(root, file), false)].some(
+              ([next, recursive]) =>
+                recursive && next !== change.path && reaches(next, change.path),
+            ),
+          )
+          .map(directFile),
+      ).size,
+    };
   }
   const files = [...selected].sort();
   const profileEntry = repositories.find((entry) => entry.repo === 'dsh-gea-plugin');
@@ -751,6 +780,7 @@ export function selectCiTests({
     files,
     executedBy,
     reasons,
+    reasonDetails,
     runtimeFiles,
     sourceWindowFiles,
     browserFiles,
