@@ -55,3 +55,19 @@ test('atomic order presentation publication retains previous assets and rejects 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('checkout preserves manifest-verified order presentation bytes', async () => {
+  const attributes = await readFile(new URL('../.gitattributes', import.meta.url), 'utf8');
+  assert.match(
+    attributes,
+    /^lib\/business\/inventory-orderfulfillment\/sales-window\/\* text eol=lf$/m,
+  );
+  const root = await mkdtemp(join(tmpdir(), 'order-presentation-bytes-'));
+  try {
+    const manifest = await buildFulfillmentSalesWindow({ output: root });
+    for (const name of Object.keys(manifest.assets))
+      assert.equal((await readFile(join(root, name), 'utf8')).includes('\r'), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
