@@ -106,7 +106,10 @@ test('narrow source table keeps columns, paging and display choices accessible',
     el.style.width = '320px';
   });
   await expect(frame.locator('table').first()).toBeVisible();
-  const before = calls.length;
+  await expect(frame.getByRole('status', { name: '补货确认加载中' })).toHaveCount(0);
+  const tableReads = () =>
+    calls.filter((call) => call.queryId === 'replenishment.detail.atomic').length;
+  const before = tableReads();
   await frame.locator('summary').filter({ hasText: '列设置' }).click();
   const choices = frame
     .locator('details')
@@ -124,7 +127,7 @@ test('narrow source table keeps columns, paging and display choices accessible',
   });
   assert.equal(visible, true, 'column choices must not be clipped by an ancestor');
   await frame.getByRole('button', { name: '显示全部', exact: true }).click();
-  assert.equal(calls.length, before, 'display choices do not trigger a data query');
+  assert.equal(tableReads(), before, 'display choices do not trigger a table data query');
   const table = frame.locator('table').first();
   const scrolled = await table.evaluate((el) => {
     const wrap = el.parentElement;

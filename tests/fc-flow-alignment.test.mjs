@@ -52,13 +52,34 @@ test('incoming order demand never consumes branch stock and transfer supply is d
   assert.equal(r.period_remaining_out, 280);
   assert.equal(r.expected_month_end_qty, -265);
 });
-test('whole-month override excludes missing SKU, preserves other warehouse, and propagates unknown totals', () => {
+test('whole-month override excludes missing SKU and aggregates the valid remaining records', () => {
   const missing = applyFcPlan({ ...row, sku: 'S2', month_out_plan: 310 }, plans, '2026-10-26', 7);
   assert.equal(missing.recommended_qty, null);
   assert.equal(missing.period_current_out, null);
   const other = { ...row, warehouse_code: 'W2' };
   assert.equal(applyFcPlan(other, plans, '2026-10-26', 7), other);
-  assert.equal(summarizeFcRows([missing, { recommended_qty: 5 }]).recommended, null);
+  assert.equal(summarizeFcRows([missing, { recommended_qty: 5 }]).recommended, 5);
+});
+
+test('invalid records cannot poison totals or contribute only one side of turnover', () => {
+  const rows = [
+    { recommended_qty: 5, inventory_qty: 100, daily_plan: 10 },
+    { recommended_qty: 0, inventory_qty: 20, daily_plan: 0 },
+    { recommended_qty: null, inventory_qty: 900, daily_plan: null },
+    { recommended_qty: -3, inventory_qty: null, daily_plan: 500 },
+    { recommended_qty: NaN, inventory_qty: -20, daily_plan: 4 },
+  ];
+  assert.deepEqual(summarizeFcRows(rows), { recommended: 5, missingCount: 3, forwardTurnover: 12 });
+  assert.deepEqual(summarizeFcRows([{ recommended_qty: 0, inventory_qty: 20, daily_plan: 0 }]), {
+    recommended: 0,
+    missingCount: 0,
+    forwardTurnover: null,
+  });
+  assert.deepEqual(summarizeFcRows([{ recommended_qty: null }]), {
+    recommended: null,
+    missingCount: 1,
+    forwardTurnover: null,
+  });
 });
 test('natural-month ceil and tomorrow-start horizon cover month-end, leap year and year boundary', () => {
   for (const [date, month, out, next, forecast] of [

@@ -195,7 +195,8 @@ test('customer SKU tab has no extra toolbar and follows outer customer filters w
   await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
   const panel = frame.getByRole('region', { name: '客户SKU库存明细' });
   await expect(panel.getByText('商品A-0', { exact: true })).toBeVisible();
-  await expect(panel.locator('.arco-table-th')).toHaveCount(17);
+  await expect(panel.locator('.arco-table-th')).toHaveCount(18);
+  await expect(panel.locator('.arco-table-th').filter({ hasText: '大日期库存' })).toHaveCount(1);
   await expect(panel.locator('.customer-sku-filters')).toHaveCount(0);
   await expect(panel.locator('details')).toHaveCount(0);
   await expect(panel.getByRole('button')).toHaveCount(0);

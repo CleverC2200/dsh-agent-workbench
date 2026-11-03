@@ -1,4 +1,4 @@
-"""Keep branch order reads on ASN; remove legacy dealer-order adapters."""
+"""Keep stock dictionaries independent while retaining downstream customer order facts."""
 import json
 from pathlib import Path
 import re
@@ -15,6 +15,8 @@ def clean(config):
         if name.startswith(('shortage.', 'tracking.', 'product_map.')):
             removed.append(name)
             del config['queries'][name]
+            continue
+        if name.startswith(('orders.', 'snapshot.orders.')):
             continue
         query = config['queries'][name]
         if not any(table in query['request']['sql'] for table in DEALER_TABLES):

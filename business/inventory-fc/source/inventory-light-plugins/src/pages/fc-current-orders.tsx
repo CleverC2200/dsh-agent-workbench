@@ -126,7 +126,7 @@ function OrderLines({
                 {[
                   '产品',
                   '需求量（件）',
-                  '基地已占用（件）',
+                  '分仓已占用（件）',
                   '剩余需求量（件）',
                   '缺货量（件）',
                 ].map((label) => (
@@ -275,10 +275,10 @@ export function FcCurrentOrders({
           </label>
         )}
         <label>
-          调拨单号／基地／SKU
+          客户订单号／下游客户／SKU
           <input
-            aria-label="调拨单号或供货基地"
-            placeholder="调拨单号／基地／SKU／产品名称"
+            aria-label="客户订单号或下游客户"
+            placeholder="客户订单号／下游客户／SKU／产品名称"
             value={draft.search}
             onChange={(event) => {
               setListSearch(event.target.value);
@@ -333,11 +333,12 @@ export function FcCurrentOrders({
                 <tr>
                   {[
                     '订单号',
-                    '供货基地',
+                    '分仓',
+                    '下游客户',
                     '订单日期',
                     'SKU个数',
                     '需求量（件）',
-                    '基地已占用（件）',
+                    '分仓已占用（件）',
                     '剩余需求量（件）',
                     '缺货量（件）',
                     '状态',
@@ -369,6 +370,7 @@ export function FcCurrentOrders({
                           {row.order_no}
                         </button>
                       </td>
+                      <td>{text(row.warehouse_name || row.warehouse_code)}</td>
                       <td>{text(row.customer_name || row.customer_code)}</td>
                       <td>{text(row.created_at?.slice(0, 10) ?? null)}</td>
                       <td>{qty(row.sku_count)}</td>
@@ -398,7 +400,7 @@ export function FcCurrentOrders({
                     </tr>
                     {expanded.has(orderKey(row)) && (
                       <tr>
-                        <td colSpan={9}>
+                        <td colSpan={10}>
                           <OrderLines config={config} order={row} revision={revision} />
                         </td>
                       </tr>

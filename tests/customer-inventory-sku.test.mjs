@@ -77,6 +77,7 @@ test('SKU page reuses dealer presentation and server paging with bound customer 
       '平均货龄',
       '目标库存',
       '正常库存',
+      '大日期库存',
       '临期库存',
       '库存金额',
       '库存日期',
