@@ -46,6 +46,8 @@ test('live fulfillment keeps granted rows and clears denied, filtered and previo
                 errorCode: 'RETURN_PERMISSION_DENIED',
                 message: 'Denied',
               }
+            : id === 'orders.source-period'
+              ? {rows:[{latest_created:'2026-10-21 12:00:00',latest_load:'2026-10-21 12:05:00'}],configVersion:'v1'}
             : id === 'orders.facts'
               ? {
                   rows: [
@@ -217,7 +219,7 @@ test('live fulfillment keeps granted rows and clears denied, filtered and previo
     window.fixtureDenied = true;
     window.connectFixture('session-b');
   });
-  await expect(page.locator('#deliveryOrderDetailRows')).toContainText('RETURN_PERMISSION_DENIED');
+  await expect(page.locator('#prototypeStatus')).toContainText('订单源日期读取失败或未获授权');
   await expect(page.locator('body')).not.toContainText('AUTHORIZED-ORDER');
   assert.deepEqual(errors, []);
 });
