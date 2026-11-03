@@ -30,7 +30,10 @@ window.OrderShortageEditor = (() => {
       originalQuantity: number(line.quantity),
       draftQuantity: number(line.quantity),
     }));
-    const editable = state.status === 'pending' && capabilities.editable === true;
+    const editable =
+      state.status === 'pending' &&
+      capabilities.editable === true &&
+      state.permissions?.canAct !== false;
     let page = 'order',
       search = '',
       category = '全部';

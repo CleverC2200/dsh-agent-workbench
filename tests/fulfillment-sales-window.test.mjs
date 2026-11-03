@@ -187,3 +187,33 @@ test('frontend bundle owns its assets and has reproducible hashes without deploy
     await rm(output, { recursive: true, force: true });
   }
 });
+
+test('shared recipients see read-only details and return without submitting or editing', async () => {
+  for (const mode of ['confirm', 'defer', 'details']) {
+    const dom = new JSDOM(html, {
+      runScripts: 'outside-only',
+      url: 'https://fixture.invalid/window/test?mode=' + mode,
+    });
+    try {
+      const requests = [];
+      const state = fixture();
+      state.previewOnly = false;
+      state.permissions = { canAct: false };
+      dom.window.fetch = async (url) => {
+        requests.push(url);
+        return { ok: true, json: async () => state };
+      };
+      dom.window.eval(editor + '\n' + controller);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(dom.window.document.getElementById('title').textContent, '订单明细');
+      assert.equal(dom.window.document.getElementById('submit').hidden, true);
+      assert.equal(dom.window.document.getElementById('orderEditor').hidden, true);
+      assert.equal(dom.window.document.getElementById('cancel').textContent, '返回');
+      assert.match(dom.window.document.getElementById('notice').textContent, /指定销售/);
+      dom.window.document.getElementById('submit').click();
+      assert.equal(requests.length, 1);
+    } finally {
+      dom.window.close();
+    }
+  }
+});
