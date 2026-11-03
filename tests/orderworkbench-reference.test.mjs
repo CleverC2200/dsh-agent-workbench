@@ -2,6 +2,7 @@ import { createReportPersistence } from '../prototypes/inventory-orderworkbench/
 import { createFrameProgress } from '../business/shared/frame-progress.js';
 import { metricDetailsRequest } from '../prototypes/inventory-orderworkbench/metric-details.mjs';
 import { startDashboardTiming } from '../business/shared/dashboard-timing.js';
+import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache } from '../prototypes/inventory-orderworkbench/presentation-cache.mjs';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,6 +29,8 @@ test('order workbench reference interactions', async () => {
   window.createReportPersistence = createReportPersistence;
   window.createFrameProgress = createFrameProgress;
   window.startDashboardTiming = startDashboardTiming;
+  window.createWorkbenchPresentationCache = createWorkbenchPresentationCache;
+  window.createWorkbenchEvidenceCache = createWorkbenchEvidenceCache;
   window.encodeReportRequest = async (request) => request;
   window.savedReports = new Map();
   window.savedEdits = new Map();
@@ -109,11 +112,16 @@ test('order workbench reference interactions', async () => {
       '',
     );
     window.eval(
-      'const ready=Promise.resolve(); const loadWorkbenchFacts=async(start,end,signal,options)=>{window.requestedPeriod={start,end};if(window.deferLoad)return new Promise(resolve=>window.pendingReads.push({resolve,progress:options.onProgress}));return {...window.liveFixture,start,end}}; const createPageViewState=()=>({subscribe(fn){window.restoreView=fn},update(state){window.savedView=state}}); const draft=async()=>{}; const publishReport=(snapshot)=>{for(const type of ["click","change","submit"]) document.addEventListener(type,()=>{window.pageSnapshot=snapshot()}); window.pageSnapshot=snapshot(); return ()=>{window.pageSnapshot=snapshot()}};\n' +
+      'const ready=Promise.resolve(); const loadWorkbenchFacts=async(start,end,signal,options)=>{window.requestedPeriod={start,end};if(window.deferLoad)return new Promise(resolve=>window.pendingReads.push({resolve,progress:options.onProgress,signal,start,end}));return {...window.liveFixture,start,end}}; const createPageViewState=()=>({subscribe(fn){window.restoreView=fn},update(state){window.savedView=state}}); const draft=async()=>{}; const publishReport=(snapshot)=>{for(const type of ["click","change","submit"]) document.addEventListener(type,()=>{window.pageSnapshot=snapshot()}); window.pageSnapshot=snapshot(); return ()=>{window.pageSnapshot=snapshot()}};\n' +
         code,
     );
     const document = window.document;
+    window.dispatchEvent(new window.Event('gea-session-changed'));
     await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(window.reportLoads, 1, 'initial Session notification and ready resolve share one live load');
+    window.dispatchEvent(new window.Event('gea-session-changed'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(window.reportLoads, 1, 'duplicate connected notifications do not restart a live report');
     assert.equal(document.querySelectorAll('.wb-kpi').length, 6);
     assert.equal(window.pageSnapshot.consumerCode, 'order');
     assert.equal(window.pageSnapshot.mock, false);
@@ -150,7 +158,8 @@ test('order workbench reference interactions', async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(window.requestedPeriod.start, '2026-09-01');
     assert.equal(window.requestedPeriod.end, '2026-09-07');
-    assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'saved');
+    assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'loaded');
+    assert.equal(window.savedReports.size, 0, 'viewing periods does not write full metric snapshots');
     assert.equal(
       validHtmlViewState('inventory-orderworkbench', { ...window.savedView, version: 1 }),
       true,
@@ -196,7 +205,17 @@ test('order workbench reference interactions', async () => {
     click('[data-wb-edit-unmet]');
     assert.equal(document.getElementById('wbUnmetEntity').value, '小水饺');
     click('#wbUnmetAddCancel');
-    for (const button of document.querySelectorAll('[data-wb-dimension-tab]')) button.click();
+    const metricNode = document.querySelector('#wbKpis .wb-kpi');
+    let missingReasonReads = 0;
+    const readMissingReason = window.workbenchCellMissingReason;
+    window.workbenchCellMissingReason = (...args) => { missingReasonReads++; return readMissingReason(...args); };
+    for (let repeat = 0; repeat < 3; repeat++)
+      for (const button of document.querySelectorAll('[data-wb-dimension-tab]')) {
+        button.click();
+        assert.equal(document.querySelector('#wbKpis .wb-kpi'), metricNode);
+        assert.equal(window.pageSnapshot.dimension.key, button.dataset.wbDimensionTab);
+      }
+    assert.ok(missingReasonReads < 50, `table rendering recalculated ${missingReasonReads} cell diagnostics`);
     click('[data-wb-reference-add]');
     document.getElementById('wbReferenceName').value = '月度报告';
     document.getElementById('wbReferenceUrl').value = 'https://example.com/report';
@@ -233,6 +252,10 @@ test('order workbench reference interactions', async () => {
     assert.match(document.querySelector('.wb-improvement-table').textContent, /测试改善/);
     window.rejectReportSaves = true;
     click('[data-period-month="2026-08"]');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    click('[data-wb-summary-edit]');
+    document.getElementById('wbSummaryPositiveInput').value = '保存失败时保留的编辑';
+    submit('wbSummaryEditForm');
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'error');
     click('[data-period-month="2026-09"]');
@@ -293,28 +316,27 @@ test('order workbench reference interactions', async () => {
       'background save must not change selected period',
     );
     assert.ok(
-      [...window.savedReports.values()].some(
-        (value) => value.report.edits.summary.positive === '对比加载时编辑的摘要',
+      [...window.savedEdits.values()].some(
+        (value) => value.edits.summary.positive === '对比加载时编辑的摘要',
       ),
-      'inactive period edits save after its complete data arrives',
+      'cancelling inactive reads does not cancel independently saved edits',
     );
+    assert.equal(window.pendingReads[0].signal.aborted, true);
     click('[data-period-month="2026-08"]');
     assert.match(document.getElementById('periodPickerValue').textContent, /2026年8月/);
-    window.pendingReads[0].progress(partial);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const resumed = window.pendingReads.at(-1);
+    resumed.progress(partial);
     assert.equal(
       document.querySelector('[data-wb-summary-content="positive"]').textContent,
       '对比加载时编辑的摘要',
     );
-    window.pendingReads[0].resolve(window.liveFixture);
+    resumed.resolve(window.liveFixture);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'saved');
-    assert.ok(
-      [...window.savedReports.values()].some(
-        (value) =>
-          value.report.facts.complete === true &&
-          value.report.edits.summary.positive === '对比加载时编辑的摘要',
-      ),
-    );
+    assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'loaded');
+    assert.equal(window.savedReports.size, 0, 'completed metric loads remain in memory without background database writes');
+    assert.ok([...window.savedEdits.values()].some(value =>
+      value.edits.summary.positive === '对比加载时编辑的摘要'));
     click('[data-period-month="2026-07"]');
     assert.ok(
       document.querySelector('[data-period-month="2026-09"]'),

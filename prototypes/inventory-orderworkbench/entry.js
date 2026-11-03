@@ -7,7 +7,8 @@ import { metricDetailsRequest } from './metric-details.mjs';
 import { loadWorkbenchFacts, loadWorkbenchSkuPage } from './live-source.js';
 import { createFrameProgress } from '../../business/shared/frame-progress.js';
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
-import { workbenchPresentation, workbenchEvidence, workbenchBaseIncluded } from './live-presentation.mjs';
+import { workbenchPresentation, workbenchBaseIncluded } from './live-presentation.mjs';
+import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache } from './presentation-cache.mjs';
 import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
 import { reusableWorkbenchFacts, compatibleWorkbenchFacts } from './metric-model.mjs';
 import { publishReport } from './publication.js';
@@ -27,6 +28,8 @@ let liveSkuDetails = {};
 let liveSkuPagination = {};
 const workbenchSkuPages = new Map();
 let applyLiveFacts = () => {};
+const cachedWorkbenchPresentation = createWorkbenchPresentationCache();
+const cachedWorkbenchEvidence = createWorkbenchEvidenceCache();
 let reportLoaded = false, savedPresentation = null, reportEdited = false;
 const periodCacheMaxAge = 20 * 60 * 1000;
 const periodReports = new Map();
@@ -2293,8 +2296,18 @@ async function readCurrentPeriod() {
   const key=periodMode+':'+selectedMonth+(periodMode==='week'?':'+selectedWeek:'');
   if (key===liveReadKey) return;
   if(activePeriodReport && reportLoaded) activePeriodReport.edits=structuredClone(reportEdits());
+  if (activePeriodReport && !activePeriodReport.finished) {
+    activePeriodReport.readController?.abort();
+    activePeriodReport.started = false;
+    if (!activePeriodReport.loaded && !activePeriodReport.dirty && !activePeriodReport.persistence.pending()) {
+      activePeriodReport.controller.abort();
+      activePeriodReport.persistence.cancel();
+      periodReports.delete(liveReadKey);
+    }
+  }
   liveReadKey=key;
   let entry=periodReports.get(key);
+  if (entry?.controller.signal.aborted) { periodReports.delete(key); entry = null; }
   if(entry && !entry.dirty && !entry.persistence.pending() && entry.finished && Date.now()-entry.finished>periodCacheMaxAge){entry.controller.abort();periodReports.delete(key);entry=null;}
   if(!entry){
     entry={controller:new AbortController(),edits:null,dirty:false,loaded:false,facts:null,started:false};
@@ -2306,6 +2319,14 @@ async function readCurrentPeriod() {
     periodReports.set(key,entry);
   }
   activePeriodReport=entry;persistence=entry.persistence;
+  for (const [cachedKey, cached] of periodReports) {
+    if (periodReports.size <= 6) break;
+    if (cached !== entry && !cached.started && !cached.dirty && !cached.persistence.pending()) {
+      cached.controller.abort();
+      cached.persistence.cancel();
+      periodReports.delete(cachedKey);
+    }
+  }
   const controller=liveController=entry.controller;
   liveFacts=null;
   reportLoaded=false; savedPresentation=null; reportEdited=false;
@@ -2321,15 +2342,15 @@ async function readCurrentPeriod() {
   const start=periodMode==='month'?monthStart:(selectedWeek<monthStart?monthStart:selectedWeek);
   const weekEnd=addDays(selectedWeek,7);
   const end=periodMode==='week'&&weekEnd<monthEnd?weekEnd:monthEnd;
-  const applyFacts = (facts, storedPresentation) => {
+  const applyFacts = (facts, storedPresentation, { dimensionOnly = false } = {}) => {
     if (controller.signal.aborted) return;
     entry.facts=facts;
     if (liveReadKey!==key) return;
     liveFacts=facts;
-    const presentation=storedPresentation&&!storedPresentation.lazy&&storedPresentation.performanceStyleVersion===performanceStyleVersion?storedPresentation:workbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
+    const presentation=storedPresentation&&!storedPresentation.lazy&&storedPresentation.performanceStyleVersion===performanceStyleVersion?storedPresentation:cachedWorkbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
     savedPresentation=presentation;
-    for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
-    for(const metric of metricDefinitions) {
+    if (!dimensionOnly) for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
+    if (!dimensionOnly) for(const metric of metricDefinitions) {
       const card=topMetricCards.find(item=>item.key===metric.key);
       if(card) Object.assign(metric,{value:card.value+card.unit,display:card.value,status:card.status,note:card.formula,
         formula:card.formula,change:card.comparison[0],sameChange:card.comparison[1]});
@@ -2344,6 +2365,11 @@ async function readCurrentPeriod() {
     liveSkuDetails=facts.sqlSummary?{}:presentation.skus;
     if(facts.sqlSummary)for(const expanded of expandedSkuCategories){const category=expanded.slice(expanded.indexOf(':')+1);void loadServerSku(category,workbenchSkuPages.get(category)??0);}
     liveSkuPagination=presentation.skuPagination??{};
+    if (dimensionOnly) {
+      renderWorkbenchDimensions();
+      updateReport();
+      return;
+    }
     renderSelectedPeriod();
     updateReport();
   };
@@ -2359,18 +2385,26 @@ async function readCurrentPeriod() {
     if(entry.status){persistenceStatus.dataset.state=entry.status.state;persistenceStatus.textContent=' · '+entry.status.message;}
     return;
   }
+  if (entry.facts) {
+    reportLoaded = entry.loaded;
+    applyFacts(entry.facts);
+  }
   entry.started=true;
-  const timing = startDashboardTiming('order-workbench', controller.signal);
+  const readController = entry.readController = new AbortController();
+  const readSignal = AbortSignal.any([controller.signal, readController.signal]);
+  const timing = startDashboardTiming('order-workbench', readSignal);
   try {
     let saved;
     try {
-      saved = await entry.persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal);
-      entry.loaded=true;if(!entry.dirty)entry.edits=saved?.edits??{};
-      if(activePeriodReport===entry){reportLoaded=true;restoreReportEdits(entry.edits);}
-    } catch (error) { controller.signal.throwIfAborted(); }
+      entry.restore ??= entry.persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal);
+      saved = await entry.restore;
+      if(!entry.loaded && !entry.dirty)entry.edits=saved?.edits??{};
+      entry.loaded=true;
+      if(activePeriodReport===entry && !readSignal.aborted){reportLoaded=true;restoreReportEdits(entry.edits);}
+    } catch (error) { entry.restore = undefined; controller.signal.throwIfAborted(); }
 
-    controller.signal.throwIfAborted();
-    if(compatibleWorkbenchFacts(saved?.facts)) {
+    readSignal.throwIfAborted();
+    if(!entry.facts && compatibleWorkbenchFacts(saved?.facts)) {
       entry.apply(saved.facts,saved.presentation);
       timing.mark('saved-report-ready');
     }
@@ -2385,25 +2419,32 @@ async function readCurrentPeriod() {
         if (Object.values(facts.periods[facts.selected]?.metrics??{}).some(metric=>typeof metric.value==='number'&&Number.isFinite(metric.value)))
           timing.mark('selected-period-ready');
       }
-    }, controller.signal);
+    }, readSignal);
     let facts;
     try {
-      facts=await loadWorkbenchFacts(start,end,controller.signal,{onProgress:progress.push,base:entry.persistence.scope()?.base,summary:true});
+      const base = entry.persistence.scope()?.base;
+      const seedFacts = [...periodReports.values()].filter(cached => cached.loaded &&
+        cached.persistence.scope()?.base === base && compatibleWorkbenchFacts(cached.facts) &&
+        Date.now() - Date.parse(cached.facts.readAt) < periodCacheMaxAge)
+        .map(cached => cached.facts);
+      facts=await loadWorkbenchFacts(start,end,readSignal,{onProgress:progress.push,base,summary:true,seedFacts});
+      readSignal.throwIfAborted();
       const partial = Object.values(facts.periods).some(period => period.sections.some(section => section.status === 'error')) ||
         ['directors','customers','customerManagers'].some(name => facts[name]?.status === 'error');
       timing.finish(partial ? 'partial' : 'complete');
     } catch (error) {
-      timing.finish(controller.signal.aborted ? 'cancelled' : 'failed');
+      timing.finish(readSignal.aborted ? 'cancelled' : 'failed');
       throw error;
     } finally { progress.cancel(); }
     entry.apply(facts);entry.finished=Date.now();
     if(entry.loaded){
       if(activePeriodReport===entry)entry.edits=structuredClone(reportEdits());
-      entry.persistence.save({schemaVersion:1,facts,presentation:workbenchPresentation(facts,{dimension:dimensionTab}),edits:entry.edits});
     }
     for(const [cachedKey,cached] of periodReports)if(periodReports.size>6&&cached!==activePeriodReport&&cached.finished&&!cached.dirty&&!cached.persistence.pending()){cached.controller.abort();periodReports.delete(cachedKey);}
   } catch (error) {
-    timing.finish(controller.signal.aborted ? 'cancelled' : 'failed');
+    timing.finish(readSignal.aborted ? 'cancelled' : 'failed');
+    if (entry.readController !== readController) return;
+    if (readSignal.aborted) { entry.started = false; return; }
     entry.started=false;entry.facts=null;entry.loaded=false;
     if(!entry.dirty)periodReports.delete(key);
     if (!controller.signal.aborted && activePeriodReport===entry) {
@@ -2416,12 +2457,12 @@ async function readCurrentPeriod() {
   }
 }
 clearLiveMetrics();
-void ready.then(()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
+void ready.then(()=>{if(liveConnected)return;liveConnected=true;liveReadKey='';renderSelectedPeriod();});
 for (const name of ['gea-identity-changed','gea-session-changing','pagehide']) window.addEventListener(name,()=>{
   for(const entry of periodReports.values()){entry.controller.abort();entry.persistence.cancel();}periodReports.clear();activePeriodReport=null;
   liveConnected=false;liveController?.abort();persistence.cancel();reportEdited=false;reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
 });
-window.addEventListener('gea-session-changed',()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
+window.addEventListener('gea-session-changed',()=>{if(liveConnected)return;liveConnected=true;liveReadKey='';renderSelectedPeriod();});
 
 function renderWorkbench() {
   renderWorkbenchSummary();
@@ -2570,11 +2611,11 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
   const rows = table.rows.filter(
     (row) => !selectedBase || baseColumnIndex == null || row[baseColumnIndex] === selectedBase,
   );
+  const headings=table.groups.flatMap(group=>group.rowspan?[{group:group.label,header:group.label}]:group.columns.map(header=>({group:group.label,header})));
   const body = rows
     .map((row) => {
       const cells = row
         .map((value,columnIndex) => {
-          const headings=table.groups.flatMap(group=>group.rowspan?[{group:group.label,header:group.label}]:group.columns.map(header=>({group:group.label,header})));
           const unmapped=['未映射','归属待补全'].includes(value);
           const missing=unmapped||(value?.text??value)==='—';
           const title=value?.title?` title="${escapeHtml(value.title)}"`:missing?` title="${escapeHtml(workbenchCellMissingReason(liveFacts,{...headings[columnIndex],row,dimension:dimensionTab,period:table.title.includes('周度')?'week':'month'}))}"`:'';
@@ -2777,8 +2818,7 @@ function renderWorkbenchDimensions() {
   panel.querySelectorAll('[data-wb-sku-page]').forEach(button=>button.addEventListener('click',()=>{
     workbenchSkuPages.set(decodeURIComponent(button.dataset.wbSkuPage),Number(button.dataset.page));
     if(liveFacts?.sqlSummary){void loadServerSku(decodeURIComponent(button.dataset.wbSkuPage),Number(button.dataset.page));return;}
-    if(liveFacts)applyLiveFacts(liveFacts);
-    renderWorkbenchDimensions();
+    refreshWorkbenchDimension();
   }));
   panel.querySelectorAll('[data-wb-sku-toggle]').forEach((button) =>
     button.addEventListener('click', () => {
@@ -2786,8 +2826,7 @@ function renderWorkbenchDimensions() {
       if (expandedSkuCategories.has(key)) expandedSkuCategories.delete(key);
       else expandedSkuCategories.add(key);
       if(liveFacts?.sqlSummary){void loadServerSku(button.dataset.wbSkuToggle,workbenchSkuPages.get(button.dataset.wbSkuToggle)??0);renderWorkbenchDimensions();return;}
-      if(liveFacts)applyLiveFacts(liveFacts);
-      renderWorkbenchDimensions();
+      refreshWorkbenchDimension();
     }),
   );
   panel.querySelectorAll('[data-wb-region-toggle]').forEach((button) =>
@@ -2800,11 +2839,15 @@ function renderWorkbenchDimensions() {
   );
 }
 const wbDimensionTabButtons = [...workbenchView.querySelectorAll('[data-wb-dimension-tab]')];
+function refreshWorkbenchDimension() {
+  if (liveFacts) applyLiveFacts(liveFacts, undefined, { dimensionOnly: true });
+  else renderWorkbenchDimensions();
+}
 wbDimensionTabButtons.forEach((button) => {
   button.addEventListener('click', () => {
+    if (dimensionTab === button.dataset.wbDimensionTab) return;
     dimensionTab = button.dataset.wbDimensionTab;
-    if(liveFacts)applyLiveFacts(liveFacts);
-    renderWorkbenchDimensions();
+    refreshWorkbenchDimension();
   });
 });
 function showWorkbenchToast(message) {
@@ -3647,8 +3690,7 @@ workbenchView.addEventListener('keydown', (event) => {
   if (event.key === 'End') index = tabs.length - 1;
   event.preventDefault();
   dimensionTab = tabs[index].dataset.wbDimensionTab;
-  if(liveFacts)applyLiveFacts(liveFacts);
-  renderWorkbenchDimensions();
+  refreshWorkbenchDimension();
   tabs[index].focus();
 });
 function focusCreatedTask(id) {
@@ -3875,7 +3917,7 @@ const updateReport = publishReport(
     return {
       source: 'gea-governed-sql',
       mock: false,
-      evidence: workbenchEvidence(liveFacts),
+      evidence: cachedWorkbenchEvidence(liveFacts),
       pageId: 'inventory-orderworkbench',
       instance: 'default',
       period: {

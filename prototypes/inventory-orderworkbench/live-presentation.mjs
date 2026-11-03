@@ -125,21 +125,48 @@ function summaryRows(periods, field, directorMap, loading = false) {
     ).map((key) => {
       const [name, base] = JSON.parse(key);
       return {
+        id: key,
         labels: [name, base],
-        filter: (row, key) =>
-          dimensionValue(row.base) === base && directors(row, key).includes(name),
       };
     });
   else
     groups = distinct(source.map((row) => dimensionValue(row[field]))).map((label) => ({
+      id: label,
       labels: [label],
-      filter: (row) => dimensionValue(row[field]) === label,
     }));
   if (field !== 'director')
     groups.push({
+      id: Symbol('total'),
       labels: ['合计'],
-      filter: (row) => field !== 'base' || workbenchBaseIncluded(row.base),
     });
+  const indexedPeriods = new Map();
+  const groupedMetrics = (key, group) => {
+    const period = periods[key];
+    if (!period) return {};
+    if (!indexedPeriods.has(key)) {
+      const buckets = new Map(groups.map((group) => [group.id, []]));
+      for (const section of period.sections) {
+        const sectionRows = new Map(groups.map((group) => [group.id, []]));
+        for (const row of section.rows) {
+          const ids = field === 'director'
+            ? directors(row, key).map((name) => JSON.stringify([name, dimensionValue(row.base)]))
+            : [dimensionValue(row[field])];
+          for (const id of new Set(ids)) sectionRows.get(id)?.push(row);
+        }
+        for (const group of groups) {
+          const groupRows = typeof group.id === 'symbol'
+            ? field === 'base' ? section.rows.filter((row) => workbenchBaseIncluded(row.base)) : section.rows
+            : sectionRows.get(group.id);
+          buckets.get(group.id).push({ ...section, rows: groupRows });
+        }
+      }
+      indexedPeriods.set(key, new Map([...buckets].map(([id, sections]) => [id,
+        computeWorkbenchMetrics({ ...period, sections }, undefined,
+          { turnoverScope: field === 'item' ? 'item' : 'base' }),
+      ])));
+    }
+    return indexedPeriods.get(key).get(group.id);
+  };
   const tables = {};
   for (const [key, previous, year] of [
     ['month', 'previousMonth', 'yearMonth'],
@@ -150,34 +177,26 @@ function summaryRows(periods, field, directorMap, loading = false) {
       continue;
     }
     tables[key] = groups.map((group) => {
-      const formulaOptions = { turnoverScope: field === 'item' ? 'item' : 'base' };
-      const m = computeWorkbenchMetrics(
-        periods[key],
-        (row) => group.filter(row, key),
-        formulaOptions,
-      );
-      const p = periods[previous]
-        ? computeWorkbenchMetrics(
-            periods[previous],
-            (row) => group.filter(row, previous),
-            formulaOptions,
-          )
-        : {};
-      const y = periods[year]
-        ? computeWorkbenchMetrics(periods[year], (row) => group.filter(row, year), formulaOptions)
-        : {};
+      const m = groupedMetrics(key, group);
+      const p = groupedMetrics(previous, group);
+      const y = groupedMetrics(year, group);
       const cells = (name) => {
-        const currentCell = performanceCurrentCell(
+        let currentCell = performanceCurrentCell(
           name,
           metricValue(m, name),
           value(m, name),
           field === 'director' ? group.labels[1] : field === 'base' ? group.labels[0] : '',
         );
+        if (metricValue(m, name) === null)
+          currentCell = { text: '—', title: m[name]?.missingReason ?? '当前分组尚无有效计算依据。' };
         if (m[name]?.sample && currentCell && typeof currentCell === 'object')
           currentCell.title = metricCoverageSummary(m[name]) + '；不是全量指标。';
         const delta = (other, otherKey) => {
           if (loading && !periods[otherKey]) return '加载中';
           const text = metricDelta(m, other, name);
+          if (text === '—') return { text, title: metricValue(m, name) === null
+            ? m[name]?.missingReason ?? '当前分组尚无有效计算依据。'
+            : '比较期：' + (other[name]?.missingReason ?? '当前分组尚无有效计算依据。') };
           return text !== '—' && (m[name]?.sample || other[name]?.sample)
             ? { text, title: metricComparisonNote(m, other, name) }
             : text;
