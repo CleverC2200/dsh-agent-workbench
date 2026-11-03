@@ -213,7 +213,7 @@ export function mountFramePresentation(
   let rememberedConversationWidth: number | undefined;
   let execution: WorkbenchPageExecution | undefined;
   const backendListeners = new Set<() => void>();
-  ctx.inject(['businessAccount', 'remote.session', 'sessions', 'conversation'], (scope) => {
+  ctx.inject(['businessAccount', 'remote', 'remote.session', 'sessions', 'conversation'], (scope) => {
     const owned = createExecution(scope, scope.businessAccount);
     execution = owned;
     for (const changed of backendListeners) changed();
@@ -589,6 +589,9 @@ export function mountFramePresentation(
             },
             () => {
               if (alive()) setConnectionState('connected');
+            },
+            () => {
+              if (alive()) changeView('split');
             },
           );
           disposeBridge = bridge;
