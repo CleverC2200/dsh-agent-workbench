@@ -20,7 +20,7 @@ const sdkDependency = '@ci/sdk';
 const upstreamDependency = '@ci/upstreams';
 const testFile = /\.(?:test\.[cm]?[jt]sx?|(?:browser|contract)\.mjs)$/;
 
-function versionOnlyFiles(root, base) {
+function versionOnlyFiles(root, base, companionPeerOnly = false) {
   const files = new Set();
   try {
     const before = JSON.parse(git(root, 'show', `${base}:package.json`));
@@ -34,7 +34,12 @@ function versionOnlyFiles(root, base) {
       !current ||
       current === previous ||
       typeof before.name !== 'string' ||
-      JSON.stringify(oldFields) !== JSON.stringify(newFields)
+      JSON.stringify(oldFields) !==
+        JSON.stringify(
+          companionPeerOnly
+            ? { ...newFields, peerDependencies: oldFields.peerDependencies }
+            : newFields,
+        )
     )
       return files;
     files.add('package.json');
@@ -45,14 +50,15 @@ function versionOnlyFiles(root, base) {
       quote === '"'
         ? JSON.stringify(value)
         : "'" + JSON.stringify(value).slice(1, -1).replaceAll("'", "\\'") + "'";
-    for (const quote of ['"', "'"]) {
-      const oldLine = `  version: ${literal(previous, quote)},`;
-      if (
-        oldStamp.includes(oldLine) &&
-        oldStamp.replace(oldLine, `  version: ${literal(current, quote)},`) === newStamp
-      )
-        files.add(file);
-    }
+    for (const quote of ['"', "'"])
+      for (const ending of [',\n', '\n']) {
+        const oldLine = `  version: ${literal(previous, quote)}${ending}`;
+        if (
+          oldStamp.includes(oldLine) &&
+          oldStamp.replace(oldLine, `  version: ${literal(current, quote)}${ending}`) === newStamp
+        )
+          files.add(file);
+      }
     const lockFile = 'package-lock.json';
     if (existsSync(resolve(root, lockFile))) {
       const oldLock = JSON.parse(git(root, 'show', `${base}:${lockFile}`));
@@ -66,6 +72,52 @@ function versionOnlyFiles(root, base) {
     return files;
   }
   return files;
+}
+
+function companionPeerOnlyManifest(root, base, repositories, allowVersionChange) {
+  try {
+    const before = JSON.parse(git(root, 'show', `${base}:package.json`));
+    const after = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
+    const oldPeers = before.peerDependencies;
+    const newPeers = after.peerDependencies;
+    if (
+      !oldPeers ||
+      !newPeers ||
+      typeof before.version !== 'string' ||
+      !before.version ||
+      typeof after.version !== 'string' ||
+      !after.version ||
+      (!allowVersionChange && before.version !== after.version) ||
+      JSON.stringify(Object.keys(oldPeers)) !== JSON.stringify(Object.keys(newPeers)) ||
+      JSON.stringify(before) !==
+        JSON.stringify({ ...after, version: before.version, peerDependencies: oldPeers })
+    )
+      return false;
+    const companions = repositories
+      .filter((entry) => entry.path !== root)
+      .map((entry) => JSON.parse(readFileSync(resolve(entry.path, 'package.json'), 'utf8')).name);
+    const exactVersion =
+      /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+    let changed = false;
+    for (const [name, previous] of Object.entries(oldPeers)) {
+      const current = newPeers[name];
+      if (previous === current) continue;
+      if (!companions.includes(name) || typeof previous !== 'string' || typeof current !== 'string')
+        return false;
+      const oldVersions = previous.split('||').map((value) => value.trim());
+      const newVersions = current.split('||').map((value) => value.trim());
+      if (
+        ![...oldVersions, ...newVersions].every((value) => exactVersion.test(value)) ||
+        !oldVersions.every((value) => newVersions.includes(value)) ||
+        !newVersions.some((value) => !oldVersions.includes(value))
+      )
+        return false;
+      changed = true;
+    }
+    return changed;
+  } catch {
+    return false;
+  }
 }
 
 function references(file, roots, known, importsOnly = false) {
@@ -552,11 +604,33 @@ export function selectCiTests({
     );
   const applicability = docsOnly ? 'docs' : 'source';
   const versionTests = policy.versionTests === undefined ? [] : expand(policy.versionTests);
+  const companionPeerTests =
+    policy.companionPeerTests === undefined ? [] : expand(policy.companionPeerTests);
+  const companionPeerOnly =
+    sourceOnly &&
+    companionPeerTests.length > 0 &&
+    !changes.some(
+      (change) =>
+        change.repo === repo &&
+        /(?:^|\/)(?:package-lock\.json|pnpm-lock\.yaml|npm-shrinkwrap\.json)$/.test(change.file),
+    ) &&
+    companionPeerOnlyManifest(root, diffBase, repositories, versionTests.length > 0);
   const versionFiles =
-    sourceOnly && versionTests.length ? versionOnlyFiles(root, diffBase) : new Set();
+    sourceOnly && versionTests.length
+      ? versionOnlyFiles(root, diffBase, companionPeerOnly)
+      : new Set();
   const selected = new Set(docsOnly ? [] : required),
     reasons = {};
   for (const change of changes) {
+    if (change.repo === repo && change.file === 'package.json' && companionPeerOnly) {
+      change.companionPeerOnly = true;
+      const tests = [
+        ...new Set([...companionPeerTests, ...(versionFiles.has(change.file) ? versionTests : [])]),
+      ].sort();
+      reasons[`${change.repo}/${change.file}`] = tests;
+      for (const file of tests) selected.add(directFile(file));
+      continue;
+    }
     if (change.repo === repo && versionFiles.has(change.file)) {
       change.versionOnly = true;
       reasons[`${change.repo}/${change.file}`] = versionTests;
@@ -667,10 +741,11 @@ export function selectCiTests({
     diffBase,
     policySha256: digest(policyBytes),
     peerBaselineSha256: sourceOnly ? null : digest(baselineBytes),
-    changes: changes.map(({ repo, file, versionOnly }) => ({
+    changes: changes.map(({ repo, file, versionOnly, companionPeerOnly }) => ({
       repo,
       file,
       ...(versionOnly ? { versionOnly } : {}),
+      ...(companionPeerOnly ? { companionPeerOnly } : {}),
     })),
     required,
     files,
