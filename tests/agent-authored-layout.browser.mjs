@@ -4,6 +4,14 @@ import { readFile, mkdir } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
 import { configuredPageHtml, configuredWire } from './fixtures/configured-page.mjs';
 
+async function selectProductionDimension(frame, name) {
+  await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+  const tab = frame.getByRole('tab', { name, exact: true });
+  // Center below sticky toolbars after the initial cards stop changing the document height.
+  await tab.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+  await tab.click();
+}
+
 async function openCompanySku(frame, layer = '基地', organization = '华东') {
   await frame.getByRole('button', { name: '汤圆', exact: true }).click();
   await frame.getByRole('button', { name: layer, exact: true }).click();
@@ -156,14 +164,14 @@ test('APS mounts only the selected analysis cards and detail lists', async (t) =
   await frame
     .locator('.analysis-workspace')
     .evaluate((element) => element.scrollTo({ top: 0, behavior: 'instant' }));
-  await frame.getByRole('tab', { name: '基地维度', exact: true }).click();
+  await selectProductionDimension(frame, '基地维度');
   await expect(frame.locator('#base-dashboard')).toBeVisible();
   await expect(frame.locator('#base')).toBeVisible();
   await expect(frame.locator('#category-operations, #cross-analysis')).toHaveCount(0);
   await frame
     .locator('.analysis-workspace')
     .evaluate((element) => element.scrollTo({ top: 0, behavior: 'instant' }));
-  await frame.getByRole('tab', { name: '交叉分析', exact: true }).click();
+  await selectProductionDimension(frame, '交叉分析');
   await expect(frame.locator('#cross-analysis')).toBeVisible();
   await expect(frame.locator('#base-dashboard, #base')).toHaveCount(0);
   assert.deepEqual(errors, []);
@@ -221,7 +229,7 @@ for (const width of [1280, 900, 760]) {
     await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
     await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
     await frame.getByRole('tab', { name: '月度视角', exact: true }).click();
-    await frame.getByRole('tab', { name: '交叉分析', exact: true }).click();
+    await selectProductionDimension(frame, '交叉分析');
     const cross = frame.locator('#cross-analysis');
     const cell = (scope) => cross.locator(`.matrix-row button[title^="${scope} ·"]`);
     await cross
@@ -2770,8 +2778,7 @@ for (const dimension of ['品类维度', '基地维度'])
       await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
       await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
       await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
-      if (dimension === '基地维度')
-        await frame.getByRole('tab', { name: dimension, exact: true }).click();
+      if (dimension === '基地维度') await selectProductionDimension(frame, dimension);
       await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
       const base = dimension === '基地维度';
       if (width === 1280)
