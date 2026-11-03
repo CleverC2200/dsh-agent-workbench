@@ -1044,6 +1044,11 @@ test('replenishment quick filters use server scope, product links expand inline 
           configVersion: 'fixture',
         },
       });
+    // Keep the loading panel visible before the resource request reaches the fixture log.
+    if (id === 'base_resources.detail.atomic')
+      await new Promise((resolve) => {
+        setTimeout(resolve, 200);
+      });
     calls.push({ id, values });
     const q = config.queries[id];
     assert.ok(q, id);
@@ -1157,7 +1162,9 @@ test('replenishment quick filters use server scope, product links expand inline 
   const resources = page.getByRole('region', { name: 'SKU1基地资源', exact: true });
   await expect(resources).toContainText('华东');
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  assert.equal(calls.find((c) => c.id === 'base_resources.detail.atomic').values.sku, 'SKU1');
+  await expect
+    .poll(() => calls.find((c) => c.id === 'base_resources.detail.atomic')?.values.sku)
+    .toBe('SKU1');
   const scroll = page
     .locator('.table-scroll')
     .filter({ has: page.locator(':scope > .replenishment-table') })
