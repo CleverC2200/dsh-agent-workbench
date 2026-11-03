@@ -5,7 +5,7 @@ from sqlglot import exp
 from sqlglot.optimizer.scope import traverse_scope,Scope
 repo=Path(__file__).resolve().parents[1]
 pages=[]
-for agent in ['fc','qll']:
+for agent in ['fc','qll','aqkc']:
  cfg=json.loads((repo/f'business/inventory-{agent}/sql.config.json').read_text())
  calls=[]
  for member in cfg['dailySummary']['bundle']['members']:

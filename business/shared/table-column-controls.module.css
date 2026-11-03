@@ -1,0 +1,96 @@
+.filterButton {
+  border: 0;
+  background: transparent;
+  color: #737d8f;
+  cursor: pointer;
+  padding: 4px;
+  display: inline-flex;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.filterButton[data-active='true'] {
+  color: #df1732;
+  background: #fff0f3;
+  border-radius: 4px;
+}
+.filterButton:focus-visible,
+.resizeHandle:focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: -2px;
+}
+.filterPopup {
+  position: fixed;
+  z-index: 10000;
+  width: 260px;
+  padding: 14px;
+  box-sizing: border-box;
+  background: white;
+  color: #252a34;
+  border: 1px solid #e3e6ea;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px #19223224;
+  font:
+    12px 'Microsoft YaHei UI',
+    'PingFang SC',
+    sans-serif;
+  display: grid;
+  gap: 12px;
+}
+.filterPopup label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.filterPopup input,
+.filterPopup select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 34px;
+  padding: 6px 8px;
+  border: 1px solid #d8dde5;
+  border-radius: 6px;
+  font: inherit;
+  color: inherit;
+  background: white;
+}
+.range {
+  display: flex;
+  gap: 8px;
+}
+.range label {
+  flex: 1;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.actions button {
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #d8dde5;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.actions button[type='submit'] {
+  background: #df1732;
+  border-color: #df1732;
+  color: white;
+}
+.resizeHandle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 5;
+}
+.resizeHandle:hover,
+.resizeHandle:focus-visible {
+  background: #df173259;
+}

@@ -16,6 +16,7 @@ import dealer from '../inventory-dealer/source/inventory-light-plugins/src/pages
 import chain from '../inventory-qll/source/inventory-light-plugins/src/pages/qll/components/full-chain-workbench.module.css';
 import base from '../inventory-aqkc/source/inventory-light-plugins/src/pages/aqkc/components/inventory-operations-workbench.module.css';
 import css from './original-business-list.module.css';
+import { ColumnFilterControl, ColumnResizeHandle } from './table-column-controls';
 
 const optionalLabelNames: Record<string, string> = {
   material_name: '产品名称',
@@ -55,6 +56,9 @@ export function OriginalBusinessList({
   renderRowDetails,
   frozenColumns,
   onFrozenColumns,
+  columnWidths = {},
+  onColumnWidths,
+  onColumnFilter,
 }: any) {
   const fc = agentId === 'inventory-fc',
     qll = agentId === 'inventory-qll',
@@ -81,6 +85,18 @@ export function OriginalBusinessList({
       ]
     : selectedColumns;
   const table = useRef<HTMLTableElement>(null);
+  const resizable = Boolean(view.resizableColumns);
+  const widthOf = (column: { field: string; format?: string }) =>
+    columnWidths[column.field] ??
+    (column.field === 'material_name'
+      ? 280
+      : column.field === 'material_group_name'
+        ? 220
+        : column.field === 'missing_age_13'
+          ? 240
+          : column.format === 'quantity-share'
+            ? 170
+            : 140);
   const [offsets, setOffsets] = useState<Record<string, number>>({});
   const columnKey = columns.map((column: any) => column.field).join(':');
   useLayoutEffect(() => {
@@ -128,9 +144,35 @@ export function OriginalBusinessList({
       </span>
     );
   };
+  const headerLabel = (column: { field: string; label: string }) =>
+    fc && view.sortFields?.[column.field] && onSort ? (
+      <button
+        type="button"
+        className={css.sortHeader}
+        onClick={() => onSort(view.sortFields[column.field])}
+      >
+        {column.label}{' '}
+        {view.sortFields[column.field] === appliedFilters?.sort_field
+          ? appliedFilters.sort_direction === 'desc'
+            ? '↓'
+            : '↑'
+          : '↕'}
+      </button>
+    ) : (
+      column.label
+    );
   const rawTable = (
     <table
       ref={table}
+      data-resizable={resizable || undefined}
+      style={
+        resizable
+          ? {
+              width: columns.reduce((sum: number, column: any) => sum + widthOf(column), 0),
+              minWidth: 0,
+            }
+          : undefined
+      }
       title={
         fc && view.id === 'inventory'
           ? '货龄分段按[0,30)、[30,60)、[60,90)、≥90天统计正库存批次，占比以该SKU正库存为分母'
@@ -142,6 +184,13 @@ export function OriginalBusinessList({
           : undefined
       }
     >
+      {resizable && (
+        <colgroup>
+          {columns.map((column: any) => (
+            <col key={column.field} style={{ width: widthOf(column) }} />
+          ))}
+        </colgroup>
+      )}
       {fc && view.id === 'plan' && <caption>当前使用计划 · 数量单位：件</caption>}
       {fc && view.id === 'base-resources' && (
         <caption>
@@ -172,7 +221,7 @@ export function OriginalBusinessList({
               }
               scope="col"
               title={c.reason}
-              style={fixedStyle(c.field)}
+              style={{ ...fixedStyle(c.field), ...(resizable ? { width: widthOf(c) } : {}) }}
               aria-sort={
                 fc && view.sortFields?.[c.field] === appliedFilters?.sort_field
                   ? appliedFilters.sort_direction === 'desc'
@@ -181,21 +230,27 @@ export function OriginalBusinessList({
                   : undefined
               }
             >
-              {fc && view.sortFields?.[c.field] && onSort ? (
-                <button
-                  type="button"
-                  className={css.sortHeader}
-                  onClick={() => onSort(view.sortFields[c.field])}
-                >
-                  {c.label}{' '}
-                  {view.sortFields[c.field] === appliedFilters?.sort_field
-                    ? appliedFilters.sort_direction === 'desc'
-                      ? '↓'
-                      : '↑'
-                    : '↕'}
-                </button>
+              {resizable ? (
+                <div className={css.columnHeader}>
+                  <span>{headerLabel(c)}</span>
+                  {view.columnFilters?.[c.field] && onColumnFilter && (
+                    <ColumnFilterControl
+                      label={c.label}
+                      definition={view.columnFilters[c.field]}
+                      values={appliedFilters ?? {}}
+                      onApply={onColumnFilter}
+                    />
+                  )}
+                </div>
               ) : (
-                c.label
+                headerLabel(c)
+              )}
+              {resizable && (
+                <ColumnResizeHandle
+                  label={c.label}
+                  width={widthOf(c)}
+                  onResize={(width) => onColumnWidths?.({ ...columnWidths, [c.field]: width })}
+                />
               )}
             </th>
           ))}
@@ -219,6 +274,27 @@ export function OriginalBusinessList({
           </React.Fragment>
         ))}
       </tbody>
+      {resizable && result?.tableSummary && !error && !loading && (
+        <tfoot>
+          <tr>
+            {columns.map((column: any, index: number) => {
+              const field = column.valueField ?? column.field;
+              return (
+                <td key={column.field} data-column={column.field} style={fixedStyle(column.field)}>
+                  {index === 0 && (
+                    <span>合计{Object.hasOwn(result.tableSummary, field) ? ' · ' : ''}</span>
+                  )}
+                  {Object.hasOwn(result.tableSummary, field)
+                    ? displayCell(result.tableSummary, column)
+                    : index === 0
+                      ? null
+                      : '-'}
+                </td>
+              );
+            })}
+          </tr>
+        </tfoot>
+      )}
     </table>
   );
   const data = ['available', 'empty'].includes(result?.status) ? result.rows : [];
