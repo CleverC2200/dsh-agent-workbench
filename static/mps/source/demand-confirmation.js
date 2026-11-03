@@ -2171,7 +2171,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
               ? relations
               : null,
-          active: active && step === 'check',
+          // Later steps still consume these reads; only the visible card publishes context.
+          active,
+          contextActive: active && step === 'check',
         }),
         h(
           'div',
