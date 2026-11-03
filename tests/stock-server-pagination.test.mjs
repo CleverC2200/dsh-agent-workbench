@@ -19,9 +19,17 @@ const {
   'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
 );
 const now = new Date('2026-10-15T01:00:00Z');
+async function waitFor(predicate) {
+  const end = Date.now() + 2000;
+  while (!predicate()) {
+    assert.ok(Date.now() < end, 'expected asynchronous read did not settle');
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+}
 function source() {
   const calls = [];
   const execute = async (_, call) => {
+    if (call.queryId === 'summary.snapshot') return { rows: [] };
     calls.push(call);
     const columns = config.queries[call.queryId].resultColumns;
     let rows;
@@ -109,6 +117,7 @@ test('changed configuration between page turns cannot mix snapshot and page data
       {
         now,
         execute: async (...args) => {
+          if (args[1].queryId === 'summary.snapshot') return io.execute(...args);
           count++;
           return { ...(await io.execute(...args)), configVersion: 'v2' };
         },
@@ -157,6 +166,7 @@ test('independent target calendar and stock date start in the same gateway wave'
     {
       now,
       execute: async (...args) => {
+        if (args[1].queryId === 'summary.snapshot') return io.execute(...args);
         seen.push([args[1].queryId, wave]);
         await new Promise((resolve) => {
           pending.push(resolve);
@@ -241,7 +251,7 @@ test('cancelling a drill does not cancel another consumer of the refresh metadat
       { now, execute, signal: caller.signal },
     );
     const aborted = assert.rejects(first, { name: 'AbortError' });
-    await new Promise(setImmediate);
+    await waitFor(() => release.length === 2);
     const second = readConfiguredStockPage({ base: '华东' }, { now, execute });
     caller.abort();
     release.forEach((f) => f());
@@ -328,7 +338,7 @@ test('landing inventory is published while target analysis waits; a failed analy
     now,
     onInventory: (value) => progress.push(value),
   });
-  await new Promise(setImmediate);
+  await waitFor(() => rejectFull && progress.length);
   const early = progress[0];
   rejectFull(Object.assign(Error('analysis failed'), { code: 'GEA_QUERY_FAILED' }));
   await assert.rejects(job, { code: 'GEA_QUERY_FAILED' });
@@ -364,7 +374,7 @@ test('a slow optional inventory query cannot hold a successful full dashboard or
     complete = value;
     return value;
   });
-  await new Promise(setImmediate);
+  await waitFor(() => finish && complete);
   const early = complete;
   finish();
   await job;

@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-test('new whole-workspace queries withdraw old warnings while current failures still publish', async () => {
+test('query failures retain agent evidence without displaying a partial-data banner', async () => {
   const require = createRequire(resolve('package.json')),
     React = require('react'),
     { JSDOM } = require('jsdom');
@@ -51,7 +51,7 @@ test('new whole-workspace queries withdraw old warnings while current failures s
                 : a.path === '@business-style'
                   ? ''
                   : a.path.endsWith('channel.js')
-                    ? 'export const ready=Promise.resolve();export const reportElements=()=>()=>{};export const action=()=>{};export const publish=async()=>{};'
+                    ? 'export const call=async()=>{throw Error("Unexpected fixture call")};export const ready=Promise.resolve();export const reportElements=()=>()=>{};export const action=()=>{};export const publish=async()=>{};'
                     : 'export const load=async()=>({fixture:true});export const clearFacts=()=>{};export const loadDetails=async()=>({});export const loadTrend=async()=>({});export const loadHistory=async()=>({});',
           }));
         },
@@ -70,23 +70,25 @@ test('new whole-workspace queries withdraw old warnings while current failures s
     const warn = (message) =>
       window.dispatchEvent(new CustomEvent('gea-query-warning', { detail: { message } }));
     await React.act(async () => warn('channel denied'));
-    assert.match(document.getElementById('app').textContent, /当前账号的数据权限未就绪/);
+    assert.equal(document.querySelector('[role=alert]') === null, true);
+    assert.equal(document.getElementById('app').textContent, '');
     assert.equal(api.pageContext().parts.queryFailure.message, 'channel denied');
     await React.act(async () =>
       window.fetch('/api/workspace?scope=company&month=2026-09&part=current&sku=10007014'),
     );
-    assert.equal(document.querySelector('[role=alert]'), null);
+    assert.equal(document.querySelector('[role=alert]') === null, true);
     assert.equal(api.pageContext().parts.queryFailure, undefined);
     await React.act(async () => warn('new company failure'));
     assert.equal(api.pageContext().parts.queryFailure.message, 'new company failure');
-    assert.match(document.getElementById('app').textContent, /部分数据读取失败/);
+    assert.equal(document.querySelector('[role=alert]') === null, true);
+    assert.equal(document.getElementById('app').textContent, '');
     await React.act(async () => window.fetch('/api/workspace?scope=company&sku=another-object'));
     assert.equal(
       api.pageContext().parts.queryFailure.message,
       'new company failure',
       'object reads do not clear page failures',
     );
-    assert.match(document.getElementById('app').textContent, /部分数据读取失败/);
+    assert.equal(document.querySelector('[role=alert]') === null, true);
     await React.act(async () => window.fetch('/api/workspace?scope=all-channel&part=current'));
     assert.equal(api.pageContext().parts.queryFailure, undefined);
     await React.act(async () => window.dispatchEvent(new Event('gea-identity-changed')));

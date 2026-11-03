@@ -15,6 +15,7 @@ export function immutableQueryConfig(config) {
   immutableRegistries.add(snapshot);
   return snapshot;
 }
+
 export class QueryContractError extends Error {
   constructor(code, message, metadata = {}) {
     super(message);
@@ -192,7 +193,10 @@ export function createQueryClient(config, execute) {
       () => execute(request, { signal, queryId: id, values: structuredClone(values) }),
       signal,
       priority ?? query(config, id).priority ?? 0,
-      concurrency,
+      query(config, id).maxConcurrency === 1 ? 1 : concurrency,
+      // Collect the inventory first-screen reads before selecting priority. Otherwise
+      // synchronous component order starts a heavy query ahead of ready cards.
+      ['inventory-fc', 'inventory-qll', 'inventory-aqkc'].includes(config.agentId),
     );
     signal?.throwIfAborted();
     const failure = result?.failure ?? result?.error;

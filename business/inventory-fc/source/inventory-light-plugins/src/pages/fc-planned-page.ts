@@ -12,7 +12,7 @@ export function projectFcPlannedRows(
 ) {
   const filters = input.filters ?? {};
   const query = filters.search?.trim().toLowerCase() ?? '';
-  const mode = filters.list_mode ?? 'business';
+  const mode = filters.list_mode ?? 'all';
   const measured = rows.map((row) => applyFcPlan(row, plans, input.asOf, input.cycleDays ?? 7));
   const filtered = measured.filter((row) => {
     if (viewId !== 'replenishment') return true;
@@ -31,10 +31,11 @@ export function projectFcPlannedRows(
         'period_next_out',
         'period_next_transfer',
       ].some((field) => (knownNumber(row[field]) ?? 0) > 0);
-      return (
-        (!input.replenishment.neededOnly || needed) &&
-        (!input.replenishment.businessOnly || business)
-      );
+      if (
+        (input.replenishment.neededOnly && !needed) ||
+        (input.replenishment.businessOnly && !business)
+      )
+        return false;
     }
     if (query) return true;
     if (mode === 'urgent') return (knownNumber(row.current_order_shortage) ?? 0) > 0;

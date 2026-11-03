@@ -36,7 +36,7 @@ class QuickFilters(unittest.TestCase):
 
 
     def test_next_month_transfer_only_is_business_activity(self):
-        self.f.insert('agents_scm_warehouse_transfer_plan_data_d',warehouse_code='WH1',material_code='TRANSFER_ONLY',warehouse_name='分仓1',material_name='仅调拨',warehouse_month_out_plan=0,warehouse_future30_qty=0,warehouse_month_transfer_plan=12,stat_month='202611')
+        self.f.insert('agents_scm_warehouse_transfer_plan_data_d',warehouseid='WH1',material_code='TRANSFER_ONLY',warehouse_name='分仓1',material_name='仅调拨',warehouse_month_out_plan=0,warehouse_future30_qty=0,warehouse_month_transfer_plan=12,stat_month='202611')
         rows=self.f.read('replenishment.detail',business_only=True)
         self.assertIn('TRANSFER_ONLY',[row['sku'] for row in rows])
         self.assertEqual(self.f.read('replenishment.count',business_only=True),[{'total':3}])

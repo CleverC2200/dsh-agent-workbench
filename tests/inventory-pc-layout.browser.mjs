@@ -294,7 +294,7 @@ for (const id of ['qll', 'dealer'])
       id === 'qll'
         ? [
             frame.getByText(/^5,580件$/).first(),
-            frame.getByText(/核心判断/).first(),
+            frame.getByRole('region', { name: 'AI 洞察', exact: true }).locator('p'),
             frame.getByText('含渠道', { exact: true }),
             frame.getByRole('button', { name: '汤圆', exact: true }),
           ]

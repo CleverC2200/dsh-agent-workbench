@@ -1,3 +1,4 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -13,7 +14,11 @@ const output = await build({
 const { readGroupedOrderOverview } = await import(
   'data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64')
 );
-const config = JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8'));
+const config = sourceDetailConfig(
+  JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8')),
+);
+const twoGroups = structuredClone(config);
+twoGroups.overviewOrderGroups.views['branch-overview'] = '分仓';
 const fields = config.queries[config.overviewOrderGroups.queryId].resultColumns;
 const row = (type, quantity, rate) => ({
   ...Object.fromEntries(fields.map((key) => [key, null])),
@@ -25,7 +30,7 @@ const row = (type, quantity, rate) => ({
 
 test('one request retains separate factory/branch aggregates and binds the date range', async () => {
   const calls = [];
-  const parts = await readGroupedOrderOverview(config, '2026-10-31', {
+  const parts = await readGroupedOrderOverview(twoGroups, '2026-10-31', {
     execute: async (_request, call) => {
       calls.push(call);
       return { configVersion: 'v1', rows: [row('工厂', 120, 0.9), row('分仓', 30, 0.8)] };
@@ -41,7 +46,7 @@ test('one request retains separate factory/branch aggregates and binds the date 
 });
 
 test('an absent pickup group is empty, without suppressing the other group', async () => {
-  const parts = await readGroupedOrderOverview(config, '2026-10-28', {
+  const parts = await readGroupedOrderOverview(twoGroups, '2026-10-28', {
     execute: async () => ({ configVersion: 'v1', rows: [row('分仓', 30, null)] }),
   });
   assert.equal(parts['factory-overview'].total, 0);
@@ -70,7 +75,7 @@ test('duplicate groups and denied reads fail without a retry', async () => {
   assert.equal(calls, 1);
 });
 
-test('the landing reader shares one grouped request and isolates its failure from current orders', async () => {
+test('full-chain uses independent branch transfer fulfillment even when base orders are denied', async () => {
   const bundle = await build({
     entryPoints: ['business/shared/configured-overview.ts'],
     bundle: true,
@@ -88,22 +93,40 @@ test('the landing reader shares one grouped request and isolates its failure fro
       execute: async (_request, call) => {
         calls.push(call.queryId);
         if (call.queryId === config.overviewOrderGroups.queryId) {
+          assert.equal(call.values.pickup_type_mode, 'equal');
+          assert.equal(call.values.pickup_type, '工厂');
           if (denied) throw Object.assign(Error('denied'), { code: 'ROW_SCOPE_DENIED' });
           return { configVersion: 'v1', rows: [row('工厂', 120, 0.9), row('分仓', 30, 0.8)] };
+        }
+        if (call.queryId === 'branch-supply.summary') {
+          const fields = config.queries[call.queryId].resultColumns;
+          return {
+            configVersion: 'v1',
+            rows: [
+              {
+                ...Object.fromEntries(fields.map((field) => [field, 0])),
+                row_count: 2,
+                demand: 50,
+                shipped: 40,
+                fulfillment_rate: 0.8,
+              },
+            ],
+          };
         }
         return { configVersion: 'v1', rows: [] };
       },
     });
     assert.equal(calls.filter((id) => id === config.overviewOrderGroups.queryId).length, 1);
     assert.ok(!calls.includes('orders.summary'));
+    assert.equal(calls.filter((id) => id === 'branch-supply.summary').length, 1);
+    assert.equal(parts['branch-overview'].summary.demand, 50);
+    assert.equal(parts['branch-overview'].error, undefined);
     assert.ok(parts['current-shortage']);
     assert.equal(parts['current-shortage'].error, undefined);
     if (denied) {
       assert.equal(parts['factory-overview'].error, 'denied');
-      assert.equal(parts['branch-overview'].error, 'denied');
     } else {
       assert.equal(parts['factory-overview'].summary.ordered, 120);
-      assert.equal(parts['branch-overview'].summary.ordered, 30);
     }
   }
 });

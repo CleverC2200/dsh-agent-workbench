@@ -32,6 +32,15 @@ test(
           body: `<html><head><style>${css}</style></head><body><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-qll/query","token":"fixture"}</script><div id="root"></div><script>${js}</script></body></html>`,
         });
       const { queryId, parameters: p } = route.request().postDataJSON();
+      if (queryId === 'summary.snapshot')
+        return route.fulfill({
+          json: {
+            rows: [],
+            returnedColumns: config.queries[queryId].resultColumns,
+            rejectedColumns: [],
+            configVersion: 'fixture',
+          },
+        });
       calls.push({ queryId, ...p });
       if (queryId === 'category-tree.branch' && failBranch) {
         failBranch = false;
@@ -58,28 +67,35 @@ test(
             }[c] ?? 0,
           ]),
         );
-      const rows = queryId.startsWith('source.')
-        ? [row('', '')]
-        : p.level === 'category'
-          ? [row('汤圆', '汤圆')]
-          : p.level === 'organization'
-            ? [
-                row(
-                  queryId.endsWith('customer')
-                    ? '河南省区'
-                    : queryId.endsWith('branch')
-                      ? 'A020'
-                      : '郑州',
-                  queryId.endsWith('branch')
-                    ? '长沙分仓'
-                    : queryId.endsWith('customer')
-                      ? '河南省区'
-                      : '郑州',
-                ),
-              ]
-            : Array.from({ length: p.tree_risk ? 1 : p.offset ? 2 : 11 }, (_, i) =>
-                row(`SKU${p.offset + i}`, '测试商品'),
-              );
+      const rows =
+        queryId === 'overview.quick-stock'
+          ? ['基地', '分仓'].map((location_type) => ({
+              ...row('', ''),
+              location_type,
+              snapshot_date: '2026-10-28',
+            }))
+          : queryId.startsWith('source.')
+            ? [row('', '')]
+            : p.level === 'category'
+              ? [row('汤圆', '汤圆')]
+              : p.level === 'organization'
+                ? [
+                    row(
+                      queryId.endsWith('customer')
+                        ? '河南省区'
+                        : queryId.endsWith('branch')
+                          ? 'A020'
+                          : '郑州',
+                      queryId.endsWith('branch')
+                        ? '长沙分仓'
+                        : queryId.endsWith('customer')
+                          ? '河南省区'
+                          : '郑州',
+                    ),
+                  ]
+                : Array.from({ length: p.tree_risk ? 1 : p.offset ? 2 : 11 }, (_, i) =>
+                    row(`SKU${p.offset + i}`, '测试商品'),
+                  );
       return route.fulfill({
         json: { rows, returnedColumns: columns, rejectedColumns: [], configVersion: 'fixture' },
       });

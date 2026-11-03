@@ -6,6 +6,8 @@ import { mpsPage } from './helpers/mps-page.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const plan = '';
+const currentMonth = new Date().toISOString().slice(0, 7) + '-01';
+const previousYearMonth = String(Number(currentMonth.slice(0, 4)) - 1) + currentMonth.slice(4);
 const shipment = 'agents_scm_cust_deliv_daily_di.';
 
 test('reported plan details include matched product dimensions and region without a diagnostic column', async (t) => {
@@ -173,12 +175,8 @@ test('full fact paging keeps zero and missing base distinct, without a failed sh
   ).toContainText('当前账号暂无数据权限');
   assert.deepEqual(
     calls
-      .filter(
-        (call) =>
-          call.queryId === 'facts.report' &&
-          call.parameters.month ===
-            calls.find((read) => read.queryId === 'facts.report').parameters.month,
-      )
+      .filter((call) => call.queryId === 'facts.report' && call.parameters.month === currentMonth)
+
       .map((call) => call.parameters.offset),
     [0, 200],
   );
@@ -206,8 +204,6 @@ test('refreshing facts keeps an uploaded annual plan marked as a local file', as
   await expect(annual.getByText('业务数据 · 源数量', { exact: true })).toHaveCount(0);
 });
 test('truncated facts are rejected and a late historical period cannot overwrite the selected year', async (t) => {
-  const now = new Date();
-  const initialHistoryMonth = `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   let release;
   const pending = new Promise((resolve) => {
     release = resolve;
@@ -217,7 +213,7 @@ test('truncated facts are rejected and a late historical period cannot overwrite
     if (query.queryId === 'facts.report.count') return { ...fixture(query), rows: [{ total: 2 }] };
     if (
       query.queryId === 'facts.history' &&
-      query.parameters.month === initialHistoryMonth &&
+      query.parameters.month === previousYearMonth &&
       ++historyCalls === 1
     )
       await pending;

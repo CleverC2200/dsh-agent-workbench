@@ -35,6 +35,7 @@ const { deriveMetrics } = await load('../dsh-agent-manage/src/aps-compute/metric
 function fixture(calendar) {
   const calls = [];
   const execute = async (_, call) => {
+    if (call.queryId === 'summary.snapshot') return { rows: [] };
     calls.push(call);
     const columns = config.queries[call.queryId].resultColumns;
     const row = Object.fromEntries(columns.map((c) => [c, null]));
@@ -116,6 +117,7 @@ test('a version calendar does not load stock details or pretend database visibil
 test('calendar and inventory from different config versions cannot be combined', async () => {
   const io = fixture([{ month: '2026-10-01', inventory_version: '月初' }]);
   const execute = async (request, call) => {
+    if (call.queryId === 'summary.snapshot') return { rows: [] };
     const result = await io.execute(request, call);
     if (call.queryId === 'source.stock-date') result.configVersion = 'changed';
     return result;
@@ -735,6 +737,7 @@ test('base stock and fulfillment publish before a slow or failed age source', as
   assert.equal(w.workbench.cards[0].value, '150');
   assert.equal(w.workbench.cards[2].value, '-');
   assert.equal(w.workbench.cards[3].value, '80.0%');
+  assert.ok(w.workbench.readErrors.some((error) => error.includes('AGE_SOURCE_FAILED')));
 });
 test('a failed stock source still leaves verified fulfillment available', async (t) => {
   install(t);
@@ -744,6 +747,7 @@ test('a failed stock source still leaves verified fulfillment available', async 
   const w = await cube.loadInitialDashboard();
   assert.equal(w.workbench.cards[0].value, '-');
   assert.equal(w.workbench.cards[3].value, '80.0%');
+  assert.ok(w.workbench.readErrors.some((error) => error.includes('STOCK_SOURCE_FAILED')));
 });
 
 test('base/category warnings use the highest child risk instead of offsetting inventory gaps', () => {

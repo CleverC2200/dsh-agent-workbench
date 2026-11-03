@@ -23,8 +23,9 @@ export async function readGroupedOrderOverview(
           : structuredClone(query.request.parameters[key]),
     ]),
   );
-  values.pickup_type_mode = 'all';
-  values.pickup_type = null;
+  const pickupTypes = [...new Set(Object.values(definition.views))];
+  values.pickup_type_mode = pickupTypes.length === 1 ? 'equal' : 'all';
+  values.pickup_type = pickupTypes.length === 1 ? pickupTypes[0] : null;
   const result = await createAgentQueries(config, options.execute).read(
     definition.queryId,
     values,
