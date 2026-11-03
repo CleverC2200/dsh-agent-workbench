@@ -11586,6 +11586,26 @@ html {
   height: 14px;
   transition: transform 0.16s;
 }
+.category-drill-row[aria-busy='true'] > .category-drill-toggle > svg {
+  box-sizing: border-box;
+  border: 1.5px solid var(--ui-border, #e8edf3);
+  border-top-color: var(--ui-accent, #df1732);
+  border-radius: 50%;
+  animation: drill-toggle-spin 1s linear infinite;
+}
+.category-drill-row[aria-busy='true'] > .category-drill-toggle > svg > * {
+  visibility: hidden;
+}
+@keyframes drill-toggle-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .category-drill-row[aria-busy='true'] > .category-drill-toggle > svg {
+    animation: none;
+  }
+}
 .category-drill-row[aria-expanded='false'] .category-drill-toggle svg {
   transform: rotate(-90deg);
 }

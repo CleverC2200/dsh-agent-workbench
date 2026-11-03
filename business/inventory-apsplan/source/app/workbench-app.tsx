@@ -1,4 +1,5 @@
 import { DrillPage } from './drill-page';
+import { DrillBranchLoading } from './drill-branch-loading';
 import { QueryErrors } from '../../../shared/query-errors';
 import { BusinessToolbar } from '../../../shared/business-toolbar';
 import { budgetPerformanceObservation } from 'dsh-agent-manage/aps-compute/budget-performance';
@@ -4888,13 +4889,32 @@ export default function Home({
   const [search, _setSearch] = usePageViewField(React, apsView, 'search', '');
   const [dateOpen, setDateOpen] = useState(false);
   const [weekOpen, setWeekOpen] = useState(false);
-  const [selectedYearKey, setSelectedYearKey] = usePageViewField(
+  const [activeWorkspace, setActiveWorkspace] = usePageViewField<WorkspaceName>(
+    React,
+    apsView,
+    'activeWorkspace',
+    initialWorkspace,
+    undefined,
+    (value) =>
+      [
+        'coordination',
+        'demand',
+        'plan',
+        'sales-plan',
+        'digital',
+        'intelligent',
+        'delivery',
+      ].includes(value as string)
+        ? (value as WorkspaceName)
+        : initialWorkspace,
+  );
+  const [boardYearKey, setBoardYearKey] = usePageViewField(
     React,
     apsView,
     'selectedYearKey',
     liveData && !APS_MOCK ? String(new Date().getFullYear()) : '2026',
   );
-  const [selectedMonthKey, setSelectedMonthKey] = usePageViewField(
+  const [boardMonthKey, setBoardMonthKey] = usePageViewField(
     React,
     apsView,
     'selectedMonthKey',
@@ -4906,13 +4926,13 @@ export default function Home({
     'selectedWeekKey',
     '2026-W35',
   );
-  const [selectedDay, setSelectedDay] = usePageViewField(
+  const [boardDay, setBoardDay] = usePageViewField(
     React,
     apsView,
     'selectedDay',
     liveData && !APS_MOCK ? new Date().getDate() : 30,
   );
-  const [timeGranularity, setTimeGranularity] = usePageViewField<TimeGranularity>(
+  const [boardGranularity, setTimeGranularity] = usePageViewField<TimeGranularity>(
     React,
     apsView,
     'timeGranularity',
@@ -4923,6 +4943,36 @@ export default function Home({
         ? (value as TimeGranularity)
         : 'month',
   );
+  // The intelligent workspace owns a monthly period; board date controls retain their own state.
+  const [intelligentYearKey, setIntelligentYearKey] = usePageViewField(
+    React,
+    apsView,
+    'intelligentYearKey',
+    liveData && !APS_MOCK ? String(new Date().getFullYear()) : '2026',
+  );
+  const [intelligentMonthKey, setIntelligentMonthKey] = usePageViewField(
+    React,
+    apsView,
+    'intelligentMonthKey',
+    liveData && !APS_MOCK ? String(new Date().getMonth() + 1).padStart(2, '0') : '08',
+  );
+  const [intelligentDay, setIntelligentDay] = usePageViewField(
+    React,
+    apsView,
+    'intelligentDay',
+    liveData && !APS_MOCK ? new Date().getDate() : 30,
+  );
+  const intelligentPeriod = activeWorkspace === 'intelligent';
+  const [selectedYearKey, setSelectedYearKey] = intelligentPeriod
+    ? ([intelligentYearKey, setIntelligentYearKey] as const)
+    : ([boardYearKey, setBoardYearKey] as const);
+  const [selectedMonthKey, setSelectedMonthKey] = intelligentPeriod
+    ? ([intelligentMonthKey, setIntelligentMonthKey] as const)
+    : ([boardMonthKey, setBoardMonthKey] as const);
+  const [selectedDay, setSelectedDay] = intelligentPeriod
+    ? ([intelligentDay, setIntelligentDay] as const)
+    : ([boardDay, setBoardDay] as const);
+  const timeGranularity: TimeGranularity = intelligentPeriod ? 'month' : boardGranularity;
   const [toast, setToast] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<
@@ -4943,25 +4993,6 @@ export default function Home({
     apsView,
     'sidebarCollapsed',
     false,
-  );
-  const [activeWorkspace, setActiveWorkspace] = usePageViewField<WorkspaceName>(
-    React,
-    apsView,
-    'activeWorkspace',
-    initialWorkspace,
-    undefined,
-    (value) =>
-      [
-        'coordination',
-        'demand',
-        'plan',
-        'sales-plan',
-        'digital',
-        'intelligent',
-        'delivery',
-      ].includes(value as string)
-        ? (value as WorkspaceName)
-        : initialWorkspace,
   );
   const [salesPlanRunId, setSalesPlanRunId] = useState(0);
   const [analysisScope, setAnalysisScope] = usePageViewField<AnalysisScope>(
@@ -5733,6 +5764,24 @@ export default function Home({
     可发货天数: ['shippable'],
     订单满足率: ['orders'],
     订单缺货量: ['orders'],
+  };
+  const branchPending = (mode: 'category' | 'base', level: 'categories' | 'items', key: string) => {
+    if (!liveData || live.loadingScope?.mode !== mode || !live.loadingScope[level].includes(key))
+      return false;
+    const selectedMetric = mode === 'category' ? activeCategoryMetric : activeBaseMetric;
+    const names = selectedMetric ? [selectedMetric] : activeProductionMetricNames;
+    const sources = new Set(
+      names.flatMap((name) => (metricSources[name] ?? []).flatMap((id) => [id, `${id}-products`])),
+    );
+    const waiting = (period: 'current' | 'previous' | 'annual') => {
+      const pending = live.sourcePending?.[period];
+      return pending === undefined
+        ? period === 'current'
+          ? live.busy
+          : live.comparisonBusy
+        : pending.some((id) => sources.has(id));
+    };
+    return waiting('current') || (!!selectedMetric && (waiting('previous') || waiting('annual')));
   };
   const metricReadFailed = (name: string) =>
     live.data?.sections.some(
@@ -6669,9 +6718,12 @@ export default function Home({
         workspace: ['intelligent', 'plan'],
         analysisScope: ['overview', 'production', 'sales'],
         productionDimension: ['category', 'base', 'cross'],
-        granularity: timeGranularityOptions.map((option) => option.key),
+        granularity: intelligentPeriod
+          ? ['month']
+          : timeGranularityOptions.map((option) => option.key),
       },
       constraints: {
+        intelligentGranularity: ['month'],
         overviewGranularity: ['year', 'month'],
         date: '有效ISO日期，不晚于当前日期',
         weekDate: '周视角以date所在自然周为锚点，实际截止以filters.current.date为准',
@@ -6706,6 +6758,10 @@ export default function Home({
   };
   apsViewRef.current = {
     current: apsCurrent,
+    periodSetters: {
+      intelligent: [setIntelligentYearKey, setIntelligentMonthKey, setIntelligentDay],
+      plan: [setBoardYearKey, setBoardMonthKey, setBoardDay],
+    },
     bases: apsBases,
     weekKey: selectedWeek.key,
     dateAnchor: `${selectedYear.key}-${selectedMonth.key}-${String(selectedDay).padStart(2, '0')}`,
@@ -6772,7 +6828,14 @@ export default function Home({
           )
         )
           throw Error('经营筛选参数无效');
-        const { current, bases, dateAnchor, weekKey } = apsViewRef.current;
+        const { current, bases, dateAnchor, weekKey, periodSetters } = apsViewRef.current;
+        const targetWorkspace = input.workspace ?? current.workspace;
+        if (
+          targetWorkspace === 'intelligent' &&
+          input.granularity !== undefined &&
+          input.granularity !== 'month'
+        )
+          throw Error('智能工作台仅支持月度视角');
         const allowed: any = {
           granularity: ['year', 'month', 'week', 'day'],
           workspace: ['intelligent', 'plan'],
@@ -6828,12 +6891,16 @@ export default function Home({
         await acknowledgePendingView(changed, options);
         options.signal?.throwIfAborted();
         if (input.date !== undefined) {
-          setSelectedYearKey(input.date.slice(0, 4));
-          setSelectedMonthKey(input.date.slice(5, 7));
-          setSelectedDay(Number(input.date.slice(8)));
-          if (requestedWeek) setSelectedWeekKey(requestedWeek.key);
+          const [setYear, setMonth, setDay] =
+            periodSetters[targetWorkspace === 'intelligent' ? 'intelligent' : 'plan'];
+          setYear(input.date.slice(0, 4));
+          setMonth(input.date.slice(5, 7));
+          setDay(Number(input.date.slice(8)));
+          if (targetWorkspace !== 'intelligent' && requestedWeek)
+            setSelectedWeekKey(requestedWeek.key);
         }
-        if (input.granularity !== undefined) setTimeGranularity(input.granularity);
+        if (targetWorkspace !== 'intelligent' && input.granularity !== undefined)
+          setTimeGranularity(input.granularity);
         if (input.workspace !== undefined) setActiveWorkspace(input.workspace);
         if (input.analysisScope !== undefined) setAnalysisScope(input.analysisScope);
         if (input.productionDimension !== undefined)
@@ -7342,6 +7409,7 @@ export default function Home({
     <div className="month-wrap date-picker-wrap">
       <button
         className="date-button date-picker-button"
+        title={periodMeta.range}
         aria-haspopup="menu"
         aria-expanded={dateOpen}
         onClick={() => {
@@ -7355,7 +7423,9 @@ export default function Home({
             ? selectedYear.label
             : timeGranularity === 'day'
               ? selectedDateLabel
-              : selectedPeriodLabel}
+              : timeGranularity === 'week'
+                ? `${selectedPeriodLabel} · ${selectedWeek.label}`
+                : selectedPeriodLabel}
         </span>
         <ChevronDown />
       </button>
@@ -7400,6 +7470,32 @@ export default function Home({
                     >
                       <Check />
                       {month.value}月
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+            {timeGranularity === 'week' && (
+              <section>
+                <strong>{'自然周'}</strong>
+                <div className="date-picker-week">
+                  {naturalWeekOptions.map((week) => (
+                    <button
+                      key={week.key}
+                      disabled={
+                        liveData &&
+                        isFutureCalendarDay(
+                          Number(selectedYear.key),
+                          selectedMonth.value,
+                          week.startDay,
+                        )
+                      }
+                      className={selectedWeek.key === week.key ? 'selected' : ''}
+                      onClick={() => chooseWeek(week)}
+                    >
+                      <Check />
+                      <strong>{week.label}</strong>
+                      <span>{week.range}</span>
                     </button>
                   ))}
                 </div>
@@ -7611,7 +7707,10 @@ export default function Home({
                 <button
                   className={activeWorkspace === 'intelligent' ? 'selected' : ''}
                   aria-current={activeWorkspace === 'intelligent' ? 'page' : undefined}
-                  onClick={() => setActiveWorkspace('intelligent')}
+                  onClick={() => {
+                    setActiveWorkspace('intelligent');
+                    closePeriodMenus();
+                  }}
                 >
                   智能工作台
                 </button>
@@ -7619,8 +7718,8 @@ export default function Home({
                   className={activeWorkspace === 'plan' ? 'selected' : ''}
                   aria-current={activeWorkspace === 'plan' ? 'page' : undefined}
                   onClick={() => {
-                    setAnalysisScope('overview');
                     setActiveWorkspace('plan');
+                    closePeriodMenus();
                   }}
                 >
                   产销协同看板
@@ -7779,7 +7878,7 @@ export default function Home({
                       ))}
                     </div>
                     {!embedMode && periodDatePicker}
-                    {timeGranularity === 'week' && (
+                    {!embedMode && timeGranularity === 'week' && (
                       <div className="month-wrap week-wrap">
                         <button
                           className="date-button week-button"
@@ -8506,6 +8605,11 @@ export default function Home({
                               className={`category-drill-row category-level ${selectedCategoryRowKey === category.name ? 'is-selected' : ''} ${categoryTab === 'overview' ? '' : 'period-metric'}`}
                               role="row"
                               aria-expanded={categoryOpen}
+                              aria-busy={
+                                (categoryOpen &&
+                                  branchPending('category', 'categories', category.name)) ||
+                                undefined
+                              }
                             >
                               <button
                                 className="category-drill-toggle"
@@ -8543,6 +8647,10 @@ export default function Home({
                                       className={`category-drill-row item-level ${selectedCategoryRowKey === itemKey ? 'is-selected' : ''} ${categoryTab === 'overview' ? '' : 'period-metric'}`}
                                       role="row"
                                       aria-expanded={itemOpen}
+                                      aria-busy={
+                                        (itemOpen && branchPending('category', 'items', itemKey)) ||
+                                        undefined
+                                      }
                                     >
                                       <button
                                         className="category-drill-toggle"
@@ -8602,9 +8710,28 @@ export default function Home({
                                         }}
                                       </DrillPage>
                                     )}
+                                    {itemOpen && branchPending('category', 'items', itemKey) && (
+                                      <DrillBranchLoading
+                                        label={`${item.name}物料组加载中`}
+                                        hasRows={item.materials.length > 0}
+                                        depth={2}
+                                        metricCount={activeProductionMetricNames.length}
+                                        periodMetric={categoryTab !== 'overview'}
+                                      />
+                                    )}
                                   </div>
                                 );
                               })}
+                            {categoryOpen &&
+                              branchPending('category', 'categories', category.name) && (
+                                <DrillBranchLoading
+                                  label={`${category.name}品项加载中`}
+                                  hasRows={category.items.length > 0}
+                                  depth={1}
+                                  metricCount={activeProductionMetricNames.length}
+                                  periodMetric={categoryTab !== 'overview'}
+                                />
+                              )}
                           </div>
                         );
                       })}
@@ -9103,6 +9230,11 @@ export default function Home({
                                       className={`category-drill-row item-level base-category-level ${selectedBaseRowKey === categoryKey ? 'is-selected' : ''} ${baseTab === 'overview' ? '' : 'period-metric'}`}
                                       role="row"
                                       aria-expanded={categoryOpen}
+                                      aria-busy={
+                                        (categoryOpen &&
+                                          branchPending('base', 'categories', categoryKey)) ||
+                                        undefined
+                                      }
                                     >
                                       <button
                                         className="category-drill-toggle"
@@ -9142,6 +9274,11 @@ export default function Home({
                                               className={`category-drill-row base-item-level ${baseTab === 'overview' ? '' : 'period-metric'}`}
                                               role="row"
                                               aria-expanded={itemOpen}
+                                              aria-busy={
+                                                (itemOpen &&
+                                                  branchPending('base', 'items', itemKey)) ||
+                                                undefined
+                                              }
                                             >
                                               <button
                                                 className="category-drill-toggle"
@@ -9202,12 +9339,43 @@ export default function Home({
                                                 }}
                                               </DrillPage>
                                             )}
+                                            {itemOpen &&
+                                              branchPending('base', 'items', itemKey) && (
+                                                <DrillBranchLoading
+                                                  label={`${item.name}物料组加载中`}
+                                                  hasRows={item.materials.length > 0}
+                                                  depth={3}
+                                                  metricCount={activeProductionMetricNames.length}
+                                                  periodMetric={baseTab !== 'overview'}
+                                                />
+                                              )}
                                           </div>
                                         );
                                       })}
+                                    {categoryOpen &&
+                                      branchPending('base', 'categories', categoryKey) && (
+                                        <DrillBranchLoading
+                                          label={`${category}品项加载中`}
+                                          hasRows={productItems.length > 0}
+                                          depth={2}
+                                          metricCount={activeProductionMetricNames.length}
+                                          periodMetric={baseTab !== 'overview'}
+                                        />
+                                      )}
                                   </div>
                                 );
                               })}
+                            {baseOpen &&
+                              liveData &&
+                              live.busy &&
+                              !liveBaseHierarchies[base.name].length && (
+                                <DrillBranchLoading
+                                  label={`${base.name}品类加载中`}
+                                  depth={1}
+                                  metricCount={activeProductionMetricNames.length}
+                                  periodMetric={baseTab !== 'overview'}
+                                />
+                              )}
                           </div>
                         );
                       })}
