@@ -1,5 +1,13 @@
 export type BusinessEnvironment = 'production' | 'test';
 
+export type PasswordLoginChallenge = { challengeId: string; image: string; expiresIn: number };
+export type PasswordLoginInput = {
+  challengeId: string;
+  username: string;
+  password: string;
+  captcha: string;
+};
+
 /** A read-only view of GEA's sole Host identity and its explicit login actions. */
 export interface BusinessAccount {
   getSnapshot(): Readonly<{
@@ -22,6 +30,11 @@ export interface BusinessAccount {
     environment: BusinessEnvironment,
   ): Promise<{ loginId: string; image: string; expiresIn: number }>;
   pollLogin(loginId: string, signal: AbortSignal): Promise<boolean>;
+  preparePasswordLogin(
+    signal: AbortSignal,
+    environment: BusinessEnvironment,
+  ): Promise<PasswordLoginChallenge>;
+  loginWithPassword(input: PasswordLoginInput, signal: AbortSignal): Promise<void>;
   logout(signal: AbortSignal): Promise<void>;
 }
 declare module '@deepseek-ai/cordis' {

@@ -3046,3 +3046,136 @@ test('business navigation never selects unavailable entries when no page is acti
   }
   assert.equal(document.querySelectorAll('.gea-shell-nav-child[aria-current="page"]').length, 0);
 });
+
+test('account password form cancels preparation on close and rejects late images', async (t) => {
+  const { root, dom } = await mountedDom(t);
+  const late = Promise.withResolvers(),
+    preparations = [];
+  const snapshot = {
+    state: 'confirmed',
+    scope: null,
+    status: {
+      environment: 'test',
+      environments: ['production', 'test'],
+      authenticated: false,
+      user: null,
+    },
+  };
+  const authority = {
+    getSnapshot: () => snapshot,
+    subscribe: () => () => {},
+    startLogin: async () => ({
+      loginId: 'qr',
+      image: 'data:image/png;base64,AA==',
+      expiresIn: 120,
+    }),
+    pollLogin: async () => false,
+    preparePasswordLogin: (signal) => {
+      preparations.push(signal);
+      return preparations.length === 1
+        ? late.promise
+        : Promise.resolve({
+            challengeId: 'captcha',
+            image: 'data:image/jpg;base64,AA==',
+            expiresIn: 60,
+          });
+    },
+    loginWithPassword: () => {
+      throw Error('UNEXPECTED_LOGIN');
+    },
+  };
+  const { entries } = fixture(authority);
+  const account = entries.find((row) => row.options.name === 'settings.launcher');
+  await React.act(async () =>
+    root.render(
+      React.createElement(account.component, {
+        wide: true,
+        settingsOpen: false,
+        openSettings: () => {},
+      }),
+    ),
+  );
+  const open = async () => {
+    await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
+    await React.act(async () =>
+      [...document.querySelectorAll('[role="menuitem"]')]
+        .find((button) => button.textContent === '登录 GEA')
+        .click(),
+    );
+    await React.act(async () =>
+      [...document.querySelectorAll('[role="dialog"] button')]
+        .find((button) => button.textContent === '账号密码')
+        .click(),
+    );
+  };
+  await open();
+  await React.act(async () => document.querySelector('.gea-account-login-close').click());
+  assert.equal(preparations[0].aborted, true);
+  await React.act(async () =>
+    late.resolve({ challengeId: 'late', image: 'data:image/jpg;base64,AA==', expiresIn: 60 }),
+  );
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  await open();
+  assert.ok(document.querySelector('input[name="password"]'));
+  await React.act(async () => root.render(null));
+  assert.equal(preparations[1].aborted, true);
+  assert.equal(dom.window.localStorage.length, 0);
+});
+
+test('server logout uncertainty remains visible in the account menu after local sign-out', async (t) => {
+  const { root } = await mountedDom(t);
+  let snapshot = {
+    state: 'confirmed',
+    scope: 'fixture',
+    status: {
+      environment: 'test',
+      environments: ['test'],
+      authenticated: true,
+      user: { name: 'Fixture User' },
+    },
+  };
+  const listeners = new Set();
+  const authority = {
+    getSnapshot: () => snapshot,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    logout: async () => {
+      snapshot = {
+        ...snapshot,
+        scope: null,
+        status: { ...snapshot.status, authenticated: false, user: null },
+      };
+      for (const listener of listeners) listener();
+      throw Object.assign(Error('unconfirmed'), { code: 'GEA_LOGOUT_UNCONFIRMED' });
+    },
+  };
+  const { entries } = fixture(authority);
+  const account = entries.find((row) => row.options.name === 'settings.launcher');
+  await React.act(async () =>
+    root.render(
+      React.createElement(account.component, {
+        wide: false,
+        settingsOpen: false,
+        openSettings: () => {},
+      }),
+    ),
+  );
+  await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="menuitem"]')]
+      .find((button) => button.textContent === '退出登录')
+      .click(),
+  );
+  assert.equal(snapshot.status.authenticated, false);
+  assert.equal(
+    document.querySelector('[role="menu"] [role="alert"]').textContent,
+    '已退出本机，但服务端注销未确认。',
+  );
+  assert.ok(
+    [...document.querySelectorAll('[role="menuitem"]')].some(
+      (button) => button.textContent === '登录 GEA',
+    ),
+  );
+});
