@@ -381,3 +381,84 @@ test('peer source keeps its explicit SDK declarations while owner aliases and re
     /SOURCE_TYPES_FAILED/,
   );
 });
+
+test('GEA checks Workbench implementation in its own Context before consuming fresh declarations', async (t) => {
+  const parent = mkdtempSync(join(process.cwd(), '.runtime/source-faces-'));
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+  const peers = ['dsh-agent-workbench', 'dsh-gea-plugin'].map((repo) => ({
+    repo,
+    path: join(parent, repo),
+  }));
+  const [workbench, gea] = peers;
+  const put = (root, file, value) => {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), value);
+  };
+  const options = {
+    strict: true,
+    module: 'NodeNext',
+    moduleResolution: 'NodeNext',
+    target: 'ES2023',
+    skipLibCheck: true,
+    paths: {
+      'fixture-context': [join(parent, 'context.d.ts')],
+      'fixture-host': [join(parent, 'host.d.ts')],
+      'fixture-client': [join(parent, 'client.d.ts')],
+    },
+  };
+  put(parent, 'context.d.ts', 'export interface Context {}');
+  put(
+    parent,
+    'host.d.ts',
+    'import "fixture-context"; declare module "fixture-context" { interface Context { sessions: { create(id: string): void } } }',
+  );
+  put(
+    parent,
+    'client.d.ts',
+    'import "fixture-context"; declare module "fixture-context" { interface Context { sessions: { create(options: { workspaceId: string }): Promise<string> } } }',
+  );
+  for (const peer of peers) {
+    put(
+      peer.path,
+      'package.json',
+      JSON.stringify({
+        name: peer.repo,
+        type: 'module',
+        exports: { './contract': { types: './lib/types/contract.d.ts' } },
+      }),
+    );
+    put(
+      peer.path,
+      'tsconfig.official.json',
+      JSON.stringify({ compilerOptions: options, include: ['src/**/*.ts'] }),
+    );
+  }
+  const implementation =
+    'import type {} from "fixture-client"; import type { Context } from "fixture-context"; declare const context: Context; export function create(): Promise<string> { return context.sessions.create({ workspaceId: "workspace" }); }';
+  put(workbench.path, 'src/contract.ts', implementation);
+  put(workbench.path, 'lib/types/contract.d.ts', 'export function create(): number;');
+  const consumer =
+    'import type {} from "fixture-host"; import { create } from "dsh-agent-workbench/contract"; export const result: Promise<string> = create();';
+  put(gea.path, 'src/consumer.ts', consumer);
+  await checkTypes(gea.path, peers, gea.repo);
+  put(
+    workbench.path,
+    'src/contract.ts',
+    implementation.replace(
+      'return context.sessions.create({ workspaceId: "workspace" });',
+      'return 1;',
+    ),
+  );
+  await assert.rejects(() => checkTypes(gea.path, peers, gea.repo), /SOURCE_TYPES_FAILED/);
+  put(workbench.path, 'src/contract.ts', implementation);
+  put(
+    gea.path,
+    'src/consumer.ts',
+    consumer.replace('Promise<string> = create()', 'number = create()'),
+  );
+  await assert.rejects(() => checkTypes(gea.path, peers, gea.repo), /SOURCE_TYPES_FAILED/);
+  assert.equal(
+    readFileSync(join(workbench.path, 'lib/types/contract.d.ts'), 'utf8'),
+    'export function create(): number;',
+  );
+});
