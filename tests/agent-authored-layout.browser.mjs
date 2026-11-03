@@ -1794,7 +1794,10 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
           warehouse_name: second ? '北京分仓' : '上海分仓',
         };
       });
-    if (/^replenishment(?:-confirmation)?\.detail/.test(query.queryId) && query.parameters.warehouse_code) {
+    if (
+      /^replenishment(?:-confirmation)?\.detail/.test(query.queryId) &&
+      query.parameters.warehouse_code
+    ) {
       const total = query.parameters.warehouse_code === '001' ? 10 : 11;
       value.rows = value.rows
         .filter((row) => row.warehouse_code === query.parameters.warehouse_code)

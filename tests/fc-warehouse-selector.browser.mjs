@@ -315,8 +315,9 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toHaveCount(0);
   await expect.poll(() => typeof releaseConfirmation).toBe('function');
   assert.equal(
-    calls.findLast((c) => c.id === 'replenishment-confirmation.detail.atomic' && c.values.page_size === 200)
-      .values.warehouse_code,
+    calls.findLast(
+      (c) => c.id === 'replenishment-confirmation.detail.atomic' && c.values.page_size === 200,
+    ).values.warehouse_code,
     'N417',
   );
   assert.equal(
@@ -813,7 +814,9 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
     else if (id === 'branch-warehouse.directory')
       rows = [{ warehouse_code: 'N436', warehouse_name: '郑州DC仓', base: '郑州' }];
     else if (id.startsWith('source.')) rows = [{ day: '2026-10-29' }];
-    else if (['replenishment.detail.atomic', 'replenishment-confirmation.detail.atomic'].includes(id)) {
+    else if (
+      ['replenishment.detail.atomic', 'replenishment-confirmation.detail.atomic'].includes(id)
+    ) {
       if (failPersistent)
         return route.fulfill({
           status: 503,
