@@ -48,10 +48,11 @@ if (process.env.FULFILLMENT_SIMULATION_CONFIG) {
   );
 }
 html = html
-  .replace('</head>', `<style>${theme}\n${style}</style></head>`)
+  .replace('</head>', () => `<style>${theme}\n${style}</style></head>`)
   .replace(
     '</body>',
-    `<script>${result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')}</script></body>`,
+    () =>
+      `<script>${result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')}</script></body>`,
   );
 await mkdir(out, { recursive: true });
 await writeFile(resolve(out, 'index.html'), html);
