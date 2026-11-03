@@ -10,7 +10,7 @@ body{margin:0;background:#f5f6f7;color:#34383e;font:16px/1.7 system-ui,sans-seri
 <p id="quantity"></p><p id="notice" role="alert"></p><p id="result" role="status" hidden></p>
 <nav id="pages" hidden><button id="previous">上一页</button> <span id="pageLabel"></span> <button id="next">下一页</button></nav>
 <small>本次只登记销售处理决定，实际开单、发货及改单由业务系统执行。</small>
-<div class="actions"><button id="cancel">取消</button><button class="primary" id="submit" disabled>确认</button></div></main>
+<div class="actions"><button id="cancel">返回</button><button class="primary" id="submit" disabled>确认</button></div></main>
 <!--update-begin---author:Codex ---date:2026-11-02 for：【订单履约正式确认链路本地联调】避开测试代理静态JS路由----------- -->
 <main id="orderEditor" hidden aria-label="缺货订单处理"></main>
 <style>
@@ -19,5 +19,5 @@ body{margin:0;background:#f5f6f7;color:#34383e;font:16px/1.7 system-ui,sans-seri
 /* update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅订单处理窗口布局----------- */
 </style>
 
-<script defer src="../assets/window-script"></script></html>
+<script defer src="../assets/window-script?release=__ORDER_PRESENTATION_RELEASE__"></script></html>
 <!--update-end---author:Codex ---date:2026-11-02 for：【订单履约正式确认链路本地联调】避开测试代理静态JS路由----------- -->
