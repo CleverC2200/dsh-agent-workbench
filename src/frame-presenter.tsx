@@ -213,17 +213,20 @@ export function mountFramePresentation(
   let rememberedConversationWidth: number | undefined;
   let execution: WorkbenchPageExecution | undefined;
   const backendListeners = new Set<() => void>();
-  ctx.inject(['businessAccount', 'remote', 'remote.session', 'sessions', 'conversation'], (scope) => {
-    const owned = createExecution(scope, scope.businessAccount);
-    execution = owned;
-    for (const changed of backendListeners) changed();
-    scope.effect(() => () => {
-      if (execution === owned) {
-        execution = undefined;
-        for (const changed of backendListeners) changed();
-      }
-    });
-  });
+  ctx.inject(
+    ['businessAccount', 'remote', 'remote.session', 'sessions', 'conversation'],
+    (scope) => {
+      const owned = createExecution(scope, scope.businessAccount);
+      execution = owned;
+      for (const changed of backendListeners) changed();
+      scope.effect(() => () => {
+        if (execution === owned) {
+          execution = undefined;
+          for (const changed of backendListeners) changed();
+        }
+      });
+    },
+  );
   const interaction = installPageInteraction(ctx);
   const pageViews = new Map<MainPanelId, 'center' | 'split' | 'chat'>();
   let tools: Pick<Context, 'sidebarRight' | 'sidebarRightTabs'> | undefined;
