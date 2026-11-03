@@ -708,21 +708,26 @@ test('qll original current-order card retains new base snapshot quantities witho
   );
   assert.deepEqual(errors, []);
 });
-test('QLL branch turnover reads its summary and its date control has a stable Chinese display', async (t) => {
+test('QLL branch turnover uses shipment quantities after its summary arrives and keeps the Chinese date display', async (t) => {
   const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
     if (query.queryId === 'branch-turnover.cards')
-      Object.assign(result.rows[0], { historical_turnover_days: 999, turnover_count: 30 });
+      Object.assign(result.rows[0], {
+        historical_turnover_days: 999,
+        turnover_count: 30,
+        rolling_ship_daily: 446.4,
+      });
     if (query.queryId === 'base_shipments.summary')
       Object.assign(result.rows[0], { rolling_ship_positive: 13392, rolling_missing_qty: 0 });
-    if (query.queryId === 'replenishment.summary')
-      Object.assign(result.rows[0], { rolling_ship_daily: 446.4 });
     return result;
   });
   const card = frame
     .getByRole('button')
     .filter({ has: frame.getByText('库存周转', { exact: true }) });
-  await expect(card).toContainText('12.5天');
-  assert.ok(calls.some((query) => query.queryId === 'branch-turnover.cards'));
+  await expect
+    .poll(() => calls.filter((query) => query.queryId === 'branch-turnover.cards').length)
+    .toBe(1);
+  await expect(card.getByText('分仓周转', { exact: true }).locator('..')).toContainText('12.5天');
+  await expect(card).not.toContainText('999.0天');
   await expect(frame.getByLabel('读取时点')).toHaveValue('2026-10-20');
   await expect(frame.getByText('2026年10月20日', { exact: true })).toBeVisible();
   assert.deepEqual(errors, []);

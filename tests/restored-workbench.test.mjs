@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
+import { directSourceFixture } from './fixtures/configured-page.mjs';
 const output = await build({
   entryPoints: ['business/shared/configured-overview.ts'],
   bundle: true,
@@ -16,7 +17,9 @@ const configs = Object.fromEntries(
   await Promise.all(
     ['fc', 'qll', 'dealer'].map(async (a) => [
       a,
-      JSON.parse(await readFile(`business/inventory-${a}/sql.config.json`, 'utf8')),
+      directSourceFixture(
+        JSON.parse(await readFile(`business/inventory-${a}/sql.config.json`, 'utf8')),
+      ),
     ]),
   ),
 );
