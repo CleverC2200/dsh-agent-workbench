@@ -20,7 +20,7 @@ test('production FC config keeps an unavailable summary unknown without substitu
     format: 'iife',
     platform: 'browser',
     alias: { react: resolve('node_modules/react'), 'react-dom': resolve('node_modules/react-dom') },
-    define: { PLUGIN_ID: '\"fc\"', 'process.env.NODE_ENV': '\"test\"' },
+    define: { PLUGIN_ID: '"fc"', 'process.env.NODE_ENV': '"test"' },
     loader: { '.css': 'css', '.module.css': 'local-css' },
   });
   const js = output.outputFiles.find((file) => file.path.endsWith('.js')).text;
