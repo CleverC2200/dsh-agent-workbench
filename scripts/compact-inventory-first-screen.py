@@ -28,3 +28,7 @@ for agent in ['fc','qll']:
  q['request']['sql']=sql;q['parameterSpec']={k:v for k,v in q['parameterSpec'].items() if k in used};q['request']['parameters']={k:v for k,v in q['request']['parameters'].items() if k in used}
  for member in bundle['members']:member['bindings']={k:v for k,v in member['bindings'].items() if k in used}
  (repo/f'business/inventory-{agent}/sql.config.json').write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n');print(agent,len(sql),len(used))
+
+# Rebuild the batch-discovery envelope too; retaining a stale bootstrap loses new members.
+import runpy
+runpy.run_path(str(repo/"scripts/optimize-daily-bundles.py"))

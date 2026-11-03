@@ -11,7 +11,7 @@ from sqlglot.optimizer.simplify import simplify
 from sqlglot.optimizer.eliminate_ctes import eliminate_ctes
 repo = Path(__file__).resolve().parents[1]
 for agent in ['fc', 'qll', 'aqkc']:
- cfg=json.loads((repo/f'business/inventory-{agent}/sql.config.json').read_text());bundle=cfg['dailySummary']['bundle'];q=cfg['queries'][bundle['queryId']];sql=q['request']['sql'];fixed={}
+ cfg=json.loads((repo/f'business/inventory-{agent}/sql.config.json').read_text());original=copy.deepcopy(cfg);bundle=cfg['dailySummary']['bundle'];q=cfg['queries'][bundle['queryId']];sql=q['request']['sql'];fixed={}
  for member in bundle['members']:
   for param,name in member['bindings'].items():
    value=member['values'][name]
@@ -54,4 +54,5 @@ for agent in ['fc', 'qll', 'aqkc']:
  bootstrap['title']='每日汇总批次与首屏一次读取'
  cfg['queries']['summary.bootstrap']=bootstrap
  bundle['bootstrapQueryId']='summary.bootstrap'
- (repo/f'business/inventory-{agent}/sql.config.json').write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n');print(agent,len(sql),len(used))
+ if cfg!=original:(repo/f'business/inventory-{agent}/sql.config.json').write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n')
+ print(agent,len(sql),len(used))
