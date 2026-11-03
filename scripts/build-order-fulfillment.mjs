@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { prepareFulfillmentPresentation } from '../prototypes/inventory-orderfulfillment/prepare-presentation.mjs';
 import { buildFulfillmentSalesWindow } from './build-fulfillment-sales-window.mjs';
+import { addFulfillmentPacketQueries } from '../business/inventory-orderfulfillment/packet-queries.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'prototypes/inventory-orderfulfillment');
@@ -17,10 +18,19 @@ let html = (await readFile(resolve(source, 'source.html'), 'utf8')).replace(/\r\
 if (digest(html) !== provenance.sourceHtmlSha256) throw Error('PROTOTYPE_SOURCE_MISMATCH');
 html = (await readFile(resolve(source, 'presentation.html'), 'utf8')).replace(/[ \t]+$/gm, '');
 html = prepareFulfillmentPresentation(html);
-const sqlConfig = await readFile(
-  resolve(root, 'business/inventory-orderfulfillment/sql.config.json'),
-  'utf8',
-);
+const sqlConfig =
+  JSON.stringify(
+    addFulfillmentPacketQueries(
+      JSON.parse(
+        await readFile(
+          resolve(root, 'business/inventory-orderfulfillment/sql.config.json'),
+          'utf8',
+        ),
+      ),
+    ),
+    null,
+    2,
+  ) + '\n';
 const theme = (await readFile(resolve(root, 'theme/tokens.css'), 'utf8')).replace(/\r\n/g, '\n');
 if (digest(theme) !== '281fe7eebe0775b6bedabad6806753db6afe5eded52e6d9ade54067d23e20ef8')
   throw Error('PROTOTYPE_THEME_MISMATCH');
