@@ -150,7 +150,7 @@ test('all-unknown, absent sample fields, query errors and zero denominators do n
   });
   assert.equal(presentation.cards[0].status, '查询失败');
 });
-test('cards, six tables, evidence and comparisons expose sample scope without green full-result badges', () => {
+test('cards show metric health while footers, tooltips, tables and comparisons retain sample scope', () => {
   const p = make();
   p.metrics = computeWorkbenchMetrics(p);
   const previous = make();
@@ -171,8 +171,13 @@ test('cards, six tables, evidence and comparisons expose sample scope without gr
     customers: { rows: [] },
   };
   const result = workbenchPresentation(facts);
-  assert.match(result.cards[0].status, /样本/);
-  assert.notEqual(result.cards[0].status, '健康');
+  assert.equal(result.cards[0].status, '健康');
+  assert.equal(result.cards[1].status, '预警');
+  assert.equal(result.cards[2].status, '预警');
+  assert.match(result.cards[0].footer, /可判定样本/);
+  assert.match(result.cards[0].coverageNote, /覆盖80.0%/);
+  p.metrics['作废率'].value = 11;
+  assert.equal(workbenchPresentation(facts).cards[0].status, '严重');
   assert.match(result.cards[2].comparison[0], /10.00%\*/);
   assert.match(result.cards[2].comparisonNotes[0], /不代表全量/);
   assert.match(result.performance['base-performance'].month[0][1].text, /\*/);
