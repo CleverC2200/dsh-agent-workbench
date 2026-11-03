@@ -256,8 +256,6 @@ export function workbenchPresentation(facts, options = {}) {
         ? '查询失败'
         : metrics[name]?.noRows
           ? '暂无数据'
-          : metrics[name]?.sample
-          ? `样本 ${metrics[name].sample.coverage.toFixed(1)}%`
           : metricState(name, metricValue(metrics, name)),
     coverageNote: metrics[name]?.coverageNote ?? '',
     comparisonNotes: [
