@@ -67,6 +67,19 @@ class PlanTemplate(unittest.TestCase):
         self.assertIsNone(rows[3]['stat_month'])
         self.assertTrue(all(r['warehouse_month_transfer_plan'] is None for r in rows))
 
+    def test_source_plan_count_matches_its_rows_without_transfer_or_stock_inputs(self):
+        self.db.execute('ALTER TABLE agents_scm_warehouse_transfer_plan_data_d ADD COLUMN last_month_actual_qty REAL')
+        self.db.execute('ALTER TABLE agents_scm_warehouse_transfer_plan_data_d ADD COLUMN current_day_avg_qty REAL')
+        query = self.config['queries']['branch-plan.detail']
+        count_id = query['pagination']['countQuery']
+        for warehouse, expected in [('A', 3), ('B', 1), ('missing', 0)]:
+            with self.subTest(warehouse=warehouse):
+                self.query = query
+                rows = self.read(gea_p1='equal', gea_p2=warehouse)
+                self.query = self.config['queries'][count_id]
+                total = self.read(gea_p1='equal', gea_p2=warehouse)[0]['total']
+                self.assertEqual((total, len(rows)), (expected, expected))
+
     def test_branch_sku_and_empty_filter_keep_count_and_page_consistent(self):
         rows=self.read(gea_p1='equal',gea_p2='A',gea_p3='equal',gea_p4='2')
         self.assertEqual([(r['warehouse_code'],r['sku'],r['page_scope_total']) for r in rows],[('A','2',1)])

@@ -21939,7 +21939,7 @@
       ],
       "pagination": {
         "mode": "sql_limit_offset",
-        "countQuery": "transfer_plan.count",
+        "countQuery": "transfer_plan.template.count",
         "atomicQuery": "branch-plan.detail.atomic"
       },
       "notes": "仅按仓库SKU和自然月读取计划及计划辅助字段，不扫描库存货龄和发货明细。人工覆盖规则由同一工作台计算模型处理；数量件，NULL和重复保持未知。"

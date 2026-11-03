@@ -19,3 +19,5 @@ Prior repairs retained: customer downstream-order fulfillment uses its existing 
 Validation: affected source, query, presentation, package-version and compatibility checks run before the PR is merged. The final release records bind the actual merged source, package digests, channel revision and verification boundaries. Existing unresolved business reconciliations are not marked complete by packaging.
 
 Release workflow: dsh-plugin-release 1.3.0, locally distributed bundle; no registered team-maintenance source. The plugin suite uses the existing GitHub/OSS destinations. Desktop packaging is outside this release.
+
+Source plan paging uses the plan-only count query; it does not inherit current transfer execution parameters or stock permissions. The actual source SQL fixture verifies count/list equality across warehouse and empty scopes. Export checks account separately for one snapshot metadata read while preserving bounded data pages, source-change restart and permission-denial assertions.

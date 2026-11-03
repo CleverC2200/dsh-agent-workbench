@@ -26,6 +26,9 @@ const configs = Object.fromEntries(
 );
 for (const config of Object.values(configs))
   for (const q of Object.values(config.queries)) if (q.pagination) delete q.pagination.atomicQuery;
+const planCountQuery =
+  configs.fc.queries[configs.fc.sourceViews.views.find((v) => v.id === 'plan').queryId].pagination
+    .countQuery;
 const input = { asOf: '2026-10-15', customer: '20141461' };
 function source(config, adapt = () => {}) {
   const calls = [];
@@ -198,7 +201,7 @@ test('permission-rejected detail columns are not replaced with null-filled succe
 test('changing counts or config version rejects inconsistent pages instead of showing a mixed total', async () => {
   for (const type of ['count', 'config']) {
     const io = source(configs.fc, (call, r, calls) => {
-      if (type === 'count' && calls.filter((c) => c.queryId === 'transfer_plan.count').length === 2)
+      if (type === 'count' && calls.filter((c) => c.queryId === planCountQuery).length === 2)
         r.rows = [{ total: 2 }];
       if (
         type === 'config' &&
@@ -768,7 +771,7 @@ test('FC plan paging is independent of stock/shipments and binds the next calend
     assert.equal(call.values.month, month);
     assert.equal(call.values.next_month, next);
     assert.equal(call.values.page_size, 10);
-    assert.ok(io.calls.every((call) => [query, 'transfer_plan.count'].includes(call.queryId)));
+    assert.ok(io.calls.every((call) => [query, planCountQuery].includes(call.queryId)));
     assert.ok(
       !/agents_scm_inventory_sku_data_d|agents_scm_cust_deliv_daily_di/.test(
         configs.fc.queries[query].request.sql,
