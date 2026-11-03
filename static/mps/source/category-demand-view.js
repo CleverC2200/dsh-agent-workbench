@@ -1,7 +1,7 @@
 import { buildCategoryDemand } from './category-demand.js';
 import { changeAdjustment } from './local-draft.js';
 
-export function createCategoryDemand(react, { table, downloadCsv, categories, useMpsPart }) {
+export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
   const columns = [
     '大类',
@@ -12,13 +12,18 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
     '同期平均占比',
     '② 占比法',
     '加权',
+  ];
+  const detailColumns = [
+    '大类',
+    '月份',
     '系统需求数量',
-    '有效需求数量',
+    '大类预估需求数量',
     '调整原因',
     '调整时间',
+    '缺项说明',
   ];
   return function CategoryDemand({ draft, update, active }) {
-    const result = react.useMemo(() => buildCategoryDemand(draft, categories), [draft]);
+    const result = react.useMemo(() => buildCategoryDemand(draft), [draft]);
     const [editing, setEditing] = react.useState(null);
     const [quantity, setQuantity] = react.useState('');
     const [reason, setReason] = react.useState('');
@@ -28,18 +33,15 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
       setError('');
     }, [draft.id, draft.month]);
     const undo = (row) => {
-      const candidate = buildCategoryDemand(
-        {
-          ...draft,
-          adjustments: {
-            ...draft.adjustments,
-            categoryDemand: (draft.adjustments?.categoryDemand ?? []).filter(
-              (entry) => entry.month !== row.month || entry.category !== row.category,
-            ),
-          },
+      const candidate = buildCategoryDemand({
+        ...draft,
+        adjustments: {
+          ...draft.adjustments,
+          categoryDemand: (draft.adjustments?.categoryDemand ?? []).filter(
+            (entry) => entry.month !== row.month || entry.category !== row.category,
+          ),
         },
-        categories,
-      );
+      });
       update({
         adjustments: changeAdjustment(
           draft.adjustments,
@@ -60,6 +62,33 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
       const edit = draft.adjustments?.categoryDemand?.find(
         (entry) => entry.month === row.month && entry.category === row.category,
       );
+      const basis = result.bases.find((entry) => entry.category === row.category);
+      const missing = [];
+      if (row.systemQuantity === null) {
+        if (index % 4 < 2) {
+          if (basis.baseActual === null) missing.push(`${basis.endMonth} 基期BI实绩缺失`);
+          if (basis.actual === null)
+            missing.push(`${result.recent[0]}至${basis.endMonth} BI实绩缺失或不完整`);
+          if (basis.recentShare === null || basis.recentShare <= 0)
+            missing.push(`${result.recent[0]}至${basis.endMonth} 历史同期占比缺失或合计为0`);
+          if (row.share === null) missing.push(`${row.month} 历史同期占比缺失`);
+          for (const period of result.historical.filter(
+            (entry) =>
+              entry.category === row.category &&
+              entry.month > basis.endMonth &&
+              entry.month <= row.month &&
+              entry.mom === null,
+          ))
+            missing.push(`${period.month} 历史环比缺失`);
+          if (basis.plan === null)
+            missing.push(`${result.recent[0]}至${basis.endMonth} DMS发货量缺失或不完整`);
+          else if (basis.achievementRate === null || basis.achievementRate <= 0)
+            missing.push('近三月达成率缺失或为0');
+        } else {
+          if (row.chain === null) missing.push(`${row.month} 年度分月环比缺失或分母为0`);
+          if (result.rows[index - 1].quantity === null) missing.push('上月有效需求缺失');
+        }
+      }
       return {
         大类: row.category,
         月份: `${row.month}（M+${(index % 4) + 1}）`,
@@ -70,9 +99,10 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
         '② 占比法': row.shareMethod ?? '',
         加权: row.weighted ?? '',
         系统需求数量: row.systemQuantity ?? '',
-        有效需求数量: row.quantity ?? '',
+        大类预估需求数量: row.quantity ?? '',
         调整原因: edit?.reason ?? '',
         调整时间: edit?.at ?? '',
+        缺项说明: missing.join('；'),
         操作: h(
           react.Fragment,
           {},
@@ -122,7 +152,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
             )?.systemQuantity ?? null,
           reason,
         });
-        const candidate = buildCategoryDemand({ ...draft, adjustments }, categories);
+        const candidate = buildCategoryDemand({ ...draft, adjustments });
         if (candidate.adjustmentIssues.length) throw Error(candidate.adjustmentIssues.join('；'));
         update({ adjustments });
         setEditing(null);
@@ -143,7 +173,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
       {},
       h(
         'section',
-        { 'aria-label': '逐月测算', className: 'dc-card dc-results' },
+        { 'aria-label': '逐月测算', className: 'dc-card dc-results dc-category-demand' },
         h(
           'div',
           { className: 'dc-card-head' },
@@ -155,13 +185,43 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
           ),
           h(
             'button',
-            { onClick: () => downloadCsv(`大类逐月测算-${draft.month}.csv`, columns, rows) },
+            {
+              onClick: () =>
+                downloadCsv(
+                  `大类逐月测算-${draft.month}.csv`,
+                  [...columns, ...detailColumns.filter((column) => !columns.includes(column))],
+                  rows,
+                ),
+            },
             '下载测算明细',
           ),
         ),
         result.adjustmentIssues.length > 0 &&
           h('p', { role: 'alert' }, `以下调整未生效：${result.adjustmentIssues.join('；')}`),
-        table([...columns, '操作'], rows),
+        h(
+          'div',
+          { className: 'dc-category-demand-main' },
+          table(
+            columns,
+            rows,
+            Object.fromEntries(
+              [
+                ['① 环比法', '基期 × 环比链'],
+                ['② 占比法', '全年预估 × 占比'],
+                ['加权', '①②各占一半'],
+              ].map(([name, formula]) => [
+                name,
+                h(react.Fragment, {}, name, h('small', {}, formula)),
+              ]),
+            ),
+          ),
+        ),
+        h(
+          'details',
+          { className: 'dc-card-foot' },
+          h('summary', {}, '查看系统值、调整与缺项说明'),
+          table([...detailColumns, '操作'], rows),
+        ),
         editing &&
           h(
             'fieldset',
@@ -203,7 +263,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
         h(
           'div',
           { className: 'dc-card-foot' },
-          'M+1、M+2按（环比法＋占比法）÷2÷计划达成率；计划达成率＝同一窗口近三月BI实发合计÷DMS计划合计。M+3、M+4按上月有效需求×年度分月环比延展。年度分月环比＝本月年度需求÷上月年度需求。缺完整历史、零分母或依赖数据时系统值留空；人工调整须填写原因。展示取整数，计算及下载保留原精度。',
+          'M+1、M+2按（环比法＋占比法）÷2÷达成率；达成率＝同一窗口近三月BI实绩合计÷DMS发货量合计（delivery_qty，件）。M+3、M+4按上月有效需求×年度分月环比延展。年度分月环比＝本月年度需求÷上月年度需求。缺完整历史、零分母或依赖数据时系统值留空；人工调整须填写原因。展示取整数，计算及下载保留原精度。',
         ),
       ),
       h(

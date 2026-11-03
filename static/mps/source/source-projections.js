@@ -87,7 +87,7 @@ function aggregate(rows, column) {
   };
 }
 
-export function sourceCheckRows(checks, rawProducts, pull) {
+export function sourceCheckRows(checks, rawProducts) {
   const labels = new Map();
   for (const row of rawProducts ?? []) {
     const code = text(row.material_code) || text(row['产品编码']),
@@ -117,12 +117,6 @@ export function sourceCheckRows(checks, rawProducts, pull) {
           ...row,
           大类: category,
           源分类: category,
-          ...(source === 'DMS'
-            ? {
-                月初数量: row['源月初数量'] ?? row['月初数量'],
-                纠偏数量: row['源纠偏数量'] ?? row['纠偏数量'],
-              }
-            : {}),
         },
       ];
     });
@@ -140,7 +134,7 @@ export function sourceCheckRows(checks, rawProducts, pull) {
         .flatMap((labels) => [...labels]),
     ),
   ];
-  const column = pull === 'monthly' ? '月初数量' : '纠偏数量';
+  const column = 'DMS发货数量';
   const rows = periods.flatMap((period) =>
     classes.map((category) => {
       const history = period.history.filter((row) => row['大类'] === category);
@@ -162,7 +156,8 @@ export function sourceCheckRows(checks, rawProducts, pull) {
         ...(actual.missing ? [`BI缺数量${actual.missing}条，显示已知小计`] : []),
         ...(plan.missing ? [`DMS缺数量${plan.missing}条，显示已知小计`] : []),
         ...(missingKeys ? [`缺SKU ${missingKeys}条`] : []),
-        ...(plan.quantity === 0 ? ['DMS计划为0，比值不可用'] : []),
+        ...new Set(report.map((row) => row['缺项原因']).filter(Boolean)),
+        ...(plan.quantity === 0 ? ['DMS发货量为0，比值不可用'] : []),
       ];
       const ratio =
         !issues.length && actual.quantity !== null && plan.quantity > 0

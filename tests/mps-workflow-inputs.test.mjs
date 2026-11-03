@@ -47,6 +47,19 @@ const draft = () => ({
     { 月份: '2025-12', 基地: '乙', 产品编码: 'B', 数量: 40, 不含税收入: '' },
   ],
   historyMetadata: { partial: true, warnings: ['部分收入为空'] },
+  historyAnnual: {
+    periods: [
+      {
+        start: '2025-07-01',
+        end: '2026-06-30',
+        rows: [
+          { 基地: '甲', 产品编码: 'A', 数量: 60 },
+          { 基地: '乙', 产品编码: 'B', 数量: 40 },
+        ],
+      },
+    ],
+  },
+  historyAnnualRead: { status: 'ready' },
   reportRead: { status: 'ready' },
   historyRead: { status: 'ready' },
   categoryDemand: [{ month: '2026-12', category: '点心', quantity: 120 }],
@@ -102,19 +115,19 @@ test('按实际期间撤销失效提报与历史，别月成功或失败不改�
       '2027-01': { status: 'failed', error: '一月提报拒权' },
     },
   };
-  source.historyRead = {
-    periods: {
-      '2025-12': { status: 'failed', error: '十二月历史拒权' },
-      '2024-12': { status: 'ready' },
-    },
-  };
+  source.historyAnnual.periods[0].error = '上一财年历史拒权';
   const failed = buildMpsWorkflow(source);
   assert.equal(failed.rows[0].historyQuantity, null);
   assert.equal(failed.rows[0].reportQuantity, 30);
   assert.equal(failed.rows[0].demand, null);
-  assert.match(failed.rows[0].missing.demand.join(''), /十二月历史拒权/);
-  source.historyRead.periods['2025-12'] = { status: 'ready' };
-  source.historyRead.periods['2024-12'] = { status: 'failed', error: '前年拒权' };
+  assert.match(failed.rows[0].missing.demand.join(''), /上一财年历史拒权/);
+  delete source.historyAnnual.periods[0].error;
+  source.historyAnnual.periods.push({
+    start: '2024-07-01',
+    end: '2025-06-30',
+    rows: [],
+    error: '前年拒权',
+  });
   assert.ok(Math.abs(buildMpsWorkflow(source).rows[0].demand - 54) < 1e-12);
   source.reportRead.periods['2026-12'] = { status: 'loading' };
   assert.equal(buildMpsWorkflow(source).rows[0].reportQuantity, null);
@@ -148,6 +161,7 @@ test('产能与有效结存不能扩充月度需求范围，缺正式归属和�
   const source = draft();
   source.report = [];
   source.history = [];
+  source.historyAnnual.periods[0].rows = [];
   const snapshot = {
     draftId: 'v1',
     month: '2026-12',
@@ -159,7 +173,7 @@ test('产能与有效结存不能扩充月度需求范围，缺正式归属和�
   const result = buildMpsWorkflow(source, relations, snapshot);
   assert.deepEqual(result.rows, []);
   assert.equal(result.scopeCoverage, 'in-scope');
-  assert.match(result.missing.join(''), /正式.*归属/);
+  assert.match(result.missing.join(''), /当前产品明细.*物料编码.*物料组编码/);
   assert.match(result.missing.join(''), /全国覆盖.*实际证明/);
 });
 
@@ -167,10 +181,9 @@ test('空月来源拒权不能随着月度候选为空而消失', () => {
   const source = draft();
   source.report = [];
   source.history = [];
+  source.historyAnnual.periods[0].rows = [];
   source.reportRead = { periods: { '2026-12': { status: 'failed', error: '十二月提报拒权' } } };
-  source.historyRead = {
-    periods: { '2025-12': { status: 'failed', error: '十二月历史读取失败' } },
-  };
+  source.historyAnnual.periods[0].error = '十二月历史读取失败';
   const result = buildMpsWorkflow(source);
   assert.equal(result.rows.length, 0);
   assert.match(result.missing.join(''), /2026-12.*十二月提报拒权/);
@@ -190,12 +203,7 @@ test('M+2调整后的大类有效链进入需求与M+3库存，系统基线和�
     产品编码: 'A',
     月初数量: 100,
   }));
-  source.history = ['2025-10', '2025-11', '2025-12'].map((month) => ({
-    月份: month,
-    基地: '甲',
-    产品编码: 'A',
-    数量: 100,
-  }));
+  source.historyAnnual.periods[0].rows = [{ 基地: '甲', 产品编码: 'A', 数量: 100 }];
   source.categoryDemand = [
     { month: '2026-10', category: '点心', quantity: 125, systemQuantity: 125 },
     { month: '2026-11', category: '点心', quantity: 200, systemQuantity: 125 },
@@ -230,4 +238,79 @@ test('M+2调整后的大类有效链进入需求与M+3库存，系统基线和�
     buildMpsWorkflow(source).categoryRows.find((row) => row.category === '点心').systemQuantity,
     null,
   );
+});
+
+test('业务销售提报按基地物料allnum重分当前物料组，旧系列占比和月初选择不影响计算', () => {
+  const source = draft();
+  source.reportSource = 'business';
+  source.planRatesRead = { status: 'ready', month: source.month };
+  source.products[0].物料组 = '102009';
+  source.products[1].物料组 = '102009';
+  source.planRates = [
+    { 月份: source.month, 维度类型: '基地+产品', 基地: '甲', 产品编码: 'A', 当前维度计划量: 30 },
+    { 月份: source.month, 维度类型: '基地+产品', 基地: '乙', 产品编码: 'B', 当前维度计划量: 70 },
+    { 月份: source.month, 维度类型: '大类+物料组', 物料组名称: '错误系列名称', 计划占比: 0.999 },
+  ];
+  source.history[0].数量 = 99999;
+  const first = buildMpsWorkflow(source).rows[0];
+  assert.equal(first.group, '102009');
+  assert.equal(first.reportLayers.groupQuantity, 100);
+  assert.equal(first.reportLayers.baseShare, 1);
+  assert.equal(first.reportShare, 0.3);
+  assert.equal(first.historyQuantity, 60);
+  source.pull = 'correction';
+  assert.equal(buildMpsWorkflow(source).rows[0].reportShare, 0.3);
+});
+
+test('上一财年跨7月切换，缺正确全年期间时不能拿去年同月或另一财年顶替', () => {
+  const source = draft();
+  source.month = '2026-06';
+  source.report = [{ 月份: '2026-06', 基地: '甲', 产品编码: 'A', 月初数量: 1 }];
+  source.historyAnnual.periods.push({
+    start: '2024-07-01',
+    end: '2025-06-30',
+    rows: [{ 基地: '甲', 产品编码: 'A', 数量: 9 }],
+  });
+  const rows = buildMpsWorkflow(source).rows;
+  assert.equal(rows.find((row) => row.month === '2026-06' && row.code === 'A').historyQuantity, 9);
+  assert.equal(rows.find((row) => row.month === '2026-07' && row.code === 'A').historyQuantity, 60);
+  source.historyAnnual.periods.shift();
+  assert.equal(
+    buildMpsWorkflow(source).rows.find((row) => row.month === '2026-07' && row.code === 'A'),
+    undefined,
+  );
+});
+
+test('完整财年查询使用起止日期，不落回单月查询', async () => {
+  const { makeRequest } = await import('../business/shared/configured-query-client.mjs');
+  const { readFile } = await import('node:fs/promises');
+  const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
+  const request = makeRequest(config, 'facts.history-annual', {
+    start: '2025-07-01',
+    end: '2026-06-30',
+    page_size: 200,
+    offset: 0,
+  });
+  assert.deepEqual(request.cube.timeDimensions[0].dateRange, ['2025-07-01', '2026-06-30']);
+});
+
+test('销售基地物料业务键重复不重复加量，重读或失败会撤销旧占比但不撤销独立历史', () => {
+  const source = draft();
+  source.reportSource = 'business';
+  source.planRatesRead = { status: 'ready' };
+  source.planRates = [
+    { 月份: source.month, 维度类型: '基地+产品', 基地: '甲', 产品编码: 'A', 当前维度计划量: 10 },
+  ];
+  assert.equal(buildMpsWorkflow(source).rows[0].reportShare, 1);
+  source.planRates.push({ ...source.planRates[0] });
+  assert.equal(buildMpsWorkflow(source).rows[0].reportShare, null);
+  source.planRates.pop();
+  for (const status of ['loading', 'failed', 'unread']) {
+    source.planRatesRead = { status, error: '提报读取失效' };
+    const row = buildMpsWorkflow(source).rows[0];
+    assert.equal(row.reportShare, null);
+    assert.equal(row.historyShare, 0.6);
+  }
+  source.historyAnnualRead = { status: 'loading' };
+  assert.equal(buildMpsWorkflow(source).rows[0].historyShare, null);
 });

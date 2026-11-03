@@ -48,7 +48,7 @@ test('forecast fixes one source batch across a year boundary, preserves zero and
     /精度/,
   );
 });
-test('group aggregates retain source counts while conflicting group summaries stay unavailable', () => {
+test('SKU aggregates retain source counts while conflicting base-SKU summaries stay unavailable', () => {
   const same = forecastRows([forecast({ source_rows: 2 })], '2026-12');
   assert.equal(same[0]['数量'], 0);
   assert.equal(same[0]['源记录数'], 2);
@@ -63,9 +63,9 @@ test('group aggregates retain source counts while conflicting group summaries st
   assert(
     forecastRows([forecast({ belong_base: '   ' })], '2026-12').every((r) => r['数量'] === ''),
   );
-  const products = [{ 基地: '', 产品编码: '10001', 大类: '汤圆', 系列: '系列甲', 物料组: '001' }];
+  const products = [{ 基地: '', 产品编码: '001', 大类: '汤圆', 系列: '系列甲', 物料组: 'G001' }];
   assert.equal(forecastDimensions(same, products)[0]['大类'], '汤圆');
-  assert.equal(forecastDimensions(same, [{ ...products[0], 物料组: '1' }])[0]['大类'], '');
+  assert.equal(forecastDimensions(same, [{ ...products[0], 产品编码: '1' }])[0]['大类'], '');
   assert.equal(
     forecastDimensions(same, [...products, { ...products[0], 大类: '饺子' }])[0]['大类'],
     '',
@@ -200,7 +200,7 @@ test('delivery accepts finite small numeric ratios while preserving precise deci
     );
 });
 
-test('forecast classification explains missing and ambiguous group members without erasing quantities', () => {
+test('forecast classification explains missing and ambiguous SKU mappings without erasing quantities', () => {
   const rows = forecastRows(
     [forecast({ current_month_forecast_qty: 8, next_month_forecast_qty: null })],
     '2026-12',
@@ -208,20 +208,22 @@ test('forecast classification explains missing and ambiguous group members witho
   const [missing, missingQuantity] = forecastDimensions(rows, [{ 产品编码: '1' }]);
   assert.equal(missing['数量'], 8);
   assert.equal(missing['大类'], '');
-  assert.match(missing['缺项原因'], /未匹配主数据/);
+  assert.match(missing['缺项原因'], /未匹配当前产品明细/);
   assert.equal(missingQuantity['数量'], '');
-  assert.match(missingQuantity['缺项原因'], /预测数量缺失.*未匹配主数据/);
+  assert.match(missingQuantity['缺项原因'], /预测数量缺失.*未匹配当前产品明细/);
   const [ambiguous] = forecastDimensions(rows, [
-    { 产品编码: '10001', 物料组: '001', 大类: '汤圆' },
-    { 产品编码: '10002', 物料组: '001', 大类: '饺子' },
+    { 产品编码: '001', 物料组: 'G001', 大类: '汤圆' },
+    { 产品编码: '001', 物料组: 'G001', 大类: '饺子' },
   ]);
   assert.equal(ambiguous['数量'], 8);
   assert.equal(ambiguous['大类'], '');
-  assert.match(ambiguous['缺项原因'], /多个源值/);
+  assert.match(ambiguous['缺项原因'], /多个当前值/);
 });
 
 test('plan share parameters use natural current and next month across years', () => {
-  assert.deepEqual(sourceTableParameters('plan-rate', '2026-12'), { months: ['202612', '202701'] });
+  assert.deepEqual(sourceTableParameters('plan-rate', '2026-12'), {
+    months: ['202612', '202701', '202702'],
+  });
 });
 
 test('plan shares preserve nationwide null bases, zero and precise source ratios', () => {
@@ -243,4 +245,23 @@ test('plan shares preserve nationwide null bases, zero and precise source ratios
   assert.equal(result['当前维度计划量'], 0);
   assert.equal(result['计划占比'], '0.000000000000');
   assert.throws(() => planRateRows([{ ...row, stat_month: '202611' }], '2026-12'), /月份/);
+});
+
+test('预测按产品物料编码对应当前产品明细，大类系列和物料组编码各取本SKU', () => {
+  const rows = forecastRows([forecast({ material_code: '10000001' })], '2026-12');
+  const [row] = forecastDimensions(rows, [
+    {
+      基地: '',
+      产品编码: '10000001',
+      大类: '汤圆',
+      系列: '400g精装',
+      物料组: '102007',
+      物料组名称: '思念400g宁波风味汤圆',
+    },
+  ]);
+  assert.equal(row['产品编码'], '10000001');
+  assert.equal(row['大类'], '汤圆');
+  assert.equal(row['系列'], '400g精装');
+  assert.equal(row['物料组'], '102007');
+  assert.equal(row['数量'], 0);
 });
