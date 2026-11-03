@@ -8,6 +8,8 @@ class UpstreamOrders(unittest.TestCase):
 CREATE TABLE agents_scm_execute_detail_hourly_d(receive_wh TEXT,warehouseid TEXT,fromorderno TEXT,belong_base TEXT,executeorderno TEXT,executeorderlineno TEXT,material_code TEXT,material_name TEXT,header_addtime TEXT,requireddeliverytime TEXT,wms_close_time TEXT,order_close_time TEXT,prapare_order_status TEXT,load_time TEXT,bizunitconvertrate REAL,qtyordered REAL,qtyallocated REAL,qtyshipped REAL,order_type TEXT,plant_flag TEXT,detailstatus INTEGER,canceltime TEXT,dmscanceltime TEXT);
 CREATE TABLE agents_scm_asn_detail_d(warehouseid TEXT,warehouse_name TEXT,warehouse_classify TEXT,source_warehouseid TEXT,asnreference1 TEXT,asnno TEXT,asnlineno TEXT,material_code TEXT,header_addtime TEXT,actualarrivetime TEXT,order_close_time TEXT,asnstatus TEXT,lastreceivingtime TEXT,load_time TEXT,expectedqty REAL,receivedqty REAL,asntype TEXT);
 CREATE TABLE agents_scm_material_in_out_summary_d(material_code TEXT,product_categ_name TEXT,material_group_name TEXT);''')
+  self.db.execute('CREATE TABLE agents_scm_execute_detail_d AS SELECT * FROM agents_scm_execute_detail_hourly_d WHERE 0')
+  self.addCleanup(self.db.close)
   self.db.create_function('CONCAT',-1,lambda *x:''.join(str(v) for v in x if v is not None))
   self.db.create_function('SUBSTRING',3,lambda s,a,n:s[a-1:a+n-1] if s else None)
   for wh,name,kind,qty in [('BASE','基地仓','01',60),('BR1','分仓一','20',100000),('BR2','分仓二','20',0)]:
@@ -23,7 +25,11 @@ CREATE TABLE agents_scm_material_in_out_summary_d(material_code TEXT,product_cat
    (wh,'分仓'+wh,'20',row['warehouseid'],order,'ASN-'+order,row['executeorderlineno'],'SKU',date+' 00:00:00',None,None,'00',None,'2026-10-30',demand,0,'TT'))
   self.db.execute('INSERT INTO agents_scm_execute_detail_hourly_d ('+','.join(row)+') VALUES ('+','.join('?' for _ in row)+')',list(row.values()))
  def rows(self):
-  sql=(W/'business/inventory-fc/upstream-orders-source.sql').read_text();sql=sql[:sql.rindex('\nSELECT l.warehouse_code')]+''' SELECT l.warehouse_code AS warehouse_code,l.order_no AS order_no,l.demand AS demand,l.preparing_allocated AS preparing_allocated,l.remaining AS remaining,l.available AS available,l.shortage AS shortage,l.invalid AS invalid FROM upstream_current AS l ORDER BY l.order_no'''
+  import sqlglot
+  tree=sqlglot.parse_one((W/'business/inventory-fc/upstream-orders-source.sql').read_text(),read='postgres')
+  result=sqlglot.parse_one("SELECT l.warehouse_code AS warehouse_code,l.order_no AS order_no,l.demand AS demand,l.preparing_allocated AS preparing_allocated,l.remaining AS remaining,l.available AS available,l.shortage AS shortage,l.invalid AS invalid FROM upstream_current AS l ORDER BY l.order_no",read='postgres')
+  with_key = 'with_' if 'with_' in sqlglot.exp.Select.arg_types else 'with'
+  result.set(with_key,tree.args[with_key]);sql=result.sql(dialect='sqlite')
   return {r['order_no']:dict(r) for r in self.db.execute(sql)}
  def test_incoming_direction_and_status(self):
   self.add('BR1','DEALER','2026-10-01',9000,0,order_type='ZO10')
@@ -87,4 +93,27 @@ CREATE TABLE agents_scm_material_in_out_summary_d(material_code TEXT,product_cat
   self.db.execute("UPDATE agents_scm_execute_detail_hourly_d SET qtyallocated=700 WHERE executeorderno='O1'")
   self.db.execute("UPDATE agents_scm_execute_detail_hourly_d SET qtyallocated=NULL WHERE executeorderno='O2'")
   self.assertEqual(self.rows()['O1']['shortage'],0);self.assertIsNone(self.rows()['O2']['shortage'])
+ def test_daily_full_set_is_retained_when_hourly_only_contains_updates(self):
+  self.db.execute('INSERT INTO agents_scm_execute_detail_d SELECT * FROM agents_scm_execute_detail_hourly_d')
+  self.db.execute("DELETE FROM agents_scm_execute_detail_hourly_d WHERE executeorderno<>'O1'")
+  self.assertEqual(set(self.rows()),{'O1','O2','O3'})
+  self.assertEqual(self.rows()['O2']['shortage'],40)
+ def test_newer_hourly_line_replaces_daily_line_without_double_counting(self):
+  self.db.execute('INSERT INTO agents_scm_execute_detail_d SELECT * FROM agents_scm_execute_detail_hourly_d')
+  self.db.execute("UPDATE agents_scm_execute_detail_hourly_d SET load_time='2026-10-30 14:00:00',qtyallocated=400 WHERE executeorderno='O1'")
+  self.assertEqual(self.rows()['O1']['preparing_allocated'],40)
+ def test_company_sale_uses_zo14_execution_and_units(self):
+  self.db.execute("UPDATE agents_scm_asn_detail_d SET asntype='COMPANY_SALE' WHERE asnreference1='O1'")
+  self.db.execute("UPDATE agents_scm_execute_detail_hourly_d SET order_type='ZO14' WHERE executeorderno='O1'")
+  self.assertEqual(self.rows()['O1']['preparing_allocated'],20)
+ def test_empty_header_remains_visible_with_zero_quantities(self):
+  self.db.execute("INSERT INTO agents_scm_asn_detail_d VALUES ('BR1','分仓一','20','BASE','EMPTY','ASN-EMPTY',NULL,NULL,'2026-10-01',NULL,NULL,'00',NULL,'2026-10-30',NULL,NULL,'TT')")
+  row=self.rows()['EMPTY'];self.assertEqual([row[k] for k in ['demand','preparing_allocated','remaining','available','shortage','invalid']],[0,0,0,0,0,0])
+ def test_known_nonbase_source_is_excluded(self):
+  self.db.execute("INSERT INTO agents_scm_inventory_sku_data_d VALUES ('20261030','OTHER','其他仓','03',NULL,'SKU',100,'20261001','01','P','Q','Y')")
+  self.add('BR1','NONBASE','2026-10-01',70,20,warehouseid='OTHER');self.assertNotIn('NONBASE',self.rows())
+ def test_identical_zero_stock_duplicates_do_not_invalidate_pool(self):
+  self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=0 WHERE warehouseid='BASE'")
+  self.db.execute("INSERT INTO agents_scm_inventory_sku_data_d SELECT * FROM agents_scm_inventory_sku_data_d WHERE warehouseid='BASE'")
+  row=self.rows()['O1'];self.assertEqual(row['shortage'],50);self.assertEqual(row['invalid'],0)
 if __name__=='__main__':unittest.main()

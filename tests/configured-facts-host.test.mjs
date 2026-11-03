@@ -1,8 +1,11 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
-const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+const config = sourceDetailConfig(
+  JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8')),
+);
 const bundle = await build({
   entryPoints: ['business/shared/configured-facts.ts'],
   bundle: true,
@@ -31,7 +34,7 @@ test('independent Host reads use the current installed config rather than a prio
             call.queryId === 'source.branch-stock-date'
               ? { day: '2026-10-22' }
               : { row_count: 1, recommended_qty: 35 };
-          if (call.queryId === 'replenishment.summary') cycles.push(request.parameters.gea_p2303);
+          if (call.queryId === 'replenishment.overview') cycles.push(request.parameters.gea_p2303);
           return {
             rows: [
               Object.fromEntries(query.resultColumns.map((name) => [name, values[name] ?? 0])),

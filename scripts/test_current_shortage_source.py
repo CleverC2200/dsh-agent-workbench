@@ -15,8 +15,13 @@ class SourceFormula(unittest.TestCase):
   for w,sku,qty,*opt in stock:
    cl=opt[0] if opt else '01';batch=opt[1] if len(opt)>1 else 'a';date=opt[2] if len(opt)>2 else '20261021'
    c.execute('INSERT INTO agents_scm_inventory_sku_data_d VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',(date,w,w,'B',sku,sku,'20260101','sap','plant',batch,'1',cl,qty))
+  from test_fc_upstream_orders import UpstreamOrders
+  fixture=UpstreamOrders();fixture.setUp()
+  for table in ['agents_scm_asn_detail_d','agents_scm_execute_detail_hourly_d']:
+   c.execute(fixture.db.execute("SELECT sql FROM sqlite_master WHERE name=?",(table,)).fetchone()[0])
+  fixture.db.close()
   c.executemany('INSERT INTO agents_scm_material_in_out_summary_d (warehouseid,pickup_point) VALUES (?,?)',mapping)
-  for column,kind in [('cust_code',"TEXT DEFAULT 'FIXTURE'"),('qtyshipped','REAL DEFAULT 0'),('delivery_qty','REAL DEFAULT 0'),('detailstatus','INTEGER DEFAULT 10'),('order_close_time','TEXT'),('wms_close_time','TEXT'),('canceltime','TEXT'),('dmscanceltime','TEXT'),('bdwctime','TEXT'),('prapare_order_status','TEXT')]:
+  for column,kind in [('executeorderno','TEXT'),('executeorderlineno','TEXT'),('fromorderno','TEXT'),('load_time','TEXT'),('order_type','TEXT'),('receive_wh','TEXT'),('warehouseid','TEXT'),('header_addtime','TEXT'),('requireddeliverytime','TEXT'),('plant_flag','TEXT'),('cust_code',"TEXT DEFAULT 'FIXTURE'"),('qtyshipped','REAL DEFAULT 0'),('delivery_qty','REAL DEFAULT 0'),('detailstatus','INTEGER DEFAULT 10'),('order_close_time','TEXT'),('wms_close_time','TEXT'),('canceltime','TEXT'),('dmscanceltime','TEXT'),('bdwctime','TEXT'),('prapare_order_status','TEXT')]:
    c.execute('ALTER TABLE agents_scm_execute_detail_d ADD COLUMN '+column+' '+kind)
   c.execute("UPDATE agents_scm_execute_detail_d SET canceltime='2026-10-01' WHERE bizflowstatus='作废'")
   return [dict(r) for r in c.execute(statement,{'gea_p1':None,'gea_p2':None,'gea_p3':None,'gea_p6':None})]
@@ -48,11 +53,13 @@ class SourceFormula(unittest.TestCase):
   r=self.run_case([],[('w','s',3,'20')],[('w','p')]);self.assertEqual(r[0]['shortage_qty'],0);self.assertEqual(r[0]['absent_inventory_sku'],0)
  def test_missing_inventory_snapshot_blocks(self):
   r=self.run_case([('o','s','p',10,0)],[],[('w','p')]);self.assertIsNone(r[0]['shortage_qty']);self.assertEqual(r[0]['invalid_sku'],1)
- def test_full_chain_summary_keeps_known_demand_for_unmapped_points(self):
+ def test_full_chain_summary_does_not_treat_unmapped_dealer_points_as_branch_asn(self):
   config=json.loads((pathlib.Path(__file__).resolve().parents[1]/'business/inventory-qll/sql.config.json').read_text())
   rows=self.run_case([('a','s','p',10,0),('b','s','new',8,0)],[('w','s',3)],[('w','p')],config['queries']['current-shortage.summary']['request']['sql'])
-  mapped=next(r for r in rows if r['location_type']=='基地');unknown=next(r for r in rows if r['location_type']=='待映射')
-  self.assertEqual(mapped['shortage'],7);self.assertEqual(unknown['demand'],8);self.assertEqual(unknown['remaining'],8);self.assertEqual(unknown['invalid'],1);self.assertIsNone(unknown['shortage'])
+  base=json.loads((pathlib.Path(__file__).resolve().parents[1]/'business/inventory-aqkc/sql.config.json').read_text())
+  expected=self.run_case([('a','s','p',10,0),('b','s','new',8,0)],[('w','s',3)],[('w','p')],base['queries']['current-shortage.summary']['request']['sql'])
+  self.assertEqual(rows,expected)
+  self.assertEqual(rows[0]['demand'],10);self.assertEqual(rows[0]['shortage'],7)
  def test_summary_distinguishes_empty_source_from_no_active_orders(self):
   config=json.loads((pathlib.Path(__file__).resolve().parents[1]/'business/inventory-qll/sql.config.json').read_text())
   sql=config['queries']['current-shortage.summary']['request']['sql']

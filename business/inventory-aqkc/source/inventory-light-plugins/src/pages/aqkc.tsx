@@ -1085,6 +1085,10 @@ export function InventoryOperationsWorkbench() {
                     />
                   ))}
                 </div>
+                <QueryErrors
+                  errors={overviewWorkspace.workbench?.readErrors ?? []}
+                  scope="inventory-aqkc-overview"
+                />
                 <section className={styles.summaryBox} aria-label="AI 洞察">
                   <div className={styles.insightHeading}>
                     <span aria-hidden="true">✦</span>

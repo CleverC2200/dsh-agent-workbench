@@ -22,6 +22,7 @@ const base = JSON.parse(await readFile('business/inventory-aqkc/sql.config.json'
 const aps = JSON.parse(await readFile('business/inventory-apsplan/sql.config.json'));
 function executor(c, calls) {
   return async (request, o) => {
+    if (o.queryId === 'summary.snapshot') return { rows: [] };
     calls.push(o.queryId);
     assert.equal(request.sql.includes('%(gea_'), false);
     let rows;

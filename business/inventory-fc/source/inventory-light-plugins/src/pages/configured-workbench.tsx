@@ -23,7 +23,6 @@ import { WarehouseSelect } from './fc/components/warehouse-select';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
-import { BusinessDateInput } from '../../../../../shared/business-date-input';
 import { Fragment, useState, useEffect, useRef, useMemo } from 'react';
 import config from '../../../../sql.config.json';
 import { readConfiguredFacts } from '../../../../../shared/configured-facts';
@@ -97,7 +96,6 @@ function WorkbenchBody() {
   const [warehouseError, setWarehouseError] = useState('');
   const [tab, setTab] = useState('replenishment'),
     [date, setDate] = useState(businessDay),
-    [draft, setDraft] = useState(businessDay),
     [revision, refresh] = useState(0),
     [cycleDays, setCycleDays] = useState(
       () => configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays,
@@ -109,6 +107,15 @@ function WorkbenchBody() {
     [ruleDraft, setRuleDraft] = useState<FcCycleRule[]>([]),
     [cycleError, setCycleError] = useState(''),
     [planningError, setPlanningError] = useState('');
+  useEffect(() => {
+    const syncDay = () => setDate(businessDay());
+    window.addEventListener('focus', syncDay);
+    document.addEventListener('visibilitychange', syncDay);
+    return () => {
+      window.removeEventListener('focus', syncDay);
+      document.removeEventListener('visibilitychange', syncDay);
+    };
+  }, []);
   useEffect(() => {
     const plans = planningPlans;
     setTrial(null);
@@ -374,17 +381,10 @@ function WorkbenchBody() {
               className={common.controls}
               onSubmit={(e) => {
                 e.preventDefault();
-                setDate(draft);
+                setDate(businessDay());
                 refresh((n) => n + 1);
               }}
             >
-              <BusinessDateInput
-                aria-label="读取时点"
-                value={draft}
-                max={businessDay()}
-                required
-                onValueChange={setDraft}
-              />
               <button className="secondary-button">刷新</button>
             </LocalQueryForm>
           }

@@ -13,9 +13,29 @@ const { outputFiles } = await build({
   platform: 'node',
   format: 'esm',
 });
-const { readCurrentShortage, currentShortageSum } = await import(
+const { readCurrentShortage: readSourceShortage, currentShortageSum } = await import(
   'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
 );
+// Model the snapshot discovery request separately from the source shortage fixtures.
+function readCurrentShortage(config, queryId, filters, options) {
+  const execute = async (request, call) => {
+    if (call.queryId === 'summary.snapshot') return { rows: [] };
+    const result = await options.execute(request, call);
+    if (queryId.endsWith('.locations') && result.rows) {
+      if (call.queryId.endsWith('.count')) return { rows: [{ total: result.rows.length }] };
+      return {
+        ...result,
+        rows: result.rows.map((row) => ({
+          ...row,
+          page_scope_total: result.rows.length,
+          page_row_present: 1,
+        })),
+      };
+    }
+    return result;
+  };
+  return readSourceShortage(config, queryId, filters, { ...options, execute });
+}
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
 const fields = config.queries['current-shortage.detail'].resultColumns;
 const row = (index, total = 11) =>
@@ -83,7 +103,11 @@ test('permission failures and invalid scope never become zero shortage', async (
       'current-shortage.summary',
       {},
       {
-        execute: async () => ({ success: false, errorCode: 'ROW_SCOPE_DENIED', message: 'denied' }),
+        execute: async () => ({
+          success: false,
+          errorCode: 'ROW_SCOPE_DENIED',
+          message: 'denied',
+        }),
       },
     ),
     { code: 'ROW_SCOPE_DENIED' },

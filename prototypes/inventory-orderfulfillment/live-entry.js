@@ -9,6 +9,7 @@ import { configuredQueryFreshAfter } from '../../business/shared/query-cache.ts'
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
 import { ready, call, publish as publishContext, reportElements, action } from '../../business/shared/channel.js';
 import { fulfillmentPageContext } from './page-context.mjs';
+import { fulfillmentSourcePeriod, fulfillmentSourceDescription } from './source-period.mjs';
 import { keepPageObservation } from '../../business/shared/page-observation.js';
 import { quotePage } from '../../src/page-interaction/quote.ts';
 import { createPageViewState } from '../../business/shared/view-state.js';
@@ -71,6 +72,7 @@ let connected = false,
   revision = 0;
 let currentDetailData=null;
 let currentResults=null;
+let sourcePeriod=null;
 let dimension = 'deliveryDimensionPanel';
 const $ = (id) => document.getElementById(id);
 const salesSimulation = mountSalesSimulation(document);
@@ -155,6 +157,8 @@ function placeholder(body, message = '待数据接入') {
   target.textContent = message;
 }
 function clear(message = '正在读取当前授权数据…') {
+  sourcePeriod=null;
+  document.querySelector('.freshness').textContent=message;
   document.querySelectorAll('.metric-extra,.metric-period,.metric-coverage').forEach(node=>node.remove());
   for(const state of orderPagination.values()){state.context=null;state.page=0;state.nav.hidden=true;}
   clearPanels();
@@ -846,7 +850,9 @@ function renderSummary(results, selected) {
   renderSummaryDetails(document,computed,enrichedFacts(results)?.rows??[],selected,get(results,'shortage.detail'));
   const h3 = document.querySelector('#fulfillmentView > .fulfillment-analysis h3');
   if (h3)
-    h3.textContent = Number(summary?.source_orders)===0?'当前授权与日期范围暂无订单':localPreview
+    h3.textContent = Number(summary?.source_orders)===0
+      ? sourcePeriod?.delayed ? '当天暂未查到订单，源最新入库尚未到今天' : '当天及当前筛选范围暂无可见订单'
+      :localPreview
       ? '当前数据库读取范围的订单履约情况'
       : '当前授权范围的订单履约情况';
   const p = document.querySelector('#fulfillmentView > .fulfillment-analysis > p');
@@ -896,7 +902,7 @@ function renderSummary(results, selected) {
   $('fulfillmentBaseScope').textContent =
     (selected.base || '全部基地') + (localPreview ? ' · 本地数据库范围' : ' · 当前授权范围');
   document.querySelector('.freshness').textContent =
-    '按源下单日期 ' + selected.start + '；源快照时间未知，库存以各源日期为准';
+    '按源下单日期 ' + selected.start + '；' + fulfillmentSourceDescription(sourcePeriod) + '；库存以各源日期为准';
   const foot = document.querySelector('.fulfillment-analysis-foot > span');
   if (foot)
     foot.textContent =
@@ -962,12 +968,12 @@ async function loadFutureProduction(){
 async function load() {
   const selected = selectedFilters();
   const key = JSON.stringify(selected);
-  if (activeRead?.key === key && activeRead.current()) {if(currentResults){currentDetailData=null;renderGrantedDetails(currentResults);}return ensureItemPage();}
+  if (activeRead?.key === key && activeRead.checkedDay === shanghaiToday() && activeRead.current()) {if(currentResults){currentDetailData=null;renderGrantedDetails(currentResults);}return ensureItemPage();}
   const task = owner.begin();
   const timing = startDashboardTiming('order-fulfillment', task.signal);
   itemController?.abort();itemPageKey='';currentResults=null;
   for(const value of Object.values(itemPages))value.page=1;
-  activeRead = { key, current: task.current, signal:task.signal, complete:false, timing };
+  activeRead = { key, checkedDay:shanghaiToday(), current: task.current, signal:task.signal, complete:false, timing };
   clear();
   if (!connected || !reader) {
     timing.finish('unavailable');
@@ -975,6 +981,23 @@ async function load() {
     return;
   }
   saveView();
+  try {
+    const period = await reader.summary('orders.source-period', {end_exclusive:nextDay(shanghaiToday())}, task.signal);
+    if (!task.current()) return;
+    if (period.rejectedColumns?.length) throw Error('SOURCE_PERIOD_PERMISSION_DENIED');
+    sourcePeriod = fulfillmentSourcePeriod(period.rows[0], shanghaiToday());
+    activeRead.key=JSON.stringify(selected);
+    activeRead.version=period.configVersion;
+    document.querySelector('.freshness').textContent=fulfillmentSourceDescription(sourcePeriod);
+  } catch (error) {
+    if (!task.current()) return;
+    sourcePeriod=null;
+    clear('订单源日期读取失败或未获授权，暂不能确认订单数量');
+    status.textContent='订单源日期读取失败或未获授权，未将异常显示为0';
+    timing.finish('failed');
+    activeRead=null;
+    return;
+  }
   const ids = fulfillmentCardQueries;
   const optionFilters = {...selected,base:null,region:null,province:null,sales_group:null,channel:null,customer:null,order:null,sku:null,carrier:null};
   if(!filterCatalogLoaded && JSON.stringify(optionFilters)!==JSON.stringify(selected)) {
@@ -1002,7 +1025,7 @@ async function load() {
         const versions = Object.values(progressive)
           .filter((part) => part.status === 'fulfilled')
           .map((part) => part.value.configVersion);
-        if (new Set(versions).size > 1) {
+        if (new Set([...versions, activeRead.version]).size > 1) {
           owner.invalidate();
           clear('配置已变化，请重新查询');
           return value;
@@ -1050,6 +1073,7 @@ async function load() {
     authorization: localPreview ? 'database-account-only' : 'current-gea-identity',
     mock: false,
     consumerCode: 'order01',
+    sourcePeriod,
     fieldCoverage: facts ? {
       totalRows: facts.rows.length,
       fields: Object.fromEntries(['packingunitmain','bizunitconvertrate','lastbillingdate','latestarrivaldate','latestsendcardate','requireddeliverytime','requireddeliverytimebak','system_calc_arrival_date','sales_person','order_person','logistics_provider'].map(field => [field, {

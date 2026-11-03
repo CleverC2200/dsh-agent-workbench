@@ -5,6 +5,24 @@
   "source": "ai_db",
   "templates": {},
   "queries": {
+    "orders.source-period": {
+      "title": "当前授权订单源更新时间",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        }
+      },
+      "request": {
+        "sql": "SELECT MAX(e.header_addtime) AS latest_created,MAX(e.load_time) AS latest_load FROM agents_scm_execute_detail_hourly_d e WHERE e.header_addtime < :gea_p1",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": ["latest_created", "latest_load"]
+    },
     "sku.owners": {
       "title": "品项责任与生产分类（独立授权）",
       "parameterSpec": {

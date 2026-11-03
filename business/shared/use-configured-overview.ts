@@ -1,4 +1,5 @@
 import { refreshConfiguredQueries } from './query-cache';
+import { useQueryIdentity } from './use-query-identity';
 import { useEffect, useState, useRef } from 'react';
 import type { FcCycleRule } from './fc-cycle-rules';
 import { readConfiguredOverview } from './configured-overview';
@@ -15,12 +16,14 @@ export function useConfiguredOverview(
   warehouseCode?: string,
   fcCycleWarehouse?: string,
 ) {
+  const identity = useQueryIdentity();
   const previousRevision = useRef(revision);
   if (previousRevision.current !== revision) {
     refreshConfiguredQueries();
     previousRevision.current = revision;
   }
   const scopeKey = JSON.stringify([
+    identity,
     config.agentId,
     viewIds,
     date,
@@ -90,6 +93,7 @@ export function useConfiguredOverview(
       });
     return () => controller.abort();
   }, [
+    identity,
     config.agentId,
     JSON.stringify(viewIds),
     date,

@@ -64,6 +64,15 @@ test('manual plan results, ten-row pagination and CSV all use the same recalcula
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture"}</script><script>${js}</script>`,
       });
     const { queryId, parameters } = route.request().postDataJSON();
+    if (queryId === 'summary.snapshot')
+      return route.fulfill({
+        json: {
+          rows: [],
+          returnedColumns: config.queries[queryId].resultColumns,
+          rejectedColumns: [],
+          configVersion: 'fixture',
+        },
+      });
     calls.push({ queryId, parameters });
     const q = config.queries[queryId];
     assert.ok(q, queryId);

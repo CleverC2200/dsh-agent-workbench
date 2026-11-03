@@ -48,7 +48,7 @@ for v in c['sourceViews']['views']:
     if v['id'] in ['replenishment','plan','inventory']:
         if not any(f['name']=='search' for f in v['filters']):v['filters'].append({'name':'search','label':'SKU／产品名称'})
     if v['id']=='replenishment':
-        v['defaultFilters']={'list_mode':'business','sort_field':'recommended_qty','sort_direction':'desc'}
+        v['defaultFilters']={'list_mode':'all','sort_field':'recommended_qty','sort_direction':'desc'}
         if not any(f['name']=='list_mode' for f in v['filters']):v['filters'].append({'name':'list_mode','label':'补货筛选','options':[{'label':'有业务','value':'business'},{'label':'紧急 SKU','value':'urgent'},{'label':'低于建议','value':'recommended'},{'label':'全部','value':'all'}]})
         v['sortFields']={col['field']:col.get('valueField',col['field']) for col in v['columns'] if col.get('valueField',col['field']) in sorts and col['field'] not in ['missing_actualQty','missing_reason']}
         for name in ['sort_field','sort_direction']:

@@ -8,7 +8,7 @@ import {
   symlinkSync,
   realpathSync,
 } from 'node:fs';
-import { resolve, sep } from 'node:path';
+import { resolve, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { selectCiTests } from './ci-test-plan.mjs';
@@ -101,7 +101,9 @@ export async function sourceChecks(result, phase) {
       (repo === 'dsh-agent-manage' && selected.files.some((file) => file.endsWith('.ts'))),
     upstreams,
     joint,
-    pythonSql: selected.files.includes('tests/agent-sql-direct.test.mjs'),
+    pythonSql: selected.files.some((file) =>
+      ['tests/agent-sql-direct.test.mjs', 'tests/fc-upstream-orders.test.mjs'].includes(file),
+    ),
   };
   mkdirSync('.runtime', { recursive: true });
   writeFileSync('.runtime/source-checks-plan.json', JSON.stringify(plan, null, 2) + '\n');
@@ -359,6 +361,45 @@ export async function checkTypes(root, repositories, repo, changed = []) {
     if (!parsed) throw Error(`SOURCE_TYPES_CONFIG_REQUIRED: ${file}`);
     return parsed;
   };
+  const declarations = new Map();
+  const projectedPeers = new Set();
+  const assertDiagnostics = (diagnostics, file) => {
+    if (!diagnostics.length) return;
+    console.error(
+      ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+        getCurrentDirectory: () => root,
+        getCanonicalFileName: (file) => file,
+        getNewLine: () => '\n',
+      }),
+    );
+    throw Error(`SOURCE_TYPES_FAILED: ${file}`);
+  };
+  const peerDeclaration = (peer, source) => {
+    const destination = resolve(root, '.runtime/source-peer-types', peer.repo);
+    if (!projectedPeers.has(peer.path)) {
+      const parsed = parseConfig(resolve(peer.path, 'tsconfig.official.json'));
+      const program = ts.createProgram(parsed.fileNames, {
+        ...parsed.options,
+        noEmit: false,
+        declaration: true,
+        emitDeclarationOnly: true,
+        declarationMap: false,
+        incremental: false,
+        composite: false,
+        rootDir: peer.path,
+        outDir: destination,
+      });
+      assertDiagnostics([...parsed.errors, ...ts.getPreEmitDiagnostics(program)], peer.repo);
+      const emitted = program.emit(undefined, (file, content) =>
+        declarations.set(resolve(file), content),
+      );
+      assertDiagnostics(emitted.diagnostics, peer.repo);
+      projectedPeers.add(peer.path);
+    }
+    const target = resolve(destination, relative(peer.path, source).replace(/\.tsx?$/, '.d.ts'));
+    if (!declarations.has(target)) throw Error(`SOURCE_PEER_TYPES_REQUIRED: ${target}`);
+    return target;
+  };
   const core = resolve(root, '../../official-latest-standard');
   const peerPaths = {},
     peerCorePaths = {};
@@ -384,7 +425,11 @@ export async function checkTypes(root, repositories, repo, changed = []) {
       );
       const target = existsSync(source) ? source : source.replace(/\.ts$/, '.tsx');
       if (existsSync(target)) {
-        peerPaths[pkg.name + (name === '.' ? '' : name.slice(1))] = [target];
+        peerPaths[pkg.name + (name === '.' ? '' : name.slice(1))] = [
+          repo === 'dsh-gea-plugin' && peer.repo === 'dsh-agent-workbench'
+            ? peerDeclaration(peer, target)
+            : target,
+        ];
         mapsSource = true;
       }
     }
@@ -427,21 +472,25 @@ export async function checkTypes(root, repositories, repo, changed = []) {
       )
       .map((file) => resolve(root, file))
       .filter((file) => !configuredSources.has(file) || parsed.fileNames.includes(file));
+    const host = ts.createCompilerHost(parsed.options);
+    const original = { ...host };
+    host.fileExists = (file) => declarations.has(resolve(file)) || original.fileExists(file);
+    host.readFile = (file) => declarations.get(resolve(file)) ?? original.readFile(file);
+    host.directoryExists = (directory) =>
+      [...declarations.keys()].some((file) => file.startsWith(resolve(directory) + sep)) ||
+      original.directoryExists?.(directory) === true;
+    host.getSourceFile = (file, languageVersion, onError, shouldCreateNewSourceFile) =>
+      declarations.has(resolve(file))
+        ? ts.createSourceFile(file, declarations.get(resolve(file)), languageVersion, true)
+        : original.getSourceFile(file, languageVersion, onError, shouldCreateNewSourceFile);
+    host.realpath = (file) =>
+      declarations.has(resolve(file)) ? file : (original.realpath?.(file) ?? file);
     const program = ts.createProgram(
       [...new Set([...parsed.fileNames, ...affected, ...ambient])],
       parsed.options,
+      host,
     );
-    const diagnostics = [...parsed.errors, ...ts.getPreEmitDiagnostics(program)];
-    if (diagnostics.length) {
-      console.error(
-        ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-          getCurrentDirectory: () => root,
-          getCanonicalFileName: (file) => file,
-          getNewLine: () => '\n',
-        }),
-      );
-      throw Error(`SOURCE_TYPES_FAILED: ${file}`);
-    }
+    assertDiagnostics([...parsed.errors, ...ts.getPreEmitDiagnostics(program)], file);
     console.log(
       JSON.stringify({
         typecheck: file,

@@ -108,6 +108,7 @@ export type WorkspacePresentation =
   | 'fixed_workbench_no_data';
 
 export interface FixedSafetyStockWorkbench {
+  readErrors?: string[];
   status: 'ready' | 'no_data';
   statusDescription: string;
   overallAnalysis: string;
@@ -632,6 +633,9 @@ function normalizeFixedWorkbench(value: unknown): FixedSafetyStockWorkbench | nu
   return {
     status: value.status === 'no_data' ? 'no_data' : 'ready',
     statusDescription: asString(value.statusDescription),
+    readErrors: Array.isArray(value.readErrors)
+      ? value.readErrors.filter((error): error is string => typeof error === 'string')
+      : [],
     overallAnalysis: asString(value.overallAnalysis),
     inventoryInsight: normalizeInventoryRiskEvidence(value.inventoryInsight),
     ...(noData ? { noData } : {}),

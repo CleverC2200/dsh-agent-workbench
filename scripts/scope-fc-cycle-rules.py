@@ -5,7 +5,10 @@ import sqlglot
 from sqlglot import exp
 p=Path(__file__).resolve().parents[1]/'business/inventory-fc/sql.config.json'
 c=json.loads(p.read_text())
-for q in c['queries'].values():
+for key,q in c['queries'].items():
+ # This derived query is only selected with default cycles; regenerate it from
+ # the canonical summary using compact-fc-overview/card-reads after rule changes.
+ if key=='replenishment.overview':continue
  if 'fc_net_input AS (' not in q['request']['sql'] or 'gea_p2802' in q['parameterSpec']:continue
  t=sqlglot.parse_one(q['request']['sql'],read='postgres')
  node=next(x for x in t.ctes if x.alias=='fc_net_input').this

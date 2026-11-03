@@ -49,7 +49,7 @@ test('overview uses whole-scope aggregates without count or detail round trips',
     await readConfiguredOverview(configs[a], '2026-10-15', '', io);
     assert.ok(
       io.calls.every((c) =>
-        /^calendar\.target_versions$|^overview\.(?:quick-stock|orders-by-pickup)$|summary|\.cards$|\.inventory$|source\.(?:(?:dealer-|branch-)?stock|health)-date/.test(
+        /^calendar\.target_versions$|^overview\.(?:quick-stock|orders-by-pickup)$|summary|\.overview$|\.cards$|\.inventory$|source\.(?:(?:dealer-|branch-)?stock|health)-date/.test(
           c.queryId,
         ),
       ),
@@ -87,7 +87,7 @@ test('an authorization failure stays local to its domain and is never retried', 
   const r = await readConfiguredOverview(configs.fc, '2026-10-15', '', io);
   assert.equal(r['branch-supply'].error, 'denied');
   assert.ok(r.replenishment.summary);
-  assert.equal(io.calls.filter((c) => c.queryId === 'replenishment.summary').length, 1);
+  assert.equal(io.calls.filter((c) => c.queryId === 'replenishment.overview').length, 1);
   assert.equal(io.calls.filter((c) => c.queryId === 'branch-supply.summary').length, 2);
 });
 test('config changes across overview domains reject the combined overview', async () => {

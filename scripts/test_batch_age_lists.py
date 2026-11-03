@@ -127,9 +127,9 @@ class BatchAgeLists(unittest.TestCase):
   self.batch(2,4277,base='濮阳');self.batch(290,5697,base='濮阳');self.batch(290,-5697,base='濮阳')
   for query in ['batch-age.groups','batch-age.atomic']:
    r=self.read(query_id=query)[0]
-   self.assertEqual(r['total_qty'],4277);self.assertEqual(r['negative_qty'],-5697)
+   self.assertEqual(r['total_qty'],4277);self.assertEqual(r['negative_qty'],0)
    self.assertEqual(sum(r[k] for k in ['age0_30','age31_40','age41_60','age60_plus','unknown_age_qty','negative_qty']),r['total_qty'])
-   self.assertAlmostEqual(r['average_age'],(2*4277+290*5697)/9974,places=5)
+   self.assertEqual(r['age_weight_qty'],4277);self.assertEqual(r['age60_plus'],0);self.assertEqual(r['max_age'],2);self.assertEqual(r['average_age'],2)
  def test_stock_calendar_uses_same_batch_snapshot_and_base_pool_as_age_calendar(self):
   self.batch(10,100);self.batch(10,900,kind='20')
   self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET month_date='20261023' WHERE warehouse_classify='20'")

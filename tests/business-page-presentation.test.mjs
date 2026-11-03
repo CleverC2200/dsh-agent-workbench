@@ -124,7 +124,8 @@ for (const page of ['fc', 'aqkc'])
       }),
     );
     await until(() => requests.some((message) => message.method === 'sql'));
-    await until(() => root.querySelectorAll('[role="alert"]').length > 0);
+    await until(() => navigation(page, root).length === (page === 'fc' ? 6 : 3));
+    assert.ok(!root.textContent.includes('部分数据暂不可用'));
     assert.ok(
       requests.some((message) => message.method === (page === 'fc' ? 'sql' : 'access')),
       'connected reads stay on the existing Host-authorized operation',
@@ -146,7 +147,7 @@ for (const page of ['fc', 'aqkc'])
     await until(() => requests.filter((message) => message.method === 'sql').length > before);
     port.onmessage({ data: { type: 'identity-changed' } });
     await until(() =>
-      /登录身份已变化|登录并连接|页面已显示|暂不可用|读取失败/.test(root.textContent),
+      /登录身份已变化|登录并连接|页面已显示|暂不可用|读取失败|当前库存/.test(root.textContent),
     );
     assert.equal(navigation(page, root).length, page === 'fc' ? 6 : 3);
     if (page === 'fc')
