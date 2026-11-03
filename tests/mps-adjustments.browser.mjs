@@ -46,6 +46,7 @@ test('MPS category override records a reason and time, survives reload and undo 
   });
   const month = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
   const period = month.match(/\d{4}-\d{2}/)[0];
+  await frame.getByText('查看系统值、调整与缺项说明', { exact: true }).click();
   await frame.getByRole('button', { name: `调整 汤圆 ${period}`, exact: true }).click();
   const form = frame.getByRole('group', { name: '大类需求调整' });
   await form.getByLabel('调整需求数量').fill('120');
@@ -60,6 +61,7 @@ test('MPS category override records a reason and time, survives reload and undo 
     )
     .toBe(120);
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
+  await frame.getByText('查看系统值、调整与缺项说明', { exact: true }).click();
   await expect(
     frame
       .getByRole('region', { name: '逐月测算', exact: true })

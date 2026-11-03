@@ -4,14 +4,12 @@ import { sourceCheckRows } from './source-projections.js';
 const number = (value) =>
   value === '' || value == null || !Number.isFinite(Number(value)) ? null : Number(value);
 const ready = (state, month) => state?.status === 'ready' && state.month === month;
-export function buildCategoryDemand(draft, categories) {
+export function buildCategoryDemand(draft) {
   const checks = sourceCheckRows(
     ready(draft.sourceChecksRead, draft.month) ? draft.sourceChecks : null,
     ['loading', 'failed'].includes(draft.productsRead?.status)
       ? []
       : (draft.products ?? draft.productRaw),
-    draft.pull,
-    categories,
   );
   const historical = ready(draft.historicalIndicatorsRead, draft.month)
     ? draft.historicalIndicators.periods.flatMap((period) => (period.error ? [] : period.rows))
