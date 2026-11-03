@@ -135,6 +135,12 @@ def main():
       combined.this.set('expressions',[e for e in combined.this.expressions if e.alias_or_name!='sku'])
      if 'sku' not in combined.this.named_selects:combined.this.select(source_alias+'.'+source_column+' AS sku',append=True,copy=False)
     changed=True
+   # Doris DECIMAL(38,0) target arithmetic otherwise truncates fractional inventory.
+   for value in t.find_all(exp.Alias):
+    if value.alias!='known_inventory_deviation_qty':continue
+    for difference in value.find_all(exp.Sub):
+     if not isinstance(difference.this,exp.Cast):
+      difference.set('this',exp.Cast(this=difference.this.copy(),to=exp.DataType.build('DOUBLE')));changed=True
    if changed:persist_query(q,eliminate_ctes(t))
  # Restore dealer execution facts for FC. Warehouse association is accepted only when unique.
  mapping=parse('''WITH customer_execute_warehouse AS (
