@@ -24,11 +24,11 @@ const percent = (value) =>
         Number(value) * 100,
       ) + '%';
 
-export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPart, categories }) {
+export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
   const PlanRates = createPlanRates(react, { Dialog, table, downloadCsv });
   return function SourceInputs({ kind, draft, update, relations, active }) {
-    const calculated = react.useMemo(() => buildCategoryDemand(draft, categories), [draft]);
+    const calculated = react.useMemo(() => buildCategoryDemand(draft), [draft]);
     const endMonth = calculated.endMonth;
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = react.useState(0);
@@ -129,7 +129,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   calculated.recent.map(async (month) => {
                     const [history, report] = await Promise.all([
                       read(() => readFactMonth('history', month, stop.signal)),
-                      read(() => readFactMonth('report', month, stop.signal)),
+                      read(() => readFactMonth('execution-delivery', month, stop.signal)),
                     ]);
                     return { month, history, report };
                   }),
@@ -180,8 +180,6 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         sourceCheckRows(
           current && kind === 'basic' ? draft.sourceChecks : null,
           ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : draft.products,
-          draft.pull,
-          categories,
         ),
       [current, draft.sourceChecks, draft.products, draft.productsRead, draft.pull, kind],
     );
@@ -330,10 +328,10 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             : number(latest.actual.knownQuantity) +
               (latest.actual.quantity === null ? '（已知小计）' : ''),
         三月实绩: actual.display,
-        三月DMS计划: plan.display,
+        三月DMS发货量: plan.display,
         三月占比合计: percent(basis?.recentShare),
         全年预估: number(basis?.annualEstimate),
-        计划达成率: percent(basis?.achievementRate),
+        达成率: percent(basis?.achievementRate),
         核对说明: issues.join('；') || (current ? '按当前产品池SKU归类' : '尚未读取核对窗口'),
       };
     });
@@ -463,7 +461,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           h(
             'p',
             { className: 'dc-muted' },
-            'BI实绩与DMS计划按所示三个月核对，计划随月初／纠偏选择。各来源按当前产品池SKU重新归类，池外SKU另列清单，缺值不补0。期初使用评估月前4至前2月，纠偏使用前3至前1月。基期取窗口最后一月，全年预估＝三月实绩÷三月历史平均占比之和。',
+            'BI实绩与DMS发货量按所示三个月核对。DMS取订单所属月的delivery_qty（发货量，件），只纳入参与统计、非赠品、有效明细。达成率＝三月BI实绩÷三月DMS发货量。各来源按当前产品池SKU重新归类，池外SKU另列清单，缺值不补0。期初使用评估月前4至前2月，纠偏使用前3至前1月。基期取窗口最后一月，全年预估＝三月实绩÷三月历史平均占比之和。',
           ),
           state?.error && h('p', { role: 'alert' }, state.error),
           draft.historyAnnualRead?.error &&
@@ -474,10 +472,10 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             '大类或源分类',
             '基期实绩',
             '三月实绩',
-            '三月DMS计划',
+            '三月DMS发货量',
             '三月占比合计',
             '全年预估',
-            '计划达成率',
+            '达成率',
             '核对说明',
           ],
           basicRows,

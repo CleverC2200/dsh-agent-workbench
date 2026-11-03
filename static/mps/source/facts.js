@@ -19,7 +19,8 @@ const text = (value) => {
   return value;
 };
 export async function readFactMonth(type, month, signal) {
-  if (!['report', 'history'].includes(type)) throw Error('该事实来源尚未接入');
+  if (!['report', 'history', 'execution-delivery'].includes(type))
+    throw Error('该事实来源尚未接入');
   return readFacts('facts.' + type, { month: month + '-01' }, signal, type, month);
 }
 export async function readHistoryAnnual(month, signal) {
@@ -41,7 +42,7 @@ async function readFacts(id, parameters, signal, type, month) {
       { signal: options.signal },
     ),
   );
-  if (type === 'report') {
+  if (type === 'report' || type === 'execution-delivery') {
     const result = await client.readAll(
       id,
       { ...parameters, page_size: 200, offset: 0 },
@@ -51,6 +52,19 @@ async function readFacts(id, parameters, signal, type, month) {
       rows: result.rows.map((row) => {
         const base = text(row.belong_base),
           code = text(row.material_code);
+        if (type === 'execution-delivery')
+          return {
+            月份: month,
+            基地: base,
+            产品编码: code,
+            DMS发货数量: number(row.shipment_qty_total),
+            缺项原因:
+              Number(row.duplicate_rows) > 0
+                ? '出库执行单行重复，发货量未合计'
+                : Number(row.missing_rows) > 0
+                  ? '发货量或出库执行单行标识缺失'
+                  : '',
+          };
         const dimensions = {
           产品名称: text(row.material_name),
           大类: text(row.sub_category),

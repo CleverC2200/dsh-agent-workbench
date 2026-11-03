@@ -169,7 +169,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
     products,
     productMonths: [...productMonths.values()],
     scopeCoverage: 'in-scope',
-    categoryDemand: (draft.categoryDemand ?? buildCategoryDemand(draft, []).rows).map((row) => ({
+    categoryDemand: (draft.categoryDemand ?? buildCategoryDemand(draft).rows).map((row) => ({
       month: text(row.month),
       category: text(row.category),
       quantity: number(row.quantity),

@@ -1,7 +1,7 @@
 import { buildCategoryDemand } from './category-demand.js';
 import { changeAdjustment } from './local-draft.js';
 
-export function createCategoryDemand(react, { table, downloadCsv, categories, useMpsPart }) {
+export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
   const columns = [
     '大类',
@@ -23,7 +23,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
     '缺项说明',
   ];
   return function CategoryDemand({ draft, update, active }) {
-    const result = react.useMemo(() => buildCategoryDemand(draft, categories), [draft]);
+    const result = react.useMemo(() => buildCategoryDemand(draft), [draft]);
     const [editing, setEditing] = react.useState(null);
     const [quantity, setQuantity] = react.useState('');
     const [reason, setReason] = react.useState('');
@@ -33,18 +33,15 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
       setError('');
     }, [draft.id, draft.month]);
     const undo = (row) => {
-      const candidate = buildCategoryDemand(
-        {
-          ...draft,
-          adjustments: {
-            ...draft.adjustments,
-            categoryDemand: (draft.adjustments?.categoryDemand ?? []).filter(
-              (entry) => entry.month !== row.month || entry.category !== row.category,
-            ),
-          },
+      const candidate = buildCategoryDemand({
+        ...draft,
+        adjustments: {
+          ...draft.adjustments,
+          categoryDemand: (draft.adjustments?.categoryDemand ?? []).filter(
+            (entry) => entry.month !== row.month || entry.category !== row.category,
+          ),
         },
-        categories,
-      );
+      });
       update({
         adjustments: changeAdjustment(
           draft.adjustments,
@@ -84,9 +81,9 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
           ))
             missing.push(`${period.month} 历史环比缺失`);
           if (basis.plan === null)
-            missing.push(`${result.recent[0]}至${basis.endMonth} DMS计划缺失或不完整`);
+            missing.push(`${result.recent[0]}至${basis.endMonth} DMS发货量缺失或不完整`);
           else if (basis.achievementRate === null || basis.achievementRate <= 0)
-            missing.push('近三月计划达成率缺失或为0');
+            missing.push('近三月达成率缺失或为0');
         } else {
           if (row.chain === null) missing.push(`${row.month} 年度分月环比缺失或分母为0`);
           if (result.rows[index - 1].quantity === null) missing.push('上月有效需求缺失');
@@ -155,7 +152,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
             )?.systemQuantity ?? null,
           reason,
         });
-        const candidate = buildCategoryDemand({ ...draft, adjustments }, categories);
+        const candidate = buildCategoryDemand({ ...draft, adjustments });
         if (candidate.adjustmentIssues.length) throw Error(candidate.adjustmentIssues.join('；'));
         update({ adjustments });
         setEditing(null);
@@ -266,7 +263,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
         h(
           'div',
           { className: 'dc-card-foot' },
-          'M+1、M+2按（环比法＋占比法）÷2÷计划达成率；计划达成率＝同一窗口近三月BI实发合计÷DMS计划合计。M+3、M+4按上月有效需求×年度分月环比延展。年度分月环比＝本月年度需求÷上月年度需求。缺完整历史、零分母或依赖数据时系统值留空；人工调整须填写原因。展示取整数，计算及下载保留原精度。',
+          'M+1、M+2按（环比法＋占比法）÷2÷达成率；达成率＝同一窗口近三月BI实绩合计÷DMS发货量合计（delivery_qty，件）。M+3、M+4按上月有效需求×年度分月环比延展。年度分月环比＝本月年度需求÷上月年度需求。缺完整历史、零分母或依赖数据时系统值留空；人工调整须填写原因。展示取整数，计算及下载保留原精度。',
         ),
       ),
       h(

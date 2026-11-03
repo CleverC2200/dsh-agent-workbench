@@ -44,6 +44,17 @@ function fixture({ queryId, parameters }) {
         allnum_total: index ? 60 : 20,
       }),
     );
+  if (queryId.startsWith('facts.execution-delivery'))
+    rows = ['A', 'B'].map((material_code, index) =>
+      record('facts.execution-delivery', {
+        belong_base: '郑州',
+        material_code,
+        shipment_qty_total: index ? 30 : 10,
+        source_rows: 1,
+        missing_rows: 0,
+        duplicate_rows: 0,
+      }),
+    );
   if (queryId === 'facts.history' || queryId === 'facts.history-annual')
     rows = ['A', 'B'].map((code) =>
       record(queryId, {
@@ -193,7 +204,7 @@ test('historical shares reuse the existing computation while final category dema
   );
 });
 
-test('source checks fetch explicit months and use DMS versions while an unrelated missing income does not hide shipment quantities', async (t) => {
+test('source checks read DMS shipped pieces for the same explicit window in both evaluation modes', async (t) => {
   const { frame, calls } = await mpsPage(t, config, fixture);
   await version(frame, '2026-11');
   const section = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
@@ -209,19 +220,21 @@ test('source checks fetch explicit months and use DMS versions while an unrelate
   await expect(row.locator('td').nth(3)).toHaveText('120');
   for (const month of ['2026-07-01', '2026-08-01', '2026-09-01'])
     assert(
-      calls.some((call) => call.queryId === 'facts.report' && call.parameters.month === month),
+      calls.some(
+        (call) => call.queryId === 'facts.execution-delivery' && call.parameters.month === month,
+      ),
     );
   await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
   await expect(section.getByLabel('源值核对截止月份')).toHaveValue('2026-10');
-  await expect(row.locator('td').nth(3)).toHaveText('240');
-  await expect(row).toContainText('50.00%');
+  await expect(row.locator('td').nth(3)).toHaveText('120');
+  await expect(row).toContainText('100.00%');
   await expect(section).toContainText('期初使用评估月前4至前2月');
 });
 
 test('missing recent plans preserve the independent annual estimate and disclose the monthly dependency', async (t) => {
   const { frame } = await mpsPage(t, config, (query) => {
     const result = fixture(query);
-    return query.queryId === 'facts.report'
+    return query.queryId === 'facts.execution-delivery'
       ? { ...result, rows: [], totalRowCount: 0, hasMorePages: false }
       : result;
   });
@@ -232,7 +245,7 @@ test('missing recent plans preserve the independent annual estimate and disclose
   await expect(row.locator('td').nth(5)).toHaveText('400');
   await expect(row.locator('td').nth(6)).toHaveText('-');
   const calculation = frame.getByRole('region', { name: '逐月测算', exact: true });
-  await expect(calculation).toContainText('2026-07至2026-09 DMS计划缺失或不完整');
+  await expect(calculation).toContainText('2026-07至2026-09 DMS发货量缺失或不完整');
   await expect(calculation.locator('tbody tr').first().locator('td').nth(6)).toHaveText('40');
 });
 
@@ -265,7 +278,7 @@ test('three-year cards read complete historical periods and disclose the valid y
 test('failed source-check refresh retracts old comparisons instead of leaving an earlier ratio visible', async (t) => {
   let deny = false;
   const { frame } = await mpsPage(t, config, (query) => {
-    if (deny && query.queryId === 'facts.report') throw Error('SOURCE_READ_DENIED');
+    if (deny && query.queryId === 'facts.execution-delivery') throw Error('SOURCE_READ_DENIED');
     return fixture(query);
   });
   const section = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
@@ -399,7 +412,7 @@ test('source-check displays round quantities but its download keeps monthly deci
   await section.getByRole('button', { name: '下载源值核对', exact: true }).click();
   const csv = await mpsDownloadText(await (await waiting).path());
   assert.match(csv, /评估版本,评估月份,源月份/);
-  assert.match(csv, /,汤圆,月初数量,40\.75,40,40\.75,40,/);
+  assert.match(csv, /,汤圆,DMS发货数量,40\.75,40,40\.75,40,/);
 });
 
 test('entering demand confirmation reads the three-month source check without a separate click', async (t) => {

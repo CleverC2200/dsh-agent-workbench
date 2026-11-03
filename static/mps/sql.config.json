@@ -371,6 +371,65 @@
         "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(missing_qty) AS missing_qty, SUM(CASE WHEN quantity_variants > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN quantity_variants = 1 AND missing_qty = 0 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_values GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month) AS mps_summary"
       }
     },
+    "facts.execution-delivery": {
+      "title": "DMS历史发货量（件）",
+      "grain": ["belong_base", "material_code"],
+      "columns": [
+        "belong_base",
+        "material_code",
+        "shipment_qty_total",
+        "source_rows",
+        "missing_rows",
+        "duplicate_rows"
+      ],
+      "parameterSpec": {
+        "month": {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "sql": "SELECT belong_base, material_code, CASE WHEN COUNT(shipment_qty) = COUNT(*) THEN SUM(shipment_qty) ELSE NULL END AS shipment_qty_total, SUM(line_rows) AS source_rows, SUM(CASE WHEN shipment_qty IS NULL THEN line_rows ELSE 0 END) AS missing_rows, SUM(CASE WHEN line_rows > 1 THEN line_rows ELSE 0 END) AS duplicate_rows FROM (SELECT belong_base, material_code, executeorderno, executeorderlineno, COUNT(*) AS line_rows, CASE WHEN COUNT(*) = 1 AND COUNT(delivery_qty) = 1 AND NULLIF(TRIM(executeorderno), '') IS NOT NULL AND executeorderlineno IS NOT NULL THEN SUM(delivery_qty) ELSE NULL END AS shipment_qty FROM agents_scm_execute_detail_d WHERE order_month = SUBSTRING(:month, 1, 7) AND is_stat = '1' AND freegift = 'N' AND detailstatus = 10 GROUP BY belong_base, material_code, executeorderno, executeorderlineno) d GROUP BY belong_base, material_code ORDER BY belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "facts.execution-delivery.count"
+      }
+    },
+    "facts.execution-delivery.count": {
+      "title": "DMS历史发货分组数",
+      "parameterSpec": {
+        "month": {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        }
+      },
+      "columns": ["total"],
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code FROM agents_scm_execute_detail_d WHERE order_month = SUBSTRING(:month, 1, 7) AND is_stat = '1' AND freegift = 'N' AND detailstatus = 10 GROUP BY belong_base, material_code) d"
+      }
+    },
     "facts.report": {
       "title": "report",
       "grain": ["region_name", "belong_base", "material_code"],
@@ -1132,26 +1191,11 @@
           ],
           "timezone": "UTC",
           "order": [
-            [
-              "agents_scm_cust_deliv_daily_di.belong_base",
-              "asc"
-            ],
-            [
-              "agents_scm_cust_deliv_daily_di.material_code",
-              "asc"
-            ],
-            [
-              "agents_scm_cust_deliv_daily_di.material_name",
-              "asc"
-            ],
-            [
-              "agents_scm_cust_deliv_daily_di.product_categ_name",
-              "asc"
-            ],
-            [
-              "agents_scm_cust_deliv_daily_di.material_group_name",
-              "asc"
-            ]
+            ["agents_scm_cust_deliv_daily_di.belong_base", "asc"],
+            ["agents_scm_cust_deliv_daily_di.material_code", "asc"],
+            ["agents_scm_cust_deliv_daily_di.material_name", "asc"],
+            ["agents_scm_cust_deliv_daily_di.product_categ_name", "asc"],
+            ["agents_scm_cust_deliv_daily_di.material_group_name", "asc"]
           ],
           "limit": {
             "$parameter": "page_size"
