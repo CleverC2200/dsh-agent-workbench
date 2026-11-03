@@ -35,6 +35,7 @@ import brandLogo from './brand-logo.png';
 import css from './shell.css';
 import layoutCss from './layout.css';
 import loginCss from './login.css';
+import passwordLoginCss from './password-login.css';
 import staticControlsCss from './formal-static-controls.css';
 
 const INBOX = 'gea-inbox' as MainPanelId;
@@ -149,7 +150,8 @@ export function mountCompanyUI(
     // Loader must not claim this effect-owned sheet for a later materializing plugin.
     style.dataset.plugin = '@cleverc2200/dsh-agent-workbench';
     style.dataset.companyWorkbench = 'formal-508feea';
-    style.textContent = staticControlsCss + '\n' + css + '\n' + layoutCss + '\n' + loginCss;
+    style.textContent =
+      staticControlsCss + '\n' + css + '\n' + layoutCss + '\n' + loginCss + '\n' + passwordLoginCss;
     document.head.append(style);
     return () => style.remove();
   });
@@ -322,6 +324,7 @@ export function mountCompanyUI(
     const menu = useRef<HTMLDivElement>(null),
       trigger = useRef<HTMLButtonElement>(null);
     const [position, setPosition] = useState<{ left: number; bottom: number } | null>(null);
+    const [logoutWarning, setLogoutWarning] = useState(false);
     const [loginOpen, setLoginOpen] = useState(false);
     useEffect(() => {
       if (
@@ -390,12 +393,21 @@ export function mountCompanyUI(
       pending.current = controller;
       setBusy(true);
       setFailed(false);
+      setLogoutWarning(false);
       try {
         await authority.logout(controller.signal);
         controller.signal.throwIfAborted();
         setPosition(null);
-      } catch {
-        if (!controller.signal.aborted) setFailed(true);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          if (
+            error instanceof Error &&
+            'code' in error &&
+            error.code === 'GEA_LOGOUT_UNCONFIRMED'
+          ) {
+            setLogoutWarning(true);
+          } else setFailed(true);
+        }
       } finally {
         if (!controller.signal.aborted) setBusy(false);
       }
@@ -492,6 +504,7 @@ export function mountCompanyUI(
                   disabled={!authority || identity.state !== 'confirmed' || Boolean(identity.error)}
                   onClick={() => {
                     close();
+                    setLogoutWarning(false);
                     setLoginOpen(true);
                   }}
                 >
@@ -525,6 +538,7 @@ export function mountCompanyUI(
                   {failed && <span role="alert">{t('logoutFailed')}</span>}
                 </div>
               )}
+              {logoutWarning && <p role="alert">{t('logoutUnconfirmed')}</p>}
             </div>,
             document.body,
           )}
