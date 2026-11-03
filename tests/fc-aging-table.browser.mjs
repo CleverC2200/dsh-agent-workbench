@@ -1,0 +1,223 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { build } from 'esbuild';
+import { chromium, expect } from '@playwright/test';
+import { directSourceFixture } from './fixtures/configured-page.mjs';
+
+const config = directSourceFixture(
+  JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8')),
+);
+const output = await build({
+  stdin: {
+    contents: `import React from 'react';import{createRoot}from'react-dom/client';
+      import './business/inventory-fc/source/inventory-light-plugins/src/dsh-ui/base.css';
+      import './business/inventory-fc/source/inventory-light-plugins/src/pages/fc.css';
+      import {ConfiguredFactsPage} from './business/shared/configured-facts-page';
+      import {originalFcView} from './business/shared/original-business-views';
+      import {FcConfiguredList,FcWorkflowProvider} from './business/inventory-fc/source/inventory-light-plugins/src/pages/configured-fc-list';
+      const config=${JSON.stringify(config)};
+      createRoot(document.getElementById('app')).render(<FcWorkflowProvider><ConfiguredFactsPage config={config}
+        businessList={FcConfiguredList} date="2026-10-22" viewIds={['inventory']}
+        presentation={originalFcView(config,'structure')}/></FcWorkflowProvider>);`,
+    resolveDir: process.cwd(),
+    loader: 'tsx',
+  },
+  bundle: true,
+  write: false,
+  outfile: 'aging.js',
+  format: 'iife',
+  platform: 'browser',
+  alias: { react: resolve('node_modules/react'), 'react-dom': resolve('node_modules/react-dom') },
+  define: { PLUGIN_ID: '"fc"', 'process.env.NODE_ENV': '"test"' },
+  loader: { '.css': 'css', '.module.css': 'local-css' },
+});
+const js = output.outputFiles.find((file) => file.path.endsWith('.js')).text;
+const css = output.outputFiles.find((file) => file.path.endsWith('.css')).text;
+
+test('aging headers resize without reads, filter server pages and keep all-scope totals aligned', async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const calls = [],
+    errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error' && message.text().includes('same key'))
+      errors.push(message.text());
+  });
+  const all = Array.from({ length: 14 }, (_, i) => ({
+    material_code: `S${String(i + 1).padStart(2, '0')}`,
+    material_name: `商品${i + 1}`,
+    total_qty: i === 13 ? 0 : i + 1,
+    age_weight_qty: i === 13 ? 0 : i + 1,
+    weighted_age: (i === 13 ? 0 : i + 1) * 20,
+    unknown_age_qty: 0,
+    average_age: 20,
+    max_age: 20,
+    age0_30: i === 13 ? 0 : i + 1,
+    age31_60: 0,
+    age61_90: 0,
+    age90_plus: 0,
+    daily_movement: 1,
+    warning: '正常',
+  }));
+  await page.route('http://127.0.0.1:19497/**', async (route) => {
+    if (route.request().method() !== 'POST')
+      return route.fulfill({
+        contentType: 'text/html',
+        body: `<style>${css}</style><div id="app"></div><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
+      });
+    const { queryId, parameters: values } = route.request().postDataJSON();
+    calls.push({ queryId, values });
+    const query = config.queries[queryId];
+    assert.ok(query, queryId);
+    let rows;
+    if (queryId === 'source.branch-stock-date') rows = [{ day: '2026-10-22' }];
+    else {
+      assert.equal(queryId, 'batch-age.atomic');
+      const filtered = all.filter(
+        (row) =>
+          (values.stock_presence !== '有库存' || row.total_qty > 0) &&
+          (values.stock_presence !== '无库存' || row.total_qty === 0) &&
+          (!values.column_material_code_contains ||
+            row.material_code.includes(values.column_material_code_contains.replaceAll('%', ''))) &&
+          (values.column_total_qty_min == null || row.total_qty >= values.column_total_qty_min) &&
+          (values.column_total_qty_max == null || row.total_qty <= values.column_total_qty_max),
+      );
+      const summary = {
+        total_qty: filtered.reduce((sum, row) => sum + row.total_qty, 0),
+        average_age: filtered.length ? 20 : null,
+        age_weight_qty: filtered.reduce((sum, row) => sum + row.total_qty, 0),
+        age0_30: filtered.reduce((sum, row) => sum + row.total_qty, 0),
+        unknown_age_qty: 0,
+      };
+      const scope = Object.fromEntries(
+        Object.entries(query.scopeSummaryColumns).map(([field, alias]) => [
+          alias,
+          summary[field] ?? null,
+        ]),
+      );
+      rows = filtered.slice(values.offset, values.offset + values.page_size).map((row) => ({
+        ...Object.fromEntries(query.resultColumns.map((field) => [field, null])),
+        ...row,
+        ...scope,
+        page_scope_total: filtered.length,
+        page_row_present: 1,
+      }));
+      if (!rows.length)
+        rows = [
+          {
+            ...Object.fromEntries(query.resultColumns.map((field) => [field, null])),
+            ...scope,
+            page_scope_total: 0,
+          },
+        ];
+    }
+    return route.fulfill({
+      json: {
+        rows,
+        returnedColumns: query.resultColumns,
+        rejectedColumns: [],
+        configVersion: 'fixture',
+      },
+    });
+  });
+  await page.goto('http://127.0.0.1:19497/');
+  const table = page.locator('table[data-resizable]');
+  const footer = table.locator('tfoot');
+  await expect(table.locator('tbody tr')).toHaveCount(10);
+  await expect(footer.locator('[data-column="total_qty"]')).toHaveText('91');
+  await expect(footer.locator('[data-column="missing_age_5"]')).toHaveText('20.0');
+  const header = table.locator('th[data-field="material_name"]');
+  const before = await header.boundingBox();
+  const handle = page.getByRole('separator', { name: '调整产品名称列宽' });
+  await handle.scrollIntoViewIfNeeded();
+  const bounds = await handle.boundingBox(),
+    reads = calls.length;
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 103, bounds.y + 12);
+  await page.mouse.up();
+  await expect
+    .poll(async () => (await header.boundingBox()).width)
+    .toBeGreaterThan(before.width + 90);
+  await handle.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(handle).toHaveAttribute('aria-valuenow', String(Math.round(before.width + 90)));
+  assert.equal(calls.length, reads, 'resizing must not read business data');
+  const stockFilters = page.getByRole('group', { name: '库存情况', exact: true });
+  await stockFilters.getByRole('button', { name: '无库存', exact: true }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  await expect(table.locator('tbody [data-column="material_code"]')).toHaveText('S14');
+  await expect(footer.locator('[data-column="total_qty"]')).toHaveText('0');
+  assert.equal(calls.at(-1).values.stock_presence, '无库存');
+  await stockFilters.getByRole('button', { name: '有库存', exact: true }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(10);
+  await expect(footer.locator('[data-column="total_qty"]')).toHaveText('91');
+  await page.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(3);
+  await expect(footer.locator('[data-column="total_qty"]')).toHaveText('91');
+  await page.getByRole('button', { name: '筛选产品编码', exact: true }).click();
+  await page.getByLabel('包含', { exact: true }).fill('S13');
+  await page.getByRole('button', { name: '应用', exact: true }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  await expect(footer.locator('[data-column="total_qty"]')).toHaveText('13');
+  assert.equal(calls.at(-1).values.column_material_code_contains, '%S13%');
+  assert.equal(calls.at(-1).values.offset, 0);
+  assert.equal(calls.at(-1).values.stock_presence, '有库存');
+  await page.getByRole('button', { name: '筛选产品编码', exact: true }).click();
+  await page.getByRole('button', { name: '清除', exact: true }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(10);
+  await page.getByRole('button', { name: '筛选当前库存量', exact: true }).scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: '筛选当前库存量', exact: true }).click();
+  await page.getByLabel('最小值', { exact: true }).fill('11');
+  await page.getByLabel('最大值', { exact: true }).fill('12');
+  await page.getByRole('button', { name: '应用', exact: true }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  await expect(footer.locator('[data-column="total_qty"]')).toHaveText('23');
+  assert.equal(calls.at(-1).values.column_total_qty_min, '11');
+  assert.equal(calls.at(-1).values.column_total_qty_max, '12');
+  await page.getByLabel('列设置', { exact: true }).click();
+  await page.getByRole('checkbox', { name: '产品大类', exact: true }).uncheck();
+  await expect(table.locator('th[data-field="product_categ_name"]')).toHaveCount(0);
+  assert.equal(await footer.locator('td').count(), await table.locator('thead th').count());
+  await page.getByLabel('列设置', { exact: true }).click();
+  await table
+    .locator('th[data-field="material_name"]')
+    .dragTo(table.locator('th[data-field="material_code"]'));
+  const headerOrder = await table
+    .locator('thead th')
+    .evaluateAll((headers) => headers.map((cell) => cell.dataset.column));
+  const footerOrder = await footer
+    .locator('td')
+    .evaluateAll((cells) => cells.map((cell) => cell.dataset.column));
+  assert.deepEqual(footerOrder, headerOrder);
+  assert.ok(headerOrder.indexOf('material_name') < headerOrder.indexOf('material_code'));
+  await table.locator('th[data-field="total_qty"]').dragTo(table.locator('thead th').first());
+  await expect(footer.locator('td').first()).toHaveText('合计 · 23');
+  await page.getByRole('button', { name: '筛选当前库存量', exact: true }).click();
+  await page.getByLabel('最小值', { exact: true }).fill('99');
+  await page.getByLabel('最大值', { exact: true }).fill('100');
+  await page.getByRole('button', { name: '应用', exact: true }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(0);
+  await expect(footer.locator('td').first()).toHaveText('合计 · 0');
+  await expect(footer.locator('[data-column="missing_age_5"]')).toHaveText('-');
+  await page.getByRole('button', { name: '清空筛选', exact: true }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(10);
+  await expect(footer.locator('td').first()).toHaveText('合计 · 91');
+  await expect(stockFilters.getByRole('button', { name: '全部库存', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  assert.equal(calls.at(-1).values.stock_presence, null);
+  await page.screenshot({ path: '/tmp/fc-aging-table-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.screenshot({ path: '/tmp/fc-aging-table-narrow.png', fullPage: true });
+  assert.equal(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    true,
+  );
+  assert.deepEqual(errors, []);
+});

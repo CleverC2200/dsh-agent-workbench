@@ -1248,7 +1248,11 @@ export function FcConfiguredList(
             </section>
           );
         }}
-        getRowKey={rowKey}
+        getRowKey={
+          scope.viewId === 'inventory'
+            ? (row: FcRow) => JSON.stringify([row.warehouseid, row.material_code, row.level])
+            : rowKey
+        }
         emptyMessage={
           scope.viewId === 'replenishment' && selection.neededOnly
             ? '当前筛选没有匹配的需补货明细；可取消“需补货”查看全部明细及缺失要素。'
