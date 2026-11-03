@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { PlanPagination } from '../../../shared/plan-pagination';
 
 /** Render only the visible leaf rows; aggregate cards still use the complete snapshot. */
 export function DrillPage({
@@ -9,25 +10,48 @@ export function DrillPage({
   children: (value: string, index: number) => ReactNode;
 }) {
   const [requestedPage, setPage] = useState(1);
-  const pages = Math.max(1, Math.ceil(rows.length / 10));
+  const [pageSize, setPageSize] = useState(10);
+  const pages = Math.max(1, Math.ceil(rows.length / pageSize));
   const page = Math.min(requestedPage, pages);
-  const offset = (page - 1) * 10;
+  const offset = (page - 1) * pageSize;
+  const footer = useRef<HTMLDivElement>(null);
+  const paged = rows.length > 10;
+  useLayoutEffect(() => {
+    const element = footer.current;
+    const table = element?.closest<HTMLElement>('.category-drill-table');
+    if (!element || !table) return;
+    // Nested row groups constrain CSS sticky; keep the branch footer in the visible scrollport.
+    const align = () => {
+      element.style.width = `${table.clientWidth}px`;
+      element.style.transform = `translateX(${table.scrollLeft}px)`;
+    };
+    align();
+    const observer = new ResizeObserver(align);
+    observer.observe(table);
+    table.addEventListener('scroll', align, { passive: true });
+    return () => {
+      observer.disconnect();
+      table.removeEventListener('scroll', align);
+    };
+  }, [paged]);
   return (
     <>
-      {rows.slice(offset, offset + 10).map((value, index) => children(value, offset + index))}
-      {rows.length > 10 && (
-        <nav className="aps-drill-pagination" aria-label="物料组分页">
-          <span>共 {rows.length} 条 · 10 条/页</span>
-          <button type="button" disabled={page === 1} onClick={() => setPage(page - 1)}>
-            上一页
-          </button>
-          <span>
-            {page} / {pages}
-          </span>
-          <button type="button" disabled={page === pages} onClick={() => setPage(page + 1)}>
-            下一页
-          </button>
-        </nav>
+      {rows.slice(offset, offset + pageSize).map((value, index) => children(value, offset + index))}
+      {paged && (
+        <div ref={footer} className="aps-drill-pagination">
+          <PlanPagination
+            ariaLabel="物料组分页"
+            totalCount={rows.length}
+            page={page}
+            pageSize={pageSize}
+            loading={false}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
+        </div>
       )}
     </>
   );

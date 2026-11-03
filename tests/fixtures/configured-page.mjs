@@ -7,6 +7,8 @@ import { makeRequest } from '../../business/shared/configured-query-client.mjs';
 export function directSourceFixture(config) {
   const fixture = structuredClone(config);
   delete fixture.dailySummary;
+  delete fixture.overviewQuickStock;
+  for (const query of Object.values(fixture.queries)) delete query.summaryRoute;
   return fixture;
 }
 export async function configuredPageHtml(id) {

@@ -143,6 +143,9 @@ const monthly = (start: string, end: string, kind: string) =>
   (end === today() || date(shiftDays(end, 1)).getUTCDate() === 1);
 // One adapter owns a bounded queue shared by main and comparison requests.
 export function createGeaWorkspace(transport: SqlTransport) {
+  // This reader belongs to one period/identity/refresh cycle. Only completed
+  // reads are reused; a cancelled request must never poison another branch.
+  const configuredReads = new Map<string, Row[]>();
   const unavailable = new Map<string, unknown>();
   const sharedReads = new Map<string, Promise<Row[]>>();
   let running = 0;
@@ -245,6 +248,19 @@ export function createGeaWorkspace(transport: SqlTransport) {
             : config.workspaceDrillBindings?.[input.detailMode]?.[name]) ??
           config.workspaceBindings?.[name];
         const key = binding ? JSON.stringify(binding) : name;
+        const query = binding && config.queries[binding.queryId];
+        const grouped = Object.values(query?.parameterSpec ?? {}).some(
+          (spec: any) => spec.name === 'product_group_mode',
+        );
+        const completedKey = JSON.stringify([
+          binding,
+          query,
+          values.start,
+          values.end,
+          values.version,
+          values.order_type,
+          grouped ? values.productScope : null,
+        ]);
         const permissionKey = 'configured:' + key;
         if (unavailable.has(permissionKey)) throw unavailable.get(permissionKey);
         let job = directReads.get(key);
@@ -252,13 +268,18 @@ export function createGeaWorkspace(transport: SqlTransport) {
           job = limited(async () => {
             input.signal?.throwIfAborted();
             if (unavailable.has(permissionKey)) throw unavailable.get(permissionKey);
-            return readWorkspaceQuery(sqlConfiguration, name, values, {
+            const completed = !grouped ? configuredReads.get(completedKey) : undefined;
+            if (completed) return completed;
+            const rows = await readWorkspaceQuery(sqlConfiguration, name, values, {
               signal: input.signal,
               onInventory:
                 name === 'stock' && input.summary && !selected
                   ? (rows) => publishInventory?.(normalize(rows))
                   : undefined,
             });
+            input.signal?.throwIfAborted();
+            if (!grouped) configuredReads.set(completedKey, rows);
+            return rows;
           }).catch((error) => {
             if (
               !input.signal?.aborted &&
@@ -554,6 +575,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
       throw new GeaQueryError('APS_INVALID_FILTER', '筛选参数无效');
     if (input.refresh && !input.comparison && input.stage !== 'remaining') {
       sharedReads.clear();
+      configuredReads.clear();
       unavailable.clear();
     }
     if (!input.comparison) return run(input);

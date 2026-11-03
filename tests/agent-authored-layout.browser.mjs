@@ -2617,3 +2617,354 @@ test('dealer inventory tabs use square embedded loading', async (t) => {
     await expect(loading).toHaveCSS('border-top-width', '0px');
   }
 });
+
+for (const [view, label] of [
+  ['年度视角', '2026年'],
+  ['月度视角', '2026年10月'],
+  ['周度视角', /2026年10月.*W43/],
+  ['日度视角', '2026年10月20日'],
+])
+  test(`APS intelligent workspace stays monthly independently of board: ${view}`, async (t) => {
+    const { frame, errors, calls } = await mount(t, 'apsplan', 1280);
+    const picker = frame.locator('[data-business-toolbar] .date-picker-button');
+    await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+    await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
+    await frame.getByRole('tab', { name: view, exact: true }).click();
+    await expect(picker).toHaveText(label);
+    await frame.getByRole('button', { name: '智能工作台', exact: true }).click();
+    await expect(picker).toHaveText('2026年10月');
+    await expect(frame.locator('.intelligent-section-heading').first()).toContainText('月度视角');
+    await picker.click();
+    const menu = frame.getByRole('menu', { name: '统计日期筛选' });
+    await expect(menu.locator('.date-picker-day, .date-picker-week')).toHaveCount(0);
+    await menu
+      .locator('.date-picker-month')
+      .getByRole('button', { name: '9月', exact: true })
+      .click();
+    await picker.click();
+    await expect(picker).toHaveText('2026年9月');
+    await expect
+      .poll(() =>
+        calls.some(
+          (q) =>
+            q.queryId === 'overview.production' &&
+            q.parameters.start === '20260901' &&
+            q.parameters.end_exclusive === '20260921',
+        ),
+      )
+      .toBe(true);
+    await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+    await expect(picker).toHaveText(label);
+    await expect(frame.getByRole('tab', { name: view, exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await frame.getByRole('button', { name: '智能工作台', exact: true }).click();
+    await expect(picker).toHaveText('2026年9月');
+    assert.deepEqual(errors, []);
+  });
+
+test('APS list expansion keeps loaded rows and collapse does not reread the workspace', async (t) => {
+  let hold = false;
+  const pending = [];
+  t.after(() => pending.splice(0).forEach((resolve) => resolve()));
+  const { frame, calls, errors } = await mount(t, 'apsplan', 1280, async (query, result) => {
+    if (hold) await new Promise((resolve) => pending.push(resolve));
+    if (query.queryId.endsWith('.production'))
+      result.rows.forEach((row) =>
+        Object.assign(row, {
+          planned: 100,
+          actual: 98,
+          valid_records: 1,
+          records: 1,
+          source_basis: 'MES_QUANTITY',
+        }),
+      );
+    if (query.parameters.product_categories_enabled)
+      result.rows.forEach((row) => {
+        row.item = '测试品项';
+      });
+    return result;
+  });
+  await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+  await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
+  await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+  const table = frame.locator('#category-operations .category-drill-table');
+  const row = table.locator('.category-level').filter({ hasText: '汤圆' });
+  await expect(row).toHaveCount(1);
+  const before = await row.textContent();
+  const count = calls.length;
+  const budgets = () => calls.filter((q) => q.queryId === 'page.budget-performance').length;
+  const initialBudgets = budgets();
+  hold = true;
+  await row.locator('.category-drill-toggle').click();
+  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  await expect(row).toHaveText(before);
+  await expect(table.getByRole('status')).toHaveText('汤圆品项加载中');
+  await expect(
+    frame
+      .locator('article.period-kpi-card')
+      .filter({ hasText: '生产计划达成率' })
+      .locator('.kpi-value strong'),
+  ).not.toHaveText('-');
+  hold = false;
+  pending.splice(0).forEach((resolve) => resolve());
+  await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+  assert.ok(calls.length > count, 'new branch still reads its own detail');
+  assert.equal(budgets(), initialBudgets, 'branch expansion must not reread unrelated budget data');
+  const loadedCount = calls.length;
+  await row.locator('.category-drill-toggle').click();
+  await expect(row).toHaveAttribute('aria-expanded', 'false');
+  await row.locator('.category-drill-toggle').click();
+  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  assert.equal(calls.length, loadedCount, 'collapse/reopen must reuse the loaded branch');
+  await expect(table.locator('.item-level').filter({ hasText: '测试品项' })).toBeVisible();
+  await frame.locator('body').evaluate(() => window.dispatchEvent(new Event('gea-page-refresh')));
+  await expect.poll(budgets).toBeGreaterThan(initialBudgets);
+  await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+  const beforeSession = budgets();
+  hold = true;
+  await frame
+    .locator('body')
+    .evaluate(() => window.dispatchEvent(new Event('gea-session-changing')));
+  await expect(row).toHaveCount(0);
+  await frame
+    .locator('body')
+    .evaluate(() => window.dispatchEvent(new Event('gea-session-changed')));
+  await expect(row).toHaveCount(0);
+  hold = false;
+  pending.splice(0).forEach((resolve) => resolve());
+  await expect(row).toHaveCount(1);
+  await expect.poll(budgets).toBeGreaterThan(beforeSession);
+  assert.deepEqual(errors, []);
+});
+
+for (const dimension of ['品类维度', '基地维度'])
+  for (const width of [1280, 760])
+    test(`APS drill skeleton covers category and material loading: ${dimension} ${width}px`, async (t) => {
+      let hold = false;
+      let holdComparison = false;
+      const pending = [];
+      t.after(() => pending.splice(0).forEach((resolve) => resolve()));
+      const { page, frame, errors } = await mount(t, 'apsplan', width, async (query, result) => {
+        if (
+          hold ||
+          (holdComparison &&
+            query.queryId === 'drill.product.production' &&
+            query.parameters.start !== '20261001')
+        )
+          await new Promise((resolve) => pending.push(resolve));
+        result.rows.forEach((row) => {
+          if (
+            row.category &&
+            (width === 1280 ||
+              query.parameters.product_categories?.some(
+                (value) => value === '汤圆' || value.endsWith('::汤圆'),
+              ))
+          )
+            row.item = '测试品项';
+          if (query.parameters.product_items_enabled) row.material = '测试物料组';
+        });
+        return result;
+      });
+      await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+      await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
+      await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+      if (dimension === '基地维度')
+        await frame.getByRole('tab', { name: dimension, exact: true }).click();
+      await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+      const base = dimension === '基地维度';
+      if (width === 1280)
+        await frame
+          .locator(base ? '#base' : '#category-operations')
+          .getByRole('tab', { name: '生产计划达成率', exact: true })
+          .click();
+      const table = frame.locator(
+        base ? '#base .base-drill-table' : '#category-operations .category-drill-table',
+      );
+      const category = table
+        .locator(base ? '.base-category-level' : '.category-level')
+        .filter({ hasText: '汤圆' })
+        .first();
+      hold = true;
+      await category.locator('.category-drill-toggle').click();
+      const hasItems = width === 1280;
+      const itemsLoading = table.getByRole('status', {
+        name: hasItems ? '汤圆品项：其余指标读取中' : '汤圆品项加载中',
+        exact: true,
+      });
+      if (hasItems) await expect(itemsLoading).toHaveCount(0);
+      else await expect(itemsLoading).toBeVisible();
+      await expect(category).toHaveAttribute('aria-busy', 'true');
+      if (hasItems)
+        await expect(category.locator('.category-drill-toggle svg')).toHaveCSS(
+          'animation-duration',
+          '1s',
+        );
+      else
+        await expect(
+          itemsLoading.locator('.category-drill-row').first().locator(':scope > span'),
+        ).toHaveCount(await table.locator('.category-drill-head > *').count());
+      const bar = hasItems
+        ? category.locator('.category-drill-toggle svg')
+        : itemsLoading.locator('[data-skeleton-bar]').first();
+      await expect(bar).not.toHaveCSS('animation-name', 'none');
+      await expect(bar).toHaveCSS('animation-duration', hasItems ? '1s' : '1.4s');
+      await category.locator('.category-drill-toggle').click();
+      await expect(itemsLoading).toHaveCount(0);
+      await category.locator('.category-drill-toggle').click();
+      if (hasItems) await expect(itemsLoading).toHaveCount(0);
+      else await expect(itemsLoading).toBeVisible();
+      hold = false;
+      pending.splice(0).forEach((resolve) => resolve());
+      await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+      await expect(itemsLoading).toHaveCount(0);
+      const item = table
+        .locator(base ? '.base-item-level' : '.item-level')
+        .filter({ hasText: '测试品项' })
+        .first();
+      holdComparison = true;
+      await item.locator('.category-drill-toggle').click();
+      const materialLoading = table.getByRole('status', {
+        name: '测试品项物料组：其余指标读取中',
+        exact: true,
+      });
+      await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+      if (width === 760) {
+        await expect(materialLoading).toHaveCount(0);
+        holdComparison = false;
+        pending.splice(0).forEach((resolve) => resolve());
+        assert.deepEqual(errors, []);
+        return;
+      }
+      await expect(materialLoading).toHaveCount(0);
+      await expect(table.getByText('其余指标读取中', { exact: true })).toHaveCount(0);
+      await expect(item.locator('.category-drill-toggle svg')).toHaveCSS(
+        'animation-duration',
+        '1s',
+      );
+      await expect(
+        table.locator('.material-level').filter({ hasText: '测试物料组' }).first(),
+      ).toBeVisible();
+      await expect(item).toHaveAttribute('aria-busy', 'true');
+      await expect(item.locator('.category-drill-toggle')).toBeFocused();
+      const tabs = frame.locator(base ? '#base' : '#category-operations');
+      await tabs.getByRole('tab', { name: '订单缺货量', exact: true }).click();
+      await expect(materialLoading).toHaveCount(0);
+      await expect(item).not.toHaveAttribute('aria-busy', 'true');
+      await tabs.getByRole('tab', { name: '生产计划达成率', exact: true }).click();
+      await expect(materialLoading).toHaveCount(0);
+      await expect(item).toHaveAttribute('aria-busy', 'true');
+      if (process.env.AGENT_LAYOUT_EVIDENCE) {
+        await mkdir(process.env.AGENT_LAYOUT_EVIDENCE, { recursive: true });
+        await table.screenshot({
+          path: process.env.AGENT_LAYOUT_EVIDENCE + `/aps-drill-loading-${dimension}-${width}.png`,
+        });
+      }
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await expect(item.locator('.category-drill-toggle svg')).toHaveCSS('animation-name', 'none');
+      holdComparison = false;
+      pending.splice(0).forEach((resolve) => resolve());
+      await expect(materialLoading).toHaveCount(0);
+      await expect(
+        table.locator('.material-level').filter({ hasText: '测试物料组' }).first(),
+      ).toBeVisible();
+      assert.deepEqual(errors, []);
+    });
+
+for (const outcome of ['empty', 'failed'])
+  test(`APS branch skeleton exits after ${outcome} detail response`, async (t) => {
+    let hold = false;
+    const pending = [];
+    t.after(() => pending.splice(0).forEach((resolve) => resolve()));
+    const { frame, errors } = await mount(t, 'apsplan', 1280, async (query, result) => {
+      if (query.parameters.product_items_enabled) {
+        if (hold) await new Promise((resolve) => pending.push(resolve));
+        if (outcome === 'failed') throw Error('GEA_DATA_PERMISSION_DENIED');
+        return { ...result, rows: [] };
+      }
+      result.rows.forEach((row) => {
+        if (row.category) row.item = '测试品项';
+      });
+      return result;
+    });
+    await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+    await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
+    await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+    const table = frame.locator('#category-operations .category-drill-table');
+    await table
+      .locator('.category-level')
+      .filter({ hasText: '汤圆' })
+      .locator('.category-drill-toggle')
+      .click();
+    await expect(table.getByRole('status')).toHaveCount(0);
+    const item = table.locator('.item-level').filter({ hasText: '测试品项' }).first();
+    hold = true;
+    await item.locator('.category-drill-toggle').click();
+    const loading = table.getByRole('status', { name: '测试品项物料组加载中', exact: true });
+    await expect(loading).toBeVisible();
+    hold = false;
+    pending.splice(0).forEach((resolve) => resolve());
+    await expect(loading).toHaveCount(0);
+    await expect(item).not.toHaveAttribute('aria-busy', 'true');
+    assert.deepEqual(errors, []);
+  });
+
+for (const width of [1280, 760])
+  test(`APS material pagination uses shared footer inside the real board at ${width}px`, async (t) => {
+    const { frame, errors } = await mount(t, 'apsplan', width, async (query, result) => {
+      result.rows.forEach((row) => {
+        if (row.category) row.item = '测试品项';
+      });
+      if (query.parameters.product_items_enabled)
+        result.rows = result.rows.flatMap((row) =>
+          Array.from({ length: 21 }, (_, index) => ({
+            ...row,
+            material: `测试物料组${String(index + 1).padStart(2, '0')}`,
+          })),
+        );
+      return result;
+    });
+    await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+    await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
+    await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+    const table = frame.locator('#category-operations .category-drill-table');
+    await table
+      .locator('.category-level')
+      .filter({ hasText: '汤圆' })
+      .locator('.category-drill-toggle')
+      .click();
+    await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+    await table
+      .locator('.item-level')
+      .filter({ hasText: '测试品项' })
+      .locator('.category-drill-toggle')
+      .first()
+      .click();
+    const pager = table.getByRole('navigation', { name: '物料组分页' });
+    await expect(pager).toBeVisible();
+    await expect(table.locator('.material-level')).toHaveCount(10);
+    await expect(pager.getByText('共 21 条')).toHaveCSS('font-size', '12px');
+    await expect(pager.getByRole('button', { name: '下一页' })).toHaveCSS('height', '36px');
+    await table.evaluate((el) => (el.scrollLeft = el.scrollWidth));
+    await expect
+      .poll(() =>
+        pager.evaluate((el) => {
+          const outer = el.closest('.category-drill-table').getBoundingClientRect();
+          return [...el.querySelectorAll('button')].every((button) => {
+            const b = button.getBoundingClientRect();
+            return b.left >= outer.left && b.right <= outer.right;
+          });
+        }),
+      )
+      .toBe(true);
+    await pager.getByRole('button', { name: '下一页' }).click();
+    await expect(table.locator('.material-level').first()).toContainText('测试物料组11');
+    if (process.env.AGENT_LAYOUT_EVIDENCE) {
+      await mkdir(process.env.AGENT_LAYOUT_EVIDENCE, { recursive: true });
+      await pager.screenshot({
+        path: process.env.AGENT_LAYOUT_EVIDENCE + `/board-pagination-${width}.png`,
+      });
+    }
+    assert.deepEqual(errors, []);
+  });

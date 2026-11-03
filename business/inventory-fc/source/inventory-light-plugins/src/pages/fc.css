@@ -4857,10 +4857,71 @@ input:focus-visible,
   gap: 8px;
   font-weight: 600;
 }
+/* Keep the warehouse field independent from the compact pagination selector. */
+.fc-workflow-dialog > label > select {
+  box-sizing: border-box;
+  width: 240px;
+  min-width: 0;
+  max-width: calc(100% - 40px);
+  font: 500 12px/1.5 var(--ui-font);
+}
+.fc-workflow-dialog select,
+.fc-workflow-dialog select::picker(select) {
+  appearance: base-select;
+}
 .fc-workflow-dialog select {
-  min-width: 180px;
-  max-width: 100%;
+  align-items: center;
+  gap: 12px;
+}
+.fc-workflow-dialog select::picker-icon {
+  color: var(--ui-muted);
+}
+.fc-workflow-dialog select::picker(select) {
+  max-height: min(260px, 55vh);
+  margin-block: 6px;
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+  color: var(--ui-secondary);
+  box-shadow: 0 8px 24px #1822301a;
+  font: 400 12px/1.5 var(--ui-font);
+}
+.fc-workflow-dialog select option {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.fc-workflow-dialog select option:hover,
+.fc-workflow-dialog select option:focus {
+  background: var(--ui-hover);
+}
+.fc-workflow-dialog select option:checked {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+.fc-workflow-dialog > nav {
+  gap: 8px;
+  padding: 8px 0;
+  font-variant-numeric: tabular-nums;
+}
+.fc-workflow-dialog > nav > select {
+  box-sizing: border-box;
+  flex: 0 0 92px;
+  width: 92px;
+  min-width: 0;
+  height: 32px;
+  padding-inline: 10px;
   font: inherit;
+}
+.fc-workflow-dialog > nav > button {
+  min-height: 32px;
+  padding: 6px 10px;
+}
+.fc-workflow-dialog > nav > span {
+  white-space: nowrap;
 }
 .fc-workflow-dialog .fc-dms-fields {
   display: grid;
