@@ -481,12 +481,9 @@ test('confirmed category computation reaches the monthly table and keeps raw dow
     .getByRole('region', { name: '逐月测算', exact: true })
     .locator('tbody tr')
     .first();
-  await expect(
-    frame
-      .getByRole('region', { name: '逐月测算', exact: true })
-      .getByRole('columnheader', { name: '大类预估需求数量 加权 ÷ 达成率', exact: true }),
-  ).toBeVisible();
-  await expect(calculation.locator('td').nth(8)).toHaveText('51');
+  const main = frame.locator('.dc-category-demand-main');
+  await expect(main.getByRole('columnheader', { name: '大类预估需求数量' })).toHaveCount(0);
+  await expect(main.getByRole('columnheader', { name: '操作', exact: true })).toHaveCount(0);
   await expect(calculation.locator('td').nth(2)).toHaveText('125.00%');
   await expect(calculation.locator('td').nth(3)).toHaveText('156.25%');
   await expect(calculation.locator('td').nth(4)).toHaveText('63');

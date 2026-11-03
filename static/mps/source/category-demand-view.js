@@ -12,7 +12,6 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
     '同期平均占比',
     '② 占比法',
     '加权',
-    '大类预估需求数量',
   ];
   const detailColumns = [
     '大类',
@@ -206,14 +205,13 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
           'div',
           { className: 'dc-category-demand-main' },
           table(
-            [...columns, '操作'],
+            columns,
             rows,
             Object.fromEntries(
               [
                 ['① 环比法', '基期 × 环比链'],
                 ['② 占比法', '全年预估 × 占比'],
                 ['加权', '①②各占一半'],
-                ['大类预估需求数量', '加权 ÷ 达成率'],
               ].map(([name, formula]) => [
                 name,
                 h(react.Fragment, {}, name, h('small', {}, formula)),
@@ -225,7 +223,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
           'details',
           { className: 'dc-card-foot' },
           h('summary', {}, '查看系统值、调整与缺项说明'),
-          table(detailColumns, rows),
+          table([...detailColumns, '操作'], rows),
         ),
         editing &&
           h(
