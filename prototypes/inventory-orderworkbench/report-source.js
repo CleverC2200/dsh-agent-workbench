@@ -77,7 +77,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     const definition = workbenchQueries[name],
       logicalId = 'workbench.' + name.toLowerCase()+(options.summary && ['orders','stock','ages','ontime'].includes(name)?'.summary':'');
     const summarized=logicalId.endsWith('.summary');
-    const packeted = (summarized && name === 'stock') || (options.summary && name === 'directors');
+    const packeted = (summarized && name === 'stock') || (options.summary && ['directors', 'customers', 'customerManagers'].includes(name));
     const id = logicalId + (packeted ? '.packets' : '');
     if(summarized)values={...values,period_start:values.period_start??values.start,period_end:values.period_end??values.end_exclusive,owner_start:values.period_start??values.start,owner_end:values.period_end??values.end_exclusive};
     const result = definition.keys
@@ -99,7 +99,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
         );
     const sourceRows = packeted ? unpackRowPackets(result.rows,
       config.queries[name === 'directors'?'workbench.directormembers':logicalId].resultColumns,
-      name === 'directors' ? ['base','sku','director_value','item_value'] : ['base','category','item','director','names']) : result.rows;
+      name === 'directors' ? ['base','sku','director_value','item_value'] : name === 'stock' ? ['base','category','item','director','names'] : definition.keys) : result.rows;
     const rows = name === 'ontime' && summarized ? sourceRows.flatMap((row) => {
       const packed = typeof row.packed_orders === 'string' ? JSON.parse(row.packed_orders) : row.packed_orders;
       if (!Array.isArray(packed)) throw Object.assign(Error('准交订单分组不完整'), {code:'INVALID_ORDER_PACKETS'});
@@ -178,14 +178,16 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   };
   const load = async (spec, name) => {
     const values = { start: spec.start, end_exclusive: spec.end };
-    const priority = name === specs.selected ? 10 : -10;
+    const priority = name === 'month' ? 30 : name === 'week' ? 20 : -10;
     if (spec.start >= spec.end)
       return { ...spec, sections: [], metrics: computeWorkbenchMetrics({ ...spec, sections: [] }) };
-    const pending = ['orders', 'ontime', 'changes', 'stock', 'ages', 'directors'].map((id) => ({
-      id,
-      status: 'loading',
-      rows: [],
-    }));
+    const restored = options.summary && (options.seedFacts ?? []).flatMap(facts =>
+      facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true && facts.attributionVersion === 2
+        ? Object.values(facts.periods ?? {}) : [],
+    ).find(period => period.start === spec.start && period.end === spec.end &&
+      period.kind === spec.kind && (period.inventoryEnd ?? period.end) === (spec.inventoryEnd ?? spec.end));
+    const pending = ['orders', 'ontime', 'changes', 'stock', 'ages', 'directors'].map((id) =>
+      restored?.sections?.find(part => part.id === id && part.status === 'ready') ?? { id, status: 'loading', rows: [] });
     const update = () => {
       periods[name] = {
         ...spec,
@@ -194,9 +196,12 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       };
       progress();
     };
+    if (pending.some(part => part.status === 'ready')) update();
     const [sections, attribution, sharedItems] = await Promise.all([Promise.all(
       ['orders', 'ontime', 'changes', 'stock', 'ages', 'directors'].map((id) =>
         section(id, async () => {
+          const cached = pending.find(part => part.id === id && part.status === 'ready');
+          if (cached) return cached.rows;
           if (id === 'directors')
             return read(id, {
               start: dayOffset(spec.end, -1).slice(0, 7) + '-01',
@@ -246,18 +251,24 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   });
   const progress = () => {
     signal?.throwIfAborted();
-    if (periods[selected]) options.onProgress?.(snapshot());
+    if (periods.month || periods[selected]) options.onProgress?.(snapshot());
   };
-  const selectedLoad = load(specs[selected], selected).then(period => {periods[selected]=period;progress();});
+  await Promise.all(['month', 'week'].map(async name => {
+    periods[name] = await load(specs[name], name);
+    progress();
+  }));
+  signal?.throwIfAborted();
   const entries = Object.entries(specs).filter(
-    ([name]) => name !== 'selected' && name !== selected,
+    ([name]) => name !== 'selected' && !['month', 'week'].includes(name),
   );
   const values = { start: specs[selected].start, end_exclusive: specs[selected].end };
   const loadMetadata = async () =>
     Promise.all(
       ['directors', 'customers', 'customerManagers'].map(async (id) => {
         const range = id === 'directors' ? specs.month : specs[selected];
-        metadata[id] = await section(id, () =>
+        metadata[id] = id === 'directors'
+          ? periods.month.sections.find(part => part.id === 'directors') ?? { id, status: 'ready', rows: [] }
+          : await section(id, () =>
           range.start >= range.end ? [] : read(
             id,
             id === 'directors'
@@ -270,7 +281,6 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     );
   let next = 0;
   await Promise.all([
-    selectedLoad,
     loadMetadata(),
     ...Array.from({ length: 2 }, async () => {
       while (next < entries.length) {
