@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
+import { readFile } from 'node:fs/promises';
 const out = await build({
   stdin: {
     contents:
@@ -359,4 +360,31 @@ test('default calculation route is used only for the materialized 7+3 cycle', ()
     'snapshot.fact',
   );
   assert.equal(dailySummaryQuery(def, snapshot, { ...v, next_month: '2027-01-01' }), null);
+});
+
+test('confirmation fast path preserves custom cycles and unsupported filter/sort semantics', async () => {
+  const cfg = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+  const query = cfg.queries['replenishment-confirmation.detail.atomic'];
+  const values = {
+    month: '2026-11-01',
+    stat_date: '2026-11-01',
+    as_of: '2026-11-02',
+    cycle_days: 7,
+    preparation_days: 3,
+    needed_only: true,
+    business_only: false,
+    list_mode: 'all',
+    sort_field: 'key',
+    sort_direction: 'asc',
+  };
+  assert.equal(
+    dailySummaryQuery(query, snapshot, values).queryId,
+    'snapshot-default.replenishment-confirmation.detail.atomic',
+  );
+  assert.equal(
+    dailySummaryQuery(query, snapshot, { ...values, cycle_days: 12 }).queryId,
+    'snapshot.replenishment.detail.atomic',
+  );
+  for (const change of [{ business_only: true }, { sort_field: 'sku' }, { list_mode: 'urgent' }])
+    assert.equal(dailySummaryQuery(query, snapshot, { ...values, ...change }), null);
 });

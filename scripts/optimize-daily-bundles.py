@@ -10,7 +10,7 @@ from sqlglot import exp
 from sqlglot.optimizer.simplify import simplify
 from sqlglot.optimizer.eliminate_ctes import eliminate_ctes
 repo = Path(__file__).resolve().parents[1]
-for agent in ['fc', 'qll']:
+for agent in ['fc', 'qll', 'aqkc']:
  cfg=json.loads((repo/f'business/inventory-{agent}/sql.config.json').read_text());bundle=cfg['dailySummary']['bundle'];q=cfg['queries'][bundle['queryId']];sql=q['request']['sql'];fixed={}
  for member in bundle['members']:
   for param,name in member['bindings'].items():
@@ -32,14 +32,16 @@ for agent in ['fc', 'qll']:
  bootstrap=copy.deepcopy(q)
  selected=sqlglot.parse_one(cfg['queries']['summary.snapshot']['request']['sql'])
  bootstrap_tree=sqlglot.parse_one(sql)
- source_columns={'summary_batch_id':'batch_id','stat_date':'stock_date','stock_date':'stock_date','month':'target_month'}
+ source_columns={'summary_batch_id':'batch_id','stat_date':'stock_date','stock_date':'stock_date','month':'target_month','as_of':'business_date','inventory_version':'default_inventory_version'}
  for param,spec in q['parameterSpec'].items():
   if spec['name']=='bundle_offset':
    replacement='0'
   else:
    name=next(name for member in bundle['members'] for key,name in member['bindings'].items() if key==param)
-   if name not in source_columns:raise ValueError('Uncovered bootstrap input: '+name)
-   replacement='(SELECT s.'+source_columns[name]+' AS '+source_columns[name]+' FROM selected_daily_batch AS s)'
+   if name=='stock_month':
+    replacement="(SELECT CONCAT(SUBSTRING(CAST(s.stock_date AS VARCHAR), 1, 7), '-01') AS stock_month FROM selected_daily_batch AS s)"
+   elif name not in source_columns:raise ValueError('Uncovered bootstrap input: '+name)
+   else:replacement='(SELECT s.'+source_columns[name]+' AS '+source_columns[name]+' FROM selected_daily_batch AS s)'
   sql=re.sub(':'+param+r'\b',replacement,sql)
  bootstrap_tree=sqlglot.parse_one(sql)
  bootstrap_tree.args.get('with_', bootstrap_tree.args.get('with')).set('expressions',[exp.CTE(this=selected,alias=exp.TableAlias(this=exp.to_identifier('selected_daily_batch'))),*bootstrap_tree.ctes])

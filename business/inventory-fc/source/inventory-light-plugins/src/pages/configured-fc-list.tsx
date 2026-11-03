@@ -16,6 +16,7 @@ import { fcSubmissionProvenance, type FcStoredVersions } from '../../../../../sh
 import { persistAndSubmitFc, verifyFcReceiptArchive } from './fc-submission-persistence';
 import { fcPersistence } from './fc-storage-client';
 import type { FcStoreScope } from '../../../../../shared/fc-persistence';
+import type { FactInput } from '../../../../../shared/configured-facts';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { knownNumber } from '../../../../../shared/configured-overview';
 import { call } from '../channel.js';
@@ -540,6 +541,37 @@ export function FcConfiguredList(
       setPlanDraft(next);
       if (!parsed.errors.length) memoryStorage.setItem(planDraftKey, JSON.stringify(next));
     });
+  // Filter before pagination; explicitly edited quantities and local plans still need
+  // their source row for recalculation and submission provenance (including zero edits).
+  const confirmationInput = (filters: FactInput['filters']): FactInput => ({
+    ...scope.input,
+    filters: Object.fromEntries(
+      Object.entries(filters ?? {}).filter(
+        ([name]) => !['list_mode', 'sort_field', 'sort_direction'].includes(name),
+      ),
+    ),
+    replenishment: {
+      neededOnly: true,
+      businessOnly: false,
+      positiveActualKeys: Object.keys(draft.quantities).flatMap((key) => {
+        try {
+          const [warehouse, sku] = z.tuple([z.string(), z.string()]).parse(JSON.parse(key));
+          return [filterKey(warehouse, sku)];
+        } catch {
+          return [];
+        }
+      }),
+      positivePlanKeys: [
+        ...new Set([
+          ...(planSelection.positivePlanKeys ?? []),
+          ...plans
+            .filter((plan) => [month, nextMonth(month)].includes(plan.month))
+            .map((plan) => filterKey(plan.warehouseCode, plan.sku)),
+        ]),
+      ],
+      zeroPlanKeys: planSelection.zeroPlanKeys,
+    },
+  });
   const previewDraft = (
     mode: 'draft' | 'export',
     warehouse = scopedWarehouse || exportWarehouse,
@@ -563,10 +595,10 @@ export function FcConfiguredList(
     );
     const readScope = {
       ...scope,
-      viewId: 'replenishment',
+      viewId: mode === 'export' ? 'replenishment-confirmation' : 'replenishment',
       input:
         mode === 'export'
-          ? { ...scope.input, filters: { ...confirmationFilters, warehouse_code: warehouse } }
+          ? confirmationInput({ ...confirmationFilters, warehouse_code: warehouse })
           : { ...scope.input, filters: confirmationFilters },
     };
     return run(async (signal) => {
@@ -857,11 +889,8 @@ export function FcConfiguredList(
         await readFcActionRows(
           {
             ...scope,
-            viewId: 'replenishment',
-            input: {
-              ...scope.input,
-              filters: { ...scope.input.filters, warehouse_code: exportWarehouse },
-            },
+            viewId: 'replenishment-confirmation',
+            input: confirmationInput({ ...scope.input.filters, warehouse_code: exportWarehouse }),
           },
           signal,
         )

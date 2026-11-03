@@ -124,6 +124,13 @@ test('confirmation hides missing and zero amounts, while retaining positive manu
       [...document.querySelectorAll('button')].find((b) => b.textContent === '提交').click();
       await new Promise((r) => setTimeout(r, 20));
     });
+    assert.equal(
+      globalThis.dmsFixture.readScopes[0].input.replenishment?.neededOnly,
+      true,
+      'confirmation must exclude zero advice before pagination',
+    );
+    assert.equal(globalThis.dmsFixture.readScopes[0].input.replenishment?.businessOnly, false);
+    assert.equal(globalThis.dmsFixture.readScopes[0].viewId, 'replenishment-confirmation');
     const input = document.querySelector('[aria-label="SKU1实际补货量"]');
     assert.ok(input);
     assert.equal(input.disabled, false, 'unknown advice must not disable manual quantity');
