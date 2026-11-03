@@ -31,6 +31,30 @@ class PlanTemplate(unittest.TestCase):
         sql = sqlglot.transpile(self.query['request']['sql'], read='postgres', write='sqlite')[0]
         return [dict(r) for r in self.db.execute(sql,params)]
 
+    def test_gateway_default_page_does_not_truncate_plan_exports(self):
+        # The gateway defaults an unbounded outer SELECT to 50 rows, even if
+        # an inner CTE has LIMIT 200. Both list and export retain a full page.
+        self.db.execute('ALTER TABLE agents_scm_warehouse_transfer_plan_data_d ADD COLUMN last_month_actual_qty REAL')
+        self.db.execute('ALTER TABLE agents_scm_warehouse_transfer_plan_data_d ADD COLUMN current_day_avg_qty REAL')
+        self.db.executemany('INSERT INTO agents_scm_warehouse_transfer_plan_data_d (warehouseid,material_code,warehouse_name,material_name,stat_month) VALUES (?,?,?,?,?)',
+                            [('A', str(1000+i), '仓A', '商品', '202610') for i in range(230)])
+        for query_id in ['transfer_plan.template.atomic', 'branch-plan.detail.atomic']:
+            with self.subTest(query_id=query_id):
+                self.query = self.config['queries'][query_id]
+                tree = sqlglot.parse_one(self.query['request']['sql'], read='postgres')
+                if tree.args.get('limit') is None:
+                    # Emulate the governed gateway's documented default page.
+                    self.query = {**self.query, 'request': {**self.query['request'], 'sql': self.query['request']['sql'] + ' LIMIT 50'}}
+                first = self.read(gea_p8=200, gea_p9=0)
+                second = self.read(gea_p8=200, gea_p9=200)
+                self.assertEqual([len(first), len(second)], [200, 34])
+                self.assertTrue(all(row['page_scope_total'] == 234 for row in first + second))
+                self.assertEqual(len({(r['warehouse_code'], r['sku']) for r in first + second}), 234)
+                empty = self.read(gea_p8=200, gea_p9=400)
+                self.assertEqual(len(empty), 1)
+                self.assertEqual(empty[0]['page_scope_total'], 234)
+                self.assertIsNone(empty[0]['page_row_present'])
+
     def test_plans_and_unknowns_are_not_replaced_by_stock_or_zero(self):
         rows = self.read()
         self.assertEqual(len(rows),4)
@@ -42,6 +66,19 @@ class PlanTemplate(unittest.TestCase):
         self.assertIsNone(rows[3]['month_out_plan'])
         self.assertIsNone(rows[3]['stat_month'])
         self.assertTrue(all(r['warehouse_month_transfer_plan'] is None for r in rows))
+
+    def test_source_plan_count_matches_its_rows_without_transfer_or_stock_inputs(self):
+        self.db.execute('ALTER TABLE agents_scm_warehouse_transfer_plan_data_d ADD COLUMN last_month_actual_qty REAL')
+        self.db.execute('ALTER TABLE agents_scm_warehouse_transfer_plan_data_d ADD COLUMN current_day_avg_qty REAL')
+        query = self.config['queries']['branch-plan.detail']
+        count_id = query['pagination']['countQuery']
+        for warehouse, expected in [('A', 3), ('B', 1), ('missing', 0)]:
+            with self.subTest(warehouse=warehouse):
+                self.query = query
+                rows = self.read(gea_p1='equal', gea_p2=warehouse)
+                self.query = self.config['queries'][count_id]
+                total = self.read(gea_p1='equal', gea_p2=warehouse)[0]['total']
+                self.assertEqual((total, len(rows)), (expected, expected))
 
     def test_branch_sku_and_empty_filter_keep_count_and_page_consistent(self):
         rows=self.read(gea_p1='equal',gea_p2='A',gea_p3='equal',gea_p4='2')

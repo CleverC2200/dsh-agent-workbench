@@ -361,7 +361,14 @@ export async function readConfiguredFacts(
   for (const [name, raw] of Object.entries(filters)) {
     const value = raw.trim();
     if (!value) continue;
-    if (name === 'search') values.search_pattern = '%' + value.replace(/[\\%_]/g, '\\$&') + '%';
+    if (name.startsWith('column_') && name.endsWith('_contains') && name in values)
+      values[name] = '%' + value.replace(/[\\%_]/g, '\\$&') + '%';
+    else if (name.startsWith('column_') && /_(min|max)$/.test(name) && name in values) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return fail('INVALID_FILTER', '数值筛选请输入有效数字');
+      values[name] = value;
+    } else if (name === 'search')
+      values.search_pattern = '%' + value.replace(/[\\%_]/g, '\\$&') + '%';
     else if (name === 'warehouse_search' && 'warehouse_search_pattern' in values)
       values.warehouse_search_pattern = '%' + value.replace(/[\\%_]/g, '\\$&') + '%';
     else if (name === 'base') {
@@ -501,6 +508,16 @@ export async function readConfiguredFacts(
           }
         : productionRead;
     const block = unpackAtomicPage(result, readOffset / readSize + 1, readSize);
+    const summaryColumns = config.queries[id].scopeSummaryColumns;
+    const tableSummary =
+      summaryColumns && result.rows[0]
+        ? Object.fromEntries(
+            Object.entries(summaryColumns).map(([field, alias]) => [
+              field,
+              typeof alias === 'string' ? (result.rows[0][alias] ?? null) : null,
+            ]),
+          )
+        : null;
     const unavailableLabels = [...optionalLabels].filter((field) => {
       const alias = (column: any) =>
         typeof column === 'string'
@@ -533,6 +550,7 @@ export async function readConfiguredFacts(
           })
         : rows,
       supplementaryError: production.error,
+      tableSummary,
       unavailableLabels,
       partial: unavailableLabels.length > 0,
       total,

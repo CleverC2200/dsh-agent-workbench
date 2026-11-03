@@ -48,6 +48,7 @@ export type ConfiguredListState = {
   filters: Record<string, string>;
   draft: Record<string, string>;
   columns: Record<string, string[]>;
+  widths?: Record<string, Record<string, number>>;
   frozen: string[];
   replenishment?: FactInput['replenishment'];
 };
@@ -128,6 +129,9 @@ export function ConfiguredFactsPage({
   const [columnChoices, setColumnChoices] = useState<Record<string, string[]>>(
     () => initialState?.columns ?? {},
   );
+  const [columnWidths, setColumnWidths] = useState<Record<string, Record<string, number>>>(
+    () => initialState?.widths ?? {},
+  );
   const [frozenColumns, setFrozenColumns] = useState<string[]>(
     () =>
       initialState?.frozen ??
@@ -151,10 +155,11 @@ export function ConfiguredFactsPage({
       filters,
       draft,
       columns: columnChoices,
+      widths: columnWidths,
       frozen: frozenColumns,
       replenishment,
     });
-  }, [filters, draft, columnChoices, frozenColumns, replenishment]);
+  }, [filters, draft, columnChoices, columnWidths, frozenColumns, replenishment]);
   const [localPage, setLocalPage] = useState(1),
     [localPageSize, setLocalPageSize] = useState(10),
     [revision, refresh] = useState(0);
@@ -335,6 +340,15 @@ export function ConfiguredFactsPage({
         view={view}
         columns={columns}
         chosenColumns={chosenColumns}
+        columnWidths={columnWidths[viewId] ?? {}}
+        onColumnWidths={(next: Record<string, number>) =>
+          setColumnWidths((old) => ({ ...old, [viewId]: next }))
+        }
+        onColumnFilter={(changes: Record<string, string>) => {
+          setDraft((old) => ({ ...old, ...changes }));
+          setFilters((old) => ({ ...old, ...changes }));
+          setPage(1);
+        }}
         frozenColumns={config.agentId === 'inventory-fc' ? frozenColumns : undefined}
         onFrozenColumns={config.agentId === 'inventory-fc' ? setFrozenColumns : undefined}
         onColumns={(next: string[]) => setColumnChoices((old) => ({ ...old, [viewId]: next }))}
