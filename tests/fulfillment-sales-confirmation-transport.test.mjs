@@ -231,3 +231,46 @@ test('failed, unknown and queued delivery cannot be reported as awaiting a sales
     }
   }
 });
+
+test('personnel options stay explicit and fresh authorization is checked on each send', async (t) => {
+  const dom = new JSDOM('<button></button>');
+  const calls = [];
+  let available = true;
+  const transport = mountSalesConfirmationTransport(dom.window.document, async (payload) => {
+    calls.push(payload);
+    if (payload.operation === 'capabilities') return { available, mode: 'test' };
+    if (payload.operation === 'participants')
+      return {
+        mode: 'test',
+        participants: [{ userId: 'tester', displayName: '测试人员', canProcess: true }],
+      };
+    return { status: 'pending', delivery: 'queued' };
+  });
+  t.after(() => {
+    transport.clear();
+    dom.window.close();
+  });
+  await transport.participants('测试');
+  await transport.notify(
+    { ...a, ...period },
+    { recipientUserIds: ['tester'], handlerUserId: 'tester' },
+  );
+  assert.deepEqual(
+    calls.find((p) => p.operation === 'create'),
+    {
+      operation: 'create',
+      selection: selection(a),
+      recipientUserIds: ['tester'],
+      handlerUserId: 'tester',
+    },
+  );
+  available = false;
+  await assert.rejects(
+    transport.notify(
+      { ...a, ...period },
+      { recipientUserIds: ['tester'], handlerUserId: 'tester' },
+    ),
+    /未获得发卡权限|尚未获得发卡权限/,
+  );
+  assert.equal(calls.filter((p) => p.operation === 'create').length, 1);
+});

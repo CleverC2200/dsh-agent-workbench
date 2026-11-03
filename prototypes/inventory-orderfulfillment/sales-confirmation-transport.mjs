@@ -40,19 +40,31 @@ export function mountSalesConfirmationTransport(document, request) {
                       verification_required: '结果待核实',
                       resolved: '已处理',
                     }[result.status] ?? '状态待核实');
-  async function available() {
+  async function configuration(fresh = false) {
+    if (fresh) availability = undefined;
     if (!availability) {
       const current = generation;
       const pending = Promise.resolve()
         .then(() => request({ operation: 'capabilities' }))
-        .then((value) => value?.available === true)
-        .catch(() => {
-          if (current === generation && availability === pending) availability = undefined;
-          return false;
+        .then((value) => {
+          if (current !== generation) throw Error('页面范围已切换，请重新操作');
+          return value;
         });
       availability = pending;
+      void pending
+        .finally(() => {
+          if (availability === pending) availability = undefined;
+        })
+        .catch(() => {});
     }
     return availability;
+  }
+  async function available(fresh = false) {
+    try {
+      return (await configuration(fresh))?.available === true;
+    } catch {
+      return false;
+    }
   }
   function unknown(binding, reason) {
     binding.button.textContent = '状态待核实';
@@ -136,12 +148,40 @@ export function mountSalesConfirmationTransport(document, request) {
   document.defaultView?.addEventListener('gea-session-changing', clear);
   return {
     available,
-    async notify(draft) {
+    configuration,
+    async participants(query = '') {
+      const current = generation;
+      const result = await request({ operation: 'participants', query });
+      if (current !== generation) throw Error('页面范围已切换，请重新操作');
+      if (!Array.isArray(result.participants) || !['test', 'sales'].includes(result.mode))
+        throw Error('人员目录响应无效');
+      return result;
+    },
+    async notify(draft, delivery = {}) {
       const current = generation,
         s = selection(draft);
-      if (!(await available())) throw Error('正式飞书确认入口尚未启用');
+      if (
+        !delivery ||
+        typeof delivery !== 'object' ||
+        Array.isArray(delivery) ||
+        Object.keys(delivery).some((key) => !['recipientUserIds', 'handlerUserId'].includes(key))
+      )
+        throw Error('发送设置无效');
+      if (delivery.recipientUserIds !== undefined && !Array.isArray(delivery.recipientUserIds))
+        throw Error('发送设置无效');
+      const target =
+        delivery.recipientUserIds === undefined
+          ? {}
+          : {
+              recipientUserIds: [...delivery.recipientUserIds],
+              ...(delivery.handlerUserId === undefined
+                ? {}
+                : { handlerUserId: delivery.handlerUserId }),
+            };
+      const enabled = await available(true);
       if (current !== generation) throw Error('页面范围已切换，请重新操作');
-      const result = await request({ operation: 'create', selection: s });
+      if (!enabled) throw Error('当前人员尚未获得发卡权限或后台入口尚未启用');
+      const result = await request({ operation: 'create', selection: s, ...target });
       if (current !== generation) throw Error('页面范围已切换，请重新操作');
       update(s, result);
       void refresh(current);
@@ -157,8 +197,9 @@ export function mountSalesConfirmationTransport(document, request) {
     async history(row, period) {
       const current = generation,
         s = selection(row, period);
-      if (!(await available())) throw Error('正式飞书确认入口尚未启用');
+      const enabled = await available();
       if (current !== generation) throw Error('页面范围已切换，请重新查看');
+      if (!enabled) throw Error('正式飞书确认入口尚未启用');
       const result = await request({ operation: 'lookup', selection: s });
       if (current !== generation) throw Error('页面范围已切换，请重新查看');
       update(s, result);
