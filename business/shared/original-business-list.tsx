@@ -220,6 +220,7 @@ export function OriginalBusinessList({
                   : undefined
               }
               scope="col"
+              aria-label={resizable ? c.label : undefined}
               title={c.reason}
               style={{ ...fixedStyle(c.field), ...(resizable ? { width: widthOf(c) } : {}) }}
               aria-sort={

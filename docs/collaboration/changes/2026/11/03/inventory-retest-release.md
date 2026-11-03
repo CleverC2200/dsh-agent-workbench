@@ -21,3 +21,5 @@ Validation: affected source, query, presentation, package-version and compatibil
 Release workflow: dsh-plugin-release 1.3.0, locally distributed bundle; no registered team-maintenance source. The plugin suite uses the existing GitHub/OSS destinations. Desktop packaging is outside this release.
 
 Source plan paging uses the plan-only count query; it does not inherit current transfer execution parameters or stock permissions. The actual source SQL fixture verifies count/list equality across warehouse and empty scopes. Export checks account separately for one snapshot metadata read while preserving bounded data pages, source-change restart and permission-denial assertions.
+
+Resizable column headers keep their own accessible names while filter/resize controls retain separate labels. The existing maximum-age detail regression remains unchanged; the column-visibility test selects its checkbox by role to distinguish it from the same-named header.

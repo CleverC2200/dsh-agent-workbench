@@ -180,7 +180,7 @@ test('aging headers resize without reads, filter server pages and keep all-scope
   assert.equal(calls.at(-1).values.column_total_qty_min, '11');
   assert.equal(calls.at(-1).values.column_total_qty_max, '12');
   await page.getByLabel('列设置', { exact: true }).click();
-  await page.getByLabel('产品大类', { exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: '产品大类', exact: true }).uncheck();
   await expect(table.locator('th[data-field="product_categ_name"]')).toHaveCount(0);
   assert.equal(await footer.locator('td').count(), await table.locator('thead th').count());
   await page.getByLabel('列设置', { exact: true }).click();
