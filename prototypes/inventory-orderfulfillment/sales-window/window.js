@@ -35,7 +35,7 @@ async function request(path, options = {}) {
   return data;
 }
 function status() {
-  const pending = state?.status === 'pending';
+  const pending = state?.status === 'pending' && state?.permissions?.canAct !== false;
   element('submit').hidden = mode === 'details' || mode === 'list' || !pending;
   element('submit').disabled =
     inflight ||
@@ -49,7 +49,7 @@ function status() {
     element('notice').textContent = '仅查看界面效果，不执行真实延期、发货或改单。';
   }
   //update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】本机预览可查看延期页面但不写入处理决定-----------
-  if (!pending && mode !== 'list') {
+  if (state?.status !== 'pending' && mode !== 'list') {
     const d = state?.decisions?.[0];
     element('result').hidden = false;
     element('result').textContent =
@@ -66,11 +66,12 @@ async function load() {
   state = await request('/data?mode=' + mode + '&pageNo=' + pageNo);
   //update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅在认证读取成功后渲染草稿，关闭原确认按钮-----------
   if (
-    mode === 'edit' ||
-    (mode === 'details' &&
-      state.status === 'pending' &&
-      (!rateReady(state.snapshot?.satisfactionRate) ||
-        (state.snapshot?.lines || []).some((line) => knownNumber(line.shortage) > 0)))
+    state.permissions?.canAct !== false &&
+    (mode === 'edit' ||
+      (mode === 'details' &&
+        state.status === 'pending' &&
+        (!rateReady(state.snapshot?.satisfactionRate) ||
+          (state.snapshot?.lines || []).some((line) => knownNumber(line.shortage) > 0))))
   ) {
     window.OrderShortageEditor.mount(document, {
       ...state,
@@ -139,9 +140,12 @@ async function load() {
     return;
   }
   const p = state.snapshot;
-  element('title').textContent = { confirm: '确认开单？', defer: '暂缓发货', details: '订单明细' }[
-    mode
-  ];
+  if (state.permissions?.canAct === false)
+    element('notice').textContent = '你可以查看此订单；处理操作由指定销售执行。';
+  element('title').textContent =
+    state.permissions?.canAct === false
+      ? '订单明细'
+      : { confirm: '确认开单？', defer: '暂缓发货', details: '订单明细' }[mode];
   element('summary').textContent =
     '订单号：' +
     p.orderNo +
@@ -152,8 +156,8 @@ async function load() {
     '\n订单满足率：' +
     (knownNumber(p.satisfactionRate) === null ? '—' : Number(p.satisfactionRate).toFixed(1) + '%');
   element('quantity').textContent = '总数量：' + quantityText(p.quantity);
-  element('defer').hidden = mode !== 'defer';
-  element('items').hidden = mode !== 'details';
+  element('defer').hidden = mode !== 'defer' || state.permissions?.canAct === false;
+  element('items').hidden = mode !== 'details' && state.permissions?.canAct !== false;
   element('items').replaceChildren();
   for (const line of p.lines || []) {
     const item = document.createElement('article'),
@@ -165,7 +169,7 @@ async function load() {
     item.append(name, detail);
     element('items').append(item);
   }
-  element('cancel').textContent = mode === 'details' ? '返回' : '取消';
+  element('cancel').textContent = '返回';
   status();
 }
 element('cancel').onclick = () => {

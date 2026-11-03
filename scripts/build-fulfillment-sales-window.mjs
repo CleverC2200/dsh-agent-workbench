@@ -2,26 +2,37 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { salesCardTemplate } from '../prototypes/inventory-orderfulfillment/sales-card-template.mjs';
 
 /** Build frontend-owned assets for an existing same-origin, authorized sales window. Never deploys them. */
 export async function buildFulfillmentSalesWindow({ output } = {}) {
   const root = resolve(import.meta.dirname, '..');
   const source = resolve(root, 'prototypes/inventory-orderfulfillment');
   const out = output ?? resolve(root, 'lib/business/inventory-orderfulfillment/sales-window');
-  const read = (path) => readFile(resolve(source, path), 'utf8');
-  const html = (await read('sales-window/window.html')).replace(
-    '<script defer src="../assets/order-editor"></script>',
-    '',
-  );
+  const read = async (path) =>
+    (await readFile(resolve(source, path), 'utf8')).replace(/\r\n/g, '\n');
+  const html = (await read('sales-window/window.html'))
+    .replace('<script defer src="../assets/order-editor"></script>', '')
+    .replace(
+      '../assets/window-script"',
+      '../assets/window-script?release=__ORDER_PRESENTATION_RELEASE__"',
+    );
   const script =
     (await read('sales-window/order-editor.js')) + '\n' + (await read('sales-window/window.js'));
   const card = await read('sales-confirmation-card.mjs');
   await mkdir(out, { recursive: true });
-  const assets = { 'window.html': html, 'window.js': script, 'card.mjs': card };
+  const assets = {
+    'window.html': html,
+    'window.js': script,
+    'card.mjs': card,
+    'sales-card-template.mjs': await read('sales-card-template.mjs'),
+    'card-template.json': JSON.stringify(salesCardTemplate, null, 2) + '\n',
+  };
   const sha256 = (text) => createHash('sha256').update(text).digest('hex');
   for (const [name, content] of Object.entries(assets))
     await writeFile(resolve(out, name), content);
   const manifest = {
+    presentationApiVersion: 1,
     owner: 'dsh-agent-workbench',
     consumerCode: 'order01',
     dataMode: 'EXISTING_AUTHORIZED_SALES_WINDOW',
