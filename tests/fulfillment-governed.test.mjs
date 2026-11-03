@@ -174,7 +174,10 @@ test('order01 queries bind business filters only and expose no transport credent
     assert.ok(request.sql.startsWith('SELECT'));
     assert.doesNotMatch(request.sql, /EXISTS\s*\(|\bSUBSTR\s*\(/i);
     assert.throws(() => makeRequest(config, id, { ...values, consumerCode: 'other' }), /参数/);
-    assert.throws(() => makeRequest(config, id, { ...values, start: '2026-10-22' }), id === 'orders.source-period' ? /参数/ : /日期/);
+    assert.throws(
+      () => makeRequest(config, id, { ...values, start: '2026-10-22' }),
+      id === 'orders.source-period' ? /参数/ : /日期/,
+    );
     assert.doesNotMatch(
       JSON.stringify(query),
       /100\.100\.1\.75|develop_hr|password|delegationToken/,

@@ -21,10 +21,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "latest_created",
-        "latest_load"
-      ]
+      "resultColumns": ["latest_created", "latest_load"]
     },
     "sku.owners": {
       "title": "品项责任与生产分类（独立授权）",

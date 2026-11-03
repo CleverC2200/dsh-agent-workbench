@@ -47,68 +47,73 @@ test('live fulfillment keeps granted rows and clears denied, filtered and previo
                 message: 'Denied',
               }
             : id === 'orders.source-period'
-              ? {rows:[{latest_created:'2026-10-21 12:00:00',latest_load:'2026-10-21 12:05:00'}],configVersion:'v1'}
-            : id === 'orders.facts'
               ? {
                   rows: [
-                    {
-                      cust_order_no: 'AUTHORIZED-ORDER',
-                      executeorderno: 'E1',
-                      executeorderlineno: '1',
-                      cust_code: 'C01',
-                      cust_name: 'PRIVATE-CUSTOMER',
-                      detailstatus: 10,
-                      is_stat: '1',
-                    },
+                    { latest_created: '2026-10-21 12:00:00', latest_load: '2026-10-21 12:05:00' },
                   ],
-                  returnedColumns: [
-                    'cust_order_no',
-                    'executeorderno',
-                    'executeorderlineno',
-                    'cust_code',
-                    'detailstatus',
-                    'is_stat',
-                  ],
-                  rejectedColumns: ['cust_name'],
                   configVersion: 'v1',
                 }
-              : id.endsWith('.count')
-                ? { rows: [{ total: 1 }], configVersion: 'v1' }
-                : id === 'orders.summary'
-                  ? {
-                      rows: [
-                        {
-                          source_orders: 1,
-                          source_rows: 1,
-                          first_created: '2026-10-21',
-                          latest_created: '2026-10-21',
-                        },
-                      ],
-                      configVersion: 'v1',
-                    }
-                  : id === 'trace.summary'
+              : id === 'orders.facts'
+                ? {
+                    rows: [
+                      {
+                        cust_order_no: 'AUTHORIZED-ORDER',
+                        executeorderno: 'E1',
+                        executeorderlineno: '1',
+                        cust_code: 'C01',
+                        cust_name: 'PRIVATE-CUSTOMER',
+                        detailstatus: 10,
+                        is_stat: '1',
+                      },
+                    ],
+                    returnedColumns: [
+                      'cust_order_no',
+                      'executeorderno',
+                      'executeorderlineno',
+                      'cust_code',
+                      'detailstatus',
+                      'is_stat',
+                    ],
+                    rejectedColumns: ['cust_name'],
+                    configVersion: 'v1',
+                  }
+                : id.endsWith('.count')
+                  ? { rows: [{ total: 1 }], configVersion: 'v1' }
+                  : id === 'orders.summary'
                     ? {
                         rows: [
                           {
-                            matched_orders: 1,
-                            overdue_orders: 0,
-                            warning_orders: 0,
+                            source_orders: 1,
+                            source_rows: 1,
+                            first_created: '2026-10-21',
+                            latest_created: '2026-10-21',
                           },
                         ],
                         configVersion: 'v1',
                       }
-                    : {
-                        rows: [
-                          {
-                            order_no: 'AUTHORIZED-ORDER',
-                            customer_code: 'C01',
-                            customer_name: 'PRIVATE-CUSTOMER',
-                          },
-                        ],
-                        returnedColumns: ['order_no', 'customer_code'],
-                        rejectedColumns: ['customer_name'],
-                        configVersion: 'v1',
-                      };
+                    : id === 'trace.summary'
+                      ? {
+                          rows: [
+                            {
+                              matched_orders: 1,
+                              overdue_orders: 0,
+                              warning_orders: 0,
+                            },
+                          ],
+                          configVersion: 'v1',
+                        }
+                      : {
+                          rows: [
+                            {
+                              order_no: 'AUTHORIZED-ORDER',
+                              customer_code: 'C01',
+                              customer_name: 'PRIVATE-CUSTOMER',
+                            },
+                          ],
+                          returnedColumns: ['order_no', 'customer_code'],
+                          rejectedColumns: ['customer_name'],
+                          configVersion: 'v1',
+                        };
         }
         channel.port1.postMessage({ type: 'response', id: data.id, result });
       };
