@@ -218,7 +218,7 @@ test('source checks fetch explicit months and use DMS versions while an unrelate
   await expect(section).toContainText('期初使用评估月前4至前2月');
 });
 
-test('three-year cards read complete historical source periods and display source ratios without computing an unconfirmed mean', async (t) => {
+test('three-year cards read complete historical periods and disclose the valid years of the mean', async (t) => {
   const { frame, calls } = await mpsPage(t, config, fixture);
   await version(frame);
   await frame.getByRole('button', { name: '读取三年同比源值', exact: true }).click();
@@ -226,7 +226,7 @@ test('three-year cards read complete historical source periods and display sourc
   const card = region
     .locator('section')
     .filter({ has: frame.getByRole('heading', { name: '三年同比', exact: true }) });
-  await expect(card).toContainText('原值已读取');
+  await expect(card).toContainText('6 / 6 项可计算');
   await card.getByRole('button', { name: '预览', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '三年同比 · 源值核对', exact: true });
   for (const year of [2023, 2024, 2025]) {
@@ -241,6 +241,7 @@ test('three-year cards read complete historical source periods and display sourc
   }
   await expect(dialog).toContainText('1.1111111111111112');
   await expect(dialog).toContainText('等权平均');
+  await expect(dialog).toContainText('2025、2024、2023（3年）');
 });
 
 test('failed source-check refresh retracts old comparisons instead of leaving an earlier ratio visible', async (t) => {
@@ -281,6 +282,7 @@ test('a failed historical year does not hide the two successfully read years', a
   await expect(dialog).toContainText('2024-10');
   await expect(dialog).toContainText('2025-10');
   await expect(dialog).toContainText('共12条');
+  await expect(dialog).toContainText('2025、2024（2年）');
 });
 
 test('identity reset cancels pending source checks even when the replacement draft reuses local-1', async (t) => {
@@ -611,4 +613,40 @@ test('模型双期预测沿用四项统计，明细保留物料组及零数量',
   await expect(row.getByRole('cell', { name: 'G', exact: true })).toBeVisible();
   const columns = await dialog.getByRole('columnheader').allTextContents();
   await expect(row.locator('td').nth(columns.indexOf('数量'))).toHaveText('0');
+});
+
+test('同比缺一年时预览按两年计算并列出有效年份', async (t) => {
+  const { frame, contexts } = await mpsPage(t, config, (query) => {
+    const result = fixture(query);
+    if (query.queryId === 'category-history.detail')
+      result.rows.forEach((row) => {
+        if (row.stat_month.startsWith('2023')) row.last_year_dimension_act_dl_qty = null;
+      });
+    return result;
+  });
+  await version(frame, '2026-11');
+  const card = frame
+    .locator('section.dc-parameter')
+    .filter({ has: frame.getByRole('heading', { name: '三年同比', exact: true }) });
+  await expect(card).toContainText('6 / 6 项可计算');
+  await expect(card).toContainText('按有效年份等权平均');
+  await card.getByRole('button', { name: '预览', exact: true }).click();
+  const dialog = frame.getByRole('dialog', { name: '三年同比 · 源值核对', exact: true });
+  const table = dialog
+    .getByRole('table')
+    .filter({ has: frame.getByRole('columnheader', { name: '同比有效年份', exact: true }) });
+  const row = table
+    .locator('tbody tr')
+    .filter({ has: frame.getByRole('cell', { name: '2026-11', exact: true }) });
+  await expect(row).toContainText('2025、2024（2年）');
+  await expect(row).toContainText(String(100 / 90));
+  await expect
+    .poll(() =>
+      contexts.some((entry) =>
+        entry.parts?.['source-inputs-parameters']?.factors?.some(
+          (factor) => factor.month === '2026-11' && factor.yoyYears?.length === 2,
+        ),
+      ),
+    )
+    .toBe(true);
 });

@@ -345,6 +345,17 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         evaluationMonth: draft.month,
         read: state ?? null,
         purpose: 'confirmed category demand and source inputs',
+        factors:
+          kind === 'parameters'
+            ? calculated.historical.map(({ category, month, yoy, yoyYears, mom, share }) => ({
+                category,
+                month,
+                yoy,
+                yoyYears,
+                mom,
+                share,
+              }))
+            : undefined,
         months:
           kind === 'basic'
             ? checks.months
@@ -501,9 +512,11 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   { className: 'dc-status' },
                   index < 3
                     ? current
-                      ? state.error
-                        ? '部分原值已读取'
-                        : '原值已读取'
+                      ? index === 0
+                        ? `${state.error ? '部分原值已读取 · ' : ''}${calculated.historical.filter((row) => row.yoy !== null).length} / ${calculated.historical.length} 项可计算`
+                        : state.error
+                          ? '部分原值已读取'
+                          : '原值已读取'
                       : '待同步原值'
                     : draft.historyAnnualRead?.status === 'loading'
                       ? '全年历史读取中…'
@@ -517,7 +530,9 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   'p',
                   {},
                   index < 3
-                    ? '每年全国同大类先汇总，再对三个完整年份等权平均；同比、环比为系数，月占比为月量÷对应财年全年。'
+                    ? index === 0
+                      ? '最近三年逐年汇总同大类数量后计算同比系数，按有效年份等权平均。缺年、零分母或无效年度跳过；全部不可用时留空，实际年份见预览。'
+                      : '环比和月占比仍对三个完整年份等权平均；环比为系数，月占比为月量÷对应财年全年。'
                     : `${previousFiscalYear(draft.month).start}至${previousFiscalYear(draft.month).end}全年发货；按当前物料编码、物料组编码计算物料组占大类、产品占物料组、基地产品占范围内同SKU。`,
                 ),
               ),
@@ -566,7 +581,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             { className: 'dc-muted' },
             isShare
               ? `销售提报期间${draft.month}，取allnum；历史期间${previousFiscalYear(draft.month).start}至${previousFiscalYear(draft.month).end}。与第三步共用计算，以当前物料编码、物料组编码归类，缺行保留为空。`
-              : '源同比、环比和财年比例分别保留；三年系数从全国同大类的分子分母计算后等权平均，缺年或零分母不出结果。',
+              : '同比系数按最近三年中的有效年份等权平均，实际参与年份逐项列明；环比和月占比仍需三个完整年份。源同比、环比和财年比例分别保留。',
           ),
           isShare &&
             h(
@@ -649,11 +664,14 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             ),
           !isShare &&
             table(
-              ['大类', '目标月份', '三年同比系数', '三年环比系数', '三年月占比'],
+              ['大类', '目标月份', '同比系数', '同比有效年份', '三年环比系数', '三年月占比'],
               calculated.historical.map((row) => ({
                 大类: row.category,
                 目标月份: row.month,
-                三年同比系数: row.yoy ?? '',
+                同比系数: row.yoy ?? '',
+                同比有效年份: row.yoyYears.length
+                  ? `${row.yoyYears.map((month) => month.slice(0, 4)).join('、')}（${row.yoyYears.length}年）`
+                  : '无有效年份',
                 三年环比系数: row.mom ?? '',
                 三年月占比: row.share ?? '',
               })),
