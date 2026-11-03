@@ -195,10 +195,11 @@ test('historical shares reuse the existing computation while final category dema
 
 test('source checks fetch explicit months and use DMS versions while an unrelated missing income does not hide shipment quantities', async (t) => {
   const { frame, calls } = await mpsPage(t, config, fixture);
-  await version(frame);
+  await version(frame, '2026-11');
   const section = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
-  await section.getByLabel('源值核对截止月份').fill('2026-09');
-  await section.getByRole('button', { name: '读取三月源值', exact: true }).click();
+  await expect(section.getByLabel('源值核对截止月份')).toHaveValue('2026-09');
+  await expect(section.getByLabel('源值核对截止月份')).toHaveAttribute('readonly', '');
+  await expect(section).toContainText('2026-07 至 2026-09');
   const row = section
     .locator('tbody tr')
     .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
@@ -211,11 +212,28 @@ test('source checks fetch explicit months and use DMS versions while an unrelate
       calls.some((call) => call.queryId === 'facts.report' && call.parameters.month === month),
     );
   await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
+  await expect(section.getByLabel('源值核对截止月份')).toHaveValue('2026-10');
   await expect(row.locator('td').nth(3)).toHaveText('240');
   await expect(row).toContainText('50.00%');
-  await section.getByLabel('源值核对截止月份').fill('2026-08');
-  await expect(row.locator('td').nth(2)).toHaveText('-');
   await expect(section).toContainText('期初使用评估月前4至前2月');
+});
+
+test('missing recent plans preserve the independent annual estimate and disclose the monthly dependency', async (t) => {
+  const { frame } = await mpsPage(t, config, (query) => {
+    const result = fixture(query);
+    return query.queryId === 'facts.report'
+      ? { ...result, rows: [], totalRowCount: 0, hasMorePages: false }
+      : result;
+  });
+  await version(frame, '2026-11');
+  const basic = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
+  const row = basic.locator('tbody tr').first();
+  await expect(row.locator('td').nth(2)).toHaveText('120');
+  await expect(row.locator('td').nth(5)).toHaveText('400');
+  await expect(row.locator('td').nth(6)).toHaveText('-');
+  const calculation = frame.getByRole('region', { name: '逐月测算', exact: true });
+  await expect(calculation).toContainText('2026-07至2026-09 DMS计划缺失或不完整');
+  await expect(calculation.locator('tbody tr').first().locator('td').nth(6)).toHaveText('40');
 });
 
 test('three-year cards read complete historical periods and disclose the valid years of the mean', async (t) => {

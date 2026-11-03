@@ -28,9 +28,8 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
   const h = react.createElement;
   const PlanRates = createPlanRates(react, { Dialog, table, downloadCsv });
   return function SourceInputs({ kind, draft, update, relations, active }) {
-    const [endMonth, setEndMonth] = react.useState(() =>
-      monthOffset(draft.month, draft.pull === 'monthly' ? -2 : -1),
-    );
+    const calculated = react.useMemo(() => buildCategoryDemand(draft, categories), [draft]);
+    const endMonth = calculated.endMonth;
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = react.useState(0);
     const [showExcluded, setShowExcluded] = react.useState(false);
@@ -127,8 +126,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               }
             : {
                 periods: await Promise.all(
-                  [-2, -1, 0].map(async (offset) => {
-                    const month = monthOffset(endMonth, offset);
+                  calculated.recent.map(async (month) => {
                     const [history, report] = await Promise.all([
                       read(() => readFactMonth('history', month, stop.signal)),
                       read(() => readFactMonth('report', month, stop.signal)),
@@ -191,7 +189,6 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       current && kind === 'parameters'
         ? draft.historicalIndicators.periods.flatMap((period) => period.rows)
         : [];
-    const calculated = react.useMemo(() => buildCategoryDemand(draft, categories), [draft]);
     const historicalRows = historical.filter(
       (row) => (!dimension || row['维度类型'] === dimension) && (!base || row['基地'] === base),
     );
@@ -297,7 +294,9 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       : historicalColumns;
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(previewRows.length / 25) - 1));
     const totals = (category, side) => {
-      const rows = checks.rows.filter((row) => row.category === category);
+      const rows = checks.rows.filter(
+        (row) => row.category === category && calculated.recent.includes(row.month),
+      );
       const amount = rows.map((row) => row[side]);
       const complete = rows.length === 3 && amount.every((row) => row.quantity !== null);
       const known = amount.filter((row) => row.knownQuantity !== null);
@@ -315,9 +314,14 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
     const basicRows = checks.categories.map((category) => {
       const actual = totals(category, 'actual'),
         plan = totals(category, 'plan');
-      const rows = checks.rows.filter((row) => row.category === category);
+      const rows = checks.rows.filter(
+        (row) => row.category === category && calculated.recent.includes(row.month),
+      );
       const latest = rows.find((row) => row.month === endMonth);
-      const issues = [...new Set(rows.flatMap((row) => row.issues))];
+      const basis = calculated.bases.find((row) => row.category === category);
+      const issues = rows.flatMap((row) => row.issues.map((issue) => `${row.month} ${issue}`));
+      for (const month of calculated.recent)
+        if (!rows.some((row) => row.month === month)) issues.push(`${month} 尚未读取核对源值`);
       return {
         大类或源分类: category,
         基期实绩:
@@ -327,14 +331,9 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               (latest.actual.quantity === null ? '（已知小计）' : ''),
         三月实绩: actual.display,
         三月DMS计划: plan.display,
-        三月占比合计: percent(
-          calculated.bases.find((row) => row.category === category)?.recentShare,
-        ),
-        全年预估: number(calculated.bases.find((row) => row.category === category)?.annualEstimate),
-        计划达成率:
-          !issues.length && actual.quantity !== null && plan.quantity > 0
-            ? percent(actual.quantity / plan.quantity)
-            : '-',
+        三月占比合计: percent(basis?.recentShare),
+        全年预估: number(basis?.annualEstimate),
+        计划达成率: percent(basis?.achievementRate),
         核对说明: issues.join('；') || (current ? '按当前产品池SKU归类' : '尚未读取核对窗口'),
       };
     });
@@ -389,16 +388,11 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                 type: 'month',
                 'aria-label': '源值核对截止月份',
                 value: endMonth,
-                disabled: busy,
-                onChange: (event) => {
-                  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) {
-                    setEndMonth(event.target.value);
-                    update({ sourceChecksRead: { status: 'unread', month: draft.month } });
-                  }
-                },
+                readOnly: true,
+                title: '由评估月份与提报口径确定，与逐月测算使用同一窗口',
               }),
             ),
-            h('span', {}, `${monthOffset(endMonth, -2)} 至 ${endMonth}`),
+            h('span', {}, `${calculated.recent[0]} 至 ${endMonth}`),
             h(
               'button',
               { disabled: !active || !hasMpsSource() || busy, onClick: load },

@@ -16,6 +16,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
     '有效需求数量',
     '调整原因',
     '调整时间',
+    '缺项说明',
   ];
   return function CategoryDemand({ draft, update, active }) {
     const result = react.useMemo(() => buildCategoryDemand(draft, categories), [draft]);
@@ -60,6 +61,33 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
       const edit = draft.adjustments?.categoryDemand?.find(
         (entry) => entry.month === row.month && entry.category === row.category,
       );
+      const basis = result.bases.find((entry) => entry.category === row.category);
+      const missing = [];
+      if (row.systemQuantity === null) {
+        if (index % 4 < 2) {
+          if (basis.baseActual === null) missing.push(`${basis.endMonth} 基期BI实绩缺失`);
+          if (basis.actual === null)
+            missing.push(`${result.recent[0]}至${basis.endMonth} BI实绩缺失或不完整`);
+          if (basis.recentShare === null || basis.recentShare <= 0)
+            missing.push(`${result.recent[0]}至${basis.endMonth} 历史同期占比缺失或合计为0`);
+          if (row.share === null) missing.push(`${row.month} 历史同期占比缺失`);
+          for (const period of result.historical.filter(
+            (entry) =>
+              entry.category === row.category &&
+              entry.month > basis.endMonth &&
+              entry.month <= row.month &&
+              entry.mom === null,
+          ))
+            missing.push(`${period.month} 历史环比缺失`);
+          if (basis.plan === null)
+            missing.push(`${result.recent[0]}至${basis.endMonth} DMS计划缺失或不完整`);
+          else if (basis.achievementRate === null || basis.achievementRate <= 0)
+            missing.push('近三月计划达成率缺失或为0');
+        } else {
+          if (row.chain === null) missing.push(`${row.month} 年度分月环比缺失或分母为0`);
+          if (result.rows[index - 1].quantity === null) missing.push('上月有效需求缺失');
+        }
+      }
       return {
         大类: row.category,
         月份: `${row.month}（M+${(index % 4) + 1}）`,
@@ -73,6 +101,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
         有效需求数量: row.quantity ?? '',
         调整原因: edit?.reason ?? '',
         调整时间: edit?.at ?? '',
+        缺项说明: missing.join('；'),
         操作: h(
           react.Fragment,
           {},
