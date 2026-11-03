@@ -1,5 +1,5 @@
 {
-  "presentationApiVersion": 1,
+  "presentationApiVersion": 2,
   "owner": "dsh-agent-workbench",
   "consumerCode": "order01",
   "dataMode": "EXISTING_AUTHORIZED_SALES_WINDOW",
@@ -8,11 +8,11 @@
     "window.js": "order-confirmation/window.js"
   },
   "assets": {
-    "window.html": "9c7842b8851a2c8bb1c930dc514df216e70ba4242f20a71a7471625a193340df",
-    "window.js": "5765c65d84505facdeaf5cc9cf2e1461cff5a18a282dc5f18327b4df04bf6578",
-    "card.mjs": "454217f74fa4df77b4632cca0d087e1ddbce6cf0d3c860f3053f6b7dd06f6060",
-    "sales-card-template.mjs": "c21bd2e13140639953288dd20bb2c6ef1ed574a5df76760ac8132b0c463e3ba5",
-    "card-template.json": "7270dc90eceaa60d188304fd03e69a7bc2a6d62c6aa9c8d945df1259c7f8dd52"
+    "window.html": "b4333137f2a03d8896984b4caf0c231f0770f17c407786ec488eff62fadf3689",
+    "window.js": "912869619bb04876447f3f33b7bccc14f38717b69fdcd851503220e49dea09c8",
+    "card.mjs": "9ddad976ba7ccc8422dedeebb1928a796fc95272ae85f530d499e56e65209b22",
+    "sales-card-template.mjs": "ecefb00bf6e245a2bf3b830367c07e97c2dac9b392b1fdc6d303747340612e21",
+    "card-template.json": "a3fdfa35f21bdabdceb1b13777a15ec1dbefb9147121072e98d4d01bb4454b3f"
   },
   "orderEditing": "DRAFT_ONLY_UNTIL_REAL_ORDER_API_CONNECTED",
   "deployed": false

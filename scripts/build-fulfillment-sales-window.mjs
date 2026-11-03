@@ -33,7 +33,7 @@ export async function buildFulfillmentSalesWindow({ output } = {}) {
   for (const [name, content] of Object.entries(assets))
     await writeFile(resolve(out, name), content);
   const manifest = {
-    presentationApiVersion: 1,
+    presentationApiVersion: 2,
     owner: 'dsh-agent-workbench',
     consumerCode: 'order01',
     dataMode: 'EXISTING_AUTHORIZED_SALES_WINDOW',

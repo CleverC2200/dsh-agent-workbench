@@ -1440,7 +1440,7 @@ body {
 
 <script>"use strict";
 (() => {
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/missing-reasons.mjs
+  // prototypes/inventory-orderfulfillment/missing-reasons.mjs
   var empty = (value2) => value2 === null || value2 === void 0 || value2 === "";
   var valid = (value2) => !empty(value2) && Number.isFinite(Number(value2));
   var key = (execution, material, customer) => JSON.stringify([execution, material, customer]);
@@ -1560,7 +1560,7 @@ body {
     return reason;
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/summary-details.mjs
+  // prototypes/inventory-orderfulfillment/summary-details.mjs
   var validNumber = (value2) => value2 !== null && value2 !== void 0 && value2 !== "" && Number.isFinite(Number(value2));
   function summaryDetails(computed, facts = []) {
     const valid2 = computed?.quantities.filter((row) => row.valid_rows > 0) ?? [];
@@ -1724,7 +1724,7 @@ body {
     }
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/push-settings.mjs
+  // prototypes/inventory-orderfulfillment/push-settings.mjs
   function mountPushSettings(document2, request) {
     const button2 = document2.getElementById("fulfillmentPushSettings");
     const dialog = document2.createElement("dialog");
@@ -1840,7 +1840,7 @@ body {
     return { ...value2 };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/sales-confirmation-people.mjs
+  // prototypes/inventory-orderfulfillment/sales-confirmation-people.mjs
   function mountSalesConfirmationPeople(document2, formal, alive, changed) {
     const node = (tag, text2) => {
       const value2 = document2.createElement(tag);
@@ -1976,24 +1976,34 @@ body {
     };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/sales-card-template.mjs
+  // prototypes/inventory-orderfulfillment/sales-card-template.mjs
   var conditional = (path, yes, no) => ({
     $if: path,
     yes,
     ...no === void 0 ? {} : { no }
   });
+  var grey = (content) => `<font color='grey'>${content}</font>`;
+  var secondary = (content) => ({ tag: "markdown", content: grey(content) });
   var button = (label, mode, type) => ({
     tag: "button",
     type,
     text: { tag: "plain_text", content: label },
-    behaviors: conditional(`section.has${mode}`, [
-      { type: "open_url", default_url: `\${section.${mode}Url}` }
-    ]),
-    disabled: conditional(`section.has${mode}`, false, true),
-    disabled_tips: conditional(`section.has${mode}`, void 0, {
-      tag: "plain_text",
-      content: "\u7B49\u5F85 GEA \u63D0\u4F9B\u5F53\u524D\u8BA2\u5355\u7684\u53D7\u63A7\u64CD\u4F5C\u5165\u53E3"
-    })
+    behaviors: conditional(
+      "section.hasEntry",
+      [{ type: "open_url", default_url: `\${section.entryUrl}%26view%3D${mode.toLowerCase()}` }],
+      conditional(`section.has${mode}`, [
+        { type: "open_url", default_url: `\${section.${mode}Url}` }
+      ])
+    ),
+    disabled: conditional("section.hasEntry", false, conditional(`section.has${mode}`, false, true)),
+    disabled_tips: conditional(
+      "section.hasEntry",
+      void 0,
+      conditional(`section.has${mode}`, void 0, {
+        tag: "plain_text",
+        content: "\u7B49\u5F85 GEA \u63D0\u4F9B\u5F53\u524D\u8BA2\u5355\u7684\u53D7\u63A7\u64CD\u4F5C\u5165\u53E3"
+      })
+    )
   });
   var salesCardTemplate = {
     schema: "2.0",
@@ -2050,19 +2060,22 @@ body {
                     {
                       tag: "markdown",
                       content: conditional(
-                        "section.hasDetails",
-                        "\u8BA2\u5355\u53F7\uFF1A[${section.orderNoMarkdown}](${section.detailsUrl})",
-                        "\u8BA2\u5355\u53F7\uFF1A${section.orderNoMarkdown}"
+                        "section.hasEntry",
+                        grey(
+                          "\u8BA2\u5355\u53F7\uFF1A[${section.orderNoMarkdown}](${section.entryUrl}%26view%3Ddetails)"
+                        ),
+                        conditional(
+                          "section.hasDetails",
+                          grey("\u8BA2\u5355\u53F7\uFF1A[${section.orderNoMarkdown}](${section.detailsUrl})"),
+                          grey("\u8BA2\u5355\u53F7\uFF1A${section.orderNoMarkdown}")
+                        )
                       )
                     },
                     ...[
                       "\u5BA2\u6237\uFF1A${section.customer}",
                       "\u8BA2\u5355\u6EE1\u8DB3\u7387\uFF1A${section.rate}",
                       "\u603B\u6570\u91CF\uFF1A${section.quantity}"
-                    ].map((content) => ({
-                      tag: "div",
-                      text: { tag: "plain_text", content, text_color: "grey-700" }
-                    }))
+                    ].map(secondary)
                   ]
                 },
                 {
@@ -2083,7 +2096,7 @@ body {
                       ],
                       {
                         tag: "markdown",
-                        content: conditional("section.deferred", "\u5DF2\u6682\u7F13", "\u5DF2\u5904\u7406")
+                        content: conditional("section.deferred", grey("\u5DF2\u6682\u7F13"), grey("\u5DF2\u5904\u7406"))
                       }
                     )
                   ]
@@ -2092,21 +2105,22 @@ body {
             }
           ]
         },
-        conditional("preview", {
-          tag: "markdown",
-          content: "\u672C\u5730\u6837\u4F8B\u9884\u89C8 \xB7 \u4E0D\u53D1\u8D27\u3001\u4E0D\u6539\u5355\uFF1B\u5EF6\u671F\u53CA\u63D0\u4EA4\u4E0D\u4FDD\u5B58\u3002"
-        }),
-        conditional("pilot", {
-          tag: "markdown",
-          content: "\u8BD5\u70B9\u9A8C\u6536 \xB7 OMS \u5C1A\u672A\u63A5\u5165\uFF0C\u4EC5\u4FDD\u5B58\u786E\u8BA4\uFF0F\u6682\u7F13\u51B3\u5B9A\uFF0C\u4E0D\u6267\u884C\u5F00\u5355\u3001\u53D1\u8D27\u6216\u6539\u5355"
-        }),
-        conditional("omsUnavailable", {
-          tag: "markdown",
-          content: "OMS \u5C1A\u672A\u63A5\u5165 \xB7 \u4EC5\u4FDD\u5B58\u786E\u8BA4\uFF0F\u6682\u7F13\u51B3\u5B9A\uFF0C\u4E0D\u6267\u884C\u5F00\u5355\u3001\u53D1\u8D27\u6216\u6539\u5355"
-        }),
+        conditional("preview", secondary("\u672C\u5730\u6837\u4F8B\u9884\u89C8 \xB7 \u4E0D\u53D1\u8D27\u3001\u4E0D\u6539\u5355\uFF1B\u5EF6\u671F\u53CA\u63D0\u4EA4\u4E0D\u4FDD\u5B58\u3002")),
+        conditional(
+          "pilot",
+          secondary("\u8BD5\u70B9\u9A8C\u6536 \xB7 OMS \u5C1A\u672A\u63A5\u5165\uFF0C\u4EC5\u4FDD\u5B58\u786E\u8BA4\uFF0F\u6682\u7F13\u51B3\u5B9A\uFF0C\u4E0D\u6267\u884C\u5F00\u5355\u3001\u53D1\u8D27\u6216\u6539\u5355")
+        ),
+        conditional(
+          "omsUnavailable",
+          secondary("OMS \u5C1A\u672A\u63A5\u5165 \xB7 \u4EC5\u4FDD\u5B58\u786E\u8BA4\uFF0F\u6682\u7F13\u51B3\u5B9A\uFF0C\u4E0D\u6267\u884C\u5F00\u5355\u3001\u53D1\u8D27\u6216\u6539\u5355")
+        ),
         conditional("hasMore", {
           tag: "markdown",
-          content: "\u53E6\u6709 ${remaining} \u7B14\u8BB0\u5F55\uFF0C[\u67E5\u770B\u5168\u90E8 ${total} \u7B14](${allUrl})"
+          content: conditional(
+            "hasAllEntry",
+            "\u53E6\u6709 ${remaining} \u7B14\u8BB0\u5F55\uFF0C[\u67E5\u770B\u5168\u90E8 ${total} \u7B14](${allEntryUrl}%26view%3Dlist)",
+            "\u53E6\u6709 ${remaining} \u7B14\u8BB0\u5F55\uFF0C[\u67E5\u770B\u5168\u90E8 ${total} \u7B14](${allUrl})"
+          )
         })
       ]
     }
@@ -2142,7 +2156,7 @@ body {
     return render(template, model);
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/sales-confirmation-card.mjs
+  // prototypes/inventory-orderfulfillment/sales-confirmation-card.mjs
   function confirmationDraft(input) {
     const draft = structuredClone(input);
     const rate = (typeof draft.rate === "string" || typeof draft.rate === "number") && String(draft.rate).trim() !== "" ? Number(draft.rate) : NaN;
@@ -2159,7 +2173,10 @@ body {
     const escape = (value2) => String(value2 ?? "\u2014").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]).replace(/[\\*_[\]`]/g, "\\$&");
     const urls = options.urls || {};
     let origin;
-    for (const value2 of Object.values(urls)) {
+    for (const value2 of [
+      ...Object.values(urls),
+      ...options.entryUrl === void 0 ? [] : [options.entryUrl]
+    ]) {
       if (typeof value2 !== "string" || !value2.trim()) throw Error("ORDER_CONFIRMATION_LINK_INVALID");
       const url = new URL(value2);
       const local = options.preview === true && url.protocol === "http:" && url.hostname === "127.0.0.1";
@@ -2174,6 +2191,8 @@ body {
       (line) => typeof line.rawShortage === "number" && Number.isFinite(line.rawShortage) && line.rawShortage > 0
     );
     const section = {
+      hasEntry: Boolean(options.entryUrl),
+      entryUrl: options.entryUrl ? windowUrl(options.entryUrl) : "",
       orderNoMarkdown: escape(draft.orderNo),
       customer: escape(draft.customer),
       quantity: String(draft.quantity ?? "\u2014"),
@@ -2209,7 +2228,7 @@ body {
     });
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/sales-confirmation.mjs
+  // prototypes/inventory-orderfulfillment/sales-confirmation.mjs
   function mountSalesConfirmation(document2, simulation, formal) {
     const overlay = document2.getElementById("salesConfirmOverlay");
     const dialog = overlay.querySelector(".confirmation-dialog");
@@ -2364,7 +2383,7 @@ body {
     };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/business/shared/query-error.js
+  // business/shared/query-error.js
   var DATA_PERMISSION_MESSAGE = "\u5F53\u524D\u8D26\u53F7\u6682\u65E0\u6570\u636E\u6743\u9650";
   function sqlQueryError(cause) {
     if (cause?.name === "AbortError") return cause;
@@ -2388,7 +2407,7 @@ body {
     return error;
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/business/shared/channel.js
+  // business/shared/channel.js
   var context;
   var channel;
   var sequence = 0;
@@ -2655,7 +2674,7 @@ body {
     return call("context", context2, options);
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/sales-simulation.mjs
+  // prototypes/inventory-orderfulfillment/sales-simulation.mjs
   function mountSalesSimulation(document2) {
     const node = document2.getElementById("fulfillment-simulation-config");
     const config2 = node ? JSON.parse(node.textContent) : null;
@@ -2728,7 +2747,7 @@ body {
     };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/sales-confirmation-transport.mjs
+  // prototypes/inventory-orderfulfillment/sales-confirmation-transport.mjs
   function mountSalesConfirmationTransport(document2, request) {
     let generation = 0, availability, timer2, debounce, failures = 0;
     const bindings = /* @__PURE__ */ new Map(), results = /* @__PURE__ */ new Map();
@@ -2902,7 +2921,7 @@ body {
     };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/business/shared/query-scheduler.js
+  // business/shared/query-scheduler.js
   var runningQueries = 0;
   var waitingQueries = [];
   var queueTimer;
@@ -2947,7 +2966,7 @@ body {
     });
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/business/shared/configured-query-client.mjs
+  // business/shared/configured-query-client.mjs
   var own = (value2, key5) => Object.prototype.hasOwnProperty.call(value2, key5);
   var immutableRegistries = /* @__PURE__ */ new WeakSet();
   var QueryContractError = class extends Error {
@@ -3288,7 +3307,7 @@ body {
     };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/paged-source.mjs
+  // prototypes/inventory-orderfulfillment/paged-source.mjs
   var fulfillmentCardQueries = ["orders.summary", "orders.facts", "execution.trace", "trace.detail", "shortage.detail"];
   async function readItemPage(reader2, filters, { signal, page = 1, size = 20, base = null, search = null, inventory = true, onPage } = {}) {
     signal?.throwIfAborted();
@@ -3315,7 +3334,7 @@ body {
     return { result: { ...result, serverPage: true }, ages: supplements[0], owners: supplements[1] };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/organization-filter.js
+  // prototypes/inventory-orderfulfillment/organization-filter.js
   function organizationSelection(value2) {
     if (value2.startsWith("group:")) {
       try {
@@ -3453,7 +3472,7 @@ body {
     } };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/business/shared/query-cache.ts
+  // business/shared/query-cache.ts
   var freshAfter = 0;
   var identityGeneration = 0;
   var identityListeners = /* @__PURE__ */ new Set();
@@ -3471,7 +3490,7 @@ body {
     });
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/business/shared/dashboard-timing.js
+  // business/shared/dashboard-timing.js
   function startDashboardTiming(page, signal) {
     const clock = globalThis.performance;
     const start = clock?.now();
@@ -3501,7 +3520,7 @@ body {
     };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/page-context.mjs
+  // prototypes/inventory-orderfulfillment/page-context.mjs
   var contextLimit = 9e4;
   var sampleLimit = 3;
   var detailedKeys = /* @__PURE__ */ new Set([
@@ -3589,7 +3608,7 @@ body {
     return result;
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/source-period.mjs
+  // prototypes/inventory-orderfulfillment/source-period.mjs
   function fulfillmentSourcePeriod(row, today) {
     if (!row || !Object.hasOwn(row, "latest_created") || !Object.hasOwn(row, "latest_load"))
       throw Error("SOURCE_PERIOD_UNAVAILABLE");
@@ -3615,7 +3634,7 @@ body {
     return `${reason}\u6E90\u6700\u65B0\u4E0B\u5355 ${period.latestCreated}\uFF1B\u6700\u65B0\u5165\u5E93 ${period.latestLoad ?? "\u672A\u77E5"}\uFF1B\u4EC5\u7EDF\u8BA1\u5F53\u5929\u521B\u5EFA\u7684\u8BA2\u5355\uFF0C\u4E0D\u5C55\u793A\u5386\u53F2\u8BA2\u5355`;
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/business/shared/page-observation.js
+  // business/shared/page-observation.js
   function keepPageObservation(read, send, { interval = 3e4 } = {}) {
     let pending2 = false;
     const tick = async () => {
@@ -3635,12 +3654,12 @@ body {
     return dispose;
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/src/page-interaction/quote.ts
+  // src/page-interaction/quote.ts
   function quotePage(value2, signal) {
     return window.dshPageInteraction?.quote(value2, signal) ?? Promise.reject(Error("\u8BF7\u5148\u5173\u8054\u5F53\u524D\u9875\u9762\u7684\u771F\u5B9E\u5BF9\u8BDD\uFF0C\u518D\u8F6C\u5165\u8349\u7A3F\u3002"));
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/business/shared/view-state.js
+  // business/shared/view-state.js
   var PROTOCOL = "dsh-workbench-view-v1";
   function createPageViewState(page) {
     const sessionPage = [
@@ -3728,7 +3747,7 @@ body {
     };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/order-metrics.mjs
+  // prototypes/inventory-orderfulfillment/order-metrics.mjs
   var number = (value2) => value2 === null || value2 === void 0 || value2 === "" ? null : Number.isFinite(Number(value2)) ? Number(value2) : null;
   function shanghaiTime(value2) {
     if (typeof value2 !== "string" || !/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(value2)) return null;
@@ -4066,7 +4085,7 @@ body {
     }).sort((a, b) => a.group_name.localeCompare(b.group_name, "zh-CN"));
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/execution-trace.mjs
+  // prototypes/inventory-orderfulfillment/execution-trace.mjs
   var fields = ["carrier_name", "carrier_id", "waybillno", "order_stage", "odo_order_status", "gpsisinraildate_to", "arriveconfirm_time", "expected_deliv_time", "requireddeliverytimebak", "requireddeliverytime", "lastbillingdate", "latestarrivaldate", "latestsendcardate", "peidan_status", "paiche_status", "zhuangche_status", "zaitu_status", "is_ontime", "fromorderno"];
   var key3 = (row) => JSON.stringify([row.executeorderno, row.cust_code]);
   var present = (value2) => value2 !== null && value2 !== void 0 && value2 !== "";
@@ -4167,7 +4186,7 @@ body {
     return { scope: "\u5F53\u524D\u521B\u5EFA\u65E5\u5217\u8868\u5185\u3001\u5B9E\u9645\u5230\u8D27\u843D\u5728\u6240\u9009\u671F\u95F4\u7684\u5B8C\u6574\u8BA2\u5355\u6837\u672C\uFF1B\u4E0D\u662F\u5B8C\u6574\u5230\u8D27\u5468\u671F\u51C6\u4EA4\u7387", assessed, onTime, unknown, outsidePeriod, rate: assessed ? onTime / assessed * 100 : null };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/live-panels.js
+  // prototypes/inventory-orderfulfillment/live-panels.js
   var text = (value2) => value2 === null || value2 === void 0 || value2 === "" ? "\u2014" : String(value2);
   var svgNode = (name, attributes = {}, content) => {
     const node = document.createElementNS("http://www.w3.org/2000/svg", name);
@@ -4367,7 +4386,7 @@ body {
     });
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/live-model.mjs
+  // prototypes/inventory-orderfulfillment/live-model.mjs
   function shanghaiToday(now = /* @__PURE__ */ new Date()) {
     return new Date(now.getTime() + 8 * 36e5).toISOString().slice(0, 10);
   }
@@ -4544,7 +4563,7 @@ body {
     };
   }
 
-  // .runtime/order-card-presentation/source/dsh-agent-workbench/prototypes/inventory-orderfulfillment/live-entry.js
+  // prototypes/inventory-orderfulfillment/live-entry.js
   var publish2 = (value2, options) => publish(fulfillmentPageContext(value2), options);
   var configNode = document.getElementById("agent-sql-config");
   var config = configNode ? JSON.parse(configNode.textContent) : null;
