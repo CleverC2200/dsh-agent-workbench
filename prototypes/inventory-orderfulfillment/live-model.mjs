@@ -2,6 +2,7 @@ import {
   createQueryClient,
   QueryContractError,
 } from '../../business/shared/configured-query-client.mjs';
+import { unpackRowPackets } from '../../business/shared/row-packets.mjs';
 
 export function shanghaiToday(now = new Date()) {
   return new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
@@ -134,6 +135,19 @@ export function createFulfillmentReader(config, execute) {
   return {
     collection,
     async all(id,filters,{signal,priority=0}={}) {
+      const packetId = id + '.packets';
+      if (config.queries[packetId]) {
+        const result = await client.readAll(packetId, { ...filters, page_size: 32, offset: 0 }, {
+          signal, priority, singlePageFirst: true, keyFields: ['packet_index'],
+          requiredColumns: config.queries[packetId].resultColumns,
+        });
+        if (result.pages?.some(page => page.rejectedColumns?.length))
+          throw new QueryContractError('PERMISSION_DENIED', '分组明细字段未获完整授权，未使用部分数据');
+        const columns = config.queries[id].resultColumns;
+        const rows = unpackRowPackets(result.rows, columns, ['packet_position']);
+        return { ...result, rows, total: rows.length, returnedColumns: columns, rejectedColumns: [],
+          readAt: new Date().toISOString(), scope: '当前筛选与授权范围完整输入' };
+      }
       const countId=config.queries[id].pagination.countQuery;
       const [before,result]=await Promise.all([
         client.read(countId,filters,{signal,priority,requiredColumns:['total']}),

@@ -4,7 +4,7 @@ import { mountPushSettings } from './push-settings.mjs';
 import { mountSalesConfirmation } from './sales-confirmation.mjs';
 import { mountSalesSimulation } from './sales-simulation.mjs';
 import { mountSalesConfirmationTransport } from './sales-confirmation-transport.mjs';
-import { fulfillmentCardQueries, readItemPage } from './paged-source.mjs';
+import { fulfillmentCardQueries, readItemPage, startFulfillmentCardReads } from './paged-source.mjs';
 import { mountOrganizationFilter, organizationSelection } from './organization-filter.js';
 import { configuredQueryFreshAfter } from '../../business/shared/query-cache.ts';
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
@@ -17,6 +17,7 @@ import {
 } from '../../business/shared/channel.js';
 import { fulfillmentPageContext } from './page-context.mjs';
 import { fulfillmentSourcePeriod, fulfillmentSourceDescription } from './source-period.mjs';
+import { createFulfillmentDerivedCache } from './derived-cache.mjs';
 import { keepPageObservation } from '../../business/shared/page-observation.js';
 import { quotePage } from '../../src/page-interaction/quote.ts';
 import { createPageViewState } from '../../business/shared/view-state.js';
@@ -358,6 +359,7 @@ function pendingShortage(results) {
   const facts = enrichedFacts(results),
     source = get(results, 'shortage.detail');
   if (!facts || !source) return null;
+  return cachedShortage(facts, source, 'pending', () => {
   const keys = new Set(
     facts.rows
       .filter(
@@ -374,7 +376,11 @@ function pendingShortage(results) {
       keys.has(JSON.stringify([r.execution_order, r.sku, r.customer_code])),
     ),
   };
+  });
 }
+const cachedShortage = createFulfillmentDerivedCache();
+const cachedOrderRows = createFulfillmentDerivedCache();
+const cachedComparisons = createFulfillmentDerivedCache({ maxAge: 1000 });
 function pendingShortageSummary(result) {
   if (!result) return undefined;
   const rows = result.rows,
@@ -401,6 +407,7 @@ function pendingShortageSummary(result) {
   };
 }
 function completeOrderRows(facts) {
+  return cachedOrderRows(facts, null, 'orders', () => {
   const aliases = {
     order_no: 'cust_order_no',
     customer_code: 'cust_code',
@@ -429,6 +436,7 @@ function completeOrderRows(facts) {
       ),
     rejectedColumns: [],
   };
+  });
 }
 function replaceOptions(select, choices, emptyLabel) {
   const current = select.value;
@@ -1231,13 +1239,11 @@ function renderGrantedDetails(results) {
   const facts = sourceFacts;
   const shortage = pendingShortage(results);
   const comparison = (dimension) =>
-    facts ? comparisonMetrics(facts.rows, dimension, shortage?.rows ?? null) : null;
+    facts ? cachedComparisons(facts, shortage, dimension, () => comparisonMetrics(
+      dimension === 'all_scope' ? facts.rows.map(row => ({ ...row, all_scope: '当前范围' })) : facts.rows,
+      dimension, shortage?.rows ?? null)) : null;
   if (facts && dimension === 'deliveryDimensionPanel') {
-    const total = comparisonMetrics(
-      facts.rows.map((row) => ({ ...row, all_scope: '当前范围' })),
-      'all_scope',
-      shortage?.rows ?? null,
-    )[0];
+    const total = comparison('all_scope')[0];
     renderCharts(calculatedMetrics(results), total, (ids) =>
       drillOrders($('deliveryBaseCompareRows'), { group_name: null }, ids),
     );
@@ -1675,6 +1681,8 @@ async function load() {
     return ensureItemPage();
   }
   const task = owner.begin();
+  const startedAt = performance.now();
+  delete status.dataset.loadDurationMs;
   const timing = startDashboardTiming('order-fulfillment', task.signal);
   itemController?.abort();
   itemPageKey = '';
@@ -1695,12 +1703,11 @@ async function load() {
     return;
   }
   saveView();
+  const periodRead = reader.summary('orders.source-period',
+    { end_exclusive: nextDay(shanghaiToday()) }, task.signal);
+  const cardReads = startFulfillmentCardReads(reader, selected, task.signal);
   try {
-    const period = await reader.summary(
-      'orders.source-period',
-      { end_exclusive: nextDay(shanghaiToday()) },
-      task.signal,
-    );
+    const period = await periodRead;
     if (!task.current()) return;
     if (period.rejectedColumns?.length) throw Error('SOURCE_PERIOD_PERMISSION_DENIED');
     sourcePeriod = fulfillmentSourcePeriod(period.rows[0], shanghaiToday());
@@ -1709,6 +1716,7 @@ async function load() {
     document.querySelector('.freshness').textContent = fulfillmentSourceDescription(sourcePeriod);
   } catch {
     if (!task.current()) return;
+    owner.invalidate();
     sourcePeriod = null;
     clear('订单源日期读取失败或未获授权，暂不能确认订单数量');
     status.textContent = '订单源日期读取失败或未获授权，未将异常显示为0';
@@ -1744,24 +1752,9 @@ async function load() {
   const settled = await Promise.allSettled(
     ids.map(async (id) => {
       try {
-        const value = await (id === 'orders.facts' ||
-        id === 'execution.trace' ||
-        id === 'trace.detail' ||
-        id === 'shortage.detail' ||
-        id === 'sku.detail' ||
-        id === 'sku.age' ||
-        id === 'sku.owners'
-          ? reader.all(id, selected, {
-              signal: task.signal,
-              priority: id === 'orders.facts' ? 10 : 0,
-            })
-          : id.endsWith('.summary')
-            ? reader.summary(id, selected, task.signal)
-            : reader.collection(id, selected, {
-                signal: task.signal,
-                page: 1,
-                size: 20,
-              }));
+        const part = await cardReads.get(id);
+        if (part.status === 'rejected') throw part.reason;
+        const value = part.value;
         if (!task.current()) return value;
         progressive[id] = { status: 'fulfilled', value };
         if (!sourceCountsAgree(progressive)) {
@@ -1924,6 +1917,7 @@ async function load() {
   };
   const failures = settled.filter((x) => x.status === 'rejected');
   timing.finish(failures.length ? 'partial' : 'complete');
+  status.dataset.loadDurationMs = String(Math.round(performance.now() - startedAt));
   status.textContent =
     (localPreview
       ? '数据库真实数据 · 本地只读 · 未验GEA用户权限'

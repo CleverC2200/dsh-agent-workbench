@@ -185,7 +185,8 @@
     "@deepseek-ai/dsh-client-ui-sidebar-right": "file:../../official-latest-standard/packages/client/ui-sidebar-right",
     "oxlint": "1.87.0",
     "oxfmt": "0.72.0",
-    "lucide-react": "1.31.0"
+    "lucide-react": "1.31.0",
+    "semver": "7.7.4"
   },
   "packageManager": "npm@11.11.0"
 }
