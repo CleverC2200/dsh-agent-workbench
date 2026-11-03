@@ -2,11 +2,12 @@ import { encodeReportRequest } from './report-transfer.mjs';
 import { workbenchCellMissingReason } from './missing-reasons.mjs';
 import { createReportPersistence } from './report-persistence.mjs';
 import { createPageViewState } from '../../business/shared/view-state.js';
-import { draft, ready, call } from '../../business/shared/channel.js';
+import { ask, draft, ready, call } from '../../business/shared/channel.js';
+import { metricDetailsRequest } from './metric-details.mjs';
 import { loadWorkbenchFacts, loadWorkbenchSkuPage } from './live-source.js';
 import { createFrameProgress } from '../../business/shared/frame-progress.js';
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
-import { workbenchPresentation, workbenchEvidence, workbenchMetricDetail, workbenchBaseIncluded } from './live-presentation.mjs';
+import { workbenchPresentation, workbenchEvidence, workbenchBaseIncluded } from './live-presentation.mjs';
 import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
 import { reusableWorkbenchFacts, compatibleWorkbenchFacts } from './metric-model.mjs';
 import { publishReport } from './publication.js';
@@ -2430,7 +2431,7 @@ function renderWorkbench() {
   document.getElementById('wbKpis').innerHTML = topMetricCards
     .map((metric) => {
       const statusClass = ['未达', '严重'].includes(metric.status) ? 'bad' : metric.status === '预警' ? 'warn' : metric.status === '健康' ? '' : 'unknown';
-      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.label)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
+      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="生成${escapeHtml(metric.label)}明细表" title="发送到右侧 Agent 生成明细表"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
     })
     .join('');
   document.querySelectorAll('#wbKpis .wb-kpi').forEach((card,index)=>{
@@ -3819,14 +3820,24 @@ async function send(text) {
     showWorkbenchToast('无法填入分析问题：' + error.message);
   }
 }
-function openMetricDetail(key) {
-  const metric = activeReport()?.metrics.find((item) => item.key === key);
-  if (!metric) return;
-  document.getElementById('wbDetailTitle').textContent = key + '口径';
-  document.getElementById('wbDetailBody').textContent = workbenchMetricDetail(liveFacts, key);
-  document.getElementById('wbDetailBody').style.whiteSpace = 'pre-line';
-  wbDetailOverlay.hidden = false;
-  document.getElementById('wbDetailClose').focus();
+let sendingMetricDetails = false;
+async function openMetricDetail(key) {
+  if (sendingMetricDetails) return;
+  const button = [...workbenchView.querySelectorAll('[data-metric-question]')].find(node => node.dataset.metricQuestion === key);
+  try {
+    const request = metricDetailsRequest(liveFacts, key, {
+      mode: periodMode, month: selectedMonth, week: selectedWeek, label: selectedPeriodLabel(),
+    });
+    sendingMetricDetails = true;
+    button?.setAttribute('aria-busy', 'true');
+    await ask(request.text, request.context);
+    showWorkbenchToast('明细请求已发送至右侧 Agent，正在生成表格。');
+  } catch (error) {
+    showWorkbenchToast('无法发送指标明细请求：' + error.message);
+  } finally {
+    sendingMetricDetails = false;
+    button?.removeAttribute('aria-busy');
+  }
 }
 function openFulfillmentPlugin() {
   window.parent.postMessage(
