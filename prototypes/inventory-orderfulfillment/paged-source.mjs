@@ -2,6 +2,15 @@ import { QueryContractError } from '../../business/shared/configured-query-clien
 
 export const fulfillmentCardQueries = ['orders.summary', 'orders.facts', 'execution.trace', 'trace.detail', 'shortage.detail'];
 
+/** Start independent reads together; the caller validates the source period before publishing. */
+export function startFulfillmentCardReads(reader, filters, signal) {
+  return new Map(fulfillmentCardQueries.map(id => [id, Promise.resolve().then(() => {
+    signal?.throwIfAborted();
+    return id.endsWith('.summary') ? reader.summary(id, filters, signal)
+      : reader.all(id, filters, { signal, priority: id === 'orders.facts' ? 10 : 0 });
+  }).then(value => ({ status: 'fulfilled', value }), reason => ({ status: 'rejected', reason }))]));
+}
+
 // A table page is never used as a card denominator. Each supplement still reads
 // its complete counted input, restricted to the base/SKU keys on this page.
 export async function readItemPage(reader, filters, {signal, page = 1, size = 20, base = null, search = null, inventory = true, onPage} = {}) {
