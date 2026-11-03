@@ -238,6 +238,9 @@ test('received order report restores the selected week and publishes current sup
   await page.frameLocator('iframe').locator('#periodPickerTrigger').click();
   await page.frameLocator('iframe').locator('[data-period-week="2026-08-31"]').click();
   await expect
+    .poll(() => page.evaluate(() => window.readState('inventory-orderworkbench')?.week))
+    .toBe('2026-08-31');
+  await expect
     .poll(() => page.evaluate(() => window.readState('inventory-orderworkbench')?.mode))
     .toBe('week');
   await page.evaluate(() => window.hidePage());
