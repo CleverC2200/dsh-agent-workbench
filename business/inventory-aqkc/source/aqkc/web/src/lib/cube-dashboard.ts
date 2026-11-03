@@ -2551,15 +2551,21 @@ function configuredSummaryWorkspace(
     const n = sum('row_count'),
       gapCount = sum('gap_count'),
       turnCount = sum('turn_count'),
-      den = sum('turn_demand');
+      den = sum('turn_demand'),
+      targetDen = rs.some((r) => Object.hasOwn(r, 'target_turn_demand'))
+        ? sum('target_turn_demand')
+        : den;
     return {
       sum,
       n,
       gapCount,
       turnCount,
+      comparableTurnover:
+        !rs.some((r) => Object.hasOwn(r, 'target_turn_count')) ||
+        sum('target_turn_count') === turnCount,
       gap: gapCount ? sum('gap') : null,
       turn: den > 0 ? sum('turn_inventory') / den : null,
-      targetTurn: den > 0 ? sum('turn_target') / den : null,
+      targetTurn: targetDen > 0 ? sum('turn_target') / targetDen : null,
     };
   };
   const all = stats(groups),
@@ -2705,7 +2711,9 @@ function configuredSummaryWorkspace(
         {
           label: '天数差额',
           value: days(
-            all.turn !== null && all.targetTurn !== null ? all.turn - all.targetTurn : null,
+            all.comparableTurnover && all.turn !== null && all.targetTurn !== null
+              ? all.turn - all.targetTurn
+              : null,
           ),
         },
       ],
