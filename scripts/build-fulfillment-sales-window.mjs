@@ -16,7 +16,8 @@ export async function buildFulfillmentSalesWindow({ output } = {}) {
     .replace(
       '../assets/window-script"',
       '../assets/window-script?release=__ORDER_PRESENTATION_RELEASE__"',
-    );
+    )
+    .replace(/[ \t]+$/gm, '');
   const script =
     (await read('sales-window/order-editor.js')) + '\n' + (await read('sales-window/window.js'));
   const card = await read('sales-confirmation-card.mjs');

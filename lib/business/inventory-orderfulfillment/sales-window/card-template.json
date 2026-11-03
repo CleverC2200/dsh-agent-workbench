@@ -227,7 +227,14 @@
         "$if": "pilot",
         "yes": {
           "tag": "markdown",
-          "content": "试点验收 · 仅登记销售决定，不执行真实发货或改单"
+          "content": "试点验收 · OMS 尚未接入，仅保存确认／暂缓决定，不执行开单、发货或改单"
+        }
+      },
+      {
+        "$if": "omsUnavailable",
+        "yes": {
+          "tag": "markdown",
+          "content": "OMS 尚未接入 · 仅保存确认／暂缓决定，不执行开单、发货或改单"
         }
       },
       {
