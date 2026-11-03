@@ -27,7 +27,7 @@ const percent = (value) =>
 export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
   const PlanRates = createPlanRates(react, { Dialog, table, downloadCsv });
-  return function SourceInputs({ kind, draft, update, relations, active }) {
+  return function SourceInputs({ kind, draft, update, relations, active, contextActive = active }) {
     const calculated = react.useMemo(() => buildCategoryDemand(draft), [draft]);
     const endMonth = calculated.endMonth;
     const [preview, setPreview] = react.useState(null);
@@ -362,7 +362,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         total: kind === 'basic' ? basicRows.length : previewRows.length,
       },
       kind === 'basic' ? '大类基础源值核对' : '派生指标源值核对',
-      active,
+      contextActive,
     );
     if (kind === 'basic')
       return h(

@@ -520,7 +520,7 @@ test('batched plan loading and separate fiscal-year failure or partial emptiness
     release = resolve;
   });
   t.after(() => release());
-  const { frame } = await mpsPage(t, config, async (query) => {
+  const { frame, contexts } = await mpsPage(t, config, async (query) => {
     if (query.queryId === 'plan-rate.detail') await pending;
     if (query.queryId === 'facts.history-annual') {
       if (query.parameters.start === '2025-07-01') throw Error('AGENT_ACCESS_DENIED');
@@ -540,6 +540,9 @@ test('batched plan loading and separate fiscal-year failure or partial emptiness
   await expect(row('上一财年发货', '2027-06')).toContainText('暂无数据权限');
   await expect(row('上一财年发货', '2027-07')).toContainText('读取不完整');
   await expect(row('上一财年发货', '2027-07').getByRole('cell').nth(3)).toHaveText('—');
+  await expect
+    .poll(() => Object.keys(contexts.at(-1)?.parts ?? {}).sort())
+    .toEqual(['navigation', 'process']);
   release();
   await expect(row('销售提报占比', '2027-07')).toContainText('成功有记录');
 });
