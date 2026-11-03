@@ -344,18 +344,20 @@ export function applyFcPlan(row: FcRow, plans: ImportedPlan[], asOf: string, cyc
 }
 
 export function summarizeFcRows(rows: FcRow[]) {
-  const completeSum = (field: string) => {
-    const values = rows.map((row) => knownNumber(row[field]));
-    return values.length && values.every((value) => value !== null)
-      ? values.reduce<number>((total, value) => total + value!, 0)
-      : null;
-  };
-  const demand = completeSum('daily_plan'),
-    stock = completeSum('inventory_qty');
+  const valid = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  const recommendations = rows.map((row) => knownNumber(row.recommended_qty)).filter(valid);
+  const pairs = rows
+    .map((row) => [knownNumber(row.daily_plan), knownNumber(row.inventory_qty)])
+    .filter((pair): pair is [number, number] => pair.every(valid));
+  const demand = pairs.reduce((sum, [value]) => sum + value, 0);
+  const stock = pairs.reduce((sum, [, value]) => sum + value, 0);
   return {
-    recommended: completeSum('recommended_qty'),
-    missingCount: rows.filter((row) => knownNumber(row.recommended_qty) === null).length,
-    forwardTurnover: demand !== null && demand > 0 && stock !== null ? stock / demand : null,
+    recommended: recommendations.length
+      ? recommendations.reduce((sum, value) => sum + value, 0)
+      : null,
+    missingCount: rows.length - recommendations.length,
+    forwardTurnover: pairs.length && demand > 0 ? stock / demand : null,
   };
 }
 

@@ -32,7 +32,7 @@ test(
           body: `<html><head><style>${css}</style></head><body><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-qll/query","token":"fixture"}</script><div id="root"></div><script>${js}</script></body></html>`,
         });
       const { queryId, parameters: p } = route.request().postDataJSON();
-      if (queryId === 'summary.snapshot')
+      if (['summary.snapshot', 'summary.bootstrap'].includes(queryId))
         return route.fulfill({
           json: {
             rows: [],

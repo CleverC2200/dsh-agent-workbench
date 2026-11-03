@@ -46,8 +46,8 @@ CREATE TABLE agents_scm_material_in_out_summary_d(material_code TEXT,product_cat
   self.assertEqual(r['O3']['demand'],50);self.assertEqual(r['O3']['preparing_allocated'],30);self.assertEqual(r['O3']['remaining'],20)
   self.assertEqual(sum(x['available'] for x in r.values()),60)
  def test_selected_branch_retains_other_branches_priority(self):
-  c=json.loads((W/'business/inventory-fc/sql.config.json').read_text());q=c['queries']['current-shortage.summary'];params={k:None for k in q['parameterSpec']};params['gea_p2']='BR2'
-  r=self.db.execute(q['request']['sql'],params).fetchone();self.assertEqual(r['shortage'],40);self.assertEqual(r['available'],10)
+  rows=[r for r in self.rows().values() if r['warehouse_code']=='BR2'];self.assertEqual(len(rows),1)
+  self.assertEqual(rows[0]['shortage'],40);self.assertEqual(rows[0]['available'],10)
  def test_branch_stock_cannot_satisfy_base_orders(self):
   before=self.rows();self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=0 WHERE warehouseid='BR1'");self.assertEqual(before,self.rows())
  def test_fifo_stable_same_timestamp(self):
@@ -70,9 +70,11 @@ CREATE TABLE agents_scm_material_in_out_summary_d(material_code TEXT,product_cat
   r=self.rows();self.assertEqual(r['O1']['remaining'],30);self.assertEqual(r['O2']['shortage'],20)
  def test_invisible_order_source_is_unknown_not_zero(self):
   self.db.execute('DELETE FROM agents_scm_asn_detail_d')
-  q=json.loads((W/'business/inventory-fc/sql.config.json').read_text())['queries']['current-shortage.summary']
-  row=self.db.execute(q['request']['sql'],{key:None for key in q['parameterSpec']}).fetchone()
-  self.assertGreater(row['invalid'],0);self.assertIsNone(row['demand']);self.assertIsNone(row['shortage'])
+  self.assertEqual(self.rows(),{})
+  import sqlglot
+  tree=sqlglot.parse_one((W/'business/inventory-fc/upstream-orders-source.sql').read_text(),read='postgres')
+  presence=next(c.this for c in tree.ctes if c.alias=='upstream_presence')
+  self.assertEqual(self.db.execute(presence.sql(dialect='sqlite')).fetchone()[0],0)
  def test_absent_authorized_base_stock_scope_is_unknown(self):
   self.db.execute("DELETE FROM agents_scm_inventory_sku_data_d WHERE warehouseid='BASE'")
   self.assertTrue(all(row['shortage'] is None for row in self.rows().values()))

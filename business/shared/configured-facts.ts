@@ -168,7 +168,9 @@ export async function readConfiguredFacts(
   // Only non-calculating labels may be absent on a display page. Quantity,
   // scope, sorting and pagination columns keep their complete read contract.
   const optionalLabels =
-    config.agentId === 'inventory-fc' && viewId === 'replenishment' && options.detailsOnly
+    config.agentId === 'inventory-fc' &&
+    ['replenishment', 'replenishment-confirmation'].includes(viewId) &&
+    options.detailsOnly
       ? new Set([
           'material_name',
           'warehouse_name',

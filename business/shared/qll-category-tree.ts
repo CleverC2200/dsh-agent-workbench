@@ -66,7 +66,8 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
         { as_of: input.date },
         {
           signal,
-          ...(quick ? { requiredColumns: config.queries[source].resultColumns } : {}),
+          requiredColumns:
+            config.queries[source].snapshotRequiredColumns ?? config.queries[source].resultColumns,
         },
       );
       snapshot = quick

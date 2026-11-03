@@ -65,8 +65,8 @@ export function mapCustomerInventoryRows(rows) {
       throw Error('CUSTOMER_INVENTORY_SNAPSHOT_INCONSISTENT');
     snapshot = rowSnapshot;
     const code = String(row.cust_code ?? '').trim();
-    const name = String(row.cust_name ?? '').trim();
-    if (!code || !name) throw Error('CUSTOMER_INVENTORY_IDENTITY_MISSING');
+    if (!code) throw Error('CUSTOMER_INVENTORY_IDENTITY_MISSING');
+    const name = String(row.cust_name ?? '').trim() || code;
     const skuRows = finite(row.sku_rows) ?? 0;
     const complete = (field) => finite(row[field]) === skuRows;
     const inventorySkuRows = Object.hasOwn(row, 'inventory_sku_rows') ? finite(row.inventory_sku_rows) : skuRows;

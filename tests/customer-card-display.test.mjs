@@ -2,8 +2,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { customerCardStatusLabel } from '../prototypes/inventory-customer/card-display.js';
-import { summarizeCustomerInventory } from '../prototypes/inventory-customer/customer-inventory-model.js';
+import {
+  mapCustomerInventoryRows,
+  summarizeCustomerInventory,
+} from '../prototypes/inventory-customer/customer-inventory-model.js';
 import { customerPageContext } from '../prototypes/inventory-customer/page-context.js';
+
+test('missing customer names fall back to codes without discarding other customers', () => {
+  const inventory = mapCustomerInventoryRows([
+    { snapshot_date: '2026-11-03', cust_code: '20161634', cust_name: null },
+    { snapshot_date: '2026-11-03', cust_code: '20161635', cust_name: '  ' },
+    { snapshot_date: '2026-11-03', cust_code: '20161636', cust_name: '正常客户' },
+  ]);
+  assert.deepEqual(
+    inventory.rows.map((row) => [row.code, row.name]),
+    [
+      ['20161634', '20161634'],
+      ['20161635', '20161635'],
+      ['20161636', '正常客户'],
+    ],
+  );
+});
 
 test('stocked customers count distinct positive-stock customers in the supplied scope', () => {
   const rows = [

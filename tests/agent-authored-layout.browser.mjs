@@ -162,7 +162,7 @@ test('APS mounts only the selected analysis cards and detail lists', async (t) =
   await expect(frame.locator('#category-operations, #cross-analysis')).toHaveCount(0);
   await frame
     .locator('.analysis-workspace')
-    .evaluate((element) => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+    .evaluate((element) => element.scrollTo({ top: 0, behavior: 'instant' }));
   await frame.getByRole('tab', { name: '交叉分析', exact: true }).click();
   await expect(frame.locator('#cross-analysis')).toBeVisible();
   await expect(frame.locator('#base-dashboard, #base')).toHaveCount(0);
@@ -622,7 +622,7 @@ test('fc: current order card uses its own demand, allocation and three-stage gap
   const card = frame.locator('.kpi-card').filter({ hasText: '当前订单' });
   await expect(card.locator('.kpi-value')).toHaveText('450件');
   await expect(card.locator('dl')).toContainText('缺货量3件');
-  await expect(card.locator('dl')).toContainText('基地已占用50件');
+  await expect(card.locator('dl')).toContainText('分仓已占用50件');
   assert.doesNotMatch(await card.innerText(), /16,163|86,814|本月/);
   assert.equal(calls.filter((q) => q.queryId === 'current-shortage.overview').length, 1);
   assert.deepEqual(errors, []);
@@ -708,21 +708,26 @@ test('qll original current-order card retains new base snapshot quantities witho
   );
   assert.deepEqual(errors, []);
 });
-test('QLL branch turnover reads its summary and its date control has a stable Chinese display', async (t) => {
+test('QLL branch turnover uses shipment quantities after its summary arrives and keeps the Chinese date display', async (t) => {
   const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
     if (query.queryId === 'branch-turnover.cards')
-      Object.assign(result.rows[0], { historical_turnover_days: 999, turnover_count: 30 });
+      Object.assign(result.rows[0], {
+        historical_turnover_days: 999,
+        turnover_count: 30,
+        rolling_ship_daily: 446.4,
+      });
     if (query.queryId === 'base_shipments.summary')
       Object.assign(result.rows[0], { rolling_ship_positive: 13392, rolling_missing_qty: 0 });
-    if (query.queryId === 'replenishment.summary')
-      Object.assign(result.rows[0], { rolling_ship_daily: 446.4 });
     return result;
   });
   const card = frame
     .getByRole('button')
     .filter({ has: frame.getByText('库存周转', { exact: true }) });
-  await expect(card).toContainText('12.5天');
-  assert.ok(calls.some((query) => query.queryId === 'branch-turnover.cards'));
+  await expect
+    .poll(() => calls.filter((query) => query.queryId === 'branch-turnover.cards').length)
+    .toBe(1);
+  await expect(card.getByText('分仓周转', { exact: true }).locator('..')).toContainText('12.5天');
+  await expect(card).not.toContainText('999.0天');
   await expect(frame.getByLabel('读取时点')).toHaveValue('2026-10-20');
   await expect(frame.getByText('2026年10月20日', { exact: true })).toBeVisible();
   assert.deepEqual(errors, []);
@@ -1033,7 +1038,7 @@ test('FC current-order card preserves a verified zero independently of monthly q
     .locator('article.kpi-card')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
   await expect(card.locator('.kpi-value')).toHaveText('0件');
-  await expect(card.locator('dt')).toHaveText(['缺货量', '基地已占用']);
+  await expect(card.locator('dt')).toHaveText(['缺货量', '分仓已占用']);
   await expect(card.locator('dd')).toHaveText(['0件', '0件']);
   assert.equal(calls.filter((q) => q.queryId === 'current-shortage.overview').length, 1);
   assert.deepEqual(errors, []);
@@ -1498,7 +1503,7 @@ test('AQKC overview fits five compact cards in a wide row and adapts without cli
 
 function fcWorkflowRows(query, result) {
   const detail =
-    /^(?:replenishment\.detail|branch-plan\.detail|transfer_plan\.(?:detail|template))(?:\.atomic)?$/.test(
+    /^(?:replenishment(?:-confirmation)?\.detail|branch-plan\.detail|transfer_plan\.(?:detail|template))(?:\.atomic)?$/.test(
       query.queryId,
     );
   const values = (index) => ({
@@ -1692,7 +1697,7 @@ test('FC restores real plan template, validates warehouse scope and applies an i
   const card = frame
     .locator('[data-overview-cards="fc"] article')
     .filter({ has: frame.getByText('待补货量', { exact: true }) });
-  await expect(card.locator('.kpi-value')).toHaveText('-'); // Unlisted SKUs in the replaced month remain unknown.
+  await expect(card.locator('.kpi-value')).toHaveText('80件'); // Unknown SKUs do not erase the valid imported recommendation.
   await frame.getByRole('button', { name: '补货确认', exact: true }).click();
   await expect(
     frame.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }),
@@ -1785,7 +1790,7 @@ test('FC refused export reads never download a partial file or retry authorizati
 test('FC DMS export keeps warehouses separate and preserves another warehouse draft', async (t) => {
   const { frame, page, errors } = await mount(t, 'fc', 1280, (query, result) => {
     const value = fcWorkflowRows(query, result);
-    if (query.queryId.startsWith('replenishment.detail'))
+    if (/^replenishment(?:-confirmation)?\.detail/.test(query.queryId))
       value.rows = value.rows.map((row) => {
         const second = Number(String(row.sku).slice(-3)) >= 10;
         return {
@@ -1794,7 +1799,10 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
           warehouse_name: second ? '北京分仓' : '上海分仓',
         };
       });
-    if (query.queryId.startsWith('replenishment.detail') && query.parameters.warehouse_code) {
+    if (
+      /^replenishment(?:-confirmation)?\.detail/.test(query.queryId) &&
+      query.parameters.warehouse_code
+    ) {
       const total = query.parameters.warehouse_code === '001' ? 10 : 11;
       value.rows = value.rows
         .filter((row) => row.warehouse_code === query.parameters.warehouse_code)
@@ -1943,7 +1951,25 @@ for (const [inventory, inTransit, stockDays] of [
   test(`QLL channel switch exposes customer summary and ten-row customer paging: ${inventory}`, async (t) => {
     const { page, frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
       if (query.queryId === 'dealer.stock.summary')
-        Object.assign(result.rows[0], { inventory, in_transit: inTransit, cover_days: stockDays });
+        Object.assign(result.rows[0], {
+          inventory,
+          in_transit: inTransit,
+          cover_days: stockDays,
+          onhand_days: stockDays,
+          onhand_cover_inventory: inventory,
+          onhand_cover_sales30:
+            stockDays === null ? null : stockDays > 0 ? (inventory * 30) / stockDays : 0,
+          valid_onhand_cover: stockDays === null ? 0 : 1,
+          total_inventory: inventory === null || inTransit === null ? null : inventory + inTransit,
+          cover_inventory: inventory === null || inTransit === null ? null : inventory + inTransit,
+          cover_sales30:
+            stockDays === null
+              ? null
+              : stockDays > 0
+                ? ((inventory + inTransit) * 30) / stockDays
+                : 0,
+          valid_cover: stockDays === null ? 0 : 1,
+        });
       return result;
     });
     const grid = frame.locator('[data-overview-cards="qll"]');
@@ -1978,6 +2004,9 @@ for (const [inventory, inTransit, stockDays] of [
     );
     await expect(value(turnover, '客户库存支撑')).toHaveText(
       stockDays === null ? '-' : stockDays === 0 ? '0.0天' : '18.0天',
+    );
+    await expect(stock.locator('strong').last()).toHaveText(
+      inventory === null ? '-' : inventory === 0 ? '1.12万件' : '2.32万件',
     );
     const customerLayer = await openCompanySku(frame, '渠道', '河南省区');
     await expect(customerLayer.locator('tbody tr')).toHaveCount(10);
@@ -2421,9 +2450,9 @@ test('base dashboard model failure leaves cards and detail rows visible', async 
   const { frame, errors } = await mount(t, 'aqkc', 1280, undefined, () => {
     throw Error('MODEL_UNAVAILABLE');
   });
-  await expect(frame.getByRole('region', { name: 'AI 洞察', exact: true })).toContainText(
-    'AI 洞察暂不可用',
-  );
+  const panel = frame.getByRole('region', { name: 'AI 洞察', exact: true });
+  await expect(panel.locator('p')).toHaveText('-');
+  await expect(panel).not.toContainText('暂不可用');
   await expect(frame.locator('[data-overview-cards="aqkc"]')).toBeVisible();
   await expect(frame.locator('tbody tr').first()).toBeVisible();
   assert.deepEqual(errors, []);
@@ -2539,8 +2568,8 @@ test('FC model failure leaves stock cards and ten-row list available', async (t)
   const { frame, errors } = await mount(t, 'fc', 1280, fcWorkflowRows, async () => {
     throw Error('MODEL_UNAVAILABLE');
   });
-  await expect(frame.getByRole('region', { name: 'AI 洞察', exact: true })).toContainText(
-    'AI 洞察暂时生成失败',
+  await expect(frame.getByRole('region', { name: 'AI 洞察', exact: true }).locator('p')).toHaveText(
+    '-',
   );
   await expect(frame.locator('[data-overview-cards="fc"] article')).toHaveCount(5);
   await expect(

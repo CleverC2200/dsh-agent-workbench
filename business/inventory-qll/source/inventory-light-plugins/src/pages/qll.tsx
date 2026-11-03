@@ -65,7 +65,7 @@ const KPI_COPY: Record<
 > = {
   inventoryLevel: {
     title: '当前库存',
-    definition: '当前库存＝基地库存＋分仓库存合计。',
+    definition: '当前库存＝基地库存＋分仓库存；含渠道时加上客户在仓库存。',
     eyebrow: '公司系统 / 全渠道观察',
     target: '目标库存',
   },
@@ -73,7 +73,7 @@ const KPI_COPY: Record<
     title: '库存周转',
     eyebrow: '近30日动销',
     target: '参考口径',
-    definition: '库存周转＝基地／分仓当前库存÷基地／分仓近30日日均动销；基地、分仓分别计算。',
+    definition: '库存合计÷近30日日均动销合计。',
   },
   aging: {
     title: '平均货龄',
@@ -83,17 +83,15 @@ const KPI_COPY: Record<
   },
   fulfillment: {
     title: '订单满足率',
-    definition:
-      '订单满足率：基地为当月已发货订单满足率；分仓为当月向基地下单的调拨订单履约满足率。',
+    definition: '当月已发货客户订单：限额发货量÷订货量。',
     eyebrow: '本自然月',
     target: '目标满足率',
   },
   orderGap: {
     title: '当前订单',
-    eyebrow: '基地待发货／分仓待收货订单',
+    eyebrow: '基地／分仓当前客户订单',
     target: '本月发货量',
-    definition:
-      '当前订单＝基地有效未发货完成订单量（未备单需求＋已备单未发货占用）＋分仓有效未收货完成ASN需求量（预期到货量－已收货量）。',
+    definition: '基地与分仓当前未完成客户订单。',
   },
 };
 
@@ -133,7 +131,9 @@ export function KpiCard({
   const primaryValue =
     metricKey === 'orderGap'
       ? (workspace.orderExecution?.currentOrderQty ?? null)
-      : (inventoryMetric?.companyCurrent ?? metric.current);
+      : workspace.scope === 'all-channel'
+        ? metric.current
+        : (inventoryMetric?.companyCurrent ?? metric.current);
   const cardValue = (value: number | null, unit: MetricValue['unit']) =>
     value == null ? '-' : formatMetric(value, unit, true).replace(/\s+/g, '');
   const splitValues =
@@ -217,7 +217,7 @@ export function KpiCard({
           </div>
         </>
       ) : metricKey === 'turnover' ? (
-        <div title="客户在仓及在途库存÷同范围近30日日均动销">
+        <div title="客户在仓库存÷同范围近30日日均动销">
           <dt>{'客户库存支撑'}</dt>
           <dd>{cardValue(channelSnapshot.stockDays, '天')}</dd>
         </div>
@@ -260,11 +260,9 @@ export function KpiCard({
               : metricKey === 'aging'
                 ? '平均货龄 / >30天库存量；分层展示'
                 : metricKey === 'fulfillment'
-                  ? layer === 'branch'
-                    ? '当月分仓向基地调拨订单，逐行限额发货量÷同池需求量'
-                    : '同月已发货订单池，逐行限额发货量÷同池订单量'
+                  ? '当月已发货客户订单'
                   : layer === 'branch'
-                    ? '有效未收货完成ASN的预期到货量－已收货量'
+                    ? '当前未完成客户订单'
                     : '未备单完成需求量＋备单完成未发货占用量';
         return (
           <div key={layer}>
@@ -320,10 +318,7 @@ export function KpiCard({
             }
           >
             {splitValues ? (
-              <strong className={styles.kpiValue}>
-                {cardValue(splitValues[0].value, splitValues[0].unit)}
-                <small className={styles.kpiScopeLabel}>{'基地'}</small>
-              </strong>
+              <strong className={styles.kpiValue}>{valueText}</strong>
             ) : (
               <strong
                 className={`${styles.kpiValue} ${unavailable ? styles.kpiUnavailable : metric.state === 'risk' ? styles.kpiValueRisk : ''}`}
@@ -1440,7 +1435,7 @@ export function FullChainWorkbench() {
                         )}
                         <p className={styles.referenceFoot}>
                           {
-                            '公司数量为件；客户预订单总量为箱，渠道日快照为件，未做跨单位加总。基地周转使用计划日均、分仓使用实际日均出库，不合成公司回顾周转。大区、省区、物料组暂无对应来源，不展示演示归属。'
+                            '数量按件汇总；含渠道计入客户在仓。周转按同范围库存与近30日日均动销重算。'
                           }
                         </p>
                       </details>

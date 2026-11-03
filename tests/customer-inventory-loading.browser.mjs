@@ -195,7 +195,8 @@ test('customer SKU tab has no extra toolbar and follows outer customer filters w
   await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
   const panel = frame.getByRole('region', { name: '客户SKU库存明细' });
   await expect(panel.getByText('商品A-0', { exact: true })).toBeVisible();
-  await expect(panel.locator('.arco-table-th')).toHaveCount(17);
+  await expect(panel.locator('.arco-table-th')).toHaveCount(18);
+  await expect(panel.locator('.arco-table-th').filter({ hasText: '大日期库存' })).toHaveCount(1);
   await expect(panel.locator('.customer-sku-filters')).toHaveCount(0);
   await expect(panel.locator('details')).toHaveCount(0);
   await expect(panel.getByRole('button')).toHaveCount(0);
@@ -367,6 +368,9 @@ test('SQL failure preserves the interface and does not publish a fake empty succ
     '当前用户暂无客户库存数据权限',
   );
   await expect(frame.locator('.dealer-table-card')).toBeVisible();
+  const customerCount = frame.locator('.metric-card').filter({ hasText: '有库存的客户数' });
+  await expect(customerCount.locator('.metric-value')).toHaveText('—');
+  await expect(customerCount.locator('.arco-statistic')).toHaveCount(0);
   assert.deepEqual(await page.evaluate(() => window.receivedContexts), []);
   assert.deepEqual(errors, []);
 });
@@ -377,6 +381,9 @@ test('successful empty inventory is explicit rather than a loading or permission
     '当前授权范围暂无客户库存数据',
   );
   await expect(frame.locator('.metric-card')).toHaveCount(7);
+  await expect(frame.locator('.metric-card').filter({ hasText: '有库存的客户数' })).toContainText(
+    '0个',
+  );
   assert.deepEqual(errors, []);
 });
 
@@ -439,6 +446,38 @@ test('successful reads fill the same shell; identity changes remove previous inv
   await expect(frame.locator('.metric-card')).toHaveCount(7);
   assert.deepEqual(errors, []);
   assert.ok((await page.evaluate(() => window.receivedContexts)).length > 0);
+});
+
+test('a null customer name displays its code and preserves the rest of the loaded inventory', async (t) => {
+  const rows = [
+    {
+      snapshot_date: '2026-11-03',
+      cust_code: '20161634',
+      cust_name: null,
+      stock_qty: 0,
+      sku_rows: 2,
+      stock_coverage: 2,
+    },
+    {
+      snapshot_date: '2026-11-03',
+      cust_code: 'normal',
+      cust_name: '正常客户',
+      stock_qty: 10,
+      sku_rows: 1,
+      stock_coverage: 1,
+    },
+  ];
+  const { frame, errors } = await fixture(t, { rows });
+  await expect(frame.locator('#customer-load-status')).toBeHidden();
+  await expect(frame.locator('.dealer-table-card')).toContainText('20161634');
+  await expect(frame.locator('.dealer-table-card')).toContainText('正常客户');
+  await expect(frame.locator('.dealer-name strong').filter({ hasText: /^20161634$/ })).toHaveCount(
+    1,
+  );
+  await expect(frame.locator('.metric-card').filter({ hasText: '有库存的客户数' })).toContainText(
+    '1个',
+  );
+  assert.deepEqual(errors, []);
 });
 
 test('region, province and city choices rebuild after rows arrive, including a role selected while loading', async (t) => {
