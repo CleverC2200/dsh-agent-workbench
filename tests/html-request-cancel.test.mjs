@@ -111,7 +111,7 @@ for (const cause of ['abort', 'timeout'])
     );
   });
 
-test('a page feedback draft uses the owned Core input interface and never submits a prompt', async (t) => {
+test('drafts stay unsent and explicit conversations reveal the associated chat only after sending', async (t) => {
   const saved = { window: globalThis.window, document: globalThis.document };
   const hostListeners = new Set(),
     pageListeners = new Set();
@@ -149,6 +149,7 @@ test('a page feedback draft uses the owned Core input interface and never submit
   globalThis.window = host;
   const { connectHtmlFrame } = await load('src/html-bridge.ts', 'feedback-draft');
   let prompted = 0;
+  let conversationsShown = 0;
   const drafts = [];
   const execution = {
     call: async () => [],
@@ -171,6 +172,10 @@ test('a page feedback draft uses the owned Core input interface and never submit
     () => ({ active: { colorScheme: 'light', tokens: {} }, fontSize: 14 }),
     new AbortController().signal,
     () => {},
+    undefined,
+    () => {
+      conversationsShown++;
+    },
   );
   t.after(async () => {
     stop();
@@ -182,6 +187,17 @@ test('a page feedback draft uses the owned Core input interface and never submit
   });
   assert.deepEqual(drafts, [{ session: 'owned', text: '请继续核对本事项。未发送。' }]);
   assert.equal(prompted, 0);
+  assert.equal(conversationsShown, 0);
   await assert.rejects(channel.call('draft', { text: '', rpc: 'submit' }), /INVALID_PAGE_DRAFT/);
   assert.equal(drafts.length, 1);
+  assert.deepEqual(await channel.ask('生成指标明细表', { pageId: 'inventory-orderworkbench' }), {
+    sent: true,
+  });
+  assert.equal(prompted, 1);
+  assert.equal(conversationsShown, 1);
+  execution.prompt = async () => {
+    throw Error('MODEL_UNAVAILABLE');
+  };
+  await assert.rejects(channel.ask('再次生成', {}), /MODEL_UNAVAILABLE/);
+  assert.equal(conversationsShown, 1);
 });

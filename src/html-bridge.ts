@@ -15,6 +15,7 @@ export function connectHtmlFrame(
   signal: AbortSignal,
   failed: (error: unknown) => void,
   onConnected?: () => void,
+  onConversation?: () => void,
 ): { (): void; sendTheme(): void } {
   const lifetime = new AbortController();
   const channel = new MessageChannel();
@@ -187,6 +188,7 @@ export function connectHtmlFrame(
             text,
             AbortSignal.any([signal, lifetime.signal, task.signal]),
           );
+          if (alive() && !task.signal.aborted) onConversation?.();
           result = { sent: true };
         } else if (message.method === 'fulfillment-simulation') {
           result = await fulfillmentSimulationRequest(

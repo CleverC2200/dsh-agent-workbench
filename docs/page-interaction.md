@@ -42,6 +42,8 @@ HTML待执行动作携带其owned lease对应的真实`session`。页面端在�
 
 页面桥 `draft` 方法只接收 `{text}`，通过当前已授权连接的真实Session追加未发送纯文字。Core公开 `slash/input-insert-text` 事件校验编辑revision并持久化语义草稿，已有文字与引用保留。忙态、取消或编辑变化拒绝插入。`conversation` 仍会发送模型Task，本批个人反馈按钮只调用 `draft`。
 
+订单工作台指标卡的显式点击使用 `conversation` 向该页面关联的 Session 发送明细请求，携带本期、本周实际边界、当前指标口径和来源状态，路由 `operations-order-kpi-details` 生成对应表格。发送成功后展示页面与对话分栏；仅插入草稿的其他按钮仍使用 `draft`，不因此自动发送。
+
 ## 工具回执
 
 `startPageBridgeClient` 在宿主请求成功后移除本批回执。请求未到 Host，或 Host 已接受但响应丢失时，下一轮重发相同回执。客户端按工具调用 ID 防止重复执行，Host 忽略已完成调用的重复回执。离页或换 Session 时释放旧客户端，取消在途应用并停止旧回执重试；新客户端只向新 Session 交付自己的回执。

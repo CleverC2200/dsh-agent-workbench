@@ -1,5 +1,6 @@
 import { createReportPersistence } from '../prototypes/inventory-orderworkbench/report-persistence.mjs';
 import { createFrameProgress } from '../business/shared/frame-progress.js';
+import { metricDetailsRequest } from '../prototypes/inventory-orderworkbench/metric-details.mjs';
 import { startDashboardTiming } from '../business/shared/dashboard-timing.js';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -81,6 +82,11 @@ test('order workbench reference interactions', async () => {
   window.workbenchEvidence = model.workbenchEvidence;
   window.workbenchMetricDetail = model.workbenchMetricDetail;
   window.workbenchCellMissingReason = model.workbenchCellMissingReason;
+  window.metricDetailsRequest = metricDetailsRequest;
+  window.detailRequests = [];
+  window.ask = async (text, context) => {
+    window.detailRequests.push({ text, context });
+  };
   window.shippableDaysTarget = shippableDaysTarget;
   window.performanceStyleVersion = performanceStyleVersion;
   window.metricCalculationVersion = metricCalculationVersion;
@@ -131,9 +137,12 @@ test('order workbench reference interactions', async () => {
         .getElementById(id)
         .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     click('.wb-kpi');
-    assert.equal(document.getElementById('wbDetailOverlay').hidden, false);
-    assert.match(document.getElementById('wbDetailBody').textContent, /上月同期.*10.00%/);
-    click('#wbDetailClose');
+    click('.wb-kpi');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(document.getElementById('wbDetailOverlay').hidden, true);
+    assert.equal(window.detailRequests.length, 1);
+    assert.match(window.detailRequests[0].text, /operations-order-kpi-details.*作废率指标明细/);
+    assert.equal(window.detailRequests[0].context.consumerCode, 'order');
     click('#periodPickerTrigger');
     assert.equal(document.getElementById('periodPickerMenu').hidden, false);
     click('[data-period-week="2026-08-31"]');
