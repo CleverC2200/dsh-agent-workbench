@@ -571,3 +571,44 @@ test('三年指标请求未结束时，上一财年占比仍可独立完成读�
     release();
   }
 });
+
+test('模型双期预测按产品物料编码显示大类系列和真实物料组，保留零数量', async (t) => {
+  const { frame } = await mpsPage(t, config, (query) => {
+    if (!query.queryId.startsWith('forecast.')) return fixture(query);
+    const rows = ['A', 'B'].map((code, index) =>
+      record('forecast.detail', {
+        stat_month: '2026-11',
+        belong_base: '郑州',
+        material_code: code,
+        material_name: '产品' + code,
+        current_month_forecast_qty: index ? 5 : 0,
+        next_month_forecast_qty: index ? 7 : 10,
+        source_rows: 1,
+      }),
+    );
+    const count = query.queryId.endsWith('.count');
+    return {
+      rows: count
+        ? [{ total: rows.length }]
+        : rows.slice(query.parameters.offset, query.parameters.offset + query.parameters.page_size),
+      returnedColumns: count ? ['total'] : config.queries[query.queryId].columns,
+      configVersion: 'forecast-sku-fixture',
+    };
+  });
+  await version(frame, '2026-11');
+  const card = frame.getByRole('region', { name: '模型双期预测', exact: true });
+  await expect(card.getByRole('button', { name: '大类 1', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: '系列 1', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: '物料组 1', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: '产品 2', exact: true })).toBeVisible();
+  await card.getByRole('button', { name: '预览当前明细', exact: true }).click();
+  const dialog = frame.getByRole('dialog');
+  const row = dialog
+    .locator('tbody tr')
+    .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) });
+  await expect(row).toContainText('汤圆');
+  await expect(row).toContainText('系列甲');
+  await expect(row.getByRole('cell', { name: 'G', exact: true })).toBeVisible();
+  const columns = await dialog.getByRole('columnheader').allTextContents();
+  await expect(row.locator('td').nth(columns.indexOf('数量'))).toHaveText('0');
+});

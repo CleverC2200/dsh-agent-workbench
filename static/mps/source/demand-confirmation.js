@@ -358,10 +358,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const { period, column, rows } = sourceSelection(draft, type);
     const business = draft[type + 'Source'] === 'business';
     const sourceDimensions =
-      type === 'forecast' && business ? ['基地', '大类', '系列', '物料组'] : dimensions;
+      type === 'forecast' && business ? ['基地', '大类', '系列', '物料组', '产品编码'] : dimensions;
     const visibleColumns =
       type === 'forecast' && business
-        ? ['月份', '基地', '物料组', '物料组名称', '大类', '系列']
+        ? ['月份', '基地', '产品编码', '产品名称', '物料组', '物料组名称', '大类', '系列']
         : type === 'report' && business
           ? ['月份', '大区', '基地', '产品编码', '产品名称', '大类', '系列', '物料组', '物料组名称']
           : sourceColumns;
@@ -499,7 +499,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             type === 'report'
               ? '期初与纠偏为两个完整版本，分别使用，不相加。按大区×基地×SKU汇总；大区按客户与物料关系匹配，产品分类取产品清单。缺基地或数量不可用时留空。'
               : type === 'forecast'
-                ? `预测批次 ${draft.month}：当月列对应${draft.month}，下一月列对应${monthOffset(draft.month, 1)}。按基地×物料组汇总，缺数量时不以部分合计代替完整预测。分类按同物料组SKU的一致源值补充，单位待确认。`
+                ? `预测批次 ${draft.month}：当月列对应${draft.month}，下一月列对应${monthOffset(draft.month, 1)}。按基地×物料编码读取，缺数量时不以部分合计代替完整预测。大类、系列及物料组按当前产品明细的物料编码对应，单位待确认。`
                 : '按实际发货日期汇总同一期间。发货数量与含赠品数量分别展示，不相加；不含税收入不替代含税销售额。',
           ),
         business &&
@@ -1382,7 +1382,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 : undefined,
             dimensions: Object.fromEntries(
               (type === 'forecast' && draft.forecastSource === 'business'
-                ? ['基地', '大类', '系列', '物料组']
+                ? ['基地', '大类', '系列', '物料组', '产品编码']
                 : dimensions
               ).map((dimension) => [
                 dimension,

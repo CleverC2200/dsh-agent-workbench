@@ -100,21 +100,21 @@ export function forecastRows(rows, month) {
     const count = counts.get(key(row));
     const issue =
       !base.trim() || !code.trim()
-        ? '缺基地或物料组编码'
+        ? '缺基地或物料编码'
         : count > 1
-          ? '同批次基地物料组汇总重复，未合计'
+          ? '同批次基地物料汇总重复，未合计'
           : '';
     const current = quantity(row.current_month_forecast_qty),
       next = quantity(row.next_month_forecast_qty);
     return [current, next].map((value, offset) => ({
       月份: monthOffset(month, offset),
       基地: base,
-      产品编码: '',
-      产品名称: '',
+      产品编码: code,
+      产品名称: text(row.material_name),
       大类: '',
       系列: '',
-      物料组: code,
-      物料组名称: text(row.material_name),
+      物料组: '',
+      物料组名称: '',
       数量: issue ? '' : value,
       预测批次: month,
       源批次月份: text(row.stat_month),
@@ -129,20 +129,24 @@ export function forecastDimensions(rows, products) {
   return rows.map((row) => {
     const matches = products.filter(
       (p) =>
-        p['物料组'] && p['物料组'] === row['物料组'] && (!p['基地'] || p['基地'] === row['基地']),
+        p['产品编码'] &&
+        p['产品编码'] === row['产品编码'] &&
+        (!p['基地'] || p['基地'] === row['基地']),
     );
     if (!matches.length)
       return {
         ...row,
-        缺项原因: [row['缺项原因'], '物料组未匹配主数据，分类留空'].filter(Boolean).join('；'),
+        缺项原因: [row['缺项原因'], '物料编码未匹配当前产品明细，分类留空']
+          .filter(Boolean)
+          .join('；'),
       };
     const fields = {},
       issues = [];
-    for (const name of ['大类', '系列', '物料组名称']) {
+    for (const name of ['大类', '系列', '物料组', '物料组名称']) {
       const values = [...new Set(matches.map((product) => product[name]).filter(Boolean))];
       fields[name] =
         matches.every((product) => product[name]) && values.length === 1 ? values[0] : '';
-      if (values.length > 1) issues.push(`物料组${name}存在多个源值，未选择`);
+      if (values.length > 1) issues.push(`同物料编码的${name}存在多个当前值，未选择`);
     }
     return { ...row, ...fields, 缺项原因: [row['缺项原因'], ...issues].filter(Boolean).join('；') };
   });
