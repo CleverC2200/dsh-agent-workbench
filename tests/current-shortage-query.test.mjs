@@ -19,7 +19,7 @@ const { readCurrentShortage: readSourceShortage, currentShortageSum } = await im
 // Model the snapshot discovery request separately from the source shortage fixtures.
 function readCurrentShortage(config, queryId, filters, options) {
   const execute = async (request, call) => {
-    if (call.queryId === 'summary.snapshot') return { rows: [] };
+    if (['summary.snapshot', 'summary.bootstrap'].includes(call.queryId)) return { rows: [] };
     const result = await options.execute(request, call);
     if (queryId.endsWith('.locations') && result.rows) {
       if (call.queryId.endsWith('.count')) return { rows: [{ total: result.rows.length }] };

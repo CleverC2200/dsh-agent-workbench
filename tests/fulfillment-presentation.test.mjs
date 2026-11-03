@@ -67,7 +67,16 @@ test('packaged fulfillment Agent exposes the complete ordered Skill set and prom
   const load = async (path) => JSON.parse(await readFile(new URL(path, root), 'utf8'));
   const manifest = await load('plugin.json');
   const profile = await load('prompt.json');
-  assert.equal(profile.skills.length, 11);
+  const declared = JSON.parse(
+    await readFile(
+      new URL(
+        '../../dsh-agent-manage/business-resources/inventory-orderfulfillment/prompt.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  );
+  assert.deepEqual(profile.skills, declared.skills);
   for (const [index, name] of profile.skills.entries()) {
     const skill = await readFile(new URL(manifest.skills[index], root), 'utf8');
     assert.ok(skill.includes(`name: ${name}`));

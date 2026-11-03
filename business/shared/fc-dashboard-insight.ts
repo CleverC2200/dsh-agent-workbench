@@ -36,7 +36,7 @@ export function branchDashboardEvidence(input: {
       ? null
       : values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
   };
-  const available = number(plan.available_qty) ?? number(stock.available_qty);
+  const available = number(stock.available_qty) ?? number(plan.available_qty);
   const totalRows = number(plan.row_count);
   const comparable = input.localPlanTrial ? null : number(plan.comparable_sku_count);
   const deviation = input.localPlanTrial ? null : number(plan.known_inventory_deviation_qty);
@@ -128,21 +128,25 @@ export function branchDashboardEvidence(input: {
       transferInTransitQty: number(plan.known_in_transit),
       alreadyDeductedFromRecommendation: true,
     },
-    baseSupply: {
-      direction: '分仓向基地补货；货物由基地发往收货分仓',
-      monthlyDemandQty: number(summary('branch-supply').demand),
-      monthlyShippedQty: number(summary('branch-supply').shipped),
-      monthlyFulfillmentRate: number(summary('branch-supply').fulfillment_rate),
+    customerOrders: {
+      direction: '分仓向下游客户供货',
+      monthlyDemandQty: number(summary('orders').demand),
+      monthlyShippedQty: number(summary('orders').shipped),
+      monthlyFulfillmentRate: number(summary('orders').fulfillment_rate),
       currentDemandQty: currentSum('demand'),
       pendingQty: currentSum('remaining'),
-      inTransitQty: number(plan.known_in_transit),
-      currentBaseAllocatedQty: currentSum('allocated'),
+      currentBranchAllocatedQty: currentSum('allocated'),
       coverage:
-        '月度履约取基地向分仓发货执行；当前订单取有效未收货完成ASN，需求为预期量减已收量，基地占用关联出库执行。调拨在途与页面同步汇总。',
+        '月度履约取分仓向下游客户供货的已发货订单池；当前订单与缺货取分仓有效未完成客户订单。ASN仅用于上游补货备单与在途，不能替代客户订单。',
     },
     sales: {
       last30DaysQty: number(plan.rolling_ship_positive),
       last30DaysDailyQty: number(plan.rolling_ship_daily),
+    },
+    turnover: {
+      forecastDays: number(plan.forecast_turnover_days),
+      basis:
+        '仅库存与展望日均均有效的同一分仓/SKU记录；缺失或异常记录同时排除出分子和分母，不代表全部库存的展望周转。零计划有效，合计日均为零时周转未知。',
     },
     coverage: {
       kind: complete ? '全范围可比' : '仅已核实可比子集，不能判断整体高低库存',
@@ -169,7 +173,8 @@ export function branchDashboardEvidence(input: {
     definitions: {
       inventoryDeviation:
         '高低库存判断只比较comparison中的同一SKU交集：订单扣减后可供库存=该交集目标+差额。totals.currentAvailableQty是全仓可用库存，不能与子集目标、差额或偏差率配对比较。可用库存不含在途。',
-      unknown: 'null为缺失，已知可加和量按已知部分汇总并保留缺失计数；不把未知事实当0。',
+      unknown:
+        'null为缺失。异常或缺失记录不参与其指标汇总，其余有效记录继续计算，保留忽略数量；零值有效，不把未知事实当0。',
       ranking: '当前没有全量分仓×品类排名或SKU交集证据，不使用列表当前页排名或解释错配原因。',
       intersections:
         '缺目标个数和缺计算要素个数均为独立计数，没有SKU交集，不能断言集中在相同SKU、相同批次或同一原因，也不能用两计数接近推断重叠。',

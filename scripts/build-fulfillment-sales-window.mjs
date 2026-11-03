@@ -16,7 +16,8 @@ export async function buildFulfillmentSalesWindow({ output } = {}) {
     .replace(
       '../assets/window-script"',
       '../assets/window-script?release=__ORDER_PRESENTATION_RELEASE__"',
-    );
+    )
+    .replace(/[ \t]+$/gm, '');
   const script =
     (await read('sales-window/order-editor.js')) + '\n' + (await read('sales-window/window.js'));
   const card = await read('sales-confirmation-card.mjs');
@@ -32,7 +33,7 @@ export async function buildFulfillmentSalesWindow({ output } = {}) {
   for (const [name, content] of Object.entries(assets))
     await writeFile(resolve(out, name), content);
   const manifest = {
-    presentationApiVersion: 1,
+    presentationApiVersion: 2,
     owner: 'dsh-agent-workbench',
     consumerCode: 'order01',
     dataMode: 'EXISTING_AUTHORIZED_SALES_WINDOW',

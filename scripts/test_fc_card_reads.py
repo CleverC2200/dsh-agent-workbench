@@ -2,13 +2,13 @@
 import json
 import unittest
 from pathlib import Path
-import test_fc_upstream_orders
+import test_fc_current_orders
 
 ROOT = Path(__file__).resolve().parents[1]
 
 class CardReads(unittest.TestCase):
     def setUp(self):
-        fixture = test_fc_upstream_orders.UpstreamOrders()
+        fixture = test_fc_current_orders.BranchCurrentOrders()
         fixture.setUp()
         self.db = fixture.db
         self.addCleanup(self.db.close)
@@ -30,32 +30,32 @@ class CardReads(unittest.TestCase):
             self.assertEqual(self.read('current-shortage.summary', warehouse_code=warehouse), actual)
 
     def test_shared_count_counts_sku_locations_not_order_lines(self):
-        for warehouse, expected in [(None, 2), ('BR1', 1), ('BR2', 1), ('missing', 0)]:
+        for warehouse, expected in [(None, 1), ('BR1', 0), ('BR2', 1), ('missing', 0)]:
             rows = self.read('current-shortage.overview', warehouse_code=warehouse)
             self.assertEqual(sum(row['replenishment_shortage_sku_count'] for row in rows), expected)
 
-    def test_orders_keep_fifo_for_all_and_selected_warehouses(self):
+    def test_customer_stock_deducted_once_for_all_and_selected_warehouses(self):
         self.assert_orders_equal()
 
     def test_orders_keep_unknown_allocations(self):
-        self.db.execute("UPDATE agents_scm_execute_detail_hourly_d SET qtyallocated=NULL WHERE fromorderno='O1'")
+        self.db.execute("UPDATE agents_scm_execute_detail_d SET qtyallocated=NULL WHERE cust_order_no='O1'")
         self.assert_orders_equal()
 
     def test_orders_do_not_depend_on_unused_product_labels(self):
-        self.db.executemany('INSERT INTO agents_scm_material_in_out_summary_d VALUES (?,?,?)', [('SKU','汤圆','A'), ('SKU','水饺','B')])
+        self.db.executemany('INSERT INTO agents_scm_material_in_out_summary_d (material_code,product_categ_name,material_group_name) VALUES (?,?,?)', [('SKU','汤圆','A'), ('SKU','水饺','B')])
         self.assert_orders_equal()
 
     def test_snapshot_and_inventory_match_existing_aggregate_at_identical_date(self):
         for warehouse in [None, 'BR1', 'BR2', 'missing']:
             row = self.read('source.branch-stock-date', as_of='2026-11-02', warehouse_code=warehouse)[0]
-            self.assertEqual(row.pop('day'), '2026-10-30')
-            expected = self.read('health.inventory', stat_date='2026-10-30', warehouse_code=warehouse)[0]
+            self.assertEqual(row.pop('day'), '2026-11-02')
+            expected = self.read('health.inventory', stat_date='2026-11-02', warehouse_code=warehouse)[0]
             self.assertEqual(row, expected)
 
     def test_latest_date_is_not_changed_by_selected_warehouse(self):
         self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET month_date='20261029' WHERE warehouseid='BR1'")
         row = self.read('source.branch-stock-date', as_of='2026-11-02', warehouse_code='BR1')[0]
-        self.assertEqual(row['day'], '2026-10-30')
+        self.assertEqual(row['day'], '2026-11-02')
         self.assertEqual(row['row_count'], 0)
         self.assertIsNone(row['total_qty'])
 

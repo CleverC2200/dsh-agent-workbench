@@ -1,23 +1,697 @@
 <!doctype html>
-<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>订单销售确认</title>
-<style>
-[hidden]{display:none!important}
-body{margin:0;background:#f5f6f7;color:#34383e;font:16px/1.7 system-ui,sans-serif}main{max-width:700px;margin:24px auto;background:white;padding:24px;border-radius:12px}h1{font-size:22px;margin:0 0 18px}#summary{white-space:pre-line;color:#555}article{padding:16px 0;border-bottom:1px solid #e5e6eb}article p{margin:4px 0;color:#666}.actions{display:flex;justify-content:flex-end;gap:12px;margin-top:24px;border-top:1px solid #e5e6eb;padding-top:18px}button,select{font:inherit;border:1px solid #c9cdd4;border-radius:8px;background:white;padding:8px 20px}button{cursor:pointer}button.primary{color:#fff;background:#245bdb;border-color:#245bdb}button:disabled{opacity:.5;cursor:default}#notice{color:#d33;min-height:1.7em}#result{padding:12px;background:#f0f7ff;color:#245bdb}small{color:#86909c}label{display:block;margin:18px 0}#quantity{font-weight:600}@media(max-width:500px){main{margin:0;padding:20px;border-radius:0}.actions button{flex:1;min-width:0}select{width:100%;margin-top:8px}}
-</style>
-<main id="confirmationMain"><h1 id="title">订单销售确认</h1><p id="summary"></p><section id="items" hidden></section>
-<label id="defer" hidden>暂缓天数 <select id="days" aria-label="暂缓天数"><option value="">请选择 1—7 天</option><option value="1">1 天</option><option value="2">2 天</option><option value="3">3 天</option><option value="4">4 天</option><option value="5">5 天</option><option value="6">6 天</option><option value="7">7 天</option></select></label>
-<p id="quantity"></p><p id="notice" role="alert"></p><p id="result" role="status" hidden></p>
-<nav id="pages" hidden><button id="previous">上一页</button> <span id="pageLabel"></span> <button id="next">下一页</button></nav>
-<small>本次只登记销售处理决定，实际开单、发货及改单由业务系统执行。</small>
-<div class="actions"><button id="cancel">返回</button><button class="primary" id="submit" disabled>确认</button></div></main>
-<!--update-begin---author:Codex ---date:2026-11-02 for：【订单履约正式确认链路本地联调】避开测试代理静态JS路由----------- -->
-<main id="orderEditor" hidden aria-label="缺货订单处理"></main>
-<style>
-/* update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅订单处理窗口布局----------- */
-#orderEditor{padding:0;max-width:700px}#orderEditor header{display:flex;align-items:center;gap:12px;padding:16px;border-bottom:1px solid #eee}#orderEditor h1{font-size:20px;margin:0;flex:1}#orderEditor button{font-size:14px;padding:6px 12px}#orderEditor .editor-body{padding:16px}#orderEditor .editor-note{font-size:13px;color:#86909c;margin:8px 0}#orderEditor .editor-warning{color:#c73535;font-size:13px;white-space:pre-line}#orderEditor .editor-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}#orderEditor .editor-search{font:inherit;width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:8px;padding:8px 12px}#orderEditor article{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px}#orderEditor .editor-image{height:64px;border-radius:6px;background:#f2f3f5;display:grid;place-items:center;color:#86909c;font-size:13px}#orderEditor .editor-item-info{min-width:0}#orderEditor .editor-item-info strong{display:block;overflow-wrap:anywhere}#orderEditor .editor-quantity{display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:8px}#orderEditor input[type=number]{width:76px;text-align:center;font:inherit;border:1px solid #ddd;border-radius:4px;padding:4px}#orderEditor footer{padding:16px;border-top:1px solid #eee;display:flex;gap:12px;align-items:center;flex-wrap:wrap}#orderEditor footer .editor-totals{flex:1;min-width:180px}#orderEditor .editor-primary{color:white;background:#ed2232;border-color:#ed2232}#orderEditor button[aria-pressed=true]{color:#ed2232;border-color:#ed2232}#orderEditor .editor-empty{padding:32px;text-align:center;color:#86909c}#orderEditor label{margin:0}#orderEditor select{font-size:14px;max-width:100%;padding:6px}
-/* update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅订单处理窗口布局----------- */
-</style>
+<html lang="zh-CN">
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>正在加载订单</title>
+  <style>
+    [hidden] {
+      display: none !important;
+    }
+    body {
+      margin: 0;
+      background: #f5f6f7;
+      color: #34383e;
+      font:
+        16px/1.7 system-ui,
+        sans-serif;
+    }
+    main {
+      max-width: 700px;
+      margin: 24px auto;
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+    }
+    h1 {
+      font-size: 22px;
+      margin: 0 0 18px;
+    }
+    #summary {
+      white-space: pre-line;
+      color: #555;
+    }
+    article {
+      padding: 16px 0;
+      border-bottom: 1px solid #e5e6eb;
+    }
+    article p {
+      margin: 4px 0;
+      color: #666;
+    }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 24px;
+      border-top: 1px solid #e5e6eb;
+      padding-top: 18px;
+    }
+    #process,
+    button,
+    select {
+      font: inherit;
+      border: 1px solid #c9cdd4;
+      border-radius: 8px;
+      background: white;
+      padding: 8px 20px;
+    }
+    button {
+      cursor: pointer;
+    }
+    button.primary {
+      color: #fff;
+      background: #245bdb;
+      border-color: #245bdb;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    #notice {
+      color: #d33;
+      min-height: 1.7em;
+    }
+    #result {
+      padding: 12px;
+      background: #f0f7ff;
+      color: #245bdb;
+    }
+    small {
+      color: #86909c;
+    }
+    label {
+      display: block;
+      margin: 18px 0;
+    }
+    #quantity {
+      font-weight: 600;
+    }
+    @media (max-width: 500px) {
+      main {
+        margin: 0;
+        padding: 20px;
+        border-radius: 0;
+      }
+      .actions button {
+        flex: 1;
+        min-width: 0;
+      }
+      select {
+        width: 100%;
+        margin-top: 8px;
+      }
+    }
+  </style>
+  <main id="windowLoading" role="status" aria-live="polite">
+    <h1>正在加载订单…</h1>
+    <p>正在读取订单信息，请稍候。</p>
+  </main>
+  <main id="confirmationMain" hidden>
+    <h1 id="title"></h1>
+    <p id="summary"></p>
+    <section id="items" hidden></section>
+    <label id="defer" hidden
+      >暂缓天数
+      <select id="days" aria-label="暂缓天数">
+        <option value="">请选择 1—7 天</option>
+        <option value="1">1 天</option>
+        <option value="2">2 天</option>
+        <option value="3">3 天</option>
+        <option value="4">4 天</option>
+        <option value="5">5 天</option>
+        <option value="6">6 天</option>
+        <option value="7">7 天</option>
+      </select></label
+    >
+    <p id="quantity"></p>
+    <p id="notice" role="alert"></p>
+    <p id="result" role="status" hidden></p>
+    <nav id="pages" hidden>
+      <button id="previous">上一页</button> <span id="pageLabel"></span>
+      <button id="next">下一页</button>
+    </nav>
+    <small>OMS 尚未接入：本次仅保存确认／暂缓决定，不执行开单、发货或改单。</small>
+    <div class="actions">
+      <button id="cancel">返回</button><a id="process" hidden>订单处理</a
+      ><button class="primary" id="submit" disabled>确认</button>
+    </div>
+  </main>
+  <!--update-begin---author:Codex ---date:2026-11-02 for：【订单履约正式确认链路本地联调】避开测试代理静态JS路由----------- -->
+  <main id="orderEditor" hidden aria-label="缺货订单处理"></main>
+  <style>
+    /* update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅订单处理窗口布局----------- */
+    #orderEditor {
+      width: min(760px, calc(100% - 32px));
+      height: calc(100dvh - 32px);
+      max-height: 1000px;
+      max-width: 760px;
+      margin: 16px auto;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 4px 24px #1f29370a;
+    }
+    #orderEditor * {
+      box-sizing: border-box;
+    }
+    #orderEditor header {
+      display: grid;
+      grid-template-columns: 110px 1fr 110px;
+      align-items: center;
+      min-height: 56px;
+      padding: 0 20px;
+      background: #f4f4f5;
+      border-bottom: 1px solid #eceef0;
+      flex-shrink: 0;
+    }
+    #orderEditor h1 {
+      margin: 0;
+      text-align: center;
+      font-size: 20px;
+      font-weight: 650;
+    }
+    #orderEditor button {
+      font: inherit;
+      font-size: 14px;
+      padding: 7px 12px;
+      border: 1px solid #e8e8eb;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+    }
+    #orderEditor button:disabled {
+      cursor: not-allowed;
+    }
+    #orderEditor button:focus-visible,
+    #orderEditor input:focus-visible,
+    #orderEditor select:focus-visible {
+      outline: 2px solid #ed2232;
+      outline-offset: 2px;
+    }
+    #orderEditor .editor-back,
+    #orderEditor .editor-cart {
+      border: 0;
+      background: transparent;
+      padding: 8px 0;
+      text-align: left;
+      color: #60646c;
+    }
+    #orderEditor .editor-cart {
+      text-align: right;
+      font-size: 12px;
+    }
+    #orderEditor .editor-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #orderEditor .editor-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 24px;
+      border-bottom: 1px solid #efeff1;
+      flex-shrink: 0;
+    }
+    #orderEditor .editor-toolbar > span {
+      flex: 1;
+      white-space: nowrap;
+      font-size: 15px;
+    }
+    #orderEditor .editor-toolbar label {
+      margin: 0;
+    }
+    #orderEditor .editor-vehicle select {
+      max-width: 190px;
+      padding: 6px;
+      border: 0;
+      background: white;
+      color: #9c9fa6;
+      font-size: 13px;
+    }
+    #orderEditor .editor-add {
+      border: 0;
+      padding: 6px 0;
+      color: #ed2232;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    #orderEditor .editor-order-products {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+    }
+    #orderEditor .editor-products {
+      min-width: 0;
+    }
+    #orderEditor article {
+      display: grid;
+      grid-template-columns: 108px minmax(0, 1fr);
+      gap: 20px;
+      padding: 20px 24px;
+      border-bottom: 1px solid #efeff1;
+      margin: 0;
+    }
+    #orderEditor .editor-image {
+      position: relative;
+      width: 108px;
+      height: 122px;
+      align-self: start;
+      overflow: hidden;
+      background: #f5f5f6;
+      border: 1px solid #e9e9ec;
+      border-radius: 7px;
+    }
+    #orderEditor .editor-image:before {
+      content: '';
+      position: absolute;
+      left: 22%;
+      top: 34%;
+      width: 54%;
+      height: 38%;
+      background: #dedfe3;
+      clip-path: polygon(0 100%, 36% 16%, 61% 67%, 77% 40%, 100% 100%);
+    }
+    #orderEditor .editor-image:after {
+      content: '';
+      position: absolute;
+      top: 21%;
+      right: 22%;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: #dedfe3;
+    }
+    #orderEditor .editor-image span {
+      position: absolute;
+      bottom: 7px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 11px;
+      color: #9c9fa6;
+    }
+    #orderEditor .editor-item-info {
+      min-width: 0;
+    }
+    #orderEditor .editor-product-name {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      color: #29313c;
+      font-size: 16px;
+      line-height: 1.6;
+      font-weight: 650;
+      overflow-wrap: anywhere;
+    }
+    #orderEditor article .editor-spec {
+      margin: 4px 0 0;
+      color: #9b9ea5;
+      font-size: 13px;
+    }
+    #orderEditor .editor-sku,
+    #orderEditor .editor-original {
+      display: block;
+      color: #a2a5ac;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+    #orderEditor .editor-product-trading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    #orderEditor .editor-price {
+      flex-shrink: 0;
+    }
+    #orderEditor .editor-price strong {
+      display: block;
+      font-size: 17px;
+      font-weight: 650;
+      color: #252b32;
+    }
+    #orderEditor .editor-price small {
+      display: block;
+      font-size: 10px;
+      color: #a2a5ac;
+    }
+    #orderEditor .editor-quantity {
+      display: flex;
+      align-items: center;
+      margin-left: auto;
+    }
+    #orderEditor .editor-quantity button {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border-radius: 5px 0 0 5px;
+      color: #343a44;
+      font-size: 18px;
+    }
+    #orderEditor .editor-quantity button:last-of-type {
+      border-radius: 0 5px 5px 0;
+    }
+    #orderEditor .editor-quantity button:disabled {
+      color: #c6c9d0;
+      background: #fafafa;
+    }
+    #orderEditor input[type='number'] {
+      width: 48px;
+      height: 32px;
+      padding: 0 3px;
+      border: 1px solid #e8e8eb;
+      border-left: 0;
+      border-right: 0;
+      border-radius: 0;
+      text-align: center;
+      font: inherit;
+      font-size: 14px;
+      appearance: textfield;
+      background: white;
+    }
+    #orderEditor input[type='number']::-webkit-inner-spin-button,
+    #orderEditor input[type='number']::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    #orderEditor .editor-quantity > span {
+      margin-left: 7px;
+      font-size: 11px;
+      color: #9b9ea5;
+    }
+    #orderEditor article .editor-stock-warning {
+      text-align: right;
+      margin: 7px 0 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #ed2232;
+    }
+    #orderEditor .editor-original {
+      margin-top: 4px;
+    }
+    #orderEditor .editor-delivery-info {
+      padding: 12px 24px 4px;
+      color: #9b9ea5;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    #orderEditor .editor-delivery-info p {
+      margin: 3px 0;
+      overflow-wrap: anywhere;
+    }
+    #orderEditor .editor-disclosure {
+      padding: 7px 24px 10px;
+      color: #989ca5;
+      font-size: 11px;
+      flex-shrink: 0;
+      max-height: 120px;
+      overflow: auto;
+    }
+    #orderEditor .editor-disclosure summary {
+      cursor: pointer;
+    }
+    #orderEditor .editor-disclosure p {
+      margin: 5px 0;
+      line-height: 1.7;
+    }
+    #orderEditor .editor-warning {
+      color: #ba493e;
+      font-size: 12px;
+      margin: 8px 24px;
+    }
+    #orderEditor .editor-disclosure .editor-warning {
+      margin: 5px 0;
+    }
+    #orderEditor footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px 16px;
+      flex-shrink: 0;
+      background: white;
+      padding: 14px 24px 10px;
+      border-top: 1px solid #e9e9ec;
+      box-shadow: 0 -3px 12px #1f293705;
+    }
+    #orderEditor .editor-totals {
+      min-width: 0;
+      flex: 1;
+    }
+    #orderEditor .editor-totals > strong {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    #orderEditor .editor-rate {
+      color: #ed2232;
+      font-size: 11px;
+      margin: 3px 0;
+    }
+    #orderEditor .editor-order-number {
+      color: #92969f;
+      font-size: 10px;
+      margin: 3px 0 0;
+      overflow-wrap: anywhere;
+    }
+    #orderEditor[data-page='catalog'] .editor-rate,
+    #orderEditor[data-page='catalog'] .editor-order-number {
+      display: none;
+    }
+    #orderEditor .editor-checkout {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    #orderEditor .editor-amount {
+      font-size: 15px;
+      color: #393e46;
+      white-space: nowrap;
+    }
+    #orderEditor .editor-primary {
+      min-height: 42px;
+      padding: 9px 17px;
+      color: white;
+      background: #ed2232;
+      border-color: #ed2232;
+      font-weight: 600;
+    }
+    #orderEditor .editor-primary:disabled {
+      color: white;
+      background: #ee979f;
+      border-color: #ee979f;
+    }
+    #orderEditor .editor-draft-note {
+      width: 100%;
+      margin: 0;
+      color: #a0a4ad;
+      font-size: 10px;
+      line-height: 1.6;
+    }
+    #orderEditor .editor-search-bar {
+      display: flex;
+      align-items: center;
+      margin: 16px 20px 8px;
+      padding: 0 14px;
+      border: 1px solid #e9e9ec;
+      border-radius: 10px;
+      min-height: 42px;
+      flex-shrink: 0;
+    }
+    #orderEditor .editor-search-icon {
+      color: #a3a7af;
+      font-size: 24px;
+      margin-right: 10px;
+    }
+    #orderEditor .editor-search {
+      width: 100%;
+      min-width: 0;
+      font: inherit;
+      font-size: 14px;
+      border: 0;
+      outline: none;
+      background: transparent;
+      padding: 10px 0;
+    }
+    #orderEditor .editor-category-tabs {
+      display: flex;
+      gap: 24px;
+      overflow-x: auto;
+      flex-shrink: 0;
+      padding: 0 20px;
+      border-bottom: 1px solid #ededf0;
+    }
+    #orderEditor .editor-category-tabs button {
+      padding: 12px 2px;
+      border: 0;
+      border-bottom: 3px solid transparent;
+      border-radius: 0;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    #orderEditor .editor-category-tabs button[aria-pressed='true'] {
+      color: #ed2232;
+      border-bottom-color: #ed2232;
+    }
+    #orderEditor .editor-catalog {
+      display: grid;
+      grid-template-columns: 100px minmax(0, 1fr);
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    #orderEditor .editor-subcategories {
+      min-height: 0;
+      overflow-y: auto;
+      background: #f5f5f6;
+    }
+    #orderEditor .editor-subcategories button {
+      width: 100%;
+      padding: 19px 8px;
+      border: 0;
+      border-left: 3px solid transparent;
+      border-radius: 0;
+      font-size: 13px;
+      background: transparent;
+      color: #626772;
+      overflow-wrap: anywhere;
+    }
+    #orderEditor .editor-subcategories button[aria-pressed='true'] {
+      background: white;
+      color: #ed2232;
+      border-left-color: #ed2232;
+    }
+    #orderEditor .editor-catalog .editor-products {
+      overflow-y: auto;
+      min-height: 0;
+    }
+    #orderEditor .editor-catalog article {
+      grid-template-columns: 94px minmax(0, 1fr);
+      gap: 14px;
+      padding: 18px 16px;
+    }
+    #orderEditor .editor-catalog .editor-image {
+      width: 94px;
+      height: 110px;
+    }
+    #orderEditor .editor-empty {
+      padding: 32px 18px;
+      text-align: center;
+      color: #a2a5ac;
+      font-size: 13px;
+    }
+    @media (max-width: 520px) {
+      #orderEditor {
+        width: 100%;
+        height: 100dvh;
+        max-height: none;
+        margin: 0;
+        border-radius: 0;
+      }
+      #orderEditor header {
+        grid-template-columns: 90px 1fr 90px;
+        padding: 0 14px;
+        min-height: 50px;
+      }
+      #orderEditor h1 {
+        font-size: 18px;
+      }
+      #orderEditor .editor-toolbar {
+        gap: 10px;
+        padding: 13px 14px;
+      }
+      #orderEditor .editor-toolbar > span {
+        font-size: 12px;
+      }
+      #orderEditor .editor-vehicle select {
+        max-width: 140px;
+        font-size: 11px;
+      }
+      #orderEditor .editor-add {
+        font-size: 13px;
+      }
+      #orderEditor article {
+        grid-template-columns: 80px minmax(0, 1fr);
+        gap: 13px;
+        padding: 16px 14px;
+      }
+      #orderEditor .editor-image {
+        width: 80px;
+        height: 100px;
+      }
+      #orderEditor .editor-product-name {
+        font-size: 14px;
+      }
+      #orderEditor .editor-product-trading {
+        gap: 7px;
+        margin-top: 12px;
+      }
+      #orderEditor .editor-quantity button {
+        width: 27px;
+        height: 30px;
+      }
+      #orderEditor input[type='number'] {
+        width: 38px;
+        height: 30px;
+      }
+      #orderEditor .editor-price strong {
+        font-size: 15px;
+      }
+      #orderEditor .editor-quantity > span {
+        margin-left: 4px;
+      }
+      #orderEditor .editor-delivery-info,
+      #orderEditor .editor-disclosure {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+      #orderEditor footer {
+        padding: 11px 14px 8px;
+        gap: 8px;
+      }
+      #orderEditor .editor-totals > strong {
+        font-size: 11px;
+      }
+      #orderEditor .editor-checkout {
+        gap: 8px;
+      }
+      #orderEditor .editor-primary {
+        padding: 8px 11px;
+        font-size: 12px;
+      }
+      #orderEditor .editor-amount {
+        font-size: 12px;
+      }
+      #orderEditor .editor-catalog {
+        grid-template-columns: 76px minmax(0, 1fr);
+      }
+      #orderEditor .editor-catalog article {
+        grid-template-columns: 66px minmax(0, 1fr);
+        gap: 10px;
+        padding: 14px 10px;
+      }
+      #orderEditor .editor-catalog .editor-image {
+        width: 66px;
+        height: 85px;
+      }
+      #orderEditor .editor-catalog .editor-product-name {
+        font-size: 13px;
+      }
+      #orderEditor .editor-search-bar {
+        margin: 12px 14px 6px;
+      }
+      #orderEditor .editor-category-tabs {
+        gap: 20px;
+        padding: 0 14px;
+      }
+    }
+    /* update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅订单处理窗口布局----------- */
+  </style>
 
-<script defer src="../assets/window-script?release=__ORDER_PRESENTATION_RELEASE__"></script></html>
+  <script defer src="../assets/window-script?release=__ORDER_PRESENTATION_RELEASE__"></script>
+</html>
 <!--update-end---author:Codex ---date:2026-11-02 for：【订单履约正式确认链路本地联调】避开测试代理静态JS路由----------- -->

@@ -20,7 +20,7 @@ test('atomic order presentation publication retains previous assets and rejects 
       'utf8',
     );
     assert.match(firstHtml, /__ORDER_PRESENTATION_RELEASE__/);
-    await writeFile(join(bundle, 'window.html'), firstHtml.replace('订单销售确认', '订单测试窗口'));
+    await writeFile(join(bundle, 'window.html'), firstHtml + '\n<!-- 订单测试窗口 -->\n');
     await assert.rejects(publishFulfillmentSalesWindow({ bundle, directory }), /hash mismatch/);
     assert.equal(
       JSON.parse(await readFile(join(directory, 'active.json'), 'utf8')).release,

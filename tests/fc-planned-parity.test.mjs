@@ -202,9 +202,9 @@ test('aging suggestions reproduce original rules for 90+, 60+, unknown age, no s
   assert.equal(fcAgingDisplay({ age90_plus: null }, 'missing_age_13'), '-');
 });
 
-test('current-order labels use the original 20 percent bands and preserve unknowns', () => {
+test('current-order labels include every positive shortage and preserve unknowns', () => {
   assert.equal(currentOrderStatus(0, 100), '正常');
-  assert.equal(currentOrderStatus(19.99, 100), '临期');
+  assert.equal(currentOrderStatus(19.99, 100), '缺口');
   assert.equal(currentOrderStatus(20, 100), '缺口');
   assert.equal(currentOrderStatus(100, 100), '缺口');
   assert.equal(currentOrderStatus(null, 100), '-');

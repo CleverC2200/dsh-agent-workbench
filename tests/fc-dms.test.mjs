@@ -124,6 +124,13 @@ test('confirmation hides missing and zero amounts, while retaining positive manu
       [...document.querySelectorAll('button')].find((b) => b.textContent === '提交').click();
       await new Promise((r) => setTimeout(r, 20));
     });
+    assert.equal(
+      globalThis.dmsFixture.readScopes[0].input.replenishment?.neededOnly,
+      true,
+      'confirmation must exclude zero advice before pagination',
+    );
+    assert.equal(globalThis.dmsFixture.readScopes[0].input.replenishment?.businessOnly, false);
+    assert.equal(globalThis.dmsFixture.readScopes[0].viewId, 'replenishment-confirmation');
     const input = document.querySelector('[aria-label="SKU1实际补货量"]');
     assert.ok(input);
     assert.equal(input.disabled, false, 'unknown advice must not disable manual quantity');
@@ -430,9 +437,11 @@ test('master values fill independently; stale warehouse results and errors leave
   globalThis.document = dom.window.document;
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let late;
+  let masterRequests = 0;
   globalThis.dmsFixture = {
-    rows,
+    rows: [...rows, { ...rows[0], warehouse_code: 'W2' }],
     call: async (_method, p) => {
+      masterRequests++;
       assert.equal(p.operation, 'resolve-target');
       if (p.warehouseCode === 'W2')
         return new Promise((r) => {
@@ -499,6 +508,27 @@ test('master values fill independently; stale warehouse results and errors leave
         .click();
     });
     assert.equal(document.querySelector('[aria-label="提货点编码"]').readOnly, false);
+    const changeInput = async (label, value) =>
+      act(async () => {
+        const input = document.querySelector(`[aria-label="${label}"]`);
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(
+          input,
+          value,
+        );
+        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        await tick();
+      });
+    await changeInput('提货点编码', '77');
+    const loadedRequests = masterRequests;
+    await changeInput('SKU1实际补货量', '0');
+    assert.equal(document.querySelector('[aria-label="提货点编码"]'), null);
+    await changeInput('SKU1实际补货量', '3');
+    assert.equal(
+      masterRequests,
+      loadedRequests,
+      'restoring a quantity must not refetch and overwrite manual codes',
+    );
+    assert.equal(document.querySelector('[aria-label="提货点编码"]').value, '77');
     await act(async () => {
       select.value = 'W2';
       select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
@@ -514,6 +544,52 @@ test('master values fill independently; stale warehouse results and errors leave
       await tick();
     });
     assert.doesNotMatch(document.body.textContent, /LATE|迟到/);
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+    delete globalThis.dmsFixture;
+  }
+});
+
+test('zero replenishment does not read DMS master data or show an order form', async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
+  globalThis.window = dom.window;
+  globalThis.document = dom.window.document;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let calls = 0;
+  globalThis.dmsFixture = {
+    rows: [{ warehouse_code: 'W1', sku: 'ZERO', recommended_qty: 0 }],
+    call: async () => {
+      calls++;
+      throw Error('must not request DMS for an empty order');
+    },
+  };
+  const { createRoot } = await import('react-dom/client');
+  const root = createRoot(document.getElementById('root'));
+  try {
+    await act(async () =>
+      root.render(
+        React.createElement(
+          FcWorkflowProvider,
+          null,
+          React.createElement(FcConfiguredList, {
+            columns: [],
+            view: { title: '补货' },
+            actionScope: {
+              viewId: 'replenishment',
+              input: { asOf: '2026-11-03', filters: { warehouse_code: 'W1' } },
+            },
+          }),
+        ),
+      ),
+    );
+    await act(async () => {
+      [...document.querySelectorAll('button')].find((b) => b.textContent === '提交').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    assert.equal(calls, 0);
+    assert.equal(document.querySelector('[aria-label="客户编码"]'), null);
+    assert.match(document.body.textContent, /当前分仓无需补货/);
   } finally {
     await act(async () => root.unmount());
     dom.window.close();

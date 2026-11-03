@@ -68,34 +68,26 @@
                   {
                     "tag": "markdown",
                     "content": {
-                      "$if": "section.hasDetails",
-                      "yes": "订单号：[${section.orderNoMarkdown}](${section.detailsUrl})",
-                      "no": "订单号：${section.orderNoMarkdown}"
+                      "$if": "section.hasEntry",
+                      "yes": "<font color='grey'>订单号：[${section.orderNoMarkdown}](${section.entryUrl}%26view%3Ddetails)</font>",
+                      "no": {
+                        "$if": "section.hasDetails",
+                        "yes": "<font color='grey'>订单号：[${section.orderNoMarkdown}](${section.detailsUrl})</font>",
+                        "no": "<font color='grey'>订单号：${section.orderNoMarkdown}</font>"
+                      }
                     }
                   },
                   {
-                    "tag": "div",
-                    "text": {
-                      "tag": "plain_text",
-                      "content": "客户：${section.customer}",
-                      "text_color": "grey-700"
-                    }
+                    "tag": "markdown",
+                    "content": "<font color='grey'>客户：${section.customer}</font>"
                   },
                   {
-                    "tag": "div",
-                    "text": {
-                      "tag": "plain_text",
-                      "content": "订单满足率：${section.rate}",
-                      "text_color": "grey-700"
-                    }
+                    "tag": "markdown",
+                    "content": "<font color='grey'>订单满足率：${section.rate}</font>"
                   },
                   {
-                    "tag": "div",
-                    "text": {
-                      "tag": "plain_text",
-                      "content": "总数量：${section.quantity}",
-                      "text_color": "grey-700"
-                    }
+                    "tag": "markdown",
+                    "content": "<font color='grey'>总数量：${section.quantity}</font>"
                   }
                 ]
               },
@@ -117,24 +109,40 @@
                             "content": "确认发货"
                           },
                           "behaviors": {
-                            "$if": "section.hasConfirm",
+                            "$if": "section.hasEntry",
                             "yes": [
                               {
                                 "type": "open_url",
-                                "default_url": "${section.ConfirmUrl}"
+                                "default_url": "${section.entryUrl}%26view%3Dconfirm"
                               }
-                            ]
+                            ],
+                            "no": {
+                              "$if": "section.hasConfirm",
+                              "yes": [
+                                {
+                                  "type": "open_url",
+                                  "default_url": "${section.ConfirmUrl}"
+                                }
+                              ]
+                            }
                           },
                           "disabled": {
-                            "$if": "section.hasConfirm",
+                            "$if": "section.hasEntry",
                             "yes": false,
-                            "no": true
+                            "no": {
+                              "$if": "section.hasConfirm",
+                              "yes": false,
+                              "no": true
+                            }
                           },
                           "disabled_tips": {
-                            "$if": "section.hasConfirm",
+                            "$if": "section.hasEntry",
                             "no": {
-                              "tag": "plain_text",
-                              "content": "等待 GEA 提供当前订单的受控操作入口"
+                              "$if": "section.hasConfirm",
+                              "no": {
+                                "tag": "plain_text",
+                                "content": "等待 GEA 提供当前订单的受控操作入口"
+                              }
                             }
                           }
                         }
@@ -147,24 +155,40 @@
                           "content": "暂缓发货"
                         },
                         "behaviors": {
-                          "$if": "section.hasDefer",
+                          "$if": "section.hasEntry",
                           "yes": [
                             {
                               "type": "open_url",
-                              "default_url": "${section.DeferUrl}"
+                              "default_url": "${section.entryUrl}%26view%3Ddefer"
                             }
-                          ]
+                          ],
+                          "no": {
+                            "$if": "section.hasDefer",
+                            "yes": [
+                              {
+                                "type": "open_url",
+                                "default_url": "${section.DeferUrl}"
+                              }
+                            ]
+                          }
                         },
                         "disabled": {
-                          "$if": "section.hasDefer",
+                          "$if": "section.hasEntry",
                           "yes": false,
-                          "no": true
+                          "no": {
+                            "$if": "section.hasDefer",
+                            "yes": false,
+                            "no": true
+                          }
                         },
                         "disabled_tips": {
-                          "$if": "section.hasDefer",
+                          "$if": "section.hasEntry",
                           "no": {
-                            "tag": "plain_text",
-                            "content": "等待 GEA 提供当前订单的受控操作入口"
+                            "$if": "section.hasDefer",
+                            "no": {
+                              "tag": "plain_text",
+                              "content": "等待 GEA 提供当前订单的受控操作入口"
+                            }
                           }
                         }
                       },
@@ -178,24 +202,40 @@
                             "content": "订单处理"
                           },
                           "behaviors": {
-                            "$if": "section.hasEdit",
+                            "$if": "section.hasEntry",
                             "yes": [
                               {
                                 "type": "open_url",
-                                "default_url": "${section.EditUrl}"
+                                "default_url": "${section.entryUrl}%26view%3Dedit"
                               }
-                            ]
+                            ],
+                            "no": {
+                              "$if": "section.hasEdit",
+                              "yes": [
+                                {
+                                  "type": "open_url",
+                                  "default_url": "${section.EditUrl}"
+                                }
+                              ]
+                            }
                           },
                           "disabled": {
-                            "$if": "section.hasEdit",
+                            "$if": "section.hasEntry",
                             "yes": false,
-                            "no": true
+                            "no": {
+                              "$if": "section.hasEdit",
+                              "yes": false,
+                              "no": true
+                            }
                           },
                           "disabled_tips": {
-                            "$if": "section.hasEdit",
+                            "$if": "section.hasEntry",
                             "no": {
-                              "tag": "plain_text",
-                              "content": "等待 GEA 提供当前订单的受控操作入口"
+                              "$if": "section.hasEdit",
+                              "no": {
+                                "tag": "plain_text",
+                                "content": "等待 GEA 提供当前订单的受控操作入口"
+                              }
                             }
                           }
                         }
@@ -205,8 +245,8 @@
                       "tag": "markdown",
                       "content": {
                         "$if": "section.deferred",
-                        "yes": "已暂缓",
-                        "no": "已处理"
+                        "yes": "<font color='grey'>已暂缓</font>",
+                        "no": "<font color='grey'>已处理</font>"
                       }
                     }
                   }
@@ -220,21 +260,32 @@
         "$if": "preview",
         "yes": {
           "tag": "markdown",
-          "content": "本地样例预览 · 不发货、不改单；延期及提交不保存。"
+          "content": "<font color='grey'>本地样例预览 · 不发货、不改单；延期及提交不保存。</font>"
         }
       },
       {
         "$if": "pilot",
         "yes": {
           "tag": "markdown",
-          "content": "试点验收 · 仅登记销售决定，不执行真实发货或改单"
+          "content": "<font color='grey'>试点验收 · OMS 尚未接入，仅保存确认／暂缓决定，不执行开单、发货或改单</font>"
+        }
+      },
+      {
+        "$if": "omsUnavailable",
+        "yes": {
+          "tag": "markdown",
+          "content": "<font color='grey'>OMS 尚未接入 · 仅保存确认／暂缓决定，不执行开单、发货或改单</font>"
         }
       },
       {
         "$if": "hasMore",
         "yes": {
           "tag": "markdown",
-          "content": "另有 ${remaining} 笔记录，[查看全部 ${total} 笔](${allUrl})"
+          "content": {
+            "$if": "hasAllEntry",
+            "yes": "另有 ${remaining} 笔记录，[查看全部 ${total} 笔](${allEntryUrl}%26view%3Dlist)",
+            "no": "另有 ${remaining} 笔记录，[查看全部 ${total} 笔](${allUrl})"
+          }
         }
       }
     ]

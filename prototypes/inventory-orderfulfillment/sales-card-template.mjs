@@ -4,18 +4,28 @@ const conditional = (path, yes, no) => ({
   yes,
   ...(no === undefined ? {} : { no }),
 });
+const grey = (content) => `<font color='grey'>${content}</font>`;
+const secondary = (content) => ({ tag: 'markdown', content: grey(content) });
 const button = (label, mode, type) => ({
   tag: 'button',
   type,
   text: { tag: 'plain_text', content: label },
-  behaviors: conditional(`section.has${mode}`, [
-    { type: 'open_url', default_url: `\${section.${mode}Url}` },
-  ]),
-  disabled: conditional(`section.has${mode}`, false, true),
-  disabled_tips: conditional(`section.has${mode}`, undefined, {
-    tag: 'plain_text',
-    content: '等待 GEA 提供当前订单的受控操作入口',
-  }),
+  behaviors: conditional(
+    'section.hasEntry',
+    [{ type: 'open_url', default_url: `\${section.entryUrl}%26view%3D${mode.toLowerCase()}` }],
+    conditional(`section.has${mode}`, [
+      { type: 'open_url', default_url: `\${section.${mode}Url}` },
+    ]),
+  ),
+  disabled: conditional('section.hasEntry', false, conditional(`section.has${mode}`, false, true)),
+  disabled_tips: conditional(
+    'section.hasEntry',
+    undefined,
+    conditional(`section.has${mode}`, undefined, {
+      tag: 'plain_text',
+      content: '等待 GEA 提供当前订单的受控操作入口',
+    }),
+  ),
 });
 export const salesCardTemplate = {
   schema: '2.0',
@@ -72,19 +82,22 @@ export const salesCardTemplate = {
                   {
                     tag: 'markdown',
                     content: conditional(
-                      'section.hasDetails',
-                      '订单号：[${section.orderNoMarkdown}](${section.detailsUrl})',
-                      '订单号：${section.orderNoMarkdown}',
+                      'section.hasEntry',
+                      grey(
+                        '订单号：[${section.orderNoMarkdown}](${section.entryUrl}%26view%3Ddetails)',
+                      ),
+                      conditional(
+                        'section.hasDetails',
+                        grey('订单号：[${section.orderNoMarkdown}](${section.detailsUrl})'),
+                        grey('订单号：${section.orderNoMarkdown}'),
+                      ),
                     ),
                   },
                   ...[
                     '客户：${section.customer}',
                     '订单满足率：${section.rate}',
                     '总数量：${section.quantity}',
-                  ].map((content) => ({
-                    tag: 'div',
-                    text: { tag: 'plain_text', content, text_color: 'grey-700' },
-                  })),
+                  ].map(secondary),
                 ],
               },
               {
@@ -105,7 +118,7 @@ export const salesCardTemplate = {
                     ],
                     {
                       tag: 'markdown',
-                      content: conditional('section.deferred', '已暂缓', '已处理'),
+                      content: conditional('section.deferred', grey('已暂缓'), grey('已处理')),
                     },
                   ),
                 ],
@@ -114,17 +127,22 @@ export const salesCardTemplate = {
           },
         ],
       },
-      conditional('preview', {
-        tag: 'markdown',
-        content: '本地样例预览 · 不发货、不改单；延期及提交不保存。',
-      }),
-      conditional('pilot', {
-        tag: 'markdown',
-        content: '试点验收 · 仅登记销售决定，不执行真实发货或改单',
-      }),
+      conditional('preview', secondary('本地样例预览 · 不发货、不改单；延期及提交不保存。')),
+      conditional(
+        'pilot',
+        secondary('试点验收 · OMS 尚未接入，仅保存确认／暂缓决定，不执行开单、发货或改单'),
+      ),
+      conditional(
+        'omsUnavailable',
+        secondary('OMS 尚未接入 · 仅保存确认／暂缓决定，不执行开单、发货或改单'),
+      ),
       conditional('hasMore', {
         tag: 'markdown',
-        content: '另有 ${remaining} 笔记录，[查看全部 ${total} 笔](${allUrl})',
+        content: conditional(
+          'hasAllEntry',
+          '另有 ${remaining} 笔记录，[查看全部 ${total} 笔](${allEntryUrl}%26view%3Dlist)',
+          '另有 ${remaining} 笔记录，[查看全部 ${total} 笔](${allUrl})',
+        ),
       }),
     ],
   },
