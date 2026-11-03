@@ -357,8 +357,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [page, setPage] = react.useState(0);
     const { period, column, rows } = sourceSelection(draft, type);
     const business = draft[type + 'Source'] === 'business';
-    const sourceDimensions =
-      type === 'forecast' && business ? ['基地', '大类', '系列', '物料组', '产品编码'] : dimensions;
     const visibleColumns =
       type === 'forecast' && business
         ? ['月份', '基地', '产品编码', '产品名称', '物料组', '物料组名称', '大类', '系列']
@@ -397,7 +395,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       update(changes);
       setPage(0);
     };
-    const grouped = sourceDimensions.includes(preview)
+    const grouped = dimensions.includes(preview)
       ? [...new Set(rows.map((row) => row[preview]))].map((name) => {
           const records = rows.filter((row) => row[preview] === name);
           return {
@@ -521,7 +519,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'div',
           { className: 'dc-coverage' },
-          sourceDimensions.map((dimension) =>
+          dimensions.map((dimension) =>
             h(
               'button',
               {
@@ -1381,10 +1379,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 ? [...new Set(rows.map((row) => row['缺项原因']).filter(Boolean))]
                 : undefined,
             dimensions: Object.fromEntries(
-              (type === 'forecast' && draft.forecastSource === 'business'
-                ? ['基地', '大类', '系列', '物料组', '产品编码']
-                : dimensions
-              ).map((dimension) => [
+              dimensions.map((dimension) => [
                 dimension,
                 {
                   count: new Set(rows.map((row) => row[dimension]).filter(Boolean)).size,

@@ -572,7 +572,7 @@ test('三年指标请求未结束时，上一财年占比仍可独立完成读�
   }
 });
 
-test('模型双期预测按产品物料编码显示大类系列和真实物料组，保留零数量', async (t) => {
+test('模型双期预测沿用四项统计，明细保留物料组及零数量', async (t) => {
   const { frame } = await mpsPage(t, config, (query) => {
     if (!query.queryId.startsWith('forecast.')) return fixture(query);
     const rows = ['A', 'B'].map((code, index) =>
@@ -599,7 +599,7 @@ test('模型双期预测按产品物料编码显示大类系列和真实物料�
   const card = frame.getByRole('region', { name: '模型双期预测', exact: true });
   await expect(card.getByRole('button', { name: '大类 1', exact: true })).toBeVisible();
   await expect(card.getByRole('button', { name: '系列 1', exact: true })).toBeVisible();
-  await expect(card.getByRole('button', { name: '物料组 1', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: /^物料组/ })).toHaveCount(0);
   await expect(card.getByRole('button', { name: '产品 2', exact: true })).toBeVisible();
   await card.getByRole('button', { name: '预览当前明细', exact: true }).click();
   const dialog = frame.getByRole('dialog');
