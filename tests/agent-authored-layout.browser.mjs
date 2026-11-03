@@ -622,7 +622,7 @@ test('fc: current order card uses its own demand, allocation and three-stage gap
   const card = frame.locator('.kpi-card').filter({ hasText: '当前订单' });
   await expect(card.locator('.kpi-value')).toHaveText('450件');
   await expect(card.locator('dl')).toContainText('缺货量3件');
-  await expect(card.locator('dl')).toContainText('基地已占用50件');
+  await expect(card.locator('dl')).toContainText('分仓已占用50件');
   assert.doesNotMatch(await card.innerText(), /16,163|86,814|本月/);
   assert.equal(calls.filter((q) => q.queryId === 'current-shortage.overview').length, 1);
   assert.deepEqual(errors, []);
@@ -1033,7 +1033,7 @@ test('FC current-order card preserves a verified zero independently of monthly q
     .locator('article.kpi-card')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
   await expect(card.locator('.kpi-value')).toHaveText('0件');
-  await expect(card.locator('dt')).toHaveText(['缺货量', '基地已占用']);
+  await expect(card.locator('dt')).toHaveText(['缺货量', '分仓已占用']);
   await expect(card.locator('dd')).toHaveText(['0件', '0件']);
   assert.equal(calls.filter((q) => q.queryId === 'current-shortage.overview').length, 1);
   assert.deepEqual(errors, []);
@@ -1946,7 +1946,25 @@ for (const [inventory, inTransit, stockDays] of [
   test(`QLL channel switch exposes customer summary and ten-row customer paging: ${inventory}`, async (t) => {
     const { page, frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
       if (query.queryId === 'dealer.stock.summary')
-        Object.assign(result.rows[0], { inventory, in_transit: inTransit, cover_days: stockDays });
+        Object.assign(result.rows[0], {
+          inventory,
+          in_transit: inTransit,
+          cover_days: stockDays,
+          onhand_days: stockDays,
+          onhand_cover_inventory: inventory,
+          onhand_cover_sales30:
+            stockDays === null ? null : stockDays > 0 ? (inventory * 30) / stockDays : 0,
+          valid_onhand_cover: stockDays === null ? 0 : 1,
+          total_inventory: inventory === null || inTransit === null ? null : inventory + inTransit,
+          cover_inventory: inventory === null || inTransit === null ? null : inventory + inTransit,
+          cover_sales30:
+            stockDays === null
+              ? null
+              : stockDays > 0
+                ? ((inventory + inTransit) * 30) / stockDays
+                : 0,
+          valid_cover: stockDays === null ? 0 : 1,
+        });
       return result;
     });
     const grid = frame.locator('[data-overview-cards="qll"]');
@@ -1981,6 +1999,9 @@ for (const [inventory, inTransit, stockDays] of [
     );
     await expect(value(turnover, '客户库存支撑')).toHaveText(
       stockDays === null ? '-' : stockDays === 0 ? '0.0天' : '18.0天',
+    );
+    await expect(stock.locator('strong').last()).toHaveText(
+      inventory === null ? '-' : inventory === 0 ? '1.12万件' : '2.32万件',
     );
     const customerLayer = await openCompanySku(frame, '渠道', '河南省区');
     await expect(customerLayer.locator('tbody tr')).toHaveCount(10);

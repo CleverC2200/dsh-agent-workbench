@@ -128,17 +128,16 @@ export function branchDashboardEvidence(input: {
       transferInTransitQty: number(plan.known_in_transit),
       alreadyDeductedFromRecommendation: true,
     },
-    baseSupply: {
-      direction: '分仓向基地补货；货物由基地发往收货分仓',
-      monthlyDemandQty: number(summary('branch-supply').demand),
-      monthlyShippedQty: number(summary('branch-supply').shipped),
-      monthlyFulfillmentRate: number(summary('branch-supply').fulfillment_rate),
+    customerOrders: {
+      direction: '分仓向下游经销商供货',
+      monthlyDemandQty: number(summary('orders').demand),
+      monthlyShippedQty: number(summary('orders').shipped),
+      monthlyFulfillmentRate: number(summary('orders').fulfillment_rate),
       currentDemandQty: currentSum('demand'),
       pendingQty: currentSum('remaining'),
-      inTransitQty: number(plan.known_in_transit),
-      currentBaseAllocatedQty: currentSum('allocated'),
+      currentBranchAllocatedQty: currentSum('allocated'),
       coverage:
-        '月度履约取基地向分仓发货执行；当前订单取有效未收货完成ASN，需求为预期量减已收量，基地占用关联出库执行。调拨在途与页面同步汇总。',
+        '月度履约取分仓向下游经销商供货的已发货订单池；当前订单与缺货取分仓有效未完成客户订单。ASN仅用于上游补货备单与在途，不能替代客户订单。',
     },
     sales: {
       last30DaysQty: number(plan.rolling_ship_positive),

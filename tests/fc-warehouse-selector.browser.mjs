@@ -219,9 +219,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   assert.ok(!calls.some((c) => c.id === 'health.summary'));
   await expect(page.locator('[data-overview-cards="fc"] article').last()).toContainText('23');
   await expect
-    .poll(() =>
-      calls.some((c) => c.id === 'branch-supply.summary' && c.values.warehouse_code === 'A170'),
-    )
+    .poll(() => calls.some((c) => c.id === 'orders.summary' && c.values.warehouse_code === 'A170'))
     .toBe(true);
   await expect
     .poll(() =>
@@ -354,10 +352,10 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   const orderPanel = page.getByRole('region', { name: '当前订单', exact: true });
   await expect(
-    orderPanel.getByRole('textbox', { name: '调拨单号或供货基地', exact: true }),
+    orderPanel.getByRole('textbox', { name: '客户订单号或经销商', exact: true }),
   ).toHaveValue('');
   await orderPanel
-    .getByRole('textbox', { name: '调拨单号或供货基地', exact: true })
+    .getByRole('textbox', { name: '客户订单号或经销商', exact: true })
     .fill('CE-SHARED');
   await page.getByRole('button', { name: '补货确认', exact: true }).click();
   const replenishmentPanel = page.getByRole('region', { name: '补货确认', exact: true });
@@ -622,7 +620,7 @@ test('FC shows system plans before import and downloads every authorized row thr
   assert.deepEqual(errors, []);
 });
 
-test('FC upstream transfer orders show supply bases, exact SKUs and preserve receiving branch scope', async (t) => {
+test('FC downstream customer orders show dealers, exact SKUs and preserve shipping branch scope', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -720,11 +718,11 @@ test('FC upstream transfer orders show supply bases, exact SKUs and preserve rec
   await expect(list.getByText('遂平', { exact: true })).toBeVisible();
   await expect(list.locator('thead').first().locator('th')).toHaveText([
     '订单号',
-    '供货基地',
+    '经销商',
     '订单日期',
     'SKU个数',
     '需求量（件）',
-    '基地已占用（件）',
+    '分仓已占用（件）',
     '剩余需求量（件）',
     '缺货量（件）',
     '状态',
@@ -760,7 +758,7 @@ test('FC upstream transfer orders show supply bases, exact SKUs and preserve rec
   assert.equal(detailCall.values.order_no, 'CE2600000190');
   assert.equal(detailCall.values.customer_code, 'C1');
   assert.ok(!calls.some((call) => call.id === 'current-shortage.detail'));
-  await list.getByRole('textbox', { name: '调拨单号或供货基地', exact: true }).fill('CE2600000190');
+  await list.getByRole('textbox', { name: '客户订单号或经销商', exact: true }).fill('CE2600000190');
   await list.getByRole('button', { name: '查询', exact: true }).click();
   await expect
     .poll(

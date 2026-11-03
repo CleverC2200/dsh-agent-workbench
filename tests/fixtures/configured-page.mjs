@@ -85,6 +85,10 @@ export async function configuredWire(id) {
             matched_turnover_inventory: 5580,
             matched_turnover_demand: 210,
             fulfillment_rate: 0.88,
+            fulfillment_shipped_quantity: 88,
+            fulfillment_order_quantity: 100,
+            onhand_cover_inventory: 12060,
+            onhand_cover_sales30: 24120,
             demand: 100,
             shortage: 12,
             shipped: 88,
@@ -133,6 +137,8 @@ export async function configuredWire(id) {
                 treeRow(`sku-A-${String(offset + i).padStart(3, '0')}`, '测试商品'),
               );
     }
+    if (payload.queryId === 'overview.orders-by-pickup')
+      rows = ['工厂', '分仓'].map((pickup_type) => ({ ...makeRow(0), pickup_type }));
     if (payload.queryId === 'overview.quick-stock') {
       rows = ['基地', '分仓'].map((location_type) => ({
         ...makeRow(0),

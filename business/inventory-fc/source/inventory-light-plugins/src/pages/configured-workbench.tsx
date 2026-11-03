@@ -40,7 +40,6 @@ import { useConfiguredOverview } from '../../../../../shared/use-configured-over
 import {
   businessDay,
   fulfillmentPercent,
-  completeValue,
   knownNumber,
 } from '../../../../../shared/configured-overview';
 import { updateContext } from '../native/context';
@@ -227,13 +226,13 @@ function WorkbenchBody() {
     (value) => updateContext('overview', value),
     cycleDays,
     config.overviewViewIds.filter(
-      (id) => !['shipments', 'orders', 'branch-supply-current'].includes(id),
+      (id) => !['shipments', 'branch-supply', 'branch-supply-current'].includes(id),
     ),
     cycleRules,
     warehouse,
     cycleWarehouse,
   );
-  const order = parts['branch-supply']?.summary,
+  const order = parts.orders?.summary,
     plan = parts.replenishment?.summary;
   const trialActive = trial?.scope === fcTrialScope(date, cycleDays, warehouse);
   const recommended = trialActive
@@ -298,13 +297,13 @@ function WorkbenchBody() {
     },
     {
       title: '订单满足率',
-      description: '当月基地已向分仓发货的调拨订单履约，按收货分仓归属，数量单位为件。',
+      description: '当月分仓向经销商供货的已发货订单池；逐行限额发货量÷同池订货量，沿用基地口径。',
       value: fulfillmentPercent(order),
       unit: '%',
       color: 'green',
       details: [
-        ['补货订货量', completeValue(order, 'demand'), '件'],
-        ['实际发货量', completeValue(order, 'shipped'), '件'],
+        ['已发订单量', knownNumber(order?.fulfillment_order_quantity), '件'],
+        ['限额发货量', knownNumber(order?.fulfillment_shipped_quantity), '件'],
       ],
     },
     {
@@ -324,10 +323,10 @@ function WorkbenchBody() {
       unit: '件',
       color: 'amber',
       description:
-        '分仓向基地下单的有效未收货ASN，按预期数量扣已收数量统计当前需求。缺货先减基地已占用，再按基地与SKU扣共享可用库存，依订单创建时间分配。',
+        '分仓向下游经销商供货的有效未完成订单；需求先减订单占用，再按分仓与SKU扣一次可用库存。异常记录不影响正常记录汇总。',
       details: [
         ['缺货量', currentGap.value, '件'],
-        ['基地已占用', currentAllocated.value, '件'],
+        ['分仓已占用', currentAllocated.value, '件'],
       ],
     },
   ];

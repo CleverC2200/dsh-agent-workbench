@@ -37,7 +37,7 @@ export function originalFcView(config: any, tab: string, asOf?: string) {
         'material_name',
         'inventory_qty',
         'available_qty',
-        ['missing_preparingQty', '当前待收货需求'],
+        ['missing_preparingQty', '客户订单需求'],
         'missing_shortageQty',
         'historical_turnover_days',
         'target_inventory_qty',

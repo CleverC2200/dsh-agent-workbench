@@ -52,7 +52,7 @@ async function openFixture(t, denied = false) {
     assert.ok(q, id);
     if (
       denied &&
-      (id === 'branch-supply.summary' ||
+      (id === 'orders.summary' ||
         ['replenishment.summary', 'replenishment.overview'].includes(id) ||
         ['current-shortage.summary', 'current-shortage.overview'].includes(id))
     )
@@ -72,7 +72,7 @@ async function openFixture(t, denied = false) {
     else if (id === 'source.branch-stock-date')
       Object.assign(row, { day: '2026-10-30', row_count: 1, total_qty: 13200 });
     else if (id.startsWith('source.')) rows = [{ day: '2026-10-30' }];
-    else if (id === 'branch-supply.summary')
+    else if (id === 'orders.summary')
       Object.assign(row, {
         row_count: parameters.period_mode === 'current' ? 43 : 163,
         demand: parameters.period_mode === 'current' ? 17068 : 32124,
@@ -80,6 +80,8 @@ async function openFixture(t, denied = false) {
         pending: parameters.period_mode === 'current' ? 5999 : 5708,
         in_transit: 1644,
         fulfillment_rate: 26416 / 32124,
+        fulfillment_shipped_quantity: 26416,
+        fulfillment_order_quantity: 32124,
       });
     else if (['current-shortage.summary', 'current-shortage.overview'].includes(id))
       Object.assign(row, {
@@ -106,10 +108,10 @@ async function openFixture(t, denied = false) {
         page_row_present: 1,
         warehouse_code: 'A230',
         warehouse_name: '杭州分仓',
-        order_no: 'BASE-SUPPLY-1',
+        order_no: 'CUSTOMER-ORDER-1',
         order_status: '00',
-        customer_code: '郑州',
-        customer_name: '郑州',
+        customer_code: 'CUSTOMER-1',
+        customer_name: '测试经销商',
         requested_at: '2026-10-30',
         created_at: '2026-10-01',
         ordered: 20,
@@ -120,7 +122,7 @@ async function openFixture(t, denied = false) {
         satisfaction: 0.5,
         line_no: 1,
         sku: 'SKU1',
-        material_name: '基地补货商品',
+        material_name: '客户订货商品',
         base_warehouse: 'N411',
         base: '郑州',
         order_type: 'ZUB',
@@ -151,7 +153,7 @@ async function openFixture(t, denied = false) {
   await page.goto('http://127.0.0.1:19487/');
   return { page, calls };
 }
-test('FC renders base supply fulfillment and cross-month orders independently of customer outbound demand', async (t) => {
+test('FC renders downstream customer fulfillment and open orders independently of upstream transfers', async (t) => {
   const { page, calls } = await openFixture(t);
   const cards = page.locator('[data-overview-cards="fc"] article');
   await expect(cards.filter({ hasText: '订单满足率' }).locator('.kpi-value')).toHaveText('82.23%');
@@ -160,15 +162,18 @@ test('FC renders base supply fulfillment and cross-month orders independently of
   await page.getByRole('button', { name: '选择分仓' }).click();
   await page.locator('[role=option][data-value="A230"]').click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
-  await expect(page.locator('table')).toContainText('BASE-SUPPLY-1');
-  await expect(page.locator('table')).toContainText('郑州');
+  await expect(page.locator('table')).toContainText('CUSTOMER-ORDER-1');
+  await expect(page.locator('table')).toContainText('测试经销商');
   await expect(page.getByRole('button', { name: '选择分仓' })).toContainText('A230');
   assert.ok(
     calls.some(
       (c) => c.id === 'branch-current-orders.page' && c.parameters.warehouse_code === 'A230',
     ),
   );
-  assert.ok(!calls.some((c) => ['orders.summary', 'branch-supply-current.summary'].includes(c.id)));
+  assert.ok(calls.some((c) => c.id === 'orders.summary'));
+  assert.ok(
+    !calls.some((c) => ['branch-supply.summary', 'branch-supply-current.summary'].includes(c.id)),
+  );
   await expect(page.getByRole('button', { name: '客户订单', exact: true })).toHaveCount(0);
   assert.ok(
     calls.some((c) => ['current-shortage.summary', 'current-shortage.overview'].includes(c.id)),
@@ -183,7 +188,7 @@ test('FC exposes denied domains and preserves ready inventory without fabricatin
   await expect(cards.filter({ hasText: '当前订单' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.filter({ hasText: '待补货量' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.first().locator('.kpi-value')).toHaveText('1.32万件');
-  await expect.poll(() => calls.filter((c) => c.id === 'branch-supply.summary').length).toBe(1);
+  await expect.poll(() => calls.filter((c) => c.id === 'orders.summary').length).toBe(1);
   await expect
     .poll(
       () =>

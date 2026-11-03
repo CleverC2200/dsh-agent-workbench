@@ -1,0 +1,592 @@
+[
+  {
+    "variant": "BRANCH_CUSTOMER_CURRENT",
+    "table": "agents_inv_order_summary_day",
+    "sourceSql": "WITH customer_stock_date AS (SELECT MAX(i.month_date) AS month_date FROM agents_scm_inventory_sku_data_d AS i WHERE i.warehouse_classify IN ('01', '02', '20')), customer_stock AS (SELECT i.warehouseid AS warehouseid, i.warehouse_name AS warehouse_name, i.belong_base AS belong_base, i.material_code AS sku, i.available_qty AS available_qty, i.prod_date AS prod_date, i.sap_warehouseid AS sap_warehouseid, i.plant AS plant, i.quality_batch AS quality_batch, i.is_good_prod AS is_good_prod, i.warehouse_classify AS warehouse_classify FROM agents_scm_inventory_sku_data_d AS i INNER JOIN customer_stock_date AS s ON i.month_date = s.month_date WHERE i.warehouse_classify = '20' OR i.warehouseid = 'N436'), customer_warehouses AS (SELECT i.warehouseid AS warehouse_code, MAX(i.warehouse_name) AS warehouse_name, CASE WHEN COUNT(DISTINCT i.belong_base) = 1 THEN MAX(i.belong_base) END AS base FROM customer_stock AS i GROUP BY i.warehouseid), customer_execution_latest AS (SELECT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, MAX(e.load_time) AS load_time FROM agents_scm_execute_detail_d AS e INNER JOIN customer_warehouses AS w ON e.warehouseid = w.warehouse_code WHERE NULLIF(TRIM(e.executeorderno), '') IS NOT NULL AND e.executeorderlineno IS NOT NULL GROUP BY e.executeorderno, e.executeorderlineno), customer_execution AS (SELECT DISTINCT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, e.warehouseid AS warehouseid, e.cust_order_no AS cust_order_no, e.cust_code AS cust_code, e.cust_name AS cust_name, e.material_code AS material_code, e.material_name AS material_name, e.header_addtime AS header_addtime, e.requireddeliverytime AS requireddeliverytime, e.qtyordered AS qtyordered, e.qtyallocated AS qtyallocated, e.qtyshipped AS qtyshipped, e.bizunitconvertrate AS bizunitconvertrate, e.bdwctime AS bdwctime, e.prapare_order_status AS prapare_order_status, e.bizflowstatus AS bizflowstatus, e.detailstatus AS detailstatus, e.order_close_time AS order_close_time, e.wms_close_time AS wms_close_time, e.canceltime AS canceltime, e.dmscanceltime AS dmscanceltime, e.order_type AS order_type FROM agents_scm_execute_detail_d AS e INNER JOIN customer_execution_latest AS k ON e.executeorderno = k.executeorderno AND e.executeorderlineno = k.executeorderlineno AND (e.load_time = k.load_time OR (e.load_time IS NULL AND k.load_time IS NULL))), customer_execution_keys AS (SELECT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, COUNT(*) AS versions FROM customer_execution AS e GROUP BY e.executeorderno, e.executeorderlineno), customer_valid_lines AS (SELECT w.warehouse_code AS warehouse_code, w.warehouse_name AS warehouse_name, w.base AS base, e.cust_order_no AS order_no, e.cust_code AS customer_code, e.cust_name AS customer_name, e.material_code AS sku, e.material_name AS material_name, e.header_addtime AS created_at, e.requireddeliverytime AS requested_at, e.bizflowstatus AS order_status, e.qtyordered / e.bizunitconvertrate AS ordered, CASE WHEN NULLIF(TRIM(CAST(e.bdwctime AS TEXT)), '') IS NOT NULL OR e.prapare_order_status IN ('备单完成', '备单完毕') THEN e.qtyallocated / e.bizunitconvertrate ELSE e.qtyordered / e.bizunitconvertrate END AS demand, e.qtyallocated / e.bizunitconvertrate AS allocated, e.qtyshipped / e.bizunitconvertrate AS shipped, CASE WHEN e.qtyshipped < e.qtyordered THEN 1 ELSE 0 END AS unshipped FROM customer_execution AS e INNER JOIN customer_execution_keys AS k ON e.executeorderno = k.executeorderno AND e.executeorderlineno = k.executeorderlineno INNER JOIN customer_warehouses AS w ON e.warehouseid = w.warehouse_code WHERE k.versions = 1 AND e.detailstatus = 10 AND e.order_close_time IS NULL AND e.wms_close_time IS NULL AND NULLIF(TRIM(e.canceltime), '') IS NULL AND NULLIF(TRIM(CAST(e.dmscanceltime AS TEXT)), '') IS NULL AND (e.prapare_order_status IS NULL OR NOT e.prapare_order_status IN ('作废', '已签收')) AND NULLIF(TRIM(e.cust_order_no), '') IS NOT NULL AND NULLIF(TRIM(e.material_code), '') IS NOT NULL AND e.bizunitconvertrate > 0 AND e.qtyordered >= 0 AND e.qtyallocated >= 0 AND e.qtyshipped >= 0 AND (e.order_type IS NULL OR NOT e.order_type IN ('ZUB', 'ZO14', 'TT', 'TT1', 'TT2', 'STO'))), customer_open_orders AS (SELECT l.warehouse_code AS warehouse_code, l.order_no AS order_no, l.customer_code AS customer_code FROM customer_valid_lines AS l GROUP BY l.warehouse_code, l.order_no, l.customer_code HAVING MAX(l.unshipped) = 1), customer_open_lines AS (SELECT l.warehouse_code AS warehouse_code, l.warehouse_name AS warehouse_name, l.base AS base, l.order_no AS order_no, l.customer_code AS customer_code, CASE WHEN COUNT(DISTINCT l.customer_name) = 1 THEN MAX(l.customer_name) END AS customer_name, l.sku AS sku, CASE WHEN COUNT(DISTINCT l.material_name) = 1 THEN MAX(l.material_name) END AS material_name, MIN(l.created_at) AS created_at, MIN(l.requested_at) AS requested_at, CASE WHEN COUNT(DISTINCT l.order_status) = 1 THEN MAX(l.order_status) END AS order_status, SUM(l.ordered) AS ordered, SUM(l.demand) AS demand, SUM(l.allocated) AS allocated, SUM(l.shipped) AS shipped, CASE WHEN SUM(l.demand) > SUM(l.allocated) THEN SUM(l.demand) - SUM(l.allocated) ELSE 0 END AS remaining FROM customer_valid_lines AS l INNER JOIN customer_open_orders AS o ON l.warehouse_code = o.warehouse_code AND l.order_no = o.order_no AND (l.customer_code = o.customer_code OR (l.customer_code IS NULL AND o.customer_code IS NULL)) GROUP BY l.warehouse_code, l.warehouse_name, l.base, l.order_no, l.customer_code, l.sku), customer_sku_demand AS (SELECT l.warehouse_code AS warehouse_code, l.sku AS sku, MAX(l.material_name) AS material_name, SUM(l.demand) AS demand, SUM(l.allocated) AS allocated, SUM(l.remaining) AS remaining FROM customer_open_lines AS l GROUP BY l.warehouse_code, l.sku), customer_stock_batches AS (SELECT i.warehouseid AS warehouse_code, i.sku AS sku, CASE WHEN COUNT(i.available_qty) = COUNT(*) AND (COUNT(*) = 1 OR (MIN(i.available_qty) = 0 AND MAX(i.available_qty) = 0)) THEN SUM(i.available_qty) END AS available FROM customer_stock AS i GROUP BY i.warehouseid, i.sku, i.prod_date, i.sap_warehouseid, i.plant, i.quality_batch, i.is_good_prod, i.warehouse_classify), customer_sku_stock AS (SELECT b.warehouse_code AS warehouse_code, b.sku AS sku, CASE WHEN COUNT(b.available) > 0 THEN SUM(b.available) END AS available FROM customer_stock_batches AS b GROUP BY b.warehouse_code, b.sku), customer_materials AS (SELECT m.material_code AS sku, CASE WHEN COUNT(DISTINCT m.product_categ_name) = 1 THEN MAX(m.product_categ_name) END AS category, CASE WHEN COUNT(DISTINCT m.material_group_name) = 1 THEN MAX(m.material_group_name) END AS material_group FROM agents_scm_material_in_out_summary_d AS m GROUP BY m.material_code), customer_source_presence AS (SELECT COUNT(*) AS source_count FROM (SELECT 1 AS present FROM agents_scm_execute_detail_d AS e LIMIT 1) AS p), customer_current AS (SELECT CAST(CONCAT(SUBSTRING(s.month_date, 1, 4), '-', SUBSTRING(s.month_date, 5, 2), '-', SUBSTRING(s.month_date, 7, 2)) AS DATE) AS snapshot_date, '分仓' AS location_type, w.warehouse_code AS location_code, w.warehouse_name AS location_name, w.base AS base, w.warehouse_code AS warehouse_code, d.sku AS sku, d.material_name AS material_name, m.category AS category, m.material_group AS material_group, CASE WHEN p.source_count > 0 THEN COALESCE(d.demand, 0) END AS demand, CASE WHEN p.source_count > 0 THEN COALESCE(d.allocated, 0) END AS allocated, CASE WHEN p.source_count > 0 THEN COALESCE(d.remaining, 0) END AS remaining, CASE WHEN p.source_count > 0 AND (i.sku IS NULL OR i.available IS NOT NULL) THEN CASE WHEN COALESCE(i.available, 0) > 0 THEN i.available ELSE 0 END END AS available, CASE WHEN p.source_count > 0 AND (i.sku IS NULL OR i.available IS NOT NULL) THEN CASE WHEN COALESCE(d.remaining, 0) > CASE WHEN i.available > 0 THEN i.available ELSE 0 END THEN COALESCE(d.remaining, 0) - CASE WHEN i.available > 0 THEN i.available ELSE 0 END ELSE 0 END END AS shortage, CASE WHEN p.source_count = 0 OR s.month_date IS NULL OR (i.sku IS NOT NULL AND i.available IS NULL) THEN 1 ELSE 0 END AS invalid FROM customer_warehouses AS w CROSS JOIN customer_stock_date AS s CROSS JOIN customer_source_presence AS p LEFT JOIN customer_sku_demand AS d ON w.warehouse_code = d.warehouse_code LEFT JOIN customer_sku_stock AS i ON d.warehouse_code = i.warehouse_code AND d.sku = i.sku LEFT JOIN customer_materials AS m ON d.sku = m.sku) SELECT r.snapshot_date AS snapshot_date, r.location_type AS location_type, r.location_code AS location_code, r.location_name AS location_name, r.base AS base, r.warehouse_code AS warehouse_code, r.sku AS sku, r.material_name AS material_name, r.category AS category, r.material_group AS material_group, r.demand AS demand, r.allocated AS allocated, r.remaining AS remaining, r.available AS available, r.shortage AS shortage, r.invalid AS invalid FROM customer_current AS r",
+    "sourceColumns": [
+      "snapshot_date",
+      "location_type",
+      "location_code",
+      "location_name",
+      "base",
+      "warehouse_code",
+      "sku",
+      "material_name",
+      "category",
+      "material_group",
+      "demand",
+      "allocated",
+      "remaining",
+      "available",
+      "shortage",
+      "invalid"
+    ],
+    "targetMapping": {
+      "snapshot_date": "snapshot_date",
+      "location_type": "location_type",
+      "location_code": "location_code",
+      "location_name": "location_name",
+      "belong_base": "base",
+      "warehouseid": "warehouse_code",
+      "sku": "sku",
+      "material_name": "material_name",
+      "category": "category",
+      "material_group": "material_group",
+      "shortage_demand": "demand",
+      "current_allocated": "allocated",
+      "current_remaining": "remaining",
+      "current_pool_allocated_qty": "available",
+      "current_shortage": "shortage",
+      "current_invalid": "invalid"
+    },
+    "parameterSpec": {
+      "gea_p1": {
+        "name": "base",
+        "type": "string",
+        "nullable": true
+      },
+      "gea_p2": {
+        "name": "warehouse_code",
+        "type": "string",
+        "nullable": true
+      },
+      "gea_p3": {
+        "name": "sku",
+        "type": "string",
+        "nullable": true
+      },
+      "gea_p6": {
+        "name": "category",
+        "type": "string",
+        "nullable": true
+      }
+    },
+    "parameters": {
+      "gea_p1": null,
+      "gea_p2": null,
+      "gea_p3": null,
+      "gea_p6": null
+    }
+  },
+  {
+    "variant": "BRANCH_CUSTOMER_LINES",
+    "table": "agents_inv_order_summary_day",
+    "sourceSql": "WITH customer_stock_date AS (SELECT MAX(i.month_date) AS month_date FROM agents_scm_inventory_sku_data_d AS i WHERE i.warehouse_classify IN ('01', '02', '20')), customer_stock AS (SELECT i.warehouseid AS warehouseid, i.warehouse_name AS warehouse_name, i.belong_base AS belong_base, i.material_code AS sku, i.available_qty AS available_qty, i.prod_date AS prod_date, i.sap_warehouseid AS sap_warehouseid, i.plant AS plant, i.quality_batch AS quality_batch, i.is_good_prod AS is_good_prod, i.warehouse_classify AS warehouse_classify FROM agents_scm_inventory_sku_data_d AS i INNER JOIN customer_stock_date AS s ON i.month_date = s.month_date WHERE i.warehouse_classify = '20' OR i.warehouseid = 'N436'), customer_warehouses AS (SELECT i.warehouseid AS warehouse_code, MAX(i.warehouse_name) AS warehouse_name, CASE WHEN COUNT(DISTINCT i.belong_base) = 1 THEN MAX(i.belong_base) END AS base FROM customer_stock AS i GROUP BY i.warehouseid), customer_execution_latest AS (SELECT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, MAX(e.load_time) AS load_time FROM agents_scm_execute_detail_d AS e INNER JOIN customer_warehouses AS w ON e.warehouseid = w.warehouse_code WHERE NULLIF(TRIM(e.executeorderno), '') IS NOT NULL AND e.executeorderlineno IS NOT NULL GROUP BY e.executeorderno, e.executeorderlineno), customer_execution AS (SELECT DISTINCT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, e.warehouseid AS warehouseid, e.cust_order_no AS cust_order_no, e.cust_code AS cust_code, e.cust_name AS cust_name, e.material_code AS material_code, e.material_name AS material_name, e.header_addtime AS header_addtime, e.requireddeliverytime AS requireddeliverytime, e.qtyordered AS qtyordered, e.qtyallocated AS qtyallocated, e.qtyshipped AS qtyshipped, e.bizunitconvertrate AS bizunitconvertrate, e.bdwctime AS bdwctime, e.prapare_order_status AS prapare_order_status, e.bizflowstatus AS bizflowstatus, e.detailstatus AS detailstatus, e.order_close_time AS order_close_time, e.wms_close_time AS wms_close_time, e.canceltime AS canceltime, e.dmscanceltime AS dmscanceltime, e.order_type AS order_type FROM agents_scm_execute_detail_d AS e INNER JOIN customer_execution_latest AS k ON e.executeorderno = k.executeorderno AND e.executeorderlineno = k.executeorderlineno AND (e.load_time = k.load_time OR (e.load_time IS NULL AND k.load_time IS NULL))), customer_execution_keys AS (SELECT e.executeorderno AS executeorderno, e.executeorderlineno AS executeorderlineno, COUNT(*) AS versions FROM customer_execution AS e GROUP BY e.executeorderno, e.executeorderlineno), customer_valid_lines AS (SELECT w.warehouse_code AS warehouse_code, w.warehouse_name AS warehouse_name, w.base AS base, e.cust_order_no AS order_no, e.cust_code AS customer_code, e.cust_name AS customer_name, e.material_code AS sku, e.material_name AS material_name, e.header_addtime AS created_at, e.requireddeliverytime AS requested_at, e.bizflowstatus AS order_status, e.qtyordered / e.bizunitconvertrate AS ordered, CASE WHEN NULLIF(TRIM(CAST(e.bdwctime AS TEXT)), '') IS NOT NULL OR e.prapare_order_status IN ('备单完成', '备单完毕') THEN e.qtyallocated / e.bizunitconvertrate ELSE e.qtyordered / e.bizunitconvertrate END AS demand, e.qtyallocated / e.bizunitconvertrate AS allocated, e.qtyshipped / e.bizunitconvertrate AS shipped, CASE WHEN e.qtyshipped < e.qtyordered THEN 1 ELSE 0 END AS unshipped FROM customer_execution AS e INNER JOIN customer_execution_keys AS k ON e.executeorderno = k.executeorderno AND e.executeorderlineno = k.executeorderlineno INNER JOIN customer_warehouses AS w ON e.warehouseid = w.warehouse_code WHERE k.versions = 1 AND e.detailstatus = 10 AND e.order_close_time IS NULL AND e.wms_close_time IS NULL AND NULLIF(TRIM(e.canceltime), '') IS NULL AND NULLIF(TRIM(CAST(e.dmscanceltime AS TEXT)), '') IS NULL AND (e.prapare_order_status IS NULL OR NOT e.prapare_order_status IN ('作废', '已签收')) AND NULLIF(TRIM(e.cust_order_no), '') IS NOT NULL AND NULLIF(TRIM(e.material_code), '') IS NOT NULL AND e.bizunitconvertrate > 0 AND e.qtyordered >= 0 AND e.qtyallocated >= 0 AND e.qtyshipped >= 0 AND (e.order_type IS NULL OR NOT e.order_type IN ('ZUB', 'ZO14', 'TT', 'TT1', 'TT2', 'STO'))), customer_open_orders AS (SELECT l.warehouse_code AS warehouse_code, l.order_no AS order_no, l.customer_code AS customer_code FROM customer_valid_lines AS l GROUP BY l.warehouse_code, l.order_no, l.customer_code HAVING MAX(l.unshipped) = 1), customer_open_lines AS (SELECT l.warehouse_code AS warehouse_code, l.warehouse_name AS warehouse_name, l.base AS base, l.order_no AS order_no, l.customer_code AS customer_code, CASE WHEN COUNT(DISTINCT l.customer_name) = 1 THEN MAX(l.customer_name) END AS customer_name, l.sku AS sku, CASE WHEN COUNT(DISTINCT l.material_name) = 1 THEN MAX(l.material_name) END AS material_name, MIN(l.created_at) AS created_at, MIN(l.requested_at) AS requested_at, CASE WHEN COUNT(DISTINCT l.order_status) = 1 THEN MAX(l.order_status) END AS order_status, SUM(l.ordered) AS ordered, SUM(l.demand) AS demand, SUM(l.allocated) AS allocated, SUM(l.shipped) AS shipped, CASE WHEN SUM(l.demand) > SUM(l.allocated) THEN SUM(l.demand) - SUM(l.allocated) ELSE 0 END AS remaining FROM customer_valid_lines AS l INNER JOIN customer_open_orders AS o ON l.warehouse_code = o.warehouse_code AND l.order_no = o.order_no AND (l.customer_code = o.customer_code OR (l.customer_code IS NULL AND o.customer_code IS NULL)) GROUP BY l.warehouse_code, l.warehouse_name, l.base, l.order_no, l.customer_code, l.sku), customer_stock_batches AS (SELECT i.warehouseid AS warehouse_code, i.sku AS sku, CASE WHEN COUNT(i.available_qty) = COUNT(*) AND (COUNT(*) = 1 OR (MIN(i.available_qty) = 0 AND MAX(i.available_qty) = 0)) THEN SUM(i.available_qty) END AS available FROM customer_stock AS i GROUP BY i.warehouseid, i.sku, i.prod_date, i.sap_warehouseid, i.plant, i.quality_batch, i.is_good_prod, i.warehouse_classify), customer_sku_stock AS (SELECT b.warehouse_code AS warehouse_code, b.sku AS sku, CASE WHEN COUNT(b.available) > 0 THEN SUM(b.available) END AS available FROM customer_stock_batches AS b GROUP BY b.warehouse_code, b.sku), customer_prior AS (SELECT l.warehouse_code AS warehouse_code, l.order_no AS order_no, l.customer_code AS customer_code, l.sku AS sku, COALESCE(SUM(p.remaining), 0) AS prior_remaining FROM customer_open_lines AS l LEFT JOIN customer_open_lines AS p ON l.warehouse_code = p.warehouse_code AND l.sku = p.sku AND p.remaining > 0 AND (COALESCE(CAST(p.created_at AS TEXT), '') < COALESCE(CAST(l.created_at AS TEXT), '') OR (COALESCE(CAST(p.created_at AS TEXT), '') = COALESCE(CAST(l.created_at AS TEXT), '') AND p.order_no < l.order_no) OR (COALESCE(CAST(p.created_at AS TEXT), '') = COALESCE(CAST(l.created_at AS TEXT), '') AND p.order_no = l.order_no AND COALESCE(p.customer_code, '') < COALESCE(l.customer_code, ''))) WHERE l.remaining > 0 GROUP BY l.warehouse_code, l.order_no, l.customer_code, l.sku), customer_current_lines AS (SELECT l.warehouse_code AS warehouse_code, l.warehouse_name AS warehouse_name, l.base AS base, l.order_no AS order_no, l.customer_code AS customer_code, l.customer_name AS customer_name, l.sku AS sku, l.material_name AS material_name, l.created_at AS created_at, l.requested_at AS requested_at, l.order_status AS order_status, l.ordered AS ordered, l.demand AS demand, l.allocated AS allocated, l.shipped AS shipped, l.remaining AS remaining, CASE WHEN l.remaining = 0 THEN 0 WHEN i.sku IS NULL OR i.available IS NOT NULL THEN CASE WHEN COALESCE(i.available, 0) <= COALESCE(p.prior_remaining, 0) THEN l.remaining WHEN i.available >= COALESCE(p.prior_remaining, 0) + l.remaining THEN 0 ELSE l.remaining - i.available + COALESCE(p.prior_remaining, 0) END END AS shortage FROM customer_open_lines AS l LEFT JOIN customer_prior AS p ON l.warehouse_code = p.warehouse_code AND l.order_no = p.order_no AND l.sku = p.sku AND (l.customer_code = p.customer_code OR (l.customer_code IS NULL AND p.customer_code IS NULL)) LEFT JOIN customer_sku_stock AS i ON l.warehouse_code = i.warehouse_code AND l.sku = i.sku) SELECT r.warehouse_code AS warehouse_code, r.warehouse_name AS warehouse_name, r.base AS base, r.order_no AS order_no, r.customer_code AS customer_code, r.customer_name AS customer_name, r.sku AS sku, r.material_name AS material_name, r.created_at AS created_at, r.requested_at AS requested_at, r.order_status AS order_status, r.ordered AS ordered, r.demand AS demand, r.allocated AS allocated, r.shipped AS shipped, r.remaining AS remaining, r.shortage AS shortage FROM customer_current_lines AS r",
+    "sourceColumns": [
+      "warehouse_code",
+      "warehouse_name",
+      "base",
+      "order_no",
+      "customer_code",
+      "customer_name",
+      "sku",
+      "material_name",
+      "created_at",
+      "requested_at",
+      "order_status",
+      "ordered",
+      "demand",
+      "allocated",
+      "shipped",
+      "remaining",
+      "shortage"
+    ],
+    "targetMapping": {
+      "warehouseid": "warehouse_code",
+      "location_name": "warehouse_name",
+      "belong_base": "base",
+      "order_no": "order_no",
+      "customer_code": "customer_code",
+      "customer_name": "customer_name",
+      "sku": "sku",
+      "material_name": "material_name",
+      "created_at": "created_at",
+      "order_date": "requested_at",
+      "order_status": "order_status",
+      "current_ordered": "ordered",
+      "current_demand": "demand",
+      "current_allocated": "allocated",
+      "current_shipped": "shipped",
+      "current_remaining": "remaining",
+      "current_shortage": "shortage"
+    },
+    "parameterSpec": {
+      "gea_p1": {
+        "name": "warehouse_code",
+        "type": "string",
+        "required": true,
+        "nullable": true
+      },
+      "gea_p5": {
+        "name": "page_size",
+        "type": "integer",
+        "required": true,
+        "nullable": false,
+        "minimum": 1,
+        "maximum": 50
+      },
+      "gea_p6": {
+        "name": "offset",
+        "type": "integer",
+        "required": true,
+        "nullable": false,
+        "minimum": 0
+      },
+      "gea_p2": {
+        "name": "customer_code",
+        "type": "string",
+        "required": true,
+        "nullable": true
+      },
+      "gea_p3": {
+        "name": "search_pattern",
+        "type": "string",
+        "required": true,
+        "nullable": true
+      },
+      "gea_p4": {
+        "name": "shortage_only",
+        "type": "boolean",
+        "required": true,
+        "nullable": false
+      },
+      "gea_p7": {
+        "name": "warehouse_search_pattern",
+        "type": "string",
+        "required": true,
+        "nullable": true
+      }
+    },
+    "parameters": {
+      "gea_p1": null,
+      "gea_p2": null,
+      "gea_p3": null,
+      "gea_p4": false,
+      "gea_p5": 10,
+      "gea_p6": 0,
+      "gea_p7": null
+    }
+  },
+  {
+    "variant": "BRANCH_CUSTOMER_PERIOD",
+    "table": "agents_inv_order_summary_day",
+    "sourceSql": "WITH source_records AS (SELECT t.fromorderno AS fromorderno, t.belong_base AS belong_base, t.cust_category AS cust_category, t.pick_point_type2 AS pick_point_type2, t.pickup_point_origin AS pickup_point_origin, t.pickup_point_default AS pickup_point_default, t.pickup_point AS pickup_point, t.pickup_point_name AS pickup_point_name, t.pickup_point_desc AS pickup_point_desc, t.region_name AS region_name, t.province_region_name AS province_region_name, t.cust_type AS cust_type, t.sales_group_name AS sales_group_name, t.cust_group_name AS cust_group_name, t.cust_code AS cust_code, t.cust_name AS cust_name, t.new_material_name AS new_material_name, t.mater_bar_code AS mater_bar_code, t.xilie AS xilie, t.pinxiang AS pinxiang, t.material_group_name AS material_group_name, t.product_categ_name AS product_categ_name, t.new_material_code AS new_material_code, t.fromorderno_month AS fromorderno_month, t.executeorderno AS executeorderno, t.order_qty_origin AS order_qty_origin, t.need_qty_origin AS need_qty_origin, t.pack_unitqty AS pack_unitqty, t.qtyshipped AS qtyshipped, t.outqty AS outqty, t.belong_base_final AS belong_base_final, t.exp_flag AS exp_flag, t.pickup_point_kpi AS pickup_point_kpi, t.header_addtime AS header_addtime, t.sale_cat AS sale_cat, t.pro_cat AS pro_cat, t.bdwctime AS bdwctime, t.complete_time AS complete_time, t.is_ontime AS is_ontime, COUNT(*) AS source_rows FROM agents_order_execute_isontime_mi AS t WHERE CASE WHEN :gea_p3 = 'created' THEN COALESCE(t.header_addtime, t.fromorderno_month) ELSE t.fromorderno_month END >= CAST(:gea_p1 AS DATE) AND CASE WHEN :gea_p3 = 'created' THEN COALESCE(t.header_addtime, t.fromorderno_month) ELSE t.fromorderno_month END < CAST(:gea_p2 AS DATE) AND (:gea_p4 IS NULL OR t.exp_flag = :gea_p4) AND (:gea_p5 = FALSE OR t.order_qty_origin > 0 OR t.need_qty_origin > 0) GROUP BY t.fromorderno, t.belong_base, t.cust_category, t.pick_point_type2, t.pickup_point_origin, t.pickup_point_default, t.pickup_point, t.pickup_point_name, t.pickup_point_desc, t.region_name, t.province_region_name, t.cust_type, t.sales_group_name, t.cust_group_name, t.cust_code, t.cust_name, t.new_material_name, t.mater_bar_code, t.xilie, t.pinxiang, t.material_group_name, t.product_categ_name, t.new_material_code, t.fromorderno_month, t.executeorderno, t.order_qty_origin, t.need_qty_origin, t.pack_unitqty, t.qtyshipped, t.outqty, t.belong_base_final, t.exp_flag, t.pickup_point_kpi, t.header_addtime, t.sale_cat, t.pro_cat, t.bdwctime, t.complete_time, t.is_ontime), projected AS (SELECT t.belong_base AS base, t.pick_point_type2 AS pickup_type, t.pickup_point AS pickup_code, t.pickup_point_name AS pickup_name, t.cust_code AS customer, t.cust_name AS customer_name, t.new_material_code AS sku, t.new_material_name AS material_name, t.product_categ_name AS category, t.pinxiang AS item, t.xilie AS series, t.material_group_name AS material_group, t.region_name AS region, t.province_region_name AS province, t.sales_group_name AS sales_group, t.fromorderno AS from_order, t.executeorderno AS execute_order, t.fromorderno_month AS order_date, t.header_addtime AS created_at, t.complete_time AS completed_at, t.is_ontime AS is_ontime, CASE WHEN t.source_rows = 1 THEN t.order_qty_origin ELSE NULL END AS ordered, CASE WHEN t.source_rows = 1 THEN t.need_qty_origin ELSE NULL END AS demand, CASE WHEN t.source_rows = 1 THEN t.outqty ELSE NULL END AS shortage, CASE WHEN t.source_rows = 1 THEN t.qtyshipped ELSE NULL END AS shipped, CASE WHEN t.source_rows = 1 THEN CASE WHEN t.qtyshipped IS NULL THEN NULL WHEN t.qtyshipped > 0 THEN t.order_qty_origin ELSE 0 END ELSE NULL END AS shipped_order_quantity, t.source_rows AS source_rows, CASE WHEN t.source_rows > 1 OR t.need_qty_origin IS NULL OR t.outqty IS NULL OR t.need_qty_origin < 0 OR t.outqty < 0 OR t.outqty > t.need_qty_origin THEN 1 ELSE 0 END AS invalid, CASE WHEN t.source_rows = 1 THEN t.pack_unitqty ELSE NULL END AS source_occupied FROM source_records AS t), order_grouped AS (SELECT d.base AS base, d.pickup_type AS pickup_type, d.pickup_code AS pickup_code, d.pickup_name AS pickup_name, d.customer AS customer, d.customer_name AS customer_name, d.sku AS sku, d.material_name AS material_name, d.category AS category, d.item AS item, d.series AS series, d.material_group AS material_group, d.region AS region, d.province AS province, d.sales_group AS sales_group, d.from_order AS from_order, d.execute_order AS execute_order, d.order_date AS order_date, d.created_at AS created_at, d.completed_at AS completed_at, d.is_ontime AS is_ontime, CASE WHEN COUNT(d.ordered) = COUNT(*) THEN SUM(d.ordered) ELSE NULL END AS ordered, CASE WHEN COUNT(d.demand) = COUNT(*) THEN SUM(d.demand) ELSE NULL END AS demand, CASE WHEN COUNT(d.shortage) = COUNT(*) THEN SUM(d.shortage) ELSE NULL END AS shortage, CASE WHEN COUNT(d.shipped) = COUNT(*) THEN SUM(d.shipped) ELSE NULL END AS shipped, CASE WHEN COUNT(d.shipped_order_quantity) = COUNT(*) THEN SUM(d.shipped_order_quantity) ELSE NULL END AS shipped_order_quantity, SUM(d.source_rows) AS source_rows, SUM(d.invalid) AS invalid, CASE WHEN COUNT(d.source_occupied) = COUNT(*) THEN SUM(d.source_occupied) ELSE NULL END AS source_occupied FROM projected AS d GROUP BY d.base, d.pickup_type, d.pickup_code, d.pickup_name, d.customer, d.customer_name, d.sku, d.material_name, d.category, d.item, d.series, d.material_group, d.region, d.province, d.sales_group, d.from_order, d.execute_order, d.order_date, d.created_at, d.completed_at, d.is_ontime), business_rows AS (SELECT d.base AS base, d.pickup_type AS pickup_type, d.pickup_code AS pickup_code, d.pickup_name AS pickup_name, d.customer AS customer, d.customer_name AS customer_name, d.sku AS sku, d.material_name AS material_name, d.category AS category, d.item AS item, d.series AS series, d.material_group AS material_group, d.region AS region, d.province AS province, d.sales_group AS sales_group, d.from_order AS from_order, d.execute_order AS execute_order, d.order_date AS order_date, d.created_at AS created_at, d.completed_at AS completed_at, d.is_ontime AS is_ontime, d.ordered AS ordered, d.demand AS demand, d.shortage AS shortage, d.shipped AS shipped, d.shipped_order_quantity AS shipped_order_quantity, d.source_rows AS source_rows, d.invalid AS invalid, CAST(CASE WHEN :gea_p3 = 'created' THEN COALESCE(d.created_at, d.order_date) ELSE d.order_date END AS DATE) AS business_day, d.source_occupied AS source_occupied, cw.warehouse_code AS warehouse_code FROM order_grouped AS d LEFT JOIN (WITH customer_execute_warehouse AS (SELECT e.executeorderno AS execute_order, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(e.warehouseid), '')) = 1 THEN MAX(e.warehouseid) END AS warehouse_code FROM agents_scm_execute_detail_d AS e GROUP BY e.executeorderno), customer_pickup_warehouse AS (SELECT t.pickup_point AS pickup_code, CASE WHEN COUNT(DISTINCT e.warehouse_code) = 1 THEN MAX(e.warehouse_code) END AS warehouse_code FROM agents_order_execute_isontime_mi AS t INNER JOIN customer_execute_warehouse AS e ON t.executeorderno = e.execute_order WHERE t.pick_point_type2 = '分仓' GROUP BY t.pickup_point) SELECT m.pickup_code AS pickup_code, m.warehouse_code AS warehouse_code FROM customer_pickup_warehouse AS m) AS cw ON cw.pickup_code = d.pickup_code WHERE d.pickup_type = '分仓') SELECT r.base AS base, r.pickup_type AS pickup_type, r.pickup_code AS pickup_code, r.pickup_name AS pickup_name, r.customer AS customer, r.customer_name AS customer_name, r.sku AS sku, r.material_name AS material_name, r.category AS category, r.item AS item, r.series AS series, r.material_group AS material_group, r.region AS region, r.province AS province, r.sales_group AS sales_group, r.from_order AS from_order, r.execute_order AS execute_order, r.order_date AS order_date, r.created_at AS created_at, r.completed_at AS completed_at, r.is_ontime AS is_ontime, r.ordered AS ordered, r.demand AS demand, r.shortage AS shortage, r.shipped AS shipped, r.shipped_order_quantity AS shipped_order_quantity, r.source_rows AS source_rows, r.invalid AS invalid, r.business_day AS business_day, r.source_occupied AS source_occupied, r.warehouse_code AS warehouse_code FROM business_rows AS r",
+    "sourceColumns": [
+      "base",
+      "pickup_type",
+      "pickup_code",
+      "pickup_name",
+      "customer",
+      "customer_name",
+      "sku",
+      "material_name",
+      "category",
+      "item",
+      "series",
+      "material_group",
+      "region",
+      "province",
+      "sales_group",
+      "from_order",
+      "execute_order",
+      "order_date",
+      "created_at",
+      "completed_at",
+      "is_ontime",
+      "ordered",
+      "demand",
+      "shortage",
+      "shipped",
+      "shipped_order_quantity",
+      "source_rows",
+      "invalid",
+      "business_day",
+      "source_occupied",
+      "warehouse_code"
+    ],
+    "targetMapping": {
+      "belong_base": "base",
+      "pickup_type": "pickup_type",
+      "pickup_code": "pickup_code",
+      "pickup_name": "pickup_name",
+      "customer": "customer",
+      "customer_name": "customer_name",
+      "sku": "sku",
+      "material_name": "material_name",
+      "category": "category",
+      "item": "item",
+      "series": "series",
+      "material_group": "material_group",
+      "region": "region",
+      "province": "province",
+      "sales_group": "sales_group",
+      "from_order": "from_order",
+      "execute_order": "execute_order",
+      "order_date": "order_date",
+      "created_at": "created_at",
+      "completed_at": "completed_at",
+      "period_is_ontime": "is_ontime",
+      "period_ordered": "ordered",
+      "period_demand": "demand",
+      "period_shortage": "shortage",
+      "period_shipped": "shipped",
+      "period_shipped_order_quantity": "shipped_order_quantity",
+      "period_source_rows": "source_rows",
+      "period_invalid": "invalid",
+      "business_day": "business_day",
+      "period_source_occupied": "source_occupied",
+      "warehouseid": "warehouse_code"
+    },
+    "parameterSpec": {
+      "gea_p1": {
+        "name": "start",
+        "type": "string",
+        "example": "2026-10-01",
+        "required": true,
+        "nullable": false,
+        "format": "YYYY-MM-DD"
+      },
+      "gea_p2": {
+        "name": "end_exclusive",
+        "type": "string",
+        "example": "2026-10-14",
+        "required": true,
+        "nullable": false,
+        "format": "YYYY-MM-DD"
+      },
+      "gea_p3": {
+        "name": "date_basis",
+        "type": "string",
+        "example": "order_month",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "order_month",
+          "created"
+        ]
+      },
+      "gea_p4": {
+        "name": "exp_flag",
+        "type": "string",
+        "example": "否",
+        "required": true,
+        "nullable": true
+      },
+      "gea_p5": {
+        "name": "positive_orders_only",
+        "type": "boolean",
+        "example": true,
+        "required": true,
+        "nullable": false
+      },
+      "gea_p6": {
+        "name": "bases_enabled",
+        "type": "boolean",
+        "example": false,
+        "required": true,
+        "nullable": false
+      },
+      "gea_p7": {
+        "name": "bases",
+        "type": "array",
+        "example": [
+          "郑州"
+        ],
+        "required": true,
+        "nullable": false,
+        "items": "string",
+        "minItems": 1
+      },
+      "gea_p8": {
+        "name": "pickup_type_mode",
+        "type": "string",
+        "example": "all",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "all",
+          "equal",
+          "missing"
+        ]
+      },
+      "gea_p9": {
+        "name": "pickup_type",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true
+      },
+      "gea_p10": {
+        "name": "pickup_code_mode",
+        "type": "string",
+        "example": "all",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "all",
+          "equal",
+          "missing"
+        ]
+      },
+      "gea_p11": {
+        "name": "pickup_code",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true
+      },
+      "gea_p12": {
+        "name": "customer_mode",
+        "type": "string",
+        "example": "all",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "all",
+          "equal",
+          "missing"
+        ]
+      },
+      "gea_p13": {
+        "name": "customer",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true
+      },
+      "gea_p14": {
+        "name": "sku_mode",
+        "type": "string",
+        "example": "all",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "all",
+          "equal",
+          "missing"
+        ]
+      },
+      "gea_p15": {
+        "name": "sku",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true
+      },
+      "gea_p16": {
+        "name": "category_mode",
+        "type": "string",
+        "example": "all",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "all",
+          "equal",
+          "missing"
+        ]
+      },
+      "gea_p17": {
+        "name": "category",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true
+      },
+      "gea_p18": {
+        "name": "item_mode",
+        "type": "string",
+        "example": "all",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "all",
+          "equal",
+          "missing"
+        ]
+      },
+      "gea_p19": {
+        "name": "item",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true
+      },
+      "gea_p20": {
+        "name": "series_mode",
+        "type": "string",
+        "example": "all",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "all",
+          "equal",
+          "missing"
+        ]
+      },
+      "gea_p21": {
+        "name": "series",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true
+      },
+      "gea_p22": {
+        "name": "region_mode",
+        "type": "string",
+        "example": "all",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "all",
+          "equal",
+          "missing"
+        ]
+      },
+      "gea_p23": {
+        "name": "region",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true
+      },
+      "gea_p24": {
+        "name": "province_mode",
+        "type": "string",
+        "example": "all",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "all",
+          "equal",
+          "missing"
+        ]
+      },
+      "gea_p25": {
+        "name": "province",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true
+      },
+      "gea_p26": {
+        "name": "sales_group_mode",
+        "type": "string",
+        "example": "all",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "all",
+          "equal",
+          "missing"
+        ]
+      },
+      "gea_p27": {
+        "name": "sales_group",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true
+      },
+      "gea_p28": {
+        "name": "search_pattern",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true,
+        "format": "LIKE pattern; host escapes literal %/_/backslash and surrounds with % for literal contains"
+      },
+      "gea_p29": {
+        "name": "exclude_category",
+        "type": "string",
+        "example": null,
+        "required": true,
+        "nullable": true
+      },
+      "gea_p30": {
+        "name": "page_size",
+        "type": "integer",
+        "example": 20,
+        "required": true,
+        "nullable": false,
+        "minimum": 1,
+        "maximum": 200
+      },
+      "gea_p31": {
+        "name": "offset",
+        "type": "integer",
+        "example": 0,
+        "required": true,
+        "nullable": false,
+        "minimum": 0
+      },
+      "gea_p32": {
+        "name": "sort_by",
+        "type": "string",
+        "example": "key",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "key",
+          "ordered",
+          "demand",
+          "shortage"
+        ]
+      },
+      "gea_p33": {
+        "name": "sort_direction",
+        "type": "string",
+        "example": "asc",
+        "required": true,
+        "nullable": false,
+        "enum": [
+          "asc",
+          "desc"
+        ]
+      },
+      "gea_p91": {
+        "name": "warehouse_code",
+        "type": "string",
+        "nullable": true,
+        "required": true
+      }
+    },
+    "parameters": {
+      "gea_p1": "2026-10-01",
+      "gea_p2": "2026-10-14",
+      "gea_p3": "order_month",
+      "gea_p4": "否",
+      "gea_p5": true,
+      "gea_p6": false,
+      "gea_p7": [
+        "郑州"
+      ],
+      "gea_p8": "all",
+      "gea_p9": null,
+      "gea_p10": "all",
+      "gea_p11": null,
+      "gea_p12": "all",
+      "gea_p13": null,
+      "gea_p14": "all",
+      "gea_p15": null,
+      "gea_p16": "all",
+      "gea_p17": null,
+      "gea_p18": "all",
+      "gea_p19": null,
+      "gea_p20": "all",
+      "gea_p21": null,
+      "gea_p22": "all",
+      "gea_p23": null,
+      "gea_p24": "all",
+      "gea_p25": null,
+      "gea_p26": "all",
+      "gea_p27": null,
+      "gea_p28": null,
+      "gea_p29": null,
+      "gea_p30": 10,
+      "gea_p31": 0,
+      "gea_p32": "key",
+      "gea_p33": "asc",
+      "gea_p91": null
+    }
+  }
+]

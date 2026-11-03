@@ -65,7 +65,7 @@ const KPI_COPY: Record<
 > = {
   inventoryLevel: {
     title: '当前库存',
-    definition: '当前库存＝基地库存＋分仓库存合计。',
+    definition: '当前库存＝基地库存＋分仓库存；含渠道时加上客户在仓库存。',
     eyebrow: '公司系统 / 全渠道观察',
     target: '目标库存',
   },
@@ -73,7 +73,8 @@ const KPI_COPY: Record<
     title: '库存周转',
     eyebrow: '近30日动销',
     target: '参考口径',
-    definition: '库存周转＝基地／分仓当前库存÷基地／分仓近30日日均动销；基地、分仓分别计算。',
+    definition:
+      '库存周转＝对应范围库存合计÷近30日日均动销合计；含渠道时纳入客户有效在仓库存及动销。各层天数不相加、不平均。',
   },
   aging: {
     title: '平均货龄',
@@ -84,16 +85,16 @@ const KPI_COPY: Record<
   fulfillment: {
     title: '订单满足率',
     definition:
-      '订单满足率：基地为当月已发货订单满足率；分仓为当月向基地下单的调拨订单履约满足率。',
+      '订单满足率：基地与分仓均取向下游客户供货的当月已发货订单池；逐行限额发货量合计÷同池订货量合计。公司值合并数量后重算。',
     eyebrow: '本自然月',
     target: '目标满足率',
   },
   orderGap: {
     title: '当前订单',
-    eyebrow: '基地待发货／分仓待收货订单',
+    eyebrow: '基地／分仓当前客户订单',
     target: '本月发货量',
     definition:
-      '当前订单＝基地有效未发货完成订单量（未备单需求＋已备单未发货占用）＋分仓有效未收货完成ASN需求量（预期到货量－已收货量）。',
+      '当前订单＝基地有效未发货完成订单量（未备单需求＋已备单未发货占用）＋分仓向下游经销商供货的有效未完成订单需求量。',
   },
 };
 
@@ -133,7 +134,9 @@ export function KpiCard({
   const primaryValue =
     metricKey === 'orderGap'
       ? (workspace.orderExecution?.currentOrderQty ?? null)
-      : (inventoryMetric?.companyCurrent ?? metric.current);
+      : workspace.scope === 'all-channel'
+        ? metric.current
+        : (inventoryMetric?.companyCurrent ?? metric.current);
   const cardValue = (value: number | null, unit: MetricValue['unit']) =>
     value == null ? '-' : formatMetric(value, unit, true).replace(/\s+/g, '');
   const splitValues =
@@ -320,10 +323,7 @@ export function KpiCard({
             }
           >
             {splitValues ? (
-              <strong className={styles.kpiValue}>
-                {cardValue(splitValues[0].value, splitValues[0].unit)}
-                <small className={styles.kpiScopeLabel}>{'基地'}</small>
-              </strong>
+              <strong className={styles.kpiValue}>{valueText}</strong>
             ) : (
               <strong
                 className={`${styles.kpiValue} ${unavailable ? styles.kpiUnavailable : metric.state === 'risk' ? styles.kpiValueRisk : ''}`}

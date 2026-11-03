@@ -126,7 +126,7 @@ function OrderLines({
                 {[
                   '产品',
                   '需求量（件）',
-                  '基地已占用（件）',
+                  '分仓已占用（件）',
                   '剩余需求量（件）',
                   '缺货量（件）',
                 ].map((label) => (
@@ -275,10 +275,10 @@ export function FcCurrentOrders({
           </label>
         )}
         <label>
-          调拨单号／基地／SKU
+          客户订单号／经销商／SKU
           <input
-            aria-label="调拨单号或供货基地"
-            placeholder="调拨单号／基地／SKU／产品名称"
+            aria-label="客户订单号或经销商"
+            placeholder="客户订单号／经销商／SKU／产品名称"
             value={draft.search}
             onChange={(event) => {
               setListSearch(event.target.value);
@@ -333,11 +333,11 @@ export function FcCurrentOrders({
                 <tr>
                   {[
                     '订单号',
-                    '供货基地',
+                    '经销商',
                     '订单日期',
                     'SKU个数',
                     '需求量（件）',
-                    '基地已占用（件）',
+                    '分仓已占用（件）',
                     '剩余需求量（件）',
                     '缺货量（件）',
                     '状态',

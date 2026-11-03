@@ -1,4 +1,4 @@
-"""Keep full-chain branch order reads aligned with the branch ASN contracts."""
+"""Keep full-chain branch order reads aligned with downstream branch customer contracts."""
 import copy
 import importlib.util
 import json
@@ -66,9 +66,9 @@ def build_source(config, base, branch):
         tree.set(WITH_KEY, exp.With(expressions=ctes))
         query['request']['sql'] = render(tree)
         query['plugins'] = ['qll']
-        query['notes'] = ('基地保持基地有效未发货订单口径；分仓复用 ASN 未收货完成订单，'
-                          '关联基地出库占用并换算为件，基地可用库存按订单创建时间先后分配一次。'
-                          '分仓筛选在共享库存分配后执行；缺失或无权限不补零。')
+        query['notes'] = ('基地保持基地有效未发货订单口径；分仓复用下游客户未完成订单，'
+                          '按实际发货分仓归属并换算为件，分仓SKU可用库存只扣一次。'
+                          '异常业务记录不影响正常记录汇总；权限失败不补零。')
         config['queries'][key] = query
 
     for key, source in branch['queries'].items():
@@ -92,7 +92,7 @@ def build_source(config, base, branch):
     config['queries']['branch-turnover.cards'].pop('orderCountFromOverview', None)
     views = {v['id']: v for v in config['sourceViews']['views']}
     fc_views = {v['id']: v for v in branch['sourceViews']['views']}
-    supply = copy.deepcopy(fc_views['branch-supply'])
+    supply = copy.deepcopy(fc_views['orders'])
     supply['id'] = 'branch-overview'
     config['sourceViews']['views'] = [supply if v['id'] == 'branch-overview' else v
                                      for v in config['sourceViews']['views']]
@@ -102,11 +102,11 @@ def build_source(config, base, branch):
             repl[field] = copy.deepcopy(fc_views['replenishment'][field])
     for metric in repl.get('metrics', []):
         metric['label'] = metric['label'].replace('箱', '件')
-    config['overviewOrderGroups']['views'].pop('branch-overview', None)
+    config['overviewOrderGroups']['views']['branch-overview'] = '分仓'
     grouped = config['queries']['overview.orders-by-pickup']
     # The shared dealer execution query remains for the base fulfillment metric only.
-    grouped['request']['parameters']['gea_p8'] = 'equal'
-    grouped['request']['parameters']['gea_p9'] = '工厂'
+    grouped['request']['parameters']['gea_p8'] = 'all'
+    grouped['request']['parameters']['gea_p9'] = None
     spec = importlib.util.spec_from_file_location('qll_loading', ROOT / 'scripts/optimize-qll-loading.py')
     loading = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(loading)
