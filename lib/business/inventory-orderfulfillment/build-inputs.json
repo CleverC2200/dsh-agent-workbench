@@ -13,6 +13,6 @@
   "sqlConfigSha256": "321269e64237d0efa4bda770405195fa307df97a0e630cce940d1a286c2c3b89",
   "dataMode": "GEA_GOVERNED_READONLY",
   "themeBindingSha256": "7459b538a457c70d06dde226187a87cecde5bfe7faa5c2a289212c0d062d2f30",
-  "channelBundleSha256": "6efc5eba52807d46433f2254eb3a079500fb902eca59427ec6c365b14036363e",
-  "htmlSha256": "ac91c244eb84e224c11284da683409b8612314ff9b67c0d30db5a162cc20b89b"
+  "channelBundleSha256": "b5de3a953a1b67c39c366181a1dec5acda9ec1e2a03747ec68f3fd2c1bded780",
+  "htmlSha256": "eb3aea3190d14c6e3a3f72947a60b1f26c270045424f6ecdf719289ae35435a4"
 }

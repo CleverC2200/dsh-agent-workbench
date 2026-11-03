@@ -29,7 +29,10 @@ export function salesConfirmationCard(input, options = {}) {
       .replace(/[\\*_[\]`]/g, '\\$&');
   const urls = options.urls || {};
   let origin;
-  for (const value of Object.values(urls)) {
+  for (const value of [
+    ...Object.values(urls),
+    ...(options.entryUrl === undefined ? [] : [options.entryUrl]),
+  ]) {
     if (typeof value !== 'string' || !value.trim()) throw Error('ORDER_CONFIRMATION_LINK_INVALID');
     const url = new URL(value);
     const local =
@@ -56,6 +59,8 @@ export function salesConfirmationCard(input, options = {}) {
       line.rawShortage > 0,
   );
   const section = {
+    hasEntry: Boolean(options.entryUrl),
+    entryUrl: options.entryUrl ? windowUrl(options.entryUrl) : '',
     orderNoMarkdown: escape(draft.orderNo),
     customer: escape(draft.customer),
     quantity: String(draft.quantity ?? '—'),

@@ -1,6 +1,7 @@
 'use strict';
 const element = (id) => document.getElementById(id);
-const requestedMode = new URLSearchParams(location.search).get('mode');
+const navigation = new URLSearchParams(location.search);
+const requestedMode = navigation.get('view') ?? navigation.get('mode');
 //update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】订单处理与商品增减共享原订单验证窗口-----------
 const mode = ['confirm', 'defer', 'details', 'list', 'edit'].includes(requestedMode)
   ? requestedMode
@@ -63,16 +64,9 @@ function status() {
   }
 }
 async function load() {
-  state = await request('/data?mode=' + mode + '&pageNo=' + pageNo);
+  state = await request('/data?includeRelated=' + (mode === 'list') + '&pageNo=' + pageNo);
   //update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅在认证读取成功后渲染草稿，关闭原确认按钮-----------
-  if (
-    state.permissions?.canAct !== false &&
-    (mode === 'edit' ||
-      (mode === 'details' &&
-        state.status === 'pending' &&
-        (!rateReady(state.snapshot?.satisfactionRate) ||
-          (state.snapshot?.lines || []).some((line) => knownNumber(line.shortage) > 0))))
-  ) {
+  if (state.permissions?.canAct !== false && mode === 'edit') {
     window.OrderShortageEditor.mount(document, {
       ...state,
       editor: state.editor ?? {
@@ -85,6 +79,7 @@ async function load() {
           '订单修改接口尚未接入，当前调整仅为本窗口草稿，未修改原订单；可售商品及车型规则待提供。',
       },
     });
+    element('windowLoading').hidden = true;
     element('submit').hidden = true;
     return;
   }
@@ -101,7 +96,7 @@ async function load() {
         link = document.createElement('a'),
         info = document.createElement('p');
       link.textContent = row.snapshot.orderNo;
-      link.href = row.entryUrl + '&mode=details';
+      link.href = row.entryUrl + '&view=details';
       info.textContent =
         row.snapshot.customer + '；' + (row.status === 'pending' ? '待处理' : '已处理');
       item.append(link, info);
@@ -113,7 +108,7 @@ async function load() {
           if (action === 'confirm' && !rateReady(row.snapshot.satisfactionRate)) continue;
           const button = document.createElement('a');
           button.textContent = title;
-          button.href = row.entryUrl + '&mode=' + action;
+          button.href = row.entryUrl + '&view=' + action;
           button.style.marginRight = '16px';
           item.append(button);
         }
@@ -125,7 +120,7 @@ async function load() {
       ) {
         const edit = document.createElement('a');
         edit.textContent = '订单处理';
-        edit.href = row.entryUrl + '&mode=details';
+        edit.href = row.entryUrl + '&view=edit';
         item.append(edit);
       }
       //update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】列表缺货订单提供相同处理入口-----------
@@ -137,9 +132,23 @@ async function load() {
     element('pageLabel').textContent = '第 ' + pageNo + ' 页，共 ' + state.related.total + ' 笔';
     element('cancel').textContent = '返回';
     status();
+    document.title = '订单确认记录';
+    element('confirmationMain').hidden = false;
+    element('windowLoading').hidden = true;
     return;
   }
   const p = state.snapshot;
+  const process = element('process');
+  process.hidden =
+    mode !== 'details' ||
+    state.status !== 'pending' ||
+    state.permissions?.canAct === false ||
+    (rateReady(p.satisfactionRate) &&
+      !(p.lines || []).some((line) => knownNumber(line.shortage) > 0));
+  const editUrl = new URL(location.href);
+  editUrl.searchParams.set('view', 'edit');
+  editUrl.searchParams.delete('mode');
+  process.href = editUrl.href;
   if (state.permissions?.canAct === false)
     element('notice').textContent = '你可以查看此订单；处理操作由指定销售执行。';
   element('title').textContent =
@@ -171,6 +180,9 @@ async function load() {
   }
   element('cancel').textContent = '返回';
   status();
+  document.title = element('title').textContent;
+  element('confirmationMain').hidden = false;
+  element('windowLoading').hidden = true;
 }
 element('cancel').onclick = () => {
   window.close();
@@ -227,5 +239,12 @@ element('submit').onclick = async () => {
   }
 };
 load().catch((error) => {
+  element('windowLoading').hidden = true;
+  element('orderEditor').hidden = true;
+  element('confirmationMain').hidden = false;
+  element('title').textContent = '订单加载失败';
+  document.title = '订单加载失败';
+  element('submit').hidden = true;
+  element('process').hidden = true;
   element('notice').textContent = error.message;
 });
