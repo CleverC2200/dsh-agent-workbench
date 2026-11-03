@@ -68,15 +68,14 @@ const history = (quantity, extra = {}) => ({
 const report = (monthly, adjusted, extra = {}) => ({
   基地: '郑州',
   产品编码: 'A',
-  月初数量: monthly,
-  纠偏数量: adjusted,
+  DMS发货数量: monthly,
   ...extra,
 });
 const checks = (actual, plan) => ({
   periods: [{ month: '2026-09', history: { rows: actual }, report: { rows: plan } }],
 });
 
-test('source checks use BI actuals and the selected DMS full version, not annual plan or a sum of versions', () => {
+test('source checks use DMS shipped pieces independently of obsolete report-version quantities', () => {
   const input = checks([history(12)], [report(10, 20)]);
   const monthly = sourceCheckRows(input, [raw('A', { sub_category: '汤圆' })], 'monthly', ['汤圆'])
     .rows[0];
@@ -84,8 +83,8 @@ test('source checks use BI actuals and the selected DMS full version, not annual
     .rows[0];
   assert.equal(monthly.plan.quantity, 10);
   assert.equal(monthly.ratio, 1.2);
-  assert.equal(adjusted.plan.quantity, 20);
-  assert.equal(adjusted.ratio, 0.6);
+  assert.equal(adjusted.plan.quantity, 10);
+  assert.equal(adjusted.ratio, 1.2);
 });
 
 test('zero, absent periods and incomplete values remain distinct; partial known subtotals do not produce ratios', () => {
@@ -138,10 +137,7 @@ test('current pool remaps BI and DMS by SKU; excluded nonzero historical SKUs do
 
 test('nationwide pool totals retain source quantities without a base; ambiguous current classifications are listed for completion', () => {
   const result = sourceCheckRows(
-    checks(
-      [history(8, { 基地: '' })],
-      [report('', '', { 基地: '', 源月初数量: 10, 源纠偏数量: 20 })],
-    ),
+    checks([history(8, { 基地: '' })], [report(20, 20, { 基地: '' })]),
     [raw('A', { sub_category: '汤圆' })],
     'adjust',
   );
