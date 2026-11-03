@@ -287,6 +287,19 @@
   overflow-x: auto;
   scrollbar-color: #b6bdc8 transparent;
 }
+.dc-category-demand-main th small {
+  display: block;
+  color: var(--dc-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+.dc-category-demand-main th:nth-child(9),
+.dc-category-demand-main td:nth-child(9) {
+  text-align: right;
+}
+.dc-category-demand-main td:nth-child(9) {
+  font-weight: 700;
+}
 .dc-page table {
   width: 100%;
   min-width: 760px;

@@ -295,7 +295,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       }),
     );
   }
-  const table = (columns, rows) =>
+  const table = (columns, rows, headers = {}) =>
     h(
       'div',
       { className: 'dc-table-scroll' },
@@ -308,7 +308,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'tr',
             {},
-            columns.map((column) => h('th', { key: column }, column)),
+            columns.map((column) => h('th', { key: column }, headers[column] ?? column)),
           ),
         ),
         h(

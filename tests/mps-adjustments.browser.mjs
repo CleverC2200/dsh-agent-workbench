@@ -60,6 +60,7 @@ test('MPS category override records a reason and time, survives reload and undo 
     )
     .toBe(120);
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
+  await frame.getByText('查看系统值、调整与缺项说明', { exact: true }).click();
   await expect(
     frame
       .getByRole('region', { name: '逐月测算', exact: true })

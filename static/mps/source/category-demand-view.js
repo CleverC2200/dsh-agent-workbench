@@ -12,8 +12,13 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
     '同期平均占比',
     '② 占比法',
     '加权',
+    '大类预估需求数量',
+  ];
+  const detailColumns = [
+    '大类',
+    '月份',
     '系统需求数量',
-    '有效需求数量',
+    '大类预估需求数量',
     '调整原因',
     '调整时间',
     '缺项说明',
@@ -98,7 +103,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
         '② 占比法': row.shareMethod ?? '',
         加权: row.weighted ?? '',
         系统需求数量: row.systemQuantity ?? '',
-        有效需求数量: row.quantity ?? '',
+        大类预估需求数量: row.quantity ?? '',
         调整原因: edit?.reason ?? '',
         调整时间: edit?.at ?? '',
         缺项说明: missing.join('；'),
@@ -172,7 +177,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
       {},
       h(
         'section',
-        { 'aria-label': '逐月测算', className: 'dc-card dc-results' },
+        { 'aria-label': '逐月测算', className: 'dc-card dc-results dc-category-demand' },
         h(
           'div',
           { className: 'dc-card-head' },
@@ -184,13 +189,44 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
           ),
           h(
             'button',
-            { onClick: () => downloadCsv(`大类逐月测算-${draft.month}.csv`, columns, rows) },
+            {
+              onClick: () =>
+                downloadCsv(
+                  `大类逐月测算-${draft.month}.csv`,
+                  [...columns, ...detailColumns.filter((column) => !columns.includes(column))],
+                  rows,
+                ),
+            },
             '下载测算明细',
           ),
         ),
         result.adjustmentIssues.length > 0 &&
           h('p', { role: 'alert' }, `以下调整未生效：${result.adjustmentIssues.join('；')}`),
-        table([...columns, '操作'], rows),
+        h(
+          'div',
+          { className: 'dc-category-demand-main' },
+          table(
+            [...columns, '操作'],
+            rows,
+            Object.fromEntries(
+              [
+                ['① 环比法', '基期 × 环比链'],
+                ['② 占比法', '全年预估 × 占比'],
+                ['加权', '①②各占一半'],
+                ['大类预估需求数量', '加权 ÷ 达成率'],
+              ].map(([name, formula]) => [
+                name,
+                h(react.Fragment, {}, name, h('small', {}, formula)),
+              ]),
+            ),
+          ),
+        ),
+        h(
+          'details',
+          { className: 'dc-card-foot' },
+          h('summary', {}, '查看系统值、调整与缺项说明'),
+          table(detailColumns, rows),
+        ),
         editing &&
           h(
             'fieldset',
