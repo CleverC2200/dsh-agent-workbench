@@ -44,7 +44,7 @@ function fixture({ queryId, parameters }) {
         allnum_total: index ? 60 : 20,
       }),
     );
-  if (queryId === 'facts.history')
+  if (queryId === 'facts.history' || queryId === 'facts.history-annual')
     rows = ['A', 'B'].map((code) =>
       record(queryId, {
         'agents_scm_cust_deliv_daily_di.belong_base': '郑州',
@@ -179,14 +179,14 @@ test('historical shares reuse the existing computation while final category dema
   await expect(card).toContainText('2 / 2 条可计算');
   await card.getByRole('button', { name: '预览', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '去年发运占比 · 源值核对', exact: true });
-  await expect(dialog).toContainText('25.00%');
-  await expect(dialog).toContainText('75.00%');
+  await expect(dialog).toContainText('100.00%');
+  await expect(dialog.getByRole('columnheader', { name: '物料组编码', exact: true })).toBeVisible();
   await expect(dialog).toContainText('50.00%');
   const waiting = page.waitForEvent('download');
   await dialog.getByRole('button', { name: '下载源值', exact: true }).click();
   const csv = await mpsDownloadText(await (await waiting).path());
-  assert.match(csv, /,0\.25,0\.5,/);
-  assert.doesNotMatch(csv, /25%/);
+  assert.match(csv, /,1,0\.5,/);
+  assert.doesNotMatch(csv, /\d+\.\d+%/);
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   await expect(frame.getByRole('region', { name: '大类预估需求数量', exact: true })).toContainText(
     'M+4只到大类',
@@ -392,14 +392,15 @@ test('entering demand confirmation reads the three-month source check without a 
   await expect(row.locator('td').nth(2)).toHaveText('120');
 });
 
-test('sales plan share card reads all three source dimensions and exports the raw ratio', async (t) => {
+test('sales plan share card rebuilds three dimensions using current material-group codes', async (t) => {
   const { page, frame, calls } = await mpsPage(t, config, fixture);
   await version(frame);
   const card = frame.getByRole('region', { name: '销售提报占比', exact: true });
   await expect(card).toContainText('3 条源记录');
   await card.getByRole('button', { name: '预览', exact: true }).click();
-  const dialog = frame.getByRole('dialog', { name: '销售提报占比 · 计划源值', exact: true });
-  await expect(dialog).toContainText('25.00%');
+  const dialog = frame.getByRole('dialog', { name: '销售提报占比 · 当前物料组核对', exact: true });
+  await expect(dialog).toContainText('100.00%');
+  await expect(dialog.getByRole('columnheader', { name: '物料组编码', exact: true })).toBeVisible();
   for (const dimension of ['大类+物料组', '物料组+产品', '基地+产品']) {
     await dialog.getByLabel('计划占比维度').selectOption(dimension);
     await expect(dialog.locator('tbody')).toContainText(dimension);
@@ -407,12 +408,14 @@ test('sales plan share card reads all three source dimensions and exports the ra
   const waiting = page.waitForEvent('download');
   await dialog.getByRole('button', { name: '下载源值', exact: true }).click();
   const csv = await mpsDownloadText(await (await waiting).path());
-  assert.match(csv, /0\.250000000000/);
+  assert.match(csv, /,G,/);
+  assert(!csv.includes('0.250000000000'));
   assert(!csv.includes('25.00%'));
   assert(
     calls.some(
       (call) =>
-        call.queryId === 'plan-rate.detail' && call.parameters.months.join() === '202610,202611',
+        call.queryId === 'plan-rate.detail' &&
+        call.parameters.months.join() === '202610,202611,202612',
     ),
   );
 });
@@ -517,4 +520,54 @@ test('current pool category demand fills all four months and exports correction 
   assert.match(csv, /2026-10（M\+1）/);
   assert.match(csv, /2027-01（M\+4）/);
   assert.doesNotMatch(csv, /NaN|Infinity/);
+});
+
+test('历史占比读取上一完整财年，预览列出当前物料组和全年数量并支持未对应明细', async (t) => {
+  const { frame, calls } = await mpsPage(t, config, fixture);
+  await version(frame, '2026-11');
+  const card = frame
+    .locator('section.dc-parameter')
+    .filter({ has: frame.getByRole('heading', { name: '去年发运占比', exact: true }) });
+  await expect(card).toContainText('2025-07-01至2026-06-30');
+  await expect(card).toContainText('条可计算');
+  await card.getByRole('button', { name: '预览', exact: true }).click();
+  const dialog = frame.getByRole('dialog', { name: '去年发运占比 · 源值核对', exact: true });
+  await expect(
+    dialog.getByRole('columnheader', { name: '上一财年发货数量', exact: true }),
+  ).toBeVisible();
+  const row = dialog
+    .locator('tbody tr')
+    .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) });
+  await expect(dialog).toContainText('2025-07-01至2026-06-30');
+  await expect(row.getByRole('cell', { name: 'G', exact: true })).toBeVisible();
+  await expect(row).toContainText('50.00%');
+  assert(
+    calls.some(
+      (call) =>
+        call.queryId === 'facts.history-annual' &&
+        call.parameters.start === '2025-07-01' &&
+        call.parameters.end === '2026-06-30',
+    ),
+  );
+  await dialog.getByRole('button', { name: /未对应记录/ }).click();
+  await expect(dialog.getByRole('columnheader', { name: '未对应原因', exact: true })).toBeVisible();
+});
+
+test('三年指标请求未结束时，上一财年占比仍可独立完成读取', async (t) => {
+  let release;
+  const blocked = new Promise((resolve) => {
+    release = resolve;
+  });
+  const { frame } = await mpsPage(t, config, async (query) => {
+    if (query.queryId.startsWith('category-history.')) await blocked;
+    return fixture(query);
+  });
+  try {
+    const card = frame
+      .locator('section.dc-parameter')
+      .filter({ has: frame.getByRole('heading', { name: '去年发运占比', exact: true }) });
+    await expect(card).toContainText('2 / 2 条可计算');
+  } finally {
+    release();
+  }
 });

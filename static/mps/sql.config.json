@@ -1055,6 +1055,112 @@
       "request": {
         "sql": "SELECT COUNT(*) AS total FROM (SELECT DISTINCT material_code, channel_name, ton_per_piece FROM agents_dim_material_prod_sales_info_d WHERE material_code IN (:codes)) AS unit_weights"
       }
+    },
+    "facts.history-annual": {
+      "title": "上一完整财年历史占比数量",
+      "grain": [
+        "agents_scm_cust_deliv_daily_di.belong_base",
+        "agents_scm_cust_deliv_daily_di.material_code",
+        "agents_scm_cust_deliv_daily_di.material_name",
+        "agents_scm_cust_deliv_daily_di.product_categ_name",
+        "agents_scm_cust_deliv_daily_di.material_group_name"
+      ],
+      "columns": [
+        "agents_scm_cust_deliv_daily_di.belong_base",
+        "agents_scm_cust_deliv_daily_di.material_code",
+        "agents_scm_cust_deliv_daily_di.material_name",
+        "agents_scm_cust_deliv_daily_di.product_categ_name",
+        "agents_scm_cust_deliv_daily_di.material_group_name",
+        "agents_scm_cust_deliv_daily_di.act_dl_qty_total",
+        "agents_scm_cust_deliv_daily_di.act_dl_qty_all_total",
+        "agents_scm_cust_deliv_daily_di.income_excl_tax_local_total"
+      ],
+      "parameterSpec": {
+        "page_size": {
+          "name": "page_size",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "offset": {
+          "name": "offset",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "start": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "end": {
+          "name": "end",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        }
+      },
+      "request": {
+        "cube": {
+          "measures": [
+            "agents_scm_cust_deliv_daily_di.act_dl_qty_total",
+            "agents_scm_cust_deliv_daily_di.act_dl_qty_all_total",
+            "agents_scm_cust_deliv_daily_di.income_excl_tax_local_total"
+          ],
+          "dimensions": [
+            "agents_scm_cust_deliv_daily_di.belong_base",
+            "agents_scm_cust_deliv_daily_di.material_code",
+            "agents_scm_cust_deliv_daily_di.material_name",
+            "agents_scm_cust_deliv_daily_di.product_categ_name",
+            "agents_scm_cust_deliv_daily_di.material_group_name"
+          ],
+          "timeDimensions": [
+            {
+              "dimension": "agents_scm_cust_deliv_daily_di.shipment_date",
+              "dateRange": [
+                {
+                  "$parameter": "start"
+                },
+                {
+                  "$parameter": "end"
+                }
+              ]
+            }
+          ],
+          "timezone": "UTC",
+          "order": [
+            [
+              "agents_scm_cust_deliv_daily_di.belong_base",
+              "asc"
+            ],
+            [
+              "agents_scm_cust_deliv_daily_di.material_code",
+              "asc"
+            ],
+            [
+              "agents_scm_cust_deliv_daily_di.material_name",
+              "asc"
+            ],
+            [
+              "agents_scm_cust_deliv_daily_di.product_categ_name",
+              "asc"
+            ],
+            [
+              "agents_scm_cust_deliv_daily_di.material_group_name",
+              "asc"
+            ]
+          ],
+          "limit": {
+            "$parameter": "page_size"
+          },
+          "offset": {
+            "$parameter": "offset"
+          }
+        }
+      }
     }
   }
 }

@@ -1,3 +1,4 @@
+import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { call } from '../../../business/shared/channel.js';
 import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
 
@@ -20,6 +21,10 @@ const text = (value) => {
 export async function readFactMonth(type, month, signal) {
   if (!['report', 'history'].includes(type)) throw Error('该事实来源尚未接入');
   return readFacts('facts.' + type, { month: month + '-01' }, signal, type, month);
+}
+export async function readHistoryAnnual(month, signal) {
+  const period = previousFiscalYear(month);
+  return readFacts('facts.history-annual', period, signal, 'historyAnnual');
 }
 async function readFacts(id, parameters, signal, type, month) {
   const element = document.getElementById('agent-sql-config');
@@ -123,7 +128,9 @@ async function readFacts(id, parameters, signal, type, month) {
     const base = text(value('belong_base'));
     const code = text(value('material_code'));
     return {
-      月份: month,
+      ...(type === 'historyAnnual'
+        ? { 期间开始: parameters.start, 期间结束: parameters.end }
+        : { 月份: month }),
       基地: base,
       产品编码: code,
       产品名称: text(value('material_name')),
@@ -137,7 +144,13 @@ async function readFacts(id, parameters, signal, type, month) {
   });
   return {
     rows: records,
-    metadata: { period: month, partial, warnings, total, configVersion: version },
+    metadata: {
+      ...(type === 'historyAnnual' ? parameters : { period: month }),
+      partial,
+      warnings,
+      total,
+      configVersion: version,
+    },
   };
 }
 

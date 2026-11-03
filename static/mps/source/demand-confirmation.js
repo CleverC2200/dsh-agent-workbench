@@ -1250,33 +1250,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     }, [draft.id, draft.month, draft.historyYears, active, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
-      if (
-        active &&
-        hasMpsSource() &&
-        ['process', 'constraints', 'capacity', 'report'].includes(step)
-      )
-        ready.then(() => {
-          if (!current) return;
-          const latest = localRef.current.drafts.find((entry) => entry.id === draft.id);
-          for (const type of ['report', 'history']) {
-            if (!latest || latest.files[type]) continue;
-            const periods = Array.from({ length: 3 }, (_, offset) =>
-              monthOffset(draft.month, offset - (type === 'history' ? 12 : 0)),
-            ).filter(
-              (period) =>
-                !['ready', 'failed', 'denied', 'error'].includes(
-                  latest[type + 'Read']?.periods?.[period]?.status,
-                ),
-            );
-            if (periods.length) void sync(type, periods);
-          }
-        });
-      return () => {
-        current = false;
-      };
-    }, [draft.id, draft.month, step, active, scopeGeneration]);
-    react.useEffect(() => {
-      let current = true;
       if (active && hasMpsSource())
         ready.then(() => {
           if (current && !draft.files.forecast) void sync('forecast');
@@ -1467,7 +1440,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               : 'waiting-for-forecast-and-business-rules',
           modelInput: 'forecast',
           sourceIndicators: 'delivery',
-          parameterInputs: ['report', 'history'],
+          parameterInputs: [
+            draft.reportSource === 'business' ? 'planRates' : 'report',
+            'historyAnnual',
+          ],
           basicIndicatorInputs: ['report', 'history'],
           monthlyCalculation: 'derived-from-inputs-without-result-table',
         },
@@ -2200,7 +2176,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
               ? relations
               : null,
-          active: active && step === 'check',
+          active,
         }),
         h(
           'div',

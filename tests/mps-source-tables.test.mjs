@@ -221,7 +221,9 @@ test('forecast classification explains missing and ambiguous group members witho
 });
 
 test('plan share parameters use natural current and next month across years', () => {
-  assert.deepEqual(sourceTableParameters('plan-rate', '2026-12'), { months: ['202612', '202701'] });
+  assert.deepEqual(sourceTableParameters('plan-rate', '2026-12'), {
+    months: ['202612', '202701', '202702'],
+  });
 });
 
 test('plan shares preserve nationwide null bases, zero and precise source ratios', () => {

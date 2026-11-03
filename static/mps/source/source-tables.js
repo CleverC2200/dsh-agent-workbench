@@ -79,7 +79,11 @@ export function sourceTableParameters(kind, month) {
       ],
     };
   if (kind === 'plan-rate')
-    return { months: [month, monthOffset(month, 1)].map((value) => value.replace('-', '')) };
+    return {
+      months: [month, monthOffset(month, 1), monthOffset(month, 2)].map((value) =>
+        value.replace('-', ''),
+      ),
+    };
   if (kind === 'delivery') return { months: [...months, month.replace('-', '')] };
   throw Error('未知月主计划来源');
 }
@@ -217,7 +221,7 @@ export const planRateColumns = {
   dimension_rate: '计划占比',
 };
 export function planRateRows(rows, month) {
-  const months = [month, monthOffset(month, 1)];
+  const months = [month, monthOffset(month, 1), monthOffset(month, 2)];
   return rows.map((row) => {
     const period = tableMonth(row.stat_month);
     if (!months.includes(period)) throw Error('计划占比来源月份与请求不一致');
