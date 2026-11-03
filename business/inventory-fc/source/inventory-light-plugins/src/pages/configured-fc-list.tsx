@@ -212,6 +212,7 @@ export function FcConfiguredList(
   const [targetLoading, setTargetLoading] = useState(false);
   const [automaticTargetFields, setAutomaticTargetFields] = useState<string[]>([]);
   const targetRequest = useRef<AbortController | null>(null);
+  const loadedTargetScope = useRef<string | null>(null);
   const readDmsTarget = async (warehouse: string, addressCode = '') => {
     targetRequest.current?.abort();
     const task = new AbortController();
@@ -254,11 +255,30 @@ export function FcConfiguredList(
       if (!task.signal.aborted) setTargetLoading(false);
     }
   };
+  const hasDmsItems =
+    previewState === 'ready' &&
+    exportRows.some(
+      (row) =>
+        String(row.warehouse_code) === exportWarehouse &&
+        (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0,
+    );
   useEffect(() => {
-    if (dialog !== 'export' || !exportWarehouse) return;
-    void readDmsTarget(exportWarehouse);
-    return () => targetRequest.current?.abort();
-  }, [dialog, exportWarehouse, scopeId]);
+    if (dialog !== 'export') loadedTargetScope.current = null;
+    if (dialog !== 'export' || !exportWarehouse || !hasDmsItems) {
+      targetRequest.current?.abort();
+      setTargetLoading(false);
+      setTargetMessage('');
+      return;
+    }
+    const targetScope = JSON.stringify([exportWarehouse, scopeId]);
+    if (loadedTargetScope.current === targetScope) return;
+    const read = readDmsTarget(exportWarehouse);
+    const request = targetRequest.current;
+    void read.then(() => {
+      if (!request?.signal.aborted) loadedTargetScope.current = targetScope;
+    });
+    return () => request?.abort();
+  }, [dialog, exportWarehouse, scopeId, hasDmsItems]);
   const [dmsReceipt, setDmsReceipt] = useState<{
     orderCode: string;
     aiPreOrderCode: string;
@@ -271,6 +291,7 @@ export function FcConfiguredList(
   const [consumptionReviewed, setConsumptionReviewed] = useState(false);
   useEffect(() => setConsumptionReviewed(false), [exportRows, draft, exportWarehouse]);
   useEffect(() => {
+    loadedTargetScope.current = null;
     setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
     setAutomaticTargetFields([]);
     setDmsReceipt(null);
@@ -1426,7 +1447,7 @@ export function FcConfiguredList(
                   条记录缺少分仓或商品编码，已排除出本次提交和导出，请核对源数据。
                 </p>
               )}
-              {dialog === 'export' && (
+              {dialog === 'export' && hasDmsItems && (
                 <fieldset className="fc-dms-fields" disabled={busy || Boolean(dmsReceipt)}>
                   <legend>DMS 暂存信息</legend>
                   {(
@@ -1516,7 +1537,9 @@ export function FcConfiguredList(
               <p>
                 {displayedPreviewRows.length}个SKU
                 {dialog === 'export'
-                  ? '，可暂存至DMS，或仅导出Excel。暂存成功前请保留草稿；结果未知时请先在DMS核查。'
+                  ? hasDmsItems
+                    ? '，可暂存至DMS，或仅导出Excel。暂存成功前请保留草稿；结果未知时请先在DMS核查。'
+                    : '，当前分仓无需补货。'
                   : ''}
               </p>
               <div className="table-scroll">
