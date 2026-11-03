@@ -271,6 +271,7 @@ function WorkbenchBody() {
   const cards = [
     {
       title: '当前库存',
+      description: '周转指标按有效记录计算；展望周转的库存与计划取同一批记录，异常或缺失项不参与。',
       value: knownNumber(branchStock?.total_qty),
       unit: '件',
       color: 'blue',
@@ -460,8 +461,8 @@ function WorkbenchBody() {
                   </div>
                   {c.title === '待补货量' && missingRecommendations > 0 && (
                     <small>
-                      {c.value !== null ? '已测算部分；' : ''}
-                      {missingRecommendations} 项待核实
+                      {c.value !== null ? '按有效记录计算；' : ''}
+                      已忽略 {missingRecommendations} 项异常或缺失记录
                     </small>
                   )}
                   {c.title === '当前订单' &&
@@ -493,7 +494,7 @@ function WorkbenchBody() {
                 {modelInsight.status === 'ready'
                   ? modelInsight.answer?.replace(/\s*\n+\s*/g, ' ')
                   : modelInsight.status === 'error'
-                    ? 'AI 洞察暂时生成失败，可刷新后重试。'
+                    ? '-'
                     : 'AI 洞察生成中…'}
               </p>
             </section>

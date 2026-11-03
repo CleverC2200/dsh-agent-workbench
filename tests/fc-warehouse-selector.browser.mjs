@@ -38,7 +38,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -165,7 +165,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     .filter({ hasText: '待补货量' });
   await expect(replenishmentCard).toContainText('70');
   await expect(replenishmentCard).toContainText('110.36万件');
-  await expect(replenishmentCard).toContainText('已测算部分；2 项待核实');
+  await expect(replenishmentCard).toContainText('按有效记录计算；已忽略 2 项异常或缺失记录');
   const toolbar = page.locator('form[data-business-filters="fc"]');
   for (const width of [1280, 900, 640]) {
     await page.setViewportSize({ width, height: 900 });
@@ -401,7 +401,7 @@ test('FC aging exposes immediate risk filters, leading risk column and ten-row s
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -538,7 +538,7 @@ test('FC shows system plans before import and downloads every authorized row thr
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -635,7 +635,7 @@ test('FC upstream transfer orders show supply bases, exact SKUs and preserve rec
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -792,7 +792,7 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -984,7 +984,7 @@ test('replenishment quick filters use server scope, product links expand inline 
         body: `<style>${css}</style><div id="app"></div><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -1147,7 +1147,7 @@ test('identity changes reload cards and lists even when both accounts select all
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],

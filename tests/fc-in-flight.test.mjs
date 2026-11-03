@@ -95,7 +95,8 @@ test('cards and the list share one pending inventory-date read through their act
   const execute = async (_, o) => {
     calls.push(o.queryId);
     await new Promise(setImmediate);
-    if (o.queryId === 'summary.snapshot') return { configVersion: 'fixture', rows: [] };
+    if (['summary.snapshot', 'summary.bootstrap'].includes(o.queryId))
+      return { configVersion: 'fixture', rows: [] };
     return {
       configVersion: 'fixture',
       rows: [

@@ -242,7 +242,7 @@ export default function ConfiguredWorkbench() {
                 {modelInsight.status === 'ready'
                   ? modelInsight.answer
                   : modelInsight.status === 'error'
-                    ? '洞察暂生成失败，可刷新后重试。'
+                    ? '-'
                     : '正在分析当前库存…'}
               </p>
             </section>

@@ -36,7 +36,7 @@ export function branchDashboardEvidence(input: {
       ? null
       : values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
   };
-  const available = number(plan.available_qty) ?? number(stock.available_qty);
+  const available = number(stock.available_qty) ?? number(plan.available_qty);
   const totalRows = number(plan.row_count);
   const comparable = input.localPlanTrial ? null : number(plan.comparable_sku_count);
   const deviation = input.localPlanTrial ? null : number(plan.known_inventory_deviation_qty);
@@ -144,6 +144,11 @@ export function branchDashboardEvidence(input: {
       last30DaysQty: number(plan.rolling_ship_positive),
       last30DaysDailyQty: number(plan.rolling_ship_daily),
     },
+    turnover: {
+      forecastDays: number(plan.forecast_turnover_days),
+      basis:
+        '仅库存与展望日均均有效的同一分仓/SKU记录；缺失或异常记录同时排除出分子和分母，不代表全部库存的展望周转。零计划有效，合计日均为零时周转未知。',
+    },
     coverage: {
       kind: complete ? '全范围可比' : '仅已核实可比子集，不能判断整体高低库存',
       totalSkuLocations: totalRows,
@@ -169,7 +174,8 @@ export function branchDashboardEvidence(input: {
     definitions: {
       inventoryDeviation:
         '高低库存判断只比较comparison中的同一SKU交集：订单扣减后可供库存=该交集目标+差额。totals.currentAvailableQty是全仓可用库存，不能与子集目标、差额或偏差率配对比较。可用库存不含在途。',
-      unknown: 'null为缺失，已知可加和量按已知部分汇总并保留缺失计数；不把未知事实当0。',
+      unknown:
+        'null为缺失。异常或缺失记录不参与其指标汇总，其余有效记录继续计算，保留忽略数量；零值有效，不把未知事实当0。',
       ranking: '当前没有全量分仓×品类排名或SKU交集证据，不使用列表当前页排名或解释错配原因。',
       intersections:
         '缺目标个数和缺计算要素个数均为独立计数，没有SKU交集，不能断言集中在相同SKU、相同批次或同一原因，也不能用两计数接近推断重叠。',

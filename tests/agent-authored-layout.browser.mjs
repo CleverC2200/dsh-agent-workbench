@@ -1692,7 +1692,7 @@ test('FC restores real plan template, validates warehouse scope and applies an i
   const card = frame
     .locator('[data-overview-cards="fc"] article')
     .filter({ has: frame.getByText('待补货量', { exact: true }) });
-  await expect(card.locator('.kpi-value')).toHaveText('-'); // Unlisted SKUs in the replaced month remain unknown.
+  await expect(card.locator('.kpi-value')).toHaveText('80件'); // Unknown SKUs do not erase the valid imported recommendation.
   await frame.getByRole('button', { name: '补货确认', exact: true }).click();
   await expect(
     frame.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }),
@@ -2539,8 +2539,8 @@ test('FC model failure leaves stock cards and ten-row list available', async (t)
   const { frame, errors } = await mount(t, 'fc', 1280, fcWorkflowRows, async () => {
     throw Error('MODEL_UNAVAILABLE');
   });
-  await expect(frame.getByRole('region', { name: 'AI 洞察', exact: true })).toContainText(
-    'AI 洞察暂时生成失败',
+  await expect(frame.getByRole('region', { name: 'AI 洞察', exact: true }).locator('p')).toHaveText(
+    '-',
   );
   await expect(frame.locator('[data-overview-cards="fc"] article')).toHaveCount(5);
   await expect(

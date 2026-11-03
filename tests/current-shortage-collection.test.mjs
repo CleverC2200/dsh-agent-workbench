@@ -34,7 +34,7 @@ function execute(truncate = false) {
   const calls = [];
   const run = async (_, call) => {
     calls.push(call);
-    if (call.queryId === 'summary.snapshot') return { rows: [] };
+    if (['summary.snapshot', 'summary.bootstrap'].includes(call.queryId)) return { rows: [] };
     if (call.queryId.endsWith('.count')) return { rows: [{ total: 56 }] };
     const { offset, page_size } = call.values;
     const page = rows.slice(offset, offset + page_size - (truncate && offset === 0 ? 1 : 0));
@@ -54,7 +54,11 @@ test('current-order location aggregates read all 56 rows across the gateway 50-r
   assert.equal(result.rows.length, 56);
   assert.deepEqual(
     calls
-      .filter((c) => !c.queryId.endsWith('.count') && c.queryId !== 'summary.snapshot')
+      .filter(
+        (c) =>
+          !c.queryId.endsWith('.count') &&
+          !['summary.snapshot', 'summary.bootstrap'].includes(c.queryId),
+      )
       .map((c) => c.values.offset),
     [0, 50],
   );

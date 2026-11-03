@@ -21,7 +21,11 @@ let identityGeneration = 0;
 if (typeof window !== 'undefined')
   window.addEventListener('gea-identity-changed', () => identityGeneration++);
 const suppliedReads = new WeakMap<ConfiguredExecution, ReturnType<typeof inFlightQueries<any>>>();
-type SummaryReads = Map<string, { at: number; result: Promise<DailySummarySnapshot> }>;
+type SummaryRead = {
+  snapshot: DailySummarySnapshot;
+  preloaded?: { at: number; result: any };
+};
+type SummaryReads = Map<string, { at: number; result: Promise<SummaryRead> }>;
 const pageSummaries: SummaryReads = new Map();
 const suppliedSummaries = new WeakMap<ConfiguredExecution, SummaryReads>();
 
@@ -100,6 +104,7 @@ export function createAgentQueries(
       );
     });
   let selectedSnapshot: DailySummarySnapshot | undefined;
+  let preloaded: SummaryRead['preloaded'];
   const client = createQueryClient(config, (request, options) =>
     executeDailyBundle(
       config,
@@ -109,6 +114,7 @@ export function createAgentQueries(
       request,
       options,
       freshness.freshAfter ?? configuredQueryFreshAfter(),
+      preloaded,
     ),
   );
   const shared = execute
@@ -129,7 +135,8 @@ export function createAgentQueries(
     : pageSummaries;
   const selectRead = async (id: string, values: Record<string, unknown>) => {
     if (!config.dailySummary || !config.queries[id]?.summaryRoute) return { id, values };
-    const snapshotId = config.dailySummary.snapshotQueryId;
+    const bootstrapId = config.dailySummary.bundle?.bootstrapQueryId;
+    const snapshotId = bootstrapId ?? config.dailySummary.snapshotQueryId;
     if (typeof snapshotId !== 'string' || !config.queries[snapshotId])
       throw Error('SUMMARY_SNAPSHOT_NOT_CONFIGURED');
     const key = JSON.stringify([
@@ -140,9 +147,42 @@ export function createAgentQueries(
     ]);
     let snapshot = summaryReads.get(key);
     if (!snapshot || Date.now() - snapshot.at >= 20 * 60 * 1000) {
+      const metadataColumns = config.queries[config.dailySummary.snapshotQueryId].resultColumns;
       const result = client
-        .read(snapshotId, {}, { requiredColumns: config.queries[snapshotId].resultColumns })
-        .then(parseDailySummarySnapshot);
+        .read(snapshotId, {}, { requiredColumns: metadataColumns })
+        .then((response: any): SummaryRead => {
+          if (!bootstrapId) return { snapshot: parseDailySummarySnapshot(response) };
+          const metadata = (row: any) =>
+            Object.fromEntries(metadataColumns.map((name: string) => [name, row[name]]));
+          const rows = response.rows;
+          if (!Array.isArray(rows)) throw Error('SUMMARY_SNAPSHOT_INVALID');
+          if (
+            rows.some(
+              (row: any) => JSON.stringify(metadata(row)) !== JSON.stringify(metadata(rows[0])),
+            )
+          )
+            throw Error('SUMMARY_SNAPSHOT_INVALID');
+          const businessColumns = (columns: any[] | undefined) =>
+            columns?.filter(
+              (column) =>
+                !metadataColumns.includes(
+                  typeof column === 'string'
+                    ? column
+                    : (column.outputAlias ?? column.alias ?? column.name ?? column.columnName),
+                ),
+            );
+          return {
+            snapshot: parseDailySummarySnapshot({ rows: rows.length ? [metadata(rows[0])] : [] }),
+            preloaded: {
+              at: Date.now(),
+              result: {
+                ...response,
+                returnedColumns: businessColumns(response.returnedColumns),
+                rejectedColumns: businessColumns(response.rejectedColumns),
+              },
+            },
+          };
+        });
       snapshot = { at: Date.now(), result };
       summaryReads.set(key, snapshot);
       result.catch((error) => {
@@ -154,10 +194,12 @@ export function createAgentQueries(
           return;
         if (summaryReads.get(key)?.result === result) summaryReads.delete(key);
       });
-      // Only version metadata is cached. Business rows remain identity-checked by the Host.
+      // Prefetched rows expire after the initial-load window; metadata can outlive them.
       if (summaryReads.size > 32) summaryReads.delete(summaryReads.keys().next().value ?? '');
     }
-    selectedSnapshot = await snapshot.result;
+    const selectedRead = await snapshot.result;
+    selectedSnapshot = selectedRead.snapshot;
+    preloaded = selectedRead.preloaded;
     const selected = dailySummaryQuery(config.queries[id], selectedSnapshot, values);
     return selected ? { id: selected.queryId, values: selected.values } : { id, values };
   };

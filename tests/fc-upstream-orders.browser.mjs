@@ -38,7 +38,7 @@ async function openFixture(t, denied = false) {
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
