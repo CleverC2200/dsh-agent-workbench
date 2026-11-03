@@ -360,16 +360,29 @@ test('SQL summaries preserve NULL, zero, duplicate-stock guards and every visibl
         a.cards.map((c) => [c.key, c.value, ...c.comparison]),
         dimension + ' cards',
       );
-      const comparablePerformance = performance => Object.fromEntries(
-        Object.entries(performance).map(([key, tables]) => [key, Object.fromEntries(
-          Object.entries(tables).map(([period, rows]) => [period, rows.map(row => row.map(cell => {
-            if (cell?.text !== '—') return cell;
-            assert.ok(cell.title, 'missing values retain their source-specific diagnostic');
-            return cell.text;
-          }))]),
-        )]),
+      const comparablePerformance = (performance) =>
+        Object.fromEntries(
+          Object.entries(performance).map(([key, tables]) => [
+            key,
+            Object.fromEntries(
+              Object.entries(tables).map(([period, rows]) => [
+                period,
+                rows.map((row) =>
+                  row.map((cell) => {
+                    if (cell?.text !== '—') return cell;
+                    assert.ok(cell.title, 'missing values retain their source-specific diagnostic');
+                    return cell.text;
+                  }),
+                ),
+              ]),
+            ),
+          ]),
+        );
+      assert.deepEqual(
+        comparablePerformance(b.performance),
+        comparablePerformance(a.performance),
+        dimension,
       );
-      assert.deepEqual(comparablePerformance(b.performance), comparablePerformance(a.performance), dimension);
       assert.deepEqual(b.dimensions, a.dimensions, dimension + ' dimensions');
     }
   } finally {

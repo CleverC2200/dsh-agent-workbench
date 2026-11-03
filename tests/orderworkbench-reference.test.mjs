@@ -2,7 +2,10 @@ import { createReportPersistence } from '../prototypes/inventory-orderworkbench/
 import { createFrameProgress } from '../business/shared/frame-progress.js';
 import { metricDetailsRequest } from '../prototypes/inventory-orderworkbench/metric-details.mjs';
 import { startDashboardTiming } from '../business/shared/dashboard-timing.js';
-import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache } from '../prototypes/inventory-orderworkbench/presentation-cache.mjs';
+import {
+  createWorkbenchPresentationCache,
+  createWorkbenchEvidenceCache,
+} from '../prototypes/inventory-orderworkbench/presentation-cache.mjs';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -118,10 +121,18 @@ test('order workbench reference interactions', async () => {
     const document = window.document;
     window.dispatchEvent(new window.Event('gea-session-changed'));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.equal(window.reportLoads, 1, 'initial Session notification and ready resolve share one live load');
+    assert.equal(
+      window.reportLoads,
+      1,
+      'initial Session notification and ready resolve share one live load',
+    );
     window.dispatchEvent(new window.Event('gea-session-changed'));
-    await new Promise(resolve => setTimeout(resolve, 0));
-    assert.equal(window.reportLoads, 1, 'duplicate connected notifications do not restart a live report');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(
+      window.reportLoads,
+      1,
+      'duplicate connected notifications do not restart a live report',
+    );
     assert.equal(document.querySelectorAll('.wb-kpi').length, 6);
     assert.equal(window.pageSnapshot.consumerCode, 'order');
     assert.equal(window.pageSnapshot.mock, false);
@@ -159,7 +170,11 @@ test('order workbench reference interactions', async () => {
     assert.equal(window.requestedPeriod.start, '2026-09-01');
     assert.equal(window.requestedPeriod.end, '2026-09-07');
     assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'loaded');
-    assert.equal(window.savedReports.size, 0, 'viewing periods does not write full metric snapshots');
+    assert.equal(
+      window.savedReports.size,
+      0,
+      'viewing periods does not write full metric snapshots',
+    );
     assert.equal(
       validHtmlViewState('inventory-orderworkbench', { ...window.savedView, version: 1 }),
       true,
@@ -208,14 +223,20 @@ test('order workbench reference interactions', async () => {
     const metricNode = document.querySelector('#wbKpis .wb-kpi');
     let missingReasonReads = 0;
     const readMissingReason = window.workbenchCellMissingReason;
-    window.workbenchCellMissingReason = (...args) => { missingReasonReads++; return readMissingReason(...args); };
+    window.workbenchCellMissingReason = (...args) => {
+      missingReasonReads++;
+      return readMissingReason(...args);
+    };
     for (let repeat = 0; repeat < 3; repeat++)
       for (const button of document.querySelectorAll('[data-wb-dimension-tab]')) {
         button.click();
         assert.equal(document.querySelector('#wbKpis .wb-kpi'), metricNode);
         assert.equal(window.pageSnapshot.dimension.key, button.dataset.wbDimensionTab);
       }
-    assert.ok(missingReasonReads < 50, `table rendering recalculated ${missingReasonReads} cell diagnostics`);
+    assert.ok(
+      missingReasonReads < 50,
+      `table rendering recalculated ${missingReasonReads} cell diagnostics`,
+    );
     click('[data-wb-reference-add]');
     document.getElementById('wbReferenceName').value = '月度报告';
     document.getElementById('wbReferenceUrl').value = 'https://example.com/report';
@@ -334,9 +355,16 @@ test('order workbench reference interactions', async () => {
     resumed.resolve(window.liveFixture);
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'loaded');
-    assert.equal(window.savedReports.size, 0, 'completed metric loads remain in memory without background database writes');
-    assert.ok([...window.savedEdits.values()].some(value =>
-      value.edits.summary.positive === '对比加载时编辑的摘要'));
+    assert.equal(
+      window.savedReports.size,
+      0,
+      'completed metric loads remain in memory without background database writes',
+    );
+    assert.ok(
+      [...window.savedEdits.values()].some(
+        (value) => value.edits.summary.positive === '对比加载时编辑的摘要',
+      ),
+    );
     click('[data-period-month="2026-07"]');
     assert.ok(
       document.querySelector('[data-period-month="2026-09"]'),

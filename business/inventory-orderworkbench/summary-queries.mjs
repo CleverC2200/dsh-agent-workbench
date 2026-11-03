@@ -45,7 +45,10 @@ export function addWorkbenchSummaryQueries(config) {
     };
   }
   const directors = config.queries['workbench.directormembers'];
-  for (const [name, keys] of [['customers', ['region', 'province', 'customer']], ['customermanagers', ['customer']]]) {
+  for (const [name, keys] of [
+    ['customers', ['region', 'province', 'customer']],
+    ['customermanagers', ['customer']],
+  ]) {
     const original = config.queries['workbench.' + name];
     if (!original?.pagination?.countQuery) continue;
     const count = config.queries[original.pagination.countQuery];
