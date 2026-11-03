@@ -9,7 +9,12 @@ export function prepareFulfillmentPresentation(html) {
   const orderToolbar = d.createElement('div');
   orderToolbar.className = 'delivery-order-view-toolbar';
   orderTabs.before(orderToolbar);
-  orderToolbar.append(orderTabs, orderTools);
+  const pushSettings = d.createElement('button');
+  pushSettings.id = 'fulfillmentPushSettings';
+  pushSettings.type = 'button';
+  pushSettings.className = 'fulfillment-push-settings-trigger';
+  pushSettings.textContent = '推送设置';
+  orderToolbar.append(orderTabs, pushSettings, orderTools);
   d.querySelector('main').id = 'app';
   const status = d.createElement('span');
   status.id = 'prototypeStatus';

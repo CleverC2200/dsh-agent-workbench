@@ -45,6 +45,27 @@ export function addWorkbenchSummaryQueries(config) {
     };
   }
   const directors = config.queries['workbench.directormembers'];
+  for (const [name, keys] of [
+    ['customers', ['region', 'province', 'customer']],
+    ['customermanagers', ['customer']],
+  ]) {
+    const original = config.queries['workbench.' + name];
+    if (!original?.pagination?.countQuery) continue;
+    const count = config.queries[original.pagination.countQuery];
+    const packets = rowPacketSql(raw(name), original.resultColumns, keys);
+    const id = 'workbench.' + name + '.packets';
+    config.queries[id + '.count'] = {
+      ...count,
+      request: { ...count.request, sql: 'SELECT COUNT(*) AS total FROM (' + packets + ') counted' },
+      resultColumns: ['total'],
+    };
+    config.queries[id] = {
+      ...original,
+      request: { ...original.request, sql: packets + ' LIMIT :gea_p1001 OFFSET :gea_p1002' },
+      resultColumns: ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],
+      pagination: { countQuery: id + '.count' },
+    };
+  }
   if (directors?.pagination?.countQuery) {
     const directorPackets = rowPacketSql(raw('directormembers'), directors.resultColumns, [
       'base',

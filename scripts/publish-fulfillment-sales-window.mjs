@@ -21,7 +21,7 @@ export async function publishFulfillmentSalesWindow({ bundle, directory }) {
   if (
     manifest.owner !== 'dsh-agent-workbench' ||
     manifest.consumerCode !== 'order01' ||
-    manifest.presentationApiVersion !== 1 ||
+    ![1, 2].includes(manifest.presentationApiVersion) ||
     Object.keys(manifest.assets ?? {})
       .sort()
       .join() !== [...names].sort().join()

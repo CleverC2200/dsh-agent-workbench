@@ -607,6 +607,142 @@ test('metadata loads while comparisons are pending and final facts remain identi
   assert.deepEqual(withoutReadAt(actual), withoutReadAt(expected));
 });
 
+test('month and week finish before auxiliary and historical reads compete for the queue', async () => {
+  let release, started;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const primaryStarted = new Promise((resolve) => {
+    started = resolve;
+  });
+  const calls = [],
+    progress = [];
+  const running = model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    summary: true,
+    now: new Date('2026-10-30T00:00:00Z'),
+    execute: async (_request, context) => {
+      calls.push(context);
+      if (context.queryId === 'workbench.orders.summary') {
+        started();
+        await held;
+      }
+      return { rows: [] };
+    },
+    onProgress: (facts) => progress.push(facts),
+  });
+  await primaryStarted;
+  await new Promise((resolve) => setImmediate(resolve));
+  try {
+    assert.ok(
+      progress.some((facts) => facts.periods.month),
+      'month can paint before week completion',
+    );
+    assert.ok(calls.every(({ values }) => !['2026-09-01', '2025-10-01'].includes(values.start)));
+    assert.ok(!calls.some(({ queryId }) => /customers|customermanagers/.test(queryId)));
+  } finally {
+    release();
+  }
+  const facts = await running;
+  assert.equal(facts.complete, true);
+  assert.ok(calls.some(({ values }) => values.start === '2026-09-01'));
+});
+
+test('same-scope period seeds reuse validated sections but retry failed sections and reject old versions', async () => {
+  const calls = [];
+  const options = {
+    summary: true,
+    now: new Date('2026-10-30T00:00:00Z'),
+    execute: async (_request, context) => {
+      calls.push(context);
+      return { rows: [] };
+    },
+  };
+  const first = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, options);
+  calls.length = 0;
+  const reused = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    seedFacts: [first],
+  });
+  assert.ok(calls.every(({ queryId }) => /customers|customermanagers/.test(queryId)));
+  assert.deepEqual(reused.periods, first.periods);
+  const failed = structuredClone(first);
+  failed.periods.week.sections.find((part) => part.id === 'orders').status = 'error';
+  calls.length = 0;
+  await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    seedFacts: [failed],
+  });
+  assert.equal(calls.filter(({ queryId }) => queryId === 'workbench.orders.summary').length, 1);
+  calls.length = 0;
+  await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    seedFacts: [{ ...first, metricCalculationVersion: -1 }],
+  });
+  assert.ok(calls.some(({ queryId }) => queryId === 'workbench.orders.summary'));
+});
+
+test('customer packets retain complete UTF-8 and nullable metadata in one read per collection', async () => {
+  const columns = [
+    'region',
+    'province',
+    'customer',
+    'name',
+    'numerator',
+    'denominator',
+    'records',
+    'invalid',
+  ];
+  const customers = Array.from({ length: 1700 }, (_, i) => [
+    '大区',
+    '省区',
+    `00${i}`,
+    `客户😀:${i}`,
+    i % 2,
+    10,
+    1,
+    0,
+  ]);
+  const managers = customers.map((row, i) => [row[2], i % 2 ? null : '负责人', i % 2 ? 0 : 1]);
+  const tuple = (fields) =>
+    fields
+      .map((value) => (value === null ? 'N' : `V${Buffer.byteLength(String(value))}:${value}`))
+      .join('');
+  const packets = (rows) =>
+    Array.from({ length: Math.ceil(rows.length / 64) }, (_, packet_index) => ({
+      packet_index,
+      packet_scope_total: rows.length,
+      packet_count: rows.slice(packet_index * 64, (packet_index + 1) * 64).length,
+      packet_rows: rows
+        .slice(packet_index * 64, (packet_index + 1) * 64)
+        .map((row, i) => tuple([packet_index * 64 + i + 1, ...row])),
+    }));
+  const calls = [];
+  const facts = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    summary: true,
+    now: new Date('2026-10-30T00:00:00Z'),
+    execute: async (_request, { queryId }) => {
+      calls.push(queryId);
+      return {
+        rows:
+          queryId === 'workbench.customers.packets'
+            ? packets(customers)
+            : queryId === 'workbench.customermanagers.packets'
+              ? packets(managers)
+              : [],
+      };
+    },
+  });
+  assert.equal(facts.customers.status, 'ready');
+  assert.deepEqual(
+    facts.customers.rows,
+    customers.map((row) => Object.fromEntries(columns.map((key, i) => [key, row[i]]))),
+  );
+  assert.equal(facts.customerManagers.rows.length, 1700);
+  assert.deepEqual(facts.customerManagers.rows[1], { customer: '001', manager: null, names: 0 });
+  assert.equal(calls.filter((id) => id.startsWith('workbench.customers')).length, 1);
+  assert.equal(calls.filter((id) => id.startsWith('workbench.customermanagers')).length, 1);
+});
+
 test('lazy table presentation preserves card and selected-dimension results without building hidden SKU details', () => {
   const period = fixturePeriod();
   period.metrics = model.computeWorkbenchMetrics(period);

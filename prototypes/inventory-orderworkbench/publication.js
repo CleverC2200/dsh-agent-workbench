@@ -7,7 +7,8 @@ export function publishReport(snapshot, disposePage) {
     revision = 0,
     epoch = 0;
   let latest,
-    running = false;
+    running = false,
+    timer;
   let withdraw = () => {};
   let lifetime = new AbortController();
   const status = document.getElementById('pageSyncStatus');
@@ -19,11 +20,11 @@ export function publishReport(snapshot, disposePage) {
     if (running || !active || !connected) return;
     running = true;
     while (latest && active && connected) {
-      const next = latest;
       latest = undefined;
       const version = revision,
         identity = epoch;
       try {
+        const next = snapshot();
         await call('context', next, { signal: lifetime.signal });
         if (!active || !connected || identity !== epoch) continue;
         if (version !== revision) continue;
@@ -63,9 +64,12 @@ export function publishReport(snapshot, disposePage) {
     revision++;
     withdraw();
     withdraw = () => {};
-    latest = snapshot();
+    latest = true;
     if (connected) showStatus('正在同步当前报告上下文…');
-    void flush();
+    if (timer === undefined) timer = setTimeout(() => {
+      timer = undefined;
+      void flush();
+    });
   }
   const changed = () => {
     epoch++;
@@ -79,6 +83,8 @@ export function publishReport(snapshot, disposePage) {
     lifetime.abort();
     connected = false;
     latest = undefined;
+    clearTimeout(timer);
+    timer = undefined;
     withdraw();
     withdraw = () => {};
     showStatus('页面会话已失效，请重新打开页面。');
@@ -90,6 +96,7 @@ export function publishReport(snapshot, disposePage) {
     if (!active) return;
     active = false;
     clearInterval(heartbeat);
+    clearTimeout(timer);
     epoch++;
     lifetime.abort();
     latest = undefined;

@@ -1,3 +1,4 @@
+import { directSourceFixture } from './fixtures/configured-page.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
@@ -6,6 +7,17 @@ import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
 const bundle = await build({
+  plugins: [
+    {
+      name: 'direct-source-interaction-fixture',
+      setup(builder) {
+        builder.onLoad({ filter: /inventory-fc\/sql\.config\.json$/ }, () => ({
+          contents: JSON.stringify(directSourceFixture(config)),
+          loader: 'json',
+        }));
+      },
+    },
+  ],
   stdin: {
     contents: `import './business/inventory-fc/source/inventory-light-plugins/src/dsh-ui/base.css';import React from 'react';import{createRoot}from'react-dom/client';import{configuredQueryFreshAfter}from'./business/shared/query-cache';window.queryFreshAfter=configuredQueryFreshAfter;import Page from './business/inventory-fc/source/inventory-light-plugins/src/pages/configured-workbench.tsx';createRoot(document.getElementById('app')).render(React.createElement(Page));`,
     resolveDir: process.cwd(),
@@ -38,7 +50,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -48,7 +60,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
         },
       });
     calls.push({ id, values });
-    if (id === 'replenishment.detail.atomic' && values.page_size === 200)
+    if (id === 'replenishment-confirmation.detail.atomic' && values.page_size === 200)
       await new Promise((resolve) => {
         releaseConfirmation = resolve;
       });
@@ -165,7 +177,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     .filter({ hasText: '待补货量' });
   await expect(replenishmentCard).toContainText('70');
   await expect(replenishmentCard).toContainText('110.36万件');
-  await expect(replenishmentCard).toContainText('已测算部分；2 项待核实');
+  await expect(replenishmentCard).not.toContainText('已忽略');
+  await expect(replenishmentCard).toHaveAttribute('title', /已忽略 2 项异常或缺失记录/);
   const toolbar = page.locator('form[data-business-filters="fc"]');
   for (const width of [1280, 900, 640]) {
     await page.setViewportSize({ width, height: 900 });
@@ -219,9 +232,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   assert.ok(!calls.some((c) => c.id === 'health.summary'));
   await expect(page.locator('[data-overview-cards="fc"] article').last()).toContainText('23');
   await expect
-    .poll(() =>
-      calls.some((c) => c.id === 'branch-supply.summary' && c.values.warehouse_code === 'A170'),
-    )
+    .poll(() => calls.some((c) => c.id === 'orders.summary' && c.values.warehouse_code === 'A170'))
     .toBe(true);
   await expect
     .poll(() =>
@@ -315,8 +326,9 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toHaveCount(0);
   await expect.poll(() => typeof releaseConfirmation).toBe('function');
   assert.equal(
-    calls.findLast((c) => c.id === 'replenishment.detail.atomic' && c.values.page_size === 200)
-      .values.warehouse_code,
+    calls.findLast(
+      (c) => c.id === 'replenishment-confirmation.detail.atomic' && c.values.page_size === 200,
+    ).values.warehouse_code,
     'N417',
   );
   assert.equal(
@@ -353,10 +365,10 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   const orderPanel = page.getByRole('region', { name: '当前订单', exact: true });
   await expect(
-    orderPanel.getByRole('textbox', { name: '调拨单号或供货基地', exact: true }),
+    orderPanel.getByRole('textbox', { name: '客户订单号或下游客户', exact: true }),
   ).toHaveValue('');
   await orderPanel
-    .getByRole('textbox', { name: '调拨单号或供货基地', exact: true })
+    .getByRole('textbox', { name: '客户订单号或下游客户', exact: true })
     .fill('CE-SHARED');
   await page.getByRole('button', { name: '补货确认', exact: true }).click();
   const replenishmentPanel = page.getByRole('region', { name: '补货确认', exact: true });
@@ -401,7 +413,7 @@ test('FC aging exposes immediate risk filters, leading risk column and ten-row s
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -538,7 +550,7 @@ test('FC shows system plans before import and downloads every authorized row thr
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -621,7 +633,7 @@ test('FC shows system plans before import and downloads every authorized row thr
   assert.deepEqual(errors, []);
 });
 
-test('FC upstream transfer orders show supply bases, exact SKUs and preserve receiving branch scope', async (t) => {
+test('FC downstream customer orders show dealers, exact SKUs and preserve shipping branch scope', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -635,7 +647,7 @@ test('FC upstream transfer orders show supply bases, exact SKUs and preserve rec
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -719,11 +731,12 @@ test('FC upstream transfer orders show supply bases, exact SKUs and preserve rec
   await expect(list.getByText('遂平', { exact: true })).toBeVisible();
   await expect(list.locator('thead').first().locator('th')).toHaveText([
     '订单号',
-    '供货基地',
+    '分仓',
+    '下游客户',
     '订单日期',
     'SKU个数',
     '需求量（件）',
-    '基地已占用（件）',
+    '分仓已占用（件）',
     '剩余需求量（件）',
     '缺货量（件）',
     '状态',
@@ -759,7 +772,9 @@ test('FC upstream transfer orders show supply bases, exact SKUs and preserve rec
   assert.equal(detailCall.values.order_no, 'CE2600000190');
   assert.equal(detailCall.values.customer_code, 'C1');
   assert.ok(!calls.some((call) => call.id === 'current-shortage.detail'));
-  await list.getByRole('textbox', { name: '调拨单号或供货基地', exact: true }).fill('CE2600000190');
+  await list
+    .getByRole('textbox', { name: '客户订单号或下游客户', exact: true })
+    .fill('CE2600000190');
   await list.getByRole('button', { name: '查询', exact: true }).click();
   await expect
     .poll(
@@ -792,7 +807,7 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -813,7 +828,9 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
     else if (id === 'branch-warehouse.directory')
       rows = [{ warehouse_code: 'N436', warehouse_name: '郑州DC仓', base: '郑州' }];
     else if (id.startsWith('source.')) rows = [{ day: '2026-10-29' }];
-    else if (id === 'replenishment.detail.atomic') {
+    else if (
+      ['replenishment.detail.atomic', 'replenishment-confirmation.detail.atomic'].includes(id)
+    ) {
       if (failPersistent)
         return route.fulfill({
           status: 503,
@@ -984,7 +1001,7 @@ test('replenishment quick filters use server scope, product links expand inline 
         body: `<style>${css}</style><div id="app"></div><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -1147,7 +1164,7 @@ test('identity changes reload cards and lists even when both accounts select all
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],

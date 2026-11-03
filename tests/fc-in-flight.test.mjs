@@ -91,11 +91,23 @@ test('cards and the list share one pending inventory-date read through their act
   );
   const { readFile } = await import('node:fs/promises');
   const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+  delete config.dailySummary.bundle; // This test isolates pending snapshot reads from bootstrap bundling.
   const calls = [];
   const execute = async (_, o) => {
     calls.push(o.queryId);
     await new Promise(setImmediate);
-    if (o.queryId === 'summary.snapshot') return { configVersion: 'fixture', rows: [] };
+    if (['summary.snapshot', 'summary.bootstrap'].includes(o.queryId))
+      return {
+        configVersion: 'fixture',
+        rows: [
+          {
+            batch_id: '20261102080000000000',
+            business_date: '2026-11-02',
+            stock_date: '2026-11-01',
+            target_month: '2026-11-01',
+          },
+        ],
+      };
     return {
       configVersion: 'fixture',
       rows: [
@@ -119,7 +131,7 @@ test('cards and the list share one pending inventory-date read through their act
   ]);
   assert.equal(overview['branch-stock'].error, undefined);
   assert.equal(page.total, 0);
-  assert.equal(calls.filter((id) => id === 'source.branch-stock-date').length, 1);
+  assert.equal(calls.filter((id) => id === 'snapshot.source.branch-stock-date').length, 1);
   const before = calls.length;
   await readConfiguredFacts(
     config,
@@ -127,7 +139,7 @@ test('cards and the list share one pending inventory-date read through their act
     { asOf: '2026-11-02', readContext: page.readContext, filters: { list_mode: 'urgent' } },
     { execute, detailsOnly: true },
   );
-  assert.deepEqual(calls.slice(before), ['replenishment.detail.atomic']);
+  assert.deepEqual(calls.slice(before), ['snapshot-default.replenishment.detail.atomic']);
   const expired = { ...page.readContext, readAt: Date.now() - 21 * 60 * 1000 };
   await readConfiguredFacts(
     config,
@@ -135,5 +147,5 @@ test('cards and the list share one pending inventory-date read through their act
     { asOf: '2026-11-02', readContext: expired },
     { execute, detailsOnly: true },
   );
-  assert.equal(calls.filter((id) => id === 'source.branch-stock-date').length, 2);
+  assert.equal(calls.filter((id) => id === 'snapshot.source.branch-stock-date').length, 2);
 });

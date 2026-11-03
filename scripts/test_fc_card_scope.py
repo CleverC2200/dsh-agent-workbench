@@ -21,14 +21,14 @@ class BranchCardScope(unittest.TestCase):
   row=self.f.read('replenishment.summary')[0]
   self.assertEqual((row['warehouse_count'],row['known_in_transit'],row['known_preparing']),(1,20,20))
   detail=self.f.read('replenishment.detail');self.assertEqual({r['warehouse_code'] for r in detail},{'WH1'})
- def test_customer_orders_never_replace_branch_asn_demand(self):
+ def test_customer_orders_drive_branch_replenishment_independently_of_asn(self):
   self.add('DEALER')
   detail=next(r for r in self.f.read('replenishment.detail') if r['sku']=='S1')
-  self.assertEqual((detail['current_order_demand'],detail['current_order_allocated'],detail['calculation_order_remaining']),(0,0,0))
-  self.assertEqual(detail['recommended_qty'],35)
+  self.assertEqual((detail['current_order_demand'],detail['current_order_allocated'],detail['calculation_order_remaining']),(100,20,80))
+  self.assertEqual(detail['recommended_qty'],115)
  def test_unknown_sku_does_not_erase_calculable_replenishment(self):
   row=self.f.read('replenishment.summary')[0]
-  self.assertIsNone(row['recommended_qty']);self.assertEqual(row['known_recommended_qty'],35)
+  self.assertEqual(row['recommended_qty'],35);self.assertEqual(row['known_recommended_qty'],35)
   self.assertEqual((row['calculated_sku_count'],row['missing_calculation_count']),(1,1))
  def test_scoped_regeneration_is_idempotent(self):
   root=Path(__file__).resolve().parents[1];spec=spec_from_file_location('cards',root/'scripts/update-fc-card-scope.py');module=module_from_spec(spec);spec.loader.exec_module(module)

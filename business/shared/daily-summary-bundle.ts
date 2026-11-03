@@ -82,6 +82,7 @@ export async function executeDailyBundle(
   request: any,
   options: Parameters<ConfiguredExecution>[1],
   freshAfter: number,
+  preloaded?: { at: number; result: any },
 ) {
   const bundle = config.dailySummary?.bundle;
   const member = bundle?.members?.find((item: any) => item.queryId === options.queryId);
@@ -136,12 +137,15 @@ export async function executeDailyBundle(
       let total = 1;
       for (let offset = 0; offset < total; offset += bundle.maxRows) {
         const pageValues = { ...values, bundle_offset: offset };
-        const result = await run(makeRequest(config, bundle.queryId, pageValues), {
-          ...options,
-          queryId: bundle.queryId,
-          values: pageValues,
-          signal: controller.signal,
-        });
+        const result =
+          offset === 0 && preloaded && Date.now() - preloaded.at < 45000
+            ? preloaded.result
+            : await run(makeRequest(config, bundle.queryId, pageValues), {
+                ...options,
+                queryId: bundle.queryId,
+                values: pageValues,
+                signal: controller.signal,
+              });
         if (result?.failure || result?.error || result?.success === false)
           throw Object.assign(Error(result.failure?.message || result.message || '汇总读取失败'), {
             code: result.failure?.reasonCode || 'QUERY_FAILED',

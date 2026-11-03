@@ -487,6 +487,8 @@ export function OriginalBusinessList({
         <p className={css.empty}>请选择客户。</p>
       ) : result?.status === 'select_sku' ? (
         <p className={css.empty}>请输入SKU后查询基地资源。</p>
+      ) : fc && ['SUMMARY_NOT_AVAILABLE', 'SUMMARY_SCOPE_NOT_COVERED'].includes(error?.code) ? (
+        <p className={css.empty}>-</p>
       ) : fc && error ? (
         <div role="alert" className={css.empty}>
           <p>该列表读取失败：{error.message}</p>

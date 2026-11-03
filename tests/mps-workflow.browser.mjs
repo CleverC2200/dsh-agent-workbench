@@ -12,6 +12,29 @@ const emptySource = ({ queryId }) => ({
   rejectedColumns: [],
   configVersion: 'workflow-fixture-v1',
 });
+const annualFixtures = new WeakMap();
+async function workflowPage(t) {
+  const state = { rows: [] };
+  const result = await mpsPage(t, config, (query) => {
+    if (query.queryId !== 'facts.history-annual') return emptySource(query);
+    const rows = state.rows.slice(
+      query.parameters.offset,
+      query.parameters.offset + query.parameters.page_size,
+    );
+    return {
+      rows,
+      returnedColumns: config.queries[query.queryId].columns,
+      configVersion: 'annual-workflow-fixture',
+      totalRowCount: state.rows.length,
+      offset: query.parameters.offset,
+      hasMorePages: query.parameters.offset + rows.length < state.rows.length,
+      dataStatus: 'ok',
+      warnings: [],
+    };
+  });
+  annualFixtures.set(result.frame, state);
+  return result;
+}
 async function version(frame, month) {
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
@@ -27,7 +50,7 @@ async function download(page, view, name) {
 }
 
 test('MPS processing shows current evaluation and missing split dependencies in the same downloadable results', async (t) => {
-  const { page, frame } = await mpsPage(t, config, emptySource);
+  const { page, frame } = await workflowPage(t);
   await version(frame, '2026-10');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
@@ -47,7 +70,7 @@ test('MPS processing shows current evaluation and missing split dependencies in 
 });
 
 test('MPS processing applies category exclusions to source-derived rows and CSV without removing products or report categories', async (t) => {
-  const { page, frame } = await mpsPage(t, config, emptySource);
+  const { page, frame } = await workflowPage(t);
   await version(frame, '2026-10');
   await upload(
     frame,
@@ -79,13 +102,49 @@ test('MPS processing applies category exclusions to source-derived rows and CSV 
 });
 
 async function upload(frame, label, text) {
+  if (label === '设置上一财年发货夹具') {
+    const [header, ...lines] = text
+      .trim()
+      .split('\n')
+      .map((line) => line.split(','));
+    const rows = new Map();
+    for (const line of lines) {
+      const value = (name) => line[header.indexOf(name)];
+      const key = JSON.stringify([value('基地'), value('产品编码')]);
+      const quantity = Number(value('数量'));
+      if (
+        rows.has(key) &&
+        rows.get(key)['agents_scm_cust_deliv_daily_di.act_dl_qty_total'] !== quantity
+      )
+        throw Error('年度夹具同一基地物料数量冲突');
+      rows.set(key, {
+        ...Object.fromEntries(
+          config.queries['facts.history-annual'].columns.map((column) => [column, null]),
+        ),
+        'agents_scm_cust_deliv_daily_di.belong_base': value('基地'),
+        'agents_scm_cust_deliv_daily_di.material_code': value('产品编码'),
+        'agents_scm_cust_deliv_daily_di.material_name': value('产品名称'),
+        'agents_scm_cust_deliv_daily_di.product_categ_name': value('大类'),
+        'agents_scm_cust_deliv_daily_di.act_dl_qty_total': quantity,
+      });
+    }
+    annualFixtures.get(frame).rows = [...rows.values()];
+    await frame.getByRole('button', { name: '读取去年发运占比源值', exact: true }).click();
+    await expect(frame.getByText('全年历史读取中…')).toHaveCount(0);
+    return;
+  }
+  const details = frame
+    .locator('details')
+    .filter({ has: frame.getByText('查看系统值、调整与缺项说明', { exact: true }) });
+  if ((await details.isVisible()) && (await details.getAttribute('open')) === null)
+    await details.locator('summary').click();
   await frame
     .getByLabel(label, { exact: true })
     .setInputFiles({ name: '本地核对.csv', mimeType: 'text/csv', buffer: Buffer.from(text) });
 }
 
-test('MPS 月度需求范围不跨月复制，池外源分类只阻断当月对应大类', async (t) => {
-  const { page, frame } = await mpsPage(t, config, emptySource);
+test('MPS 完整财年跨月复用但月度提报不跨月复制，池外分类单列', async (t) => {
+  const { page, frame } = await workflowPage(t);
   await version(frame, '2026-12');
   await upload(
     frame,
@@ -99,7 +158,7 @@ test('MPS 月度需求范围不跨月复制，池外源分类只阻断当月对�
   );
   await upload(
     frame,
-    '选择历史发货CSV',
+    '设置上一财年发货夹具',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,甲,A,产品甲,汤圆,系列,组甲,60\n2026-01,乙,B,产品乙,面点,系列,组乙,40',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
@@ -110,21 +169,24 @@ test('MPS 月度需求范围不跨月复制，池外源分类只阻断当月对�
   ).toHaveText('100.00%');
   await expect(
     view.getByRole('table', { name: '基地单品需求拆分', exact: true }).locator('tbody tr'),
-  ).toHaveCount(1);
+  ).toHaveCount(2);
   const december = await download(page, view, '下载需求拆分');
   assert.match(december, /产品甲/);
-  assert.doesNotMatch(december, /产品乙/);
+  assert.match(december, /产品乙/);
+  await expect(
+    view.getByRole('button', { name: '乙 B 2026-12 提报数量 计算过程', exact: true }),
+  ).toHaveText('—');
   await view.getByLabel('月份筛选', { exact: true }).selectOption('2027-01');
   await expect(
     view.getByRole('button', { name: '乙 B 2027-01 系统占比 计算过程', exact: true }),
   ).toHaveText('100.00%');
   await expect(
     view.getByRole('table', { name: '基地单品需求拆分', exact: true }).locator('tbody tr'),
-  ).toHaveCount(1);
+  ).toHaveCount(2);
 });
 
 test('MPS local constraints edit the current draft and leave formal writes disabled across versions', async (t) => {
-  const { page, frame } = await mpsPage(t, config, emptySource);
+  const { page, frame } = await workflowPage(t);
   await version(frame, '2026-10');
   await upload(
     frame,
@@ -157,7 +219,7 @@ test('MPS local constraints edit the current draft and leave formal writes disab
 });
 
 test('MPS capacity and report keep missing formula dependencies empty and export the current source rows', async (t) => {
-  const { page, frame } = await mpsPage(t, config, emptySource);
+  const { page, frame } = await workflowPage(t);
   await version(frame, '2026-10');
   await upload(
     frame,
@@ -200,7 +262,7 @@ test('MPS capacity and report keep missing formula dependencies empty and export
 });
 
 test('MPS processing rounds source quantities for display and preserves raw values in its download', async (t) => {
-  const { page, frame } = await mpsPage(t, config, emptySource);
+  const { page, frame } = await workflowPage(t);
   await version(frame, '2026-10');
   await upload(
     frame,
@@ -222,7 +284,7 @@ test('MPS processing rounds source quantities for display and preserves raw valu
 });
 
 test('MPS configuration keeps accepted production days, explicit weight and assigned resources in the current local version', async (t) => {
-  const { page, frame } = await mpsPage(t, config, emptySource);
+  const { page, frame } = await workflowPage(t);
   await version(frame, '2026-12');
   await upload(
     frame,
@@ -282,7 +344,7 @@ test('MPS configuration keeps accepted production days, explicit weight and assi
 });
 
 test('MPS processing exposes both three-layer sources and exports their intermediate quantities with the Top1 fallback', async (t) => {
-  const { page, frame } = await mpsPage(t, config, emptySource);
+  const { page, frame } = await workflowPage(t);
   await version(frame, '2026-12');
   await upload(
     frame,
@@ -296,7 +358,7 @@ test('MPS processing exposes both three-layer sources and exports their intermed
   );
   await upload(
     frame,
-    '选择历史发货CSV',
+    '设置上一财年发货夹具',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,甲,A,产品甲,汤圆,系列,组,60\n2025-12,乙,B,产品乙,汤圆,系列,组,40',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
@@ -318,8 +380,8 @@ test('MPS processing exposes both three-layer sources and exports their intermed
   assert.match(csv, /Top1托底/);
 });
 
-test('MPS report and CSV keep missing monthly domains outside complete production tons', async (t) => {
-  const { page, frame } = await mpsPage(t, config, emptySource);
+test('MPS report and CSV retain the annual SKU domain while incomplete production dependencies stay unknown', async (t) => {
+  const { page, frame } = await workflowPage(t);
   await version(frame, '2026-12');
   await upload(
     frame,
@@ -333,7 +395,7 @@ test('MPS report and CSV keep missing monthly domains outside complete productio
   );
   await upload(
     frame,
-    '选择历史发货CSV',
+    '设置上一财年发货夹具',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,汤圆,系列,组,100',
   );
   for (const month of ['2026-12', '2027-01', '2027-02']) {
@@ -360,21 +422,22 @@ test('MPS report and CSV keep missing monthly domains outside complete productio
     .locator('tbody tr');
   await expect(summary.locator('td').nth(1)).toHaveText('100');
   await expect(summary.locator('td').nth(2)).toHaveText('—');
-  await expect(summary.locator('td').nth(4)).toHaveText('1');
-  await expect(summary).toContainText('2027-01 汤圆 缺月度SKU域');
-  await expect(summary).toContainText('2027-02 汤圆 缺月度SKU域');
+  await expect(summary.locator('td').nth(4)).toHaveText('3');
+  await expect(summary).not.toContainText('缺月度SKU域');
+  await expect(summary).toContainText('缺明确SKU件吨系数或所需生产');
   const csv = await download(page, report, '下载产销存报告');
   const book = XLSX.read(csv, { type: 'string', raw: true });
   const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
   const total = exported.find((row) => row['粒度'] === '全版本汇总，无约束参考');
   assert.equal(total['已知生产吨数小计'], '100');
   assert.equal(total['完整生产吨数'], '');
-  assert.equal(total['总行数'], '1');
-  assert.match(total['未评估原因'], /2027-01 汤圆.*2027-02 汤圆/);
+  assert.equal(total['总行数'], '3');
+  assert.doesNotMatch(total['未评估原因'], /缺月度SKU域/);
+  assert.match(total['未评估原因'], /缺明确SKU件吨系数或所需生产/);
 });
 
 test('MPS effective category and share edits drive the same unconstrained inventory and shared-resource report export', async (t) => {
-  const { page, frame } = await mpsPage(t, config, emptySource);
+  const { page, frame } = await workflowPage(t);
   await version(frame, '2026-12');
   await upload(
     frame,
@@ -401,7 +464,7 @@ test('MPS effective category and share edits drive the same unconstrained invent
   );
   await upload(
     frame,
-    '选择历史发货CSV',
+    '设置上一财年发货夹具',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n' +
       sourceRows(['2025-12', '2026-01', '2026-02'], false),
   );
@@ -530,7 +593,7 @@ test('MPS effective category and share edits drive the same unconstrained invent
 });
 
 test('MPS share undo preserves group balance and stale overrides remain removable after the product scope changes', async (t) => {
-  const { frame } = await mpsPage(t, config, emptySource);
+  const { frame } = await workflowPage(t);
   await version(frame, '2026-12');
   await upload(
     frame,
@@ -544,7 +607,7 @@ test('MPS share undo preserves group balance and stale overrides remain removabl
   );
   await upload(
     frame,
-    '选择历史发货CSV',
+    '设置上一财年发货夹具',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,汤圆,系列,组,60\n2025-12,郑州,B,产品乙,汤圆,系列,组,40',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
@@ -587,7 +650,7 @@ test('MPS share undo preserves group balance and stale overrides remain removabl
 });
 
 test('MPS accepted share undo audits its recomputed effective value separately from the captured system value', async (t) => {
-  const { page, frame } = await mpsPage(t, config, emptySource);
+  const { page, frame } = await workflowPage(t);
   await version(frame, '2026-12');
   await upload(
     frame,
@@ -601,7 +664,7 @@ test('MPS accepted share undo audits its recomputed effective value separately f
   );
   await upload(
     frame,
-    '选择历史发货CSV',
+    '设置上一财年发货夹具',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,汤圆,系列,组,30\n2025-12,华东,A,产品甲,汤圆,系列,组,30\n2025-12,郑州,B,产品乙,汤圆,系列,组,40',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
@@ -695,10 +758,11 @@ test('MPS category undo audits the current inherited quantity after an upstream 
   await frame.getByRole('button', { name: '撤销 汤圆 2026-12', exact: true }).click();
   const row = frame
     .getByRole('region', { name: '逐月测算', exact: true })
+    .locator('details')
     .getByRole('row')
     .filter({ hasText: '2026-12（M+3）' })
     .filter({ hasText: '汤圆' });
-  await expect(row.locator('td').nth(9)).toHaveText('600');
+  await expect(row.locator('td').nth(3)).toHaveText('600');
   const audit = frame
     .getByRole('region', { name: '大类调整记录', exact: true })
     .locator('tbody tr')

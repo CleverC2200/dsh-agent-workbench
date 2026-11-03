@@ -74,7 +74,10 @@ for (const agent of ['fc', 'aqkc', 'qll', 'dealer', 'apsplan'])
         start() {},
         close() {},
         postMessage(m) {
-          if (m.type === 'request' && m.parameters.queryId === 'summary.snapshot') {
+          if (
+            m.type === 'request' &&
+            ['summary.snapshot', 'summary.bootstrap'].includes(m.parameters.queryId)
+          ) {
             queueMicrotask(() =>
               port.onmessage({ data: { type: 'response', id: m.id, result: { rows: [] } } }),
             );

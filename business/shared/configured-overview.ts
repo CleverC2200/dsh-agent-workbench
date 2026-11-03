@@ -5,8 +5,7 @@ import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readCurrentShortage } from './current-shortage';
 import { readGroupedOrderOverview } from './grouped-order-overview';
 
-export const businessDay = () =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+export { businessDay } from './business-day';
 export function knownNumber(value: unknown): number | null {
   return value == null || String(value).trim() === '' || !Number.isFinite(Number(value))
     ? null

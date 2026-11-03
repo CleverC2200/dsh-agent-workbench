@@ -1,3 +1,4 @@
+import { mountSalesConfirmationPeople } from './sales-confirmation-people.mjs';
 import { confirmationDraft, salesConfirmationCard } from './sales-confirmation-card.mjs';
 export { confirmationDraft, salesConfirmationCard } from './sales-confirmation-card.mjs';
 
@@ -10,7 +11,7 @@ export function mountSalesConfirmation(document, simulation, formal) {
   const orderLabel = document.getElementById('salesConfirmOrder');
   dialog.classList.add('sales-confirmation-preview');
   let opener;
-  let generation=0;
+  let generation = 0;
   const node = (tag, text, className) => {
     const element = document.createElement(tag);
     if (text != null) element.textContent = text;
@@ -33,7 +34,11 @@ export function mountSalesConfirmation(document, simulation, formal) {
     if (overlay.hidden) return;
     if (event.key === 'Escape') close();
     if (event.key === 'Tab') {
-      const elements = [...dialog.querySelectorAll('button:not(:disabled)')];
+      const elements = [
+        ...dialog.querySelectorAll(
+          'button:not(:disabled), input:not(:disabled), select:not(:disabled)',
+        ),
+      ];
       const first = elements[0],
         last = elements.at(-1);
       if (event.shiftKey && document.activeElement === first) {
@@ -47,7 +52,7 @@ export function mountSalesConfirmation(document, simulation, formal) {
   });
   return {
     open(input, trigger) {
-      const current=++generation;
+      const current = ++generation;
       const draft = confirmationDraft(input);
       const simulated = simulation?.matches(draft) === true;
       opener = trigger;
@@ -75,13 +80,15 @@ export function mountSalesConfirmation(document, simulation, formal) {
         'p',
         simulated
           ? '仅发送模拟卡片到测试群，不触发真实发货或改单。'
-          : formal ? '正在核对正式飞书确认入口…' : '飞书群发送与人员映射接口尚未接入，当前未发送通知。',
+          : formal
+            ? '正在核对正式飞书确认入口…'
+            : '飞书群发送与人员映射接口尚未接入，当前未发送通知。',
         'sales-preview-notice',
       );
       status.role = 'status';
       form.append(status);
       const footer = node('div', null, 'sales-preview-actions');
-      const cancel = node('button', '取消');
+      const cancel = node('button', '返回');
       cancel.type = 'button';
       cancel.addEventListener('click', close);
       const send = node(
@@ -105,32 +112,63 @@ export function mountSalesConfirmation(document, simulation, formal) {
             send.disabled = false;
           }
         });
-      if(!simulated&&formal){
-        void formal.available().then(available=>{
-          if(current!==generation||overlay.hidden)return;
-          status.textContent=available?'销售将在飞书中确认或暂缓；本次不执行真实发货和改单。':'正式飞书确认入口尚未启用，当前未发送通知。';
-          send.textContent=available?'发送销售确认卡片':'发送到飞书群（待启用）';
-          send.disabled=!available;
-          if(available)send.click();
+      if (!simulated && formal) {
+        let sending = false,
+          completed = false;
+        const alive = () => current === generation && !overlay.hidden;
+        const people = mountSalesConfirmationPeople(document, formal, alive, () => {
+          if (alive()) send.disabled = sending || completed || !people.valid();
         });
-        send.addEventListener('click',async()=>{
-          if(send.disabled)return;
-          send.disabled=true;status.textContent='正在创建确认任务…';
-          try{
-            const result=await formal.notify(draft);
-            if(current!==generation||overlay.hidden)return;
-            status.textContent=result.status==='resolved'?'该订单快照已有处理记录，可在确认状态中查看。'
-              :result.delivery==='sent'?'确认卡片已发送，等待销售在飞书处理。'
-              :result.delivery==='failed'?'确认任务已保存，但飞书卡片发送失败，请核对后台配置。'
-              :result.delivery==='verification_required'?'发送结果待核实，请查看确认状态，不要重复发起。'
-              :'确认任务已创建，卡片正在发送，请在确认状态中查看结果。';
-            send.textContent='确认任务已登记';
-          }catch(error){if(current!==generation||overlay.hidden)return;status.textContent=error.message;send.disabled=false;}
+        form.append(people.element);
+        void formal
+          .available()
+          .then(async (available) => {
+            if (!alive()) return;
+            if (!available) {
+              status.textContent = '当前人员未获发卡授权或后台入口未启用，未发送通知。';
+              return;
+            }
+            status.textContent = '请选择收件人与处理人。仅保存确认／暂缓决定，OMS 尚未接入。';
+            send.textContent = '发送销售确认卡片';
+            await people.load();
+            if (alive()) send.disabled = !people.valid();
+          })
+          .catch((error) => {
+            if (alive()) status.textContent = error.message;
+          });
+        send.addEventListener('click', async () => {
+          if (send.disabled || sending || completed) return;
+          sending = true;
+          send.disabled = true;
+          status.textContent = '正在创建确认任务…';
+          try {
+            const result = await formal.notify(draft, people.delivery());
+            if (!alive()) return;
+            completed = true;
+            status.textContent =
+              result.status === 'resolved'
+                ? '该订单快照已有处理记录，可在确认状态中查看。'
+                : result.delivery === 'sent'
+                  ? '确认卡片已发送，等待指定人员处理；不代表 OMS 已执行。'
+                  : result.delivery === 'failed'
+                    ? '任务已保存，卡片发送失败；请核对状态后重试。'
+                    : result.delivery === 'verification_required'
+                      ? '发送结果待核实，请查看确认状态，不要重复发起。'
+                      : '确认任务已创建，卡片正在发送，请在确认状态中查看结果。';
+            send.textContent = '确认任务已登记';
+          } catch (error) {
+            if (alive()) status.textContent = error.message;
+          } finally {
+            sending = false;
+            if (alive()) send.disabled = completed || !people.valid();
+          }
         });
       }
       send.title = simulated
         ? '只向测试群发送模拟卡片并艾特田庚，不执行业务确认'
-        : formal ? '向对应销售发起飞书确认，客户端不处理订单' : '需 GEA 提供 order01 受控发送接口、接收群和销售账号映射；不在客户端确认订单';
+        : formal
+          ? '向对应销售发起飞书确认，客户端不处理订单'
+          : '需 GEA 提供 order01 受控发送接口、接收群和销售账号映射；不在客户端确认订单';
       footer.append(cancel, send);
       form.append(footer);
       overlay.hidden = false;

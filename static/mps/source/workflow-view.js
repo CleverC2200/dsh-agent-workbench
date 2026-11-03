@@ -12,7 +12,7 @@ const titles = {
 };
 const labels = {
   reportQuantity: '提报数量',
-  historyQuantity: '历史发货数量',
+  historyQuantity: '上一财年发货数量',
   reportShare: '提报占比',
   historyShare: '历史占比',
   systemShare: '系统占比',
@@ -324,7 +324,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         expression += `；${row.layerMissing.join('、')}`;
       if (field === 'systemShare')
         expression = row.fallback
-          ? `去年同月${coverage}物料组销量Top1托底SKU。物料组平均占比 ${value(row.groupShare)} 减去其余SKU有效占比，再按本SKU未调整基地的系统占比分配。系统值 ${value(row.systemShare)}`
+          ? `上一财年全年${coverage}物料组销量Top1托底SKU。物料组平均占比 ${value(row.groupShare)} 减去其余SKU有效占比，再按本SKU未调整基地的系统占比分配。系统值 ${value(row.systemShare)}`
           : `(${value(row.reportShare)} + ${value(row.historyShare)}) ÷ 2 = ${value(row.systemShare)}`;
       if (field === 'share')
         expression = `系统占比 ${value(row.systemShare)}；有效占比 ${value(row.share)}。${row.fallback ? '本SKU承接物料组剩余占比。' : ''}`;
@@ -658,7 +658,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       return h(
         'div',
         { className: 'wf-share-controls' },
-        h('span', null, row.fallback ? `去年同月${coverage}组内Top1托底` : '按两路有效占比分配'),
+        h(
+          'span',
+          null,
+          row.fallback ? `上一财年全年${coverage}组内Top1托底` : '按两路有效占比分配',
+        ),
         saved ? h('span', null, `已调整：${saved.reason} · ${saved.at}`) : null,
         editing
           ? h(
@@ -1236,7 +1240,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             h(
               'p',
               { className: 'wf-note' },
-              `M+4只展示大类需求，供M+3目标库存参考，不生成第四个月SKU需求。Top1托底SKU按去年同月${coverage}组内销量选择；其未调整基地承接组内剩余占比。`,
+              `M+4只展示大类需求，供M+3目标库存参考，不生成第四个月SKU需求。Top1托底SKU按上一财年全年${coverage}组内销量选择；其未调整基地承接组内剩余占比。`,
             ),
             shareError && !editingShare
               ? h('p', { role: 'alert', className: 'wf-note wf-unavailable' }, shareError)
@@ -1300,7 +1304,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                       row.base,
                       row.group,
                       row.code,
-                      source === 'report' ? '计划提报' : '去年同月发货',
+                      source === 'report' ? '计划提报' : '上一财年全年发货',
                       ...['groupShare', 'skuShare', 'baseShare', 'product'].map((field) =>
                         numberText(layer?.[field], true),
                       ),

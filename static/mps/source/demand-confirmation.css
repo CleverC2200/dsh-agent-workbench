@@ -287,6 +287,12 @@
   overflow-x: auto;
   scrollbar-color: #b6bdc8 transparent;
 }
+.dc-category-demand-main th small {
+  display: block;
+  color: var(--dc-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
 .dc-page table {
   width: 100%;
   min-width: 760px;
