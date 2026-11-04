@@ -29,6 +29,8 @@ export function mountReportImport({
   document.body.append(overlay);
   const find = (id) => overlay.querySelector("#" + id);
   let pending = null,
+    pendingValue = null,
+    previewRequest = null,
     busy = false,
     showingExample = false,
     sending = false,
@@ -40,8 +42,8 @@ export function mountReportImport({
     find("wbImportCommit").disabled =
       busy || showingExample || !pending?.canCommit;
     find("wbImportExample").disabled = busy;
-    find("wbImportClose").disabled = busy;
-    find("wbImportCancel").disabled = busy;
+    find("wbImportClose").disabled = busy && !previewRequest;
+    find("wbImportCancel").disabled = busy && !previewRequest;
     find("wbImportCancel").textContent =
       pending && !pending.canCommit && !showingExample ? "关闭" : "取消";
     find("wbImportAsk").disabled = busy || sending;
@@ -106,31 +108,61 @@ export function mountReportImport({
       throw Error("请等待当前报告读取完成，并先保存人工编辑");
     return current;
   }
-  async function prepare(value, signal) {
-    if (busy) throw Error("正在处理另一批导入");
+  function prepare(value, signal) {
+    signal?.throwIfAborted();
     const current = assertReady();
     if (typeof value !== "string" || value.length > 60000)
       throw Error("导入内容为空或过大，请拆分批次");
     const batch = JSON.parse(value);
+    if (previewRequest?.key === current.key && previewRequest.value === value) return;
+    if (busy) throw Error("正在处理另一批导入");
+    if (pending?.canCommit && pending.key === current.key && pendingValue === value &&
+        pending.editVersion === current.editVersion) {
+      render(pending);
+      return;
+    }
     const epoch = ++generation;
     pending = null;
+    pendingValue = null;
+    const controller = new AbortController();
+    const request = previewRequest = { controller, key: current.key, value, batchId: batch?.batchId };
     busy = true;
+    showingExample = false;
+    overlay.hidden = false;
+    find("wbImportContent").replaceChildren();
+    find("wbImportNote").textContent = `目标周期：${current.period.start} 至 ${current.period.end}（结束日不含）。已有人工内容会保留。`;
+    show("正在读取报告并校验导入内容，尚未写入。请等待预览完成，可点击取消。重复发送同一批内容不会重复校验。");
     refresh();
-    try {
-      const result = await preview(batch, signal);
-      signal?.throwIfAborted();
-      if (epoch !== generation || state().key !== current.key)
-        throw Error("统计周期已切换，请重新预览");
-      pending = { ...result, key: current.key };
-      render(pending);
-    } catch (error) {
-      show("预览失败：" + error.message);
-      throw error;
-    } finally {
-      busy = false;
-      refresh();
-      window.setTimeout(changed, 0);
-    }
+    changed();
+    const deadline = window.setTimeout(() => controller.abort(Error("预览校验超时，未写入，请使用同一批次重试")), 60000);
+    let onAbort;
+    const aborted = new Promise((_, reject) => {
+      onAbort = () => reject(controller.signal.reason);
+      controller.signal.addEventListener("abort", onAbort, { once: true });
+    });
+    // The action acknowledges the visible loading dialog; the page owns this read-only job.
+    void (async () => {
+      try {
+        const result = await Promise.race([preview(batch, controller.signal), aborted]);
+        controller.signal.throwIfAborted();
+        if (epoch !== generation || state().key !== current.key)
+          throw Error("统计周期已切换，请重新预览");
+        pending = { ...result, key: current.key };
+        pendingValue = value;
+        render(pending);
+      } catch (error) {
+        if (previewRequest === request) show("预览失败：" + error.message);
+      } finally {
+        window.clearTimeout(deadline);
+        controller.signal.removeEventListener("abort", onAbort);
+        if (previewRequest === request) {
+          previewRequest = null;
+          busy = false;
+          refresh();
+          window.setTimeout(changed, 0);
+        }
+      }
+    })();
   }
   async function save(value, signal, confirmed) {
     if (
@@ -180,10 +212,14 @@ export function mountReportImport({
     }
   };
   const cancel = () => {
-    if (busy) return;
+    if (busy && !previewRequest) return;
+    previewRequest?.controller.abort(Error("已取消预览，未写入"));
+    previewRequest = null;
+    busy = false;
     const saved = pending && !pending.canCommit;
     generation++;
     pending = null;
+    pendingValue = null;
     overlay.hidden = true;
     find("wbImportContent").replaceChildren();
     show(
@@ -269,8 +305,14 @@ export function mountReportImport({
     );
   };
   const invalidate = () => {
+    if (previewRequest) {
+      previewRequest.controller.abort(Error("页面周期或身份已切换"));
+      previewRequest = null;
+      busy = false;
+    }
     generation++;
     pending = null;
+    pendingValue = null;
     overlay.hidden = true;
     refresh();
   };
@@ -282,6 +324,7 @@ export function mountReportImport({
     },
     context: () => ({
       status: find("wbImportStatus").textContent,
+      processing: previewRequest !== null,
       previewId: pending?.previewId ?? null,
       canCommit: pending?.canCommit ?? false,
       awaitingUserConfirmation:
@@ -292,7 +335,7 @@ export function mountReportImport({
       authorizedBases:
         state().scope?.base || state().scope?.bases?.join("、") || "",
       period: state().period,
-      batchId: pending?.batch?.batchId ?? null,
+      batchId: pending?.batch?.batchId ?? previewRequest?.batchId ?? null,
     }),
     elements: () => [
       {
@@ -308,7 +351,7 @@ export function mountReportImport({
       {
         id: "report:import-preview",
         role: "control",
-        label: "AI 填充：预览结构化内容",
+        label: "AI 填充：启动导入预览校验，完成状态见 importPreview",
         actions: ["preview"],
         effect: "draft",
       },

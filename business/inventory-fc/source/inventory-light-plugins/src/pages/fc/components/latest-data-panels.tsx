@@ -30,7 +30,6 @@ export function EffectivePlansTable({
   return (
     <div className="table-scroll">
       <table className="data-table">
-        <caption>当前使用计划 · 数量单位：件</caption>
         <thead>
           <tr>
             <th>SKU</th>

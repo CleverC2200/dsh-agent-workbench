@@ -50,6 +50,27 @@ class TemplateSnapshot(unittest.TestCase):
                 for id in ['transfer_plan.template','transfer_plan.template.atomic','transfer_plan.template.count']:
                     self.assertEqual(self.read(id,**values),self.read(id,summary=True,**values))
 
+    def test_gateway_default_limit_cannot_truncate_snapshot_export(self):
+        # Use more than the gateway default 50 and one complete requested page.
+        self.db.executemany('INSERT INTO agents_scm_warehouse_transfer_plan_data_d VALUES(?,?,?,?,?,?,?,?,?)',
+            [('A110',f'EXTRA{i:03}','沈阳',f'产品{i}','汤圆',i,0,None,'202611') for i in range(221)])
+        source=self.read('transfer_plan.template',page_size=2000)
+        self.db.execute('DELETE FROM agents_inv_branch_sku_day')
+        for row in source:
+            record={**row,'warehouseid':row['warehouse_code'],'inv_batch_id':'fixture','inv_variant_id':'BRANCH_PLAN_TEMPLATE'}
+            self.db.execute('INSERT INTO agents_inv_branch_sku_day ('+','.join(self.fields)+') VALUES ('+','.join('?' for _ in self.fields)+')',[record.get(x) for x in self.fields])
+        q=self.config['queries']['snapshot.transfer_plan.template.atomic']
+        tree=sqlglot.parse_one(q['request']['sql'],read='postgres')
+        if tree.args.get('limit') is None:
+            tree=tree.limit(50)
+        pages=[]
+        for offset in [0,200]:
+            params=self.values(q,month='2026-11-01',next_month='2026-12-01',summary_batch_id='fixture',page_size=200,offset=offset)
+            pages.append(self.execute(tree.sql(dialect='postgres'),params))
+        self.assertEqual([len(page) for page in pages],[200,35])
+        self.assertEqual(len({(r['warehouse_code'],r['sku']) for page in pages for r in page}),235)
+        self.assertTrue(all(r['page_scope_total']==235 for page in pages for r in page))
+
     def test_duplicate_zero_null_and_next_month_preserve_source_semantics(self):
         rows=self.read('transfer_plan.template',summary=True,page_size=200,warehouse_code_mode='equal',warehouse_code='A110')
         first,conflict=rows[0],rows[1]
