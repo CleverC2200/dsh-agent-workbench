@@ -10,7 +10,7 @@ import {
   productRows,
 } from './master-data.js';
 import { createMasterData } from './master-data-view.js';
-import { readFactMonth } from './facts.js';
+import { readFactMonth, readInventoryTargets } from './facts.js';
 import { readSourceTable, forecastDimensions } from './source-tables.js';
 import { createDeliveryMetrics } from './delivery-metrics.js';
 import { createWorkflow } from './workflow-view.js';
@@ -1083,6 +1083,40 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       }
       if (valid()) setBusy((state) => ({ ...state, [type]: false }));
     };
+    const syncInventoryTargets = async () => {
+      const id = draft.id;
+      const { signal, valid } = begin('inventoryTargets');
+      try {
+        const result = await readInventoryTargets(draft.month, monthOffset(draft.month, 2), signal);
+        if (valid())
+          setDrafts((entries) =>
+            entries.map((entry) =>
+              entry.id === id
+                ? {
+                    ...entry,
+                    inventoryTargets: result.rows,
+                    inventoryTargetsRead: { status: 'ready', metadata: result.metadata },
+                  }
+                : entry,
+            ),
+          );
+      } catch (failure) {
+        if (valid())
+          setDrafts((entries) =>
+            entries.map((entry) =>
+              entry.id === id
+                ? {
+                    ...entry,
+                    inventoryTargets: [],
+                    inventoryTargetsRead: { status: 'failed', error: failure.message },
+                  }
+                : entry,
+            ),
+          );
+      } finally {
+        if (valid()) setBusy((state) => ({ ...state, inventoryTargets: false }));
+      }
+    };
     const read = async (type, file) => {
       const id = draft.id;
       const previousRead = draft[type + 'Read'];
@@ -1266,6 +1300,16 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         current = false;
       };
     }, [draft.id, draft.month, draft.deliveryMonth, active, scopeGeneration]);
+    react.useEffect(() => {
+      let current = true;
+      if (active && hasMpsSource())
+        ready.then(() => {
+          if (current) void syncInventoryTargets();
+        });
+      return () => {
+        current = false;
+      };
+    }, [draft.id, draft.month, active, scopeGeneration]);
     const update = (changes) =>
       setDrafts((entries) =>
         entries.map((entry) => (entry.id === draft.id ? { ...entry, ...changes } : entry)),
@@ -1755,6 +1799,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       active &&
         ['process', 'constraints', 'capacity', 'report'].includes(step) &&
         h(Workflow, {
+          syncInventoryTargets,
+          inventoryTargetsBusy: busy.inventoryTargets,
           step,
           draft,
           scopeGeneration,

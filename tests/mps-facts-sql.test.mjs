@@ -188,3 +188,40 @@ test('reported quantities retain partial NULL independently and preserve real ze
     ],
   );
 });
+
+test('inventory target SQL keeps month, base, SKU and version keys and rejects duplicate facts without summing versions', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec(
+    'CREATE TABLE agents_scm_goods_inventory_turnover_data_m(year_month TEXT, belong_base TEXT, material_code TEXT, inventory_version TEXT, final_target_inventory REAL, avg_daily_planned_demand REAL)',
+  );
+  const insert = db.prepare(
+    'INSERT INTO agents_scm_goods_inventory_turnover_data_m VALUES(?,?,?,?,?,?)',
+  );
+  for (const row of [
+    ['2026-11-01', '郑州', 'A', '纠偏', 100, 10],
+    ['2026-11-01', '郑州', 'A', '月初', 500, 20],
+    ['2026-12-01', '郑州', 'A', '滚动', 200, 10],
+    ['2026-11-01', '华南', 'A', '纠偏', 0, 10],
+    ['2026-11-01', '郑州', 'B', '纠偏', 100, 0],
+    ['2026-11-01', '郑州', 'C', '纠偏', 80, 10],
+    ['2026-11-01', '郑州', 'C', '纠偏', 80, 10],
+    ['2026-10-01', '郑州', 'A', '纠偏', 9999, 10],
+  ])
+    insert.run(...row);
+  const params = { start_month: '2026-11', end_month: '2027-01' };
+  const rows = db
+    .prepare(config.queries['inventory-targets.detail'].request.sql)
+    .all({ ...params, gea_p98: 200, gea_p99: 0 });
+  assert.equal(rows.length, 6);
+  assert.equal(rows.find((row) => row.material_code === 'C').source_rows, 2);
+  assert.equal(rows.find((row) => row.material_code === 'C').final_target_inventory, null);
+  assert.equal(
+    rows.filter((row) => row.belong_base === '郑州' && row.material_code === 'A').length,
+    3,
+  );
+  assert.equal(
+    db.prepare(config.queries['inventory-targets.count'].request.sql).get(params).total,
+    6,
+  );
+});

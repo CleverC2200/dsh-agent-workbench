@@ -1,3 +1,4 @@
+import { createInventoryTargetPanel } from './inventory-target-view.js';
 import { createConstraintPanel } from './constraint-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
@@ -77,16 +78,19 @@ const reasons = (row, fields) => [
   ...new Set(fields.flatMap((field) => row.missing?.[field] ?? [])),
 ];
 const status = (row, fields) => reasons(row, fields).join('、') || '已计算';
-const sourceText = '①大类需求；②月末结存；③两路占比；④源产能；⑤本地配置';
+const sourceText = '①大类需求；②月末结存；③两路占比；④源产能；⑤月表目标与人工覆盖';
 
 export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
   const h = react.createElement;
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
+  const InventoryTargetPanel = createInventoryTargetPanel(react, { downloadCsv });
   const ConstraintPanel = createConstraintPanel(react, { Dialog });
   return function Workflow({
     step,
     draft,
     scopeGeneration,
+    syncInventoryTargets,
+    inventoryTargetsBusy,
     update,
     relations,
     shipmentSnapshot,
@@ -838,7 +842,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 return;
               update({
                 constraints: {
-                  ...result.constraints,
+                  ...draft.constraints,
+                  rules: draft.constraints?.rules ?? { local: [] },
                   safetyDays: [
                     ...result.constraints.safetyDays.filter((item) => item.base !== sourceBase),
                     { base: sourceBase, days: text === '' ? null : Number(text) },
@@ -1349,39 +1354,17 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                     shipmentSnapshot,
                   ),
               },
-              card(
-                '基地安全库存',
-                h(
-                  react.Fragment,
-                  null,
-                  table('本地安全天数', ['基地', '安全天数', '来源', '未评估原因'], constraintRows),
-                  h(
-                    'p',
-                    { className: 'wf-note' },
-                    '目标期末库存＝有效安全天数×下一月需求÷下一月自然日天数；缺项单独列出，已知小计不代替完整目标。',
-                  ),
-                  table(
-                    '目标期末库存',
-                    ['基地', '月份', '已知目标库存（件）', '缺项单品'],
-                    bases.flatMap((base) =>
-                      result.months.slice(0, 3).map((month) => {
-                        const rows = result.rows.filter(
-                          (row) => row.base === base && row.month === month,
-                        );
-                        const known = rows.filter((row) => row.targetInventory !== null);
-                        return [
-                          base,
-                          month,
-                          known.length
-                            ? numberText(known.reduce((sum, row) => sum + row.targetInventory, 0))
-                            : '—',
-                          rows.length - known.length,
-                        ];
-                      }),
-                    ),
-                  ),
-                ),
-              ),
+              h(InventoryTargetPanel, {
+                key: JSON.stringify([draft.id, draft.month, scopeGeneration]),
+                draft,
+                result,
+                update,
+                sync: syncInventoryTargets,
+                busy: inventoryTargetsBusy,
+                table,
+                card,
+                overrideRows: constraintRows,
+              }),
               card(
                 '可用生产天数',
                 table(
@@ -1535,7 +1518,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                   '正式约束来源',
                   ['项目', '正式来源', '状态'],
                   [
-                    ['安全天数', '—', '正式来源未就绪'],
+                    [
+                      '目标周转天数',
+                      'ai_db.agents_scm_goods_inventory_turnover_data_m',
+                      '已接只读月表；人工覆盖保存在当前草稿',
+                    ],
                     ['约束规则', '—', '正式来源未就绪'],
                   ],
                 ),

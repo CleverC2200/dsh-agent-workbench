@@ -510,6 +510,7 @@ test('structured MPS rules, monthly evidence and change history round-trip throu
     pull: 'monthly',
     files: {},
     constraints: {
+      targetVersion: '滚动',
       safetyDays: [],
       rules: {
         local: [
@@ -537,7 +538,9 @@ test('structured MPS rules, monthly evidence and change history round-trip throu
       },
     },
   };
+  draft.inventoryTargets = [{ finalTarget: 999 }];
   const encoded = encodeLocalDrafts([draft], draft.id);
+  assert.equal(encoded.drafts[0].inventoryTargets, undefined);
   const owner = new WorkbenchController({ panel() {}, document() {} });
   owner.registerFrame({ id: 'plan-category-production', kind: 'html', src: '/mps' });
   owner.saveHtmlViewState('plan-category-production', 'tenant/user/session', {

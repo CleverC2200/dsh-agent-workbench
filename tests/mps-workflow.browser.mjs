@@ -266,6 +266,7 @@ test('MPS constraints retain prototype rule management, collapse advanced inputs
   await expect(view.getByRole('table', { name: '约束列表', exact: true })).toBeVisible();
   await expect(view.getByRole('region', { name: '冲突与放宽建议', exact: true })).toBeVisible();
   await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toBeHidden();
+  await view.locator('summary').filter({ hasText: '基地人工覆盖' }).click();
   await view.getByLabel('郑州 安全天数', { exact: true }).fill('0');
   await view.getByRole('button', { name: '新增约束', exact: true }).click();
   const editor = frame.getByRole('dialog', { name: '新增约束', exact: true });
@@ -494,6 +495,7 @@ test('MPS report and CSV retain the annual SKU domain while incomplete productio
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
   await constraints.locator('summary').filter({ hasText: '高级配置：' }).click();
+  await constraints.locator('summary').filter({ hasText: '基地人工覆盖' }).click();
   await constraints.getByLabel('郑州 安全天数', { exact: true }).fill('0');
   await constraints.getByLabel('郑州 A 件吨系数', { exact: true }).fill('1');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
@@ -586,6 +588,7 @@ test('MPS effective category and share edits drive the same unconstrained invent
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
   await constraints.locator('summary').filter({ hasText: '高级配置：' }).click();
+  await constraints.locator('summary').filter({ hasText: '基地人工覆盖' }).click();
   await constraints.getByLabel('郑州 安全天数', { exact: true }).fill('31');
   for (const month of ['2026-12', '2027-01', '2027-02'])
     await constraints.getByRole('button', { name: `郑州 ${month} 采用25天`, exact: true }).click();
@@ -913,4 +916,100 @@ test('MPS business-rule evidence produces a real conflict, keeps preview reversi
       fullPage: true,
     });
   }
+});
+
+test('MPS Tab5 reads monthly target facts, aligns versions per base and exports computed SKU days with separate missing rows', async (t) => {
+  let failure = false;
+  const facts = [
+    {
+      target_month: '2026-12',
+      belong_base: '郑州',
+      material_code: 'A',
+      inventory_version: '纠偏',
+      final_target_inventory: 120,
+      avg_daily_planned_demand: 10,
+      source_rows: 1,
+    },
+    {
+      target_month: '2026-12',
+      belong_base: '郑州',
+      material_code: 'A',
+      inventory_version: '月初',
+      final_target_inventory: 500,
+      avg_daily_planned_demand: 10,
+      source_rows: 1,
+    },
+    {
+      target_month: '2026-12',
+      belong_base: '郑州',
+      material_code: 'B',
+      inventory_version: '月初',
+      final_target_inventory: 300,
+      avg_daily_planned_demand: 10,
+      source_rows: 1,
+    },
+    {
+      target_month: '2027-01',
+      belong_base: '郑州',
+      material_code: 'A',
+      inventory_version: '滚动',
+      final_target_inventory: 220,
+      avg_daily_planned_demand: 10,
+      source_rows: 1,
+    },
+  ];
+  const { page, frame, calls } = await mpsPage(t, config, ({ queryId, parameters }) => {
+    if (!queryId.startsWith('inventory-targets.')) return emptySource({ queryId });
+    if (failure) throw Error('目标来源暂不可用');
+    const rows = facts.filter(
+      (row) =>
+        row.target_month >= parameters.start_month && row.target_month <= parameters.end_month,
+    );
+    return {
+      rows: queryId.endsWith('.count')
+        ? [{ total: rows.length }]
+        : rows.slice(parameters.offset, parameters.offset + parameters.page_size),
+      returnedColumns: config.queries[queryId].columns,
+      rejectedColumns: [],
+      configVersion: 'targets-v1',
+    };
+  });
+  await version(frame, '2026-12');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,\n郑州,B,产品乙,汤圆,系列,组,,',
+  );
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,产品甲,汤圆,系列,组,100,100\n2026-12,郑州,B,产品乙,汤圆,系列,组,100,100\n2027-01,郑州,A,产品甲,汤圆,系列,组,100,100',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  const view = frame.getByRole('region', { name: '约束与配置', exact: true });
+  const detail = view.getByRole('table', { name: '目标库存单品明细', exact: true });
+  await expect(detail).toContainText('缺纠偏目标记录');
+  let csv = await download(page, view, '下载目标库存明细');
+  assert.match(csv, /2026-12,郑州,A,产品甲,纠偏,120,10,12,12,月表计算/);
+  assert.match(csv, /2026-12,郑州,B,产品乙,纠偏/);
+  await view.getByLabel('目标库存版本', { exact: true }).selectOption('月初');
+  csv = await download(page, view, '下载目标库存明细');
+  assert.match(csv, /2026-12,郑州,B,产品乙,月初,300,10,30,30,月表计算/);
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.queryId === 'inventory-targets.detail' &&
+        call.parameters.start_month === '2026-12' &&
+        call.parameters.end_month === '2027-02',
+    ),
+  );
+  const saved = await page.evaluate(() => window.readView());
+  const draft = saved.localDrafts.drafts.find((row) => row.id === saved.localDrafts.selected);
+  assert.equal(draft.constraints.targetVersion, '月初');
+  assert.equal(draft.inventoryTargets, undefined);
+  failure = true;
+  await view.getByRole('button', { name: '同步目标库存', exact: true }).click();
+  await expect(view).toContainText('数据读取失败');
+  csv = await download(page, view, '下载目标库存明细');
+  assert.doesNotMatch(csv, /,300,10,30,30,月表计算/);
 });

@@ -42,13 +42,18 @@ async function readFacts(id, parameters, signal, type, month) {
       { signal: options.signal },
     ),
   );
-  if (type === 'report' || type === 'execution-delivery' || type === 'shipment') {
+  if (
+    type === 'report' ||
+    type === 'execution-delivery' ||
+    type === 'shipment' ||
+    type === 'inventoryTargets'
+  ) {
     const result = await client.readAll(
       id,
       { ...parameters, page_size: 200, offset: 0 },
       { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
     );
-    if (type === 'shipment')
+    if (type === 'shipment' || type === 'inventoryTargets')
       return {
         rows: result.rows,
         metadata: {
@@ -222,5 +227,31 @@ export async function readShipmentInputs(cutoff, signal) {
         duplicateDays: number(row.duplicate_days),
       };
     }),
+  };
+}
+
+export async function readInventoryTargets(month, endMonth, signal) {
+  const result = await readFacts(
+    'inventory-targets.detail',
+    { start_month: month, end_month: endMonth },
+    signal,
+    'inventoryTargets',
+  );
+  return {
+    rows: result.rows.map((row) => ({
+      month: text(row.target_month),
+      base: text(row.belong_base),
+      code: text(row.material_code),
+      version: text(row.inventory_version),
+      finalTarget: row.final_target_inventory === null ? null : number(row.final_target_inventory),
+      dailyDemand:
+        row.avg_daily_planned_demand === null ? null : number(row.avg_daily_planned_demand),
+      sourceRows: number(row.source_rows),
+    })),
+    metadata: {
+      ...result.metadata,
+      sourceTable: 'ai_db.agents_scm_goods_inventory_turnover_data_m',
+      readAt: new Date().toISOString(),
+    },
   };
 }
