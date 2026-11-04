@@ -45,10 +45,10 @@ const columns = [
 const keyOf = (row) => JSON.stringify([row.base, row.code]);
 const display = (value) =>
   value == null ? '待定' : value.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
-const completeSum = (rows, field) =>
-  rows.length && rows.every((row) => row[field] != null)
-    ? finite(rows.reduce((sum, row) => sum + row[field], 0))
-    : null;
+const knownSum = (rows, field) => {
+  const known = rows.filter((row) => row[field] != null);
+  return known.length ? finite(known.reduce((sum, row) => sum + row[field], 0)) : null;
+};
 const finite = (number) =>
   Number.isFinite(number) && Math.abs(number) <= Number.MAX_SAFE_INTEGER ? number : null;
 function derive(row, passed, total) {
@@ -194,19 +194,31 @@ export function createShipment(
               end,
               adjustment: adjustment ?? null,
               remainingSource: remainingEdit?.source ?? null,
+              missingFields: inputFields.filter((field) => row[field] == null),
             };
           }),
       [sourceRows, month, passed, totalDays, state.values, state.remaining],
     );
     const aggregate = (children, who) => {
       const inputs = Object.fromEntries(
-        inputFields.map((field) => [field, completeSum(children, field)]),
+        inputFields.map((field) => [field, knownSum(children, field)]),
+      );
+      const forecastRows = children.filter((row) => row.prediction != null);
+      const calculation = derive(
+        Object.fromEntries(inputFields.map((field) => [field, knownSum(forecastRows, field)])),
+        passed,
+        totalDays,
       );
       return {
-        ...derive(inputs, passed, totalDays),
+        ...calculation,
+        ...inputs,
         who,
-        fin: completeSum(children, 'fin'),
-        end: completeSum(children, 'end'),
+        fin: knownSum(children, 'fin'),
+        end: knownSum(children, 'end'),
+        calculation,
+        missingCounts: Object.fromEntries(
+          fields.map((field) => [field, children.filter((row) => row[field] == null).length]),
+        ),
         children,
       };
     };
@@ -466,6 +478,7 @@ export function createShipment(
         '输入来源',
         '调整来源',
         '剩余入库来源',
+        '缺失输入',
       ];
       downloadCsv(
         `MPS-${draft.month}-${draft.id}-发货与结存.csv`,
@@ -498,6 +511,7 @@ export function createShipment(
               : sourceKind === 'local-file'
                 ? '本地CSV；BI排产未核齐'
                 : `本月生产入库÷${passed}×${totalDays - passed}，逐SKU四舍五入`),
+          缺失输入: row.missingFields.map((field) => names[fields.indexOf(field)]).join('、'),
         })),
       );
     };
@@ -544,7 +558,13 @@ export function createShipment(
         field === 'fin' || (field === 'remaining' && row.children && who !== '全国合计');
       return h(
         'td',
-        { key: field, className: row[field] < 0 ? 'sp-negative' : undefined },
+        {
+          key: field,
+          className: row[field] < 0 ? 'sp-negative' : undefined,
+          title: row.missingCounts?.[field]
+            ? `仅汇总已有数据，${row.missingCounts[field]}个单品待定`
+            : undefined,
+        },
         editable
           ? h(Editable, {
               value: row[field],
@@ -571,6 +591,18 @@ export function createShipment(
           'th',
           { scope: 'row' },
           label,
+          row.children
+            ? Object.values(row.missingCounts).some((count) => count > 0) &&
+                h('span', { className: 'sp-warning sp-coverage' }, '部分汇总')
+            : row.missingFields.length > 0 &&
+                h(
+                  'span',
+                  {
+                    className: 'sp-warning sp-coverage',
+                    title: `缺失：${row.missingFields.map((field) => names[fields.indexOf(field)]).join('、')}`,
+                  },
+                  '缺项',
+                ),
           row.end < 0 && h('span', { className: 'sp-warning' }, '需含调拨'),
         ),
         ...fields.map((field) => numberCell(row, field, who)),
@@ -579,9 +611,13 @@ export function createShipment(
       formula &&
       (() => {
         const { row, field, who } = formula;
-        const raw = (key) => (row[key] == null ? '待定' : String(row[key]));
+        const calculation =
+          row.children && ['shipDays', 'average', 'prediction'].includes(field)
+            ? row.calculation
+            : row;
+        const raw = (key) => (calculation[key] == null ? '待定' : String(calculation[key]));
         const fallback =
-          row.daily3 === 0
+          calculation.daily3 === 0
             ? `近三天为0，使用本月已发货÷已过天数：${raw('shipped')} ÷ ${passed}。`
             : '';
         const expressions = {
@@ -595,7 +631,7 @@ export function createShipment(
           ],
           prediction: [
             '本月预测量 = 日均 × max(0,总天数 − 已过天数 − 发运天数) + 已发货 + 已备 + 未备，四舍五入为件',
-            `(${row.hold ?? '待定'} ÷ (${passed} + ${row.shipDays ?? '待定'})) × max(0, ${totalDays} − ${passed} − ${row.shipDays ?? '待定'}) + ${row.hold ?? '待定'}；日均展示${raw('average')}，中间值不舍入。`,
+            `(${calculation.hold ?? '待定'} ÷ (${passed} + ${calculation.shipDays ?? '待定'})) × max(0, ${totalDays} − ${passed} − ${calculation.shipDays ?? '待定'}) + ${calculation.hold ?? '待定'}；日均展示${raw('average')}，中间值不舍入。`,
           ],
           fin: [
             '整月预估发货 = 单品有效值之和；单品默认预测值，人工覆盖按当前有效权重重摊并补偿残差',
@@ -615,12 +651,16 @@ export function createShipment(
                   : '本地CSV输入，BI排产未核齐'),
           ],
           end: [
-            '预计月末结存 = 月初库存 + 本月生产入库 + 剩余天数入库 − 整月预估发货',
-            `${raw('open')} + ${raw('inbound')} + ${raw('remaining')} − ${raw('fin')}`,
+            row.children
+              ? '预计月末结存 = 已有单品结存之和；缺项单品保留待定'
+              : '预计月末结存 = 月初库存 + 本月生产入库 + 剩余天数入库 − 整月预估发货',
+            row.children
+              ? `${row.children.length - row.missingCounts.end}个可计算单品结存求和 = ${raw('end')}`
+              : `${raw('open')} + ${raw('inbound')} + ${raw('remaining')} − ${raw('fin')}`,
           ],
         };
         const [expression, substitution] = expressions[field] ?? [
-          `${names[fields.indexOf(field)]} = ${row.children ? '下级同字段完整输入之和' : '当前月份输入原值'}`,
+          `${names[fields.indexOf(field)]} = ${row.children ? '下级同字段已有数据之和' : '当前月份输入原值'}`,
           `表内取值 ${raw(field)}`,
         ];
         return h(
@@ -631,6 +671,14 @@ export function createShipment(
             footer: h('button', { onClick: () => setFormula(null) }, '关闭'),
           },
           h('div', { className: 'sp-formula' }, expression),
+          row.children &&
+            h(
+              'p',
+              {},
+              ['shipDays', 'average', 'prediction'].includes(field)
+                ? `按可计算的${row.children.filter((child) => child.prediction != null).length}/${row.children.length}个单品重算，缺失输入未补零。`
+                : `已汇总${row.children.length - row.missingCounts[field]}/${row.children.length}个单品，待定单品未补零。`,
+            ),
           h(
             'table',
             { className: 'sp-formula-inputs' },
@@ -651,7 +699,7 @@ export function createShipment(
                   'tr',
                   { key },
                   h('td', {}, names[fields.indexOf(key)]),
-                  h('td', {}, display(row[key])),
+                  h('td', {}, display(calculation[key])),
                 ),
               ),
               h('tr', {}, h('td', {}, '计算'), h('td', {}, substitution)),

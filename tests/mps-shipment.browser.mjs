@@ -62,6 +62,51 @@ async function exported(page, frame) {
   for await (const chunk of await (await waiting).createReadStream()) chunks.push(chunk);
   return Buffer.concat(chunks).toString('utf8');
 }
+test('MPS shipment summarizes available values and marks missing SKUs without filling unknown inputs with zero', async (t) => {
+  const { page, frame, table } = await shipment(t);
+  await upload(frame, [
+    '2026-09,郑州,A,完整产品,汤圆,系列,组,220,10,10,10,100,200,80',
+    '2026-09,郑州,B,缺项产品,汤圆,系列,组,110,,10,10,,20,8',
+    '2026-09,华东,C,全缺产品,汤圆,系列,组,,,,,,,',
+    '2026-09,西南,Z,真实零,汤圆,系列,组,0,0,0,0,0,0,0',
+  ]);
+  for (const [field, value] of [
+    ['本月已发货', '330'],
+    ['已备', '10'],
+    ['未备', '20'],
+    ['近三天日均发货量', '20'],
+    ['月初库存', '100'],
+    ['本月生产入库', '220'],
+    ['预计月末结存', '80'],
+  ])
+    await expect(
+      table.getByRole('button', { name: `郑州 ${field} 计算过程`, exact: true }),
+    ).toHaveText(value);
+  await expect(table.getByLabel('郑州 整月预估发货', { exact: true })).toHaveValue('300');
+  await expect(table.getByLabel('全国合计 整月预估发货', { exact: true })).toHaveValue('300');
+  await expect(table.getByLabel('华东 整月预估发货', { exact: true })).toHaveValue('');
+  await expect(table.getByLabel('西南 整月预估发货', { exact: true })).toHaveValue('0');
+  await expect(table.getByRole('row').filter({ hasText: '郑州' })).toContainText('部分汇总');
+  await table.getByRole('button', { name: '郑州 本月预测量 计算过程', exact: true }).click();
+  await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText('1/2个单品重算');
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }).click();
+  await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText(
+    '1个可计算单品结存求和 = 80',
+  );
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
+  const missing = table.getByRole('row').filter({ hasText: '缺项产品' });
+  await expect(missing).toContainText('缺项');
+  await expect(missing.locator('.sp-coverage')).toHaveAttribute('title', '缺失：已备、月初库存');
+  await expect(table.getByRole('button', { name: '郑州 B 已备 计算过程', exact: true })).toHaveText(
+    '待定',
+  );
+  await expect(table.getByLabel('郑州 B 整月预估发货', { exact: true })).toHaveValue('');
+  const csv = await exported(page, frame);
+  assert.match(csv, /缺失输入/);
+  assert.match(csv, /已备、月初库存/);
+});
 test('MPS shipment applies SKU, base and national adjustments to current effective values with exact totals, residuals and signed export evidence', async (t) => {
   const { page, frame, table } = await shipment(t);
   await upload(frame, [
