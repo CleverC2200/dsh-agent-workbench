@@ -10,6 +10,7 @@ class WarehouseScope(unittest.TestCase):
             db.executemany('INSERT INTO stock VALUES (?,?)', [('Y204','02'),('N436','02'),('Y204','20'),('N436','20'),('A020','20'),('BASE','01')])
             queries=[
                 ("s.warehouse_classify='20' OR s.warehouseid='N436'", [('A020',)]),
+                ("TRIM(s.warehouse_classify)='20' OR TRIM(s.warehouseid)='N436'", [('A020',)]),
                 ("s.warehouse_classify IN ('01','02') AND s.warehouseid <> 'N436'", [('BASE',),('N436',),('Y204',)]),
                 ("s.warehouse_classify IN ('01','02','20')", [('A020',),('BASE',),('N436',),('Y204',)]),
             ]

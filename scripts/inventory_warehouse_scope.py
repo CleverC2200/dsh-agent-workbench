@@ -11,14 +11,13 @@ MARKER = '/* inventory-branch-exclusions:N436,Y204 */'
 
 def warehouse_scope(sql, dialect='postgres'):
     """Change source predicates without reserializing ETL dates or casts."""
-    if MARKER in sql:
-        return sql
-    if 'warehouse_classify' not in sql and 'N436' not in sql:
-        return sql
     original = sql
     sql = sql.replace('/* fc-warehouse-exceptions:N436 */', '')
-    sql = re.sub(r"\s+OR\s+\w+\.(?:warehouseid|warehouse)\s*=\s*'N436'", '', sql, flags=re.I)
-    sql = re.sub(r"\s+AND\s+\w+\.warehouseid\s*<>\s*'N436'", '', sql, flags=re.I)
+    legacy_field = r'(?:TRIM\s*\(\s*\w+\.(?:warehouseid|warehouse)\s*\)|\w+\.(?:warehouseid|warehouse))'
+    sql = re.sub(r"\s+OR\s+" + legacy_field + r"\s*=\s*'N436'", '', sql, flags=re.I)
+    sql = re.sub(r"\s+AND\s+" + legacy_field + r"\s*<>\s*'N436'", '', sql, flags=re.I)
+    if MARKER in sql or 'warehouse_classify' not in sql:
+        return sql
     tree = sqlglot.parse_one(sql, read=dialect)
     edits = {}
     for scope in traverse_scope(tree) or []:
