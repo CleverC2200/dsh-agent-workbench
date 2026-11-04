@@ -8,7 +8,7 @@ class WarehouseExceptions(unittest.TestCase):
     def test_base_and_branch_stock_are_disjoint(self):
         with sqlite3.connect(':memory:') as db:
             db.execute('CREATE TABLE stock (warehouseid TEXT, warehouse_classify TEXT)')
-            db.executemany('INSERT INTO stock VALUES (?,?)', [('Y204','02'), ('Y302','02'), ('A110','20'), ('N436','03')])
+            db.executemany('INSERT INTO stock VALUES (?,?)', [('Y204','02'), ('Y302','02'), ('A110','20'), ('N436','02')])
             for condition, expected in [
                 ("s.warehouse_classify = '20'", [('A110',), ('N436',), ('Y204',)]),
                 ("s.warehouse_classify IN ('01', '02')", [('Y302',)]),

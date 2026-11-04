@@ -1,5 +1,5 @@
-/* inventory-warehouse-exceptions:N436,Y204 */
-WITH customer_stock_date AS (
+WITH /* inventory-warehouse-exceptions:N436,Y204 */
+customer_stock_date AS (
  SELECT MAX(i.month_date) AS month_date FROM agents_scm_inventory_sku_data_d AS i
  WHERE i.warehouse_classify IN ('01','02','20')
 ), customer_stock AS (

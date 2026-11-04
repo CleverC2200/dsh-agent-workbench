@@ -1,5 +1,5 @@
-/* inventory-warehouse-exceptions:N436,Y204 */
-WITH latest_inventory AS (
+WITH /* inventory-warehouse-exceptions:N436,Y204 */
+latest_inventory AS (
   SELECT
     MAX(agents_scm_inventory_sku_data_d.month_date) AS month_date
   FROM agents_scm_inventory_sku_data_d AS agents_scm_inventory_sku_data_d

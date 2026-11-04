@@ -48183,7 +48183,7 @@
     },
     "fc.src.lib.server.warehouse-catalog.2": {
       "segments": [
-        "/* warehouse_catalog:inventory */\n      WITH scopes AS (\n        SELECT DISTINCT COALESCE(NULLIF(BTRIM(pickup_point), ''), NULLIF(BTRIM(self_pickup_point), '')) AS pickup_code, warehouseid,\n          NULLIF(BTRIM(warehouse_name), '') AS warehouse_name\n        FROM data_service.agents_scm_branch_inventory_snapshot\n        WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM data_service.agents_scm_branch_inventory_snapshot)\n          AND warehouse_classify = '20'\n      )\n      SELECT DISTINCT pickup_code, warehouseid, warehouse_name\n      FROM scopes\n      WHERE pickup_code IS NOT NULL AND warehouse_name IS NOT NULL\n      ORDER BY pickup_code, warehouse_name\n    "
+        "/* inventory-warehouse-exceptions:N436,Y204 */\n/* warehouse_catalog:inventory */\n      WITH scopes AS (\n        SELECT DISTINCT COALESCE(NULLIF(BTRIM(pickup_point), ''), NULLIF(BTRIM(self_pickup_point), '')) AS pickup_code, warehouseid,\n          NULLIF(BTRIM(warehouse_name), '') AS warehouse_name\n        FROM data_service.agents_scm_branch_inventory_snapshot\n        WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM data_service.agents_scm_branch_inventory_snapshot)\n          AND (warehouse_classify = '20' OR warehouseid IN ('N436', 'Y204'))\n      )\n      SELECT DISTINCT pickup_code, warehouseid, warehouse_name\n      FROM scopes\n      WHERE pickup_code IS NOT NULL AND warehouse_name IS NOT NULL\n      ORDER BY pickup_code, warehouse_name\n    "
       ],
       "source": "business/inventory-fc/source/fc/src/lib/server/warehouse-catalog.ts"
     },

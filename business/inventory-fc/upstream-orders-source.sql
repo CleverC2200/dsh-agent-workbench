@@ -1,5 +1,5 @@
-/* inventory-warehouse-exceptions:N436,Y204 */
-WITH upstream_snapshot AS (
+WITH /* inventory-warehouse-exceptions:N436,Y204 */
+upstream_snapshot AS (
   SELECT
     MAX(i.month_date) AS month_date
   FROM agents_scm_inventory_sku_data_d AS i
