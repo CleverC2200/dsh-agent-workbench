@@ -206,7 +206,11 @@ test('drafts stay unsent and explicit conversations reveal the associated chat o
   assert.deepEqual(await channel.ask('为当前报告准备导入预览'), { sent: true });
   assert.equal(prompted, 2);
   assert.equal(conversationsShown, 2);
-  assert.equal(contexts.length, 1, 'omitting context preserves the already published page snapshot');
+  assert.equal(
+    contexts.length,
+    1,
+    'omitting context preserves the already published page snapshot',
+  );
   execution.prompt = async () => {
     throw Error('MODEL_UNAVAILABLE');
   };
