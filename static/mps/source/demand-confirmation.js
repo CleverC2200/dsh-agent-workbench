@@ -2190,7 +2190,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
               ? relations
               : null,
-          active: active && step === 'check',
+          active,
+          contextActive: active && step === 'check',
         }),
         h(CategoryDemand, { draft, update, active: active && step === 'check' }),
         step === 'check' &&

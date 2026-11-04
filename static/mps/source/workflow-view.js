@@ -49,6 +49,7 @@ const processFields = [
   'systemShare',
   'share',
   'demand',
+  'openingInventory',
 ];
 const planFields = [
   'demand',
@@ -168,6 +169,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const inScope = (row) => step !== 'process' || !excludedProcessCategories.has(row.category);
     const scopedRows = result.rows.filter(inScope);
     const scopedCategories = result.categoryRows.filter(inScope);
+    const demandCategories = scopedCategories.filter((row) => row.month !== result.months[3]);
+    const openingRows = scopedRows.filter((row) => row.month === draft.month);
     const configurationPairs = [
       ...new Map(
         [
@@ -1218,11 +1221,31 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             ),
           ),
         ),
-      step === 'process' && h(SourceDiagnostics, { draft, result, table }),
       step === 'process'
         ? h(
             react.Fragment,
             null,
+            card(
+              '前两步输入',
+              table(
+                '前两步输入',
+                ['输入', '期间', '已就绪', '待补'],
+                [
+                  [
+                    '①大类有效需求',
+                    result.months.slice(0, 3).join('、'),
+                    `${demandCategories.filter((row) => row.quantity != null).length}项`,
+                    `${demandCategories.filter((row) => row.quantity == null).length}项`,
+                  ],
+                  [
+                    '②月末结存 → 首月期初库存',
+                    `${result.shipmentMonth} → ${draft.month}`,
+                    `${openingRows.filter((row) => row.openingInventory != null).length}个基地单品`,
+                    `${openingRows.filter((row) => row.openingInventory == null).length}个基地单品`,
+                  ],
+                ],
+              ),
+            ),
             card(
               '大类需求',
               table(
@@ -1334,6 +1357,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 '下载需求拆分',
               ),
             ),
+            h(
+              'p',
+              { className: 'wf-note' },
+              '需求数量＝第一步大类有效需求×两路三层占比的平均值，人工调整后使用有效占比。首月期初库存承接第二步同版上月结存；后月库存需结合安全库存和生产参考逐月结转。',
+            ),
             card(
               '占比调整记录',
               table(
@@ -1351,6 +1379,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                   ]),
               ),
             ),
+            h(SourceDiagnostics, { draft, result, table }),
           )
         : step === 'constraints'
           ? h(

@@ -309,6 +309,30 @@ async function businessShipment(t, execute = shipmentFacts) {
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   return { ...result, table: frame.getByRole('table', { name: '本月预估发货明细' }) };
 }
+test('MPS shipment finishes the current sync after moving to processing', async (t) => {
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  t.after(() => release());
+  let started = false;
+  const { frame, table } = await businessShipment(t, async (query) => {
+    if (query.queryId === 'facts.shipment') {
+      started = true;
+      await pending;
+    }
+    return shipmentFacts(query);
+  });
+  await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  await expect.poll(() => started).toBe(true);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  release();
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await expect(
+    table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('73');
+});
+
 test('MPS shipment loads every warehouse input from the stock table and derives forecast and remaining inbound', async (t) => {
   const { page, frame, table, calls } = await businessShipment(t);
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();

@@ -172,7 +172,7 @@ export function createShipment(
         generation.current++;
         controller.current?.abort();
       };
-    }, [draft.id, draft.month, active, cutoff]);
+    }, [draft.id, draft.month, cutoff]);
     const rows = react.useMemo(
       () =>
         sourceRows

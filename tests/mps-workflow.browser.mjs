@@ -49,6 +49,74 @@ async function download(page, view, name) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+test('MPS basic inputs finish while navigating through shipment to processing and are reused on return', async (t) => {
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  t.after(() => release());
+  let started = false;
+  let countCalls = 0;
+  const { frame } = await mpsPage(t, config, async (query) => {
+    if (
+      query.queryId === 'facts.execution-delivery.count' &&
+      query.parameters.month === '2027-01-01'
+    ) {
+      countCalls++;
+      if (!started) {
+        started = true;
+        await pending;
+      }
+    }
+    return emptySource(query);
+  });
+  await version(frame, '2027-03');
+  await expect.poll(() => started).toBe(true);
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  release();
+  await expect.poll(() => countCalls).toBe(2);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  await expect(frame.getByRole('button', { name: '下载源值核对', exact: true })).toBeEnabled();
+  assert.equal(countCalls, 2);
+});
+
+test('MPS processing carries the same-version shipment closing stock into its visible detail and export', async (t) => {
+  const { page, frame } = await workflowPage(t);
+  await version(frame, '2026-10');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
+  );
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,产品甲,汤圆,系列,组,100,100',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await upload(
+    frame,
+    '选择发货输入CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-09,郑州,A,产品甲,汤圆,系列,组,220,10,10,10,100,200,80',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
+  await expect(view.getByRole('table', { name: '前两步输入', exact: true })).toContainText(
+    '2026-09 → 2026-10',
+  );
+  await expect(
+    view.getByRole('button', { name: '郑州 A 2026-10 期初库存 计算过程', exact: true }),
+  ).toHaveText('80');
+  const csv = await download(page, view, '下载需求拆分');
+  const book = XLSX.read(csv, { type: 'string', raw: true });
+  const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  assert.equal(
+    String(rows.find((row) => row['月份'] === '2026-10' && row['产品编码'] === 'A')['期初库存']),
+    '80',
+  );
+});
+
 test('MPS processing shows current evaluation and missing split dependencies in the same downloadable results', async (t) => {
   const { page, frame } = await workflowPage(t);
   await version(frame, '2026-10');
