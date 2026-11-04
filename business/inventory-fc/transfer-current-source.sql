@@ -1,4 +1,4 @@
-/* inventory-warehouse-exceptions:N436,Y204 */
+/* inventory-branch-exclusions:N436,Y204 */
 -- Current base-to-branch transfers; latest daily/hourly state before eligibility.
 -- Quantities keep the existing case conversion; sent-but-unreceived uses dispatch state.
 WITH transfer_stock_date AS (
@@ -6,11 +6,11 @@ WITH transfer_stock_date AS (
 ), transfer_receivers AS (
  SELECT i.warehouseid AS warehouse_code,CASE WHEN COUNT(DISTINCT NULLIF(TRIM(i.warehouse_name),''))=1 THEN MAX(NULLIF(TRIM(i.warehouse_name),'')) ELSE NULL END AS warehouse_name
  FROM agents_scm_inventory_sku_data_d AS i INNER JOIN transfer_stock_date AS d ON i.month_date=d.month_date
- WHERE (i.warehouse_classify='20' OR i.warehouseid IN ('N436', 'Y204')) OR i.warehouseid='N436' GROUP BY i.warehouseid
+ WHERE (i.warehouse_classify='20' AND i.warehouseid NOT IN ('N436', 'Y204')) GROUP BY i.warehouseid
 ), transfer_origins AS (
  SELECT i.warehouseid AS warehouse_code,CASE WHEN COUNT(DISTINCT NULLIF(TRIM(i.belong_base),''))=1 THEN MAX(NULLIF(TRIM(i.belong_base),'')) ELSE NULL END AS base
  FROM agents_scm_inventory_sku_data_d AS i INNER JOIN transfer_stock_date AS d ON i.month_date=d.month_date
- WHERE (i.warehouse_classify IN ('01','02') AND i.warehouseid NOT IN ('N436', 'Y204')) GROUP BY i.warehouseid
+ WHERE i.warehouse_classify IN ('01','02') GROUP BY i.warehouseid
 ), transfer_union AS (
  SELECT e.executeorderno AS order_no,e.executeorderlineno AS line_no,e.receive_wh AS warehouse_code,
  e.warehouseid AS source_warehouse,e.material_code AS sku,e.material_name AS material_name,

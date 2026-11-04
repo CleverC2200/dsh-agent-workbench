@@ -1,10 +1,10 @@
-WITH /* inventory-warehouse-exceptions:N436,Y204 */
+WITH /* inventory-branch-exclusions:N436,Y204 */
 latest_inventory AS (
   SELECT
     MAX(agents_scm_inventory_sku_data_d.month_date) AS month_date
   FROM agents_scm_inventory_sku_data_d AS agents_scm_inventory_sku_data_d
   WHERE
-    agents_scm_inventory_sku_data_d.warehouse_classify IN ('01', '02', '20')
+    (agents_scm_inventory_sku_data_d.warehouse_classify IN ('01', '02', '20') AND (agents_scm_inventory_sku_data_d.warehouse_classify <> '20' OR agents_scm_inventory_sku_data_d.warehouseid NOT IN ('N436', 'Y204')))
 ), warehouse_points AS (
   SELECT
     agents_scm_material_in_out_summary_d.warehouseid AS warehouseid,
@@ -31,16 +31,16 @@ latest_inventory AS (
     i.warehouse_classify AS warehouse_classify,
     i.available_qty AS available_qty,
     w.pickup_point AS pickup_point,
-    CASE WHEN (i.warehouse_classify = '20' OR i.warehouseid IN ('N436', 'Y204')) THEN '分仓' ELSE '基地' END AS location_type,
-    CASE WHEN (i.warehouse_classify = '20' OR i.warehouseid IN ('N436', 'Y204')) THEN i.warehouseid ELSE i.belong_base END AS location_code,
-    CASE WHEN (i.warehouse_classify = '20' OR i.warehouseid IN ('N436', 'Y204')) THEN i.warehouse_name ELSE i.belong_base END AS location_name
+    CASE WHEN (i.warehouse_classify = '20' AND i.warehouseid NOT IN ('N436', 'Y204')) THEN '分仓' ELSE '基地' END AS location_type,
+    CASE WHEN (i.warehouse_classify = '20' AND i.warehouseid NOT IN ('N436', 'Y204')) THEN i.warehouseid ELSE i.belong_base END AS location_code,
+    CASE WHEN (i.warehouse_classify = '20' AND i.warehouseid NOT IN ('N436', 'Y204')) THEN i.warehouse_name ELSE i.belong_base END AS location_name
   FROM agents_scm_inventory_sku_data_d AS i
   INNER JOIN latest_inventory AS s
     ON i.month_date = s.month_date
   LEFT JOIN warehouse_points AS w
     ON i.warehouseid = w.warehouseid
   WHERE
-    i.warehouse_classify IN ('01', '02', '20')
+    (i.warehouse_classify IN ('01', '02', '20') AND (i.warehouse_classify <> '20' OR i.warehouseid NOT IN ('N436', 'Y204')))
 ), point_location_candidates AS (
   SELECT
     inventory_rows.pickup_point AS pickup_point,
