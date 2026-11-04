@@ -189,7 +189,7 @@ test('reported quantities retain partial NULL independently and preserve real ze
   );
 });
 
-test('inventory target SQL keeps month, base, SKU and version keys and rejects duplicate facts without summing versions', (t) => {
+test('inventory target SQL preserves all keys, reduces agreeing repeats and isolates conflicting facts without summing versions', (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   db.exec(
@@ -206,6 +206,8 @@ test('inventory target SQL keeps month, base, SKU and version keys and rejects d
     ['2026-11-01', '郑州', 'B', '纠偏', 100, 0],
     ['2026-11-01', '郑州', 'C', '纠偏', 80, 10],
     ['2026-11-01', '郑州', 'C', '纠偏', 80, 10],
+    ['2026-11-01', '郑州', 'D', '纠偏', 80, 10],
+    ['2026-11-01', '郑州', 'D', '纠偏', 90, 10],
     ['2026-10-01', '郑州', 'A', '纠偏', 9999, 10],
   ])
     insert.run(...row);
@@ -213,15 +215,16 @@ test('inventory target SQL keeps month, base, SKU and version keys and rejects d
   const rows = db
     .prepare(config.queries['inventory-targets.detail'].request.sql)
     .all({ ...params, gea_p98: 200, gea_p99: 0 });
-  assert.equal(rows.length, 6);
+  assert.equal(rows.length, 7);
   assert.equal(rows.find((row) => row.material_code === 'C').source_rows, 2);
-  assert.equal(rows.find((row) => row.material_code === 'C').final_target_inventory, null);
+  assert.equal(rows.find((row) => row.material_code === 'C').final_target_inventory, 80);
+  assert.equal(rows.find((row) => row.material_code === 'D').final_target_inventory, null);
   assert.equal(
     rows.filter((row) => row.belong_base === '郑州' && row.material_code === 'A').length,
     3,
   );
   assert.equal(
     db.prepare(config.queries['inventory-targets.count'].request.sql).get(params).total,
-    6,
+    7,
   );
 });

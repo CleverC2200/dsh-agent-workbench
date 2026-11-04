@@ -928,7 +928,7 @@ test('MPS Tab5 reads monthly target facts, aligns versions per base and exports 
       inventory_version: '纠偏',
       final_target_inventory: 120,
       avg_daily_planned_demand: 10,
-      source_rows: 1,
+      source_rows: 12,
     },
     {
       target_month: '2026-12',
