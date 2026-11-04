@@ -146,3 +146,96 @@
   outline: 2px solid var(--dc-accent, #b62036);
   outline-offset: 2px;
 }
+.wf-rule-notice {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  background: #fff;
+  color: var(--dc-ink);
+  border: 1px solid var(--dc-line);
+  border-radius: 10px;
+  line-height: 1.7;
+}
+.wf-rule-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.wf-rule-actions .wf-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wf-advanced > summary {
+  cursor: pointer;
+  padding: 16px 18px;
+  font-weight: 600;
+}
+.wf-advanced-body {
+  padding: 0 18px 18px;
+}
+.wf-rule-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.wf-rule-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.wf-rule-form input,
+.wf-rule-form select {
+  width: 100%;
+  box-sizing: border-box;
+}
+.wf-rule-form p {
+  grid-column: 1 / -1;
+}
+@media (max-width: 680px) {
+  .wf-rule-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.wf-rule-strength,
+.wf-rule-status {
+  display: inline-block;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: #eef1f5;
+  color: #555d68;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.wf-rule-strength[data-strength='硬'],
+.wf-rule-status[data-status='conflict'] {
+  background: #ffe9ec;
+  color: #c8112a;
+}
+.wf-rule-status[data-status='warning'],
+.wf-rule-status[data-status='pending'],
+.wf-rule-status[data-status='draft'] {
+  background: #fff4d9;
+  color: #765500;
+}
+.wf-rule-status[data-status='applied'],
+.wf-rule-status[data-status='met'] {
+  background: #eaf7ef;
+  color: #126c43;
+}
+.wf-rule-evidence {
+  grid-column: 1 / -1;
+  border: 1px solid #e3e6ea;
+  padding: 12px;
+  border-radius: 8px;
+}
+.wf-rule-evidence .wf-rule-form {
+  margin-top: 10px;
+}
+.wf-rule-notice {
+  max-width: none;
+}
+.wf-rule-actions label.wf-check {
+  flex-direction: row;
+}

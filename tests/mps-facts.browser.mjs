@@ -514,6 +514,46 @@ test('source diagnostics use current plan-rate rows and full-year history for co
   await expect(dialog).toContainText('当前维度计划量');
 });
 
+test('source detail joins product classifications and shows matched rows before missing-base records without inventing a base', async (t) => {
+  const { page, frame } = await mpsPage(t, config, (query) =>
+    fixture(
+      query,
+      query.queryId.startsWith('plan-rate.')
+        ? query.parameters.months.flatMap((month) => [
+            rate(month, '001', 0, { belong_base: null }),
+            rate(month, '001', 42),
+          ])
+        : undefined,
+    ),
+  );
+  await assessment(frame);
+  await expect(frame.getByRole('region', { name: '销售提报占比', exact: true })).toContainText(
+    '6 条源记录',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await frame
+    .getByRole('region', { name: '逐期来源诊断', exact: true })
+    .getByRole('row')
+    .filter({ hasText: '销售提报占比' })
+    .filter({ hasText: '2026-10' })
+    .getByRole('button', { name: '明细', exact: true })
+    .click();
+  const dialog = frame.getByRole('dialog');
+  const rows = dialog.getByRole('table', { name: '来源明细', exact: true }).getByRole('row');
+  await expect(rows.nth(1)).toContainText('基地甲');
+  for (const value of ['产品001', '汤圆', '系列甲', '组甲', '42'])
+    await expect(rows.nth(1)).toContainText(value);
+  await expect(rows.nth(2)).toContainText('源数据缺基地');
+  await expect(rows.nth(2)).toContainText('缺业务键');
+  await expect(rows.nth(2)).not.toContainText('基地甲');
+  await expect(dialog.getByRole('columnheader', { name: '大区', exact: true })).toHaveCount(0);
+  const pending = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: '下载明细', exact: true }).click();
+  const csv = await mpsDownloadText(await (await pending).path());
+  assert.match(csv, /产品001,汤圆,系列甲,组甲/);
+  assert.match(csv, /缺基地/);
+});
+
 test('batched plan loading and separate fiscal-year failure or partial emptiness remain distinct', async (t) => {
   let release;
   const pending = new Promise((resolve) => {

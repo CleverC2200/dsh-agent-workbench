@@ -53,16 +53,12 @@ export function encodeLocalDrafts(drafts, selected) {
       ...(draft.constraints
         ? {
             constraints: {
+              ...(draft.constraints.targetVersion
+                ? { targetVersion: draft.constraints.targetVersion }
+                : {}),
               safetyDays: draft.constraints.safetyDays ?? [],
               rules: {
-                local: (draft.constraints.rules?.local ?? []).map((row) =>
-                  Object.fromEntries(
-                    ['description', 'target', 'strength', 'until'].map((key) => [
-                      key,
-                      row[key] ?? '',
-                    ]),
-                  ),
-                ),
+                ...structuredClone(draft.constraints.rules ?? { local: [] }),
               },
             },
           }

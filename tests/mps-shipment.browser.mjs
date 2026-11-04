@@ -62,6 +62,51 @@ async function exported(page, frame) {
   for await (const chunk of await (await waiting).createReadStream()) chunks.push(chunk);
   return Buffer.concat(chunks).toString('utf8');
 }
+test('MPS shipment summarizes available values and marks missing SKUs without filling unknown inputs with zero', async (t) => {
+  const { page, frame, table } = await shipment(t);
+  await upload(frame, [
+    '2026-09,郑州,A,完整产品,汤圆,系列,组,220,10,10,10,100,200,80',
+    '2026-09,郑州,B,缺项产品,汤圆,系列,组,110,,10,10,,20,8',
+    '2026-09,华东,C,全缺产品,汤圆,系列,组,,,,,,,',
+    '2026-09,西南,Z,真实零,汤圆,系列,组,0,0,0,0,0,0,0',
+  ]);
+  for (const [field, value] of [
+    ['本月已发货', '330'],
+    ['已备', '10'],
+    ['未备', '20'],
+    ['近三天日均发货量', '20'],
+    ['月初库存', '100'],
+    ['本月生产入库', '220'],
+    ['预计月末结存', '80'],
+  ])
+    await expect(
+      table.getByRole('button', { name: `郑州 ${field} 计算过程`, exact: true }),
+    ).toHaveText(value);
+  await expect(table.getByLabel('郑州 整月预估发货', { exact: true })).toHaveValue('300');
+  await expect(table.getByLabel('全国合计 整月预估发货', { exact: true })).toHaveValue('300');
+  await expect(table.getByLabel('华东 整月预估发货', { exact: true })).toHaveValue('');
+  await expect(table.getByLabel('西南 整月预估发货', { exact: true })).toHaveValue('0');
+  await expect(table.getByRole('row').filter({ hasText: '郑州' })).toContainText('部分汇总');
+  await table.getByRole('button', { name: '郑州 本月预测量 计算过程', exact: true }).click();
+  await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText('1/2个单品重算');
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }).click();
+  await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText(
+    '1个可计算单品结存求和 = 80',
+  );
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
+  const missing = table.getByRole('row').filter({ hasText: '缺项产品' });
+  await expect(missing).toContainText('缺项');
+  await expect(missing.locator('.sp-coverage')).toHaveAttribute('title', '缺失：已备、月初库存');
+  await expect(table.getByRole('button', { name: '郑州 B 已备 计算过程', exact: true })).toHaveText(
+    '待定',
+  );
+  await expect(table.getByLabel('郑州 B 整月预估发货', { exact: true })).toHaveValue('');
+  const csv = await exported(page, frame);
+  assert.match(csv, /缺失输入/);
+  assert.match(csv, /已备、月初库存/);
+});
 test('MPS shipment applies SKU, base and national adjustments to current effective values with exact totals, residuals and signed export evidence', async (t) => {
   const { page, frame, table } = await shipment(t);
   await upload(frame, [
@@ -219,34 +264,38 @@ test('MPS shipment calendars cross the year and leap February while shared evalu
 });
 
 const sourceConfig = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
-const factPrefix = 'agents_scm_cust_deliv_daily_di.';
 function shipmentFacts(query) {
-  if (query.queryId !== 'facts.shipment')
-    return {
-      rows: query.queryId.endsWith('.count') ? [{ total: 0 }] : [],
-      returnedColumns: sourceConfig.queries[query.queryId].columns,
-      configVersion: 'ship-v1',
-      totalRowCount: 0,
-      offset: query.parameters.offset,
-      hasMorePages: false,
-    };
-  const recent = query.parameters.start === '2026-09-20';
-  const rows = [
-    {
-      [factPrefix + 'belong_base']: '郑州',
-      [factPrefix + 'material_code']: 'A',
-      [factPrefix + 'material_name']: null,
-      [factPrefix + 'product_categ_name']: null,
-      [factPrefix + 'material_group_name']: null,
-      [factPrefix + 'act_dl_qty_total']: recent ? 12 : 220,
-    },
-  ];
+  const count = query.queryId === 'facts.shipment.count';
+  const stock = query.queryId === 'facts.shipment';
+  const rows = count
+    ? [{ total: 1 }]
+    : stock
+      ? [
+          {
+            belong_base: '郑州',
+            material_code: 'A',
+            material_name: '产品A',
+            series: '系列',
+            product_item: '汤圆',
+            shipped: 220,
+            prepped: 10,
+            unprepped: 10,
+            daily3: 10,
+            open: 100,
+            inbound: 200,
+            source_days: Number(query.parameters.cutoff.slice(8)),
+            duplicate_days: 0,
+          },
+        ]
+      : query.queryId.endsWith('.count')
+        ? [{ total: 0 }]
+        : [];
   return {
     rows,
     returnedColumns: sourceConfig.queries[query.queryId].columns,
-    configVersion: 'ship-v1',
-    totalRowCount: 1,
-    offset: 0,
+    configVersion: 'ship-v2',
+    totalRowCount: stock ? 1 : 0,
+    offset: query.parameters.offset ?? 0,
     hasMorePages: false,
   };
 }
@@ -260,29 +309,65 @@ async function businessShipment(t, execute = shipmentFacts) {
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   return { ...result, table: frame.getByRole('table', { name: '本月预估发货明细' }) };
 }
-test('MPS shipment reads actual quantities through cutoff and a separate complete three-day range without replacing missing inputs', async (t) => {
+test('MPS shipment finishes the current sync after moving to processing', async (t) => {
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  t.after(() => release());
+  let started = false;
+  const { frame, table } = await businessShipment(t, async (query) => {
+    if (query.queryId === 'facts.shipment') {
+      started = true;
+      await pending;
+    }
+    return shipmentFacts(query);
+  });
+  await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  await expect.poll(() => started).toBe(true);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  release();
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await expect(
+    table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('73');
+});
+
+test('MPS shipment loads every warehouse input from the stock table and derives forecast and remaining inbound', async (t) => {
   const { page, frame, table, calls } = await businessShipment(t);
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  for (const [name, value] of [
+    ['本月已发货', '220'],
+    ['已备', '10'],
+    ['未备', '10'],
+    ['近三天日均发货量', '10'],
+    ['月初库存', '100'],
+    ['本月生产入库', '200'],
+  ])
+    await expect(
+      table.getByRole('button', { name: `郑州 ${name} 计算过程`, exact: true }),
+    ).toHaveText(value);
+  await expect(table.getByLabel('郑州 整月预估发货', { exact: true })).toHaveValue('300');
+  await expect(table.getByLabel('郑州 剩余天数入库', { exact: true })).toHaveValue('73');
   await expect(
-    table.getByRole('button', { name: '郑州 本月已发货 计算过程', exact: true }),
-  ).toHaveText('220');
-  await expect(
-    table.getByRole('button', { name: '郑州 近三天日均发货量 计算过程', exact: true }),
-  ).toHaveText('4');
-  await expect(table.getByRole('button', { name: '郑州 已备 计算过程', exact: true })).toHaveText(
-    '待定',
-  );
-  await expect(table.getByLabel('郑州 整月预估发货', { exact: true })).toHaveValue('');
+    table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('73');
   const queries = calls.filter((call) => call.queryId === 'facts.shipment');
-  assert.deepEqual(queries.map((call) => [call.parameters.start, call.parameters.end]).sort(), [
-    ['2026-09-01', '2026-09-22'],
-    ['2026-09-20', '2026-09-22'],
-  ]);
+  assert.equal(queries.length, 1);
+  assert.deepEqual(queries[0].parameters, {
+    month: '2026-09-01',
+    cutoff: '2026-09-22',
+    recent_start: '2026-09-20',
+    page_size: 200,
+    offset: 0,
+  });
   await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
-  await expect(table.getByRole('row').filter({ hasText: 'A' })).toContainText('产品名称未提供');
+  await table.getByRole('button', { name: '郑州 A 剩余天数入库 计算过程', exact: true }).click();
+  await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText('200 ÷ 22 × 8');
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   const csv = await exported(page, frame);
-  assert.match(csv, /220,,,4,,,,/);
-  assert.match(csv, /业务来源/);
+  assert.match(csv, /220,10,10,10,100,200,73/);
+  assert.match(csv, /ai_db.agents_scm_stock_detail_d/);
 });
 test('MPS actual shipment failure withdraws prior business output and switches explicitly between preserved CSV and current business rows', async (t) => {
   let denied = false;
@@ -334,22 +419,29 @@ test('MPS actual shipment failure withdraws prior business output and switches e
     table.getByRole('button', { name: '郑州 本月已发货 计算过程', exact: true }),
   ).toHaveText('22');
 });
-test('MPS actual shipment preserves full paging, zero and NULL while a failed recent range does not block cutoff quantities', async (t) => {
+test('MPS stock inputs preserve paging, zero, NULL and incomplete source status', async (t) => {
   const { frame, table, calls } = await businessShipment(t, (query) => {
+    if (query.queryId === 'facts.shipment.count')
+      return { ...shipmentFacts(query), rows: [{ total: 202 }] };
     if (query.queryId !== 'facts.shipment') return shipmentFacts(query);
-    if (query.parameters.start !== '2026-09-01') throw Error('RECENT_SOURCE_FAILED');
     const records = Array.from({ length: 202 }, (_, i) => ({
-      [factPrefix + 'belong_base']: i === 201 ? null : '郑州',
-      [factPrefix + 'material_code']: String(i).padStart(5, '0'),
-      [factPrefix + 'material_name']: '真实产品' + i,
-      [factPrefix + 'product_categ_name']: '汤圆',
-      [factPrefix + 'material_group_name']: '组',
-      [factPrefix + 'act_dl_qty_total']: i === 200 ? null : 0,
+      belong_base: i === 201 ? null : '郑州',
+      material_code: String(i).padStart(5, '0'),
+      material_name: '真实产品' + i,
+      series: '系列',
+      product_item: '汤圆',
+      shipped: i === 200 ? null : 0,
+      prepped: 0,
+      unprepped: 0,
+      daily3: i === 200 ? null : 0,
+      open: 0,
+      inbound: 0,
+      source_days: 22,
+      duplicate_days: 0,
     }));
     return {
+      ...shipmentFacts(query),
       rows: records.slice(query.parameters.offset, query.parameters.offset + 200),
-      returnedColumns: sourceConfig.queries[query.queryId].columns,
-      configVersion: 'ship-v1',
       totalRowCount: records.length,
       offset: query.parameters.offset,
       hasMorePages: query.parameters.offset + 200 < records.length,
@@ -357,22 +449,18 @@ test('MPS actual shipment preserves full paging, zero and NULL while a failed re
   });
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
   const region = frame.getByRole('region', { name: '发货本地核对' });
-  await expect(region.getByRole('alert')).toContainText('实际发货已读取；近三天读取失败');
   await expect(region).toContainText('源数据1条缺基地或产品编码');
+  await expect(region).toContainText('1个单品存在缺值或日记录不齐');
   await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
-  await expect(
-    table.getByRole('button', { name: '郑州 00000 本月已发货 计算过程', exact: true }),
-  ).toHaveText('0');
-  await expect(
-    table.getByRole('button', { name: '郑州 00200 本月已发货 计算过程', exact: true }),
-  ).toHaveText('待定');
-  await expect(
-    table.getByRole('button', { name: '郑州 00000 近三天日均发货量 计算过程', exact: true }),
-  ).toHaveText('待定');
+  for (const [code, value] of [
+    ['00000', '0'],
+    ['00200', '待定'],
+  ])
+    await expect(
+      table.getByRole('button', { name: `郑州 ${code} 本月已发货 计算过程`, exact: true }),
+    ).toHaveText(value);
   assert.deepEqual(
-    calls
-      .filter((q) => q.queryId === 'facts.shipment' && q.parameters.start === '2026-09-01')
-      .map((q) => q.parameters.offset),
+    calls.filter((q) => q.queryId === 'facts.shipment').map((q) => q.parameters.offset),
     [0, 200],
   );
 });
@@ -386,16 +474,16 @@ test('MPS cutoff changes invalidate a pending earlier read and incomplete pages 
   const { frame, table } = await businessShipment(t, async (query) => {
     if (
       query.queryId === 'facts.shipment' &&
-      query.parameters.end === '2026-09-22' &&
-      query.parameters.start === '2026-09-01'
+      query.parameters.cutoff === '2026-09-22' &&
+      query.parameters.month === '2026-09-01'
     ) {
       started = true;
       await pending;
     }
     const result = shipmentFacts(query);
-    if (query.queryId === 'facts.shipment' && query.parameters.end === '2026-09-25') {
-      result.rows[0][factPrefix + 'act_dl_qty_total'] = 250;
-      if (incomplete) result.totalRowCount = 2;
+    if (query.queryId === 'facts.shipment' && query.parameters.cutoff === '2026-09-25') {
+      result.rows[0].shipped = 250;
+      if (incomplete) result.rows = [];
     }
     return result;
   });
@@ -415,27 +503,31 @@ test('MPS cutoff changes invalidate a pending earlier read and incomplete pages 
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
   await expect(
     frame.getByRole('region', { name: '发货本地核对' }).getByRole('alert'),
-  ).toContainText('未采用不完整结果');
+  ).toContainText('分页与计数不一致');
   await expect(
     table.getByRole('button', { name: '郑州 本月已发货 计算过程', exact: true }),
   ).toHaveText('待定');
 });
-test('MPS shipment conflicting source product dimensions remain unresolved after quantity aggregation', async (t) => {
+test('MPS stock input missing product dimensions retain quantities without inventing a category', async (t) => {
   const { page, frame, table } = await businessShipment(t, (query) => {
     const result = shipmentFacts(query);
     if (query.queryId === 'facts.shipment') {
-      result.rows[0][factPrefix + 'product_categ_name'] = '汤圆';
-      result.rows.push({ ...result.rows[0], [factPrefix + 'product_categ_name']: '水饺' });
-      result.totalRowCount = 2;
+      result.rows[0].material_name = null;
+      result.rows[0].product_item = null;
     }
     return result;
   });
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
   await expect(
     table.getByRole('button', { name: '郑州 本月已发货 计算过程', exact: true }),
-  ).toHaveText('440');
+  ).toHaveText('220');
+  await expect(frame.getByRole('region', { name: '发货本地核对' })).toContainText(
+    '产品名称、系列或品项缺失或冲突',
+  );
+  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
+  await expect(table.getByRole('row').filter({ hasText: 'A' })).toContainText('产品名称未提供');
   const csv = await exported(page, frame);
-  assert.doesNotMatch(csv, /水饺|汤圆/);
+  assert.doesNotMatch(csv, /汤圆/);
 });
 
 test('MPS shipment rounds displayed quantities while keeping decimal source values in exports', async (t) => {
