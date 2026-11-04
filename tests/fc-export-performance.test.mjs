@@ -93,7 +93,10 @@ test('full plan export uses bounded lightweight reads rather than scanning aging
   );
   assert.equal(rows.length, 2471);
   assert.equal(new Set(rows.map((r) => r.sku)).size, 2471);
-  const pages = calls.filter((c) => !c.queryId.startsWith('source.'));
+  const pages = calls.filter(
+    (c) => c.queryId !== 'summary.snapshot' && !c.queryId.startsWith('source.'),
+  );
+  assert.equal(calls.filter((c) => c.queryId === 'summary.snapshot').length, 1);
   assert.ok(pages.length <= 13, `expected at most 13 bounded requests; got ${pages.length}`);
   for (const page of pages) {
     assert.ok(page.values.page_size <= 200);
@@ -116,9 +119,9 @@ test('a changed source count discards the prefix and restarts the entire collect
   assert.equal(new Set(rows.map((r) => r.sku)).size, 2472);
   assert.equal(attempt, 2);
   assert.ok(
-    calls.every(
-      (c) => c.values.warehouse_code === 'A020' && c.values.warehouse_code_mode === 'equal',
-    ),
+    calls
+      .filter((c) => c.queryId !== 'summary.snapshot')
+      .every((c) => c.values.warehouse_code === 'A020' && c.values.warehouse_code_mode === 'equal'),
   );
 });
 test('permission denial does not retry or return a partial download', async () => {

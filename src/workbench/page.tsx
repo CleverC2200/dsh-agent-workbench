@@ -23,6 +23,7 @@ import { salesPlanStagesForRoles } from './original/workbenches/regionalApproval
 import type { NativeBusinessStatus as Status } from './business-contract.ts';
 import type { CopyKey } from '../client/locales.ts';
 import './workbench.css';
+import '../company/password-login.css';
 import { LoginSurface } from '../company/login-dialog.tsx';
 import { mountPicker } from '../page-interaction/picker.ts';
 import { ApiLogCenter } from './api-log-center.tsx';
@@ -231,6 +232,18 @@ const resubmitClient = {
 };
 
 const nativeLogin = {
+  preparePasswordLogin: (signal: AbortSignal, environment: Status['environment']) =>
+    rpc<import('../company/account.ts').PasswordLoginChallenge>(
+      'login/password/prepare',
+      { environment },
+      signal,
+    ),
+  loginWithPassword: async (
+    input: import('../company/account.ts').PasswordLoginInput,
+    signal: AbortSignal,
+  ) => {
+    await rpc('login/password', input, signal);
+  },
   startLogin: (signal: AbortSignal, environment: Status['environment']) =>
     rpc<{ image: string; loginId: string; expiresIn: number }>(
       'login/start',

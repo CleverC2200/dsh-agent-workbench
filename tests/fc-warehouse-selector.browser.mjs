@@ -11,7 +11,7 @@ const bundle = await build({
     {
       name: 'direct-source-interaction-fixture',
       setup(builder) {
-        builder.onLoad({ filter: /inventory-fc\/sql\.config\.json$/ }, () => ({
+        builder.onLoad({ filter: /inventory-fc[\\/]sql\.config\.json$/ }, () => ({
           contents: JSON.stringify(directSourceFixture(config)),
           loader: 'json',
         }));
@@ -195,7 +195,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     });
     assert.equal(layout.contained, true, `toolbar controls fit at ${width}px`);
     assert.equal(layout.usableFields, true, `filter inputs remain usable at ${width}px`);
-    if (width >= 900)
+    // The shared toolbar wraps at compact desktop widths while retaining usable controls.
+    if (width >= 1200)
       assert.equal(layout.sameLine, true, `toolbar stays on one line at ${width}px`);
   }
   await page.setViewportSize({ width: 900, height: 900 });
@@ -341,6 +342,27 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(confirmation).not.toContainText('正在读取补货清单');
   await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toBeDisabled();
   await expect(confirmation).toContainText('0个SKU');
+  await confirmation.screenshot({ path: '.scratch/fc-confirmation-style.png' });
+  const pageSizeWidth = await confirmation
+    .getByLabel('每页条数')
+    .evaluate((el) => el.getBoundingClientRect().width);
+  assert.ok(pageSizeWidth <= 100, `page-size control is oversized: ${pageSizeWidth}px`);
+  assert.equal(
+    await confirmation.getByLabel('导出补货分仓').evaluate((el) => getComputedStyle(el).appearance),
+    'base-select',
+  );
+  for (const width of [520, 900, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const pagination = confirmation.getByRole('navigation', { name: '操作预览分页' });
+    const bounds = await pagination.boundingBox();
+    assert.ok(
+      bounds.x >= 0 && bounds.x + bounds.width <= width,
+      'pagination stays inside narrow viewport',
+    );
+  }
+  await confirmation.getByLabel('导出补货分仓').click();
+  await page.screenshot({ path: '.scratch/fc-confirmation-picker.png' });
+  await page.keyboard.press('Escape');
   await confirmation.getByRole('button', { name: '取消', exact: true }).click();
   await expect(confirmation).toHaveCount(0);
   // A page left open overnight follows the current business day without a date picker.
@@ -975,6 +997,18 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
   await confirmationQty.fill('25');
   await confirmationQty.press('Tab');
   await expect(confirmationQty).toHaveValue('25');
+  for (const width of [520, 900, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const pagination = confirmation.getByRole('navigation', { name: '操作预览分页' });
+    const bounds = await pagination.boundingBox();
+    assert.ok(
+      bounds.x >= 0 && bounds.x + bounds.width <= width,
+      'pagination stays inside narrow viewport',
+    );
+  }
+  await confirmation.getByLabel('导出补货分仓').click();
+  await page.screenshot({ path: '.scratch/fc-confirmation-picker.png' });
+  await page.keyboard.press('Escape');
   await confirmation.getByRole('button', { name: '取消', exact: true }).click();
   await expect(
     page.getByRole('spinbutton', { name: '10000034实际补货量', exact: true }),
@@ -1009,6 +1043,11 @@ test('replenishment quick filters use server scope, product links expand inline 
           rejectedColumns: [],
           configVersion: 'fixture',
         },
+      });
+    // Keep the loading panel visible before the resource request reaches the fixture log.
+    if (id === 'base_resources.detail.atomic')
+      await new Promise((resolve) => {
+        setTimeout(resolve, 200);
       });
     calls.push({ id, values });
     const q = config.queries[id];
@@ -1123,7 +1162,9 @@ test('replenishment quick filters use server scope, product links expand inline 
   const resources = page.getByRole('region', { name: 'SKU1基地资源', exact: true });
   await expect(resources).toContainText('华东');
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  assert.equal(calls.find((c) => c.id === 'base_resources.detail.atomic').values.sku, 'SKU1');
+  await expect
+    .poll(() => calls.find((c) => c.id === 'base_resources.detail.atomic')?.values.sku)
+    .toBe('SKU1');
   const scroll = page
     .locator('.table-scroll')
     .filter({ has: page.locator(':scope > .replenishment-table') })

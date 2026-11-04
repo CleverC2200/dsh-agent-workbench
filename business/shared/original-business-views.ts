@@ -115,7 +115,7 @@ export function originalFcView(config: any, tab: string, asOf?: string) {
           (field) => field !== 'missing_age_10',
         ),
       ],
-      ['base', 'search', 'risk', 'age_filter', 'sort_field', 'sort_direction'],
+      ['base', 'search', 'risk', 'age_filter', 'stock_presence', 'sort_field', 'sort_direction'],
     );
   if (tab === 'plan')
     return present(

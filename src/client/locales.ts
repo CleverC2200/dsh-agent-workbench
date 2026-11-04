@@ -1,5 +1,7 @@
+import { passwordLoginCopy } from '../company/locales.ts';
 /** 独立销售计划页面使用的本地化文案。 */
 const copy = {
+  ...passwordLoginCopy,
   aiWorkbench: ['AI工作台', 'AI workspace'],
   startConversation: ['新建对话', 'New conversation'],
   thinking: ['深度思考中', 'Thinking'],
@@ -121,7 +123,7 @@ const copy = {
   ],
   loginFooter: ['GEA 业务工作台', 'GEA business workspace'],
   changeEnvironment: ['切换环境 / 重新登录', 'Change environment / sign in again'],
-  login: ['飞书扫码登录', 'Sign in with Lark QR'],
+  login: ['登录 GEA', 'Sign in to GEA'],
   dshConversation: ['DSH 对话', 'DSH conversation'],
   modelDiscovering: ['正在获取 GEA 模型…', 'Discovering GEA models…'],
   modelDiscovered: ['已获取模型（尚未验证推理）：', 'Model discovered (inference not verified): '],
@@ -132,7 +134,7 @@ const copy = {
   environment: ['GEA 环境', 'GEA environment'],
   pending: ['等待飞书扫码确认', 'Waiting for Lark confirmation'],
   expired: ['二维码已过期，请重新获取', 'QR expired. Get a new code.'],
-  loginExpired: ['GEA 登录已失效，请重新扫码', 'GEA login expired. Sign in again.'],
+  loginExpired: ['GEA 登录已失效，请重新登录', 'GEA login expired. Sign in again.'],
   loginHelp: [
     '登录仅保留在当前服务进程中，重启后需重新登录。',
     'Login stays in this server process; restart requires signing in again.',
