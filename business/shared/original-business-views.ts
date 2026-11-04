@@ -34,7 +34,6 @@ export function originalFcView(config: any, tab: string, asOf?: string) {
       '补货确认',
       [
         ['warehouse_name', '分仓'],
-        ['warehouse_code', '分仓编码'],
         ['sku', '产品编码'],
         'material_name',
         'inventory_qty',
@@ -105,7 +104,6 @@ export function originalFcView(config: any, tab: string, asOf?: string) {
         'material_code',
         'material_name',
         ['warehouse_name', '分仓'],
-        ['warehouseid', '分仓编码'],
         'product_categ_name',
         'material_group_name',
         'total_qty',
@@ -115,7 +113,16 @@ export function originalFcView(config: any, tab: string, asOf?: string) {
           (field) => field !== 'missing_age_10',
         ),
       ],
-      ['base', 'search', 'risk', 'age_filter', 'stock_presence', 'sort_field', 'sort_direction'],
+      [
+        'base',
+        'search',
+        'category',
+        'risk',
+        'age_filter',
+        'stock_presence',
+        'sort_field',
+        'sort_direction',
+      ],
     );
   if (tab === 'plan')
     return present(
@@ -124,7 +131,6 @@ export function originalFcView(config: any, tab: string, asOf?: string) {
       '分仓计划',
       [
         ['warehouse_name', '分仓'],
-        ['warehouse_code', '分仓编码'],
         ['sku', 'SKU编码'],
         'material_name',
         'missing_current_out',
