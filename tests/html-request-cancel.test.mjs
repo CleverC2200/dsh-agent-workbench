@@ -151,8 +151,15 @@ test('drafts stay unsent and explicit conversations reveal the associated chat o
   let prompted = 0;
   let conversationsShown = 0;
   const drafts = [];
+  const contexts = [];
   const execution = {
-    call: async () => [],
+    call: async (_connection, method, parameters) => {
+      if (method === 'context') {
+        if (parameters === undefined) throw Error('INVALID_PAGE_CONTEXT');
+        contexts.push(parameters);
+      }
+      return [];
+    },
     prompt: async () => {
       prompted++;
     },
@@ -195,9 +202,18 @@ test('drafts stay unsent and explicit conversations reveal the associated chat o
   });
   assert.equal(prompted, 1);
   assert.equal(conversationsShown, 1);
+  assert.deepEqual(contexts, [{ pageId: 'inventory-orderworkbench' }]);
+  assert.deepEqual(await channel.ask('为当前报告准备导入预览'), { sent: true });
+  assert.equal(prompted, 2);
+  assert.equal(conversationsShown, 2);
+  assert.equal(
+    contexts.length,
+    1,
+    'omitting context preserves the already published page snapshot',
+  );
   execution.prompt = async () => {
     throw Error('MODEL_UNAVAILABLE');
   };
   await assert.rejects(channel.ask('再次生成', {}), /MODEL_UNAVAILABLE/);
-  assert.equal(conversationsShown, 1);
+  assert.equal(conversationsShown, 2);
 });

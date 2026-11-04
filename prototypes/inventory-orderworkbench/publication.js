@@ -1,7 +1,7 @@
 // State is supplied by the report renderer, never discovered from host DOM.
 import { ready, call, reportElements } from '../../business/shared/channel.js';
 
-export function publishReport(snapshot, disposePage) {
+export function publishReport(snapshot, disposePage, importer) {
   let active = true,
     connected = false,
     revision = 0,
@@ -29,27 +29,32 @@ export function publishReport(snapshot, disposePage) {
         if (!active || !connected || identity !== epoch) continue;
         if (version !== revision) continue;
         showStatus('');
-        withdraw = reportElements('order-report', [
-          { id: 'report:period', role: 'field', label: '当前统计周期', value: next.period.label },
-          ...next.metrics.map((metric, index) => ({
-            id: `report:metric:${index}`,
-            role: 'field',
-            label: metric.key,
-            value: `${metric.value} · ${metric.status} · 目标${metric.target}`,
-          })),
-          ...next.events.map((event) => ({
-            id: `report:event:${event.id}`,
-            role: 'row',
-            label: event.title,
-            value: event.summary,
-          })),
-          ...next.tasks.map((task) => ({
-            id: `report:task:${task.id}`,
-            role: 'row',
-            label: task.title,
-            value: `${task.status} · ${task.role} · ${task.due}`,
-          })),
-        ]);
+        withdraw = reportElements(
+          'order-report',
+          [
+            ...(importer?.elements() ?? []),
+            { id: 'report:period', role: 'field', label: '当前统计周期', value: next.period.label },
+            ...next.metrics.map((metric, index) => ({
+              id: `report:metric:${index}`,
+              role: 'field',
+              label: metric.key,
+              value: `${metric.value} · ${metric.status} · 目标${metric.target}`,
+            })),
+            ...next.events.map((event) => ({
+              id: `report:event:${event.id}`,
+              role: 'row',
+              label: event.title,
+              value: event.summary,
+            })),
+            ...next.tasks.map((task) => ({
+              id: `report:task:${task.id}`,
+              role: 'row',
+              label: task.title,
+              value: `${task.status} · ${task.role} · ${task.due}`,
+            })),
+          ],
+          importer?.apply,
+        );
       } catch (error) {
         if (active && connected && identity === epoch && version === revision)
           showStatus(
@@ -62,16 +67,17 @@ export function publishReport(snapshot, disposePage) {
   function update() {
     if (!active) return;
     revision++;
-    withdraw();
-    withdraw = () => {};
     latest = true;
     if (connected) showStatus('正在同步当前报告上下文…');
-    if (timer === undefined) timer = setTimeout(() => {
-      timer = undefined;
-      void flush();
-    });
+    if (timer === undefined)
+      timer = setTimeout(() => {
+        timer = undefined;
+        void flush();
+      });
   }
   const changed = () => {
+    withdraw();
+    withdraw = () => {};
     epoch++;
     lifetime.abort();
     lifetime = new AbortController();

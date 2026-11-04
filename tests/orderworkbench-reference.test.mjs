@@ -1,3 +1,9 @@
+import { mountReportImport } from '../prototypes/inventory-orderworkbench/report-import.mjs';
+import {
+  projectReportImports,
+  importedSummary,
+  summarySupplement,
+} from '../prototypes/inventory-orderworkbench/import-content.mjs';
 import { createReportPersistence } from '../prototypes/inventory-orderworkbench/report-persistence.mjs';
 import { createFrameProgress } from '../business/shared/frame-progress.js';
 import { metricDetailsRequest } from '../prototypes/inventory-orderworkbench/metric-details.mjs';
@@ -29,6 +35,12 @@ test('order workbench reference interactions', async () => {
   });
   const { window } = dom;
   window.structuredClone = structuredClone;
+  Object.assign(window, {
+    mountReportImport,
+    projectReportImports,
+    importedSummary,
+    summarySupplement,
+  });
   window.createReportPersistence = createReportPersistence;
   window.createFrameProgress = createFrameProgress;
   window.startDashboardTiming = startDashboardTiming;
