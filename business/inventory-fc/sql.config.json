@@ -48698,6 +48698,11 @@
             ]
           },
           {
+            "name": "category",
+            "label": "产品大类",
+            "hidden": true
+          },
+          {
             "name": "column_warehouseid_contains",
             "label": "column_warehouseid_contains",
             "hidden": true
@@ -48924,8 +48929,9 @@
             "name": "column_material_name_contains"
           },
           "product_categ_name": {
-            "kind": "text",
-            "name": "column_product_categ_name_contains"
+            "kind": "select",
+            "name": "category",
+            "options": []
           },
           "material_group_name": {
             "kind": "text",

@@ -50,6 +50,7 @@ test('aging headers resize without reads, filter server pages and keep all-scope
   const all = Array.from({ length: 14 }, (_, i) => ({
     material_code: `S${String(i + 1).padStart(2, '0')}`,
     material_name: `商品${i + 1}`,
+    product_categ_name: i === 13 ? '面点' : '饺子',
     total_qty: i === 13 ? 0 : i + 1,
     age_weight_qty: i === 13 ? 0 : i + 1,
     weighted_age: (i === 13 ? 0 : i + 1) * 20,
@@ -75,10 +76,18 @@ test('aging headers resize without reads, filter server pages and keep all-scope
     assert.ok(query, queryId);
     let rows;
     if (queryId === 'source.branch-stock-date') rows = [{ day: '2026-10-22' }];
-    else {
+    else if (queryId === 'batch-age.atomic' && values.group_level === 'category') {
+      rows = ['饺子', '面点'].map((level) => ({
+        ...Object.fromEntries(query.resultColumns.map((field) => [field, null])),
+        level,
+        page_scope_total: 2,
+        page_row_present: 1,
+      }));
+    } else {
       assert.equal(queryId, 'batch-age.atomic');
       const filtered = all.filter(
         (row) =>
+          (!values.category || row.product_categ_name === values.category) &&
           (values.stock_presence !== '有库存' || row.total_qty > 0) &&
           (values.stock_presence !== '无库存' || row.total_qty === 0) &&
           (!values.column_material_code_contains ||
@@ -127,6 +136,23 @@ test('aging headers resize without reads, filter server pages and keep all-scope
   await page.goto('http://127.0.0.1:19497/');
   const table = page.locator('table[data-resizable]');
   const footer = table.locator('tfoot');
+  await expect(table.locator('tbody tr')).toHaveCount(10);
+  await expect(table.locator('th[data-field="warehouseid"]')).toHaveCount(0);
+  await page.getByLabel('列设置', { exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: '分仓编码', exact: true })).toHaveCount(0);
+  await page.getByLabel('列设置', { exact: true }).click();
+  await page.getByRole('button', { name: '筛选产品大类', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: '筛选值', exact: true })).toBeEnabled();
+  await expect(
+    page.getByRole('combobox', { name: '筛选值', exact: true }).locator('option'),
+  ).toHaveText(['全部', '饺子', '面点']);
+  await page.getByRole('combobox', { name: '筛选值', exact: true }).selectOption('面点');
+  await page.getByRole('button', { name: '应用', exact: true }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  assert.equal(calls.at(-1).values.category, '面点');
+  await expect(table.locator('tbody [data-column="material_code"]')).toHaveText('S14');
+  await page.getByRole('button', { name: '筛选产品大类', exact: true }).click();
+  await page.getByRole('button', { name: '清除', exact: true }).click();
   await expect(table.locator('tbody tr')).toHaveCount(10);
   await expect(footer.locator('[data-column="total_qty"]')).toHaveText('91');
   await expect(footer.locator('[data-column="missing_age_5"]')).toHaveText('20.0');
