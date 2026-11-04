@@ -1,5 +1,5 @@
 import { prototypeShipments } from './prototype-shipments.js';
-import { readShipmentRange } from './facts.js';
+import { readShipmentInputs } from './facts.js';
 import { hasMpsSource } from './master-data.js';
 const emptyRows = [];
 const bases = ['西南', '郑州', '遂平', '华东', '华南'];
@@ -45,10 +45,10 @@ const columns = [
 const keyOf = (row) => JSON.stringify([row.base, row.code]);
 const display = (value) =>
   value == null ? '待定' : value.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
-const completeSum = (rows, field) =>
-  rows.length && rows.every((row) => row[field] != null)
-    ? finite(rows.reduce((sum, row) => sum + row[field], 0))
-    : null;
+const knownSum = (rows, field) => {
+  const known = rows.filter((row) => row[field] != null);
+  return known.length ? finite(known.reduce((sum, row) => sum + row[field], 0)) : null;
+};
 const finite = (number) =>
   Number.isFinite(number) && Math.abs(number) <= Number.MAX_SAFE_INTEGER ? number : null;
 function derive(row, passed, total) {
@@ -172,7 +172,7 @@ export function createShipment(
         generation.current++;
         controller.current?.abort();
       };
-    }, [draft.id, draft.month, active, cutoff]);
+    }, [draft.id, draft.month, cutoff]);
     const rows = react.useMemo(
       () =>
         sourceRows
@@ -194,19 +194,31 @@ export function createShipment(
               end,
               adjustment: adjustment ?? null,
               remainingSource: remainingEdit?.source ?? null,
+              missingFields: inputFields.filter((field) => row[field] == null),
             };
           }),
       [sourceRows, month, passed, totalDays, state.values, state.remaining],
     );
     const aggregate = (children, who) => {
       const inputs = Object.fromEntries(
-        inputFields.map((field) => [field, completeSum(children, field)]),
+        inputFields.map((field) => [field, knownSum(children, field)]),
+      );
+      const forecastRows = children.filter((row) => row.prediction != null);
+      const calculation = derive(
+        Object.fromEntries(inputFields.map((field) => [field, knownSum(forecastRows, field)])),
+        passed,
+        totalDays,
       );
       return {
-        ...derive(inputs, passed, totalDays),
+        ...calculation,
+        ...inputs,
         who,
-        fin: completeSum(children, 'fin'),
-        end: completeSum(children, 'end'),
+        fin: knownSum(children, 'fin'),
+        end: knownSum(children, 'end'),
+        calculation,
+        missingCounts: Object.fromEntries(
+          fields.map((field) => [field, children.filter((row) => row[field] == null).length]),
+        ),
         children,
       };
     };
@@ -236,8 +248,8 @@ export function createShipment(
         : sourceKind === 'local-file'
           ? `本地CSV：${state.file}`
           : business
-            ? `业务来源：实际发货 ${month}-01 至 ${cutoff}；近三天${business.metadata.recentStatus === 'ok' ? '截止日及前两日' : '未提供'}；已备未备与库存来源未接入`
-            : '实际发货尚未同步；已备未备、库存与BI排产未接入';
+            ? `业务来源：ai_db.agents_scm_stock_detail_d，${month}-01 至 ${cutoff}`
+            : '数仓输入尚未同步';
     react.useEffect(() => {
       snapshotCallback.current?.({
         draftId: draft.id,
@@ -280,91 +292,46 @@ export function createShipment(
             }
           : {}),
       });
-      const recentStart = `${month}-${String(passed - 2).padStart(2, '0')}`;
-      const results = await Promise.allSettled([
-        readShipmentRange(`${month}-01`, cutoff, stop.signal),
-        passed >= 3 ? readShipmentRange(recentStart, cutoff, stop.signal) : Promise.resolve(null),
-      ]);
-      if (!valid()) return;
       try {
-        if (results[0].status === 'rejected') throw results[0].reason;
-        const monthly = results[0].value;
-        const recent = results[1].status === 'fulfilled' ? results[1].value : null;
-        const summarize = (records) => {
-          const grouped = new Map();
-          for (const record of records) {
-            if (!record.base || !record.code || !bases.includes(record.base)) continue;
-            const key = keyOf(record);
-            const previous = grouped.get(key);
-            const value = previous
-              ? previous.shipped == null || record.shipped == null
-                ? null
-                : finite(previous.shipped + record.shipped)
-              : record.shipped;
-            grouped.set(key, {
-              ...record,
-              shipped: value,
-              ...Object.fromEntries(
-                ['name', 'category', 'group'].map((field) => [
-                  field,
-                  previous && previous[field] !== record[field] ? '' : record[field],
-                ]),
-              ),
-            });
-          }
-          return grouped;
-        };
-        const recentRows = summarize(recent?.rows ?? emptyRows);
-        const actualRows = [...summarize(monthly.rows).values()].map((row) => ({
-          ...row,
-          series: '',
-          prepped: null,
-          unprepped: null,
-          open: null,
-          inbound: null,
-          remaining: null,
-          daily3:
-            recentRows.get(keyOf(row))?.shipped == null
-              ? null
-              : finite(recentRows.get(keyOf(row)).shipped / 3),
-        }));
-        const omitted = monthly.rows.filter(
-          (row) => !row.base || !row.code || !bases.includes(row.base),
+        const result = await readShipmentInputs(cutoff, stop.signal);
+        if (!valid()) return;
+        const actualRows = result.rows.filter(
+          (row) => row.base && row.code && bases.includes(row.base),
+        );
+        const omitted = result.rows.length - actualRows.length;
+        const missingDimensions = actualRows.filter(
+          (row) => !row.name || !row.series || !row.group,
         ).length;
+        const incompleteRows = actualRows.filter(
+          (row) => inputFields.some((field) => row[field] == null) || row.sourceDays < passed,
+        ).length;
+        const duplicateRows = actualRows.filter((row) => row.duplicateDays > 0).length;
         updateState({
           business: {
             month,
             cutoff,
             rows: actualRows,
-            sourceRecords: monthly.rows,
+            sourceRecords: result.rows,
             metadata: {
-              ...monthly.metadata,
+              ...result.metadata,
               partial:
-                monthly.metadata.partial ||
-                !!omitted ||
-                !recent ||
-                recent.metadata.partial ||
-                actualRows.some(
-                  (row) => !row.name || !row.category || !row.group || row.shipped == null,
-                ),
-              recentStatus: recent ? 'ok' : passed < 3 ? 'insufficient-days' : 'failed',
-              recent: recent?.metadata ?? null,
-              recentError: results[1].status === 'rejected' ? results[1].reason.message : null,
+                result.metadata.partial ||
+                !!(omitted || missingDimensions || incompleteRows || duplicateRows),
+              recentStatus: passed < 3 ? 'insufficient-days' : 'ok',
               omittedRows: omitted,
-              missingDimensions: actualRows.filter(
-                (row) => !row.name || !row.category || !row.group,
-              ).length,
+              missingDimensions,
+              incompleteRows,
+              duplicateRows,
             },
           },
         });
         setSyncStatus('ok');
-        if (results[1].status === 'rejected')
-          setError(`实际发货已读取；近三天读取失败：${results[1].reason.message}`);
       } catch (failure) {
+        if (!valid()) return;
         setSyncStatus('failed');
         setError(
           /AGENT_ACCESS_DENIED|PERMISSION_DENIED|RESOURCE_NOT_IN_DATASET/.test(failure.message)
-            ? '当前账号暂无实际发货数据权限'
+            ? '当前账号暂无库存日计划数据权限'
             : failure.message,
         );
       } finally {
@@ -511,6 +478,7 @@ export function createShipment(
         '输入来源',
         '调整来源',
         '剩余入库来源',
+        '缺失输入',
       ];
       downloadCsv(
         `MPS-${draft.month}-${draft.id}-发货与结存.csv`,
@@ -542,7 +510,8 @@ export function createShipment(
               ? '演示推算：生产入库÷22×8，四舍五入'
               : sourceKind === 'local-file'
                 ? '本地CSV；BI排产未核齐'
-                : 'BI排产未接入'),
+                : `本月生产入库÷${passed}×${totalDays - passed}，逐SKU四舍五入`),
+          缺失输入: row.missingFields.map((field) => names[fields.indexOf(field)]).join('、'),
         })),
       );
     };
@@ -589,7 +558,13 @@ export function createShipment(
         field === 'fin' || (field === 'remaining' && row.children && who !== '全国合计');
       return h(
         'td',
-        { key: field, className: row[field] < 0 ? 'sp-negative' : undefined },
+        {
+          key: field,
+          className: row[field] < 0 ? 'sp-negative' : undefined,
+          title: row.missingCounts?.[field]
+            ? `仅汇总已有数据，${row.missingCounts[field]}个单品待定`
+            : undefined,
+        },
         editable
           ? h(Editable, {
               value: row[field],
@@ -616,6 +591,18 @@ export function createShipment(
           'th',
           { scope: 'row' },
           label,
+          row.children
+            ? Object.values(row.missingCounts).some((count) => count > 0) &&
+                h('span', { className: 'sp-warning sp-coverage' }, '部分汇总')
+            : row.missingFields.length > 0 &&
+                h(
+                  'span',
+                  {
+                    className: 'sp-warning sp-coverage',
+                    title: `缺失：${row.missingFields.map((field) => names[fields.indexOf(field)]).join('、')}`,
+                  },
+                  '缺项',
+                ),
           row.end < 0 && h('span', { className: 'sp-warning' }, '需含调拨'),
         ),
         ...fields.map((field) => numberCell(row, field, who)),
@@ -624,9 +611,13 @@ export function createShipment(
       formula &&
       (() => {
         const { row, field, who } = formula;
-        const raw = (key) => (row[key] == null ? '待定' : String(row[key]));
+        const calculation =
+          row.children && ['shipDays', 'average', 'prediction'].includes(field)
+            ? row.calculation
+            : row;
+        const raw = (key) => (calculation[key] == null ? '待定' : String(calculation[key]));
         const fallback =
-          row.daily3 === 0
+          calculation.daily3 === 0
             ? `近三天为0，使用本月已发货÷已过天数：${raw('shipped')} ÷ ${passed}。`
             : '';
         const expressions = {
@@ -640,7 +631,7 @@ export function createShipment(
           ],
           prediction: [
             '本月预测量 = 日均 × max(0,总天数 − 已过天数 − 发运天数) + 已发货 + 已备 + 未备，四舍五入为件',
-            `(${row.hold ?? '待定'} ÷ (${passed} + ${row.shipDays ?? '待定'})) × max(0, ${totalDays} − ${passed} − ${row.shipDays ?? '待定'}) + ${row.hold ?? '待定'}；日均展示${raw('average')}，中间值不舍入。`,
+            `(${calculation.hold ?? '待定'} ÷ (${passed} + ${calculation.shipDays ?? '待定'})) × max(0, ${totalDays} − ${passed} − ${calculation.shipDays ?? '待定'}) + ${calculation.hold ?? '待定'}；日均展示${raw('average')}，中间值不舍入。`,
           ],
           fin: [
             '整月预估发货 = 单品有效值之和；单品默认预测值，人工覆盖按当前有效权重重摊并补偿残差',
@@ -651,19 +642,25 @@ export function createShipment(
                 : '默认单品预测值',
           ],
           remaining: [
-            '剩余天数入库 = 原输入；基地覆盖按明细原剩余入库权重重摊并补偿残差',
+            '剩余天数入库 = 单品入库日均 × 剩余天数；基地覆盖按明细原剩余入库权重重摊并补偿残差',
             row.remainingSource ??
               (sourceKind === 'demo'
                 ? '演示推算：本月生产入库 ÷ 22 × 8，逐SKU四舍五入'
-                : '本地CSV输入，BI排产未核齐'),
+                : sourceKind === 'business'
+                  ? `${raw('inbound')} ÷ ${passed} × ${totalDays - passed}，逐SKU四舍五入`
+                  : '本地CSV输入，BI排产未核齐'),
           ],
           end: [
-            '预计月末结存 = 月初库存 + 本月生产入库 + 剩余天数入库 − 整月预估发货',
-            `${raw('open')} + ${raw('inbound')} + ${raw('remaining')} − ${raw('fin')}`,
+            row.children
+              ? '预计月末结存 = 已有单品结存之和；缺项单品保留待定'
+              : '预计月末结存 = 月初库存 + 本月生产入库 + 剩余天数入库 − 整月预估发货',
+            row.children
+              ? `${row.children.length - row.missingCounts.end}个可计算单品结存求和 = ${raw('end')}`
+              : `${raw('open')} + ${raw('inbound')} + ${raw('remaining')} − ${raw('fin')}`,
           ],
         };
         const [expression, substitution] = expressions[field] ?? [
-          `${names[fields.indexOf(field)]} = ${row.children ? '下级同字段完整输入之和' : '当前月份输入原值'}`,
+          `${names[fields.indexOf(field)]} = ${row.children ? '下级同字段已有数据之和' : '当前月份输入原值'}`,
           `表内取值 ${raw(field)}`,
         ];
         return h(
@@ -674,6 +671,14 @@ export function createShipment(
             footer: h('button', { onClick: () => setFormula(null) }, '关闭'),
           },
           h('div', { className: 'sp-formula' }, expression),
+          row.children &&
+            h(
+              'p',
+              {},
+              ['shipDays', 'average', 'prediction'].includes(field)
+                ? `按可计算的${row.children.filter((child) => child.prediction != null).length}/${row.children.length}个单品重算，缺失输入未补零。`
+                : `已汇总${row.children.length - row.missingCounts[field]}/${row.children.length}个单品，待定单品未补零。`,
+            ),
           h(
             'table',
             { className: 'sp-formula-inputs' },
@@ -694,7 +699,7 @@ export function createShipment(
                   'tr',
                   { key },
                   h('td', {}, names[fields.indexOf(key)]),
-                  h('td', {}, display(row[key])),
+                  h('td', {}, display(calculation[key])),
                 ),
               ),
               h('tr', {}, h('td', {}, '计算'), h('td', {}, substitution)),
@@ -840,7 +845,7 @@ export function createShipment(
           busy
             ? '正在读取或校验输入…'
             : syncStatus === 'failed'
-              ? '实际发货同步失败，未采用旧业务结果'
+              ? '数仓输入同步失败，未采用旧业务结果'
               : source,
         ),
         business?.metadata.omittedRows > 0 &&
@@ -853,8 +858,16 @@ export function createShipment(
           h(
             'p',
             {},
-            `源数据${business.metadata.missingDimensions}条产品名称、大类或物料组缺失或冲突，保留数量与源状态`,
+            `源数据${business.metadata.missingDimensions}条产品名称、系列或品项缺失或冲突，保留数量与源状态`,
           ),
+        business?.metadata.incompleteRows > 0 &&
+          h(
+            'p',
+            {},
+            `源数据${business.metadata.incompleteRows}个单品存在缺值或日记录不齐，缺值保留待定`,
+          ),
+        business?.metadata.duplicateRows > 0 &&
+          h('p', {}, `源数据${business.metadata.duplicateRows}个单品有重复日期，相关输入未采用`),
         business?.metadata.recentStatus === 'insufficient-days' &&
           h('p', {}, '截止日前本月不足三天，近三天日均未提供'),
         error && h('p', { role: 'alert', className: 'sp-error' }, error),

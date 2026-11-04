@@ -50,6 +50,95 @@ test('DMS shipment source uses shipped pieces and rejects incomplete or repeated
   );
 });
 
+test('shipment SQL sums daily flows once, reads cutoff snapshots and calculates the actual recent three days', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec(`CREATE TABLE agents_scm_stock_detail_d (
+    data_month TEXT, belong_base TEXT, material_code TEXT, the_date TEXT,
+    material_name TEXT, series TEXT, product_item TEXT,
+    total_sales_qty REAL, allocated_qty REAL, ordered_qty REAL,
+    begin_stock REAL, produce_in_qty REAL
+  )`);
+  const insert = db.prepare(
+    'INSERT INTO agents_scm_stock_detail_d VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  );
+  for (let day = 1; day <= 23; day++) {
+    const date = `2026-09-${String(day).padStart(2, '0')}`;
+    insert.run(
+      '2026-09-01',
+      '郑州',
+      'A',
+      date,
+      '产品A',
+      '系列',
+      '汤圆',
+      day === 22 ? 20 : 10,
+      day === 22 ? 10 : 999,
+      day === 22 ? 30 : 999,
+      100,
+      2,
+    );
+    insert.run(
+      '2026-09-01',
+      '郑州',
+      'B',
+      date,
+      '产品B',
+      '系列',
+      '汤圆',
+      0,
+      0,
+      day === 22 ? null : 0,
+      0,
+      day === 2 ? null : 0,
+    );
+  }
+  insert.run('2026-09-01', '郑州', 'C', '2026-09-01', '产品C', '系列', '汤圆', 5, 1, 2, 10, 3);
+  insert.run('2026-09-01', '郑州', 'C', '2026-09-01', '产品冲突', '系列', '汤圆', 5, 1, 2, 10, 3);
+  const query = db.prepare(config.queries['facts.shipment'].request.sql);
+  const parameters = {
+    month: '2026-09-01',
+    cutoff: '2026-09-22',
+    recent_start: '2026-09-20',
+    gea_p98: 2,
+    gea_p99: 0,
+  };
+  const rows = [...query.all(parameters), ...query.all({ ...parameters, gea_p99: 2 })];
+  assert.equal(
+    db
+      .prepare(config.queries['facts.shipment.count'].request.sql)
+      .get({ month: parameters.month, cutoff: parameters.cutoff }).total,
+    3,
+  );
+  assert.deepEqual(
+    rows.map(
+      ({ material_code, shipped, prepped, unprepped, daily3, open, inbound, duplicate_days }) => [
+        material_code,
+        shipped,
+        prepped,
+        unprepped,
+        daily3,
+        open,
+        inbound,
+        duplicate_days,
+      ],
+    ),
+    [
+      ['A', 230, 10, 30, 40 / 3, 100, 44, 0],
+      ['B', 0, 0, null, 0, 0, null, 0],
+      ['C', null, null, null, null, null, null, 1],
+    ],
+  );
+  assert.equal(rows[2].material_name, null);
+  const early = query.all({ ...parameters, cutoff: '2026-09-02', recent_start: '2026-09-01' });
+  assert.equal(early[0].daily3, null);
+  db.exec(
+    "UPDATE agents_scm_stock_detail_d SET total_sales_qty = NULL WHERE material_code = 'A' AND the_date = '2026-09-20'",
+  );
+  assert.equal(query.all(parameters)[0].shipped, null);
+  assert.equal(query.all(parameters)[0].daily3, null);
+});
+
 test('reported quantities retain partial NULL independently and preserve real zero through named SQL paging', (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
@@ -97,5 +186,45 @@ test('reported quantities retain partial NULL independently and preserve real ze
       ['C', null, null],
       ['D', 10, null],
     ],
+  );
+});
+
+test('inventory target SQL preserves all keys, reduces agreeing repeats and isolates conflicting facts without summing versions', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec(
+    'CREATE TABLE agents_scm_goods_inventory_turnover_data_m(year_month TEXT, belong_base TEXT, material_code TEXT, inventory_version TEXT, final_target_inventory REAL, avg_daily_planned_demand REAL)',
+  );
+  const insert = db.prepare(
+    'INSERT INTO agents_scm_goods_inventory_turnover_data_m VALUES(?,?,?,?,?,?)',
+  );
+  for (const row of [
+    ['2026-11-01', '郑州', 'A', '纠偏', 100, 10],
+    ['2026-11-01', '郑州', 'A', '月初', 500, 20],
+    ['2026-12-01', '郑州', 'A', '滚动', 200, 10],
+    ['2026-11-01', '华南', 'A', '纠偏', 0, 10],
+    ['2026-11-01', '郑州', 'B', '纠偏', 100, 0],
+    ['2026-11-01', '郑州', 'C', '纠偏', 80, 10],
+    ['2026-11-01', '郑州', 'C', '纠偏', 80, 10],
+    ['2026-11-01', '郑州', 'D', '纠偏', 80, 10],
+    ['2026-11-01', '郑州', 'D', '纠偏', 90, 10],
+    ['2026-10-01', '郑州', 'A', '纠偏', 9999, 10],
+  ])
+    insert.run(...row);
+  const params = { start_month: '2026-11', end_month: '2027-01' };
+  const rows = db
+    .prepare(config.queries['inventory-targets.detail'].request.sql)
+    .all({ ...params, gea_p98: 200, gea_p99: 0 });
+  assert.equal(rows.length, 7);
+  assert.equal(rows.find((row) => row.material_code === 'C').source_rows, 2);
+  assert.equal(rows.find((row) => row.material_code === 'C').final_target_inventory, 80);
+  assert.equal(rows.find((row) => row.material_code === 'D').final_target_inventory, null);
+  assert.equal(
+    rows.filter((row) => row.belong_base === '郑州' && row.material_code === 'A').length,
+    3,
+  );
+  assert.equal(
+    db.prepare(config.queries['inventory-targets.count'].request.sql).get(params).total,
+    7,
   );
 });
