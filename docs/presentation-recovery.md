@@ -10,9 +10,11 @@
 
 旧版本 1 呈现记忆不在运行时解码。Core 持久 Session 与用户历史保留；部署若需转换旧呈现数据，应作为独立一次性升级处理。
 
+订单工作台的周期报告缓存仅保存在当前页面实例内，不进入呈现记忆或磁盘。普通切页释放页面桥时，取消在途读取和导入预览，但保留已完成、无未保存编辑及无待保存操作的兼容报告，期限仍为原有20分钟，不因切页续期。同一身份、同一个真实 Core Session 重新取得页面 grant 后可复用这些报告及其派生呈现；实际 Session 替换、身份变化、页面卸载或过期时清除。未完成、部分失败和待保存报告不作为可恢复缓存，不重放任何写入。实现见[页面缓存](../prototypes/inventory-orderworkbench/presentation-cache.mjs)。
+
 ## 实际 Session 与身份确认
 
-重建 Controller 不打开或创建 Session。恢复等待 Core 目录就绪，核对保存的具体成员与工作区，再用 `retain`/`ready` 借用实际 Session。当前 preset 从 Core 投影读取。地址缺失或不匹配显示失败，不静默新建替代会话。确认后沿 `uiWorkspace.openSession` 导航，并释放所有借用引用。
+重建 Controller 不打开或创建 Session。恢复等待 Core 目录就绪，核对保存的具体成员与工作区，再用 `retain`/`ready` 借用实际 Session。当前 preset 从 Core 投影读取。地址缺失或不匹配显示失败，不静默新建替代会话。确认后沿 `uiWorkspace.openSession` 导航，并释放本次恢复借用的引用。已访问页面的常驻呈现另持有公开 Session 引用，由 `SessionProvider` 绑定该页；普通菜单切换不释放此呈现引用，页面关联撤销、替换、注销或 UI 卸载时释放。它不持有业务 grant 或执行通道。
 
 业务恢复等待 GEA 只读身份投影无错误确认，stable subject 由 GEA 提供，不从标签或缓存登录标志推导。新的 Host generation 取得新的 page owner 与 grant，旧 owner/grant 不随重启恢复。不同用户、租户或环境不复用旧关联；UI 意图按 subject 与 Session 分区。静态页面不新增 GEA 登录前置。
 
