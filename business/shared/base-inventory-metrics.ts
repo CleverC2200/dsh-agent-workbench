@@ -1,6 +1,5 @@
 import { createAgentQueries, type ConfiguredExecution } from './agent-query';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
-import { readConfiguredTargetScope } from './configured-target-scope';
 
 const date = (value: string) => {
   const parsed = new Date(value + 'T00:00:00Z');
@@ -81,11 +80,14 @@ export async function readBaseInventoryMetrics(
           ];
         }),
       );
-      return id.endsWith('.groups')
+      return id.endsWith('.groups') || id === 'page.dashboard-groups'
         ? client.readAll(id, values, {
             signal: options.signal,
             requiredColumns: query.resultColumns,
-            keyFields: id === 'inventory.groups' ? ['base', 'category'] : ['category'],
+            keyFields:
+              id === 'page.dashboard-groups'
+                ? ['base', 'category']
+                : ['base', 'category', 'pickup_type', 'pickup_code'],
             maxRows: 50000,
           })
         : client.read(id, values, { signal: options.signal, requiredColumns: query.resultColumns });
@@ -96,41 +98,52 @@ export async function readBaseInventoryMetrics(
         const snapshotDate = snapshot.rows[0]?.day;
         if (typeof snapshotDate !== 'string' || !snapshotDate.startsWith(asOf.slice(0, 7)))
           return { status: 'unavailable', reason: 'NO_SNAPSHOT_IN_PERIOD', rows: [] };
-        const targetScope = await readConfiguredTargetScope(client, asOf, options.signal);
-        const result = await read('inventory.groups', {
+        // Physical stock and historical movement do not depend on published targets.
+        const result = await read('page.dashboard-groups', {
           stock_date: snapshotDate,
-          month: targetScope.targetMonth,
-          inventory_version: targetScope.inventoryVersion,
         });
-        if (
-          result.configVersion !== snapshot.configVersion ||
-          result.configVersion !== targetScope.configVersion
-        )
+        if (result.configVersion !== snapshot.configVersion)
           throw Object.assign(Error('QUERY_CONFIG_CHANGED'), { code: 'QUERY_CONFIG_CHANGED' });
         const groups = new Map<string, Array<{ inventory: number | null; daily: number | null }>>();
         for (const row of result.rows) {
           const category = typeof row.category === 'string' ? row.category : '';
           const values = groups.get(category) ?? [];
-          values.push({ inventory: number(row.inventory), daily: number(row.stock_avg_30d_sale) });
+          values.push({
+            inventory:
+              (number(row.inventory_valid_count) ?? 0) > 0 ? number(row.inventory_valid) : null,
+            daily:
+              (number(row.stock_avg_30d_sale_valid_count) ?? 0) > 0
+                ? number(row.stock_avg_30d_sale_valid)
+                : null,
+          });
           groups.set(category, values);
         }
-        const sum = (values: Array<number | null>) =>
-          values.every((value) => value !== null)
-            ? values.reduce<number>((total, value) => total + (value ?? 0), 0)
-            : null;
+        const sum = (values: Array<number | null>) => {
+          const known = values.filter((value): value is number => value !== null);
+          return known.length ? known.reduce((total, value) => total + value, 0) : null;
+        };
         return {
           status: result.rows.length ? 'available' : 'empty',
           snapshotDate,
           rows: [...groups].map(([category, rows]) => {
             const inventory = sum(rows.map((row) => row.inventory));
             const daily = sum(rows.map((row) => row.daily));
+            const comparable = rows.filter((row) => row.inventory !== null && row.daily !== null);
+            const turnoverInventory = sum(comparable.map((row) => row.inventory));
+            const turnoverDaily = sum(comparable.map((row) => row.daily));
             return {
               category: category || null,
               inventoryQty: inventory,
               dailyShipment30Qty: daily,
+              turnoverInventoryQty: turnoverInventory,
+              turnoverDailyShipment30Qty: turnoverDaily,
+              excludedTurnoverGroups: rows.length - comparable.length,
               turnoverDays:
-                inventory !== null && inventory >= 0 && daily !== null && daily > 0
-                  ? inventory / daily
+                turnoverInventory !== null &&
+                turnoverInventory >= 0 &&
+                turnoverDaily !== null &&
+                turnoverDaily > 0
+                  ? turnoverInventory / turnoverDaily
                   : null,
             };
           }),
@@ -143,17 +156,44 @@ export async function readBaseInventoryMetrics(
     const orders = async () => {
       try {
         const result = await read('orders.groups', {
+          group_level: 'base_category',
           pickup_type_mode: 'equal',
           pickup_type: '工厂',
           exp_flag: '否',
           positive_orders_only: true,
         });
+        const groups = new Map<string, Array<{ shipped: number | null; ordered: number | null }>>();
+        for (const row of result.rows) {
+          const category = typeof row.category === 'string' ? row.category : '';
+          const entries = groups.get(category) ?? [];
+          entries.push({
+            shipped: number(row.fulfilled_shipped_quantity),
+            ordered: number(row.fulfillment_order_quantity),
+          });
+          groups.set(category, entries);
+        }
         return {
           status: result.rows.length ? 'available' : 'empty',
-          rows: result.rows.map((row: Record<string, unknown>) => ({
-            category: row.category,
-            fulfillmentRate: number(row.fulfillment_rate),
-          })),
+          rows: [...groups].map(([category, entries]) => {
+            const valid = entries.filter(
+              (row) =>
+                row.shipped !== null && row.shipped >= 0 && row.ordered !== null && row.ordered > 0,
+            );
+            const shipped = valid.length
+              ? valid.reduce((sum, row) => sum + (row.shipped ?? 0), 0)
+              : null;
+            const ordered = valid.length
+              ? valid.reduce((sum, row) => sum + (row.ordered ?? 0), 0)
+              : null;
+            return {
+              category: category || null,
+              fulfilledShippedQuantity: shipped,
+              shippedOrderQuantity: ordered,
+              excludedFulfillmentGroups: entries.length - valid.length,
+              fulfillmentRate:
+                shipped !== null && ordered !== null && ordered > 0 ? shipped / ordered : null,
+            };
+          }),
         };
       } catch (error) {
         options.signal.throwIfAborted();
@@ -180,7 +220,8 @@ export async function readBaseInventoryMetrics(
       unit: '件',
     },
     definitions: {
-      turnover: '基地实物库存÷同范围近30日日均动销；不使用计划周转替代',
+      turnover:
+        '与看板同源的有效基地实物库存÷同范围近30日日均动销；缺失组只排除对应组并保留数量，不使用计划周转替代',
       fulfillment: '所属业务月的已发货订单数量满足率；保留实际数据覆盖',
       comparisons:
         '同一范围、同一指标、同一月内截止日；只有两期均有数值才可计算。空结果、读取失败、未发布资源分别报告；未查询不能称无历史。历史订单为当前来源状态，不还原过去时点状态。库存快照截止日不一致时不作同比环比。',
