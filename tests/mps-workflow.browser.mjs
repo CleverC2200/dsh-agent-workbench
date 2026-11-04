@@ -253,7 +253,7 @@ test('MPS 完整财年跨月复用但月度提报不跨月复制，池外分类�
   ).toHaveCount(2);
 });
 
-test('MPS local constraints edit the current draft and leave formal writes disabled across versions', async (t) => {
+test('MPS constraints retain prototype rule management, collapse advanced inputs and isolate versions', async (t) => {
   const { page, frame } = await workflowPage(t);
   await version(frame, '2026-10');
   await upload(
@@ -263,27 +263,38 @@ test('MPS local constraints edit the current draft and leave formal writes disab
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
-  await expect(view.getByRole('button', { name: '保存正式配置', exact: true })).toBeDisabled();
+  await expect(view.getByRole('table', { name: '约束列表', exact: true })).toBeVisible();
+  await expect(view.getByRole('region', { name: '冲突与放宽建议', exact: true })).toBeVisible();
+  await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toBeHidden();
   await view.getByLabel('郑州 安全天数', { exact: true }).fill('0');
-  await expect(view.getByLabel('郑州 安全天数', { exact: true })).toHaveValue('0');
-  await view.getByRole('button', { name: '新增本地约束', exact: true }).click();
-  await view.getByLabel('约束1 内容', { exact: true }).fill('停线核对');
-  await view.getByLabel('约束1 作用对象', { exact: true }).fill('郑州1线');
-  await view.getByLabel('约束1 强度', { exact: true }).selectOption('软');
-  await view.getByLabel('约束1 生效至', { exact: true }).fill('2026-10-31');
-  await expect(view.getByRole('table', { name: '本地约束', exact: true })).toContainText(
-    '未参与计算',
+  await view.getByRole('button', { name: '新增约束', exact: true }).click();
+  const editor = frame.getByRole('dialog', { name: '新增约束', exact: true });
+  await editor.getByLabel('约束内容', { exact: true }).fill('最低库存核对');
+  await editor.getByLabel('作用基地', { exact: true }).selectOption('郑州');
+  await editor.getByLabel('规则参数', { exact: true }).fill('12');
+  await editor.getByLabel('生效至（留空为长期）', { exact: true }).fill('2026-10');
+  await editor.getByRole('button', { name: '保存约束', exact: true }).click();
+  await expect(view.getByRole('table', { name: '约束列表', exact: true })).toContainText(
+    '最低库存核对',
   );
-  const csv = await download(page, view, '下载本地配置');
-  assert.match(csv, /2026-10,郑州,0/);
-  assert.match(csv, /停线核对/);
-  assert.match(csv, /2026-10-31/);
+  await expect(view.getByRole('table', { name: '规则计算结果', exact: true })).toContainText(
+    '待补计算输入',
+  );
   await version(frame, '2026-11');
-  await expect(view.getByLabel('约束1 内容', { exact: true })).toHaveCount(0);
+  await expect(view.getByRole('table', { name: '约束列表', exact: true })).not.toContainText(
+    '最低库存核对',
+  );
   await frame.getByLabel('评估版本选择').selectOption('local-2');
-  await expect(view.getByLabel('约束1 内容', { exact: true })).toHaveValue('停线核对');
-  await view.getByRole('button', { name: '删除约束1', exact: true }).click();
-  await expect(view.getByLabel('约束1 内容', { exact: true })).toHaveCount(0);
+  await expect(view.getByRole('table', { name: '约束列表', exact: true })).toContainText(
+    '最低库存核对',
+  );
+  await view.getByRole('button', { name: '停用约束1', exact: true }).click();
+  await expect(view.getByRole('table', { name: '约束列表', exact: true })).toContainText('已停用');
+  await view.locator('summary').filter({ hasText: '高级配置：' }).click();
+  await expect(view.getByRole('button', { name: '保存正式配置', exact: true })).toBeDisabled();
+  const csv = await download(page, view, '下载本地配置');
+  assert.match(csv, /最低库存核对/);
+  assert.match(csv, /2026-10/);
 });
 
 test('MPS capacity and report keep missing formula dependencies empty and export the current source rows', async (t) => {
@@ -307,7 +318,7 @@ test('MPS capacity and report keep missing formula dependencies empty and export
   for (const field of [
     '目标库存',
     '所需生产量',
-    '无约束期末库存',
+    '参考期末库存',
     '所需生产吨数',
     '可执行主计划',
     '调拨',
@@ -361,6 +372,7 @@ test('MPS configuration keeps accepted production days, explicit weight and assi
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
+  await view.locator('summary').filter({ hasText: '高级配置：' }).click();
   await expect(view).toContainText('下一月需求 ÷ 下一月自然日天数');
   await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('');
   await view.getByRole('button', { name: '郑州 2026-12 采用25天', exact: true }).click();
@@ -383,7 +395,7 @@ test('MPS configuration keeps accepted production days, explicit weight and assi
   assert.match(csv, /2026-12/);
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   const capacity = frame.getByRole('region', { name: '产能评估与缺口', exact: true });
-  await expect(capacity).toContainText('无约束参考');
+  await expect(capacity).toContainText('已采用规则推导所需生产量');
   await expect(capacity.getByRole('table', { name: '资源负荷', exact: true })).toContainText(
     '一号隧道',
   );
@@ -481,6 +493,7 @@ test('MPS report and CSV retain the annual SKU domain while incomplete productio
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
+  await constraints.locator('summary').filter({ hasText: '高级配置：' }).click();
   await constraints.getByLabel('郑州 安全天数', { exact: true }).fill('0');
   await constraints.getByLabel('郑州 A 件吨系数', { exact: true }).fill('1');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
@@ -496,7 +509,7 @@ test('MPS report and CSV retain the annual SKU domain while incomplete productio
   const csv = await download(page, report, '下载产销存报告');
   const book = XLSX.read(csv, { type: 'string', raw: true });
   const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
-  const total = exported.find((row) => row['粒度'] === '全版本汇总，无约束参考');
+  const total = exported.find((row) => row['粒度'] === '全版本汇总，需求推导参考');
   assert.equal(total['已知生产吨数小计'], '100');
   assert.equal(total['完整生产吨数'], '');
   assert.equal(total['总行数'], '3');
@@ -572,6 +585,7 @@ test('MPS effective category and share edits drive the same unconstrained invent
   await shipmentEstimate.press('Enter');
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
+  await constraints.locator('summary').filter({ hasText: '高级配置：' }).click();
   await constraints.getByLabel('郑州 安全天数', { exact: true }).fill('31');
   for (const month of ['2026-12', '2027-01', '2027-02'])
     await constraints.getByRole('button', { name: `郑州 ${month} 采用25天`, exact: true }).click();
@@ -607,7 +621,7 @@ test('MPS effective category and share edits drive the same unconstrained invent
     ['期初库存', '-5'],
     ['目标库存', '120'],
     ['所需生产量', '200'],
-    ['无约束期末库存', '120'],
+    ['参考期末库存', '120'],
     ['所需生产吨数', '2'],
   ]) {
     await expect(
@@ -644,7 +658,7 @@ test('MPS effective category and share edits drive the same unconstrained invent
   const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
   const a = rows.find(
     (row) =>
-      row['粒度'] === '无约束产销存参考' && row['月份'] === '2026-12' && row['产品编码'] === 'A',
+      row['粒度'] === '需求推导产销存参考' && row['月份'] === '2026-12' && row['产品编码'] === 'A',
   );
   assert.equal(Number(a['所需生产量']), 200);
   const tunnel = rows.find(
@@ -655,7 +669,7 @@ test('MPS effective category and share edits drive the same unconstrained invent
   assert.ok(Math.abs(Number(tunnel['缺口吨数']) - 1.6) < 1e-12);
   assert.ok(Math.abs(Number(tunnel['超载天数']) - 16) < 1e-12);
   assert.equal(
-    rows.filter((row) => row['粒度'] === '无约束产销存参考' && row['月份'] === '2027-03').length,
+    rows.filter((row) => row['粒度'] === '需求推导产销存参考' && row['月份'] === '2027-03').length,
     0,
   );
 });
@@ -851,4 +865,52 @@ test('MPS category undo audits the current inherited quantity after an upstream 
   });
   assert.equal(entry.systemValue, null);
   assert.equal(entry.value, 600);
+});
+
+test('MPS business-rule evidence produces a real conflict, keeps preview reversible and saves structured fields', async (t) => {
+  const { page, frame } = await workflowPage(t);
+  await version(frame, '2026-11');
+  await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  const view = frame.getByRole('region', { name: '约束与配置', exact: true });
+  await view.getByRole('button', { name: '新增约束', exact: true }).click();
+  const editor = frame.getByRole('dialog', { name: '新增约束', exact: true });
+  await editor.getByLabel('规则类型', { exact: true }).selectOption('cost-limit');
+  await editor.getByLabel('约束内容', { exact: true }).fill('代工成本增幅不得超过8%');
+  await editor.getByLabel('规则参数', { exact: true }).fill('8');
+  await editor.getByLabel('2026-11 方案核对值', { exact: true }).fill('10');
+  await editor.getByLabel('2026-11 核对来源', { exact: true }).fill('当前月方案成本同比核对');
+  await editor.getByRole('button', { name: '保存约束', exact: true }).click();
+  const result = view.getByRole('table', { name: '规则计算结果', exact: true });
+  await expect(result.getByRole('row').filter({ hasText: '2026-11' })).toContainText('存在冲突');
+  await expect(result).toContainText('10%，上限8%');
+  await result.getByRole('button', { name: '预览放宽', exact: true }).click();
+  const preview = frame.getByRole('dialog', { name: '放宽约束预览', exact: true });
+  await preview.getByRole('button', { name: '保留原约束', exact: true }).click();
+  await expect(result).toContainText('存在冲突');
+  await expect
+    .poll(async () => {
+      const saved = await page.evaluate(() => window.readView());
+      return saved?.localDrafts?.drafts?.find((row) => row.id === saved.localDrafts.selected)
+        ?.constraints?.rules?.local?.[0]?.effect?.value;
+    })
+    .toBe(8);
+  await view.getByRole('button', { name: '编辑约束1', exact: true }).click();
+  const edit = frame.getByRole('dialog', { name: '编辑约束', exact: true });
+  await edit.getByLabel('2026-11 方案核对值', { exact: true }).fill('7');
+  await edit.getByRole('button', { name: '保存约束', exact: true }).click();
+  await expect(result.getByRole('row').filter({ hasText: '2026-11' })).toContainText('满足约束');
+  if (process.env.MPS_RULE_SCREENSHOTS === '1') {
+    await view.locator('.wf-scope').scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: '.scratch/tab5-implementation/rules-desktop.png',
+      fullPage: true,
+    });
+    await page.evaluate(() => {
+      document.getElementById('root').style.width = '1120px';
+    });
+    await page.screenshot({
+      path: '.scratch/tab5-implementation/rules-narrow.png',
+      fullPage: true,
+    });
+  }
 });

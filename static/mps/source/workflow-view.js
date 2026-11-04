@@ -1,3 +1,4 @@
+import { createConstraintPanel } from './constraint-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
 import { call } from '../../../business/shared/channel.js';
@@ -19,7 +20,7 @@ const labels = {
   share: '有效占比',
   nextMonthDemand: '下一月需求参考',
   requiredProduction: '所需生产量',
-  projectedClosing: '无约束期末库存',
+  projectedClosing: '参考期末库存',
   requiredProductionTons: '所需生产吨数',
   productionDays: '生产天数',
   demand: '需求数量',
@@ -81,6 +82,7 @@ const sourceText = '①大类需求；②月末结存；③两路占比；④源
 export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
   const h = react.createElement;
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
+  const ConstraintPanel = createConstraintPanel(react, { Dialog });
   return function Workflow({
     step,
     draft,
@@ -341,7 +343,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         expression =
           row.month === result.months[0]
             ? `${result.shipmentMonth}月末结存 = ${value(row.openingInventory)}`
-            : `承接上一月无约束期末库存 = ${value(row.openingInventory)}，不代表超载后的实际库存`;
+            : `承接上一月参考期末库存 = ${value(row.openingInventory)}，不代表超载后的实际库存`;
       if (field === 'nextMonthDemand')
         expression =
           row.month === result.months[2]
@@ -356,9 +358,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       if (field === 'targetInventory' && row.safetyDays === 0)
         expression = '安全天数明确为0，目标库存为0，无需下一月需求';
       if (field === 'requiredProduction')
-        expression = `max(0, ${value(row.demand)} + ${value(row.targetInventory)} − ${value(row.openingInventory)}) = ${value(row.requiredProduction)}，无约束参考`;
+        expression = `max(0, ${value(row.demand)} + ${value(row.targetInventory)} − ${value(row.openingInventory)}) = ${value(row.requiredProduction)}，需求推导参考`;
       if (field === 'projectedClosing')
-        expression = `${value(row.openingInventory)} + ${value(row.requiredProduction)} − ${value(row.demand)} = ${value(row.projectedClosing)}，无约束参考`;
+        expression = `${value(row.openingInventory)} + ${value(row.requiredProduction)} − ${value(row.demand)} = ${value(row.projectedClosing)}，需求推导参考`;
       if (field === 'requiredProductionTons')
         expression = `${value(row.requiredProduction)} × 明确维护的件吨系数 = ${value(row.requiredProductionTons)}`;
       if (missing.length) expression += `${expression ? '；' : ''}缺项：${missing.join('、')}`;
@@ -481,7 +483,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         return {
           评估版本: draft.name,
           评估月份: draft.month,
-          粒度: includeCategory ? '基地×物料组×SKU' : '无约束产销存参考',
+          粒度: includeCategory ? '基地×物料组×SKU' : '需求推导产销存参考',
           ...Object.fromEntries(identityColumns.map(([key, label]) => [label, row[key]])),
           ...Object.fromEntries(exportFields.map((key) => [labels[key], row[key]])),
           ...Object.fromEntries(layerColumns.map((key, index) => [key, layerValues[index]])),
@@ -489,7 +491,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             layerQuantityColumns.map((key, index) => [key, layerQuantities[index]]),
           ),
           分层缺项: row.layerMissing?.join('；'),
-          公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；无约束期末=期初+所需生产-需求`,
+          公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
           Top1托底: row.fallback ? '是' : '否',
           调整原因: adjustment?.reason,
           调整时间: adjustment?.at,
@@ -545,7 +547,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           rows.push({
             评估版本: draft.name,
             评估月份: draft.month,
-            粒度: '全版本汇总，无约束参考',
+            粒度: '全版本汇总，需求推导参考',
             已知生产吨数小计: result.summary.knownRequiredProductionTons,
             完整生产吨数: result.summary.requiredProductionTons,
             已评估行数: result.summary.evaluatedRows,
@@ -1136,65 +1138,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       ),
     ]);
     const localRules = result.constraints.rules.local ?? [];
-    const updateRules = (entries) =>
-      update({
-        constraints: {
-          ...result.constraints,
-          rules: { ...result.constraints.rules, local: entries },
-        },
-      });
-    const ruleRows = localRules.flatMap((rule, index) => {
-      if (
-        search &&
-        ![rule.description, rule.target, rule.strength, rule.until].some((value) =>
-          String(value ?? '').includes(search),
-        )
-      )
-        return [];
-      const input = (key, label, type = 'text') =>
-        h('input', {
-          type,
-          'aria-label': `约束${index + 1} ${label}`,
-          value: rule[key] ?? '',
-          onChange: (event) =>
-            updateRules(
-              localRules.map((item, position) =>
-                position === index ? { ...item, [key]: event.target.value } : item,
-              ),
-            ),
-        });
-      return [
-        [
-          input('description', '内容'),
-          input('target', '作用对象'),
-          h(
-            'select',
-            {
-              'aria-label': `约束${index + 1} 强度`,
-              value: rule.strength,
-              onChange: (event) =>
-                updateRules(
-                  localRules.map((item, position) =>
-                    position === index ? { ...item, strength: event.target.value } : item,
-                  ),
-                ),
-            },
-            h('option', { value: '硬' }, '硬'),
-            h('option', { value: '软' }, '软'),
-          ),
-          input('until', '生效至', 'date'),
-          '本地草稿 · 未参与计算',
-          h(
-            'button',
-            {
-              'aria-label': `删除约束${index + 1}`,
-              onClick: () => updateRules(localRules.filter((_, position) => position !== index)),
-            },
-            '删除',
-          ),
-        ],
-      ];
-    });
     return h(
       'section',
       { className: 'wf-page', 'aria-label': titles[step] },
@@ -1204,10 +1147,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         h('strong', null, `${draft.name} · ${draft.month}`),
         h('span', null, `发货所属月 ${result.shipmentMonth}`),
       ),
-      filterBar,
-      result.scopeCoverage !== 'national' &&
+      step !== 'constraints' && filterBar,
+      step !== 'constraints' &&
+        result.scopeCoverage !== 'national' &&
         h('p', { className: 'wf-note' }, '产品池全国覆盖尚未取得实际证明，仅报告范围内结果'),
-      step !== 'process' &&
+      !['process', 'constraints'].includes(step) &&
         card(
           '实际输入缺项',
           h(
@@ -1383,11 +1327,60 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           )
         : step === 'constraints'
           ? h(
-              react.Fragment,
-              null,
+              ConstraintPanel,
+              {
+                key: JSON.stringify([draft.id, draft.month, scopeGeneration]),
+                draft,
+                result,
+                update,
+                bases,
+                table,
+                card,
+                previewRules: (local) =>
+                  buildMpsWorkflow(
+                    {
+                      ...draft,
+                      constraints: {
+                        ...draft.constraints,
+                        rules: { ...draft.constraints?.rules, local },
+                      },
+                    },
+                    relations,
+                    shipmentSnapshot,
+                  ),
+              },
               card(
-                '安全天数',
-                table('本地安全天数', ['基地', '安全天数', '来源', '未评估原因'], constraintRows),
+                '基地安全库存',
+                h(
+                  react.Fragment,
+                  null,
+                  table('本地安全天数', ['基地', '安全天数', '来源', '未评估原因'], constraintRows),
+                  h(
+                    'p',
+                    { className: 'wf-note' },
+                    '目标期末库存＝有效安全天数×下一月需求÷下一月自然日天数；缺项单独列出，已知小计不代替完整目标。',
+                  ),
+                  table(
+                    '目标期末库存',
+                    ['基地', '月份', '已知目标库存（件）', '缺项单品'],
+                    bases.flatMap((base) =>
+                      result.months.slice(0, 3).map((month) => {
+                        const rows = result.rows.filter(
+                          (row) => row.base === base && row.month === month,
+                        );
+                        const known = rows.filter((row) => row.targetInventory !== null);
+                        return [
+                          base,
+                          month,
+                          known.length
+                            ? numberText(known.reduce((sum, row) => sum + row.targetInventory, 0))
+                            : '—',
+                          rows.length - known.length,
+                        ];
+                      }),
+                    ),
+                  ),
+                ),
               ),
               card(
                 '可用生产天数',
@@ -1537,25 +1530,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 ),
               ),
               card(
-                '本地约束',
-                table(
-                  '本地约束',
-                  ['约束内容', '作用对象', '强度', '生效至', '状态', '操作'],
-                  ruleRows,
-                ),
-                h(
-                  'button',
-                  {
-                    onClick: () =>
-                      updateRules([
-                        ...localRules,
-                        { description: '', target: '', strength: '硬', until: '' },
-                      ]),
-                  },
-                  '新增本地约束',
-                ),
-              ),
-              card(
                 '正式约束来源',
                 table(
                   '正式约束来源',
@@ -1660,7 +1634,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                           强度: rule.strength,
                           生效至: rule.until,
                           来源: '本地隔离草稿',
-                          状态: '未参与计算',
+                          状态:
+                            (result.ruleEvaluations ?? [])
+                              .filter((entry) => entry.ruleId === rule.id)
+                              .map((entry) => `${entry.month} ${entry.status}: ${entry.reason}`)
+                              .join('；') || '待完善规则参数',
                         })),
                       ],
                     ),
@@ -1674,7 +1652,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               h(
                 'p',
                 { className: 'wf-note', role: 'status' },
-                '以下是无约束参考，所需生产量不代表实际可执行。前月超载时，后月仍按无约束期末库存承接。未自动生成可执行主计划，未自动处置调拨或外协。',
+                '以下按需求、库存及已采用规则推导所需生产量，不代表实际可执行。前月超载时，后月仍按参考期末库存承接。未自动生成可执行主计划，未自动处置调拨或外协。',
               ),
               result.summary
                 ? card(
@@ -1767,7 +1745,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 ),
               ),
               card(
-                step === 'report' ? '产销存明细' : '无约束生产评估明细',
+                step === 'report' ? '产销存明细' : '需求推导生产评估明细',
                 h(
                   react.Fragment,
                   null,
@@ -1825,7 +1803,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                           relations?.sources ? '已接当前关系结果' : '关系尚未读取',
                         ],
                         ['⑤约束与配置', '本地隔离草稿；正式保存未就绪'],
-                        ['⑥产能评估与缺口', '无约束所需生产与共享资源负荷；未生成可执行主计划'],
+                        [
+                          '⑥产能评估与缺口',
+                          '规则调整后的所需生产与共享资源负荷；未生成可执行主计划',
+                        ],
                       ],
                     ),
                   ),

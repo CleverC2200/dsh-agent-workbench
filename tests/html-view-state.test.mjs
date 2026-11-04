@@ -501,3 +501,65 @@ test('MPS local and business shipment edits recover through the codec and Host w
     /INVALID_HTML_VIEW_STATE/,
   );
 });
+
+test('structured MPS rules, monthly evidence and change history round-trip through codec and client validation', () => {
+  const draft = {
+    id: 'rules-v1',
+    name: '规则版本',
+    month: '2026-11',
+    pull: 'monthly',
+    files: {},
+    constraints: {
+      safetyDays: [],
+      rules: {
+        local: [
+          {
+            id: 'R',
+            description: '调拨上限',
+            target: '郑州',
+            strength: '硬',
+            until: '',
+            category: '调拨',
+            source: '计划维护',
+            base: '郑州',
+            code: '',
+            productCategory: '',
+            from: '2026-11',
+            enabled: true,
+            accepted: false,
+            effect: { kind: 'transfer-limit', value: 400 },
+            observations: [{ month: '2026-11', value: 380, source: '当月方案' }],
+          },
+        ],
+        history: [
+          { at: '2026-11-04T00:00:00.000Z', ruleId: 'R', description: '调拨上限', action: '新增' },
+        ],
+      },
+    },
+  };
+  const encoded = encodeLocalDrafts([draft], draft.id);
+  const owner = new WorkbenchController({ panel() {}, document() {} });
+  owner.registerFrame({ id: 'plan-category-production', kind: 'html', src: '/mps' });
+  owner.saveHtmlViewState('plan-category-production', 'tenant/user/session', {
+    version: 1,
+    localDrafts: encoded,
+  });
+  const recovered = decodeLocalDrafts(
+    owner.readHtmlViewState('plan-category-production', 'tenant/user/session').localDrafts,
+    (id, month) => ({ id, month, files: {} }),
+    () => {
+      throw Error('Unexpected fallback');
+    },
+  );
+  assert.deepEqual(recovered.drafts[0].constraints, draft.constraints);
+  const invalid = structuredClone(encoded);
+  invalid.drafts[0].constraints.rules.local[0].credentials = 'forbidden';
+  assert.throws(
+    () =>
+      owner.saveHtmlViewState('plan-category-production', 'tenant/user/session', {
+        version: 1,
+        localDrafts: invalid,
+      }),
+    /INVALID_HTML_VIEW_STATE/,
+  );
+});

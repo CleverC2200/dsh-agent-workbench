@@ -105,8 +105,45 @@ export const mpsLocalDraftSchema = z.strictObject({
     .strictObject({
       safetyDays: list(z.strictObject({ base: text, days: quantity.nullable() })),
       rules: z.strictObject({
+        history: list(
+          z.strictObject({ at: z.iso.datetime(), ruleId: text, description: text, action: text }),
+        ).optional(),
         local: list(
-          z.strictObject({ description: text, target: text, strength: text, until: text }),
+          z.strictObject({
+            description: text,
+            target: text,
+            strength: text,
+            until: text,
+            id: text.optional(),
+            category: text.optional(),
+            source: text.optional(),
+            base: text.optional(),
+            code: text.optional(),
+            productCategory: text.optional(),
+            observations: list(
+              z.strictObject({ month, value: numeric.nullable(), source: text }),
+            ).optional(),
+            from: text.optional(),
+            enabled: z.boolean().optional(),
+            accepted: z.boolean().optional(),
+            effect: z
+              .discriminatedUnion('kind', [
+                z.strictObject({ kind: z.literal('resource-unavailable'), resourceId: text }),
+                z.strictObject({ kind: z.literal('self-only') }),
+                ...(
+                  [
+                    'inventory-days',
+                    'production-days',
+                    'transfer-limit',
+                    'cost-limit',
+                    'lead-days',
+                  ] as const
+                ).map((kind) =>
+                  z.strictObject({ kind: z.literal(kind), value: quantity.nullable() }),
+                ),
+              ])
+              .optional(),
+          }),
         ),
       }),
     })
