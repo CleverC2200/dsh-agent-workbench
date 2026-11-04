@@ -7,7 +7,6 @@ export function mountSalesConfirmationPeople(document, formal, alive, changed) {
   };
   const element = node('section');
   element.setAttribute('aria-label', '飞书收件人与处理人');
-  const modeLabel = node('p', '正在读取发卡模式…');
   const query = node('input');
   query.type = 'search';
   query.maxLength = 80;
@@ -25,13 +24,13 @@ export function mountSalesConfirmationPeople(document, formal, alive, changed) {
   notice.role = 'status';
   const hint = node(
     'p',
-    '人员需在 GEA「用户能力授权」中获授对应能力。被艾特可查看，只有指定处理人可保存确认／暂缓决定。',
+    '人员需在 GEA「授权中心」中获授对应能力。被艾特可查看，只有指定处理人可保存确认／暂缓决定。',
   );
   const recipientLabel = node('label', '被艾特人员（最多 10 人，可多选）');
   recipientLabel.append(recipients);
   const handlerLabel = node('label', '确认与暂缓处理人');
   handlerLabel.append(handler);
-  element.append(modeLabel, query, search, recipientLabel, handlerLabel, hint, notice);
+  element.append(query, search, recipientLabel, handlerLabel, hint, notice);
   let mode,
     loading = false,
     searchGeneration = 0,
@@ -70,10 +69,6 @@ export function mountSalesConfirmationPeople(document, formal, alive, changed) {
       if ([...handler.options].some((option) => option.value === previous))
         handler.value = previous;
     }
-    modeLabel.textContent =
-      mode === 'test'
-        ? '发卡模式：测试联调（不执行 OMS）'
-        : '发卡模式：按订单销售分派（OMS 尚未接入）';
     changed();
   }
   async function load() {
@@ -87,6 +82,7 @@ export function mountSalesConfirmationPeople(document, formal, alive, changed) {
       if (!alive() || current !== searchGeneration) return;
       if (!['test', 'sales'].includes(result.mode) || !Array.isArray(result.participants))
         throw Error('后台未返回有效的人员目录，请核对接口版本');
+      if (result.mode !== 'test') throw Error('发卡模式已变化，请关闭窗口后重新打开。');
       mode = result.mode;
       visible = [];
       for (const person of result.participants) {
@@ -109,6 +105,9 @@ export function mountSalesConfirmationPeople(document, formal, alive, changed) {
     } catch (error) {
       if (alive() && current === searchGeneration) {
         mode = undefined;
+        recipients.replaceChildren();
+        handler.replaceChildren();
+        handler.disabled = true;
         notice.textContent = error.message;
       }
     } finally {
