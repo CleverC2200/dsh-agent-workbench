@@ -509,6 +509,36 @@ body {
   padding: 16px;
   justify-content: flex-end;
 }
+.sales-test-options {
+  margin: 16px;
+  padding: 12px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.sales-test-options summary {
+  cursor: pointer;
+  color: #64748b;
+  font-weight: 600;
+}
+.sales-test-options section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  margin-top: 12px;
+}
+.sales-test-options label,
+.sales-test-options p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.sales-test-options label {
+  display: grid;
+  gap: 6px;
+}
+.sales-test-options select {
+  width: 100%;
+}
 .sales-confirmation-preview button {
   cursor: pointer;
   padding: 8px 14px;
