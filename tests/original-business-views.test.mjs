@@ -101,20 +101,23 @@ test('presentation selection never changes SQL, parameters, permissions or sourc
   }
 });
 
-test('branch stock, aging and plan rows retain their warehouse identity in the table and CSV contract', async () => {
+test('branch tables and CSV retain warehouse names while warehouse codes remain query identity', async () => {
   const c = await config('fc');
   for (const tab of ['replenishment', 'structure', 'plan']) {
     const column = views.originalFcView(c, tab).columns.find((c) => c.field === 'warehouse_name');
     assert.ok(column, tab + ': warehouse identity missing');
     assert.equal(column.label, '分仓');
+    const codeField = tab === 'structure' ? 'warehouseid' : 'warehouse_code';
+    assert.equal(
+      views.originalFcView(c, tab).columns.some((column) => column.field === codeField),
+      false,
+    );
+    const source = c.sourceViews.views.find(
+      (view) => view.id === (tab === 'structure' ? 'inventory' : tab),
+    );
     assert.ok(
-      views
-        .originalFcView(c, tab)
-        .columns.some(
-          (c) =>
-            c.field === (tab === 'structure' ? 'warehouseid' : 'warehouse_code') &&
-            c.label === '分仓编码',
-        ),
+      c.queries[source.queryId].resultColumns.includes(codeField),
+      tab + ': query lost warehouse identity',
     );
   }
 });
