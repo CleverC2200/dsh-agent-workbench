@@ -55,7 +55,7 @@ jobs:
   source-checks:
     needs: source-plan
     if: needs.source-plan.outputs.mode != 'docs'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read

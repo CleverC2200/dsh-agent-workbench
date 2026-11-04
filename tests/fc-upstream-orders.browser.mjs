@@ -35,10 +35,11 @@ const bundle = await build({
 const js = bundle.outputFiles.find((f) => f.path.endsWith('.js')).text;
 const css = bundle.outputFiles.find((f) => f.path.endsWith('.css'))?.text ?? '';
 
-async function openFixture(t, denied = false) {
+async function openFixture(t, denied = false, resourcesDenied = false) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  page.setDefaultTimeout(10000);
   const calls = [];
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -63,10 +64,11 @@ async function openFixture(t, denied = false) {
     const q = config.queries[id];
     assert.ok(q, id);
     if (
-      denied &&
-      (id === 'orders.summary' ||
-        ['replenishment.summary', 'replenishment.overview'].includes(id) ||
-        ['current-shortage.summary', 'current-shortage.overview'].includes(id))
+      (resourcesDenied && id === 'base-production.days') ||
+      (denied &&
+        (id === 'orders.summary' ||
+          ['replenishment.summary', 'replenishment.overview'].includes(id) ||
+          ['current-shortage.summary', 'current-shortage.overview'].includes(id)))
     )
       return route.fulfill({
         status: 403,
@@ -159,6 +161,8 @@ async function openFixture(t, denied = false) {
         remaining: 10,
         shortage: 5,
       });
+    else if (id === 'base_resources.detail.atomic')
+      rows = [{ ...row, page_scope_total: 0, page_row_present: null }];
     else if (id.includes('atomic') || id.endsWith('.detail')) rows = [];
     else
       Object.assign(row, {
@@ -247,4 +251,20 @@ test('FC exposes denied domains and preserves ready inventory without fabricatin
           .length,
     )
     .toBe(1);
+});
+
+test('FC base resources keeps an authorization failure distinct from a successful empty query', async (t) => {
+  const { page, calls } = await openFixture(t, false, true);
+  await page.getByRole('button', { name: '基地资源', exact: true }).click();
+  const sku = page.getByLabel('SKU', { exact: true });
+  await sku.fill('SKU1');
+  await page.getByRole('button', { name: '查询', exact: true }).click();
+  await expect
+    .poll(() => calls.filter((call) => call.id === 'base-production.days').length)
+    .toBe(1);
+  const table = page
+    .locator('table')
+    .filter({ has: page.locator('caption', { hasText: '基地排产资源监控' }) });
+  await expect(table.locator('xpath=..').locator('p').first()).toHaveText(/^-重新加载数据$/);
+  await expect(page.getByRole('alert')).toHaveCount(0);
 });
