@@ -5,6 +5,11 @@ import { expect } from '@playwright/test';
 import { mpsPage } from './helpers/mps-page.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
+async function showAdvanced(view) {
+  const summary = view.locator('summary').filter({ hasText: '高级配置：' });
+  if ((await summary.locator('..').getAttribute('open')) === null) await summary.click();
+}
+
 const records = [
   { material_code: 'A', channel_name: '思念', ton_per_piece: 0.00576 },
   { material_code: 'B', channel_name: '思念', ton_per_piece: null },
@@ -36,8 +41,10 @@ test('MPS coefficient candidates expire on same-draft restore and Session reconn
   });
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
+  await showAdvanced(view);
   await view.getByLabel('郑州 A 适用渠道', { exact: true }).fill('思念');
   const adopt = view.getByRole('button', { name: '郑州 A 使用来源系数', exact: true });
+  await showAdvanced(view);
   await view.getByRole('button', { name: '读取件吨系数', exact: true }).click();
   await expect(adopt).toBeEnabled();
   await page.evaluate(() => {
@@ -48,12 +55,15 @@ test('MPS coefficient candidates expire on same-draft restore and Session reconn
         '*',
       );
   });
+  await showAdvanced(view);
   await expect(adopt).toBeDisabled();
   await expect(view.getByRole('button', { name: '下载系数来源', exact: true })).toHaveCount(0);
   await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toHaveValue('');
+  await showAdvanced(view);
   await view.getByRole('button', { name: '读取件吨系数', exact: true }).click();
   await expect(adopt).toBeEnabled();
   await view.evaluate(() => window.dispatchEvent(new Event('gea-session-changed')));
+  await showAdvanced(view);
   await expect(adopt).toBeDisabled();
   await expect(view.getByRole('button', { name: '下载系数来源', exact: true })).toHaveCount(0);
   await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toHaveValue('');
@@ -96,10 +106,13 @@ for (const event of [
     });
     await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
     const view = frame.getByRole('region', { name: '约束与配置', exact: true });
+    await showAdvanced(view);
     await view.getByLabel('郑州 A 适用渠道', { exact: true }).fill('思念');
+    await showAdvanced(view);
     await view.getByRole('button', { name: '读取件吨系数', exact: true }).click();
     await expect.poll(() => received).toBe(true);
     await view.evaluate((_element, name) => window.dispatchEvent(new Event(name)), event);
+    await showAdvanced(view);
     await expect(view.getByRole('button', { name: '读取中', exact: true })).toHaveCount(0);
     release();
     await expect.poll(() => returned).toBe(true);
@@ -145,6 +158,8 @@ test('MPS reads complete channel coefficients and adopts only an explicitly appl
   });
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
+  await showAdvanced(view);
+  await showAdvanced(view);
   await view.getByRole('button', { name: '读取件吨系数', exact: true }).click();
   await expect(view).toContainText('0.00576');
   await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toHaveValue('');
@@ -163,6 +178,7 @@ test('MPS reads complete channel coefficients and adopts only an explicitly appl
   await expect(view).toContainText('缺正数吨/件系数');
   await expect(view).toContainText('系数冲突');
   await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('');
+  await view.locator('summary').filter({ hasText: '基地人工覆盖' }).click();
   await view.getByLabel('郑州 安全天数', { exact: true }).fill('0');
   const waiting = page.waitForEvent('download');
   await view.getByRole('button', { name: '下载本地配置', exact: true }).click();
@@ -187,6 +203,7 @@ test('MPS reads complete channel coefficients and adopts only an explicitly appl
   await expect(view.getByLabel('郑州 A 适用渠道', { exact: true })).toHaveValue('思念');
   await expect(view).toContainText('weights-test-v1');
   incomplete = true;
+  await showAdvanced(view);
   await view.getByRole('button', { name: '读取件吨系数', exact: true }).click();
   await expect(view).toContainText('分页与计数不一致');
   await expect(
@@ -227,6 +244,8 @@ test('MPS coefficient batches cover the whole product pool and discard cross-bat
   });
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
+  await showAdvanced(view);
+  await showAdvanced(view);
   await view.getByRole('button', { name: '读取件吨系数', exact: true }).click();
   await expect(view).toContainText('已完整读取101个产品编码、101条渠道系数来源');
   assert.deepEqual(
@@ -236,6 +255,7 @@ test('MPS coefficient batches cover the whole product pool and discard cross-bat
   await expect(view.getByLabel('郑州 A0 件吨系数', { exact: true })).toHaveValue('');
   changed = true;
   batches = [];
+  await showAdvanced(view);
   await view.getByRole('button', { name: '读取件吨系数', exact: true }).click();
   await expect(view).toContainText('件吨系数读取期间查询配置版本变化');
   await view.getByLabel('郑州 A0 适用渠道', { exact: true }).fill('思念');
