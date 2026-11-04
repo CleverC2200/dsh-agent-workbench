@@ -42,12 +42,23 @@ async function readFacts(id, parameters, signal, type, month) {
       { signal: options.signal },
     ),
   );
-  if (type === 'report' || type === 'execution-delivery') {
+  if (type === 'report' || type === 'execution-delivery' || type === 'shipment') {
     const result = await client.readAll(
       id,
       { ...parameters, page_size: 200, offset: 0 },
       { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
     );
+    if (type === 'shipment')
+      return {
+        rows: result.rows,
+        metadata: {
+          partial: false,
+          warnings: [],
+          total: result.total,
+          configVersion: result.configVersion,
+          ...parameters,
+        },
+      };
     return {
       rows: result.rows.map((row) => {
         const base = text(row.belong_base),
@@ -134,8 +145,6 @@ async function readFacts(id, parameters, signal, type, month) {
     partial ||= result.dataStatus === 'partial';
     warnings.push(...(result.warnings ?? []));
   }
-  if (type === 'shipment')
-    return { rows, metadata: { partial, warnings, total, configVersion: version, ...parameters } };
   const prefix = 'agents_scm_cust_deliv_daily_di.';
   const records = rows.map((row) => {
     const value = (name) => row[prefix + name];
@@ -168,27 +177,50 @@ async function readFacts(id, parameters, signal, type, month) {
   };
 }
 
-export async function readShipmentRange(start, end, signal) {
+export async function readShipmentInputs(cutoff, signal) {
   const valid = (value) =>
     typeof value === 'string' &&
     /^\d{4}-\d{2}-\d{2}$/.test(value) &&
     Number.isFinite(Date.parse(value + 'T00:00:00Z')) &&
     new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
-  if (!valid(start) || !valid(end) || start > end || start.slice(0, 7) !== end.slice(0, 7))
-    throw Error('实际发货须限定同月有效截止期间');
-  const result = await readFacts('facts.shipment', { start, end }, signal, 'shipment');
-  const prefix = 'agents_scm_cust_deliv_daily_di.';
+  if (!valid(cutoff)) throw Error('发货输入须限定有效截止日期');
+  const month = cutoff.slice(0, 7);
+  const passed = Number(cutoff.slice(8));
+  const [year, monthNumber] = month.split('-').map(Number);
+  const totalDays = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const recentStart = `${month}-${String(Math.max(1, passed - 2)).padStart(2, '0')}`;
+  const result = await readFacts(
+    'facts.shipment',
+    { month: month + '-01', cutoff, recent_start: recentStart },
+    signal,
+    'shipment',
+  );
   return {
     ...result,
-    rows: result.rows.map((row) => ({
-      month: start.slice(0, 7),
-      base: text(row[prefix + 'belong_base']),
-      code: text(row[prefix + 'material_code']),
-      name: text(row[prefix + 'material_name']),
-      category: text(row[prefix + 'product_categ_name']),
-      group: text(row[prefix + 'material_group_name']),
-      shipped:
-        row[prefix + 'act_dl_qty_total'] === null ? null : number(row[prefix + 'act_dl_qty_total']),
-    })),
+    metadata: { ...result.metadata, sourceTable: 'ai_db.agents_scm_stock_detail_d' },
+    rows: result.rows.map((row) => {
+      const quantities = Object.fromEntries(
+        ['shipped', 'prepped', 'unprepped', 'daily3', 'open', 'inbound'].map((field) => [
+          field,
+          row[field] === null ? null : number(row[field]),
+        ]),
+      );
+      return {
+        month,
+        base: text(row.belong_base),
+        code: text(row.material_code),
+        name: text(row.material_name),
+        category: '',
+        series: text(row.series),
+        group: text(row.product_item),
+        ...quantities,
+        remaining:
+          quantities.inbound == null
+            ? null
+            : Math.round((quantities.inbound / passed) * (totalDays - passed)),
+        sourceDays: number(row.source_days),
+        duplicateDays: number(row.duplicate_days),
+      };
+    }),
   };
 }

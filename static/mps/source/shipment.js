@@ -1,5 +1,5 @@
 import { prototypeShipments } from './prototype-shipments.js';
-import { readShipmentRange } from './facts.js';
+import { readShipmentInputs } from './facts.js';
 import { hasMpsSource } from './master-data.js';
 const emptyRows = [];
 const bases = ['西南', '郑州', '遂平', '华东', '华南'];
@@ -236,8 +236,8 @@ export function createShipment(
         : sourceKind === 'local-file'
           ? `本地CSV：${state.file}`
           : business
-            ? `业务来源：实际发货 ${month}-01 至 ${cutoff}；近三天${business.metadata.recentStatus === 'ok' ? '截止日及前两日' : '未提供'}；已备未备与库存来源未接入`
-            : '实际发货尚未同步；已备未备、库存与BI排产未接入';
+            ? `业务来源：ai_db.agents_scm_stock_detail_d，${month}-01 至 ${cutoff}`
+            : '数仓输入尚未同步';
     react.useEffect(() => {
       snapshotCallback.current?.({
         draftId: draft.id,
@@ -280,91 +280,46 @@ export function createShipment(
             }
           : {}),
       });
-      const recentStart = `${month}-${String(passed - 2).padStart(2, '0')}`;
-      const results = await Promise.allSettled([
-        readShipmentRange(`${month}-01`, cutoff, stop.signal),
-        passed >= 3 ? readShipmentRange(recentStart, cutoff, stop.signal) : Promise.resolve(null),
-      ]);
-      if (!valid()) return;
       try {
-        if (results[0].status === 'rejected') throw results[0].reason;
-        const monthly = results[0].value;
-        const recent = results[1].status === 'fulfilled' ? results[1].value : null;
-        const summarize = (records) => {
-          const grouped = new Map();
-          for (const record of records) {
-            if (!record.base || !record.code || !bases.includes(record.base)) continue;
-            const key = keyOf(record);
-            const previous = grouped.get(key);
-            const value = previous
-              ? previous.shipped == null || record.shipped == null
-                ? null
-                : finite(previous.shipped + record.shipped)
-              : record.shipped;
-            grouped.set(key, {
-              ...record,
-              shipped: value,
-              ...Object.fromEntries(
-                ['name', 'category', 'group'].map((field) => [
-                  field,
-                  previous && previous[field] !== record[field] ? '' : record[field],
-                ]),
-              ),
-            });
-          }
-          return grouped;
-        };
-        const recentRows = summarize(recent?.rows ?? emptyRows);
-        const actualRows = [...summarize(monthly.rows).values()].map((row) => ({
-          ...row,
-          series: '',
-          prepped: null,
-          unprepped: null,
-          open: null,
-          inbound: null,
-          remaining: null,
-          daily3:
-            recentRows.get(keyOf(row))?.shipped == null
-              ? null
-              : finite(recentRows.get(keyOf(row)).shipped / 3),
-        }));
-        const omitted = monthly.rows.filter(
-          (row) => !row.base || !row.code || !bases.includes(row.base),
+        const result = await readShipmentInputs(cutoff, stop.signal);
+        if (!valid()) return;
+        const actualRows = result.rows.filter(
+          (row) => row.base && row.code && bases.includes(row.base),
+        );
+        const omitted = result.rows.length - actualRows.length;
+        const missingDimensions = actualRows.filter(
+          (row) => !row.name || !row.series || !row.group,
         ).length;
+        const incompleteRows = actualRows.filter(
+          (row) => inputFields.some((field) => row[field] == null) || row.sourceDays < passed,
+        ).length;
+        const duplicateRows = actualRows.filter((row) => row.duplicateDays > 0).length;
         updateState({
           business: {
             month,
             cutoff,
             rows: actualRows,
-            sourceRecords: monthly.rows,
+            sourceRecords: result.rows,
             metadata: {
-              ...monthly.metadata,
+              ...result.metadata,
               partial:
-                monthly.metadata.partial ||
-                !!omitted ||
-                !recent ||
-                recent.metadata.partial ||
-                actualRows.some(
-                  (row) => !row.name || !row.category || !row.group || row.shipped == null,
-                ),
-              recentStatus: recent ? 'ok' : passed < 3 ? 'insufficient-days' : 'failed',
-              recent: recent?.metadata ?? null,
-              recentError: results[1].status === 'rejected' ? results[1].reason.message : null,
+                result.metadata.partial ||
+                !!(omitted || missingDimensions || incompleteRows || duplicateRows),
+              recentStatus: passed < 3 ? 'insufficient-days' : 'ok',
               omittedRows: omitted,
-              missingDimensions: actualRows.filter(
-                (row) => !row.name || !row.category || !row.group,
-              ).length,
+              missingDimensions,
+              incompleteRows,
+              duplicateRows,
             },
           },
         });
         setSyncStatus('ok');
-        if (results[1].status === 'rejected')
-          setError(`实际发货已读取；近三天读取失败：${results[1].reason.message}`);
       } catch (failure) {
+        if (!valid()) return;
         setSyncStatus('failed');
         setError(
           /AGENT_ACCESS_DENIED|PERMISSION_DENIED|RESOURCE_NOT_IN_DATASET/.test(failure.message)
-            ? '当前账号暂无实际发货数据权限'
+            ? '当前账号暂无库存日计划数据权限'
             : failure.message,
         );
       } finally {
@@ -542,7 +497,7 @@ export function createShipment(
               ? '演示推算：生产入库÷22×8，四舍五入'
               : sourceKind === 'local-file'
                 ? '本地CSV；BI排产未核齐'
-                : 'BI排产未接入'),
+                : `本月生产入库÷${passed}×${totalDays - passed}，逐SKU四舍五入`),
         })),
       );
     };
@@ -651,11 +606,13 @@ export function createShipment(
                 : '默认单品预测值',
           ],
           remaining: [
-            '剩余天数入库 = 原输入；基地覆盖按明细原剩余入库权重重摊并补偿残差',
+            '剩余天数入库 = 单品入库日均 × 剩余天数；基地覆盖按明细原剩余入库权重重摊并补偿残差',
             row.remainingSource ??
               (sourceKind === 'demo'
                 ? '演示推算：本月生产入库 ÷ 22 × 8，逐SKU四舍五入'
-                : '本地CSV输入，BI排产未核齐'),
+                : sourceKind === 'business'
+                  ? `${raw('inbound')} ÷ ${passed} × ${totalDays - passed}，逐SKU四舍五入`
+                  : '本地CSV输入，BI排产未核齐'),
           ],
           end: [
             '预计月末结存 = 月初库存 + 本月生产入库 + 剩余天数入库 − 整月预估发货',
@@ -840,7 +797,7 @@ export function createShipment(
           busy
             ? '正在读取或校验输入…'
             : syncStatus === 'failed'
-              ? '实际发货同步失败，未采用旧业务结果'
+              ? '数仓输入同步失败，未采用旧业务结果'
               : source,
         ),
         business?.metadata.omittedRows > 0 &&
@@ -853,8 +810,16 @@ export function createShipment(
           h(
             'p',
             {},
-            `源数据${business.metadata.missingDimensions}条产品名称、大类或物料组缺失或冲突，保留数量与源状态`,
+            `源数据${business.metadata.missingDimensions}条产品名称、系列或品项缺失或冲突，保留数量与源状态`,
           ),
+        business?.metadata.incompleteRows > 0 &&
+          h(
+            'p',
+            {},
+            `源数据${business.metadata.incompleteRows}个单品存在缺值或日记录不齐，缺值保留待定`,
+          ),
+        business?.metadata.duplicateRows > 0 &&
+          h('p', {}, `源数据${business.metadata.duplicateRows}个单品有重复日期，相关输入未采用`),
         business?.metadata.recentStatus === 'insufficient-days' &&
           h('p', {}, '截止日前本月不足三天，近三天日均未提供'),
         error && h('p', { role: 'alert', className: 'sp-error' }, error),
