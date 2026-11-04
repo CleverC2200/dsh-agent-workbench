@@ -180,14 +180,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "gap",
-            "inventory",
-            "target",
-            "safety_stock",
-            "turnover_inventory"
-          ]
+          "enum": ["key", "gap", "inventory", "target", "safety_stock", "turnover_inventory"]
         },
         "gea_p23": {
           "name": "sort_direction",
@@ -876,14 +869,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "gap",
-            "inventory",
-            "target",
-            "safety_stock",
-            "turnover_inventory"
-          ]
+          "enum": ["key", "gap", "inventory", "target", "safety_stock", "turnover_inventory"]
         },
         "gea_p23": {
           "name": "sort_direction",
@@ -4923,15 +4909,7 @@
           "example": "day",
           "required": true,
           "nullable": false,
-          "enum": [
-            "day",
-            "base",
-            "warehouse",
-            "sku",
-            "product",
-            "organization",
-            "customer"
-          ]
+          "enum": ["day", "base", "warehouse", "sku", "product", "organization", "customer"]
         }
       },
       "request": {
@@ -4978,13 +4956,7 @@
         "day": ["day"],
         "base": ["base"],
         "warehouse": ["warehouse_classify", "warehouse_group", "warehouse"],
-        "sku": [
-          "warehouse_classify",
-          "warehouse_group",
-          "warehouse",
-          "category",
-          "sku"
-        ],
+        "sku": ["warehouse_classify", "warehouse_group", "warehouse", "category", "sku"],
         "product": ["base", "category", "material_group"],
         "organization": ["region", "province", "sales_group"],
         "customer": ["customer"]
@@ -5215,15 +5187,7 @@
           "example": "day",
           "required": true,
           "nullable": false,
-          "enum": [
-            "day",
-            "base",
-            "warehouse",
-            "sku",
-            "product",
-            "organization",
-            "customer"
-          ]
+          "enum": ["day", "base", "warehouse", "sku", "product", "organization", "customer"]
         }
       },
       "request": {
@@ -7508,12 +7472,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "current_stock",
-            "available_stock",
-            "current_stock_60"
-          ]
+          "enum": ["key", "current_stock", "available_stock", "current_stock_60"]
         },
         "gea_p16": {
           "name": "sort_direction",
@@ -8143,12 +8102,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "current_stock",
-            "available_stock",
-            "current_stock_60"
-          ]
+          "enum": ["key", "current_stock", "available_stock", "current_stock_60"]
         },
         "gea_p16": {
           "name": "sort_direction",
@@ -8670,13 +8624,7 @@
     "health.detail": {
       "title": "源库存健康度明细分页",
       "plugins": ["aqkc", "fc", "qll", "aps"],
-      "grain": [
-        "stat_date",
-        "belong_base",
-        "warehouse_type",
-        "warehouseid",
-        "material_code"
-      ],
+      "grain": ["stat_date", "belong_base", "warehouse_type", "warehouseid", "material_code"],
       "notes": "按统计日、仓库编码、SKU读取；相同重复值只取一次，冲突保持未知。age_days是最大库龄。名称优先取库存快照商品名，源缺值时沿用原唯一SKU字典补充。名称均为当前参考，不回溯历史命名；左连接不改变库存行数。；商品资料仅按唯一SKU匹配产品清单补空名称/物料组；同SKU字段冲突保留空，数量与日期范围不变。 批次现库存按仓库/SKU求和；不按 warehouse_classify 过滤或归类；分仓用 warehouseid 编码关联和筛选、warehouse_name 展示名称；基地用 belong_base 名称关联和筛选；商品名称取 material_name；基地与分仓为同一事实集的维度，不重复相加；正库存且生产日期有效的批次计算最大货龄。按原分仓规则逐批次汇总60天及以上超龄库存、90天及以上滞库库存；非正库存或无有效货龄的批次数量不计入风险量。安全/目标库存及更新时间仍保持未知。 D120：同仓库/SKU/生产日期/快照先按有符号数量汇总，再对净正批次计算货龄、分段及风险；不跨SKU、仓库或生产日期冲抵。",
       "activation": "source_candidate_pending_published_fields_and_agent_gea_replay",
       "parameterSpec": {
@@ -10866,12 +10814,7 @@
         "product": ["base", "category", "item", "series"],
         "sku": ["base", "category", "sku"]
       },
-      "resultColumns": [
-        "base",
-        "row_count",
-        "known_available",
-        "known_available_count"
-      ]
+      "resultColumns": ["base", "row_count", "known_available", "known_available_count"]
     },
     "base_resources.count": {
       "title": "库存与目标分层分组总数",
@@ -11970,13 +11913,7 @@
     "health.detail.atomic": {
       "title": "源库存健康度明细分页",
       "plugins": ["aqkc", "fc", "qll", "aps"],
-      "grain": [
-        "stat_date",
-        "belong_base",
-        "warehouse_type",
-        "warehouseid",
-        "material_code"
-      ],
+      "grain": ["stat_date", "belong_base", "warehouse_type", "warehouseid", "material_code"],
       "notes": "同一SQL读取总数及当前页；空页用一条标记行保留总数；外层显式保持原排序，不下载全量明细。；商品资料仅按唯一SKU匹配产品清单补空名称/物料组；同SKU字段冲突保留空，数量与日期范围不变。 批次现库存按仓库/SKU求和；不按 warehouse_classify 过滤或归类；分仓用 warehouseid 编码关联和筛选、warehouse_name 展示名称；基地用 belong_base 名称关联和筛选；商品名称取 material_name；基地与分仓为同一事实集的维度，不重复相加；正库存且生产日期有效的批次计算最大货龄。按原分仓规则逐批次汇总60天及以上超龄库存、90天及以上滞库库存；非正库存或无有效货龄的批次数量不计入风险量。安全/目标库存及更新时间仍保持未知。 D120：同仓库/SKU/生产日期/快照先按有符号数量汇总，再对净正批次计算货龄、分段及风险；不跨SKU、仓库或生产日期冲抵。",
       "activation": "source_candidate_pending_published_fields_and_agent_gea_replay",
       "parameterSpec": {
@@ -12377,14 +12314,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "gap",
-            "inventory",
-            "target",
-            "safety_stock",
-            "turnover_inventory"
-          ]
+          "enum": ["key", "gap", "inventory", "target", "safety_stock", "turnover_inventory"]
         },
         "gea_p23": {
           "name": "sort_direction",
@@ -17068,13 +16998,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "total_qty",
-            "age60_plus",
-            "average_age",
-            "daily_movement"
-          ]
+          "enum": ["key", "total_qty", "age60_plus", "average_age", "daily_movement"]
         },
         "gea_p14": {
           "name": "sort_direction",
@@ -17819,13 +17743,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "total_qty",
-            "age60_plus",
-            "average_age",
-            "daily_movement"
-          ]
+          "enum": ["key", "total_qty", "age60_plus", "average_age", "daily_movement"]
         },
         "gea_p14": {
           "name": "sort_direction",
@@ -20465,13 +20383,7 @@
         },
         "includeTotal": false
       },
-      "resultColumns": [
-        "row_count",
-        "total_qty",
-        "available_qty",
-        "pack_unit_qty",
-        "freeze_qty"
-      ],
+      "resultColumns": ["row_count", "total_qty", "available_qty", "pack_unit_qty", "freeze_qty"],
       "priority": 30,
       "summaryRoute": {
         "queryId": "snapshot.health.inventory",
@@ -22959,14 +22871,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "gap",
-            "inventory",
-            "target",
-            "safety_stock",
-            "turnover_inventory"
-          ]
+          "enum": ["key", "gap", "inventory", "target", "safety_stock", "turnover_inventory"]
         },
         "gea_p23": {
           "name": "sort_direction",
@@ -23661,14 +23566,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "gap",
-            "inventory",
-            "target",
-            "safety_stock",
-            "turnover_inventory"
-          ]
+          "enum": ["key", "gap", "inventory", "target", "safety_stock", "turnover_inventory"]
         },
         "gea_p23": {
           "name": "sort_direction",
@@ -24868,14 +24766,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "gap",
-            "inventory",
-            "target",
-            "safety_stock",
-            "turnover_inventory"
-          ]
+          "enum": ["key", "gap", "inventory", "target", "safety_stock", "turnover_inventory"]
         },
         "gea_p23": {
           "name": "sort_direction",
@@ -28936,13 +28827,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "total_qty",
-            "age60_plus",
-            "average_age",
-            "daily_movement"
-          ]
+          "enum": ["key", "total_qty", "age60_plus", "average_age", "daily_movement"]
         },
         "gea_p14": {
           "name": "sort_direction",
@@ -29691,13 +29576,7 @@
           "example": "key",
           "required": true,
           "nullable": false,
-          "enum": [
-            "key",
-            "total_qty",
-            "age60_plus",
-            "average_age",
-            "daily_movement"
-          ]
+          "enum": ["key", "total_qty", "age60_plus", "average_age", "daily_movement"]
         },
         "gea_p14": {
           "name": "sort_direction",
@@ -32346,13 +32225,7 @@
         },
         "includeTotal": false
       },
-      "resultColumns": [
-        "row_count",
-        "total_qty",
-        "available_qty",
-        "pack_unit_qty",
-        "freeze_qty"
-      ],
+      "resultColumns": ["row_count", "total_qty", "available_qty", "pack_unit_qty", "freeze_qty"],
       "priority": 30
     },
     "snapshot.branch-current-orders.page": {
@@ -37920,12 +37793,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "batch_id",
-        "business_date",
-        "stock_date",
-        "target_month"
-      ],
+      "resultColumns": ["batch_id", "business_date", "stock_date", "target_month"],
       "priority": 100
     },
     "snapshot.calendar.target_versions": {
@@ -48043,11 +47911,7 @@
       "source": "business/inventory-fc/source/fc/src/lib/server/warehouse-snapshot.ts"
     },
     "fc.src.lib.server.warehouse-snapshot.9": {
-      "segments": [
-        "(f.executeorderno = $",
-        "::text AND f.new_material_code = $",
-        "::text)"
-      ],
+      "segments": ["(f.executeorderno = $", "::text AND f.new_material_code = $", "::text)"],
       "source": "business/inventory-fc/source/fc/src/lib/server/warehouse-snapshot.ts"
     },
     "fc.src.lib.server.warehouse-snapshot.10": {
@@ -48160,11 +48024,7 @@
       "source": "business/inventory-fc/source/inventory-light-plugins/src/fc-transfer.ts"
     },
     "fragments.source.inventory-light-plugins.src.governed.columnar.ts.1": {
-      "segments": [
-        "CAST(JSON_AGG(\"dsh_columns\".\"",
-        "\") AS TEXT) AS \"",
-        "\""
-      ],
+      "segments": ["CAST(JSON_AGG(\"dsh_columns\".\"", "\") AS TEXT) AS \"", "\""],
       "source": "business/inventory-fc/source/inventory-light-plugins/src/governed/columnar.ts"
     },
     "inline.source.fc.src.lib.server.warehouse-snapshot.ts.1": {
@@ -48196,11 +48056,7 @@
       "source": "business/inventory-fc/source/inventory-light-plugins/src/fc-transfer.ts"
     },
     "inline.source.inventory-light-plugins.src.fc-transfer.ts.5": {
-      "segments": [
-        " || JSONB_BUILD_OBJECT('",
-        "',TO_CHAR(s.",
-        ",'YYYY-MM-DD HH24:MI:SS'))"
-      ],
+      "segments": [" || JSONB_BUILD_OBJECT('", "',TO_CHAR(s.", ",'YYYY-MM-DD HH24:MI:SS'))"],
       "source": "business/inventory-fc/source/inventory-light-plugins/src/fc-transfer.ts"
     },
     "inline.source.inventory-light-plugins.src.fc-transfer.ts.6": {
@@ -48248,13 +48104,7 @@
     {
       "id": "inventory_batches",
       "plugins": ["aqkc", "fc", "qll", "aps"],
-      "pages": [
-        "货龄结构",
-        "平均货龄",
-        "7/14天FIFO预测",
-        "180天库存",
-        "批次弹窗"
-      ],
+      "pages": ["货龄结构", "平均货龄", "7/14天FIFO预测", "180天库存", "批次弹窗"],
       "requires": [
         "snapshot_date",
         "base",
@@ -48269,11 +48119,7 @@
       "reason": "仓库现存、可用、最大库龄及源超龄量已接入；仍缺批次生产日和批次剩余数量，不能推算平均库龄、各货龄桶或FIFO。",
       "sourceKind": "source_fact",
       "rootCause": {
-        "causeTypes": [
-          "new_scope_gap",
-          "source_quality",
-          "stale_detail_source"
-        ],
+        "causeTypes": ["new_scope_gap", "source_quality", "stale_detail_source"],
         "summary": "旧货龄10月14日31282行，仅12313行有货龄/生产日；分仓批次库存109498行已有106611行生产日。旧专用基地批次明细仍停9月22日。",
         "oldTables": [
           "agents_scm_inventory_age",
@@ -48363,11 +48209,7 @@
       "reason": "源仅汇总计划/状态，没有等价数量单据明细。",
       "sourceKind": "source_fact",
       "rootCause": {
-        "causeTypes": [
-          "stale_detail_source",
-          "new_scope_gap",
-          "source_quality"
-        ],
+        "causeTypes": ["stale_detail_source", "new_scope_gap", "source_quality"],
         "summary": "旧专用调拨明细7605行仍是9月22日，部分在途量为空；运营汇总已更新，不表示明细也更新。",
         "oldTables": ["agents_scm_branch_transfer_detail"],
         "action": "检查专用明细发布/刷新任务，并承接新库；汇总与明细按同快照对账。",
@@ -48409,13 +48251,7 @@
       "id": "future_production",
       "plugins": ["fc", "aps"],
       "pages": ["未来7日产量", "基地资源产能"],
-      "requires": [
-        "future_date",
-        "base",
-        "sku",
-        "planned_qty",
-        "schedule_version"
-      ],
+      "requires": ["future_date", "base", "sku", "planned_qty", "schedule_version"],
       "reason": "需未来7日排产，MES实绩不是未来排产。",
       "sourceKind": "source_fact",
       "rootCause": {
@@ -48457,12 +48293,7 @@
       "id": "historical_snapshots",
       "plugins": ["aqkc", "fc", "qll", "aps"],
       "pages": ["过去某日当时订单状态", "历史目标/货龄趋势", "历史月中对比"],
-      "requires": [
-        "business_date",
-        "snapshot_time",
-        "version",
-        "stable published batch"
-      ],
+      "requires": ["business_date", "snapshot_time", "version", "stable published batch"],
       "reason": "存在业务日期不代表存在历史快照；当前状态不能冒充历史as-of。",
       "sourceKind": "source_fact",
       "rootCause": {
@@ -48485,9 +48316,7 @@
       "id": "write_workflows",
       "plugins": ["aqkc", "fc", "qll", "aps"],
       "pages": ["正式保存", "审批", "锁定", "下单", "反馈", "任务派发"],
-      "requires": [
-        "separate authorized business APIs when durable/shared writes are required"
-      ],
+      "requires": ["separate authorized business APIs when durable/shared writes are required"],
       "sourceKind": "business_api",
       "reason": "不是数据库查询缺口。FC人工计划/周期/调整草稿已有iframe内存预览；AQKC反馈保存、APS正式派发/决策仍未接入。现有本地能力应保留，跨会话保存与正式业务执行另接授权接口，不能用只读SQL实现。",
       "rootCause": {
@@ -51844,12 +51673,7 @@
             "label": "入库量（源单位）"
           }
         ],
-        "defaultColumns": [
-          "warehouse_code",
-          "sku",
-          "business_date",
-          "inbound_qty"
-        ],
+        "defaultColumns": ["warehouse_code", "sku", "business_date", "inbound_qty"],
         "metrics": [
           {
             "field": "inbound_qty",
