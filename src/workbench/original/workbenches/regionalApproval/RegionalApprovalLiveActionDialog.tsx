@@ -207,6 +207,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     if (initialAction === 'SAVE') return;
     setDraftReady(false);
     setDraftError('');
+    if (!selectedRole) return;
     const draft = salesPlan.draft;
     if (!draft) {
       setDraftError('loadFailed');
@@ -234,7 +235,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
             result.draft?.role && result.draft.role !== selectedRole
               ? []
               : (result.draft?.adjustments ?? []),
-            selectedRole === approvalStage ? pendingValues : undefined,
+            pendingValues,
           ),
         );
         setDraftReady(true);
@@ -243,7 +244,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
         if (!controller.signal.aborted) setDraftError('loadFailed');
       });
     return () => controller.abort();
-  }, [row.planId, row.versionId, initialAction, directApproval, selectedRole]);
+  }, [row.planId, row.versionId, initialAction, directApproval, selectedRole, pendingValues]);
   const [confirmedInputs, setConfirmedInputs] = useState<Record<string, string>>({});
   const [adjustmentSkus, setAdjustmentSkus] = useState<AdjustmentSkuState>({ status: 'idle' });
   const action = useSalesPlanAction({ client });
@@ -553,6 +554,41 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     </Modal>
   );
 
+  const roleControl = (
+    <>
+      <div className={styles.formControl}>
+        <span>{t('common.assistantSurface.regionalApproval.liveAction.approvalRole')}</span>
+        <Select
+          value={selectedRole}
+          disabled={intentLocked}
+          aria-label={t('common.assistantSurface.regionalApproval.liveAction.approvalRole')}
+          placeholder={t('common.assistantSurface.regionalApproval.liveAction.selectRole')}
+          onChange={(role) => {
+            setSelectedRole(role);
+            setDraftReady(initialAction === 'SAVE');
+            setDraftError('');
+            setAdjustmentValues({});
+            setConfirmedInputs({});
+            setConfirmed(false);
+            setAttempted(false);
+          }}
+        >
+          {availableRoles.map((role) => (
+            <Select.Option key={role} value={role}>
+              {t(`common.assistantSurface.regionalApproval.stages.${role}`)}
+            </Select.Option>
+          ))}
+        </Select>
+      </div>
+      {unsupportedRole ? (
+        <Alert
+          type="warning"
+          content={t('common.assistantSurface.regionalApproval.liveAction.roleContractUnavailable')}
+        />
+      ) : null}
+    </>
+  );
+
   if (kind === 'REJECT') {
     return (
       <>
@@ -572,6 +608,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           onOk={submit}
         >
           <div className={styles.compactRejectBody}>
+            {roleControl}
             {draftError ? (
               <Alert
                 type="warning"
@@ -732,37 +769,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           </section>
 
           <div className={styles.form}>
-            <div className={styles.formControl}>
-              <span>{t('common.assistantSurface.regionalApproval.liveAction.approvalRole')}</span>
-              <Select
-                value={selectedRole}
-                disabled={intentLocked}
-                aria-label={t('common.assistantSurface.regionalApproval.liveAction.approvalRole')}
-                placeholder={t('common.assistantSurface.regionalApproval.liveAction.selectRole')}
-                onChange={(role) => {
-                  setSelectedRole(role);
-                  setAdjustmentValues({});
-                  setConfirmedInputs({});
-                  setConfirmed(false);
-                  setAttempted(false);
-                }}
-              >
-                {availableRoles.map((role) => (
-                  <Select.Option key={role} value={role}>
-                    {t(`common.assistantSurface.regionalApproval.stages.${role}`)}
-                  </Select.Option>
-                ))}
-              </Select>
-            </div>
-            {unsupportedRole ? (
-              <Alert
-                type="warning"
-                content={t(
-                  'common.assistantSurface.regionalApproval.liveAction.roleContractUnavailable',
-                )}
-              />
-            ) : null}
-
+            {roleControl}
             <div className={styles.formControl}>
               <span>{t('common.assistantSurface.regionalApproval.liveAction.action')}</span>
               {initialAction === 'SAVE' ? (

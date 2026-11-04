@@ -46,21 +46,23 @@ const client={
 };
 if(scenario?.startsWith('reject-')) {
  const mode=query.get('mode')??'pending';
+ const multiRole=query.get('multiRole')==='1';
  const row={planId:'return-plan',versionId:'return-version',status:2,planTypeCode:'Y',skuCount:1};
  const access={versionId:row.versionId,status:row.status,nodeOrder:3,approvalRole:'province',policy:'role-visible-v1',roleContractSupported:true,roleActions:[{role:'province',allowedActions:['APPROVE','REJECT']}],allowedActions:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)};
- const detail={currentVersion:{...row,id:row.versionId,effective:true,orderType:query.get('orderType')??'M'},skus:[{id:'s1',versionId:row.versionId,skuCode:'789',qty:'100',regionConfirmedQty:'120',price:'2',amt:'200',regionConfirmedAmount:'240'}],actionContext:access};
+ const detail={currentVersion:{...row,id:row.versionId,effective:true,orderType:query.get('orderType')??'M'},skus:[{id:'s1',versionId:row.versionId,skuCode:'789',qty:'100',regionConfirmedQty:'120',provinceConfirmedQty:mode==='race'?'150':null,provinceConfirmedAmount:mode==='race'?'300':null,price:'2',amt:'200',regionConfirmedAmount:'240'}],actionContext:access};
  const stored={role:'province',adjustments:[{skuCode:'789',adjustQty:mode==='stored'?'-10':'-5'}]};
  const pendingValues=mode==='stored'?undefined:{'789':mode==='invalid'?'-1':'110'};
- window.draftReads=[];
+ window.draftReads=[];window.resolveRoleDrafts={};
  const salesPlan={...client,draft:{invoke:async(params)=>{
    window.draftReads.push({planId:params.planId,approvalRole:params.approvalRole});
+   if(mode==='race') await new Promise(resolve=>window.resolveRoleDrafts[params.approvalRole]=resolve);
    if(mode==='deferred') await new Promise(resolve=>window.resolveDraft=resolve);
    if(mode==='failed') throw Error('fixture draft failure');
    return {draft:stored,stale:mode==='stale'};
  }}};
  const root=createRoot(document.getElementById('root'));
  root.render(<WorkbenchHostProvider value={{salesPlan}}>{scenario==='reject-single'
-  ?<RegionalApprovalLiveActionDialog visible row={row} approvalStage="province" approvalStages={['province']} initialAction="REJECT" evidence={detail} pendingValues={pendingValues} t={i18n.t.bind(i18n)} client={salesPlan} onPermissionDenied={()=>{}} onSucceeded={()=>{}} onRefresh={()=>{}} onClose={()=>{}} />
+  ?<RegionalApprovalLiveActionDialog visible row={row} approvalStage={multiRole?'customer':'province'} approvalStages={multiRole?['region','province']:['province']} initialAction="REJECT" evidence={detail} pendingValues={pendingValues} t={i18n.t.bind(i18n)} client={salesPlan} onPermissionDenied={()=>{}} onSucceeded={()=>{}} onRefresh={()=>{}} onClose={()=>{}} />
   :<RegionalApprovalBatchActionDialog visible kind="REJECT" items={[{row,detail,access,pendingValues}]} t={i18n.t.bind(i18n)} client={salesPlan} onPermissionDenied={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} onClose={()=>{}} />
  }</WorkbenchHostProvider>);
 } else createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDialog items={items} client={client} connected={!['channel','signed-out-source'].includes(scenario)} unavailableReason={query.get('reason')??undefined} t={i18n.t.bind(i18n)} onClose={()=>{}} onSucceeded={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} />);
@@ -76,7 +78,7 @@ if(scenario?.startsWith('reject-')) {
 async function openConfirmation(
   t,
   scenario,
-  { language = 'zh-CN', reason, blocked = false, mode, orderType } = {},
+  { language = 'zh-CN', reason, blocked = false, mode, orderType, multiRole = false } = {},
 ) {
   const server = createServer((request, response) => {
     const file = output.outputFiles.find(
@@ -112,6 +114,7 @@ async function openConfirmation(
         ...(reason ? { reason } : {}),
         ...(mode ? { mode } : {}),
         ...(orderType ? { orderType } : {}),
+        ...(multiRole ? { multiRole: '1' } : {}),
       }),
   );
   const dialog = page.getByRole('dialog');
@@ -374,4 +377,58 @@ test('single rejection waits for the draft before sending the latest visible 110
   assert.deepEqual(await page.evaluate(() => window.actions[0].request.adjustments), [
     { skuCode: '789', adjustQty: '-10' },
   ]);
+});
+
+async function selectReturnRole(page, dialog, name) {
+  await dialog.getByRole('combobox', { name: '本次审批角色', exact: true }).click();
+  await page.getByRole('option', { name, exact: true }).click();
+}
+
+for (const orderType of ['M', 'Z'])
+  test(`multi-role ${orderType} rejection requires a role and includes the latest unsaved 110`, async (t) => {
+    const { page, dialog } = await openConfirmation(t, 'reject-single', {
+      blocked: true,
+      multiRole: true,
+      orderType,
+    });
+    await dialog.getByLabel('退回原因（必填）').fill('按最新110处理');
+    const button = dialog.getByRole('button', { name: '确认退回', exact: true });
+    await expect(button).toBeDisabled();
+    assert.equal(await page.evaluate(() => window.actions.length), 0);
+    await selectReturnRole(page, dialog, '省区审批');
+    await expect(button).toBeEnabled();
+    await button.click();
+    await expect.poll(() => page.evaluate(() => window.actions.length)).toBe(1);
+    const call = await page.evaluate(() => window.actions[0]);
+    assert.equal(call.request.approvalRole, 'province');
+    assert.equal(call.request.action, 'REJECT');
+    assert.deepEqual(call.request.adjustments, [{ skuCode: '789', adjustQty: '-10' }]);
+    assert.deepEqual(await page.evaluate(() => window.draftReads), [
+      { planId: 'return-plan', approvalRole: 'province' },
+    ]);
+  });
+
+test('switching return roles rebases 110 and ignores a late draft for the old role', async (t) => {
+  const { page, dialog } = await openConfirmation(t, 'reject-single', {
+    blocked: true,
+    multiRole: true,
+    mode: 'race',
+  });
+  await dialog.getByLabel('退回原因（必填）').fill('按最新110处理');
+  const button = dialog.getByRole('button', { name: '确认退回', exact: true });
+  await selectReturnRole(page, dialog, '城市经理审批');
+  await expect.poll(() => page.evaluate(() => window.draftReads.length)).toBe(1);
+  await expect(button).toBeDisabled();
+  await selectReturnRole(page, dialog, '省区审批');
+  await expect.poll(() => page.evaluate(() => window.draftReads.length)).toBe(2);
+  await expect(button).toBeDisabled();
+  await page.evaluate(() => window.resolveRoleDrafts.province());
+  await expect(button).toBeEnabled();
+  await page.evaluate(() => window.resolveRoleDrafts.region());
+  await expect(button).toBeEnabled();
+  await button.click();
+  await expect.poll(() => page.evaluate(() => window.actions.length)).toBe(1);
+  const request = await page.evaluate(() => window.actions[0].request);
+  assert.equal(request.approvalRole, 'province');
+  assert.deepEqual(request.adjustments, [{ skuCode: '789', adjustQty: '-40' }]);
 });
