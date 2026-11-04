@@ -7,6 +7,136 @@ import {
   importedSummary,
 } from '../prototypes/inventory-orderworkbench/import-content.mjs';
 const period = { type: 'WEEK', start: '2026-10-19', end: '2026-10-26' };
+
+test('slow preview acknowledges the loading dialog, deduplicates retries, and outlives the action receipt', async (t) => {
+  const dom = new JSDOM('<div class="wb-summary-actions"></div>');
+  t.after(() => dom.window.close());
+  const batch = {
+    batchId: 'write-test-20261019',
+    period,
+    summary: { risk: '联调记录，待核验' },
+    unmet: [],
+    short: [],
+    long: [],
+  };
+  const gate = Promise.withResolvers();
+  let reads = 0,
+    writes = 0,
+    readSignal;
+  const page = mountReportImport({
+    document: dom.window.document,
+    state: () => ({ ready: true, key: 'week', period, editVersion: 0 }),
+    preview: (_batch, signal) => {
+      reads++;
+      readSignal = signal;
+      return gate.promise;
+    },
+    commit: async () => {
+      writes++;
+    },
+    changed() {},
+    ask() {},
+  });
+  t.after(() => page.dispose());
+  const action = {
+    kind: 'invoke',
+    target: 'report:import-preview',
+    action: 'preview',
+    value: JSON.stringify(batch),
+  };
+  const controller = new AbortController();
+  await page.apply(action, controller.signal);
+  assert.equal(page.context().processing, true);
+  assert.equal(page.context().batchId, batch.batchId);
+  assert.equal(page.context().canCommit, false);
+  assert.match(page.context().status, /正在读取报告/);
+  assert.equal(dom.window.document.querySelector('.wb-import-overlay').hidden, false);
+  assert.equal(dom.window.document.getElementById('wbImportCommit').disabled, true);
+  controller.abort();
+  assert.equal(
+    readSignal.aborted,
+    false,
+    'accepted read-only preview belongs to the page, not the completed tool call',
+  );
+  await page.apply(action);
+  assert.equal(reads, 1);
+  gate.resolve({ batch, previewId: 'slow-preview', canCommit: true, editVersion: 0 });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(page.context().processing, false);
+  assert.equal(page.context().awaitingUserConfirmation, true);
+  await page.apply(action);
+  assert.equal(reads, 1, 'ready same-batch preview is reused');
+  assert.equal(writes, 0, 'only the user confirmation button can write');
+});
+
+for (const cancel of ['cancel', 'period', 'identity', 'dispose'])
+  test(`pending preview is cancelled on ${cancel} and a late result cannot reopen it`, async (t) => {
+    const dom = new JSDOM('<div class="wb-summary-actions"></div>');
+    t.after(() => dom.window.close());
+    const gate = Promise.withResolvers();
+    const batch = { period, summary: {}, unmet: [], short: [], long: [] };
+    let readSignal,
+      writes = 0;
+    const page = mountReportImport({
+      document: dom.window.document,
+      state: () => ({ ready: true, key: 'week', period }),
+      preview: (_batch, signal) => {
+        readSignal = signal;
+        return gate.promise;
+      },
+      commit: async () => {
+        writes++;
+      },
+      changed() {},
+      ask() {},
+    });
+    t.after(() => page.dispose());
+    await page.apply({
+      kind: 'invoke',
+      target: 'report:import-preview',
+      action: 'preview',
+      value: JSON.stringify(batch),
+    });
+    if (cancel === 'cancel') dom.window.document.getElementById('wbImportCancel').click();
+    else if (cancel === 'identity')
+      dom.window.dispatchEvent(new dom.window.Event('gea-identity-changed'));
+    else if (cancel === 'dispose') page.dispose();
+    else page.invalidate();
+    assert.equal(readSignal.aborted, true);
+    gate.resolve({ batch, previewId: 'late', canCommit: true });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(page.context().canCommit, false);
+    assert.equal(page.context().processing, false);
+    assert.equal(page.context().awaitingUserConfirmation, false);
+    assert.equal(writes, 0);
+  });
+
+test('backend preview failure is published after acknowledgement without claiming a write', async (t) => {
+  const dom = new JSDOM('<div class="wb-summary-actions"></div>');
+  t.after(() => dom.window.close());
+  const gate = Promise.withResolvers();
+  const page = mountReportImport({
+    document: dom.window.document,
+    state: () => ({ ready: true, key: 'week', period }),
+    preview: () => gate.promise,
+    commit: async () => assert.fail('preview must not write'),
+    changed() {},
+    ask() {},
+  });
+  t.after(() => page.dispose());
+  await page.apply({
+    kind: 'invoke',
+    target: 'report:import-preview',
+    action: 'preview',
+    value: '{}',
+  });
+  gate.reject(Error('数据库校验失败'));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(page.context().status, /预览失败：数据库校验失败/);
+  assert.equal(page.context().processing, false);
+  assert.equal(page.context().canCommit, false);
+  assert.equal(page.context().previewId, null);
+});
 test('Agent preview opens dialog; only a user button confirmation writes', async (t) => {
   const dom = new JSDOM('<div class="wb-summary-actions"></div>');
   t.after(() => dom.window.close());
@@ -40,6 +170,7 @@ test('Agent preview opens dialog; only a user button confirmation writes', async
     action: 'preview',
     value: JSON.stringify(batch),
   });
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(page.context().canCommit, true);
   assert.equal(page.elements().find((row) => row.id === 'report:import-scope').value, '郑州');
   assert.equal(
@@ -106,6 +237,7 @@ test('period change invalidates preview; failed commit is not displayed as saved
     action: 'preview',
     value: JSON.stringify(batch),
   });
+  await new Promise((resolve) => setImmediate(resolve));
   dom.window.document.getElementById('wbImportCommit').onclick({ isTrusted: true });
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.match(page.context().status, /数据库未确认/);
@@ -182,6 +314,7 @@ test('cancel, close and Escape discard the preview without writes', async (t) =>
       action: 'preview',
       value: JSON.stringify(batch),
     });
+    await new Promise((resolve) => setImmediate(resolve));
     if (action === 'Escape')
       dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape' }));
     else dom.window.document.getElementById(action).click();
@@ -229,6 +362,7 @@ test('viewing an example preserves the prepared draft; Agent handoff closes only
     action: 'preview',
     value: JSON.stringify(batch),
   });
+  await new Promise((resolve) => setImmediate(resolve));
   doc.getElementById('wbImportExample').click();
   assert.equal(page.context().previewId, 'p');
   assert.equal(page.context().awaitingUserConfirmation, false);

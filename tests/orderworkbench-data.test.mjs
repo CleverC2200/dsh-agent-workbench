@@ -647,6 +647,60 @@ test('month and week finish before auxiliary and historical reads compete for th
   assert.ok(calls.some(({ values }) => values.start === '2026-09-01'));
 });
 
+test('slow historical periods do not block other comparisons or exceed query concurrency', async () => {
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const calls = [];
+  let active = 0,
+    peak = 0;
+  const options = { summary: true, now: new Date('2026-10-30T00:00:00Z') };
+  const running = model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    execute: async (_request, context) => {
+      calls.push(context);
+      peak = Math.max(peak, ++active);
+      try {
+        if (
+          context.queryId === 'workbench.orders.summary' &&
+          ['2026-09-01', '2025-10-01'].includes(context.values.start)
+        )
+          await held;
+        return { rows: [] };
+      } finally {
+        active--;
+      }
+    },
+  });
+  try {
+    for (
+      let attempt = 0;
+      attempt < 200 && !calls.some(({ values }) => values.start === '2025-10-20');
+      attempt++
+    )
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.ok(
+      calls.some(({ values }) => values.start === '2026-10-12'),
+      'previous week starts before slow months finish',
+    );
+    assert.ok(
+      calls.some(({ values }) => values.start === '2025-10-20'),
+      'year week starts before slow months finish',
+    );
+    assert.ok(peak <= 6, 'the shared query concurrency limit is preserved');
+  } finally {
+    release();
+  }
+  const actual = await running;
+  const expected = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    execute: async () => ({ rows: [] }),
+  });
+  const withoutReadAt = ({ readAt: _readAt, ...facts }) => facts;
+  assert.deepEqual(withoutReadAt(actual), withoutReadAt(expected));
+});
+
 test('same-scope period seeds reuse validated sections but retry failed sections and reject old versions', async () => {
   const calls = [];
   const options = {

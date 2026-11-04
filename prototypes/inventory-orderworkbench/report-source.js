@@ -279,15 +279,11 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
         progress();
       }),
     );
-  let next = 0;
   await Promise.all([
     loadMetadata(),
-    ...Array.from({ length: 2 }, async () => {
-      while (next < entries.length) {
-        const [name, spec] = entries[next++];
-        periods[name] = await load(spec, name);
-        progress();
-      }
+    ...entries.map(async ([name, spec]) => {
+      periods[name] = await load(spec, name);
+      progress();
     }),
   ]);
   signal?.throwIfAborted();
