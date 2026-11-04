@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
+import { JSDOM } from 'jsdom';
+import { mountReportImport } from '../prototypes/inventory-orderworkbench/report-import.mjs';
 const { outputFiles } = await build({
   entryPoints: ['src/page-interaction/page-bridge/client.ts'],
   bundle: true,
@@ -20,6 +22,74 @@ const host = await build({
 });
 const { createPageBridge } = await import(
   'data:text/javascript;base64,' + Buffer.from(host.outputFiles[0].text).toString('base64')
+);
+
+test(
+  'report preview returns a page receipt before slow validation and later opens a valid confirmation',
+  { timeout: 3000 },
+  async (t) => {
+    const dom = new JSDOM('<div class="wb-summary-actions"></div>');
+    t.after(() => dom.window.close());
+    const period = { type: 'WEEK', start: '2026-10-19', end: '2026-10-26' };
+    const batch = {
+      batchId: 'bridge-preview-test',
+      period,
+      summary: { risk: '联调记录' },
+      unmet: [],
+      short: [],
+      long: [],
+    };
+    const backend = Promise.withResolvers();
+    let readSignal;
+    const importer = mountReportImport({
+      document: dom.window.document,
+      state: () => ({ ready: true, key: 'week', period }),
+      preview: (_batch, signal) => {
+        readSignal = signal;
+        return backend.promise;
+      },
+      commit: async () => assert.fail('a preview must not write'),
+      changed() {},
+      ask() {},
+    });
+    t.after(() => importer.dispose());
+    const bridge = createPageBridge();
+    const call = bridge.enqueue('owned', {
+      toolCallName: 'apply',
+      args: {
+        kind: 'invoke',
+        target: 'report:import-preview',
+        action: 'preview',
+        value: JSON.stringify(batch),
+      },
+    });
+    const stop = startPageBridgeClient({
+      endpoint: 'page',
+      sessionId: 'owned',
+      initialDelayMs: 0,
+      pollMs: 1,
+      closeOnDispose: false,
+      applyTimeoutMs: 1000,
+      request: async (_endpoint, payload) => ({
+        events: bridge.pull(payload.sessionId, payload.toolMessages),
+      }),
+      apply: async (args, _meta, signal) => {
+        await importer.apply(args, signal);
+        return { applied: true };
+      },
+    });
+    t.after(stop);
+    const receipt = await bridge.wait('owned', call, 500, 1);
+    assert.ok(receipt, 'waiting for backend validation must not consume the Host receipt deadline');
+    assert.equal(JSON.parse(receipt.content).applied, true);
+    assert.equal(importer.context().processing, true);
+    stop();
+    assert.equal(readSignal.aborted, false);
+    backend.resolve({ batch, previewId: 'validated', canCommit: true });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(importer.context().previewId, 'validated');
+    assert.equal(importer.context().awaitingUserConfirmation, true);
+  },
 );
 
 test('disposing the page cancels its active application and does not publish a late success', async () => {
