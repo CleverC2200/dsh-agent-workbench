@@ -47,7 +47,7 @@ Host 公开认证 Fetch：
 
 ## 官方呈现与 Native 文档
 
-同一真实 Session 中切回首页只隐藏已访问 Document，保留其 Native DOM 与 iframe；隐藏时 `active=false`，停止当前业务能力与页面捕获。页面恢复协调位于常驻 Documents 席位，冷启动不依赖已选中的页面。真实 Session 切换继续遵守 Core `session-maybe` 的重挂语义，状态恢复沿既有持久存储与身份核对，不以 DOM 保留代替恢复。CSS anchor 只引用 Workbench 自己的占位，窗口控制区使用 Core 公开的 `--dsh-frame-leading-clearance` 保留点击空间，不读取壳层私有 DOM 或复制栏宽状态。
+Documents 容器使用 root 席位；主会话变化由独立的 `session-maybe` 观察席位交给既有恢复协调处理。每个已访问 Document 通过公开 `retain` 引用和 `SessionProvider` 绑定自身关联的真实 Core Session，普通菜单切换和返回首页只隐藏页面，不因其他页面成为主会话而重挂自身 DOM 或 iframe。隐藏时 `active=false`，停止当前业务能力与页面捕获；呈现引用不保留 GEA page grant 或在途执行。页面自身关联替换、身份撤销、页面注销或 UI 卸载会释放引用；自身 Session 切换仍遵守 Core 的重挂语义，冷恢复继续核对实际 Session 与身份，不以 DOM 保留代替恢复。CSS anchor 只引用 Workbench 自己的占位，窗口控制区使用 Core 公开的 `--dsh-frame-leading-clearance` 保留点击空间，不读取壳层私有 DOM 或复制栏宽状态。
 
 [cordis.patch.yml](../cordis.patch.yml) 插入本插件并禁用默认 `ui-sidebar`；Workbench 贡献公开侧栏席位，继续消费官方工作区浏览器与设置。官方 `ui-layout` 和 `ui-conversation` 服务与 Factory 保持启用。macOS 品牌行位于独立窗口控制行下方；两种侧栏状态使用官方公共图标，收起后整列退出布局。
 

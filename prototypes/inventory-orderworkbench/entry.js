@@ -2,13 +2,13 @@ import { encodeReportRequest } from './report-transfer.mjs';
 import { workbenchCellMissingReason } from './missing-reasons.mjs';
 import { createReportPersistence } from './report-persistence.mjs';
 import { createPageViewState } from '../../business/shared/view-state.js';
-import { ask, draft, ready, call } from '../../business/shared/channel.js';
+import { ask, draft, ready, call, currentSessionId } from '../../business/shared/channel.js';
 import { metricDetailsRequest } from './metric-details.mjs';
 import { loadWorkbenchFacts, loadWorkbenchSkuPage } from './live-source.js';
 import { createFrameProgress } from '../../business/shared/frame-progress.js';
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
 import { workbenchPresentation, workbenchBaseIncluded } from './live-presentation.mjs';
-import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache } from './presentation-cache.mjs';
+import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache, createWorkbenchPeriodCacheLifecycle } from './presentation-cache.mjs';
 import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
 import { reusableWorkbenchFacts, compatibleWorkbenchFacts } from './metric-model.mjs';
 import { publishReport } from './publication.js';
@@ -35,6 +35,7 @@ const cachedWorkbenchEvidence = createWorkbenchEvidenceCache();
 let reportLoaded = false, savedPresentation = null, reportEdited = false;
 const periodCacheMaxAge = 20 * 60 * 1000;
 const periodReports = new Map();
+const periodCacheLifecycle = createWorkbenchPeriodCacheLifecycle(periodReports, { maxAge: periodCacheMaxAge, reusable: reusableWorkbenchFacts, now: () => Date.now() });
 let activePeriodReport;
 let reportImporter;
 let workbenchImportHistory = [];
@@ -2500,12 +2501,19 @@ async function readCurrentPeriod() {
   }
 }
 clearLiveMetrics();
-void ready.then(()=>{if(liveConnected)return;liveConnected=true;liveReadKey='';renderSelectedPeriod();});
-for (const name of ['gea-identity-changed','gea-session-changing','pagehide']) window.addEventListener(name,()=>{
-  for(const entry of periodReports.values()){entry.controller.abort();entry.persistence.cancel();}periodReports.clear();activePeriodReport=null;
-  liveConnected=false;liveController?.abort();persistence.cancel();reportEdited=false;reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
-});
-window.addEventListener('gea-session-changed',()=>{if(liveConnected)return;liveConnected=true;liveReadKey='';renderSelectedPeriod();});
+const resumeWorkbenchConnection = () => {
+  if (!periodCacheLifecycle.resume(currentSessionId()) || liveConnected) return;
+  liveConnected=true;liveReadKey='';renderSelectedPeriod();
+};
+const suspendWorkbenchConnection = (clear = false) => {
+  if (clear) periodCacheLifecycle.clear(); else periodCacheLifecycle.suspend();
+  activePeriodReport=null;liveController=undefined;
+  liveConnected=false;reportEdited=false;reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
+};
+void ready.then(resumeWorkbenchConnection);
+window.addEventListener('gea-session-changing',()=>suspendWorkbenchConnection());
+for (const name of ['gea-identity-changed','pagehide']) window.addEventListener(name,()=>suspendWorkbenchConnection(true));
+window.addEventListener('gea-session-changed',resumeWorkbenchConnection);
 
 function renderWorkbench() {
   renderWorkbenchSummary();

@@ -240,6 +240,9 @@ export class WorkbenchController implements AgentWorkbench {
       ? selection
       : undefined;
   }
+  sessionForPage(page: MainPanelId): DocumentSession | undefined {
+    return this.currentSelection(page);
+  }
   private currentSelection(page: MainPanelId): DocumentSession | undefined {
     if (!this.activePresets.has(page)) return undefined;
     return this.associations.get(page)?.get(this.activePresets.get(page)!);
