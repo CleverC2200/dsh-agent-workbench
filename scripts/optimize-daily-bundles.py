@@ -3,14 +3,16 @@
 Member matching still checks every input before consuming these rows. Physical output columns
 remain separate, so RETURN permission filtering retains its normal dependency checks.
 """
-import json, re, copy
+import argparse, json, re, copy
 from pathlib import Path
 import sqlglot
 from sqlglot import exp
 from sqlglot.optimizer.simplify import simplify
 from sqlglot.optimizer.eliminate_ctes import eliminate_ctes
 repo = Path(__file__).resolve().parents[1]
-for agent in ['fc', 'qll', 'aqkc']:
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--agents',nargs='+',choices=['fc','qll','aqkc'],default=['fc','qll','aqkc'])
+for agent in parser.parse_args().agents:
  cfg=json.loads((repo/f'business/inventory-{agent}/sql.config.json').read_text());original=copy.deepcopy(cfg);bundle=cfg['dailySummary']['bundle'];q=cfg['queries'][bundle['queryId']];sql=q['request']['sql'];fixed={}
  for member in bundle['members']:
   for param,name in member['bindings'].items():
