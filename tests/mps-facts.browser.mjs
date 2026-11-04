@@ -213,7 +213,9 @@ test('confirmed monthly versions and shipment measures populate independently wh
   assert(
     calls
       .filter((call) => /stock|inventory/.test(call.queryId))
-      .every((call) => ['inventory-targets.detail', 'inventory-targets.count'].includes(call.queryId)),
+      .every((call) =>
+        ['inventory-targets.detail', 'inventory-targets.count'].includes(call.queryId),
+      ),
   );
 });
 test('full fact paging keeps zero and missing base distinct, without a failed shipment blocking plans', async (t) => {
