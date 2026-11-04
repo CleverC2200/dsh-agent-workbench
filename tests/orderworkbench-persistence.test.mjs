@@ -52,3 +52,36 @@ test('late saves from the old page cannot publish saved state on a new period', 
   await turn();
   assert.equal(states.at(-1), 'loaded');
 });
+
+test('import persistence uses confirmed edit revision and stable retry request id', async () => {
+  let fail = true;
+  const calls = [],
+    states = [];
+  const period = { type: 'WEEK', start: '2026-10-19', end: '2026-10-26' };
+  const owner = createReportPersistence(
+    async (request) => {
+      calls.push(structuredClone(request));
+      if (request.operation === 'load')
+        return { version: 0, editVersion: 3, report: null, scope: { key: 'scope1' } };
+      if (request.operation === 'preview-import')
+        return { editVersion: 3, scope: { key: 'scope1' }, previewId: 'preview' };
+      if (fail) throw Error('NETWORK');
+      return {
+        saved: true,
+        version: 4,
+        requestId: request.requestId,
+        edits: { summary: { risk: '核验结果' } },
+      };
+    },
+    (state) => states.push(state),
+  );
+  await owner.open(period, new AbortController().signal);
+  const prepared = await owner.previewImport({});
+  await assert.rejects(owner.commitImport(prepared, {}), /NETWORK/);
+  fail = false;
+  await owner.commitImport(prepared, {});
+  const writes = calls.filter((row) => row.operation === 'commit-import');
+  assert.equal(writes[0].requestId, writes[1].requestId);
+  assert.equal(owner.state().editVersion, 4);
+  assert.equal(states.at(-1), 'saved');
+});

@@ -17,7 +17,8 @@
     "skills/operations-kpi-performance-analysis/SKILL.md",
     "skills/operations-order-kpi-details/SKILL.md",
     "skills/operations-exception-root-cause/SKILL.md",
-    "skills/improvement-action-closure/SKILL.md"
+    "skills/improvement-action-closure/SKILL.md",
+    "skills/operations-workbook-exception-import/SKILL.md"
   ],
   "mcp": "mcp.json",
   "gea": {

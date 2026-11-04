@@ -181,7 +181,8 @@ export function connectHtmlFrame(
             JSON.stringify(message.parameters?.context ?? {}).length > 100000
           )
             throw Error('INVALID_PAGE_QUESTION');
-          await call('context', message.parameters?.context, task.signal);
+          if (message.parameters?.context !== undefined)
+            await call('context', message.parameters.context, task.signal);
           if (!alive() || task.signal.aborted) return;
           await execution.prompt(
             connection,

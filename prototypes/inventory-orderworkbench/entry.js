@@ -12,6 +12,8 @@ import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache } from '
 import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
 import { reusableWorkbenchFacts, compatibleWorkbenchFacts } from './metric-model.mjs';
 import { publishReport } from './publication.js';
+import { mountReportImport } from './report-import.mjs';
+import { projectReportImports, importedSummary, summarySupplement } from './import-content.mjs';
 const view = createPageViewState('inventory-orderworkbench');
 let restoringView = false;
 const pageTimeouts = new Set(),
@@ -34,6 +36,12 @@ let reportLoaded = false, savedPresentation = null, reportEdited = false;
 const periodCacheMaxAge = 20 * 60 * 1000;
 const periodReports = new Map();
 let activePeriodReport;
+let reportImporter;
+let workbenchImportHistory = [];
+let workbenchImportOverrides = {};
+const importedContent = () => projectReportImports(workbenchImportHistory, workbenchImportOverrides);
+const effectiveSummary = () => importedSummary(workbenchSummaryContent, importedContent().summary, defaultWorkbenchSummary);
+const supplementalSummary = () => summarySupplement(workbenchSummaryContent, importedContent().summary, defaultWorkbenchSummary);
 let eventFilter = 'focus';
 let taskFilter = 'all';
 let dimensionTab = 'base-performance';
@@ -79,13 +87,15 @@ let persistence = createReportPersistence(
   },
 );
 function reportEdits() {
-  return { summary: workbenchSummaryContent, unmet: addedWorkbenchUnmetEntries,
+  return { imports: workbenchImportHistory, importOverrides: workbenchImportOverrides, summary: workbenchSummaryContent, unmet: addedWorkbenchUnmetEntries,
     overrides: [...workbenchUnmetOverrides], deleted: [...deletedWorkbenchUnmetKeys],
     directors: workbenchDirectorNotes, references: workbenchReferenceLinks,
-    improvements: [...workbenchView.querySelectorAll('.wb-improvement-table')].map(table => [...table.tBodies[0].rows].map(row => [...row.querySelectorAll('td:not(.actions)')].map(cell => ({text: cell.textContent, className: cell.className.replace('is-editing', '').trim()})))),
+    improvements: [...workbenchView.querySelectorAll('.wb-improvement-table')].map(table => [...table.tBodies[0].rows].filter(row => !row.dataset.importRow).map(row => [...row.querySelectorAll('td:not(.actions)')].map(cell => ({text: cell.textContent, className: cell.className.replace('is-editing', '').trim()})))),
     tasks: [...improvementTasks], issues: [...dimensionIssueEdits], createdTasks: [...createdWorkbenchTasks] };
 }
 function restoreReportEdits(edits = {}) {
+  workbenchImportHistory = edits.imports ?? [];
+  workbenchImportOverrides = edits.importOverrides ?? {};
   workbenchSummaryContent = { ...defaultWorkbenchSummary, ...edits.summary };
   addedWorkbenchUnmetEntries = edits.unmet ?? [];
   workbenchDirectorNotes = edits.directors ?? [];
@@ -102,6 +112,7 @@ function restoreReportEdits(edits = {}) {
     }
   });
   deletedWorkbenchUnmetKeys.clear(); for (const key of edits.deleted ?? []) deletedWorkbenchUnmetKeys.add(key);
+  renderImportedImprovements();
 }
 function saveEditedReport() { reportEdited = true; if(activePeriodReport){activePeriodReport.edits=structuredClone(reportEdits());activePeriodReport.dirty=true;} return persistence.saveEdits(reportEdits()); }
 function saveWorkbenchSummary() { return saveEditedReport(); }
@@ -112,6 +123,7 @@ function saveWorkbenchLocalState() { return saveEditedReport(); }
 window.addEventListener('beforeunload', event => { if (reportEdited || [...periodReports.values()].some(entry=>entry.dirty || entry.persistence.pending())) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('click', event => {
   const button = event.target.closest('button');
+  if (reportImporter?.busy && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)/.test(attribute.name))) { event.preventDefault(); event.stopImmediatePropagation(); showWorkbenchToast('正在写入导入内容，请等待保存结果'); return; }
   if (!reportLoaded && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)$/.test(attribute.name))) {
     event.preventDefault(); event.stopImmediatePropagation();
     showWorkbenchToast('报告尚未读取完整或未获授权，暂不能编辑保存。'); return;
@@ -2167,11 +2179,41 @@ function escapeHtml(value) {
     (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char],
   );
 }
+function renderImportedImprovements() {
+  for (const [index, table] of [...workbenchView.querySelectorAll('.wb-improvement-table')].entries()) {
+    table.querySelectorAll('[data-import-row]').forEach(row => row.remove());
+    for (const entry of importedContent()[index === 0 ? 'short' : 'long']) {
+      const row = document.createElement('tr'); row.dataset.importRow = entry.id;
+      const fields = index === 0 ? [entry.direction, entry.measure, entry.issue] : [entry.mechanism, entry.content, entry.goal, entry.status];
+      for (const cellValue of entry.cells ?? fields.map(text => ({ text, className: '' }))) {
+        const cell = document.createElement('td'); cell.textContent = cellValue.text; cell.className = cellValue.className; row.append(cell);
+      }
+      appendImprovementActions(row); table.tBodies[0].append(row);
+    }
+  }
+}
 function renderWorkbenchSummary() {
   document.querySelectorAll('[data-wb-summary-content]').forEach((node) => {
     const key = node.dataset.wbSummaryContent;
-    node.textContent = workbenchSummaryContent[key] ?? '暂无人工填写的分析。';
+    node.textContent = effectiveSummary()[key] ?? '暂无人工填写的分析。';
   });
+  document.getElementById('wbImportedSummary')?.remove();
+  const additions = supplementalSummary();
+  if (!Object.keys(additions).length) return;
+  const section = document.createElement('section'); section.id = 'wbImportedSummary';
+  section.style.cssText = 'border-top:1px solid #e5e7eb;margin-top:16px;padding-top:14px';
+  const heading = document.createElement('h3'); heading.textContent = '补充结论';
+  heading.style.cssText = 'font-size:15px;margin:0 0 8px'; section.append(heading);
+  const lines = document.createElement('div'); lines.className = 'wb-summary-lines';
+  const labels = {positive:'正向：',risk:'风险：',rhythm:'旬/周节奏：'};
+  for (const [key, value] of Object.entries(additions)) {
+    const row = document.createElement('p'); const icon = document.createElement('span');
+    icon.className = 'wb-summary-icon'; icon.textContent = '✦'; icon.setAttribute('aria-hidden','true');
+    const body = document.createElement('span'), label = document.createElement('strong'), text = document.createElement('span');
+    label.textContent = labels[key]; text.textContent = value; text.style.whiteSpace = 'pre-wrap';
+    body.append(label,text); row.append(icon,body); lines.append(row);
+  }
+  section.append(lines); document.getElementById('wbMetricAnalysis').append(section);
 }
 function renderWorkbenchReferenceLinks() {
   const list = document.getElementById('wbReferenceList');
@@ -2295,6 +2337,7 @@ async function readCurrentPeriod() {
   if (!liveConnected) return;
   const key=periodMode+':'+selectedMonth+(periodMode==='week'?':'+selectedWeek:'');
   if (key===liveReadKey) return;
+  reportImporter?.invalidate();
   if(activePeriodReport && reportLoaded) activePeriodReport.edits=structuredClone(reportEdits());
   if (activePeriodReport && !activePeriodReport.finished) {
     activePeriodReport.readController?.abort();
@@ -2649,10 +2692,10 @@ function renderWorkbenchUnmetCards(sectionTitle, items, emptyText) {
         )
         .join('');
       const tools = `<div class="wb-unmet-card-actions"><button type="button" aria-label="编辑${escapeHtml(item.title)}" title="编辑" data-wb-edit-unmet="${encodeURIComponent(item.key)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="delete" type="button" aria-label="删除${escapeHtml(item.title)}" title="删除" data-wb-delete-unmet="${encodeURIComponent(item.key)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div>`;
-      return `<article class="wb-unmet-card" data-wb-unmet-card="${encodeURIComponent(item.key)}">${tools}<h4><span class="wb-unmet-dot" aria-hidden="true">●</span>${escapeHtml(item.title)}</h4>${item.analysis ? `<p class="wb-unmet-analysis"><strong>未达成指标：</strong>${escapeHtml(item.analysis)}</p>` : ''}<ul>${reasons}</ul><div class="wb-unmet-measures"><strong><span aria-hidden="true">✓</span> 改善（执行情况）：</strong><div>${measures}</div></div></article>`;
+      return `<article class="wb-unmet-card" data-wb-unmet-card="${encodeURIComponent(item.key)}">${tools}<h4><span class="wb-unmet-dot" aria-hidden="true">●</span>${escapeHtml(item.title)}</h4>${item.analysis ? `<p class="wb-unmet-analysis"><strong>未达成指标：</strong>${escapeHtml(item.analysis)}</p>` : ''}<ul>${reasons}</ul><div class="wb-unmet-measures"><strong><span aria-hidden="true">✓</span> ${item.imported ? '改善措施' : '改善（执行情况）'}：</strong><div>${measures}</div></div></article>`;
     })
     .join('');
-  const kind = sectionTitle.startsWith('基地') ? 'base' : 'item';
+  const kind = sectionTitle.startsWith('基地') ? 'base' : sectionTitle.startsWith('应责总监') ? 'director' : 'item';
   return `<section class="wb-unmet-section"><div class="wb-unmet-section-head"><h3>${escapeHtml(sectionTitle)}</h3><div class="wb-unmet-section-actions"><button class="wb-unmet-ai-button" type="button" data-wb-unmet-ai="${kind}">✦ AI 分析</button><button class="wb-unmet-add-button" type="button" data-wb-add-unmet="${kind}">添加</button></div></div>${cards || `<p class="wb-unmet-empty">${escapeHtml(emptyText)}</p>`}</section>`;
 }
 function unmetTextLines(value) {
@@ -2662,7 +2705,7 @@ function unmetTextLines(value) {
     .filter(Boolean);
 }
 function getWorkbenchUnmetItems(kind, selectedBase = '') {
-  const sourceItems = kind === 'base' ? workbenchBaseUnmetItems : workbenchItemUnmetItems;
+  const sourceItems = kind === 'base' ? workbenchBaseUnmetItems : kind === 'item' ? workbenchItemUnmetItems : [];
   const staticItems = sourceItems.map((item, index) => {
     const key = `${kind}:static:${index}`;
     const separator = item.title.indexOf('｜');
@@ -2713,7 +2756,12 @@ function getWorkbenchUnmetItems(kind, selectedBase = '') {
         key,
       };
     });
-  return [...staticItems, ...addedItems].filter(
+  const imports = importedContent().unmet.filter(row => row.dimension === kind).map(row => {
+    const key = kind + ':import:' + row.id; const value = workbenchUnmetOverrides.get(key) ?? row;
+    return { key, title: value.entity, entity: value.entity, reasons: unmetTextLines(value.reason), measures: unmetTextLines(value.measure),
+      imported: true, formTitle: value.entity, formReason: value.reason, formMeasure: value.measure };
+  });
+  return [...staticItems, ...addedItems, ...imports].filter(
     (item) =>
       (!item.key.includes(':static:') || workbenchUnmetOverrides.has(item.key)) &&
       !deletedWorkbenchUnmetKeys.has(item.key) &&
@@ -2752,7 +2800,7 @@ function renderWorkbenchPerformance(dimension) {
       : dimensionTab === 'item-performance'
         ? renderWorkbenchItemUnmet()
         : dimensionTab === 'director-performance'
-          ? renderWorkbenchDirectorNotes()
+          ? renderWorkbenchUnmetCards('应责总监未达成项：原因分析与改善措施', getWorkbenchUnmetItems('director'), '当前暂无应责总监未达成事项。') + renderWorkbenchDirectorNotes()
           : '';
   panel.innerHTML = `<section class="wb-performance-period"><h3>${escapeHtml(dimension.monthly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.monthly, '', dimension.baseColumnIndex)}</section><section class="wb-performance-period"><h3>${escapeHtml(dimension.weekly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.weekly, '', dimension.baseColumnIndex)}</section>${bottomSection}<p class="wb-performance-note">当前授权范围；环比同比比较同长度已完成周期。*表示可判定样本或样本差，覆盖率见悬浮，不代表全量指标。“—”表示无有效计算依据。共同责任分别展示，不相加。</p>`;
 }
@@ -2947,9 +2995,10 @@ function saveIssueEditor(generateTask) {
 }
 function openWorkbenchUnmetAdd(kind, trigger, itemKey = '') {
   const isBase = kind === 'base';
+  const entityLabel = kind === 'director' ? '应责总监' : isBase ? '基地' : '品项';
   const entitySelect = document.getElementById('wbUnmetEntity');
   const item = itemKey ? getWorkbenchUnmetItems(kind).find((entry) => entry.key === itemKey) : null;
-  const options = isBase
+  const options = kind === 'director' ? [...new Set(getWorkbenchUnmetItems('director').map(row => row.entity))] : isBase
     ? workbenchPerformance['base-performance'].monthly.rows
         .map((row) => row[0])
         .filter((base) => base !== '合计')
@@ -2959,7 +3008,7 @@ function openWorkbenchUnmetAdd(kind, trigger, itemKey = '') {
   document.getElementById('wbUnmetAddTitle').textContent = item
     ? isBase
       ? '编辑基地未达成项'
-      : '编辑品项未达成项'
+      : '编辑' + entityLabel + '未达成项'
     : isBase
       ? '添加基地未达成项'
       : '添加品项未达成项';
@@ -2968,8 +3017,8 @@ function openWorkbenchUnmetAdd(kind, trigger, itemKey = '') {
     : isBase
       ? '补充基地未达成原因与改善措施'
       : '补充品项未达成原因与改善措施';
-  document.getElementById('wbUnmetEntityLabel').textContent = isBase ? '选择基地' : '选择品项';
-  entitySelect.innerHTML = `<option value="">${isBase ? '请选择基地' : '请选择品项'}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${item?.entity === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}`;
+  document.getElementById('wbUnmetEntityLabel').textContent = '选择' + entityLabel;
+  entitySelect.innerHTML = `<option value="">${'请选择' + entityLabel}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${item?.entity === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}`;
   document.getElementById('wbUnmetTitleInput').value = item?.formTitle || '';
   document.getElementById('wbUnmetReasonInput').value = item?.formReason || '';
   document.getElementById('wbUnmetMeasureInput').value = item?.formMeasure || '';
@@ -3123,7 +3172,7 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !directorNoteOverlay.hidden) closeWorkbenchDirectorNote();
 });
 function openWorkbenchUnmetDelete(key, trigger) {
-  const kind = key.startsWith('base:') ? 'base' : 'item';
+  const kind = key.startsWith('base:') ? 'base' : key.startsWith('director:') ? 'director' : 'item';
   const item = getWorkbenchUnmetItems(kind).find((entry) => entry.key === key);
   if (!item) return;
   document.getElementById('wbUnmetDeleteCopy').textContent =
@@ -3378,7 +3427,7 @@ const summaryInputs = {
 };
 function openWorkbenchSummaryEdit(trigger) {
   Object.entries(summaryInputs).forEach(([key, input]) => {
-    input.value = workbenchSummaryContent[key];
+    input.value = effectiveSummary()[key];
   });
   pendingWorkbenchSummaryTrigger = trigger;
   summaryEditOverlay.hidden = false;
@@ -3482,20 +3531,22 @@ workbenchView.addEventListener('click', (event) => {
     improvementEdit.setAttribute('aria-label', isEditing ? '编辑改善措施' : '保存改善措施');
     improvementEdit.title = isEditing ? '编辑' : '保存';
     if (!isEditing) row.querySelector('td:not(.actions)')?.focus();
-    else { saveEditedReport(); showWorkbenchToast('正在保存改善措施…'); }
+    else { if (row.dataset.importRow) workbenchImportOverrides[row.dataset.importRow] = [...row.querySelectorAll('td:not(.actions)')].map(cell => ({ text: cell.textContent, className: cell.className })); saveEditedReport(); showWorkbenchToast('正在保存改善措施…'); }
     return;
   }
   const improvementDelete = event.target.closest('[data-wb-improvement-delete]');
   if (improvementDelete) {
     if (!window.confirm('确认删除这条改善措施吗？删除将保存到当前周期报告。')) return;
-    improvementDelete.closest('tr')?.remove();
+    const row = improvementDelete.closest('tr');
+    if (row?.dataset.importRow) workbenchImportOverrides[row.dataset.importRow] = null;
+    row?.remove();
     saveEditedReport(); showWorkbenchToast('正在保存删除结果…');
     return;
   }
   const editUnmet = event.target.closest('[data-wb-edit-unmet]');
   if (editUnmet) {
     const key = decodeURIComponent(editUnmet.dataset.wbEditUnmet);
-    openWorkbenchUnmetAdd(key.startsWith('base:') ? 'base' : 'item', editUnmet, key);
+    openWorkbenchUnmetAdd(key.startsWith('base:') ? 'base' : key.startsWith('director:') ? 'director' : 'item', editUnmet, key);
     return;
   }
   const deleteUnmet = event.target.closest('[data-wb-delete-unmet]');
@@ -3516,7 +3567,7 @@ workbenchView.addEventListener('click', (event) => {
       showWorkbenchToast('当前没有未达成项可供分析。');
       return;
     }
-    const title = kind === 'base' ? '基地未达成项' : '品项未达成项';
+    const title = kind === 'base' ? '基地未达成项' : kind === 'director' ? '应责总监未达成项' : '品项未达成项';
     const details = items
       .map((item) =>
         [
@@ -3901,6 +3952,19 @@ view.subscribe((state) => {
   updateReport();
 });
 
+reportImporter = mountReportImport({ document,
+  state: () => ({ ...persistence.state(), key: liveReadKey, ready: reportLoaded && !reportEdited && !persistence.pending() && !document.querySelector('.is-editing') && ![...document.querySelectorAll('.wb-adopt-overlay')].some(node => !node.hidden) }),
+  preview: (batch, signal) => persistence.previewImport(batch, signal),
+  commit: async (prepared, signal) => {
+    const entry = activePeriodReport; const result = await entry.persistence.commitImport(prepared, prepared.batch, signal);
+    entry.edits = structuredClone(result.edits);
+    if (activePeriodReport === entry && !entry.controller.signal.aborted) {
+      restoreReportEdits(result.edits); reportEdited = false; entry.dirty = false;
+      renderWorkbenchSummary(); renderWorkbenchDimensions(); renderImportedImprovements();
+    }
+    return result;
+  }, changed: () => updateReport(), ask: text => ask(text),
+});
 const updateReport = publishReport(
   () => {
     const report = activeReport();
@@ -3949,7 +4013,9 @@ const updateReport = publishReport(
             },
           }))
         : [],
-      summary: report ? { ...workbenchSummaryContent, source: '人工编辑内容，保存状态见页面提示' } : null,
+      summary: report ? { ...effectiveSummary(), source: '人工维护与受控导入内容，保存状态见页面提示' } : null,
+      supplementalSummary: report ? supplementalSummary() : null,
+      importPreview: reportImporter.context(),
       dimension: report
         ? {
             key: dimensionTab,
@@ -3959,7 +4025,7 @@ const updateReport = publishReport(
                 ? getWorkbenchUnmetItems('base')
                 : dimensionTab === 'item-performance'
                   ? getWorkbenchUnmetItems('item')
-                  : [],
+                  : dimensionTab === 'director-performance' ? getWorkbenchUnmetItems('director') : [],
             directorNotes: dimensionTab === 'director-performance' ? workbenchDirectorNotes : [],
           }
         : null,
@@ -3984,9 +4050,11 @@ const updateReport = publishReport(
     };
   },
   () => {
+    reportImporter.dispose();
     for (const handle of pageTimeouts) clearTimeout(handle);
     for (const url of downloadUrls) URL.revokeObjectURL(url);
     pageTimeouts.clear();
     downloadUrls.clear();
   },
+  reportImporter,
 );
