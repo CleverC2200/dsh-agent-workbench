@@ -41,9 +41,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.list table[data-resizable] tfoot td {
-  background: #f7f8fa;
-  border-top: 1px solid #d8dde5;
+.list table tfoot td {
+  background: #f5f6f8;
+  border-top: 1px solid #e3e6ea;
   font-weight: 700;
 }
 .toolbar {

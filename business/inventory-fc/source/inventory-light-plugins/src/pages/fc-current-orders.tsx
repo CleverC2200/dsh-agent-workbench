@@ -44,7 +44,18 @@ const orderSchema = lineSchema.omit({ sku: true, material_name: true }).extend({
 });
 type Order = z.infer<typeof orderSchema>;
 type Line = z.infer<typeof lineSchema>;
-type Page<T> = { rows: T[]; total: number };
+const orderTotalsSchema = orderSchema.pick({
+  sku_count: true,
+  demand: true,
+  allocated: true,
+  remaining: true,
+  shortage: true,
+});
+type Page<T> = {
+  rows: T[];
+  total: number;
+  totals: z.infer<typeof orderTotalsSchema> | null;
+};
 type ReadState<T> =
   | { kind: 'loading' }
   | { kind: 'ready'; data: Page<T> }
@@ -73,7 +84,17 @@ async function readPage<T>(
     { signal, requiredColumns: definition.resultColumns },
   );
   const unpacked = unpackAtomicPage(result, page, pageSize);
-  return { rows: z.array(schema).parse(unpacked.rows), total: unpacked.total };
+  const totals = definition.scopeSummaryColumns
+    ? orderTotalsSchema.parse(
+        Object.fromEntries(
+          Object.entries(definition.scopeSummaryColumns).map(([field, alias]) => [
+            field,
+            result.rows[0]?.[alias] ?? null,
+          ]),
+        ),
+      )
+    : null;
+  return { rows: z.array(schema).parse(unpacked.rows), total: unpacked.total, totals };
 }
 
 function OrderLines({
@@ -408,6 +429,22 @@ export function FcCurrentOrders({
                   </React.Fragment>
                 ))}
               </tbody>
+              {state.data.totals && (
+                <tfoot aria-label="当前筛选合计">
+                  <tr>
+                    <td>合计</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>{qty(state.data.totals.sku_count)}</td>
+                    <td>{qty(state.data.totals.demand)}</td>
+                    <td>{qty(state.data.totals.allocated)}</td>
+                    <td>{qty(state.data.totals.remaining)}</td>
+                    <td>{qty(state.data.totals.shortage)}</td>
+                    <td>-</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
           {!state.data.rows.length && <p>暂无未发货完成订单。</p>}
