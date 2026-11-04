@@ -17,6 +17,9 @@ import zh from './src/workbench/original/zh-CN.json';
 import en from './src/workbench/original/en-US.json';
 import { RegionalApprovalResubmitDialog } from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
 import { salesPlanDraftSnapshot } from './src/workbench/original/workbenches/regionalApproval/models/salesPlanLocalDraftModel.ts';
+import { WorkbenchHostProvider } from './src/workbench/original/bridge.ts';
+import RegionalApprovalLiveActionDialog from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalLiveActionDialog.tsx';
+import RegionalApprovalBatchActionDialog from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalBatchActionDialog.tsx';
 import { BackendHttpError } from './src/workbench/original/http-error.ts';
 const i18n=i18next.createInstance();
 const query=new URL(location.href).searchParams;
@@ -41,7 +44,26 @@ const client={
  action:{invoke:async(request)=>{window.actions.push(request);if(scenario==='permission')throw new BackendHttpError({method:'POST',path:'/actions',status:403,body:{error:'denied'}});throw Error('fixture-refusal');}},
  submit:{invoke:async(request)=>{window.submissions.push(request);throw Error('fixture-refusal');}},
 };
-createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDialog items={items} client={client} connected={!['channel','signed-out-source'].includes(scenario)} unavailableReason={query.get('reason')??undefined} t={i18n.t.bind(i18n)} onClose={()=>{}} onSucceeded={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} />);
+if(scenario?.startsWith('reject-')) {
+ const mode=query.get('mode')??'pending';
+ const row={planId:'return-plan',versionId:'return-version',status:2,planTypeCode:'Y',skuCount:1};
+ const access={versionId:row.versionId,status:row.status,nodeOrder:3,approvalRole:'province',policy:'role-visible-v1',roleContractSupported:true,roleActions:[{role:'province',allowedActions:['APPROVE','REJECT']}],allowedActions:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)};
+ const detail={currentVersion:{...row,id:row.versionId,effective:true,orderType:query.get('orderType')??'M'},skus:[{id:'s1',versionId:row.versionId,skuCode:'789',qty:'100',regionConfirmedQty:'120',price:'2',amt:'200',regionConfirmedAmount:'240'}],actionContext:access};
+ const stored={role:'province',adjustments:[{skuCode:'789',adjustQty:mode==='stored'?'-10':'-5'}]};
+ const pendingValues=mode==='stored'?undefined:{'789':mode==='invalid'?'-1':'110'};
+ window.draftReads=[];
+ const salesPlan={...client,draft:{invoke:async(params)=>{
+   window.draftReads.push({planId:params.planId,approvalRole:params.approvalRole});
+   if(mode==='deferred') await new Promise(resolve=>window.resolveDraft=resolve);
+   if(mode==='failed') throw Error('fixture draft failure');
+   return {draft:stored,stale:mode==='stale'};
+ }}};
+ const root=createRoot(document.getElementById('root'));
+ root.render(<WorkbenchHostProvider value={{salesPlan}}>{scenario==='reject-single'
+  ?<RegionalApprovalLiveActionDialog visible row={row} approvalStage="province" approvalStages={['province']} initialAction="REJECT" evidence={detail} pendingValues={pendingValues} t={i18n.t.bind(i18n)} client={salesPlan} onPermissionDenied={()=>{}} onSucceeded={()=>{}} onRefresh={()=>{}} onClose={()=>{}} />
+  :<RegionalApprovalBatchActionDialog visible kind="REJECT" items={[{row,detail,access,pendingValues}]} t={i18n.t.bind(i18n)} client={salesPlan} onPermissionDenied={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} onClose={()=>{}} />
+ }</WorkbenchHostProvider>);
+} else createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDialog items={items} client={client} connected={!['channel','signed-out-source'].includes(scenario)} unavailableReason={query.get('reason')??undefined} t={i18n.t.bind(i18n)} onClose={()=>{}} onSucceeded={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} />);
 `,
   },
   bundle: true,
@@ -51,7 +73,11 @@ createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDial
   format: 'esm',
 });
 
-async function openConfirmation(t, scenario, { language = 'zh-CN', reason, blocked = false } = {}) {
+async function openConfirmation(
+  t,
+  scenario,
+  { language = 'zh-CN', reason, blocked = false, mode, orderType } = {},
+) {
   const server = createServer((request, response) => {
     const file = output.outputFiles.find(
       (file) => request.url?.split('?')[0] === '/' + file.path.split('/').at(-1),
@@ -80,7 +106,13 @@ async function openConfirmation(t, scenario, { language = 'zh-CN', reason, block
     'http://127.0.0.1:' +
       server.address().port +
       '/?' +
-      new URLSearchParams({ scenario, language, ...(reason ? { reason } : {}) }),
+      new URLSearchParams({
+        scenario,
+        language,
+        ...(reason ? { reason } : {}),
+        ...(mode ? { mode } : {}),
+        ...(orderType ? { orderType } : {}),
+      }),
   );
   const dialog = page.getByRole('dialog');
   if (!blocked)
@@ -277,3 +309,69 @@ test(
     assert.equal(await page.evaluate(() => window.submissions.length), 0);
   },
 );
+
+for (const scenario of ['reject-single', 'reject-batch']) {
+  const confirm = scenario === 'reject-single' ? '确认退回' : '确认批量退回';
+  for (const orderType of ['M', 'Z'])
+    for (const mode of ['pending', 'stored'])
+      test(`${scenario} ${orderType} sends 110 relative to 120 from ${mode} values`, async (t) => {
+        const { page, dialog } = await openConfirmation(t, scenario, {
+          blocked: true,
+          mode,
+          orderType,
+        });
+        await dialog
+          .getByLabel(scenario === 'reject-single' ? '退回原因（必填）' : '批量审批备注')
+          .fill('请按修改后的数量处理');
+        const button = dialog.getByRole('button', { name: confirm, exact: true });
+        await expect(button).toBeEnabled();
+        await button.click();
+        await expect.poll(() => page.evaluate(() => window.actions.length)).toBe(1);
+        const [call] = await page.evaluate(() => window.actions);
+        assert.equal(call.request.action, 'REJECT');
+        assert.equal(call.request.approvalRole, 'province');
+        assert.equal(call.request.approvalPolicy, 'role-visible-v1');
+        assert.equal(call.request.expectedSnapshot, 'a'.repeat(64));
+        assert.deepEqual(call.request.adjustments, [{ skuCode: '789', adjustQty: '-10' }]);
+        assert.deepEqual(await page.evaluate(() => window.draftReads), [
+          { planId: 'return-plan', approvalRole: 'province' },
+        ]);
+        assert.equal(await page.evaluate(() => window.submissions.length), 0);
+      });
+
+  for (const mode of ['failed', 'stale', 'invalid'])
+    test(`${scenario} blocks rejection when draft is ${mode}`, async (t) => {
+      const { page, dialog } = await openConfirmation(t, scenario, { blocked: true, mode });
+      await dialog
+        .getByLabel(scenario === 'reject-single' ? '退回原因（必填）' : '批量审批备注')
+        .fill('核对数量');
+      const button = dialog.getByRole('button', { name: confirm, exact: true });
+      if (scenario === 'reject-single') {
+        await expect(button).toBeDisabled();
+        await expect(dialog.getByRole('alert')).toBeVisible();
+      } else {
+        await button.click();
+        await expect.poll(() => page.evaluate(() => window.outcomes.length)).toBe(1);
+        assert.equal(await page.evaluate(() => window.outcomes[0][0].status), 'failed');
+      }
+      assert.equal(await page.evaluate(() => window.actions.length), 0);
+    });
+}
+
+test('single rejection waits for the draft before sending the latest visible 110', async (t) => {
+  const { page, dialog } = await openConfirmation(t, 'reject-single', {
+    blocked: true,
+    mode: 'deferred',
+  });
+  await dialog.getByLabel('退回原因（必填）').fill('核对数量');
+  const button = dialog.getByRole('button', { name: '确认退回', exact: true });
+  await expect(button).toBeDisabled();
+  assert.equal(await page.evaluate(() => window.actions.length), 0);
+  await page.evaluate(() => window.resolveDraft());
+  await expect(button).toBeEnabled();
+  await button.click();
+  await expect.poll(() => page.evaluate(() => window.actions.length)).toBe(1);
+  assert.deepEqual(await page.evaluate(() => window.actions[0].request.adjustments), [
+    { skuCode: '789', adjustQty: '-10' },
+  ]);
+});

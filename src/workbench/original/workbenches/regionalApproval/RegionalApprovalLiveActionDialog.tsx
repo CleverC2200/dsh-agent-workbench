@@ -205,9 +205,21 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   const [draftError, setDraftError] = useState('');
   useEffect(() => {
     if (initialAction === 'SAVE') return;
+    setDraftReady(false);
+    setDraftError('');
+    const draft = salesPlan.draft;
+    if (!draft) {
+      setDraftError('loadFailed');
+      return;
+    }
     const controller = new AbortController();
-    void salesPlan
-      .draft!.invoke({ planId: row.planId, versionId: row.versionId, signal: controller.signal })
+    void draft
+      .invoke({
+        planId: row.planId,
+        versionId: row.versionId,
+        approvalRole: selectedRole,
+        signal: controller.signal,
+      })
       .then((result) => {
         if (controller.signal.aborted) return;
         if (result.stale) {
@@ -344,20 +356,15 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     !selectedRole ||
     !access?.allowedActions.includes(kind) ||
     targetStatus === undefined ||
+    !draftReady ||
+    adjustmentsInvalid ||
+    (adjustments.length > 0 && adjustmentSkus.status !== 'success') ||
+    nodeComparisons.some((item) => !item.confirmedQty || item.confirmedQty.startsWith('-')) ||
     (kind === 'REJECT'
       ? !remark.trim() || Array.from(remark.trim()).length > 1000
       : kind === 'SAVE'
-        ? !draftReady ||
-          !confirmed ||
-          adjustments.length === 0 ||
-          adjustmentSkus.status !== 'success' ||
-          adjustmentsInvalid ||
-          nodeComparisons.some((item) => !item.confirmedQty || item.confirmedQty.startsWith('-'))
-        : !draftReady ||
-          (!directApproval && !confirmed) ||
-          adjustmentsInvalid ||
-          (adjustments.length > 0 && adjustmentSkus.status !== 'success') ||
-          nodeComparisons.some((item) => !item.confirmedQty || item.confirmedQty.startsWith('-')));
+        ? !confirmed || adjustments.length === 0 || adjustmentSkus.status !== 'success'
+        : !directApproval && !confirmed);
   const unknown = t('common.assistantSurface.regionalApproval.liveAction.checksum.unknown');
   const hasAdjustmentDraft = Object.values(adjustmentValues).some(
     (value) => value.trim().length > 0,
@@ -450,7 +457,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
       expectedStatus: row.status,
       ...(access?.snapshotHash ? { expectedSnapshot: access.snapshotHash } : {}),
       ...(remark.trim() ? { remark: remark.trim() } : {}),
-      ...(kind !== 'REJECT' && adjustments.length > 0 ? { adjustments } : {}),
+      ...(adjustments.length > 0 ? { adjustments } : {}),
     };
     submittedRequest.current = request;
     void complete(
@@ -565,6 +572,22 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           onOk={submit}
         >
           <div className={styles.compactRejectBody}>
+            {draftError ? (
+              <Alert
+                type="warning"
+                content={t(`common.assistantSurface.regionalApproval.draft.${draftError}`)}
+                action={
+                  <Button
+                    onClick={() => {
+                      onRefresh();
+                      onClose();
+                    }}
+                  >
+                    {t('common.assistantSurface.regionalApproval.liveAction.refresh')}
+                  </Button>
+                }
+              />
+            ) : null}
             <label className={styles.formControl}>
               <span>{t('common.assistantSurface.regionalApproval.liveAction.rejectRemark')}</span>
               <Input.TextArea
