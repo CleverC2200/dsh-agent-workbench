@@ -37,6 +37,19 @@ class TransferExecutionInventory(unittest.TestCase):
         self.assertEqual(self.sku()['preparing'], 0)
         self.assertEqual(self.sku()['open_transfer_reported_qty'], 5)
 
+    def test_wms_outbound_completion_does_not_remove_unreceived_goods(self):
+        self.transfer(qtyordered=2000, qtyallocated=2000, qtyshipped=2000, qtysigned=0,
+                      bizunitconvertrate=10, packingunitconvertrate=10,
+                      prapare_order_status='运输中', orderstatus=100,
+                      wms_close_time='2026-10-20 01:20:06')
+        row=self.sku()
+        self.assertEqual((row['in_transit'],row['preparing']),(200,0))
+
+    def test_wms_outbound_partial_receipt_only_keeps_the_unreceived_balance(self):
+        self.transfer(qtyshipped=60, qtysigned=24, prapare_order_status='运输中',
+                      orderstatus=100, wms_close_time='2026-10-20')
+        self.assertEqual(self.sku()['in_transit'],3)
+
     def test_stale_plan_totals_do_not_create_transfers_without_execution_orders(self):
         self.assertEqual(self.sku()['in_transit'], 0)
         self.assertEqual(self.sku()['preparing'], 0)
