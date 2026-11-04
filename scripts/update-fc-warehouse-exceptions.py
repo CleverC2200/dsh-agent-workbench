@@ -3,6 +3,7 @@ import json
 import re
 from pathlib import Path
 from inventory_warehouse_scope import warehouse_scope, branch_read_scope, MARKER
+from optimize_base_scoped_queries import optimize as normalize_base_scope, SCOPED_QUERY_IDS
 
 ROOT = Path(__file__).resolve().parents[1]
 for agent in ['fc', 'aqkc']:
@@ -14,6 +15,8 @@ for agent in ['fc', 'aqkc']:
         sql = warehouse_scope(original)
         if agent == 'fc':
             sql = branch_read_scope(sql)
+        elif query_id in SCOPED_QUERY_IDS:
+            sql = normalize_base_scope({**query, 'request': {**query['request'], 'sql': sql}})
         query['request']['sql'] = sql
         if sql != original:
             changed.append(query_id)
