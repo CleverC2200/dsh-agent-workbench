@@ -1254,9 +1254,11 @@ export function FcConfiguredList(
             : rowKey
         }
         emptyMessage={
-          scope.viewId === 'replenishment' && selection.neededOnly
-            ? '当前筛选没有匹配的需补货明细；可取消“需补货”查看全部明细及缺失要素。'
-            : '暂无数据。'
+          scope.viewId === 'base-resources' && props.result?.supplementaryError
+            ? '-'
+            : scope.viewId === 'replenishment' && selection.neededOnly
+              ? '当前筛选没有匹配的需补货明细；可取消“需补货”查看全部明细及缺失要素。'
+              : '暂无数据。'
         }
         renderCell={renderCell}
         result={

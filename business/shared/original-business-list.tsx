@@ -548,6 +548,9 @@ export function OriginalBusinessList({
         errors={[
           error ? `${error.message}（${error.code}）` : '',
           result?.summaryError?.message,
+          result?.supplementaryError
+            ? `${result.supplementaryError.message}（${result.supplementaryError.code}）`
+            : '',
         ].filter(Boolean)}
         scope={agentId}
       />
