@@ -59,7 +59,6 @@ export function OriginalBusinessList({
   columnWidths = {},
   onColumnWidths,
   onColumnFilter,
-  loadCategoryOptions,
 }: any) {
   const fc = agentId === 'inventory-fc',
     qll = agentId === 'inventory-qll',
@@ -241,11 +240,6 @@ export function OriginalBusinessList({
                       definition={view.columnFilters[c.field]}
                       values={appliedFilters ?? {}}
                       onApply={onColumnFilter}
-                      loadOptions={
-                        fc && view.id === 'inventory' && c.field === 'product_categ_name'
-                          ? loadCategoryOptions
-                          : undefined
-                      }
                     />
                   )}
                 </div>

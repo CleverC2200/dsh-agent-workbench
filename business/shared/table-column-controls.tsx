@@ -12,38 +12,14 @@ export function ColumnFilterControl({
   definition,
   values,
   onApply,
-  loadOptions,
 }: {
   label: string;
   definition: ColumnFilter;
   values: Record<string, string>;
   onApply: (changes: Record<string, string>) => void;
-  loadOptions?: (signal: AbortSignal) => Promise<{ value: string; label: string }[]>;
 }) {
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
-  const [loadedOptions, setLoadedOptions] = useState<{ value: string; label: string }[]>([]);
-  const [optionsError, setOptionsError] = useState('');
-  const [optionsLoading, setOptionsLoading] = useState(false);
-  useEffect(() => {
-    if (!position || !loadOptions) return;
-    const controller = new AbortController();
-    setLoadedOptions([]);
-    setOptionsError('');
-    setOptionsLoading(true);
-    loadOptions(controller.signal)
-      .then((options) => {
-        if (!controller.signal.aborted) setLoadedOptions(options);
-      })
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted)
-          setOptionsError(error instanceof Error ? error.message : '筛选项读取失败');
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setOptionsLoading(false);
-      });
-    return () => controller.abort();
-  }, [position, loadOptions]);
   const button = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLFormElement>(null);
   const names = definition.kind === 'number' ? [definition.min, definition.max] : [definition.name];
@@ -151,12 +127,11 @@ export function ColumnFilterControl({
               <label>
                 筛选值
                 <select
-                  disabled={optionsLoading || Boolean(optionsError)}
                   value={draft[definition.name] ?? ''}
                   onChange={(event) => setDraft({ [definition.name]: event.target.value })}
                 >
                   <option value="">全部</option>
-                  {(loadOptions ? loadedOptions : definition.options).map((option) => (
+                  {definition.options.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -173,8 +148,6 @@ export function ColumnFilterControl({
                 />
               </label>
             )}
-            {optionsLoading && <span role="status">正在读取筛选项…</span>}
-            {optionsError && <span role="alert">{optionsError}</span>}
             <div className={css.actions}>
               <button
                 type="button"
@@ -182,9 +155,7 @@ export function ColumnFilterControl({
               >
                 清除
               </button>
-              <button type="submit" disabled={optionsLoading || Boolean(optionsError)}>
-                应用
-              </button>
+              <button type="submit">应用</button>
             </div>
           </form>,
           document.body,

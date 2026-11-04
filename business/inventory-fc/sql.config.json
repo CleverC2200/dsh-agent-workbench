@@ -17013,7 +17013,7 @@
           "type": "string",
           "required": true,
           "nullable": true,
-          "enum": ["预警", "滞库", "正常"]
+          "enum": ["预警", "滞库", "正常", "货龄待核实", "无库存"]
         },
         "gea_p4103": {
           "name": "age_filter",
@@ -17393,7 +17393,7 @@
           "type": "string",
           "required": true,
           "nullable": true,
-          "enum": ["预警", "滞库", "正常"]
+          "enum": ["预警", "滞库", "正常", "货龄待核实", "无库存"]
         },
         "gea_p4103": {
           "name": "age_filter",
@@ -17758,7 +17758,7 @@
           "type": "string",
           "required": true,
           "nullable": true,
-          "enum": ["预警", "滞库", "正常"]
+          "enum": ["预警", "滞库", "正常", "货龄待核实", "无库存"]
         },
         "gea_p4103": {
           "name": "age_filter",
@@ -28842,7 +28842,7 @@
           "type": "string",
           "required": true,
           "nullable": true,
-          "enum": ["预警", "滞库", "正常"]
+          "enum": ["预警", "滞库", "正常", "货龄待核实", "无库存"]
         },
         "gea_p4103": {
           "name": "age_filter",
@@ -29224,7 +29224,7 @@
           "type": "string",
           "required": true,
           "nullable": true,
-          "enum": ["预警", "滞库", "正常"]
+          "enum": ["预警", "滞库", "正常", "货龄待核实", "无库存"]
         },
         "gea_p4103": {
           "name": "age_filter",
@@ -29591,7 +29591,7 @@
           "type": "string",
           "required": true,
           "nullable": true,
-          "enum": ["预警", "滞库", "正常"]
+          "enum": ["预警", "滞库", "正常", "货龄待核实", "无库存"]
         },
         "gea_p4103": {
           "name": "age_filter",
@@ -48514,7 +48514,8 @@
           },
           {
             "field": "total_qty",
-            "label": "当前库存量"
+            "label": "当前库存量",
+            "reason": "当前SKU全部批次的库存；超龄与滞库数量请看对应货龄列合计。"
           },
           {
             "field": "missing_age_5",
@@ -48700,7 +48701,17 @@
           {
             "name": "category",
             "label": "产品大类",
-            "hidden": true
+            "selectOptions": [
+              "汤圆",
+              "饺子",
+              "馄饨",
+              "休闲",
+              "饼类",
+              "面点",
+              "调理肉制品",
+              "粽子",
+              "饺鲜说"
+            ]
           },
           {
             "name": "column_warehouseid_contains",
@@ -48931,7 +48942,44 @@
           "product_categ_name": {
             "kind": "select",
             "name": "category",
-            "options": []
+            "options": [
+              {
+                "value": "汤圆",
+                "label": "汤圆"
+              },
+              {
+                "value": "饺子",
+                "label": "饺子"
+              },
+              {
+                "value": "馄饨",
+                "label": "馄饨"
+              },
+              {
+                "value": "休闲",
+                "label": "休闲"
+              },
+              {
+                "value": "饼类",
+                "label": "饼类"
+              },
+              {
+                "value": "面点",
+                "label": "面点"
+              },
+              {
+                "value": "调理肉制品",
+                "label": "调理肉制品"
+              },
+              {
+                "value": "粽子",
+                "label": "粽子"
+              },
+              {
+                "value": "饺鲜说",
+                "label": "饺鲜说"
+              }
+            ]
           },
           "material_group_name": {
             "kind": "text",

@@ -6,8 +6,7 @@ import { OriginalBusinessList } from './original-business-list';
 import { LocalQueryForm } from './local-query-form';
 import { PlanPagination } from './plan-pagination';
 import { DashboardTableSkeleton } from '../inventory-fc/source/inventory-light-plugins/src/dsh-ui/workbench-loading';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { readFcCategoryOptions } from './fc-category-options';
+import React, { useEffect, useRef, useState } from 'react';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import {
   factMetric,
@@ -315,25 +314,6 @@ export function ConfiguredFactsPage({
     navigate('orders');
   };
 
-  const loadCategoryOptions = useCallback(
-    (signal: AbortSignal) =>
-      readFcCategoryOptions(
-        config,
-        {
-          snapshotDate: result?.snapshotDate,
-          warehouseCode: scopeFilters.warehouse_code || filters.warehouse_code || null,
-        },
-        signal,
-      ),
-    [
-      config,
-      identity,
-      revision,
-      result?.snapshotDate,
-      scopeFilters.warehouse_code,
-      filters.warehouse_code,
-    ],
-  );
   const businessTitleId = React.useId();
   const titleId = presentation ? businessTitleId : 'source-view-title';
   const BusinessList = businessList ?? OriginalBusinessList;
@@ -364,7 +344,6 @@ export function ConfiguredFactsPage({
         onColumnWidths={(next: Record<string, number>) =>
           setColumnWidths((old) => ({ ...old, [viewId]: next }))
         }
-        loadCategoryOptions={loadCategoryOptions}
         onColumnFilter={(changes: Record<string, string>) => {
           setDraft((old) => ({ ...old, ...changes }));
           setFilters((old) => ({ ...old, ...changes }));
