@@ -558,43 +558,50 @@
       }
     },
     "facts.shipment": {
-      "title": "shipment",
-      "grain": [
-        "agents_scm_cust_deliv_daily_di.belong_base",
-        "agents_scm_cust_deliv_daily_di.material_code",
-        "agents_scm_cust_deliv_daily_di.material_name",
-        "agents_scm_cust_deliv_daily_di.product_categ_name",
-        "agents_scm_cust_deliv_daily_di.material_group_name"
-      ],
+      "title": "本月预估发货数仓输入",
+      "grain": ["belong_base", "material_code"],
       "columns": [
-        "agents_scm_cust_deliv_daily_di.belong_base",
-        "agents_scm_cust_deliv_daily_di.material_code",
-        "agents_scm_cust_deliv_daily_di.material_name",
-        "agents_scm_cust_deliv_daily_di.product_categ_name",
-        "agents_scm_cust_deliv_daily_di.material_group_name",
-        "agents_scm_cust_deliv_daily_di.act_dl_qty_total"
+        "belong_base",
+        "material_code",
+        "material_name",
+        "series",
+        "product_item",
+        "shipped",
+        "prepped",
+        "unprepped",
+        "daily3",
+        "open",
+        "inbound",
+        "source_days",
+        "duplicate_days"
       ],
       "parameterSpec": {
-        "start": {
-          "name": "start",
+        "month": {
+          "name": "month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
+        "cutoff": {
+          "name": "cutoff",
           "type": "string",
           "nullable": false,
           "format": "YYYY-MM-DD"
         },
-        "end": {
-          "name": "end",
+        "recent_start": {
+          "name": "recent_start",
           "type": "string",
           "nullable": false,
           "format": "YYYY-MM-DD"
         },
-        "page_size": {
+        "gea_p98": {
           "name": "page_size",
           "type": "integer",
           "nullable": false,
           "minimum": 1,
           "maximum": 200
         },
-        "offset": {
+        "gea_p99": {
           "name": "offset",
           "type": "integer",
           "nullable": false,
@@ -603,43 +610,10 @@
         }
       },
       "request": {
-        "cube": {
-          "measures": ["agents_scm_cust_deliv_daily_di.act_dl_qty_total"],
-          "dimensions": [
-            "agents_scm_cust_deliv_daily_di.belong_base",
-            "agents_scm_cust_deliv_daily_di.material_code",
-            "agents_scm_cust_deliv_daily_di.material_name",
-            "agents_scm_cust_deliv_daily_di.product_categ_name",
-            "agents_scm_cust_deliv_daily_di.material_group_name"
-          ],
-          "timeDimensions": [
-            {
-              "dimension": "agents_scm_cust_deliv_daily_di.shipment_date",
-              "dateRange": [
-                {
-                  "$parameter": "start"
-                },
-                {
-                  "$parameter": "end"
-                }
-              ]
-            }
-          ],
-          "timezone": "UTC",
-          "order": [
-            ["agents_scm_cust_deliv_daily_di.belong_base", "asc"],
-            ["agents_scm_cust_deliv_daily_di.material_code", "asc"],
-            ["agents_scm_cust_deliv_daily_di.material_name", "asc"],
-            ["agents_scm_cust_deliv_daily_di.product_categ_name", "asc"],
-            ["agents_scm_cust_deliv_daily_di.material_group_name", "asc"]
-          ],
-          "limit": {
-            "$parameter": "page_size"
-          },
-          "offset": {
-            "$parameter": "offset"
-          }
-        }
+        "sql": "SELECT belong_base, material_code, CASE WHEN COUNT(NULLIF(TRIM(material_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(material_name), '')) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(NULLIF(TRIM(series), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(series), '')) = 1 THEN MAX(series) ELSE NULL END AS series, CASE WHEN COUNT(NULLIF(TRIM(product_item), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item), '')) = 1 THEN MAX(product_item) ELSE NULL END AS product_item, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(total_sales_qty) = COUNT(*) THEN SUM(total_sales_qty) ELSE NULL END AS shipped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN allocated_qty END) ELSE NULL END AS prepped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN ordered_qty END) ELSE NULL END AS unprepped, CASE WHEN COUNT(CASE WHEN the_date >= :recent_start THEN 1 END) = 3 AND COUNT(DISTINCT CASE WHEN the_date >= :recent_start THEN the_date END) = 3 AND COUNT(CASE WHEN the_date >= :recent_start THEN total_sales_qty END) = 3 THEN SUM(CASE WHEN the_date >= :recent_start THEN total_sales_qty ELSE 0 END) / 3.0 ELSE NULL END AS daily3, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN begin_stock END) ELSE NULL END AS open, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(produce_in_qty) = COUNT(*) THEN SUM(produce_in_qty) ELSE NULL END AS inbound, COUNT(DISTINCT the_date) AS source_days, COUNT(*) - COUNT(DISTINCT the_date) AS duplicate_days FROM agents_scm_stock_detail_d WHERE data_month = :month AND the_date >= :month AND the_date <= :cutoff GROUP BY belong_base, material_code ORDER BY belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "facts.shipment.count"
       }
     },
     "forecast.detail": {
@@ -1204,6 +1178,108 @@
             "$parameter": "offset"
           }
         }
+      }
+    },
+    "facts.shipment.count": {
+      "title": "本月预估发货基地物料计数",
+      "columns": ["total"],
+      "parameterSpec": {
+        "month": {
+          "name": "month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
+        "cutoff": {
+          "name": "cutoff",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code FROM agents_scm_stock_detail_d WHERE data_month = :month AND the_date >= :month AND the_date <= :cutoff GROUP BY belong_base, material_code) shipment_rows"
+      }
+    },
+    "inventory-targets.detail": {
+      "title": "目标库存与周转天数来源",
+      "grain": ["target_month", "belong_base", "material_code", "inventory_version"],
+      "columns": [
+        "target_month",
+        "belong_base",
+        "material_code",
+        "inventory_version",
+        "final_target_inventory",
+        "avg_daily_planned_demand",
+        "source_rows"
+      ],
+      "parameterSpec": {
+        "start_month": {
+          "name": "start_month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM"
+        },
+        "end_month": {
+          "name": "end_month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM"
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "sql": "SELECT SUBSTRING(CAST(year_month AS TEXT), 1, 7) AS target_month, belong_base, material_code, inventory_version, CASE WHEN COUNT(final_target_inventory) = COUNT(*) AND COUNT(DISTINCT final_target_inventory) = 1 THEN MAX(final_target_inventory) ELSE NULL END AS final_target_inventory, CASE WHEN COUNT(avg_daily_planned_demand) = COUNT(*) AND COUNT(DISTINCT avg_daily_planned_demand) = 1 THEN MAX(avg_daily_planned_demand) ELSE NULL END AS avg_daily_planned_demand, COUNT(*) AS source_rows FROM agents_scm_goods_inventory_turnover_data_m WHERE SUBSTRING(CAST(year_month AS TEXT), 1, 7) >= :start_month AND SUBSTRING(CAST(year_month AS TEXT), 1, 7) <= :end_month AND inventory_version IN ('纠偏', '月初', '滚动') GROUP BY SUBSTRING(CAST(year_month AS TEXT), 1, 7), belong_base, material_code, inventory_version ORDER BY target_month, belong_base, inventory_version, material_code LIMIT :gea_p98 OFFSET :gea_p99",
+        "parameters": {
+          "start_month": "2026-11",
+          "end_month": "2027-01",
+          "gea_p98": 200,
+          "gea_p99": 0
+        },
+        "includeTotal": false
+      },
+      "pagination": {
+        "countQuery": "inventory-targets.count"
+      }
+    },
+    "inventory-targets.count": {
+      "title": "目标库存来源记录数",
+      "grain": [],
+      "columns": ["total"],
+      "parameterSpec": {
+        "start_month": {
+          "name": "start_month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM"
+        },
+        "end_month": {
+          "name": "end_month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM"
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT SUBSTRING(CAST(year_month AS TEXT), 1, 7) AS target_month, belong_base, material_code, inventory_version, CASE WHEN COUNT(final_target_inventory) = COUNT(*) AND COUNT(DISTINCT final_target_inventory) = 1 THEN MAX(final_target_inventory) ELSE NULL END AS final_target_inventory, CASE WHEN COUNT(avg_daily_planned_demand) = COUNT(*) AND COUNT(DISTINCT avg_daily_planned_demand) = 1 THEN MAX(avg_daily_planned_demand) ELSE NULL END AS avg_daily_planned_demand, COUNT(*) AS source_rows FROM agents_scm_goods_inventory_turnover_data_m WHERE SUBSTRING(CAST(year_month AS TEXT), 1, 7) >= :start_month AND SUBSTRING(CAST(year_month AS TEXT), 1, 7) <= :end_month AND inventory_version IN ('纠偏', '月初', '滚动') GROUP BY SUBSTRING(CAST(year_month AS TEXT), 1, 7), belong_base, material_code, inventory_version) AS target_rows",
+        "parameters": {
+          "start_month": "2026-11",
+          "end_month": "2027-01"
+        },
+        "includeTotal": false
       }
     }
   }

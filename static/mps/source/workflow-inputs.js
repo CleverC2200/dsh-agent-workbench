@@ -166,6 +166,17 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
   const productIssues = sourceIssues(draft, 'products');
   const result = computeMpsWorkflow({
     context,
+    inventoryTargets: draft.inventoryTargets ?? [],
+    inventoryTargetVersion: draft.constraints?.targetVersion ?? 'auto',
+    inventoryTargetIssues:
+      draft.inventoryTargetsRead?.status === 'ready'
+        ? []
+        : [
+            draft.inventoryTargetsRead?.error ||
+              (draft.inventoryTargetsRead?.status === 'loading'
+                ? '目标库存来源正在读取'
+                : '目标库存来源尚未读取'),
+          ],
     products,
     productMonths: [...productMonths.values()],
     scopeCoverage: 'in-scope',
