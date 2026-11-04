@@ -1261,6 +1261,14 @@ export function FcConfiguredList(
               : '暂无数据。'
         }
         renderCell={renderCell}
+        renderSummaryCell={(row: FcRow, column: { field: string; valueField?: string }) => {
+          const field = column.valueField ?? column.field;
+          if (scope.viewId === 'replenishment')
+            return fcReplenishmentDisplay(row, field) ?? props.renderCell(row, column);
+          if (scope.viewId === 'plan')
+            return fcPlanDisplay(row, field) ?? props.renderCell(row, column);
+          return renderCell(row, column);
+        }}
         result={
           props.result
             ? {

@@ -95,21 +95,27 @@ function tie(a: FcRow, b: FcRow) {
   );
 }
 
+function listTotals(rows: FcRow[], fields: string[]) {
+  return Object.fromEntries(
+    fields.map((field) => {
+      const values = rows.map((row) => knownNumber(row[field])).filter((value) => value !== null);
+      return [
+        field,
+        rows.length === 0
+          ? 0
+          : values.length
+            ? values.reduce((sum, value) => sum + value, 0)
+            : null,
+      ];
+    }),
+  );
+}
+
 /** Normal reads stay server-paged. Only active manual plans require a whole-scope recalculation. */
 export function fcPlannedReader(plans: ImportedPlan[]): typeof readConfiguredFacts {
   return async (config, viewId, input, options = {}) => {
     if (!plans.length || !['replenishment', 'plan'].includes(viewId) || options.summaryOnly)
       return readConfiguredFacts(config, viewId, input, options);
-    if (viewId === 'plan') {
-      const page = await readConfiguredFacts(config, viewId, input, options);
-      options.signal?.throwIfAborted();
-      return {
-        ...page,
-        rows: page.rows.map((row: FcRow) =>
-          applyFcPlan(row, plans, input.asOf, input.cycleDays ?? 7),
-        ),
-      };
-    }
     const filters = Object.fromEntries(
       Object.entries(input.filters ?? {}).filter(
         ([key]) => !['list_mode', 'sort_field', 'sort_direction'].includes(key),
@@ -146,6 +152,7 @@ export function fcPlannedReader(plans: ImportedPlan[]): typeof readConfiguredFac
       ...first,
       status: rows.length ? 'available' : 'empty',
       total: rows.length,
+      tableSummary: listTotals(rows, Object.keys(first.tableSummary ?? {})),
       rows: rows.slice((page - 1) * pageSize, page * pageSize),
       readContext: undefined,
     };

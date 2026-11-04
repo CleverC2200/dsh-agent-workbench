@@ -1,13 +1,14 @@
-WITH customer_stock_date AS (
+WITH /* inventory-branch-exclusions:N436,Y204 */
+customer_stock_date AS (
  SELECT MAX(i.month_date) AS month_date FROM agents_scm_inventory_sku_data_d AS i
- WHERE i.warehouse_classify IN ('01','02','20')
+ WHERE (i.warehouse_classify IN ('01','02','20') AND (i.warehouse_classify <> '20' OR i.warehouseid NOT IN ('N436', 'Y204')))
 ), customer_stock AS (
  SELECT i.warehouseid AS warehouseid, i.warehouse_name AS warehouse_name, i.belong_base AS belong_base,
  i.material_code AS sku, i.available_qty AS available_qty, i.prod_date AS prod_date,
  i.sap_warehouseid AS sap_warehouseid, i.plant AS plant, i.quality_batch AS quality_batch,
  i.is_good_prod AS is_good_prod, i.warehouse_classify AS warehouse_classify
  FROM agents_scm_inventory_sku_data_d AS i INNER JOIN customer_stock_date AS s ON i.month_date=s.month_date
- WHERE i.warehouse_classify='20' OR i.warehouseid='N436'
+ WHERE (i.warehouse_classify='20' AND i.warehouseid NOT IN ('N436', 'Y204'))
 ), customer_warehouses AS (
  SELECT i.warehouseid AS warehouse_code, MAX(i.warehouse_name) AS warehouse_name,
  CASE WHEN COUNT(DISTINCT i.belong_base)=1 THEN MAX(i.belong_base) END AS base

@@ -9,6 +9,7 @@ from sqlglot import exp
 ROOT = Path(__file__).resolve().parents[1]
 WITH_KEY = 'with_' if 'with_' in exp.Select.arg_types else 'with'
 FROM_KEY = 'from_' if 'from_' in exp.Select.arg_types else 'from'
+SCOPED_QUERY_IDS = ('page.inventory-groups', 'page.dashboard-groups', 'page.structure-groups', 'page.sku-detail', 'page.sku-detail.count', 'page.sku-detail.atomic')
 
 
 def optimize(query):
@@ -61,7 +62,7 @@ def optimize(query):
 def main():
     path = ROOT / 'business/inventory-aqkc/sql.config.json'
     config = json.loads(path.read_text())
-    for query_id in ['page.inventory-groups', 'page.dashboard-groups', 'page.structure-groups', 'page.sku-detail', 'page.sku-detail.count', 'page.sku-detail.atomic']:
+    for query_id in SCOPED_QUERY_IDS:
         query = config['queries'][query_id]
         query['request']['sql'] = optimize(query)
         assert optimize(query) == query['request']['sql']

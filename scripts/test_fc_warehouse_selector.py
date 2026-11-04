@@ -25,7 +25,7 @@ class WarehouseScope(unittest.TestCase):
         sql = sqlglot.transpile(query, read='postgres', write='sqlite')[0]
         db = sqlite3.connect(':memory:'); self.addCleanup(db.close)
         db.execute('CREATE TABLE agents_scm_inventory_sku_data_d (month_date TEXT,warehouse_classify TEXT,warehouseid TEXT,warehouse_name TEXT,belong_base TEXT)')
-        db.executemany('INSERT INTO agents_scm_inventory_sku_data_d VALUES (?,?,?,?,?)', [('20261026','20','OLD','旧仓','西南'),('20261027','20','A170','成都分仓','西南'),('20261027','20','A170','成都分仓','西南'),('20261027','02','Y302','成都配送中心仓','西南'),('20261028','20','FUTURE','未来仓','西南')])
+        db.executemany('INSERT INTO agents_scm_inventory_sku_data_d VALUES (?,?,?,?,?)', [('20261026','20','OLD','旧仓','西南'),('20261027','20','A170','成都分仓','西南'),('20261027','20','A170','成都分仓','西南'),('20261027','20','Y204','上海分仓','郑州'),('20261027','20','N436','郑州DC仓','郑州'),('20261027','02','Y302','成都配送中心仓','西南'),('20261028','20','FUTURE','未来仓','西南')])
         self.assertEqual(list(db.execute(sql, {'gea_p1':'2026-10-27','gea_p2':200,'gea_p3':0})), [('A170','成都分仓','西南')])
 
 if __name__ == '__main__':
