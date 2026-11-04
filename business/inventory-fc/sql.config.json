@@ -37827,7 +37827,7 @@
         }
       },
       "request": {
-        "sql": "SELECT t.month AS month, t.inventory_version AS inventory_version, t.source_rows AS source_rows FROM (SELECT m.month AS month, m.effective_version AS inventory_version, m.version_source_rows AS source_rows FROM agents_inv_base_sku_day AS m WHERE (m.inv_batch_id = :gea_p90001) AND (m.inv_variant_id = 'TARGET_CALENDAR')) AS t ORDER BY t.month DESC NULLS FIRST, t.inventory_version NULLS LAST LIMIT :gea_p1 OFFSET :gea_p2",
+        "sql": "SELECT t.month AS month, t.inventory_version AS inventory_version, t.source_rows AS source_rows FROM (SELECT authorized_target_calendar.month AS month, authorized_target_calendar.inventory_version AS inventory_version, MAX(authorized_target_calendar.source_rows) AS source_rows FROM (SELECT m.month AS month, m.effective_version AS inventory_version, m.version_source_rows AS source_rows FROM agents_inv_base_sku_day AS m WHERE (m.inv_batch_id = :gea_p90001) AND (m.inv_variant_id = 'TARGET_CALENDAR') UNION ALL SELECT m.month AS month, m.effective_version AS inventory_version, CAST(0 AS BIGINT) AS source_rows FROM agents_inv_base_sku_day AS m WHERE (m.inv_batch_id = :gea_p90001) AND (m.inv_variant_id = '__BASE_READY__') AND m.month IS NOT NULL AND NULLIF(TRIM(m.effective_version), '') IS NOT NULL) AS authorized_target_calendar GROUP BY authorized_target_calendar.month, authorized_target_calendar.inventory_version) AS t ORDER BY t.month DESC NULLS FIRST, t.inventory_version NULLS LAST LIMIT :gea_p1 OFFSET :gea_p2",
         "parameters": {
           "gea_p1": 10,
           "gea_p2": 0,
@@ -37855,7 +37855,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT m.month AS month, m.effective_version AS inventory_version, m.version_source_rows AS source_rows FROM agents_inv_base_sku_day AS m WHERE (m.inv_batch_id = :gea_p90001) AND (m.inv_variant_id = 'TARGET_CALENDAR')) AS t",
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT authorized_target_calendar.month AS month, authorized_target_calendar.inventory_version AS inventory_version, MAX(authorized_target_calendar.source_rows) AS source_rows FROM (SELECT m.month AS month, m.effective_version AS inventory_version, m.version_source_rows AS source_rows FROM agents_inv_base_sku_day AS m WHERE (m.inv_batch_id = :gea_p90001) AND (m.inv_variant_id = 'TARGET_CALENDAR') UNION ALL SELECT m.month AS month, m.effective_version AS inventory_version, CAST(0 AS BIGINT) AS source_rows FROM agents_inv_base_sku_day AS m WHERE (m.inv_batch_id = :gea_p90001) AND (m.inv_variant_id = '__BASE_READY__') AND m.month IS NOT NULL AND NULLIF(TRIM(m.effective_version), '') IS NOT NULL) AS authorized_target_calendar GROUP BY authorized_target_calendar.month, authorized_target_calendar.inventory_version) AS t",
         "parameters": {
           "gea_p90001": "UNPUBLISHED_BATCH"
         },

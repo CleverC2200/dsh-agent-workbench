@@ -377,7 +377,9 @@ export async function readConfiguredStockPage(
     shipment_end_exclusive: next.toISOString().slice(0, 10).replaceAll('-', ''),
     order_start: month,
     order_end_exclusive: next.toISOString().slice(0, 10),
-    order_bases_enabled: bases.length > 0,
+    // Orders are joined per base; the final bases filter scopes both stock and order facts.
+    // Keep the source default so a selected base still uses its equivalent daily summary.
+    order_bases_enabled: false,
     order_bases: bases.length ? bases : ['郑州'],
   });
   const subset = (id: string) =>

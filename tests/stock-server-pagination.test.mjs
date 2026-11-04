@@ -4,7 +4,11 @@ import { build } from 'esbuild';
 import { readFile } from 'node:fs/promises';
 const config = JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8'));
 const bundle = await build({
-  entryPoints: ['business/inventory-aqkc/source/inventory-light-plugins/src/configured-stock.ts'],
+  stdin: {
+    contents:
+      "export * from './business/inventory-aqkc/source/inventory-light-plugins/src/configured-stock.ts';export{dailySummaryQuery}from'./business/shared/daily-summary.ts';",
+    resolveDir: process.cwd(),
+  },
   bundle: true,
   write: false,
   platform: 'node',
@@ -15,6 +19,7 @@ const {
   readConfiguredStockSummary,
   readConfiguredHealthSummary,
   startConfiguredStockReadCycle,
+  dailySummaryQuery,
 } = await import(
   'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
 );
@@ -431,4 +436,26 @@ test('base inventory and age cards share the batch date without coupling target 
   } finally {
     startConfiguredStockReadCycle();
   }
+});
+
+test('a selected base retains its final scope while remaining eligible for the daily SKU summary', async () => {
+  const io = source();
+  await readConfiguredStockPage({ base: '华南' }, { ...io, now });
+  const values = io.calls.find((call) => call.queryId === 'page.sku-detail.atomic').values;
+  assert.equal(values.bases_enabled, true);
+  assert.deepEqual(values.bases, ['华南']);
+  assert.deepEqual(values.order_bases, ['华南']);
+  const routed = dailySummaryQuery(
+    config.queries['page.sku-detail.atomic'],
+    {
+      kind: 'ready',
+      batchId: 'BATCH',
+      businessDate: '2026-10-15',
+      stockDate: '2026-10-14',
+      targetMonth: '2026-10-01',
+      defaultInventoryVersion: '月初',
+    },
+    values,
+  );
+  assert.equal(routed?.queryId, 'snapshot.page.sku-detail.atomic');
 });
