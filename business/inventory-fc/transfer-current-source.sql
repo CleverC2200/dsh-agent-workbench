@@ -70,7 +70,7 @@ WITH transfer_stock_date AS (
  INNER JOIN transfer_origins AS o ON e.source_warehouse=o.warehouse_code
  WHERE v.source_versions=1 AND e.order_type IN ('TT1','TT2','STO','ZUB','TT')
  AND e.detail_status=10 AND (e.header_status IS NULL OR e.header_status<>90)
- AND e.closed_at IS NULL
+ AND (e.closed_at IS NULL OR e.order_status IN ('运输中','已派未到'))
  AND NULLIF(TRIM(e.cancelled_at),'') IS NULL AND NULLIF(TRIM(e.dms_cancelled_at),'') IS NULL
  AND (e.order_status IS NULL OR e.order_status NOT IN ('作废','已签收'))
  AND (e.flow_status IS NULL OR e.flow_status<>'作废') AND NULLIF(TRIM(e.sku),'') IS NOT NULL
