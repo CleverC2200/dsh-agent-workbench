@@ -1137,6 +1137,36 @@ body {
   padding: 16px;
   justify-content: flex-end;
 }
+.sales-test-options {
+  margin: 16px;
+  padding: 12px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.sales-test-options summary {
+  cursor: pointer;
+  color: #64748b;
+  font-weight: 600;
+}
+.sales-test-options section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  margin-top: 12px;
+}
+.sales-test-options label,
+.sales-test-options p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.sales-test-options label {
+  display: grid;
+  gap: 6px;
+}
+.sales-test-options select {
+  width: 100%;
+}
 .sales-confirmation-preview button {
   cursor: pointer;
   padding: 8px 14px;
@@ -1849,7 +1879,6 @@ body {
     };
     const element = node("section");
     element.setAttribute("aria-label", "\u98DE\u4E66\u6536\u4EF6\u4EBA\u4E0E\u5904\u7406\u4EBA");
-    const modeLabel = node("p", "\u6B63\u5728\u8BFB\u53D6\u53D1\u5361\u6A21\u5F0F\u2026");
     const query2 = node("input");
     query2.type = "search";
     query2.maxLength = 80;
@@ -1867,13 +1896,13 @@ body {
     notice.role = "status";
     const hint = node(
       "p",
-      "\u4EBA\u5458\u9700\u5728 GEA\u300C\u7528\u6237\u80FD\u529B\u6388\u6743\u300D\u4E2D\u83B7\u6388\u5BF9\u5E94\u80FD\u529B\u3002\u88AB\u827E\u7279\u53EF\u67E5\u770B\uFF0C\u53EA\u6709\u6307\u5B9A\u5904\u7406\u4EBA\u53EF\u4FDD\u5B58\u786E\u8BA4\uFF0F\u6682\u7F13\u51B3\u5B9A\u3002"
+      "\u4EBA\u5458\u9700\u5728 GEA\u300C\u6388\u6743\u4E2D\u5FC3\u300D\u4E2D\u83B7\u6388\u5BF9\u5E94\u80FD\u529B\u3002\u88AB\u827E\u7279\u53EF\u67E5\u770B\uFF0C\u53EA\u6709\u6307\u5B9A\u5904\u7406\u4EBA\u53EF\u4FDD\u5B58\u786E\u8BA4\uFF0F\u6682\u7F13\u51B3\u5B9A\u3002"
     );
     const recipientLabel = node("label", "\u88AB\u827E\u7279\u4EBA\u5458\uFF08\u6700\u591A 10 \u4EBA\uFF0C\u53EF\u591A\u9009\uFF09");
     recipientLabel.append(recipients);
     const handlerLabel = node("label", "\u786E\u8BA4\u4E0E\u6682\u7F13\u5904\u7406\u4EBA");
     handlerLabel.append(handler);
-    element.append(modeLabel, query2, search, recipientLabel, handlerLabel, hint, notice);
+    element.append(query2, search, recipientLabel, handlerLabel, hint, notice);
     let mode, loading = false, searchGeneration = 0, edited = false, visible = [];
     const people = /* @__PURE__ */ new Map(), selected = /* @__PURE__ */ new Set();
     function render() {
@@ -1907,7 +1936,6 @@ body {
         if ([...handler.options].some((option) => option.value === previous))
           handler.value = previous;
       }
-      modeLabel.textContent = mode === "test" ? "\u53D1\u5361\u6A21\u5F0F\uFF1A\u6D4B\u8BD5\u8054\u8C03\uFF08\u4E0D\u6267\u884C OMS\uFF09" : "\u53D1\u5361\u6A21\u5F0F\uFF1A\u6309\u8BA2\u5355\u9500\u552E\u5206\u6D3E\uFF08OMS \u5C1A\u672A\u63A5\u5165\uFF09";
       changed();
     }
     async function load2() {
@@ -1921,6 +1949,7 @@ body {
         if (!alive() || current !== searchGeneration) return;
         if (!["test", "sales"].includes(result.mode) || !Array.isArray(result.participants))
           throw Error("\u540E\u53F0\u672A\u8FD4\u56DE\u6709\u6548\u7684\u4EBA\u5458\u76EE\u5F55\uFF0C\u8BF7\u6838\u5BF9\u63A5\u53E3\u7248\u672C");
+        if (result.mode !== "test") throw Error("\u53D1\u5361\u6A21\u5F0F\u5DF2\u53D8\u5316\uFF0C\u8BF7\u5173\u95ED\u7A97\u53E3\u540E\u91CD\u65B0\u6253\u5F00\u3002");
         mode = result.mode;
         visible = [];
         for (const person of result.participants) {
@@ -1937,6 +1966,9 @@ body {
       } catch (error) {
         if (alive() && current === searchGeneration) {
           mode = void 0;
+          recipients.replaceChildren();
+          handler.replaceChildren();
+          handler.disabled = true;
           notice.textContent = error.message;
         }
       } finally {
@@ -2262,9 +2294,11 @@ body {
       if (event.key === "Tab") {
         const elements = [
           ...dialog.querySelectorAll(
-            "button:not(:disabled), input:not(:disabled), select:not(:disabled)"
+            "button:not(:disabled), input:not(:disabled), select:not(:disabled), summary"
           )
-        ];
+        ].filter(
+          (element) => !element.closest("details:not([open])") || element.tagName === "SUMMARY"
+        );
         const first = elements[0], last = elements.at(-1);
         if (event.shiftKey && document2.activeElement === first) {
           event.preventDefault();
@@ -2303,7 +2337,7 @@ body {
         form.append(fields2);
         const status2 = node(
           "p",
-          simulated ? "\u4EC5\u53D1\u9001\u6A21\u62DF\u5361\u7247\u5230\u6D4B\u8BD5\u7FA4\uFF0C\u4E0D\u89E6\u53D1\u771F\u5B9E\u53D1\u8D27\u6216\u6539\u5355\u3002" : formal ? "\u6B63\u5728\u6838\u5BF9\u6B63\u5F0F\u98DE\u4E66\u786E\u8BA4\u5165\u53E3\u2026" : "\u98DE\u4E66\u7FA4\u53D1\u9001\u4E0E\u4EBA\u5458\u6620\u5C04\u63A5\u53E3\u5C1A\u672A\u63A5\u5165\uFF0C\u5F53\u524D\u672A\u53D1\u9001\u901A\u77E5\u3002",
+          simulated ? "\u4EC5\u53D1\u9001\u6A21\u62DF\u5361\u7247\u5230\u6D4B\u8BD5\u7FA4\uFF0C\u4E0D\u89E6\u53D1\u771F\u5B9E\u53D1\u8D27\u6216\u6539\u5355\u3002" : formal ? "\u6B63\u5728\u6838\u5BF9\u53D1\u5361\u6743\u9650\u2026" : "\u98DE\u4E66\u7FA4\u53D1\u9001\u4E0E\u4EBA\u5458\u6620\u5C04\u63A5\u53E3\u5C1A\u672A\u63A5\u5165\uFF0C\u5F53\u524D\u672A\u53D1\u9001\u901A\u77E5\u3002",
           "sales-preview-notice"
         );
         status2.role = "status";
@@ -2314,7 +2348,7 @@ body {
         cancel.addEventListener("click", close);
         const send = node(
           "button",
-          simulated ? "\u53D1\u9001\u5230\u98DE\u4E66\u6D4B\u8BD5\u7FA4\uFF08\u4EC5\u6A21\u62DF\uFF09" : "\u53D1\u9001\u5230\u98DE\u4E66\u7FA4\uFF08\u5F85\u63A5\u5165\uFF09",
+          simulated ? "\u53D1\u9001\u5230\u98DE\u4E66\u6D4B\u8BD5\u7FA4\uFF08\u4EC5\u6A21\u62DF\uFF09" : "\u53D1\u9001\u5230\u98DE\u4E66\u7FA4",
           "primary"
         );
         send.type = "button";
@@ -2333,24 +2367,41 @@ body {
             }
           });
         if (!simulated && formal) {
-          let sending = false, completed = false;
+          let sending = false, completed = false, ready2 = false, testOptions, people;
           const alive = () => current === generation && !overlay.hidden;
-          const people = mountSalesConfirmationPeople(document2, formal, alive, () => {
-            if (alive()) send.disabled = sending || completed || !people.valid();
-          });
-          form.append(people.element);
-          void formal.available().then(async (available) => {
+          const valid2 = () => ready2 && (!testOptions?.open || people?.valid() === true);
+          const changed = () => {
+            if (alive()) send.disabled = sending || completed || !valid2();
+          };
+          void formal.configuration().then((configuration) => {
             if (!alive()) return;
-            if (!available) {
+            if (configuration?.available !== true) {
               status2.textContent = "\u5F53\u524D\u4EBA\u5458\u672A\u83B7\u53D1\u5361\u6388\u6743\u6216\u540E\u53F0\u5165\u53E3\u672A\u542F\u7528\uFF0C\u672A\u53D1\u9001\u901A\u77E5\u3002";
               return;
             }
-            status2.textContent = "\u8BF7\u9009\u62E9\u6536\u4EF6\u4EBA\u4E0E\u5904\u7406\u4EBA\u3002\u4EC5\u4FDD\u5B58\u786E\u8BA4\uFF0F\u6682\u7F13\u51B3\u5B9A\uFF0COMS \u5C1A\u672A\u63A5\u5165\u3002";
-            send.textContent = "\u53D1\u9001\u9500\u552E\u786E\u8BA4\u5361\u7247";
-            await people.load();
-            if (alive()) send.disabled = !people.valid();
+            if (!["test", "sales"].includes(configuration.mode))
+              throw Error("\u540E\u53F0\u672A\u8FD4\u56DE\u6709\u6548\u7684\u53D1\u5361\u914D\u7F6E\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002");
+            if (configuration.mode === "test") {
+              status2.textContent = "\u6D4B\u8BD5\u8054\u8C03\uFF1A\u9ED8\u8BA4\u7531\u5F53\u524D\u6D4B\u8BD5\u4EBA\u5458\u5904\u7406\u3002\u9700\u6307\u5B9A\u5176\u4ED6\u4EBA\u5458\u65F6\uFF0C\u53EF\u5C55\u5F00\u6D4B\u8BD5\u9009\u9879\u3002";
+              testOptions = node("details", null, "sales-test-options");
+              testOptions.append(node("summary", "\u6D4B\u8BD5\u9009\u9879\uFF08\u6307\u5B9A\u6536\u4EF6\u4EBA\u4E0E\u5904\u7406\u4EBA\uFF09"));
+              testOptions.addEventListener("toggle", () => {
+                if (!alive() || sending || completed) return;
+                if (testOptions.open && !people) {
+                  people = mountSalesConfirmationPeople(document2, formal, alive, changed);
+                  testOptions.append(people.element);
+                  void people.load();
+                }
+                changed();
+              });
+              form.insertBefore(testOptions, footer);
+            } else {
+              status2.textContent = "\u540E\u53F0\u5C06\u6309\u8BA2\u5355\u5BF9\u5E94\u9500\u552E\u5206\u6D3E\uFF0C\u5E76\u53D1\u9001\u5230\u914D\u7F6E\u7684\u98DE\u4E66\u7FA4\u3002";
+            }
+            ready2 = true;
+            changed();
           }).catch((error) => {
-            if (alive()) status2.textContent = error.message;
+            if (alive()) status2.textContent = `\u6682\u65F6\u65E0\u6CD5\u53D1\u5361\uFF1A${error.message}`;
           });
           send.addEventListener("click", async () => {
             if (send.disabled || sending || completed) return;
@@ -2358,7 +2409,8 @@ body {
             send.disabled = true;
             status2.textContent = "\u6B63\u5728\u521B\u5EFA\u786E\u8BA4\u4EFB\u52A1\u2026";
             try {
-              const result = await formal.notify(draft, people.delivery());
+              const delivery = testOptions?.open ? people.delivery() : {};
+              const result = await formal.notify(draft, delivery);
               if (!alive()) return;
               completed = true;
               status2.textContent = result.status === "resolved" ? "\u8BE5\u8BA2\u5355\u5FEB\u7167\u5DF2\u6709\u5904\u7406\u8BB0\u5F55\uFF0C\u53EF\u5728\u786E\u8BA4\u72B6\u6001\u4E2D\u67E5\u770B\u3002" : result.delivery === "sent" ? "\u786E\u8BA4\u5361\u7247\u5DF2\u53D1\u9001\uFF0C\u7B49\u5F85\u6307\u5B9A\u4EBA\u5458\u5904\u7406\uFF1B\u4E0D\u4EE3\u8868 OMS \u5DF2\u6267\u884C\u3002" : result.delivery === "failed" ? "\u4EFB\u52A1\u5DF2\u4FDD\u5B58\uFF0C\u5361\u7247\u53D1\u9001\u5931\u8D25\uFF1B\u8BF7\u6838\u5BF9\u72B6\u6001\u540E\u91CD\u8BD5\u3002" : result.delivery === "verification_required" ? "\u53D1\u9001\u7ED3\u679C\u5F85\u6838\u5B9E\uFF0C\u8BF7\u67E5\u770B\u786E\u8BA4\u72B6\u6001\uFF0C\u4E0D\u8981\u91CD\u590D\u53D1\u8D77\u3002" : "\u786E\u8BA4\u4EFB\u52A1\u5DF2\u521B\u5EFA\uFF0C\u5361\u7247\u6B63\u5728\u53D1\u9001\uFF0C\u8BF7\u5728\u786E\u8BA4\u72B6\u6001\u4E2D\u67E5\u770B\u7ED3\u679C\u3002";
@@ -2367,7 +2419,7 @@ body {
               if (alive()) status2.textContent = error.message;
             } finally {
               sending = false;
-              if (alive()) send.disabled = completed || !people.valid();
+              changed();
             }
           });
         }

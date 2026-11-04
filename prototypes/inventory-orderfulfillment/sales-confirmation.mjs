@@ -36,9 +36,11 @@ export function mountSalesConfirmation(document, simulation, formal) {
     if (event.key === 'Tab') {
       const elements = [
         ...dialog.querySelectorAll(
-          'button:not(:disabled), input:not(:disabled), select:not(:disabled)',
+          'button:not(:disabled), input:not(:disabled), select:not(:disabled), summary',
         ),
-      ];
+      ].filter(
+        (element) => !element.closest('details:not([open])') || element.tagName === 'SUMMARY',
+      );
       const first = elements[0],
         last = elements.at(-1);
       if (event.shiftKey && document.activeElement === first) {
@@ -81,7 +83,7 @@ export function mountSalesConfirmation(document, simulation, formal) {
         simulated
           ? '仅发送模拟卡片到测试群，不触发真实发货或改单。'
           : formal
-            ? '正在核对正式飞书确认入口…'
+            ? '正在核对发卡权限…'
             : '飞书群发送与人员映射接口尚未接入，当前未发送通知。',
         'sales-preview-notice',
       );
@@ -93,7 +95,7 @@ export function mountSalesConfirmation(document, simulation, formal) {
       cancel.addEventListener('click', close);
       const send = node(
         'button',
-        simulated ? '发送到飞书测试群（仅模拟）' : '发送到飞书群（待接入）',
+        simulated ? '发送到飞书测试群（仅模拟）' : '发送到飞书群',
         'primary',
       );
       send.type = 'button';
@@ -114,27 +116,48 @@ export function mountSalesConfirmation(document, simulation, formal) {
         });
       if (!simulated && formal) {
         let sending = false,
-          completed = false;
+          completed = false,
+          ready = false,
+          testOptions,
+          people;
         const alive = () => current === generation && !overlay.hidden;
-        const people = mountSalesConfirmationPeople(document, formal, alive, () => {
-          if (alive()) send.disabled = sending || completed || !people.valid();
-        });
-        form.append(people.element);
+        const valid = () => ready && (!testOptions?.open || people?.valid() === true);
+        const changed = () => {
+          if (alive()) send.disabled = sending || completed || !valid();
+        };
         void formal
-          .available()
-          .then(async (available) => {
+          .configuration()
+          .then((configuration) => {
             if (!alive()) return;
-            if (!available) {
+            if (configuration?.available !== true) {
               status.textContent = '当前人员未获发卡授权或后台入口未启用，未发送通知。';
               return;
             }
-            status.textContent = '请选择收件人与处理人。仅保存确认／暂缓决定，OMS 尚未接入。';
-            send.textContent = '发送销售确认卡片';
-            await people.load();
-            if (alive()) send.disabled = !people.valid();
+            if (!['test', 'sales'].includes(configuration.mode))
+              throw Error('后台未返回有效的发卡配置，请稍后重试。');
+            if (configuration.mode === 'test') {
+              status.textContent =
+                '测试联调：默认由当前测试人员处理。需指定其他人员时，可展开测试选项。';
+              testOptions = node('details', null, 'sales-test-options');
+              testOptions.append(node('summary', '测试选项（指定收件人与处理人）'));
+              testOptions.addEventListener('toggle', () => {
+                if (!alive() || sending || completed) return;
+                if (testOptions.open && !people) {
+                  people = mountSalesConfirmationPeople(document, formal, alive, changed);
+                  testOptions.append(people.element);
+                  void people.load();
+                }
+                changed();
+              });
+              form.insertBefore(testOptions, footer);
+            } else {
+              status.textContent = '后台将按订单对应销售分派，并发送到配置的飞书群。';
+            }
+            ready = true;
+            changed();
           })
           .catch((error) => {
-            if (alive()) status.textContent = error.message;
+            if (alive()) status.textContent = `暂时无法发卡：${error.message}`;
           });
         send.addEventListener('click', async () => {
           if (send.disabled || sending || completed) return;
@@ -142,7 +165,8 @@ export function mountSalesConfirmation(document, simulation, formal) {
           send.disabled = true;
           status.textContent = '正在创建确认任务…';
           try {
-            const result = await formal.notify(draft, people.delivery());
+            const delivery = testOptions?.open ? people.delivery() : {};
+            const result = await formal.notify(draft, delivery);
             if (!alive()) return;
             completed = true;
             status.textContent =
@@ -160,7 +184,7 @@ export function mountSalesConfirmation(document, simulation, formal) {
             if (alive()) status.textContent = error.message;
           } finally {
             sending = false;
-            if (alive()) send.disabled = completed || !people.valid();
+            changed();
           }
         });
       }
