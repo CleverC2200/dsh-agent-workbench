@@ -8,11 +8,13 @@ const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 test('计划量按实证月份和六维来源键读取 allnum，缺量和重复分开，日期跨自然月不丢量', (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
-  db.exec(`CREATE TABLE dws_scm_cust_plan_exe_di (
+  db.exec(`CREATE TABLE agents_scm_dws_scm_cust_plan_exe_di (
     stat_date TEXT, stat_month TEXT, material_code TEXT, cust_code TEXT,
     belong_base TEXT, warehouse_group_type TEXT, allnum REAL, act_dl_qty REAL
   )`);
-  const insert = db.prepare('INSERT INTO dws_scm_cust_plan_exe_di VALUES (?,?,?,?,?,?,?,?)');
+  const insert = db.prepare(
+    'INSERT INTO agents_scm_dws_scm_cust_plan_exe_di VALUES (?,?,?,?,?,?,?,?)',
+  );
   for (const [date, sku, customer, plan] of [
     ['20260928', 'A', 'C1', 100],
     ['20261103', 'A', 'C2', 25],

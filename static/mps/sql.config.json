@@ -412,7 +412,7 @@
         }
       },
       "request": {
-        "sql": "SELECT belong_base, material_code, CASE WHEN COUNT(plan_qty) = COUNT(*) THEN SUM(plan_qty) ELSE NULL END AS plan_qty_total, SUM(plan_qty) AS known_plan_qty_total, SUM(source_plan_qty) AS source_plan_qty_total, SUM(source_rows) AS source_rows, SUM(missing_rows) AS missing_rows, SUM(CASE WHEN source_rows > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, MIN(stat_date) AS source_date_start, MAX(stat_date) AS source_date_end FROM (SELECT stat_date, stat_month, belong_base, material_code, cust_code, warehouse_group_type, COUNT(*) AS source_rows, SUM(allnum) AS source_plan_qty, SUM(CASE WHEN allnum IS NULL THEN 1 ELSE 0 END) AS missing_rows, CASE WHEN COUNT(*) = 1 AND COUNT(allnum) = 1 THEN SUM(allnum) ELSE NULL END AS plan_qty FROM dws_scm_cust_plan_exe_di WHERE stat_month = REPLACE(SUBSTRING(:month, 1, 7), '-', '') GROUP BY stat_date, stat_month, belong_base, material_code, cust_code, warehouse_group_type) AS plan_rows GROUP BY belong_base, material_code ORDER BY belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT belong_base, material_code, CASE WHEN COUNT(plan_qty) = COUNT(*) THEN SUM(plan_qty) ELSE NULL END AS plan_qty_total, SUM(plan_qty) AS known_plan_qty_total, SUM(source_plan_qty) AS source_plan_qty_total, SUM(source_rows) AS source_rows, SUM(missing_rows) AS missing_rows, SUM(CASE WHEN source_rows > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, MIN(stat_date) AS source_date_start, MAX(stat_date) AS source_date_end FROM (SELECT stat_date, stat_month, belong_base, material_code, cust_code, warehouse_group_type, COUNT(*) AS source_rows, SUM(allnum) AS source_plan_qty, SUM(CASE WHEN allnum IS NULL THEN 1 ELSE 0 END) AS missing_rows, CASE WHEN COUNT(*) = 1 AND COUNT(allnum) = 1 THEN SUM(allnum) ELSE NULL END AS plan_qty FROM agents_scm_dws_scm_cust_plan_exe_di WHERE stat_month = REPLACE(SUBSTRING(:month, 1, 7), '-', '') GROUP BY stat_date, stat_month, belong_base, material_code, cust_code, warehouse_group_type) AS plan_rows GROUP BY belong_base, material_code ORDER BY belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "facts.plan-quantity.count"
@@ -431,7 +431,7 @@
       },
       "columns": ["total"],
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code FROM dws_scm_cust_plan_exe_di WHERE stat_month = REPLACE(SUBSTRING(:month, 1, 7), '-', '') GROUP BY belong_base, material_code) AS plan_groups"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code FROM agents_scm_dws_scm_cust_plan_exe_di WHERE stat_month = REPLACE(SUBSTRING(:month, 1, 7), '-', '') GROUP BY belong_base, material_code) AS plan_groups"
       }
     },
     "facts.report": {

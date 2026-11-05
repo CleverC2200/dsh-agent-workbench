@@ -108,7 +108,7 @@ async function readFacts(id, parameters, signal, type, month) {
       metadata: {
         period: month,
         ...(type === 'plan-quantity'
-          ? { sourceTable: 'ai_db.dws_scm_cust_plan_exe_di', quantityField: 'allnum' }
+          ? { sourceTable: 'ai_db.agents_scm_dws_scm_cust_plan_exe_di', quantityField: 'allnum' }
           : {}),
         partial: false,
         warnings: [],
