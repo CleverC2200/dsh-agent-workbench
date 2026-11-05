@@ -83,7 +83,7 @@ async function readFacts(id, parameters, signal, type, month) {
             缺项原因: [
               ...(Number(row.duplicate_rows) > 0 ? ['计划来源六维业务键重复，未合计有效量'] : []),
               ...(Number(row.missing_rows) > 0 ? ['计划数量缺失，保留已知小计'] : []),
-              ...(!base || !code ? ['缺基地或物料编码'] : []),
+              ...(!code ? ['缺物料编码'] : []),
             ].join('；'),
           };
         const dimensions = {

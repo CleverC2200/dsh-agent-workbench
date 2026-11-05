@@ -253,6 +253,96 @@ test('missing recent plans preserve the independent annual estimate and disclose
   await expect(calculation.locator('tbody tr').first().locator('td').nth(6)).toHaveText('40');
 });
 
+test('nationwide source checks accept base-free plan quantities while retaining missing-code, duplicate and missing-quantity anomalies', async (t) => {
+  let invalid = false;
+  const { page, frame } = await mpsPage(t, config, (query) => {
+    const result = fixture(query);
+    if (query.queryId === 'facts.plan-quantity.count' && invalid)
+      return { ...result, rows: [{ total: 3 }] };
+    if (query.queryId !== 'facts.plan-quantity') return result;
+    result.rows.forEach((row, index) => {
+      row.belong_base = '';
+      row.plan_qty_total = invalid ? null : index ? 0 : 20;
+      row.known_plan_qty_total = index ? 0 : 20;
+      row.source_plan_qty_total = index ? 0 : 20;
+      row.duplicate_rows = invalid && !index ? 2 : 0;
+      row.source_rows = invalid && !index ? 2 : 1;
+      row.missing_rows = invalid && index ? 1 : 0;
+    });
+    if (invalid)
+      result.rows.push(
+        record('facts.plan-quantity', {
+          belong_base: '',
+          material_code: '',
+          plan_qty_total: 5,
+          known_plan_qty_total: 5,
+          source_plan_qty_total: 5,
+          source_rows: 1,
+          duplicate_rows: 0,
+          missing_rows: 0,
+        }),
+      );
+    return { ...result, totalRowCount: result.rows.length };
+  });
+  await version(frame, '2026-11');
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '有基地产品.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,G,,\n郑州,B,产品乙,汤圆,系列甲,G,,',
+    ),
+  });
+  const source = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
+  const category = source.locator('tbody tr').filter({
+    has: frame.getByRole('cell', { name: '汤圆', exact: true }),
+  });
+  await expect(category.locator('td').nth(3)).toHaveText('60');
+  await expect(category.locator('td').nth(6)).toHaveText('200.00%');
+  await expect(category).not.toContainText('缺基地');
+  const exportRows = async (name) => {
+    const pending = page.waitForEvent('download');
+    await source.getByRole('button', { name, exact: true }).click();
+    const text = await mpsDownloadText(await (await pending).path());
+    const book = XLSX.read(text, { type: 'string', raw: true });
+    return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  };
+  const checks = await exportRows('下载源值核对');
+  assert.equal(checks.length, 3);
+  assert(checks.every((row) => row['计划源数量'] === '20' && row['核对比值'] === '2'));
+  const valid = (await exportRows('下载完整来源明细')).filter((row) => row['来源'] === '计划量');
+  assert.equal(valid.length, 6);
+  assert(valid.every((row) => !row['基地'] && !row['缺项原因']));
+  assert.equal(valid.filter((row) => row['产品编码'] === 'B' && row['计划数量'] === '0').length, 3);
+  invalid = true;
+  await source.getByRole('button', { name: '读取三月源值', exact: true }).click();
+  await expect(category.locator('td').nth(6)).toHaveText('-');
+  await expect(category).toContainText('计划来源六维业务键重复');
+  await expect(category).toContainText('计划数量缺失');
+  const incomplete = (await exportRows('下载完整来源明细')).filter(
+    (row) => row['来源'] === '计划量',
+  );
+  assert.equal(incomplete.length, 9);
+  assert.equal(
+    incomplete.filter(
+      (row) =>
+        !row['产品编码'] && row['原因'] === '不在当前产品池' && row['缺项原因'] === '缺物料编码',
+    ).length,
+    3,
+  );
+  assert.equal(
+    incomplete.filter(
+      (row) => row['产品编码'] === 'A' && !row['计划数量'] && row['重复键条数'] === '2',
+    ).length,
+    3,
+  );
+  assert.equal(
+    incomplete.filter(
+      (row) => row['产品编码'] === 'B' && !row['计划数量'] && row['缺数量条数'] === '1',
+    ).length,
+    3,
+  );
+});
+
 test('three-year cards read complete historical periods and disclose the valid years of the mean', async (t) => {
   const { frame, calls } = await mpsPage(t, config, fixture);
   await version(frame);
