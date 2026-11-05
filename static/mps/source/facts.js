@@ -19,8 +19,7 @@ const text = (value) => {
   return value;
 };
 export async function readFactMonth(type, month, signal) {
-  if (!['report', 'history', 'execution-delivery'].includes(type))
-    throw Error('该事实来源尚未接入');
+  if (!['report', 'history', 'plan-quantity'].includes(type)) throw Error('该事实来源尚未接入');
   return readFacts('facts.' + type, { month: month + '-01' }, signal, type, month);
 }
 export async function readHistoryAnnual(month, signal) {
@@ -44,7 +43,7 @@ async function readFacts(id, parameters, signal, type, month) {
   );
   if (
     type === 'report' ||
-    type === 'execution-delivery' ||
+    type === 'plan-quantity' ||
     type === 'shipment' ||
     type === 'inventoryTargets'
   ) {
@@ -68,18 +67,24 @@ async function readFacts(id, parameters, signal, type, month) {
       rows: result.rows.map((row) => {
         const base = text(row.belong_base),
           code = text(row.material_code);
-        if (type === 'execution-delivery')
+        if (type === 'plan-quantity')
           return {
             月份: month,
             基地: base,
             产品编码: code,
-            DMS发货数量: number(row.shipment_qty_total),
-            缺项原因:
-              Number(row.duplicate_rows) > 0
-                ? '出库执行单行重复，发货量未合计'
-                : Number(row.missing_rows) > 0
-                  ? '发货量或出库执行单行标识缺失'
-                  : '',
+            计划数量: number(row.plan_qty_total),
+            已知计划数量: number(row.known_plan_qty_total),
+            源计划数量: number(row.source_plan_qty_total),
+            源记录数: number(row.source_rows),
+            缺数量条数: number(row.missing_rows),
+            重复键条数: number(row.duplicate_rows),
+            源日期开始: text(row.source_date_start),
+            源日期结束: text(row.source_date_end),
+            缺项原因: [
+              ...(Number(row.duplicate_rows) > 0 ? ['计划来源六维业务键重复，未合计有效量'] : []),
+              ...(Number(row.missing_rows) > 0 ? ['计划数量缺失，保留已知小计'] : []),
+              ...(!base || !code ? ['缺基地或物料编码'] : []),
+            ].join('；'),
           };
         const dimensions = {
           产品名称: text(row.material_name),
@@ -102,6 +107,9 @@ async function readFacts(id, parameters, signal, type, month) {
       }),
       metadata: {
         period: month,
+        ...(type === 'plan-quantity'
+          ? { sourceTable: 'ai_db.dws_scm_cust_plan_exe_di', quantityField: 'allnum' }
+          : {}),
         partial: false,
         warnings: [],
         total: result.total,
@@ -247,6 +255,14 @@ export async function readInventoryTargets(month, endMonth, signal) {
       dailyDemand:
         row.avg_daily_planned_demand === null ? null : number(row.avg_daily_planned_demand),
       sourceRows: number(row.source_rows),
+      finalTargetValueCount: number(row.final_target_value_count),
+      dailyDemandValueCount: number(row.daily_demand_value_count),
+      missingTargetRows: number(row.missing_target_rows),
+      missingDailyRows: number(row.missing_daily_rows),
+      conflictFields: [
+        ...(Number(row.final_target_value_count) > 1 ? ['finalTarget'] : []),
+        ...(Number(row.daily_demand_value_count) > 1 ? ['dailyDemand'] : []),
+      ],
     })),
     metadata: {
       ...result.metadata,

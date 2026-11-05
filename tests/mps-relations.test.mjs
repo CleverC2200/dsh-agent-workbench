@@ -69,7 +69,11 @@ test('relation result keeps every exact-code candidate and never matches by name
   assert.equal(result.sku[2].capacity, null);
   assert.equal(result.sku[3].product.material_code, '1');
   assert.equal(result.sku[3].capacity, null);
-  assert.deepEqual(result.sku[4].missing, ['缺产线物料编码', '无产品记录']);
+  assert.deepEqual(result.sku[4].missing, [
+    '缺产线物料编码',
+    '无产品记录',
+    '缺基地、车间或隧道号，未建立产能关系',
+  ]);
   assert.equal(result.sku[4].product, null);
 });
 
@@ -212,7 +216,12 @@ test('source series and categories remain missing even when the exact product is
     },
     '2026-10',
   );
-  assert.deepEqual(result.sku[0].missing, ['缺产线源系列', '缺组合系列', '缺产线生产品类']);
+  assert.deepEqual(result.sku[0].missing, [
+    '缺产线源系列',
+    '缺组合系列',
+    '缺产线生产品类',
+    '缺基地、车间或隧道号，未建立产能关系',
+  ]);
   assert.equal(result.sku[0].capacity.standard_daily_output_pc, 0);
   assert.deepEqual(result.transfers[0].missing, ['缺SAP品类', '缺老大类', '缺调拨生产品类']);
   assert.deepEqual(result.transfers[0].pending, []);
@@ -256,4 +265,41 @@ test('求解分别读取三个月的调拨方向，拒绝跨月数据和读取�
   wrongMonth = false;
   changed = true;
   await assert.rejects(readPlanRelations(config, execute, months), /来源配置版本变化/);
+});
+
+test('产线只按同基地同生产单位同隧道匹配，未匹配与多匹配保留候选原记录', () => {
+  const tunnel = {
+    belong_base: '甲',
+    production_unit: '车间一',
+    tunnel_no: 'T',
+    series: '系列甲',
+    production_category: '源品类',
+    source_rows: 2,
+  };
+  const sku = {
+    material_code: 'A',
+    belong_base: '甲',
+    workshop: '车间一',
+    tunnel_no: 'T',
+    series: 'SKU系列',
+    production_category: 'SKU品类',
+    combined_series: '组合',
+  };
+  const result = relationRecords(
+    {
+      products: [{ material_code: 'A', series: '产品系列', sub_category: '产品大类' }],
+      tunnels: [tunnel, { ...tunnel, series: '系列乙' }],
+      sku_capacity: [sku, { ...sku, workshop: '未知车间' }, { ...sku, workshop: '' }],
+      transfers: [],
+    },
+    '2026-11',
+  );
+  assert.equal(result.sku[0].tunnelMatch.status, 'matched');
+  assert.equal(result.sku[0].tunnelMatch.sourceIndexes.length, 2);
+  assert.equal(result.sku[1].tunnelMatch.status, 'unmatched');
+  assert.equal(result.sku[2].tunnelMatch.status, 'missing-key');
+  assert.match(result.sku[1].missing.join('；'), /生产单位.*车间/);
+  assert.match(result.lines[0].missing.join('；'), /重复/);
+  assert.equal(result.sku[0].product.sub_category, '产品大类');
+  assert.equal(result.sku[0].capacity.production_category, 'SKU品类');
 });

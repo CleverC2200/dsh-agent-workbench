@@ -113,7 +113,7 @@ function fixture({ queryId, parameters }, records) {
       configVersion: 'v1',
     };
   }
-  if (queryId.startsWith('facts.execution-delivery'))
+  if (queryId.startsWith('facts.plan-quantity'))
     return {
       rows: queryId.endsWith('.count') ? [{ total: 0 }] : [],
       returnedColumns: config.queries[queryId].columns,

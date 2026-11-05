@@ -58,10 +58,7 @@ test('MPS basic inputs finish while navigating through shipment to processing an
   let started = false;
   let countCalls = 0;
   const { frame } = await mpsPage(t, config, async (query) => {
-    if (
-      query.queryId === 'facts.execution-delivery.count' &&
-      query.parameters.month === '2027-01-01'
-    ) {
+    if (query.queryId === 'facts.plan-quantity.count' && query.parameters.month === '2027-01-01') {
       countCalls++;
       if (!started) {
         started = true;

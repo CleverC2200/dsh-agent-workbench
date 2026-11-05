@@ -371,16 +371,20 @@
         "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(missing_qty) AS missing_qty, SUM(CASE WHEN quantity_variants > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN quantity_variants = 1 AND missing_qty = 0 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_values GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month) AS mps_summary"
       }
     },
-    "facts.execution-delivery": {
-      "title": "DMS历史发货量（件）",
+    "facts.plan-quantity": {
+      "title": "计划量（allnum，件）",
       "grain": ["belong_base", "material_code"],
       "columns": [
         "belong_base",
         "material_code",
-        "shipment_qty_total",
+        "plan_qty_total",
+        "known_plan_qty_total",
+        "source_plan_qty_total",
         "source_rows",
         "missing_rows",
-        "duplicate_rows"
+        "duplicate_rows",
+        "source_date_start",
+        "source_date_end"
       ],
       "parameterSpec": {
         "month": {
@@ -408,14 +412,14 @@
         }
       },
       "request": {
-        "sql": "SELECT belong_base, material_code, CASE WHEN COUNT(shipment_qty) = COUNT(*) THEN SUM(shipment_qty) ELSE NULL END AS shipment_qty_total, SUM(line_rows) AS source_rows, SUM(CASE WHEN shipment_qty IS NULL THEN line_rows ELSE 0 END) AS missing_rows, SUM(CASE WHEN line_rows > 1 THEN line_rows ELSE 0 END) AS duplicate_rows FROM (SELECT belong_base, material_code, executeorderno, executeorderlineno, COUNT(*) AS line_rows, CASE WHEN COUNT(*) = 1 AND COUNT(delivery_qty) = 1 AND NULLIF(TRIM(executeorderno), '') IS NOT NULL AND executeorderlineno IS NOT NULL THEN SUM(delivery_qty) ELSE NULL END AS shipment_qty FROM agents_scm_execute_detail_d WHERE order_month = SUBSTRING(:month, 1, 7) AND is_stat = '1' AND freegift = 'N' AND detailstatus = 10 GROUP BY belong_base, material_code, executeorderno, executeorderlineno) d GROUP BY belong_base, material_code ORDER BY belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT belong_base, material_code, CASE WHEN COUNT(plan_qty) = COUNT(*) THEN SUM(plan_qty) ELSE NULL END AS plan_qty_total, SUM(plan_qty) AS known_plan_qty_total, SUM(source_plan_qty) AS source_plan_qty_total, SUM(source_rows) AS source_rows, SUM(missing_rows) AS missing_rows, SUM(CASE WHEN source_rows > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, MIN(stat_date) AS source_date_start, MAX(stat_date) AS source_date_end FROM (SELECT stat_date, stat_month, belong_base, material_code, cust_code, warehouse_group_type, COUNT(*) AS source_rows, SUM(allnum) AS source_plan_qty, SUM(CASE WHEN allnum IS NULL THEN 1 ELSE 0 END) AS missing_rows, CASE WHEN COUNT(*) = 1 AND COUNT(allnum) = 1 THEN SUM(allnum) ELSE NULL END AS plan_qty FROM dws_scm_cust_plan_exe_di WHERE stat_month = REPLACE(SUBSTRING(:month, 1, 7), '-', '') GROUP BY stat_date, stat_month, belong_base, material_code, cust_code, warehouse_group_type) AS plan_rows GROUP BY belong_base, material_code ORDER BY belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
-        "countQuery": "facts.execution-delivery.count"
+        "countQuery": "facts.plan-quantity.count"
       }
     },
-    "facts.execution-delivery.count": {
-      "title": "DMS历史发货分组数",
+    "facts.plan-quantity.count": {
+      "title": "计划量基地物料分组数",
       "parameterSpec": {
         "month": {
           "name": "month",
@@ -427,7 +431,7 @@
       },
       "columns": ["total"],
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code FROM agents_scm_execute_detail_d WHERE order_month = SUBSTRING(:month, 1, 7) AND is_stat = '1' AND freegift = 'N' AND detailstatus = 10 GROUP BY belong_base, material_code) d"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code FROM dws_scm_cust_plan_exe_di WHERE stat_month = REPLACE(SUBSTRING(:month, 1, 7), '-', '') GROUP BY belong_base, material_code) AS plan_groups"
       }
     },
     "facts.report": {
@@ -1211,7 +1215,11 @@
         "inventory_version",
         "final_target_inventory",
         "avg_daily_planned_demand",
-        "source_rows"
+        "source_rows",
+        "final_target_value_count",
+        "daily_demand_value_count",
+        "missing_target_rows",
+        "missing_daily_rows"
       ],
       "parameterSpec": {
         "start_month": {
@@ -1242,7 +1250,7 @@
         }
       },
       "request": {
-        "sql": "SELECT SUBSTRING(CAST(year_month AS TEXT), 1, 7) AS target_month, belong_base, material_code, inventory_version, CASE WHEN COUNT(final_target_inventory) = COUNT(*) AND COUNT(DISTINCT final_target_inventory) = 1 THEN MAX(final_target_inventory) ELSE NULL END AS final_target_inventory, CASE WHEN COUNT(avg_daily_planned_demand) = COUNT(*) AND COUNT(DISTINCT avg_daily_planned_demand) = 1 THEN MAX(avg_daily_planned_demand) ELSE NULL END AS avg_daily_planned_demand, COUNT(*) AS source_rows FROM agents_scm_goods_inventory_turnover_data_m WHERE SUBSTRING(CAST(year_month AS TEXT), 1, 7) >= :start_month AND SUBSTRING(CAST(year_month AS TEXT), 1, 7) <= :end_month AND inventory_version IN ('纠偏', '月初', '滚动') GROUP BY SUBSTRING(CAST(year_month AS TEXT), 1, 7), belong_base, material_code, inventory_version ORDER BY target_month, belong_base, inventory_version, material_code LIMIT :gea_p98 OFFSET :gea_p99",
+        "sql": "SELECT SUBSTRING(CAST(year_month AS TEXT), 1, 7) AS target_month, belong_base, material_code, inventory_version, CASE WHEN COUNT(final_target_inventory) = COUNT(*) AND COUNT(DISTINCT final_target_inventory) = 1 THEN MAX(final_target_inventory) ELSE NULL END AS final_target_inventory, CASE WHEN COUNT(avg_daily_planned_demand) = COUNT(*) AND COUNT(DISTINCT avg_daily_planned_demand) = 1 THEN MAX(avg_daily_planned_demand) ELSE NULL END AS avg_daily_planned_demand, COUNT(*) AS source_rows, COUNT(DISTINCT final_target_inventory) AS final_target_value_count, COUNT(DISTINCT avg_daily_planned_demand) AS daily_demand_value_count, SUM(CASE WHEN final_target_inventory IS NULL THEN 1 ELSE 0 END) AS missing_target_rows, SUM(CASE WHEN avg_daily_planned_demand IS NULL THEN 1 ELSE 0 END) AS missing_daily_rows FROM agents_scm_goods_inventory_turnover_data_m WHERE SUBSTRING(CAST(year_month AS TEXT), 1, 7) >= :start_month AND SUBSTRING(CAST(year_month AS TEXT), 1, 7) <= :end_month AND inventory_version IN ('纠偏', '月初', '滚动') GROUP BY SUBSTRING(CAST(year_month AS TEXT), 1, 7), belong_base, material_code, inventory_version ORDER BY target_month, belong_base, inventory_version, material_code LIMIT :gea_p98 OFFSET :gea_p99",
         "parameters": {
           "start_month": "2026-11",
           "end_month": "2027-01",

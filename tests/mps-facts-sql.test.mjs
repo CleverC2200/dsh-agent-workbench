@@ -5,47 +5,43 @@ import { DatabaseSync } from 'node:sqlite';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 
-test('DMS shipment source uses shipped pieces and rejects incomplete or repeated execution lines', (t) => {
+test('计划量按实证月份和六维来源键读取 allnum，缺量和重复分开，日期跨自然月不丢量', (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
-  db.exec(`CREATE TABLE agents_scm_execute_detail_d (
-    order_month TEXT, is_stat TEXT, freegift TEXT, detailstatus INTEGER,
-    belong_base TEXT, material_code TEXT, executeorderno TEXT, executeorderlineno INTEGER,
-    delivery_qty REAL, qtyshipped REAL
+  db.exec(`CREATE TABLE dws_scm_cust_plan_exe_di (
+    stat_date TEXT, stat_month TEXT, material_code TEXT, cust_code TEXT,
+    belong_base TEXT, warehouse_group_type TEXT, allnum REAL, act_dl_qty REAL
   )`);
-  const insert = db.prepare('INSERT INTO agents_scm_execute_detail_d VALUES (?,?,?,?,?,?,?,?,?,?)');
-  for (const [sku, execution, quantity] of [
-    ['A', 'A1', 100],
-    ['A', 'A2', 25],
-    ['B', 'B1', 20],
-    ['B', 'B2', null],
-    ['C', 'C1', 2],
-    ['C', 'C1', 3],
-    ['D', 'D1', 0],
+  const insert = db.prepare('INSERT INTO dws_scm_cust_plan_exe_di VALUES (?,?,?,?,?,?,?,?)');
+  for (const [date, sku, customer, plan] of [
+    ['20260928', 'A', 'C1', 100],
+    ['20261103', 'A', 'C2', 25],
+    ['20261001', 'B', 'C1', 20],
+    ['20261002', 'B', 'C2', null],
+    ['20261001', 'C', 'C1', 2],
+    ['20261001', 'C', 'C1', 3],
+    ['20261001', 'D', 'C1', 0],
   ])
-    insert.run('2026-07', '1', 'N', 10, '基地甲', sku, execution, 1, quantity, 9999);
-  for (const [month, stat, gift, status] of [
-    ['2026-08', '1', 'N', 10],
-    ['2026-07', '0', 'N', 10],
-    ['2026-07', '1', 'Y', 10],
-    ['2026-07', '1', 'N', 20],
-  ])
-    insert.run(month, stat, gift, status, '基地甲', 'A', 'excluded', 1, 1000, 9999);
-  const query = db.prepare(config.queries['facts.execution-delivery'].request.sql);
+    insert.run(date, '202610', sku, customer, '基地甲', 'FACTORY_WH', plan, 9999);
+  insert.run('20261001', '202609', 'A', 'C1', '基地甲', 'FACTORY_WH', 1000, 9999);
+  const query = db.prepare(config.queries['facts.plan-quantity'].request.sql);
   const rows = [
-    ...query.all({ month: '2026-07-01', gea_p98: 2, gea_p99: 0 }),
-    ...query.all({ month: '2026-07-01', gea_p98: 2, gea_p99: 2 }),
+    ...query.all({ month: '2026-10-01', gea_p98: 2, gea_p99: 0 }),
+    ...query.all({ month: '2026-10-01', gea_p98: 2, gea_p99: 2 }),
   ];
   assert.deepEqual(
-    rows.map(({ shipment_qty_total }) => shipment_qty_total),
+    rows.map(({ plan_qty_total }) => plan_qty_total),
     [125, null, null, 0],
   );
+  assert.equal(rows[0].source_date_start, '20260928');
+  assert.equal(rows[0].source_date_end, '20261103');
+  assert.equal(rows[1].known_plan_qty_total, 20);
   assert.equal(rows[1].missing_rows, 1);
   assert.equal(rows[2].duplicate_rows, 2);
+  assert.equal(rows[2].source_plan_qty_total, 5);
   assert.equal(
-    db
-      .prepare(config.queries['facts.execution-delivery.count'].request.sql)
-      .get({ month: '2026-07-01' }).total,
+    db.prepare(config.queries['facts.plan-quantity.count'].request.sql).get({ month: '2026-10-01' })
+      .total,
     4,
   );
 });
@@ -219,6 +215,9 @@ test('inventory target SQL preserves all keys, reduces agreeing repeats and isol
   assert.equal(rows.find((row) => row.material_code === 'C').source_rows, 2);
   assert.equal(rows.find((row) => row.material_code === 'C').final_target_inventory, 80);
   assert.equal(rows.find((row) => row.material_code === 'D').final_target_inventory, null);
+  assert.equal(rows.find((row) => row.material_code === 'D').final_target_value_count, 2);
+  assert.equal(rows.find((row) => row.material_code === 'D').missing_target_rows, 0);
+  assert.equal(rows.find((row) => row.material_code === 'B').daily_demand_value_count, 1);
   assert.equal(
     rows.filter((row) => row.belong_base === '郑州' && row.material_code === 'A').length,
     3,

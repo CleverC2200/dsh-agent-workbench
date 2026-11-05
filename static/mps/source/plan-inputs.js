@@ -1,4 +1,5 @@
 import { unitWeightCandidate } from './unit-weights.js';
+import { matchTunnelCapacity, physicalTunnelKey, tunnelCapacityConflicts } from './relations.js';
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const number = (value) => {
@@ -12,7 +13,6 @@ const number = (value) => {
     ? numeric
     : null;
 };
-const physicalKey = (base, workshop, tunnel) => JSON.stringify([base, workshop, tunnel]);
 
 export function buildPlanSources(draft, relations, weightRead) {
   const sources = relations?.sources;
@@ -37,7 +37,7 @@ export function buildPlanSources(draft, relations, weightRead) {
       issues.push('隧道来源缺基地、车间或隧道号');
       continue;
     }
-    const key = physicalKey(base, workshop, tunnel);
+    const key = physicalTunnelKey(base, workshop, tunnel);
     const group = groups.get(key) ?? [];
     group.push(row);
     groups.set(key, group);
@@ -48,9 +48,24 @@ export function buildPlanSources(draft, relations, weightRead) {
     const first = group[0];
     if (manualBases.has(text(first.belong_base))) continue;
     const values = [...new Set(group.map((row) => number(row.standard_daily_output_ton)))];
-    if (values.length !== 1 || values[0] === null) {
+    const pieces = [...new Set(group.map((row) => number(row.standard_daily_output_pc)))];
+    if (values.length !== 1 || values[0] === null || pieces.length > 1) {
       issues.push(
         `${text(first.belong_base)} ${text(first.production_unit)} ${text(first.tunnel_no)} 日产能力冲突或缺失`,
+      );
+      continue;
+    }
+    const skuRows = (sources.sku_capacity ?? []).filter(
+      (row) =>
+        physicalTunnelKey(text(row.belong_base), text(row.workshop), text(row.tunnel_no)) === key,
+    );
+    const conflicts = tunnelCapacityConflicts(group, skuRows);
+    if (conflicts.length) {
+      issues.push(
+        ...conflicts.map(
+          (row) =>
+            `${text(first.belong_base)} ${text(first.production_unit)} ${text(first.tunnel_no)}：${row.reason}`,
+        ),
       );
       continue;
     }
@@ -80,14 +95,15 @@ export function buildPlanSources(draft, relations, weightRead) {
       tunnel = text(row.tunnel_no),
       workshop = text(row.workshop);
     if (!base || !code || !tunnel || manualBases.has(base)) continue;
-    const exact = sourceResources.filter(
-      (resource) =>
-        resource.base === base && resource.workshop === workshop && resource.tunnel === tunnel,
+    const match = matchTunnelCapacity(row, sources.tunnels);
+    if (match.status !== 'matched') {
+      issues.push(`${base} ${workshop} ${tunnel} ${code}：${match.missing.join('；')}`);
+      continue;
+    }
+    const resource = sourceResources.find(
+      (resource) => resource.id === `source:${match.resourceKey}`,
     );
-    const matches = exact.length
-      ? exact
-      : sourceResources.filter((resource) => resource.base === base && resource.tunnel === tunnel);
-    if (matches.length === 1) candidates.push({ base, code, resourceId: matches[0].id });
+    if (resource) candidates.push({ base, code, resourceId: resource.id });
   }
   const uniqueCandidates = [
     ...new Map(candidates.map((row) => [JSON.stringify(row), row])).values(),

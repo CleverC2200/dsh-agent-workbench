@@ -428,3 +428,65 @@ test('求解上下文只发布当前页业务值，万行结果与共享资源�
   assert.equal(context.resourceTotal, 300);
   assert.ok(JSON.stringify(context).length < 20000);
 });
+
+test('同隧道不同系列不扩产，日产件数冲突和车间未匹配不会自动取最大值或套用唯一隧道', async () => {
+  const { buildPlanSources } = await import('../static/mps/source/plan-inputs.js');
+  const source = draft();
+  const tunnel = {
+    belong_base: '甲',
+    production_unit: '一车间',
+    tunnel_no: 'T',
+    standard_daily_output_ton: 5,
+    standard_daily_output_pc: 100,
+  };
+  const relations = {
+    sources: {
+      tunnels: [tunnel],
+      sku_capacity: [
+        { belong_base: '甲', workshop: '错误车间', tunnel_no: 'T', material_code: 'A' },
+      ],
+      transfers: [],
+    },
+  };
+  const unmatched = buildPlanSources(source, relations);
+  assert.equal(unmatched.resources.length, 1);
+  assert.equal(unmatched.planCandidates.length, 0);
+  assert.match(unmatched.planSourceIssues.join('；'), /车间.*未匹配/);
+  relations.sources.tunnels.push({ ...tunnel, series: '乙系列', standard_daily_output_pc: 200 });
+  const conflict = buildPlanSources(source, relations);
+  assert.equal(conflict.resources.length, 0);
+  assert.match(conflict.planSourceIssues.join('；'), /日产能力冲突/);
+});
+
+test('两表同物理隧道标准日产吨数不同保留冲突，不能选择任何一表继续排产', async () => {
+  const { buildPlanSources } = await import('../static/mps/source/plan-inputs.js');
+  const source = draft();
+  const relations = {
+    sources: {
+      tunnels: [
+        {
+          belong_base: '甲',
+          production_unit: '一车间',
+          tunnel_no: 'T',
+          standard_daily_output_ton: 4400,
+          standard_daily_output_pc: null,
+        },
+      ],
+      sku_capacity: [
+        {
+          belong_base: '甲',
+          workshop: '一车间',
+          tunnel_no: 'T',
+          material_code: 'A',
+          standard_daily_output_ton: 43,
+          standard_daily_output_pc: 3000,
+        },
+      ],
+      transfers: [],
+    },
+  };
+  const result = buildPlanSources(source, relations);
+  assert.equal(result.resources.length, 0);
+  assert.equal(result.planCandidates.length, 0);
+  assert.match(result.planSourceIssues.join('；'), /两表.*标准日产吨数.*冲突/);
+});

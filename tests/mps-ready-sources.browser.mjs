@@ -44,12 +44,16 @@ function fixture({ queryId, parameters }) {
         allnum_total: index ? 60 : 20,
       }),
     );
-  if (queryId.startsWith('facts.execution-delivery'))
+  if (queryId.startsWith('facts.plan-quantity'))
     rows = ['A', 'B'].map((material_code, index) =>
-      record('facts.execution-delivery', {
+      record('facts.plan-quantity', {
         belong_base: '郑州',
         material_code,
-        shipment_qty_total: index ? 30 : 10,
+        plan_qty_total: index ? 30 : 10,
+        known_plan_qty_total: index ? 30 : 10,
+        source_plan_qty_total: index ? 30 : 10,
+        source_date_start: '20260101',
+        source_date_end: '20261231',
         source_rows: 1,
         missing_rows: 0,
         duplicate_rows: 0,
@@ -221,7 +225,7 @@ test('source checks read DMS shipped pieces for the same explicit window in both
   for (const month of ['2026-07-01', '2026-08-01', '2026-09-01'])
     assert(
       calls.some(
-        (call) => call.queryId === 'facts.execution-delivery' && call.parameters.month === month,
+        (call) => call.queryId === 'facts.plan-quantity' && call.parameters.month === month,
       ),
     );
   await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
@@ -234,7 +238,7 @@ test('source checks read DMS shipped pieces for the same explicit window in both
 test('missing recent plans preserve the independent annual estimate and disclose the monthly dependency', async (t) => {
   const { frame } = await mpsPage(t, config, (query) => {
     const result = fixture(query);
-    return query.queryId === 'facts.execution-delivery'
+    return query.queryId === 'facts.plan-quantity'
       ? { ...result, rows: [], totalRowCount: 0, hasMorePages: false }
       : result;
   });
@@ -278,7 +282,7 @@ test('three-year cards read complete historical periods and disclose the valid y
 test('failed source-check refresh retracts old comparisons instead of leaving an earlier ratio visible', async (t) => {
   let deny = false;
   const { frame } = await mpsPage(t, config, (query) => {
-    if (deny && query.queryId === 'facts.execution-delivery') throw Error('SOURCE_READ_DENIED');
+    if (deny && query.queryId === 'facts.plan-quantity') throw Error('SOURCE_READ_DENIED');
     return fixture(query);
   });
   const section = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
