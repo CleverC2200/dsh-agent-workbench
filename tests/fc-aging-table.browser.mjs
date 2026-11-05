@@ -29,21 +29,26 @@ const output = await build({
   outfile: 'aging.js',
   format: 'iife',
   platform: 'browser',
-  alias: { react: resolve('node_modules/react'), 'react-dom': resolve('node_modules/react-dom') },
+  alias: {
+    react: resolve('node_modules/react'),
+    'react-dom': resolve('node_modules/react-dom'),
+  },
   define: { PLUGIN_ID: '"fc"', 'process.env.NODE_ENV': '"test"' },
   loader: { '.css': 'css', '.module.css': 'local-css' },
 });
 const js = output.outputFiles.find((file) => file.path.endsWith('.js')).text;
 const css = output.outputFiles.find((file) => file.path.endsWith('.css')).text;
 
-test('aging headers resize without reads, filter server pages and keep all-scope totals aligned', async (t) => {
+test('aging filters apply inside the client restricted frame and keep all-scope totals aligned', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const host = await browser.newPage({
+    viewport: { width: 1280, height: 900 },
+  });
   const calls = [],
     errors = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => {
+  host.on('pageerror', (error) => errors.push(error.message));
+  host.on('console', (message) => {
     if (message.type() === 'error' && message.text().includes('same key'))
       errors.push(message.text());
   });
@@ -65,11 +70,21 @@ test('aging headers resize without reads, filter server pages and keep all-scope
     warning:
       i === 0 ? '货龄待核实' : i === 13 ? '无库存' : i === 12 ? '滞库' : i === 11 ? '预警' : '正常',
   }));
-  await page.route('http://127.0.0.1:19497/**', async (route) => {
+  await host.route('http://127.0.0.1:19497/**', async (route) => {
+    const headers = {
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
+      'access-control-allow-headers': '*',
+    };
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     if (route.request().method() !== 'POST')
       return route.fulfill({
         contentType: 'text/html',
-        body: `<style>${css}</style><div id="app"></div><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
+        headers,
+        body:
+          new URL(route.request().url()).pathname === '/'
+            ? '<body style="margin:0"><iframe sandbox="allow-scripts allow-downloads" src="/aging" style="width:100%;height:900px;border:0"></iframe></body>'
+            : `<style>${css}</style><div id="app"></div><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId, parameters: values } = route.request().postDataJSON();
     calls.push({ queryId, values });
@@ -86,7 +101,22 @@ test('aging headers resize without reads, filter server pages and keep all-scope
       }));
     } else {
       assert.equal(queryId, 'batch-age.atomic');
-      const filtered = all.filter(
+      const scopeRows = values.age_filter
+        ? all
+            .filter(
+              (row) =>
+                (row.material_code === 'S12' && values.age_filter.includes('60-90')) ||
+                (row.material_code === 'S13' && values.age_filter.includes('90+')),
+            )
+            .map((row) => ({
+              ...row,
+              total_qty: row.material_code === 'S12' ? 7 : 5,
+              age_weight_qty: row.material_code === 'S12' ? 7 : 5,
+              weighted_age: row.material_code === 'S12' ? 490 : 500,
+              average_age: row.material_code === 'S12' ? 70 : 100,
+            }))
+        : all;
+      const filtered = scopeRows.filter(
         (row) =>
           (!values.risk || row.warning === values.risk) &&
           (!values.category || row.product_categ_name === values.category) &&
@@ -127,6 +157,7 @@ test('aging headers resize without reads, filter server pages and keep all-scope
         ];
     }
     return route.fulfill({
+      headers,
       json: {
         rows,
         returnedColumns: query.resultColumns,
@@ -135,9 +166,15 @@ test('aging headers resize without reads, filter server pages and keep all-scope
       },
     });
   });
-  await page.goto('http://127.0.0.1:19497/');
+  await host.goto('http://127.0.0.1:19497/');
+  const page = host.frames().find((frame) => frame !== host.mainFrame());
+  assert.ok(page, 'the inventory page must run inside the restricted client frame');
   const table = page.locator('table[data-resizable]');
   const footer = table.locator('tfoot');
+  await expect(table.locator('th[data-field="total_qty"]')).toContainText('库存量');
+  await expect(
+    page.getByRole('checkbox', { name: '90天以上', exact: true }).locator('..'),
+  ).toHaveAttribute('title', '仅统计所选货龄批次，库存量和合计同步筛选。');
   await expect(table.locator('tbody tr')).toHaveCount(10);
   await expect(table.locator('th[data-field="warehouseid"]')).toHaveCount(0);
   await page.getByLabel('列设置', { exact: true }).click();
@@ -194,7 +231,10 @@ test('aging headers resize without reads, filter server pages and keep all-scope
   await page.getByRole('combobox', { name: '筛选值', exact: true }).selectOption('');
   await page.getByRole('button', { name: '应用', exact: true }).click();
   await expect(footer.locator('[data-column="total_qty"]')).toHaveText('91');
-  const categorySelect = page.getByRole('combobox', { name: '产品大类', exact: true });
+  const categorySelect = page.getByRole('combobox', {
+    name: '产品大类',
+    exact: true,
+  });
   await expect(categorySelect.locator('option')).toHaveCount(10);
   await categorySelect.selectOption('面点');
   await page.getByRole('button', { name: '查询', exact: true }).click();
@@ -208,18 +248,21 @@ test('aging headers resize without reads, filter server pages and keep all-scope
   await handle.scrollIntoViewIfNeeded();
   const bounds = await handle.boundingBox(),
     reads = calls.length;
-  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 12);
-  await page.mouse.down();
-  await page.mouse.move(bounds.x + 103, bounds.y + 12);
-  await page.mouse.up();
+  await host.mouse.move(bounds.x + bounds.width / 2, bounds.y + 12);
+  await host.mouse.down();
+  await host.mouse.move(bounds.x + 103, bounds.y + 12);
+  await host.mouse.up();
   await expect
     .poll(async () => (await header.boundingBox()).width)
     .toBeGreaterThan(before.width + 90);
   await handle.focus();
-  await page.keyboard.press('ArrowLeft');
+  await host.keyboard.press('ArrowLeft');
   await expect(handle).toHaveAttribute('aria-valuenow', String(Math.round(before.width + 90)));
   assert.equal(calls.length, reads, 'resizing must not read business data');
-  const stockFilters = page.getByRole('group', { name: '库存情况', exact: true });
+  const stockFilters = page.getByRole('group', {
+    name: '库存情况',
+    exact: true,
+  });
   await stockFilters.getByRole('button', { name: '无库存', exact: true }).click();
   await expect(table.locator('tbody tr')).toHaveCount(1);
   await expect(table.locator('tbody [data-column="material_code"]')).toHaveText('S14');
@@ -242,8 +285,8 @@ test('aging headers resize without reads, filter server pages and keep all-scope
   await page.getByRole('button', { name: '筛选产品编码', exact: true }).click();
   await page.getByRole('button', { name: '清除', exact: true }).click();
   await expect(table.locator('tbody tr')).toHaveCount(10);
-  await page.getByRole('button', { name: '筛选当前库存量', exact: true }).scrollIntoViewIfNeeded();
-  await page.getByRole('button', { name: '筛选当前库存量', exact: true }).click();
+  await page.getByRole('button', { name: '筛选库存量', exact: true }).scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: '筛选库存量', exact: true }).click();
   await page.getByLabel('最小值', { exact: true }).fill('11');
   await page.getByLabel('最大值', { exact: true }).fill('12');
   await page.getByRole('button', { name: '应用', exact: true }).click();
@@ -269,7 +312,7 @@ test('aging headers resize without reads, filter server pages and keep all-scope
   assert.ok(headerOrder.indexOf('material_name') < headerOrder.indexOf('material_code'));
   await table.locator('th[data-field="total_qty"]').dragTo(table.locator('thead th').first());
   await expect(footer.locator('td').first()).toHaveText('合计 · 23');
-  await page.getByRole('button', { name: '筛选当前库存量', exact: true }).click();
+  await page.getByRole('button', { name: '筛选库存量', exact: true }).click();
   await page.getByLabel('最小值', { exact: true }).fill('99');
   await page.getByLabel('最大值', { exact: true }).fill('100');
   await page.getByRole('button', { name: '应用', exact: true }).click();
@@ -284,9 +327,27 @@ test('aging headers resize without reads, filter server pages and keep all-scope
     'true',
   );
   assert.equal(calls.at(-1).values.stock_presence, null);
-  await page.screenshot({ path: '/tmp/fc-aging-table-desktop.png', fullPage: true });
-  await page.setViewportSize({ width: 768, height: 900 });
-  await page.screenshot({ path: '/tmp/fc-aging-table-narrow.png', fullPage: true });
+  await page.getByRole('checkbox', { name: '90天以上', exact: true }).check();
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  await expect(table.locator('tbody [data-column="total_qty"]')).toHaveText('5');
+  await expect(footer.locator('td').first()).toHaveText('合计 · 5');
+  assert.equal(calls.at(-1).values.age_filter, '90+');
+  await page.getByRole('checkbox', { name: '60–90天', exact: true }).check();
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  await expect(footer.locator('td').first()).toHaveText('合计 · 12');
+  assert.equal(calls.at(-1).values.age_filter, '60-90,90+');
+  await page.getByRole('checkbox', { name: '90天以上', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: '60–90天', exact: true }).uncheck();
+  await expect(footer.locator('td').first()).toHaveText('合计 · 91');
+  await host.screenshot({
+    path: '/tmp/fc-aging-table-desktop.png',
+    fullPage: true,
+  });
+  await host.setViewportSize({ width: 768, height: 900 });
+  await host.screenshot({
+    path: '/tmp/fc-aging-table-narrow.png',
+    fullPage: true,
+  });
   assert.equal(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     true,
