@@ -419,6 +419,15 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         const layer = row[field === 'reportShare' ? 'reportLayers' : 'historyLayers'];
         if (layer)
           expression = `物料组 / 大类：${value(layer.groupQuantity)} ÷ ${value(layer.categoryQuantity)} = ${value(layer.groupShare)}；${coverage}SKU / 物料组：${value(layer.skuQuantity)} ÷ ${value(layer.groupQuantity)} = ${value(layer.skuShare)}；基地SKU / ${coverage}SKU：${value(layer.baseQuantity)} ÷ ${value(layer.skuQuantity)} = ${value(layer.baseShare)}；三层连乘：${value(layer.groupShare)} × ${value(layer.skuShare)} × ${value(layer.baseShare)} = ${value(layer.product)}`;
+        if (
+          field === 'reportShare' &&
+          layer &&
+          row.reportShare !== null &&
+          [layer.groupQuantity, layer.categoryQuantity, layer.skuQuantity, layer.baseQuantity].some(
+            (quantity) => quantity === null,
+          )
+        )
+          expression = `部分原始数量缺项，保留原值。按源计划占比与Top1剩余占比拆分：物料组占比 ${value(layer.groupShare)}；SKU占比 ${value(layer.skuShare)}；基地占比 ${value(layer.baseShare)}；有效提报系数 ${value(row.reportShare)}`;
       }
       if ((field === 'reportShare' || field === 'historyShare') && row.layerMissing?.length)
         expression += `；${row.layerMissing.join('、')}`;
