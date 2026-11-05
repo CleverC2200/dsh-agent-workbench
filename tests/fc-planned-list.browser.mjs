@@ -130,6 +130,7 @@ test('manual plan results, ten-row pagination and CSV all use the same recalcula
   await expect(list.getByRole('button', { name: 'S25', exact: true })).toBeVisible();
   await expect(list.locator('tbody > tr')).toHaveCount(10);
   await expect(list.getByRole('spinbutton', { name: 'S25实际补货量' })).toHaveValue('225');
+  await expect(list.locator('tfoot [data-column="recommended_qty"]')).toHaveText('2,645');
   await list
     .getByRole('group', { name: '补货筛选' })
     .getByRole('button', { name: '低于建议', exact: true })
@@ -138,6 +139,7 @@ test('manual plan results, ten-row pagination and CSV all use the same recalcula
   await list.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(list.getByRole('button', { name: 'S15', exact: true })).toBeVisible();
   await expect(list.getByRole('button', { name: 'S25', exact: true })).toHaveCount(0);
+  await expect(list.locator('tfoot [data-column="recommended_qty"]')).toHaveText('2,645');
   const downloadPromise = page.waitForEvent('download');
   await list.getByRole('button', { name: 'CSV', exact: true }).click();
   const download = await downloadPromise;

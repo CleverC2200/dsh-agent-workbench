@@ -47,6 +47,7 @@ export function OriginalBusinessList({
   onPage,
   onPageSize,
   renderCell,
+  renderSummaryCell,
   toolbarActions,
   quickFilterActions,
   emptyMessage = '暂无符合条件的数据。',
@@ -128,7 +129,8 @@ export function OriginalBusinessList({
           background: 'var(--ui-surface)',
         }
       : undefined;
-  const displayCell = (row: any, column: any) => {
+  const displayCell = (row: any, column: any, summary = false) => {
+    if (summary && renderSummaryCell) return renderSummaryCell(row, column);
     const unit = /[（(](件|箱)(?:[）)])/.exec(column.label ?? '')?.[1];
     if (!qll || !unit || column.unavailable || column.secondary) return renderCell(row, column);
     const raw =
@@ -191,7 +193,6 @@ export function OriginalBusinessList({
           ))}
         </colgroup>
       )}
-      {fc && view.id === 'plan' && <caption>当前使用计划 · 数量单位：件</caption>}
       {fc && view.id === 'base-resources' && (
         <caption>
           基地排产资源监控 · {filters.sku ? `SKU ${filters.sku}` : '按基地汇总'} · T～T+6
@@ -275,7 +276,7 @@ export function OriginalBusinessList({
           </React.Fragment>
         ))}
       </tbody>
-      {resizable && result?.tableSummary && !error && !loading && (
+      {result?.tableSummary && !error && !loading && (
         <tfoot>
           <tr>
             {columns.map((column: any, index: number) => {
@@ -286,7 +287,7 @@ export function OriginalBusinessList({
                     <span>合计{Object.hasOwn(result.tableSummary, field) ? ' · ' : ''}</span>
                   )}
                   {Object.hasOwn(result.tableSummary, field)
-                    ? displayCell(result.tableSummary, column)
+                    ? displayCell(result.tableSummary, column, true)
                     : index === 0
                       ? null
                       : '-'}
@@ -373,7 +374,14 @@ export function OriginalBusinessList({
       <div key={f.name} className={css.quickFilters} role="group" aria-label={f.label}>
         {f.options.map((option: any) =>
           f.multiple ? (
-            <label key={option.value}>
+            <label
+              key={option.value}
+              title={
+                fc && view.id === 'inventory' && f.name === 'age_filter'
+                  ? '仅统计所选货龄批次，库存量和合计同步筛选。'
+                  : undefined
+              }
+            >
               <input
                 type="checkbox"
                 checked={(appliedFilters?.[f.name] ?? '').split(',').includes(option.value)}

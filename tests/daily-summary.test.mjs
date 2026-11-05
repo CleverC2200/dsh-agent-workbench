@@ -498,3 +498,25 @@ test('Shanghai business-day rollover selects a new batch without a manual refres
   batch = '20261104083642623642';
   assert.equal((await createAgentQueries(cfg, execute).read('fact', {})).rows[0].value, batch);
 });
+
+test('category stock age keeps its snapshot date while actual movement follows the business-day window', () => {
+  const values = {
+    stat_date: '2026-11-01',
+    batch_rolling_start: '20261004',
+    batch_end_exclusive: '20261103',
+  };
+  assert.equal(dailySummaryQuery(route('age-movement'), snapshot, values).queryId, 'snapshot.fact');
+  assert.equal(dailySummaryQuery(route('age'), snapshot, values), null);
+  assert.equal(
+    dailySummaryQuery(route('age-movement'), snapshot, {
+      ...values,
+      batch_rolling_start: '20261003',
+      batch_end_exclusive: '20261102',
+    }),
+    null,
+  );
+  assert.equal(
+    dailySummaryQuery(route('age-movement'), snapshot, { ...values, stat_date: '2026-10-31' }),
+    null,
+  );
+});

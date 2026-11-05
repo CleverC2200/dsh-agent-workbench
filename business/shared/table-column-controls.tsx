@@ -5,7 +5,11 @@ import css from './table-column-controls.module.css';
 type ColumnFilter =
   | { kind: 'text'; name: string }
   | { kind: 'number'; min: string; max: string }
-  | { kind: 'select'; name: string; options: { value: string; label: string }[] };
+  | {
+      kind: 'select';
+      name: string;
+      options: { value: string; label: string }[];
+    };
 
 export function ColumnFilterControl({
   label,
@@ -18,7 +22,10 @@ export function ColumnFilterControl({
   values: Record<string, string>;
   onApply: (changes: Record<string, string>) => void;
 }) {
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const [position, setPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const button = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLFormElement>(null);
@@ -58,6 +65,10 @@ export function ColumnFilterControl({
     setPosition(null);
     button.current?.focus();
   };
+  // 客户端页面容器禁止原生表单提交，点击和回车须直接应用筛选。
+  const applyDraft = () => {
+    if (popup.current?.reportValidity()) apply(draft);
+  };
   return (
     <>
       <button
@@ -93,7 +104,20 @@ export function ColumnFilterControl({
             aria-label={`${label}筛选`}
             onSubmit={(event) => {
               event.preventDefault();
-              apply(draft);
+              event.stopPropagation();
+              applyDraft();
+            }}
+            onKeyDown={(event) => {
+              if (
+                event.key === 'Enter' &&
+                !event.nativeEvent.isComposing &&
+                (event.target instanceof HTMLInputElement ||
+                  event.target instanceof HTMLSelectElement)
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                applyDraft();
+              }
             }}
           >
             <strong>{label}</strong>
@@ -106,7 +130,10 @@ export function ColumnFilterControl({
                     step="any"
                     value={draft[definition.min] ?? ''}
                     onChange={(event) =>
-                      setDraft({ ...draft, [definition.min]: event.target.value })
+                      setDraft({
+                        ...draft,
+                        [definition.min]: event.target.value,
+                      })
                     }
                   />
                 </label>
@@ -118,7 +145,10 @@ export function ColumnFilterControl({
                     min={draft[definition.min] || undefined}
                     value={draft[definition.max] ?? ''}
                     onChange={(event) =>
-                      setDraft({ ...draft, [definition.max]: event.target.value })
+                      setDraft({
+                        ...draft,
+                        [definition.max]: event.target.value,
+                      })
                     }
                   />
                 </label>
@@ -155,7 +185,9 @@ export function ColumnFilterControl({
               >
                 清除
               </button>
-              <button type="submit">应用</button>
+              <button type="button" className={css.applyButton} onClick={applyDraft}>
+                应用
+              </button>
             </div>
           </form>,
           document.body,

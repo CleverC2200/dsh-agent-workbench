@@ -75,7 +75,7 @@
   cursor: pointer;
   font: inherit;
 }
-.actions button[type='submit'] {
+.actions button.applyButton {
   background: #df1732;
   border-color: #df1732;
   color: white;
