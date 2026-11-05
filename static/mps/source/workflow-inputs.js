@@ -175,7 +175,9 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         row['维度类型'] === '大类+物料组'
           ? product['大类'] === row['大类'] &&
             [product['物料组'], product['物料组名称']].includes(row['物料组名称'])
-          : product['产品编码'] === row['产品编码'],
+          : product['产品编码'] === row['产品编码'] &&
+            (row['维度类型'] !== '物料组+产品' ||
+              [product['物料组'], product['物料组名称']].includes(row['物料组名称'])),
       );
       const scopes = [
         ...new Map(
