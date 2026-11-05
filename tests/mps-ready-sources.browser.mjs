@@ -208,7 +208,7 @@ test('historical shares reuse the existing computation while final category dema
   );
 });
 
-test('source checks read DMS shipped pieces for the same explicit window in both evaluation modes', async (t) => {
+test('source checks read allnum planned pieces for the same explicit window in both evaluation modes', async (t) => {
   const { frame, calls } = await mpsPage(t, config, fixture);
   await version(frame, '2026-11');
   const section = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
@@ -249,7 +249,7 @@ test('missing recent plans preserve the independent annual estimate and disclose
   await expect(row.locator('td').nth(5)).toHaveText('400');
   await expect(row.locator('td').nth(6)).toHaveText('-');
   const calculation = frame.getByRole('region', { name: '逐月测算', exact: true });
-  await expect(calculation).toContainText('2026-07至2026-09 DMS发货量缺失或不完整');
+  await expect(calculation).toContainText('2026-07至2026-09 计划量缺失或不完整');
   await expect(calculation.locator('tbody tr').first().locator('td').nth(6)).toHaveText('40');
 });
 
@@ -277,6 +277,10 @@ test('three-year cards read complete historical periods and disclose the valid y
   await expect(dialog).toContainText('1.1111111111111112');
   await expect(dialog).toContainText('等权平均');
   await expect(dialog).toContainText('2025、2024、2023（3年）');
+  await expect(dialog).toContainText('2022-10');
+  await expect(dialog).toContainText('3/3组 · 三年齐备');
+  for (const label of ['分子年月', '分母年月', '分子数量', '分母数量', '参与平均', '排除原因'])
+    await expect(dialog.getByRole('columnheader', { name: label, exact: true })).toBeVisible();
 });
 
 test('failed source-check refresh retracts old comparisons instead of leaving an earlier ratio visible', async (t) => {
@@ -416,7 +420,7 @@ test('source-check displays round quantities but its download keeps monthly deci
   await section.getByRole('button', { name: '下载源值核对', exact: true }).click();
   const csv = await mpsDownloadText(await (await waiting).path());
   assert.match(csv, /评估版本,评估月份,源月份/);
-  assert.match(csv, /,汤圆,DMS发货数量,40\.75,40,40\.75,40,/);
+  assert.match(csv, /,汤圆,计划数量,40\.75,40,40\.75,40,/);
 });
 
 test('entering demand confirmation reads the three-month source check without a separate click', async (t) => {
@@ -687,4 +691,50 @@ test('同比缺一年时预览按两年计算并列出有效年份', async (t) =
       ),
     )
     .toBe(true);
+});
+
+test('basic source anomalies keep known BI quantities and export every row while the plan dataset is denied', async (t) => {
+  const { page, frame } = await mpsPage(t, config, (query) => {
+    if (query.queryId.startsWith('facts.plan-quantity'))
+      throw Error('AUTHORIZATION_REWRITE：数据表不在当前租户启用数据集范围内');
+    if (query.queryId !== 'facts.history') return fixture(query);
+    const rows = Array.from({ length: 31 }, (_, index) =>
+      record('facts.history', {
+        'agents_scm_cust_deliv_daily_di.belong_base': '郑州',
+        'agents_scm_cust_deliv_daily_di.material_code': index === 0 ? 'A' : `OUT-${index}`,
+        'agents_scm_cust_deliv_daily_di.material_name': `来源产品${index}`,
+        'agents_scm_cust_deliv_daily_di.act_dl_qty_total': index === 0 ? 0 : index,
+        'agents_scm_cust_deliv_daily_di.act_dl_qty_all_total': index,
+      }),
+    );
+    return {
+      rows,
+      returnedColumns: config.queries['facts.history'].columns,
+      configVersion: 'denied-plan-fixture',
+      totalRowCount: 31,
+      offset: 0,
+      hasMorePages: false,
+      dataStatus: 'ok',
+      warnings: [],
+    };
+  });
+  await version(frame);
+  const source = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
+  await expect(source).toContainText('当前租户尚未启用此数据集，请联系管理员启用');
+  const category = source
+    .locator('tbody tr')
+    .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
+  await expect(category.locator('td').nth(2)).toHaveText('0');
+  const pending = page.waitForEvent('download');
+  await source.getByRole('button', { name: '下载完整来源明细', exact: true }).click();
+  const csv = await mpsDownloadText(await (await pending).path());
+  const book = XLSX.read(csv, { type: 'string', raw: true });
+  const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  assert.equal(rows.length, 96);
+  assert.equal(rows.filter((row) => row['来源'] === '计划量').length, 3);
+  assert.ok(rows.some((row) => row['产品编码'] === 'OUT-30' && row['原因'] === '不在当前产品池'));
+  await source.getByRole('button', { name: '查看异常与来源明细（96条）', exact: true }).click();
+  const dialog = frame.getByRole('dialog', { name: '基础核对异常与来源明细', exact: true });
+  await expect(dialog.locator('tbody tr')).toHaveCount(25);
+  await expect(dialog).toContainText('2026-06至2026-08');
 });

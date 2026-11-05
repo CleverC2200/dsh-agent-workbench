@@ -568,3 +568,47 @@
 .wf-plan-detail-row .wf-table-scroll th {
   top: 38px;
 }
+.wf-demand-node {
+  margin: 12px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--dc-line, #e3e6ea);
+  border-radius: 10px;
+}
+.wf-demand-node > summary {
+  cursor: pointer;
+  color: var(--dc-text, #20232a);
+  font-size: 12px;
+  font-weight: 600;
+}
+.wf-demand-node[open] > summary {
+  margin-bottom: 12px;
+}
+.wf-quantity-cell {
+  display: grid;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.wf-quantity-cell small {
+  color: #555d68;
+}
+.wf-quantity-cell .wf-actions {
+  margin: 0;
+  gap: 8px;
+}
+.wf-quantity-editor {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--dc-line, #e3e6ea);
+  border-radius: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+.wf-quantity-editor p {
+  flex-basis: 100%;
+}
+.wf-page summary:focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: 2px;
+}

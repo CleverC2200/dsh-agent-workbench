@@ -32,7 +32,7 @@ async function assessment(frame, month = '2026-10', codes = ['001']) {
   });
 }
 
-test('reported plan details include matched product dimensions and region without a diagnostic column', async (t) => {
+test('reported plan details use current product mapping and retain source dimensions for audit', async (t) => {
   const records = [
     {
       region_name: '直营渠道销售',
@@ -57,6 +57,13 @@ test('reported plan details include matched product dimensions and region withou
   const { page, frame } = await mpsPage(t, config, (query) =>
     fixture(query, query.queryId.startsWith('facts.report') ? records : undefined),
   );
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '产品映射.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,物料组名称,老品编码,老品名称\n华东,10000008,小小汤圆,汤圆,3.9g汤圆,102018,小小汤圆组,,',
+    ),
+  });
   const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
   await expect(report.getByText('业务来源', { exact: true })).toBeVisible();
   await report.getByRole('button', { name: '预览当前明细', exact: true }).click();
@@ -189,20 +196,20 @@ test('confirmed monthly versions and shipment measures populate independently wh
   await preview.getByRole('button', { name: '下载明细', exact: true }).click();
   const previewCsv = await mpsDownloadText(await (await previewDownload).path());
   assert.match(previewCsv, /数量,含赠品数量,不含税收入/);
-  assert.match(previewCsv, /,7,9,\r?\n?$/);
+  assert.match(previewCsv, /,7,9,/);
   await preview.getByRole('button', { name: '关闭弹窗' }).click();
   const downloaded = page.waitForEvent('download');
   await history.getByRole('button', { name: '导出当前明细' }).click();
   const csv = await mpsDownloadText(await (await downloaded).path());
   assert.match(csv, /数量,含赠品数量,不含税收入/);
-  assert.match(csv, /,7,9,\r?\n?$/);
+  assert.match(csv, /,7,9,/);
   assert.equal(previewCsv, csv);
   await report.getByRole('button', { name: '预览当前明细', exact: true }).click();
   const reportDownload = page.waitForEvent('download');
   await frame.getByRole('dialog').getByRole('button', { name: '下载明细', exact: true }).click();
   const reportCsv = await mpsDownloadText(await (await reportDownload).path());
   assert.match(reportCsv, /月初数量,纠偏数量/);
-  assert.match(reportCsv, /,10,20\r?\n?$/);
+  assert.match(reportCsv, /,10,20,/);
   await frame.getByRole('dialog').getByRole('button', { name: '关闭弹窗' }).click();
   await expect(
     frame
@@ -314,6 +321,9 @@ test('monthly shipment denial does not replace the independently read previous f
     '1 / 1 条可计算',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await frame.getByText('大类系统值与缺项', { exact: true }).click();
+  await frame.getByText('拆分过程与基地SKU明细', { exact: true }).click();
+  await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
   await expect(
     frame.getByRole('button', {
       name: '基地甲 001 2026-10 上一财年发货数量 计算过程',
@@ -408,6 +418,9 @@ test('processing uses fully paged sales-plan rates and one complete fiscal year 
     '1 / 1 条可计算',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await frame.getByText('大类系统值与缺项', { exact: true }).click();
+  await frame.getByText('拆分过程与基地SKU明细', { exact: true }).click();
+  await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
   await expect(
     frame.getByRole('button', { name: '基地甲 001 2026-11 提报数量 计算过程', exact: true }),
   ).toHaveText('38');
@@ -441,6 +454,9 @@ test('an annual-source denial is visible for its complete fiscal scope while sal
     '6 条源记录',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await frame.getByText('大类系统值与缺项', { exact: true }).click();
+  await frame.getByText('拆分过程与基地SKU明细', { exact: true }).click();
+  await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
   for (const month of ['2026-10', '2026-11', '2026-12']) {
     await expect(
       frame.getByRole('button', {
@@ -489,6 +505,9 @@ test('source diagnostics use current plan-rate rows and full-year history for co
     '8 条源记录',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await frame.getByText('大类系统值与缺项', { exact: true }).click();
+  await frame.getByText('拆分过程与基地SKU明细', { exact: true }).click();
+  await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
   const diagnostics = frame.getByRole('region', { name: '逐期来源诊断', exact: true });
   const row = (source, month) =>
     diagnostics
@@ -538,6 +557,9 @@ test('source detail joins product classifications and shows matched rows before 
     '6 条源记录',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await frame.getByText('大类系统值与缺项', { exact: true }).click();
+  await frame.getByText('拆分过程与基地SKU明细', { exact: true }).click();
+  await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
   await frame
     .getByRole('region', { name: '逐期来源诊断', exact: true })
     .getByRole('row')
@@ -577,6 +599,9 @@ test('batched plan loading and separate fiscal-year failure or partial emptiness
   });
   await assessment(frame, '2027-06');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await frame.getByText('大类系统值与缺项', { exact: true }).click();
+  await frame.getByText('拆分过程与基地SKU明细', { exact: true }).click();
+  await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
   const diagnostics = frame.getByRole('region', { name: '逐期来源诊断', exact: true });
   const row = (source, month) =>
     diagnostics
@@ -599,6 +624,9 @@ test('a document without configured sources shows six unread periods without inv
     throw Error('UNEXPECTED_SOURCE_READ');
   });
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await frame.getByText('大类系统值与缺项', { exact: true }).click();
+  await frame.getByText('拆分过程与基地SKU明细', { exact: true }).click();
+  await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
   const diagnostics = frame.getByRole('region', { name: '逐期来源诊断', exact: true });
   await expect(diagnostics.getByRole('row')).toHaveCount(7);
   await expect(diagnostics.getByRole('cell', { name: '未读取', exact: true })).toHaveCount(6);
@@ -650,6 +678,9 @@ test('history diagnostics retain complete quantity coverage when only income is 
     ),
   });
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await frame.getByText('大类系统值与缺项', { exact: true }).click();
+  await frame.getByText('拆分过程与基地SKU明细', { exact: true }).click();
+  await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
   const diagnostics = frame.getByRole('region', { name: '逐期来源诊断', exact: true });
   const october = diagnostics
     .getByRole('row')

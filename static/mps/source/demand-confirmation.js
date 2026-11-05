@@ -14,8 +14,7 @@ import { readFactMonth, readInventoryTargets } from './facts.js';
 import { readSourceTable, forecastDimensions } from './source-tables.js';
 import { createDeliveryMetrics } from './delivery-metrics.js';
 import { createWorkflow } from './workflow-view.js';
-import { mpsCategories as categories } from 'dsh-agent-manage/mps-compute/workflow';
-import { productProjections } from './source-projections.js';
+import { productProjections, sourceDimensions } from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
 import { productFileText, productReplacementErrors } from './product-file.js';
 import { workbookBytes } from './workbook.js';
@@ -126,8 +125,6 @@ function parseCsv(text, columns) {
       errors.push(`第${index + 2}行老品编码和名称须同时填写或留空`);
     return record;
   });
-  if (columns === annualColumns && rows.some((row) => !categories.includes(row['大类'])))
-    errors.push('年度计划大类须属于本页八大类范围');
   if (columns === productColumns) {
     const seen = new Set();
     rows.forEach((record, index) => {
@@ -163,7 +160,7 @@ async function downloadWorkbook(name, tables) {
   const bytes = await workbookBytes(tables);
   downloadFile(name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bytes);
 }
-function downloadCsv(name, columns, rows) {
+export function downloadCsv(name, columns, rows) {
   return downloadWorkbook(name.replace(/\.csv$/i, '.xlsx'), [{ name: '数据', columns, rows }]);
 }
 const integer = new Intl.NumberFormat('zh-CN', {
@@ -227,9 +224,15 @@ function sourceSelection(draft, type) {
   return {
     period,
     column,
-    rows: (type === 'forecast' ? forecastSourceRows(draft) : draft[type]).filter(
-      (row) => row['月份'] === period,
-    ),
+    rows: (type === 'forecast'
+      ? forecastSourceRows(draft)
+      : ['report', 'history'].includes(type)
+        ? sourceDimensions(
+            draft[type],
+            ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : draft.products,
+          )
+        : draft[type]
+    ).filter((row) => row['月份'] === period),
   };
 }
 function downloadFile(name, mime, text) {
@@ -245,7 +248,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
   const CategoryDemand = createCategoryDemand(react, {
     table: (...args) => table(...args),
     downloadCsv,
-    categories,
     useMpsPart,
   });
   function Dialog({ title, children, footer, close, className = '' }) {
@@ -380,6 +382,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   '读取状态',
                 ]
               : ['数量', '含赠品数量', '不含税收入']),
+          '源大类',
+          '源系列',
+          '源物料组',
+          '缺项原因',
         ]
       : [...sourceColumns, column];
     react.useEffect(() => setPage(0), [draft[type]]);
@@ -578,7 +584,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 downloadCsv(
                   `${definition.short}-全部已读.csv`,
                   business ? detailColumns : definition.columns,
-                  type === 'forecast' ? forecastSourceRows(draft) : draft[type],
+                  type === 'forecast'
+                    ? forecastSourceRows(draft)
+                    : sourceDimensions(draft[type], draft.products),
                 ),
             },
             '导出全部已读明细',
@@ -757,7 +765,14 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
       );
     };
-    const displayedCategories = live ? [...new Set(annual.map((row) => row['大类']))] : categories;
+    const displayedCategories = [
+      ...new Set(
+        annual
+          .map((row) => row['大类'])
+          .concat(draft.products.map((row) => row['大类']))
+          .filter(Boolean),
+      ),
+    ];
     const rows = displayedCategories.map((category) => ({
       大类: category || '-',
       ...Object.fromEntries(
@@ -861,7 +876,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     table,
     downloadCsv,
     useMpsPart,
-    categories,
   });
   const Shipment = createShipment(react, useMpsPart, {
     Dialog,

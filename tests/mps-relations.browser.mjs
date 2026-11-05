@@ -26,6 +26,7 @@ const rows = {
       production_category: '产线生产品类',
       standard_daily_output_pc: 50,
       standard_daily_output_ton: 0,
+      source_rows: 2,
     },
     {
       material_code: 'P000',
@@ -44,6 +45,7 @@ const rows = {
     {
       belong_base: '四川',
       production_unit: '生产单位甲',
+      source_rows: 39,
       tunnel_no: '1#',
       series: '隧道源系列',
       production_category: '源品类',
@@ -157,6 +159,8 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
   await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('');
   await view.getByRole('tab', { name: /产线与源系列/ }).click();
   await expect(view.locator('tbody tr')).toContainText('生产单位甲');
+  await expect(view.getByRole('columnheader', { name: '源记录数', exact: true })).toBeVisible();
+  await expect(view.locator('tbody tr').locator('td').nth(9)).toHaveText('39');
   await expect(view.locator('tbody tr')).toContainText('四川');
   await expect(view.locator('tbody tr')).not.toContainText('西南');
   await view.getByRole('tab', { name: /基地与调拨/ }).click();
@@ -234,8 +238,8 @@ test('source series and category gaps stay visible and filterable with a complet
   await expect(view.locator('tbody tr')).toHaveCount(2);
   await expect(view.getByRole('columnheader', { name: '源生产品类', exact: true })).toBeVisible();
   await view.getByRole('checkbox', { name: '仅缺项或待确认' }).check();
-  await expect(view.locator('tbody tr')).toHaveCount(1);
-  const candidate = view.locator('tbody tr');
+  await expect(view.locator('tbody tr')).toHaveCount(2);
+  const candidate = view.locator('tbody tr').filter({ hasText: '缺产线源系列' });
   await expect(candidate).toContainText('产品系列');
   await expect(candidate).toContainText('汤圆');
   await expect(candidate).toContainText('缺产线源系列、缺组合系列、缺产线生产品类');

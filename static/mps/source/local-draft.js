@@ -1,6 +1,11 @@
 import { mpsLocalStateSchema } from '../../../src/mps-local-draft.ts';
 
-export const emptyAdjustments = () => ({ categoryDemand: [], shares: [], history: [] });
+export const emptyAdjustments = () => ({
+  categoryDemand: [],
+  shares: [],
+  quantities: [],
+  history: [],
+});
 const sources = ['products', 'annual', 'report', 'forecast', 'history'];
 const columns = [
   '月份',
@@ -108,13 +113,30 @@ export function decodeLocalDrafts(value, makeDraft, fallback) {
     }),
   };
 }
+export const quantityAdjustmentKey = (entry) =>
+  JSON.stringify([
+    entry.month,
+    entry.category,
+    entry.group,
+    entry.kind,
+    entry.code ?? '',
+    entry.base ?? '',
+  ]);
 export function changeAdjustment(adjustments, kind, input, undo = false) {
   const state = adjustments ?? emptyAdjustments();
   const key =
-    kind === 'categoryDemand' ? JSON.stringify([input.month, input.category]) : input.rowId;
+    kind === 'categoryDemand'
+      ? JSON.stringify([input.month, input.category])
+      : kind === 'quantities'
+        ? quantityAdjustmentKey(input)
+        : input.rowId;
   const keyOf = (entry) =>
-    kind === 'categoryDemand' ? JSON.stringify([entry.month, entry.category]) : entry.rowId;
-  const previous = state[kind].find((entry) => keyOf(entry) === key);
+    kind === 'categoryDemand'
+      ? JSON.stringify([entry.month, entry.category])
+      : kind === 'quantities'
+        ? quantityAdjustmentKey(entry)
+        : entry.rowId;
+  const previous = (state[kind] ?? []).find((entry) => keyOf(entry) === key);
   if (undo && !previous) return state;
   const entry = undo
     ? previous
@@ -123,7 +145,7 @@ export function changeAdjustment(adjustments, kind, input, undo = false) {
         reason: String(input.reason ?? '').trim(),
         at: new Date().toISOString(),
       };
-  const value = kind === 'categoryDemand' ? entry.quantity : entry.share;
+  const value = kind === 'shares' ? entry.share : entry.quantity;
   if (
     !undo &&
     (!entry.reason || !Number.isFinite(value) || value < 0 || (kind === 'shares' && value > 1))
@@ -131,7 +153,10 @@ export function changeAdjustment(adjustments, kind, input, undo = false) {
     throw Error('调整值须为非负有限数，占比不得超过1，并填写调整原因。');
   return {
     ...state,
-    [kind]: [...state[kind].filter((entry) => keyOf(entry) !== key), ...(undo ? [] : [entry])],
+    [kind]: [
+      ...(state[kind] ?? []).filter((entry) => keyOf(entry) !== key),
+      ...(undo ? [] : [entry]),
+    ],
     history: [
       ...state.history,
       {

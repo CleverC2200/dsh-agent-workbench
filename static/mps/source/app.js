@@ -1,4 +1,4 @@
-import { createDemandConfirmation } from './demand-confirmation.js';
+import { createDemandConfirmation, downloadCsv } from './demand-confirmation.js';
 import { createRelations } from './relations-view.js';
 import { mpsView, useMpsPart, useMpsNavigation } from './context.js';
 import { AuthorQuestions, useAuthorQuote } from '../../../business/shared/author-questions.js';
@@ -14,7 +14,7 @@ const mpsSteps = [
   ['report', '产销存报告'],
 ].map(([key, label], index) => ({ key, label, step: String(index + 1) }));
 const DemandConfirmation = createDemandConfirmation(y, useMpsPart, mpsView);
-const Relations = createRelations(y, useMpsPart);
+const Relations = createRelations(y, useMpsPart, { downloadCsv });
 const selectedStep = () => {
   const key = window.location.hash.replace(/^#\/?/, '').split('/')[0];
   return mpsSteps.some((step) => step.key === key) ? key : 'check';

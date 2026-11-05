@@ -24,6 +24,11 @@ const columns = {
     '源生产品类',
     '组合标准日产/件',
     '组合标准日产/吨',
+    '源记录数',
+    '更新时间',
+    '生产单位与车间匹配',
+    '物理资源键',
+    '候选物理资源',
     '核对状态',
   ],
   lines: [
@@ -36,6 +41,8 @@ const columns = {
     '源系列',
     '组合标准日产/件',
     '组合标准日产/吨',
+    '源记录数',
+    '更新时间',
     '核对状态',
   ],
   transfers: [
@@ -70,6 +77,16 @@ function cells(kind, row) {
       source.production_category,
       source.standard_daily_output_pc,
       source.standard_daily_output_ton,
+      source.source_rows,
+      source.update_time,
+      {
+        matched: '唯一对应',
+        multiple: '多匹配待核',
+        unmatched: '未匹配',
+        'missing-key': '业务键缺失',
+      }[row.tunnelMatch?.status] ?? '无候选来源',
+      row.tunnelMatch?.resourceKey,
+      row.tunnelMatch?.candidateResourceKeys?.join('；'),
       status(row),
     ];
   if (kind === 'lines')
@@ -83,6 +100,8 @@ function cells(kind, row) {
       source.series,
       source.standard_daily_output_pc,
       source.standard_daily_output_ton,
+      source.source_rows,
+      source.update_time,
       status(row),
     ];
   return [
@@ -99,7 +118,7 @@ function cells(kind, row) {
     status(row),
   ];
 }
-export function createRelations(react, useMpsPart) {
+export function createRelations(react, useMpsPart, { downloadCsv }) {
   const h = react.createElement;
   return function Relations({ scope, onResult, active = true, enabled = true }) {
     const [kind, setKind] = react.useState('sku');
@@ -239,12 +258,35 @@ export function createRelations(react, useMpsPart) {
         }),
       ),
       h(
+        'p',
+        { className: 'wf-note' },
+        '两表按本次全量来源核对，重新读取替换旧记录。物理隧道按基地、生产单位或车间、隧道号识别，同隧道跨系列或SKU共用资源上限。隧道吨位不是日产能；标准日产件数与吨数分别保留。未匹配、多匹配和日产冲突须核对，不自动取最大值或求和。源生产品类与产品大类独立展示。',
+      ),
+      h(
         'section',
         { className: 'ap-board-card', 'aria-label': selected.name },
         h(
           'div',
           { className: 'ap-card-head mps-relations-tools' },
           h('h3', null, selected.name),
+          h(
+            'button',
+            {
+              disabled: state.busy || Boolean(state.error) || !records.length,
+              onClick: () =>
+                downloadCsv(
+                  `${scope.month}-${selected.name}-完整来源.csv`,
+                  ['评估版本', ...columns[kind]],
+                  records.map((row) => ({
+                    评估版本: scope.name,
+                    ...Object.fromEntries(
+                      columns[kind].map((column, index) => [column, cells(kind, row)[index]]),
+                    ),
+                  })),
+                ),
+            },
+            '下载完整关系明细',
+          ),
           h('input', {
             type: 'search',
             'aria-label': '搜索关系记录',

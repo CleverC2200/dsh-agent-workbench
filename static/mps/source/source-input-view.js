@@ -129,7 +129,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   calculated.recent.map(async (month) => {
                     const [history, report] = await Promise.all([
                       read(() => readFactMonth('history', month, stop.signal)),
-                      read(() => readFactMonth('execution-delivery', month, stop.signal)),
+                      read(() => readFactMonth('plan-quantity', month, stop.signal)),
                     ]);
                     return { month, history, report };
                   }),
@@ -142,7 +142,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               : []
             : [
                 ...(period.history.error ? [`${period.month} BI：${period.history.error}`] : []),
-                ...(period.report.error ? [`${period.month} DMS：${period.report.error}`] : []),
+                ...(period.report.error ? [`${period.month} 计划量：${period.report.error}`] : []),
               ],
         );
         if (result.annual?.error) errors.push(`年度产品池：${result.annual.error}`);
@@ -189,6 +189,30 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         : [];
     const historicalRows = historical.filter(
       (row) => (!dimension || row['维度类型'] === dimension) && (!base || row['基地'] === base),
+    );
+    const comparisonColumns = [
+      '大类',
+      '目标月份',
+      '分子年月',
+      '分母年月',
+      '分子数量',
+      '分母数量',
+      '同比系数',
+      '参与平均',
+      '排除原因',
+    ];
+    const comparisonRows = calculated.historical.flatMap((row) =>
+      (row.years ?? []).map((year) => ({
+        大类: row.category,
+        目标月份: row.month,
+        分子年月: year.numeratorMonth,
+        分母年月: year.denominatorMonth,
+        分子数量: year.quantity ?? '',
+        分母数量: year.priorYearQuantity ?? '',
+        同比系数: year.ratio ?? '',
+        参与平均: year.valid ? '是' : '否',
+        排除原因: year.excludedReasons.join('；'),
+      })),
     );
     const historicalColumns = [
       '月份',
@@ -328,7 +352,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             : number(latest.actual.knownQuantity) +
               (latest.actual.quantity === null ? '（已知小计）' : ''),
         三月实绩: actual.display,
-        三月DMS发货量: plan.display,
+        三月计划量: plan.display,
         三月占比合计: percent(basis?.recentShare),
         全年预估: number(basis?.annualEstimate),
         达成率: percent(basis?.achievementRate),
@@ -344,14 +368,18 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         purpose: 'confirmed category demand and source inputs',
         factors:
           kind === 'parameters'
-            ? calculated.historical.map(({ category, month, yoy, yoyYears, mom, share }) => ({
-                category,
-                month,
-                yoy,
-                yoyYears,
-                mom,
-                share,
-              }))
+            ? calculated.historical.map(
+                ({ category, month, yoy, yoyYears, yoyValidCount, yoyComplete, mom, share }) => ({
+                  category,
+                  month,
+                  yoy,
+                  yoyYears,
+                  yoyValidCount,
+                  yoyComplete,
+                  mom,
+                  share,
+                }),
+              )
             : undefined,
         months:
           kind === 'basic'
@@ -402,17 +430,17 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                 disabled: !current,
                 onClick: () =>
                   downloadCsv(
-                    '大类基础源值核对.csv',
+                    `大类基础源值核对-${calculated.recent[0]}至${endMonth}.csv`,
                     [
                       '评估版本',
                       '评估月份',
                       '源月份',
                       '源分类',
-                      'DMS口径',
+                      '计划量口径',
                       'BI源数量',
-                      'DMS源数量',
+                      '计划源数量',
                       'BI已知小计',
-                      'DMS已知小计',
+                      '计划已知小计',
                       '核对比值',
                       '核对说明',
                     ],
@@ -421,11 +449,11 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                       评估月份: draft.month,
                       源月份: row.month,
                       源分类: row.category,
-                      DMS口径: checks.column,
+                      计划量口径: checks.column,
                       BI源数量: row.actual.quantity ?? '',
-                      DMS源数量: row.plan.quantity ?? '',
+                      计划源数量: row.plan.quantity ?? '',
                       BI已知小计: row.actual.knownQuantity ?? '',
-                      DMS已知小计: row.plan.knownQuantity ?? '',
+                      计划已知小计: row.plan.knownQuantity ?? '',
                       核对比值: row.ratio ?? '',
                       核对说明: row.issues.join('；'),
                     })),
@@ -457,11 +485,57 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               },
               `下载池外待补清单（${checks.excluded.length}条）`,
             ),
+            h(
+              'button',
+              {
+                disabled: !current,
+                onClick: () => {
+                  setPreview('基础核对异常与来源明细');
+                  setPage(0);
+                },
+              },
+              `查看异常与来源明细（${checks.details.length}条）`,
+            ),
+            h(
+              'button',
+              {
+                disabled: !current,
+                onClick: () =>
+                  downloadCsv(
+                    `基础核对完整来源-${calculated.recent[0]}至${endMonth}.csv`,
+                    [
+                      '月份',
+                      '来源',
+                      '基地',
+                      '产品编码',
+                      '产品名称',
+                      '大类',
+                      '系列',
+                      '物料组',
+                      '源大类',
+                      '源系列',
+                      '数量',
+                      '计划数量',
+                      '已知计划数量',
+                      '源计划数量',
+                      '源记录数',
+                      '缺数量条数',
+                      '重复键条数',
+                      '源日期开始',
+                      '源日期结束',
+                      '原因',
+                      '缺项原因',
+                    ],
+                    checks.details,
+                  ),
+              },
+              '下载完整来源明细',
+            ),
           ),
           h(
             'p',
             { className: 'dc-muted' },
-            'BI实绩与DMS发货量按所示三个月核对。DMS取订单所属月的delivery_qty（发货量，件），只纳入参与统计、非赠品、有效明细。达成率＝三月BI实绩÷三月DMS发货量。各来源按当前产品池SKU重新归类，池外SKU另列清单，缺值不补0。期初使用评估月前4至前2月，纠偏使用前3至前1月。基期取窗口最后一月，全年预估＝三月实绩÷三月历史平均占比之和。',
+            'BI实绩与计划量按所示三个月核对。计划量取ai_db.agents_scm_dws_scm_cust_plan_exe_di.allnum（件），按源日期所属月核对。达成率＝三月BI实绩÷三月计划量。各来源按当前产品池SKU重新归类，池外SKU另列清单，缺值不补0。期初使用评估月前4至前2月，纠偏使用前3至前1月。基期取窗口最后一月，全年预估＝三月实绩÷三月历史平均占比之和。',
           ),
           state?.error && h('p', { role: 'alert' }, state.error),
           draft.historyAnnualRead?.error &&
@@ -472,7 +546,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             '大类或源分类',
             '基期实绩',
             '三月实绩',
-            '三月DMS发货量',
+            '三月计划量',
             '三月占比合计',
             '全年预估',
             '达成率',
@@ -480,6 +554,51 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           ],
           basicRows,
         ),
+        preview &&
+          h(
+            Dialog,
+            {
+              title: preview,
+              close: () => setPreview(null),
+              className: 'dc-source-detail',
+              footer: h('button', { onClick: () => setPreview(null) }, '关闭'),
+            },
+            h(
+              'p',
+              null,
+              `${calculated.recent[0]}至${endMonth}；共${checks.details.length}条，预览每页25条，完整下载包含全部记录及读取失败。`,
+            ),
+            table(
+              [
+                '月份',
+                '来源',
+                '基地',
+                '产品编码',
+                '大类',
+                '数量',
+                '计划数量',
+                '已知计划数量',
+                '源记录数',
+                '缺数量条数',
+                '重复键条数',
+                '原因',
+              ],
+              checks.details.slice(page * 25, (page + 1) * 25),
+            ),
+            h(
+              'button',
+              { disabled: page === 0, onClick: () => setPage(page - 1) },
+              '上一页来源明细',
+            ),
+            h(
+              'button',
+              {
+                disabled: (page + 1) * 25 >= checks.details.length,
+                onClick: () => setPage(page + 1),
+              },
+              '下一页来源明细',
+            ),
+          ),
       );
     return h(
       react.Fragment,
@@ -656,7 +775,15 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             ),
           !isShare &&
             table(
-              ['大类', '目标月份', '同比系数', '同比有效年份', '三年环比系数', '三年月占比'],
+              [
+                '大类',
+                '目标月份',
+                '同比系数',
+                '同比有效年份',
+                '有效组数',
+                '三年环比系数',
+                '三年月占比',
+              ],
               calculated.historical.map((row) => ({
                 大类: row.category,
                 目标月份: row.month,
@@ -664,9 +791,25 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                 同比有效年份: row.yoyYears.length
                   ? `${row.yoyYears.map((month) => month.slice(0, 4)).join('、')}（${row.yoyYears.length}年）`
                   : '无有效年份',
+                有效组数: `${row.yoyValidCount}/3组${row.yoyComplete ? ' · 三年齐备' : ' · 未齐备'}`,
                 三年环比系数: row.mom ?? '',
                 三年月占比: row.share ?? '',
               })),
+            ),
+          !isShare && table(comparisonColumns, comparisonRows),
+          !isShare &&
+            h(
+              'button',
+              {
+                disabled: !comparisonRows.length,
+                onClick: () =>
+                  downloadCsv(
+                    `${draft.month}-同比三组分子分母.csv`,
+                    comparisonColumns,
+                    comparisonRows,
+                  ),
+              },
+              '下载同比分子分母',
             ),
           table(previewColumns, previewRows.slice(pageIndex * 25, (pageIndex + 1) * 25)),
           !previewRows.length &&

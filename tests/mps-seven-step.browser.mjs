@@ -40,8 +40,9 @@ test('MPS seven steps share the selected evaluation without legacy simulation co
   }
   assert.equal(await page.evaluate(() => window.peerDraft), '历史草稿，请保留。');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  await frame.getByText('需求与库存参考底稿（非排产结果）', { exact: true }).click();
   const download = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载产销存报告', exact: true }).click();
+  await frame.getByRole('button', { name: '下载需求推导参考', exact: true }).click();
   const csv = await readFile(await (await download).path(), 'utf8');
   assert.match(csv, /2026-12/);
   assert.match(csv, /2027-01/);
@@ -85,6 +86,7 @@ test('MPS shipment closing inventory feeds the same-version assessment and repor
     ),
   });
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
+  await frame.getByText('需求与库存参考底稿（非排产结果）', { exact: true }).click();
   await expect(
     frame.getByRole('button', { name: '郑州 A 2026-10 期初库存 计算过程', exact: true }),
   ).toHaveText('1,000');
@@ -97,6 +99,7 @@ test('MPS shipment closing inventory feeds the same-version assessment and repor
   await estimate.fill('500');
   await estimate.press('Enter');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  await frame.getByText('需求与库存参考底稿（非排产结果）', { exact: true }).click();
   await expect(
     frame.getByRole('button', { name: '郑州 A 2026-10 期初库存 计算过程', exact: true }),
   ).toHaveText('800');
@@ -123,6 +126,7 @@ test('MPS missing reasons remain readable in two-line rows at a 600px document w
   });
   await monthlyScope(frame);
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  await frame.getByText('需求与库存参考底稿（非排产结果）', { exact: true }).click();
   const table = frame.getByRole('table', { name: '产销存报告', exact: true });
   const row = table.locator('tbody tr').first();
   assert.ok((await row.boundingBox()).height <= 90);

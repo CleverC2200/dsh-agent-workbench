@@ -28,6 +28,7 @@ export function createConstraintPanel(react, { Dialog }) {
     table,
     card,
     previewRules,
+    allocationState,
     children,
   }) {
     const [hardOnly, setHardOnly] = react.useState(false);
@@ -259,6 +260,23 @@ export function createConstraintPanel(react, { Dialog }) {
                 ),
             },
             '新增约束',
+          ),
+        ),
+      ),
+      card(
+        '平均溢出规则',
+        h(
+          react.Fragment,
+          null,
+          h(
+            'p',
+            { className: 'wf-note' },
+            '共享稀缺资源的SKU按各自待生产需求获得相同满足率。需求80和20、可供50时分配40和10，满足率均为50%；原需求保留，未满足量单列。先满足本地需求，再用剩余能力按合法调拨与替代资源处理；任何资源占用不得超过有效上限。',
+          ),
+          h(
+            'p',
+            { role: 'status', className: 'wf-note' },
+            `计算状态：${allocationState}。未满足量及原因见第六步同版产能评估。`,
           ),
         ),
       ),

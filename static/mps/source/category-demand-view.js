@@ -81,7 +81,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
           ))
             missing.push(`${period.month} 历史环比缺失`);
           if (basis.plan === null)
-            missing.push(`${result.recent[0]}至${basis.endMonth} DMS发货量缺失或不完整`);
+            missing.push(`${result.recent[0]}至${basis.endMonth} 计划量缺失或不完整`);
           else if (basis.achievementRate === null || basis.achievementRate <= 0)
             missing.push('近三月达成率缺失或为0');
         } else {
@@ -263,7 +263,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
         h(
           'div',
           { className: 'dc-card-foot' },
-          'M+1、M+2按（环比法＋占比法）÷2÷达成率；达成率＝同一窗口近三月BI实绩合计÷DMS发货量合计（delivery_qty，件）。M+3、M+4按上月有效需求×年度分月环比延展。年度分月环比＝本月年度需求÷上月年度需求。缺完整历史、零分母或依赖数据时系统值留空；人工调整须填写原因。展示取整数，计算及下载保留原精度。',
+          'M+1、M+2按（环比法＋占比法）÷2÷达成率；达成率＝同一窗口近三月BI实绩合计÷计划量合计（allnum，件）。M+3、M+4按上月有效需求×年度分月环比延展。年度分月环比＝本月年度需求÷上月年度需求。缺完整历史、零分母或依赖数据时系统值留空；人工调整须填写原因。展示取整数，计算及下载保留原精度。',
         ),
       ),
       h(
@@ -279,7 +279,18 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
             '下游使用有效需求。M+4只到大类，本地调整不代表正式保存。',
           ),
         ),
-        table(['大类', 'M+1', 'M+2', 'M+3', 'M+4'], summary),
+        table(
+          ['大类', 'M+1', 'M+2', 'M+3', 'M+4'],
+          summary,
+          Object.fromEntries(
+            result.rows
+              .slice(0, 4)
+              .map((row, index) => [
+                `M+${index + 1}`,
+                `M+${index + 1} · ${row.month}${index === 3 ? ' 库存参考' : ''}`,
+              ]),
+          ),
+        ),
       ),
       (draft.adjustments?.history ?? []).some((entry) => entry.kind === 'categoryDemand') &&
         h(

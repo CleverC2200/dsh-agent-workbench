@@ -23,6 +23,7 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
     const [base, setBase] = react.useState('');
     const [search, setSearch] = react.useState('');
     const [page, setPage] = react.useState(0);
+    const [sourcePage, setSourcePage] = react.useState(0);
     const version = draft.constraints?.targetVersion ?? 'auto';
     const bases = [...new Set(result.rows.map((row) => row.base))].sort();
     const rows = result.rows.filter(
@@ -50,6 +51,10 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
       '天数来源',
       '推导目标库存',
       '源缺项',
+      '源记录状态',
+      '源缺项代码',
+      '推导依赖缺项',
+      '推导缺项代码',
     ];
     const values = (row) => [
       row.month,
@@ -64,7 +69,53 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
       sources[row.safetyDaysSource],
       row.targetInventory,
       row.inventoryTarget.missing.join('；'),
+      {
+        valid: '有效',
+        missing: '缺源记录或版本',
+        invalid: '源数值无效',
+        conflict: '源值冲突',
+        'read-failed': '读取失败',
+      }[row.inventoryTarget.status] ?? '待核对',
+      row.inventoryTarget.missingCodes?.join('；'),
+      row.missing.targetInventory?.join('；'),
+      row.targetInventoryMissing?.join('；'),
     ];
+    const sourceColumns = [
+      '月份',
+      '基地',
+      '产品编码',
+      '目标版本',
+      '源最终目标库存',
+      '源日均计划需求',
+      '源记录数',
+      '目标不同值数',
+      '日均不同值数',
+      '目标空值行',
+      '日均空值行',
+      '源冲突字段',
+      '业务键核对',
+    ];
+    const sourceRows = (read?.status === 'ready' ? (draft.inventoryTargets ?? []) : []).map(
+      (row) => ({
+        月份: row.month,
+        基地: row.base,
+        产品编码: row.code,
+        目标版本: row.version,
+        源最终目标库存: row.finalTarget,
+        源日均计划需求: row.dailyDemand,
+        源记录数: row.sourceRows,
+        目标不同值数: row.finalTargetValueCount,
+        日均不同值数: row.dailyDemandValueCount,
+        目标空值行: row.missingTargetRows,
+        日均空值行: row.missingDailyRows,
+        源冲突字段: row.conflictFields?.join('；'),
+        业务键核对: result.rows.some(
+          (item) => item.month === row.month && item.base === row.base && item.code === row.code,
+        )
+          ? '月份、基地、SKU匹配；版本按当前规则选择'
+          : '月份、基地或SKU不在当前评估明细，未参与计算',
+      }),
+    );
     return card(
       '基地与单品目标库存',
       h(
@@ -118,6 +169,24 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
             },
             '下载目标库存明细',
           ),
+          h(
+            'button',
+            {
+              disabled: !result.rows.length,
+              onClick: () =>
+                downloadCsv(
+                  `${draft.month}-三个月完整目标库存`,
+                  ['评估版本', ...fields],
+                  result.rows.map((row) => ({
+                    评估版本: draft.name,
+                    ...Object.fromEntries(
+                      fields.map((field, index) => [field, values(row)[index]]),
+                    ),
+                  })),
+                ),
+            },
+            '下载三个月完整目标库存',
+          ),
         ),
         h(
           'p',
@@ -148,7 +217,11 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
             result.months.slice(0, 3).map((month) => {
               const group = result.rows.filter((row) => row.base === base && row.month === month);
               const known = group.filter((row) => row.inventoryTarget.days !== null);
-              const target = known.length
+              const targetRows = group.filter((row) => row.inventoryTarget.finalTarget !== null);
+              const target = targetRows.length
+                ? targetRows.reduce((sum, row) => sum + row.inventoryTarget.finalTarget, 0)
+                : null;
+              const pairedTarget = known.length
                 ? known.reduce((sum, row) => sum + row.inventoryTarget.finalTarget, 0)
                 : null;
               const daily = known.length
@@ -162,7 +235,7 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
                 ) || '—',
                 number(target),
                 number(daily),
-                number(daily > 0 ? target / daily : null),
+                number(daily > 0 ? pairedTarget / daily : null),
                 group.length - known.length,
                 group.filter((row) => row.targetInventory === null).length,
               ];
@@ -172,7 +245,7 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
         h(
           'p',
           { className: 'wf-note' },
-          '汇总只统计分子、分母有效配对的单品，周转天数按合计目标库存÷合计日均需求计算。推导目标库存＝有效安全天数×下月需求÷下月自然日天数。',
+          '已知目标库存包含源目标有效但日均需求无效的单品；日均需求与周转天数只统计有效配对，周转天数按配对目标库存÷配对日均需求计算。源值有效与推导依赖缺失分别核对。推导目标库存＝有效安全天数×下月需求÷下月自然日天数。',
         ),
         h(
           'div',
@@ -228,6 +301,54 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
             'button',
             { disabled: (page + 1) * 25 >= rows.length, onClick: () => setPage(page + 1) },
             '下一页目标明细',
+          ),
+        ),
+        h(
+          'details',
+          { className: 'wf-disclosure' },
+          h('summary', null, `源记录与业务键核对（${sourceRows.length}条）`),
+          h(
+            'p',
+            { className: 'wf-note' },
+            '保留源月份、基地、SKU及全部版本，用于核对错键、缺值和冲突。源记录有效但下月需求缺失时，单品明细分别显示源值和推导缺项。',
+          ),
+          table(
+            '目标库存源记录',
+            sourceColumns,
+            sourceRows
+              .slice(sourcePage * 25, (sourcePage + 1) * 25)
+              .map((row) => sourceColumns.map((column) => text(row[column]))),
+          ),
+          h(
+            'div',
+            { className: 'wf-actions' },
+            h('span', null, `共${sourceRows.length}条，第${sourcePage + 1}页`),
+            h(
+              'button',
+              { disabled: sourcePage === 0, onClick: () => setSourcePage(sourcePage - 1) },
+              '上一页目标源记录',
+            ),
+            h(
+              'button',
+              {
+                disabled: (sourcePage + 1) * 25 >= sourceRows.length,
+                onClick: () => setSourcePage(sourcePage + 1),
+              },
+              '下一页目标源记录',
+            ),
+            h(
+              'button',
+              {
+                disabled: !sourceRows.length,
+                onClick: () =>
+                  downloadCsv(
+                    `${draft.month}-目标库存完整源记录`,
+                    ['评估版本', ...sourceColumns],
+                    sourceRows.map((row) => ({ 评估版本: draft.name, ...row })),
+                  ),
+              },
+              '下载完整目标源记录',
+            ),
           ),
         ),
         h(

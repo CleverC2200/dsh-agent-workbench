@@ -1,3 +1,4 @@
+import { sourceDimensions } from './source-projections.js';
 import { buildCategoryDemand } from './category-demand.js';
 import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { solveMpsPlan } from 'dsh-agent-manage/mps-compute/plan';
@@ -202,6 +203,17 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       categoryDemand: (draft.adjustments?.categoryDemand ?? []).map(
         ({ month, category, quantity }) => ({ month, category, quantity }),
       ),
+      quantities: (draft.adjustments?.quantities ?? []).map(
+        ({ kind, month, category, group, code, base, quantity }) => ({
+          kind,
+          month,
+          category,
+          group,
+          ...(kind !== 'group' ? { code } : {}),
+          ...(kind === 'base-sku' ? { base } : {}),
+          quantity,
+        }),
+      ),
       shares: (draft.adjustments?.shares ?? []).map(({ rowId, share }) => ({ rowId, share })),
     },
     productionDays: (draft.productionDays ?? []).map((row) => ({
@@ -237,6 +249,48 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     },
   };
   const result = computeMpsWorkflow(workflowInput);
+  const forecast = sourceDimensions(draft.forecast ?? [], draft.products ?? []);
+  const shipment = validShipment
+    ? sourceDimensions(
+        (shipmentSnapshot.rows ?? []).map((row) => ({
+          ...row,
+          基地: row.base,
+          产品编码: row.code,
+        })),
+        draft.products ?? [],
+      )
+    : [];
+  const summarize = (rows, field, issues = []) => {
+    const known = rows.map((row) => number(row[field])).filter((value) => value !== null);
+    const total = known.reduce((sum, value) => sum + value, 0);
+    return {
+      quantity: !issues.length && rows.length && known.length === rows.length ? total : null,
+      knownQuantity: !issues.length && known.length ? total : null,
+      missingCount: issues.length ? Math.max(1, rows.length) : rows.length - known.length,
+      count: rows.length,
+      issues,
+    };
+  };
+  result.categoryComparisons = [...new Set(result.categoryRows.map((row) => row.category))].map(
+    (category) => ({
+      category,
+      shipment: summarize(
+        shipment.filter((row) => row['大类'] === category),
+        'fin',
+        validShipment ? [] : ['第二步同版预估发货尚未就绪'],
+      ),
+      forecast: Object.fromEntries(
+        months.slice(0, 2).map((month) => [
+          month,
+          summarize(
+            forecast.filter((row) => row['月份'] === month && row['大类'] === category),
+            '数量',
+            sourceIssues(draft, 'forecast', month),
+          ),
+        ]),
+      ),
+    }),
+  );
   if (evaluation) {
     const planSources = buildPlanSources(draft, relations, evaluation.weights);
     result.plan = solveMpsPlan({

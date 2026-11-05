@@ -1,3 +1,4 @@
+import { sourceDimensions } from './source-projections.js';
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const key = (base, code) => JSON.stringify([text(base), text(code)]);
 const hasKey = (row) => text(row['基地']) && text(row['产品编码']);
@@ -32,16 +33,16 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
       const code = text(row['产品编码']);
       if (code) products.set(code, [...(products.get(code) ?? []), row]);
     }
-    const productFields = ['产品名称', '大类', '系列', '物料组', '物料组名称'];
+    const currentProducts = [...products.values()].flat();
     const productDetail = (row) => {
-      const candidates = products.get(text(row['产品编码'])) ?? [];
-      return Object.fromEntries(
-        productFields.map((field) => {
-          const values = new Set(candidates.map((product) => text(product[field])));
-          const unique = values.size === 1 && !values.has('') ? [...values][0] : '';
-          return [field, text(row[field]) || unique];
-        }),
+      const mapped = sourceDimensions([row], currentProducts)[0];
+      const candidates = (products.get(text(row['产品编码'])) ?? []).filter(
+        (product) => !text(product['基地']) || product['基地'] === row['基地'],
       );
+      const names = [
+        ...new Set(candidates.map((product) => text(product['产品名称'])).filter(Boolean)),
+      ];
+      return { ...mapped, 产品名称: text(row['产品名称']) || (names.length === 1 ? names[0] : '') };
     };
     const diagnostics = ['report', 'history'].flatMap((source) =>
       result.months.slice(0, 3).map((month) => {
@@ -149,6 +150,10 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
           '系列',
           '物料组',
           '物料组名称',
+          '源大类',
+          '源系列',
+          '源物料组',
+          '缺项原因',
           ...(sales
             ? ['当前维度计划量']
             : source === 'report'
@@ -181,6 +186,7 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
                 当前数量状态: usable(quantity(row)) ? '数量可用' : '缺数量',
                 产品池匹配: !hasKey(row) ? '缺业务键' : matched(row) ? '池内' : '池外',
                 缺项说明: [
+                  detail['缺项原因'],
                   !text(row['基地']) ? '源数据缺基地' : '',
                   !text(row['产品编码']) ? '源数据缺产品编码' : '',
                   ...['大类', '系列', '物料组']

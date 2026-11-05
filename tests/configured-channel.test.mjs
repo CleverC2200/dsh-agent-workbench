@@ -157,3 +157,23 @@ test('structured permission and publication failures remain distinct from an emp
     /尚未发布或授权/,
   );
 });
+
+test('an authorization rewrite identifies an explicitly disabled tenant dataset without misclassifying other failures', async () => {
+  const { sqlQueryError } = await import('../business/shared/query-error.js');
+  const cause = Error(
+    'AUTHORIZATION_REWRITE：数据表不在当前租户启用数据集范围内 SELECT secret_table token=private',
+  );
+  const unavailable = sqlQueryError(cause);
+  assert.match(unavailable.message, /当前租户尚未启用此数据集，请联系管理员启用/);
+  assert.doesNotMatch(unavailable.message, /secret_table|private|SELECT/);
+  assert.equal(unavailable.cause, cause);
+  assert.match(
+    sqlQueryError(Error('AUTHORIZATION_REWRITE unknown SQL failure')).message,
+    /数据读取失败/,
+  );
+  assert.equal(
+    sqlQueryError(Error('ACCESS_DENIED AUTHORIZATION_REWRITE 数据表不在当前租户启用数据集范围内'))
+      .message,
+    '当前账号暂无数据权限',
+  );
+});
