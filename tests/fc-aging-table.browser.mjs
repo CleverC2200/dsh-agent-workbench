@@ -101,7 +101,22 @@ test('aging filters apply inside the client restricted frame and keep all-scope 
       }));
     } else {
       assert.equal(queryId, 'batch-age.atomic');
-      const filtered = all.filter(
+      const scopeRows = values.age_filter
+        ? all
+            .filter(
+              (row) =>
+                (row.material_code === 'S12' && values.age_filter.includes('60-90')) ||
+                (row.material_code === 'S13' && values.age_filter.includes('90+')),
+            )
+            .map((row) => ({
+              ...row,
+              total_qty: row.material_code === 'S12' ? 7 : 5,
+              age_weight_qty: row.material_code === 'S12' ? 7 : 5,
+              weighted_age: row.material_code === 'S12' ? 490 : 500,
+              average_age: row.material_code === 'S12' ? 70 : 100,
+            }))
+        : all;
+      const filtered = scopeRows.filter(
         (row) =>
           (!values.risk || row.warning === values.risk) &&
           (!values.category || row.product_categ_name === values.category) &&
@@ -156,13 +171,10 @@ test('aging filters apply inside the client restricted frame and keep all-scope 
   assert.ok(page, 'the inventory page must run inside the restricted client frame');
   const table = page.locator('table[data-resizable]');
   const footer = table.locator('tfoot');
-  await expect(table.locator('th[data-field="total_qty"]')).toContainText('SKU总库存量');
+  await expect(table.locator('th[data-field="total_qty"]')).toContainText('库存量');
   await expect(
     page.getByRole('checkbox', { name: '90天以上', exact: true }).locator('..'),
-  ).toHaveAttribute(
-    'title',
-    '筛选包含对应货龄批次的SKU；SKU总库存含全部批次，分段数量见对应货龄列。',
-  );
+  ).toHaveAttribute('title', '仅统计所选货龄批次，库存量和合计同步筛选。');
   await expect(table.locator('tbody tr')).toHaveCount(10);
   await expect(table.locator('th[data-field="warehouseid"]')).toHaveCount(0);
   await page.getByLabel('列设置', { exact: true }).click();
@@ -273,8 +285,8 @@ test('aging filters apply inside the client restricted frame and keep all-scope 
   await page.getByRole('button', { name: '筛选产品编码', exact: true }).click();
   await page.getByRole('button', { name: '清除', exact: true }).click();
   await expect(table.locator('tbody tr')).toHaveCount(10);
-  await page.getByRole('button', { name: '筛选SKU总库存量', exact: true }).scrollIntoViewIfNeeded();
-  await page.getByRole('button', { name: '筛选SKU总库存量', exact: true }).click();
+  await page.getByRole('button', { name: '筛选库存量', exact: true }).scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: '筛选库存量', exact: true }).click();
   await page.getByLabel('最小值', { exact: true }).fill('11');
   await page.getByLabel('最大值', { exact: true }).fill('12');
   await page.getByRole('button', { name: '应用', exact: true }).click();
@@ -300,7 +312,7 @@ test('aging filters apply inside the client restricted frame and keep all-scope 
   assert.ok(headerOrder.indexOf('material_name') < headerOrder.indexOf('material_code'));
   await table.locator('th[data-field="total_qty"]').dragTo(table.locator('thead th').first());
   await expect(footer.locator('td').first()).toHaveText('合计 · 23');
-  await page.getByRole('button', { name: '筛选SKU总库存量', exact: true }).click();
+  await page.getByRole('button', { name: '筛选库存量', exact: true }).click();
   await page.getByLabel('最小值', { exact: true }).fill('99');
   await page.getByLabel('最大值', { exact: true }).fill('100');
   await page.getByRole('button', { name: '应用', exact: true }).click();
@@ -315,6 +327,18 @@ test('aging filters apply inside the client restricted frame and keep all-scope 
     'true',
   );
   assert.equal(calls.at(-1).values.stock_presence, null);
+  await page.getByRole('checkbox', { name: '90天以上', exact: true }).check();
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  await expect(table.locator('tbody [data-column="total_qty"]')).toHaveText('5');
+  await expect(footer.locator('td').first()).toHaveText('合计 · 5');
+  assert.equal(calls.at(-1).values.age_filter, '90+');
+  await page.getByRole('checkbox', { name: '60–90天', exact: true }).check();
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  await expect(footer.locator('td').first()).toHaveText('合计 · 12');
+  assert.equal(calls.at(-1).values.age_filter, '60-90,90+');
+  await page.getByRole('checkbox', { name: '90天以上', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: '60–90天', exact: true }).uncheck();
+  await expect(footer.locator('td').first()).toHaveText('合计 · 91');
   await host.screenshot({
     path: '/tmp/fc-aging-table-desktop.png',
     fullPage: true,

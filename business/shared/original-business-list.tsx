@@ -378,7 +378,7 @@ export function OriginalBusinessList({
               key={option.value}
               title={
                 fc && view.id === 'inventory' && f.name === 'age_filter'
-                  ? '筛选包含对应货龄批次的SKU；SKU总库存含全部批次，分段数量见对应货龄列。'
+                  ? '仅统计所选货龄批次，库存量和合计同步筛选。'
                   : undefined
               }
             >

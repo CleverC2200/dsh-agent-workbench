@@ -15,7 +15,7 @@ class AgingTableScope(unittest.TestCase):
         return self.f.read(agent='fc', query_id=query_id, stat_date='2026-10-22',
                            group_level='detail', **filters)
 
-    def test_age_filter_selects_skus_without_relabeling_all_batches_as_aged(self):
+    def test_age_filter_scopes_rows_and_totals_to_selected_batches(self):
         self.f.batch(20, 120, sku='MIXED', kind='20')
         self.f.batch(90, 5, sku='MIXED', kind='20')
         self.f.batch(60, 7, sku='ONLY60', kind='20')
@@ -24,12 +24,19 @@ class AgingTableScope(unittest.TestCase):
         self.assertEqual(sum(r['stagnant_qty'] for r in full), 5)
         older = self.read(age_filter='90+')
         self.assertEqual(older[0]['page_scope_total'], 1)
-        self.assertEqual(older[0]['scope_total_qty'], 125)
+        self.assertEqual(older[0]['total_qty'], 5)
+        self.assertEqual(older[0]['scope_total_qty'], 5)
+        self.assertEqual(older[0]['average_age'], 90)
+        self.assertEqual(older[0]['scope_average_age'], 90)
         self.assertEqual(older[0]['scope_age90_plus'], 5)
         both = self.read(age_filter='60-90,90+')
-        self.assertEqual(both[0]['scope_total_qty'], 132)
+        self.assertEqual(both[0]['scope_total_qty'], 12)
         self.assertEqual(both[0]['scope_overaged_qty'], 12)
         self.assertEqual(both[0]['scope_age90_plus'], 5)
+        middle = self.read(age_filter='60-90')
+        self.assertEqual(middle[0]['scope_total_qty'], 7)
+        self.assertEqual(middle[0]['scope_average_age'], 60)
+        self.assertEqual(full[0]['scope_total_qty'], 132)
 
     def test_footer_uses_all_filtered_rows_on_every_page(self):
         for i in range(13):
@@ -84,7 +91,7 @@ class AgingTableScope(unittest.TestCase):
         self.assertIsNone(row['scope_average_age'])
 
     def test_summary_table_and_source_paths_use_identical_filters_and_totals(self):
-        for age, qty, sku in [(10, 10, 'MATCH-1'), (70, 30, 'MATCH-2'), (20, 100, 'OTHER'), (10, 0, 'ZERO')]:
+        for age, qty, sku in [(10, 10, 'MATCH-1'), (70, 30, 'MATCH-2'), (20, 100, 'OTHER'), (90, 5, 'OTHER'), (10, 0, 'ZERO')]:
             self.f.batch(age, qty, sku=sku, kind='20')
         query = json.loads((fixtures.ROOT / 'business/inventory-fc/sql.config.json').read_text())['queries']['snapshot.batch-age.atomic']
         tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
@@ -93,10 +100,25 @@ class AgingTableScope(unittest.TestCase):
         aliases = {'sku': 'material_code', 'category': 'product_categ_name',
                    'material_group': 'material_group_name', 'inventory_qty': 'total_qty',
                    'occupied_qty': 'pack_unit_qty', 'frozen_qty': 'freeze_qty'}
-        for row in self.read():
-            snapshot = {field: row.get(aliases.get(field, field)) for field in fields}
-            snapshot.update(inv_batch_id='fixture', inv_variant_id='BRANCH_AGE', stock_date='2026-10-22')
-            self.f.db.execute('INSERT INTO agents_inv_branch_sku_day (' + ','.join(fields) + ') VALUES (' + ','.join('?' for _ in fields) + ')', [snapshot[field] for field in fields])
+        variants = {'': 'BRANCH_AGE', '60-90': 'BRANCH_AGE:60-90',
+                    '90+': 'BRANCH_AGE:90+', '60-90,90+': 'BRANCH_AGE:60+'}
+        for age_filter, variant in variants.items():
+            for row in self.read(age_filter=age_filter):
+                if not row['page_row_present']:
+                    continue
+                snapshot = {field: row.get(aliases.get(field, field)) for field in fields}
+                snapshot.update(inv_batch_id='fixture', inv_variant_id=variant, stock_date='2026-10-22')
+                self.f.db.execute('INSERT INTO agents_inv_branch_sku_day (' + ','.join(fields) + ') VALUES (' + ','.join('?' for _ in fields) + ')', [snapshot[field] for field in fields])
+        for age_filter in variants:
+            for page_size, offset in [(1, 0), (1, 1), (10, 0)]:
+                values = dict(age_filter=age_filter, page_size=page_size, offset=offset)
+                raw = self.read(**values)
+                snapshot = self.read(query_id='snapshot.batch-age.atomic', summary_batch_id='fixture', **values)
+                self.assertEqual(snapshot, raw)
+            for family in ['groups', 'count']:
+                raw = self.read(query_id='batch-age.' + family, age_filter=age_filter)
+                snapshot = self.read(query_id='snapshot.batch-age.' + family, summary_batch_id='fixture', age_filter=age_filter)
+                self.assertEqual(snapshot, raw)
         filters = {'column_material_code_contains': '%MATCH%', 'column_total_qty_min': '20'}
         source = self.read(**filters)[0]
         snapshot = self.read(query_id='snapshot.batch-age.atomic', summary_batch_id='fixture', **filters)[0]
