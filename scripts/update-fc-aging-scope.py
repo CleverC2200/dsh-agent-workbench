@@ -18,6 +18,11 @@ def filter_batches(tree, condition):
     ctes[0].this.set('where', exp.Where(this=sqlglot.parse_one(condition, read='postgres')))
 
 
+def governed_sql(tree):
+    # Preserve gateway named binds and Doris-compatible DOUBLE instead of DB-API/PostgreSQL spellings.
+    return tree.sql()
+
+
 def main():
     path = Path(__file__).resolve().parents[1] / 'business/inventory-fc/sql.config.json'
     config = json.loads(path.read_text())
@@ -33,7 +38,7 @@ def main():
         if key.startswith('batch-age.'):
             tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
             filter_batches(tree, condition)
-            query['request']['sql'] = tree.sql(dialect='postgres')
+            query['request']['sql'] = governed_sql(tree)
         elif key.startswith('snapshot.batch-age.'):
             tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
             matches = [e for e in tree.find_all(exp.EQ)
@@ -41,7 +46,7 @@ def main():
                        and e.this.table == 'm']
             assert len(matches) == 1
             matches[0].set('expression', sqlglot.parse_one(selector, read='postgres'))
-            query['request']['sql'] = tree.sql(dialect='postgres')
+            query['request']['sql'] = governed_sql(tree)
     view = next(v for v in config['sourceViews']['views'] if v['id'] == 'inventory')
     column = next(c for c in view['columns'] if c['field'] == 'total_qty')
     column.update(label='库存量', reason='按当前筛选范围汇总库存；选择货龄时，仅统计所选货龄批次。')

@@ -2,6 +2,7 @@
 import unittest
 import test_batch_age_lists as fixtures
 import json
+import re
 import sqlglot
 
 
@@ -14,6 +15,16 @@ class AgingTableScope(unittest.TestCase):
     def read(self, query_id='batch-age.atomic', **filters):
         return self.f.read(agent='fc', query_id=query_id, stat_date='2026-10-22',
                            group_level='detail', **filters)
+
+    def test_aging_queries_preserve_gateway_named_parameter_contract(self):
+        config = json.loads((fixtures.ROOT / 'business/inventory-fc/sql.config.json').read_text())
+        for key, query in config['queries'].items():
+            if 'batch-age.' not in key:
+                continue
+            sql = query['request']['sql']
+            self.assertNotIn('%(', sql, key)
+            self.assertNotIn('DOUBLE PRECISION', sql, key)
+            self.assertEqual(set(re.findall(r':(gea_p\d+)\b', sql)), set(query['request']['parameters']), key)
 
     def test_age_filter_scopes_rows_and_totals_to_selected_batches(self):
         self.f.batch(20, 120, sku='MIXED', kind='20')
