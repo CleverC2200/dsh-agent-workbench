@@ -93,6 +93,20 @@ test('confirmation keeps the replenishment list order and quantities for the sam
   await page.locator('[role=option][data-value="A110"]').click();
   await page.getByRole('checkbox', { name: '需补货', exact: true }).check();
   const list = page.locator('table.replenishment-table');
+  assert.deepEqual(
+    await list
+      .locator('thead th')
+      .evaluateAll((headers) => headers.slice(0, 7).map((header) => header.dataset.field)),
+    [
+      'sku',
+      'material_name',
+      'inventory_qty',
+      'available_qty',
+      'occupied_qty',
+      'missing_preparingQty',
+      'open_transfer_reported_qty',
+    ],
+  );
   const listQuantities = () =>
     list
       .getByRole('spinbutton')
@@ -497,11 +511,11 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   ).toHaveValue('CE-SHARED');
   await replenishmentPanel.getByRole('button', { name: '清空筛选', exact: true }).click();
   await replenishmentPanel.getByLabel('列设置', { exact: true }).click();
-  await replenishmentPanel.getByRole('checkbox', { name: '现库存', exact: true }).uncheck();
+  await replenishmentPanel.getByRole('checkbox', { name: '现存量', exact: true }).uncheck();
   await replenishmentPanel.getByRole('checkbox', { name: '冻结产品名称', exact: true }).check();
   await page.getByRole('button', { name: '货龄结构', exact: true }).click();
   await page.getByRole('button', { name: '补货确认', exact: true }).click();
-  await expect(replenishmentPanel.getByRole('columnheader', { name: /^现库存/ })).toHaveCount(0);
+  await expect(replenishmentPanel.getByRole('columnheader', { name: /^现存量/ })).toHaveCount(0);
   await replenishmentPanel.getByLabel('列设置', { exact: true }).click();
   await expect(
     replenishmentPanel.getByRole('checkbox', { name: '冻结产品名称', exact: true }),
@@ -1061,7 +1075,7 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
       () => requests.filter((r) => r.id === 'replenishment.detail.atomic').at(-1)?.values.list_mode,
     )
     .toBe('recommended');
-  await page.getByRole('button', { name: /现库存 ↕/ }).click();
+  await page.getByRole('button', { name: /现存量 ↕/ }).click();
   await expect
     .poll(
       () =>
@@ -1069,8 +1083,8 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
     )
     .toBe('inventory_qty');
   await page.locator('summary[aria-label="列设置"]').click();
-  await expect(page.getByRole('checkbox', { name: '冻结现库存', exact: true })).toBeVisible();
-  await page.getByRole('checkbox', { name: '冻结现库存', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: '冻结现存量', exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: '冻结现存量', exact: true }).check();
   await page.locator('summary[aria-label="列设置"]').click();
   failPersistent = true;
   await page.getByRole('button', { name: '紧急 SKU', exact: true }).click();
