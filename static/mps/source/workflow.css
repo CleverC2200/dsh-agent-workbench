@@ -568,20 +568,106 @@
 .wf-plan-detail-row .wf-table-scroll th {
   top: 38px;
 }
-.wf-demand-node {
-  margin: 12px 0;
-  padding: 12px 16px;
-  border: 1px solid var(--dc-line, #e3e6ea);
-  border-radius: 10px;
+.wf-processed-table {
+  min-width: 1770px;
+  font-variant-numeric: tabular-nums;
 }
-.wf-demand-node > summary {
-  cursor: pointer;
-  color: var(--dc-text, #20232a);
-  font-size: 12px;
+.wf-page .wf-processed-table th {
+  white-space: normal;
+  min-width: 145px;
+}
+.wf-page .wf-processed-table thead th {
+  height: 64px;
+  vertical-align: middle;
+}
+.wf-page .wf-processed-table tr > :first-child {
+  position: sticky;
+  left: 0;
+  min-width: 330px;
+  max-width: 330px;
+  width: 330px;
+  z-index: 2;
+  background: #fff;
+  text-align: left;
+}
+.wf-page .wf-processed-table thead th:first-child {
+  z-index: 3;
+  background: var(--dc-head, #f7f8fa);
+}
+.wf-page .wf-processed-table tbody th {
+  top: auto;
+  font-weight: 400;
+}
+.wf-demand-level-0 > :first-child {
   font-weight: 600;
 }
-.wf-demand-node[open] > summary {
-  margin-bottom: 12px;
+.wf-demand-identity {
+  display: grid;
+  gap: 6px;
+}
+.wf-demand-toggle,
+.wf-demand-leaf {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.wf-page .wf-demand-toggle {
+  border: 0;
+  background: transparent;
+  padding: 4px 0;
+  text-align: left;
+  color: inherit;
+  font-weight: inherit;
+}
+.wf-demand-toggle svg {
+  flex: 0 0 12px;
+  margin-top: 3px;
+}
+.wf-page .wf-demand-explain {
+  justify-self: start;
+  margin-left: 20px;
+}
+.wf-source-value {
+  display: grid;
+  gap: 4px;
+}
+.wf-source-status {
+  display: block;
+  margin-top: 4px;
+}
+.wf-page .wf-edit-number {
+  min-width: 110px;
+  width: 100%;
+  padding: 6px 8px;
+  background: #f3f4f6;
+  text-align: right;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.wf-page .wf-edit-number:disabled {
+  background: transparent;
+  color: #555d68;
+}
+.wf-page .wf-processed-table td,
+.wf-page .wf-processed-table tbody th {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  vertical-align: middle;
+}
+.wf-source-value small,
+.wf-processed-table td > small {
+  color: #555d68;
+}
+.wf-page .wf-processed-table td:last-child {
+  min-width: 145px;
+  max-width: none;
+}
+.wf-demand-toggle:focus-visible,
+.wf-processed-scroll:focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: -2px;
 }
 .wf-quantity-cell {
   display: grid;

@@ -263,6 +263,11 @@ export function createShipment(
         sourceRows,
         sourceRecords: sourceKind === 'business' ? business.sourceRecords : sourceRows,
         rows,
+        adjustForecast: (keys, value, label) => {
+          const selected = rows.filter((row) => keys.includes(keyOf(row)));
+          if (!selected.length) return '当前对象无本月发货明细，未修改。';
+          return change({ children: selected }, 'fin', value, label);
+        },
         metadata: sourceKind === 'business' ? business.metadata : null,
       });
     }, [draft.id, draft.month, month, cutoff, source, sourceKind, sourceRows, rows, business]);
@@ -392,14 +397,16 @@ export function createShipment(
             assign(
               row.children,
               target,
-              `${who}基地覆盖${target}件，按明细当前有效量重摊并补偿舍入残差，替换单品覆盖`,
+              `${who}覆盖${target}件，按明细当前有效量重摊并补偿舍入残差，替换单品覆盖`,
             );
           else values[keyOf(row)] = { value: target, source: '单品人工覆盖', previous: row.fin };
           updateState({ values });
         }
         setError('');
+        return null;
       } catch (failure) {
         setError(failure.message);
+        return failure.message;
       }
     };
     const read = async (file) => {

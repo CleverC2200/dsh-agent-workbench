@@ -271,6 +271,14 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       issues,
     };
   };
+  result.comparisonSources = {
+    historyPeriod: previousFiscalYear(draft.month),
+    shipment,
+    forecast: forecast.map((row) => ({
+      ...row,
+      数量: sourceIssues(draft, 'forecast', row['月份']).length ? null : row['数量'],
+    })),
+  };
   result.categoryComparisons = [...new Set(result.categoryRows.map((row) => row.category))].map(
     (category) => ({
       category,

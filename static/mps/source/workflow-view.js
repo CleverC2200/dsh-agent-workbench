@@ -433,6 +433,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           (item) => item.month === row.month && item.category === row.category,
         )?.quantity;
         expression = `${value(total)} × ${value(row.share)} = ${value(row.demand)}`;
+        for (const [name, layer] of [
+          ['提报', row.reportLayers],
+          ['历史', row.historyLayers],
+        ]) {
+          if (layer)
+            expression += `；${name}三层占比：${value(layer.groupShare)} × ${value(layer.skuShare)} × ${value(layer.baseShare)} = ${value(layer.product)}`;
+        }
+        expression += `；系统占比 ${value(row.systemShare)}，有效占比 ${value(row.share)}`;
       }
       if (field === 'openingInventory')
         expression =
@@ -536,6 +544,17 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       resourceStatus[row.status] ?? '未评估',
     ];
     const exportRows = (name, exportFields, includeCategory = false) => {
+      const shipmentByProduct = new Map(
+        (result.comparisonSources?.shipment ?? []).map((row) => [
+          JSON.stringify([row['基地'], row['产品编码']]),
+          row,
+        ]),
+      );
+      const forecastByMonth = new Map();
+      for (const row of result.comparisonSources?.forecast ?? []) {
+        const key = JSON.stringify([row['月份'], row['基地'], row['产品编码']]);
+        forecastByMonth.set(key, forecastByMonth.has(key) ? null : row['数量']);
+      }
       const columns = [
         ...new Set([
           '评估版本',
@@ -556,6 +575,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           '数量调整状态',
           '固定数量调整',
           '本月预估发货',
+          '本月预估所属月',
+          '本月系统预估发货',
           '本月预估发货已知小计',
           '本月预估发货完整性',
           '本月预估发货缺项数',
@@ -578,6 +599,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         ]),
       ];
       const rows = (includeCategory ? scopedRows : filtered).map((row) => {
+        const shipment = shipmentByProduct.get(JSON.stringify([row.base, row.code]));
+        const forecast = forecastByMonth.get(JSON.stringify([row.month, row.base, row.code]));
         const adjustment = draft.adjustments?.shares?.find((item) => item.rowId === row.id);
         const layerValues = ['reportLayers', 'historyLayers'].flatMap((key) =>
           ['groupShare', 'skuShare', 'baseShare', 'product'].map((field) => row[key]?.[field]),
@@ -601,6 +624,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           分层缺项: row.layerMissing?.join('；'),
           公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
           系统SKU需求: row.systemDemand,
+          本月预估所属月: result.shipmentMonth,
+          本月系统预估发货: shipment?.prediction,
+          本月预估发货: shipment?.fin,
+          本月预估发货已知小计: shipment?.fin,
+          本月预估发货完整性: shipment?.fin != null ? '完整' : '缺项',
+          本月预估发货缺项数: shipment?.fin != null ? 0 : 1,
+          模型预测数量: forecast,
+          模型已知小计: forecast,
           数量调整状态: row.quantityAdjusted ? '数量固定及下级联动' : '系统拆分或占比调整',
           Top1托底: row.fallback ? '是' : '否',
           调整原因: adjustment?.reason,
@@ -1362,6 +1393,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               shipmentSnapshot,
               table,
               card,
+              onExplain: explain,
             }),
             h(
               'details',

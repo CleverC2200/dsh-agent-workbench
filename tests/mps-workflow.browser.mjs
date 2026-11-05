@@ -1228,6 +1228,12 @@ test('MPS processing compares both forecast months and persists fixed quantities
     '选择模型预测CSV',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2026-12,郑州,A,产品甲,汤圆,真实系列,组,0\n2027-01,郑州,A,产品甲,汤圆,真实系列,组,250',
   );
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await upload(
+    frame,
+    '选择发货输入CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-11,郑州,A,产品甲,汤圆,真实系列,组,220,10,10,10,100,200,80\n2026-11,郑州,B,产品乙,汤圆,真实系列,组,0,0,0,0,0,0,0',
+  );
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   const apply = async (name, value, reason = '分层数量核对') => {
@@ -1250,6 +1256,19 @@ test('MPS processing compares both forecast months and persists fixed quantities
   ).toBeVisible();
   await expect(summary.locator('tbody tr td').nth(3)).toHaveText('0');
   await expect(summary.locator('tbody tr td').nth(5)).toHaveText('250');
+  const processed = view.getByRole('table', { name: '加工后的需求明细', exact: true });
+  await expect(
+    processed.getByRole('columnheader', { name: 'M+1 2026-12 计划提报', exact: true }),
+  ).toBeVisible();
+  await expect(
+    processed.getByRole('columnheader', { name: '2026-11 本月预估发货（可调整）', exact: true }),
+  ).toBeVisible();
+  const categoryDetail = processed.locator('tbody tr').first();
+  await expect(categoryDetail.getByRole('cell').nth(0)).toHaveText('100');
+  await expect(categoryDetail.getByRole('cell').nth(1)).toHaveText('100');
+  await expect(categoryDetail.getByRole('cell').nth(2)).toHaveText('300');
+  await expect(categoryDetail.getByRole('cell').nth(4)).toContainText('0');
+  await expect(categoryDetail.getByRole('cell').nth(4)).toContainText('已知小计');
   await view.getByText('大类 · 汤圆', { exact: true }).click();
   await view.getByText('物料组 · 组', { exact: true }).click();
   await view.getByText('SKU · B 产品乙', { exact: true }).click();
@@ -1290,13 +1309,17 @@ test('MPS processing compares both forecast months and persists fixed quantities
       document.getElementById('root').style.width = '1800px';
     });
     await page.screenshot({ path: '.scratch/t3-ui/process-1280.png' });
-    await view.getByRole('heading', { name: '加工后的需求', exact: true }).scrollIntoViewIfNeeded();
+    await view
+      .getByRole('heading', { name: '加工后的需求', exact: true })
+      .evaluate((element) => element.scrollIntoView({ block: 'start' }));
     await page.screenshot({ path: '.scratch/t3-ui/tree-1280.png' });
     await page.evaluate(() => {
       document.getElementById('root').style.width = '1120px';
     });
     await page.screenshot({ path: '.scratch/t3-ui/process-600.png' });
-    await view.getByRole('heading', { name: '加工后的需求', exact: true }).scrollIntoViewIfNeeded();
+    await view
+      .getByRole('heading', { name: '加工后的需求', exact: true })
+      .evaluate((element) => element.scrollIntoView({ block: 'start' }));
     await page.screenshot({ path: '.scratch/t3-ui/tree-600.png' });
   }
   await view.getByLabel('月份筛选').selectOption('2027-01');
@@ -1308,6 +1331,10 @@ test('MPS processing compares both forecast months and persists fixed quantities
     '80',
   );
   assert.ok(rows.some((row) => row['月份'] === '2027-01'));
+  const skuCompare = rows.find((row) => row['月份'] === '2026-12' && row['产品编码'] === 'A');
+  assert.equal(skuCompare['模型预测数量'], '0');
+  assert.equal(skuCompare['本月预估发货'], '300');
+  assert.equal(skuCompare['本月预估所属月'], '2026-11');
   assert.match(rows.find((row) => row['粒度'] === '全部调整记录')['全部调整记录'], /分层数量核对/);
   const state = await page.evaluate(() => {
     const value = window.readView().localDrafts;
@@ -1317,4 +1344,20 @@ test('MPS processing compares both forecast months and persists fixed quantities
     state.adjustments.history.filter((row) => row.kind === 'quantities').at(-1).value,
     80,
   );
+  await view.getByLabel('月份筛选').selectOption('');
+  await view.getByRole('button', { name: '调整本月预估 汤圆', exact: true }).click();
+  const shipmentEditor = view.getByRole('group', { name: '分层需求数量调整' });
+  await shipmentEditor.getByLabel('本月预估发货数量').fill('600');
+  await shipmentEditor.getByRole('button', { name: '应用本月预估调整', exact: true }).click();
+  await expect(shipmentEditor).toHaveCount(0);
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await expect(frame.getByLabel('全国合计 整月预估发货', { exact: true })).toHaveValue('600');
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await view.getByText('大类 · 汤圆', { exact: true }).click();
+  await view.getByText('物料组 · 组', { exact: true }).click();
+  await view.getByText('SKU · A 产品甲', { exact: true }).click();
+  await view.getByRole('button', { name: '运算过程 郑州 A 2026-12', exact: true }).click();
+  await expect(frame.getByRole('dialog')).toContainText('提报三层占比');
+  await expect(frame.getByRole('dialog')).toContainText('历史三层占比');
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
 });
