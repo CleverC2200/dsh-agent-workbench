@@ -1,4 +1,5 @@
 import { changesSql, customersSql, ordersSql, ontimeSql } from './document-queries.mjs';
+import { workbenchBaseSql } from './base-scope.mjs';
 const attributionSources = `SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_d
         UNION ALL SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_hourly_d
         UNION ALL SELECT belong_base,material_code,NULL AS director,product_item,the_date AS attribution_date FROM agents_scm_stock_detail_d
@@ -75,6 +76,17 @@ const ageWarehouses = `SELECT DISTINCT warehouse_id FROM dim_bas_warehouse
   WHERE warehouse_classify IN ('01','02')
     AND warehouse_classify_name IN ('工厂成品仓','工厂外租库')`;
 
+// Historical batch scope must not override an explicit same-day non-factory class.
+const ageWarehouseSnapshots = `SELECT warehouseid,month_date,
+  MAX(CASE WHEN warehouse_classify NOT IN ('01','02')
+    OR warehouse_classify_name NOT IN ('工厂成品仓','工厂外租库') THEN 1 ELSE 0 END) AS excluded,
+  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(belong_base),''))=1
+    AND COUNT(NULLIF(TRIM(belong_base),''))=COUNT(*) THEN MAX(NULLIF(TRIM(belong_base),'')) END AS base
+  FROM agents_scm_inventory_sku_data_d GROUP BY warehouseid,month_date`;
+const ageBase = workbenchBaseSql(
+  "COALESCE(NULLIF(TRIM(b.belong_base),''),snapshot_warehouse.base)",
+);
+
 export const workbenchQueries = {
   orders: {
     keys: ['base', 'category', 'item', 'sku'],
@@ -89,6 +101,7 @@ export const workbenchQueries = {
       'sample_demand',
       'sample_shortage',
       'sample_records',
+      'unknown_quantity',
       'records',
       'invalid',
       'missing_ship_date',
@@ -133,6 +146,7 @@ export const workbenchQueries = {
       'denominator',
       'records',
       'invalid',
+      'unknown_quantity',
     ],
     sql: customersSql,
     scoped: true,
@@ -173,7 +187,9 @@ export const workbenchQueries = {
     columns: ['day'],
     sql: `SELECT MAX(b.dt) AS day FROM dwd_scm_material_age_his b
       INNER JOIN (${ageWarehouses}) w ON w.warehouse_id=b.warehouseid
-      WHERE (:gea_p900='' OR b.belong_base=:gea_p900) AND b.dt>=:gea_p1 AND b.dt<:gea_p2`,
+      LEFT JOIN (${ageWarehouseSnapshots}) snapshot_warehouse
+        ON snapshot_warehouse.warehouseid=b.warehouseid AND snapshot_warehouse.month_date=b.dt
+      WHERE (:gea_p900='' OR ${ageBase}=:gea_p900) AND b.dt>=:gea_p1 AND b.dt<:gea_p2 AND COALESCE(snapshot_warehouse.excluded,0)=0`,
   },
   ages: {
     scoped: true,
@@ -190,7 +206,7 @@ export const workbenchQueries = {
       'excluded',
       'invalid',
     ],
-    sql: `SELECT b.belong_base AS base,b.material_code AS sku,MAX(d.category) AS category,
+    sql: `SELECT ${ageBase} AS base,b.material_code AS sku,MAX(d.category) AS category,
         CASE WHEN MAX(s.names)>1 THEN NULL ELSE COALESCE(MAX(s.item),MAX(m.item)) END AS item,
       MAX(b.dt) AS snapshot_date,
       SUM(b.inv_qty) AS stock_qty,
@@ -199,6 +215,8 @@ export const workbenchQueries = {
       SUM(CASE WHEN b.inv_qty IS NULL OR (b.inv_qty<>0 AND (b.age_days IS NULL OR b.age_days<0)) THEN 1 ELSE 0 END) AS invalid
       FROM dwd_scm_material_age_his b
       INNER JOIN (${ageWarehouses}) w ON w.warehouse_id=b.warehouseid
+      LEFT JOIN (${ageWarehouseSnapshots}) snapshot_warehouse
+        ON snapshot_warehouse.warehouseid=b.warehouseid AND snapshot_warehouse.month_date=b.dt
       LEFT JOIN (${dictionary}) d ON d.sku=b.material_code
       LEFT JOIN (SELECT material_code AS sku,
         COUNT(DISTINCT NULLIF(TRIM(product_item),'')) AS names,
@@ -208,8 +226,8 @@ export const workbenchQueries = {
         CASE WHEN COUNT(DISTINCT NULLIF(TRIM(pinxiang),''))=1 THEN MAX(NULLIF(TRIM(pinxiang),'')) END AS item
         FROM agents_order_execute_isontime_mi WHERE fromorderno_month>=:gea_p5 AND fromorderno_month<:gea_p6
         GROUP BY new_material_code) m ON m.sku=b.material_code
-      WHERE (:gea_p900='' OR b.belong_base=:gea_p900) AND b.dt=:gea_p1
-      GROUP BY b.belong_base,b.material_code`,
+      WHERE (:gea_p900='' OR ${ageBase}=:gea_p900) AND b.dt=:gea_p1 AND COALESCE(snapshot_warehouse.excluded,0)=0
+      GROUP BY ${ageBase},b.material_code`,
     omitEnd: true,
     extra: {
       gea_p4: { name: 'snapshot', type: 'string', required: true, format: 'YYYY-MM-DD' },

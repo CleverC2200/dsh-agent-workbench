@@ -1,5 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 13;
+export const metricCalculationVersion = 21;
 export function compatibleWorkbenchFacts(facts) {
   return (
     facts?.complete === true &&
@@ -83,11 +83,13 @@ export function nationalStockDays(rows) {
 export function computeWorkbenchMetrics(
   period,
   filter = () => true,
-  { turnoverScope = 'national' } = {},
+  { turnoverScope = 'national', ontimeFilter = filter } = {},
 ) {
   const section = (name) => period.sections.find((section) => section.id === name);
   const rows = (name) =>
-    section(name)?.status === 'ready' ? section(name).rows.filter(filter) : [];
+    section(name)?.status === 'ready'
+      ? section(name).rows.filter(name === 'ontime' ? ontimeFilter : filter)
+      : [];
   const orders = rows('orders'),
     stock = rows('stock'),
     ages = rows('ages'),
@@ -107,12 +109,12 @@ export function computeWorkbenchMetrics(
         denominator > 0 &&
         numerator !== null &&
         numerator >= 0 &&
-        numerator <= denominator
+        (kind === '2' || numerator <= denominator)
         ? (numerator / denominator) * 100
         : null,
       kind === '1'
-        ? '按OMS新增日期，客户编码＋原订单号去重：锁定期内且接单12小时后作废订单数 ÷ O接收订单数（剔除12小时内作废）；缺作废时间不计算'
-        : '按OMS新增日期，客户编码＋原订单号去重：锁定期内客户改单订单数 ÷ 全部有效订单数（剔除全部作废）；锁定日为交期7日内接单后12小时，否则确认交期前7日；缺锁定依据不计算',
+        ? '按传到OMS的单据新增日期，客户编码＋原订单号去重：锁定期内且接单超过12小时后作废订单数 ÷ O接收订单数（剔除接单后12小时以内、含恰好12小时作废的订单）；缺作废时间不计算'
+        : '按日表header_addtime筛选OMS创建周期，按商品明细数量合计、不按订单或SKU种类计数：锁定期内ΣABS(客户要求改单量change_order_qty－有效商品数量) ÷ Σ有效商品数量 ×100%；有效量优先D最后修改量dms_last_update_qty，空时取调整需求量备份need_qty_origin；三个数量全空剔除，其余空按0、真实0有效；整单作废剔除，仅保留detailstatus=10且is_stat=1；交期距创建≤7日按创建+12小时锁定，否则确认到货-7日；以custchangetime判定锁内，不额外限定改单在创建周期内；该时间对SKU实际改量的覆盖仍待核，缺失保留未知',
     );
   }
   const need = sum(orders, 'demand'),
@@ -127,7 +129,7 @@ export function computeWorkbenchMetrics(
   const arrivalRows = rows('ontime'),
     byOrder = new Map();
   for (const row of arrivalRows) {
-    const key = JSON.stringify([row.customer, row.order_no]);
+    const key = JSON.stringify([row.order_no]);
     if (!byOrder.has(key)) byOrder.set(key, []);
     byOrder.get(key).push(row);
   }
@@ -145,7 +147,7 @@ export function computeWorkbenchMetrics(
           assessed.length) *
           100
       : null,
-    '按整单最后实际到货日期，客户编码＋原订单号去重：全部执行单均准交的订单数 ÷ 已发货到货订单数；到货优先GPS围栏、其次人工确认；截止=max(客户期望、确认交期、系统交期)+12小时；缺任一依据不计算',
+    '按TMS实际到货时间选周期，执行单号去重：准交执行单数 ÷ 已发货执行单数；到货优先目的地GPS围栏、其次到货确认；到货≤max(客户期望、开单确认到货、系统计算到货)+12小时（含边界）为准交；剔除同提货点且双方均工厂仓/工厂外租仓的短拨、海外/国外/港澳大区、未派车、虚拟出库1/2、指定车型及空车型、超时原因14/16；郑州庞丽娟按基地准交率；系统交期缺失但到货≤已有两交期最大值+12小时可严格确认准交；否则保留未知；短拨仓类可由仓库维表唯一补齐，冲突不覆盖',
   );
   const total = sum(ages, 'stock_qty'),
     aged = sum(ages, 'aged_qty');
@@ -185,7 +187,7 @@ export function computeWorkbenchMetrics(
       !finite(denominator) ||
       denominator <= 0 ||
       numerator < 0 ||
-      numerator > denominator ||
+      (name !== '改单率' && numerator > denominator) ||
       !finite(known) ||
       !finite(total) ||
       !Number.isSafeInteger(known) ||
@@ -221,8 +223,39 @@ export function computeWorkbenchMetrics(
         sum(selected, 'sample_denominator'),
         sum(selected, 'sample_records'),
         sum(selected, 'records'),
-        '张候选订单',
+        name === '改单率' ? '条候选商品明细' : '张候选订单',
       );
+  }
+  const amendmentRows = changes.filter((row) => String(row.kind) === '2');
+  const amendment = result['改单率'];
+  if (amendment.sample) {
+    amendment.sample.value = amendment.value;
+    amendment.value = null;
+    amendment.note += '；完整数量改单率待核，样本率仅作明细参考，不发布为主指标';
+  }
+  if (
+    amendmentRows.length &&
+    amendmentRows.every((row) =>
+      ['denominator', 'sample_numerator', 'sample_records', 'records', 'unknown_quantity'].every(
+        (key) => finite(row[key]),
+      ),
+    )
+  ) {
+    const denominator = sum(amendmentRows, 'denominator');
+    const knownNumerator = sum(amendmentRows, 'sample_numerator');
+    const unknown = sum(amendmentRows, 'records') - sum(amendmentRows, 'sample_records');
+    const unknownQuantity = sum(amendmentRows, 'unknown_quantity');
+    if (denominator > 0 && knownNumerator >= 0 && unknown >= 0 && unknownQuantity >= 0) {
+      amendment.population = {
+        denominator,
+        knownNumerator,
+        unknown,
+        unknownQuantity,
+        minimumPercent: (100 * knownNumerator) / denominator,
+        maximumPercent: (100 * (knownNumerator + unknownQuantity)) / denominator,
+      };
+      amendment.note += `；有效商品数量分母${denominator}，按现有时间已判定调整量${knownNumerator}，待判定${unknown}条明细、数量差额${unknownQuantity}`;
+    }
   }
   if (
     orders.length &&
@@ -248,6 +281,12 @@ export function computeWorkbenchMetrics(
         row.customer && row.order_no && Number(row.invalid) === 0 && [0, 1].includes(row.ontime),
     ),
   );
+  result['准交率'].counts = {
+    onTime: judged.filter((lines) => lines.every((row) => row.ontime === 1)).length,
+    total: assessed.length,
+    known: judged.length,
+    pending: assessed.length - judged.length,
+  };
   sample(
     '准交率',
     judged.filter((lines) => lines.every((row) => row.ontime === 1)).length,
@@ -256,6 +295,12 @@ export function computeWorkbenchMetrics(
     assessed.length,
     '张候选到货订单',
   );
+  if (result['准交率'].counts.pending > 0) {
+    if (result['准交率'].sample) result['准交率'].sample.value = result['准交率'].value;
+    result['准交率'].value = (100 * result['准交率'].counts.onTime) / result['准交率'].counts.total;
+    result['准交率'].note +=
+      '；显示已确认准交数÷全部应统计已发货执行单数；缺失数据的执行单保留在分母，暂不计入准交数，补齐后重算';
+  }
   for (const [id, names] of [
     ['orders', ['订单满足率']],
     ['ontime', ['准交率']],
@@ -272,7 +317,11 @@ export function computeWorkbenchMetrics(
         Object.assign(result[name], { value: null, note: '查询未完成：' + part.code });
     else if (!rows(id).length)
       for (const name of names)
-        Object.assign(result[name], { value: null, noRows: true, note: '所选周期及授权范围内无来源数据' });
+        Object.assign(result[name], {
+          value: null,
+          noRows: true,
+          note: '所选周期及授权范围内无来源数据',
+        });
   }
   if (period.start && period.end && period.start >= period.end)
     for (const name of metricNames)
@@ -303,7 +352,12 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
           ? 'ontime'
           : 'orders';
   const part = period?.sections?.find((section) => section.id === id);
-  if (period && period.start >= period.end && Array.isArray(period.sections) && !period.sections.length)
+  if (
+    period &&
+    period.start >= period.end &&
+    Array.isArray(period.sections) &&
+    !period.sections.length
+  )
     return '本周期暂无已结束统计日：订单按T-1累计，当前区间起止相同，未发起空区间查询。不是仍在加载，也不代表整张源表无数据；库存指标仍需筛选内的有效快照，缺失保持未知，不用其他周期替代。';
   if (!part || part.status === 'loading')
     return '系统尚未完成读取：所选周期数据未加载完成，暂不能判定源表缺数据。';
@@ -323,7 +377,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
       '无法完整归属发货周期；未以接单日期或加载时间替代。'
     );
   if (name === '准交率' && source.some((row) => Number(row.invalid) > 0 || row.ontime == null))
-    return '源数据未提供或关联冲突：到货周期内部分订单缺完整GPS/人工到货或三个承诺交期之一，不能以已有判定样本代替全部订单。';
+    return '源数据未提供或关联冲突：到货周期内部分执行单缺系统交期且已超过已有交期+12小时，或收发仓属性缺失/冲突；不能确认其为准交或逾期。';
   if (
     name === '周转天数' &&
     source.some((row) => row.source_rows === null || row.inventory === null)
@@ -351,13 +405,20 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
     if (!selected.length)
       return `源数据未提供：agents_scm_execute_detail_hourly_d 在当前分组没有订单计数记录。`;
     if (
+      name === '改单率' &&
+      selected.some(
+        (row) => Number(row.invalid) > 0 || row.numerator == null || row.denominator == null,
+      )
+    )
+      return '改单数量或锁定期依据不足：需客户要求改单量change_order_qty、D最后修改量dms_last_update_qty、调整需求量备份need_qty_origin，以及OMS新增时间header_addtime、开单确认到货requireddeliverytime和实际改量对应的custchangetime；数量空值按已确认规则处理，缺失的改量时间不当作未改单。';
+    if (
       selected.some(
         (row) => Number(row.invalid) > 0 || row.numerator == null || row.denominator == null,
       )
     )
       return `源数据未提供或归并冲突：agents_scm_execute_detail_hourly_d 的${name === '作废率' ? '作废时间 canceltime、' : '客户改单时间 custchangetime、'}OMS新增日期、确认交期或原订单标识不完整，无法判断锁定期并按订单去重；未用数量比率替代。`;
     if (selected.reduce((sum, row) => sum + Number(row.denominator ?? 0), 0) === 0)
-      return `系统未能计算：当前分组有效订单数分母为0，不能计算${name}。`;
+      return `系统未能计算：当前分组${name === '改单率' ? '有效商品数量' : '有效订单数'}分母为0，不能计算${name}。`;
   }
   if (name === '订单满足率' && total('demand') === 0)
     return '系统未能计算：agents_order_execute_isontime_mi 当前分组需求量合计为0，订单满足率没有有效分母。';

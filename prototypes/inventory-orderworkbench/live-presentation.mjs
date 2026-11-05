@@ -20,7 +20,31 @@ const text = (value, unit = '%', digits = 2) =>
   value === null || value === undefined ? '—' : Number(value).toFixed(digits) + unit;
 const value = (metrics, name) =>
   text(metricValue(metrics, name), name === '周转天数' ? '' : '%') +
-  (metrics?.[name]?.sample ? '*' : '');
+  (name !== '准交率' && metrics?.[name]?.sample ? '*' : '');
+const onTimeDisplayNote = (metric) => {
+  const counts = metric?.counts;
+  if (metric?.value == null && !counts?.total) return metric?.missingReason ?? '暂无源数据可计算';
+  return [
+    Number.isFinite(metric?.value)
+      ? `已确认准交数÷全部应统计已发货执行单数=${metric.value.toFixed(6)}%`
+      : counts?.pending > 0
+        ? '缺失数据，无法确认准交数'
+        : '',
+    Number.isFinite(metric?.sample?.value)
+      ? `补充：可判定样本率${metric.sample.value.toFixed(6)}%，不代替完整准交率`
+      : '',
+    counts
+      ? `已确认准交${counts.onTime}张，已发货候选${counts.total}张，可判定${counts.known}张，待判定${counts.pending}张`
+      : '',
+    counts?.pending > 0 && counts.total > 0
+      ? `缺失数据${counts.pending}张保留在分母，暂不计入准交数，补齐后重算；未将其认定为已确认逾期`
+      : '',
+    metric.coverageNote ?? '',
+  ]
+    .filter(Boolean)
+    .join('；');
+};
+const onTimeStatus = (metric) => metricState('准交率', metric?.value ?? null);
 const rows = (period, id) =>
   period?.sections.find((section) => section.id === id && section.status === 'ready')?.rows ?? [];
 const distinct = (values) =>
@@ -77,6 +101,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
   const selected = periods.month ?? periods.week;
   const source = [
     ...rows(selected, 'orders'),
+    ...rows(selected, 'ontime'),
     ...rows(selected, 'stock'),
     ...rows(selected, 'ages').filter(
       (row) =>
@@ -164,11 +189,16 @@ function summaryRows(periods, field, directorMap, loading = false) {
         }
         for (const group of groups) {
           const groupRows =
-            typeof group.id === 'symbol'
-              ? field === 'base'
-                ? section.rows.filter((row) => workbenchBaseIncluded(row.base))
-                : section.rows
-              : sectionRows.get(group.id);
+            field === 'director' &&
+            section.id === 'ontime' &&
+            ['郑州', '郑州基地'].includes(group.labels[1]) &&
+            group.labels[0] === '庞丽娟'
+              ? section.rows.filter((row) => dimensionValue(row.base) === group.labels[1])
+              : typeof group.id === 'symbol'
+                ? field === 'base'
+                  ? section.rows.filter((row) => workbenchBaseIncluded(row.base))
+                  : section.rows
+                : sectionRows.get(group.id);
           buckets.get(group.id).push({ ...section, rows: groupRows });
         }
       }
@@ -184,7 +214,21 @@ function summaryRows(periods, field, directorMap, loading = false) {
         ),
       );
     }
-    return indexedPeriods.get(key).get(group.id);
+    const grouped = indexedPeriods.get(key).get(group.id);
+    if (
+      field === 'director' &&
+      group.labels[0] === '庞丽娟' &&
+      ['郑州', '郑州基地'].includes(group.labels[1])
+    ) {
+      return {
+        ...grouped,
+        准交率: computeWorkbenchMetrics(
+          period,
+          (row) => dimensionValue(row.base) === group.labels[1],
+        )['准交率'],
+      };
+    }
+    return grouped;
   };
   const tables = {};
   for (const [key, previous, year] of [
@@ -213,6 +257,8 @@ function summaryRows(periods, field, directorMap, loading = false) {
           };
         if (m[name]?.sample && currentCell && typeof currentCell === 'object')
           currentCell.title = metricCoverageSummary(m[name]) + '；不是全量指标。';
+        if (name === '准交率' && currentCell && typeof currentCell === 'object')
+          currentCell.title = onTimeDisplayNote(m[name]);
         const delta = (other, otherKey) => {
           if (loading && !periods[otherKey]) return '加载中';
           const text = metricDelta(m, other, name);
@@ -310,6 +356,11 @@ export function workbenchPresentation(facts, options = {}) {
       metricValue(metrics, name) === null
         ? '—'
         : metricValue(metrics, name).toFixed(name === '周转天数' ? 1 : 2),
+    unit: metrics[name]?.unit ?? '%',
+    countsNote:
+      name === '准交率' && metrics[name]?.counts?.total > 0
+        ? `已确认准交${metrics[name].counts.onTime}张／已发货候选${metrics[name].counts.total}张；待判定${metrics[name].counts.pending}张`
+        : '',
     status: metrics[name]?.emptyPeriod
       ? '暂无已结束日期'
       : metrics[name]?.loading
@@ -318,8 +369,11 @@ export function workbenchPresentation(facts, options = {}) {
           ? '查询失败'
           : metrics[name]?.noRows
             ? '暂无数据'
-            : metricState(name, metricValue(metrics, name)),
-    coverageNote: metrics[name]?.coverageNote ?? '',
+            : name === '准交率' && metrics[name]?.counts?.pending > 0
+              ? onTimeStatus(metrics[name])
+              : metricState(name, metricValue(metrics, name)),
+    coverageNote:
+      name === '准交率' ? onTimeDisplayNote(metrics[name]) : (metrics[name]?.coverageNote ?? ''),
     comparisonNotes: [
       comparisonNote('month', 'previousMonth', name),
       comparisonNote('month', 'yearMonth', name),
@@ -328,11 +382,18 @@ export function workbenchPresentation(facts, options = {}) {
     ],
     formula: metrics[name].note,
     missingReason: metrics[name].missingReason,
-    footer: `本周${name === '货龄（>60天库存占比）' ? '货龄占比' : name === '周转天数' ? '可发货天数' : name === '订单满足率' ? '满足率' : name} ${loading && !periods.week ? '加载中' : text(metricValue(periods.week?.metrics, name), name === '周转天数' ? '天' : '%', name === '周转天数' ? 1 : 2)}${periods.week?.metrics[name]?.sample ? '（可判定样本）' : ''}`,
+    footer:
+      name === '准交率' && periods.week?.metrics[name]?.counts?.pending > 0
+        ? `本周准交率 ${text(metricValue(periods.week.metrics, name))}（${periods.week.metrics[name].counts.pending}张缺失数据未计准交）`
+        : `本周${name === '货龄（>60天库存占比）' ? '货龄占比' : name === '周转天数' ? '可发货天数' : name === '订单满足率' ? '满足率' : name} ${loading && !periods.week ? '加载中' : text(metricValue(periods.week?.metrics, name), name === '周转天数' ? '天' : '%', name === '周转天数' ? 1 : 2)}${periods.week?.metrics[name]?.sample ? '（可判定样本）' : ''}`,
     footerNote:
-      metricValue(periods.week?.metrics, name) === null
-        ? (periods.week?.metrics[name]?.missingReason ?? '本周数据尚未返回。')
-        : (periods.week?.metrics[name]?.coverageNote ?? ''),
+      name === '准交率' && periods.week?.metrics[name]?.counts?.pending > 0
+        ? onTimeDisplayNote(periods.week.metrics[name])
+        : metricValue(periods.week?.metrics, name) === null
+          ? (periods.week?.metrics[name]?.missingReason ?? '本周数据尚未返回。')
+          : name === '准交率'
+            ? onTimeDisplayNote(periods.week?.metrics[name])
+            : (periods.week?.metrics[name]?.coverageNote ?? ''),
     comparison: [
       comparison('month', 'previousMonth', name),
       comparison('month', 'yearMonth', name),
