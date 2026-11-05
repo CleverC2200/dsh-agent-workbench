@@ -511,6 +511,8 @@ test('plugin update continues while its panel is closed and exposes no invented 
   await expect(panel.getByText('正在安装', { exact: true }).first()).toBeVisible({ timeout: 8000 });
   await expect(panel.getByRole('progressbar').last()).not.toHaveAttribute('value');
   await page.keyboard.press('Escape');
+  await expect(panel).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '更新', exact: true })).toBeFocused();
   await page.getByRole('button', { name: '更新', exact: true }).click();
   await expect(panel.getByText('正在安装', { exact: true }).first()).toBeVisible();
   assert.equal(await page.evaluate(() => window.pluginUpdateClicks), 1);
@@ -531,7 +533,10 @@ test('plugin update continues while its panel is closed and exposes no invented 
     });
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '更新', exact: true })).toBeFocused();
+  const updateEntry = page.getByRole('button', { name: '更新', exact: true });
+  if (!(await updateEntry.isVisible()))
+    await page.getByRole('button', { name: '展开业务菜单', exact: true }).click();
+  await expect(updateEntry).toBeVisible();
 });
 
 for (const mode of ['web', 'version-failed'])
