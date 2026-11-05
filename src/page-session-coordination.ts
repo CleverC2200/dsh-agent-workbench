@@ -189,12 +189,7 @@ export function usePageSessionCoordination({
       return;
     }
     await runSelection(ownerSignal, async (signal) => {
-      const requested = await resourceWorkspace(
-        host.fetch,
-        signal,
-        cwd ?? selection?.cwd ?? currentCwd,
-        host.pickDirectory,
-      );
+      const requested = await resourceWorkspace(host, signal, cwd ?? selection?.cwd ?? currentCwd);
       const { path: directory } = await host.workspace(requested);
       signal.throwIfAborted();
       let cached = reuse
@@ -238,12 +233,7 @@ export function usePageSessionCoordination({
     }
     await runSelection(undefined, async (signal) => {
       // Borrow the current Core Workspace before requesting another directory.
-      const cwd = await resourceWorkspace(
-        host.fetch,
-        signal,
-        selection?.cwd ?? currentCwd,
-        host.pickDirectory,
-      );
+      const cwd = await resourceWorkspace(host, signal, selection?.cwd ?? currentCwd);
       const { workspaceId } = await host.workspace(cwd);
       signal.throwIfAborted();
       const id = await host.create({ workspaceId });
@@ -299,10 +289,9 @@ export function usePageSessionCoordination({
     preparation.current = controller;
     void (async () => {
       const cwd = await resourceWorkspace(
-        host.fetch,
+        { ...host, pickDirectory: prepare ? host.pickDirectory : undefined },
         controller.signal,
         selection?.cwd ?? currentCwd,
-        prepare ? host.pickDirectory : undefined,
       );
       const response = await host.fetch(
         '/api/agent-manage/resources?' + new URLSearchParams({ cwd }),

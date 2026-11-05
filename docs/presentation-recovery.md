@@ -20,6 +20,8 @@
 
 每个已声明解释者保存自己的 Session 地址。换解释者使用正常资源动作，新建会话或复用已核真实 preset/workspace 的地址；不会改变已完成对话的 preset 绕过 Core 锁。解释者提示、实际安装可用和 GEA 授权分别检查。
 
+Agent 启动、页面解释者与资源选用先沿用传入的会话或页面目录，其次使用 Workbench 显式配置的目录。没有这些目录时，从 Core 当前主会话或最近活动工作区读取目录；只有 Core 没有可选工作区时才提示用户选择。最近活动按工作区内 Session 的更新时间排序，无 Session 时使用工作区创建时间。目录选择不建立独立缓存，也不复用其它 Agent 的会话、预设或草稿。
+
 ## 显式引用 sidecar
 
 显式页面引用使用 Workbench 持有、位于 Core 公开 `storageDomain` 的 Session sidecar `workbench_page_references`。它只保存用户有限选取内容与当前 GEA grant 提供的环境、租户和用户归属。composer 仍保存原小回执；快照不是恢复的页面业务结果或授权。

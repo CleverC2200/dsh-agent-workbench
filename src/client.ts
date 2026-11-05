@@ -129,7 +129,7 @@ export function apply(ctx: Context): void {
         const current = Object.values(sessions.byId).find(
           (row) => (row.retainedBy.mainView ?? 0) > 0,
         );
-        const cwd = await resourceWorkspace(host.fetch, signal, current?.cwd, host.pickDirectory);
+        const cwd = await resourceWorkspace(host, signal, current?.cwd);
         signal.throwIfAborted();
         const { workspaceId, path } = await host.workspace(cwd);
         signal.throwIfAborted();
