@@ -22,6 +22,7 @@ const value = (metrics, name) =>
   (name !== '准交率' && metrics?.[name]?.sample ? '*' : '');
 const onTimeDisplayNote = (metric) => {
   const counts = metric?.counts;
+  if (metric?.value == null && !counts?.total) return metric?.missingReason ?? '暂无源数据可计算';
   return [
     Number.isFinite(metric?.value)
       ? `已确认准交数÷全部应统计已发货执行单数=${metric.value.toFixed(6)}%`
@@ -179,27 +180,54 @@ function summaryRows(periods, field, directorMap, loading = false) {
       for (const section of period.sections) {
         const sectionRows = new Map(groups.map((group) => [group.id, []]));
         for (const row of section.rows) {
-          const ids = field === 'director'
-            ? directors(row, key).map((name) => JSON.stringify([name, dimensionValue(row.base)]))
-            : [dimensionValue(row[field])];
+          const ids =
+            field === 'director'
+              ? directors(row, key).map((name) => JSON.stringify([name, dimensionValue(row.base)]))
+              : [dimensionValue(row[field])];
           for (const id of new Set(ids)) sectionRows.get(id)?.push(row);
         }
         for (const group of groups) {
-          const groupRows = field === 'director' && section.id === 'ontime' &&
-            ['郑州', '郑州基地'].includes(group.labels[1]) && group.labels[0] === '庞丽娟'
-            ? section.rows.filter((row) => dimensionValue(row.base) === group.labels[1])
-            : typeof group.id === 'symbol'
-            ? field === 'base' ? section.rows.filter((row) => workbenchBaseIncluded(row.base)) : section.rows
-            : sectionRows.get(group.id);
+          const groupRows =
+            field === 'director' &&
+            section.id === 'ontime' &&
+            ['郑州', '郑州基地'].includes(group.labels[1]) &&
+            group.labels[0] === '庞丽娟'
+              ? section.rows.filter((row) => dimensionValue(row.base) === group.labels[1])
+              : typeof group.id === 'symbol'
+                ? field === 'base'
+                  ? section.rows.filter((row) => workbenchBaseIncluded(row.base))
+                  : section.rows
+                : sectionRows.get(group.id);
           buckets.get(group.id).push({ ...section, rows: groupRows });
         }
       }
-      indexedPeriods.set(key, new Map([...buckets].map(([id, sections]) => [id,
-        computeWorkbenchMetrics({ ...period, sections }, undefined,
-          { turnoverScope: field === 'item' ? 'item' : 'base' }),
-      ])));
+      indexedPeriods.set(
+        key,
+        new Map(
+          [...buckets].map(([id, sections]) => [
+            id,
+            computeWorkbenchMetrics({ ...period, sections }, undefined, {
+              turnoverScope: field === 'item' ? 'item' : 'base',
+            }),
+          ]),
+        ),
+      );
     }
-    return indexedPeriods.get(key).get(group.id);
+    const grouped = indexedPeriods.get(key).get(group.id);
+    if (
+      field === 'director' &&
+      group.labels[0] === '庞丽娟' &&
+      ['郑州', '郑州基地'].includes(group.labels[1])
+    ) {
+      return {
+        ...grouped,
+        准交率: computeWorkbenchMetrics(
+          period,
+          (row) => dimensionValue(row.base) === group.labels[1],
+        )['准交率'],
+      };
+    }
+    return grouped;
   };
   const tables = {};
   for (const [key, previous, year] of [
@@ -222,7 +250,10 @@ function summaryRows(periods, field, directorMap, loading = false) {
           field === 'director' ? group.labels[1] : field === 'base' ? group.labels[0] : '',
         );
         if (metricValue(m, name) === null)
-          currentCell = { text: '—', title: m[name]?.missingReason ?? '当前分组尚无有效计算依据。' };
+          currentCell = {
+            text: '—',
+            title: m[name]?.missingReason ?? '当前分组尚无有效计算依据。',
+          };
         if (m[name]?.sample && currentCell && typeof currentCell === 'object')
           currentCell.title = metricCoverageSummary(m[name]) + '；不是全量指标。';
         if (name === '准交率' && currentCell && typeof currentCell === 'object')
@@ -230,9 +261,14 @@ function summaryRows(periods, field, directorMap, loading = false) {
         const delta = (other, otherKey) => {
           if (loading && !periods[otherKey]) return '加载中';
           const text = metricDelta(m, other, name);
-          if (text === '—') return { text, title: metricValue(m, name) === null
-            ? m[name]?.missingReason ?? '当前分组尚无有效计算依据。'
-            : '比较期：' + (other[name]?.missingReason ?? '当前分组尚无有效计算依据。') };
+          if (text === '—')
+            return {
+              text,
+              title:
+                metricValue(m, name) === null
+                  ? (m[name]?.missingReason ?? '当前分组尚无有效计算依据。')
+                  : '比较期：' + (other[name]?.missingReason ?? '当前分组尚无有效计算依据。'),
+            };
           return text !== '—' && (m[name]?.sample || other[name]?.sample)
             ? { text, title: metricComparisonNote(m, other, name) }
             : text;
@@ -334,9 +370,7 @@ export function workbenchPresentation(facts, options = {}) {
             ? '暂无数据'
             : name === '准交率' && metrics[name]?.counts?.pending > 0
               ? onTimeStatus(metrics[name])
-              : metrics[name]?.sample && name !== '准交率'
-                ? `样本 ${metrics[name].sample.coverage.toFixed(1)}%`
-                : metricState(name, metricValue(metrics, name)),
+              : metricState(name, metricValue(metrics, name)),
     coverageNote:
       name === '准交率' ? onTimeDisplayNote(metrics[name]) : (metrics[name]?.coverageNote ?? ''),
     comparisonNotes: [

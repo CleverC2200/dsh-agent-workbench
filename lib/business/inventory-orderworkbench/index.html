@@ -7340,6 +7340,7 @@ table[class^='wb-'] :is(.wb-region-order-count, .category-toggle, .region-change
   var value = (metrics, name) => text(metricValue(metrics, name), name === "\u5468\u8F6C\u5929\u6570" ? "" : "%") + (name !== "\u51C6\u4EA4\u7387" && metrics?.[name]?.sample ? "*" : "");
   var onTimeDisplayNote = (metric) => {
     const counts = metric?.counts;
+    if (metric?.value == null && !counts?.total) return metric?.missingReason ?? "\u6682\u65E0\u6E90\u6570\u636E\u53EF\u8BA1\u7B97";
     return [
       Number.isFinite(metric?.value) ? `\u5DF2\u786E\u8BA4\u51C6\u4EA4\u6570\xF7\u5168\u90E8\u5E94\u7EDF\u8BA1\u5DF2\u53D1\u8D27\u6267\u884C\u5355\u6570=${metric.value.toFixed(6)}%` : counts?.pending > 0 ? "\u7F3A\u5931\u6570\u636E\uFF0C\u65E0\u6CD5\u786E\u8BA4\u51C6\u4EA4\u6570" : "",
       Number.isFinite(metric?.sample?.value) ? `\u8865\u5145\uFF1A\u53EF\u5224\u5B9A\u6837\u672C\u7387${metric.sample.value.toFixed(6)}%\uFF0C\u4E0D\u4EE3\u66FF\u5B8C\u6574\u51C6\u4EA4\u7387` : "",
@@ -7461,16 +7462,29 @@ table[class^='wb-'] :is(.wb-region-order-count, .category-toggle, .region-change
             buckets.get(group2.id).push({ ...section, rows: groupRows });
           }
         }
-        indexedPeriods.set(key, new Map([...buckets].map(([id, sections]) => [
-          id,
-          computeWorkbenchMetrics(
-            { ...period, sections },
-            void 0,
-            { turnoverScope: field === "item" ? "item" : "base" }
+        indexedPeriods.set(
+          key,
+          new Map(
+            [...buckets].map(([id, sections]) => [
+              id,
+              computeWorkbenchMetrics({ ...period, sections }, void 0, {
+                turnoverScope: field === "item" ? "item" : "base"
+              })
+            ])
           )
-        ])));
+        );
       }
-      return indexedPeriods.get(key).get(group.id);
+      const grouped = indexedPeriods.get(key).get(group.id);
+      if (field === "director" && group.labels[0] === "\u5E9E\u4E3D\u5A1F" && ["\u90D1\u5DDE", "\u90D1\u5DDE\u57FA\u5730"].includes(group.labels[1])) {
+        return {
+          ...grouped,
+          \u51C6\u4EA4\u7387: computeWorkbenchMetrics(
+            period,
+            (row) => dimensionValue(row.base) === group.labels[1]
+          )["\u51C6\u4EA4\u7387"]
+        };
+      }
+      return grouped;
     };
     const tables = {};
     for (const [key, previous, year] of [
@@ -7493,7 +7507,10 @@ table[class^='wb-'] :is(.wb-region-order-count, .category-toggle, .region-change
             field === "director" ? group.labels[1] : field === "base" ? group.labels[0] : ""
           );
           if (metricValue(m, name) === null)
-            currentCell = { text: "\u2014", title: m[name]?.missingReason ?? "\u5F53\u524D\u5206\u7EC4\u5C1A\u65E0\u6709\u6548\u8BA1\u7B97\u4F9D\u636E\u3002" };
+            currentCell = {
+              text: "\u2014",
+              title: m[name]?.missingReason ?? "\u5F53\u524D\u5206\u7EC4\u5C1A\u65E0\u6709\u6548\u8BA1\u7B97\u4F9D\u636E\u3002"
+            };
           if (m[name]?.sample && currentCell && typeof currentCell === "object")
             currentCell.title = metricCoverageSummary(m[name]) + "\uFF1B\u4E0D\u662F\u5168\u91CF\u6307\u6807\u3002";
           if (name === "\u51C6\u4EA4\u7387" && currentCell && typeof currentCell === "object")
@@ -7501,7 +7518,11 @@ table[class^='wb-'] :is(.wb-region-order-count, .category-toggle, .region-change
           const delta = (other, otherKey) => {
             if (loading && !periods[otherKey]) return "\u52A0\u8F7D\u4E2D";
             const text2 = metricDelta(m, other, name);
-            if (text2 === "\u2014") return { text: text2, title: metricValue(m, name) === null ? m[name]?.missingReason ?? "\u5F53\u524D\u5206\u7EC4\u5C1A\u65E0\u6709\u6548\u8BA1\u7B97\u4F9D\u636E\u3002" : "\u6BD4\u8F83\u671F\uFF1A" + (other[name]?.missingReason ?? "\u5F53\u524D\u5206\u7EC4\u5C1A\u65E0\u6709\u6548\u8BA1\u7B97\u4F9D\u636E\u3002") };
+            if (text2 === "\u2014")
+              return {
+                text: text2,
+                title: metricValue(m, name) === null ? m[name]?.missingReason ?? "\u5F53\u524D\u5206\u7EC4\u5C1A\u65E0\u6709\u6548\u8BA1\u7B97\u4F9D\u636E\u3002" : "\u6BD4\u8F83\u671F\uFF1A" + (other[name]?.missingReason ?? "\u5F53\u524D\u5206\u7EC4\u5C1A\u65E0\u6709\u6548\u8BA1\u7B97\u4F9D\u636E\u3002")
+              };
             return text2 !== "\u2014" && (m[name]?.sample || other[name]?.sample) ? { text: text2, title: metricComparisonNote(m, other, name) } : text2;
           };
           return [currentCell, delta(p, previous), delta(y, year)];
@@ -7561,7 +7582,7 @@ table[class^='wb-'] :is(.wb-region-order-count, .category-toggle, .region-change
       value: metricValue(metrics, name) === null ? "\u2014" : metricValue(metrics, name).toFixed(name === "\u5468\u8F6C\u5929\u6570" ? 1 : 2),
       unit: metrics[name]?.unit ?? "%",
       countsNote: name === "\u51C6\u4EA4\u7387" && metrics[name]?.counts?.total > 0 ? `\u5DF2\u786E\u8BA4\u51C6\u4EA4${metrics[name].counts.onTime}\u5F20\uFF0F\u5DF2\u53D1\u8D27\u5019\u9009${metrics[name].counts.total}\u5F20\uFF1B\u5F85\u5224\u5B9A${metrics[name].counts.pending}\u5F20` : "",
-      status: metrics[name]?.emptyPeriod ? "\u6682\u65E0\u5DF2\u7ED3\u675F\u65E5\u671F" : metrics[name]?.loading ? "\u52A0\u8F7D\u4E2D" : metrics[name]?.value == null && metrics[name]?.missingReason?.startsWith("\u7CFB\u7EDF\u8BFB\u53D6\u672A\u6210\u529F") ? "\u67E5\u8BE2\u5931\u8D25" : metrics[name]?.noRows ? "\u6682\u65E0\u6570\u636E" : name === "\u51C6\u4EA4\u7387" && metrics[name]?.counts?.pending > 0 ? onTimeStatus(metrics[name]) : metrics[name]?.sample && name !== "\u51C6\u4EA4\u7387" ? `\u6837\u672C ${metrics[name].sample.coverage.toFixed(1)}%` : metricState(name, metricValue(metrics, name)),
+      status: metrics[name]?.emptyPeriod ? "\u6682\u65E0\u5DF2\u7ED3\u675F\u65E5\u671F" : metrics[name]?.loading ? "\u52A0\u8F7D\u4E2D" : metrics[name]?.value == null && metrics[name]?.missingReason?.startsWith("\u7CFB\u7EDF\u8BFB\u53D6\u672A\u6210\u529F") ? "\u67E5\u8BE2\u5931\u8D25" : metrics[name]?.noRows ? "\u6682\u65E0\u6570\u636E" : name === "\u51C6\u4EA4\u7387" && metrics[name]?.counts?.pending > 0 ? onTimeStatus(metrics[name]) : metricState(name, metricValue(metrics, name)),
       coverageNote: name === "\u51C6\u4EA4\u7387" ? onTimeDisplayNote(metrics[name]) : metrics[name]?.coverageNote ?? "",
       comparisonNotes: [
         comparisonNote("month", "previousMonth", name),

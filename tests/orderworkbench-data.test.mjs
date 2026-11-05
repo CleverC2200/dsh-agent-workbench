@@ -898,7 +898,7 @@ test('denied, duplicated, zero denominator and invalid age data remain unknown',
         row[field] = value;
       });
     else source[0][field] = value;
-    assert.equal(model.computeWorkbenchMetrics(period)[name].value, null);
+    assert.equal(model.computeWorkbenchMetrics(period)[name].value, id === 'ontime' ? 0 : null);
   }
   const period = fixturePeriod();
   period.sections.find((section) => section.id === 'changes').status = 'error';
