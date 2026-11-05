@@ -55,6 +55,7 @@ test('aging filters apply inside the client restricted frame and keep all-scope 
   const all = Array.from({ length: 14 }, (_, i) => ({
     material_code: `S${String(i + 1).padStart(2, '0')}`,
     material_name: `商品${i + 1}`,
+    product_tag: i === 0 ? '预下市(处理库存)' : null,
     product_categ_name: i === 13 ? '面点' : '饺子',
     total_qty: i === 13 ? 0 : i + 1,
     age_weight_qty: i === 13 ? 0 : i + 1,
@@ -176,7 +177,20 @@ test('aging filters apply inside the client restricted frame and keep all-scope 
     page.getByRole('checkbox', { name: '90天以上', exact: true }).locator('..'),
   ).toHaveAttribute('title', '仅统计所选货龄批次，库存量和合计同步筛选。');
   await expect(table.locator('tbody tr')).toHaveCount(10);
+  await expect(table.locator('thead th').nth(1)).toContainText('产品标签');
+  await expect(table.locator('tbody tr').first().locator('[data-column="product_tag"]')).toHaveText(
+    '预下市(处理库存)',
+  );
+  await expect(table.locator('tbody tr').nth(1).locator('[data-column="product_tag"]')).toHaveText(
+    '-',
+  );
+  await expect(table.locator('tbody tr').first().locator('td').first()).toHaveCSS('height', '40px');
+  await expect(table.locator('th[data-field="missing_age_10"]')).toHaveCSS('width', '96px');
+  await expect(
+    table.locator('tbody tr').first().locator('[data-column="material_name"]'),
+  ).toHaveAttribute('title', '商品1');
   await expect(table.locator('th[data-field="warehouseid"]')).toHaveCount(0);
+  await host.screenshot({ path: '/tmp/fc-aging-product-tag-desktop.png', fullPage: true });
   await page.getByLabel('列设置', { exact: true }).click();
   await expect(page.getByRole('checkbox', { name: '分仓编码', exact: true })).toHaveCount(0);
   await page.getByLabel('列设置', { exact: true }).click();

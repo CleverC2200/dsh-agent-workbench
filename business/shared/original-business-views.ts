@@ -101,6 +101,7 @@ export function originalFcView(config: any, tab: string, asOf?: string) {
       '货龄结构',
       [
         'missing_age_10',
+        'product_tag',
         'material_code',
         'material_name',
         ['warehouse_name', '分仓'],

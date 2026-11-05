@@ -26,6 +26,28 @@ class AgingTableScope(unittest.TestCase):
             self.assertNotIn('DOUBLE PRECISION', sql, key)
             self.assertEqual(set(re.findall(r':(gea_p\d+)\b', sql)), set(query['request']['parameters']), key)
 
+    def test_product_labels_cannot_multiply_inventory_or_change_paging(self):
+        self.f.batch(100, 10, sku='TAGGED', kind='20')
+        self.f.batch(70, 20, sku='BLANK', kind='20')
+        self.f.batch(90, 5, sku='CONFLICT', kind='20')
+        self.f.db.executemany('INSERT INTO agents_dim_material_prod_sales_info_d VALUES (?,?)',
+                             [('TAGGED', '预下市'), ('TAGGED', '预下市'),
+                              ('BLANK', ''), ('BLANK', None),
+                              ('CONFLICT', '试销品'), ('CONFLICT', '次新品')])
+        rows = self.read()
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]['scope_total_qty'], 35)
+        self.assertEqual({r['material_code']: r['product_tag'] for r in rows},
+                         {'TAGGED': '预下市', 'BLANK': None, 'CONFLICT': None})
+        first = self.read(page_size=1)
+        next_page = self.read(page_size=1, offset=1)
+        self.assertEqual(first[0]['scope_total_qty'], next_page[0]['scope_total_qty'])
+        self.assertEqual(next_page[0]['page_scope_total'], 3)
+        groups = self.read(query_id='batch-age.groups')
+        self.assertEqual(sum(r['total_qty'] for r in groups), 35)
+        self.assertEqual({r['material_code']: r['product_tag'] for r in groups},
+                         {'TAGGED': '预下市', 'BLANK': None, 'CONFLICT': None})
+
     def test_age_filter_scopes_rows_and_totals_to_selected_batches(self):
         self.f.batch(20, 120, sku='MIXED', kind='20')
         self.f.batch(90, 5, sku='MIXED', kind='20')
@@ -104,6 +126,8 @@ class AgingTableScope(unittest.TestCase):
     def test_summary_table_and_source_paths_use_identical_filters_and_totals(self):
         for age, qty, sku in [(10, 10, 'MATCH-1'), (70, 30, 'MATCH-2'), (20, 100, 'OTHER'), (90, 5, 'OTHER'), (10, 0, 'ZERO')]:
             self.f.batch(age, qty, sku=sku, kind='20')
+        self.f.db.executemany('INSERT INTO agents_dim_material_prod_sales_info_d VALUES (?,?)',
+                             [('MATCH-2', '即将下市'), ('OTHER', '预下市')])
         query = json.loads((fixtures.ROOT / 'business/inventory-fc/sql.config.json').read_text())['queries']['snapshot.batch-age.atomic']
         tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
         fields = sorted({column.name for column in tree.find_all(sqlglot.exp.Column) if column.table == 'm'})
