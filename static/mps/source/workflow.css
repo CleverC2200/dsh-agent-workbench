@@ -620,6 +620,14 @@
   text-align: left;
   color: inherit;
   font-weight: inherit;
+  white-space: normal;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.wf-demand-toggle span {
+  flex: 1;
+  min-width: 0;
 }
 .wf-demand-toggle svg {
   flex: 0 0 12px;

@@ -602,7 +602,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
           h(
             'p',
             { className: 'wf-note' },
-            '按大类、物料组、SKU、基地展开。展开基地可查看运算过程。已知小计含待补项，缺值不补零。',
+            '按大类、物料组、SKU、基地展开。来源对照统计当前拆分范围内的基地SKU。展开基地可查看运算过程。已知小计含待补项，缺值不补零。',
           ),
           detailTable,
           h(

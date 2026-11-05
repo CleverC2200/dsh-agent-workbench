@@ -1211,28 +1211,28 @@ test('MPS processing compares both forecast months and persists fixed quantities
   await upload(
     frame,
     '选择产品关系CSV或Excel',
-    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,真实系列,组,,\n郑州,B,产品乙,汤圆,真实系列,组,,',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）,汤圆,真实系列,组,,\n郑州,B,产品乙,汤圆,真实系列,组,,',
   );
   await upload(
     frame,
     '选择计划提报CSV',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,产品甲,汤圆,真实系列,组,60,60\n2026-12,郑州,B,产品乙,汤圆,真实系列,组,40,40\n2027-01,郑州,A,产品甲,汤圆,真实系列,组,60,60\n2027-01,郑州,B,产品乙,汤圆,真实系列,组,40,40',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）,汤圆,真实系列,组,60,60\n2026-12,郑州,B,产品乙,汤圆,真实系列,组,40,40\n2027-01,郑州,A,麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）,汤圆,真实系列,组,60,60\n2027-01,郑州,B,产品乙,汤圆,真实系列,组,40,40',
   );
   await upload(
     frame,
     '设置上一财年发货夹具',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,汤圆,真实系列,组,60\n2025-12,郑州,B,产品乙,汤圆,真实系列,组,40',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）,汤圆,真实系列,组,60\n2025-12,郑州,B,产品乙,汤圆,真实系列,组,40',
   );
   await upload(
     frame,
     '选择模型预测CSV',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2026-12,郑州,A,产品甲,汤圆,真实系列,组,0\n2027-01,郑州,A,产品甲,汤圆,真实系列,组,250',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2026-12,郑州,A,麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）,汤圆,真实系列,组,0\n2027-01,郑州,A,麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）,汤圆,真实系列,组,250',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await upload(
     frame,
     '选择发货输入CSV',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-11,郑州,A,产品甲,汤圆,真实系列,组,220,10,10,10,100,200,80\n2026-11,郑州,B,产品乙,汤圆,真实系列,组,0,0,0,0,0,0,0',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-11,郑州,A,麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）,汤圆,真实系列,组,220,10,10,10,100,200,80\n2026-11,郑州,B,产品乙,汤圆,真实系列,组,0,0,0,0,0,0,0',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
@@ -1320,6 +1320,16 @@ test('MPS processing compares both forecast months and persists fixed quantities
     await view
       .getByRole('heading', { name: '加工后的需求', exact: true })
       .evaluate((element) => element.scrollIntoView({ block: 'start' }));
+    const longName = view.getByRole('button', {
+      name: 'SKU · A 麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）',
+      exact: true,
+    });
+    const textBox = await longName.locator('span').boundingBox();
+    const identityBox = await longName.locator('xpath=ancestor::th').boundingBox();
+    assert.ok(
+      textBox.x + textBox.width <= identityBox.x + identityBox.width + 1,
+      'long product names stay inside the pinned identity column',
+    );
     await page.screenshot({ path: '.scratch/t3-ui/tree-600.png' });
   }
   await view.getByLabel('月份筛选').selectOption('2027-01');
@@ -1355,7 +1365,9 @@ test('MPS processing compares both forecast months and persists fixed quantities
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   await view.getByText('大类 · 汤圆', { exact: true }).click();
   await view.getByText('物料组 · 组', { exact: true }).click();
-  await view.getByText('SKU · A 产品甲', { exact: true }).click();
+  await view
+    .getByText('SKU · A 麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）', { exact: true })
+    .click();
   await view.getByRole('button', { name: '运算过程 郑州 A 2026-12', exact: true }).click();
   await expect(frame.getByRole('dialog')).toContainText('提报三层占比');
   await expect(frame.getByRole('dialog')).toContainText('历史三层占比');
