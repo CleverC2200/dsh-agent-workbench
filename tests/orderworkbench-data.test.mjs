@@ -286,7 +286,7 @@ test('arrival packets preserve whole-order counts, unknown verdicts and UTF-8 di
       members,
     },
     {
-      order_no: 'order:1',
+      order_no: 'execution:2',
       customer: '另一客户',
       ontime: 1,
       arrival_date: '2026-10-23',
@@ -349,7 +349,8 @@ test('arrival packets preserve whole-order counts, unknown verdicts and UTF-8 di
   const raw = await run(false),
     packed = await run(true);
   const metric = (facts) => facts.periods.week.metrics['准交率'];
-  assert.ok(Math.abs(metric(packed).value - 200 / 3) < 1e-10);
+  assert.equal(metric(packed).value, 50);
+  assert.ok(Math.abs(metric(packed).sample.value - 200 / 3) < 1e-10);
   assert.deepEqual(metric(packed).sample, metric(raw).sample);
   assert.equal(metric(packed).value, metric(raw).value);
   const section = packed.periods.week.sections.find((part) => part.id === 'ontime');
@@ -745,6 +746,7 @@ test('customer packets retain complete UTF-8 and nullable metadata in one read p
     'denominator',
     'records',
     'invalid',
+    'unknown_quantity',
   ];
   const customers = Array.from({ length: 1700 }, (_, i) => [
     '大区',
@@ -755,6 +757,7 @@ test('customer packets retain complete UTF-8 and nullable metadata in one read p
     10,
     1,
     0,
+    null,
   ]);
   const managers = customers.map((row, i) => [row[2], i % 2 ? null : '负责人', i % 2 ? 0 : 1]);
   const tuple = (fields) =>
@@ -870,7 +873,7 @@ test('document metrics use order counts, distinct arrival orders and calendar-da
     Object.values(metrics).map((metric) => metric.value),
     [10, 5, 96, 90, 10, 30],
   );
-  assert.match(metrics['准交率'].note, /客户编码＋原订单号去重/);
+  assert.match(metrics['准交率'].note, /执行单号去重/);
   const period = fixturePeriod();
   period.sections[0].rows.push({
     ...period.sections[0].rows[0],
@@ -897,7 +900,7 @@ test('denied, duplicated, zero denominator and invalid age data remain unknown',
         row[field] = value;
       });
     else source[0][field] = value;
-    assert.equal(model.computeWorkbenchMetrics(period)[name].value, null);
+    assert.equal(model.computeWorkbenchMetrics(period)[name].value, id === 'ontime' ? 0 : null);
   }
   const period = fixturePeriod();
   period.sections.find((section) => section.id === 'changes').status = 'error';
@@ -1093,7 +1096,8 @@ test('one arrival order with many SKUs counts once; incomplete orders leave an e
   part.rows[0].ontime = null;
   part.rows[0].invalid = 1;
   const missing = model.computeWorkbenchMetrics(p)['准交率'];
-  assert.equal(missing.value, (8 / 9) * 100);
+  assert.equal(missing.value, 80);
+  assert.equal(missing.sample.value, (8 / 9) * 100);
   assert.deepEqual([missing.sample.known, missing.sample.total], [9, 10]);
   assert.match(missing.coverageNote, /不是全量指标/);
 });

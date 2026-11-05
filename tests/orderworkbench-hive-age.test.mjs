@@ -10,7 +10,8 @@ import {
 
 function fixture() {
   const db = new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE age_history(dt,warehouseid,belong_base,material_code,inv_qty,age_days);
+  db.exec(`CREATE TABLE agents_scm_inventory_sku_data_d(warehouseid,month_date,warehouse_classify,warehouse_classify_name,belong_base);
+      CREATE TABLE age_history(dt,warehouseid,belong_base,material_code,inv_qty,age_days);
     CREATE TABLE warehouse(warehouse_id,warehouse_classify,warehouse_classify_name);
     CREATE TABLE agents_scm_material_in_out_summary_d(material_code,product_categ_name,material_group_name);
     CREATE TABLE agents_scm_stock_detail_d(material_code,product_item,the_date);

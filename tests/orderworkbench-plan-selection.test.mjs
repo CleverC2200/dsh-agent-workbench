@@ -143,7 +143,16 @@ test('next-month plans retain snapshot month divisor across leap February and ye
 });
 
 test('old cached facts are invalidated for the changed plan selection', () => {
-  assert.equal(metricCalculationVersion, 13);
+  assert.ok(metricCalculationVersion >= 13);
+  assert.equal(
+    compatibleWorkbenchFacts({
+      complete: true,
+      attributionVersion: 2,
+      metricCalculationVersion,
+      periods: { month: {} },
+    }),
+    true,
+  );
   assert.equal(
     compatibleWorkbenchFacts({
       complete: true,

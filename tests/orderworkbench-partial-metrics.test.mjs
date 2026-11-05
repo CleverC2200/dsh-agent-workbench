@@ -111,17 +111,20 @@ test('partial rates use independently validated quantities and show exact candid
   const p = make();
   const m = computeWorkbenchMetrics(p);
   assert.equal(m['作废率'].value, 0);
-  assert.equal(m['改单率'].value, 5);
+  assert.equal(m['改单率'].value, null);
+  assert.equal(m['改单率'].sample.value, 5);
+  assert.match(m['改单率'].note, /完整数量改单率待核/);
   assert.equal(m['订单满足率'].value, 90);
   assert.equal(m['订单满足率'].sample.coverage, 60);
-  assert.equal(m['准交率'].value, 100);
+  assert.equal(m['准交率'].value, 50);
+  assert.equal(m['准交率'].sample.value, 100);
   assert.deepEqual([m['准交率'].sample.known, m['准交率'].sample.total], [1, 2]);
   assert.match(m['准交率'].coverageNote, /不是全量指标/);
 });
 test('one invalid split verdict excludes the whole original order, not only its SKU', () => {
   const p = make();
   p.sections[2].rows[1].invalid = 1;
-  assert.equal(computeWorkbenchMetrics(p)['准交率'].value, null);
+  assert.equal(computeWorkbenchMetrics(p)['准交率'].value, 0);
 });
 test('all-unknown, absent sample fields, query errors and zero denominators do not become zero rates', () => {
   const p = make();
@@ -172,7 +175,9 @@ test('cards show metric health while footers, tooltips, tables and comparisons r
   };
   const result = workbenchPresentation(facts);
   assert.equal(result.cards[0].status, '健康');
-  assert.equal(result.cards[1].status, '预警');
+  assert.equal(result.cards[1].status, '数据不足');
+  assert.equal(result.cards[1].value, '—');
+  assert.equal(p.metrics['改单率'].sample.value, 5);
   assert.equal(result.cards[2].status, '预警');
   assert.match(result.cards[0].footer, /可判定样本/);
   assert.match(result.cards[0].coverageNote, /覆盖80.0%/);

@@ -5,5 +5,5 @@
     "inventory-orderworkbench"
   ],
   "consumerCode": "order",
-  "maxEffect": "view"
+  "maxEffect": "submit"
 }
