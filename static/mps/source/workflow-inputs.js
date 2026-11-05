@@ -1,5 +1,7 @@
 import { buildCategoryDemand } from './category-demand.js';
 import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
+import { solveMpsPlan } from 'dsh-agent-manage/mps-compute/plan';
+import { buildPlanSources } from './plan-inputs.js';
 
 const number = (value) => {
   if (
@@ -28,7 +30,7 @@ const sourceIssues = (draft, source, month) => {
   ];
 };
 
-export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
+export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation) {
   const context = { id: draft.id, name: draft.name, month: draft.month };
   const reportColumn = draft.pull === 'monthly' ? '月初数量' : '纠偏数量';
   const readQuantity = (rows, column) =>
@@ -164,7 +166,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
     }
   }
   const productIssues = sourceIssues(draft, 'products');
-  const result = computeMpsWorkflow({
+  const workflowInput = {
     context,
     inventoryTargets: draft.inventoryTargets ?? [],
     inventoryTargetVersion: draft.constraints?.targetVersion ?? 'auto',
@@ -233,7 +235,17 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
       })),
       rules: structuredClone(draft.constraints?.rules ?? {}),
     },
-  });
+  };
+  const result = computeMpsWorkflow(workflowInput);
+  if (evaluation) {
+    const planSources = buildPlanSources(draft, relations, evaluation.weights);
+    result.plan = solveMpsPlan({
+      ...workflowInput,
+      ...planSources,
+      planSourceIssues: [...planSources.planSourceIssues, ...(evaluation.sourceIssues ?? [])],
+    });
+    result.plan.sources = planSources.metadata;
+  }
   for (const row of result.rows) {
     for (const source of ['report', 'history']) {
       const issues = source === 'report' ? reportIssues(row.month) : annualIssues(row.month);

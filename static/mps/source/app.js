@@ -28,6 +28,10 @@ function Mps() {
     (value) => value,
     (value) => (mpsSteps.some((item) => item.key === value) ? value : 'check'),
   );
+  const bodyRef = y.useRef(null);
+  y.useEffect(() => {
+    if (['capacity', 'report'].includes(step)) bodyRef.current?.scrollTo({ top: 0 });
+  }, [step]);
   const [assistantDraft, setAssistantDraft] = usePageViewField(y, mpsView, 'assistantDraft', '');
   const [scope, setScope] = y.useState(null);
   const [relations, setRelations] = y.useState(null);
@@ -101,7 +105,7 @@ function Mps() {
       ),
       y.createElement(
         'div',
-        { className: 'ap-board-body' },
+        { className: 'ap-board-body', ref: bodyRef },
         y.createElement(DemandConfirmation, {
           active: true,
           step,

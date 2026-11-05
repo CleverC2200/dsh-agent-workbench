@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { relationRecords, readRelations } from '../static/mps/source/relations.js';
+import {
+  relationRecords,
+  readRelations,
+  readPlanRelations,
+} from '../static/mps/source/relations.js';
 import { readFile } from 'node:fs/promises';
 const config = JSON.parse(
   await readFile(new URL('../static/mps/sql.config.json', import.meta.url), 'utf8'),
@@ -212,4 +216,44 @@ test('source series and categories remain missing even when the exact product is
   assert.equal(result.sku[0].capacity.standard_daily_output_pc, 0);
   assert.deepEqual(result.transfers[0].missing, ['缺SAP品类', '缺老大类', '缺调拨生产品类']);
   assert.deepEqual(result.transfers[0].pending, []);
+});
+
+test('求解分别读取三个月的调拨方向，拒绝跨月数据和读取期间版本变化', async () => {
+  const periods = [];
+  let wrongMonth = false;
+  let changed = false;
+  const execute = async (_request, { queryId, values }) => {
+    const transfer = queryId.startsWith('transfers.');
+    if (transfer) periods.push(values.period);
+    const data = transfer
+      ? [
+          {
+            ...Object.fromEntries(
+              config.queries['transfers.detail'].columns.map((column) => [column, null]),
+            ),
+            stat_period: wrongMonth ? '2026-12' : values.period,
+            material_code: 'A',
+            transfer_direction: '甲→乙',
+          },
+        ]
+      : [];
+    return {
+      rows: queryId.endsWith('.count') ? [{ total: data.length }] : data,
+      returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,
+      rejectedColumns: [],
+      configVersion: changed && values.period === '2027-01' ? 'changed' : 'v1',
+    };
+  };
+  const months = ['2026-12', '2027-01', '2027-02'];
+  const result = await readPlanRelations(config, execute, months);
+  assert.deepEqual(
+    result.sources.transfers.map((row) => row.stat_period),
+    months,
+  );
+  assert.ok(months.every((month) => periods.includes(month)));
+  wrongMonth = true;
+  await assert.rejects(readPlanRelations(config, execute, months), /调拨来源月份/);
+  wrongMonth = false;
+  changed = true;
+  await assert.rejects(readPlanRelations(config, execute, months), /来源配置版本变化/);
 });

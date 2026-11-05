@@ -4,6 +4,8 @@ import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
 import { call } from '../../../business/shared/channel.js';
 import { readUnitWeights, unitWeightCandidate } from './unit-weights.js';
+import { createEvaluationOverview, planContext } from './evaluation-view.js';
+import { readPlanRelations } from './relations.js';
 
 const excludedProcessCategories = new Set(['饺子', '调理肉制品', '饼类']);
 const titles = {
@@ -85,7 +87,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
   const InventoryTargetPanel = createInventoryTargetPanel(react, { downloadCsv });
   const ConstraintPanel = createConstraintPanel(react, { Dialog });
+  const EvaluationOverview = createEvaluationOverview(react, { downloadCsv, Dialog });
   return function Workflow({
+    evaluation,
+    setEvaluation,
     step,
     draft,
     scopeGeneration,
@@ -107,6 +112,20 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const [formula, setFormula] = react.useState(null);
     const [editingShare, setEditingShare] = react.useState(null);
     const [shareError, setShareError] = react.useState('');
+    const detailRef = react.useRef(null);
+    const [executing, setExecuting] = react.useState(false);
+    const [evaluationError, setEvaluationError] = react.useState('');
+    const executionGeneration = react.useRef(0);
+    const executionController = react.useRef(null);
+    react.useEffect(() => {
+      executionGeneration.current++;
+      setExecuting(false);
+      setEvaluationError('');
+      return () => {
+        executionGeneration.current++;
+        executionController.current?.abort();
+      };
+    }, [draft, relations, shipmentSnapshot, scopeGeneration]);
     const result = react.useMemo(
       () => buildMpsWorkflow(draft, relations, shipmentSnapshot),
       [draft, relations, shipmentSnapshot],
@@ -164,11 +183,73 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           weightCodes,
           controller.signal,
         );
-        if (generation === weightGeneration.current) setWeightRead(read);
+        if (generation === weightGeneration.current) {
+          setWeightRead(read);
+          return read;
+        }
       } catch (error) {
         if (generation === weightGeneration.current) setWeightError(error.message);
       } finally {
         if (generation === weightGeneration.current) setWeightBusy(false);
+      }
+    };
+    const currentEvaluation =
+      evaluation?.draft.id === draft.id && evaluation.scopeGeneration === scopeGeneration
+        ? evaluation
+        : null;
+    const evaluationStale = Boolean(
+      currentEvaluation &&
+      (currentEvaluation.draft !== draft ||
+        currentEvaluation.relations !== relations ||
+        currentEvaluation.shipmentSnapshot !== shipmentSnapshot ||
+        (weightRead && weightRead !== currentEvaluation.weights)),
+    );
+    const executeEvaluation = async () => {
+      const ticket = ++executionGeneration.current;
+      executionController.current?.abort();
+      const controller = new AbortController();
+      executionController.current = controller;
+      setExecuting(true);
+      setEvaluationError('');
+      try {
+        const config = JSON.parse(document.getElementById('agent-sql-config').textContent);
+        const [weights, sourceRead] = await Promise.all([
+          weightRead ? Promise.resolve(weightRead) : syncWeights(),
+          readPlanRelations(
+            config,
+            (_request, options) =>
+              call(
+                'sql',
+                { queryId: options.queryId, parameters: options.values },
+                { signal: options.signal },
+              ),
+            result.months.slice(0, 3),
+            controller.signal,
+          ).then(
+            (value) => ({ value }),
+            (error) => ({ error: error.message }),
+          ),
+        ]);
+        if (ticket !== executionGeneration.current) return;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        if (ticket !== executionGeneration.current) return;
+        const computed = buildMpsWorkflow(draft, sourceRead.value ?? null, shipmentSnapshot, {
+          weights,
+          sourceIssues: sourceRead.error ? [sourceRead.error] : [],
+        });
+        setEvaluation({
+          draft,
+          relations,
+          shipmentSnapshot,
+          scopeGeneration,
+          weights,
+          result: computed,
+          at: new Date().toLocaleString('zh-CN'),
+        });
+      } catch (error) {
+        if (ticket === executionGeneration.current) setEvaluationError(error.message);
+      } finally {
+        if (ticket === executionGeneration.current) setExecuting(false);
       }
     };
     const fields = step === 'process' ? processFields : planFields;
@@ -226,6 +307,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       setEditingShare(null);
       setShareError('');
     }
+    const planning = ['capacity', 'report'].includes(step);
     useMpsPart(
       react,
       step,
@@ -235,21 +317,28 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         shipmentMonth: result.shipmentMonth,
         filter: { search, base, category, month, onlyMissing },
         categoryRows,
-        rows: visible,
+        rows: planning ? [] : visible,
         total: scopedRows.length,
         filteredTotal: filtered.length,
         page: pageIndex + 1,
         constraints: result.constraints,
         productionDays: draft.productionDays ?? [],
-        unitWeights: draft.unitWeights ?? [],
+        unitWeights: planning ? undefined : (draft.unitWeights ?? []),
         resources: draft.resources ?? [],
-        resourceAssignments: draft.resourceAssignments ?? [],
-        resourceLoads: result.resourceLoads ?? [],
-        summary: result.summary,
+        resourceAssignments: planning ? undefined : (draft.resourceAssignments ?? []),
+        resourceLoads: planning ? undefined : (result.resourceLoads ?? []),
+        summary: planning ? undefined : result.summary,
         adjustments: draft.adjustments,
         adjustmentIssues: result.adjustmentIssues ?? [],
-        missing: result.missing,
+        missing: planning ? undefined : result.missing,
         businessSave: 'not-connected',
+        plan: currentEvaluation
+          ? {
+              at: currentEvaluation.at,
+              stale: evaluationStale,
+              ...planContext(currentEvaluation.result.plan, visible, { base, month }),
+            }
+          : null,
       },
       titles[step],
     );
@@ -1145,30 +1234,21 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const localRules = result.constraints.rules.local ?? [];
     return h(
       'section',
-      { className: 'wf-page', 'aria-label': titles[step] },
-      h(
-        'div',
-        { className: 'wf-scope' },
-        h('strong', null, `${draft.name} · ${draft.month}`),
-        h('span', null, `发货所属月 ${result.shipmentMonth}`),
-      ),
+      { className: 'wf-page', 'data-planning': planning, 'aria-label': titles[step] },
+      !planning &&
+        h(
+          'div',
+          { className: 'wf-scope' },
+          h('strong', null, `${draft.name} · ${draft.month}`),
+          h('span', null, `发货所属月 ${result.shipmentMonth}`),
+        ),
       step !== 'constraints' && filterBar,
       step !== 'constraints' &&
         result.scopeCoverage !== 'national' &&
-        h('p', { className: 'wf-note' }, '产品池全国覆盖尚未取得实际证明，仅报告范围内结果'),
-      !['process', 'constraints'].includes(step) &&
-        card(
-          '实际输入缺项',
-          h(
-            'details',
-            null,
-            h('summary', null, `待补实际数据或合同：${inputGaps.length}项`),
-            table(
-              '实际输入缺项',
-              ['项目', '尚缺实际数据或合同'],
-              inputGaps.map((row) => row.slice(0, 2)),
-            ),
-          ),
+        h(
+          'p',
+          { className: planning ? 'wf-plan-coverage' : 'wf-note' },
+          '产品池全国覆盖尚未取得实际证明，仅报告范围内结果',
         ),
       step === 'process'
         ? h(
@@ -1636,170 +1716,227 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           : h(
               react.Fragment,
               null,
+              h(EvaluationOverview, {
+                step,
+                draft,
+                currentEvaluation,
+                stale: evaluationStale,
+                executing,
+                error: evaluationError,
+                onExecute: executeEvaluation,
+                filters: { base, month, category, search, onlyMissing },
+                table,
+                card,
+                numberText,
+              }),
               h(
-                'p',
-                { className: 'wf-note', role: 'status' },
-                '以下按需求、库存及已采用规则推导所需生产量，不代表实际可执行。前月超载时，后月仍按参考期末库存承接。未自动生成可执行主计划，未自动处置调拨或外协。',
-              ),
-              result.summary
-                ? card(
-                    '评估范围与汇总',
-                    table(
+                'details',
+                { className: 'wf-disclosure' },
+                h('summary', null, '需求与库存参考底稿（非排产结果）'),
+                h(
+                  'p',
+                  { className: 'wf-note', role: 'status' },
+                  '本底稿仅用于追溯所需生产量，后月承接参考目标库存。实际排产与结转请以上方求解结果为准。',
+                ),
+                result.summary
+                  ? card(
                       '评估范围与汇总',
-                      [
-                        '范围',
-                        '已知生产吨数小计',
-                        '完整生产吨数',
-                        '已评估行数',
-                        '总行数',
-                        '未评估范围',
-                      ],
-                      [
+                      table(
+                        '评估范围与汇总',
                         [
-                          '当前完整版本，汇总不受明细筛选影响',
-                          numberText(result.summary.knownRequiredProductionTons, false, 6),
-                          numberText(result.summary.requiredProductionTons, false, 6),
-                          result.summary.evaluatedRows,
-                          result.summary.totalRows,
-                          result.summary.missing.join('、') || '完整',
+                          '范围',
+                          '已知生产吨数小计',
+                          '完整生产吨数',
+                          '已评估行数',
+                          '总行数',
+                          '未评估范围',
                         ],
-                      ],
-                    ),
-                  )
-                : null,
-              card(
-                '资源负荷与缺口',
-                h(
-                  react.Fragment,
-                  null,
-                  h(
-                    'p',
-                    { className: 'wf-note' },
-                    '共享资源按完整负荷评估，不随大类或SKU搜索拆开。负荷 = 分配所需吨数 ÷ 日产吨数 ÷ 可用生产天数。缺隧道或成型机均不能判定全约束通过。',
-                  ),
-                  table(
-                    '资源负荷',
-                    ['月份', '基地', ...resourceColumns, '未评估原因'],
-                    resourceLoads.map((row) => [
-                      row.month,
-                      row.base,
-                      ...resourceValues(row).map((value, index) =>
-                        index === 7
-                          ? numberText(value, true)
-                          : index >= 3 && index <= 9
-                            ? numberText(value, false, 6)
-                            : display(value),
+                        [
+                          [
+                            '当前完整版本，汇总不受明细筛选影响',
+                            numberText(result.summary.knownRequiredProductionTons, false, 6),
+                            numberText(result.summary.requiredProductionTons, false, 6),
+                            result.summary.evaluatedRows,
+                            result.summary.totalRows,
+                            result.summary.missing.length
+                              ? h(
+                                  'details',
+                                  null,
+                                  h('summary', null, `${result.summary.missing.length}项缺失说明`),
+                                  h(
+                                    'p',
+                                    { className: 'wf-reasons' },
+                                    result.summary.missing.join('、'),
+                                  ),
+                                )
+                              : '完整',
+                          ],
+                        ],
                       ),
-                      row.missing.join('、') || '已评估',
-                    ]),
+                    )
+                  : null,
+                card(
+                  '资源负荷与缺口',
+                  h(
+                    react.Fragment,
+                    null,
+                    h(
+                      'p',
+                      { className: 'wf-note' },
+                      '共享资源按完整负荷评估，不随大类或SKU搜索拆开。负荷 = 分配所需吨数 ÷ 日产吨数 ÷ 可用生产天数。本底稿保留历史推导口径，实际求解以唯一隧道资源校验为准。',
+                    ),
+                    table(
+                      '资源负荷',
+                      ['月份', '基地', ...resourceColumns, '未评估原因'],
+                      resourceLoads.map((row) => [
+                        row.month,
+                        row.base,
+                        ...resourceValues(row).map((value, index) =>
+                          index === 7
+                            ? numberText(value, true)
+                            : index >= 3 && index <= 9
+                              ? numberText(value, false, 6)
+                              : display(value),
+                        ),
+                        row.missing.join('、') || '已评估',
+                      ]),
+                    ),
+                  ),
+                  h(
+                    'button',
+                    {
+                      onClick: () =>
+                        exportRows(step === 'report' ? '产销存报告' : '产能评估', planFields),
+                    },
+                    '下载资源负荷参考',
                   ),
                 ),
                 h(
-                  'button',
-                  {
-                    onClick: () =>
-                      exportRows(step === 'report' ? '产销存报告' : '产能评估', planFields),
-                  },
-                  '下载资源负荷与缺口',
-                ),
-              ),
-              card(
-                '未评估清单',
-                table(
-                  '未评估清单',
-                  ['月份', '基地', '产品编码', '缺项'],
-                  filtered
-                    .filter(
-                      (row) =>
-                        reasons(row, [
-                          'requiredProduction',
-                          'requiredProductionTons',
-                          'productionDays',
-                          'resourceAssignments',
-                        ]).length,
-                    )
-                    .map((row) => [
-                      row.month,
-                      row.base,
-                      row.code,
-                      status(row, [
-                        'requiredProduction',
-                        'requiredProductionTons',
-                        'productionDays',
-                        'resourceAssignments',
-                      ]),
-                    ]),
-                ),
-              ),
-              card(
-                step === 'report' ? '产销存明细' : '需求推导生产评估明细',
-                h(
-                  react.Fragment,
-                  null,
-                  rowsTable(step === 'report' ? '产销存报告' : '产能评估明细', planFields),
-                  footer,
-                ),
-                h(
-                  'button',
-                  {
-                    onClick: () =>
-                      exportRows(step === 'report' ? '产销存报告' : '产能评估', planFields),
-                  },
-                  step === 'report' ? '下载产销存报告' : '下载产能评估',
-                ),
-              ),
-              step === 'capacity'
-                ? card(
-                    '源产能候选',
+                  'details',
+                  { className: 'wf-disclosure' },
+                  h('summary', null, '未评估清单 · 当前页单品'),
+                  card(
+                    '未评估清单',
                     table(
-                      '源产能候选',
-                      [
-                        '月份',
-                        '基地',
-                        '产品编码',
-                        '产线',
-                        '标准日产/件',
-                        '标准日产/吨',
-                        '未评估原因',
-                      ],
-                      visible.flatMap((row) =>
-                        row.capacities.map((item) => [
+                      '未评估清单',
+                      ['月份', '基地', '产品编码', '缺项'],
+                      visible
+                        .filter(
+                          (row) =>
+                            reasons(row, [
+                              'requiredProduction',
+                              'requiredProductionTons',
+                              'productionDays',
+                              'resourceAssignments',
+                            ]).length,
+                        )
+                        .map((row) => [
                           row.month,
                           row.base,
                           row.code,
-                          display(item.line),
-                          numberText(item.dailyPieces),
-                          numberText(item.dailyTons),
-                          item.missing.join('、') ||
-                            '源值，仅供核对；请在约束与配置中明确维护资源与分配',
+                          status(row, [
+                            'requiredProduction',
+                            'requiredProductionTons',
+                            'productionDays',
+                            'resourceAssignments',
+                          ]),
                         ]),
-                      ),
-                    ),
-                  )
-                : card(
-                    '报告来源',
-                    table(
-                      '报告来源',
-                      ['来源', '状态'],
-                      [
-                        ['①需求确认', '大类需求与缺项随当前版本重算'],
-                        ['②本月预估发货', `${result.shipmentMonth}月末结存，缺数留空`],
-                        ['③需求加工与收敛', '两路三层占比、物料组Top1托底与有效调整'],
-                        [
-                          '④主数据对应关系',
-                          relations?.sources ? '已接当前关系结果' : '关系尚未读取',
-                        ],
-                        ['⑤约束与配置', '本地隔离草稿；正式保存未就绪'],
-                        [
-                          '⑥产能评估与缺口',
-                          '规则调整后的所需生产与共享资源负荷；未生成可执行主计划',
-                        ],
-                      ],
                     ),
                   ),
+                ),
+                h(
+                  'div',
+                  { ref: detailRef, className: 'wf-detail-anchor' },
+                  card(
+                    step === 'report' ? '产销存明细' : '需求推导生产评估明细',
+                    h(
+                      react.Fragment,
+                      null,
+                      rowsTable(step === 'report' ? '产销存报告' : '产能评估明细', planFields),
+                      footer,
+                    ),
+                    h(
+                      'button',
+                      {
+                        onClick: () =>
+                          exportRows(step === 'report' ? '产销存报告' : '产能评估', planFields),
+                      },
+                      '下载需求推导参考',
+                    ),
+                  ),
+                ),
+                step === 'capacity'
+                  ? card(
+                      '源产能候选',
+                      table(
+                        '源产能候选',
+                        [
+                          '月份',
+                          '基地',
+                          '产品编码',
+                          '产线',
+                          '标准日产/件',
+                          '标准日产/吨',
+                          '未评估原因',
+                        ],
+                        visible.flatMap((row) =>
+                          row.capacities.map((item) => [
+                            row.month,
+                            row.base,
+                            row.code,
+                            display(item.line),
+                            numberText(item.dailyPieces),
+                            numberText(item.dailyTons),
+                            item.missing.join('、') ||
+                              '源值，仅供核对；请在约束与配置中明确维护资源与分配',
+                          ]),
+                        ),
+                      ),
+                    )
+                  : card(
+                      '报告来源',
+                      table(
+                        '报告来源',
+                        ['来源', '状态'],
+                        [
+                          ['①需求确认', '大类需求与缺项随当前版本重算'],
+                          ['②本月预估发货', `${result.shipmentMonth}月末结存，缺数留空`],
+                          ['③需求加工与收敛', '两路三层占比、物料组Top1托底与有效调整'],
+                          [
+                            '④主数据对应关系',
+                            relations?.sources ? '已接当前关系结果' : '关系尚未读取',
+                          ],
+                          ['⑤约束与配置', '本地隔离草稿；正式保存未就绪'],
+                          [
+                            '⑥产能评估与缺口',
+                            '规则调整后的所需生产与共享资源负荷；未生成可执行主计划',
+                          ],
+                        ],
+                      ),
+                    ),
+                h(
+                  'details',
+                  { className: 'wf-disclosure' },
+                  h('summary', null, `参考底稿输入说明 · ${inputGaps.length}项`),
+                  table(
+                    '参考底稿输入说明',
+                    ['项目', '历史需求推导口径'],
+                    inputGaps.map((row) => row.slice(0, 2)),
+                  ),
+                ),
+              ),
             ),
-      result.missing.length
-        ? h('div', { className: 'wf-limitations', role: 'status' }, result.missing.join('；'))
+      ['process', 'constraints'].includes(step) && result.missing.length
+        ? h(
+            'details',
+            { className: 'wf-limitations', role: 'status' },
+            h('summary', null, `计算说明与缺项 · ${result.missing.length}条`),
+            h(
+              'ul',
+              null,
+              result.missing.map((reason) => h('li', { key: reason }, reason)),
+            ),
+          )
         : null,
       h(
         'div',

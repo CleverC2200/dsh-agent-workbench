@@ -2,6 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
+import { summarizeEvaluation, planContext } from '../static/mps/source/evaluation-view.js';
+
+test('产销存汇总保留已知小计、真实零值与缺项，并隔离基地和月份', () => {
+  const groups = summarizeEvaluation([
+    { month: '2026-12', base: '甲', demand: 100, openingInventory: 0, requiredProduction: 40 },
+    { month: '2026-12', base: '甲', demand: null, openingInventory: 20, requiredProduction: null },
+    { month: '2027-01', base: '甲', demand: null },
+    { month: '2026-12', base: '乙', demand: 0 },
+  ]);
+  const first = groups.find((row) => row.base === '甲' && row.month === '2026-12');
+  assert.deepEqual(first.metrics.demand, { value: 100, known: 1, missing: 1 });
+  assert.deepEqual(first.metrics.openingInventory, { value: 20, known: 2, missing: 0 });
+  assert.deepEqual(first.metrics.requiredProductionTons, { value: null, known: 0, missing: 2 });
+  assert.equal(groups.find((row) => row.base === '乙').metrics.demand.value, 0);
+  assert.equal(groups.find((row) => row.month === '2027-01').metrics.demand.value, null);
+});
 
 const compiled = await build({
   entryPoints: ['static/mps/source/workflow-inputs.js'],
@@ -313,4 +329,102 @@ test('销售基地物料业务键重复不重复加量，重读或失败会撤�
   }
   source.historyAnnualRead = { status: 'loading' };
   assert.equal(buildMpsWorkflow(source).rows[0].historyShare, null);
+});
+
+test('求解装配按物理隧道去重，冲突能力与渠道系数留待补充，调拨限定来源月份', async () => {
+  const { buildPlanSources } = await import('../static/mps/source/plan-inputs.js');
+  const source = draft();
+  source.constraints.rules.local = [];
+  const tunnel = {
+    belong_base: '甲',
+    production_unit: '一车间',
+    tunnel_no: 'T',
+    standard_daily_output_ton: 5,
+  };
+  const relations = {
+    sources: {
+      tunnels: [
+        tunnel,
+        { ...tunnel, series: '另一系列' },
+        { ...tunnel, tunnel_no: 'U', standard_daily_output_ton: 2 },
+        { ...tunnel, tunnel_no: 'U', standard_daily_output_ton: 3 },
+      ],
+      sku_capacity: [{ belong_base: '甲', workshop: '一车间', tunnel_no: 'T', material_code: 'A' }],
+      transfers: [
+        {
+          stat_period: '2026-12',
+          material_code: 'A',
+          transfer_direction: '甲→乙',
+          target_base: '乙',
+        },
+        { material_code: 'B', transfer_direction: '全国' },
+      ],
+    },
+  };
+  const weights = {
+    rows: [
+      { material_code: 'A', channel_name: '商超', ton_per_piece: 0.1 },
+      { material_code: 'A', channel_name: '电商', ton_per_piece: 0.2 },
+      { material_code: 'B', channel_name: '商超', ton_per_piece: 0.3 },
+    ],
+  };
+  const first = buildPlanSources(source, relations, weights);
+  assert.ok(!first.unitWeights.some((row) => row.code === 'A'));
+  assert.equal(
+    first.unitWeights.find((row) => row.base === '乙' && row.code === 'B').tonsPerPiece,
+    0.3,
+  );
+  assert.equal(first.resources.length, 1);
+  assert.equal(first.planCandidates.length, 1);
+  assert.match(first.planSourceIssues.join(''), /能力冲突/);
+  assert.deepEqual(first.transferRoutes, [{ from: '甲', to: '乙', code: 'A', month: '2026-12' }]);
+  assert.equal(first.metadata.pendingRoutes, 1);
+  assert.equal(first.productionDays.find((row) => row.month === '2027-02').days, 15);
+  source.resources = [{ id: 'manual', base: '甲', kind: 'tunnel', name: '人工隧道', dailyTons: 7 }];
+  source.resourceAssignments = [
+    { month: '2026-12', base: '甲', code: 'A', resourceId: 'manual', share: 1 },
+  ];
+  const manual = buildPlanSources(source, relations, null);
+  assert.deepEqual(manual.resources, source.resources);
+  assert.equal(manual.planCandidates[0].month, '2026-12');
+});
+
+test('求解上下文只发布当前页业务值，万行结果与共享资源不重复塞入会话', () => {
+  const rows = Array.from({ length: 10956 }, (_, index) => ({
+    id: String(index),
+    month: '2026-11',
+    base: '甲',
+    code: 'A' + index,
+    mainPlan: 40,
+    demand: 80,
+    fulfillment: 0.5,
+    capacities: Array(200).fill({ source: '重复来源'.repeat(30) }),
+    missing: { demand: Array(100).fill('旧版参考缺项') },
+    planMissing: ['缺部分库存'],
+  }));
+  const resources = Array.from({ length: 300 }, (_, index) => ({
+    base: '甲',
+    month: '2026-11',
+    resourceId: String(index),
+    capacity: 50,
+    scheduledTons: 50,
+    load: 1,
+  }));
+  const context = planContext(
+    {
+      rows,
+      resourceSchedules: resources,
+      transfers: [],
+      summary: { totalRows: rows.length },
+      sources: { resources: 300 },
+    },
+    rows.slice(0, 25),
+    { base: '甲', month: '' },
+  );
+  assert.equal(context.rows.length, 25);
+  assert.equal(context.rows[0].mainPlan, 40);
+  assert.equal(context.rows[0].capacities, undefined);
+  assert.equal(context.resources.length, 25);
+  assert.equal(context.resourceTotal, 300);
+  assert.ok(JSON.stringify(context).length < 20000);
 });

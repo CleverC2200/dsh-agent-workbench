@@ -33,6 +33,35 @@ export async function readRelations(config, execute, month, signal) {
   };
 }
 
+export async function readPlanRelations(config, execute, months, signal) {
+  const first = await readRelations(config, execute, months[0], signal);
+  const query = createQueryClient(config, execute);
+  const definition = config.queries['transfers.detail'];
+  const later = await Promise.all(
+    months.slice(1).map(async (month) => {
+      const result = await query.readAll(
+        'transfers.detail',
+        { period: month, page_size: 200, offset: 0 },
+        {
+          signal,
+          keyFields: definition.grain,
+          requiredColumns: definition.columns,
+          maxRows: 10000,
+        },
+      );
+      if (result.configVersion !== first.configVersion)
+        throw Error('求解来源配置版本变化，请重新评估');
+      if (result.rows.some((row) => row.stat_period !== month))
+        throw Error('调拨来源月份与求解月份不一致');
+      return result.rows;
+    }),
+  );
+  return {
+    ...first,
+    sources: { ...first.sources, transfers: [...first.sources.transfers, ...later.flat()] },
+  };
+}
+
 const emptySourceField = (value) => value == null || (typeof value === 'string' && !value.trim());
 const capacityMissing = (source) => [
   ...(emptySourceField(source.series) ? ['缺产线源系列'] : []),

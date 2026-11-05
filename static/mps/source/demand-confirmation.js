@@ -926,6 +926,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [busy, setBusy] = react.useState({});
     const [scopeGeneration, setScopeGeneration] = react.useState(0);
     const [shipmentSnapshot, setShipmentSnapshot] = react.useState(null);
+    const [evaluation, setEvaluation] = react.useState(null);
     const receiveShipment = react.useCallback(
       (snapshot) => setShipmentSnapshot({ ...snapshot, scopeGeneration }),
       [scopeGeneration],
@@ -1799,6 +1800,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       active &&
         ['process', 'constraints', 'capacity', 'report'].includes(step) &&
         h(Workflow, {
+          evaluation,
+          setEvaluation,
           syncInventoryTargets,
           inventoryTargetsBusy: busy.inventoryTargets,
           step,

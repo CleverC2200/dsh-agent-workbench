@@ -313,6 +313,7 @@ test('MPS capacity and report keep missing formula dependencies empty and export
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   const capacity = frame.getByRole('region', { name: '产能评估与缺口', exact: true });
+  await capacity.getByText('需求与库存参考底稿（非排产结果）', { exact: true }).click();
   await expect(capacity.getByRole('table', { name: '产能评估明细', exact: true })).toContainText(
     'A',
   );
@@ -328,15 +329,17 @@ test('MPS capacity and report keep missing formula dependencies empty and export
       capacity.getByRole('button', { name: `郑州 A 2026-10 ${field} 计算过程`, exact: true }),
     ).toHaveText('—');
   await capacity.getByLabel('月份筛选', { exact: true }).selectOption('2026-10');
-  const capacityCsv = await download(page, capacity, '下载产能评估');
+  const capacityCsv = await download(page, capacity, '下载需求推导参考');
   assert.match(capacityCsv, /'=1\+1/);
   const book = XLSX.read(capacityCsv, { type: 'string', raw: true });
   const exportedRows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
   assert.ok(exportedRows.every((row) => !row['月份'] || row['月份'] === '2026-10'));
   await capacity.getByRole('button', { name: '下一步：产销存报告', exact: true }).click();
   const report = frame.getByRole('region', { name: '产销存报告', exact: true });
+  const reference = report.getByText('需求与库存参考底稿（非排产结果）', { exact: true });
+  if (!(await reference.evaluate((element) => element.parentElement.open))) await reference.click();
   await report.getByLabel('月份筛选', { exact: true }).selectOption('2026-10');
-  const reportCsv = await download(page, report, '下载产销存报告');
+  const reportCsv = await download(page, report, '下载需求推导参考');
   assert.equal(reportCsv, capacityCsv);
   await expect(report.getByRole('button', { name: '保存正式报告', exact: true })).toBeDisabled();
 });
@@ -396,11 +399,12 @@ test('MPS configuration keeps accepted production days, explicit weight and assi
   assert.match(csv, /2026-12/);
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   const capacity = frame.getByRole('region', { name: '产能评估与缺口', exact: true });
-  await expect(capacity).toContainText('已采用规则推导所需生产量');
+  await capacity.getByText('需求与库存参考底稿（非排产结果）', { exact: true }).click();
+  await expect(capacity).toContainText('本底稿仅用于追溯所需生产量');
   await expect(capacity.getByRole('table', { name: '资源负荷', exact: true })).toContainText(
     '一号隧道',
   );
-  await expect(capacity).toContainText('未自动生成可执行主计划');
+  await expect(capacity.getByRole('button', { name: '执行评估', exact: true })).toBeEnabled();
   if (process.env.MPS_WORKFLOW_SCREENSHOT_DIR) {
     await capacity.locator('.wf-scope').scrollIntoViewIfNeeded();
     await page.screenshot({
@@ -500,6 +504,9 @@ test('MPS report and CSV retain the annual SKU domain while incomplete productio
   await constraints.getByLabel('郑州 A 件吨系数', { exact: true }).fill('1');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
   const report = frame.getByRole('region', { name: '产销存报告', exact: true });
+  const reference = report.getByText('需求与库存参考底稿（非排产结果）', { exact: true });
+  if (!(await reference.evaluate((element) => element.parentElement.open))) await reference.click();
+  await expect(report.getByRole('button', { name: '导出产销存结果', exact: true })).toBeDisabled();
   const summary = report
     .getByRole('table', { name: '评估范围与汇总', exact: true })
     .locator('tbody tr');
@@ -508,7 +515,7 @@ test('MPS report and CSV retain the annual SKU domain while incomplete productio
   await expect(summary.locator('td').nth(4)).toHaveText('3');
   await expect(summary).not.toContainText('缺月度SKU域');
   await expect(summary).toContainText('缺明确SKU件吨系数或所需生产');
-  const csv = await download(page, report, '下载产销存报告');
+  const csv = await download(page, report, '下载需求推导参考');
   const book = XLSX.read(csv, { type: 'string', raw: true });
   const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
   const total = exported.find((row) => row['粒度'] === '全版本汇总，需求推导参考');
@@ -619,6 +626,7 @@ test('MPS effective category and share edits drive the same unconstrained invent
     }
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   const capacity = frame.getByRole('region', { name: '产能评估与缺口', exact: true });
+  await capacity.getByText('需求与库存参考底稿（非排产结果）', { exact: true }).click();
   for (const [field, value] of [
     ['需求数量', '75'],
     ['期初库存', '-5'],
@@ -643,10 +651,12 @@ test('MPS effective category and share edits drive the same unconstrained invent
     .first();
   await expect(tunnelRow.locator('td').nth(10)).toHaveText('16');
   await expect(tunnelRow.locator('td').nth(11)).toHaveText('1.6');
-  const capacityCsv = await download(page, capacity, '下载产能评估');
+  const capacityCsv = await download(page, capacity, '下载需求推导参考');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
   const report = frame.getByRole('region', { name: '产销存报告', exact: true });
-  const reportCsv = await download(page, report, '下载产销存报告');
+  const reference = report.getByText('需求与库存参考底稿（非排产结果）', { exact: true });
+  if (!(await reference.evaluate((element) => element.parentElement.open))) await reference.click();
+  const reportCsv = await download(page, report, '下载需求推导参考');
   assert.equal(reportCsv, capacityCsv);
   if (process.env.MPS_WORKFLOW_SCREENSHOT_DIR) {
     await report
@@ -675,6 +685,69 @@ test('MPS effective category and share edits drive the same unconstrained invent
     rows.filter((row) => row['粒度'] === '需求推导产销存参考' && row['月份'] === '2027-03').length,
     0,
   );
+
+  await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
+  await capacity.getByRole('button', { name: '执行评估', exact: true }).click();
+  await expect(capacity.getByRole('button', { name: '导出求解结果', exact: true })).toBeEnabled();
+  const resourceSection = capacity
+    .locator('.wf-plan-disclosure')
+    .filter({ hasText: '唯一资源排产与产能校验' });
+  await resourceSection.locator('summary').click();
+  assert.ok(
+    await resourceSection.evaluate(
+      (element) =>
+        element.getBoundingClientRect().width >=
+        element.parentElement.getBoundingClientRect().width - 2,
+    ),
+  );
+  await capacity.locator('summary').filter({ hasText: '未覆盖缺口与公平分配' }).click();
+  const actualLoads = capacity.getByRole('table', { name: '实际资源负荷', exact: true });
+  await expect(actualLoads).toContainText('100.00%');
+  await expect(actualLoads).not.toContainText('共享成型机');
+  await expect(capacity.getByRole('table', { name: '求解缺口明细', exact: true })).toContainText(
+    '60.98%',
+  );
+  const solvedCsv = await download(page, capacity, '导出求解结果');
+  const solvedBook = XLSX.read(solvedCsv, { type: 'string', raw: true });
+  const solved = XLSX.utils.sheet_to_json(solvedBook.Sheets[solvedBook.SheetNames[0]]);
+  const firstMonth = solved.filter((row) => row['月份'] === '2026-12');
+  assert.equal(firstMonth.length, 2);
+  const [planA, planB] = ['A', 'B'].map((code) =>
+    firstMonth.find((row) => row['产品编码'] === code),
+  );
+  assert.ok(Math.abs(Number(planA['生产满足率']) - Number(planB['生产满足率'])) < 1e-8);
+  assert.ok(Number(planA['实际主计划量']) * 0.01 + Number(planB['实际主计划量']) * 0.02 <= 2.5);
+  assert.ok(Number(planA['实际主计划量']) < Number(a['所需生产量']));
+  const secondA = solved.find((row) => row['月份'] === '2027-01' && row['产品编码'] === 'A');
+  assert.equal(Number(secondA['期初库存']), Number(planA['实际期末库存']));
+  await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  await expect(report.getByRole('button', { name: '执行评估', exact: true })).toHaveCount(0);
+  await expect(report.getByRole('table', { name: '产销存汇总', exact: true })).toHaveCount(1);
+  assert.ok(
+    await report
+      .locator('.wf-plan-month')
+      .first()
+      .evaluate((element) => parseFloat(getComputedStyle(element).paddingLeft) >= 16),
+  );
+  assert.equal(await frame.locator('.ap-board-body').evaluate((element) => element.scrollTop), 0);
+  const actualReportCsv = await download(page, report, '导出产销存结果');
+  assert.equal(actualReportCsv, solvedCsv);
+  await report.getByLabel('月份筛选', { exact: true }).selectOption('2026-12');
+  await report.getByRole('button', { name: '展开 2个单品', exact: true }).click();
+  await report.getByLabel('单品明细大类', { exact: true }).selectOption('汤圆');
+  await report.getByLabel('单品明细物料组', { exact: true }).selectOption('组');
+  await expect(report.getByRole('table', { name: '求解单品明细', exact: true })).toContainText('A');
+  await report
+    .getByRole('button', { name: '郑州 A 2026-12 实际主计划量 求解过程', exact: true })
+    .click();
+  await expect(frame.getByRole('dialog')).toContainText('共同满足率');
+  await frame.getByRole('dialog').getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  await constraints.locator('summary').filter({ hasText: '高级配置：' }).click();
+  await constraints.getByLabel('郑州 A 件吨系数', { exact: true }).fill('0.03');
+  await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  await expect(report).toContainText('输入已变化，需重新评估');
+  await expect(report.getByRole('button', { name: '导出产销存结果', exact: true })).toBeDisabled();
 });
 
 test('MPS share undo preserves group balance and stale overrides remain removable after the product scope changes', async (t) => {

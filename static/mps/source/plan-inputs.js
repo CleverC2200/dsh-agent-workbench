@@ -1,0 +1,195 @@
+import { unitWeightCandidate } from './unit-weights.js';
+
+const text = (value) => (typeof value === 'string' ? value.trim() : '');
+const number = (value) => {
+  if (
+    typeof value !== 'number' &&
+    !(typeof value === 'string' && /^\d+(\.\d+)?$/.test(value.trim()))
+  )
+    return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= Number.MAX_SAFE_INTEGER
+    ? numeric
+    : null;
+};
+const physicalKey = (base, workshop, tunnel) => JSON.stringify([base, workshop, tunnel]);
+
+export function buildPlanSources(draft, relations, weightRead) {
+  const sources = relations?.sources;
+  const issues = [];
+  const manual = (draft.resources ?? [])
+    .filter((row) => row.kind === 'tunnel')
+    .map((row) => ({ ...row, dailyTons: number(row.dailyTons) }));
+  const facts = [
+    ...(draft.products ?? []),
+    ...(draft.report ?? []),
+    ...(draft.history ?? []),
+    ...(draft.planRates ?? []),
+    ...(draft.historyAnnual?.periods ?? []).flatMap((period) => period.rows ?? []),
+  ];
+  const manualBases = new Set(manual.map((row) => row.base));
+  const groups = new Map();
+  for (const row of sources?.tunnels ?? []) {
+    const base = text(row.belong_base),
+      workshop = text(row.production_unit),
+      tunnel = text(row.tunnel_no);
+    if (!base || !workshop || !tunnel) {
+      issues.push('隧道来源缺基地、车间或隧道号');
+      continue;
+    }
+    const key = physicalKey(base, workshop, tunnel);
+    const group = groups.get(key) ?? [];
+    group.push(row);
+    groups.set(key, group);
+  }
+  const resources = [...manual];
+  const sourceResources = [];
+  for (const [key, group] of groups) {
+    const first = group[0];
+    if (manualBases.has(text(first.belong_base))) continue;
+    const values = [...new Set(group.map((row) => number(row.standard_daily_output_ton)))];
+    if (values.length !== 1 || values[0] === null) {
+      issues.push(
+        `${text(first.belong_base)} ${text(first.production_unit)} ${text(first.tunnel_no)} 日产能力冲突或缺失`,
+      );
+      continue;
+    }
+    const resource = {
+      id: `source:${key}`,
+      base: text(first.belong_base),
+      kind: 'tunnel',
+      name: `${text(first.production_unit)} / ${text(first.tunnel_no)}`,
+      dailyTons: values[0],
+      workshop: text(first.production_unit),
+      tunnel: text(first.tunnel_no),
+    };
+    sourceResources.push(resource);
+    resources.push(resource);
+  }
+  const candidates = (draft.resourceAssignments ?? [])
+    .filter(
+      (row) =>
+        manualBases.has(row.base) &&
+        row.share > 0 &&
+        manual.some((resource) => resource.id === row.resourceId && resource.base === row.base),
+    )
+    .map(({ base, code, resourceId, month }) => ({ base, code, resourceId, month }));
+  for (const row of sources?.sku_capacity ?? []) {
+    const base = text(row.belong_base),
+      code = text(row.material_code),
+      tunnel = text(row.tunnel_no),
+      workshop = text(row.workshop);
+    if (!base || !code || !tunnel || manualBases.has(base)) continue;
+    const exact = sourceResources.filter(
+      (resource) =>
+        resource.base === base && resource.workshop === workshop && resource.tunnel === tunnel,
+    );
+    const matches = exact.length
+      ? exact
+      : sourceResources.filter((resource) => resource.base === base && resource.tunnel === tunnel);
+    if (matches.length === 1) candidates.push({ base, code, resourceId: matches[0].id });
+  }
+  const uniqueCandidates = [
+    ...new Map(candidates.map((row) => [JSON.stringify(row), row])).values(),
+  ];
+  const bases = [
+    ...new Set([
+      ...resources.map((row) => row.base),
+      ...facts.map((row) => text(row['基地'])).filter(Boolean),
+    ]),
+  ];
+  const months = Array.from({ length: 3 }, (_, index) => {
+    const date = new Date(`${draft.month}-01T00:00:00Z`);
+    date.setUTCMonth(date.getUTCMonth() + index);
+    return date.toISOString().slice(0, 7);
+  });
+  const productionDays = bases.flatMap((base) =>
+    months.map((month) => {
+      const overrides = (draft.productionDays ?? []).filter(
+        (row) => row.base === base && row.month === month,
+      );
+      return {
+        base,
+        month,
+        days: overrides.length
+          ? overrides.length === 1
+            ? number(overrides[0].days)
+            : null
+          : month === '2027-02'
+            ? 15
+            : Number(month.slice(5)) === 2
+              ? null
+              : 25,
+      };
+    }),
+  );
+  const unitWeights = (draft.unitWeights ?? []).map((row) => ({
+    ...row,
+    tonsPerPiece: number(row.tonsPerPiece),
+  }));
+  const pairs = [
+    ...new Map(
+      [
+        ...facts.map((row) => ({ base: text(row['基地']), code: text(row['产品编码']) })),
+        ...uniqueCandidates,
+      ]
+        .filter((row) => row.base && row.code)
+        .map((row) => [JSON.stringify([row.base, row.code]), row]),
+    ).values(),
+  ];
+  const sourceWeights = new Map();
+  for (const row of weightRead?.rows ?? []) {
+    const group = sourceWeights.get(text(row.material_code)) ?? [];
+    group.push(row);
+    sourceWeights.set(text(row.material_code), group);
+  }
+  for (const pair of pairs) {
+    if (unitWeights.some((row) => row.base === pair.base && row.code === pair.code)) continue;
+    const values = sourceWeights.get(pair.code) ?? [];
+    const channels = [...new Set(values.map((row) => text(row.channel_name)).filter(Boolean))].join(
+      '、',
+    );
+    const candidate = unitWeightCandidate(values, pair.code, channels);
+    if (candidate.tonsPerPiece !== null)
+      unitWeights.push({ base: pair.base, code: pair.code, tonsPerPiece: candidate.tonsPerPiece });
+  }
+  const transferRoutes = [];
+  let pendingRoutes = 0;
+  const canonical = (name) => bases.find((base) => base === name || `${base}基地` === name);
+  for (const row of sources?.transfers ?? []) {
+    const parts = text(row.transfer_direction).split(/\s*(?:->|→|至|到)\s*/);
+    const from = parts.length === 2 ? canonical(parts[0]) : null;
+    const to = parts.length === 2 ? canonical(parts[1]) : null;
+    if (
+      from &&
+      to &&
+      from !== to &&
+      text(row.material_code) &&
+      (!text(row.target_base) || canonical(text(row.target_base)) === to)
+    )
+      transferRoutes.push({
+        from,
+        to,
+        code: text(row.material_code),
+        month: text(row.stat_period) || draft.month,
+      });
+    else pendingRoutes++;
+  }
+  return {
+    resources,
+    planCandidates: uniqueCandidates,
+    productionDays,
+    unitWeights,
+    transferRoutes: [...new Map(transferRoutes.map((row) => [JSON.stringify(row), row])).values()],
+    planSourceIssues: [...new Set(issues)],
+    metadata: {
+      resources: resources.length,
+      candidates: uniqueCandidates.length,
+      coefficients: unitWeights.length,
+      transferRoutes: transferRoutes.length,
+      pendingRoutes,
+      calendar: '常规月25天、已确认2027年2月15天；人工月份配置优先。其他年份2月需维护。',
+      notes: !sources ? ['主数据尚未读取，源产能未装配'] : [],
+    },
+  };
+}
