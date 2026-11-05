@@ -32,17 +32,21 @@ class FcListTotals(unittest.TestCase):
                 self.assertIsNone(aggregate.args.get('limit'))
                 input_table = (aggregate.args.get('from_') or aggregate.args['from']).this
                 self.assertNotIn(input_table.name, ['page_rows', 'plan_page'])
-                columns = sorted({column.name for column in aggregate.find_all(exp.Column)})
+                columns = sorted({column.name for column in aggregate.find_all(exp.Column)} | {'sku'})
                 aggregate.from_('fixture AS ' + input_table.alias_or_name, copy=False)
                 with sqlite3.connect(':memory:') as db:
                     db.row_factory = sqlite3.Row
                     db.execute('CREATE TABLE fixture (' + ','.join(columns) + ')')
                     for value in range(1, 14):
                         row = {column: 0 for column in columns}
+                        row['sku'] = None if value % 2 == 0 else str(value)
                         row[field] = value
                         db.execute('INSERT INTO fixture VALUES (' + ','.join('?' for _ in columns) + ')', [row[column] for column in columns])
                     sql = aggregate.sql(dialect='sqlite')
-                    self.assertEqual(db.execute(sql).fetchone()[summary[field]], 91)
+                    result = db.execute(sql).fetchone()
+                    self.assertEqual(result[summary[field]], 91)
+                    count_column = 'page_scope_total' if 'page_scope_total' in result.keys() else 'total'
+                    self.assertEqual(result[count_column], 13)
                     db.execute('UPDATE fixture SET ' + field + '=NULL WHERE ' + field + '=13')
                     self.assertEqual(db.execute(sql).fetchone()[summary[field]], 78)
                     db.execute('UPDATE fixture SET ' + field + '=NULL')
