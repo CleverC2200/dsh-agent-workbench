@@ -175,7 +175,9 @@ test('cards show metric health while footers, tooltips, tables and comparisons r
   };
   const result = workbenchPresentation(facts);
   assert.equal(result.cards[0].status, '健康');
-  assert.equal(result.cards[1].status, '预警');
+  assert.equal(result.cards[1].status, '数据不足');
+  assert.equal(result.cards[1].value, '—');
+  assert.equal(p.metrics['改单率'].sample.value, 5);
   assert.equal(result.cards[2].status, '预警');
   assert.match(result.cards[0].footer, /可判定样本/);
   assert.match(result.cards[0].coverageNote, /覆盖80.0%/);

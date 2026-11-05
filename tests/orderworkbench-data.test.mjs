@@ -746,6 +746,7 @@ test('customer packets retain complete UTF-8 and nullable metadata in one read p
     'denominator',
     'records',
     'invalid',
+    'unknown_quantity',
   ];
   const customers = Array.from({ length: 1700 }, (_, i) => [
     '大区',
@@ -756,6 +757,7 @@ test('customer packets retain complete UTF-8 and nullable metadata in one read p
     10,
     1,
     0,
+    null,
   ]);
   const managers = customers.map((row, i) => [row[2], i % 2 ? null : '负责人', i % 2 ? 0 : 1]);
   const tuple = (fields) =>
