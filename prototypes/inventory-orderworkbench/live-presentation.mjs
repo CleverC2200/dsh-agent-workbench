@@ -302,14 +302,14 @@ export function workbenchPresentation(facts, options = {}) {
     const card = cards.find(card => card.key === '周转天数');
     Object.assign(card, {
       value: historical.value.toFixed(1),
-      status: historical.label,
+      status: metricState('周转天数', historical.value),
       formula: historical.note,
       historicalReference: historical,
       coverageNote: historical.note,
       comparison: ['—', '—', '—', '—'],
       comparisonNotes: Array(4).fill('历史对账快照与实时源版本不同，不计算混合口径环同比。'),
-      footer: '历史对账 ' + historical.value.toFixed(1) + '天 · 实时计算 ' + historical.liveValue.toFixed(1) + '天',
-      footerNote: historical.note,
+      footer: '本周可发货天数 ' + historical.value.toFixed(1) + '天',
+      footerNote: historical.note + '；受控来源重算值 ' + historical.liveValue.toFixed(1) + '天。',
     });
   }
   const directorMap = new Map(

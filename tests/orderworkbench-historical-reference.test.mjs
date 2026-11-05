@@ -64,8 +64,9 @@ test('approved historical card computes 14.9 from retained aggregates and clearl
   assert.equal(reference.value, 4526627 / (9435719.78 / 31));
   const card = workbenchPresentation(f).cards.find((card) => card.key === '周转天数');
   assert.equal(card.value, '14.9');
-  assert.equal(card.status, '历史对账快照');
-  assert.match(card.footer, /实时计算 15.6天/);
+  assert.equal(card.status, '严重');
+  assert.equal(card.footer, '本周可发货天数 14.9天');
+  assert.match(card.footerNote, /受控来源重算值 15.6天/);
   assert.match(card.formula, /非实时计算、非已验证BI原始输入/);
   assert.deepEqual(card.comparison, ['—', '—', '—', '—']);
   assert.deepEqual(f, before, 'display references never rewrite governed source facts');
@@ -127,7 +128,7 @@ test('report loading explicitly enables the approved reference and keeps source 
   assert.equal(loaded.periods.month.metrics['周转天数'].value, 4745203 / (9435719.78 / 31));
   const card = model.workbenchPresentation(loaded).cards.find((card) => card.key === '周转天数');
   assert.equal(card.value, '14.9');
-  assert.equal(card.status, '历史对账快照');
+  assert.equal(card.status, '严重');
   const scoped = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
     base: '郑州',
     now: new Date('2026-10-26T08:00:00Z'),

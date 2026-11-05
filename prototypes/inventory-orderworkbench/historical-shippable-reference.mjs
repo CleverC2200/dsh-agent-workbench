@@ -1,6 +1,6 @@
 // This retained aggregate is an explicitly labelled historical comparison view.
 // It is not a verified BI import snapshot and must not replace governed source facts.
-export const shippableReferenceVersion = 1;
+export const shippableReferenceVersion = 2;
 const retained = Object.freeze({
   id: 'national-shippable-20261025-retained-summary',
   stockDate: '2026-10-25',
