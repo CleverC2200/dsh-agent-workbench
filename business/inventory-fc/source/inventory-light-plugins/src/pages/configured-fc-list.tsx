@@ -860,6 +860,7 @@ export function FcConfiguredList(
   };
   const submitDms = () =>
     run(async (signal) => {
+      setNotice('正在核对补货清单，请稍候…');
       if (!exportWarehouse) throw Error('请选择分仓');
       if (targetLoading) throw Error('主数据正在读取，请稍候复核编码');
       if (warehouseReceiptPending) throw Error('该分仓有待核对的回执归档，请先核对再开始下一批');
@@ -959,47 +960,68 @@ export function FcConfiguredList(
         order,
       });
       signal.throwIfAborted();
-      const readiness = (await call(
-        'branch-dms',
-        {
-          operation: 'preflight',
-          warehouseCode: exportWarehouse,
-          order: { aiPreOrderCode, ...order },
-        },
-        { signal },
-      )) as { ready?: boolean; scope?: string };
-      signal.throwIfAborted();
-      if (readiness?.ready !== true || readiness.scope !== 'local-configuration')
-        throw Error('提交前配置检查未通过，请刷新页面并检查Host版本');
-      const receipt = await persistAndSubmitFc(
-        exportWarehouse,
-        {
-          stage: 'confirmed',
-          ...provenance,
-          month,
-          consumptionReviewed,
-          aiPreOrderCode,
-          rows: confirmationRows,
-        },
-        signal,
-        async () =>
-          call(
+      const readiness = z
+        .discriminatedUnion('scope', [
+          z.object({ ready: z.literal(true), scope: z.literal('dms-direct') }),
+          z.object({ ready: z.literal(true), scope: z.literal('local-configuration') }),
+        ])
+        .safeParse(
+          await call(
             'branch-dms',
             {
-              operation: 'submit',
+              operation: 'preflight',
               warehouseCode: exportWarehouse,
               order: { aiPreOrderCode, ...order },
             },
             { signal },
           ),
-        (received) => {
-          signal.throwIfAborted();
-          setReceiptArchived(false);
-          setDmsReceipt(received);
-          setNotice(`DMS已返回订单号：${received.orderCode}；正在保存回执，请勿重复下单。`);
-        },
-        legacyAiPreOrderCode,
-      );
+        );
+      signal.throwIfAborted();
+      if (!readiness.success) throw Error('提交前配置检查未通过，请刷新页面并检查Host版本');
+      setNotice('正在暂存到DMS，请勿重复点击…');
+      const sendDms = async () =>
+        call(
+          'branch-dms',
+          {
+            operation: 'submit',
+            warehouseCode: exportWarehouse,
+            order: { aiPreOrderCode, ...order },
+          },
+          { signal },
+        );
+      const result =
+        readiness.data.scope === 'dms-direct'
+          ? await sendDms()
+          : await persistAndSubmitFc(
+              exportWarehouse,
+              {
+                stage: 'confirmed',
+                ...provenance,
+                month,
+                consumptionReviewed,
+                aiPreOrderCode,
+                rows: confirmationRows,
+              },
+              signal,
+              sendDms,
+              (received) => {
+                signal.throwIfAborted();
+                setReceiptArchived(false);
+                setDmsReceipt(received);
+                setNotice(`DMS已返回订单号：${received.orderCode}；正在保存回执，请勿重复下单。`);
+              },
+              legacyAiPreOrderCode,
+            );
+      signal.throwIfAborted();
+      const receipt = z
+        .object({
+          orderCode: z.string().min(1),
+          aiPreOrderCode: z.string().min(1),
+          requestAiPreOrderCode: z.string().optional(),
+        })
+        .parse(result);
+      if ((receipt.requestAiPreOrderCode ?? receipt.aiPreOrderCode) !== aiPreOrderCode)
+        throw Error('DMS回执与本次补货不一致，请核对原订单；禁止重复提交');
       signal.throwIfAborted();
       setDmsReceipt(receipt);
       setReceiptArchived(true);
@@ -1292,7 +1314,7 @@ export function FcConfiguredList(
           />
         </details>
       )}
-      {notice && (
+      {notice && !dialog && (
         <p role="status" className="fc-workflow-notice">
           {notice}
         </p>
@@ -1618,83 +1640,89 @@ export function FcConfiguredList(
               onPageChange={setDialogPage}
             />
           )}
-          {notice && <p role="alert">{notice}</p>}
-          <div className="fc-workflow-actions">
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => {
-                active.current?.abort();
-                setBusy(false);
-                setDialog(null);
-              }}
-            >
-              取消
-            </button>
-            {dialog === 'template' && (
+          <div className="fc-workflow-footer">
+            {notice && (
+              <p className="fc-workflow-notice" role="alert">
+                {notice}
+              </p>
+            )}
+            <div className="fc-workflow-actions">
               <button
                 type="button"
-                className="primary-button"
-                disabled={busy || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(templateMonth)}
-                onClick={() => void downloadTemplate()}
+                className="secondary-button"
+                onClick={() => {
+                  active.current?.abort();
+                  setBusy(false);
+                  setDialog(null);
+                }}
               >
-                下载模板
+                取消
               </button>
-            )}
-            {dialog === 'import' && (
-              <button
-                type="button"
-                className="primary-button"
-                disabled={busy || importErrors.length > 0 || !planDraft?.rows.length}
-                onClick={() => void applyImport()}
-              >
-                确认导入并重算
-              </button>
-            )}
-            {dialog === 'export' && previewState === 'ready' && (
-              <>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={consumptionReviewed}
-                    disabled={busy || Boolean(dmsReceipt)}
-                    onChange={(e) => setConsumptionReviewed(e.target.checked)}
-                  />
-                  <span>已复核库存消化与本次补货数量</span>
-                </label>
+              {dialog === 'template' && (
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={
-                    busy ||
-                    targetLoading ||
-                    Object.values(dmsFields).some((value) => !value.trim()) ||
-                    !submissionRows.length ||
-                    Boolean(dmsReceipt) ||
-                    warehouseReceiptPending
-                  }
-                  onClick={() => void submitDms()}
+                  disabled={busy || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(templateMonth)}
+                  onClick={() => void downloadTemplate()}
                 >
-                  确认暂存至DMS
+                  下载模板
                 </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={busy}
-                  onClick={() => void loginDms()}
-                >
-                  进入DMS订单管理
-                </button>
+              )}
+              {dialog === 'import' && (
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={busy || !submissionRows.length}
-                  onClick={confirmExport}
+                  disabled={busy || importErrors.length > 0 || !planDraft?.rows.length}
+                  onClick={() => void applyImport()}
                 >
-                  仅导出Excel
+                  确认导入并重算
                 </button>
-              </>
-            )}
+              )}
+              {dialog === 'export' && previewState === 'ready' && (
+                <>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={consumptionReviewed}
+                      disabled={busy || Boolean(dmsReceipt)}
+                      onChange={(e) => setConsumptionReviewed(e.target.checked)}
+                    />
+                    <span>已复核库存消化与本次补货数量</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={
+                      busy ||
+                      targetLoading ||
+                      Object.values(dmsFields).some((value) => !value.trim()) ||
+                      !submissionRows.length ||
+                      Boolean(dmsReceipt) ||
+                      warehouseReceiptPending
+                    }
+                    onClick={() => void submitDms()}
+                  >
+                    {busy ? '处理中…' : '确认暂存至DMS'}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busy}
+                    onClick={() => void loginDms()}
+                  >
+                    进入DMS订单管理
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={busy || !submissionRows.length}
+                    onClick={confirmExport}
+                  >
+                    仅导出Excel
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </Modal>
