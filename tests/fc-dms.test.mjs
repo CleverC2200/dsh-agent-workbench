@@ -586,3 +586,102 @@ test('zero replenishment does not read DMS master data or show an order form', a
     delete globalThis.dmsFixture;
   }
 });
+
+test('direct DMS preflight submits without GEA persistence and keeps feedback beside the action', async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
+  globalThis.window = dom.window;
+  globalThis.document = dom.window.document;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const sent = [];
+  let succeed = false;
+  let finishPreflight;
+  globalThis.dmsFixture = {
+    rows,
+    persistenceCalls: 0,
+    call: async (method, payload) => {
+      if (payload.operation === 'resolve-target')
+        return {
+          warehouseCode: 'W1',
+          fields: { customerCode: 'C1', addressCode: 'A1', pupCode: '01' },
+          addresses: [{ code: 'A1', name: '分仓收货地' }],
+          message: '已自动带入',
+        };
+      if (payload.operation === 'preflight') {
+        await new Promise((resolve) => {
+          finishPreflight = resolve;
+        });
+        return { ready: true, scope: 'dms-direct' };
+      }
+      if (payload.operation === 'submit') {
+        sent.push(payload);
+        if (!succeed) throw Error('DMS连接失败，未取得可确认回执');
+        return { orderCode: 'DMS-DIRECT', aiPreOrderCode: payload.order.aiPreOrderCode };
+      }
+      if (method === 'branch-storage') throw Error('must not write GEA');
+      return {};
+    },
+  };
+  const { createRoot } = await import('react-dom/client');
+  const root = createRoot(document.getElementById('root'));
+  const button = (label) =>
+    [...document.querySelectorAll('button')].find((x) => x.textContent === label);
+  try {
+    await act(async () =>
+      root.render(
+        React.createElement(
+          FcWorkflowProvider,
+          null,
+          React.createElement(FcConfiguredList, {
+            columns: [],
+            view: { title: '补货' },
+            actionScope: {
+              viewId: 'replenishment',
+              input: { asOf: '2026-11-05', filters: { warehouse_code: 'W1' } },
+            },
+          }),
+        ),
+      ),
+    );
+    await act(async () => {
+      button('提交').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    await act(async () => {
+      button('确认暂存至DMS').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    assert.ok(finishPreflight);
+    assert.equal(button('处理中…').disabled, true);
+    assert.match(document.querySelector('.fc-workflow-footer').textContent, /正在核对/);
+    await act(async () => {
+      finishPreflight();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    assert.equal(sent.length, 1, 'a valid direct-DMS preflight must reach DMS without a GEA save');
+    assert.equal(globalThis.dmsFixture.persistenceCalls, 0);
+    const alert = [...document.querySelectorAll('[role="alert"]')].find((x) =>
+      x.textContent.includes('DMS连接失败'),
+    );
+    assert.ok(
+      alert?.closest('.fc-workflow-footer'),
+      'submission failure stays in the sticky action footer',
+    );
+    assert.equal(button('确认暂存至DMS').disabled, false);
+    succeed = true;
+    await act(async () => {
+      button('确认暂存至DMS').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    await act(async () => {
+      finishPreflight();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    assert.equal(sent.length, 2);
+    assert.equal(globalThis.dmsFixture.persistenceCalls, 0);
+    assert.match(document.body.textContent, /DMS订单号：DMS-DIRECT/);
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+    delete globalThis.dmsFixture;
+  }
+});
