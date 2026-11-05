@@ -4969,6 +4969,13 @@ input:focus-visible,
   gap: 5px;
   min-width: 0;
 }
+.fc-workflow-dialog .fc-dms-fields .fc-dms-address-choice {
+  grid-column: 1 / -1;
+}
+.fc-workflow-dialog .fc-dms-address-choice select {
+  width: 100%;
+  min-width: 0;
+}
 .fc-workflow-dialog .fc-dms-fields input {
   box-sizing: border-box;
   width: 100%;
