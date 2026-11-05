@@ -28,7 +28,9 @@ for agent in parser.parse_args().agents:
   if isinstance(node,exp.Alias) and node.alias in aliases:node.set('alias',exp.to_identifier(aliases[node.alias]))
  q['resultColumns']=[aliases.get(c,c) for c in q['resultColumns']]
  for member in bundle['members']:member['columns']={k:aliases.get(v,v) for k,v in member['columns'].items()}
- sql=tree.sql();used=set(re.findall(r':(gea_p\d+)\b',sql))
+ sql=tree.sql()
+ if agent=='qll':sql=re.sub(r'\bCOUNT\s*\(\s*\*\s*\)', 'COUNT(1)', sql, flags=re.I)
+ used=set(re.findall(r':(gea_p\d+)\b',sql))
  q['request']['sql']=sql;q['parameterSpec']={k:v for k,v in q['parameterSpec'].items() if k in used};q['request']['parameters']={k:v for k,v in q['request']['parameters'].items() if k in used}
  for member in bundle['members']:member['bindings']={k:v for k,v in member['bindings'].items() if k in used}
  bootstrap=copy.deepcopy(q)
