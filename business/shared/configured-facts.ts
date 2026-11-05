@@ -6,6 +6,24 @@ import { requireColumns } from './configured-query-client.mjs';
 import { createAgentQueries } from './agent-query';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readConfiguredTargetScope } from './configured-target-scope';
+import type { ConfiguredExecution } from './agent-query';
+
+/** Independent SKU ranking reads the same authorized daily batch as the base page. */
+export async function readBaseShortageSkuRanking(
+  config: AgentSqlConfig,
+  values: Record<string, unknown>,
+  options: { signal: AbortSignal; execute: ConfiguredExecution },
+) {
+  const id = 'current-shortage.sku-ranking';
+  if (config.agentId !== 'inventory-aqkc' || config.queries[id]?.summaryRoute?.required !== true)
+    throw Object.assign(Error('GEA_WORKBENCH_UPDATE_REQUIRED'), {
+      code: 'GEA_WORKBENCH_UPDATE_REQUIRED',
+    });
+  return createAgentQueries(config, options.execute).read(id, values, {
+    signal: options.signal,
+    requiredColumns: config.queries[id].resultColumns,
+  });
+}
 
 export type FactReadContext = {
   key: string;

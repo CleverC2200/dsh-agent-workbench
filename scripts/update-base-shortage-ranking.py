@@ -59,7 +59,7 @@ ORDER BY p.shortage DESC, p.sku ASC'''
             '缺货SKU数只统计正缺口的不同商品，不使用基地SKU总行数；总量和排名在同条查询同批数据内读取。'
         )
         if not prefix:
-            query['summaryRoute'] = {'queryId': 'snapshot.current-shortage.sku-ranking', 'kind': 'current'}
+            query['summaryRoute'] = {'queryId': 'snapshot.current-shortage.sku-ranking', 'kind': 'current', 'required': True}
         config['queries'][prefix + 'current-shortage.sku-ranking'] = query
 
 

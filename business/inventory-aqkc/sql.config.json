@@ -24622,7 +24622,8 @@
       "notes": "仅统一GEA受控SQL。有效且未关闭、未取消、未发货完成订单，包含已备单和部分发货；qtyordered和qtyallocated逐行除以bizunitconvertrate统一为件，同一订单SKU先截零，基地SKU汇总后扣一次可用库存；缺失数量不按0，当前状态不可重建历史。 先在用户已授权范围内按商品编码跨基地加总，再按净缺口件数降序、商品编码升序分页。缺货SKU数只统计正缺口的不同商品，不使用基地SKU总行数；总量和排名在同条查询同批数据内读取。",
       "summaryRoute": {
         "queryId": "snapshot.current-shortage.sku-ranking",
-        "kind": "current"
+        "kind": "current",
+        "required": true
       }
     },
     "snapshot.current-shortage.sku-ranking": {
