@@ -80,3 +80,5 @@ def update_agents(agents):
 
 if __name__ == '__main__':
  update_agents(['aqkc','fc','qll','apsplan'])
+ import runpy
+ runpy.run_path(str(ROOT/'scripts/update-base-shortage-ranking.py'), run_name='__main__')
