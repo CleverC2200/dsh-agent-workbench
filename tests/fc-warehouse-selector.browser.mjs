@@ -89,6 +89,8 @@ test('confirmation keeps the replenishment list order and quantities for the sam
     });
   });
   await page.goto('http://127.0.0.1:19495/');
+  await expect(page.getByRole('button', { name: '有业务', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: '有业务', exact: true })).toHaveCount(1);
   await page.getByRole('button', { name: '选择分仓', exact: true }).click();
   await page.locator('[role=option][data-value="A110"]').click();
   await page.getByRole('checkbox', { name: '需补货', exact: true }).check();

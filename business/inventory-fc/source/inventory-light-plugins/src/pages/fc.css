@@ -5020,12 +5020,17 @@ input:focus-visible,
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.fc-workflow-actions {
+.fc-workflow-footer {
   position: sticky;
   bottom: 0;
   z-index: 3;
   padding-bottom: 4px;
   background: var(--ui-surface);
+}
+.fc-workflow-footer .fc-workflow-notice {
+  margin: 0;
+  padding: 8px 0;
+  overflow-wrap: anywhere;
 }
 
 .fc-data-status {
