@@ -1128,30 +1128,31 @@ export function mountCompanyUI(
       (id: SessionId | undefined) => pageSessions.observeMainSession(id, setHistoryError),
       [],
     );
-    const documents = documentState.visitedDocuments.map((page) => (
-      <div
-        key={page.id}
-        style={{
-          height: '100%',
-          minHeight: 0,
-          display: documentState.selectedDocument?.id === page.id ? 'flex' : 'none',
-          flexDirection: 'column',
-        }}
-      >
-        <RetainedDocument
-          page={page}
-          sessionId={workbench.sessionForPage(page.id)?.sessionId}
-          SessionProvider={SessionProvider}
+    const documents = documentState.visitedDocuments.map((page) => {
+      const savedSessionId = workbench.sessionForPage(page.id)?.sessionId;
+      const sessionId =
+        savedSessionId && catalogue.byId[savedSessionId] ? savedSessionId : undefined;
+      return (
+        <div
+          key={page.id}
+          style={{
+            height: '100%',
+            minHeight: 0,
+            display: documentState.selectedDocument?.id === page.id ? 'flex' : 'none',
+            flexDirection: 'column',
+          }}
         >
-          {renderFactorySlot('agent-workbench.document', {
-            page,
-            active: documentState.selectedDocument?.id === page.id,
-            navigationError:
-              documentState.selectedDocument?.id === page.id ? historyError : undefined,
-          })}
-        </RetainedDocument>
-      </div>
-    ));
+          <RetainedDocument page={page} sessionId={sessionId} SessionProvider={SessionProvider}>
+            {renderFactorySlot('agent-workbench.document', {
+              page,
+              active: documentState.selectedDocument?.id === page.id,
+              navigationError:
+                documentState.selectedDocument?.id === page.id ? historyError : undefined,
+            })}
+          </RetainedDocument>
+        </div>
+      );
+    });
     return (
       <>
         {renderSlot('agent-workbench.main-session-observer', { observe: observeMainSession })}

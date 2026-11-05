@@ -3214,7 +3214,12 @@ test('business navigation retains each page DOM under its own borrowed Core Sess
     React.act(async () =>
       root.render(
         React.createElement(entry.component, {
-          useSessions: (select) => select({ phase: 'ready', ids: [], byId: {} }),
+          useSessions: (select) =>
+            select({
+              phase: 'ready',
+              ids: ['session-one', 'session-two'],
+              byId: { 'session-one': { cwd: '/workspace' }, 'session-two': { cwd: '/workspace' } },
+            }),
           SessionProvider,
           renderSlot: (name, props) =>
             React.createElement(observer.component, {
@@ -3259,4 +3264,50 @@ test('business navigation retains each page DOM under its own borrowed Core Sess
   assert.deepEqual(released, ['session-one']);
   await React.act(async () => root.unmount());
   assert.deepEqual(released, ['session-one', 'session-two']);
+});
+
+test('restored page waits for its actual Core catalogue member before borrowing a Session', async (t) => {
+  const { root } = await mountedDom(t);
+  const { ctx, entries, workbench } = fixture();
+  const acquired = [],
+    released = [];
+  let catalogue = { phase: 'loading', ids: [], byId: {} };
+  ctx.sessions.retain = (sessionId) => {
+    assert.ok(catalogue.byId[sessionId], 'a remembered address is not a Core Session');
+    acquired.push(sessionId);
+    return { sessionId, ready: Promise.resolve(), release: () => released.push(sessionId) };
+  };
+  const entry = entries.find((row) => row.options.name === 'agent-workbench.documents');
+  const SessionProvider = ({ session, children }) =>
+    React.createElement('section', { 'data-session': session?.sessionId }, children);
+  const render = () =>
+    React.act(async () =>
+      root.render(
+        React.createElement(entry.component, {
+          useSessions: (select) => select(catalogue),
+          SessionProvider,
+          renderSlot: () => null,
+          renderFactorySlot: (_name, props) =>
+            React.createElement('input', { 'data-page': props.page.id }),
+        }),
+      ),
+    );
+  workbench.registerFrame({ id: 'one', kind: 'local', body: () => null });
+  workbench.associateSession('one', { sessionId: 'session-one', preset: null, ownerScope: null });
+  await workbench.open('one');
+  await render();
+  assert.deepEqual(acquired, []);
+  assert.equal(workbench.sessionForPage('one').sessionId, 'session-one');
+  const original = document.querySelector('[data-page="one"]');
+  catalogue = {
+    phase: 'ready',
+    ids: ['session-one'],
+    byId: { 'session-one': { cwd: '/workspace' } },
+  };
+  await render();
+  assert.deepEqual(acquired, ['session-one']);
+  assert.equal(document.querySelector('[data-page="one"]'), original);
+  assert.equal(original.closest('[data-session]').dataset.session, 'session-one');
+  await React.act(async () => root.render(null));
+  assert.deepEqual(released, ['session-one']);
 });
