@@ -94,15 +94,13 @@ test('the actual age query rolls both named branches into southwest before scope
     db.exec(`INSERT INTO dim_bas_warehouse VALUES('known','02','工厂外租库'),('conflict','02','工厂外租库');
       INSERT INTO dwd_scm_material_age_his VALUES('20261031','known',NULL,'K',10,60),('20261031','conflict',NULL,'C',10,0);
       INSERT INTO agents_scm_inventory_sku_data_d VALUES('known','20261031','02','工厂外租库','郑州'),('known','20261031','02','工厂外租库','郑州'),('conflict','20261031','02','工厂外租库','郑州'),('conflict','20261031','02','工厂外租库','华东');`);
-    const mapped = db
-      .prepare(workbenchQueries.ages.sql)
-      .all({
-        gea_p900: '',
-        gea_p1: '20261031',
-        gea_p4: '2026-10-31',
-        gea_p5: '2026-10-01',
-        gea_p6: '2026-11-01',
-      });
+    const mapped = db.prepare(workbenchQueries.ages.sql).all({
+      gea_p900: '',
+      gea_p1: '20261031',
+      gea_p4: '2026-10-31',
+      gea_p5: '2026-10-01',
+      gea_p6: '2026-11-01',
+    });
     assert.equal(mapped.find((r) => r.sku === 'K').base, '郑州');
     assert.equal(
       mapped.find((r) => r.sku === 'K').stock_qty,

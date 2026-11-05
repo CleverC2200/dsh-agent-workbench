@@ -88,11 +88,14 @@ function read(daily, hourly = [], base = '') {
 }
 
 test('sums detail quantities including split SKUs and shares the customer formula', () => {
-  const result = read([
-    row('O', 'S', { change_order_qty: 12, dms_last_update_qty: 8 }),
-    row('O', 'S', { executeorderno: 'split', change_order_qty: 2, dms_last_update_qty: 5 }),
-    row('O2', 'S', { change_order_qty: 10, dms_last_update_qty: 10 }),
-  ], [row('O', 'stale')]);
+  const result = read(
+    [
+      row('O', 'S', { change_order_qty: 12, dms_last_update_qty: 8 }),
+      row('O', 'S', { executeorderno: 'split', change_order_qty: 2, dms_last_update_qty: 5 }),
+      row('O2', 'S', { change_order_qty: 10, dms_last_update_qty: 10 }),
+    ],
+    [row('O', 'stale')],
+  );
   assert.equal(result.events.length, 3);
   assert.equal(result.summary[0].numerator, 7);
   assert.equal(result.summary[0].denominator, 23);
@@ -100,7 +103,9 @@ test('sums detail quantities including split SKUs and shares the customer formul
   assert.equal(result.customers[0].denominator, 23);
   assert.equal(result.combined.find((r) => r.kind === '2').denominator, 23);
   assert.equal(result.combined.find((r) => r.kind === '1').unknown_quantity, 0);
-  const metric = computeWorkbenchMetrics({ sections: [{ id: 'changes', status: 'ready', rows: result.summary }] })['改单率'];
+  const metric = computeWorkbenchMetrics({
+    sections: [{ id: 'changes', status: 'ready', rows: result.summary }],
+  })['改单率'];
   assert.ok(Math.abs(metric.value - 700 / 23) < 1e-10);
   assert.match(metric.note, /数量合计/);
 });
@@ -108,24 +113,53 @@ test('sums detail quantities including split SKUs and shares the customer formul
 test('three null quantities are excluded, other nulls become zero, real DMS zero wins over backup', () => {
   const result = read([
     row('zero-DMS', 'S', { change_order_qty: 5, dms_last_update_qty: 0, need_qty_origin: 100 }),
-    row('backup', 'S', { change_order_qty: 3, dms_last_update_qty: null, need_qty_origin: 8, order_qty_origin: 200 }),
-    row('null-request', 'S', { change_order_qty: null, dms_last_update_qty: null, need_qty_origin: 7 }),
-    row('request-only', 'S', { change_order_qty: 2, dms_last_update_qty: null, need_qty_origin: null }),
-    row('all-null', 'S', { change_order_qty: null, dms_last_update_qty: null, need_qty_origin: null }),
-    row('known-zero', 'S', { change_order_qty: null, dms_last_update_qty: 0, need_qty_origin: null, custchangetime: null }),
+    row('backup', 'S', {
+      change_order_qty: 3,
+      dms_last_update_qty: null,
+      need_qty_origin: 8,
+      order_qty_origin: 200,
+    }),
+    row('null-request', 'S', {
+      change_order_qty: null,
+      dms_last_update_qty: null,
+      need_qty_origin: 7,
+    }),
+    row('request-only', 'S', {
+      change_order_qty: 2,
+      dms_last_update_qty: null,
+      need_qty_origin: null,
+    }),
+    row('all-null', 'S', {
+      change_order_qty: null,
+      dms_last_update_qty: null,
+      need_qty_origin: null,
+    }),
+    row('known-zero', 'S', {
+      change_order_qty: null,
+      dms_last_update_qty: 0,
+      need_qty_origin: null,
+      custchangetime: null,
+    }),
   ]);
   assert.equal(result.events.length, 5);
   assert.equal(result.summary[0].numerator, 19);
   assert.equal(result.summary[0].denominator, 15);
   assert.equal(result.summary[0].invalid, 0);
-  const metric = computeWorkbenchMetrics({ sections: [{ id: 'changes', status: 'ready', rows: result.summary }] })['改单率'];
+  const metric = computeWorkbenchMetrics({
+    sections: [{ id: 'changes', status: 'ready', rows: result.summary }],
+  })['改单率'];
   assert.ok(Math.abs(metric.value - 1900 / 15) < 1e-10);
 });
 
 test('missing event time preserves the full quantity denominator and quantity uncertainty', () => {
   const result = read([
     row('known', 'S', { change_order_qty: 5, dms_last_update_qty: 20 }),
-    row('unknown', 'S', { change_order_qty: null, dms_last_update_qty: null, need_qty_origin: 80, custchangetime: null }),
+    row('unknown', 'S', {
+      change_order_qty: null,
+      dms_last_update_qty: null,
+      need_qty_origin: 80,
+      custchangetime: null,
+    }),
     row('unchanged', 'S', { change_order_qty: 5, dms_last_update_qty: 5, custchangetime: null }),
   ]);
   const r = result.summary[0];
@@ -136,7 +170,9 @@ test('missing event time preserves the full quantity denominator and quantity un
   assert.equal(r.unknown_quantity, 80);
   assert.equal(r.invalid, 1);
   assert.equal(result.customers[0].numerator, null);
-  const metric = computeWorkbenchMetrics({ sections: [{ id: 'changes', status: 'ready', rows: result.summary }] })['改单率'];
+  const metric = computeWorkbenchMetrics({
+    sections: [{ id: 'changes', status: 'ready', rows: result.summary }],
+  })['改单率'];
   assert.equal(metric.value, null);
   assert.equal(metric.sample.value, 60);
   assert.equal(metric.population.denominator, 105);
@@ -151,10 +187,22 @@ test('twelve-hour and seven-day boundaries use creation and confirmed arrival', 
   const result = read([
     row('before12', 'S', { custchangetime: '2026-10-01 11:59:59' }),
     row('exact12', 'S'),
-    row('exact7', 'S', { requireddeliverytime: '2026-10-08 00:00:00', custchangetime: '2026-10-01 01:00:00' }),
-    row('over7', 'S', { requireddeliverytime: '2026-10-08 00:00:01', custchangetime: '2026-10-01 01:00:00' }),
-    row('before-long', 'S', { requireddeliverytime: '2026-10-20 00:00:00', custchangetime: '2026-10-12 23:59:59' }),
-    row('exact-long', 'S', { requireddeliverytime: '2026-10-20 00:00:00', custchangetime: '2026-10-13 00:00:00' }),
+    row('exact7', 'S', {
+      requireddeliverytime: '2026-10-08 00:00:00',
+      custchangetime: '2026-10-01 01:00:00',
+    }),
+    row('over7', 'S', {
+      requireddeliverytime: '2026-10-08 00:00:01',
+      custchangetime: '2026-10-01 01:00:00',
+    }),
+    row('before-long', 'S', {
+      requireddeliverytime: '2026-10-20 00:00:00',
+      custchangetime: '2026-10-12 23:59:59',
+    }),
+    row('exact-long', 'S', {
+      requireddeliverytime: '2026-10-20 00:00:00',
+      custchangetime: '2026-10-13 00:00:00',
+    }),
   ]);
   assert.equal(result.summary[0].numerator, 6);
   assert.equal(result.summary[0].denominator, 48);
@@ -177,23 +225,31 @@ test('creation selects the cohort, future changes count, cancelled and nonstat d
 });
 
 test('daily evidence never borrows an hourly event; invalid arrival stays unknown', () => {
-  const result = read([
-    row('missing-time', 'S', { custchangetime: null }),
-    row('missing-arrival', 'S', { requireddeliverytime: null }),
-    row('early-arrival', 'S', { requireddeliverytime: '2026-09-30' }),
-    row('early-event', 'S', { custchangetime: '2026-09-30' }),
-  ], [row('missing-time', 'S')]);
+  const result = read(
+    [
+      row('missing-time', 'S', { custchangetime: null }),
+      row('missing-arrival', 'S', { requireddeliverytime: null }),
+      row('early-arrival', 'S', { requireddeliverytime: '2026-09-30' }),
+      row('early-event', 'S', { custchangetime: '2026-09-30' }),
+    ],
+    [row('missing-time', 'S')],
+  );
   assert.equal(result.summary[0].invalid, 4);
   assert.equal(result.summary[0].denominator, 32);
   assert.equal(result.summary[0].unknown_quantity, 8);
 });
 
 test('filters each execution creation before summing; retains separate customer/base scope', () => {
-  const result = read([
-    row('O', 'S'), row('O', 'S', { cust_code: 'C2' }),
-    row('O', 'S', { executeorderno: 'later', header_addtime: '2026-11-01 00:00:00' }),
-    row('other-base', 'S', { belong_base: '华南' }),
-  ], [], '郑州');
+  const result = read(
+    [
+      row('O', 'S'),
+      row('O', 'S', { cust_code: 'C2' }),
+      row('O', 'S', { executeorderno: 'later', header_addtime: '2026-11-01 00:00:00' }),
+      row('other-base', 'S', { belong_base: '华南' }),
+    ],
+    [],
+    '郑州',
+  );
   assert.equal(result.events.length, 2);
   assert.equal(result.summary[0].numerator, 4);
   assert.equal(result.summary[0].denominator, 16);
@@ -204,6 +260,9 @@ test('daily quantity SQL does not add an event-date cutoff or count grouped SKUs
     assert.match(sql, /agents_scm_execute_detail_d/);
     assert.match(sql, /COALESCE\(s.change_order_qty,0\)/);
     assert.match(sql, /COALESCE\(s.dms_last_update_qty,s.need_qty_origin,0\)/);
-    assert.doesNotMatch(sql, /agents_scm_execute_detail_hourly_d|changed<:gea_p2|changed>=:gea_p2|1 AS change_denominator|GROUP BY cust_code,cust_order_no,material_code/);
+    assert.doesNotMatch(
+      sql,
+      /agents_scm_execute_detail_hourly_d|changed<:gea_p2|changed>=:gea_p2|1 AS change_denominator|GROUP BY cust_code,cust_order_no,material_code/,
+    );
   }
 });
