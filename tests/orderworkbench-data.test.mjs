@@ -981,7 +981,7 @@ test('configured sources keep formal field rules and safe pagination', () => {
   assert.match(config.queries['workbench.changes'].request.sql, /GROUP BY cust_code,cust_order_no/);
   assert.match(config.queries['workbench.changes'].request.sql, /INTERVAL '12' HOUR/);
   assert.match(config.queries['workbench.orders'].request.sql, /exp_flag='否'/);
-  assert.match(config.queries['workbench.stock'].request.sql, /main_sales_plan_adj>0/);
+  assert.match(config.queries['workbench.stock'].request.sql, /WHEN .*<=20 THEN main_sales_plan_adj/);
   assert.doesNotMatch(config.queries['workbench.stock'].request.sql, /avg_daily_planned_demand/);
   assert.match(config.queries['workbench.orders'].request.sql, /LEAST\(m.sent,m.demand\)/);
   assert.match(

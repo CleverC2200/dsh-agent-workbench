@@ -1,3 +1,4 @@
+import { historicalShippableReference, shippableReferenceVersion } from './historical-shippable-reference.mjs';
 import {
   computeWorkbenchMetrics,
   metricDelta,
@@ -296,6 +297,21 @@ export function workbenchPresentation(facts, options = {}) {
       comparison('week', 'yearWeek', name),
     ],
   }));
+  const historical = historicalShippableReference(periods.month, facts.displayMode === 'historical-reconciliation');
+  if (historical) {
+    const card = cards.find(card => card.key === '周转天数');
+    Object.assign(card, {
+      value: historical.value.toFixed(1),
+      status: historical.label,
+      formula: historical.note,
+      historicalReference: historical,
+      coverageNote: historical.note,
+      comparison: ['—', '—', '—', '—'],
+      comparisonNotes: Array(4).fill('历史对账快照与实时源版本不同，不计算混合口径环同比。'),
+      footer: '历史对账 ' + historical.value.toFixed(1) + '天 · 实时计算 ' + historical.liveValue.toFixed(1) + '天',
+      footerNote: historical.note,
+    });
+  }
   const directorMap = new Map(
     (facts.directors?.rows ?? []).map((row) => [
       JSON.stringify([row.base, row.sku]),
@@ -354,24 +370,29 @@ export function workbenchPresentation(facts, options = {}) {
       const filter = (row) => dimensionValue(row.category) === category,
         m = metric(current, filter),
         stock = rows(current, 'stock').filter(filter);
-      const sum = (key) =>
-        stock.length &&
-        stock.every(
+      const independent = stock.some(row => 'national_plan_records' in row);
+      const plans = independent ? stock.filter(row => Number(row.national_plan_records)>0) : stock;
+      const inventory = independent ? stock.filter(row => Number(row.national_stock_records)>0) : stock;
+      const sum = (key, source = stock) =>
+        source.length &&
+        source.every(
           (row) =>
             Number(row['missing_' + key] ?? 0) === 0 &&
+            (key !== 'national_sales_plan' || Number(row.national_plan_invalid ?? 0) === 0) &&
+            (key !== 'national_inventory' || Number(row.national_stock_invalid ?? 0) === 0) &&
             row[key] !== null &&
             Number.isFinite(Number(row[key])),
         )
-          ? stock.reduce((sum, row) => sum + Number(row[key]), 0)
+          ? source.reduce((sum, row) => sum + Number(row[key]), 0)
           : null;
       const daily =
-        stock.length && stock.every((row) => stockDaily(row, 'item') !== null)
-          ? stock.reduce((sum, row) => sum + stockDaily(row, 'item'), 0)
+        plans.length && plans.every((row) => stockDaily(row, 'item') !== null)
+          ? plans.reduce((sum, row) => sum + stockDaily(row, 'item'), 0)
           : null;
-      const sales = sum('sales_plan');
+      const sales = sum(independent ? 'national_sales_plan' : 'sales_plan', plans);
       return [
         category,
-        text(sum('inventory'), '件', 0),
+        text(sum(independent ? 'national_inventory' : 'inventory', inventory), '件', 0),
         text(sales, '件', 0),
         text(daily, '件/天'),
         text(metricValue(m, '周转天数'), '天'),
@@ -449,7 +470,7 @@ export function workbenchPresentation(facts, options = {}) {
         name: (stock?.name || filtered.find((row) => row.sku === sku)?.name || sku) + ' · ' + base,
         code: sku,
         inventory: text(stock?.inventory, '件', 0),
-        salesPlan: text(stock?.sales_plan, '件', 0),
+        salesPlan: text(stock && 'national_plan_records' in stock ? stock.national_sales_plan : stock?.sales_plan, '件', 0),
         shipDays: text(metricValue(m, '周转天数'), '天'),
         missingReasons: {
           inventory: stock
@@ -466,6 +487,7 @@ export function workbenchPresentation(facts, options = {}) {
   return {
     lazy: !!options.dimension,
     performanceStyleVersion,
+    shippableReferenceVersion,
     cards,
     performance,
     skus,
@@ -502,6 +524,7 @@ export function workbenchEvidence(facts) {
   if (!facts) return null;
   return {
     source: facts.source,
+    displayReferences: Object.fromEntries(Object.entries(facts.periods).flatMap(([key, period]) => { const reference = historicalShippableReference(period, facts.displayMode === 'historical-reconciliation'); return reference ? [[key, reference]] : []; })),
     complete: facts.complete !== false,
     pendingPeriods: facts.pendingPeriods ?? [],
     pendingSources: facts.pendingSources ?? [],

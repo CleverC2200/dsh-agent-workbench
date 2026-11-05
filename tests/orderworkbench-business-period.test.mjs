@@ -65,6 +65,17 @@ test('covered stock retains factory and rented warehouses and exposes unmatched 
       UPDATE agents_scm_inventory_sku_data_d SET warehouse_classify_name=CASE warehouse_classify WHEN '01' THEN '工厂成品仓' WHEN '02' THEN '工厂外租库' ELSE '分仓成品仓' END;
       INSERT INTO agents_scm_inventory_sku_data_d VALUES ('郑州','wrong-code','误分类','20261025',999,999,'02','分仓成品仓');`);
     db.function('CONCAT', { varargs: true }, (...values) => values.join(''));
+    db.exec(`ALTER TABLE agents_scm_stock_detail_d ADD COLUMN roll_sales_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN transfer_out_plan_roll;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_sales_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_out_plan;
+      UPDATE agents_scm_stock_detail_d SET roll_sales_plan=main_sales_plan_adj,
+        transfer_out_plan_roll=transfer_out_plan_adj;`);
+    db.exec(`CREATE TABLE agents_sales_plan_demand_m(stat_month,belong_base,material_code,plannum,allnum);
+      CREATE TABLE agents_dim_material_prod_sales_info_d(material_code,channel_name);
+      INSERT INTO agents_sales_plan_demand_m SELECT '2026-10-01',belong_base,material_code,main_sales_plan_adj,main_sales_plan_adj
+        FROM agents_scm_stock_detail_d WHERE belong_base IS NOT NULL;
+      INSERT INTO agents_dim_material_prod_sales_info_d SELECT DISTINCT material_code,'思念' FROM agents_scm_stock_detail_d;`);
     const rows = db
       .prepare(workbenchQueries.stock.sql)
       .all({ gea_p1: '2026-10-19', gea_p2: '2026-10-26' });

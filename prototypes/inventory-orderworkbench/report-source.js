@@ -235,6 +235,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   );
   const snapshot = (complete = false) => ({
     metricCalculationVersion,
+    displayMode: options.base === '' && end === '2026-10-26' && ['2026-10-01','2026-10-19'].includes(start) ? 'historical-reconciliation' : 'governed-live',
     start,
     end,
     selected,

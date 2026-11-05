@@ -25,6 +25,17 @@ test('gateway-compatible stock join preserves the full-join result including unm
       ('郑州','stock-only','b','20261025',50,50,'02','工厂外租库'),
       (NULL,'null-key','c','20261025',10,10,'01','工厂成品仓'),
       ('郑州','missing-quantity','d','20261025',0,NULL,'01','工厂成品仓');`);
+    db.exec(`ALTER TABLE agents_scm_stock_detail_d ADD COLUMN roll_sales_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN transfer_out_plan_roll;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_sales_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_out_plan;
+      UPDATE agents_scm_stock_detail_d SET roll_sales_plan=main_sales_plan_v1,
+        transfer_out_plan_roll=transfer_out_plan_v1;`);
+    db.exec(`CREATE TABLE agents_sales_plan_demand_m(stat_month,belong_base,material_code,plannum,allnum);
+      CREATE TABLE agents_dim_material_prod_sales_info_d(material_code,channel_name);
+      INSERT INTO agents_sales_plan_demand_m SELECT '2026-10-01',belong_base,material_code,main_sales_plan_v1,main_sales_plan_v1
+        FROM agents_scm_stock_detail_d WHERE belong_base IS NOT NULL;
+      INSERT INTO agents_dim_material_prod_sales_info_d SELECT DISTINCT material_code,'思念' FROM agents_scm_stock_detail_d;`);
     const sql = workbenchQueries.stock.sql;
     assert.doesNotMatch(sql, /FULL\s+(?:OUTER\s+)?JOIN|<=>/i);
     const firstArm = sql.split(' UNION ALL ')[0];
