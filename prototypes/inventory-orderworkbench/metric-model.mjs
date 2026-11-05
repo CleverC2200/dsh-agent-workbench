@@ -1,5 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 9;
+export const metricCalculationVersion = 13;
 export function compatibleWorkbenchFacts(facts) {
   return (
     facts?.complete === true &&
@@ -38,17 +38,19 @@ const invalid = (rows, key = 'invalid') =>
   rows.some((row) => !finite(row[key]) || Number(row[key]) !== 0);
 export const metricValue = (metrics, name) => metrics?.[name]?.value ?? null;
 export function stockDaily(row, scope = 'national') {
+  const sales = scope !== 'base' && 'national_plan_records' in row ? row.national_sales_plan : row.sales_plan;
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(row.stock_date) ||
-    !finite(row.sales_plan) ||
-    Number(row.sales_plan) < 0 ||
+    !finite(sales) ||
+    (scope !== 'base' && Number(row.national_plan_invalid ?? 0) !== 0) ||
+    Number(sales) < 0 ||
     (scope === 'base' && (!finite(row.transfer_plan) || Number(row.transfer_plan) < 0))
   )
     return null;
   const days = new Date(
     Date.UTC(Number(row.stock_date.slice(0, 4)), Number(row.stock_date.slice(5, 7)), 0),
   ).getUTCDate();
-  return (Number(row.sales_plan) + (scope === 'base' ? 0.5 * Number(row.transfer_plan) : 0)) / days;
+  return (Number(sales) + (scope === 'base' ? 0.5 * Number(row.transfer_plan) : 0)) / days;
 }
 // Nationwide stock and plans are two complete sets, not an intersection of SKUs.
 // A missing counterpart contributes no record; a NULL inside an existing source
@@ -156,7 +158,7 @@ export function computeWorkbenchMetrics(
   );
   put(
     '周转天数',
-    turnoverScope === 'national' && stock.some((row) => 'national_stock_records' in row)
+    turnoverScope !== 'base' && stock.some((row) => 'national_stock_records' in row)
       ? nationalStockDays(stock)
       : !invalid(stock) &&
           sum(stock, 'inventory') !== null &&
@@ -168,10 +170,10 @@ export function computeWorkbenchMetrics(
         ? sum(stock, 'inventory') /
           stock.reduce((total, row) => total + stockDaily(row, turnoverScope), 0)
         : null,
-    '工厂仓＋工厂外租仓现存量 ÷ 同范围计划日均需求；计划有正数纠偏取纠偏，否则取月初；' +
+    '工厂仓＋工厂外租仓现存量 ÷ 同范围计划日均需求；按库存业务日取计划：1—16日初版、17—20日纠偏、21—26日滚动、27日至月底下月初版；分母始终为库存业务日所在月天数；' +
       (turnoverScope === 'base'
         ? '基地日均=(月度需求计划+调拨出库计划×0.5)÷当月天数'
-        : '全国及品项日均=月度需求计划÷当月天数') +
+        : '全国及品项日均=月度需求计划÷当月天数；取库存计划表对应初版、纠偏、滚动或下月字段，不以客户需求表allnum替代') +
       '；全国库存与计划独立汇总，不要求商品逐条匹配；负库存按来源原值汇总；源内缺值、负计划、负库存合计或重复计划粒度不计算',
     '天',
   );

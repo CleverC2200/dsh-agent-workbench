@@ -1,3 +1,4 @@
+import { shippableReferenceVersion } from './historical-shippable-reference.mjs';
 import { encodeReportRequest } from './report-transfer.mjs';
 import { workbenchCellMissingReason } from './missing-reasons.mjs';
 import { createReportPersistence } from './report-persistence.mjs';
@@ -2391,7 +2392,7 @@ async function readCurrentPeriod() {
     entry.facts=facts;
     if (liveReadKey!==key) return;
     liveFacts=facts;
-    const presentation=storedPresentation&&!storedPresentation.lazy&&storedPresentation.performanceStyleVersion===performanceStyleVersion?storedPresentation:cachedWorkbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
+    const presentation=storedPresentation&&!storedPresentation.lazy&&storedPresentation.performanceStyleVersion===performanceStyleVersion&&storedPresentation.shippableReferenceVersion===shippableReferenceVersion?storedPresentation:cachedWorkbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
     savedPresentation=presentation;
     if (!dimensionOnly) for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
     if (!dimensionOnly) for(const metric of metricDefinitions) {
@@ -2636,7 +2637,7 @@ function renderWorkbenchSkuDetail(category) {
     .join('');
   const paging=liveSkuPagination[category];
   const nav=paging?`<nav class="wb-sku-pagination" aria-label="SKU明细分页"><span>共 ${paging.total} 条 · 第 ${paging.page+1} / ${Math.max(1,Math.ceil(paging.total/20))} 页</span><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page-1}" ${paging.page===0?'disabled':''}>上一页</button><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page+1}" ${(paging.page+1)*20>=paging.total?'disabled':''}>下一页</button></nav>`:'';
-  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为全部库存，月度需求计划有纠偏取纠偏，否则取月初计划。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
+  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为基地覆盖工厂仓及工厂外租仓现存量；需求与调拨计划按库存业务日取版本：1—16日初版、17—20日纠偏、21—26日滚动、27日起下月初版，日均需求除以库存日期所在月天数。全国及品项不计调拨，基地计入50%调拨。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
 }
 function renderWorkbenchRegionCustomerDetail(regionIndex) {
   const customers=workbenchDimensions['region-change'].customerDetails?.[regionIndex]??[];
