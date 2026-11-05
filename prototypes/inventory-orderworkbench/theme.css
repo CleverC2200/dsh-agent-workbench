@@ -39,6 +39,18 @@ html body {
   background: #fff4df;
   color: #9a5a00;
 }
+.wb-kpi-counts {
+  display: block;
+  margin: 3px 2px;
+  color: #687485;
+  font-size: 10px;
+  line-height: 1.45;
+}
 
-table[class^='wb-'] :is(th, td) { text-align: center !important; vertical-align: middle; }
-table[class^='wb-'] :is(.wb-region-order-count, .category-toggle, .region-change-toggle) { text-align: center; }
+table[class^='wb-'] :is(th, td) {
+  text-align: center !important;
+  vertical-align: middle;
+}
+table[class^='wb-'] :is(.wb-region-order-count, .category-toggle, .region-change-toggle) {
+  text-align: center;
+}

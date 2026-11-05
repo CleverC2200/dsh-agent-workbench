@@ -1,5 +1,5 @@
 export const shippableDaysTarget = '全国<12.5天（郑州≤12.5天，其他基地<11天）';
-export const performanceStyleVersion = 4;
+export const performanceStyleVersion = 7;
 
 export function shippableDaysState(value, base = '') {
   if (value === null || value === undefined || !Number.isFinite(value)) return '数据不足';

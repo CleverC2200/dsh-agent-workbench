@@ -64,6 +64,9 @@ test('covered stock retains factory and rented warehouses and exposes unmatched 
     db.exec(`ALTER TABLE agents_scm_inventory_sku_data_d ADD COLUMN warehouse_classify_name;
       UPDATE agents_scm_inventory_sku_data_d SET warehouse_classify_name=CASE warehouse_classify WHEN '01' THEN '工厂成品仓' WHEN '02' THEN '工厂外租库' ELSE '分仓成品仓' END;
       INSERT INTO agents_scm_inventory_sku_data_d VALUES ('郑州','wrong-code','误分类','20261025',999,999,'02','分仓成品仓');`);
+    db.exec(
+      'ALTER TABLE agents_scm_stock_detail_d ADD COLUMN roll_sales_plan; ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_sales_plan; ALTER TABLE agents_scm_stock_detail_d ADD COLUMN transfer_out_plan_roll; ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_out_plan; UPDATE agents_scm_stock_detail_d SET roll_sales_plan=CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END,transfer_out_plan_roll=CASE WHEN transfer_out_plan_adj>0 THEN transfer_out_plan_adj ELSE transfer_out_plan_v1 END',
+    );
     db.function('CONCAT', { varargs: true }, (...values) => values.join(''));
     const rows = db
       .prepare(workbenchQueries.stock.sql)

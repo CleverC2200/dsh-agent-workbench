@@ -25,6 +25,9 @@ test('gateway-compatible stock join preserves the full-join result including unm
       ('郑州','stock-only','b','20261025',50,50,'02','工厂外租库'),
       (NULL,'null-key','c','20261025',10,10,'01','工厂成品仓'),
       ('郑州','missing-quantity','d','20261025',0,NULL,'01','工厂成品仓');`);
+    db.exec(
+      'ALTER TABLE agents_scm_stock_detail_d ADD COLUMN roll_sales_plan; ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_sales_plan; ALTER TABLE agents_scm_stock_detail_d ADD COLUMN transfer_out_plan_roll; ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_out_plan; UPDATE agents_scm_stock_detail_d SET roll_sales_plan=CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END,transfer_out_plan_roll=CASE WHEN transfer_out_plan_adj>0 THEN transfer_out_plan_adj ELSE transfer_out_plan_v1 END',
+    );
     const sql = workbenchQueries.stock.sql;
     assert.doesNotMatch(sql, /FULL\s+(?:OUTER\s+)?JOIN|<=>/i);
     const firstArm = sql.split(' UNION ALL ')[0];

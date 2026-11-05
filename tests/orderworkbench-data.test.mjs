@@ -286,7 +286,7 @@ test('arrival packets preserve whole-order counts, unknown verdicts and UTF-8 di
       members,
     },
     {
-      order_no: 'order:1',
+      order_no: 'execution:2',
       customer: '另一客户',
       ontime: 1,
       arrival_date: '2026-10-23',
@@ -349,7 +349,8 @@ test('arrival packets preserve whole-order counts, unknown verdicts and UTF-8 di
   const raw = await run(false),
     packed = await run(true);
   const metric = (facts) => facts.periods.week.metrics['准交率'];
-  assert.ok(Math.abs(metric(packed).value - 200 / 3) < 1e-10);
+  assert.equal(metric(packed).value, 50);
+  assert.ok(Math.abs(metric(packed).sample.value - 200 / 3) < 1e-10);
   assert.deepEqual(metric(packed).sample, metric(raw).sample);
   assert.equal(metric(packed).value, metric(raw).value);
   const section = packed.periods.week.sections.find((part) => part.id === 'ontime');
@@ -870,7 +871,7 @@ test('document metrics use order counts, distinct arrival orders and calendar-da
     Object.values(metrics).map((metric) => metric.value),
     [10, 5, 96, 90, 10, 30],
   );
-  assert.match(metrics['准交率'].note, /客户编码＋原订单号去重/);
+  assert.match(metrics['准交率'].note, /执行单号去重/);
   const period = fixturePeriod();
   period.sections[0].rows.push({
     ...period.sections[0].rows[0],
@@ -981,7 +982,10 @@ test('configured sources keep formal field rules and safe pagination', () => {
   assert.match(config.queries['workbench.changes'].request.sql, /GROUP BY cust_code,cust_order_no/);
   assert.match(config.queries['workbench.changes'].request.sql, /INTERVAL '12' HOUR/);
   assert.match(config.queries['workbench.orders'].request.sql, /exp_flag='否'/);
-  assert.match(config.queries['workbench.stock'].request.sql, /main_sales_plan_adj>0/);
+  assert.match(
+    config.queries['workbench.stock'].request.sql,
+    /THEN roll_sales_plan ELSE next_month_sales_plan END/,
+  );
   assert.doesNotMatch(config.queries['workbench.stock'].request.sql, /avg_daily_planned_demand/);
   assert.match(config.queries['workbench.orders'].request.sql, /LEAST\(m.sent,m.demand\)/);
   assert.match(
@@ -1090,7 +1094,8 @@ test('one arrival order with many SKUs counts once; incomplete orders leave an e
   part.rows[0].ontime = null;
   part.rows[0].invalid = 1;
   const missing = model.computeWorkbenchMetrics(p)['准交率'];
-  assert.equal(missing.value, (8 / 9) * 100);
+  assert.equal(missing.value, 80);
+  assert.equal(missing.sample.value, (8 / 9) * 100);
   assert.deepEqual([missing.sample.known, missing.sample.total], [9, 10]);
   assert.match(missing.coverageNote, /不是全量指标/);
 });

@@ -811,7 +811,7 @@ const workbenchDimensions = {
   },
   'region-change': {
     title: '改单率—大区 / 省区聚焦',
-    note: '点击首列展开客户名称、编码、客户经理、改单订单数及订单总数（演示明细）。',
+    note: '点击首列展开客户名称、编码、客户经理、锁定期调整商品数量及有效商品数量。',
     summary:
       '10 个区域或渠道改单率异常，高势能渠道销售 27.55% 为最严重项；其余区域需按客户、品类和改单原因继续拆解。',
     columns: ['大区 / 渠道', '本期改单率', '上期', '环比', '状态'],
@@ -2523,7 +2523,7 @@ function renderWorkbench() {
   document.getElementById('wbKpis').innerHTML = topMetricCards
     .map((metric) => {
       const statusClass = ['未达', '严重'].includes(metric.status) ? 'bad' : metric.status === '预警' ? 'warn' : metric.status === '健康' ? '' : 'unknown';
-      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="生成${escapeHtml(metric.label)}明细表" title="发送到右侧 Agent 生成明细表"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
+      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="生成${escapeHtml(metric.label)}明细表" title="发送到右侧 Agent 生成明细表"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span>${metric.countsNote?`<span class="wb-kpi-counts">${escapeHtml(metric.countsNote)}</span>`:""}<span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
     })
     .join('');
   document.querySelectorAll('#wbKpis .wb-kpi').forEach((card,index)=>{
@@ -2640,9 +2640,9 @@ function renderWorkbenchSkuDetail(category) {
 }
 function renderWorkbenchRegionCustomerDetail(regionIndex) {
   const customers=workbenchDimensions['region-change'].customerDetails?.[regionIndex]??[];
-  const count=value=>value==null?'—':escapeHtml(String(value))+' 张';
+  const count=value=>value==null?'—':escapeHtml(String(value));
   const rows=customers.map(customer=>`<tr><td>${escapeHtml(customer.name)}（${escapeHtml(customer.code)}）</td><td>${escapeHtml(customer.manager)}</td><td>${count(customer.changedQuantity)}</td><td>${count(customer.orderedQuantity)}</td></tr>`).join('');
-  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>锁定期改单订单数</th><th>有效订单数</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户订单明细</td></tr>'}</tbody></table></div>`;
+  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>锁定期调整商品数量</th><th>有效商品数量</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户订单明细</td></tr>'}</tbody></table></div>`;
 }
 function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
   const groups = table.groups.map(group => baseColumnIndex === 0 && group.label.startsWith('可发货天数')
