@@ -235,6 +235,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   );
   const snapshot = (complete = false) => ({
     metricCalculationVersion,
+    displayMode: 'governed-live',
     start,
     end,
     selected,

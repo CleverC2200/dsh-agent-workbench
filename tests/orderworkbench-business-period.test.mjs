@@ -68,6 +68,17 @@ test('covered stock retains factory and rented warehouses and exposes unmatched 
       'ALTER TABLE agents_scm_stock_detail_d ADD COLUMN roll_sales_plan; ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_sales_plan; ALTER TABLE agents_scm_stock_detail_d ADD COLUMN transfer_out_plan_roll; ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_out_plan; UPDATE agents_scm_stock_detail_d SET roll_sales_plan=CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END,transfer_out_plan_roll=CASE WHEN transfer_out_plan_adj>0 THEN transfer_out_plan_adj ELSE transfer_out_plan_v1 END',
     );
     db.function('CONCAT', { varargs: true }, (...values) => values.join(''));
+    db.exec(`ALTER TABLE agents_scm_stock_detail_d ADD COLUMN roll_sales_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN transfer_out_plan_roll;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_sales_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_out_plan;
+      UPDATE agents_scm_stock_detail_d SET roll_sales_plan=main_sales_plan_adj,
+        transfer_out_plan_roll=transfer_out_plan_adj;`);
+    db.exec(`CREATE TABLE agents_sales_plan_demand_m(stat_month,belong_base,material_code,plannum,allnum);
+      CREATE TABLE agents_dim_material_prod_sales_info_d(material_code,channel_name);
+      INSERT INTO agents_sales_plan_demand_m SELECT '2026-10-01',belong_base,material_code,main_sales_plan_adj,main_sales_plan_adj
+        FROM agents_scm_stock_detail_d WHERE belong_base IS NOT NULL;
+      INSERT INTO agents_dim_material_prod_sales_info_d SELECT DISTINCT material_code,'思念' FROM agents_scm_stock_detail_d;`);
     const rows = db
       .prepare(workbenchQueries.stock.sql)
       .all({ gea_p1: '2026-10-19', gea_p2: '2026-10-26' });

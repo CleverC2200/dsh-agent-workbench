@@ -984,7 +984,7 @@ test('configured sources keep formal field rules and safe pagination', () => {
   assert.match(config.queries['workbench.orders'].request.sql, /exp_flag='否'/);
   assert.match(
     config.queries['workbench.stock'].request.sql,
-    /THEN roll_sales_plan ELSE next_month_sales_plan END/,
+    /WHEN .*<=20 THEN main_sales_plan_adj/,
   );
   assert.doesNotMatch(config.queries['workbench.stock'].request.sql, /avg_daily_planned_demand/);
   assert.match(config.queries['workbench.orders'].request.sql, /LEAST\(m.sent,m.demand\)/);

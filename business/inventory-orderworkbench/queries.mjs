@@ -1,6 +1,5 @@
 import { changesSql, customersSql, ordersSql, ontimeSql } from './document-queries.mjs';
 import { workbenchBaseSql } from './base-scope.mjs';
-import { workbenchPlanSql } from './plan-version.mjs';
 const attributionSources = `SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_d
         UNION ALL SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_hourly_d
         UNION ALL SELECT belong_base,material_code,NULL AS director,product_item,the_date AS attribution_date FROM agents_scm_stock_detail_d
@@ -23,13 +22,30 @@ const stockProjection = `SELECT COALESCE(s.belong_base,b.belong_base) AS base,CO
       CASE WHEN s.source_rows IS NOT NULL THEN 1 ELSE 0 END AS national_plan_records,
       COALESCE(b.invalid,0) AS national_stock_invalid,
       CASE WHEN s.source_rows>1 THEN 1 ELSE COALESCE(s.sales_invalid,0) END AS national_plan_invalid,
-      CASE WHEN b.inventory IS NULL OR b.invalid>0 OR s.source_rows IS NULL THEN 1 ELSE 0 END AS invalid
+      CASE WHEN b.inventory IS NULL OR b.invalid>0 OR s.source_rows IS NULL OR s.sales_invalid>0 OR s.transfer_invalid>0 THEN 1 ELSE 0 END AS invalid
 `;
-const salesPlan = workbenchPlanSql('sales'),
-  transferPlan = workbenchPlanSql('transfer');
+// Both plans use the inventory business day, including historical reports.
+// Zero is valid; never fall back when the selected version is missing.
+const planDay = 'CAST(SUBSTRING(CAST(the_date AS CHAR),9,2) AS INTEGER)';
+const selectedPlan = (initial, corrected, rolling, next) =>
+  `CASE WHEN ${planDay}<=16 THEN ${initial} WHEN ${planDay}<=20 THEN ${corrected}
+    WHEN ${planDay}<=26 THEN ${rolling} ELSE ${next} END`;
+const salesPlan = selectedPlan(
+  'main_sales_plan_v1',
+  'main_sales_plan_adj',
+  'roll_sales_plan',
+  'next_month_sales_plan',
+);
+const transferPlan = selectedPlan(
+  'transfer_out_plan_v1',
+  'transfer_out_plan_adj',
+  'transfer_out_plan_roll',
+  'next_month_out_plan',
+);
 const stockPlans = `SELECT belong_base,material_code,MAX(product_item) AS item,MAX(material_name) AS name,
         COUNT(*) AS source_rows,CAST(MAX(the_date) AS CHAR) AS stock_date,
         SUM(CASE WHEN (${salesPlan}) IS NULL OR (${salesPlan})<0 THEN 1 ELSE 0 END) AS sales_invalid,
+        SUM(CASE WHEN (${transferPlan}) IS NULL OR (${transferPlan})<0 THEN 1 ELSE 0 END) AS transfer_invalid,
         SUM(${salesPlan}) AS sales_plan,
         SUM(${transferPlan}) AS transfer_plan
         FROM agents_scm_stock_detail_d

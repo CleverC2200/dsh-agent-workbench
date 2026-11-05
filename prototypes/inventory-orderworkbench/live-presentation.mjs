@@ -1,3 +1,4 @@
+import { shippableReferenceVersion } from './historical-shippable-reference.mjs';
 import {
   computeWorkbenchMetrics,
   metricDelta,
@@ -458,24 +459,33 @@ export function workbenchPresentation(facts, options = {}) {
       const filter = (row) => dimensionValue(row.category) === category,
         m = metric(current, filter),
         stock = rows(current, 'stock').filter(filter);
-      const sum = (key) =>
-        stock.length &&
-        stock.every(
+      const independent = stock.some((row) => 'national_plan_records' in row);
+      const plans = independent
+        ? stock.filter((row) => Number(row.national_plan_records) > 0)
+        : stock;
+      const inventory = independent
+        ? stock.filter((row) => Number(row.national_stock_records) > 0)
+        : stock;
+      const sum = (key, source = stock) =>
+        source.length &&
+        source.every(
           (row) =>
             Number(row['missing_' + key] ?? 0) === 0 &&
+            (key !== 'national_sales_plan' || Number(row.national_plan_invalid ?? 0) === 0) &&
+            (key !== 'national_inventory' || Number(row.national_stock_invalid ?? 0) === 0) &&
             row[key] !== null &&
             Number.isFinite(Number(row[key])),
         )
-          ? stock.reduce((sum, row) => sum + Number(row[key]), 0)
+          ? source.reduce((sum, row) => sum + Number(row[key]), 0)
           : null;
       const daily =
-        stock.length && stock.every((row) => stockDaily(row, 'item') !== null)
-          ? stock.reduce((sum, row) => sum + stockDaily(row, 'item'), 0)
+        plans.length && plans.every((row) => stockDaily(row, 'item') !== null)
+          ? plans.reduce((sum, row) => sum + stockDaily(row, 'item'), 0)
           : null;
-      const sales = sum('sales_plan');
+      const sales = sum(independent ? 'national_sales_plan' : 'sales_plan', plans);
       return [
         category,
-        text(sum('inventory'), '件', 0),
+        text(sum(independent ? 'national_inventory' : 'inventory', inventory), '件', 0),
         text(sales, '件', 0),
         text(daily, '件/天'),
         text(metricValue(m, '周转天数'), '天'),
@@ -553,7 +563,11 @@ export function workbenchPresentation(facts, options = {}) {
         name: (stock?.name || filtered.find((row) => row.sku === sku)?.name || sku) + ' · ' + base,
         code: sku,
         inventory: text(stock?.inventory, '件', 0),
-        salesPlan: text(stock?.sales_plan, '件', 0),
+        salesPlan: text(
+          stock && 'national_plan_records' in stock ? stock.national_sales_plan : stock?.sales_plan,
+          '件',
+          0,
+        ),
         shipDays: text(metricValue(m, '周转天数'), '天'),
         missingReasons: {
           inventory: stock
@@ -570,6 +584,7 @@ export function workbenchPresentation(facts, options = {}) {
   return {
     lazy: !!options.dimension,
     performanceStyleVersion,
+    shippableReferenceVersion,
     cards,
     performance,
     skus,
