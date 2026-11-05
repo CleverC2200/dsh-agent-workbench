@@ -338,7 +338,6 @@ test('MPS constraints retain prototype rule management, collapse advanced inputs
   await expect(view.getByRole('table', { name: '约束列表', exact: true })).toBeVisible();
   await expect(view.getByRole('region', { name: '冲突与放宽建议', exact: true })).toBeVisible();
   await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toBeHidden();
-  await view.locator('summary').filter({ hasText: '基地人工覆盖' }).click();
   await view.getByLabel('郑州 安全天数', { exact: true }).fill('0');
   await view.getByRole('button', { name: '新增约束', exact: true }).click();
   const editor = frame.getByRole('dialog', { name: '新增约束', exact: true });
@@ -452,7 +451,7 @@ test('MPS configuration keeps accepted production days, explicit weight and assi
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
   await view.locator('summary').filter({ hasText: '高级配置：' }).click();
-  await expect(view).toContainText('下一月需求 ÷ 下一月自然日天数');
+  await expect(view).toContainText('下月需求÷下月自然天数');
   await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('');
   await view.getByRole('button', { name: '郑州 2026-12 采用25天', exact: true }).click();
   await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('25');
@@ -577,7 +576,6 @@ test('MPS report and CSV derive all three months from evaluation-month coefficie
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
   await constraints.locator('summary').filter({ hasText: '高级配置：' }).click();
-  await constraints.locator('summary').filter({ hasText: '基地人工覆盖' }).click();
   await constraints.getByLabel('郑州 安全天数', { exact: true }).fill('0');
   await constraints.getByLabel('郑州 A 件吨系数', { exact: true }).fill('1');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
@@ -676,7 +674,6 @@ test('MPS effective category and share edits drive the same unconstrained invent
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
   await constraints.locator('summary').filter({ hasText: '高级配置：' }).click();
-  await constraints.locator('summary').filter({ hasText: '基地人工覆盖' }).click();
   await constraints.getByLabel('郑州 安全天数', { exact: true }).fill('31');
   for (const month of ['2026-12', '2027-01', '2027-02'])
     await constraints.getByRole('button', { name: `郑州 ${month} 采用25天`, exact: true }).click();
@@ -824,8 +821,7 @@ test('MPS effective category and share edits drive the same unconstrained invent
   await expect(frame.getByRole('dialog')).toContainText('共同满足率');
   await frame.getByRole('dialog').getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
-  await constraints.locator('summary').filter({ hasText: '高级配置：' }).click();
-  await constraints.getByLabel('郑州 A 件吨系数', { exact: true }).fill('0.03');
+  await constraints.getByLabel('郑州 安全天数', { exact: true }).fill('10');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
   await expect(report).toContainText('输入已变化，需重新评估');
   await expect(report.getByRole('button', { name: '导出产销存结果', exact: true })).toBeDisabled();
@@ -1082,8 +1078,9 @@ test('MPS business-rule evidence produces a real conflict, keeps preview reversi
   }
 });
 
-test('MPS Tab5 reads monthly target facts, aligns versions per base and exports computed SKU days with separate missing rows', async (t) => {
+test('MPS Tab5 reuses a base policy across three months while SKU inventory versions stay diagnostic', async (t) => {
   let failure = false;
+  const annualState = { rows: [] };
   const facts = [
     {
       target_month: '2026-12',
@@ -1138,6 +1135,22 @@ test('MPS Tab5 reads monthly target facts, aligns versions per base and exports 
     ...row,
   }));
   const { page, frame, calls } = await mpsPage(t, config, ({ queryId, parameters }) => {
+    if (queryId === 'facts.history-annual') {
+      const rows = annualState.rows.slice(
+        parameters.offset,
+        parameters.offset + parameters.page_size,
+      );
+      return {
+        rows,
+        returnedColumns: config.queries[queryId].columns,
+        configVersion: 'annual-policy-fixture',
+        totalRowCount: annualState.rows.length,
+        offset: parameters.offset,
+        hasMorePages: false,
+        dataStatus: 'ok',
+        warnings: [],
+      };
+    }
     if (!queryId.startsWith('inventory-targets.')) return emptySource({ queryId });
     if (failure) throw Error('目标来源暂不可用');
     const rows = facts.filter(
@@ -1153,6 +1166,7 @@ test('MPS Tab5 reads monthly target facts, aligns versions per base and exports 
       configVersion: 'targets-v1',
     };
   });
+  annualFixtures.set(frame, annualState);
   await version(frame, '2026-12');
   await upload(
     frame,
@@ -1164,16 +1178,38 @@ test('MPS Tab5 reads monthly target facts, aligns versions per base and exports 
     '选择计划提报CSV',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,产品甲,汤圆,系列,组,100,100\n2026-12,郑州,B,产品乙,汤圆,系列,组,100,100\n2027-01,郑州,A,产品甲,汤圆,系列,组,100,100\n2027-02,郑州,A,产品甲,汤圆,系列,组,100,100',
   );
+  await upload(
+    frame,
+    '设置上一财年发货夹具',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,汤圆,系列,组,100\n2025-12,郑州,B,产品乙,汤圆,系列,组,100',
+  );
+  for (const [month, quantity] of [
+    ['2026-12', 100],
+    ['2027-01', 200],
+    ['2027-02', 300],
+    ['2027-03', 400],
+  ]) {
+    await frame.getByRole('button', { name: `调整 汤圆 ${month}`, exact: true }).click();
+    const form = frame.getByRole('group', { name: '大类需求调整', exact: true });
+    await form.getByLabel('调整需求数量', { exact: true }).fill(String(quantity));
+    await form.getByLabel('调整原因', { exact: true }).fill('基地策略计算测试');
+    await form.getByRole('button', { name: '应用大类调整', exact: true }).click();
+  }
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
   const detail = view.getByRole('table', { name: '目标库存单品明细', exact: true });
-  await expect(detail).toContainText('缺纠偏目标记录');
+  await expect(detail).toContainText('缺基地安全天数策略');
+  await expect(view.getByLabel('郑州 安全天数', { exact: true })).toBeVisible();
   let csv = await download(page, view, '下载目标库存明细');
-  assert.match(csv, /2026-12,郑州,A,产品甲,纠偏,120,10,12,12,月表计算/);
+  assert.match(csv, /2026-12,郑州,A,产品甲,纠偏,120,10,12,,缺输入/);
+  await view.getByLabel('郑州 安全天数', { exact: true }).fill('10');
+  csv = await download(page, view, '下载目标库存明细');
+  assert.match(csv, /2026-12,郑州,A,产品甲,纠偏,120,10,12,10,基地安全天数策略/);
+  await view.locator('summary').filter({ hasText: 'SKU源库存与周转天数对照' }).click();
   assert.match(csv, /2026-12,郑州,B,产品乙,纠偏/);
   await view.getByLabel('目标库存版本', { exact: true }).selectOption('月初');
   csv = await download(page, view, '下载目标库存明细');
-  assert.match(csv, /2026-12,郑州,B,产品乙,月初,300,10,30,30,月表计算/);
+  assert.match(csv, /2026-12,郑州,B,产品乙,月初,300,10,30,10,基地安全天数策略/);
   assert.ok(
     calls.some(
       (call) =>
@@ -1184,10 +1220,20 @@ test('MPS Tab5 reads monthly target facts, aligns versions per base and exports 
   );
   await view.getByLabel('目标库存版本', { exact: true }).selectOption('auto');
   const fullCsv = await download(page, view, '下载三个月完整目标库存');
-  assert.match(fullCsv, /2027-01,郑州,A,产品甲,滚动,220,10,22/);
-  assert.match(fullCsv, /2027-02,郑州,A,产品甲,滚动,50,0/);
+  assert.match(fullCsv, /2027-01,郑州,A,产品甲,滚动,220,10,22,10,基地安全天数策略/);
+  assert.match(fullCsv, /2027-02,郑州,A,产品甲,滚动,50,0,,10,基地安全天数策略/);
   assert.match(fullCsv, /zero-daily-demand/);
-  assert.match(fullCsv, /next-month-demand-missing/);
+  const book = XLSX.read(fullCsv, { type: 'string', raw: true });
+  const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  for (const row of exported) {
+    const index = ['2026-12', '2027-01', '2027-02'].indexOf(row['月份']);
+    assert.equal(Number(row['有效安全天数']), 10);
+    assert.equal(Number(row['下月自然天数']), [31, 28, 31][index]);
+    assert.ok(
+      Math.abs(Number(row['推导目标库存']) - [1000 / 31, 1500 / 28, 2000 / 31][index]) < 1e-8,
+    );
+    assert.equal(row['推导缺项代码'], undefined);
+  }
   await view.getByLabel('目标库存版本', { exact: true }).selectOption('月初');
   await expect
     .poll(() =>
@@ -1205,7 +1251,12 @@ test('MPS Tab5 reads monthly target facts, aligns versions per base and exports 
   await view.getByRole('button', { name: '同步目标库存', exact: true }).click();
   await expect(view).toContainText('数据读取失败');
   csv = await download(page, view, '下载目标库存明细');
-  assert.doesNotMatch(csv, /,300,10,30,30,月表计算/);
+  assert.doesNotMatch(csv, /,300,10,30,/);
+  assert.match(csv, /2026-12,郑州,A,产品甲,月初,,,,10,基地安全天数策略/);
+  await view.getByLabel('郑州 安全天数', { exact: true }).fill('0');
+  await expect(detail.locator('tbody tr').first().locator('td').nth(9)).toHaveText('0');
+  await view.getByLabel('郑州 安全天数', { exact: true }).fill('');
+  await expect(detail).toContainText('缺基地安全天数策略');
 });
 
 test('MPS processing compares both forecast months and persists fixed quantities with current-baseline undo', async (t) => {

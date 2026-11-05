@@ -80,7 +80,7 @@ const reasons = (row, fields) => [
   ...new Set(fields.flatMap((field) => row.missing?.[field] ?? [])),
 ];
 const status = (row, fields) => reasons(row, fields).join('、') || '已计算';
-const sourceText = '①大类需求；②月末结存；③两路占比；④源产能；⑤月表目标与人工覆盖';
+const sourceText = '①大类需求；②月末结存；③两路占比；④源产能；⑤基地安全天数策略与SKU源库存对照';
 
 export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
   const h = react.createElement;
@@ -461,10 +461,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             ? `M+4大类有效需求 × M+3有效拆分系数 = ${value(row.nextMonthDemand)}，仅供目标库存参考，不生成M+4 SKU需求`
             : `下一月有效SKU需求 = ${value(row.nextMonthDemand)}`;
       if (field === 'targetInventory') {
-        const nextDate = new Date(`${row.month}-01T00:00:00Z`);
-        nextDate.setUTCMonth(nextDate.getUTCMonth() + 2);
-        nextDate.setUTCDate(0);
-        expression = `${value(row.safetyDays)} × ${value(row.nextMonthDemand)} ÷ ${nextDate.getUTCDate()} = ${value(row.targetInventory)}`;
+        expression = `${value(row.safetyDays)} × ${value(row.nextMonthDemand)} ÷ ${row.nextMonthDays} = ${value(row.targetInventory)}；基地策略 ${value(row.baseSafetyDays)}天，已采用规则生效后使用有效安全天数`;
       }
       if (field === 'targetInventory' && row.safetyDays === 0)
         expression = '安全天数明确为0，目标库存为0，无需下一月需求';
@@ -1022,11 +1019,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         ]),
       );
     const constraintRows = bases
-      .filter(
-        (sourceBase) => (!base || sourceBase === base) && (!search || sourceBase.includes(search)),
-      )
+      .filter((sourceBase) => !base || sourceBase === base)
       .map((sourceBase) => {
-        const current = result.constraints.safetyDays.find((item) => item.base === sourceBase);
+        const matches = result.constraints.safetyDays.filter((item) => item.base === sourceBase);
+        const current = matches.length === 1 ? matches[0] : null;
         return [
           sourceBase,
           h('input', {
@@ -1056,8 +1052,12 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               });
             },
           }),
-          '本地隔离草稿',
-          '安全天数 × 下一月需求 ÷ 下一月自然日天数',
+          matches.length > 1
+            ? '重复策略，请维护唯一值'
+            : current?.days == null
+              ? '未维护'
+              : '当前评估版本',
+          `${draft.month}评估 · M+1至M+3共用；修改后需重新评估`,
         ];
       });
     const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER) =>
@@ -1617,7 +1617,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 busy: inventoryTargetsBusy,
                 table,
                 card,
-                overrideRows: constraintRows,
+                policyRows: constraintRows,
               }),
               card(
                 '可用生产天数',
@@ -1773,9 +1773,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                   ['项目', '正式来源', '状态'],
                   [
                     [
-                      '目标周转天数',
+                      '基地安全天数策略',
+                      '正式策略来源待确认',
+                      '按基地维护，保存在当前评估版本，三个月共用',
+                    ],
+                    [
+                      'SKU源库存与周转天数对照',
                       'ai_db.agents_scm_goods_inventory_turnover_data_m',
-                      '已接只读月表；人工覆盖保存在当前草稿',
+                      '只读对照，不作为基地安全天数策略',
                     ],
                     ['约束规则', '—', '正式来源未就绪'],
                   ],

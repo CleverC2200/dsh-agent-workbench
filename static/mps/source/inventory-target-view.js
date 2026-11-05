@@ -2,8 +2,7 @@ const text = (value) => (value == null ? '—' : String(value));
 const number = (value) =>
   value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 }).format(value);
 const sources = {
-  source: '月表计算',
-  manual: '基地人工覆盖',
+  'base-policy': '基地安全天数策略',
   rule: '库存下限规则',
   missing: '缺输入',
 };
@@ -17,7 +16,7 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
     busy,
     table,
     card,
-    overrideRows,
+    policyRows,
   }) {
     const [month, setMonth] = react.useState(draft.month);
     const [base, setBase] = react.useState('');
@@ -37,7 +36,12 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
       setPage(0);
     };
     const read = draft.inventoryTargetsRead;
-    const missing = result.rows.filter((row) => row.inventoryTarget.days === null).length;
+    const missing = result.rows.filter((row) => row.safetyDays === null).length;
+    const policyBases = policyRows.map((row) => row[0]);
+    const configured = policyBases.filter((base) => {
+      const matches = result.constraints.safetyDays.filter((row) => row.base === base);
+      return matches.length === 1 && Number.isFinite(matches[0].days) && matches[0].days >= 0;
+    }).length;
     const fields = [
       '月份',
       '基地',
@@ -55,6 +59,10 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
       '源缺项代码',
       '推导依赖缺项',
       '推导缺项代码',
+      '基地策略安全天数',
+      '下一月需求参考',
+      '下月自然天数',
+      '安全天数策略所属月',
     ];
     const values = (row) => [
       row.month,
@@ -79,7 +87,31 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
       row.inventoryTarget.missingCodes?.join('；'),
       row.missing.targetInventory?.join('；'),
       row.targetInventoryMissing?.join('；'),
+      row.baseSafetyDays,
+      row.nextMonthDemand,
+      row.nextMonthDays,
+      draft.month,
     ];
+    const mainColumns = [
+      '月份',
+      '基地',
+      '产品编码',
+      '产品名称',
+      '基地策略安全天数',
+      '有效安全天数',
+      '天数来源',
+      '下一月需求参考',
+      '下月自然天数',
+      '推导目标库存',
+      '推导依赖缺项',
+    ];
+    const numericColumns = new Set([
+      '基地策略安全天数',
+      '有效安全天数',
+      '下一月需求参考',
+      '下月自然天数',
+      '推导目标库存',
+    ]);
     const sourceColumns = [
       '月份',
       '基地',
@@ -122,38 +154,19 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
         react.Fragment,
         null,
         h(
+          'p',
+          { className: 'wf-note', role: 'status' },
+          `基地安全天数已维护${configured}/${policyBases.length}个基地；当前${missing}个基地单品月份缺有效安全天数。`,
+        ),
+        table('基地安全天数策略', ['基地', '安全天数（天）', '维护状态', '适用范围'], policyRows),
+        h(
+          'p',
+          { className: 'wf-note' },
+          '安全天数按当前评估版本、基地维护，同一策略用于M+1至M+3。目标库存＝有效安全天数×下月需求÷下月自然天数。留空表示待维护，明确填0时目标库存为0；已采用的库存下限规则仍参与计算。',
+        ),
+        h(
           'div',
           { className: 'wf-actions' },
-          h(
-            'label',
-            null,
-            '目标库存版本 ',
-            h(
-              'select',
-              {
-                'aria-label': '目标库存版本',
-                value: version,
-                onChange: (event) => {
-                  setPage(0);
-                  update({
-                    constraints: {
-                      ...draft.constraints,
-                      safetyDays: draft.constraints?.safetyDays ?? [],
-                      rules: draft.constraints?.rules ?? { local: [] },
-                      targetVersion: event.target.value,
-                    },
-                  });
-                },
-              },
-              [
-                ['auto', '自动：纠偏 → 月初 → 滚动'],
-                ['纠偏', '纠偏版'],
-                ['月初', '月初版'],
-                ['滚动', '滚动版'],
-              ].map(([value, title]) => h('option', { key: value, value }, title)),
-            ),
-          ),
-          h('button', { onClick: sync, disabled: busy }, busy ? '读取目标库存中…' : '同步目标库存'),
           h(
             'button',
             {
@@ -188,55 +201,38 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
             '下载三个月完整目标库存',
           ),
         ),
-        h(
-          'p',
-          { className: 'wf-note', role: 'status' },
-          read?.status === 'ready'
-            ? `来源：ai_db.agents_scm_goods_inventory_turnover_data_m；已读取${draft.inventoryTargets?.length ?? 0}条版本记录，当前计算范围有${missing}个基地单品月份缺源天数。`
-            : read?.error ||
-                (busy ? '正在读取目标库存，旧来源暂不参与计算。' : '目标库存尚未同步。'),
-        ),
-        h(
-          'p',
-          { className: 'wf-note' },
-          '按基地、单品、月份和版本匹配；自动选版在同基地同月统一生效，缺单品不跨版本补齐。源目标周转天数＝最终目标库存÷日均计划需求；同键多行数值完整且一致时去重采用，不累加；数值冲突、日均需求为空或为0时保留缺项。',
-        ),
         table(
-          '目标库存来源汇总',
+          '三个月目标库存汇总',
           [
             '基地',
             '月份',
-            '有效版本',
-            '已知目标库存',
-            '已知日均计划需求',
-            '已知配对周转天数',
-            '源缺项单品',
+            '有效安全天数',
+            '下月需求已知小计',
+            '下月自然天数',
+            '推导目标库存已知小计',
+            '缺下月需求单品',
             '推导库存缺项单品',
           ],
           bases.flatMap((base) =>
             result.months.slice(0, 3).map((month) => {
               const group = result.rows.filter((row) => row.base === base && row.month === month);
-              const known = group.filter((row) => row.inventoryTarget.days !== null);
-              const targetRows = group.filter((row) => row.inventoryTarget.finalTarget !== null);
-              const target = targetRows.length
-                ? targetRows.reduce((sum, row) => sum + row.inventoryTarget.finalTarget, 0)
-                : null;
-              const pairedTarget = known.length
-                ? known.reduce((sum, row) => sum + row.inventoryTarget.finalTarget, 0)
-                : null;
-              const daily = known.length
-                ? known.reduce((sum, row) => sum + row.inventoryTarget.dailyDemand, 0)
-                : null;
+              const days = [...new Set(group.map((row) => row.safetyDays))];
+              const demand = group.filter((row) => row.nextMonthDemand !== null);
+              const targets = group.filter((row) => row.targetInventory !== null);
               return [
                 base,
                 month,
-                [...new Set(group.map((row) => row.inventoryTarget.version).filter(Boolean))].join(
-                  '、',
-                ) || '—',
-                number(target),
-                number(daily),
-                number(daily > 0 ? pairedTarget / daily : null),
-                group.length - known.length,
+                days.length === 1 ? number(days[0]) : '按已采用规则，见单品明细',
+                number(
+                  demand.length ? demand.reduce((sum, row) => sum + row.nextMonthDemand, 0) : null,
+                ),
+                group[0]?.nextMonthDays ?? '—',
+                number(
+                  targets.length
+                    ? targets.reduce((sum, row) => sum + row.targetInventory, 0)
+                    : null,
+                ),
+                group.length - demand.length,
                 group.filter((row) => row.targetInventory === null).length,
               ];
             }),
@@ -245,7 +241,7 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
         h(
           'p',
           { className: 'wf-note' },
-          '已知目标库存包含源目标有效但日均需求无效的单品；日均需求与周转天数只统计有效配对，周转天数按配对目标库存÷配对日均需求计算。源值有效与推导依赖缺失分别核对。推导目标库存＝有效安全天数×下月需求÷下月自然日天数。',
+          '汇总为已知小计，缺项数量单列。M+1使用M+2需求，M+2使用M+3需求，M+3使用M+4大类及拆分系数形成的库存参考；M+4不生成第四个月排产。',
         ),
         h(
           'div',
@@ -283,14 +279,15 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
         ),
         table(
           '目标库存单品明细',
-          fields,
-          rows
-            .slice(page * 25, (page + 1) * 25)
-            .map((row) =>
-              values(row).map((value, index) =>
-                (index >= 5 && index <= 8) || index === 10 ? number(value) : text(value),
-              ),
-            ),
+          mainColumns,
+          rows.slice(page * 25, (page + 1) * 25).map((row) => {
+            const record = Object.fromEntries(
+              fields.map((field, index) => [field, values(row)[index]]),
+            );
+            return mainColumns.map((column) =>
+              numericColumns.has(column) ? number(record[column]) : text(record[column]),
+            );
+          }),
         ),
         h(
           'div',
@@ -306,11 +303,55 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
         h(
           'details',
           { className: 'wf-disclosure' },
-          h('summary', null, `源记录与业务键核对（${sourceRows.length}条）`),
+          h('summary', null, `SKU源库存与周转天数对照（${sourceRows.length}条）`),
+          h(
+            'div',
+            { className: 'wf-actions' },
+            h(
+              'label',
+              null,
+              '源库存版本 ',
+              h(
+                'select',
+                {
+                  'aria-label': '目标库存版本',
+                  value: version,
+                  onChange: (event) => {
+                    update({
+                      constraints: {
+                        ...draft.constraints,
+                        safetyDays: draft.constraints?.safetyDays ?? [],
+                        rules: draft.constraints?.rules ?? { local: [] },
+                        targetVersion: event.target.value,
+                      },
+                    });
+                  },
+                },
+                [
+                  ['auto', '自动：纠偏 → 月初 → 滚动'],
+                  ['纠偏', '纠偏版'],
+                  ['月初', '月初版'],
+                  ['滚动', '滚动版'],
+                ].map(([value, title]) => h('option', { key: value, value }, title)),
+              ),
+            ),
+            h(
+              'button',
+              { onClick: sync, disabled: busy },
+              busy ? '读取目标库存中…' : '同步目标库存',
+            ),
+          ),
+          h(
+            'p',
+            { className: 'wf-note', role: 'status' },
+            read?.status === 'ready'
+              ? `对照来源：ai_db.agents_scm_goods_inventory_turnover_data_m；已读取${draft.inventoryTargets?.length ?? 0}条版本记录。`
+              : read?.error || (busy ? '正在读取SKU源库存对照。' : 'SKU源库存对照尚未同步。'),
+          ),
           h(
             'p',
             { className: 'wf-note' },
-            '保留源月份、基地、SKU及全部版本，用于核对错键、缺值和冲突。源记录有效但下月需求缺失时，单品明细分别显示源值和推导缺项。',
+            '源最终目标库存÷源日均需求是SKU周转天数，仅供对照，不代替基地安全天数策略。保留各月源记录、版本和缺项；后月没有源库存记录，不阻断已有基地策略计算目标库存。',
           ),
           table(
             '目标库存源记录',
@@ -350,17 +391,6 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
               '下载完整目标源记录',
             ),
           ),
-        ),
-        h(
-          'details',
-          null,
-          h('summary', null, '基地人工覆盖（可选）'),
-          h(
-            'p',
-            { className: 'wf-note' },
-            '留空时使用各单品源目标周转天数。填值将覆盖该基地当前评估各月的安全天数，库存下限规则仍有效；不会改写源月表。单品特例可在约束列表维护。',
-          ),
-          table('本地安全天数', ['基地', '人工覆盖天数', '来源', '计算口径'], overrideRows),
         ),
       ),
     );
