@@ -8,7 +8,7 @@ import {
 } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 import { performanceStyleVersion } from '../prototypes/inventory-orderworkbench/performance-rules.mjs';
 
-test('built page uses the standard card style, retains source provenance and clears on identity change', async (t) => {
+test('built page rejects saved historical presentation, shows real stock calculation and clears on identity change', async (t) => {
   const browser = await chromium.launch({
     headless: true,
     channel: process.env.ORDER_BROWSER_CHANNEL || undefined,
@@ -51,7 +51,12 @@ test('built page uses the standard card style, retains source provenance and cle
   const savedReport = {
     schemaVersion: 1,
     edits: {},
-    presentation: { lazy: false, performanceStyleVersion, shippableReferenceVersion: 1, cards: [] },
+    presentation: {
+      lazy: false,
+      performanceStyleVersion,
+      shippableReferenceVersion: 2,
+      cards: [{ key: '周转天数', value: '14.9' }],
+    },
     facts: {
       complete: true,
       source: 'gea-governed-sql',
@@ -104,13 +109,10 @@ test('built page uses the standard card style, retains source provenance and cle
     );
   }, savedReport);
   const card = page.locator('[data-metric-question="周转天数"]');
-  await expect(card.locator('.wb-kpi-main strong')).toHaveText('14.9');
+  await expect(card.locator('.wb-kpi-main strong')).toHaveText('15.6');
   await expect(card.locator('.wb-kpi-state')).toHaveText('严重');
-  await expect(card.locator('.wb-kpi-foot')).toHaveText('本周可发货天数 14.9天');
-  await expect(card.locator('.wb-kpi-foot')).toHaveAttribute(
-    'title',
-    /非实时计算、非已验证BI原始输入/,
-  );
+  await expect(card.locator('.wb-kpi-foot')).toHaveText('本周可发货天数 15.6天');
+  await expect(card).not.toContainText('14.9');
   await card.screenshot({
     path: process.env.ORDER_REFERENCE_SCREENSHOT || '.runtime/historical-reference.png',
   });

@@ -181,7 +181,8 @@ test('director historical comparisons use the matching period owner, not the lat
     (row) => row[0] === '甲',
   );
   assert.equal(row[9].text, '10.00');
-  assert.equal(row[10], '—');
+  assert.equal(row[10].text, '—');
+  assert.match(row[10].title, /比较期.*stock/);
 });
 test('base and item formulas retain documented weights instead of fitting the screenshot', () => {
   const p = stockPeriod([{ ...stock, transfer_plan: 620 }]);
