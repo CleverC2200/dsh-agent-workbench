@@ -241,6 +241,12 @@ async function fixture(t, platform = 'darwin', conversation = false, identity, u
         await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
         return;
       }
+      if (action === 'company-prepare') {
+        assert.deepEqual(route.request().postDataJSON(), { desktopVersion: '0.1.60' });
+        await page.evaluate(() => {
+          window.companyPrepareClicks = (window.companyPrepareClicks ?? 0) + 1;
+        });
+      }
       if (action === 'check') phase = 'available';
       if (action === 'update-all') {
         phase = 'installing';
@@ -388,8 +394,9 @@ test('Windows uses one update entry and reopens the shared panel without repeati
   await expect(panel.getByRole('heading', { name: '公司插件', exact: true })).toBeVisible();
   await expect(panel).toContainText('0.1.59');
   await expect(panel).toContainText('0.1.60');
-  await panel.getByRole('button', { name: '下载客户端更新', exact: true }).click();
-  assert.equal(await page.evaluate(() => window.desktopUpdateClicks), 1);
+  await panel.getByRole('button', { name: '更新客户端及插件', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.companyPrepareClicks ?? 0)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.desktopUpdateClicks ?? 0)).toBe(1);
   assert.equal(await page.evaluate(() => window.pluginUpdateClicks ?? 0), 0);
   await panel.getByRole('button', { name: '重启应用以启用插件', exact: true }).click();
   assert.equal(await page.evaluate(() => window.pluginRestartClicks), 1);
@@ -460,7 +467,13 @@ test('update panel keeps independent progress and failures and releases observat
     panel.getByRole('button', { name: '安装客户端更新并重启', exact: true }),
   ).toBeEnabled();
   await panel.getByRole('button', { name: '安装客户端更新并重启', exact: true }).click();
-  assert.equal(await page.evaluate(() => window.desktopUpdateClicks), 1);
+  assert.equal(await page.evaluate(() => window.desktopUpdateClicks ?? 0), 0);
+  await expect(panel.getByRole('alert').filter({ hasText: '统一更新准备失败。' })).toBeVisible();
+  await page.evaluate(() => {
+    window.pluginFixtureError = false;
+  });
+  await panel.getByRole('button', { name: '安装客户端更新并重启', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.desktopUpdateClicks ?? 0)).toBe(1);
   await page.evaluate(() => {
     window.pluginFixtureError = false;
     window.pluginFixturePhase = 'downloading';
@@ -483,6 +496,7 @@ test('update panel keeps independent progress and failures and releases observat
 
 test('plugin update continues while its panel is closed and exposes no invented percent', async (t) => {
   const page = await fixture(t, 'win32', true, undefined, true);
+  await page.evaluate(() => window.emitNative({ phase: 'idle' }));
   await page.getByRole('button', { name: '更新', exact: true }).click();
   const panel = page.getByRole('dialog');
   await page.evaluate(() => {
@@ -516,12 +530,8 @@ test('plugin update continues while its panel is closed and exposes no invented 
       path: resolve(process.env.UPDATE_INDICATOR_EVIDENCE, 'unified-narrow.png'),
     });
   await page.keyboard.press('Escape');
-  assert.equal(
-    await page
-      .getByRole('button', { name: '更新', exact: true })
-      .evaluate((node) => node === document.activeElement),
-    true,
-  );
+  await expect(panel).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '更新', exact: true })).toBeFocused();
 });
 
 for (const mode of ['web', 'version-failed'])
