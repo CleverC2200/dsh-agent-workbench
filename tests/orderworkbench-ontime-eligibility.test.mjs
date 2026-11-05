@@ -53,7 +53,7 @@ test('on-time exclusions and shipment evidence do not alter fulfillment traces',
     assert.equal(db.prepare(translate(traceHeadersSql)).all().length, 7);
     db.exec(`CREATE TABLE agents_scm_execute_detail_hourly_d(cust_order_no,cust_code,material_code,executeorderno,belong_base,detailstatus,is_stat,product_item);
       CREATE TABLE agents_scm_execute_detail_d AS SELECT * FROM agents_scm_execute_detail_hourly_d;
-      
+
       INSERT INTO agents_scm_execute_detail_hourly_d SELECT executeorderno,'C','S',executeorderno,'华东',10,'1','水饺' FROM agents_scm_order_trace_final_di;
       ALTER TABLE agents_scm_execute_detail_hourly_d ADD COLUMN is_virtual;
       ALTER TABLE agents_scm_execute_detail_d ADD COLUMN is_virtual;`);
