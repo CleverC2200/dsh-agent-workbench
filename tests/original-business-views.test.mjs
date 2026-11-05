@@ -19,23 +19,28 @@ const views = await import(
 );
 const config = async (id) =>
   JSON.parse(await readFile(`business/inventory-${id}/sql.config.json`, 'utf8'));
-test('FC replenishment keeps every original business column in its original order', async () => {
+test('FC replenishment prioritizes requested stock and order columns while retaining all original metrics', async () => {
   const c = await config('fc');
+  const leading = ['产品编码', '产品名称', '现存量', '可用量', '占单量', '需求量', '调拨量'];
+  const originalLabels = Object.values(views.REPLENISHMENT_COLUMNS).map(
+    (label) =>
+      ({
+        现库存: '现存量',
+        可用库存: '可用量',
+        备单中量: '需求量',
+        调拨中: '调拨量',
+        本月调拨未发: '当前调拨备单',
+        本月调拨在途: '当前调拨在途',
+        安全库存天数: '目标覆盖天数',
+        计划来源: '取数来源',
+      })[label] ?? label,
+  );
   assert.deepEqual(
     views
       .originalFcView(c, 'replenishment')
       .columns.map((c) => c.label)
       .filter((label) => !['上月实际出库量', '本月日均出库量', '分仓', '分仓编码'].includes(label)),
-    Object.values(views.REPLENISHMENT_COLUMNS).map(
-      (label) =>
-        ({
-          备单中量: '客户订单需求',
-          本月调拨未发: '当前调拨备单',
-          本月调拨在途: '当前调拨在途',
-          安全库存天数: '目标覆盖天数',
-          计划来源: '取数来源',
-        })[label] ?? label,
-    ),
+    [...leading, ...originalLabels.filter((label) => !leading.includes(label))],
   );
   const labels = views.originalFcView(c, 'replenishment').columns.map((column) => column.label);
   assert.deepEqual(labels.slice(-2), ['上月实际出库量', '本月日均出库量']);
