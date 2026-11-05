@@ -377,6 +377,7 @@ export function metricState(name, value, { base = '' } = {}) {
   if (name === '订单满足率') return value > 95 ? '健康' : value >= 90 ? '预警' : '严重';
   if (name === '准交率') return value > 98.5 ? '健康' : value >= 94 ? '预警' : '严重';
   if (name === '周转天数') return shippableDaysState(value, base);
+  if (name === '货龄（>60天库存占比）') return '当前范围';
   return '判定标准未定义';
 }
 export function metricDelta(current, previous, name) {
