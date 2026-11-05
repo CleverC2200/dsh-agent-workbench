@@ -34,6 +34,96 @@ const bundle = await build({
 });
 const js = bundle.outputFiles.find((f) => f.path.endsWith('.js')).text;
 const css = bundle.outputFiles.find((f) => f.path.endsWith('.css'))?.text ?? '';
+test('confirmation keeps the replenishment list order and quantities for the same warehouse and SKU', async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const source = [
+    { sku: '10000298', recommended_qty: 2 },
+    { sku: '10006711', recommended_qty: 70 },
+    { sku: '10006712', recommended_qty: 80 },
+  ];
+  await page.route('http://127.0.0.1:19495/**', async (route) => {
+    if (route.request().method() !== 'POST')
+      return route.fulfill({
+        contentType: 'text/html',
+        body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
+      });
+    const { queryId: id, parameters: values } = route.request().postDataJSON();
+    const q = config.queries[id];
+    assert.ok(q, id);
+    let rows = [];
+    if (id === 'branch-warehouse.directory.count') rows = [{ total: 1 }];
+    else if (id === 'branch-warehouse.directory')
+      rows = [{ warehouse_code: 'A110', warehouse_name: '沈阳分仓', base: '郑州' }];
+    else if (id.startsWith('source.')) rows = [{ day: '2026-11-04' }];
+    else if (
+      ['replenishment.detail.atomic', 'replenishment-confirmation.detail.atomic'].includes(id)
+    ) {
+      const ordered = [...source].sort((a, b) =>
+        values.sort_field === 'recommended_qty'
+          ? (values.sort_direction === 'desc' ? -1 : 1) * (a.recommended_qty - b.recommended_qty)
+          : a.sku.localeCompare(b.sku),
+      );
+      rows = ordered.map((row) => ({
+        ...Object.fromEntries(q.resultColumns.map((key) => [key, null])),
+        ...row,
+        warehouse_code: 'A110',
+        warehouse_name: '沈阳分仓',
+        material_name: `测试商品${row.sku}`,
+        page_scope_total: source.length,
+        page_row_present: 1,
+      }));
+    } else if (id.endsWith('.count') || id.endsWith('_count')) rows = [{ total: 0 }];
+    else if (!['summary.snapshot', 'summary.bootstrap'].includes(id))
+      rows = [Object.fromEntries(q.resultColumns.map((key) => [key, 0]))];
+    return route.fulfill({
+      json: {
+        rows,
+        configVersion: 'fixture',
+        returnedColumns: q.resultColumns,
+        rejectedColumns: [],
+      },
+    });
+  });
+  await page.goto('http://127.0.0.1:19495/');
+  await page.getByRole('button', { name: '选择分仓', exact: true }).click();
+  await page.locator('[role=option][data-value="A110"]').click();
+  await page.getByRole('checkbox', { name: '需补货', exact: true }).check();
+  const list = page.locator('table.replenishment-table');
+  const listQuantities = () =>
+    list
+      .getByRole('spinbutton')
+      .evaluateAll((inputs) =>
+        inputs.map((input) => [input.getAttribute('aria-label'), input.value]),
+      );
+  await expect(list.getByRole('spinbutton').first()).toHaveValue('80');
+  const before = await listQuantities();
+  await page.getByRole('button', { name: '提交', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '确认补货订单', exact: true });
+  await expect(dialog.getByRole('spinbutton')).toHaveCount(3);
+  const confirmed = await dialog
+    .getByRole('spinbutton')
+    .evaluateAll((inputs) =>
+      inputs.map((input) => [input.getAttribute('aria-label'), input.value]),
+    );
+  assert.deepEqual(confirmed, before, 'opening confirmation must preserve row order and quantity');
+  await expect(dialog.getByRole('columnheader', { name: '产品名称', exact: true })).toBeVisible();
+  await expect(dialog.locator('tbody > tr').first()).toContainText('测试商品10006712');
+  for (const width of [640, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = await dialog.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
+  }
+  await dialog.getByRole('spinbutton', { name: '10006712实际补货量' }).fill('95');
+  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(list.getByRole('spinbutton', { name: '10006712实际补货量' })).toHaveValue('95');
+  await page.getByRole('button', { name: '提交', exact: true }).click();
+  await expect(dialog.getByRole('spinbutton', { name: '10006712实际补货量' })).toHaveValue('95');
+  assert.deepEqual(errors, []);
+});
 test('FC warehouse selector scopes cards, tabs and reset; returning to all does not force cache invalidation', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());

@@ -1,6 +1,6 @@
 import type { FcWarehouse } from './fc-warehouse-directory';
 import { PlanningTable } from './fc/components/planning-settings';
-import { projectFcPlannedRows } from './fc-planned-page';
+import { projectFcPlannedRows, sortFcReplenishmentRows } from './fc-planned-page';
 import {
   fcReplenishmentDisplay,
   fcAgingDisplay,
@@ -644,7 +644,7 @@ export function FcConfiguredList(
         setIncompletePreviewCount(candidates.length - selected.length);
         if (mode === 'export' && selected.some((row) => String(row.warehouse_code) !== warehouse))
           throw Error('返回数据不属于所选分仓，请重新读取');
-        setExportRows(selected);
+        setExportRows(sortFcReplenishmentRows(selected, scope.input));
         setPreviewState('ready');
       } catch (error) {
         if (!signal.aborted) setPreviewState('failed');
@@ -1561,6 +1561,7 @@ export function FcConfiguredList(
                   <thead>
                     <tr>
                       <th>分仓/SKU</th>
+                      <th>产品名称</th>
                       <th>建议</th>
                       <th>实际补货量</th>
                       <th>调整原因</th>
@@ -1575,6 +1576,7 @@ export function FcConfiguredList(
                           <td>
                             {text(row.warehouse_name)} / {text(row.sku)}
                           </td>
+                          <td>{text(row.material_name)}</td>
                           <td>{numeric(row.recommended_qty)}</td>
                           <td>{renderCell(row, { field: 'missing_actualQty' })}</td>
                           <td>{renderCell(row, { field: 'missing_reason' })}</td>

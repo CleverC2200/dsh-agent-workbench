@@ -53,17 +53,23 @@ export function projectFcPlannedRows(
       ].some((key) => (knownNumber(row[key]) ?? 0) > 0)
     );
   });
+  return sortFcReplenishmentRows(filtered, input, viewId);
+}
+
+/** Confirmation reads may use a materialized key order; present them in the list's order. */
+export function sortFcReplenishmentRows(rows: FcRow[], input: FactInput, viewId = 'replenishment') {
+  const filters = input.filters ?? {};
+  const query = filters.search?.trim() ?? '';
+  const mode = filters.list_mode ?? 'all';
   const field =
-    !query && viewId === 'replenishment' && mode === 'urgent'
+    filters.sort_field ??
+    (!query && viewId === 'replenishment' && mode === 'urgent'
       ? 'current_order_shortage'
-      : !query && viewId === 'replenishment' && mode === 'recommended'
+      : viewId === 'replenishment'
         ? 'recommended_qty'
-        : (filters.sort_field ?? (viewId === 'replenishment' ? 'recommended_qty' : 'sku'));
-  const direction =
-    !query && viewId === 'replenishment' && ['urgent', 'recommended'].includes(mode)
-      ? 'desc'
-      : (filters.sort_direction ?? (viewId === 'replenishment' ? 'desc' : 'asc'));
-  return filtered.sort((a, b) => {
+        : 'sku');
+  const direction = filters.sort_direction ?? (viewId === 'replenishment' ? 'desc' : 'asc');
+  return [...rows].sort((a, b) => {
     const left = a[field],
       right = b[field];
     if (left == null) return right == null ? tie(a, b) : 1;
