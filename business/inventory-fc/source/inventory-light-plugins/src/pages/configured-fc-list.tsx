@@ -1557,11 +1557,22 @@ export function FcConfiguredList(
                   : ''}
               </p>
               <div className="table-scroll">
-                <table className="data-table">
+                <table
+                  className={`data-table${dialog === 'export' ? ' fc-confirmation-table' : ''}`}
+                >
+                  {dialog === 'export' && (
+                    <colgroup>
+                      <col className="fc-confirmation-sku" />
+                      <col />
+                      <col className="fc-confirmation-suggestion" />
+                      <col className="fc-confirmation-quantity" />
+                      <col className="fc-confirmation-reason" />
+                    </colgroup>
+                  )}
                   <thead>
                     <tr>
-                      <th>分仓/SKU</th>
-                      <th>产品名称</th>
+                      <th>{dialog === 'export' ? 'SKU 编码' : '分仓/SKU'}</th>
+                      <th>SKU 名称</th>
                       <th>建议</th>
                       <th>实际补货量</th>
                       <th>调整原因</th>
@@ -1574,9 +1585,12 @@ export function FcConfiguredList(
                       .map((row) => (
                         <tr key={rowKey(row)}>
                           <td>
-                            {text(row.warehouse_name)} / {text(row.sku)}
+                            {dialog !== 'export' && `${text(row.warehouse_name)} / `}
+                            {text(row.sku)}
                           </td>
-                          <td>{text(row.material_name)}</td>
+                          <td className="fc-confirmation-name" title={text(row.material_name)}>
+                            {text(row.material_name)}
+                          </td>
                           <td>{numeric(row.recommended_qty)}</td>
                           <td>{renderCell(row, { field: 'missing_actualQty' })}</td>
                           <td>{renderCell(row, { field: 'missing_reason' })}</td>

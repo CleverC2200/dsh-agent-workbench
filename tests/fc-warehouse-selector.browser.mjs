@@ -110,18 +110,26 @@ test('confirmation keeps the replenishment list order and quantities for the sam
       inputs.map((input) => [input.getAttribute('aria-label'), input.value]),
     );
   assert.deepEqual(confirmed, before, 'opening confirmation must preserve row order and quantity');
-  await expect(dialog.getByRole('columnheader', { name: '产品名称', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('columnheader', { name: 'SKU 名称', exact: true })).toBeVisible();
+  await expect(dialog.locator('tbody > tr').first().locator('td').first()).toHaveText('10006712');
   await expect(dialog.locator('tbody > tr').first()).toContainText('测试商品10006712');
   for (const width of [640, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     const bounds = await dialog.boundingBox();
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
   }
+  const reasonWidth = await dialog
+    .getByRole('textbox', { name: '10006712调整原因' })
+    .evaluate((input) => input.getBoundingClientRect().width);
+  assert.ok(reasonWidth <= 108, 'reason input stays compact');
+  await page.screenshot({ path: '/tmp/fc-confirmation-compact-desktop.png' });
+  await dialog.getByRole('textbox', { name: '10006712调整原因' }).fill('手工调整');
   await dialog.getByRole('spinbutton', { name: '10006712实际补货量' }).fill('95');
   await dialog.getByRole('button', { name: '取消', exact: true }).click();
   await expect(list.getByRole('spinbutton', { name: '10006712实际补货量' })).toHaveValue('95');
   await page.getByRole('button', { name: '提交', exact: true }).click();
   await expect(dialog.getByRole('spinbutton', { name: '10006712实际补货量' })).toHaveValue('95');
+  await expect(dialog.getByRole('textbox', { name: '10006712调整原因' })).toHaveValue('手工调整');
   assert.deepEqual(errors, []);
 });
 test('FC warehouse selector scopes cards, tabs and reset; returning to all does not force cache invalidation', async (t) => {

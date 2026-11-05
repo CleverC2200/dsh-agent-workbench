@@ -4773,6 +4773,31 @@ body,
 .fc-workflow-dialog .data-table {
   min-width: 540px;
 }
+.fc-workflow-dialog .fc-confirmation-table {
+  min-width: 660px;
+  table-layout: fixed;
+}
+.fc-confirmation-table .fc-confirmation-sku {
+  width: 110px;
+}
+.fc-confirmation-table .fc-confirmation-suggestion {
+  width: 72px;
+}
+.fc-confirmation-table .fc-confirmation-quantity {
+  width: 116px;
+}
+.fc-confirmation-table .fc-confirmation-reason {
+  width: 128px;
+}
+.fc-confirmation-table .fc-confirmation-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fc-confirmation-table .fc-reason-input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 108px;
+}
 .fc-workflow-dialog select {
   height: 36px;
   padding: 0 8px;
