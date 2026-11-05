@@ -183,6 +183,11 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         ),
       [current, draft.sourceChecks, draft.products, draft.productsRead, draft.pull, kind],
     );
+    const basicAnomalies = checks.details.filter((row) => row['原因'] || row['缺项原因']);
+    const basicDetails = [
+      ...basicAnomalies,
+      ...checks.details.filter((row) => !row['原因'] && !row['缺项原因']),
+    ];
     const historical =
       current && kind === 'parameters'
         ? draft.historicalIndicators.periods.flatMap((period) => period.rows)
@@ -494,7 +499,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   setPage(0);
                 },
               },
-              `查看异常与来源明细（${checks.details.length}条）`,
+              `查看异常与来源明细（${basicAnomalies.length}条异常，共${checks.details.length}条）`,
             ),
             h(
               'button',
@@ -566,7 +571,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             h(
               'p',
               null,
-              `${calculated.recent[0]}至${endMonth}；共${checks.details.length}条，预览每页25条，完整下载包含全部记录及读取失败。`,
+              `${calculated.recent[0]}至${endMonth}；共${checks.details.length}条，其中异常${basicAnomalies.length}条，异常优先。预览每页25条，完整下载包含全部记录及读取失败。`,
             ),
             table(
               [
@@ -583,7 +588,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                 '重复键条数',
                 '原因',
               ],
-              checks.details.slice(page * 25, (page + 1) * 25),
+              basicDetails.slice(page * 25, (page + 1) * 25),
             ),
             h(
               'button',

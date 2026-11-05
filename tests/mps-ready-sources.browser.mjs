@@ -694,24 +694,43 @@ test('同比缺一年时预览按两年计算并列出有效年份', async (t) =
 });
 
 test('basic source anomalies keep known BI quantities and export every row while the plan dataset is denied', async (t) => {
+  const currentProducts = [
+    ...products,
+    ...Array.from({ length: 30 }, (_, index) =>
+      record('products.detail', {
+        product_item: 'G',
+        material_code: `IN-${index + 1}`,
+        material_name: `池内产品${index + 1}`,
+        sub_category: '汤圆',
+        series: '系列甲',
+        source_rows: 1,
+      }),
+    ),
+  ];
   const { page, frame } = await mpsPage(t, config, (query) => {
     if (query.queryId.startsWith('facts.plan-quantity'))
       throw Error('AUTHORIZATION_REWRITE：数据表不在当前租户启用数据集范围内');
-    if (query.queryId !== 'facts.history') return fixture(query);
-    const rows = Array.from({ length: 31 }, (_, index) =>
-      record('facts.history', {
-        'agents_scm_cust_deliv_daily_di.belong_base': '郑州',
-        'agents_scm_cust_deliv_daily_di.material_code': index === 0 ? 'A' : `OUT-${index}`,
-        'agents_scm_cust_deliv_daily_di.material_name': `来源产品${index}`,
-        'agents_scm_cust_deliv_daily_di.act_dl_qty_total': index === 0 ? 0 : index,
-        'agents_scm_cust_deliv_daily_di.act_dl_qty_all_total': index,
-      }),
-    );
+    if (!query.queryId.startsWith('products.') && query.queryId !== 'facts.history')
+      return fixture(query);
+    const rows = query.queryId.startsWith('products.')
+      ? currentProducts
+      : Array.from({ length: 32 }, (_, index) =>
+          record('facts.history', {
+            'agents_scm_cust_deliv_daily_di.belong_base': '郑州',
+            'agents_scm_cust_deliv_daily_di.material_code':
+              index === 0 ? 'A' : index < 31 ? `IN-${index}` : 'OUT-31',
+            'agents_scm_cust_deliv_daily_di.material_name': `来源产品${index}`,
+            'agents_scm_cust_deliv_daily_di.act_dl_qty_total': index === 0 ? 0 : index,
+            'agents_scm_cust_deliv_daily_di.act_dl_qty_all_total': index,
+          }),
+        );
     return {
-      rows,
-      returnedColumns: config.queries['facts.history'].columns,
+      rows: query.queryId.endsWith('.count') ? [{ total: rows.length }] : rows,
+      returnedColumns: query.queryId.endsWith('.count')
+        ? ['total']
+        : config.queries[query.queryId].columns,
       configVersion: 'denied-plan-fixture',
-      totalRowCount: 31,
+      totalRowCount: rows.length,
       offset: 0,
       hasMorePages: false,
       dataStatus: 'ok',
@@ -724,17 +743,33 @@ test('basic source anomalies keep known BI quantities and export every row while
   const category = source
     .locator('tbody tr')
     .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
-  await expect(category.locator('td').nth(2)).toHaveText('0');
+  await expect(category.locator('td').nth(2)).toHaveText('1,395');
+  await source
+    .getByRole('button', { name: '查看异常与来源明细（6条异常，共99条）', exact: true })
+    .click();
+  const dialog = frame.getByRole('dialog', { name: '基础核对异常与来源明细', exact: true });
+  await expect(dialog.locator('tbody tr')).toHaveCount(25);
+  await expect(dialog).toContainText('2026-06至2026-08');
+  await expect(dialog).toContainText('异常6条');
+  await expect(dialog.locator('tbody tr').nth(0)).toContainText('读取失败');
+  await expect(dialog.locator('tbody tr').nth(3)).toContainText('OUT-31');
+  await expect(dialog.locator('tbody tr').nth(3)).toContainText('不在当前产品池');
+  await expect(dialog.locator('tbody tr').nth(6).locator('td').nth(3)).toHaveText('A');
+  await expect(dialog.locator('tbody tr').nth(7).locator('td').nth(3)).toHaveText('IN-1');
+  await dialog.getByRole('button', { name: '下一页来源明细', exact: true }).click();
+  await expect(dialog.locator('tbody tr').nth(0).locator('td').nth(3)).toHaveText('IN-19');
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   const pending = page.waitForEvent('download');
   await source.getByRole('button', { name: '下载完整来源明细', exact: true }).click();
   const csv = await mpsDownloadText(await (await pending).path());
   const book = XLSX.read(csv, { type: 'string', raw: true });
   const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
-  assert.equal(rows.length, 96);
+  assert.equal(rows.length, 99);
   assert.equal(rows.filter((row) => row['来源'] === '计划量').length, 3);
-  assert.ok(rows.some((row) => row['产品编码'] === 'OUT-30' && row['原因'] === '不在当前产品池'));
-  await source.getByRole('button', { name: '查看异常与来源明细（96条）', exact: true }).click();
-  const dialog = frame.getByRole('dialog', { name: '基础核对异常与来源明细', exact: true });
-  await expect(dialog.locator('tbody tr')).toHaveCount(25);
-  await expect(dialog).toContainText('2026-06至2026-08');
+  assert.equal(rows[0]['产品编码'], 'A');
+  assert.equal(rows[1]['产品编码'], 'IN-1');
+  assert.equal(
+    rows.filter((row) => row['产品编码'] === 'OUT-31' && row['原因'] === '不在当前产品池').length,
+    3,
+  );
 });
