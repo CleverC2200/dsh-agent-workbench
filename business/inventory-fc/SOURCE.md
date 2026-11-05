@@ -37,3 +37,9 @@
 用户确认当前在途取 `agents_scm_warehouse_transfer_plan_data_d.transfer_onway_qty`、备单取 `transfer_prepare_qty`，两者单位均为件，按同仓库、商品、月份统计。卡片、列表、补货净需求及每日汇总采用同一口径，历史执行单不参与这两个指标。客户订单池和满足率不变。
 
 重复一致值取一次；冲突、缺失、负值按字段保持未知，正常记录继续汇总。源计划快照日期为空时不虚构时点。重新生成查询后执行 `scripts/update-fc-transfer-status.py`；回归见 `scripts/test_fc_transfer_execution.py`。
+
+### 货龄结构产品标签（2026-11-05）
+
+“产品标签”按商品编码读取 `agents_dim_material_prod_sales_info_d.tag`，保留原值，空值显示 `-`。先完成原库存筛选、全范围合计和分页，再关联当前页商品的标签；重复一致标签取一次，冲突保持未知，不扩大库存行数。主数据字段仍经 GEA 受控查询及返回权限处理，标签无返回权限时保留其余已授权库存字段。
+
+明细与汇总路径共用此展示口径，不新增汇总表字段，不修改每日同步 SQL。重新生成货龄查询后执行 `scripts/update-fc-aging-product-tag.py`；回归见 `scripts/test_fc_aging_table.py`、`tests/fc-aging-product-tag.test.mjs` 和 `tests/fc-aging-table.browser.mjs`。

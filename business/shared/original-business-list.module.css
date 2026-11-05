@@ -41,6 +41,27 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.compactAging table[data-resizable] :is(th, td) {
+  padding-inline: 12px;
+}
+.compactAging table[data-resizable] th {
+  height: 38px;
+  padding-block: 0;
+  font-size: 9px;
+}
+.compactAging table[data-resizable] td {
+  height: 40px;
+  padding-block: 4px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.compactAging .fcToolbar.toolbar {
+  min-height: 52px;
+  padding-block: 8px;
+}
+.compactAging .fcToolbar .filterField {
+  flex: 0 1 220px;
+}
 .list table tfoot td {
   background: #f5f6f8;
   border-top: 1px solid #e3e6ea;

@@ -178,7 +178,9 @@ export async function readConfiguredFacts(
           'material_group',
           'page_scope_has_material_group',
         ])
-      : new Set<string>();
+      : config.agentId === 'inventory-fc' && viewId === 'inventory'
+        ? new Set(['product_tag'])
+        : new Set<string>();
   const read = async (id: string, values: Record<string, any>, snapshot = false) => {
     // Owned by one overview load, never reused across refreshes or identities.
     // Keep rejected promises too: a denied snapshot must not trigger a retry.

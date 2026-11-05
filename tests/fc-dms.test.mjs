@@ -10,7 +10,8 @@ import React, { act } from 'react';
 const rows = [{ warehouse_code: 'W1', warehouse_name: '分仓', sku: 'SKU1', recommended_qty: 3 }];
 const mocks = {
   './fc/components/planning-settings': 'export const PlanningTable=()=>null;',
-  './fc-planned-page': 'export const projectFcPlannedRows=rows=>rows;',
+  './fc-planned-page':
+    'export const projectFcPlannedRows=rows=>rows;export const sortFcReplenishmentRows=rows=>rows;',
   './fc-batch-details': 'export const FcBatchDetails=()=>null;',
   './fc-transfer-details': 'export const FcTransferDetails=()=>null;',
   './fc/components/warehouse-select': 'export const WarehouseSelect=()=>null;',
@@ -165,8 +166,12 @@ test('branch confirmation sends documented order, retains draft on failure, and 
       if (payload.operation === 'resolve-target')
         return {
           warehouseCode: payload.warehouseCode,
-          fields: { customerCode: '', addressCode: '', pupCode: '' },
-          message: '未匹配，请补填',
+          fields:
+            payload.warehouseCode === 'W2'
+              ? { customerCode: 'C2', addressCode: 'A2', pupCode: 'P2' }
+              : { customerCode: 'C1', addressCode: 'A1', pupCode: 'P1' },
+          addresses: [{ code: payload.warehouseCode === 'W2' ? 'A2' : 'A1', name: '分仓收货地址' }],
+          message: '已自动带入',
         };
       if (method === 'branch-dms-open') {
         globalThis.dmsFixture.navigationCalls = (globalThis.dmsFixture.navigationCalls ?? 0) + 1;
@@ -223,15 +228,8 @@ test('branch confirmation sends documented order, retains draft on failure, and 
       ['提货点编码', 'P1'],
     ]) {
       const input = document.querySelector(`[aria-label="${label}"]`);
-      // React's tracked input setter must observe a native edit.
-      await act(async () => {
-        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(
-          input,
-          value,
-        );
-        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-        input.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-      });
+      assert.equal(input.value, value);
+      assert.equal(input.readOnly, true);
     }
     await click('确认暂存至DMS');
     assert.equal(calls.length, 0);
@@ -300,23 +298,18 @@ test('branch confirmation sends documented order, retains draft on failure, and 
         select.value = value;
         select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
       });
-    const fillCustomer = async () =>
-      act(async () => {
-        for (const label of ['收货地址编码', '客户编码', '提货点编码']) {
-          const field = document.querySelector(`[aria-label="${label}"]`);
-          Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(
-            field,
-            'W1-VALUE',
-          );
-          field.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-        }
-      });
     await selectWarehouse('W1');
-    await fillCustomer();
+    assert.equal(document.querySelector('[aria-label="客户编码"]').value, 'C1');
     await selectWarehouse('W2');
-    for (const label of ['客户编码', '收货地址编码', '提货点编码'])
-      assert.equal(document.querySelector(`[aria-label="${label}"]`).value, '');
-    await fillCustomer();
+    for (const [label, value] of [
+      ['客户编码', 'C2'],
+      ['收货地址编码', 'A2'],
+      ['提货点编码', 'P2'],
+    ]) {
+      const input = document.querySelector(`[aria-label="${label}"]`);
+      assert.equal(input.value, value);
+      assert.equal(input.readOnly, true);
+    }
     let release;
     globalThis.dmsFixture.call = async (_method, payload) => {
       if (payload.operation === 'preflight') return { ready: true, scope: 'local-configuration' };
@@ -404,7 +397,12 @@ test('confirmation opens before a slow read; cancellation, errors and retry neve
       { warehouse_code: ' ', sku: 'SKU2', recommended_qty: 5 },
     ];
     await act(async () => jobs[2].resolve([...rows, ...incomplete]));
-    assert.equal(button('确认暂存至DMS').disabled, false);
+    assert.equal(
+      button('确认暂存至DMS').disabled,
+      true,
+      'missing automatic routing blocks only DMS submission',
+    );
+    assert.equal(document.querySelector('[aria-label="SKU1实际补货量"]').disabled, false);
     assert.match(document.body.textContent, /1个SKU/);
     assert.match(document.querySelector('[role="alert"]').textContent, /2条记录缺少分仓或商品编码/);
     const choices = [...document.querySelector('[aria-label="导出补货分仓"]').options];
@@ -431,7 +429,7 @@ test('confirmation opens before a slow read; cancellation, errors and retry neve
   }
 });
 
-test('master values fill independently; stale warehouse results and errors leave manual fallback usable', async () => {
+test('named address choices fill readonly codes and stale identity results cannot overwrite them', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
@@ -447,16 +445,14 @@ test('master values fill independently; stale warehouse results and errors leave
         return new Promise((r) => {
           late = r;
         });
-      if (!p.addressCode)
-        return {
-          warehouseCode: p.warehouseCode,
-          fields: { customerCode: '', addressCode: '', pupCode: '' },
-          message: '请补填收货地址',
-        };
       return {
-        warehouseCode: p.warehouseCode,
-        fields: { customerCode: 'C1', addressCode: p.addressCode, pupCode: '02' },
-        message: '已关联主数据',
+        warehouseCode: 'W1',
+        fields: { customerCode: 'C1', addressCode: p.addressCode || '', pupCode: '02' },
+        addresses: [
+          { code: 'A1', name: '收货地点一' },
+          { code: 'A2', name: '收货地点二' },
+        ],
+        message: p.addressCode ? '已自动带入' : '请选择收货地址',
       };
     },
   };
@@ -481,36 +477,34 @@ test('master values fill independently; stale warehouse results and errors leave
       [...document.querySelectorAll('button')].find((b) => b.textContent === '提交').click();
       await tick();
     });
-    const select = document.querySelector('[aria-label="导出补货分仓"]');
+    const warehouse = document.querySelector('[aria-label="导出补货分仓"]');
     await act(async () => {
-      select.value = 'W1';
-      select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      warehouse.value = 'W1';
+      warehouse.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
       await tick();
     });
-    const addr = document.querySelector('[aria-label="收货地址编码"]');
+    for (const label of ['客户编码', '收货地址编码', '提货点编码'])
+      assert.equal(document.querySelector(`[aria-label="${label}"]`).readOnly, true);
+    const address = document.querySelector('[aria-label="收货地址"]');
+    assert.equal(address.value, '');
+    assert.equal(address.options[2].text, '收货地点二');
+    assert.equal(
+      [...document.querySelectorAll('button')].find((b) => b.textContent === '确认暂存至DMS')
+        .disabled,
+      true,
+    );
     await act(async () => {
-      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(
-        addr,
-        'A1',
-      );
-      addr.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-    });
-    await act(async () => {
-      addr.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
+      address.value = 'A2';
+      address.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
       await tick();
     });
+    assert.equal(document.querySelector('[aria-label="收货地址编码"]').value, 'A2');
     assert.equal(document.querySelector('[aria-label="客户编码"]').value, 'C1');
     assert.equal(document.querySelector('[aria-label="提货点编码"]').value, '02');
-    assert.equal(document.querySelector('[aria-label="提货点编码"]').readOnly, true);
-    await act(async () => {
-      [...document.querySelectorAll('button')]
-        .find((b) => b.textContent === '手动调整编码')
-        .click();
-    });
-    assert.equal(document.querySelector('[aria-label="提货点编码"]').readOnly, false);
-    const changeInput = async (label, value) =>
+    const loaded = masterRequests;
+    const changeQuantity = async (value) =>
       act(async () => {
-        const input = document.querySelector(`[aria-label="${label}"]`);
+        const input = document.querySelector('[aria-label="SKU1实际补货量"]');
         Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(
           input,
           value,
@@ -518,27 +512,23 @@ test('master values fill independently; stale warehouse results and errors leave
         input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
         await tick();
       });
-    await changeInput('提货点编码', '77');
-    const loadedRequests = masterRequests;
-    await changeInput('SKU1实际补货量', '0');
-    assert.equal(document.querySelector('[aria-label="提货点编码"]'), null);
-    await changeInput('SKU1实际补货量', '3');
-    assert.equal(
-      masterRequests,
-      loadedRequests,
-      'restoring a quantity must not refetch and overwrite manual codes',
-    );
-    assert.equal(document.querySelector('[aria-label="提货点编码"]').value, '77');
+    await changeQuantity('0');
+    assert.equal(document.querySelector('[aria-label="客户编码"]'), null);
+    await changeQuantity('3');
+    assert.equal(masterRequests, loaded);
+    assert.equal(document.querySelector('[aria-label="收货地址编码"]').value, 'A2');
     await act(async () => {
-      select.value = 'W2';
-      select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      warehouse.value = 'W2';
+      warehouse.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
       await tick();
     });
+    assert.equal(document.querySelector('[aria-label="客户编码"]').value, '');
     await act(async () => {
       window.dispatchEvent(new dom.window.Event('gea-session-changing'));
       late({
         warehouseCode: 'W2',
-        fields: { customerCode: 'LATE', addressCode: 'A2', pupCode: '03' },
+        fields: { customerCode: 'LATE', addressCode: 'A3', pupCode: '03' },
+        addresses: [],
         message: '迟到',
       });
       await tick();
