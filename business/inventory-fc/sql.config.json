@@ -49755,10 +49755,6 @@
             "label": "补货筛选",
             "options": [
               {
-                "label": "有业务",
-                "value": "business"
-              },
-              {
                 "label": "紧急 SKU",
                 "value": "urgent"
               },
@@ -52405,10 +52401,6 @@
             "name": "list_mode",
             "label": "补货筛选",
             "options": [
-              {
-                "label": "有业务",
-                "value": "business"
-              },
               {
                 "label": "紧急 SKU",
                 "value": "urgent"
