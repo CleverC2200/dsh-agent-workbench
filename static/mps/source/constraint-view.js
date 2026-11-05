@@ -32,6 +32,7 @@ export function createConstraintPanel(react, { Dialog }) {
     children,
   }) {
     const [hardOnly, setHardOnly] = react.useState(false);
+    const [advancedOpen, setAdvancedOpen] = react.useState(false);
     const [editor, setEditor] = react.useState(null);
     const [error, setError] = react.useState('');
     const [proposal, setProposal] = react.useState(null);
@@ -351,9 +352,14 @@ export function createConstraintPanel(react, { Dialog }) {
       ),
       h(
         'details',
-        { className: 'dc-card wf-advanced' },
+        {
+          className: 'dc-card wf-advanced',
+          onToggle: (event) => {
+            if (event.target === event.currentTarget) setAdvancedOpen(event.currentTarget.open);
+          },
+        },
         h('summary', null, '高级配置：生产日历、件吨系数与资源分配'),
-        h('div', { className: 'wf-advanced-body' }, children.slice(1)),
+        advancedOpen && h('div', { className: 'wf-advanced-body' }, children.slice(1)),
       ),
       editor &&
         h(

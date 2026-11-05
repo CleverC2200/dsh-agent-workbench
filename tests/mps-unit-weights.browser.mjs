@@ -159,7 +159,6 @@ test('MPS reads complete channel coefficients and adopts only an explicitly appl
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
   await showAdvanced(view);
-  await showAdvanced(view);
   await view.getByRole('button', { name: '读取件吨系数', exact: true }).click();
   await expect(view).toContainText('0.00576');
   await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toHaveValue('');
@@ -198,6 +197,7 @@ test('MPS reads complete channel coefficients and adopts only an explicitly appl
     .toBe('weights-test-v1');
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  await showAdvanced(view);
   await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toHaveValue('0.00576');
   await expect(view.getByLabel('郑州 A 适用渠道', { exact: true })).toHaveValue('思念');
   await expect(view).toContainText('weights-test-v1');
@@ -243,7 +243,6 @@ test('MPS coefficient batches cover the whole product pool and discard cross-bat
   });
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
-  await showAdvanced(view);
   await showAdvanced(view);
   await view.getByRole('button', { name: '读取件吨系数', exact: true }).click();
   await expect(view).toContainText('已完整读取101个产品编码、101条渠道系数来源');

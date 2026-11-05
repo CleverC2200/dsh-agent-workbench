@@ -337,7 +337,7 @@ test('MPS constraints retain prototype rule management, collapse advanced inputs
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
   await expect(view.getByRole('table', { name: '约束列表', exact: true })).toBeVisible();
   await expect(view.getByRole('region', { name: '冲突与放宽建议', exact: true })).toBeVisible();
-  await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toBeHidden();
+  await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toHaveCount(0);
   await view.getByLabel('郑州 安全天数', { exact: true }).fill('0');
   await view.getByRole('button', { name: '新增约束', exact: true }).click();
   const editor = frame.getByRole('dialog', { name: '新增约束', exact: true });
@@ -362,7 +362,14 @@ test('MPS constraints retain prototype rule management, collapse advanced inputs
   );
   await view.getByRole('button', { name: '停用约束1', exact: true }).click();
   await expect(view.getByRole('table', { name: '约束列表', exact: true })).toContainText('已停用');
-  await view.locator('summary').filter({ hasText: '高级配置：' }).click();
+  const advanced = view.locator('summary').filter({ hasText: '高级配置：' });
+  await advanced.click();
+  const weight = view.getByLabel('郑州 A 件吨系数', { exact: true });
+  await weight.fill('0.01');
+  await advanced.click();
+  await expect(weight).toHaveCount(0);
+  await advanced.click();
+  await expect(weight).toHaveValue('0.01');
   await expect(view.getByRole('button', { name: '保存正式配置', exact: true })).toBeDisabled();
   const csv = await download(page, view, '下载本地配置');
   assert.match(csv, /最低库存核对/);
