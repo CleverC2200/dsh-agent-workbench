@@ -156,6 +156,13 @@ test('aging filters apply inside the client restricted frame and keep all-scope 
   assert.ok(page, 'the inventory page must run inside the restricted client frame');
   const table = page.locator('table[data-resizable]');
   const footer = table.locator('tfoot');
+  await expect(table.locator('th[data-field="total_qty"]')).toContainText('SKU总库存量');
+  await expect(
+    page.getByRole('checkbox', { name: '90天以上', exact: true }).locator('..'),
+  ).toHaveAttribute(
+    'title',
+    '筛选包含对应货龄批次的SKU；SKU总库存含全部批次，分段数量见对应货龄列。',
+  );
   await expect(table.locator('tbody tr')).toHaveCount(10);
   await expect(table.locator('th[data-field="warehouseid"]')).toHaveCount(0);
   await page.getByLabel('列设置', { exact: true }).click();
@@ -266,8 +273,8 @@ test('aging filters apply inside the client restricted frame and keep all-scope 
   await page.getByRole('button', { name: '筛选产品编码', exact: true }).click();
   await page.getByRole('button', { name: '清除', exact: true }).click();
   await expect(table.locator('tbody tr')).toHaveCount(10);
-  await page.getByRole('button', { name: '筛选当前库存量', exact: true }).scrollIntoViewIfNeeded();
-  await page.getByRole('button', { name: '筛选当前库存量', exact: true }).click();
+  await page.getByRole('button', { name: '筛选SKU总库存量', exact: true }).scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: '筛选SKU总库存量', exact: true }).click();
   await page.getByLabel('最小值', { exact: true }).fill('11');
   await page.getByLabel('最大值', { exact: true }).fill('12');
   await page.getByRole('button', { name: '应用', exact: true }).click();
@@ -293,7 +300,7 @@ test('aging filters apply inside the client restricted frame and keep all-scope 
   assert.ok(headerOrder.indexOf('material_name') < headerOrder.indexOf('material_code'));
   await table.locator('th[data-field="total_qty"]').dragTo(table.locator('thead th').first());
   await expect(footer.locator('td').first()).toHaveText('合计 · 23');
-  await page.getByRole('button', { name: '筛选当前库存量', exact: true }).click();
+  await page.getByRole('button', { name: '筛选SKU总库存量', exact: true }).click();
   await page.getByLabel('最小值', { exact: true }).fill('99');
   await page.getByLabel('最大值', { exact: true }).fill('100');
   await page.getByRole('button', { name: '应用', exact: true }).click();

@@ -374,7 +374,14 @@ export function OriginalBusinessList({
       <div key={f.name} className={css.quickFilters} role="group" aria-label={f.label}>
         {f.options.map((option: any) =>
           f.multiple ? (
-            <label key={option.value}>
+            <label
+              key={option.value}
+              title={
+                fc && view.id === 'inventory' && f.name === 'age_filter'
+                  ? '筛选包含对应货龄批次的SKU；SKU总库存含全部批次，分段数量见对应货龄列。'
+                  : undefined
+              }
+            >
               <input
                 type="checkbox"
                 checked={(appliedFilters?.[f.name] ?? '').split(',').includes(option.value)}

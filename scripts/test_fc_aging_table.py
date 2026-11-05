@@ -15,6 +15,22 @@ class AgingTableScope(unittest.TestCase):
         return self.f.read(agent='fc', query_id=query_id, stat_date='2026-10-22',
                            group_level='detail', **filters)
 
+    def test_age_filter_selects_skus_without_relabeling_all_batches_as_aged(self):
+        self.f.batch(20, 120, sku='MIXED', kind='20')
+        self.f.batch(90, 5, sku='MIXED', kind='20')
+        self.f.batch(60, 7, sku='ONLY60', kind='20')
+        full = self.read()
+        self.assertEqual(sum(r['overaged_qty'] for r in full), 12)
+        self.assertEqual(sum(r['stagnant_qty'] for r in full), 5)
+        older = self.read(age_filter='90+')
+        self.assertEqual(older[0]['page_scope_total'], 1)
+        self.assertEqual(older[0]['scope_total_qty'], 125)
+        self.assertEqual(older[0]['scope_age90_plus'], 5)
+        both = self.read(age_filter='60-90,90+')
+        self.assertEqual(both[0]['scope_total_qty'], 132)
+        self.assertEqual(both[0]['scope_overaged_qty'], 12)
+        self.assertEqual(both[0]['scope_age90_plus'], 5)
+
     def test_footer_uses_all_filtered_rows_on_every_page(self):
         for i in range(13):
             self.f.batch(10, i + 1, sku=f'S{i:02}', kind='20')
