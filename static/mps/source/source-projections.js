@@ -141,28 +141,32 @@ function aggregate(rows, column, knownColumn) {
 
 export function sourceCheckRows(checks, rawProducts) {
   const excluded = [];
-  const codes = new Set(
-    (rawProducts ?? [])
-      .map((row) => text(row.material_code) || text(row['产品编码']))
-      .filter(Boolean),
-  );
+  const categoriesByCode = new Map();
+  for (const product of rawProducts ?? []) {
+    const code = text(product.material_code) || text(product['产品编码']);
+    if (!code) continue;
+    const categories = categoriesByCode.get(code) ?? new Set();
+    categories.add(text(product.sub_category) || text(product['大类']));
+    categoriesByCode.set(code, categories);
+  }
   const classify = (rows, month, source) =>
-    sourceDimensions(rows, rawProducts).flatMap((mapped, index) => {
-      const row = rows[index];
-      if (!mapped['大类']) {
+    rows.flatMap((row) => {
+      const categories = categoriesByCode.get(text(row['产品编码']));
+      const category = categories?.size === 1 ? [...categories][0] : '';
+      const mapped = { ...row, 源大类: row['源大类'] ?? row['大类'] ?? '', 大类: category };
+      if (!category) {
         excluded.push({
           ...mapped,
           月份: month,
           来源: source,
-          原因: codes.has(text(row['产品编码'])) ? '当前产品池大类不唯一' : '不在当前产品池',
+          原因: categories ? '当前产品池大类不唯一' : '不在当前产品池',
         });
         return [];
       }
       return [
         {
           ...mapped,
-          源分类: mapped['大类'],
-          映射原因: mapped['缺项原因'],
+          源分类: category,
           缺项原因: row['缺项原因'] ?? '',
         },
       ];

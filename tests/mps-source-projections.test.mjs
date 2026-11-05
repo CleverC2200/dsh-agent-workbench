@@ -142,18 +142,25 @@ test('current pool remaps BI and DMS by SKU; excluded nonzero historical SKUs do
 test('nationwide pool totals retain source quantities without a base; ambiguous current classifications are listed for completion', () => {
   const result = sourceCheckRows(
     checks([history(8, { 基地: '' })], [report(20, 20, { 基地: '' })]),
-    [raw('A', { sub_category: '汤圆' })],
+    [raw('A', { sub_category: '汤圆', belong_base: '郑州' })],
     'adjust',
   );
+  assert.equal(result.rows[0].actual.quantity, 8);
+  assert.equal(result.rows[0].plan.quantity, 20);
   assert.equal(result.rows[0].ratio, 0.4);
+  assert.equal(result.excluded.length, 0);
   const ambiguous = sourceCheckRows(
     checks([history(8)], [report(10, 10)]),
-    [raw('A', { sub_category: '汤圆' }), raw('A', { sub_category: '水饺' })],
+    [
+      raw('A', { sub_category: '汤圆', belong_base: '郑州' }),
+      raw('A', { sub_category: '水饺', belong_base: '乙' }),
+    ],
     'monthly',
   );
   assert.equal(ambiguous.rows.length, 2);
   assert.equal(ambiguous.excluded.length, 2);
   assert(ambiguous.excluded.every((r) => r['原因'] === '当前产品池大类不唯一'));
+  assert(ambiguous.rows.every((row) => row.actual.quantity === null && row.plan.quantity === null));
 });
 
 test('历史事实按基地物料唯一补齐系列，保留源值、零数量与无映射原因', () => {
@@ -161,6 +168,7 @@ test('历史事实按基地物料唯一补齐系列，保留源值、零数量�
     history(0, { 系列: '', 物料组: '旧组' }),
     history(5, { 基地: '乙' }),
     history(7, { 产品编码: 'OLD' }),
+    history(9, { 基地: '未知基地' }),
   ];
   const products = [
     { 产品编码: 'A', 基地: '郑州', 大类: '水饺', 系列: '甲系列', 物料组: 'G', 物料组名称: '组甲' },
@@ -175,6 +183,9 @@ test('历史事实按基地物料唯一补齐系列，保留源值、零数量�
   assert.equal(mapped[1]['系列'], '');
   assert.match(mapped[1]['缺项原因'], /系列.*多个/);
   assert.match(mapped[2]['缺项原因'], /未匹配/);
+  assert.equal(mapped[3]['大类'], '');
+  assert.equal(mapped[3]['系列'], '');
+  assert.match(mapped[3]['缺项原因'], /未匹配/);
   assert.equal(facts[0]['系列'], '');
 });
 

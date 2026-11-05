@@ -49,6 +49,63 @@ async function download(page, view, name) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+test('MPS complete split export retains the same shipment subtotal and completeness as the category summary', async (t) => {
+  const { page, frame } = await workflowPage(t);
+  await version(frame, '2026-10');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,\n郑州,B,产品乙,汤圆,系列,组,,',
+  );
+  await upload(
+    frame,
+    '选择模型预测CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2026-10,郑州,A,产品甲,汤圆,系列,组,10\n2026-11,郑州,A,产品甲,汤圆,系列,组,20',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  const shipmentHeader =
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n';
+  const known = '2026-09,郑州,A,产品甲,汤圆,系列,组,220,10,10,10,100,200,80\n';
+  await upload(
+    frame,
+    '选择发货输入CSV',
+    shipmentHeader + known + '2026-09,郑州,B,产品乙,汤圆,系列,组,110,,10,10,,20,8',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
+  const summary = view.getByRole('table', { name: '大类需求总表', exact: true });
+  await expect(summary.locator('tbody tr td').nth(1)).toHaveText('300（已知小计）');
+  const readExport = async () => {
+    const csv = await download(page, view, '下载需求拆分');
+    const book = XLSX.read(csv, { type: 'string', raw: true });
+    return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  };
+  const partial = await readExport();
+  for (const month of ['2026-10', '2026-11']) {
+    const category = partial.find((row) => row['粒度'] === '大类' && row['月份'] === month);
+    assert.equal(category['本月预估发货'], undefined);
+    assert.equal(category['本月预估发货已知小计'], '300');
+    assert.equal(category['本月预估发货完整性'], '已知小计');
+    assert.equal(category['本月预估发货缺项数'], '1');
+    assert.equal(category['模型预测数量'], month === '2026-10' ? '10' : '20');
+  }
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await upload(
+    frame,
+    '选择发货输入CSV',
+    shipmentHeader + known + '2026-09,郑州,B,产品乙,汤圆,系列,组,0,0,0,0,0,0,0',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await expect(summary.locator('tbody tr td').nth(1)).toHaveText('300');
+  const complete = (await readExport()).find(
+    (row) => row['粒度'] === '大类' && row['月份'] === '2026-10',
+  );
+  assert.equal(complete['本月预估发货'], '300');
+  assert.equal(complete['本月预估发货已知小计'], '300');
+  assert.equal(complete['本月预估发货完整性'], '完整');
+  assert.equal(complete['本月预估发货缺项数'], '0');
+});
+
 test('MPS basic inputs finish while navigating through shipment to processing and are reused on return', async (t) => {
   let release;
   const pending = new Promise((resolve) => {

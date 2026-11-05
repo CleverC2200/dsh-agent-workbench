@@ -556,6 +556,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           '数量调整状态',
           '固定数量调整',
           '本月预估发货',
+          '本月预估发货已知小计',
+          '本月预估发货完整性',
+          '本月预估发货缺项数',
+          '本月预估发货缺项原因',
           '模型预测数量',
           '模型已知小计',
           '全部调整记录',
@@ -621,25 +625,36 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         };
       });
       rows.unshift(
-        ...(includeCategory ? scopedCategories : categoryRows).map((row) => ({
-          评估版本: draft.name,
-          评估月份: draft.month,
-          相对月份: `M+${result.months.indexOf(row.month) + 1}`,
-          粒度: row.month === result.months[3] ? 'M+4大类，仅供库存参考' : '大类',
-          月份: row.month,
-          大类: row.category,
-          需求数量: row.quantity,
-          系统大类需求: row.systemQuantity,
-          大类调整状态: row.adjusted ? '人工调整' : '系统值',
-          本月预估发货: result.categoryComparisons?.find((item) => item.category === row.category)
-            ?.shipment.quantity,
-          模型预测数量: result.categoryComparisons?.find((item) => item.category === row.category)
-            ?.forecast[row.month]?.quantity,
-          模型已知小计: result.categoryComparisons?.find((item) => item.category === row.category)
-            ?.forecast[row.month]?.knownQuantity,
-          来源: '①大类需求',
-          未评估原因: row.missing.join('、') || '已计算',
-        })),
+        ...(includeCategory ? scopedCategories : categoryRows).map((row) => {
+          const compare = result.categoryComparisons?.find(
+            (item) => item.category === row.category,
+          );
+          return {
+            评估版本: draft.name,
+            评估月份: draft.month,
+            相对月份: `M+${result.months.indexOf(row.month) + 1}`,
+            粒度: row.month === result.months[3] ? 'M+4大类，仅供库存参考' : '大类',
+            月份: row.month,
+            大类: row.category,
+            需求数量: row.quantity,
+            系统大类需求: row.systemQuantity,
+            大类调整状态: row.adjusted ? '人工调整' : '系统值',
+            本月预估发货: compare?.shipment.quantity,
+            本月预估发货已知小计: compare?.shipment.knownQuantity,
+            本月预估发货完整性:
+              compare?.shipment.quantity != null
+                ? '完整'
+                : compare?.shipment.knownQuantity != null
+                  ? '已知小计'
+                  : '缺项',
+            本月预估发货缺项数: compare?.shipment.missingCount,
+            本月预估发货缺项原因: compare?.shipment.issues.join('；'),
+            模型预测数量: compare?.forecast[row.month]?.quantity,
+            模型已知小计: compare?.forecast[row.month]?.knownQuantity,
+            来源: '①大类需求',
+            未评估原因: row.missing.join('、') || '已计算',
+          };
+        }),
       );
       if (
         includeCategory &&
