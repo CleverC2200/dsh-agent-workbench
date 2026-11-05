@@ -76,14 +76,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         void (async () => {
           try {
             const periods = await Promise.all(
-              [
-                ...new Map(
-                  [0, 1, 2].map((offset) => {
-                    const month = monthOffset(draft.month, offset);
-                    return [previousFiscalYear(month).start, month];
-                  }),
-                ).values(),
-              ].map(async (month) => ({
+              [draft.month].map(async (month) => ({
                 ...previousFiscalYear(month),
                 ...(await read(() => readHistoryAnnual(month, stop.signal))),
               })),

@@ -423,11 +423,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       if ((field === 'reportShare' || field === 'historyShare') && row.layerMissing?.length)
         expression += `；${row.layerMissing.join('、')}`;
       if (field === 'systemShare')
-        expression = row.fallback
-          ? `上一财年全年${coverage}物料组销量Top1托底SKU。物料组平均占比 ${value(row.groupShare)} 减去其余SKU有效占比，再按本SKU未调整基地的系统占比分配。系统值 ${value(row.systemShare)}`
-          : `(${value(row.reportShare)} + ${value(row.historyShare)}) ÷ 2 = ${value(row.systemShare)}`;
+        expression = `(${value(row.reportShare)} + ${value(row.historyShare)}) ÷ 2 = ${value(row.systemShare)}`;
       if (field === 'share')
-        expression = `系统占比 ${value(row.systemShare)}；有效占比 ${value(row.share)}。${row.fallback ? '本SKU承接物料组剩余占比。' : ''}`;
+        expression = `系统占比 ${value(row.systemShare)}；有效占比 ${value(row.share)}。${row.fallback ? 'Top1承接剩余占比，人工调整与系统基线分别保留。' : ''}`;
       if (field === 'demand') {
         const total = result.categoryRows.find(
           (item) => item.month === row.month && item.category === row.category,
@@ -442,6 +440,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         }
         expression += `；系统占比 ${value(row.systemShare)}，有效占比 ${value(row.share)}`;
       }
+      if (row.coefficientFallback?.length) expression += `；${row.coefficientFallback.join('；')}`;
       if (field === 'openingInventory')
         expression =
           row.month === result.months[0]
@@ -466,6 +465,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         expression = `${value(row.openingInventory)} + ${value(row.requiredProduction)} − ${value(row.demand)} = ${value(row.projectedClosing)}，需求推导参考`;
       if (field === 'requiredProductionTons')
         expression = `${value(row.requiredProduction)} × 明确维护的件吨系数 = ${value(row.requiredProductionTons)}`;
+      if (['reportShare', 'historyShare', 'systemShare', 'share', 'demand'].includes(field))
+        expression += `；拆分系数来源为评估月份${draft.month}，同一套系数用于M+1至M+3`;
       if (missing.length) expression += `${expression ? '；' : ''}缺项：${missing.join('、')}`;
       setFormula({
         title: `${row.base} ${row.code} ${row.month} ${labels[field]} 计算过程`,
@@ -568,6 +569,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           '分层缺项',
           '公式说明',
           'Top1托底',
+          '拆分系数所属月',
+          '系数托底说明',
           '调整原因',
           '调整时间',
           '系统大类需求',
@@ -634,6 +637,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           模型已知小计: forecast,
           数量调整状态: row.quantityAdjusted ? '数量固定及下级联动' : '系统拆分或占比调整',
           Top1托底: row.fallback ? '是' : '否',
+          拆分系数所属月: draft.month,
+          系数托底说明: row.coefficientFallback?.join('；'),
           调整原因: adjustment?.reason,
           调整时间: adjustment?.at,
           源产能候选: row.capacities
@@ -849,7 +854,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         h(
           'span',
           null,
-          row.fallback ? `上一财年全年${coverage}组内Top1托底` : '按两路有效占比分配',
+          row.coefficientFallback?.join('；') ||
+            (row.fallback ? `上一财年全年${coverage}组内Top1托底` : '按两路有效占比分配'),
         ),
         saved ? h('span', null, `已调整：${saved.reason} · ${saved.at}`) : null,
         editing
@@ -1417,7 +1423,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             h(
               'p',
               { className: 'wf-note' },
-              `M+4只展示大类需求，供M+3目标库存参考，不生成第四个月SKU需求。Top1托底SKU按上一财年全年${coverage}组内销量选择；其未调整基地承接组内剩余占比。`,
+              `拆分系数取评估月份${draft.month}的提报与上一完整财年发货，同一套系数用于M+1、M+2、M+3。物料组与组内销量Top1承接各层剩余占比，不能确定的基地份额仍保留缺项。M+4只提供大类库存参考，不生成第四个月SKU排产。`,
             ),
             shareError && !editingShare
               ? h('p', { role: 'alert', className: 'wf-note wf-unavailable' }, shareError)

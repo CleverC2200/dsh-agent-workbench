@@ -278,7 +278,7 @@ test('业务销售提报按基地物料allnum重分当前物料组，旧系列�
   assert.equal(buildMpsWorkflow(source).rows[0].reportShare, 0.3);
 });
 
-test('上一财年跨7月切换，缺正确全年期间时不能拿去年同月或另一财年顶替', () => {
+test('跨7月仍用评估月所属上一完整财年，后月不切换本轮系数基期', () => {
   const source = draft();
   source.month = '2026-06';
   source.report = [{ 月份: '2026-06', 基地: '甲', 产品编码: 'A', 月初数量: 1 }];
@@ -289,12 +289,15 @@ test('上一财年跨7月切换，缺正确全年期间时不能拿去年同月�
   });
   const rows = buildMpsWorkflow(source).rows;
   assert.equal(rows.find((row) => row.month === '2026-06' && row.code === 'A').historyQuantity, 9);
-  assert.equal(rows.find((row) => row.month === '2026-07' && row.code === 'A').historyQuantity, 60);
+  assert.equal(rows.find((row) => row.month === '2026-07' && row.code === 'A').historyQuantity, 9);
   source.historyAnnual.periods.shift();
   assert.equal(
-    buildMpsWorkflow(source).rows.find((row) => row.month === '2026-07' && row.code === 'A'),
-    undefined,
+    buildMpsWorkflow(source).rows.find((row) => row.month === '2026-07' && row.code === 'A')
+      .historyQuantity,
+    9,
   );
+  source.historyAnnual.periods = [];
+  assert.equal(buildMpsWorkflow(source).rows[0].historyQuantity, null);
 });
 
 test('完整财年查询使用起止日期，不落回单月查询', async () => {
@@ -329,6 +332,33 @@ test('销售基地物料业务键重复不重复加量，重读或失败会撤�
   }
   source.historyAnnualRead = { status: 'loading' };
   assert.equal(buildMpsWorkflow(source).rows[0].historyShare, null);
+});
+
+test('评估月源三层系数接入Top1剩余占比，同版三个月使用同一基期', () => {
+  const source = draft();
+  source.reportSource = 'business';
+  source.planRatesRead = { status: 'ready', month: source.month };
+  source.products.push({ ...source.products[0], 产品编码: 'C', 物料组: '另一组' });
+  source.historyAnnual.periods[0].rows = [
+    { 基地: '甲', 产品编码: 'A', 数量: 60 },
+    { 基地: '乙', 产品编码: 'B', 数量: 20 },
+    { 基地: '甲', 产品编码: 'C', 数量: 20 },
+  ];
+  source.planRates = [
+    { 维度类型: '大类+物料组', 大类: '点心', 物料组名称: '另一组', 计划占比: 0.3 },
+    { 维度类型: '物料组+产品', 产品编码: 'B', 计划占比: 0.25 },
+    { 维度类型: '物料组+产品', 产品编码: 'C', 计划占比: 1 },
+    { 维度类型: '基地+产品', 基地: '甲', 产品编码: 'A', 当前维度计划量: '', 计划占比: 1 },
+    { 维度类型: '基地+产品', 基地: '乙', 产品编码: 'B', 当前维度计划量: 20, 计划占比: 1 },
+    { 维度类型: '基地+产品', 基地: '甲', 产品编码: 'C', 当前维度计划量: 30, 计划占比: 1 },
+  ].map((row) => ({ ...row, 月份: source.month }));
+  source.categoryDemand.push({ month: '2027-01', category: '点心', quantity: 200 });
+  const result = buildMpsWorkflow(source);
+  const a = result.rows.filter((row) => row.code === 'A');
+  assert.ok(a.every((row) => Math.abs(row.share - 0.5625) < 1e-12));
+  assert.ok(Math.abs(a[1].demand - 112.5) < 1e-12);
+  assert.equal(a[0].reportQuantity, null);
+  assert.equal(a[0].coefficientFallback.length, 2);
 });
 
 test('求解装配按物理隧道去重，冲突能力与渠道系数留待补充，调拨限定来源月份', async () => {

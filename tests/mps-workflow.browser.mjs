@@ -277,7 +277,7 @@ async function upload(frame, label, text) {
     .setInputFiles({ name: '本地核对.csv', mimeType: 'text/csv', buffer: Buffer.from(text) });
 }
 
-test('MPS 完整财年跨月复用但月度提报不跨月复制，池外分类单列', async (t) => {
+test('MPS 评估月提报与完整财年形成固定系数，后月提报不改本轮且池外分类单列', async (t) => {
   const { page, frame } = await workflowPage(t);
   await version(frame, '2026-12');
   await upload(
@@ -316,6 +316,9 @@ test('MPS 完整财年跨月复用但月度提报不跨月复制，池外分类�
   await view.getByLabel('月份筛选', { exact: true }).selectOption('2027-01');
   await expect(
     view.getByRole('button', { name: '乙 B 2027-01 系统占比 计算过程', exact: true }),
+  ).toHaveText('—');
+  await expect(
+    view.getByRole('button', { name: '甲 A 2027-01 系统占比 计算过程', exact: true }),
   ).toHaveText('100.00%');
   await expect(
     view.getByRole('table', { name: '基地单品需求拆分', exact: true }).locator('tbody tr'),
@@ -540,7 +543,7 @@ test('MPS processing exposes both three-layer sources and exports their intermed
   assert.match(csv, /Top1托底/);
 });
 
-test('MPS report and CSV retain the annual SKU domain while incomplete production dependencies stay unknown', async (t) => {
+test('MPS report and CSV derive all three months from evaluation-month coefficients without later submissions', async (t) => {
   const { page, frame } = await workflowPage(t);
   await version(frame, '2026-12');
   await upload(
@@ -585,20 +588,20 @@ test('MPS report and CSV retain the annual SKU domain while incomplete productio
   const summary = report
     .getByRole('table', { name: '评估范围与汇总', exact: true })
     .locator('tbody tr');
-  await expect(summary.locator('td').nth(1)).toHaveText('100');
-  await expect(summary.locator('td').nth(2)).toHaveText('—');
+  await expect(summary.locator('td').nth(1)).toHaveText('300');
+  await expect(summary.locator('td').nth(2)).toHaveText('300');
   await expect(summary.locator('td').nth(4)).toHaveText('3');
   await expect(summary).not.toContainText('缺月度SKU域');
-  await expect(summary).toContainText('缺明确SKU件吨系数或所需生产');
+  await expect(summary).not.toContainText('缺明确SKU件吨系数或所需生产');
   const csv = await download(page, report, '下载需求推导参考');
   const book = XLSX.read(csv, { type: 'string', raw: true });
   const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
   const total = exported.find((row) => row['粒度'] === '全版本汇总，需求推导参考');
-  assert.equal(total['已知生产吨数小计'], '100');
-  assert.equal(total['完整生产吨数'], '');
+  assert.equal(total['已知生产吨数小计'], '300');
+  assert.equal(total['完整生产吨数'], '300');
   assert.equal(total['总行数'], '3');
   assert.doesNotMatch(total['未评估原因'], /缺月度SKU域/);
-  assert.match(total['未评估原因'], /缺明确SKU件吨系数或所需生产/);
+  assert.doesNotMatch(total['未评估原因'], /缺明确SKU件吨系数或所需生产/);
 });
 
 test('MPS effective category and share edits drive the same unconstrained inventory and shared-resource report export', async (t) => {
@@ -1216,7 +1219,7 @@ test('MPS processing compares both forecast months and persists fixed quantities
   await upload(
     frame,
     '选择计划提报CSV',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）,汤圆,真实系列,组,60,60\n2026-12,郑州,B,产品乙,汤圆,真实系列,组,40,40\n2027-01,郑州,A,麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）,汤圆,真实系列,组,60,60\n2027-01,郑州,B,产品乙,汤圆,真实系列,组,40,40',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）,汤圆,真实系列,组,60,60\n2026-12,郑州,B,产品乙,汤圆,真实系列,组,40,40',
   );
   await upload(
     frame,
@@ -1340,7 +1343,14 @@ test('MPS processing compares both forecast months and persists fixed quantities
     rows.find((row) => row['月份'] === '2026-12' && row['产品编码'] === 'B')['需求数量'],
     '80',
   );
-  assert.ok(rows.some((row) => row['月份'] === '2027-01'));
+  assert.equal(
+    rows.find((row) => row['月份'] === '2027-01' && row['产品编码'] === 'A')['需求数量'],
+    '120',
+  );
+  assert.equal(
+    rows.find((row) => row['月份'] === '2027-01' && row['产品编码'] === 'A')['拆分系数所属月'],
+    '2026-12',
+  );
   const skuCompare = rows.find((row) => row['月份'] === '2026-12' && row['产品编码'] === 'A');
   assert.equal(skuCompare['模型预测数量'], '0');
   assert.equal(skuCompare['本月预估发货'], '300');
@@ -1371,5 +1381,6 @@ test('MPS processing compares both forecast months and persists fixed quantities
   await view.getByRole('button', { name: '运算过程 郑州 A 2026-12', exact: true }).click();
   await expect(frame.getByRole('dialog')).toContainText('提报三层占比');
   await expect(frame.getByRole('dialog')).toContainText('历史三层占比');
+  await expect(frame.getByRole('dialog')).toContainText('同一套系数用于M+1至M+3');
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
 });

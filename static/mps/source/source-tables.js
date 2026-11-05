@@ -81,9 +81,7 @@ export function sourceTableParameters(kind, month) {
     };
   if (kind === 'plan-rate')
     return {
-      months: [month, monthOffset(month, 1), monthOffset(month, 2)].map((value) =>
-        value.replace('-', ''),
-      ),
+      months: [month.replace('-', '')],
     };
   if (kind === 'delivery') return { months: [...months, month.replace('-', '')] };
   throw Error('未知月主计划来源');
