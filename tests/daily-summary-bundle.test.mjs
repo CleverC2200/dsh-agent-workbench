@@ -338,3 +338,43 @@ test('FC published bundle retains every member warehouse binding and its named S
     }
   }
 });
+
+test('completed branch bundles last five minutes and base/full-chain bundles last twenty without sliding hits', async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  for (const [agentId, minutes] of [
+    ['inventory-fc', 5],
+    ['inventory-aqkc', 20],
+    ['inventory-qll', 20],
+  ]) {
+    const cfg = { ...fixture(), agentId };
+    let reads = 0;
+    const run = async () => {
+      reads++;
+      return { rows };
+    };
+    await call(cfg, run);
+    now += minutes * 60 * 1000 - 1;
+    await call(cfg, run);
+    assert.equal(reads, 1, agentId);
+    now++;
+    await call(cfg, run);
+    assert.equal(reads, 2, agentId);
+  }
+});
+
+test('a transient bundle failure does not occupy the longer successful-result cache lifetime', async (t) => {
+  let now = Date.now(),
+    reads = 0;
+  t.mock.method(Date, 'now', () => now);
+  const cfg = { ...fixture(), agentId: 'inventory-fc' };
+  const run = async () => {
+    reads++;
+    if (reads === 1) throw Error('temporary gateway outage');
+    return { rows };
+  };
+  await assert.rejects(call(cfg, run), /temporary/);
+  now += 45000;
+  assert.deepEqual((await call(cfg, run)).rows, [{ value: 12 }]);
+  assert.equal(reads, 2);
+});

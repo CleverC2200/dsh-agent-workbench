@@ -1,5 +1,6 @@
 import { makeRequest, requireColumns } from './configured-query-client.mjs';
 import { configuredQueryIdentity } from './query-cache';
+import { inventoryCacheTtl } from './inventory-cache-policy';
 import type { AgentSqlConfig } from './sql-config';
 import type { DailySummarySnapshot } from './daily-summary';
 import type { ConfiguredExecution } from './agent-query';
@@ -10,6 +11,7 @@ type Entry = {
   controller: AbortController;
   users: number;
   settled: boolean;
+  failed: boolean;
 };
 const page = new Map<string, Entry>();
 const supplied = new WeakMap<ConfiguredExecution, Map<string, Entry>>();
@@ -138,8 +140,9 @@ export async function executeDailyBundle(
     freshAfter,
   ]);
   let entry = cache.get(key);
-  // Retain only the prefetched response for the short initial-load window, never persistent browser storage.
-  if (!entry || Date.now() - entry.started > 45000) {
+  const ttl = inventoryCacheTtl(config.agentId);
+  // These complete responses stay in memory only, under the same identity and exact inputs.
+  if (!entry || Date.now() - entry.started >= (entry.failed ? Math.min(ttl, 45000) : ttl)) {
     const values: Record<string, any> = {};
     for (const part of bundle.members) {
       const inputs = memberValues(part.values);
@@ -153,6 +156,7 @@ export async function executeDailyBundle(
       controller,
       users: 0,
       settled: false,
+      failed: false,
       promise: Promise.resolve(),
     };
     fresh.promise = (async () => {
@@ -162,7 +166,7 @@ export async function executeDailyBundle(
       for (let offset = 0; offset < total; offset += bundle.maxRows) {
         const pageValues = { ...values, bundle_offset: offset };
         const result =
-          offset === 0 && !warehouseCode && preloaded && Date.now() - preloaded.at < 45000
+          offset === 0 && !warehouseCode && preloaded && Date.now() - preloaded.at < ttl
             ? preloaded.result
             : await run(makeRequest(config, bundle.queryId, pageValues), {
                 ...options,
@@ -210,6 +214,7 @@ export async function executeDailyBundle(
       return { ...first, rows: collected };
     })()
       .then((result) => {
+        fresh.failed = Array.isArray(result.rejectedColumns) && result.rejectedColumns.length > 0;
         for (const part of bundle.members) {
           const rows = result.rows.filter((row: any) => String(row.bundle_part) === part.part);
           const raw = rows[0]?.bundle_total;
@@ -228,6 +233,10 @@ export async function executeDailyBundle(
             throw Object.assign(Error('首屏汇总返回不完整'), { code: 'RESULT_INCOMPLETE' });
         }
         return result;
+      })
+      .catch((error) => {
+        fresh.failed = true;
+        throw error;
       })
       .finally(() => {
         fresh.settled = true;

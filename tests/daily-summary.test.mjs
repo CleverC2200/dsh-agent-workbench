@@ -520,3 +520,45 @@ test('category stock age keeps its snapshot date while actual movement follows t
     null,
   );
 });
+
+test('an unavailable batch is not retained after the next user read sees a completed sync', async () => {
+  let available = false,
+    snapshotReads = 0;
+  const execute = async (request, options) => {
+    if (options.queryId === 'summary.snapshot') {
+      snapshotReads++;
+      return { rows: available ? [row] : [] };
+    }
+    return { rows: [{ value: request.parameters.gea_p1 }] };
+  };
+  const cfg = config();
+  assert.deepEqual(await createAgentQueries(cfg, execute).snapshot(), { kind: 'unavailable' });
+  available = true;
+  assert.equal((await createAgentQueries(cfg, execute).snapshot()).kind, 'ready');
+  assert.equal(snapshotReads, 2);
+});
+
+test('a new branch read obtains a fresh batch at five minutes while an active read stays coherent', async (t) => {
+  let now = Date.now(),
+    batch = row.batch_id,
+    reads = 0;
+  t.mock.method(Date, 'now', () => now);
+  const cfg = { ...config(), agentId: 'inventory-fc' };
+  const execute = async (request, options) => {
+    if (options.queryId === 'summary.snapshot') {
+      reads++;
+      return { rows: [{ ...row, batch_id: batch }] };
+    }
+    return { rows: [{ value: request.parameters.gea_p1 }] };
+  };
+  const active = createAgentQueries(cfg, execute);
+  await active.read('fact', {});
+  now += 5 * 60 * 1000 - 1;
+  await createAgentQueries(cfg, execute).read('fact', {});
+  assert.equal(reads, 1);
+  now++;
+  batch = '20261102190000000000';
+  assert.equal((await createAgentQueries(cfg, execute).read('fact', {})).rows[0].value, batch);
+  assert.equal((await active.read('fact', {})).rows[0].value, row.batch_id);
+  assert.equal(reads, 2);
+});
