@@ -191,10 +191,10 @@ test('inventory target SQL preserves all keys, reduces agreeing repeats and isol
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   db.exec(
-    'CREATE TABLE agents_scm_goods_inventory_turnover_data_m(year_month TEXT, belong_base TEXT, material_code TEXT, inventory_version TEXT, final_target_inventory REAL, avg_daily_planned_demand REAL)',
+    'CREATE TABLE agents_scm_goods_inventory_turnover_data_m(year_month TEXT, belong_base TEXT, material_code TEXT, inventory_version TEXT, final_target_inventory REAL, avg_daily_planned_demand REAL, final_target_turnover_days REAL)',
   );
   const insert = db.prepare(
-    'INSERT INTO agents_scm_goods_inventory_turnover_data_m VALUES(?,?,?,?,?,?)',
+    'INSERT INTO agents_scm_goods_inventory_turnover_data_m VALUES(?,?,?,?,?,?,?)',
   );
   for (const row of [
     ['2026-11-01', '郑州', 'A', '纠偏', 100, 10],
@@ -208,12 +208,24 @@ test('inventory target SQL preserves all keys, reduces agreeing repeats and isol
     ['2026-11-01', '郑州', 'D', '纠偏', 90, 10],
     ['2026-10-01', '郑州', 'A', '纠偏', 9999, 10],
   ])
-    insert.run(...row);
+    insert.run(...row, row[2] === 'B' ? 0 : 27);
   const params = { start_month: '2026-11', end_month: '2027-01' };
   const rows = db
     .prepare(config.queries['inventory-targets.detail'].request.sql)
     .all({ ...params, gea_p98: 200, gea_p99: 0 });
   assert.equal(rows.length, 7);
+  assert.equal(rows.find((row) => row.material_code === 'C').final_target_turnover_days, 27);
+  assert.equal(rows.find((row) => row.material_code === 'B').final_target_turnover_days, 0);
+  assert.equal(rows.find((row) => row.material_code === 'C').turnover_days_value_count, 1);
+  db.prepare(
+    "UPDATE agents_scm_goods_inventory_turnover_data_m SET final_target_turnover_days=30 WHERE material_code='D' AND final_target_inventory=90",
+  ).run();
+  const conflict = db
+    .prepare(config.queries['inventory-targets.detail'].request.sql)
+    .all({ ...params, gea_p98: 200, gea_p99: 0 })
+    .find((row) => row.material_code === 'D');
+  assert.equal(conflict.final_target_turnover_days, null);
+  assert.equal(conflict.turnover_days_value_count, 2);
   assert.equal(rows.find((row) => row.material_code === 'C').source_rows, 2);
   assert.equal(rows.find((row) => row.material_code === 'C').final_target_inventory, 80);
   assert.equal(rows.find((row) => row.material_code === 'D').final_target_inventory, null);

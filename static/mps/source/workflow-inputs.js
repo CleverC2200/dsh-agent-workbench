@@ -276,6 +276,11 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         base: text(row.base),
         days: number(row.days),
       })),
+      turnoverDays: (draft.constraints?.turnoverDays ?? []).map((row) => ({
+        base: text(row.base),
+        code: text(row.code),
+        days: number(row.days),
+      })),
       rules: structuredClone(draft.constraints?.rules ?? {}),
     },
   };

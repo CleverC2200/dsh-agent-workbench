@@ -1215,11 +1215,14 @@
         "inventory_version",
         "final_target_inventory",
         "avg_daily_planned_demand",
+        "final_target_turnover_days",
         "source_rows",
         "final_target_value_count",
         "daily_demand_value_count",
         "missing_target_rows",
-        "missing_daily_rows"
+        "missing_daily_rows",
+        "turnover_days_value_count",
+        "missing_turnover_days_rows"
       ],
       "parameterSpec": {
         "start_month": {
@@ -1250,7 +1253,7 @@
         }
       },
       "request": {
-        "sql": "SELECT SUBSTRING(CAST(year_month AS TEXT), 1, 7) AS target_month, belong_base, material_code, inventory_version, CASE WHEN COUNT(final_target_inventory) = COUNT(*) AND COUNT(DISTINCT final_target_inventory) = 1 THEN MAX(final_target_inventory) ELSE NULL END AS final_target_inventory, CASE WHEN COUNT(avg_daily_planned_demand) = COUNT(*) AND COUNT(DISTINCT avg_daily_planned_demand) = 1 THEN MAX(avg_daily_planned_demand) ELSE NULL END AS avg_daily_planned_demand, COUNT(*) AS source_rows, COUNT(DISTINCT final_target_inventory) AS final_target_value_count, COUNT(DISTINCT avg_daily_planned_demand) AS daily_demand_value_count, SUM(CASE WHEN final_target_inventory IS NULL THEN 1 ELSE 0 END) AS missing_target_rows, SUM(CASE WHEN avg_daily_planned_demand IS NULL THEN 1 ELSE 0 END) AS missing_daily_rows FROM agents_scm_goods_inventory_turnover_data_m WHERE SUBSTRING(CAST(year_month AS TEXT), 1, 7) >= :start_month AND SUBSTRING(CAST(year_month AS TEXT), 1, 7) <= :end_month AND inventory_version IN ('纠偏', '月初', '滚动') GROUP BY SUBSTRING(CAST(year_month AS TEXT), 1, 7), belong_base, material_code, inventory_version ORDER BY target_month, belong_base, inventory_version, material_code LIMIT :gea_p98 OFFSET :gea_p99",
+        "sql": "SELECT SUBSTRING(CAST(year_month AS TEXT), 1, 7) AS target_month, belong_base, material_code, inventory_version, CASE WHEN COUNT(final_target_inventory) = COUNT(*) AND COUNT(DISTINCT final_target_inventory) = 1 THEN MAX(final_target_inventory) ELSE NULL END AS final_target_inventory, CASE WHEN COUNT(avg_daily_planned_demand) = COUNT(*) AND COUNT(DISTINCT avg_daily_planned_demand) = 1 THEN MAX(avg_daily_planned_demand) ELSE NULL END AS avg_daily_planned_demand, CASE WHEN COUNT(final_target_turnover_days) = COUNT(*) AND COUNT(DISTINCT final_target_turnover_days) = 1 THEN MAX(final_target_turnover_days) ELSE NULL END AS final_target_turnover_days, COUNT(*) AS source_rows, COUNT(DISTINCT final_target_inventory) AS final_target_value_count, COUNT(DISTINCT avg_daily_planned_demand) AS daily_demand_value_count, SUM(CASE WHEN final_target_inventory IS NULL THEN 1 ELSE 0 END) AS missing_target_rows, SUM(CASE WHEN avg_daily_planned_demand IS NULL THEN 1 ELSE 0 END) AS missing_daily_rows, COUNT(DISTINCT final_target_turnover_days) AS turnover_days_value_count, SUM(CASE WHEN final_target_turnover_days IS NULL THEN 1 ELSE 0 END) AS missing_turnover_days_rows FROM agents_scm_goods_inventory_turnover_data_m WHERE SUBSTRING(CAST(year_month AS TEXT), 1, 7) >= :start_month AND SUBSTRING(CAST(year_month AS TEXT), 1, 7) <= :end_month AND inventory_version IN ('纠偏', '月初', '滚动') GROUP BY SUBSTRING(CAST(year_month AS TEXT), 1, 7), belong_base, material_code, inventory_version ORDER BY target_month, belong_base, inventory_version, material_code LIMIT :gea_p98 OFFSET :gea_p99",
         "parameters": {
           "start_month": "2026-11",
           "end_month": "2027-01",

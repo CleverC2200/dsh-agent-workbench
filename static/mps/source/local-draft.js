@@ -62,6 +62,9 @@ export function encodeLocalDrafts(drafts, selected) {
                 ? { targetVersion: draft.constraints.targetVersion }
                 : {}),
               safetyDays: draft.constraints.safetyDays ?? [],
+              ...(draft.constraints.turnoverDays
+                ? { turnoverDays: draft.constraints.turnoverDays }
+                : {}),
               rules: {
                 ...structuredClone(draft.constraints.rules ?? { local: [] }),
               },

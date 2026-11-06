@@ -81,7 +81,7 @@ const reasons = (row, fields) => [
   ...new Set(fields.flatMap((field) => row.missing?.[field] ?? [])),
 ];
 const status = (row, fields) => reasons(row, fields).join('、') || '已计算';
-const sourceText = '①大类需求；②月末结存；③两路占比；④源产能；⑤基地安全天数策略与SKU源库存对照';
+const sourceText = '①大类需求；②月末结存；③两路占比；④源产能；⑤源最终目标周转天数与人工补充';
 
 export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
   const h = react.createElement;
@@ -466,7 +466,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             ? `M+4大类有效需求 × M+3有效拆分系数 = ${value(row.nextMonthDemand)}，仅供目标库存参考，不生成M+4 SKU需求`
             : `下一月有效SKU需求 = ${value(row.nextMonthDemand)}`;
       if (field === 'targetInventory') {
-        expression = `${value(row.safetyDays)} × ${value(row.nextMonthDemand)} ÷ ${row.nextMonthDays} = ${value(row.targetInventory)}；基地策略 ${value(row.baseSafetyDays)}天，已采用规则生效后使用有效安全天数`;
+        expression = `${value(row.safetyDays)} × ${value(row.nextMonthDemand)} ÷ ${row.nextMonthDays} = ${value(row.targetInventory)}；源最终目标周转天数 ${value(row.turnoverPolicy.sourceDays)}天，人工补充及已采用规则生效后使用有效天数`;
       }
       if (field === 'targetInventory' && row.safetyDays === 0)
         expression = '安全天数明确为0，目标库存为0，无需下一月需求';
@@ -1234,10 +1234,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         ? [['B5 月度分配', '缺基地SKU月份对隧道和成型机各自合计1的批准分配']]
         : []),
       ...bases
-        .filter(
-          (item) =>
-            !result.constraints.safetyDays.some((row) => row.base === item && row.days !== null),
-        )
+        .filter((item) => result.rows.some((row) => row.base === item && row.safetyDays === null))
         .map((item) => [`B6 ${item}安全天数`, '缺真实值；0为有效值，空白不补0']),
       ...bases.flatMap((item) =>
         result.months
@@ -1785,7 +1782,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                     [
                       'SKU源库存与周转天数对照',
                       'ai_db.agents_scm_goods_inventory_turnover_data_m',
-                      '只读对照，不作为基地安全天数策略',
+                      '最终目标周转天数用于计算，库存与日均数量仅作对照',
                     ],
                     ['约束规则', '—', '正式来源未就绪'],
                   ],

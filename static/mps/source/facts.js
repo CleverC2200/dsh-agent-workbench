@@ -254,6 +254,10 @@ export async function readInventoryTargets(month, endMonth, signal) {
       finalTarget: row.final_target_inventory === null ? null : number(row.final_target_inventory),
       dailyDemand:
         row.avg_daily_planned_demand === null ? null : number(row.avg_daily_planned_demand),
+      finalTurnoverDays:
+        row.final_target_turnover_days == null ? null : number(row.final_target_turnover_days),
+      turnoverDaysValueCount: number(row.turnover_days_value_count),
+      missingTurnoverDaysRows: number(row.missing_turnover_days_rows),
       sourceRows: number(row.source_rows),
       finalTargetValueCount: number(row.final_target_value_count),
       dailyDemandValueCount: number(row.daily_demand_value_count),
@@ -262,6 +266,7 @@ export async function readInventoryTargets(month, endMonth, signal) {
       conflictFields: [
         ...(Number(row.final_target_value_count) > 1 ? ['finalTarget'] : []),
         ...(Number(row.daily_demand_value_count) > 1 ? ['dailyDemand'] : []),
+        ...(Number(row.turnover_days_value_count) > 1 ? ['finalTurnoverDays'] : []),
       ],
     })),
     metadata: {

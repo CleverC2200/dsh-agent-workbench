@@ -1227,6 +1227,9 @@ test('MPS Tab5 reuses a base policy across three months while SKU inventory vers
       source_rows: 1,
     },
   ].map((row) => ({
+    final_target_turnover_days: null,
+    turnover_days_value_count: 0,
+    missing_turnover_days_rows: 1,
     final_target_value_count: 1,
     daily_demand_value_count: 1,
     missing_target_rows: 0,
@@ -1297,7 +1300,7 @@ test('MPS Tab5 reuses a base policy across three months while SKU inventory vers
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
   const detail = view.getByRole('table', { name: '目标库存单品明细', exact: true });
-  await expect(detail).toContainText('缺基地安全天数策略');
+  await expect(detail).toContainText('缺目标周转天数');
   await expect(view.getByLabel('郑州 安全天数', { exact: true })).toBeVisible();
   let csv = await download(page, view, '下载目标库存明细');
   assert.match(csv, /2026-12,郑州,A,产品甲,纠偏,120,10,12,,缺输入/);
@@ -1355,7 +1358,7 @@ test('MPS Tab5 reuses a base policy across three months while SKU inventory vers
   await view.getByLabel('郑州 安全天数', { exact: true }).fill('0');
   await expect(detail.locator('tbody tr').first().locator('td').nth(9)).toHaveText('0');
   await view.getByLabel('郑州 安全天数', { exact: true }).fill('');
-  await expect(detail).toContainText('缺基地安全天数策略');
+  await expect(detail).toContainText('缺目标周转天数');
 });
 
 test('MPS processing compares both forecast months and persists fixed quantities with current-baseline undo', async (t) => {
@@ -1548,4 +1551,99 @@ test('MPS processing compares both forecast months and persists fixed quantities
   await expect(frame.getByRole('dialog')).toContainText('历史三层占比');
   await expect(frame.getByRole('dialog')).toContainText('同一套系数用于M+1至M+3');
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+});
+
+test('Tab5 uses one source final turnover day per base-SKU and persists manual supplements only for missing sources', async (t) => {
+  const source = {
+    target_month: '2027-01',
+    belong_base: '郑州',
+    material_code: 'A',
+    inventory_version: '滚动',
+    final_target_inventory: 120,
+    avg_daily_planned_demand: 10,
+    final_target_turnover_days: 27,
+    source_rows: 1,
+    final_target_value_count: 1,
+    daily_demand_value_count: 1,
+    missing_target_rows: 0,
+    missing_daily_rows: 0,
+    turnover_days_value_count: 1,
+    missing_turnover_days_rows: 0,
+  };
+  const { page, frame } = await mpsPage(t, config, ({ queryId }) =>
+    queryId.startsWith('inventory-targets.')
+      ? {
+          rows: queryId.endsWith('.count') ? [{ total: 1 }] : [source],
+          returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,
+          configVersion: 'turnover-days-source',
+        }
+      : emptySource({ queryId }),
+  );
+  await version(frame, '2026-12');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,\n郑州,B,产品乙,汤圆,系列,组,,',
+  );
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,产品甲,汤圆,系列,组,100,100\n2026-12,郑州,B,产品乙,汤圆,系列,组,100,100',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  const view = frame.getByRole('region', { name: '约束与配置', exact: true });
+  const pending = view.getByRole('table', { name: '目标周转天数待补', exact: true });
+  await expect(pending.locator('tbody tr')).toHaveCount(1);
+  await expect(pending).toContainText('产品乙');
+  const field = view.getByLabel('郑州 B 补充目标周转天数', { exact: true });
+  await expect(field).toHaveValue('');
+  let book = XLSX.read(await download(page, view, '下载三个月完整目标库存'), {
+    type: 'string',
+    raw: true,
+  });
+  let rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  assert.ok(
+    rows
+      .filter((row) => row['产品编码'] === 'A')
+      .every(
+        (row) => Number(row['有效安全天数']) === 27 && row['天数来源'] === '源最终目标周转天数',
+      ),
+  );
+  assert.ok(
+    rows.filter((row) => row['产品编码'] === 'B').every((row) => row['有效安全天数'] === undefined),
+  );
+  await field.fill('25');
+  await expect
+    .poll(async () => {
+      const saved = await page.evaluate(() => window.readView().localDrafts);
+      return saved.drafts.find((draft) => draft.id === saved.selected).constraints
+        ?.turnoverDays?.[0]?.days;
+    })
+    .toBe(25);
+  await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
+  await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  await expect(field).toHaveValue('25');
+  book = XLSX.read(await download(page, view, '下载三个月完整目标库存'), {
+    type: 'string',
+    raw: true,
+  });
+  rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  assert.ok(
+    rows
+      .filter((row) => row['产品编码'] === 'B')
+      .every(
+        (row) => Number(row['有效安全天数']) === 25 && row['天数来源'] === '人工补充目标周转天数',
+      ),
+  );
+  await field.fill('0');
+  book = XLSX.read(await download(page, view, '下载三个月完整目标库存'), {
+    type: 'string',
+    raw: true,
+  });
+  rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  assert.ok(
+    rows.filter((row) => row['产品编码'] === 'B').every((row) => row['推导目标库存'] === '0'),
+  );
+  await field.fill('');
+  await expect(pending).toContainText('缺输入');
 });

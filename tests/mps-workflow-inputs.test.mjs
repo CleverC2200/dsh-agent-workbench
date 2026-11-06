@@ -90,7 +90,7 @@ test('公开Manage source导出驱动页面归一化，收入缺失不阻断数�
   const monthly = buildMpsWorkflow(source);
   assert.ok(Math.abs(monthly.rows[0].demand - 54) < 1e-12);
   assert.equal(monthly.rows[0].base, '甲');
-  assert.deepEqual(monthly.constraints, source.constraints);
+  assert.deepEqual(monthly.constraints, { ...source.constraints, turnoverDays: [] });
   source.pull = 'correction';
   const correction = buildMpsWorkflow(source);
   assert.equal(correction.rows[0].demand, 90);

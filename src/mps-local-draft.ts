@@ -112,6 +112,9 @@ export const mpsLocalDraftSchema = z.strictObject({
     .strictObject({
       targetVersion: z.enum(['auto', '纠偏', '月初', '滚动']).optional(),
       safetyDays: list(z.strictObject({ base: text, days: quantity.nullable() })),
+      turnoverDays: list(
+        z.strictObject({ base: text, code: text, days: quantity.nullable() }),
+      ).optional(),
       rules: z.strictObject({
         history: list(
           z.strictObject({ at: z.iso.datetime(), ruleId: text, description: text, action: text }),
