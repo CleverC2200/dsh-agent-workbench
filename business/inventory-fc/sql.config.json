@@ -48681,6 +48681,7 @@
     "views": [
       {
         "id": "plan",
+        "resizableColumns": true,
         "title": "分仓计划",
         "queryId": "branch-plan.detail",
         "description": "按stat_month（YYYYMM）读取所选自然月的分仓×SKU计划，数量单位件。本月出货=warehouse_month_out_plan，次月出货=warehouse_future30_qty；真实0与缺失区分，同月重复不作计划判定。月调拨计划读取已发布warehouse_month_transfer_plan，缺值或重复保留未知，相关月末库存不以调拨中量代替。有效出货计划可用于日均、目标库存及补货计算，不需要预留快照、版本、单位字段；无有效计划时沿用近30日正向发货测算并标明依据。调拨中量包含在途及备单，不重复相加。",
@@ -49427,6 +49428,7 @@
       },
       {
         "id": "replenishment",
+        "resizableColumns": true,
         "title": "补货建议",
         "queryId": "replenishment.detail",
         "description": "按客户订单需求、分仓可用库存、计划及调拨中量计算补货。",
@@ -49867,6 +49869,7 @@
       },
       {
         "id": "cost",
+        "resizableColumns": true,
         "title": "经营指标",
         "queryId": "branch_cost.detail",
         "description": "按来源仓库编码和月份读取费用、过仓量及服务指标；不把不同仓库编码体系自动拼接。 六项运营比例源值为0至1，按百分比显示；0为源0值，不转成缺失，也不把各仓比例直接平均为公司比例。",
@@ -49957,6 +49960,7 @@
       },
       {
         "id": "base",
+        "resizableColumns": true,
         "title": "基地资源",
         "queryId": "inventory.detail",
         "description": "基地×SKU日快照与同月目标版本。分仓、经销商库存未纳入；此处数值只代表基地。 卡片仅为有值记录的数量之和，各卡覆盖范围可能不同；缺值未补0，完整合计仍可能未知。 已接库存源超60天、未备单和已备单占用数量；这些是日库存源值，不替代当前订单阶段明细。 品类、品项缺值仅用历史订单中唯一且完整的SKU映射补充；多义或缺值映射保持未知。",
@@ -50075,6 +50079,7 @@
       },
       {
         "id": "orders",
+        "resizableColumns": true,
         "title": "订单执行",
         "queryId": "orders.detail",
         "description": "分仓发往下游客户的订单；满足率仅计算已发货订单池。",
@@ -50224,6 +50229,7 @@
       },
       {
         "id": "delivery",
+        "resizableColumns": true,
         "title": "交货明细",
         "queryId": "delivery.detail",
         "description": "公司发货事实，含赠品与不含赠品分开列示。库位/仓组编码保持原值，不强行对应分仓计划编码。",
@@ -50337,6 +50343,7 @@
       },
       {
         "id": "health",
+        "resizableColumns": true,
         "title": "库存健康",
         "queryId": "health.detail",
         "description": "按快照日期、仓库和SKU合计批次库存，分仓库存仅取20类仓库，按分仓编码取值；所属基地名称用于分组与筛选。现存、可用、占用、冻结各自展示，不重复相加；零数量按0合计。age_days为正库存且生产日期有效批次的最大货龄，不代表平均货龄。源已删除超龄阈值标志、安全/目标库存和更新时间，不能从现库存反推。 产品名称仅按当前来源中唯一的SKU名称关联，名称冲突保持为空；不改变库存量或记录范围。 当前订单无名称时补用出入库来源的唯一SKU名称；订单名称有冲突时不另选其他名称。 可用、备单、冻结的有值数量单独汇总并显示记录范围，不把部分已知数量当完整合计。",
@@ -50491,6 +50498,7 @@
       },
       {
         "id": "base-resources",
+        "resizableColumns": true,
         "title": "基地排产资源监控",
         "queryId": "base_resources.detail",
         "description": "保留老版基地资源表。可用库存按最新基地库存快照合计，并列示有效SKU范围。T～T+6排产需对应日期的未来排产记录；当前MES执行记录不能代替未来可承诺排产，入库在途亦缺明确基地映射。",
@@ -50595,6 +50603,7 @@
       },
       {
         "id": "shipments",
+        "resizableColumns": true,
         "title": "分仓发货观察",
         "queryId": "branch_shipments.detail",
         "summaryId": "branch_shipments.summary",
@@ -50714,6 +50723,7 @@
       },
       {
         "id": "flows",
+        "resizableColumns": true,
         "title": "分仓出入库源量",
         "queryId": "branch_flows.detail",
         "timeMode": "current",
@@ -50799,6 +50809,7 @@
       },
       {
         "id": "branch-stock",
+        "resizableColumns": true,
         "title": "分仓库存快照",
         "queryId": "health.detail",
         "description": "按快照日期、仓库和SKU合计批次库存，分仓库存仅取20类仓库，按分仓编码取值；所属基地名称用于分组与筛选。现存、可用、占用、冻结各自展示，不重复相加；零数量按0合计。age_days为正库存且生产日期有效批次的最大货龄，不代表平均货龄。源已删除超龄阈值标志、安全/目标库存和更新时间，不能从现库存反推。 产品名称仅按当前来源中唯一的SKU名称关联，名称冲突保持为空；不改变库存量或记录范围。 当前订单无名称时补用出入库来源的唯一SKU名称；订单名称有冲突时不另选其他名称。 可用、备单、冻结的有值数量单独汇总并显示记录范围，不把部分已知数量当完整合计。",
@@ -50940,6 +50951,7 @@
       },
       {
         "id": "base-stock-flows",
+        "resizableColumns": true,
         "title": "基地产销日记录",
         "queryId": "stock_history.detail",
         "timeMode": "period",
@@ -51164,6 +51176,7 @@
       },
       {
         "id": "base-shipments",
+        "resizableColumns": true,
         "title": "基地实际发货",
         "queryId": "base_shipments.detail",
         "summaryId": "base_shipments.summary",
@@ -51302,6 +51315,7 @@
       },
       {
         "id": "replenishment-suggestions",
+        "resizableColumns": true,
         "title": "建议补货清单",
         "queryId": "replenishment-suggestions.detail",
         "description": "按stat_month（YYYYMM）读取所选自然月的分仓×SKU计划，数量单位件。本月出货=warehouse_month_out_plan，次月出货=warehouse_future30_qty；真实0与缺失区分，同月重复不作计划判定。月调拨计划尚无独立真实来源，相关月末库存保持未知。有效出货计划可用于日均、目标库存及补货计算，不需要预留快照、版本、单位字段；无有效计划时沿用近30日正向发货测算并标明依据。调拨中量包含在途及备单，不重复相加。",
@@ -51642,6 +51656,7 @@
       },
       {
         "id": "branch-supply",
+        "resizableColumns": true,
         "title": "本月补货订单",
         "queryId": "branch-supply.detail",
         "summaryId": "branch-supply.summary",
@@ -51785,6 +51800,7 @@
       },
       {
         "id": "branch-supply-current",
+        "resizableColumns": true,
         "title": "当前补货订单",
         "queryId": "branch-supply.detail",
         "summaryId": "branch-supply.summary",
@@ -51928,6 +51944,7 @@
       },
       {
         "id": "warehouse-outbound",
+        "resizableColumns": true,
         "title": "分仓实际出库",
         "queryId": "warehouse-outbound.summary",
         "summaryId": "warehouse-outbound.summary",
@@ -51944,6 +51961,7 @@
       },
       {
         "id": "branch-operations",
+        "resizableColumns": true,
         "title": "运营观察",
         "queryId": "branch_cost.detail",
         "description": "按来源仓库编码和月份读取费用、过仓量及服务指标；不把不同仓库编码体系自动拼接。 六项运营比例源值为0至1，按百分比显示；0为源0值，不转成缺失，也不把各仓比例直接平均为公司比例。",
@@ -52034,6 +52052,7 @@
       },
       {
         "id": "inbound",
+        "resizableColumns": true,
         "title": "本月入库",
         "queryId": "inbound.detail",
         "summaryId": "inbound.summary",
@@ -52074,6 +52093,7 @@
       },
       {
         "id": "replenishment-confirmation",
+        "resizableColumns": true,
         "title": "补货确认读取",
         "queryId": "replenishment-confirmation.detail",
         "description": "按客户订单需求、分仓可用库存、计划及调拨中量计算补货。",
@@ -52514,6 +52534,7 @@
       },
       {
         "id": "upstream-orders",
+        "resizableColumns": true,
         "title": "订单执行",
         "queryId": "upstream-orders.detail",
         "description": "分仓向基地下单的ASN调拨履约，收货仓库receive_wh关联分仓；当月已发货按WMS关单日期统计，逐行换算为件。",
