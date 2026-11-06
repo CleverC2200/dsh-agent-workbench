@@ -20,7 +20,7 @@ const text = (value, unit = '%', digits = 2) =>
   value === null || value === undefined ? '—' : Number(value).toFixed(digits) + unit;
 const value = (metrics, name) =>
   text(metricValue(metrics, name), name === '周转天数' ? '' : '%') +
-  (name !== '准交率' && metrics?.[name]?.sample ? '*' : '');
+  (name !== '准交率' && (metrics?.[name]?.sample || metrics?.[name]?.provisional) ? '*' : '');
 const onTimeDisplayNote = (metric) => {
   const counts = metric?.counts;
   if (metric?.value == null && !counts?.total) return metric?.missingReason ?? '暂无源数据可计算';
@@ -385,7 +385,7 @@ export function workbenchPresentation(facts, options = {}) {
     footer:
       name === '准交率' && periods.week?.metrics[name]?.counts?.pending > 0
         ? `本周准交率 ${text(metricValue(periods.week.metrics, name))}（${periods.week.metrics[name].counts.pending}张缺失数据未计准交）`
-        : `本周${name === '货龄（>60天库存占比）' ? '货龄占比' : name === '周转天数' ? '可发货天数' : name === '订单满足率' ? '满足率' : name} ${loading && !periods.week ? '加载中' : text(metricValue(periods.week?.metrics, name), name === '周转天数' ? '天' : '%', name === '周转天数' ? 1 : 2)}${periods.week?.metrics[name]?.sample ? '（可判定样本）' : ''}`,
+        : `本周${name === '货龄（>60天库存占比）' ? '货龄占比' : name === '周转天数' ? '可发货天数' : name === '订单满足率' ? '满足率' : name} ${loading && !periods.week ? '加载中' : text(metricValue(periods.week?.metrics, name), name === '周转天数' ? '天' : '%', name === '周转天数' ? 1 : 2)}${periods.week?.metrics[name]?.provisional ? '（暂算）' : periods.week?.metrics[name]?.sample ? '（可判定样本）' : ''}`,
     footerNote:
       name === '准交率' && periods.week?.metrics[name]?.counts?.pending > 0
         ? onTimeDisplayNote(periods.week.metrics[name])
@@ -644,7 +644,7 @@ export function workbenchEvidence(facts) {
               {
                 value: metric.value,
                 unit: metric.unit,
-                ...(metric.value === null || metric.sample
+                ...(metric.value === null || metric.sample || metric.provisional
                   ? {
                       note:
                         metric.value === null &&
@@ -655,6 +655,7 @@ export function workbenchEvidence(facts) {
                     }
                   : {}),
                 ...(metric.sample ? { sample: metric.sample } : {}),
+                ...(metric.provisional ? { provisional: true, population: metric.population } : {}),
               },
             ]),
           ),
@@ -733,7 +734,7 @@ export function workbenchMetricDetail(facts, name) {
       (part?.rows ?? []).map((row) => row.stock_date || row.snapshot_date).filter(Boolean),
     );
     lines.push(
-      `${label}（${period.start} 至 ${dayOffset(period.end, -1)}）：${text(metric?.value, metric?.unit ?? '%', name === '周转天数' ? 1 : 2)}${metric?.sample ? '；' + metric.coverageNote : ''}${reason ? '；' + reason : ''}${dates.length ? '；快照 ' + dates.join('、') : ''}`,
+      `${label}（${period.start} 至 ${dayOffset(period.end, -1)}）：${text(metric?.value, metric?.unit ?? '%', name === '周转天数' ? 1 : 2)}${metric?.sample || metric?.provisional ? '；' + metric.coverageNote : ''}${reason ? '；' + reason : ''}${dates.length ? '；快照 ' + dates.join('、') : ''}`,
     );
   }
   return lines.join('\n');
