@@ -113,32 +113,32 @@ test('sums detail quantities including split SKUs and shares the customer formul
 
 test('three null quantities are excluded, other nulls become zero, real DMS zero wins over backup', () => {
   const result = read([
-    row('zero-DMS', 'S', { change_order_qty: 5, dms_last_update_qty: 0, need_qty_origin: 100 }),
+    row('zero-DMS', 'S', { change_order_qty: 5, dms_last_update_qty: 0, order_qty_origin: 100 }),
     row('backup', 'S', {
       change_order_qty: 3,
       dms_last_update_qty: null,
-      need_qty_origin: 8,
-      order_qty_origin: 200,
+      order_qty_origin: 8,
+      need_qty_origin: 200,
     }),
     row('null-request', 'S', {
       change_order_qty: null,
       dms_last_update_qty: null,
-      need_qty_origin: 7,
+      order_qty_origin: 7,
     }),
     row('request-only', 'S', {
       change_order_qty: 2,
       dms_last_update_qty: null,
-      need_qty_origin: null,
+      order_qty_origin: null,
     }),
     row('all-null', 'S', {
       change_order_qty: null,
       dms_last_update_qty: null,
-      need_qty_origin: null,
+      order_qty_origin: null,
     }),
     row('known-zero', 'S', {
       change_order_qty: null,
       dms_last_update_qty: 0,
-      need_qty_origin: null,
+      order_qty_origin: null,
       custchangetime: null,
     }),
   ]);
@@ -158,7 +158,7 @@ test('missing event time preserves the full quantity denominator and quantity un
     row('unknown', 'S', {
       change_order_qty: null,
       dms_last_update_qty: null,
-      need_qty_origin: 80,
+      order_qty_origin: 80,
       custchangetime: null,
     }),
     row('unchanged', 'S', { change_order_qty: 5, dms_last_update_qty: 5, custchangetime: null }),
@@ -179,14 +179,15 @@ test('missing event time preserves the full quantity denominator and quantity un
   const metric = computeWorkbenchMetrics({
     sections: [{ id: 'changes', status: 'ready', rows: result.summary }],
   })['改单率'];
-  assert.equal(metric.value, 60);
-  assert.equal(metric.sample.value, 60);
+  assert.ok(Math.abs(metric.value - 1500 / 105) < 1e-10);
+  assert.equal(metric.sample, undefined);
+  assert.equal(metric.provisional, true);
   assert.equal(metric.population.denominator, 105);
   assert.equal(metric.population.knownNumerator, 15);
   assert.equal(metric.population.unknown, 1);
   assert.equal(metric.population.unknownQuantity, 80);
   assert.ok(Math.abs(metric.population.maximumPercent - 9500 / 105) < 1e-10);
-  assert.match(metric.coverageNote, /候选商品明细/);
+  assert.match(metric.coverageNote, /全量有效商品数量105/);
 });
 
 test('twelve-hour and seven-day boundaries use creation and confirmed arrival', () => {
@@ -265,7 +266,7 @@ test('daily quantity SQL does not add an event-date cutoff or count grouped SKUs
   for (const sql of [amendmentEventsSql, amendmentChangesSql, customersSql]) {
     assert.match(sql, /agents_scm_execute_detail_d/);
     assert.match(sql, /COALESCE\(s.change_order_qty,0\)/);
-    assert.match(sql, /COALESCE\(s.dms_last_update_qty,s.need_qty_origin,0\)/);
+    assert.match(sql, /COALESCE\(s.dms_last_update_qty,s.order_qty_origin,0\)/);
     assert.doesNotMatch(
       sql,
       /agents_scm_execute_detail_hourly_d|changed<:gea_p2|changed>=:gea_p2|1 AS change_denominator|GROUP BY cust_code,cust_order_no,material_code/,
