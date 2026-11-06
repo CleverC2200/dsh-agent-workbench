@@ -80,9 +80,9 @@ test('five main cards expose keyboard and hover definitions; branch helper uses 
   await expect(inventory).not.toContainText('分仓可用');
   const definitions = [
     '当前库存＝基地库存＋分仓库存；含渠道时加上客户在仓库存。',
-    '库存合计÷近30日日均动销合计。',
+    '同范围库存合计÷近30日日均动销合计；含渠道时纳入客户在仓和匹配动销。',
     '当前货龄＝按批次库存加权的平均货龄：Σ(批次库存×批次货龄)÷Σ批次库存。',
-    '当月已发货客户订单：限额发货量÷订货量。',
+    '当月基地与分仓已发货客户订单：逐行限额发货量合计÷同池订货量合计。',
     '基地与分仓当前未完成客户订单。',
   ];
   for (const width of [1280, 560]) {

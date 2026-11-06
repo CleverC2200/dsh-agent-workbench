@@ -6,3 +6,4 @@
 - [分仓列表列宽调整与当前订单批量明细导出](fc-orders-selection-export.md)
 - [分仓首屏合并读取与组合发布验证](fc-single-warehouse-performance.md)
 - [库存缓存与读取恢复](inventory-cache.md)
+- [库存指标说明与实际计算一致](inventory-metric-definitions.md)
