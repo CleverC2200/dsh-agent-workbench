@@ -599,3 +599,57 @@ test('来源诊断按批次投影产品维度，不为每条记录重建产品�
     `产品大类被读取${categoryReads}次，应按诊断批次建索引`,
   );
 });
+
+test('调拨装配识别源表的从某基地调拨文本，并用目标基地字段确定接收方', async () => {
+  const { buildPlanSources } = await import('../static/mps/source/plan-inputs.js');
+  const source = draft();
+  const facts = [
+    {
+      material_code: 'A',
+      stat_period: '2026-12',
+      transfer_direction: '从甲调拨',
+      target_base: '乙',
+    },
+    {
+      material_code: 'B',
+      stat_period: '2026-12',
+      transfer_direction: '从甲基地调拨',
+      target_base: '乙基地',
+    },
+    { material_code: 'C', transfer_direction: '从未确认基地调拨', target_base: '乙' },
+    { material_code: 'D', transfer_direction: '甲→乙', target_base: '甲' },
+    { material_code: 'E', transfer_direction: '从甲调拨', target_base: '甲' },
+  ];
+  const result = buildPlanSources(source, {
+    sources: { tunnels: [], sku_capacity: [], transfers: facts },
+  });
+  assert.deepEqual(result.transferRoutes, [
+    { from: '甲', to: '乙', code: 'A', month: '2026-12' },
+    { from: '甲', to: '乙', code: 'B', month: '2026-12' },
+  ]);
+  assert.equal(result.metadata.pendingRoutes, 3);
+});
+
+test('调拨装配按已确认的四川广州湖州关系匹配评估基地', async () => {
+  const { buildPlanSources } = await import('../static/mps/source/plan-inputs.js');
+  const source = {
+    ...draft(),
+    products: ['郑州', '西南', '华南', '华东'].map((base) => ({ 基地: base, 产品编码: 'A' })),
+  };
+  const transfers = [
+    { material_code: 'A', transfer_direction: '从郑州调拨', target_base: '四川' },
+    { material_code: 'B', transfer_direction: '从广州基地调拨', target_base: '湖州基地' },
+    { material_code: 'C', transfer_direction: '湖州→四川', target_base: '西南' },
+    { material_code: 'D', transfer_direction: '从西南调拨', target_base: '四川' },
+    { material_code: 'E', transfer_direction: '郑州→四川', target_base: '广州' },
+  ];
+  const result = buildPlanSources(source, {
+    sources: { tunnels: [], sku_capacity: [], transfers },
+  });
+  assert.deepEqual(result.transferRoutes, [
+    { from: '郑州', to: '西南', code: 'A', month: source.month },
+    { from: '华南', to: '华东', code: 'B', month: source.month },
+    { from: '华东', to: '西南', code: 'C', month: source.month },
+  ]);
+  assert.equal(result.metadata.pendingRoutes, 2);
+});

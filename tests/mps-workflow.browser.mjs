@@ -1308,7 +1308,7 @@ test('MPS Tab5 reuses a base policy across three months while SKU inventory vers
   csv = await download(page, view, '下载目标库存明细');
   assert.match(csv, /2026-12,郑州,A,产品甲,纠偏,120,10,12,10,基地安全天数策略/);
   await view.locator('summary').filter({ hasText: 'SKU源库存与周转天数对照' }).click();
-  assert.match(csv, /2026-12,郑州,B,产品乙,纠偏/);
+  assert.match(csv, /2026-12,郑州,B,产品乙,月初,300,10,30/);
   await view.getByLabel('目标库存版本', { exact: true }).selectOption('月初');
   csv = await download(page, view, '下载目标库存明细');
   assert.match(csv, /2026-12,郑州,B,产品乙,月初,300,10,30,10,基地安全天数策略/);

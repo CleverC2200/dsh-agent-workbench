@@ -171,9 +171,17 @@ export function buildPlanSources(draft, relations, weightRead) {
   }
   const transferRoutes = [];
   let pendingRoutes = 0;
-  const canonical = (name) => bases.find((base) => base === name || `${base}基地` === name);
+  const baseAliases = { 四川: '西南', 广州: '华南', 湖州: '华东' };
+  const canonical = (name) => {
+    const normalized = name.replace(/基地$/, '');
+    return bases.find((base) => base === name || base === (baseAliases[normalized] ?? normalized));
+  };
   for (const row of sources?.transfers ?? []) {
-    const parts = text(row.transfer_direction).split(/\s*(?:->|→|至|到)\s*/);
+    const direction = text(row.transfer_direction);
+    const incoming = /^从\s*(.+?)\s*调拨$/.exec(direction);
+    const parts = incoming
+      ? [text(incoming[1]), text(row.target_base)]
+      : direction.split(/\s*(?:->|→|至|到)\s*/);
     const from = parts.length === 2 ? canonical(parts[0]) : null;
     const to = parts.length === 2 ? canonical(parts[1]) : null;
     if (
