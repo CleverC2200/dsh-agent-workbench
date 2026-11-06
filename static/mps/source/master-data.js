@@ -152,6 +152,38 @@ export async function readAnnual(signal) {
   );
   return annualRows(result.rows);
 }
+export async function readCapacityAnnual(months, signal) {
+  const { config, query } = client();
+  const definition = config.queries['annual.detail'];
+  const result = await query.readAll(
+    'annual.detail',
+    { months: [...new Set(months.flatMap(sourceMonthValues))], page_size: 200, offset: 0 },
+    { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
+  );
+  const groups = new Map();
+  for (const row of result.rows) {
+    const month = normalizedMonth(row.stat_month);
+    const base = text(row.belong_base),
+      code = text(row.material_code);
+    if (!month || !base || !code || !months.includes(month))
+      throw Error('年度SKU需求缺有效月份、基地或编码');
+    const key = JSON.stringify([month, base, code]);
+    const group = groups.get(key) ?? [];
+    group.push({
+      month,
+      base,
+      code,
+      quantity: row.demand_qty === null ? null : number(row.demand_qty),
+    });
+    groups.set(key, group);
+  }
+  return {
+    rows: [...groups.values()].map((rows) => ({
+      ...rows[0],
+      quantity: new Set(rows.map((row) => row.quantity)).size === 1 ? rows[0].quantity : null,
+    })),
+  };
+}
 export async function readAnnualDetails(months, base, signal) {
   const { config, query } = client();
   const definition = config.queries['annual.export'];

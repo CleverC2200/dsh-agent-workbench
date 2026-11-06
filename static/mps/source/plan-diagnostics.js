@@ -195,11 +195,13 @@ export function attachPlanReport(plan, sources, relations) {
         row.planMissing.flatMap((reason) =>
           reason === genericSupplyMissing
             ? replacement
-            : reason === '缺唯一有效件吨系数'
-              ? issues
-                  .filter((issue) => issue.kind === '缺件吨系数')
-                  .map((issue) => `${issue.kind}：${issue.reason}`)
-              : [reason],
+            : reason === '缺目标库存' && row.safetyDays === null
+              ? ['缺目标周转天数，本轮暂不参与计算，补充后重新评估']
+              : reason === '缺唯一有效件吨系数'
+                ? issues
+                    .filter((issue) => issue.kind === '缺件吨系数')
+                    .map((issue) => `${issue.kind}：${issue.reason}`)
+                : [reason],
         ),
       ),
     ];

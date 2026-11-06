@@ -14,6 +14,7 @@ import { readFactMonth, readInventoryTargets } from './facts.js';
 import { readSourceTable, forecastDimensions } from './source-tables.js';
 import { createDeliveryMetrics } from './delivery-metrics.js';
 import { createWorkflow } from './workflow-view.js';
+import { defaultInventoryMonth } from './inventory-selection.js';
 import { productProjections, sourceDimensions } from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
 import { productFileText, productReplacementErrors } from './product-file.js';
@@ -170,8 +171,7 @@ const integer = new Intl.NumberFormat('zh-CN', {
 const quantity = (rows, column) =>
   rows.reduce((sum, row) => (row[column] === '' ? sum : sum + Number(row[column])), 0);
 const currentMonth = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return defaultInventoryMonth();
 };
 const blankProduct = () => Object.fromEntries(productColumns.map((column) => [column, '']));
 const makeDraft = (id, month) => ({
@@ -1580,7 +1580,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               {
                 onClick: () => {
                   setVersionName('');
-                  setMonth(draft.month);
+                  setMonth(currentMonth());
                   setReference('');
                   setVersionOpen(true);
                 },

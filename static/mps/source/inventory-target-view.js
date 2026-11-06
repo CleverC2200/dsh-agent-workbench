@@ -1,3 +1,5 @@
+import { inventoryVersionOrder } from './inventory-selection.js';
+
 const text = (value) => (value == null ? '—' : String(value));
 const number = (value) =>
   value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 }).format(value);
@@ -128,6 +130,8 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
       '安全天数策略所属月',
       '源最终目标周转天数',
       '周转天数来源月份',
+      '周转天数来源版本',
+      '本轮参与计算',
     ];
     const values = (row) => [
       row.month,
@@ -158,6 +162,8 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
       draft.month,
       row.turnoverPolicy.sourceDays,
       row.turnoverPolicy.sourceMonths.join('、'),
+      row.turnoverPolicy.sourceVersion,
+      row.safetyDays === null ? '暂不参与，补充后重新评估' : '天数已齐，其他依赖另行核对',
     ];
     const mainColumns = [
       '月份',
@@ -230,6 +236,39 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
           { className: 'wf-note', role: 'status' },
           `基地安全天数已维护${configured}/${policyBases.length}个基地；当前${missing}个基地单品月份缺有效安全天数。`,
         ),
+        h(
+          'div',
+          { className: 'wf-actions' },
+          h(
+            'label',
+            null,
+            '源库存版本 ',
+            h(
+              'select',
+              {
+                'aria-label': '目标库存版本',
+                value: version,
+                onChange: (event) => {
+                  update({
+                    constraints: {
+                      ...draft.constraints,
+                      safetyDays: draft.constraints?.safetyDays ?? [],
+                      rules: draft.constraints?.rules ?? { local: [] },
+                      targetVersion: event.target.value,
+                    },
+                  });
+                },
+              },
+              [
+                ['auto', `自动：${inventoryVersionOrder(draft.month).join(' → ')}`],
+                ['纠偏', '纠偏版'],
+                ['月初', '月初版'],
+                ['滚动', '滚动版'],
+              ].map(([value, title]) => h('option', { key: value, value }, title)),
+            ),
+          ),
+          h('button', { onClick: sync, disabled: busy }, busy ? '读取目标库存中…' : '同步目标库存'),
+        ),
         table(
           '基地安全天数策略',
           ['基地', '缺源时基地补充天数（天）', '维护状态', '适用范围'],
@@ -238,7 +277,7 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
         h(
           'p',
           { className: 'wf-note' },
-          '优先取final_target_turnover_days，同基地同SKU各月共用一个天数。源值均缺失或冲突时，在下方待补表人工补充；基地补充值仅在缺源且未补单品时使用，不自动套用25天。目标库存＝有效安全天数×下月需求÷下月自然天数。留空表示待维护，明确填0时目标库存为0；已采用的库存下限规则仍参与计算。',
+          '按所选库存版本取最终目标周转天数，同基地同SKU各月共用一个天数。自动版本按期间整体选择，不因单品缺记录、空值或冲突混取其他版本。业务来源缺天数的单品列入待补清单，本轮暂不参与计算，补充后重新评估。目标库存＝有效天数×下月需求÷下月自然天数，明确填0时目标库存为0。基地补充天数保留供人工模拟使用。',
         ),
         h('h3', null, '目标周转天数待补'),
         h(
@@ -423,43 +462,6 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
           'details',
           { className: 'wf-disclosure' },
           h('summary', null, `SKU源库存与周转天数对照（${sourceRows.length}条）`),
-          h(
-            'div',
-            { className: 'wf-actions' },
-            h(
-              'label',
-              null,
-              '源库存版本 ',
-              h(
-                'select',
-                {
-                  'aria-label': '目标库存版本',
-                  value: version,
-                  onChange: (event) => {
-                    update({
-                      constraints: {
-                        ...draft.constraints,
-                        safetyDays: draft.constraints?.safetyDays ?? [],
-                        rules: draft.constraints?.rules ?? { local: [] },
-                        targetVersion: event.target.value,
-                      },
-                    });
-                  },
-                },
-                [
-                  ['auto', '自动：纠偏 → 月初 → 滚动'],
-                  ['纠偏', '纠偏版'],
-                  ['月初', '月初版'],
-                  ['滚动', '滚动版'],
-                ].map(([value, title]) => h('option', { key: value, value }, title)),
-              ),
-            ),
-            h(
-              'button',
-              { onClick: sync, disabled: busy },
-              busy ? '读取目标库存中…' : '同步目标库存',
-            ),
-          ),
           h(
             'p',
             { className: 'wf-note', role: 'status' },

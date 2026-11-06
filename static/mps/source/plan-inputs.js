@@ -119,11 +119,22 @@ export function buildPlanSources(draft, relations, weightRead) {
       ...facts.map((row) => text(row['基地'])).filter(Boolean),
     ]),
   ];
-  const months = Array.from({ length: 3 }, (_, index) => {
-    const date = new Date(`${draft.month}-01T00:00:00Z`);
+  const fiscalStart = `${Number(draft.month.slice(0, 4)) - (Number(draft.month.slice(5)) < 7 ? 1 : 0)}-07`;
+  const fiscalMonths = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(`${fiscalStart}-01T00:00:00Z`);
     date.setUTCMonth(date.getUTCMonth() + index);
     return date.toISOString().slice(0, 7);
   });
+  const months = [
+    ...new Set([
+      ...fiscalMonths,
+      ...Array.from({ length: 5 }, (_, index) => {
+        const date = new Date(`${draft.month}-01T00:00:00Z`);
+        date.setUTCMonth(date.getUTCMonth() + index);
+        return date.toISOString().slice(0, 7);
+      }),
+    ]),
+  ];
   const productionDays = bases.flatMap((base) =>
     months.map((month) => {
       const overrides = (draft.productionDays ?? []).filter(

@@ -4,6 +4,8 @@ import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-com
 import { solveMpsPlan } from 'dsh-agent-manage/mps-compute/plan';
 import { buildPlanSources } from './plan-inputs.js';
 import { attachPlanReport } from './plan-diagnostics.js';
+import { inventoryVersionOrder } from './inventory-selection.js';
+import { buildCapacityReport } from 'dsh-agent-manage/mps-compute/capacity-report';
 
 const number = (value) => {
   if (
@@ -220,6 +222,8 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     context,
     inventoryTargets: draft.inventoryTargets ?? [],
     inventoryTargetVersion: draft.constraints?.targetVersion ?? 'auto',
+    inventoryTargetPriority: inventoryVersionOrder(draft.month),
+    requireSourceTurnoverDays: draft.productSource === 'business',
     inventoryTargetIssues:
       draft.inventoryTargetsRead?.status === 'ready'
         ? []
@@ -356,10 +360,27 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   );
   if (evaluation) {
     const planSources = buildPlanSources(draft, relations, evaluation.weights);
-    result.plan = solveMpsPlan({
+    const planInput = {
       ...workflowInput,
       ...planSources,
       planSourceIssues: [...planSources.planSourceIssues, ...(evaluation.sourceIssues ?? [])],
+    };
+    result.plan = solveMpsPlan(planInput);
+    result.plan.capacityReport = buildCapacityReport(planInput, result.plan, evaluation.annual);
+    result.plan.capacityLineDetails = planSources.resources.map((resource) => {
+      const source = (relations?.sources?.tunnels ?? []).find(
+        (row) =>
+          row.belong_base === resource.base &&
+          row.production_unit === resource.workshop &&
+          row.tunnel_no === resource.tunnel,
+      );
+      return {
+        resourceId: resource.id,
+        workshop: resource.workshop ?? '',
+        tunnel: resource.tunnel ?? '',
+        specification: source?.tunnel_tonnage ?? '',
+        outsourced: /濮阳|代工/.test(resource.workshop ?? resource.name),
+      };
     });
     result.plan.sources = planSources.metadata;
     attachPlanReport(result.plan, planSources, relations);

@@ -1,3 +1,5 @@
+import { createCapacityReport } from './capacity-report-view.js';
+
 const valid = (value) => typeof value === 'number' && Number.isFinite(value);
 const reportMissing = (row) => row.reportMissing ?? row.planMissing;
 const reportStatus = (row) => {
@@ -90,6 +92,7 @@ export function planContext(plan, visible, { base, month }) {
 }
 
 export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
+  const CapacityReport = createCapacityReport(react, { downloadCsv, Dialog });
   const h = react.createElement;
   const plannedFields = [
     'demand',
@@ -563,68 +566,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           ),
         ),
       );
-    const rccp = () => {
-      const groups = [
-        ...Map.groupBy(demandRows, (row) =>
-          JSON.stringify([row.month, row.base, row.category]),
-        ).values(),
-      ]
-        .map((rows) => {
-          const ids = new Set(rows.flatMap((row) => row.candidateResources));
-          const capacities = resources.filter(
-            (row) => row.month === rows[0].month && ids.has(row.resourceId),
-          );
-          const capacity =
-            capacities.length && capacities.every((row) => row.capacity !== null)
-              ? capacities.reduce((sum, row) => sum + row.capacity, 0)
-              : null;
-          const demand = known(rows, 'demandTons');
-          const load =
-            demand.missing === 0 && demand.value !== null && capacity > 0
-              ? demand.value / capacity
-              : null;
-          return { rows, capacity, demand, load };
-        })
-        .sort((a, b) => (b.load ?? -1) - (a.load ?? -1));
-      return card(
-        '基地 × 大类 RCCP',
-        h(
-          react.Fragment,
-          null,
-          h(
-            'p',
-            { className: 'wf-note' },
-            '单位：吨。需求负荷为求解前粗评，可超过100%；跨大类共享产能仅作组合参考，不相加为物理总产能。实际排产按下方唯一资源校验，严格不超100%。',
-          ),
-          paginate(
-            '基地大类RCCP',
-            [
-              '月份',
-              '基地',
-              '大类',
-              '已知需求吨数',
-              '组合参考月产能',
-              '需求负荷',
-              '求解前差额',
-              '未评估单品',
-            ],
-            groups.map((group) => [
-              group.rows[0].month,
-              group.rows[0].base,
-              group.rows[0].category,
-              numberText(group.demand.value, false, 3),
-              numberText(group.capacity, false, 3),
-              numberText(group.load, true),
-              group.demand.missing || group.capacity === null
-                ? '—'
-                : numberText(Math.max(0, group.demand.value - group.capacity), false, 3),
-              group.rows.filter((row) => row.planMissing.length).length,
-            ]),
-            'rccp',
-          ),
-        ),
-      );
-    };
+
     return h(
       react.Fragment,
       null,
@@ -687,6 +629,9 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         : h(
             react.Fragment,
             null,
+            step === 'capacity'
+              ? h(CapacityReport, { plan, draft, stamp, filters, card, table, numberText, active })
+              : null,
             card(
               '问题分类与补充清单',
               h(
@@ -840,7 +785,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                   react.Fragment,
                   null,
                   card(
-                    '总需求与物理月产能',
+                    '求解后实际排产校验',
                     table(
                       '需求与物理产能',
                       ['月份', '已知需求吨数', '唯一资源月产能', '实际排产吨数', '排产容量校验'],
@@ -876,7 +821,6 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                         }),
                     ),
                   ),
-                  rccp(),
                   disclosure('唯一资源排产与产能校验', resources.length, () =>
                     h(
                       react.Fragment,
@@ -916,7 +860,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                     ),
                   ),
                   card(
-                    '调拨计划 · 求解输出',
+                    '调拨求解校验明细',
                     h(
                       react.Fragment,
                       null,

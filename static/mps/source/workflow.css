@@ -437,6 +437,29 @@
   background: #fff;
   overflow: hidden;
 }
+.wf-capacity-load {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.wf-capacity-load[data-band='warning'],
+.wf-capacity-holiday {
+  color: #956900;
+  background: #fff4d9;
+}
+.wf-capacity-load[data-band='overload'] {
+  color: #c8112a;
+  background: #ffe9ec;
+}
+.wf-capacity-load[data-band='unknown'] {
+  color: #667085;
+  background: #eef1f5;
+}
+.wf-capacity-series {
+  padding: 12px;
+  background: #fafafa;
+}
 .wf-plan-disclosure > summary {
   padding: 16px 18px;
   cursor: pointer;

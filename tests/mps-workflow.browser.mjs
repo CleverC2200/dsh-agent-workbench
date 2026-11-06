@@ -885,6 +885,30 @@ test('MPS effective category and share edits drive the same unconstrained invent
     '60.98%',
   );
   const solvedCsv = await download(page, capacity, '导出求解结果');
+  await expect(capacity.getByRole('table', { name: '基地大类RCCP', exact: true })).toContainText(
+    '无归属需求',
+  );
+  await expect(capacity.getByRole('region', { name: '全年月度负荷率', exact: true })).toBeVisible();
+  await expect(capacity.getByRole('region', { name: '缺口明细', exact: true })).toBeVisible();
+  const rccpReport = capacity.getByRole('table', { name: '基地大类RCCP', exact: true });
+  await expect(rccpReport.getByRole('columnheader')).toHaveCount(9);
+  await rccpReport.getByRole('button', { name: '郑州 汤圆 系列明细', exact: true }).click();
+  await expect(rccpReport.getByRole('table', { name: 'RCCP系列明细', exact: true })).toContainText(
+    '产能配额',
+  );
+  await capacity.getByRole('button', { name: '口径与规则', exact: true }).click();
+  await expect(frame.getByRole('dialog', { name: '口径与规则', exact: true })).toContainText(
+    '超过105%为红色',
+  );
+  await frame
+    .getByRole('dialog', { name: '口径与规则', exact: true })
+    .getByRole('button', { name: '关闭弹窗', exact: true })
+    .click();
+  const physicalLines = capacity.getByRole('region', { name: '产线产能明细', exact: true });
+  await physicalLines.locator('summary').first().click();
+  await expect(
+    physicalLines.getByRole('table', { name: '物理产线产能明细', exact: true }),
+  ).toContainText('隧道吨位（规格）');
   const sourceProblems = capacity.getByRole('region', { name: '问题分类与补充清单', exact: true });
   await expect(sourceProblems).toContainText('下市品产生需求');
   await expect(sourceProblems).toContainText('缺产线产能');
@@ -1323,10 +1347,10 @@ test('MPS Tab5 reuses a base policy across three months while SKU inventory vers
   await expect(detail).toContainText('缺目标周转天数');
   await expect(view.getByLabel('郑州 安全天数', { exact: true })).toBeVisible();
   let csv = await download(page, view, '下载目标库存明细');
-  assert.match(csv, /2026-12,郑州,A,产品甲,纠偏,120,10,12,,缺输入/);
+  assert.match(csv, /2026-12,郑州,A,产品甲,月初,500,10,50,,缺输入/);
   await view.getByLabel('郑州 安全天数', { exact: true }).fill('10');
   csv = await download(page, view, '下载目标库存明细');
-  assert.match(csv, /2026-12,郑州,A,产品甲,纠偏,120,10,12,10,基地安全天数策略/);
+  assert.match(csv, /2026-12,郑州,A,产品甲,月初,500,10,50,10,基地安全天数策略/);
   await view.locator('summary').filter({ hasText: 'SKU源库存与周转天数对照' }).click();
   assert.match(csv, /2026-12,郑州,B,产品乙,月初,300,10,30/);
   await view.getByLabel('目标库存版本', { exact: true }).selectOption('月初');

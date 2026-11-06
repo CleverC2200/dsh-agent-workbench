@@ -8,6 +8,8 @@ import { readUnitWeights, unitWeightCandidate } from './unit-weights.js';
 import { createEvaluationOverview, planContext } from './evaluation-view.js';
 import { readPlanRelations } from './relations.js';
 import { computeWorkflow } from './workflow-worker-client.js';
+import { readCapacityAnnual } from './master-data.js';
+import { capacityFiscalMonths } from 'dsh-agent-manage/mps-compute/capacity-report';
 
 const titles = {
   process: '需求加工与收敛',
@@ -215,7 +217,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       setEvaluationError('');
       try {
         const config = JSON.parse(document.getElementById('agent-sql-config').textContent);
-        const [weights, sourceRead] = await Promise.all([
+        const [weights, sourceRead, annual] = await Promise.all([
           weightRead ? Promise.resolve(weightRead) : syncWeights(),
           readPlanRelations(
             config,
@@ -231,6 +233,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             (value) => ({ value }),
             (error) => ({ error: error.message }),
           ),
+          draft.productSource === 'business'
+            ? readCapacityAnnual(capacityFiscalMonths(draft.month), controller.signal).catch(
+                (error) => ({ rows: [], error: error.message }),
+              )
+            : Promise.resolve({ rows: [], error: '人工模拟未读取全年年度SKU来源' }),
         ]);
         if (ticket !== executionGeneration.current) return;
         await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -239,7 +246,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           draft,
           sourceRead.value ?? null,
           shipmentSnapshot,
-          { weights, sourceIssues: sourceRead.error ? [sourceRead.error] : [] },
+          { weights, annual, sourceIssues: sourceRead.error ? [sourceRead.error] : [] },
           controller.signal,
         );
         if (ticket !== executionGeneration.current) return;
