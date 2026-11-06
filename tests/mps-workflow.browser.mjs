@@ -890,6 +890,11 @@ test('MPS effective category and share edits drive the same unconstrained invent
   await expect(sourceProblems).toContainText('缺产线产能');
   await expect(sourceProblems).toContainText('缺调拨关系');
   await expect(sourceProblems).toContainText('缺件吨系数');
+  const issueDetail = sourceProblems.locator('details');
+  await issueDetail.locator('summary').click();
+  const detailBounds = await issueDetail.boundingBox();
+  const cardBounds = await sourceProblems.boundingBox();
+  assert.ok(detailBounds.width > cardBounds.width * 0.9);
   const classifiedCsv = await download(page, sourceProblems, '导出分类问题清单');
   assert.match(classifiedCsv, /问题分类,来源标签,标签所属月,需求数量,源表,字段/);
   const solvedBook = XLSX.read(solvedCsv, { type: 'string', raw: true });

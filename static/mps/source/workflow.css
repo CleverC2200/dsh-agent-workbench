@@ -518,7 +518,8 @@
 .wf-plan-balances > table > tbody > .wf-plan-selected > td:last-child {
   background: #fff2f4;
 }
-.wf-page[data-planning='true'] > details {
+.wf-page[data-planning='true'] > details,
+.wf-page .wf-plan-disclosure {
   width: 100%;
   max-width: none;
 }
