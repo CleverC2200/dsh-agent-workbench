@@ -25,6 +25,15 @@ test('upstream business period includes all original-order SKUs without any logi
     const rows = db
       .prepare(ordersSql)
       .all({ gea_p1: '2026-10-19', gea_p2: '2026-10-26', gea_p900: '' });
+    assert.deepEqual(
+      db
+        .prepare(ordersSql)
+        .columns()
+        .map((column) => column.name)
+        .sort(),
+      [...workbenchQueries.orders.columns].sort(),
+      'published fulfillment columns must exactly match SQL output',
+    );
     assert.equal(rows.length, 3);
     assert.equal(
       rows.reduce((sum, row) => sum + row.sample_demand, 0),

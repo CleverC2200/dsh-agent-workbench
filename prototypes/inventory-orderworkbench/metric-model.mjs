@@ -1,5 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 21;
+export const metricCalculationVersion = 22;
 export function compatibleWorkbenchFacts(facts) {
   return (
     facts?.complete === true &&
@@ -230,8 +230,7 @@ export function computeWorkbenchMetrics(
   const amendment = result['改单率'];
   if (amendment.sample) {
     amendment.sample.value = amendment.value;
-    amendment.value = null;
-    amendment.note += '；完整数量改单率待核，样本率仅作明细参考，不发布为主指标';
+    amendment.note += '；完整数量改单率待核，卡片显示可判定商品明细的数量样本率，不代表全量';
   }
   if (
     amendmentRows.length &&
