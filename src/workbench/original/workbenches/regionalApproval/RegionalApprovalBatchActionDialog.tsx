@@ -146,27 +146,28 @@ const RegionalApprovalBatchActionDialog: React.FC<{
       };
       const attempt = new SalesPlanActionAttempt(client);
       try {
-        if (kind === 'REJECT' && !salesPlan.draft) throw new Error('草稿读取失败，请重新打开');
-        const stored = await salesPlan.draft?.invoke({
-          planId: item.row.planId,
-          versionId: item.row.versionId,
-          approvalRole: item.access.approvalRole,
-        });
-        if (stored?.stale) throw new Error('草稿版本已变化，请刷新后重试');
-        const adjustments = Object.entries(
-          salesPlanApprovalDraftValues(
-            item.detail,
-            item.row,
-            item.access.approvalRole,
-            stored?.draft?.role && stored.draft.role !== item.access.approvalRole
-              ? []
-              : (stored?.draft?.adjustments ?? []),
-            item.pendingValues,
-          ),
-        )
-          .filter(([, value]) => value.trim() && !/^[+-]?0+(?:\.0{1,3})?$/.test(value.trim()))
-          .map(([skuCode, adjustQty]) => ({ skuCode, adjustQty: adjustQty.trim() }));
-        if (adjustments.length) request.adjustments = adjustments;
+        if (kind === 'APPROVE') {
+          const stored = await salesPlan.draft?.invoke({
+            planId: item.row.planId,
+            versionId: item.row.versionId,
+            approvalRole: item.access.approvalRole,
+          });
+          if (stored?.stale) throw new Error('草稿版本已变化，请刷新后重试');
+          const adjustments = Object.entries(
+            salesPlanApprovalDraftValues(
+              item.detail,
+              item.row,
+              item.access.approvalRole,
+              stored?.draft?.role && stored.draft.role !== item.access.approvalRole
+                ? []
+                : (stored?.draft?.adjustments ?? []),
+              item.pendingValues,
+            ),
+          )
+            .filter(([, value]) => value.trim() && !/^[+-]?0+(?:\.0{1,3})?$/.test(value.trim()))
+            .map(([skuCode, adjustQty]) => ({ skuCode, adjustQty: adjustQty.trim() }));
+          if (adjustments.length) request.adjustments = adjustments;
+        }
         // 逐笔串行提交：每笔都有自己的幂等键，失败不会影响已提交的其它计划。
         // eslint-disable-next-line no-await-in-loop
         await attempt.submit({

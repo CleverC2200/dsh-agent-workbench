@@ -212,22 +212,9 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   const [draftError, setDraftError] = useState('');
   useEffect(() => {
     if (initialAction === 'SAVE') return;
-    setDraftReady(false);
-    setDraftError('');
-    if (!selectedRole) return;
-    const draft = salesPlan.draft;
-    if (!draft) {
-      setDraftError('loadFailed');
-      return;
-    }
     const controller = new AbortController();
-    void draft
-      .invoke({
-        planId: row.planId,
-        versionId: row.versionId,
-        approvalRole: selectedRole,
-        signal: controller.signal,
-      })
+    void salesPlan
+      .draft!.invoke({ planId: row.planId, versionId: row.versionId, signal: controller.signal })
       .then((result) => {
         if (controller.signal.aborted) return;
         if (result.stale) {
@@ -242,7 +229,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
             result.draft?.role && result.draft.role !== selectedRole
               ? []
               : (result.draft?.adjustments ?? []),
-            pendingValues,
+            selectedRole === approvalStage ? pendingValues : undefined,
           ),
         );
         setDraftReady(true);
@@ -251,7 +238,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
         if (!controller.signal.aborted) setDraftError('loadFailed');
       });
     return () => controller.abort();
-  }, [row.planId, row.versionId, initialAction, directApproval, selectedRole, pendingValues]);
+  }, [row.planId, row.versionId, initialAction, directApproval, selectedRole]);
   const [confirmedInputs, setConfirmedInputs] = useState<Record<string, string>>({});
   const [adjustmentSkus, setAdjustmentSkus] = useState<AdjustmentSkuState>({ status: 'idle' });
   const action = useSalesPlanAction({ client });
@@ -364,15 +351,20 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     !selectedRole ||
     !access?.allowedActions.includes(kind) ||
     targetStatus === undefined ||
-    !draftReady ||
-    adjustmentsInvalid ||
-    (adjustments.length > 0 && adjustmentSkus.status !== 'success') ||
-    nodeComparisons.some((item) => !item.confirmedQty || item.confirmedQty.startsWith('-')) ||
     (kind === 'REJECT'
       ? !remark.trim() || Array.from(remark.trim()).length > 1000
       : kind === 'SAVE'
-        ? !confirmed || adjustments.length === 0 || adjustmentSkus.status !== 'success'
-        : !directApproval && !confirmed);
+        ? !draftReady ||
+          !confirmed ||
+          adjustments.length === 0 ||
+          adjustmentSkus.status !== 'success' ||
+          adjustmentsInvalid ||
+          nodeComparisons.some((item) => !item.confirmedQty || item.confirmedQty.startsWith('-'))
+        : !draftReady ||
+          (!directApproval && !confirmed) ||
+          adjustmentsInvalid ||
+          (adjustments.length > 0 && adjustmentSkus.status !== 'success') ||
+          nodeComparisons.some((item) => !item.confirmedQty || item.confirmedQty.startsWith('-')));
   const unknown = t('common.assistantSurface.regionalApproval.liveAction.checksum.unknown');
   const hasAdjustmentDraft = Object.values(adjustmentValues).some(
     (value) => value.trim().length > 0,
@@ -465,7 +457,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
       expectedStatus: row.status,
       ...(access?.snapshotHash ? { expectedSnapshot: access.snapshotHash } : {}),
       ...(remark.trim() ? { remark: remark.trim() } : {}),
-      ...(adjustments.length > 0 ? { adjustments } : {}),
+      ...(kind !== 'REJECT' && adjustments.length > 0 ? { adjustments } : {}),
     };
     submittedRequest.current = request;
     void complete(
@@ -561,41 +553,6 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     </Modal>
   );
 
-  const roleControl = (
-    <>
-      <div className={styles.formControl}>
-        <span>{t('common.assistantSurface.regionalApproval.liveAction.approvalRole')}</span>
-        <Select
-          value={selectedRole}
-          disabled={intentLocked}
-          aria-label={t('common.assistantSurface.regionalApproval.liveAction.approvalRole')}
-          placeholder={t('common.assistantSurface.regionalApproval.liveAction.selectRole')}
-          onChange={(role) => {
-            setSelectedRole(role);
-            setDraftReady(initialAction === 'SAVE');
-            setDraftError('');
-            setAdjustmentValues({});
-            setConfirmedInputs({});
-            setConfirmed(false);
-            setAttempted(false);
-          }}
-        >
-          {availableRoles.map((role) => (
-            <Select.Option key={role} value={role}>
-              {t(`common.assistantSurface.regionalApproval.stages.${role}`)}
-            </Select.Option>
-          ))}
-        </Select>
-      </div>
-      {unsupportedRole ? (
-        <Alert
-          type="warning"
-          content={t('common.assistantSurface.regionalApproval.liveAction.roleContractUnavailable')}
-        />
-      ) : null}
-    </>
-  );
-
   if (kind === 'REJECT') {
     return (
       <>
@@ -615,23 +572,6 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           onOk={submit}
         >
           <div className={styles.compactRejectBody}>
-            {roleControl}
-            {draftError ? (
-              <Alert
-                type="warning"
-                content={t(`common.assistantSurface.regionalApproval.draft.${draftError}`)}
-                action={
-                  <Button
-                    onClick={() => {
-                      onRefresh();
-                      onClose();
-                    }}
-                  >
-                    {t('common.assistantSurface.regionalApproval.liveAction.refresh')}
-                  </Button>
-                }
-              />
-            ) : null}
             <label className={styles.formControl}>
               <span>{t('common.assistantSurface.regionalApproval.liveAction.rejectRemark')}</span>
               <Input.TextArea
@@ -776,7 +716,37 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           </section>
 
           <div className={styles.form}>
-            {roleControl}
+            <div className={styles.formControl}>
+              <span>{t('common.assistantSurface.regionalApproval.liveAction.approvalRole')}</span>
+              <Select
+                value={selectedRole}
+                disabled={intentLocked}
+                aria-label={t('common.assistantSurface.regionalApproval.liveAction.approvalRole')}
+                placeholder={t('common.assistantSurface.regionalApproval.liveAction.selectRole')}
+                onChange={(role) => {
+                  setSelectedRole(role);
+                  setAdjustmentValues({});
+                  setConfirmedInputs({});
+                  setConfirmed(false);
+                  setAttempted(false);
+                }}
+              >
+                {availableRoles.map((role) => (
+                  <Select.Option key={role} value={role}>
+                    {t(`common.assistantSurface.regionalApproval.stages.${role}`)}
+                  </Select.Option>
+                ))}
+              </Select>
+            </div>
+            {unsupportedRole ? (
+              <Alert
+                type="warning"
+                content={t(
+                  'common.assistantSurface.regionalApproval.liveAction.roleContractUnavailable',
+                )}
+              />
+            ) : null}
+
             <div className={styles.formControl}>
               <span>{t('common.assistantSurface.regionalApproval.liveAction.action')}</span>
               {initialAction === 'SAVE' ? (

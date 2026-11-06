@@ -126,6 +126,9 @@ export const validateSalesPlanActionInput = (
   ) {
     throw new SalesPlanActionError('validation', false);
   }
+  if (request.action === 'REJECT' && request.adjustments?.length) {
+    throw new SalesPlanActionError('validation', false);
+  }
   if (approvalNodeOrder === 1 && request.adjustments?.length) {
     throw new SalesPlanActionError('validation', false);
   }
