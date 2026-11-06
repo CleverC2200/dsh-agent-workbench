@@ -8,14 +8,14 @@ export function confirmationDraft(input) {
       ? Number(draft.rate)
       : NaN;
   draft.rate = Number.isFinite(rate) && rate >= 0 && rate <= 100 ? rate : null;
-  const shortage = (draft.lines || []).some(
-    (line) =>
-      typeof line.rawShortage === 'number' &&
-      Number.isFinite(line.rawShortage) &&
-      line.rawShortage > 0,
-  );
   draft.scenario =
-    draft.rate === null ? 'unknown' : draft.rate >= 90 && !shortage ? 'ready' : 'shortage';
+    draft.credit?.status === 'insufficient'
+      ? 'credit'
+      : draft.rate === null
+        ? 'unknown'
+        : draft.rate >= 90
+          ? 'ready'
+          : 'shortage';
   draft.consumerCode = 'order01';
   return draft;
 }
@@ -61,7 +61,22 @@ export function salesConfirmationCard(input, options = {}) {
   const section = {
     hasEntry: Boolean(options.entryUrl),
     entryUrl: options.entryUrl ? windowUrl(options.entryUrl) : '',
-    orderNoMarkdown: escape(draft.orderNo),
+    orderNoMarkdown: escape(draft.dmsOrderNo ?? draft.orderNo),
+    executionOrderNo: escape(draft.executionOrderNo),
+    hasExecutionOrderNo:
+      typeof draft.executionOrderNo === 'string' && !!draft.executionOrderNo.trim(),
+    dmsOrderNo: escape(draft.dmsOrderNo ?? draft.orderNo),
+    deliveryDate: escape(draft.deliveryDate),
+    hasInstruction: true,
+    instruction:
+      draft.scenario === 'credit'
+        ? `信用额度不足${Number.isFinite(draft.credit?.shortfall) ? '：' + draft.credit.shortfall + '元' : ''}，补充后请核验。`
+        : draft.scenario === 'ready'
+          ? '订单满足率达到90%，请核对并处理订单。'
+          : draft.scenario === 'shortage'
+            ? '订单满足率未达到90%，请先调整商品。'
+            : '订单满足率暂未完整提供，请核对后处理。',
+    creditInsufficient: draft.scenario === 'credit',
     customer: escape(draft.customer),
     quantity: String(draft.quantity ?? '—'),
     rate: draft.rate === null ? '—' : draft.rate.toFixed(1) + '%',
@@ -84,6 +99,14 @@ export function salesConfirmationCard(input, options = {}) {
   ]) {
     section['has' + name] = Boolean(urls[key]);
     section[name + 'Url'] = urls[key] ? windowUrl(urls[key]) : '';
+  }
+  const processUrl = urls.process ?? urls.confirm ?? urls.edit;
+  section.hasProcess = Boolean(processUrl);
+  if (processUrl) {
+    const url = new URL(processUrl);
+    url.searchParams.set('view', 'process');
+    url.searchParams.delete('mode');
+    section.ProcessUrl = windowUrl(url.href);
   }
   return renderSalesCardTemplate(salesCardTemplate, {
     mentions: options.mentionOpenId ? '<at id=' + options.mentionOpenId + '></at> ' : '',
