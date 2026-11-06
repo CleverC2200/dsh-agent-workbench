@@ -19,6 +19,48 @@ const number = (value) => {
     : null;
 };
 
+export function resolveWeightPairs(manual, pairs, weightRead) {
+  const weights = manual.map((row) => ({ ...row, tonsPerPiece: number(row.tonsPerPiece) }));
+  const manualIndex = new Set(weights.map((row) => JSON.stringify([row.base, row.code])));
+  const source = new Map();
+  const issues = [];
+  for (const row of weightRead?.rows ?? []) {
+    const code = text(row.material_code);
+    source.set(code, [...(source.get(code) ?? []), row]);
+  }
+  const seen = new Set();
+  for (const pair of pairs) {
+    const key = JSON.stringify([pair.base, pair.code]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (manualIndex.has(key)) {
+      const selected = weights.filter((row) => row.base === pair.base && row.code === pair.code);
+      if (selected.length !== 1 || !(selected[0].tonsPerPiece > 0))
+        issues.push({
+          ...pair,
+          reason: '人工件吨系数重复、未维护或无效',
+          sourceTable: '当前评估版本人工参数',
+        });
+      continue;
+    }
+    const rows = source.get(pair.code) ?? [];
+    const channels = [...new Set(rows.map((row) => text(row.channel_name)).filter(Boolean))].join(
+      '、',
+    );
+    const candidate = unitWeightCandidate(rows, pair.code, channels);
+    if (candidate.tonsPerPiece !== null)
+      weights.push({ base: pair.base, code: pair.code, tonsPerPiece: candidate.tonsPerPiece });
+    else
+      issues.push({
+        base: pair.base,
+        code: pair.code,
+        reason: candidate.missing.join('；'),
+        sourceTable: 'ai_db.agents_dim_material_prod_sales_info_d',
+      });
+  }
+  return { weights, issues };
+}
+
 export function buildPlanSources(draft, relations, weightRead) {
   const sources = relations?.sources;
   const issues = [];
@@ -119,7 +161,7 @@ export function buildPlanSources(draft, relations, weightRead) {
       ...facts.map((row) => text(row['基地'])).filter(Boolean),
     ]),
   ];
-  const fiscalStart = `${Number(draft.month.slice(0, 4)) - (Number(draft.month.slice(5)) < 7 ? 1 : 0)}-07`;
+  const fiscalStart = `${Number(draft.month.slice(0, 4)) - (Number(draft.month.slice(5)) <= 7 ? 1 : 0)}-07`;
   const fiscalMonths = Array.from({ length: 12 }, (_, index) => {
     const date = new Date(`${fiscalStart}-01T00:00:00Z`);
     date.setUTCMonth(date.getUTCMonth() + index);
@@ -155,10 +197,6 @@ export function buildPlanSources(draft, relations, weightRead) {
       };
     }),
   );
-  const unitWeights = (draft.unitWeights ?? []).map((row) => ({
-    ...row,
-    tonsPerPiece: number(row.tonsPerPiece),
-  }));
   const pairs = [
     ...new Map(
       [
@@ -169,22 +207,7 @@ export function buildPlanSources(draft, relations, weightRead) {
         .map((row) => [JSON.stringify([row.base, row.code]), row]),
     ).values(),
   ];
-  const sourceWeights = new Map();
-  for (const row of weightRead?.rows ?? []) {
-    const group = sourceWeights.get(text(row.material_code)) ?? [];
-    group.push(row);
-    sourceWeights.set(text(row.material_code), group);
-  }
-  for (const pair of pairs) {
-    if (unitWeights.some((row) => row.base === pair.base && row.code === pair.code)) continue;
-    const values = sourceWeights.get(pair.code) ?? [];
-    const channels = [...new Set(values.map((row) => text(row.channel_name)).filter(Boolean))].join(
-      '、',
-    );
-    const candidate = unitWeightCandidate(values, pair.code, channels);
-    if (candidate.tonsPerPiece !== null)
-      unitWeights.push({ base: pair.base, code: pair.code, tonsPerPiece: candidate.tonsPerPiece });
-  }
+  const { weights: unitWeights } = resolveWeightPairs(draft.unitWeights ?? [], pairs, weightRead);
   const transferRoutes = [];
   let pendingRoutes = 0;
   const canonical = (name) => {

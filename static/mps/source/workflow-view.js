@@ -234,11 +234,40 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             (error) => ({ error: error.message }),
           ),
           draft.productSource === 'business'
-            ? readCapacityAnnual(capacityFiscalMonths(draft.month), controller.signal).catch(
-                (error) => ({ rows: [], error: error.message }),
-              )
+            ? readCapacityAnnual(
+                [...new Set([...capacityFiscalMonths(result.shipmentMonth), ...result.months])],
+                controller.signal,
+              ).catch((error) => ({ rows: [], error: error.message }))
             : Promise.resolve({ rows: [], error: '人工模拟未读取全年年度SKU来源' }),
         ]);
+        if (ticket !== executionGeneration.current) return;
+        if (draft.productSource === 'business') {
+          annual.referenceMonth = result.shipmentMonth;
+          const knownCodes = new Set(weights?.codes ?? weightCodes);
+          const additional = [
+            ...new Set(annual.rows.map((row) => row.code).filter((code) => !knownCodes.has(code))),
+          ];
+          if (additional.length) {
+            try {
+              const extra = await readUnitWeights(
+                config,
+                (_request, options) =>
+                  call(
+                    'sql',
+                    { queryId: options.queryId, parameters: options.values },
+                    { signal: options.signal },
+                  ),
+                additional,
+                controller.signal,
+              );
+              if (weights?.configVersion && extra.configVersion !== weights.configVersion)
+                throw Error('年度件吨系数与本轮读取配置版本不一致，请重新评估');
+              annual.extraWeights = extra;
+            } catch (error) {
+              annual.weightError = error.message;
+            }
+          }
+        }
         if (ticket !== executionGeneration.current) return;
         await new Promise((resolve) => requestAnimationFrame(resolve));
         if (ticket !== executionGeneration.current) return;

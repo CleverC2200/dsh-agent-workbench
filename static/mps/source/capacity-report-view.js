@@ -13,7 +13,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
     const [openTransfers, setOpenTransfers] = react.useState({});
     const report = plan.capacityReport;
     if (!report) return null;
-    const month = filters.month || plan.months[0];
+    const month = filters.month || report.referenceMonth;
     const next = offset(month, 1);
     const byBase = (row) => !filters.base || row.base === filters.base;
     const groups = report.rccp.filter(
@@ -124,7 +124,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
         h(
           'span',
           null,
-          `业务评估基准月 ${month} · 单位：吨。汇总保留完整基地口径，不随SKU搜索截断。`,
+          `发货基准月 ${report.referenceMonth}，当前展示 ${month} · 单位：吨。基准月取年度SKU需求，M+1至M+3取本轮拆分，M+4为年度参考。`,
         ),
         h('button', { onClick: () => setRulesOpen(true) }, '口径与规则'),
         h(
@@ -307,7 +307,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
           h(
             'p',
             { className: 'wf-note' },
-            '计划月 → 发出与接收线路 → 大类、物料组、SKU。发出侧先满足自身需求；数量单位为件，线路同时列出吨数。',
+            '计划月 → 发出与接收线路 → 大类、物料组、SKU。发出侧先满足自身需求；本表数量单位为件。',
           ),
           transferGroups.size
             ? [...transferGroups].map(([period, rows]) =>
@@ -342,16 +342,12 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                                 items.reduce((total, row) => total + row.quantity, 0),
                                 false,
                                 3,
-                              )}件 / ${numberText(
-                                items.reduce((total, row) => total + row.tons, 0),
-                                false,
-                                3,
-                              )}吨`,
+                              )}件`,
                             ),
                             openTransfers[key]
                               ? table(
                                   '线路调拨明细',
-                                  ['大类', '系列（物料组）', 'SKU', '调拨数量（件）', '调拨吨数'],
+                                  ['大类', '系列（物料组）', 'SKU', '调拨数量（件）'],
                                   items.map((item) => {
                                     const product = plan.rows.find(
                                       (row) =>
@@ -364,7 +360,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                                       product?.group ?? '待核对',
                                       item.code,
                                       numberText(item.quantity, false, 3),
-                                      numberText(item.tons, false, 3),
                                     ];
                                   }),
                                 )
@@ -387,6 +382,52 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
             'p',
             { className: 'wf-note' },
             `年度需求独立取${report.annualSource.table}，读取${report.annualSource.records}个基地SKU月份，另有${report.annualSource.excludedRows}行无SKU编码未纳入折吨、${report.annualSource.unmappedCount}行维度待核对。${report.annualSource.error || '按SKU有效吨/件折算，空值、冲突及缺件吨系数的月份保留待评估。'}2027年2月按已确认15天计算。首表超出本轮拆分的月份仅作年度需求参考，不参与排产。`,
+          ),
+          h(
+            'button',
+            {
+              disabled: !active,
+              onClick: () => {
+                const rows = report.annualIssues
+                  .filter((row) => !filters.base || row.base === filters.base)
+                  .map((row) => ({
+                    基地: row.base,
+                    产品编码: row.code,
+                    适用月份: [...new Set(row.months)].join('、'),
+                    待补原因: row.reason,
+                    源表: row.sourceTable,
+                    字段: row.fields,
+                  }));
+                downloadCsv(
+                  `${draft.month}-年度评估缺项.csv`,
+                  ['基地', '产品编码', '适用月份', '待补原因', '源表', '字段'],
+                  rows,
+                );
+              },
+            },
+            '导出年度评估缺项',
+          ),
+          h(
+            'details',
+            { className: 'wf-plan-disclosure' },
+            h(
+              'summary',
+              null,
+              `年度评估缺项 ${report.annualIssues.length}项，按基地SKU与原因分列，预览前25项`,
+            ),
+            table(
+              '年度评估缺项',
+              ['基地', 'SKU', '适用月份', '待补原因', '源表 / 字段'],
+              report.annualIssues
+                .slice(0, 25)
+                .map((row) => [
+                  row.base,
+                  row.code,
+                  [...new Set(row.months)].join('、'),
+                  row.reason,
+                  `${row.sourceTable} / ${row.fields}`,
+                ]),
+            ),
           ),
           report.annualSource.unmappedCount
             ? h(

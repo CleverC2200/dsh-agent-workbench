@@ -2,7 +2,7 @@ import { sourceDimensions } from './source-projections.js';
 import { buildCategoryDemand } from './category-demand.js';
 import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { solveMpsPlan } from 'dsh-agent-manage/mps-compute/plan';
-import { buildPlanSources } from './plan-inputs.js';
+import { buildPlanSources, resolveWeightPairs } from './plan-inputs.js';
 import { attachPlanReport } from './plan-diagnostics.js';
 import { inventoryVersionOrder } from './inventory-selection.js';
 import { buildCapacityReport } from 'dsh-agent-manage/mps-compute/capacity-report';
@@ -366,7 +366,23 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       planSourceIssues: [...planSources.planSourceIssues, ...(evaluation.sourceIssues ?? [])],
     };
     result.plan = solveMpsPlan(planInput);
-    result.plan.capacityReport = buildCapacityReport(planInput, result.plan, evaluation.annual);
+    const annualWeights = resolveWeightPairs(
+      draft.unitWeights ?? [],
+      evaluation.annual?.rows ?? [],
+      {
+        rows: [
+          ...(evaluation.weights?.rows ?? []),
+          ...(evaluation.annual?.extraWeights?.rows ?? []),
+        ],
+      },
+    );
+    result.plan.capacityReport = buildCapacityReport(
+      { ...planInput, unitWeights: annualWeights.weights },
+      result.plan,
+      evaluation.annual
+        ? { ...evaluation.annual, unitWeightGaps: annualWeights.issues }
+        : undefined,
+    );
     result.plan.capacityLineDetails = planSources.resources.map((resource) => {
       const source = (relations?.sources?.tunnels ?? []).find(
         (row) =>
