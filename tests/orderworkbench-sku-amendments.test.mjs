@@ -8,6 +8,7 @@ import {
   changesSql,
 } from '../business/inventory-orderworkbench/document-queries.mjs';
 import { computeWorkbenchMetrics } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
+import { workbenchQueries } from '../business/inventory-orderworkbench/queries.mjs';
 
 const columns = [
   'cust_code',
@@ -163,6 +164,11 @@ test('missing event time preserves the full quantity denominator and quantity un
     row('unchanged', 'S', { change_order_qty: 5, dms_last_update_qty: 5, custchangetime: null }),
   ]);
   const r = result.summary[0];
+  assert.deepEqual(
+    Object.keys(result.combined[0]).sort(),
+    [...workbenchQueries.changes.columns].sort(),
+    'published amendment columns must include the calculated unknown quantity',
+  );
   assert.equal(r.numerator, null);
   assert.equal(r.denominator, 105);
   assert.equal(r.sample_numerator, 15);
@@ -173,7 +179,7 @@ test('missing event time preserves the full quantity denominator and quantity un
   const metric = computeWorkbenchMetrics({
     sections: [{ id: 'changes', status: 'ready', rows: result.summary }],
   })['改单率'];
-  assert.equal(metric.value, null);
+  assert.equal(metric.value, 60);
   assert.equal(metric.sample.value, 60);
   assert.equal(metric.population.denominator, 105);
   assert.equal(metric.population.knownNumerator, 15);
