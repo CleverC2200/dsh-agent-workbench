@@ -1,7 +1,7 @@
 import type { NativeBusinessStatus } from '../../../business-contract.ts';
 import { isBackendHttpError } from '../../http-error.ts';
 import {
-  businessSafeErrorMessage,
+  salesPlanRejectionMessage,
   reportSalesPlanError,
   SalesPlanActionAttempt,
   classifySalesPlanActionError,
@@ -394,14 +394,7 @@ export function RegionalApprovalResubmitDialog({
           let rejection: string | undefined;
           if (isBackendHttpError(failure.cause)) {
             const id = reportSalesPlanError('sales-plan-submit', failure.cause);
-            rejection = [
-              failure.cause.status < 500
-                ? businessSafeErrorMessage(
-                    failure.cause.backendMessage.replace(/^GEA_HTTP_\d{3}[：:]\s*/u, ''),
-                  )
-                : undefined,
-              tr('requestReference', { id }),
-            ]
+            rejection = [salesPlanRejectionMessage(failure.cause), tr('requestReference', { id })]
               .filter(Boolean)
               .join(' ');
           }

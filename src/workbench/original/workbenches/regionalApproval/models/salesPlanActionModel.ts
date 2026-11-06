@@ -178,6 +178,22 @@ export const reportSalesPlanError = (scope: string, detail: unknown): string => 
   return id;
 };
 
+export const salesPlanRejectionMessage = (cause: {
+  status: number;
+  backendMessage: string;
+  details?: unknown;
+}): string | undefined => {
+  const details = cause.details;
+  const dms =
+    details &&
+    typeof details === 'object' &&
+    'upstreamCode' in details &&
+    details.upstreamCode === 'SALES_PLAN_DMS_WRITEBACK_FAILED';
+  if (cause.status >= 500 && !dms) return undefined;
+  const message = cause.backendMessage.replace(/^GEA_HTTP_\d{3}[：:]\s*/u, '');
+  return businessSafeErrorMessage(dms ? message.replace(/Integer范围/g, '系统允许范围') : message);
+};
+
 export const salesPlanConflictErrorKind = (details: unknown): 'conflict' | 'configuration' => {
   if (
     details &&
@@ -209,8 +225,16 @@ export const classifySalesPlanActionError = (error: unknown): SalesPlanActionErr
         cause: error,
       });
     }
-    if (error.status >= 500)
-      return new SalesPlanActionError('unavailable', true, undefined, { cause: error });
+    if (error.status >= 500) {
+      const rejected =
+        error.details &&
+        typeof error.details === 'object' &&
+        'retryable' in error.details &&
+        error.details.retryable === false;
+      return new SalesPlanActionError(rejected ? 'failed' : 'unavailable', !rejected, undefined, {
+        cause: error,
+      });
+    }
     return new SalesPlanActionError('failed', false, undefined, { cause: error });
   }
   if (error instanceof TypeError)

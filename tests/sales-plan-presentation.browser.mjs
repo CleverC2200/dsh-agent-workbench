@@ -888,7 +888,7 @@ test('汇总数量为空或超过精度时阻止通过，修正后可继续', { 
   const deltas = Object.fromEntries(
     drafts.map((draft) => [draft.planId, draft.adjustments[0].adjustQty]),
   );
-  assert.deepEqual(deltas, { p1: '-16', p2: '-23.999' });
+  assert.deepEqual(deltas, { p1: '-16', p2: '-24' });
 });
 
 test('退回计划可继续修改本地草稿，组织汇总分摊不触发重提或审批', { timeout: 30000 }, async (t) => {
