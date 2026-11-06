@@ -135,7 +135,7 @@ export default function ConfiguredWorkbench() {
       turnover: {
         current: stockMetrics.turnover,
         unit: '天',
-        explanation: '库存合计÷近30日日均动销合计。',
+        explanation: '同范围库存合计÷近30日日均动销合计；含渠道时纳入客户在仓和匹配动销。',
       },
       aging: {
         current: companyAverageAge(parts.health, parts['branch-stock']),
