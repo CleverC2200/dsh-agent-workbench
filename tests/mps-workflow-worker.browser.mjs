@@ -54,9 +54,39 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
         月初数量: index,
       })),
       history: [],
+      historyAnnual: {
+        periods: [
+          {
+            start: '2025-07-01',
+            end: '2026-06-30',
+            rows: Array.from({ length: 200 }, (_, index) => ({
+              基地: '甲',
+              产品编码: String(index),
+              数量: index + 1,
+            })),
+          },
+        ],
+      },
+      historyAnnualRead: { status: 'ready' },
       reportRead: { status: 'ready' },
       historyRead: { status: 'ready' },
-      categoryDemand: [{ month: '2026-12', category: '点心', quantity: 12000 }],
+      categoryDemand: ['2026-12', '2027-01', '2027-02', '2027-03'].map((month) => ({
+        month,
+        category: '点心',
+        quantity: 12000,
+      })),
+      resources: [{ id: 'R', base: '甲', kind: 'tunnel', name: '共享产线', dailyTons: 1 }],
+      resourceAssignments: Array.from({ length: 200 }, (_, index) => ({
+        base: '甲',
+        code: String(index),
+        resourceId: 'R',
+        share: 1,
+      })),
+      unitWeights: Array.from({ length: 200 }, (_, index) => ({
+        base: '甲',
+        code: String(index),
+        tonsPerPiece: 0.01,
+      })),
       constraints: { safetyDays: [{ base: '甲', days: 15 }], rules: { local: [] } },
     };
     const shipment = {
@@ -66,7 +96,11 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
       status: 'ready',
       sourceKind: 'local-file',
       source: 'local-file',
-      rows: [],
+      rows: Array.from({ length: 200 }, (_, index) => ({
+        base: '甲',
+        code: String(index),
+        end: 0,
+      })),
       adjustForecast() {},
     };
     const evaluation = { weights: null, sourceIssues: [] };
@@ -116,6 +150,11 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
     }
   });
   assert.ok(result.actual.rows.length > 0);
+  assert.ok(result.actual.plan.rows.some((row) => row.mainPlan > 0));
+  assert.equal(
+    new Set(result.actual.plan.rows.filter((row) => row.mainPlan > 0).map((row) => row.month)).size,
+    3,
+  );
   assert.deepEqual(result.actual, result.expected);
   assert.deepEqual(result.completed, result.expected);
   assert.equal(result.aborted, 'AbortError');
