@@ -1,10 +1,15 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 23;
+export const metricCalculationVersion = 26;
 export function retainableWorkbenchFacts(facts) {
-  return facts?.attributionVersion === 2 &&
+  return (
+    facts?.attributionVersion === 2 &&
     facts.metricCalculationVersion === metricCalculationVersion &&
-    Object.values(facts.periods ?? {}).some(period =>
-      Array.isArray(period?.sections) && period.sections.some(section => section.status === 'ready'));
+    Object.values(facts.periods ?? {}).some(
+      (period) =>
+        Array.isArray(period?.sections) &&
+        period.sections.some((section) => section.status === 'ready'),
+    )
+  );
 }
 export function compatibleWorkbenchFacts(facts) {
   return (
@@ -17,8 +22,9 @@ export function compatibleWorkbenchFacts(facts) {
 export function reusableWorkbenchFacts(facts) {
   return (
     compatibleWorkbenchFacts(facts) &&
-    ['directors', 'customers', 'customerManagers'].every(name =>
-      !facts[name] || facts[name].status === 'ready') &&
+    ['directors', 'customers', 'customerManagers'].every(
+      (name) => !facts[name] || facts[name].status === 'ready',
+    ) &&
     Object.values(facts.periods).every(
       (period) =>
         Array.isArray(period.sections) &&
@@ -123,7 +129,7 @@ export function computeWorkbenchMetrics(
         : null,
       kind === '1'
         ? '按传到OMS的单据新增日期，客户编码＋原订单号去重：锁定期内且接单超过12小时后作废订单数 ÷ O接收订单数（剔除接单后12小时以内、含恰好12小时作废的订单）；缺作废时间不计算'
-        : '按日表header_addtime筛选OMS创建周期，按商品明细数量合计、不按订单或SKU种类计数：锁定期内ΣABS(客户要求改单量change_order_qty－有效商品数量) ÷ Σ有效商品数量 ×100%；有效量优先D最后修改量dms_last_update_qty，空时按已核对页面映射取备份order_qty_origin（源字段绑定仍待最终核定）；三个数量全空剔除，其余空按0、真实0有效；整单作废剔除，仅保留detailstatus=10且is_stat=1；交期距创建≤7日按创建+12小时锁定，否则确认到货-7日；以custchangetime判定锁内，不额外限定改单在创建周期内；该时间对SKU实际改量的覆盖仍待核，缺失保留未知',
+        : '按日表header_addtime归属OMS创建周期；郑州筛选仅取提货点pickup_point=01，不以belong_base替代；按商品明细数量合计：仅客户要求改单量change_order_qty非空时计入ΣABS(客户要求量－有效量)，真实0保留；分母为全部有效量之和，优先dms_last_update_qty，否则need_qty_origin，数量缺失按0；三个数量全空剔除，作废及无效明细剔除；仅接口createsource=20，剔除虚拟出1/2和超时原因14/16；按仓库维表剔除发收仓同提货点且双方均为工厂仓或工厂外租库的短拨，未分配发货仓仅按同执行单、同提货点及收货仓的有效明细唯一已知发货仓补齐，冲突不推断；不使用锁定期、交期或改单时间作为条件',
     );
   }
   const need = sum(orders, 'demand'),
@@ -259,7 +265,7 @@ export function computeWorkbenchMetrics(
       if (unknown > 0) {
         amendment.value = (100 * knownNumerator) / denominator;
         amendment.provisional = true;
-        amendment.coverageNote = `暂算：现有时间已判定调整量${knownNumerator} ÷ 全量有效商品数量${denominator}；${unknown}条明细待判定，不代表完整改单率。`;
+        amendment.coverageNote = `暂算：已确认有效明细调整量${knownNumerator} ÷ 全量有效商品数量${denominator}；${unknown}条明细待判定，不代表完整改单率。`;
         amendment.note += '；' + amendment.coverageNote;
       }
     }
@@ -417,7 +423,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
         (row) => Number(row.invalid) > 0 || row.numerator == null || row.denominator == null,
       )
     )
-      return '改单数量或锁定期依据不足：需客户要求改单量change_order_qty、D最后修改量dms_last_update_qty、调整需求量备份need_qty_origin，以及OMS新增时间header_addtime、开单确认到货requireddeliverytime和实际改量对应的custchangetime；数量空值按已确认规则处理，缺失的改量时间不当作未改单。';
+      return '改单数量或有效明细标识不足：需客户要求改单量change_order_qty、D最后修改量dms_last_update_qty、调整需求量备份need_qty_origin及完整的客户、原订单、商品和订单状态；客户要求量为空不计分子，真实0保留；不要求交期或改单时间。';
     if (
       selected.some(
         (row) => Number(row.invalid) > 0 || row.numerator == null || row.denominator == null,
