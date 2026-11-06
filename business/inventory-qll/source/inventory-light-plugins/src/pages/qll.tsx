@@ -73,7 +73,7 @@ const KPI_COPY: Record<
     title: '库存周转',
     eyebrow: '近30日动销',
     target: '参考口径',
-    definition: '库存合计÷近30日日均动销合计。',
+    definition: '同范围库存合计÷近30日日均动销合计；含渠道时纳入客户在仓和匹配动销。',
   },
   aging: {
     title: '平均货龄',
@@ -83,7 +83,7 @@ const KPI_COPY: Record<
   },
   fulfillment: {
     title: '订单满足率',
-    definition: '当月已发货客户订单：限额发货量÷订货量。',
+    definition: '当月基地与分仓已发货客户订单：逐行限额发货量合计÷同池订货量合计。',
     eyebrow: '本自然月',
     target: '目标满足率',
   },
@@ -301,9 +301,8 @@ export function KpiCard({
                 {metricKey === 'orderGap' && <div>{copy.definition}</div>}
                 {inventoryMetric && inventoryMetric.planCustomerDate && (
                   <div>
-                    {'客户总量快照：'}
+                    {'客户在仓快照：'}
                     {inventoryMetric.planCustomerDate}
-                    {'；在仓 + 在途'}
                   </div>
                 )}
                 {inventoryMetric && inventoryMetric.observedCustomer > 0 && (
