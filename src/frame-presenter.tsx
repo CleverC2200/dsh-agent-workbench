@@ -268,6 +268,15 @@ export function mountFramePresentation(
     );
     const frame = useRef<HTMLIFrameElement>(null);
     const documentElement = useRef<HTMLElement>(null);
+    const [pageModalOpen, setPageModalOpen] = useState(false);
+    useEffect(() => {
+      const receiveModalState = (event: MessageEvent) => {
+        if (page.id !== 'inventory-apsplan' || event.source !== frame.current?.contentWindow || event.data?.protocol !== 'gea-page-modal-v1' || typeof event.data.open !== 'boolean') return;
+        setPageModalOpen(event.data.open);
+      };
+      window.addEventListener('message', receiveModalState);
+      return () => window.removeEventListener('message', receiveModalState);
+    }, [page.id]);
     const [preferredWidth, setPreferredWidth] = useState(() => rememberedConversationWidth ?? 520);
     const [space, setSpace] = useState({ viewport: window.innerWidth, document: 0 });
     const maximumWidth = Math.max(
@@ -706,6 +715,7 @@ export function mountFramePresentation(
       <div className="gea-page-toolbar-seat">
         <ConversationToolbar
           view={view}
+          viewDisabled={pageModalOpen}
           onViewChange={changeView}
           onHistory={() => workbench.showHistory(page.id)}
           onNewConversation={() => void newConversation()}
@@ -806,6 +816,7 @@ export function mountFramePresentation(
                 {...(page.kind === 'html' ? { sandbox: 'allow-scripts allow-downloads' } : {})}
                 className="agent-workbench-html"
                 onLoad={() => {
+                  setPageModalOpen(false);
                   setLoaded((value) => value + 1);
                   sendTheme();
                 }}

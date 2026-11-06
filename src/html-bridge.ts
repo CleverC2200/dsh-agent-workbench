@@ -191,6 +191,11 @@ export function connectHtmlFrame(
           );
           if (alive() && !task.signal.aborted) onConversation?.();
           result = { sent: true };
+        } else if (message.method === 'detection') {
+          if (connection.page.id !== 'inventory-apsplan') throw Error('DETECTION_PAGE_NOT_ALLOWED');
+          const response = await fetch('/api/agent-workbench/detection', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(message.parameters),signal:task.signal});
+          result = await response.json();
+          if (!response.ok) throw Error((result as {error?: string}).error || 'DETECTION_REQUEST_FAILED');
         } else if (message.method === 'fulfillment-simulation') {
           result = await fulfillmentSimulationRequest(
             connection.page.id,
