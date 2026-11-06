@@ -11,7 +11,10 @@ import { FcBatchDetails } from './fc-batch-details';
 import { FcTransferDetails } from './fc-transfer-details';
 import { originalFcView } from '../../../../../shared/original-business-views';
 import { mergeFcPlans } from '../../../../../shared/fc-plan-merge';
-import { fcSubmissionIdentity } from '../../../../../shared/fc-submission-identity';
+import {
+  createFcConfirmationId,
+  fcSubmissionIdentity,
+} from '../../../../../shared/fc-submission-identity';
 import { fcSubmissionProvenance, type FcStoredVersions } from '../../../../../shared/fc-provenance';
 import { persistAndSubmitFc, verifyFcReceiptArchive } from './fc-submission-persistence';
 import { fcPersistence } from './fc-storage-client';
@@ -601,7 +604,11 @@ export function FcConfiguredList(
   ) => {
     if (dmsConfirmation.current.submitting) return;
     if (mode === 'export')
-      dmsConfirmation.current = { id: crypto.randomUUID(), submitting: false, completed: false };
+      dmsConfirmation.current = {
+        id: createFcConfirmationId(),
+        submitting: false,
+        completed: false,
+      };
     setDialog(mode);
     active.current?.abort();
     setBusy(false);

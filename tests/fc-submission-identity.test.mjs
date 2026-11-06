@@ -8,7 +8,7 @@ const compiled = await build({
   format: 'esm',
   write: false,
 });
-const { fcSubmissionIdentity } = await import(
+const { createFcConfirmationId, fcSubmissionIdentity } = await import(
   'data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].text).toString('base64')
 );
 const input = {
@@ -78,4 +78,18 @@ test('identical order in distinct confirmation rounds gets a new preorder, while
   assert.deepEqual(retry, first);
   assert.notEqual(next.aiPreOrderCode, first.aiPreOrderCode);
   assert.match(next.aiPreOrderCode, /^AI[0-9a-f]{30}$/);
+});
+
+test('new confirmation IDs use independent random values even with an identical clock and input', async () => {
+  const ids = new Set(Array.from({ length: 1000 }, createFcConfirmationId));
+  assert.equal(ids.size, 1000);
+  for (const id of ids)
+    assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  const [first, second] = [...ids];
+  const original = await fcSubmissionIdentity({ ...input, confirmationId: first });
+  assert.deepEqual(await fcSubmissionIdentity({ ...input, confirmationId: first }), original);
+  assert.notEqual(
+    (await fcSubmissionIdentity({ ...input, confirmationId: second })).aiPreOrderCode,
+    original.aiPreOrderCode,
+  );
 });
