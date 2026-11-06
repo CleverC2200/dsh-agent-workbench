@@ -105,9 +105,11 @@ const baseSkuFor = (versionId) => ({
 const comparison=new URL(location.href).searchParams.get('comparison');
 if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50';
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
+if(comparison?.startsWith('sku-review')) for(const plan of sourcePlans) plan.skuCount=2;
 const plans=comparison==='returned'?sourcePlans.map(plan=>({...plan,status:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 const skuFor=(versionId)=>{
   const base=baseSkuFor(versionId);
+  if(comparison==='integer')return {...base,qty:'501.600',amt:'5016.00'};
   if(!['inline','missing'].includes(comparison)) return base;
   const old=versionId.includes('previous'),older=versionId.includes('older');
   const prefix=versionId.slice(0,2);
@@ -115,6 +117,7 @@ const skuFor=(versionId)=>{
   const price=old?'8':older?'7':prefix==='v2'?'12':prefix==='v3'?'8':'10';
   return {...base,qty,price,amt:String(Number(qty)*Number(price))};
 };
+const skusFor=versionId=>comparison?.startsWith('sku-review')?[skuFor(versionId),{...skuFor(versionId),skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
 window.savedDrafts=[];
 if (['history','forbidden','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
 const readCalls=window.readCalls=[];
@@ -127,9 +130,16 @@ const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
   list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=q?.status===undefined||q.status===1?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
-  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:[skuFor(plan.versionId)],versions:versionsFor(plan),logs:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:2,allowedActions:comparison==='returned'?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
+  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:skusFor(plan.versionId),versions:versionsFor(plan),logs:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:2,allowedActions:comparison==='returned'?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
-  versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return [skuFor(versionId)]}},
+  skuReview:{invoke:async({planId,versionId,signal})=>{
+    readCalls.push({review:planId});
+    if(comparison==='sku-review-failure') throw Error('fixture failure');
+    signal?.throwIfAborted();
+    return {versionId,skus:skusFor(versionId).map(sku=>sku.skuCode==='1001'?{...sku,amt:versionId==='v1'?'100.10':versionId==='v2'?'200.20':'0'}:sku),months:['2025-10','2026-08','2026-09'],shipmentUnavailable:false,
+      rows:[{skuCode:'1001',shipments:['1.5','10','20']},{skuCode:'2002',shipments:['2','3','4']}]};
+  }},
+  versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId)}},
   draft:{invoke:async(q)=>{const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
   logs:{invoke:async()=>[]},compare:{invoke:async({planId,fromVersionId,toVersionId})=>{
     readCalls.push({planId,fromVersionId,toVersionId});
@@ -1129,5 +1139,99 @@ test(
     await expect(page.locator('.arco-spin-loading')).toHaveCount(0);
     await expect(skeleton).toBeHidden({ timeout: 15000 });
     await expect(page.getByText('华南大区').first()).toBeVisible();
+  },
+);
+
+test(
+  'regional SKU review filters, collapses and exports the complete customer scope without writes',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t, true, 'sku-review');
+    await page.getByRole('tab', { name: '按大类 / SKU' }).click();
+    const review = page.getByRole('region', { name: '按大类 / SKU', exact: true }).first();
+    await expect(review.getByRole('cell', { name: '300.30', exact: true }).first()).toBeVisible();
+    assert.equal(
+      await page.evaluate(() => window.readCalls.filter((call) => call.review).length),
+      3,
+    );
+    await expect(review.getByRole('rowheader', { name: /1001/ })).toBeVisible();
+    if (process.env.DSH_REVIEW_EVIDENCE)
+      await page.screenshot({
+        path: process.env.DSH_REVIEW_EVIDENCE + '/regional-sku-review-all.png',
+        fullPage: true,
+      });
+    await review.getByRole('button', { name: /汤圆.*1 SKU/ }).click();
+    await expect(review.getByRole('rowheader', { name: /1001/ })).toHaveCount(0);
+    await expect(review.getByRole('cell', { name: '300.30', exact: true }).first()).toBeVisible();
+    await review.getByRole('button', { name: /汤圆.*1 SKU/ }).click();
+    await expect(review.getByRole('rowheader', { name: /2002/ })).toBeVisible();
+    await review.getByRole('combobox', { name: 'SKU 编码 / 物料名称', exact: true }).click();
+    await page.getByRole('option', { name: /1001/ }).click();
+    await expect(review.getByRole('rowheader', { name: /2002/ })).toHaveCount(0);
+    await review.getByRole('button', { name: '重置', exact: true }).click();
+    await expect(review.getByRole('rowheader', { name: /2002/ })).toBeVisible();
+    await review.getByRole('combobox', { name: '大类', exact: true }).click();
+    await page.getByRole('option', { name: '汤圆', exact: true }).click();
+    await expect(review.getByRole('rowheader', { name: /2002/ })).toHaveCount(0);
+    await review.getByRole('combobox', { name: 'SKU 编码 / 物料名称', exact: true }).click();
+    await page.getByRole('option', { name: /1001/ }).click();
+    const downloadPromise = page.waitForEvent('download');
+    await review.getByRole('button', { name: '导出汇总', exact: true }).click();
+    const download = await downloadPromise;
+    assert.equal(download.suggestedFilename(), '2026-10-SKU.xlsx');
+    const { readFile } = await import('node:fs/promises');
+    const xlsx = await import('xlsx-republish');
+    const workbook = xlsx.read(await readFile(await download.path()), { type: 'buffer' });
+    const rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+    assert.equal(rows.length, 4);
+    assert.equal(rows[2][2], 4.5);
+    assert.equal(rows[2][5], 300.3);
+    assert.deepEqual(await page.evaluate(() => window.writes), []);
+    if (process.env.DSH_REVIEW_EVIDENCE)
+      await page.screenshot({
+        path: process.env.DSH_REVIEW_EVIDENCE + '/regional-sku-review.png',
+        fullPage: true,
+      });
+    await page.setViewportSize({ width: 820, height: 900 });
+    await expect(review.getByRole('button', { name: '导出汇总', exact: true })).toBeVisible();
+    if (process.env.DSH_REVIEW_EVIDENCE)
+      await page.screenshot({
+        path: process.env.DSH_REVIEW_EVIDENCE + '/regional-sku-review-narrow.png',
+        fullPage: true,
+      });
+  },
+);
+
+test(
+  'regional SKU review exposes incomplete reads and retry without showing a partial total',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t, true, 'sku-review-failure');
+    await page.getByRole('tab', { name: '按大类 / SKU' }).click();
+    await expect(page.getByText('提报数据未完整取得，请重试。', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '导出汇总', exact: true })).toBeDisabled();
+    assert.deepEqual(await page.evaluate(() => window.writes), []);
+  },
+);
+
+test(
+  'monthly confirmation rounds visible values and persisted deltas while viewing remains read-only',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t, false, 'integer');
+    await page
+      .getByRole('button', { name: /宝阳销售组/ })
+      .first()
+      .click();
+    const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+    await expect(input).toHaveValue('502');
+    assert.deepEqual(await page.evaluate(() => window.writes), []);
+    await input.fill('501.400');
+    await input.blur();
+    await expect(input).toHaveValue('501');
+    await expect.poll(() => page.evaluate(() => window.savedDrafts.length)).toBeGreaterThan(0);
+    const draft = await page.evaluate(() => window.savedDrafts.at(-1));
+    assert.equal(Number(draft.adjustments[0].adjustQty), -0.6);
+    await expect(input.locator('xpath=ancestor::td[1]')).toContainText('¥5,010.00');
   },
 );

@@ -1217,6 +1217,31 @@
         "allocationReadOnly": "组内计划须全部可编辑，历史版本只读",
         "invalidQuantity": "请输入非负数量，最多三位小数",
         "groupScope": "{{plans}} 份计划 · {{skus}} 种 SKU，按版本①汇总"
+      },
+      "skuReview": {
+        "title": "按大类 / SKU",
+        "category": "大类",
+        "sku": "SKU 编码 / 物料名称",
+        "allCategories": "全部大类",
+        "allSkus": "全部 SKU",
+        "reset": "重置",
+        "export": "导出汇总",
+        "scope": "汇总当前权限及组织筛选范围内全部客户的提报数据。SKU 预算额按提报明细金额相加；发货量单位为件，金额单位为元。",
+        "shipped": "发货量（件）",
+        "budget": "SKU 预算额（元）",
+        "plan": "月计划量 / 金额",
+        "confirmed": "确认计划量 / 金额",
+        "planQty": "月计划量（件）",
+        "planAmount": "月计划金额（元）",
+        "confirmedQty": "确认计划量（件）",
+        "confirmedAmount": "确认计划金额（元）",
+        "subtotal": "小计",
+        "total": "合计",
+        "sheet": "大类SKU汇总",
+        "failed": "提报数据未完整取得，请重试。",
+        "retry": "重试",
+        "empty": "当前筛选范围没有 SKU",
+        "shipmentUnavailable": "部分历史发货量未能取得，相关发货量及合计显示为 —。"
       }
     },
     "contract": {

@@ -1213,6 +1213,31 @@
         "allocationReadOnly": "All plans in this group must be editable. Historical versions are read-only.",
         "invalidQuantity": "Enter a nonnegative quantity with up to three decimals",
         "groupScope": "{{plans}} plans · {{skus}} SKUs, summarized by version ①"
+      },
+      "skuReview": {
+        "title": "By category / SKU",
+        "category": "Category",
+        "sku": "SKU code / material name",
+        "allCategories": "All categories",
+        "allSkus": "All SKUs",
+        "reset": "Reset",
+        "export": "Export summary",
+        "scope": "All submitted customers within your access and organization filters. SKU budgets sum submitted line amounts. Shipments are pieces; amounts are CNY.",
+        "shipped": "shipped (pieces)",
+        "budget": "SKU budget (CNY)",
+        "plan": "Plan quantity / amount",
+        "confirmed": "Confirmed quantity / amount",
+        "planQty": "Plan quantity (pieces)",
+        "planAmount": "Plan amount (CNY)",
+        "confirmedQty": "Confirmed quantity (pieces)",
+        "confirmedAmount": "Confirmed amount (CNY)",
+        "subtotal": "Subtotal",
+        "total": "Total",
+        "sheet": "Category SKU summary",
+        "failed": "Could not load complete submissions. Please retry.",
+        "retry": "Retry",
+        "empty": "No SKUs match these filters",
+        "shipmentUnavailable": "Some historical shipments are unavailable. Affected quantities and totals show —."
       }
     },
     "contract": {

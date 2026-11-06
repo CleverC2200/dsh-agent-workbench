@@ -176,6 +176,17 @@ export type GeaSalesPlanSku = CorrectionFields & {
   categoryConfirmedAmount?: GeaSalesPlanDecimal | null;
 };
 
+export type GeaSalesPlanSkuReview = {
+  versionId: string;
+  skus: GeaSalesPlanSku[];
+  months: [string, string, string];
+  rows: Array<{
+    skuCode: string;
+    shipments: [string | null, string | null, string | null];
+  }>;
+  shipmentUnavailable: boolean;
+};
+
 export type GeaSalesPlanApprovalLog = {
   nodeOrder?: number | null;
   decisionJson?: string | null;
