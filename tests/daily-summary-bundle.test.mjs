@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
+import { readFile } from 'node:fs/promises';
 globalThis.window = new EventTarget();
 const out = await build({
   stdin: {
@@ -200,4 +201,140 @@ test('snapshot templates use calendar boundaries and compact date formats', () =
     }),
     { start: '20261004', month: '202611', version: '月初' },
   );
+});
+
+const warehouseFixture = () => {
+  const cfg = fixture();
+  cfg.agentId = 'inventory-fc';
+  cfg.queries.a.parameterSpec.gea_p2 = { name: 'warehouse_code', type: 'string', nullable: true };
+  cfg.queries.b.parameterSpec = {
+    gea_p3: { name: 'warehouse_code', type: 'string', nullable: true },
+    gea_p4: { name: 'warehouse_code_mode', type: 'string' },
+  };
+  Object.assign(cfg.queries.bundle.parameterSpec, {
+    gea_p12: { name: 'a_warehouse', type: 'string', nullable: true },
+    gea_p13: { name: 'b_warehouse', type: 'string', nullable: true },
+    gea_p14: { name: 'b_warehouse_mode', type: 'string' },
+  });
+  Object.assign(cfg.dailySummary.bundle.members[0].values, { warehouse_code: null });
+  Object.assign(cfg.dailySummary.bundle.members[0].bindings, { gea_p12: 'warehouse_code' });
+  Object.assign(cfg.dailySummary.bundle.members[1].values, {
+    warehouse_code: null,
+    warehouse_code_mode: 'all',
+  });
+  Object.assign(cfg.dailySummary.bundle.members[1].bindings, {
+    gea_p13: 'warehouse_code',
+    gea_p14: 'warehouse_code_mode',
+  });
+  return cfg;
+};
+const warehouseCall = (cfg, run, warehouse, id = 'a', preloaded) => {
+  const parameters =
+    id === 'a'
+      ? { gea_p1: 'all', gea_p2: warehouse }
+      : { gea_p3: warehouse, gea_p4: warehouse ? 'equal' : 'all' };
+  return executeDailyBundle(
+    cfg,
+    snapshot,
+    run,
+    run,
+    { parameters },
+    {
+      queryId: id,
+      values: { warehouse_code: warehouse },
+    },
+    0,
+    preloaded,
+  );
+};
+test('single warehouse cards and list share one scoped response and ignore all-warehouse preload', async () => {
+  const cfg = warehouseFixture();
+  const requests = [];
+  const run = async (req, options) => {
+    requests.push({ req, options });
+    await new Promise(setImmediate);
+    return { rows };
+  };
+  const preload = { at: Date.now(), result: { rows: rows.map((r) => ({ ...r, r0_value: 999 })) } };
+  const [a, b] = await Promise.all([
+    warehouseCall(cfg, run, 'A110', 'a', preload),
+    warehouseCall(cfg, run, 'A110', 'b', preload),
+  ]);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].options.queryId, 'bundle');
+  assert.deepEqual(requests[0].req.parameters, {
+    gea_p10: 'all',
+    gea_p11: 0,
+    gea_p12: 'A110',
+    gea_p13: 'A110',
+    gea_p14: 'equal',
+  });
+  assert.deepEqual(a.rows, [{ value: 12 }]);
+  assert.deepEqual(b.rows, [{ value: 23 }]);
+});
+test('warehouse scope cache separates warehouses and the all-warehouse response', async () => {
+  const cfg = warehouseFixture();
+  const scopes = [];
+  const run = async (req) => {
+    scopes.push(req.parameters.gea_p12);
+    return { rows: rows.map((r) => ({ ...r, r0_value: req.parameters.gea_p12 })) };
+  };
+  for (const warehouse of ['A110', 'A120', null, 'A110']) {
+    const result = await warehouseCall(cfg, run, warehouse);
+    assert.equal(result.rows[0].value, warehouse);
+  }
+  assert.deepEqual(scopes, ['A110', 'A120', null]);
+});
+test('single warehouse still preserves custom filter and permission error behavior', async () => {
+  const cfg = warehouseFixture();
+  const ids = [];
+  const run = async (_, options) => {
+    ids.push(options.queryId);
+    return { failure: { reasonCode: 'NO_RETURN_COLUMN_ALLOWED' } };
+  };
+  await call(
+    cfg,
+    run,
+    'a',
+    { values: { warehouse_code: 'A110' } },
+    {
+      parameters: { gea_p1: 'custom-sku', gea_p2: 'A110' },
+    },
+  );
+  await assert.rejects(
+    warehouseCall(cfg, run, 'A110'),
+    (e) => e.code === 'NO_RETURN_COLUMN_ALLOWED',
+  );
+  await assert.rejects(
+    warehouseCall(cfg, run, 'A110', 'b'),
+    (e) => e.code === 'NO_RETURN_COLUMN_ALLOWED',
+  );
+  assert.deepEqual(ids, ['a', 'bundle']);
+});
+
+test('older all-only SQL bindings cannot supply a single-warehouse response', async () => {
+  const cfg = warehouseFixture();
+  delete cfg.dailySummary.bundle.members[0].bindings.gea_p12;
+  const ids = [];
+  const run = async (_, options) => {
+    ids.push(options.queryId);
+    return { rows: [{ value: 110 }] };
+  };
+  assert.deepEqual((await warehouseCall(cfg, run, 'A110')).rows, [{ value: 110 }]);
+  assert.deepEqual(ids, ['a']);
+});
+
+test('FC published bundle retains every member warehouse binding and its named SQL placeholder', async () => {
+  const cfg = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+  const bundle = cfg.dailySummary.bundle;
+  const query = cfg.queries[bundle.queryId];
+  for (const member of bundle.members) {
+    for (const name of ['warehouse_code', 'warehouse_code_mode']) {
+      if (!Object.hasOwn(member.values, name)) continue;
+      const binding = Object.entries(member.bindings).find(([, value]) => value === name);
+      assert.ok(binding, member.queryId + ':' + name);
+      assert.ok(query.parameterSpec[binding[0]], member.queryId + ':' + name);
+      assert.match(query.request.sql, new RegExp(':' + binding[0] + '\\b'));
+    }
+  }
 });
