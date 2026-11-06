@@ -13,6 +13,11 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
     const [openSeries, setOpenSeries] = react.useState('');
     const [openLines, setOpenLines] = react.useState({});
     const [openTransfers, setOpenTransfers] = react.useState({});
+    const [issuePage, setIssuePage] = react.useState(0);
+    react.useEffect(
+      () => setIssuePage(0),
+      [filters.month, filters.base, filters.category, filters.search],
+    );
     const report = plan.capacityReport;
     if (!report) return null;
     const month = filters.month || report.referenceMonth;
@@ -41,14 +46,64 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
           ? `${numberText(value.known, false, 3)} · ${value.missing}项待补`
           : '缺本月需求来源'
         : numberText(value.value, false, 3);
-    const load = (value, band) =>
-      h(
-        'span',
-        { className: 'wf-capacity-load', 'data-band': band },
-        value === null ? '待评估' : numberText(value, true),
-      );
+    const load = (row) => {
+      if (row.load !== null)
+        return h(
+          'span',
+          { className: 'wf-capacity-load', 'data-band': row.band },
+          numberText(row.load, true),
+        );
+      if (row.capacity === null)
+        return h(
+          'span',
+          { className: 'wf-capacity-load', 'data-band': 'unknown' },
+          '无本基地可用产能',
+        );
+      if (row.capacity === 0)
+        return h(
+          'span',
+          { className: 'wf-capacity-load', 'data-band': 'unknown' },
+          '本月可用产能为0',
+        );
+      return row.knownLoad !== null && row.demand.missing
+        ? h(
+            'span',
+            {
+              className: 'wf-capacity-partial',
+              title: '仅用已知需求除以产能；缺项未计入，完整负荷仍未知',
+            },
+            `已知需求负荷 ${numberText(row.knownLoad, true)}`,
+            h('small', null, `缺需求或折吨${row.demand.missing}项，完整负荷待补`),
+          )
+        : row.demand.missing
+          ? `缺需求或折吨${row.demand.missing}项，完整负荷待补`
+          : '未取得需求来源';
+    };
+    const demandIssues = (report.demandIssues ?? []).filter(
+      (row) =>
+        byBase(row) &&
+        (!filters.month || row.month === filters.month) &&
+        (!filters.category || row.category === filters.category) &&
+        (!filters.search || `${row.code} ${row.name}`.includes(filters.search)),
+    );
+    const shownIssues = demandIssues.filter((row) => row.month === month);
+    const issueIndex = Math.min(issuePage, Math.max(0, Math.ceil(shownIssues.length / 25) - 1));
+    const dataState = (row) =>
+      row.capacity === null
+        ? '无本基地可用产能，需求单列核对'
+        : row.capacity === 0
+          ? '本月可用产能为0'
+          : row.demand.value === null
+            ? `缺${row.demand.missing}项归属需求或折吨，已知小计可查看`
+            : '口径齐全';
     const baseRows = report.totals.filter(
       (row) => row.month === month && (filters.base ? row.base === filters.base : true),
+    );
+    const gaps = report.gaps.filter(
+      (row) =>
+        byBase(row) &&
+        (!filters.month || row.month === filters.month) &&
+        (!filters.category || row.category === filters.category),
     );
     const exportRows = report.rccp
       .filter((row) => byBase(row))
@@ -65,12 +120,12 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
         日产吨数: row.dailyTons,
         月产能: row.capacity,
         负荷率: row.load,
+        已知需求对应负荷: row.knownLoad,
+        未计入归属需求项数: row.demand.missing,
+        未计入无归属需求项数: row.unassigned.missing,
         余量吨数: row.margin,
         缺口吨数: row.gap,
-        数据状态:
-          row.demand.value === null || row.capacity === null
-            ? '缺输入，未形成完整负荷'
-            : '口径齐全',
+        数据状态: dataState(row),
       }));
     const toggle = (setter, key, open) => setter((value) => ({ ...value, [key]: open }));
     const rccpTable = (columns, rows) =>
@@ -169,7 +224,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
             row.days ?? '待补',
             numberText(row.dailyTons, false, 3),
             numberText(row.capacity, false, 3),
-            load(row.load, row.band),
+            load(row),
             numberText(row.margin, false, 3),
             ...Array.from({ length: 4 }, (_, index) => {
               const period = offset(month, index + 1);
@@ -177,7 +232,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
               const item = (reference ? annualIndex : totalIndex).get(
                 JSON.stringify([period, row.base]),
               );
-              return item ? load(item.load, item.band) : '缺需求来源';
+              return item ? load(item) : '缺需求来源';
             }),
           ]),
         ),
@@ -190,7 +245,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
           h(
             'p',
             { className: 'wf-note' },
-            '无有效本基地产线的需求单列，不计入本基地产线负荷。共享柔线在各大类作为组合能力引用，全国物理总产能只计一次。缺换算系数或有效需求时只显示已知小计。',
+            '无有效本基地产线的需求单列，不计入本基地产线负荷。共享柔线在各大类作为组合能力引用，全国物理总产能只计一次。缺项时显示已知需求对应负荷，缺失部分未计入，完整负荷、余量和配额仍待补；具体SKU见需求与折吨缺项。',
           ),
           rccpTable(
             [
@@ -229,9 +284,9 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                   metric(row.demand),
                   numberText(row.dailyTons, false, 3),
                   numberText(row.capacity, false, 3),
-                  row.capacity === null ? '无有效产线能力' : load(row.load, row.band),
+                  load(row),
                   numberText(row.margin, false, 3),
-                  later ? load(later.load, later.band) : '缺需求来源',
+                  later ? load(later) : '缺需求来源',
                   metric(row.unassigned),
                 ],
                 ...(openSeries === key
@@ -261,9 +316,17 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                                   return [
                                     `${item.group} ${item.name}`,
                                     metric(item.demand),
-                                    numberText(item.share, true),
-                                    numberText(item.quota, false, 3),
-                                    numberText(item.excess, false, 3),
+                                    item.share === null
+                                      ? row.demand.value === 0
+                                        ? '大类需求为0'
+                                        : '大类需求未齐'
+                                      : numberText(item.share, true),
+                                    item.quota === null
+                                      ? '暂不分摊'
+                                      : numberText(item.quota, false, 3),
+                                    item.excess === null
+                                      ? '暂不计算'
+                                      : numberText(item.excess, false, 3),
                                     future ? metric(future.demand) : '缺需求来源',
                                     metric(item.unassigned),
                                   ];
@@ -298,6 +361,82 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                   : []),
               ];
             }),
+          ),
+        ),
+      ),
+      card(
+        '需求与折吨缺项',
+        h(
+          react.Fragment,
+          null,
+          h(
+            'p',
+            { className: 'wf-note' },
+            `${month}当前范围有${shownIssues.length}个单品月份未形成需求吨数；下表区分缺大类需求、缺历史拆分依据、缺拆分依据与缺件吨系数。缺项不作为0需求，也不表示缺产能。`,
+          ),
+          h(
+            'button',
+            {
+              disabled: !active || !demandIssues.length,
+              onClick: () => {
+                const rows = demandIssues.map((row) => ({
+                  月份: row.month,
+                  基地: row.base,
+                  大类: row.category,
+                  物料组: row.group,
+                  产品编码: row.code,
+                  产品名称: row.name,
+                  问题分类: row.kind,
+                  具体原因: row.reason,
+                  历史参考物料: row.referenceCode,
+                  来源: row.sourceTable,
+                  字段: row.fields,
+                }));
+                downloadCsv(`${draft.month}-需求与折吨缺项.csv`, Object.keys(rows[0] ?? {}), rows);
+              },
+            },
+            '导出需求与折吨缺项',
+          ),
+          h(
+            'details',
+            { className: 'wf-plan-disclosure' },
+            h('summary', null, `查看${month}缺项明细 ${shownIssues.length}项`),
+            shownIssues.length
+              ? table(
+                  '需求与折吨缺项',
+                  ['基地', '大类', 'SKU', '问题分类', '具体原因', '历史参考物料'],
+                  shownIssues
+                    .slice(issueIndex * 25, (issueIndex + 1) * 25)
+                    .map((row) => [
+                      row.base,
+                      row.category,
+                      `${row.code} ${row.name}`,
+                      row.kind,
+                      row.reason,
+                      row.referenceCode,
+                    ]),
+                )
+              : h('p', { className: 'wf-note' }, '当前月份和筛选范围的需求吨数无缺项。'),
+            shownIssues.length > 25
+              ? h(
+                  'div',
+                  { className: 'wf-actions' },
+                  h(
+                    'button',
+                    { disabled: issueIndex === 0, onClick: () => setIssuePage(issueIndex - 1) },
+                    '上一页',
+                  ),
+                  h('span', null, `第${issueIndex + 1}页，共${shownIssues.length}项`),
+                  h(
+                    'button',
+                    {
+                      disabled: (issueIndex + 1) * 25 >= shownIssues.length,
+                      onClick: () => setIssuePage(issueIndex + 1),
+                    },
+                    '下一页',
+                  ),
+                )
+              : null,
           ),
         ),
       ),
@@ -383,7 +522,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
           h(
             'p',
             { className: 'wf-note' },
-            `年度需求独立取${report.annualSource.table}，读取${report.annualSource.records}个基地SKU月份，另有${report.annualSource.excludedRows}行无SKU编码未纳入折吨、${report.annualSource.unmappedCount}行维度待核对。${report.annualSource.error || '按SKU有效吨/件折算，空值、冲突及缺件吨系数的月份保留待评估。'}${productionCalendarRule}首表超出本轮拆分的月份仅作年度需求参考，不参与排产。`,
+            `年度需求独立取${report.annualSource.table}，读取${report.annualSource.records}个基地SKU月份，另有${report.annualSource.excludedRows}行无SKU编码未纳入折吨、${report.annualSource.unmappedCount}行维度待核对，${report.annualSource.aggregateRows ?? 0}行全国汇总仅对照、不与基地明细重复累计。${report.annualSource.error || '按SKU有效吨/件折算，空值、冲突及缺件吨系数的月份保留待评估。'}${productionCalendarRule}首表超出本轮拆分的月份仅作年度需求参考，不参与排产。`,
           ),
           h(
             'button',
@@ -489,7 +628,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                           ? `年度需求已知小计${numberText(row.demand.known, false, 3)}吨；${row.demand.missing}项缺需求或有效件吨系数`
                           : '未取得年度需求',
                       },
-                      row ? load(row.load, row.band) : '缺来源',
+                      row ? load(row) : '缺来源',
                     ),
                   ),
                   items.every(
@@ -500,7 +639,11 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                         false,
                         3,
                       )
-                    : '全年来源未齐',
+                    : `全年已知${numberText(
+                        items.reduce((total, row) => total + (row?.demand.known ?? 0), 0),
+                        false,
+                        3,
+                      )}吨；${items.reduce((total, row) => total + (row?.demand.missing ?? 0), 0)}项月待补`,
                 ];
               }),
             ),
@@ -571,36 +714,35 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
             { className: 'wf-note' },
             '触发口径＝归属需求超过月产能上限。吨数缺口与SKU件数未满足量分开列出。无有效产能或需求不完整的行保留为待评估，不伪造缺口。',
           ),
-          table(
-            '月产能缺口明细',
-            [
-              '基地',
-              '大类',
-              '计划月',
-              '需求（吨）',
-              '月产能上限（吨）',
-              '缺口（吨）',
-              '负荷率',
-              '瓶颈类型',
-            ],
-            report.gaps
-              .filter(
-                (row) =>
-                  byBase(row) &&
-                  (!filters.month || row.month === filters.month) &&
-                  (!filters.category || row.category === filters.category),
+          gaps.length
+            ? table(
+                '月产能缺口明细',
+                [
+                  '基地',
+                  '大类',
+                  '计划月',
+                  '需求（吨）',
+                  '月产能上限（吨）',
+                  '缺口（吨）',
+                  '负荷率',
+                  '瓶颈类型',
+                ],
+                gaps.map((row) => [
+                  row.base,
+                  row.category,
+                  row.month,
+                  numberText(row.demand.value, false, 3),
+                  numberText(row.capacity, false, 3),
+                  numberText(row.gap, false, 3),
+                  load(row),
+                  '隧道；处置类型待人工确认',
+                ]),
               )
-              .map((row) => [
-                row.base,
-                row.category,
-                row.month,
-                numberText(row.demand.value, false, 3),
-                numberText(row.capacity, false, 3),
-                numberText(row.gap, false, 3),
-                load(row.load, row.band),
-                '隧道；处置类型待人工确认',
-              ]),
-          ),
+            : h(
+                'p',
+                { className: 'wf-note' },
+                '当前完整口径内暂无超产缺口；需求或折吨不完整的单品见“需求与折吨缺项”。',
+              ),
           h(
             'p',
             { className: 'wf-note' },

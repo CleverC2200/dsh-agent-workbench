@@ -732,7 +732,7 @@ test('MPS report and CSV derive all three months from evaluation-month coefficie
   assert.doesNotMatch(total['未评估原因'], /缺明确SKU件吨系数或所需生产/);
 });
 
-test('MPS effective category and share edits drive the same unconstrained inventory and shared-resource report export', async (t) => {
+async function preparedPlan(t, partialHistory = false) {
   const { page, frame } = await workflowPage(t);
   await version(frame, '2026-12');
   await upload(
@@ -762,7 +762,10 @@ test('MPS effective category and share edits drive the same unconstrained invent
     frame,
     '设置上一财年发货夹具',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n' +
-      sourceRows(['2025-12', '2026-01', '2026-02'], false),
+      sourceRows(['2025-12', '2026-01', '2026-02'], false)
+        .split('\n')
+        .filter((line) => !partialHistory || !line.includes(',B,'))
+        .join('\n'),
   );
   for (const [month, quantity] of [
     ['2026-12', 100],
@@ -781,16 +784,20 @@ test('MPS effective category and share edits drive the same unconstrained invent
   await frame.getByText('拆分过程与基地SKU明细', { exact: true }).click();
   await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
   const processing = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
-  await processing.getByRole('button', { name: '郑州 B 2026-12 调整占比', exact: true }).click();
-  await processing.getByLabel('郑州 B 2026-12 最终占比', { exact: true }).fill('0.25');
-  await processing.getByLabel('郑州 B 2026-12 调整原因', { exact: true }).fill('单品业务需求调整');
-  await processing.getByRole('button', { name: '应用占比', exact: true }).click();
-  await expect(
-    processing.getByRole('button', { name: '郑州 A 2026-12 有效占比 计算过程', exact: true }),
-  ).toHaveText('75.00%');
-  await expect(
-    processing.getByRole('button', { name: '郑州 B 2026-12 系统占比 计算过程', exact: true }),
-  ).toHaveText('40.00%');
+  if (!partialHistory) {
+    await processing.getByRole('button', { name: '郑州 B 2026-12 调整占比', exact: true }).click();
+    await processing.getByLabel('郑州 B 2026-12 最终占比', { exact: true }).fill('0.25');
+    await processing
+      .getByLabel('郑州 B 2026-12 调整原因', { exact: true })
+      .fill('单品业务需求调整');
+    await processing.getByRole('button', { name: '应用占比', exact: true }).click();
+    await expect(
+      processing.getByRole('button', { name: '郑州 A 2026-12 有效占比 计算过程', exact: true }),
+    ).toHaveText('75.00%');
+    await expect(
+      processing.getByRole('button', { name: '郑州 B 2026-12 系统占比 计算过程', exact: true }),
+    ).toHaveText('40.00%');
+  }
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await upload(
     frame,
@@ -842,6 +849,11 @@ test('MPS effective category and share edits drive the same unconstrained invent
     }
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   const capacity = frame.getByRole('region', { name: '产能评估与缺口', exact: true });
+  return { page, frame, capacity, constraints };
+}
+
+test('MPS effective category and share edits drive the same unconstrained inventory and shared-resource report export', async (t) => {
+  const { page, frame, capacity, constraints } = await preparedPlan(t);
   await capacity.getByText('需求与库存参考底稿（非排产结果）', { exact: true }).click();
   for (const [field, value] of [
     ['需求数量', '75'],
@@ -1007,6 +1019,26 @@ test('MPS effective category and share edits drive the same unconstrained invent
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
   await expect(report).toContainText('输入已变化，需重新评估');
   await expect(report.getByRole('button', { name: '导出产销存结果', exact: true })).toBeDisabled();
+});
+
+test('部分需求缺失显示已知负荷，导出保留完整负荷为空和逐SKU缺项', async (t) => {
+  const { page, capacity } = await preparedPlan(t, true);
+  await capacity.getByRole('button', { name: '执行评估', exact: true }).click();
+  await capacity.getByLabel('月份筛选', { exact: true }).selectOption('2026-12');
+  const rccp = capacity.getByRole('table', { name: '基地大类RCCP', exact: true });
+  await expect(rccp).toContainText('已知需求负荷');
+  await expect(rccp).toContainText('完整负荷待补');
+  await capacity.getByText('查看2026-12缺项明细 1项', { exact: true }).click();
+  const issues = capacity.getByRole('table', { name: '需求与折吨缺项', exact: true });
+  await expect(issues).toContainText('B 产品乙');
+  await expect(issues).toContainText('缺历史拆分依据');
+  const csv = await download(page, capacity, '导出需求与折吨缺项');
+  const book = XLSX.read(csv, { type: 'string', raw: true });
+  const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]['产品编码'], 'B');
+  assert.equal(rows[0]['历史参考物料'], 'B');
+  assert.match(rows[0]['来源'], /cust_deliv_daily_di/);
 });
 
 test('MPS share undo preserves group balance and stale overrides remain removable after the product scope changes', async (t) => {

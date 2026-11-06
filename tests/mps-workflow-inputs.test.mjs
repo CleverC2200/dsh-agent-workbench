@@ -85,6 +85,34 @@ const draft = () => ({
   },
 });
 
+test('产品老品编码接入历史参考并建立老品所在基地的新品拆分范围', () => {
+  const source = draft();
+  source.products[0]['老品编码'] = 'OLD';
+  source.historyAnnual.periods[0].rows.push(
+    { 基地: '甲', 产品编码: 'OLD', 数量: 100 },
+    { 基地: '丙', 产品编码: 'OLD', 数量: 20 },
+  );
+  const raw = structuredClone(source.historyAnnual);
+  const result = buildMpsWorkflow(source);
+  const row = result.rows.find((row) => row.base === '甲' && row.code === 'A');
+  assert.equal(row.historyCode, 'OLD');
+  assert.equal(row.historyQuantity, 100);
+  assert.equal(
+    result.rows.find((row) => row.base === '丙' && row.code === 'A').historyQuantity,
+    20,
+  );
+  assert.deepEqual(source.historyAnnual, raw);
+  const solved = buildMpsWorkflow(source, null, null, {
+    weights: { rows: [{ material_code: 'A', channel_name: '经销商', ton_per_piece: 0.1 }] },
+  });
+  assert.ok(solved.plan.rows.find((row) => row.base === '丙' && row.code === 'A').demandTons > 0);
+  assert.ok(
+    !solved.plan.rows
+      .find((row) => row.base === '丙' && row.code === 'A')
+      .planMissing.includes('缺唯一有效件吨系数'),
+  );
+});
+
 test('业务版本缺源周转天数临时按零参与，原始缺项保留且人工补充值优先', () => {
   const source = draft();
   source.productSource = 'business';

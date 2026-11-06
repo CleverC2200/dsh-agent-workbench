@@ -443,6 +443,18 @@
   border-radius: 6px;
   font-variant-numeric: tabular-nums;
 }
+.wf-capacity-partial {
+  display: inline-block;
+  color: #956900;
+  background: #fff4d9;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.wf-capacity-partial small {
+  display: block;
+  font-size: 10px;
+  line-height: 1.4;
+}
 .wf-capacity-load[data-band='warning'],
 .wf-capacity-holiday {
   color: #956900;

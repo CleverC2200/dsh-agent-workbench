@@ -24,7 +24,7 @@ const titles = {
 };
 const labels = {
   reportQuantity: '提报数量',
-  historyQuantity: '上一财年发货数量',
+  historyQuantity: '上一财年发货参考量',
   reportShare: '提报占比',
   historyShare: '历史占比',
   systemShare: '系统占比',
@@ -627,6 +627,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           ...layerColumns,
           ...layerQuantityColumns,
           '分层缺项',
+          '历史参考物料编码',
+          '历史参考口径',
           '公式说明',
           'Top1托底',
           '提报数量口径',
@@ -687,6 +689,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             layerQuantityColumns.map((key, index) => [key, layerQuantities[index]]),
           ),
           分层缺项: row.layerMissing?.join('；'),
+          历史参考物料编码: row.historyCode || row.code,
+          历史参考口径: row.historyCode ? '沿用老品历史' : '自身历史',
           公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
           系统SKU需求: row.systemDemand,
           本月预估所属月: result.shipmentMonth,

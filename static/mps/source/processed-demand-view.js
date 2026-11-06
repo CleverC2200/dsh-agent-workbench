@@ -445,6 +445,9 @@ export function createProcessedDemand(react, { downloadCsv }) {
                   h('span', null, name),
                 )
               : h('span', { className: 'wf-demand-leaf' }, name),
+            entry.kind === 'base-sku' && processRow?.historyCode
+              ? h('small', { className: 'wf-note' }, `历史参考 · ${processRow.historyCode}`)
+              : null,
             entry.kind === 'base-sku' &&
               processRow &&
               h(

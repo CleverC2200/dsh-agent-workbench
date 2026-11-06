@@ -157,6 +157,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         category: text(row['大类']),
         series: text(row['系列']),
         group: text(row['物料组']),
+        ...(text(row['老品编码']) ? { historyCode: text(row['老品编码']) } : {}),
       }));
   const productMonths = new Map();
   for (const source of ['report', 'history']) {
@@ -168,6 +169,18 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         base: row.base,
         code: row.code,
       });
+      if (source === 'history') {
+        for (const product of products.filter(
+          (product) =>
+            product.historyCode === row.code && (!product.base || product.base === row.base),
+        )) {
+          productMonths.set(JSON.stringify([month, row.base, product.code]), {
+            month,
+            base: row.base,
+            code: product.code,
+          });
+        }
+      }
     }
   }
   const reportRead =
@@ -365,7 +378,9 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     }),
   );
   if (evaluation) {
-    const planSources = buildPlanSources(draft, relations, evaluation.weights);
+    const planSources = buildPlanSources(draft, relations, evaluation.weights, [
+      ...productMonths.values(),
+    ]);
     const planInput = {
       ...workflowInput,
       ...planSources,

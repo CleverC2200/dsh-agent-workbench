@@ -2127,7 +2127,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h(
                 'p',
                 { className: 'dc-muted' },
-                '仅维护当前本地版本的产品关系。老品历史继承规则尚未确认，本次修改不改变历史发货与需求数量。',
+                '对应老品编码用于引用同基地、同财年的历史发货并计算需求拆分系数。按所填编码直接引用，不递归替换；原始发货记录保留。',
               ),
             ),
         ),

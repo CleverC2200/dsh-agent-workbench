@@ -62,7 +62,7 @@ export function resolveWeightPairs(manual, pairs, weightRead) {
   return { weights, issues };
 }
 
-export function buildPlanSources(draft, relations, weightRead) {
+export function buildPlanSources(draft, relations, weightRead, productPairs = []) {
   const sources = relations?.sources;
   const issues = [];
   const manual = (draft.resources ?? [])
@@ -188,6 +188,7 @@ export function buildPlanSources(draft, relations, weightRead) {
   const pairs = [
     ...new Map(
       [
+        ...productPairs,
         ...facts.map((row) => ({ base: text(row['基地']), code: text(row['产品编码']) })),
         ...uniqueCandidates,
       ]
