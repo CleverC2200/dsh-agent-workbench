@@ -1,5 +1,6 @@
 import { makeRequest, requireColumns } from './configured-query-client.mjs';
 import { configuredQueryIdentity } from './query-cache';
+import { inventoryCacheTtl } from './inventory-cache-policy';
 import type { AgentSqlConfig } from './sql-config';
 import type { DailySummarySnapshot } from './daily-summary';
 import type { ConfiguredExecution } from './agent-query';
@@ -10,6 +11,7 @@ type Entry = {
   controller: AbortController;
   users: number;
   settled: boolean;
+  failed: boolean;
 };
 const page = new Map<string, Entry>();
 const supplied = new WeakMap<ConfiguredExecution, Map<string, Entry>>();
@@ -87,7 +89,30 @@ export async function executeDailyBundle(
   const bundle = config.dailySummary?.bundle;
   const member = bundle?.members?.find((item: any) => item.queryId === options.queryId);
   if (!member || snapshot?.kind !== 'ready') return run(request, options);
-  const expected = dailyBundleValues(snapshot, member.values);
+  const warehouseCode =
+    config.agentId === 'inventory-fc' && typeof options.values?.warehouse_code === 'string'
+      ? options.values.warehouse_code
+      : '';
+  if (
+    warehouseCode &&
+    bundle.members.some(
+      (part: { values: Record<string, unknown>; bindings: Record<string, string> }) =>
+        Object.hasOwn(part.values, 'warehouse_code') &&
+        (!Object.values(part.bindings).includes('warehouse_code') ||
+          (Object.hasOwn(part.values, 'warehouse_code_mode') &&
+            !Object.values(part.bindings).includes('warehouse_code_mode'))),
+    )
+  )
+    return run(request, options);
+  const memberValues = (templates: Record<string, unknown>) => {
+    const values = dailyBundleValues(snapshot, templates);
+    if (warehouseCode && Object.hasOwn(values, 'warehouse_code')) {
+      values.warehouse_code = warehouseCode;
+      if (Object.hasOwn(values, 'warehouse_code_mode')) values.warehouse_code_mode = 'equal';
+    }
+    return values;
+  };
+  const expected = memberValues(member.values);
   const definition = config.queries[options.queryId];
   // Only an exact covered input uses this response. Filters and later pages retain their own queries.
   if (
@@ -111,14 +136,16 @@ export async function executeDailyBundle(
     config.agentId,
     config.queries[bundle.queryId],
     snapshot,
+    warehouseCode,
     freshAfter,
   ]);
   let entry = cache.get(key);
-  // Retain only the prefetched response for the short initial-load window, never persistent browser storage.
-  if (!entry || Date.now() - entry.started > 45000) {
+  const ttl = inventoryCacheTtl(config.agentId);
+  // These complete responses stay in memory only, under the same identity and exact inputs.
+  if (!entry || Date.now() - entry.started >= (entry.failed ? Math.min(ttl, 45000) : ttl)) {
     const values: Record<string, any> = {};
     for (const part of bundle.members) {
-      const inputs = dailyBundleValues(snapshot, part.values);
+      const inputs = memberValues(part.values);
       for (const [parameter, name] of Object.entries(part.bindings) as Array<[string, string]>)
         values[config.queries[bundle.queryId].parameterSpec[parameter].name] = inputs[name];
     }
@@ -129,6 +156,7 @@ export async function executeDailyBundle(
       controller,
       users: 0,
       settled: false,
+      failed: false,
       promise: Promise.resolve(),
     };
     fresh.promise = (async () => {
@@ -138,7 +166,7 @@ export async function executeDailyBundle(
       for (let offset = 0; offset < total; offset += bundle.maxRows) {
         const pageValues = { ...values, bundle_offset: offset };
         const result =
-          offset === 0 && preloaded && Date.now() - preloaded.at < 45000
+          offset === 0 && !warehouseCode && preloaded && Date.now() - preloaded.at < ttl
             ? preloaded.result
             : await run(makeRequest(config, bundle.queryId, pageValues), {
                 ...options,
@@ -186,6 +214,7 @@ export async function executeDailyBundle(
       return { ...first, rows: collected };
     })()
       .then((result) => {
+        fresh.failed = Array.isArray(result.rejectedColumns) && result.rejectedColumns.length > 0;
         for (const part of bundle.members) {
           const rows = result.rows.filter((row: any) => String(row.bundle_part) === part.part);
           const raw = rows[0]?.bundle_total;
@@ -204,6 +233,10 @@ export async function executeDailyBundle(
             throw Object.assign(Error('首屏汇总返回不完整'), { code: 'RESULT_INCOMPLETE' });
         }
         return result;
+      })
+      .catch((error) => {
+        fresh.failed = true;
+        throw error;
       })
       .finally(() => {
         fresh.settled = true;

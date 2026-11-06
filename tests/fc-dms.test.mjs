@@ -279,7 +279,7 @@ test('branch confirmation sends documented order, retains draft on failure, and 
     assert.deepEqual(calls[2].payload.order.itemList, calls[1].payload.order.itemList);
     await click('重新读取，准备下一批');
     await click('确认暂存至DMS');
-    assert.equal(calls[3].payload.order.aiPreOrderCode, calls[2].payload.order.aiPreOrderCode);
+    assert.notEqual(calls[3].payload.order.aiPreOrderCode, calls[2].payload.order.aiPreOrderCode);
 
     const sentBeforeNavigation = calls.length;
     globalThis.dmsFixture.navigationFail = true;
@@ -595,6 +595,7 @@ test('direct DMS preflight submits without GEA persistence and keeps feedback be
   const sent = [];
   let succeed = false;
   let finishPreflight;
+  let preflightCalls = 0;
   globalThis.dmsFixture = {
     rows,
     persistenceCalls: 0,
@@ -607,6 +608,7 @@ test('direct DMS preflight submits without GEA persistence and keeps feedback be
           message: '已自动带入',
         };
       if (payload.operation === 'preflight') {
+        preflightCalls++;
         await new Promise((resolve) => {
           finishPreflight = resolve;
         });
@@ -647,10 +649,13 @@ test('direct DMS preflight submits without GEA persistence and keeps feedback be
       await new Promise((r) => setTimeout(r, 20));
     });
     await act(async () => {
-      button('确认暂存至DMS').click();
+      const submit = button('确认暂存至DMS');
+      submit.click();
+      submit.click();
       await new Promise((r) => setTimeout(r, 20));
     });
     assert.ok(finishPreflight);
+    assert.equal(preflightCalls, 1, 'double click must not start or abort a second submission');
     assert.equal(button('处理中…').disabled, true);
     assert.match(document.querySelector('.fc-workflow-footer').textContent, /正在核对/);
     await act(async () => {
@@ -677,8 +682,32 @@ test('direct DMS preflight submits without GEA persistence and keeps feedback be
       await new Promise((r) => setTimeout(r, 20));
     });
     assert.equal(sent.length, 2);
+    assert.equal(
+      sent[1].order.aiPreOrderCode,
+      sent[0].order.aiPreOrderCode,
+      'retry preserves the original attempt',
+    );
     assert.equal(globalThis.dmsFixture.persistenceCalls, 0);
     assert.match(document.body.textContent, /DMS订单号：DMS-DIRECT/);
+    await act(async () => {
+      button('重新读取，准备下一批').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    await act(async () => {
+      button('确认暂存至DMS').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    await act(async () => {
+      finishPreflight();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    assert.equal(sent.length, 3);
+    assert.notEqual(
+      sent[2].order.aiPreOrderCode,
+      sent[1].order.aiPreOrderCode,
+      'same data in a new confirmation round must be a new order',
+    );
+    assert.deepEqual(sent[2].order.itemList, sent[1].order.itemList);
   } finally {
     await act(async () => root.unmount());
     dom.window.close();

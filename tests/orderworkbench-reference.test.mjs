@@ -12,7 +12,9 @@ import {
   createWorkbenchPresentationCache,
   createWorkbenchEvidenceCache,
   createWorkbenchPeriodCacheLifecycle,
+  createWorkbenchScopedFactsCache,
 } from '../prototypes/inventory-orderworkbench/presentation-cache.mjs';
+import { startWorkbenchStagedRead } from '../prototypes/inventory-orderworkbench/staged-facts.mjs';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,6 +25,7 @@ import {
   metricCalculationVersion,
   reusableWorkbenchFacts,
   compatibleWorkbenchFacts,
+  retainableWorkbenchFacts,
 } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 import {
   shippableDaysTarget,
@@ -36,6 +39,8 @@ test('order workbench reference interactions', async () => {
   });
   const { window } = dom;
   window.structuredClone = structuredClone;
+  window.AbortController = AbortController;
+  window.AbortSignal = AbortSignal;
   Object.assign(window, {
     mountReportImport,
     projectReportImports,
@@ -48,6 +53,9 @@ test('order workbench reference interactions', async () => {
   window.createWorkbenchPresentationCache = createWorkbenchPresentationCache;
   window.createWorkbenchEvidenceCache = createWorkbenchEvidenceCache;
   window.createWorkbenchPeriodCacheLifecycle = createWorkbenchPeriodCacheLifecycle;
+  window.createWorkbenchScopedFactsCache = createWorkbenchScopedFactsCache;
+  window.startWorkbenchStagedRead = startWorkbenchStagedRead;
+  window.retainableWorkbenchFacts = retainableWorkbenchFacts;
   window.currentSessionId = () => 'order-reference-session';
   window.encodeReportRequest = async (request) => request;
   window.savedReports = new Map();
@@ -61,6 +69,7 @@ test('order workbench reference interactions', async () => {
       const edited = window.savedEdits.get(key);
       return {
         ...snapshot,
+        scope: { key: 'reference-scope', base: '' },
         editVersion: edited?.version ?? 0,
         report: edited
           ? { ...(snapshot.report ?? { schemaVersion: 1, facts: null }), edits: edited.edits }
@@ -95,8 +104,9 @@ test('order workbench reference interactions', async () => {
         period,
       ]),
     ),
-    directors: { rows: [] },
-    customers: { rows: [] },
+    directors: { status: 'ready', rows: [] },
+    customers: { status: 'ready', rows: [] },
+    customerManagers: { status: 'ready', rows: [] },
   };
   window.workbenchPresentation = model.workbenchPresentation;
   window.workbenchBaseIncluded = model.workbenchBaseIncluded;

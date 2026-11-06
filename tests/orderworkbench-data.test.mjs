@@ -718,16 +718,18 @@ test('same-scope period seeds reuse validated sections but retry failed sections
     ...options,
     seedFacts: [first],
   });
-  assert.ok(calls.every(({ queryId }) => /customers|customermanagers/.test(queryId)));
+  assert.equal(calls.length, 0, 'same-period metadata is retained with its validated sections');
   assert.deepEqual(reused.periods, first.periods);
   const failed = structuredClone(first);
   failed.periods.week.sections.find((part) => part.id === 'orders').status = 'error';
+  failed.complete = false;
   calls.length = 0;
   await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
     ...options,
     seedFacts: [failed],
   });
   assert.equal(calls.filter(({ queryId }) => queryId === 'workbench.orders.summary').length, 1);
+  assert.equal(calls.length, 1, 'only the failed section is retried after interrupted navigation');
   calls.length = 0;
   await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
     ...options,
@@ -1142,4 +1144,153 @@ test('missing cancellation timestamp and shipment-date association explain unava
   assert.match(m['作废率'].missingReason, /canceltime/);
   assert.equal(m['订单满足率'].value, null);
   assert.match(m['订单满足率'].missingReason, /发货日期/);
+});
+
+test('shared period reads preserve typed rows, exact windows and scoped retry without rescanning successful sections', async () => {
+  const calls = [];
+  let wrongPeriod = false;
+  const packet = (columns, rows, section_id) =>
+    rows.length
+      ? [
+          {
+            ...(section_id === undefined ? {} : { section_id }),
+            packet_index: 0,
+            packet_count: rows.length,
+            packet_scope_total: rows.length,
+            packet_rows: rows.map((row, index) =>
+              [
+                String(index + 1),
+                ...columns.map((key) => (row[key] === null ? null : String(row[key]))),
+              ]
+                .map((value) =>
+                  value === null ? 'N' : 'V' + Buffer.byteLength(value) + ':' + value,
+                )
+                .join(''),
+            ),
+          },
+        ]
+      : [];
+  const execute = async (_request, { queryId, values }) => {
+    calls.push({ queryId, values });
+    const enabled = Array.from({ length: 6 }, (_, index) => index).filter(
+      (index) => values[`period_${index}_enabled`],
+    );
+    let rows = [];
+    if (queryId === 'workbench.period-snapshots')
+      rows = [
+        Object.fromEntries(
+          Array.from({ length: 6 }, (_, index) => [
+            ['stock_' + index, null],
+            ['age_' + index, null],
+          ]).flat(),
+        ),
+      ];
+    if (queryId === 'workbench.orders.periods.summary') {
+      const columns = ['period_index', ...config.queries['workbench.orders.summary'].resultColumns];
+      rows = packet(
+        columns,
+        enabled.map((index) => ({
+          ...Object.fromEntries(columns.map((key) => [key, 0])),
+          period_index: wrongPeriod ? 6 : index,
+          base: '华南',
+          category: '水饺',
+          item: '小水饺',
+          sku: null,
+          name: null,
+          director: '责任人',
+          names: 1,
+          summary: 1,
+          demand: 100 + index,
+          shortage: index,
+          sample_demand: 100 + index,
+          sample_shortage: index,
+          sample_records: 1,
+          records: 1,
+        })),
+        0,
+      );
+    }
+    if (queryId === 'workbench.changes.periods.summary') {
+      const columns = ['period_index', ...config.queries['workbench.changes'].resultColumns];
+      rows = packet(
+        columns,
+        enabled.map((index) => ({
+          ...Object.fromEntries(columns.map((key) => [key, 0])),
+          period_index: index,
+          kind: 'change',
+          region: 'R',
+          province: 'P',
+          numerator: index,
+          denominator: 100 + index,
+          records: 1,
+          unknown_quantity: 0,
+        })),
+      );
+    }
+    return { configVersion: 'period-fixture', rows };
+  };
+  const options = {
+    summary: true,
+    periodQueries: true,
+    base: '华南',
+    execute,
+    now: new Date('2026-11-01T00:00:00Z'),
+  };
+  const facts = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, options);
+  assert.equal(calls.length, 7);
+  assert.ok(
+    Object.values(facts.periods).every((p) => p.sections.every((s) => s.status === 'ready')),
+  );
+  for (const [index, key] of [
+    'month',
+    'previousMonth',
+    'yearMonth',
+    'week',
+    'previousWeek',
+    'yearWeek',
+  ].entries()) {
+    const period = facts.periods[key];
+    const order = period.sections.find((s) => s.id === 'orders').rows[0];
+    assert.equal(order.demand, 100 + index);
+    assert.equal(order.summary, 1);
+    assert.equal(order.sku, null);
+    assert.equal(period.sections.find((s) => s.id === 'changes').rows[0].unknown_quantity, 0);
+  }
+  const orderCall = calls.find((c) => c.queryId === 'workbench.orders.periods.summary');
+  assert.equal(orderCall.values.report_base, '华南');
+  assert.equal(orderCall.values.period_0_start, '2026-10-01');
+  assert.equal(orderCall.values.period_0_end, '2026-10-26');
+  assert.equal(orderCall.values.period_3_start, '2026-10-19');
+  assert.equal(orderCall.values.period_3_end, '2026-10-26');
+  const retry = structuredClone(facts);
+  Object.assign(
+    retry.periods.week.sections.find((s) => s.id === 'orders'),
+    { status: 'error', rows: [], code: 'QUERY_FAILED' },
+  );
+  calls.length = 0;
+  await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    seedFacts: [retry],
+  });
+  assert.deepEqual(
+    calls.map((c) => c.queryId),
+    ['workbench.orders.periods.summary'],
+  );
+  assert.deepEqual(
+    Array.from({ length: 6 }, (_, i) => calls[0].values[`period_${i}_enabled`]),
+    [false, false, false, true, false, false],
+  );
+  calls.length = 0;
+  wrongPeriod = true;
+  const rejected = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, options);
+  assert.ok(
+    Object.values(rejected.periods).every(
+      (p) => p.sections.find((s) => s.id === 'orders').status === 'error',
+    ),
+  );
+  assert.ok(
+    Object.values(rejected.periods).every(
+      (p) => p.sections.find((s) => s.id === 'changes').status === 'ready',
+    ),
+  );
 });

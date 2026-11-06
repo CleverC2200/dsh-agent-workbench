@@ -866,6 +866,7 @@ test('FC downstream customer orders show dealers, exact SKUs and preserve shippi
   const list = page.getByRole('region', { name: '当前订单', exact: true });
   await expect(list.getByText('遂平', { exact: true })).toBeVisible();
   await expect(list.locator('thead').first().locator('th')).toHaveText([
+    '',
     '订单号',
     '分仓',
     '下游客户',
