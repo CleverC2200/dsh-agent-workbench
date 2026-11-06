@@ -224,7 +224,7 @@ export const ontimeExecutionProductsSql = `SELECT cust_order_no,cust_code,materi
       'd.belong_base,d.detailstatus,d.is_stat,d.product_item FROM',
       'd.belong_base,d.detailstatus,d.is_stat,d.product_item,d.is_virtual FROM',
     )}) execution_rows
-  WHERE detailstatus=10 AND is_stat='1' AND (:gea_p900='' OR belong_base=:gea_p900)
+  WHERE (:gea_p900='' OR belong_base=:gea_p900)
   GROUP BY cust_order_no,cust_code,material_code,executeorderno,belong_base,detailstatus`;
 export const { ontimeSql, ontimeSummarySql, ontimePeriodSummarySql } = createOntimeQueries(
   ontimeExecutionProductsSql,
