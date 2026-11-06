@@ -8,11 +8,7 @@
     "template": "blue",
     "title": {
       "tag": "lark_md",
-      "content": {
-        "$if": "needsProcessing",
-        "yes": "${mentions}订单待处理",
-        "no": "${mentions}订单待确认"
-      }
+      "content": "${mentions}订单待确认"
     }
   },
   "body": {
@@ -33,26 +29,30 @@
               "tag": "plain_text",
               "text_color": "red",
               "content": {
-                "$concat": [
-                  {
-                    "$if": "section.rateKnown",
-                    "yes": {
-                      "$if": "section.ready",
-                      "yes": "订单满足率达到90%，请确认是否开单？",
-                      "no": "订单满足率未达到90%，请先处理缺货订单。"
+                "$if": "section.hasInstruction",
+                "yes": "${section.instruction}",
+                "no": {
+                  "$concat": [
+                    {
+                      "$if": "section.rateKnown",
+                      "yes": {
+                        "$if": "section.ready",
+                        "yes": "请核对订单信息并处理。",
+                        "no": "请核对订单信息并处理。"
+                      },
+                      "no": "订单满足率暂未完整提供，请核对后处理。"
                     },
-                    "no": "订单满足率暂未完整提供，请核对后处理。"
-                  },
-                  {
-                    "$each": "section.shortages",
-                    "as": "shortage",
-                    "template": "\nSKU：${shortage.sku} 原订单缺货：${shortage.quantity}"
-                  },
-                  {
-                    "$if": "section.moreShortages",
-                    "yes": "\n其余缺货商品请在“订单处理”中核对。"
-                  }
-                ]
+                    {
+                      "$each": "section.shortages",
+                      "as": "shortage",
+                      "template": "\nSKU：${shortage.sku} 原订单缺货：${shortage.quantity}"
+                    },
+                    {
+                      "$if": "section.moreShortages",
+                      "yes": "\n其余缺货商品请在“订单处理”中核对。"
+                    }
+                  ]
+                }
               }
             }
           },
@@ -68,12 +68,28 @@
                   {
                     "tag": "markdown",
                     "content": {
+                      "$if": "section.hasExecutionOrderNo",
+                      "yes": {
+                        "$if": "section.hasEntry",
+                        "yes": "<font color='grey'>执行单号：[${section.executionOrderNo}](${section.entryUrl}%26view%3Ddetails)</font>",
+                        "no": {
+                          "$if": "section.hasDetails",
+                          "yes": "<font color='grey'>执行单号：[${section.executionOrderNo}](${section.detailsUrl})</font>",
+                          "no": "<font color='grey'>执行单号：${section.executionOrderNo}</font>"
+                        }
+                      },
+                      "no": "<font color='grey'>执行单号：—</font>"
+                    }
+                  },
+                  {
+                    "tag": "markdown",
+                    "content": {
                       "$if": "section.hasEntry",
-                      "yes": "<font color='grey'>订单号：[${section.orderNoMarkdown}](${section.entryUrl}%26view%3Ddetails)</font>",
+                      "yes": "<font color='grey'>DMS订单号：[${section.orderNoMarkdown}](${section.entryUrl}%26view%3Ddetails)</font>",
                       "no": {
                         "$if": "section.hasDetails",
-                        "yes": "<font color='grey'>订单号：[${section.orderNoMarkdown}](${section.detailsUrl})</font>",
-                        "no": "<font color='grey'>订单号：${section.orderNoMarkdown}</font>"
+                        "yes": "<font color='grey'>DMS订单号：[${section.orderNoMarkdown}](${section.detailsUrl})</font>",
+                        "no": "<font color='grey'>DMS订单号：${section.orderNoMarkdown}</font>"
                       }
                     }
                   },
@@ -88,6 +104,10 @@
                   {
                     "tag": "markdown",
                     "content": "<font color='grey'>总数量：${section.quantity}</font>"
+                  },
+                  {
+                    "tag": "markdown",
+                    "content": "<font color='grey'>订单交货日期：${section.deliveryDate}</font>"
                   }
                 ]
               },
@@ -100,145 +120,150 @@
                     "$if": "section.pending",
                     "yes": [
                       {
-                        "$if": "section.ready",
-                        "yes": {
-                          "tag": "button",
-                          "type": "primary",
-                          "text": {
-                            "tag": "plain_text",
-                            "content": "确认发货"
-                          },
-                          "behaviors": {
-                            "$if": "section.hasEntry",
-                            "yes": [
-                              {
-                                "type": "open_url",
-                                "default_url": "${section.entryUrl}%26view%3Dconfirm"
-                              }
-                            ],
-                            "no": {
-                              "$if": "section.hasConfirm",
-                              "yes": [
-                                {
-                                  "type": "open_url",
-                                  "default_url": "${section.ConfirmUrl}"
-                                }
-                              ]
-                            }
-                          },
-                          "disabled": {
-                            "$if": "section.hasEntry",
-                            "yes": false,
-                            "no": {
-                              "$if": "section.hasConfirm",
-                              "yes": false,
-                              "no": true
-                            }
-                          },
-                          "disabled_tips": {
-                            "$if": "section.hasEntry",
-                            "no": {
-                              "$if": "section.hasConfirm",
-                              "no": {
-                                "tag": "plain_text",
-                                "content": "等待 GEA 提供当前订单的受控操作入口"
-                              }
-                            }
-                          }
-                        }
-                      },
-                      {
-                        "tag": "button",
-                        "type": "text",
-                        "text": {
-                          "tag": "plain_text",
-                          "content": "暂缓发货"
-                        },
-                        "behaviors": {
-                          "$if": "section.hasEntry",
-                          "yes": [
-                            {
-                              "type": "open_url",
-                              "default_url": "${section.entryUrl}%26view%3Ddefer"
-                            }
-                          ],
-                          "no": {
-                            "$if": "section.hasDefer",
-                            "yes": [
-                              {
-                                "type": "open_url",
-                                "default_url": "${section.DeferUrl}"
-                              }
-                            ]
-                          }
-                        },
-                        "disabled": {
-                          "$if": "section.hasEntry",
-                          "yes": false,
-                          "no": {
-                            "$if": "section.hasDefer",
-                            "yes": false,
-                            "no": true
-                          }
-                        },
-                        "disabled_tips": {
-                          "$if": "section.hasEntry",
-                          "no": {
-                            "$if": "section.hasDefer",
-                            "no": {
+                        "$if": "section.creditInsufficient",
+                        "yes": [
+                          {
+                            "tag": "button",
+                            "type": "primary",
+                            "text": {
                               "tag": "plain_text",
-                              "content": "等待 GEA 提供当前订单的受控操作入口"
-                            }
-                          }
-                        }
-                      },
-                      {
-                        "$if": "section.ready",
-                        "no": {
-                          "tag": "button",
-                          "type": "primary",
-                          "text": {
-                            "tag": "plain_text",
-                            "content": "订单处理"
-                          },
-                          "behaviors": {
-                            "$if": "section.hasEntry",
-                            "yes": [
-                              {
-                                "type": "open_url",
-                                "default_url": "${section.entryUrl}%26view%3Dedit"
-                              }
-                            ],
-                            "no": {
-                              "$if": "section.hasEdit",
+                              "content": "额度已补充"
+                            },
+                            "behaviors": {
+                              "$if": "section.hasEntry",
                               "yes": [
                                 {
                                   "type": "open_url",
-                                  "default_url": "${section.EditUrl}"
+                                  "default_url": "${section.entryUrl}%26view%3Dprocess"
                                 }
-                              ]
-                            }
-                          },
-                          "disabled": {
-                            "$if": "section.hasEntry",
-                            "yes": false,
-                            "no": {
-                              "$if": "section.hasEdit",
-                              "yes": false,
-                              "no": true
-                            }
-                          },
-                          "disabled_tips": {
-                            "$if": "section.hasEntry",
-                            "no": {
-                              "$if": "section.hasEdit",
+                              ],
                               "no": {
-                                "tag": "plain_text",
-                                "content": "等待 GEA 提供当前订单的受控操作入口"
+                                "$if": "section.hasProcess",
+                                "yes": [
+                                  {
+                                    "type": "open_url",
+                                    "default_url": "${section.ProcessUrl}"
+                                  }
+                                ]
+                              }
+                            },
+                            "disabled": {
+                              "$if": "section.hasEntry",
+                              "yes": false,
+                              "no": {
+                                "$if": "section.hasProcess",
+                                "yes": false,
+                                "no": true
+                              }
+                            },
+                            "disabled_tips": {
+                              "$if": "section.hasEntry",
+                              "no": {
+                                "$if": "section.hasProcess",
+                                "no": {
+                                  "tag": "plain_text",
+                                  "content": "等待 GEA 提供当前订单的受控操作入口"
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "tag": "markdown",
+                            "content": "<font color='grey'>订单处理（额度待核验）</font>"
+                          }
+                        ],
+                        "no": [
+                          {
+                            "tag": "button",
+                            "type": "primary",
+                            "text": {
+                              "tag": "plain_text",
+                              "content": "订单处理"
+                            },
+                            "behaviors": {
+                              "$if": "section.hasEntry",
+                              "yes": [
+                                {
+                                  "type": "open_url",
+                                  "default_url": "${section.entryUrl}%26view%3Dprocess"
+                                }
+                              ],
+                              "no": {
+                                "$if": "section.hasProcess",
+                                "yes": [
+                                  {
+                                    "type": "open_url",
+                                    "default_url": "${section.ProcessUrl}"
+                                  }
+                                ]
+                              }
+                            },
+                            "disabled": {
+                              "$if": "section.hasEntry",
+                              "yes": false,
+                              "no": {
+                                "$if": "section.hasProcess",
+                                "yes": false,
+                                "no": true
+                              }
+                            },
+                            "disabled_tips": {
+                              "$if": "section.hasEntry",
+                              "no": {
+                                "$if": "section.hasProcess",
+                                "no": {
+                                  "tag": "plain_text",
+                                  "content": "等待 GEA 提供当前订单的受控操作入口"
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "tag": "button",
+                            "type": "text",
+                            "text": {
+                              "tag": "plain_text",
+                              "content": "暂缓发货"
+                            },
+                            "behaviors": {
+                              "$if": "section.hasEntry",
+                              "yes": [
+                                {
+                                  "type": "open_url",
+                                  "default_url": "${section.entryUrl}%26view%3Ddefer"
+                                }
+                              ],
+                              "no": {
+                                "$if": "section.hasDefer",
+                                "yes": [
+                                  {
+                                    "type": "open_url",
+                                    "default_url": "${section.DeferUrl}"
+                                  }
+                                ]
+                              }
+                            },
+                            "disabled": {
+                              "$if": "section.hasEntry",
+                              "yes": false,
+                              "no": {
+                                "$if": "section.hasDefer",
+                                "yes": false,
+                                "no": true
+                              }
+                            },
+                            "disabled_tips": {
+                              "$if": "section.hasEntry",
+                              "no": {
+                                "$if": "section.hasDefer",
+                                "no": {
+                                  "tag": "plain_text",
+                                  "content": "等待 GEA 提供当前订单的受控操作入口"
+                                }
                               }
                             }
                           }
-                        }
+                        ]
                       }
                     ],
                     "no": {

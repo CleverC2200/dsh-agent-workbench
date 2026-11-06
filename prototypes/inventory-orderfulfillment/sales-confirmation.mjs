@@ -64,7 +64,7 @@ export function mountSalesConfirmation(document, simulation, formal) {
       form.append(
         node(
           'p',
-          '由机器人在指定飞书群 @对应销售并发送订单确认卡片。销售在飞书中查看明细、确认发货、暂缓或处理缺货；本工作台仅发起通知、展示处理结果。',
+          '由机器人在指定飞书群 @对应销售并发送订单待确认卡片。销售通过“订单处理”核对提交、调整商品或核验额度，也可暂缓发货；本工作台仅发起通知、展示处理结果。',
           'sales-preview-hint',
         ),
       );
