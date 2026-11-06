@@ -1,3 +1,4 @@
+import { inventoryCacheTtl } from '../../../../../shared/inventory-cache-policy';
 import { resolveFcDataDay } from '../../../../../shared/fc-data-day';
 import { useQueryIdentity } from '../../../../../shared/use-query-identity';
 import { DashboardTableSkeleton } from '../dsh-ui/workbench-loading';
@@ -228,7 +229,7 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
   useEffect(() => {
     const key = JSON.stringify([date, warehouseRevision]);
     const cached = directoryCache.current;
-    if (cached?.key === key && Date.now() - cached.at < 20 * 60 * 1000) {
+    if (cached?.key === key && Date.now() - cached.at < inventoryCacheTtl(config.agentId)) {
       setWarehouses(cached.rows);
       setWarehouseLoading(false);
       setWarehouseError('');

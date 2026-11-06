@@ -2,6 +2,7 @@ export { readBaseInventoryMetrics } from './base-inventory-metrics';
 import { fcCycleParameters, type FcCycleRule } from './fc-cycle-rules';
 import { unpackAtomicPage } from './atomic-page';
 import { configuredQueryFreshAfter, configuredQueryIdentity } from './query-cache';
+import { inventoryCacheTtl } from './inventory-cache-policy';
 import { requireColumns } from './configured-query-client.mjs';
 import { createAgentQueries } from './agent-query';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
@@ -299,7 +300,9 @@ export async function readConfiguredFacts(
       previous?.key === contextKey &&
       typeof previous.configVersion === 'string' &&
       previous.configVersion &&
-      (!fcSnapshot || (previous.readAt != null && Date.now() - previous.readAt < 20 * 60 * 1000))
+      (!fcSnapshot ||
+        (previous.readAt != null &&
+          Date.now() - previous.readAt < inventoryCacheTtl(config.agentId)))
     ) {
       snapshotDate = previous.snapshotDate;
       snapshotReadAt = previous.readAt ?? Date.now();
