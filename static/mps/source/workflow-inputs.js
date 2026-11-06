@@ -6,6 +6,7 @@ import { buildPlanSources, resolveWeightPairs } from './plan-inputs.js';
 import { attachPlanReport } from './plan-diagnostics.js';
 import { inventoryVersionOrder } from './inventory-selection.js';
 import { buildCapacityReport } from 'dsh-agent-manage/mps-compute/capacity-report';
+import { productionCalendarDays } from './production-calendar.js';
 
 const number = (value) => {
   if (
@@ -224,6 +225,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     inventoryTargetVersion: draft.constraints?.targetVersion ?? 'auto',
     inventoryTargetPriority: inventoryVersionOrder(draft.month),
     requireSourceTurnoverDays: draft.productSource === 'business',
+    missingTurnoverDaysAsZero: draft.productSource === 'business',
     inventoryTargetIssues:
       draft.inventoryTargetsRead?.status === 'ready'
         ? []
@@ -270,11 +272,15 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       ),
       shares: (draft.adjustments?.shares ?? []).map(({ rowId, share }) => ({ rowId, share })),
     },
-    productionDays: (draft.productionDays ?? []).map((row) => ({
-      base: text(row.base),
-      month: text(row.month),
-      days: number(row.days),
-    })),
+    productionDays: [
+      ...new Set([...productMonths.values()].map((row) => row.base).filter(Boolean)),
+    ].flatMap((base) =>
+      months.map((month) => ({
+        base,
+        month,
+        days: productionCalendarDays(base, month, draft.productionDays),
+      })),
+    ),
     unitWeights: (draft.unitWeights ?? []).map((row) => ({
       base: text(row.base),
       code: text(row.code),

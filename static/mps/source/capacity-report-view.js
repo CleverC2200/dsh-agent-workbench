@@ -1,3 +1,5 @@
+import { defaultProductionCalendar, productionCalendarRule } from './production-calendar.js';
+
 const offset = (month, count) => {
   const date = new Date(`${month}-01T00:00:00Z`);
   date.setUTCMonth(date.getUTCMonth() + count);
@@ -381,7 +383,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
           h(
             'p',
             { className: 'wf-note' },
-            `年度需求独立取${report.annualSource.table}，读取${report.annualSource.records}个基地SKU月份，另有${report.annualSource.excludedRows}行无SKU编码未纳入折吨、${report.annualSource.unmappedCount}行维度待核对。${report.annualSource.error || '按SKU有效吨/件折算，空值、冲突及缺件吨系数的月份保留待评估。'}2027年2月按已确认15天计算。首表超出本轮拆分的月份仅作年度需求参考，不参与排产。`,
+            `年度需求独立取${report.annualSource.table}，读取${report.annualSource.records}个基地SKU月份，另有${report.annualSource.excludedRows}行无SKU编码未纳入折吨、${report.annualSource.unmappedCount}行维度待核对。${report.annualSource.error || '按SKU有效吨/件折算，空值、冲突及缺件吨系数的月份保留待评估。'}${productionCalendarRule}首表超出本轮拆分的月份仅作年度需求参考，不参与排产。`,
           ),
           h(
             'button',
@@ -451,14 +453,19 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
             : null,
           h(
             'div',
-            { 'data-holiday-year': report.fiscalMonths.includes('2027-02') ? '2027' : '' },
+            null,
             table(
               '全年月度负荷率矩阵',
               [
                 '基地',
-                ...report.fiscalMonths.map((period) =>
-                  period === '2027-02' ? `${period} 春节月` : period,
-                ),
+                ...report.fiscalMonths.map((period) => {
+                  const days = defaultProductionCalendar(period).holidayDates.length;
+                  return h(
+                    'span',
+                    { key: period, className: days ? 'wf-capacity-holiday' : '' },
+                    days ? `${period} 春节扣${days}天` : period,
+                  );
+                }),
                 '全年需求（吨）',
               ],
               [
@@ -474,8 +481,10 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                     h(
                       'span',
                       {
-                        className:
-                          report.fiscalMonths[index] === '2027-02' ? 'wf-capacity-holiday' : '',
+                        className: defaultProductionCalendar(report.fiscalMonths[index])
+                          .holidayDates.length
+                          ? 'wf-capacity-holiday'
+                          : '',
                         title: row
                           ? `年度需求已知小计${numberText(row.demand.known, false, 3)}吨；${row.demand.missing}项缺需求或有效件吨系数`
                           : '未取得年度需求',
@@ -606,7 +615,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
             h(
               'p',
               null,
-              '月产能＝去重后的物理产线日产吨数×有效生产天数。常规月25天，已确认2027年2月15天，人工生产日历及已采用停线约束优先。',
+              `月产能＝去重后的物理产线日产吨数×有效生产天数。${productionCalendarRule}已采用停线约束继续生效。`,
             ),
             h(
               'p',

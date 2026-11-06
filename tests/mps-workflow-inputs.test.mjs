@@ -85,6 +85,35 @@ const draft = () => ({
   },
 });
 
+test('业务版本缺源周转天数临时按零参与，原始缺项保留且人工补充值优先', () => {
+  const source = draft();
+  source.productSource = 'business';
+  source.productsRead = { status: 'ready' };
+  source.inventoryTargetsRead = { status: 'ready' };
+  let result = buildMpsWorkflow(source, null);
+  assert.ok(result.rows.length > 0);
+  assert.ok(
+    result.rows.every(
+      (row) =>
+        row.safetyDays === 0 &&
+        row.targetInventory === 0 &&
+        row.safetyDaysSource === 'missing-turnover-days-zero',
+    ),
+  );
+  assert.ok(
+    result.rows.every(
+      (row) => row.turnoverPolicy.sourceDays === null && row.turnoverPolicy.missing.length > 0,
+    ),
+  );
+  source.constraints.turnoverDays = [{ base: '甲', code: 'A', days: 15 }];
+  result = buildMpsWorkflow(source, null);
+  assert.ok(
+    result.rows
+      .filter((row) => row.base === '甲')
+      .every((row) => row.safetyDays === 15 && row.safetyDaysSource === 'manual-turnover-days'),
+  );
+});
+
 test('公开Manage source导出驱动页面归一化，收入缺失不阻断数量，切口径重算', () => {
   const source = draft();
   const monthly = buildMpsWorkflow(source);

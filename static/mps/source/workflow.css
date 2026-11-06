@@ -452,7 +452,8 @@
   color: #c8112a;
   background: #ffe9ec;
 }
-.wf-page [data-holiday-year='2027'] tr > :nth-child(9) {
+.wf-page th:has(> .wf-capacity-holiday),
+.wf-page td:has(> .wf-capacity-holiday) {
   background: #fff4d9;
 }
 .wf-capacity-load[data-band='unknown'] {

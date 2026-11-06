@@ -10,6 +10,11 @@ import { readPlanRelations } from './relations.js';
 import { computeWorkflow } from './workflow-worker-client.js';
 import { readCapacityAnnual } from './master-data.js';
 import { capacityFiscalMonths } from 'dsh-agent-manage/mps-compute/capacity-report';
+import {
+  defaultProductionCalendar,
+  productionCalendarDays,
+  productionCalendarRule,
+} from './production-calendar.js';
 
 const titles = {
   process: '需求加工与收敛',
@@ -398,7 +403,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             h(
               'tr',
               null,
-              columns.map((column) => h('th', { key: column }, column)),
+              columns.map((column, index) => h('th', { key: index }, column)),
             ),
           ),
           h(
@@ -510,7 +515,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         expression = `${value(row.safetyDays)} × ${value(row.nextMonthDemand)} ÷ ${row.nextMonthDays} = ${value(row.targetInventory)}；源最终目标周转天数 ${value(row.turnoverPolicy.sourceDays)}天，人工补充及已采用规则生效后使用有效天数`;
       }
       if (field === 'targetInventory' && row.safetyDays === 0)
-        expression = '安全天数明确为0，目标库存为0，无需下一月需求';
+        expression =
+          row.safetyDaysSource === 'missing-turnover-days-zero'
+            ? '源目标周转天数待补，本轮临时按0天计算，目标库存为0；源缺项保留，补齐后重新评估'
+            : '安全天数明确为0，目标库存为0，无需下一月需求';
       if (field === 'requiredProduction')
         expression = `max(0, ${value(row.demand)} + ${value(row.targetInventory)} − ${value(row.openingInventory)}) = ${value(row.requiredProduction)}，需求推导参考`;
       if (field === 'projectedClosing')
@@ -1163,20 +1171,26 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             sourceMonth,
             numberInput(
               `${sourceBase} ${sourceMonth} 生产天数`,
-              productionDays.find((item) => item.base === sourceBase && item.month === sourceMonth)
-                ?.days,
+              productionCalendarDays(sourceBase, sourceMonth, productionDays),
               (days) => setDays(sourceBase, sourceMonth, days),
               31,
             ),
             h(
               'button',
               {
-                'aria-label': `${sourceBase} ${sourceMonth} 采用25天`,
-                onClick: () => setDays(sourceBase, sourceMonth, 25),
+                'aria-label': `${sourceBase} ${sourceMonth} 恢复默认生产天数`,
+                onClick: () =>
+                  update({
+                    productionDays: productionDays.filter(
+                      (item) => item.base !== sourceBase || item.month !== sourceMonth,
+                    ),
+                  }),
               },
-              '采用25天候选',
+              '恢复默认',
             ),
-            '请按实际维护。春节月可参考15天，月份须人工确认',
+            productionDays.some((item) => item.base === sourceBase && item.month === sourceMonth)
+              ? '人工覆盖，按填写的最终生产天数计算，不重复扣春节天数'
+              : `默认25天，春节扣减${defaultProductionCalendar(sourceMonth).holidayDates.length}天；${defaultProductionCalendar(sourceMonth).holidayDates.join('、') || '本月无春节扣减'}`,
           ]),
       );
     const skuPairs = [
@@ -1274,7 +1288,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       ],
       [
         'B6 维护来源',
-        '正式安全天数和生产日历来源、负责人及生效版本尚未提供；本地值按当前评估版本保留',
+        `目标周转天数取已配置来源；生产日历按确认规则：${productionCalendarRule}人工覆盖按当前评估版本保留。`,
       ],
       ...(!resources.some((row) => row.kind === 'tunnel')
         ? [['B5 隧道台账', '缺正式物理ID与基地车间映射，不把SKU兼容行作为设备']]
@@ -1291,15 +1305,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       ...bases.flatMap((item) =>
         result.months
           .slice(0, 3)
-          .filter(
-            (period) =>
-              !productionDays.some(
-                (row) => row.base === item && row.month === period && row.days !== null,
-              ),
-          )
+          .filter((period) => productionCalendarDays(item, period, productionDays) === null)
           .map((period) => [
             `B6 ${item} ${period}生产日历`,
-            '缺实际可用生产天数；25天候选未自动采用',
+            '人工天数为空、重复、无效，或月份超出已核验春节日历范围，请维护生产天数',
             period,
           ]),
       ),
@@ -1677,7 +1686,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 '可用生产天数',
                 table(
                   '可用生产天数',
-                  ['基地', '月份', '生产天数', '候选值', '维护说明'],
+                  ['基地', '月份', '生产天数', '默认设置', '维护说明'],
                   productionRows,
                 ),
               ),

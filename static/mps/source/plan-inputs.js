@@ -1,4 +1,5 @@
 import { unitWeightCandidate } from './unit-weights.js';
+import { productionCalendarDays, productionCalendarRule } from './production-calendar.js';
 import {
   canonicalBaseName,
   matchTunnelCapacity,
@@ -178,24 +179,11 @@ export function buildPlanSources(draft, relations, weightRead) {
     ]),
   ];
   const productionDays = bases.flatMap((base) =>
-    months.map((month) => {
-      const overrides = (draft.productionDays ?? []).filter(
-        (row) => row.base === base && row.month === month,
-      );
-      return {
-        base,
-        month,
-        days: overrides.length
-          ? overrides.length === 1
-            ? number(overrides[0].days)
-            : null
-          : month === '2027-02'
-            ? 15
-            : Number(month.slice(5)) === 2
-              ? null
-              : 25,
-      };
-    }),
+    months.map((month) => ({
+      base,
+      month,
+      days: productionCalendarDays(base, month, draft.productionDays),
+    })),
   );
   const pairs = [
     ...new Map(
@@ -249,7 +237,7 @@ export function buildPlanSources(draft, relations, weightRead) {
       coefficients: unitWeights.length,
       transferRoutes: transferRoutes.length,
       pendingRoutes,
-      calendar: '常规月25天、已确认2027年2月15天；人工月份配置优先。其他年份2月需维护。',
+      calendar: productionCalendarRule,
       notes: !sources ? ['主数据尚未读取，源产能未装配'] : [],
     },
   };

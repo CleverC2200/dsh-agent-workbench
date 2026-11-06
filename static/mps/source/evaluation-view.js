@@ -1,13 +1,18 @@
 import { createCapacityReport } from './capacity-report-view.js';
+import { turnoverDaysSources } from './inventory-target-view.js';
 
 const valid = (value) => typeof value === 'number' && Number.isFinite(value);
 const reportMissing = (row) => row.reportMissing ?? row.planMissing;
 const reportStatus = (row) => {
   const missing = reportMissing(row).join('；');
   const status = missing || (row.unfulfilled > 0 ? '产能不足，未满足量已单列' : '已评估');
-  return row.reportIssueKinds?.includes('下市品产生需求') && !status.includes('下市品产生需求')
-    ? `${status}；下市品产生需求`
-    : status;
+  const result =
+    row.reportIssueKinds?.includes('下市品产生需求') && !status.includes('下市品产生需求')
+      ? `${status}；下市品产生需求`
+      : status;
+  return row.safetyDaysSource === 'missing-turnover-days-zero'
+    ? `${result}；源周转天数待补，临时按0天`
+    : result;
 };
 const fields = [
   'openingInventory',
@@ -309,6 +314,9 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         ...Object.fromEntries(plannedFields.map((field, index) => [labels[index], row[field]])),
         需求已满足量: row.fulfilledDemand,
         生产满足率: row.fulfillment,
+        有效目标周转天数: row.safetyDays,
+        周转天数口径: turnoverDaysSources[row.safetyDaysSource],
+        源目标周转天数: row.turnoverPolicy?.sourceDays,
         状态: reportStatus(row),
         问题分类: row.reportIssueKinds?.join('；'),
         来源标签: row.supplyTags,
@@ -332,6 +340,9 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           ...labels,
           '需求已满足量',
           '生产满足率',
+          '有效目标周转天数',
+          '周转天数口径',
+          '源目标周转天数',
           '状态',
           '问题分类',
           '来源标签',
@@ -618,6 +629,13 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         ),
       ),
       error ? h('p', { role: 'alert' }, error) : null,
+      plan?.rows.some((row) => row.safetyDaysSource === 'missing-turnover-days-zero')
+        ? h(
+            'p',
+            { className: 'wf-note', role: 'status' },
+            `本轮${plan.rows.filter((row) => row.safetyDaysSource === 'missing-turnover-days-zero').length}个单品月份缺源目标周转天数，临时按0天计算目标库存，源缺项保留在第五步待补清单，补齐后重新评估。`,
+          )
+        : null,
       !plan
         ? h(
             'p',

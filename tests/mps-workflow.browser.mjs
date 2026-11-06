@@ -42,6 +42,36 @@ async function version(frame, month) {
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
 }
 
+test('春节跨月扣减显示在生产日历和年度矩阵，人工覆盖可恢复默认', async (t) => {
+  const { frame } = await workflowPage(t);
+  await version(frame, '2025-01');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  const view = frame.getByRole('region', { name: '约束与配置', exact: true });
+  await view.locator('summary').filter({ hasText: '高级配置：' }).click();
+  await expect(view.getByLabel('郑州 2025-01 生产天数', { exact: true })).toHaveValue('18');
+  await expect(view.getByLabel('郑州 2025-02 生产天数', { exact: true })).toHaveValue('22');
+  await expect(view.getByLabel('郑州 2025-03 生产天数', { exact: true })).toHaveValue('25');
+  await view.getByLabel('郑州 2025-01 生产天数', { exact: true }).fill('15');
+  await expect(view.getByLabel('郑州 2025-01 生产天数', { exact: true })).toHaveValue('15');
+  await view.getByRole('button', { name: '郑州 2025-01 恢复默认生产天数', exact: true }).click();
+  await expect(view.getByLabel('郑州 2025-01 生产天数', { exact: true })).toHaveValue('18');
+  await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
+  await frame.getByRole('button', { name: '执行评估', exact: true }).click();
+  const matrix = frame.getByRole('table', { name: '全年月度负荷率矩阵', exact: true });
+  await expect(
+    matrix.getByRole('columnheader', { name: '2025-01 春节扣7天', exact: true }),
+  ).toBeVisible();
+  await expect(
+    matrix.getByRole('columnheader', { name: '2025-02 春节扣3天', exact: true }),
+  ).toBeVisible();
+  await expect(matrix.locator('th > .wf-capacity-holiday')).toHaveCount(2);
+});
+
 test('Tab3 expands base then category, group and SKU with base-scoped totals and explanations', async (t) => {
   const { page, frame } = await workflowPage(t);
   await version(frame, '2026-12');
@@ -551,8 +581,9 @@ test('MPS configuration keeps accepted production days, explicit weight and assi
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
   await view.locator('summary').filter({ hasText: '高级配置：' }).click();
   await expect(view).toContainText('下月需求÷下月自然天数');
-  await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('');
-  await view.getByRole('button', { name: '郑州 2026-12 采用25天', exact: true }).click();
+  await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('25');
+  await view.getByLabel('郑州 2026-12 生产天数', { exact: true }).fill('15');
+  await view.getByRole('button', { name: '郑州 2026-12 恢复默认生产天数', exact: true }).click();
   await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('25');
   await view.getByLabel('郑州 A 件吨系数', { exact: true }).fill('0.02');
   await view.getByRole('button', { name: '新增产能资源', exact: true }).click();
@@ -774,8 +805,16 @@ test('MPS effective category and share edits drive the same unconstrained invent
   const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
   await constraints.locator('summary').filter({ hasText: '高级配置：' }).click();
   await constraints.getByLabel('郑州 安全天数', { exact: true }).fill('31');
+  await expect(constraints.getByLabel('郑州 2027-01 生产天数', { exact: true })).toHaveValue('25');
+  await expect(constraints.getByLabel('郑州 2027-02 生产天数', { exact: true })).toHaveValue('15');
+  await constraints.getByLabel('郑州 2027-01 生产天数', { exact: true }).fill('15');
+  await constraints
+    .getByRole('button', { name: '郑州 2027-01 恢复默认生产天数', exact: true })
+    .click();
+  await expect(constraints.getByLabel('郑州 2027-01 生产天数', { exact: true })).toHaveValue('25');
+  await expect(constraints.getByLabel('郑州 2027-02 生产天数', { exact: true })).toHaveValue('15');
   for (const month of ['2026-12', '2027-01', '2027-02'])
-    await constraints.getByRole('button', { name: `郑州 ${month} 采用25天`, exact: true }).click();
+    await constraints.getByLabel(`郑州 ${month} 生产天数`, { exact: true }).fill('25');
   await constraints.getByLabel('郑州 A 件吨系数', { exact: true }).fill('0.01');
   await constraints.getByLabel('郑州 B 件吨系数', { exact: true }).fill('0.02');
   for (const [index, id, kind, tons] of [

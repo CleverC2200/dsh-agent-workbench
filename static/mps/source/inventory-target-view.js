@@ -3,9 +3,10 @@ import { inventoryVersionOrder } from './inventory-selection.js';
 const text = (value) => (value == null ? '—' : String(value));
 const number = (value) =>
   value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 }).format(value);
-const sources = {
+export const turnoverDaysSources = {
   'target-turnover-days': '源最终目标周转天数',
   'manual-turnover-days': '人工补充目标周转天数',
+  'missing-turnover-days-zero': '源天数待补，临时按0天',
   'base-policy': '基地安全天数策略',
   rule: '库存下限规则',
   missing: '缺输入',
@@ -43,6 +44,9 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
     };
     const read = draft.inventoryTargetsRead;
     const missing = result.rows.filter((row) => row.safetyDays === null).length;
+    const temporaryZero = result.rows.filter(
+      (row) => row.safetyDaysSource === 'missing-turnover-days-zero',
+    ).length;
     const policyBases = policyRows.map((row) => row[0]);
     const configured = policyBases.filter((base) => {
       const matches = result.constraints.safetyDays.filter((row) => row.base === base);
@@ -105,7 +109,7 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
           },
         }),
         number(row.safetyDays),
-        sources[row.safetyDaysSource],
+        turnoverDaysSources[row.safetyDaysSource],
       ]);
     const fields = [
       '月份',
@@ -143,7 +147,7 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
       row.inventoryTarget.dailyDemand,
       row.inventoryTarget.days,
       row.safetyDays,
-      sources[row.safetyDaysSource],
+      turnoverDaysSources[row.safetyDaysSource],
       row.targetInventory,
       row.inventoryTarget.missing.join('；'),
       {
@@ -163,7 +167,11 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
       row.turnoverPolicy.sourceDays,
       row.turnoverPolicy.sourceMonths.join('、'),
       row.turnoverPolicy.sourceVersion,
-      row.safetyDays === null ? '暂不参与，补充后重新评估' : '天数已齐，其他依赖另行核对',
+      row.safetyDaysSource === 'missing-turnover-days-zero'
+        ? '源天数待补，临时按0天参与；其他依赖另行核对'
+        : row.safetyDays === null
+          ? '暂不参与，补充后重新评估'
+          : '天数已齐，其他依赖另行核对',
     ];
     const mainColumns = [
       '月份',
@@ -234,7 +242,7 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
         h(
           'p',
           { className: 'wf-note', role: 'status' },
-          `基地安全天数已维护${configured}/${policyBases.length}个基地；当前${missing}个基地单品月份缺有效安全天数。`,
+          `基地安全天数已维护${configured}/${policyBases.length}个基地；当前${missing}个基地单品月份缺有效安全天数，${temporaryZero}个单品月份缺源天数、临时按0天计算。`,
         ),
         h(
           'div',
@@ -277,7 +285,7 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
         h(
           'p',
           { className: 'wf-note' },
-          '按所选库存版本取最终目标周转天数，同基地同SKU各月共用一个天数。自动版本按期间整体选择，不因单品缺记录、空值或冲突混取其他版本。业务来源缺天数的单品列入待补清单，本轮暂不参与计算，补充后重新评估。目标库存＝有效天数×下月需求÷下月自然天数，明确填0时目标库存为0。基地补充天数保留供人工模拟使用。',
+          '按所选库存版本取最终目标周转天数，同基地同SKU各月共用一个天数。自动版本按期间整体选择，不因单品缺记录、空值或冲突混取其他版本。业务来源未取得有效天数且没有人工补充的单品，本轮临时按0天参与计算，源缺项保留在待补清单，补齐后重新评估。目标库存＝有效天数×下月需求÷下月自然天数，0天时目标库存为0。基地补充天数保留供人工模拟使用。',
         ),
         h('h3', null, '目标周转天数待补'),
         h(
