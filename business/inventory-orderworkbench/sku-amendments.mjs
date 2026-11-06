@@ -1,61 +1,84 @@
 // Quantity sums over daily execution details; no source-order/SKU deduplication.
-export function skuAmendmentEventsSql({ headers, stage = 'events', periods = false }) {
+const warehousePointsSql = `SELECT warehouseid AS warehouse_id,
+  CASE WHEN COUNT(pickup_point)=COUNT(*) AND COUNT(DISTINCT pickup_point)=1
+    THEN MAX(pickup_point) END AS pickup_point,
+  CASE WHEN COUNT(warehouse_classify)=COUNT(*) AND COUNT(DISTINCT warehouse_classify)=1
+    THEN MAX(warehouse_classify) END AS warehouse_classify
+  FROM agents_dim_bas_warehouse_d GROUP BY warehouseid`;
+
+export function skuAmendmentEventsSql({ stage = 'events', periods = false } = {}) {
   const fields = [
     'cust_code',
     'cust_order_no',
     'executeorderno',
     'belong_base',
+    'pickup_point',
     'material_code',
     'region_name',
     'province_region_name',
     'cust_name',
     'header_addtime',
-    'requireddeliverytime',
+    'orderstatus',
     'detailstatus',
     'is_stat',
     'change_order_qty',
     'dms_last_update_qty',
-    'order_qty_origin',
+    'need_qty_origin',
+    'warehouseid',
+    'receive_wh',
+    'createsource',
+    'is_virtual',
+    'timeout_code',
   ];
   const projection = (alias) => fields.map((field) => `${alias}.${field}`).join(',');
-  const source = `SELECT ${periods ? 'rw.period_index,' : ''}${projection('d')},d.custchangetime AS changed
+  const source = `SELECT ${periods ? 'rw.period_index,' : ''}${projection('d')}
     FROM agents_scm_execute_detail_d d
     ${periods ? 'INNER JOIN report_windows rw ON rw.enabled=TRUE AND d.header_addtime>=rw.start_date AND d.header_addtime<rw.end_date' : ''}
-    WHERE (:gea_p900='' OR d.belong_base=:gea_p900)
-      ${periods ? '' : 'AND d.header_addtime>=:gea_p1 AND d.header_addtime<:gea_p2'}`;
-  const sameOrder = ['cust_code', 'cust_order_no']
-    .map(
-      (key) =>
-        `(CASE WHEN h.${key} IS NULL THEN 'N' ELSE CONCAT('V',h.${key}) END)=(CASE WHEN s.${key} IS NULL THEN 'N' ELSE CONCAT('V',s.${key}) END)`,
-    )
-    .join(' AND ');
-  const cohort = `SELECT ${periods ? 's.period_index,' : ''}${projection('s')},s.changed,h.invalid_header,h.status AS header_status,h.cancelled,
-    COALESCE(s.change_order_qty,0) AS requested_qty,
-    COALESCE(s.dms_last_update_qty,s.order_qty_origin,0) AS effective_qty,
-    CASE WHEN s.requireddeliverytime<=s.header_addtime + INTERVAL '7' DAY
-      THEN s.header_addtime + INTERVAL '12' HOUR
-      ELSE s.requireddeliverytime - INTERVAL '7' DAY END AS locked
-    FROM (${source}) s INNER JOIN (${headers}) h
-      ON ${sameOrder}${periods ? ' AND h.period_index=s.period_index' : ''}`;
+    WHERE (:gea_p900=''
+      OR (:gea_p900='郑州' AND d.pickup_point='01')
+      OR (:gea_p900<>'郑州' AND d.belong_base=:gea_p900))
+      ${periods ? '' : 'AND d.header_addtime>=:gea_p1 AND d.header_addtime<:gea_p2'}
+      AND d.createsource='20'
+      AND (d.is_virtual IS NULL OR d.is_virtual NOT IN ('1','2'))
+      AND (d.timeout_code IS NULL OR d.timeout_code NOT IN ('14','16'))`;
+  const factoryTransfer = `CASE WHEN shipping.pickup_point IS NOT NULL
+      AND shipping.pickup_point=receiving.pickup_point
+      AND shipping.warehouse_classify IN ('01','02')
+      AND receiving.warehouse_classify IN ('01','02') THEN 1 ELSE 0 END`;
+  const knownWarehouse = "NULLIF(NULLIF(TRIM(warehouseid),'*'),'')";
+  // Unallocated rows inherit only a unique warehouse on the same valid execution and route.
+  const executionShipping = `SELECT ${periods ? 'period_index,' : ''}cust_code,executeorderno,pickup_point,receive_wh,
+    CASE WHEN COUNT(DISTINCT ${knownWarehouse})=1 THEN MAX(${knownWarehouse}) END AS warehouse_id
+    FROM (${source}) execution_lines
+    WHERE detailstatus=10 AND is_stat='1' AND (orderstatus<>90 OR orderstatus IS NULL)
+    GROUP BY ${periods ? 'period_index,' : ''}cust_code,executeorderno,pickup_point,receive_wh`;
+  const resolvedWarehouse = `COALESCE(NULLIF(NULLIF(TRIM(s.warehouseid),'*'),''),execution_shipping.warehouse_id)`;
+  const cohort = `SELECT ${periods ? 's.period_index,' : ''}${projection('s')},
+    s.change_order_qty AS requested_qty,
+    COALESCE(s.dms_last_update_qty,s.need_qty_origin,0) AS effective_qty,
+    ${factoryTransfer} AS factory_short_transfer,${resolvedWarehouse} AS resolved_warehouseid
+    FROM (${source}) s
+    LEFT JOIN (${executionShipping}) execution_shipping
+      ON execution_shipping.cust_code=s.cust_code AND execution_shipping.executeorderno=s.executeorderno
+      AND execution_shipping.pickup_point=s.pickup_point AND execution_shipping.receive_wh=s.receive_wh
+      ${periods ? 'AND execution_shipping.period_index=s.period_index' : ''}
+    LEFT JOIN (${warehousePointsSql}) shipping ON shipping.warehouse_id=${resolvedWarehouse}
+    LEFT JOIN (${warehousePointsSql}) receiving ON receiving.warehouse_id=s.receive_wh`;
   const lines = `${cohort}
     WHERE s.detailstatus=10 AND s.is_stat='1'
-      AND (h.status<>90 OR h.status IS NULL)
+      AND (s.orderstatus<>90 OR s.orderstatus IS NULL)
+      AND (${factoryTransfer})=0
       AND (s.change_order_qty IS NOT NULL OR s.dms_last_update_qty IS NOT NULL
-        OR s.order_qty_origin IS NOT NULL)`;
+        OR s.need_qty_origin IS NOT NULL)`;
+  const invalid = `NULLIF(TRIM(cust_code),'') IS NULL
+      OR NULLIF(TRIM(cust_order_no),'') IS NULL OR NULLIF(TRIM(material_code),'') IS NULL
+      OR orderstatus IS NULL`;
   const classified = `SELECT ${periods ? 'period_index,' : ''}cust_code,cust_order_no,material_code,cust_name,region_name,province_region_name,
-    requested_qty,effective_qty,ABS(requested_qty-effective_qty) AS difference_qty,
-    changed,header_addtime,requireddeliverytime,locked,
-    invalid_header,header_status,cancelled,detailstatus,is_stat,
-    CASE WHEN changed>=locked THEN ABS(requested_qty-effective_qty) ELSE 0 END AS changed_quantity,
-    CASE WHEN invalid_header>0 OR NULLIF(TRIM(material_code),'') IS NULL
-      OR detailstatus<>10 OR is_stat<>'1' OR detailstatus IS NULL OR is_stat IS NULL
-      THEN 1 ELSE 0 END AS invalid_denominator,
-    CASE WHEN invalid_header>0 OR NULLIF(TRIM(material_code),'') IS NULL
-      OR detailstatus<>10 OR is_stat<>'1' OR detailstatus IS NULL OR is_stat IS NULL
-      OR (requested_qty<>effective_qty AND (changed IS NULL OR header_addtime IS NULL
-        OR requireddeliverytime IS NULL OR requireddeliverytime<header_addtime
-        OR changed<header_addtime))
-      THEN 1 ELSE 0 END AS invalid_line
+    requested_qty,effective_qty,
+    CASE WHEN requested_qty IS NOT NULL THEN ABS(requested_qty-effective_qty) ELSE 0 END AS difference_qty,
+    CASE WHEN requested_qty IS NOT NULL THEN ABS(requested_qty-effective_qty) ELSE 0 END AS changed_quantity,
+    CASE WHEN ${invalid} THEN 1 ELSE 0 END AS invalid_denominator,
+    CASE WHEN ${invalid} THEN 1 ELSE 0 END AS invalid_line
     FROM (${lines}) amendment_lines`;
   const events = `SELECT ${periods ? 'period_index,' : ''}cust_code,cust_order_no,material_code,cust_name AS name,
     region_name AS region,province_region_name AS province,

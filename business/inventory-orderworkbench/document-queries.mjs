@@ -68,14 +68,6 @@ const lockHeaders = (
   WHERE h.created>=:gea_p1 AND h.created<:gea_p2`;
 
 const lockedHeaders = lockHeaders(orderHeaders);
-const dailyAmendmentHeaders = lockHeaders(
-  headersFor(`SELECT cust_code,cust_order_no,belong_base,
-  region_name,province_region_name,cust_name,header_addtime,requireddeliverytime,orderstatus,
-  canceltime,custchangetime FROM agents_scm_execute_detail_d
-  WHERE (:gea_p900='' OR belong_base=:gea_p900)
-    AND header_addtime>=:gea_p1 AND header_addtime<:gea_p2`),
-);
-
 const events = `SELECT cust_code,cust_order_no,name,region,province,
   CASE WHEN status=90 AND cancelled<:gea_p2 AND cancelled<=created + INTERVAL '12' HOUR THEN 0 ELSE 1 END AS cancel_denominator,
   CASE WHEN status=90 AND cancelled<:gea_p2 AND cancelled>=locked AND cancelled>created + INTERVAL '12' HOUR THEN 1 ELSE 0 END AS cancel_numerator,
@@ -83,16 +75,12 @@ const events = `SELECT cust_code,cust_order_no,name,region,province,
     OR (cancelled<:gea_p2 AND invalid_lock>0))) THEN 1 ELSE 0 END AS invalid_cancel
   FROM (${lockedHeaders}) locked_orders`;
 
-export const amendmentEventsSql = skuAmendmentEventsSql({
-  headers: dailyAmendmentHeaders,
-});
+export const amendmentEventsSql = skuAmendmentEventsSql({});
 
 export const amendmentCohortSql = skuAmendmentEventsSql({
-  headers: dailyAmendmentHeaders,
   stage: 'cohort',
 });
 export const amendmentClassifiedSql = skuAmendmentEventsSql({
-  headers: dailyAmendmentHeaders,
   stage: 'classified',
 });
 
@@ -125,34 +113,7 @@ export function periodChangesSql() {
       `FROM (${events}) order_events GROUP BY region,province`,
       'FROM period_cancel_events order_events GROUP BY period_index,region,province',
     );
-  const headerFields = [
-    'cust_code',
-    'cust_order_no',
-    'belong_base',
-    'region_name',
-    'province_region_name',
-    'cust_name',
-    'header_addtime',
-    'requireddeliverytime',
-    'orderstatus',
-    'canceltime',
-    'custchangetime',
-  ];
-  const rows = `SELECT rw.period_index,${headerFields.map((field) => 'd.' + field).join(',')}
-    FROM agents_scm_execute_detail_d d INNER JOIN report_windows rw
-      ON rw.enabled=TRUE AND d.header_addtime>=rw.start_date AND d.header_addtime<rw.end_date
-    WHERE (:gea_p900='' OR d.belong_base=:gea_p900)`;
-  const headers = headersFor(rows)
-    .replace('SELECT cust_code,cust_order_no,', 'SELECT period_index,cust_code,cust_order_no,')
-    .replace('GROUP BY cust_code,cust_order_no', 'GROUP BY period_index,cust_code,cust_order_no');
-  const locked = lockHeaders(headers)
-    .replace('SELECT h.cust_code,', 'SELECT h.period_index,h.cust_code,')
-    .replace(withoutPeriod, '');
-  const amendment = aggregateAmendmentSql(
-    skuAmendmentEventsSql({ headers: locked, periods: true }),
-    false,
-    true,
-  );
+  const amendment = aggregateAmendmentSql(skuAmendmentEventsSql({ periods: true }), false, true);
   return {
     ctes: `period_cancel_headers AS (${cancellationHeaders}),period_cancel_events AS (${cancellationEvents})`,
     sql: cancellation + ' UNION ALL ' + amendment,
