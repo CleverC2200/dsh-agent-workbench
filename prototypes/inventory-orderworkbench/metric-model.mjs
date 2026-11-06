@@ -1,5 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 24;
+export const metricCalculationVersion = 25;
 export function retainableWorkbenchFacts(facts) {
   return (
     facts?.attributionVersion === 2 &&
@@ -162,7 +162,7 @@ export function computeWorkbenchMetrics(
           assessed.length) *
           100
       : null,
-    '按TMS实际到货时间选周期，执行单号去重：准交执行单数 ÷ 已发货执行单数；到货优先目的地GPS围栏、其次到货确认；以max(客户期望、开单确认到货、系统计算到货)为基准，kamd/dc客户晚满18小时算逾期，其他客户晚满12小时算逾期，未满对应时限为准交；剔除同提货点且双方均工厂仓/工厂外租仓的短拨、海外/国外/港澳大区、未派车、虚拟出库1/2、指定车型及空车型、超时原因14/16；郑州庞丽娟按基地准交率；系统交期缺失但到货<已有两交期最大值+对应客户类型的18/12小时可严格确认准交；否则保留未知；短拨仓类可由仓库维表唯一补齐，冲突不覆盖',
+    '按TMS实际到货时间选周期，执行单号去重：准交执行单数 ÷ 已发货执行单数；到货优先目的地GPS围栏、其次到货确认，实际到货记录证明已发货，不要求lastshipmenttime非空，不按detailstatus/is_stat筛选；以max(客户期望、开单确认到货、系统计算到货)为基准，kamd/dc客户晚满18小时算逾期，其他客户晚满12小时算逾期，未满对应时限为准交；剔除同提货点且双方均工厂仓/工厂外租仓的短拨、海外/国外/港澳大区、未派车、虚拟出库1/2、指定车型及空车型、超时原因14/16；郑州庞丽娟按基地准交率；系统交期缺失但到货<已有两交期最大值+对应客户类型的18/12小时可严格确认准交；否则保留未知；短拨仓类可由仓库维表唯一补齐，冲突不覆盖',
   );
   const total = sum(ages, 'stock_qty'),
     aged = sum(ages, 'aged_qty');

@@ -7,7 +7,7 @@ import {
   traceHeadersSql,
 } from '../business/inventory-orderworkbench/document-queries.mjs';
 
-test('on-time exclusions and shipment evidence do not alter fulfillment traces', () => {
+test('on-time exclusions preserve arrived orders without shipment timestamps and fulfillment traces', () => {
   const db = new DatabaseSync(':memory:');
   try {
     db.exec(
@@ -59,11 +59,11 @@ test('on-time exclusions and shipment evidence do not alter fulfillment traces',
     const orders = db
       .prepare(translate(ontimeSql))
       .all({ gea_p900: '', gea_p1: '2026-10-01', gea_p2: '2026-11-01' });
-    assert.equal(orders.length, 1);
+    assert.equal(orders.length, 2);
     assert.equal(orders.find((r) => r.order_no === 'valid').ontime, 1);
     assert.equal(
       orders.some((r) => r.order_no === 'only-close'),
-      false,
+      true,
     );
   } finally {
     db.close();

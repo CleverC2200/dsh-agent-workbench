@@ -92,7 +92,12 @@ test('execution arrival cohort, all exclusions, missing evidence and summary par
     add('null-vehicle', { vehicle_type: null });
     add('virtual-1', {}, 1);
     add('virtual-2', {}, 2);
-    add('not-shipped', { lastshipmenttime: null });
+    add('arrival-without-shiptime', { lastshipmenttime: null });
+    add('not-shipped', {
+      lastshipmenttime: null,
+      gpsisinraildate_to: null,
+      arriveconfirm_time: null,
+    });
     add('outside', { gpsisinraildate_to: '2026-09-22 00:00:00' });
     add('no-arrival', { gpsisinraildate_to: null, arriveconfirm_time: null });
     add('updated-outside', { update_time: '2026-10-01' });
@@ -115,6 +120,7 @@ test('execution arrival cohort, all exclusions, missing evidence and summary par
       'E-nonfactory',
       'E-unmapped',
       'E-warehouse-fallback',
+      'arrival-without-shiptime',
     ]);
     assert.equal(
       result.find((r) => r.order_no === 'E-boundary').ontime,
@@ -131,16 +137,16 @@ test('execution arrival cohort, all exclusions, missing evidence and summary par
     const packed = db.prepare(translate(ontimeSummarySql)).all(params);
     assert.equal(
       packed.reduce((n, r) => n + JSON.parse(r.packed_orders).length, 0),
-      11,
-      '10 executions and one extra SKU membership',
+      12,
+      '11 executions and one extra SKU membership',
     );
     const metric = computeWorkbenchMetrics({
       sections: [{ id: 'ontime', status: 'ready', rows: result }],
     })['准交率'];
-    assert.equal(metric.sample.total, 10);
-    assert.equal(metric.sample.known, 7);
-    assert.equal(metric.value, 50);
-    assert.equal(metric.sample.value, 500 / 7);
+    assert.equal(metric.sample.total, 11);
+    assert.equal(metric.sample.known, 8);
+    assert.equal(metric.value, 500 / 11);
+    assert.equal(metric.sample.value, 500 / 8);
     for (const cust_type of ['kamd', 'dc', 'jxs']) {
       const hour = cust_type === 'jxs' ? '09' : '15';
       for (const [suffix, arrival, expected] of [
@@ -174,7 +180,13 @@ test('execution arrival cohort, all exclusions, missing evidence and summary par
       add(id, { cust_type: 'dc', expected_deliv_time: null, gpsisinraildate_to: arrival });
     add('type-conflict', { cust_type: 'dc' });
     add('type-conflict', { cust_type: 'jxs' });
+    add('inactive-detail', { gpsisinraildate_to: '2026-09-21 08:59:59' });
+    db.exec(
+      "UPDATE agents_scm_execute_detail_hourly_d SET detailstatus=90,is_stat='0' WHERE executeorderno='inactive-detail'",
+    );
     const updated = db.prepare(translate(ontimeSql)).all(params);
+    assert.equal(updated.find((r) => r.order_no === 'inactive-detail').ontime, 1);
+    assert.equal(updated.find((r) => r.order_no === 'arrival-without-shiptime').ontime, 0);
     assert.equal(updated.filter((r) => r.order_no === 'split-shipment').length, 1);
     assert.equal(updated.find((r) => r.order_no === 'split-shipment').ontime, 1);
     assert.equal(updated.find((r) => r.order_no === 'missing-at').ontime, null);

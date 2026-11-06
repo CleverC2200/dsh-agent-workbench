@@ -69,11 +69,12 @@ export function createOntimeQueries(productsSql) {
       GROUP BY history.executeorderno,history.cust_code`,
   );
   const members = ['h.belong_base', 'd.product_categ_name', 'h.product_item', 'h.material_code'];
+  // Actual destination arrival proves shipment; a missing shipment timestamp must not drop it.
   const arrivals = `SELECT t.executeorderno,t.cust_code,t.arrived AS arrival_date,
     CASE WHEN t.invalid_scope=0 AND t.arrived<t.known_deadline THEN 1
       WHEN t.deadline IS NOT NULL AND t.invalid_scope=0 THEN CASE WHEN t.arrived<t.deadline THEN 1 ELSE 0 END END AS ontime,
     CASE WHEN t.invalid_scope>0 OR (t.deadline IS NULL AND (t.known_deadline IS NULL OR t.arrived>=t.known_deadline)) THEN 1 ELSE 0 END AS invalid
-    FROM ontime_traces t WHERE t.shipped IS NOT NULL AND t.arrived>=:gea_p1 AND t.arrived<:gea_p2`;
+    FROM ontime_traces t WHERE t.arrived>=:gea_p1 AND t.arrived<:gea_p2`;
   // Reject an entire virtual execution, even when different product lines disagree.
   const scopedProducts = productsSql.replace(
     ') execution_rows\n  WHERE ',
