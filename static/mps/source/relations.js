@@ -70,6 +70,10 @@ const capacityMissing = (source) => [
 ];
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
+export function canonicalBaseName(value) {
+  const name = text(value).replace(/基地$/, '');
+  return { 四川: '西南', 广州: '华南', 湖州: '华东' }[name] ?? name;
+}
 export const physicalTunnelKey = (base, unit, tunnel) => JSON.stringify([base, unit, tunnel]);
 export function tunnelCapacityConflicts(tunnels, skus) {
   return [

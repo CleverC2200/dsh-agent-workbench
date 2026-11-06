@@ -716,3 +716,148 @@ test('调拨装配按已确认的四川广州湖州关系匹配评估基地', as
   ]);
   assert.equal(result.metadata.pendingRoutes, 2);
 });
+
+test('报告按确认口径区分下市需求、产线、调拨和件吨系数，有资源不误报缺产能', () => {
+  const source = draft();
+  source.constraints.rules = {};
+  const codes = ['A', 'B', 'C', 'D'];
+  source.products = codes.map((code) => ({
+    基地: '',
+    产品编码: code,
+    产品名称: code,
+    大类: '点心',
+    物料组: '组',
+  }));
+  source.report = codes.map((code) => ({
+    月份: source.month,
+    基地: '甲',
+    产品编码: code,
+    月初数量: 25,
+  }));
+  source.historyAnnual.periods[0].rows = codes.map((code) => ({
+    基地: '甲',
+    产品编码: code,
+    数量: 25,
+  }));
+  source.categoryDemand = [{ month: source.month, category: '点心', quantity: 100 }];
+  source.resources = [{ id: 'R', base: '甲', kind: 'tunnel', name: '产线', dailyTons: 100 }];
+  source.resourceAssignments = [{ base: '甲', code: 'A', resourceId: 'R', share: 1 }];
+  source.unitWeights = ['B', 'C', 'D'].map((code) => ({ base: '甲', code, tonsPerPiece: 1 }));
+  const relations = {
+    month: source.month,
+    sources: {
+      products: [],
+      tunnels: [],
+      sku_capacity: [],
+      transfers: [
+        {
+          stat_period: source.month,
+          target_base: '甲',
+          material_code: 'B',
+          transfer_tag: '调拨品',
+          transfer_direction: '',
+        },
+        {
+          stat_period: source.month,
+          target_base: '甲',
+          material_code: 'C',
+          transfer_tag: '自产品',
+          transfer_direction: '',
+        },
+        {
+          stat_period: source.month,
+          target_base: '甲',
+          material_code: 'D',
+          transfer_tag: '下市品',
+          transfer_direction: '',
+        },
+      ],
+    },
+  };
+  const shipment = {
+    draftId: source.id,
+    month: source.month,
+    shipmentMonth: '2026-11',
+    sourceKind: 'business',
+    rows: codes.map((code) => ({ base: '甲', code, end: 0 })),
+  };
+  const run = () => buildMpsWorkflow(source, relations, shipment, { weights: { rows: [] } }).plan;
+  const plan = run();
+  const categories = (code) =>
+    plan.reportIssues
+      .filter((row) => row.month === source.month && row.code === code)
+      .map((row) => row.kind);
+  assert.deepEqual(categories('A'), ['缺件吨系数']);
+  assert.deepEqual(categories('B'), ['缺调拨关系']);
+  assert.deepEqual(categories('C'), ['缺产线产能']);
+  assert.deepEqual(categories('D'), ['下市品产生需求']);
+  assert.ok(
+    plan.rows
+      .find((row) => row.code === 'A')
+      .reportMissing.every((reason) => !reason.startsWith('缺产线产能')),
+  );
+  assert.equal(plan.rows.find((row) => row.code === 'D').demand, 25);
+  source.report[3].月初数量 = 0;
+  source.historyAnnual.periods[0].rows[3].数量 = 0;
+  assert.ok(run().reportIssues.every((row) => row.code !== 'D'));
+  source.resources.push({ id: 'R2', base: '乙', kind: 'tunnel', name: '供方产线', dailyTons: 100 });
+  source.resourceAssignments.push({ base: '乙', code: 'B', resourceId: 'R2', share: 1 });
+  source.unitWeights.push({ base: '乙', code: 'B', tonsPerPiece: 1 });
+  relations.sources.transfers[0].transfer_direction = '从乙调拨';
+  assert.ok(run().reportIssues.every((row) => row.month !== source.month || row.code !== 'B'));
+  source.unitWeights.pop();
+  assert.deepEqual(
+    run()
+      .reportIssues.filter((row) => row.month === source.month && row.code === 'B')
+      .map((row) => row.kind),
+    ['缺件吨系数'],
+  );
+  source.unitWeights.push({ base: '甲', code: 'A', tonsPerPiece: 1 });
+  source.resources[0].dailyTons = 0;
+  const zeroCapacity = run();
+  assert.ok(
+    zeroCapacity.reportIssues.every((row) => row.month !== source.month || row.code !== 'A'),
+  );
+  assert.ok(
+    zeroCapacity.rows.find((row) => row.month === source.month && row.code === 'A').unfulfilled > 0,
+  );
+});
+
+test('组合系列为空但物理隧道有效时保留产能，不进入缺产能报告', () => {
+  const source = draft();
+  source.constraints.rules = {};
+  source.products = [source.products[0]];
+  source.report = [source.report[0]];
+  source.historyAnnual.periods[0].rows = [source.historyAnnual.periods[0].rows[0]];
+  source.unitWeights = [{ base: '甲', code: 'A', tonsPerPiece: 0.01 }];
+  const tunnel = {
+    belong_base: '甲',
+    production_unit: '瑾瑜一厂',
+    tunnel_no: '2#',
+    series: '系列',
+    production_category: '点心',
+    standard_daily_output_pc: 6000,
+    standard_daily_output_ton: 28,
+  };
+  const relations = {
+    month: source.month,
+    sources: {
+      products: [],
+      transfers: [],
+      tunnels: [tunnel],
+      sku_capacity: [{ ...tunnel, material_code: 'A', workshop: '瑾瑜一厂', combined_series: '' }],
+    },
+  };
+  const shipment = {
+    draftId: source.id,
+    month: source.month,
+    shipmentMonth: '2026-11',
+    sourceKind: 'business',
+    rows: [{ base: '甲', code: 'A', end: 0 }],
+  };
+  const plan = buildMpsWorkflow(source, relations, shipment, { weights: { rows: [] } }).plan;
+  const row = plan.rows.find((row) => row.month === source.month);
+  assert.ok(Math.abs(row.mainPlan - 120) < 1e-8);
+  assert.equal(row.candidateResources.length, 1);
+  assert.ok(plan.reportIssues.every((issue) => issue.kind !== '缺产线产能'));
+});

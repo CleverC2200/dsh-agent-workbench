@@ -1,5 +1,10 @@
 import { unitWeightCandidate } from './unit-weights.js';
-import { matchTunnelCapacity, physicalTunnelKey, tunnelCapacityConflicts } from './relations.js';
+import {
+  canonicalBaseName,
+  matchTunnelCapacity,
+  physicalTunnelKey,
+  tunnelCapacityConflicts,
+} from './relations.js';
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const number = (value) => {
@@ -171,10 +176,8 @@ export function buildPlanSources(draft, relations, weightRead) {
   }
   const transferRoutes = [];
   let pendingRoutes = 0;
-  const baseAliases = { 四川: '西南', 广州: '华南', 湖州: '华东' };
   const canonical = (name) => {
-    const normalized = name.replace(/基地$/, '');
-    return bases.find((base) => base === name || base === (baseAliases[normalized] ?? normalized));
+    return bases.find((base) => base === name || base === canonicalBaseName(name));
   };
   for (const row of sources?.transfers ?? []) {
     const direction = text(row.transfer_direction);

@@ -3,6 +3,7 @@ import { buildCategoryDemand } from './category-demand.js';
 import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { solveMpsPlan } from 'dsh-agent-manage/mps-compute/plan';
 import { buildPlanSources } from './plan-inputs.js';
+import { attachPlanReport } from './plan-diagnostics.js';
 
 const number = (value) => {
   if (
@@ -361,6 +362,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       planSourceIssues: [...planSources.planSourceIssues, ...(evaluation.sourceIssues ?? [])],
     });
     result.plan.sources = planSources.metadata;
+    attachPlanReport(result.plan, planSources, relations);
   }
   for (const row of result.rows) {
     row.reportMissingAsZero = reportMissingAsZero.has(rowKey(row));

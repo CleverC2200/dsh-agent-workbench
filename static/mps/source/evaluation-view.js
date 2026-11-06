@@ -1,4 +1,12 @@
 const valid = (value) => typeof value === 'number' && Number.isFinite(value);
+const reportMissing = (row) => row.reportMissing ?? row.planMissing;
+const reportStatus = (row) => {
+  const missing = reportMissing(row).join('；');
+  const status = missing || (row.unfulfilled > 0 ? '产能不足，未满足量已单列' : '已评估');
+  return row.reportIssueKinds?.includes('下市品产生需求') && !status.includes('下市品产生需求')
+    ? `${status}；下市品产生需求`
+    : status;
+};
 const fields = [
   'openingInventory',
   'demand',
@@ -66,8 +74,12 @@ export function planContext(plan, visible, { base, month }) {
       .slice(0, 25)
       .map((row) => ({
         ...Object.fromEntries(fields.map((field) => [field, row[field]])),
-        missing: row.planMissing.slice(0, 3).map((reason) => reason.slice(0, 200)),
-        missingCount: row.planMissing.length,
+        missing: reportMissing(row)
+          .slice(0, 3)
+          .map((reason) => reason.slice(0, 200)),
+        missingCount: reportMissing(row).length,
+        issueKinds: row.reportIssueKinds,
+        supplyTags: row.supplyTags,
       })),
     resources: resources.slice(0, 25),
     resourceTotal: resources.length,
@@ -125,6 +137,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     const [expanded, setExpanded] = react.useState({});
     const [reportOpen, setReportOpen] = react.useState(null);
     const [detailSelection, setDetailSelection] = react.useState({});
+    const [issueKind, setIssueKind] = react.useState('');
     const plan = currentEvaluation?.result.plan;
     const stamp = currentEvaluation?.at;
     react.useEffect(() => {
@@ -133,6 +146,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
       setReportOpen(null);
       setDetailSelection({});
       setDetailPages({});
+      setIssueKind('');
     }, [stamp, filters.month, filters.base, filters.category, filters.search, filters.onlyMissing]);
     const physicalRows = react.useMemo(() => {
       if (!plan) return [];
@@ -175,9 +189,31 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         [row.code, row.name, row.series, row.group].some((value) =>
           String(value ?? '').includes(filters.search),
         )) &&
-      (!filters.onlyMissing || row.planMissing.length || row.unfulfilled > 0);
+      (!filters.onlyMissing ||
+        row.planMissing.length ||
+        row.unfulfilled > 0 ||
+        row.reportIssueKinds?.length);
     const reportRows = physicalRows.filter(matches);
     const demandRows = (plan?.rows ?? []).filter(matches);
+    const visibleKeys = new Set(
+      demandRows.map((row) => JSON.stringify([row.month, row.base, row.code])),
+    );
+    const issues = (plan?.reportIssues ?? []).filter((row) =>
+      visibleKeys.has(JSON.stringify([row.month, row.base, row.code])),
+    );
+    const issueKinds = [
+      ...new Set([
+        '下市品产生需求',
+        '缺产线产能',
+        '缺调拨关系',
+        '缺件吨系数',
+        ...issues.map((row) => row.kind),
+      ]),
+    ];
+    const selectedIssues = issues.filter((row) => !issueKind || row.kind === issueKind);
+    const issuesByRow = Map.groupBy(issues, (row) =>
+      JSON.stringify([row.month, row.base, row.code]),
+    );
     const resources = (plan?.resourceSchedules ?? []).filter(
       (row) =>
         (!filters.month || row.month === filters.month) &&
@@ -202,12 +238,12 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           : null,
       );
     };
-    const paginate = (name, columns, rows, key) => {
+    const paginate = (name, columns, rows, key, render = (row) => row) => {
       const page = Math.min(detailPages[key] ?? 0, Math.max(0, Math.ceil(rows.length / 25) - 1));
       return h(
         react.Fragment,
         null,
-        table(name, columns, rows.slice(page * 25, (page + 1) * 25)),
+        table(name, columns, rows.slice(page * 25, (page + 1) * 25).map(render)),
         h(
           'div',
           { className: 'wf-plan-pagination' },
@@ -270,9 +306,13 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         ...Object.fromEntries(plannedFields.map((field, index) => [labels[index], row[field]])),
         需求已满足量: row.fulfilledDemand,
         生产满足率: row.fulfillment,
-        状态:
-          row.planMissing.join('；') ||
-          (row.unfulfilled > 0 ? '产能不足，未满足量已单列' : '已评估'),
+        状态: reportStatus(row),
+        问题分类: row.reportIssueKinds?.join('；'),
+        来源标签: row.supplyTags,
+        标签所属月: row.supplySourceMonth,
+        异常说明: (issuesByRow.get(JSON.stringify([row.month, row.base, row.code])) ?? [])
+          .map((issue) => issue.reason)
+          .join('；'),
       }));
       downloadCsv(
         `${draft.month}-${step === 'report' ? '产销存结果' : '求解结果'}.csv`,
@@ -290,13 +330,17 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           '需求已满足量',
           '生产满足率',
           '状态',
+          '问题分类',
+          '来源标签',
+          '标签所属月',
+          '异常说明',
         ],
         rows,
       );
     };
     const formula = (row, field) => {
       const value = (item) => (item == null ? '未提供' : String(item));
-      const missing = row.planMissing.join('；');
+      const missing = reportMissing(row).join('；');
       const explanation =
         field === 'closingInventory'
           ? `可用量=${value(row.openingInventory)}+${value(row.mainPlan)}+${value(row.transferIn)}-${value(row.transferOut)}；扣除本期已满足需求${value(row.fulfilledDemand)}，期末=${value(row.closingInventory)}。未满足需求单列，不自动修改下月原需求。`
@@ -391,7 +435,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
               row.code,
               h('span', { className: 'wf-plan-product-name', title: row.name }, row.name),
               ...plannedFields.map((field) => quantityCell(row, field)),
-              row.planMissing.join('；') || (row.unfulfilled > 0 ? '有未满足量' : '已评估'),
+              reportStatus(row),
             ]),
         ),
         h(
@@ -643,6 +687,123 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         : h(
             react.Fragment,
             null,
+            card(
+              '问题分类与补充清单',
+              h(
+                react.Fragment,
+                null,
+                h(
+                  'p',
+                  { className: 'wf-note' },
+                  issueKinds
+                    .map((kind) => `${kind} ${issues.filter((row) => row.kind === kind).length}项`)
+                    .join('；'),
+                ),
+                h(
+                  'p',
+                  { className: 'wf-note' },
+                  '按单品月份及问题分类计数，同一单品可有多类问题。标签所属月与需求月份分别列出；跨月标签仅作核对提示，不扩展调拨范围。需求、库存等其他缺项仍见求解缺口明细。',
+                ),
+                h(
+                  'button',
+                  {
+                    disabled: !active,
+                    onClick: () =>
+                      downloadCsv(
+                        `${draft.month}-分类问题清单.csv`,
+                        [
+                          '评估版本',
+                          '结果时间',
+                          '需求月份',
+                          '基地',
+                          '产品编码',
+                          '产品名称',
+                          '问题分类',
+                          '来源标签',
+                          '标签所属月',
+                          '需求数量',
+                          '源表',
+                          '字段',
+                          '源值与证据',
+                          '核对处理',
+                          '处理性质',
+                        ],
+                        selectedIssues.map((row) => ({
+                          评估版本: draft.name,
+                          结果时间: stamp,
+                          需求月份: row.month,
+                          基地: row.base,
+                          产品编码: row.code,
+                          产品名称: row.name,
+                          问题分类: row.kind,
+                          来源标签: row.tags,
+                          标签所属月: row.sourceMonth,
+                          需求数量: row.demand,
+                          源表: row.sourceTable,
+                          字段: row.sourceFields,
+                          源值与证据: row.reason,
+                          核对处理: row.action,
+                          处理性质: row.blocking
+                            ? '补数据或确认承接后重算'
+                            : '下市风险提示，原需求保留',
+                        })),
+                      ),
+                  },
+                  '导出分类问题清单',
+                ),
+                disclosure('查看分类问题明细', issues.length, () =>
+                  h(
+                    react.Fragment,
+                    null,
+                    h(
+                      'label',
+                      null,
+                      '问题分类',
+                      h(
+                        'select',
+                        {
+                          'aria-label': '问题分类筛选',
+                          value: issueKind,
+                          onChange: (event) => {
+                            setIssueKind(event.target.value);
+                            setDetailPages((value) => ({ ...value, classifiedIssues: 0 }));
+                          },
+                        },
+                        h('option', { value: '' }, '全部'),
+                        issueKinds.map((kind) => h('option', { key: kind, value: kind }, kind)),
+                      ),
+                    ),
+                    paginate(
+                      '分类问题明细',
+                      [
+                        '需求月份',
+                        '问题分类',
+                        '基地',
+                        '产品编码',
+                        '产品名称',
+                        '来源标签 / 所属月',
+                        '源值与证据',
+                        '源表 / 字段',
+                        '核对处理',
+                      ],
+                      selectedIssues,
+                      'classifiedIssues',
+                      (row) => [
+                        row.month,
+                        row.kind,
+                        row.base,
+                        row.code,
+                        row.name,
+                        `${row.tags || '未提供'} / ${row.sourceMonth || '未提供'}`,
+                        row.reason,
+                        `${row.sourceTable} / ${row.sourceFields}`,
+                        row.action,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
             step === 'report'
               ? h(
                   react.Fragment,
@@ -820,7 +981,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                                   ),
                               numberText(row.fulfillment, true),
                               numberText(row.unfulfilled, false, 3),
-                              row.planMissing.join('；') || '资源不足，同等满足率分配',
+                              reportStatus(row),
                             ]),
                           'gaps',
                         ),

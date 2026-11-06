@@ -885,6 +885,13 @@ test('MPS effective category and share edits drive the same unconstrained invent
     '60.98%',
   );
   const solvedCsv = await download(page, capacity, '导出求解结果');
+  const sourceProblems = capacity.getByRole('region', { name: '问题分类与补充清单', exact: true });
+  await expect(sourceProblems).toContainText('下市品产生需求');
+  await expect(sourceProblems).toContainText('缺产线产能');
+  await expect(sourceProblems).toContainText('缺调拨关系');
+  await expect(sourceProblems).toContainText('缺件吨系数');
+  const classifiedCsv = await download(page, sourceProblems, '导出分类问题清单');
+  assert.match(classifiedCsv, /问题分类,来源标签,标签所属月,需求数量,源表,字段/);
   const solvedBook = XLSX.read(solvedCsv, { type: 'string', raw: true });
   const solved = XLSX.utils.sheet_to_json(solvedBook.Sheets[solvedBook.SheetNames[0]]);
   const firstMonth = solved.filter((row) => row['月份'] === '2026-12');
@@ -909,6 +916,14 @@ test('MPS effective category and share edits drive the same unconstrained invent
   assert.equal(await frame.locator('.ap-board-body').evaluate((element) => element.scrollTop), 0);
   const actualReportCsv = await download(page, report, '导出产销存结果');
   assert.equal(actualReportCsv, solvedCsv);
+  assert.equal(
+    await download(
+      page,
+      report.getByRole('region', { name: '问题分类与补充清单', exact: true }),
+      '导出分类问题清单',
+    ),
+    classifiedCsv,
+  );
   await report.getByLabel('月份筛选', { exact: true }).selectOption('2026-12');
   await report.getByRole('button', { name: '展开 2个单品', exact: true }).click();
   await report.getByLabel('单品明细大类', { exact: true }).selectOption('汤圆');
