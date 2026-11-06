@@ -10,8 +10,9 @@ const digest = async (value: string) => {
   );
 };
 
-/** Like gea-agent-fc, a batch follows confirmed calculation inputs, not a calendar month alone. */
+/** A confirmation round has its own identity; retries retain that round and its confirmed inputs. */
 export async function fcSubmissionIdentity(input: {
+  confirmationId?: string;
   warehouseCode: string;
   month: string;
   snapshotVersion: string;

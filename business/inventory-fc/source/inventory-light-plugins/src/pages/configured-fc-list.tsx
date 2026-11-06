@@ -301,6 +301,7 @@ export function FcConfiguredList(
   const [busy, setBusy] = useState(false),
     [notice, setNotice] = useState('');
   const active = useRef<AbortController | null>(null);
+  const dmsConfirmation = useRef({ id: '', submitting: false, completed: false });
   useEffect(() => {
     active.current?.abort();
     setBusy(false);
@@ -598,6 +599,9 @@ export function FcConfiguredList(
     mode: 'draft' | 'export',
     warehouse = scopedWarehouse || exportWarehouse,
   ) => {
+    if (dmsConfirmation.current.submitting) return;
+    if (mode === 'export')
+      dmsConfirmation.current = { id: crypto.randomUUID(), submitting: false, completed: false };
     setDialog(mode);
     active.current?.abort();
     setBusy(false);
@@ -858,8 +862,11 @@ export function FcConfiguredList(
     setDialog(null);
     setNotice('补货清单已导出');
   };
-  const submitDms = () =>
-    run(async (signal) => {
+  const submitDms = () => {
+    const confirmation = dmsConfirmation.current;
+    if (confirmation.submitting || confirmation.completed || !confirmation.id) return;
+    confirmation.submitting = true;
+    return run(async (signal) => {
       setNotice('正在核对补货清单，请稍候…');
       if (!exportWarehouse) throw Error('请选择分仓');
       if (targetLoading) throw Error('主数据正在读取，请稍候复核编码');
@@ -950,6 +957,7 @@ export function FcConfiguredList(
         }))
         .sort((a, b) => a.sku.localeCompare(b.sku));
       const { aiPreOrderCode, legacyAiPreOrderCode } = await fcSubmissionIdentity({
+        confirmationId: confirmation.id,
         warehouseCode: exportWarehouse,
         month,
         snapshotVersion: provenance.snapshotVersion,
@@ -1023,6 +1031,7 @@ export function FcConfiguredList(
       if ((receipt.requestAiPreOrderCode ?? receipt.aiPreOrderCode) !== aiPreOrderCode)
         throw Error('DMS回执与本次补货不一致，请核对原订单；禁止重复提交');
       signal.throwIfAborted();
+      confirmation.completed = true;
       setDmsReceipt(receipt);
       setReceiptArchived(true);
       setNotice(`已暂存至DMS，订单号：${receipt.orderCode}。尚未审核或推单。`);
@@ -1038,7 +1047,10 @@ export function FcConfiguredList(
             `已暂存至DMS，订单号：${receipt.orderCode}；跳转未完成，请点击“进入DMS订单管理”重试，无需重新提交。`,
           );
       }
+    }).finally(() => {
+      confirmation.submitting = false;
     });
+  };
   const verifyReceiptArchive = (pending: FcStoreScope) =>
     run(async (signal) => {
       const receipt = await verifyFcReceiptArchive(pending, signal);

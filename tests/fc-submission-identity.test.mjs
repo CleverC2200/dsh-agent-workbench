@@ -67,3 +67,15 @@ test('confirmation row ordering does not create a new batch', async () => {
     (await fcSubmissionIdentity({ ...input, rows: rows.toReversed() })).aiPreOrderCode,
   );
 });
+
+test('identical order in distinct confirmation rounds gets a new preorder, while retries retain it', async () => {
+  const first = await fcSubmissionIdentity({ ...input, confirmationId: 'round-1' });
+  const retry = await fcSubmissionIdentity({
+    ...structuredClone(input),
+    confirmationId: 'round-1',
+  });
+  const next = await fcSubmissionIdentity({ ...input, confirmationId: 'round-2' });
+  assert.deepEqual(retry, first);
+  assert.notEqual(next.aiPreOrderCode, first.aiPreOrderCode);
+  assert.match(next.aiPreOrderCode, /^AI[0-9a-f]{30}$/);
+});
