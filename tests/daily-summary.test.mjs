@@ -521,7 +521,9 @@ test('category stock age keeps its snapshot date while actual movement follows t
   );
 });
 
-test('an unavailable batch is not retained after the next user read sees a completed sync', async () => {
+test('unavailable metadata coalesces initial readers and recovers after a short fixed retry window', async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
   let available = false,
     snapshotReads = 0;
   const execute = async (request, options) => {
@@ -534,8 +536,27 @@ test('an unavailable batch is not retained after the next user read sees a compl
   const cfg = config();
   assert.deepEqual(await createAgentQueries(cfg, execute).snapshot(), { kind: 'unavailable' });
   available = true;
+  now += 44999;
+  assert.deepEqual(await createAgentQueries(cfg, execute).snapshot(), { kind: 'unavailable' });
+  assert.equal(snapshotReads, 1, 'one initial load must not repeat an empty bootstrap');
+  now += 1;
   assert.equal((await createAgentQueries(cfg, execute).snapshot()).kind, 'ready');
   assert.equal(snapshotReads, 2);
+});
+
+test('explicit refresh bypasses the unavailable metadata retry window immediately', async () => {
+  let available = false;
+  const execute = async () => ({ rows: available ? [row] : [] });
+  const cfg = config();
+  assert.equal(
+    (await createAgentQueries(cfg, execute, { freshAfter: 1 }).snapshot()).kind,
+    'unavailable',
+  );
+  available = true;
+  assert.equal(
+    (await createAgentQueries(cfg, execute, { freshAfter: 2 }).snapshot()).kind,
+    'ready',
+  );
 });
 
 test('a new branch read obtains a fresh batch at five minutes while an active read stays coherent', async (t) => {

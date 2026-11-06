@@ -27,7 +27,7 @@ type SummaryRead = {
   snapshot: DailySummarySnapshot;
   preloaded?: { at: number; result: any };
 };
-type SummaryReads = Map<string, { at: number; result: Promise<SummaryRead> }>;
+type SummaryReads = Map<string, { expiresAt: number; result: Promise<SummaryRead> }>;
 const pageSummaries: SummaryReads = new Map();
 const suppliedSummaries = new WeakMap<ConfiguredExecution, SummaryReads>();
 
@@ -159,11 +159,7 @@ export function createAgentQueries(
     ]);
     // Active reads pin their batch; a new branch read can advance after five minutes.
     let snapshot = summaryReads.get(key);
-    if (
-      snapshot &&
-      config.agentId === 'inventory-fc' &&
-      Date.now() - snapshot.at >= inventoryCacheTtl(config.agentId)
-    ) {
+    if (snapshot && Date.now() >= snapshot.expiresAt) {
       summaryReads.delete(key);
       snapshot = undefined;
     }
@@ -204,7 +200,13 @@ export function createAgentQueries(
             },
           };
         });
-      snapshot = { at: Date.now(), result };
+      snapshot = {
+        expiresAt:
+          config.agentId === 'inventory-fc'
+            ? Date.now() + inventoryCacheTtl(config.agentId)
+            : Infinity,
+        result,
+      };
       summaryReads.set(key, snapshot);
       result.catch((error) => {
         const code = error?.failure?.reasonCode ?? error?.code ?? '';
@@ -223,8 +225,9 @@ export function createAgentQueries(
       throw Object.assign(Error('身份已变化，请重新读取当前账号的数据'), {
         code: 'IDENTITY_CHANGED',
       });
-    if (selectedRead.snapshot.kind === 'unavailable' && summaryReads.get(key) === snapshot)
-      summaryReads.delete(key);
+    // Coalesce one initial load, without retaining a temporary empty publication indefinitely.
+    if (selectedRead.snapshot.kind === 'unavailable')
+      snapshot.expiresAt = Math.min(snapshot.expiresAt, Date.now() + 45000);
     selectedSnapshot = selectedRead.snapshot;
     preloaded = selectedRead.preloaded;
     return selectedRead.snapshot;

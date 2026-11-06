@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
+import { resolve } from 'node:path';
 
 for (const agent of ['fc', 'aqkc', 'qll']) {
   test(`${agent}: reconnect renews the page lease without invalidating a completed query cache`, async (t) => {
@@ -13,6 +14,10 @@ for (const agent of ['fc', 'aqkc', 'qll']) {
       write: false,
       format: 'iife',
       platform: 'browser',
+      alias: {
+        react: resolve('node_modules/react'),
+        'react-dom': resolve('node_modules/react-dom'),
+      },
       define: { PLUGIN_ID: JSON.stringify(agent), 'process.env.NODE_ENV': '"test"' },
       loader: { '.css': 'empty' },
       plugins: [
