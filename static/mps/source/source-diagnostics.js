@@ -35,14 +35,13 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
     }
     const currentProducts = [...products.values()].flat();
     const productDetail = (row) => {
-      const mapped = sourceDimensions([row], currentProducts)[0];
       const candidates = (products.get(text(row['产品编码'])) ?? []).filter(
         (product) => !text(product['基地']) || product['基地'] === row['基地'],
       );
       const names = [
         ...new Set(candidates.map((product) => text(product['产品名称'])).filter(Boolean)),
       ];
-      return { ...mapped, 产品名称: text(row['产品名称']) || (names.length === 1 ? names[0] : '') };
+      return { ...row, 产品名称: text(row['产品名称']) || (names.length === 1 ? names[0] : '') };
     };
     const diagnostics = ['report', 'history'].flatMap((source) =>
       result.months.slice(0, 3).map((month) => {
@@ -169,35 +168,36 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
           id: source + month,
           summary,
           detailColumns,
-          records: [...records]
-            .sort((a, b) => Number(matched(b)) - Number(matched(a)))
-            .map((row) => {
-              const detail = productDetail(row);
-              return {
-                ...row,
-                ...detail,
-                ...(source === 'report' && !sales
-                  ? {
-                      源月初数量: row['源月初数量'] ?? row['月初数量'],
-                      源纠偏数量: row['源纠偏数量'] ?? row['纠偏数量'],
-                    }
-                  : {}),
-                当前口径: column,
-                当前数量状态: usable(quantity(row)) ? '数量可用' : '缺数量',
-                产品池匹配: !hasKey(row) ? '缺业务键' : matched(row) ? '池内' : '池外',
-                缺项说明: [
-                  detail['缺项原因'],
-                  !text(row['基地']) ? '源数据缺基地' : '',
-                  !text(row['产品编码']) ? '源数据缺产品编码' : '',
-                  ...['大类', '系列', '物料组']
-                    .filter((field) => !detail[field])
-                    .map((field) => `${field}未能唯一匹配当前产品清单`),
-                ]
-                  .filter(Boolean)
-                  .join('；'),
-                读取状态: readLabel,
-              };
-            }),
+          records: sourceDimensions(
+            [...records].sort((a, b) => Number(matched(b)) - Number(matched(a))),
+            currentProducts,
+          ).map((row) => {
+            const detail = productDetail(row);
+            return {
+              ...row,
+              ...detail,
+              ...(source === 'report' && !sales
+                ? {
+                    源月初数量: row['源月初数量'] ?? row['月初数量'],
+                    源纠偏数量: row['源纠偏数量'] ?? row['纠偏数量'],
+                  }
+                : {}),
+              当前口径: column,
+              当前数量状态: usable(quantity(row)) ? '数量可用' : '缺数量',
+              产品池匹配: !hasKey(row) ? '缺业务键' : matched(row) ? '池内' : '池外',
+              缺项说明: [
+                detail['缺项原因'],
+                !text(row['基地']) ? '源数据缺基地' : '',
+                !text(row['产品编码']) ? '源数据缺产品编码' : '',
+                ...['大类', '系列', '物料组']
+                  .filter((field) => !detail[field])
+                  .map((field) => `${field}未能唯一匹配当前产品清单`),
+              ]
+                .filter(Boolean)
+                .join('；'),
+              读取状态: readLabel,
+            };
+          }),
         };
       }),
     );

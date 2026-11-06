@@ -524,3 +524,78 @@ test('两表同物理隧道标准日产吨数不同保留冲突，不能选择�
   assert.equal(result.planCandidates.length, 0);
   assert.match(result.planSourceIssues.join('；'), /两表.*标准日产吨数.*冲突/);
 });
+
+test('来源诊断按批次投影产品维度，不为每条记录重建产品索引', async () => {
+  const React = await import('react');
+  const { renderToString } = await import('react-dom/server');
+  const output = await build({
+    entryPoints: ['static/mps/source/source-diagnostics.js'],
+    plugins: [await mpsComputePlugin()],
+    bundle: true,
+    write: false,
+    platform: 'browser',
+    format: 'esm',
+  });
+  const { createSourceDiagnostics } = await import(
+    'data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64')
+  );
+  let categoryReads = 0;
+  const months = ['2026-11', '2026-12', '2027-01'];
+  const products = Array.from({ length: 100 }, (_, code) => ({
+    基地: '甲',
+    产品编码: String(code),
+    产品名称: `产品${code}`,
+    get 大类() {
+      categoryReads++;
+      return '汤圆';
+    },
+    系列: '系列',
+    物料组: '组',
+    物料组名称: '组名',
+  }));
+  const facts = products.map((product) => ({
+    基地: '甲',
+    产品编码: product.产品编码,
+    数量: 0,
+    月初数量: 0,
+  }));
+  const source = {
+    month: months[0],
+    pull: 'monthly',
+    products,
+    report: months.flatMap((月份) => facts.map((row) => ({ ...row, 月份 }))),
+    reportRead: {
+      periods: Object.fromEntries(
+        months.map((month) => [month, { status: 'ready', metadata: { total: 100 } }]),
+      ),
+    },
+    historyAnnualRead: { month: months[0], status: 'ready' },
+    historyAnnual: {
+      periods: [{ start: '2025-07-01', end: '2026-06-30', metadata: { total: 100 }, rows: facts }],
+    },
+  };
+  const result = {
+    months,
+    rows: months.flatMap((month) =>
+      facts.map((row) => ({ month, base: row.基地, code: row.产品编码 })),
+    ),
+  };
+  let rows;
+  const Diagnostics = createSourceDiagnostics(React, { downloadCsv() {}, Dialog: () => null });
+  renderToString(
+    React.createElement(Diagnostics, {
+      draft: source,
+      result,
+      table(_name, _columns, values) {
+        rows = values;
+        return null;
+      },
+    }),
+  );
+  assert.equal(rows.length, 6);
+  assert.ok(rows.every((row) => row[5] === '100/100' && row[6] === '0'));
+  assert.ok(
+    categoryReads <= products.length * 10,
+    `产品大类被读取${categoryReads}次，应按诊断批次建索引`,
+  );
+});

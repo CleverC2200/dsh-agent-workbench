@@ -127,6 +127,9 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
       '源冲突字段',
       '业务键核对',
     ];
+    const evaluatedKeys = new Set(
+      result.rows.map((row) => JSON.stringify([row.month, row.base, row.code])),
+    );
     const sourceRows = (read?.status === 'ready' ? (draft.inventoryTargets ?? []) : []).map(
       (row) => ({
         月份: row.month,
@@ -141,9 +144,7 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
         目标空值行: row.missingTargetRows,
         日均空值行: row.missingDailyRows,
         源冲突字段: row.conflictFields?.join('；'),
-        业务键核对: result.rows.some(
-          (item) => item.month === row.month && item.base === row.base && item.code === row.code,
-        )
+        业务键核对: evaluatedKeys.has(JSON.stringify([row.month, row.base, row.code]))
           ? '月份、基地、SKU匹配；版本按当前规则选择'
           : '月份、基地或SKU不在当前评估明细，未参与计算',
       }),

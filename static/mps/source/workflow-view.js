@@ -7,6 +7,7 @@ import { call } from '../../../business/shared/channel.js';
 import { readUnitWeights, unitWeightCandidate } from './unit-weights.js';
 import { createEvaluationOverview, planContext } from './evaluation-view.js';
 import { readPlanRelations } from './relations.js';
+import { computeWorkflow } from './workflow-worker-client.js';
 
 const titles = {
   process: '需求加工与收敛',
@@ -234,10 +235,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         if (ticket !== executionGeneration.current) return;
         await new Promise((resolve) => requestAnimationFrame(resolve));
         if (ticket !== executionGeneration.current) return;
-        const computed = buildMpsWorkflow(draft, sourceRead.value ?? null, shipmentSnapshot, {
-          weights,
-          sourceIssues: sourceRead.error ? [sourceRead.error] : [],
-        });
+        const computed = await computeWorkflow(
+          draft,
+          sourceRead.value ?? null,
+          shipmentSnapshot,
+          { weights, sourceIssues: sourceRead.error ? [sourceRead.error] : [] },
+          controller.signal,
+        );
+        if (ticket !== executionGeneration.current) return;
         setEvaluation({
           draft,
           relations,
