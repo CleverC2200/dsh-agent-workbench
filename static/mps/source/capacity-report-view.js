@@ -242,11 +242,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
         h(
           react.Fragment,
           null,
-          h(
-            'p',
-            { className: 'wf-note' },
-            '无有效本基地产线的需求单列，不计入本基地产线负荷。共享柔线在各大类作为组合能力引用，全国物理总产能只计一次。缺项时显示已知需求对应负荷，缺失部分未计入，完整负荷、余量和配额仍待补；具体SKU见需求与折吨缺项。',
-          ),
+          h('p', { className: 'wf-note' }, '已知负荷未包含缺项需求；完整负荷、余量及缺口待补。'),
           rccpTable(
             [
               '基地',
@@ -445,11 +441,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
         h(
           react.Fragment,
           null,
-          h(
-            'p',
-            { className: 'wf-note' },
-            '计划月 → 发出与接收线路 → 大类、物料组、SKU。发出侧先满足自身需求；本表数量单位为件。',
-          ),
+          h('p', { className: 'wf-note' }, '单位：件'),
           transferGroups.size
             ? [...transferGroups].map(([period, rows]) =>
                 h(
@@ -519,11 +511,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
         h(
           react.Fragment,
           null,
-          h(
-            'p',
-            { className: 'wf-note' },
-            `年度需求独立取${report.annualSource.table}，读取${report.annualSource.records}个基地SKU月份，另有${report.annualSource.excludedRows}行无SKU编码未纳入折吨、${report.annualSource.unmappedCount}行维度待核对，${report.annualSource.aggregateRows ?? 0}行全国汇总仅对照、不与基地明细重复累计。${report.annualSource.error || '按SKU有效吨/件折算，空值、冲突及缺件吨系数的月份保留待评估。'}${productionCalendarRule}首表超出本轮拆分的月份仅作年度需求参考，不参与排产。`,
-          ),
           h(
             'button',
             {

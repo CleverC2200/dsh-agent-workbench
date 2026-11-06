@@ -138,6 +138,11 @@ async function upload(frame, label, text) {
 test('MPS reads CSV atomically and uses the same selected-period rows for coverage, totals, preview and export', async (t) => {
   const { page, frame } = await confirmation(t);
   await createVersion(frame, '2026-12');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,P1,产品一,汤圆,系列甲,组甲,,\n华东,P2,产品二,汤圆,系列甲,组乙,,',
+  );
   const source = frame.getByRole('region', { name: '计划提报数据' });
   await upload(frame, '选择计划提报CSV', reportCsv);
   await expect(source).toContainText('已读取4条');
@@ -270,16 +275,16 @@ test('MPS preserves missing dimensions and signed local quantities instead of in
   await expect(source).toContainText('当前期间2条，数量合计3件，缺失数量0条');
   await expect(source.getByRole('button', { name: '基地 1', exact: true })).toBeVisible();
   await expect(source).toContainText('基地缺失1条');
-  await expect(source).toContainText('系列缺失1条');
+  await expect(source).toContainText('系列缺失2条');
   await source.getByRole('button', { name: '预览当前明细', exact: true }).click();
   await expect(source.getByRole('cell', { name: '-2', exact: true })).toBeVisible();
-  await expect(source.getByRole('cell', { name: '-', exact: true })).toHaveCount(3);
+  await expect(source.getByRole('cell', { name: '-', exact: true })).toHaveCount(7);
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await source.locator('summary').filter({ hasText: '口径与统计说明' }).click();
   const downloading = page.waitForEvent('download');
   await source.getByRole('button', { name: '导出全部已读明细', exact: true }).click();
   const csv = await mpsDownloadText(await (await downloading).path());
-  assert.match(csv, /组甲,-2,/);
+  assert.match(csv, /,-2,/);
   assert.doesNotMatch(csv, /'-2/);
   await upload(frame, '选择计划提报CSV', csv);
   await expect(source.getByRole('alert')).toHaveCount(0);

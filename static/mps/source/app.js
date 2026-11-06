@@ -30,7 +30,7 @@ function Mps() {
   );
   const bodyRef = y.useRef(null);
   y.useEffect(() => {
-    if (['capacity', 'report'].includes(step)) bodyRef.current?.scrollTo({ top: 0 });
+    bodyRef.current?.scrollTo({ top: 0 });
   }, [step]);
   const [assistantDraft, setAssistantDraft] = usePageViewField(y, mpsView, 'assistantDraft', '');
   const [scope, setScope] = y.useState(null);

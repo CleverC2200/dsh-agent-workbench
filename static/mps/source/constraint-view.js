@@ -28,7 +28,6 @@ export function createConstraintPanel(react, { Dialog }) {
     table,
     card,
     previewRules,
-    allocationState,
     children,
   }) {
     const [hardOnly, setHardOnly] = react.useState(false);
@@ -179,11 +178,6 @@ export function createConstraintPanel(react, { Dialog }) {
     return h(
       react.Fragment,
       null,
-      h(
-        'p',
-        { className: 'wf-rule-notice' },
-        '约束由品类计划维护，按月份生效。硬约束不自动放宽；软约束须采用后才改变计算。变更保存在当前评估版本并留痕。',
-      ),
       card(
         '约束列表',
         h(
@@ -264,92 +258,73 @@ export function createConstraintPanel(react, { Dialog }) {
           ),
         ),
       ),
-      card(
-        '平均溢出规则',
-        h(
-          react.Fragment,
-          null,
-          h(
-            'p',
-            { className: 'wf-note' },
-            '共享稀缺资源的SKU按各自待生产需求获得相同满足率。需求80和20、可供50时分配40和10，满足率均为50%；原需求保留，未满足量单列。先满足本地需求，再用剩余能力按合法调拨与替代资源处理；任何资源占用不得超过有效上限。',
-          ),
-          h(
-            'p',
-            { role: 'status', className: 'wf-note' },
-            `计算状态：${allocationState}。未满足量及原因见第六步同版产能评估。`,
-          ),
-        ),
-      ),
       children[0],
-      card(
-        '冲突与放宽建议',
-        evaluations.length
-          ? table(
-              '规则计算结果',
-              ['规则', '月份', '结果', '影响单品', '计算依据与缺项', '处理'],
-              evaluations.map((entry) => {
-                const rule = ruleOf(entry);
-                return [
-                  rule?.description || '待完善规则',
-                  entry.month,
-                  h(
-                    'span',
-                    { className: 'wf-rule-status', 'data-status': entry.status },
-                    statuses[entry.status],
-                  ),
-                  entry.affected,
-                  entry.reason,
-                  rule && ['conflict', 'warning'].includes(entry.status)
-                    ? h(
-                        'div',
-                        { className: 'wf-rule-actions' },
-                        h('button', { onClick: () => preview(entry) }, '预览放宽'),
-                        rule.strength === '软' &&
-                          !rule.accepted &&
-                          h(
-                            'button',
-                            {
-                              onClick: () =>
-                                saveRules(
-                                  rules.map((item) =>
-                                    item === rule ? { ...item, accepted: true } : item,
+      evaluations.length > 0 &&
+        card(
+          '冲突与放宽建议',
+          evaluations.length
+            ? table(
+                '规则计算结果',
+                ['规则', '月份', '结果', '影响单品', '计算依据与缺项', '处理'],
+                evaluations.map((entry) => {
+                  const rule = ruleOf(entry);
+                  return [
+                    rule?.description || '待完善规则',
+                    entry.month,
+                    h(
+                      'span',
+                      { className: 'wf-rule-status', 'data-status': entry.status },
+                      statuses[entry.status],
+                    ),
+                    entry.affected,
+                    entry.reason,
+                    rule && ['conflict', 'warning'].includes(entry.status)
+                      ? h(
+                          'div',
+                          { className: 'wf-rule-actions' },
+                          h('button', { onClick: () => preview(entry) }, '预览放宽'),
+                          rule.strength === '软' &&
+                            !rule.accepted &&
+                            h(
+                              'button',
+                              {
+                                onClick: () =>
+                                  saveRules(
+                                    rules.map((item) =>
+                                      item === rule ? { ...item, accepted: true } : item,
+                                    ),
+                                    rule,
+                                    '采用软约束',
                                   ),
-                                  rule,
-                                  '采用软约束',
-                                ),
-                            },
-                            '采用建议',
-                          ),
-                      )
-                    : '—',
-                ];
-              }),
-            )
-          : h(
-              'p',
-              { className: 'wf-note' },
-              '尚未添加约束。添加后按实际输入计算冲突，不使用原型演示结果。',
-            ),
+                              },
+                              '采用建议',
+                            ),
+                        )
+                      : '—',
+                  ];
+                }),
+              )
+            : h('p', { className: 'wf-note' }, '暂无冲突或建议'),
+          h(
+            'span',
+            { className: 'wf-note' },
+            conflicts.length ? `${conflicts.length}项冲突、建议或待补输入` : '无待处理项',
+          ),
+        ),
+      (draft.constraints?.rules?.history?.length ?? 0) > 0 &&
         h(
-          'span',
-          { className: 'wf-note' },
-          conflicts.length ? `${conflicts.length}项冲突、建议或待补输入` : '无待处理项',
+          'details',
+          { className: 'dc-card wf-advanced' },
+          h('summary', null, `约束变更记录（${draft.constraints?.rules?.history?.length ?? 0}条）`),
+          table(
+            '约束变更记录',
+            ['时间', '约束内容', '操作'],
+            [...(draft.constraints?.rules?.history ?? [])]
+              .reverse()
+              .slice(0, 50)
+              .map((entry) => [entry.at, entry.description, entry.action]),
+          ),
         ),
-      ),
-      h(
-        'details',
-        { className: 'dc-card wf-advanced' },
-        h('summary', null, `约束变更记录（${draft.constraints?.rules?.history?.length ?? 0}条）`),
-        table(
-          '约束变更记录',
-          ['时间', '约束内容', '操作'],
-          [...(draft.constraints?.rules?.history ?? [])]
-            .reverse()
-            .slice(0, 50)
-            .map((entry) => [entry.at, entry.description, entry.action]),
-        ),
-      ),
       h(
         'details',
         {

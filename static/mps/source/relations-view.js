@@ -262,11 +262,6 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
         }),
       ),
       h(
-        'p',
-        { className: 'wf-note' },
-        '两表按本次全量来源核对，重新读取替换旧记录。物理隧道按基地、生产单位或车间、隧道号识别，同隧道跨系列或SKU共用资源上限。隧道吨位不是日产能；标准日产件数与吨数分别保留。未匹配、多匹配和日产冲突须核对，不自动取最大值或求和。源生产品类与产品大类独立展示。',
-      ),
-      h(
         'section',
         { className: 'ap-board-card', 'aria-label': selected.name },
         h(

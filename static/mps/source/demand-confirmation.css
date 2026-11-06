@@ -1,7 +1,7 @@
 .ap-app:is([data-step='check'], [data-step='ship']) .ap-board-head {
   padding: 0 24px;
 }
-.ap-app:is([data-step='check'], [data-step='ship']) .ap-board-body {
+.ap-app:is([data-step='check'], [data-step='ship'], [data-step='masterdata']) .ap-board-body {
   padding: 0;
   background: #f4f5f8;
 }
@@ -96,6 +96,13 @@
 }
 .dc-page input {
   caret-color: #165dff;
+}
+.dc-page input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  flex: none;
 }
 .dc-page ::selection {
   background: #bedaff;
@@ -335,7 +342,8 @@
   text-underline-offset: 3px;
 }
 .dc-page details {
-  max-width: 75ch;
+  min-width: 0;
+  max-width: 100%;
 }
 .dc-page .dc-product-table {
   min-width: 1300px;

@@ -577,16 +577,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
       null,
       card(
         '大类需求总表',
-        h(
-          react.Fragment,
-          null,
-          table('大类需求总表', summaryColumns, summaryRows),
-          h(
-            'p',
-            { className: 'wf-note' },
-            '本月预估发货沿用第二步同版有效值。模型预测按月单列对照，不参与加权需求。已知小计不代表完整合计。',
-          ),
-        ),
+        h(react.Fragment, null, table('大类需求总表', summaryColumns, summaryRows)),
         h('button', { onClick: exportSummary }, '下载大类需求总表'),
       ),
       card(
@@ -594,22 +585,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
         h(
           react.Fragment,
           null,
-          h(
-            'p',
-            { className: 'wf-note' },
-            '按基地、大类、物料组、SKU展开。各层汇总仅包含当前基地，SKU可查看运算过程并调整数量。跨基地大类总量仍在上方总表调整。已知小计含待补项，缺值不补零。',
-          ),
           detailTable,
-          h(
-            'details',
-            { className: 'wf-disclosure' },
-            h('summary', null, '拆分与调整规则'),
-            h(
-              'p',
-              { className: 'wf-note' },
-              '数量按完整对象展示和调整，筛选仅缩小查找范围。本月预估与第二步共用覆盖值，按当前有效量重摊。M+1、M+2数量调整保留固定下级，其余按有效拆分权重重摊；与同月大类占比调整互斥。M+3按M+2有效大类需求和年度分月环比延展，使用本月拆分来源；M+4仅供库存参考。',
-            ),
-          ),
           !rows.length &&
             h('p', { className: 'wf-note' }, '当前筛选暂无基地SKU输入，展开来源诊断查看缺项。'),
         ),

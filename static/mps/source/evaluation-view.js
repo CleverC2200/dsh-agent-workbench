@@ -222,11 +222,6 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     const issuesByRow = Map.groupBy(issues, (row) =>
       JSON.stringify([row.month, row.base, row.code]),
     );
-    const resources = (plan?.resourceSchedules ?? []).filter(
-      (row) =>
-        (!filters.month || row.month === filters.month) &&
-        (!filters.base || row.base === filters.base),
-    );
     const reportGroups = [
       ...Map.groupBy(reportRows, (row) => JSON.stringify([row.month, row.base])).values(),
     ].map((rows) => ({ month: rows[0].month, base: rows[0].base, rows }));
@@ -667,11 +662,6 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                     .join('；'),
                 ),
                 h(
-                  'p',
-                  { className: 'wf-note' },
-                  '按单品月份及问题分类计数，同一单品可有多类问题。标签所属月与需求月份分别列出；跨月标签仅作核对提示，不扩展调拨范围。需求、库存等其他缺项仍见求解缺口明细。',
-                ),
-                h(
                   'button',
                   {
                     disabled: !active,
@@ -806,111 +796,6 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
               : h(
                   react.Fragment,
                   null,
-                  card(
-                    '求解后实际排产校验',
-                    table(
-                      '需求与物理产能',
-                      ['月份', '已知需求吨数', '唯一资源月产能', '实际排产吨数', '排产容量校验'],
-                      plan.months
-                        .filter((month) => !filters.month || month === filters.month)
-                        .map((month) => {
-                          const monthly = resources.filter((row) => row.month === month);
-                          const total = known(monthly, 'capacity');
-                          return [
-                            month,
-                            numberText(
-                              known(
-                                demandRows.filter((row) => row.month === month),
-                                'demandTons',
-                              ).value,
-                              false,
-                              3,
-                            ),
-                            total.missing
-                              ? `${numberText(total.value, false, 3)} · ${total.missing}项缺失`
-                              : numberText(total.value, false, 3),
-                            numberText(
-                              monthly.reduce((sum, row) => sum + row.scheduledTons, 0),
-                              false,
-                              3,
-                            ),
-                            !monthly.length
-                              ? '缺资源，未评估'
-                              : !plan.summary.evaluatedRows
-                                ? '尚未形成有效排产'
-                                : '逐资源不超产能',
-                          ];
-                        }),
-                    ),
-                  ),
-                  disclosure('唯一资源排产与产能校验', resources.length, () =>
-                    h(
-                      react.Fragment,
-                      null,
-                      h(
-                        'p',
-                        { className: 'wf-note' },
-                        '同一物理资源跨SKU、系列和大类只占用一次。生产日历、停线及已采用规则参与计算。本轮不要求成型机。共享资源负荷不随SKU或大类筛选拆开。',
-                      ),
-                      paginate(
-                        '实际资源负荷',
-                        [
-                          '月份',
-                          '基地',
-                          '隧道',
-                          '日产吨数',
-                          '天数',
-                          '月产能',
-                          '实际排产吨数',
-                          '实际负荷',
-                          '状态',
-                        ],
-                        resources.map((row) => [
-                          row.month,
-                          row.base,
-                          row.name,
-                          numberText(row.dailyTons, false, 3),
-                          row.days ?? '—',
-                          numberText(row.capacity, false, 3),
-                          numberText(row.scheduledTons, false, 3),
-                          numberText(row.load, true),
-                          row.missing.join('；') ||
-                            (!plan.summary.evaluatedRows ? '尚未形成有效排产' : '不超上限'),
-                        ]),
-                        'resources',
-                      ),
-                    ),
-                  ),
-                  disclosure('调拨求解校验明细', plan.transfers.length, () =>
-                    h(
-                      react.Fragment,
-                      null,
-                      paginate(
-                        '求解调拨明细',
-                        ['月份', '发出基地', '接收基地', '单品', '调出/调入件数', '吨数'],
-                        plan.transfers
-                          .filter(
-                            (row) =>
-                              (!filters.month || row.month === filters.month) &&
-                              (!filters.base || [row.from, row.to].includes(filters.base)),
-                          )
-                          .map((row) => [
-                            row.month,
-                            row.from,
-                            row.to,
-                            row.code,
-                            numberText(row.quantity, false, 3),
-                            numberText(row.tons, false, 3),
-                          ]),
-                        'transferChecks',
-                      ),
-                      h(
-                        'p',
-                        { className: 'wf-note' },
-                        `每条调出对应同量调入，发出侧先满足自身需求再使用剩余能力。${plan.sources.pendingRoutes}条源方向尚不能唯一解析，未据此生成调拨。`,
-                      ),
-                    ),
-                  ),
                   disclosure(
                     '未覆盖缺口与公平分配',
                     demandRows.filter((row) => row.unfulfilled > 0 || row.planMissing.length)
@@ -959,23 +844,6 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                       ),
                   ),
                 ),
-            h(
-              'details',
-              { className: 'wf-disclosure' },
-              h('summary', null, '来源与结果说明'),
-              h(
-                'p',
-                null,
-                `${plan.sources.calendar} 0.5调拨库存修正尚未确认，本轮未采用。正式确认和保存尚未接入。已装配${plan.sources.resources}个隧道、${plan.sources.candidates}条可生产关系、${plan.sources.coefficients}个基地单品系数、${plan.sources.transferRoutes}条可解析调拨关系。`,
-              ),
-              h(
-                'ul',
-                null,
-                [...plan.sources.notes, ...plan.issues].map((text, index) =>
-                  h('li', { key: index }, text),
-                ),
-              ),
-            ),
           ),
       trace
         ? h(Dialog, { title: trace.title, close: () => setTrace(null) }, h('p', null, trace.text))

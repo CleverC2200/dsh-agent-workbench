@@ -109,7 +109,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     relations,
     shipmentSnapshot,
     onNext,
-    onShareAdjustment,
     onUndoShareAdjustment,
   }) {
     const [search, setSearch] = react.useState('');
@@ -119,9 +118,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const [onlyMissing, setOnlyMissing] = react.useState(false);
     const [page, setPage] = react.useState(0);
     const [formula, setFormula] = react.useState(null);
-    const [editingShare, setEditingShare] = react.useState(null);
     const [shareError, setShareError] = react.useState('');
-    const detailRef = react.useRef(null);
     const [executing, setExecuting] = react.useState(false);
     const [evaluationError, setEvaluationError] = react.useState('');
     const executionGeneration = react.useRef(0);
@@ -302,8 +299,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const fields = step === 'process' ? processFields : planFields;
     const scopedRows = result.rows;
     const scopedCategories = result.categoryRows;
-    const demandCategories = scopedCategories.filter((row) => row.month !== result.months[3]);
-    const openingRows = scopedRows.filter((row) => row.month === draft.month);
     const configurationPairs = [
       ...new Map(
         [
@@ -350,7 +345,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       setOnlyMissing(false);
       setPage(0);
       setFormula(null);
-      setEditingShare(null);
       setShareError('');
     }
     const planning = ['capacity', 'report'].includes(step);
@@ -535,20 +529,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         missing,
       });
     };
-    const numericCell = (row, field) =>
-      h(
-        'button',
-        {
-          className: `dc-link wf-value${row[field] == null ? ' wf-unavailable' : ''}`,
-          'aria-label': `${row.base} ${row.code} ${row.month} ${labels[field]} 计算过程`,
-          onClick: () => explain(row, field),
-        },
-        numberText(
-          row[field],
-          field.endsWith('Share') || field === 'share' || field === 'systemShare',
-          field === 'requiredProductionTons' ? 6 : 0,
-        ),
-      );
     const layerColumns = [
       '提报物料组/大类',
       '提报SKU/物料组',
@@ -870,20 +850,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         '仅未评估',
       ),
     );
-    const footer = h(
-      'div',
-      { className: 'dc-card-foot' },
-      h('span', null, `共${filtered.length}条 · 第${pageIndex + 1}页`),
-      h('button', { disabled: pageIndex === 0, onClick: () => setPage(pageIndex - 1) }, '上一页'),
-      h(
-        'button',
-        {
-          disabled: (pageIndex + 1) * 25 >= filtered.length,
-          onClick: () => setPage(pageIndex + 1),
-        },
-        '下一页',
-      ),
-    );
     const undoShare = (rowId) => {
       const shares = (draft.adjustments?.shares ?? []).filter((item) => item.rowId !== rowId);
       const candidate = buildMpsWorkflow(
@@ -916,177 +882,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         return rowId;
       }
     };
-    const shareControls = (row) => {
-      const saved = draft.adjustments?.shares?.find((item) => item.rowId === row.id);
-      const editing = editingShare?.rowId === row.id;
-      return h(
-        'div',
-        { className: 'wf-share-controls' },
-        h(
-          'span',
-          null,
-          row.coefficientFallback?.join('；') ||
-            (row.fallback
-              ? `上一财年全年${coverage}组内Top1托底`
-              : row.splitBasis === 'history-only-zero-report'
-                ? '整类提报为0，按历史占比100%分配'
-                : '按两路有效占比分配'),
-        ),
-        saved ? h('span', null, `已调整：${saved.reason} · ${saved.at}`) : null,
-        editing
-          ? h(
-              'div',
-              { className: 'wf-share-editor' },
-              h(
-                'label',
-                null,
-                '最终占比',
-                h('input', {
-                  type: 'number',
-                  min: 0,
-                  max: 1,
-                  step: 'any',
-                  'aria-label': `${row.base} ${row.code} ${row.month} 最终占比`,
-                  value: editingShare.share,
-                  onChange: (event) =>
-                    setEditingShare({ ...editingShare, share: event.target.value }),
-                }),
-              ),
-              h(
-                'label',
-                null,
-                '调整原因',
-                h('input', {
-                  'aria-label': `${row.base} ${row.code} ${row.month} 调整原因`,
-                  value: editingShare.reason,
-                  onChange: (event) =>
-                    setEditingShare({ ...editingShare, reason: event.target.value }),
-                }),
-              ),
-              h(
-                'button',
-                {
-                  onClick: () => {
-                    const share = Number(editingShare.share);
-                    if (
-                      editingShare.share.trim() === '' ||
-                      !Number.isFinite(share) ||
-                      share < 0 ||
-                      share > 1 ||
-                      !editingShare.reason.trim()
-                    ) {
-                      setShareError('请填写0至1的占比和调整原因');
-                      return;
-                    }
-                    const shares = [
-                      ...(draft.adjustments?.shares ?? []).filter((item) => item.rowId !== row.id),
-                      { rowId: row.id, share },
-                    ];
-                    const candidate = buildMpsWorkflow(
-                      { ...draft, adjustments: { ...draft.adjustments, shares } },
-                      relations,
-                      shipmentSnapshot,
-                    );
-                    if (candidate.adjustmentIssues?.length) {
-                      setShareError(candidate.adjustmentIssues.join('；'));
-                      return;
-                    }
-                    const error = onShareAdjustment?.({
-                      rowId: row.id,
-                      share,
-                      reason: editingShare.reason.trim(),
-                      systemValue: row.systemShare,
-                    });
-                    if (typeof error === 'string' && error) {
-                      setShareError(error);
-                      return;
-                    }
-                    setEditingShare(null);
-                    setShareError('');
-                  },
-                },
-                '应用占比',
-              ),
-              h(
-                'button',
-                {
-                  onClick: () => {
-                    setEditingShare(null);
-                    setShareError('');
-                  },
-                },
-                '取消',
-              ),
-              shareError
-                ? h('span', { role: 'alert', className: 'wf-unavailable' }, shareError)
-                : null,
-            )
-          : h(
-              'div',
-              null,
-              h(
-                'button',
-                {
-                  disabled:
-                    !onShareAdjustment ||
-                    row.systemShare == null ||
-                    (draft.adjustments?.quantities ?? []).some(
-                      (item) => item.month === row.month && item.category === row.category,
-                    ),
-                  title: (draft.adjustments?.quantities ?? []).some(
-                    (item) => item.month === row.month && item.category === row.category,
-                  )
-                    ? '先撤销同月大类固定数量，再调整占比'
-                    : '',
-                  'aria-label': `${row.base} ${row.code} ${row.month} 调整占比`,
-                  onClick: () => {
-                    setEditingShare({
-                      rowId: row.id,
-                      share: String(row.share ?? ''),
-                      reason: saved?.reason ?? '',
-                    });
-                    setShareError('');
-                  },
-                },
-                '调整占比',
-              ),
-              saved
-                ? h(
-                    'button',
-                    {
-                      disabled: !onUndoShareAdjustment,
-                      'aria-label': `${row.base} ${row.code} ${row.month} 撤销占比调整`,
-                      onClick: () => undoShare(row.id),
-                    },
-                    '撤销调整',
-                  )
-                : null,
-            ),
-      );
-    };
-    const rowsTable = (name, selectedFields) =>
-      table(
-        name,
-        [
-          ...identityColumns.map(([, label]) => label),
-          ...selectedFields.map((field) => labels[field]),
-          ...(step === 'process' ? ['托底与人工调整'] : []),
-          '未评估原因',
-        ],
-        visible.map((row) => [
-          ...identityColumns.map(([key]) => display(row[key])),
-          ...selectedFields.map((field) => numericCell(row, field)),
-          ...(step === 'process' ? [shareControls(row)] : []),
-          h(
-            'span',
-            {
-              className: `wf-reasons${reasons(row, selectedFields).length ? ' wf-unavailable' : ''}`,
-              title: status(row, selectedFields),
-            },
-            status(row, selectedFields),
-          ),
-        ]),
-      );
     const constraintRows = bases
       .filter((sourceBase) => !base || sourceBase === base)
       .map((sourceBase) => {
@@ -1445,27 +1240,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 '下载需求拆分',
               ),
             ),
-            card(
-              '前两步输入',
-              table(
-                '前两步输入',
-                ['输入', '期间', '已就绪', '待补'],
-                [
-                  [
-                    '①大类有效需求',
-                    result.months.slice(0, 3).join('、'),
-                    `${demandCategories.filter((row) => row.quantity != null).length}项`,
-                    `${demandCategories.filter((row) => row.quantity == null).length}项`,
-                  ],
-                  [
-                    '②月末结存 → 首月期初库存',
-                    `${result.shipmentMonth} → ${draft.month}`,
-                    `${openingRows.filter((row) => row.openingInventory != null).length}个基地单品`,
-                    `${openingRows.filter((row) => row.openingInventory == null).length}个基地单品`,
-                  ],
-                ],
-              ),
-            ),
             h(ProcessedDemand, {
               draft,
               result,
@@ -1477,31 +1251,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               card,
               onExplain: explain,
             }),
-            h(
-              'details',
-              { className: 'wf-disclosure' },
-              h('summary', null, '大类系统值与缺项'),
-              card(
-                '大类需求',
-                table(
-                  '大类需求',
-                  ['月份', '大类', '系统需求', '有效需求', '未评估原因'],
-                  categoryRows.map((row) => [
-                    row.month,
-                    row.category,
-                    numberText(row.systemQuantity),
-                    numberText(row.quantity),
-                    row.missing.join('、') || '已计算',
-                  ]),
-                ),
-              ),
-            ),
-            h(
-              'p',
-              { className: 'wf-note' },
-              `拆分系数取评估月份${draft.month}的提报与上一完整财年发货，同一套系数用于M+1、M+2、M+3。提报完整读取成功后，未提报的基地SKU按0参与计算；整类提报合计为0时，按历史占比100%拆分。已有记录的空值或冲突仍保留缺项。物料组与组内销量Top1承接各层剩余占比，不能确定的基地份额仍保留缺项。M+4只提供大类库存参考，不生成第四个月SKU排产。`,
-            ),
-            shareError && !editingShare
+            shareError
               ? h('p', { role: 'alert', className: 'wf-note wf-unavailable' }, shareError)
               : null,
             result.adjustmentIssues?.length
@@ -1511,115 +1261,35 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                   `以下调整未生效：${result.adjustmentIssues.join('；')}。可从当前占比调整中撤销失效记录。`,
                 )
               : null,
-            card(
-              '当前占比调整',
-              table(
+            (draft.adjustments?.shares?.length ?? 0) > 0 &&
+              card(
                 '当前占比调整',
-                ['对象', '系统值', '输入占比', '有效占比', '原因', '时间', '状态', '操作'],
-                (draft.adjustments?.shares ?? []).map((item) => {
-                  const row = result.rows.find((row) => row.id === item.rowId);
-                  return [
-                    shareIdentity(item.rowId),
-                    numberText(row?.systemShare, true),
-                    numberText(item.share, true),
-                    numberText(row?.share, true),
-                    item.reason,
-                    item.at,
-                    row ? '当前范围，核对有效值与未生效原因' : '不在当前产品范围，未生效',
-                    h(
-                      'button',
-                      {
-                        disabled: !onUndoShareAdjustment,
-                        'aria-label': `撤销当前占比调整 ${shareIdentity(item.rowId)}`,
-                        onClick: () => undoShare(item.rowId),
-                      },
-                      '撤销',
-                    ),
-                  ];
-                }),
-              ),
-            ),
-            h(
-              'details',
-              { className: 'wf-disclosure' },
-              h('summary', null, '拆分过程与基地SKU明细'),
-              card(
-                '两路三层占比',
                 table(
-                  '两路三层占比',
-                  [
-                    '月份',
-                    '基地',
-                    '物料组',
-                    '产品编码',
-                    '来源',
-                    '物料组/大类',
-                    `${coverage}SKU/物料组`,
-                    `基地SKU/${coverage}SKU`,
-                    '三层连乘',
-                    '说明',
-                  ],
-                  visible.flatMap((row) =>
-                    ['report', 'history'].map((source) => {
-                      const layer = row[source + 'Layers'];
-                      return [
-                        row.month,
-                        row.base,
-                        row.group,
-                        row.code,
-                        source === 'report' ? '计划提报' : '上一财年全年发货',
-                        ...['groupShare', 'skuShare', 'baseShare', 'product'].map((field) =>
-                          numberText(layer?.[field], true),
-                        ),
-                        h(
-                          'button',
-                          {
-                            className: 'dc-link',
-                            'aria-label': `${row.base} ${row.code} ${row.month} ${source === 'report' ? '提报' : '历史'}三层占比明细`,
-                            onClick: () => explain(row, source + 'Share'),
-                          },
-                          row.layerMissing?.join('、') ||
-                            (layer?.product == null
-                              ? '分母为0或来源缺失，连乘未定义；已知直接零占比单独保留'
-                              : '查看数量与连乘过程'),
-                        ),
-                      ];
-                    }),
-                  ),
-                ),
-              ),
-              card(
-                '基地单品需求拆分',
-                h(react.Fragment, null, rowsTable('基地单品需求拆分', processFields), footer),
-                h(
-                  'button',
-                  { onClick: () => exportRows('需求拆分', processFields, true) },
-                  '下载完整拆分过程',
-                ),
-              ),
-              h(
-                'p',
-                { className: 'wf-note' },
-                '需求数量＝第一步大类有效需求×两路三层占比的平均值，人工调整后使用有效占比。首月期初库存承接第二步同版上月结存；后月库存需结合安全库存和生产参考逐月结转。',
-              ),
-              card(
-                '占比调整记录',
-                table(
-                  '占比调整记录',
-                  ['对象', '操作', '系统值', '有效值', '原因', '时间'],
-                  (draft.adjustments?.history ?? [])
-                    .filter((item) => item.kind === 'shares')
-                    .map((item) => [
-                      item.key,
-                      item.action === 'undo' ? '撤销' : '调整',
-                      display(item.systemValue),
-                      display(item.value),
+                  '当前占比调整',
+                  ['对象', '系统值', '输入占比', '有效占比', '原因', '时间', '状态', '操作'],
+                  (draft.adjustments?.shares ?? []).map((item) => {
+                    const row = result.rows.find((row) => row.id === item.rowId);
+                    return [
+                      shareIdentity(item.rowId),
+                      numberText(row?.systemShare, true),
+                      numberText(item.share, true),
+                      numberText(row?.share, true),
                       item.reason,
                       item.at,
-                    ]),
+                      row ? '当前范围，核对有效值与未生效原因' : '不在当前产品范围，未生效',
+                      h(
+                        'button',
+                        {
+                          disabled: !onUndoShareAdjustment,
+                          'aria-label': `撤销当前占比调整 ${shareIdentity(item.rowId)}`,
+                          onClick: () => undoShare(item.rowId),
+                        },
+                        '撤销',
+                      ),
+                    ];
+                  }),
                 ),
               ),
-            ),
             h(
               'details',
               { className: 'wf-disclosure' },
@@ -1657,11 +1327,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 bases,
                 table,
                 card,
-                allocationState: currentEvaluation
-                  ? evaluationStale
-                    ? '输入已变化，需重新执行同版产能评估'
-                    : `同版评估已完成 · ${currentEvaluation.at}`
-                  : '尚未执行产能评估',
                 previewRules: (local) =>
                   buildMpsWorkflow(
                     {
@@ -1976,199 +1641,12 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 numberText,
               }),
               h(
-                'details',
-                { className: 'wf-disclosure' },
-                h('summary', null, '需求与库存参考底稿（非排产结果）'),
+                'div',
+                { className: 'wf-actions' },
                 h(
-                  'p',
-                  { className: 'wf-note', role: 'status' },
-                  '本底稿仅用于追溯所需生产量，后月承接参考目标库存。实际排产与结转请以上方求解结果为准。',
-                ),
-                result.summary
-                  ? card(
-                      '评估范围与汇总',
-                      table(
-                        '评估范围与汇总',
-                        [
-                          '范围',
-                          '已知生产吨数小计',
-                          '完整生产吨数',
-                          '已评估行数',
-                          '总行数',
-                          '未评估范围',
-                        ],
-                        [
-                          [
-                            '当前完整版本，汇总不受明细筛选影响',
-                            numberText(result.summary.knownRequiredProductionTons, false, 6),
-                            numberText(result.summary.requiredProductionTons, false, 6),
-                            result.summary.evaluatedRows,
-                            result.summary.totalRows,
-                            result.summary.missing.length
-                              ? h(
-                                  'details',
-                                  null,
-                                  h('summary', null, `${result.summary.missing.length}项缺失说明`),
-                                  h(
-                                    'p',
-                                    { className: 'wf-reasons' },
-                                    result.summary.missing.join('、'),
-                                  ),
-                                )
-                              : '完整',
-                          ],
-                        ],
-                      ),
-                    )
-                  : null,
-                card(
-                  '资源负荷与缺口',
-                  h(
-                    react.Fragment,
-                    null,
-                    h(
-                      'p',
-                      { className: 'wf-note' },
-                      '共享资源按完整负荷评估，不随大类或SKU搜索拆开。负荷 = 分配所需吨数 ÷ 日产吨数 ÷ 可用生产天数。本底稿保留历史推导口径，实际求解以唯一隧道资源校验为准。',
-                    ),
-                    table(
-                      '资源负荷',
-                      ['月份', '基地', ...resourceColumns, '未评估原因'],
-                      resourceLoads.map((row) => [
-                        row.month,
-                        row.base,
-                        ...resourceValues(row).map((value, index) =>
-                          index === 7
-                            ? numberText(value, true)
-                            : index >= 3 && index <= 9
-                              ? numberText(value, false, 6)
-                              : display(value),
-                        ),
-                        row.missing.join('、') || '已评估',
-                      ]),
-                    ),
-                  ),
-                  h(
-                    'button',
-                    {
-                      onClick: () =>
-                        exportRows(step === 'report' ? '产销存报告' : '产能评估', planFields),
-                    },
-                    '下载资源负荷参考',
-                  ),
-                ),
-                h(
-                  'details',
-                  { className: 'wf-disclosure' },
-                  h('summary', null, '未评估清单 · 当前页单品'),
-                  card(
-                    '未评估清单',
-                    table(
-                      '未评估清单',
-                      ['月份', '基地', '产品编码', '缺项'],
-                      visible
-                        .filter(
-                          (row) =>
-                            reasons(row, [
-                              'requiredProduction',
-                              'requiredProductionTons',
-                              'productionDays',
-                              'resourceAssignments',
-                            ]).length,
-                        )
-                        .map((row) => [
-                          row.month,
-                          row.base,
-                          row.code,
-                          status(row, [
-                            'requiredProduction',
-                            'requiredProductionTons',
-                            'productionDays',
-                            'resourceAssignments',
-                          ]),
-                        ]),
-                    ),
-                  ),
-                ),
-                h(
-                  'div',
-                  { ref: detailRef, className: 'wf-detail-anchor' },
-                  card(
-                    step === 'report' ? '产销存明细' : '需求推导生产评估明细',
-                    h(
-                      react.Fragment,
-                      null,
-                      rowsTable(step === 'report' ? '产销存报告' : '产能评估明细', planFields),
-                      footer,
-                    ),
-                    h(
-                      'button',
-                      {
-                        onClick: () =>
-                          exportRows(step === 'report' ? '产销存报告' : '产能评估', planFields),
-                      },
-                      '下载需求推导参考',
-                    ),
-                  ),
-                ),
-                step === 'capacity'
-                  ? card(
-                      '源产能候选',
-                      table(
-                        '源产能候选',
-                        [
-                          '月份',
-                          '基地',
-                          '产品编码',
-                          '产线',
-                          '标准日产/件',
-                          '标准日产/吨',
-                          '未评估原因',
-                        ],
-                        visible.flatMap((row) =>
-                          row.capacities.map((item) => [
-                            row.month,
-                            row.base,
-                            row.code,
-                            display(item.line),
-                            numberText(item.dailyPieces),
-                            numberText(item.dailyTons),
-                            item.missing.join('、') ||
-                              '源值，仅供核对；请在约束与配置中明确维护资源与分配',
-                          ]),
-                        ),
-                      ),
-                    )
-                  : card(
-                      '报告来源',
-                      table(
-                        '报告来源',
-                        ['来源', '状态'],
-                        [
-                          ['①需求确认', '大类需求与缺项随当前版本重算'],
-                          ['②本月预估发货', `${result.shipmentMonth}月末结存，缺数留空`],
-                          ['③需求加工与收敛', '两路三层占比、物料组Top1托底与有效调整'],
-                          [
-                            '④主数据对应关系',
-                            relations?.sources ? '已接当前关系结果' : '关系尚未读取',
-                          ],
-                          ['⑤约束与配置', '本地隔离草稿；正式保存未就绪'],
-                          [
-                            '⑥产能评估与缺口',
-                            '规则调整后的所需生产与共享资源负荷；未生成可执行主计划',
-                          ],
-                        ],
-                      ),
-                    ),
-                h(
-                  'details',
-                  { className: 'wf-disclosure' },
-                  h('summary', null, `参考底稿输入说明 · ${inputGaps.length}项`),
-                  table(
-                    '参考底稿输入说明',
-                    ['项目', '历史需求推导口径'],
-                    inputGaps.map((row) => row.slice(0, 2)),
-                  ),
+                  'button',
+                  { onClick: () => exportRows('需求推导参考', planFields) },
+                  '下载需求推导参考',
                 ),
               ),
             ),

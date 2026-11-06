@@ -555,25 +555,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'p',
             {},
-            type === 'forecast'
-              ? 'M+1为评估月份，M+2为下一月，后续月份依次顺延，跨年按实际年月核对。'
-              : business
-                ? '业务数量单位为件，收入单位为元；来源缺失的分类维度保持空。任一数量缺失时，其汇总留空。'
-                : '本页CSV仅用于本地核对。数量保留文件原值，不推断正负号的业务含义。',
-          ),
-          h(
-            'p',
-            {},
             dimensions
               .map(
                 (dimension) => `${dimension}缺失${rows.filter((row) => !row[dimension]).length}条`,
               )
-              .join('；') + '。空字段不计入覆盖，汇总保留未提供分组。',
-          ),
-          h(
-            'p',
-            {},
-            '缺失不补零，真实0参与统计。四维条目数按当前期间对应字段去重，无总量分母。系列与物料组独立展示。',
+              .join('；'),
           ),
           h(
             'button',
@@ -858,12 +844,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         busy && h('p', { role: 'status' }, '正在读取…'),
         error && h('p', { role: 'alert' }, error),
         exportError && h('p', { role: 'alert' }, exportError),
-        live &&
-          h(
-            'p',
-            { className: 'dc-card-note' },
-            '下载当前基地全年SKU明细、大类汇总及物料组核对表。各表冻结首行；缺失月份不补零，物料组汇总不重复计入大类。',
-          ),
         h('div', { hidden: !expanded }, table(['大类', ...months, '全年合计'], rows)),
       ),
     );
@@ -1822,8 +1802,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           draft,
           scopeGeneration,
           update,
-          onShareAdjustment: (input) =>
-            update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input) }),
           onUndoShareAdjustment: (input) =>
             update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input, true) }),
           relations:
