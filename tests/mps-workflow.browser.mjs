@@ -404,11 +404,11 @@ test('MPS 评估月提报与完整财年形成固定系数，后月提报不改�
   assert.match(december, /产品乙/);
   await expect(
     view.getByRole('button', { name: '乙 B 2026-12 提报数量 计算过程', exact: true }),
-  ).toHaveText('—');
+  ).toHaveText('0');
   await view.getByLabel('月份筛选', { exact: true }).selectOption('2027-01');
   await expect(
     view.getByRole('button', { name: '乙 B 2027-01 系统占比 计算过程', exact: true }),
-  ).toHaveText('—');
+  ).toHaveText('100.00%');
   await expect(
     view.getByRole('button', { name: '甲 A 2027-01 系统占比 计算过程', exact: true }),
   ).toHaveText('100.00%');

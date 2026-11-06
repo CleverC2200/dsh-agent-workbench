@@ -437,7 +437,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       if ((field === 'reportShare' || field === 'historyShare') && row.layerMissing?.length)
         expression += `；${row.layerMissing.join('、')}`;
       if (field === 'systemShare')
-        expression = `(${value(row.reportShare)} + ${value(row.historyShare)}) ÷ 2 = ${value(row.systemShare)}`;
+        expression =
+          row.splitBasis === 'history-only-zero-report'
+            ? `整类提报合计为0，按历史占比100%拆分：${value(row.historyShare)} × 100% = ${value(row.systemShare)}`
+            : `(${value(row.reportShare)} + ${value(row.historyShare)}) ÷ 2 = ${value(row.systemShare)}`;
       if (field === 'share')
         expression = `系统占比 ${value(row.systemShare)}；有效占比 ${value(row.share)}。${row.fallback ? 'Top1承接剩余占比，人工调整与系统基线分别保留。' : ''}`;
       if (field === 'demand') {
@@ -453,6 +456,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             expression += `；${name}三层占比：${value(layer.groupShare)} × ${value(layer.skuShare)} × ${value(layer.baseShare)} = ${value(layer.product)}`;
         }
         expression += `；系统占比 ${value(row.systemShare)}，有效占比 ${value(row.share)}`;
+        if (row.splitBasis === 'history-only-zero-report')
+          expression += '；整类提报合计为0，本类按历史占比100%拆分';
       }
       if (row.coefficientFallback?.length) expression += `；${row.coefficientFallback.join('；')}`;
       if (field === 'openingInventory')
@@ -580,6 +585,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           '分层缺项',
           '公式说明',
           'Top1托底',
+          '提报数量口径',
+          '需求拆分口径',
           '拆分系数所属月',
           '系数托底说明',
           '调整原因',
@@ -648,6 +655,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           模型已知小计: forecast,
           数量调整状态: row.quantityAdjusted ? '数量固定及下级联动' : '系统拆分或占比调整',
           Top1托底: row.fallback ? '是' : '否',
+          提报数量口径: row.reportMissingAsZero ? '完整读取后未提报按0' : '源记录数量',
+          需求拆分口径:
+            row.splitBasis === 'history-only-zero-report'
+              ? '整类提报为0，历史占比100%'
+              : '提报占比50%＋历史占比50%',
           拆分系数所属月: draft.month,
           系数托底说明: row.coefficientFallback?.join('；'),
           调整原因: adjustment?.reason,
@@ -866,7 +878,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           'span',
           null,
           row.coefficientFallback?.join('；') ||
-            (row.fallback ? `上一财年全年${coverage}组内Top1托底` : '按两路有效占比分配'),
+            (row.fallback
+              ? `上一财年全年${coverage}组内Top1托底`
+              : row.splitBasis === 'history-only-zero-report'
+                ? '整类提报为0，按历史占比100%分配'
+                : '按两路有效占比分配'),
         ),
         saved ? h('span', null, `已调整：${saved.reason} · ${saved.at}`) : null,
         editing
@@ -1434,7 +1450,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             h(
               'p',
               { className: 'wf-note' },
-              `拆分系数取评估月份${draft.month}的提报与上一完整财年发货，同一套系数用于M+1、M+2、M+3。物料组与组内销量Top1承接各层剩余占比，不能确定的基地份额仍保留缺项。M+4只提供大类库存参考，不生成第四个月SKU排产。`,
+              `拆分系数取评估月份${draft.month}的提报与上一完整财年发货，同一套系数用于M+1、M+2、M+3。提报完整读取成功后，未提报的基地SKU按0参与计算；整类提报合计为0时，按历史占比100%拆分。已有记录的空值或冲突仍保留缺项。物料组与组内销量Top1承接各层剩余占比，不能确定的基地份额仍保留缺项。M+4只提供大类库存参考，不生成第四个月SKU排产。`,
             ),
             shareError && !editingShare
               ? h('p', { role: 'alert', className: 'wf-note wf-unavailable' }, shareError)

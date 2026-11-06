@@ -166,6 +166,24 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       });
     }
   }
+  const reportRead =
+    draft.reportSource === 'business'
+      ? draft.planRatesRead
+      : (draft.reportRead?.periods?.[draft.month] ?? draft.reportRead);
+  const reportMissingAsZero = new Set();
+  if (
+    reportRead?.status === 'ready' &&
+    (!reportRead.month || reportRead.month === draft.month) &&
+    reportRead.metadata?.partial !== true &&
+    !reportIssues().length
+  ) {
+    const reported = new Set(report.map(rowKey));
+    for (const product of productMonths.values()) {
+      if (reported.has(rowKey(product))) continue;
+      report.push({ ...product, quantity: 0 });
+      reportMissingAsZero.add(rowKey(product));
+    }
+  }
   const reportRatios = [];
   if (draft.reportSource === 'business' && !reportIssues().length) {
     for (const row of draft.planRates ?? []) {
@@ -345,6 +363,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     result.plan.sources = planSources.metadata;
   }
   for (const row of result.rows) {
+    row.reportMissingAsZero = reportMissingAsZero.has(rowKey(row));
     for (const source of ['report', 'history']) {
       const issues = source === 'report' ? reportIssues() : annualIssues();
       for (const field of [source + 'Quantity', source + 'Share', 'share', 'demand'])

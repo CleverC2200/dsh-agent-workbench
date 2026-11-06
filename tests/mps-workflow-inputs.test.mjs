@@ -278,6 +278,69 @@ test('业务销售提报按基地物料allnum重分当前物料组，旧系列�
   assert.equal(buildMpsWorkflow(source).rows[0].reportShare, 0.3);
 });
 
+test('完整读取后未提报的基地SKU按零计算，读取失败与已有空值不转零', () => {
+  const source = draft();
+  source.reportSource = 'business';
+  source.planRatesRead = { status: 'ready', metadata: { partial: false } };
+  source.planRates = [
+    { 月份: source.month, 维度类型: '基地+产品', 基地: '甲', 产品编码: 'A', 当前维度计划量: 30 },
+  ];
+  const atB = () => buildMpsWorkflow(source).rows.find((row) => row.code === 'B');
+  assert.equal(atB().reportQuantity, 0);
+  assert.equal(atB().reportShare, 0);
+  assert.equal(atB().historyShare, 0.4);
+  assert.equal(atB().demand, 24);
+  assert.equal(atB().reportMissingAsZero, true);
+  assert.equal(source.planRates.length, 1);
+  for (const status of ['loading', 'failed', 'unread']) {
+    source.planRatesRead = { status };
+    assert.equal(atB().reportQuantity, null);
+    assert.equal(atB().demand, null);
+  }
+  source.planRatesRead = { status: 'ready', metadata: { partial: true } };
+  assert.equal(atB().reportQuantity, null);
+  source.planRatesRead = { status: 'ready', month: '2027-01' };
+  assert.equal(atB().reportQuantity, null);
+  source.planRatesRead = { status: 'ready' };
+  source.planRates.push({
+    月份: source.month,
+    维度类型: '基地+产品',
+    基地: '乙',
+    产品编码: 'B',
+    当前维度计划量: null,
+  });
+  assert.equal(atB().reportQuantity, null);
+  assert.equal(atB().reportMissingAsZero, false);
+});
+
+test('整类提报为零时仅用历史占比，已有空值和读取失败不能触发历史单路拆分', () => {
+  const source = draft();
+  source.reportSource = 'business';
+  source.planRatesRead = { status: 'ready' };
+  source.planRates = [];
+  const result = buildMpsWorkflow(source);
+  const first = result.rows.filter((row) => row.month === source.month);
+  assert.deepEqual(
+    first.map((row) => row.reportQuantity),
+    [0, 0],
+  );
+  assert.deepEqual(
+    first.map((row) => row.demand),
+    [72, 48],
+  );
+  assert.ok(first.every((row) => row.splitBasis === 'history-only-zero-report'));
+  source.planRates.push({
+    月份: source.month,
+    维度类型: '基地+产品',
+    基地: '甲',
+    产品编码: 'A',
+    当前维度计划量: null,
+  });
+  assert.equal(buildMpsWorkflow(source).rows[0].demand, null);
+  source.planRatesRead = { status: 'failed' };
+  assert.equal(buildMpsWorkflow(source).rows[0].demand, null);
+});
+
 test('跨7月仍用评估月所属上一完整财年，后月不切换本轮系数基期', () => {
   const source = draft();
   source.month = '2026-06';
