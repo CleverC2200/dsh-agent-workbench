@@ -111,7 +111,7 @@ test('partial rates use independently validated quantities and show exact candid
   const p = make();
   const m = computeWorkbenchMetrics(p);
   assert.equal(m['作废率'].value, 0);
-  assert.equal(m['改单率'].value, null);
+  assert.equal(m['改单率'].value, 5);
   assert.equal(m['改单率'].sample.value, 5);
   assert.match(m['改单率'].note, /完整数量改单率待核/);
   assert.equal(m['订单满足率'].value, 90);
@@ -175,8 +175,11 @@ test('cards show metric health while footers, tooltips, tables and comparisons r
   };
   const result = workbenchPresentation(facts);
   assert.equal(result.cards[0].status, '健康');
-  assert.equal(result.cards[1].status, '数据不足');
-  assert.equal(result.cards[1].value, '—');
+  assert.equal(result.cards[1].status, '预警');
+  assert.equal(result.cards[1].value, '5.00');
+  assert.equal(result.cards[1].footer, '本周改单率 5.00%（可判定样本）');
+  assert.match(result.cards[1].coverageNote, /覆盖80.0%；不是全量指标/);
+  assert.doesNotMatch(result.cards[1].footer, /下限|区间/);
   assert.equal(p.metrics['改单率'].sample.value, 5);
   assert.equal(result.cards[2].status, '预警');
   assert.match(result.cards[0].footer, /可判定样本/);
