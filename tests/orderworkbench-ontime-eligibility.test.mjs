@@ -29,6 +29,7 @@ test('on-time exclusions and shipment evidence do not alter fulfillment traces',
       put.run(id, 'C', date, ship, date, date, null, date, date, date, dispatch, region, reason);
     db.exec(`CREATE TABLE dim_bas_warehouse(warehouse_id,warehouse_classify);
       CREATE TABLE agents_scm_material_in_out_summary_d(material_code,product_categ_name,warehouseid,pickup_point,warehouse_classify);
+      ALTER TABLE agents_scm_order_trace_final_di ADD COLUMN cust_type;
       ALTER TABLE agents_scm_order_trace_final_di ADD COLUMN is_virtual_odo;
       ALTER TABLE agents_scm_order_trace_final_di ADD COLUMN vehicle_type;
       ALTER TABLE agents_scm_order_trace_final_di ADD COLUMN vehicle_type_name;
@@ -40,12 +41,8 @@ test('on-time exclusions and shipment evidence do not alter fulfillment traces',
       sql
         .replaceAll('CAST(t.expected_deliv_time AS DATETIME)', 't.expected_deliv_time')
         .replaceAll(
-          "GREATEST(MAX(t.requireddeliverytimebak),MAX(t.requireddeliverytime)) + INTERVAL '12' HOUR",
-          "datetime(GREATEST(MAX(t.requireddeliverytimebak),MAX(t.requireddeliverytime)), '+12 hours')",
-        )
-        .replace(
-          /GREATEST\((MAX\(t\.requireddeliverytimebak\),MAX\(t\.requireddeliverytime\),MAX\(t\.expected_deliv_time\))\) \+ INTERVAL '12' HOUR/g,
-          "datetime(GREATEST($1), '+12 hours')",
+          /GREATEST\((MAX\(t\.requireddeliverytimebak\),MAX\(t\.requireddeliverytime\)(?:,MAX\(t\.expected_deliv_time\))?)\) \+ INTERVAL '(12|18)' HOUR/g,
+          "datetime(GREATEST($1), '+$2 hours')",
         );
     const rows = db.prepare(translate(ontimeTraceHeadersSql)).all();
     assert.deepEqual(rows.map((r) => r.executeorderno).sort(), ['only-close', 'valid']);

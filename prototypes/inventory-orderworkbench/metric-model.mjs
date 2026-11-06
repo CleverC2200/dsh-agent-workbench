@@ -1,10 +1,15 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 23;
+export const metricCalculationVersion = 24;
 export function retainableWorkbenchFacts(facts) {
-  return facts?.attributionVersion === 2 &&
+  return (
+    facts?.attributionVersion === 2 &&
     facts.metricCalculationVersion === metricCalculationVersion &&
-    Object.values(facts.periods ?? {}).some(period =>
-      Array.isArray(period?.sections) && period.sections.some(section => section.status === 'ready'));
+    Object.values(facts.periods ?? {}).some(
+      (period) =>
+        Array.isArray(period?.sections) &&
+        period.sections.some((section) => section.status === 'ready'),
+    )
+  );
 }
 export function compatibleWorkbenchFacts(facts) {
   return (
@@ -17,8 +22,9 @@ export function compatibleWorkbenchFacts(facts) {
 export function reusableWorkbenchFacts(facts) {
   return (
     compatibleWorkbenchFacts(facts) &&
-    ['directors', 'customers', 'customerManagers'].every(name =>
-      !facts[name] || facts[name].status === 'ready') &&
+    ['directors', 'customers', 'customerManagers'].every(
+      (name) => !facts[name] || facts[name].status === 'ready',
+    ) &&
     Object.values(facts.periods).every(
       (period) =>
         Array.isArray(period.sections) &&
@@ -156,7 +162,7 @@ export function computeWorkbenchMetrics(
           assessed.length) *
           100
       : null,
-    '按TMS实际到货时间选周期，执行单号去重：准交执行单数 ÷ 已发货执行单数；到货优先目的地GPS围栏、其次到货确认；到货≤max(客户期望、开单确认到货、系统计算到货)+12小时（含边界）为准交；剔除同提货点且双方均工厂仓/工厂外租仓的短拨、海外/国外/港澳大区、未派车、虚拟出库1/2、指定车型及空车型、超时原因14/16；郑州庞丽娟按基地准交率；系统交期缺失但到货≤已有两交期最大值+12小时可严格确认准交；否则保留未知；短拨仓类可由仓库维表唯一补齐，冲突不覆盖',
+    '按TMS实际到货时间选周期，执行单号去重：准交执行单数 ÷ 已发货执行单数；到货优先目的地GPS围栏、其次到货确认；以max(客户期望、开单确认到货、系统计算到货)为基准，kamd/dc客户晚满18小时算逾期，其他客户晚满12小时算逾期，未满对应时限为准交；剔除同提货点且双方均工厂仓/工厂外租仓的短拨、海外/国外/港澳大区、未派车、虚拟出库1/2、指定车型及空车型、超时原因14/16；郑州庞丽娟按基地准交率；系统交期缺失但到货<已有两交期最大值+对应客户类型的18/12小时可严格确认准交；否则保留未知；短拨仓类可由仓库维表唯一补齐，冲突不覆盖',
   );
   const total = sum(ages, 'stock_qty'),
     aged = sum(ages, 'aged_qty');
@@ -384,7 +390,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
       '无法完整归属发货周期；未以接单日期或加载时间替代。'
     );
   if (name === '准交率' && source.some((row) => Number(row.invalid) > 0 || row.ontime == null))
-    return '源数据未提供或关联冲突：到货周期内部分执行单缺系统交期且已超过已有交期+12小时，或收发仓属性缺失/冲突；不能确认其为准交或逾期。';
+    return '源数据未提供或关联冲突：到货周期内部分执行单缺系统交期且已达到已有交期+对应客户类型的18/12小时，或客户类型时限冲突、收发仓属性缺失/冲突；不能确认其为准交或逾期。';
   if (
     name === '周转天数' &&
     source.some((row) => row.source_rows === null || row.inventory === null)

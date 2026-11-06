@@ -1,4 +1,4 @@
-// User definition, 2026-11-05: execution orders, TMS arrival cohort and +12h grace.
+// User definition, 2026-11-06: kamd/dc are late at 18h; other types at 12h.
 // Warehouse facts are reduced before joins; product movements must never multiply orders.
 export const ontimeWarehousesSql = `SELECT warehouseid,
   CASE WHEN COUNT(DISTINCT NULLIF(TRIM(pickup_point),''))=1
@@ -27,9 +27,12 @@ const excluded = `CASE WHEN TRIM(t.is_dispatch)='否'
   OR (${shortTransfer})=1 THEN 1 ELSE 0 END`;
 
 // Apply exclusions to the entire latest header, not to individual conflicting observations.
+const extendedGrace = "CASE WHEN LOWER(TRIM(t.cust_type)) IN ('kamd','dc') THEN 1 ELSE 0 END";
+const deadlineWithGrace = (fields) => `CASE WHEN MIN(${extendedGrace})=1
+    THEN GREATEST(${fields}) + INTERVAL '18' HOUR
+    ELSE GREATEST(${fields}) + INTERVAL '12' HOUR END`;
 export const ontimeTraceHeadersSql = `SELECT t.executeorderno,t.cust_code,
-  CASE WHEN COUNT(t.lastshipmenttime)=COUNT(*) AND COUNT(DISTINCT t.lastshipmenttime)=1
-    THEN MAX(t.lastshipmenttime) END AS shipped,
+  MAX(t.lastshipmenttime) AS shipped,
   CASE WHEN COUNT(COALESCE(t.gpsisinraildate_to,t.arriveconfirm_time))=COUNT(*)
     AND COUNT(DISTINCT COALESCE(t.gpsisinraildate_to,t.arriveconfirm_time))=1
     THEN MAX(COALESCE(t.gpsisinraildate_to,t.arriveconfirm_time)) END AS arrived,
@@ -37,11 +40,12 @@ export const ontimeTraceHeadersSql = `SELECT t.executeorderno,t.cust_code,
     AND COUNT(CAST(t.expected_deliv_time AS DATETIME))=COUNT(*)
     AND COUNT(DISTINCT t.requireddeliverytimebak)=1 AND COUNT(DISTINCT t.requireddeliverytime)=1
     AND COUNT(DISTINCT t.expected_deliv_time)=1
-    THEN GREATEST(MAX(t.requireddeliverytimebak),MAX(t.requireddeliverytime),MAX(CAST(t.expected_deliv_time AS DATETIME))) + INTERVAL '12' HOUR END AS deadline,
+    THEN ${deadlineWithGrace('MAX(t.requireddeliverytimebak),MAX(t.requireddeliverytime),MAX(CAST(t.expected_deliv_time AS DATETIME))')} END AS deadline,
   CASE WHEN COUNT(t.requireddeliverytimebak)=COUNT(*) AND COUNT(t.requireddeliverytime)=COUNT(*)
     AND COUNT(DISTINCT t.requireddeliverytimebak)=1 AND COUNT(DISTINCT t.requireddeliverytime)=1
-    THEN GREATEST(MAX(t.requireddeliverytimebak),MAX(t.requireddeliverytime)) + INTERVAL '12' HOUR END AS known_deadline,
-  MAX(CASE WHEN (${shortTransfer}) IS NULL THEN 1 ELSE 0 END) AS invalid_scope
+    THEN ${deadlineWithGrace('MAX(t.requireddeliverytimebak),MAX(t.requireddeliverytime)')} END AS known_deadline,
+  CASE WHEN COUNT(DISTINCT ${extendedGrace})>1 THEN 1
+    ELSE MAX(CASE WHEN (${shortTransfer}) IS NULL THEN 1 ELSE 0 END) END AS invalid_scope
   FROM agents_scm_order_trace_final_di t INNER JOIN
     (SELECT executeorderno,cust_code,MAX(update_time) AS updated FROM agents_scm_order_trace_final_di GROUP BY executeorderno,cust_code) latest
     ON latest.executeorderno=t.executeorderno AND latest.cust_code=t.cust_code AND latest.updated=t.update_time
@@ -66,9 +70,9 @@ export function createOntimeQueries(productsSql) {
   );
   const members = ['h.belong_base', 'd.product_categ_name', 'h.product_item', 'h.material_code'];
   const arrivals = `SELECT t.executeorderno,t.cust_code,t.arrived AS arrival_date,
-    CASE WHEN t.invalid_scope=0 AND t.arrived<=t.known_deadline THEN 1
-      WHEN t.deadline IS NOT NULL AND t.invalid_scope=0 THEN CASE WHEN t.arrived<=t.deadline THEN 1 ELSE 0 END END AS ontime,
-    CASE WHEN t.invalid_scope>0 OR (t.deadline IS NULL AND (t.known_deadline IS NULL OR t.arrived>t.known_deadline)) THEN 1 ELSE 0 END AS invalid
+    CASE WHEN t.invalid_scope=0 AND t.arrived<t.known_deadline THEN 1
+      WHEN t.deadline IS NOT NULL AND t.invalid_scope=0 THEN CASE WHEN t.arrived<t.deadline THEN 1 ELSE 0 END END AS ontime,
+    CASE WHEN t.invalid_scope>0 OR (t.deadline IS NULL AND (t.known_deadline IS NULL OR t.arrived>=t.known_deadline)) THEN 1 ELSE 0 END AS invalid
     FROM ontime_traces t WHERE t.shipped IS NOT NULL AND t.arrived>=:gea_p1 AND t.arrived<:gea_p2`;
   // Reject an entire virtual execution, even when different product lines disagree.
   const scopedProducts = productsSql.replace(
