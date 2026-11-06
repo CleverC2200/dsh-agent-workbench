@@ -52,6 +52,18 @@ export const ontimeTraceHeadersSql = `SELECT t.executeorderno,t.cust_code,
 const tuple = (fields) =>
   fields.map((field) => `LENGTH(COALESCE(${field},'')),':',COALESCE(${field},'')`).join(',');
 export function createOntimeQueries(productsSql) {
+  // Find candidate keys first, then retain every observation at the actual latest
+  // update. Filtering latest rows by arrival would hide conflicting observations.
+  const scopedTraces = ontimeTraceHeadersSql.replace(
+    'SELECT executeorderno,cust_code,MAX(update_time) AS updated FROM agents_scm_order_trace_final_di GROUP BY executeorderno,cust_code',
+    `SELECT history.executeorderno,history.cust_code,MAX(history.update_time) AS updated
+      FROM agents_scm_order_trace_final_di history INNER JOIN
+        (SELECT DISTINCT executeorderno,cust_code FROM agents_scm_order_trace_final_di
+          WHERE COALESCE(gpsisinraildate_to,arriveconfirm_time)>=:gea_p1
+            AND COALESCE(gpsisinraildate_to,arriveconfirm_time)<:gea_p2) candidates
+        ON candidates.executeorderno=history.executeorderno AND candidates.cust_code=history.cust_code
+      GROUP BY history.executeorderno,history.cust_code`,
+  );
   const members = ['h.belong_base', 'd.product_categ_name', 'h.product_item', 'h.material_code'];
   const arrivals = `SELECT t.executeorderno,t.cust_code,t.arrived AS arrival_date,
     CASE WHEN t.invalid_scope=0 AND t.arrived<=t.known_deadline THEN 1
@@ -59,15 +71,56 @@ export function createOntimeQueries(productsSql) {
     CASE WHEN t.invalid_scope>0 OR (t.deadline IS NULL AND (t.known_deadline IS NULL OR t.arrived>t.known_deadline)) THEN 1 ELSE 0 END AS invalid
     FROM ontime_traces t WHERE t.shipped IS NOT NULL AND t.arrived>=:gea_p1 AND t.arrived<:gea_p2`;
   // Reject an entire virtual execution, even when different product lines disagree.
-  const prefix = `WITH ontime_products AS (${productsSql}),
-    ontime_traces AS (${ontimeTraceHeadersSql}),ontime_arrivals AS (${arrivals}) `;
+  const scopedProducts = productsSql.replace(
+    ') execution_rows\n  WHERE ',
+    `) execution_rows
+  WHERE executeorderno IN (SELECT executeorderno FROM ontime_arrivals) AND `,
+  );
+  const prefix = `WITH ontime_traces AS (${scopedTraces}),ontime_arrivals AS (${arrivals}),
+    ontime_products AS (${scopedProducts}) `;
   const from = `FROM ontime_products h INNER JOIN ontime_arrivals a
     ON a.executeorderno=h.executeorderno AND a.cust_code=h.cust_code
     INNER JOIN (SELECT executeorderno,cust_code FROM ontime_products GROUP BY executeorderno,cust_code
       HAVING MAX(virtual_excluded)=0) eligible ON eligible.executeorderno=h.executeorderno AND eligible.cust_code=h.cust_code
     LEFT JOIN (SELECT material_code,CASE WHEN COUNT(DISTINCT product_categ_name)=1 THEN MAX(product_categ_name) END AS product_categ_name
       FROM agents_scm_material_in_out_summary_d GROUP BY material_code) d ON d.material_code=h.material_code`;
+  const windows = Array.from({ length: 6 }, (_, index) => ({
+    index,
+    start: ':gea_p' + (810 + index * 3),
+    end: ':gea_p' + (811 + index * 3),
+    enabled: ':gea_p' + (812 + index * 3),
+  }));
+  const inWindows = (field) =>
+    '(' +
+    windows
+      .map(
+        (window) =>
+          `(${window.enabled}=TRUE AND ${field}>=${window.start} AND ${field}<${window.end})`,
+      )
+      .join(' OR ') +
+    ')';
+  const periodTraces = scopedTraces.replace(
+    /COALESCE\(gpsisinraildate_to,arriveconfirm_time\)>=:gea_p1\s+AND COALESCE\(gpsisinraildate_to,arriveconfirm_time\)<:gea_p2/,
+    inWindows('COALESCE(gpsisinraildate_to,arriveconfirm_time)'),
+  );
+  const periodArrivals = arrivals.replace(
+    't.arrived>=:gea_p1 AND t.arrived<:gea_p2',
+    inWindows('t.arrived'),
+  );
+  const periodPrefix = `WITH report_windows AS (${windows
+    .map(
+      (window) =>
+        `SELECT ${window.index} AS period_index,${window.start} AS start_date,${window.end} AS end_date,${window.enabled} AS enabled`,
+    )
+    .join(' UNION ALL ')}),
+    ontime_traces AS (${periodTraces}),ontime_arrivals AS (${periodArrivals}),ontime_products AS (${scopedProducts}) `;
   return {
+    ontimePeriodSummarySql:
+      periodPrefix +
+      `SELECT rw.period_index,h.belong_base AS base,a.invalid,a.ontime,
+      ARRAY_AGG(CONCAT(${tuple(['h.executeorderno', 'h.cust_code', 'CAST(a.arrival_date AS CHAR)', ...members])})) AS packed_orders
+      ${from} INNER JOIN report_windows rw ON rw.enabled=TRUE AND a.arrival_date>=rw.start_date AND a.arrival_date<rw.end_date
+      GROUP BY rw.period_index,h.belong_base,a.invalid,a.ontime`,
     ontimeSql:
       prefix +
       `SELECT h.executeorderno AS order_no,h.cust_code AS customer,

@@ -98,6 +98,13 @@ test('execution arrival cohort, all exclusions, missing evidence and summary par
     add('not-shipped', { lastshipmenttime: null });
     add('outside', { gpsisinraildate_to: '2026-09-22 00:00:00' });
     add('no-arrival', { gpsisinraildate_to: null, arriveconfirm_time: null });
+    add('updated-outside', { update_time: '2026-10-01' });
+    add('updated-outside', {
+      update_time: '2026-11-01',
+      gpsisinraildate_to: '2026-09-22 00:00:00',
+    });
+    add('conflicting-latest');
+    add('conflicting-latest', { gpsisinraildate_to: '2026-09-22 00:00:00' });
     const params = { gea_p900: '', gea_p1: '2026-09-21', gea_p2: '2026-09-22' },
       result = db.prepare(translate(ontimeSql)).all(params);
     assert.deepEqual(result.map((r) => r.order_no).sort(), [

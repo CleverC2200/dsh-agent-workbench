@@ -8,10 +8,11 @@ import { metricDetailsRequest } from './metric-details.mjs';
 import { loadWorkbenchFacts, loadWorkbenchSkuPage } from './live-source.js';
 import { createFrameProgress } from '../../business/shared/frame-progress.js';
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
+import { startWorkbenchStagedRead } from './staged-facts.mjs';
 import { workbenchPresentation, workbenchBaseIncluded } from './live-presentation.mjs';
-import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache, createWorkbenchPeriodCacheLifecycle } from './presentation-cache.mjs';
+import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache, createWorkbenchPeriodCacheLifecycle, createWorkbenchScopedFactsCache } from './presentation-cache.mjs';
 import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
-import { reusableWorkbenchFacts, compatibleWorkbenchFacts } from './metric-model.mjs';
+import { reusableWorkbenchFacts, compatibleWorkbenchFacts, retainableWorkbenchFacts } from './metric-model.mjs';
 import { publishReport } from './publication.js';
 import { mountReportImport } from './report-import.mjs';
 import { projectReportImports, importedSummary, summarySupplement } from './import-content.mjs';
@@ -36,7 +37,8 @@ const cachedWorkbenchEvidence = createWorkbenchEvidenceCache();
 let reportLoaded = false, savedPresentation = null, reportEdited = false;
 const periodCacheMaxAge = 20 * 60 * 1000;
 const periodReports = new Map();
-const periodCacheLifecycle = createWorkbenchPeriodCacheLifecycle(periodReports, { maxAge: periodCacheMaxAge, reusable: reusableWorkbenchFacts, now: () => Date.now() });
+const scopedFactsCache = createWorkbenchScopedFactsCache({ maxAge: periodCacheMaxAge, reusable: retainableWorkbenchFacts });
+const periodCacheLifecycle = createWorkbenchPeriodCacheLifecycle(periodReports, { maxAge: periodCacheMaxAge, reusable: retainableWorkbenchFacts, now: () => Date.now() });
 let activePeriodReport;
 let reportImporter;
 let workbenchImportHistory = [];
@@ -2353,7 +2355,7 @@ async function readCurrentPeriod() {
   liveReadKey=key;
   let entry=periodReports.get(key);
   if (entry?.controller.signal.aborted) { periodReports.delete(key); entry = null; }
-  if(entry && !entry.dirty && !entry.persistence.pending() && entry.finished && Date.now()-entry.finished>periodCacheMaxAge){entry.controller.abort();periodReports.delete(key);entry=null;}
+  if(entry && !entry.dirty && !entry.persistence.pending() && Date.now()-(entry.finished??Date.parse(entry.facts?.readAt))>=periodCacheMaxAge){entry.controller.abort();entry.persistence.cancel();periodReports.delete(key);entry=null;}
   if(!entry){
     entry={controller:new AbortController(),edits:null,dirty:false,loaded:false,facts:null,started:false};
     entry.persistence=createReportPersistence(async(request,signal)=>{const encoded=await encodeReportRequest(request);signal.throwIfAborted();return call('workspace',encoded,{signal});},(state,message)=>{
@@ -2390,6 +2392,7 @@ async function readCurrentPeriod() {
   const applyFacts = (facts, storedPresentation, { dimensionOnly = false } = {}) => {
     if (controller.signal.aborted) return;
     entry.facts=facts;
+    if (entry.loaded) scopedFactsCache.set(entry.persistence.scope(), facts);
     if (liveReadKey!==key) return;
     liveFacts=facts;
     const presentation=storedPresentation&&!storedPresentation.lazy&&storedPresentation.performanceStyleVersion===performanceStyleVersion&&storedPresentation.shippableReferenceVersion===shippableReferenceVersion?storedPresentation:cachedWorkbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
@@ -2438,10 +2441,15 @@ async function readCurrentPeriod() {
   const readController = entry.readController = new AbortController();
   const readSignal = AbortSignal.any([controller.signal, readController.signal]);
   const timing = startDashboardTiming('order-workbench', readSignal);
+  let staged;
   try {
     let saved;
     try {
-      entry.restore ??= entry.persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal);
+      const cold = !entry.facts && !scopedFactsCache.hasPeriod(start, end);
+      entry.restore ??= entry.persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal, { includeFacts: false });
+      if (cold)
+        staged = startWorkbenchStagedRead((signal, onProgress) =>
+          loadWorkbenchFacts(start,end,signal,{base:'',summary:true,periodQueries:true,onProgress}), readSignal);
       saved = await entry.restore;
       if(!entry.loaded && !entry.dirty)entry.edits=saved?.edits??{};
       entry.loaded=true;
@@ -2449,6 +2457,17 @@ async function readCurrentPeriod() {
     } catch (error) { entry.restore = undefined; controller.signal.throwIfAborted(); }
 
     readSignal.throwIfAborted();
+    const scopedFacts = scopedFactsCache.get(entry.persistence.scope());
+    const retained = scopedFacts.find(facts => facts.start === start && facts.end === end);
+    if (!entry.facts && retained) {
+      entry.apply(retained);
+      timing.mark('retained-report-ready');
+      if (reusableWorkbenchFacts(retained)) {
+        entry.finished=Date.parse(retained.readAt);
+        timing.finish('cached-complete');
+        return;
+      }
+    }
     if(!entry.facts && compatibleWorkbenchFacts(saved?.facts)) {
       entry.apply(saved.facts,saved.presentation);
       timing.mark('saved-report-ready');
@@ -2465,23 +2484,30 @@ async function readCurrentPeriod() {
           timing.mark('selected-period-ready');
       }
     }, readSignal);
-    let facts;
+    let facts, partial;
     try {
       const base = entry.persistence.scope()?.base;
       const seedFacts = [...periodReports.values()].filter(cached => cached.loaded &&
-        cached.persistence.scope()?.base === base && compatibleWorkbenchFacts(cached.facts) &&
+        cached.persistence.scope()?.base === base && retainableWorkbenchFacts(cached.facts) &&
         Date.now() - Date.parse(cached.facts.readAt) < periodCacheMaxAge)
-        .map(cached => cached.facts);
-      facts=await loadWorkbenchFacts(start,end,readSignal,{onProgress:progress.push,base,summary:true,seedFacts});
+        .map(cached => cached.facts).concat(scopedFacts);
+      // Publish only after the independent report scope is verified. A narrower
+      // scope discards the provisional result and performs its exact scoped read.
+      if (staged && entry.persistence.scope()?.key && base === '') facts = await staged.accept(progress.push);
+      else {
+        staged?.cancel();
+        facts=await loadWorkbenchFacts(start,end,readSignal,{onProgress:progress.push,base,summary:true,periodQueries:true,seedFacts});
+      }
       readSignal.throwIfAborted();
-      const partial = Object.values(facts.periods).some(period => period.sections.some(section => section.status === 'error')) ||
+      partial = Object.values(facts.periods).some(period => period.sections.some(section => section.status === 'error')) ||
         ['directors','customers','customerManagers'].some(name => facts[name]?.status === 'error');
-      timing.finish(partial ? 'partial' : 'complete');
+      timing.mark('facts-ready');
     } catch (error) {
       timing.finish(readSignal.aborted ? 'cancelled' : 'failed');
       throw error;
     } finally { progress.cancel(); }
-    entry.apply(facts);entry.finished=Date.now();
+    entry.apply(facts);entry.finished??=Date.now();
+    timing.finish(partial ? 'partial' : 'complete');
     if(entry.loaded){
       if(activePeriodReport===entry)entry.edits=structuredClone(reportEdits());
     }
@@ -2499,7 +2525,7 @@ async function readCurrentPeriod() {
       renderWorkbench();
       updateReport();
     }
-  }
+  } finally { staged?.cancel(); }
 }
 clearLiveMetrics();
 const resumeWorkbenchConnection = () => {
@@ -2507,6 +2533,7 @@ const resumeWorkbenchConnection = () => {
   liveConnected=true;liveReadKey='';renderSelectedPeriod();
 };
 const suspendWorkbenchConnection = (clear = false) => {
+  if (clear) scopedFactsCache.clear();
   if (clear) periodCacheLifecycle.clear(); else periodCacheLifecycle.suspend();
   activePeriodReport=null;liveController=undefined;
   liveConnected=false;reportEdited=false;reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();

@@ -1,5 +1,11 @@
 import { shippableDaysState } from './performance-rules.mjs';
 export const metricCalculationVersion = 22;
+export function retainableWorkbenchFacts(facts) {
+  return facts?.attributionVersion === 2 &&
+    facts.metricCalculationVersion === metricCalculationVersion &&
+    Object.values(facts.periods ?? {}).some(period =>
+      Array.isArray(period?.sections) && period.sections.some(section => section.status === 'ready'));
+}
 export function compatibleWorkbenchFacts(facts) {
   return (
     facts?.complete === true &&
@@ -11,6 +17,8 @@ export function compatibleWorkbenchFacts(facts) {
 export function reusableWorkbenchFacts(facts) {
   return (
     compatibleWorkbenchFacts(facts) &&
+    ['directors', 'customers', 'customerManagers'].every(name =>
+      !facts[name] || facts[name].status === 'ready') &&
     Object.values(facts.periods).every(
       (period) =>
         Array.isArray(period.sections) &&

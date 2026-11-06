@@ -1,9 +1,15 @@
 import { changesSql, customersSql, ordersSql, ontimeSql } from './document-queries.mjs';
 import { workbenchBaseSql } from './base-scope.mjs';
+// Filter native date columns before UNION coerces the mixed date types to text.
+// Keep native datetime predicates available to Doris during the owner joins.
 const attributionSources = `SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_d
+          WHERE header_addtime>=:gea_p1 AND header_addtime<:gea_p2
         UNION ALL SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_hourly_d
+          WHERE header_addtime>=:gea_p1 AND header_addtime<:gea_p2
         UNION ALL SELECT belong_base,material_code,NULL AS director,product_item,the_date AS attribution_date FROM agents_scm_stock_detail_d
-        UNION ALL SELECT belong_base,new_material_code AS material_code,NULL AS director,pinxiang AS product_item,fromorderno_month AS attribution_date FROM agents_order_execute_isontime_mi`;
+          WHERE the_date>=:gea_p1 AND the_date<:gea_p2
+        UNION ALL SELECT belong_base,new_material_code AS material_code,NULL AS director,pinxiang AS product_item,fromorderno_month AS attribution_date FROM agents_order_execute_isontime_mi
+          WHERE fromorderno_month>=:gea_p1 AND fromorderno_month<:gea_p2`;
 
 // Field formulas confirmed in the shared metric register, 2026-10-23.
 const dictionary = `SELECT material_code AS sku,
@@ -77,12 +83,12 @@ const ageWarehouses = `SELECT DISTINCT warehouse_id FROM dim_bas_warehouse
     AND warehouse_classify_name IN ('工厂成品仓','工厂外租库')`;
 
 // Historical batch scope must not override an explicit same-day non-factory class.
-const ageWarehouseSnapshots = `SELECT warehouseid,month_date,
+const ageWarehouseSnapshots = (filter) => `SELECT warehouseid,month_date,
   MAX(CASE WHEN warehouse_classify NOT IN ('01','02')
     OR warehouse_classify_name NOT IN ('工厂成品仓','工厂外租库') THEN 1 ELSE 0 END) AS excluded,
   CASE WHEN COUNT(DISTINCT NULLIF(TRIM(belong_base),''))=1
     AND COUNT(NULLIF(TRIM(belong_base),''))=COUNT(*) THEN MAX(NULLIF(TRIM(belong_base),'')) END AS base
-  FROM agents_scm_inventory_sku_data_d GROUP BY warehouseid,month_date`;
+  FROM agents_scm_inventory_sku_data_d WHERE ${filter} GROUP BY warehouseid,month_date`;
 const ageBase = workbenchBaseSql(
   "COALESCE(NULLIF(TRIM(b.belong_base),''),snapshot_warehouse.base)",
 );
@@ -187,7 +193,7 @@ export const workbenchQueries = {
     columns: ['day'],
     sql: `SELECT MAX(b.dt) AS day FROM dwd_scm_material_age_his b
       INNER JOIN (${ageWarehouses}) w ON w.warehouse_id=b.warehouseid
-      LEFT JOIN (${ageWarehouseSnapshots}) snapshot_warehouse
+      LEFT JOIN (${ageWarehouseSnapshots('month_date>=:gea_p1 AND month_date<:gea_p2')}) snapshot_warehouse
         ON snapshot_warehouse.warehouseid=b.warehouseid AND snapshot_warehouse.month_date=b.dt
       WHERE (:gea_p900='' OR ${ageBase}=:gea_p900) AND b.dt>=:gea_p1 AND b.dt<:gea_p2 AND COALESCE(snapshot_warehouse.excluded,0)=0`,
   },
@@ -215,7 +221,7 @@ export const workbenchQueries = {
       SUM(CASE WHEN b.inv_qty IS NULL OR (b.inv_qty<>0 AND (b.age_days IS NULL OR b.age_days<0)) THEN 1 ELSE 0 END) AS invalid
       FROM dwd_scm_material_age_his b
       INNER JOIN (${ageWarehouses}) w ON w.warehouse_id=b.warehouseid
-      LEFT JOIN (${ageWarehouseSnapshots}) snapshot_warehouse
+      LEFT JOIN (${ageWarehouseSnapshots('month_date=:gea_p1')}) snapshot_warehouse
         ON snapshot_warehouse.warehouseid=b.warehouseid AND snapshot_warehouse.month_date=b.dt
       LEFT JOIN (${dictionary}) d ON d.sku=b.material_code
       LEFT JOIN (SELECT material_code AS sku,
@@ -308,11 +314,19 @@ export function addWorkbenchQueries(config) {
             : '';
     if (!definition.scoped)
       definition.sql = definition.sql.replace(
-        name === 'stock' ? 'WHERE s.the_date=' : 'WHERE ',
+        name === 'stock'
+          ? 'WHERE s.the_date='
+          : ['directors', 'items'].includes(name)
+            ? 'WHERE NULLIF(TRIM(d.'
+            : 'WHERE ',
         "WHERE (:gea_p900 = '' OR " +
           alias +
           'belong_base = :gea_p900) AND ' +
-          (name === 'stock' ? 's.the_date=' : ''),
+          (name === 'stock'
+            ? 's.the_date='
+            : ['directors', 'items'].includes(name)
+              ? 'NULLIF(TRIM(d.'
+              : ''),
       );
     const id = 'workbench.' + name.toLowerCase();
     const parameterSpec = {
@@ -362,3 +376,14 @@ export function addWorkbenchQueries(config) {
   }
   return config;
 }
+
+export const workbenchQueryParts = {
+  attributionSources,
+  dictionary,
+  stockPlans,
+  stockBatches,
+  stockJoin,
+  ageWarehouses,
+  ageWarehouseSnapshots,
+  ageBase,
+};
