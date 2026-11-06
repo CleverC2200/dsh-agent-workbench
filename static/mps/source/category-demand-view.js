@@ -28,6 +28,10 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
     const [quantity, setQuantity] = react.useState('');
     const [reason, setReason] = react.useState('');
     const [error, setError] = react.useState('');
+    const editorRef = react.useRef(null);
+    react.useEffect(() => {
+      if (editing) editorRef.current?.scrollIntoView({ block: 'nearest' });
+    }, [editing]);
     react.useEffect(() => {
       setEditing(null);
       setError('');
@@ -115,6 +119,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
                 setReason(edit?.reason ?? '');
                 setError('');
               },
+              className: 'dc-link',
               'aria-label': `调整 ${row.category} ${row.month}`,
             },
             '调整',
@@ -124,6 +129,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
               'button',
               {
                 onClick: () => undo(row),
+                className: 'dc-link',
                 'aria-label': `撤销 ${row.category} ${row.month}`,
               },
               '撤销',
@@ -136,7 +142,23 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
       ...Object.fromEntries(
         result.rows
           .filter((row) => row.category === basis.category)
-          .map((row, index) => [`M+${index + 1}`, row.quantity ?? '']),
+          .map((row, index) => {
+            const detail = rows[result.rows.indexOf(row)];
+            return [
+              `M+${index + 1}`,
+              h(
+                'div',
+                { className: 'dc-demand-quantity' },
+                h(
+                  'span',
+                  { className: 'dc-demand-amount', title: detail['缺项说明'] || undefined },
+                  row.quantity == null ? '-' : String(Math.round(row.quantity)),
+                  row.quantity == null && h('small', {}, '待补'),
+                ),
+                h('div', { className: 'dc-demand-cell-actions' }, detail['操作']),
+              ),
+            ];
+          }),
       ),
     }));
     const apply = () => {
@@ -216,16 +238,27 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
             ),
           ),
         ),
-        h(
-          'details',
-          { className: 'dc-card-foot' },
-          h('summary', {}, '查看系统值、调整与缺项说明'),
-          table([...detailColumns, '操作'], rows),
+      ),
+      h(
+        'section',
+        { 'aria-label': '大类预估需求数量', className: 'dc-card dc-results dc-demand-summary' },
+        h('div', { className: 'dc-card-head' }, h('h3', {}, '大类预估需求数量')),
+        table(
+          ['大类', 'M+1', 'M+2', 'M+3', 'M+4'],
+          summary,
+          Object.fromEntries(
+            result.rows
+              .slice(0, 4)
+              .map((row, index) => [
+                `M+${index + 1}`,
+                `M+${index + 1} · ${row.month}${index === 3 ? ' 库存参考' : ''}`,
+              ]),
+          ),
         ),
         editing &&
           h(
             'fieldset',
-            { 'aria-label': '大类需求调整', className: 'dc-card-foot' },
+            { ref: editorRef, 'aria-label': '大类需求调整', className: 'dc-category-editor' },
             h('legend', {}, `${editing.category} · ${editing.month}`),
             h(
               'p',
@@ -237,6 +270,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
               {},
               '调整需求数量',
               h('input', {
+                autoFocus: true,
                 'aria-label': '调整需求数量',
                 type: 'number',
                 min: 0,
@@ -260,37 +294,6 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
             h('button', { className: 'dc-primary', onClick: apply }, '应用大类调整'),
             h('button', { onClick: () => setEditing(null) }, '取消'),
           ),
-        h(
-          'div',
-          { className: 'dc-card-foot' },
-          'M+1、M+2按（环比法＋占比法）÷2÷达成率；达成率＝同一窗口近三月BI实绩合计÷计划量合计（allnum，件）。M+3、M+4按上月有效需求×年度分月环比延展。年度分月环比＝本月年度需求÷上月年度需求。缺完整历史、零分母或依赖数据时系统值留空；人工调整须填写原因。展示取整数，计算及下载保留原精度。',
-        ),
-      ),
-      h(
-        'section',
-        { 'aria-label': '大类预估需求数量', className: 'dc-card dc-results' },
-        h(
-          'div',
-          { className: 'dc-card-head' },
-          h('h3', {}, '大类预估需求数量'),
-          h(
-            'span',
-            { className: 'dc-card-note' },
-            '下游使用有效需求。M+4只到大类，本地调整不代表正式保存。',
-          ),
-        ),
-        table(
-          ['大类', 'M+1', 'M+2', 'M+3', 'M+4'],
-          summary,
-          Object.fromEntries(
-            result.rows
-              .slice(0, 4)
-              .map((row, index) => [
-                `M+${index + 1}`,
-                `M+${index + 1} · ${row.month}${index === 3 ? ' 库存参考' : ''}`,
-              ]),
-          ),
-        ),
       ),
       (draft.adjustments?.history ?? []).some((entry) => entry.kind === 'categoryDemand') &&
         h(

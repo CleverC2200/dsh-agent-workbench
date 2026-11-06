@@ -423,7 +423,7 @@
   margin-bottom: 12px;
   font-weight: 600;
 }
-.wf-plan-detail-row .wf-table-scroll {
+.wf-page[data-planning='true'] .wf-plan-detail-row .wf-table-scroll {
   margin-top: 12px;
   max-height: none;
   overflow: visible;

@@ -138,3 +138,38 @@ test('MPS data disclosures span the page at desktop and narrow widths', async (t
     }
   }
 });
+
+test('Tab1 adjusts the existing demand matrix without a duplicate review table', async (t) => {
+  const page = await authorPage(t);
+  await page.evaluate(() => window.openAuthor('mps', 1200));
+  const frame = page.frameLocator('iframe');
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '产品.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
+    ),
+  });
+  const matrix = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
+  await expect(matrix).toBeVisible();
+  await expect(frame.getByText('查看系统值、调整与缺项说明', { exact: true })).toHaveCount(0);
+  await expect(matrix.getByRole('button', { name: /^调整 / })).toHaveCount(4);
+  await expect(matrix.locator('.dc-demand-amount small')).toHaveCount(4);
+  for (const width of [1200, 600]) {
+    await page.evaluate(
+      (width) => (document.getElementById('root').style.width = `${width + 520}px`),
+      width,
+    );
+    await matrix
+      .getByRole('button', { name: /^调整 / })
+      .first()
+      .click();
+    const editor = matrix.getByRole('group', { name: '大类需求调整', exact: true });
+    await expect(editor.getByLabel('调整需求数量', { exact: true })).toBeFocused();
+    const table = await matrix.getByRole('table').boundingBox();
+    const form = await editor.boundingBox();
+    assert.ok(form.y >= table.y + table.height - 2);
+    await editor.getByRole('button', { name: '取消', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+  }
+});

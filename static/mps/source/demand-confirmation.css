@@ -300,6 +300,41 @@
   font-size: 10px;
   font-weight: 400;
 }
+.dc-demand-quantity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 160px;
+  font-variant-numeric: tabular-nums;
+}
+.dc-demand-amount {
+  display: grid;
+  gap: 4px;
+}
+.dc-demand-amount small {
+  color: #956900;
+  font-size: 11px;
+}
+.dc-demand-cell-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+.dc-category-editor {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 16px 18px;
+  border: 0;
+  border-top: 1px solid var(--dc-border);
+}
+.dc-category-editor > p {
+  flex-basis: 100%;
+}
 .dc-page table {
   width: 100%;
   min-width: 760px;

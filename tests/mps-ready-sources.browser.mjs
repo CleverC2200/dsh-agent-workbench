@@ -203,9 +203,11 @@ test('historical shares reuse the existing computation while final category dema
   assert.match(csv, /,1,0\.5,/);
   assert.doesNotMatch(csv, /\d+\.\d+%/);
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await expect(frame.getByRole('region', { name: '大类预估需求数量', exact: true })).toContainText(
-    'M+4只到大类',
-  );
+  await expect(
+    frame
+      .getByRole('region', { name: '大类预估需求数量', exact: true })
+      .getByRole('columnheader', { name: /M\+4.*库存参考/ }),
+  ).toBeVisible();
 });
 
 test('source checks read allnum planned pieces for the same explicit window in both evaluation modes', async (t) => {
@@ -249,7 +251,12 @@ test('missing recent plans preserve the independent annual estimate and disclose
   await expect(row.locator('td').nth(5)).toHaveText('400');
   await expect(row.locator('td').nth(6)).toHaveText('-');
   const calculation = frame.getByRole('region', { name: '逐月测算', exact: true });
-  await expect(calculation).toContainText('2026-07至2026-09 计划量缺失或不完整');
+  await expect(
+    frame
+      .getByRole('region', { name: '大类预估需求数量', exact: true })
+      .locator('.dc-demand-amount')
+      .first(),
+  ).toHaveAttribute('title', /2026-07至2026-09 计划量缺失或不完整/);
   await expect(calculation.locator('tbody tr').first().locator('td').nth(6)).toHaveText('40');
 });
 
@@ -584,10 +591,10 @@ test('confirmed category computation reaches the monthly table and keeps raw dow
     .getByRole('region', { name: '大类预估需求数量', exact: true })
     .locator('tbody tr')
     .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
-  await expect(result.locator('td').nth(1)).toHaveText('51');
-  await expect(result.locator('td').nth(2)).toHaveText('59');
-  await expect(result.locator('td').nth(3)).toHaveText('89');
-  await expect(result.locator('td').nth(4)).toHaveText('177');
+  await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('51');
+  await expect(result.locator('td').nth(2).locator('.dc-demand-amount')).toHaveText('59');
+  await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('89');
+  await expect(result.locator('td').nth(4).locator('.dc-demand-amount')).toHaveText('177');
   const calculation = frame
     .getByRole('region', { name: '逐月测算', exact: true })
     .locator('tbody tr')
@@ -646,8 +653,8 @@ test('current pool category demand fills all four months and exports correction 
   await expect(methods).toContainText('4 / 4 项可计算');
   const summary = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
   await expect(summary.locator('tbody tr')).toHaveCount(1);
-  const cells = await summary.locator('tbody tr td').allTextContents();
-  assert(cells.slice(1, 5).every((value) => /^\d+$/.test(value)));
+  const cells = await summary.locator('.dc-demand-amount').allTextContents();
+  assert(cells.length === 4 && cells.every((value) => /^\d+$/.test(value)));
   const waiting = page.waitForEvent('download');
   await methods.getByRole('button', { name: '下载测算明细', exact: true }).click();
   const csv = await mpsDownloadText(await (await waiting).path());

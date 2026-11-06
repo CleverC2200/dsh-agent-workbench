@@ -413,11 +413,6 @@ async function upload(frame, label, text) {
     await expect(frame.getByText('全年历史读取中…')).toHaveCount(0);
     return;
   }
-  const details = frame
-    .locator('details')
-    .filter({ has: frame.getByText('查看系统值、调整与缺项说明', { exact: true }) });
-  if ((await details.isVisible()) && (await details.getAttribute('open')) === null)
-    await details.locator('summary').click();
   await frame
     .getByLabel(label, { exact: true })
     .setInputFiles({ name: '本地核对.csv', mimeType: 'text/csv', buffer: Buffer.from(text) });
@@ -947,6 +942,11 @@ test('MPS effective category and share edits drive the same unconstrained invent
   await report.getByLabel('单品明细大类', { exact: true }).selectOption('汤圆');
   await report.getByLabel('单品明细物料组', { exact: true }).selectOption('组');
   await expect(report.getByRole('table', { name: '求解单品明细', exact: true })).toContainText('A');
+  const skuScroll = report.locator('.wf-plan-detail-row .wf-table-scroll');
+  assert.equal(await skuScroll.evaluate((element) => getComputedStyle(element).maxHeight), 'none');
+  const skuTable = await skuScroll.getByRole('table').boundingBox();
+  const skuPager = await report.locator('.wf-plan-detail-row .dc-card-foot').boundingBox();
+  assert.ok(skuPager.y >= skuTable.y + skuTable.height - 2);
   await report
     .getByRole('button', { name: '郑州 A 2026-12 实际主计划量 求解过程', exact: true })
     .click();
@@ -1124,12 +1124,10 @@ test('MPS category undo audits the current inherited quantity after an upstream 
   await adjust('2026-11', '400');
   await frame.getByRole('button', { name: '撤销 汤圆 2026-12', exact: true }).click();
   const row = frame
-    .getByRole('region', { name: '逐月测算', exact: true })
-    .locator('details')
+    .getByRole('region', { name: '大类预估需求数量', exact: true })
     .getByRole('row')
-    .filter({ hasText: '2026-12（M+3）' })
-    .filter({ hasText: '汤圆' });
-  await expect(row.locator('td').nth(3)).toHaveText('600');
+    .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
+  await expect(row.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('600');
   const audit = frame
     .getByRole('region', { name: '大类调整记录', exact: true })
     .locator('tbody tr')
