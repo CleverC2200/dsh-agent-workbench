@@ -70,7 +70,7 @@ for page in pages:
    assert all(values.get(k)==v for k,v in required.items()),values
    member_tree=sqlglot.parse_one(sql,read='postgres')
    for cte in member_tree.find_all(exp.CTE):
-    if cte.alias=='list_source':
+    if cte.alias=='list_source' and agent != 'fc':
      cte.this.set('where',None);cte.this.set('joins',None);cte.this.set('with_',None)
    sql=member_tree.sql()
   for old,sp in q['parameterSpec'].items():

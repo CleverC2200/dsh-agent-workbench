@@ -13,7 +13,7 @@ for agent in ['fc','qll']:
  for member in bundle['members']:
   for param,name in member['bindings'].items():
    value=member['values'][name]
-   if not isinstance(value,dict):fixed[param]=value
+   if not isinstance(value,dict) and not (agent=='fc' and name in {'warehouse_code','warehouse_code_mode'}):fixed[param]=value
  def literal(v):
   if isinstance(v,list):return ', '.join(literal(x) for x in v)
   return exp.convert(v).sql()

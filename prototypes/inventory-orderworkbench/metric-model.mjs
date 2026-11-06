@@ -1,5 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 22;
+export const metricCalculationVersion = 23;
 export function retainableWorkbenchFacts(facts) {
   return facts?.attributionVersion === 2 &&
     facts.metricCalculationVersion === metricCalculationVersion &&
@@ -46,7 +46,8 @@ const invalid = (rows, key = 'invalid') =>
   rows.some((row) => !finite(row[key]) || Number(row[key]) !== 0);
 export const metricValue = (metrics, name) => metrics?.[name]?.value ?? null;
 export function stockDaily(row, scope = 'national') {
-  const sales = scope !== 'base' && 'national_plan_records' in row ? row.national_sales_plan : row.sales_plan;
+  const sales =
+    scope !== 'base' && 'national_plan_records' in row ? row.national_sales_plan : row.sales_plan;
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(row.stock_date) ||
     !finite(sales) ||
@@ -122,7 +123,7 @@ export function computeWorkbenchMetrics(
         : null,
       kind === '1'
         ? '按传到OMS的单据新增日期，客户编码＋原订单号去重：锁定期内且接单超过12小时后作废订单数 ÷ O接收订单数（剔除接单后12小时以内、含恰好12小时作废的订单）；缺作废时间不计算'
-        : '按日表header_addtime筛选OMS创建周期，按商品明细数量合计、不按订单或SKU种类计数：锁定期内ΣABS(客户要求改单量change_order_qty－有效商品数量) ÷ Σ有效商品数量 ×100%；有效量优先D最后修改量dms_last_update_qty，空时取调整需求量备份need_qty_origin；三个数量全空剔除，其余空按0、真实0有效；整单作废剔除，仅保留detailstatus=10且is_stat=1；交期距创建≤7日按创建+12小时锁定，否则确认到货-7日；以custchangetime判定锁内，不额外限定改单在创建周期内；该时间对SKU实际改量的覆盖仍待核，缺失保留未知',
+        : '按日表header_addtime筛选OMS创建周期，按商品明细数量合计、不按订单或SKU种类计数：锁定期内ΣABS(客户要求改单量change_order_qty－有效商品数量) ÷ Σ有效商品数量 ×100%；有效量优先D最后修改量dms_last_update_qty，空时按已核对页面映射取备份order_qty_origin（源字段绑定仍待最终核定）；三个数量全空剔除，其余空按0、真实0有效；整单作废剔除，仅保留detailstatus=10且is_stat=1；交期距创建≤7日按创建+12小时锁定，否则确认到货-7日；以custchangetime判定锁内，不额外限定改单在创建周期内；该时间对SKU实际改量的覆盖仍待核，缺失保留未知',
     );
   }
   const need = sum(orders, 'demand'),
@@ -212,10 +213,7 @@ export function computeWorkbenchMetrics(
       `可判定样本：${known}/${total}${unit}，候选记录覆盖${coverage.toFixed(1)}%；不是全量指标。${reason}`;
     result[name].note += '；' + result[name].coverageNote;
   };
-  for (const [kind, name] of [
-    ['1', '作废率'],
-    ['2', '改单率'],
-  ]) {
+  for (const [kind, name] of [['1', '作废率']]) {
     const selected = changes.filter((row) => String(row.kind) === kind);
     if (
       selected.length &&
@@ -236,10 +234,6 @@ export function computeWorkbenchMetrics(
   }
   const amendmentRows = changes.filter((row) => String(row.kind) === '2');
   const amendment = result['改单率'];
-  if (amendment.sample) {
-    amendment.sample.value = amendment.value;
-    amendment.note += '；完整数量改单率待核，卡片显示可判定商品明细的数量样本率，不代表全量';
-  }
   if (
     amendmentRows.length &&
     amendmentRows.every((row) =>
@@ -262,6 +256,12 @@ export function computeWorkbenchMetrics(
         maximumPercent: (100 * (knownNumerator + unknownQuantity)) / denominator,
       };
       amendment.note += `；有效商品数量分母${denominator}，按现有时间已判定调整量${knownNumerator}，待判定${unknown}条明细、数量差额${unknownQuantity}`;
+      if (unknown > 0) {
+        amendment.value = (100 * knownNumerator) / denominator;
+        amendment.provisional = true;
+        amendment.coverageNote = `暂算：现有时间已判定调整量${knownNumerator} ÷ 全量有效商品数量${denominator}；${unknown}条明细待判定，不代表完整改单率。`;
+        amendment.note += '；' + amendment.coverageNote;
+      }
     }
   }
   if (
@@ -455,15 +455,18 @@ export function metricDelta(current, previous, name) {
     b = metricValue(previous, name);
   return a === null || b === null
     ? '—'
-    : `${a - b >= 0 ? '+' : ''}${(a - b).toFixed(2)}${name === '周转天数' ? '天' : '%'}${current?.[name]?.sample || previous?.[name]?.sample ? '*' : ''}`;
+    : `${a - b >= 0 ? '+' : ''}${(a - b).toFixed(2)}${name === '周转天数' ? '天' : '%'}${current?.[name]?.sample || previous?.[name]?.sample || current?.[name]?.provisional || previous?.[name]?.provisional ? '*' : ''}`;
 }
 
 export function metricComparisonNote(current, previous, name) {
+  if (current?.[name]?.provisional || previous?.[name]?.provisional)
+    return '暂算值之差，不代表完整指标同比或环比。';
   if (!current?.[name]?.sample && !previous?.[name]?.sample) return '';
   return `样本差，不代表全量同比或环比。本期：${metricCoverageSummary(current?.[name])}；比较期：${metricCoverageSummary(previous?.[name])}。`;
 }
 
 export function metricCoverageSummary(metric) {
+  if (metric?.provisional) return metric.coverageNote;
   const sample = metric?.sample;
   return sample
     ? `可判定样本${sample.known}/${sample.total}${sample.unit}，覆盖${sample.coverage.toFixed(1)}%`

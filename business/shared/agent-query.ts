@@ -135,8 +135,8 @@ export function createAgentQueries(
         return reads;
       })())
     : pageSummaries;
-  const selectRead = async (id: string, values: Record<string, unknown>) => {
-    if (!config.dailySummary || !config.queries[id]?.summaryRoute) return { id, values };
+  const readSnapshot = async (): Promise<DailySummarySnapshot> => {
+    if (!config.dailySummary) return { kind: 'unavailable' };
     const bootstrapId = config.dailySummary.bundle?.bootstrapQueryId;
     const snapshotId = bootstrapId ?? config.dailySummary.snapshotQueryId;
     if (typeof snapshotId !== 'string' || !config.queries[snapshotId])
@@ -204,18 +204,32 @@ export function createAgentQueries(
     const selectedRead = await snapshot.result;
     selectedSnapshot = selectedRead.snapshot;
     preloaded = selectedRead.preloaded;
-    const selected = dailySummaryQuery(config.queries[id], selectedSnapshot, values);
+    return selectedRead.snapshot;
+  };
+  const selectRead = async (id: string, values: Record<string, unknown>) => {
+    if (!config.dailySummary || !config.queries[id]?.summaryRoute) return { id, values };
+    const snapshot = await readSnapshot();
+    const selected = dailySummaryQuery(config.queries[id], snapshot, values);
     if (!selected && config.queries[id].summaryRoute.required === true)
       throw Object.assign(Error('当前范围的汇总数据尚未就绪'), {
         code:
-          selectedSnapshot.kind === 'unavailable'
-            ? 'SUMMARY_NOT_AVAILABLE'
-            : 'SUMMARY_SCOPE_NOT_COVERED',
+          snapshot.kind === 'unavailable' ? 'SUMMARY_NOT_AVAILABLE' : 'SUMMARY_SCOPE_NOT_COVERED',
       });
     return selected ? { id: selected.queryId, values: selected.values } : { id, values };
   };
   return {
     config,
+    async snapshot(options: { signal?: AbortSignal } = {}) {
+      const generation = identityGeneration;
+      options.signal?.throwIfAborted();
+      const snapshot = await readSnapshot();
+      options.signal?.throwIfAborted();
+      if (generation !== identityGeneration)
+        throw Object.assign(Error('身份已变化，请重新读取当前账号的数据'), {
+          code: 'IDENTITY_CHANGED',
+        });
+      return structuredClone(snapshot);
+    },
     read(id: string, values: Record<string, unknown>, options: any = {}) {
       const generation = identityGeneration;
       const key = JSON.stringify([

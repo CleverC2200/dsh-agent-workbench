@@ -209,7 +209,7 @@ export function addWorkbenchSummaryQueries(config) {
           sql,
           [...original.resultColumns, 'director', 'names', 'summary', ...extra],
           ['base', 'category', 'item', 'director', 'names'],
-        ),
+        ).replace(/ ORDER BY packet_index$/, ''),
         original,
         ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],
         ['packet_index'],

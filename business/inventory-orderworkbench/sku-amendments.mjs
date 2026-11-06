@@ -15,7 +15,7 @@ export function skuAmendmentEventsSql({ headers, stage = 'events', periods = fal
     'is_stat',
     'change_order_qty',
     'dms_last_update_qty',
-    'need_qty_origin',
+    'order_qty_origin',
   ];
   const projection = (alias) => fields.map((field) => `${alias}.${field}`).join(',');
   const source = `SELECT ${periods ? 'rw.period_index,' : ''}${projection('d')},d.custchangetime AS changed
@@ -31,7 +31,7 @@ export function skuAmendmentEventsSql({ headers, stage = 'events', periods = fal
     .join(' AND ');
   const cohort = `SELECT ${periods ? 's.period_index,' : ''}${projection('s')},s.changed,h.invalid_header,h.status AS header_status,h.cancelled,
     COALESCE(s.change_order_qty,0) AS requested_qty,
-    COALESCE(s.dms_last_update_qty,s.need_qty_origin,0) AS effective_qty,
+    COALESCE(s.dms_last_update_qty,s.order_qty_origin,0) AS effective_qty,
     CASE WHEN s.requireddeliverytime<=s.header_addtime + INTERVAL '7' DAY
       THEN s.header_addtime + INTERVAL '12' HOUR
       ELSE s.requireddeliverytime - INTERVAL '7' DAY END AS locked
@@ -41,7 +41,7 @@ export function skuAmendmentEventsSql({ headers, stage = 'events', periods = fal
     WHERE s.detailstatus=10 AND s.is_stat='1'
       AND (h.status<>90 OR h.status IS NULL)
       AND (s.change_order_qty IS NOT NULL OR s.dms_last_update_qty IS NOT NULL
-        OR s.need_qty_origin IS NOT NULL)`;
+        OR s.order_qty_origin IS NOT NULL)`;
   const classified = `SELECT ${periods ? 'period_index,' : ''}cust_code,cust_order_no,material_code,cust_name,region_name,province_region_name,
     requested_qty,effective_qty,ABS(requested_qty-effective_qty) AS difference_qty,
     changed,header_addtime,requireddeliverytime,locked,

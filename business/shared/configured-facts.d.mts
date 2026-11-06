@@ -20,6 +20,20 @@ export function readConfiguredFacts(
   },
 ): Promise<unknown>;
 
+/** Base shortage views follow the page's authorized daily snapshot without raw fallback. */
+export function readBaseCurrentShortage(
+  config: unknown,
+  queryId: string,
+  values: Record<string, unknown>,
+  options: {
+    signal: AbortSignal;
+    execute: (
+      request: unknown,
+      options: { queryId: string; values: Record<string, unknown> },
+    ) => Promise<unknown>;
+  },
+): Promise<unknown>;
+
 /** Base SKU ranking follows the authorized daily snapshot; no raw-order fallback. */
 export function readBaseShortageSkuRanking(
   config: unknown,

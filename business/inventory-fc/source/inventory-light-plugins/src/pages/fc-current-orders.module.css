@@ -50,3 +50,49 @@
 .error {
   color: #c8112a;
 }
+.exportToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e3e6ea;
+}
+.exportToolbar button {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #d9dde3;
+  border-radius: 8px;
+  background: #fff;
+  color: #555d68;
+  cursor: pointer;
+}
+.exportToolbar button:hover:not(:disabled) {
+  color: #df1732;
+  border-color: #efabb4;
+  background: #fffafb;
+}
+.exportToolbar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.exportToolbar button:focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: 2px;
+}
+.selection {
+  text-align: center;
+}
+.selection input {
+  width: 16px;
+  height: 16px;
+  accent-color: #df1732;
+}
+.selectedRow > td {
+  background: #fff2f4;
+}
+
+.selection input:focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: 2px;
+}

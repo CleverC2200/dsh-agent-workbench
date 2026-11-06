@@ -1,3 +1,7 @@
+import { resolveFcDataDay } from '../../../../../shared/fc-data-day';
+import { useQueryIdentity } from '../../../../../shared/use-query-identity';
+import { DashboardTableSkeleton } from '../dsh-ui/workbench-loading';
+import { agentSqlConfig } from '../../../../../shared/sql-config';
 import { useDashboardInsight } from '../../../../../shared/use-dashboard-insight';
 import { branchDashboardEvidence } from '../../../../../shared/fc-dashboard-insight';
 import {
@@ -64,11 +68,67 @@ const views: Record<string, string[]> = {
 export default function ConfiguredWorkbench() {
   return (
     <FcWorkflowProvider>
-      <WorkbenchBody />
+      <DailyWorkbench />
     </FcWorkflowProvider>
   );
 }
-function WorkbenchBody() {
+function DailyWorkbench() {
+  const identity = useQueryIdentity();
+  const [calendarDay, setCalendarDay] = useState(businessDay);
+  const [reload, setReload] = useState(0);
+  const [state, setState] = useState<
+    | { kind: 'loading'; identity: number }
+    | { kind: 'ready'; identity: number; date: string }
+    | { kind: 'failed'; identity: number; message: string }
+  >({ kind: 'loading', identity });
+  const activeConfig = agentSqlConfig(config);
+  useEffect(() => {
+    const syncDay = () => setCalendarDay(businessDay());
+    window.addEventListener('focus', syncDay);
+    document.addEventListener('visibilitychange', syncDay);
+    return () => {
+      window.removeEventListener('focus', syncDay);
+      document.removeEventListener('visibilitychange', syncDay);
+    };
+  }, []);
+  useEffect(() => {
+    if (!activeConfig.dailySummary) return;
+    const controller = new AbortController();
+    void resolveFcDataDay(activeConfig, calendarDay, { signal: controller.signal }).then(
+      (date) => {
+        if (!controller.signal.aborted) setState({ kind: 'ready', identity, date });
+      },
+      (error: unknown) => {
+        if (!controller.signal.aborted)
+          setState({
+            kind: 'failed',
+            identity,
+            message: error instanceof Error ? error.message : '汇总日期读取失败',
+          });
+      },
+    );
+    return () => controller.abort();
+  }, [identity, calendarDay, reload, activeConfig]);
+  const retry = () => {
+    refreshConfiguredQueries();
+    setReload((n) => n + 1);
+  };
+  if (!activeConfig.dailySummary)
+    return <WorkbenchBody dataDay={calendarDay} onDataRefresh={() => setReload((n) => n + 1)} />;
+  if (state.identity !== identity || state.kind === 'loading')
+    return <DashboardTableSkeleton label="分仓汇总数据加载中" />;
+  if (state.kind === 'failed')
+    return (
+      <div role="alert">
+        <p>{state.message}</p>
+        <button type="button" onClick={retry}>
+          重新读取数据
+        </button>
+      </div>
+    );
+  return <WorkbenchBody dataDay={state.date} onDataRefresh={() => setReload((n) => n + 1)} />;
+}
+function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefresh: () => void }) {
   const {
     trial,
     setTrial,
@@ -94,7 +154,7 @@ function WorkbenchBody() {
   const [warehouseRevision, reloadWarehouses] = useState(0);
   const [warehouseError, setWarehouseError] = useState('');
   const [tab, setTab] = useState('replenishment'),
-    [date, setDate] = useState(businessDay),
+    [date, setDate] = useState(dataDay),
     [revision, refresh] = useState(0),
     [cycleDays, setCycleDays] = useState(
       () => configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays,
@@ -106,15 +166,7 @@ function WorkbenchBody() {
     [ruleDraft, setRuleDraft] = useState<FcCycleRule[]>([]),
     [cycleError, setCycleError] = useState(''),
     [planningError, setPlanningError] = useState('');
-  useEffect(() => {
-    const syncDay = () => setDate(businessDay());
-    window.addEventListener('focus', syncDay);
-    document.addEventListener('visibilitychange', syncDay);
-    return () => {
-      window.removeEventListener('focus', syncDay);
-      document.removeEventListener('visibilitychange', syncDay);
-    };
-  }, []);
+  useEffect(() => setDate(dataDay), [dataDay]);
   useEffect(() => {
     const plans = planningPlans;
     setTrial(null);
@@ -380,10 +432,13 @@ function WorkbenchBody() {
               className={common.controls}
               onSubmit={(e) => {
                 e.preventDefault();
-                setDate(businessDay());
+                onDataRefresh();
                 refresh((n) => n + 1);
               }}
             >
+              {date !== businessDay() && (
+                <span title="按最新完整汇总批次计算">汇总日期：{date}</span>
+              )}
               <button className="secondary-button">刷新</button>
             </LocalQueryForm>
           }

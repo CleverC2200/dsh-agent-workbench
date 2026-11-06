@@ -17,7 +17,7 @@ for agent in parser.parse_args().agents:
  for member in bundle['members']:
   for param,name in member['bindings'].items():
    value=member['values'][name]
-   if not isinstance(value,dict):fixed[param]=value
+   if not isinstance(value,dict) and not (agent=='fc' and name in {'warehouse_code','warehouse_code_mode'}):fixed[param]=value
  def literal(v):
   if isinstance(v,list):return ', '.join(literal(x) for x in v)
   return exp.convert(v).sql()
@@ -42,7 +42,9 @@ for agent in parser.parse_args().agents:
    replacement='0'
   else:
    name=next(name for member in bundle['members'] for key,name in member['bindings'].items() if key==param)
-   if name=='stock_month':
+   if agent=='fc' and name in {'warehouse_code','warehouse_code_mode'}:
+    replacement=literal(next(member['values'][name] for member in bundle['members'] if param in member['bindings']))
+   elif name=='stock_month':
     replacement="(SELECT CONCAT(SUBSTRING(CAST(s.stock_date AS VARCHAR), 1, 7), '-01') AS stock_month FROM selected_daily_batch AS s)"
    elif name not in source_columns:raise ValueError('Uncovered bootstrap input: '+name)
    else:replacement='(SELECT s.'+source_columns[name]+' AS '+source_columns[name]+' FROM selected_daily_batch AS s)'
