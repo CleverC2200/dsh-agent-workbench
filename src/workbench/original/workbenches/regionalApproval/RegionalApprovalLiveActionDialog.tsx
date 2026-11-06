@@ -13,6 +13,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSalesPlanAction } from './hooks/useSalesPlanAction.ts';
 import {
   businessSafeErrorMessage,
+  salesPlanRejectionMessage,
   reportSalesPlanError,
   salesPlanActionTargetStatus,
   type SalesPlanActionClient,
@@ -70,7 +71,13 @@ const errorKey = (kind: SalesPlanActionErrorKind) =>
 export const actionErrorText = (t: TFunction, error: SalesPlanActionError): string => {
   const fallback = t(errorKey(error.kind));
   const cause = error.cause;
-  if (!isBackendHttpError(cause) || cause.status >= 500) return fallback;
+  if (!isBackendHttpError(cause)) return fallback;
+  if (cause.status >= 500) {
+    const reason = salesPlanRejectionMessage(cause);
+    if (!reason) return fallback;
+    const id = reportSalesPlanError('sales-plan-action', cause);
+    return `${reason}${t('common.assistantSurface.regionalApproval.liveAction.errors.reference', { id })}`;
+  }
   // 服务端业务拒绝的原文通常是「GEA_HTTP_409：…」，会被判成技术文案而统一换成
   // "版本状态已变化或存在并发操作、请刷新"——把"该重提"和"该找后端"这两种完全不同的
   // 结论都盖掉了。这里按上游原因码给出能落地的说法（不暴露原因码本身）。

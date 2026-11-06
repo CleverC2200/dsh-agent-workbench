@@ -90,3 +90,37 @@ test('an ended approval instance preserves the backend reason without advising r
     console.warn = original;
   }
 });
+
+test('DMS明确拒绝展示业务原因且不进入结果待核实恢复', () => {
+  const cause = new m.BackendHttpError({
+    method: 'POST',
+    path: '/actions',
+    status: 502,
+    body: {
+      error:
+        'GEA_HTTP_502：DMS回写失败: SKU 10003581 确认数量必须为整数，且数量及合计不能超出Integer范围',
+      details: {
+        upstreamCode: 'SALES_PLAN_DMS_WRITEBACK_FAILED',
+        retryable: false,
+        requestId: 'dms-rejected',
+      },
+    },
+  });
+  const failure = m.classifySalesPlanActionError(cause);
+  assert.equal(failure.retrySameIntent, false);
+  const text = m.actionErrorText((key) => key, failure);
+  assert.match(text, /10003581/);
+  assert.match(text, /整数/);
+  assert.doesNotMatch(text, /GEA_HTTP|Integer|payload/);
+});
+test('未收到业务结果的网关故障继续保留同一操作重试', () => {
+  const failure = m.classifySalesPlanActionError(
+    new m.BackendHttpError({
+      method: 'POST',
+      path: '/actions',
+      status: 502,
+      body: { error: 'Bad Gateway' },
+    }),
+  );
+  assert.equal(failure.retrySameIntent, true);
+});
