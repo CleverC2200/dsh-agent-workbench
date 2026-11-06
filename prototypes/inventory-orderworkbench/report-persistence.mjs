@@ -32,11 +32,20 @@ export function createReportPersistence(execute, status) {
     } finally { current.saving = false; }
   }
   return {
-    async open(period, signal) {
+    async open(period, signal, { includeFacts = true } = {}) {
       const current = owner = { period, signal, version: 0, editVersion:0, nextEdits:null, loaded: false, next: null, request: null, saving: false, failed: false };
       notify('loading', '正在读取已保存报告…');
       try {
-        const received = await execute({ operation: 'load', period }, signal);
+        const request = { operation: 'load', period, ...(!includeFacts ? { includeFacts: false } : {}) };
+        let received;
+        try { received = await execute(request, signal); }
+        catch (error) {
+          signal.throwIfAborted();
+          // Older Hosts keep the full load contract; never lose manual content
+          // just because they do not yet support the lightweight read hint.
+          if (includeFacts || !/ORDER_REPORT_REQUEST_INVALID/.test(error.code ?? error.message)) throw error;
+          received = await execute({ operation: 'load', period }, signal);
+        }
         const result = {...received,report:unpackWorkbenchReport(received.report)};
         signal.throwIfAborted();
         if (owner !== current) throw Error('报告周期已切换');

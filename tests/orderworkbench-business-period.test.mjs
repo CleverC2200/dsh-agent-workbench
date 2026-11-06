@@ -45,6 +45,18 @@ test('upstream business period includes all original-order SKUs without any logi
     );
     assert.equal(rows.find((row) => row.sku === 'S5').invalid, 1);
     assert.equal(rows.find((row) => row.sku === 'S5').sample_records, 0);
+    // Native-date preselection must retain *all* observations of a spanning
+    // original order; filtering its lines before grouping hides this conflict.
+    db.exec(`INSERT INTO agents_order_execute_isontime_mi VALUES
+      ('spanning','C','S6','华南','食品','水饺','六',100,80,'E6','2026-10-18','否',100),
+      ('spanning','C','S6','华南','食品','水饺','六',100,80,'E6','2026-10-25','否',100);`);
+    db.function('CONCAT', { varargs: true }, (...values) => values.join(''));
+    const spanning = db
+      .prepare(ordersSql)
+      .all({ gea_p1: '2026-10-19', gea_p2: '2026-10-26', gea_p900: '' })
+      .find((row) => row.sku === 'S6');
+    assert.equal(spanning.invalid, 1);
+    assert.equal(spanning.sample_records, 0);
   } finally {
     db.close();
   }
