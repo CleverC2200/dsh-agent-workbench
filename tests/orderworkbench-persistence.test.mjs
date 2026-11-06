@@ -2,6 +2,47 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createReportPersistence } from '../prototypes/inventory-orderworkbench/report-persistence.mjs';
 const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test('lightweight restore retains edits and falls back only for an older Host request contract', async () => {
+  const calls = [];
+  const edits = { summary: { risk: '人工内容' } };
+  const persistence = createReportPersistence(
+    async (request) => {
+      calls.push(request);
+      if (request.includeFacts === false)
+        throw Object.assign(Error('unsupported'), { code: 'ORDER_REPORT_REQUEST_INVALID' });
+      return {
+        version: 8,
+        editVersion: 3,
+        report: { schemaVersion: 1, facts: null, edits },
+        scope: { key: 'verified' },
+      };
+    },
+    () => {},
+  );
+  const report = await persistence.open(
+    { type: 'WEEK', start: '2026-10-19', end: '2026-10-26' },
+    new AbortController().signal,
+    { includeFacts: false },
+  );
+  assert.deepEqual(report.edits, edits);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].includeFacts, false);
+  assert.equal(Object.hasOwn(calls[1], 'includeFacts'), false);
+  assert.equal(persistence.state().editVersion, 3);
+  let deniedCalls = 0;
+  const denied = createReportPersistence(
+    async () => {
+      deniedCalls++;
+      throw Object.assign(Error('denied'), { code: 'ACCESS_DENIED' });
+    },
+    () => {},
+  );
+  await assert.rejects(denied.open({}, new AbortController().signal, { includeFacts: false }), {
+    code: 'ACCESS_DENIED',
+  });
+  assert.equal(deniedCalls, 1);
+});
 test('failed saves keep the same intent for retry and latest edits follow the confirmed revision', async () => {
   const calls = [],
     states = [];
