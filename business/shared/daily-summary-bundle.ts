@@ -87,7 +87,30 @@ export async function executeDailyBundle(
   const bundle = config.dailySummary?.bundle;
   const member = bundle?.members?.find((item: any) => item.queryId === options.queryId);
   if (!member || snapshot?.kind !== 'ready') return run(request, options);
-  const expected = dailyBundleValues(snapshot, member.values);
+  const warehouseCode =
+    config.agentId === 'inventory-fc' && typeof options.values?.warehouse_code === 'string'
+      ? options.values.warehouse_code
+      : '';
+  if (
+    warehouseCode &&
+    bundle.members.some(
+      (part: { values: Record<string, unknown>; bindings: Record<string, string> }) =>
+        Object.hasOwn(part.values, 'warehouse_code') &&
+        (!Object.values(part.bindings).includes('warehouse_code') ||
+          (Object.hasOwn(part.values, 'warehouse_code_mode') &&
+            !Object.values(part.bindings).includes('warehouse_code_mode'))),
+    )
+  )
+    return run(request, options);
+  const memberValues = (templates: Record<string, unknown>) => {
+    const values = dailyBundleValues(snapshot, templates);
+    if (warehouseCode && Object.hasOwn(values, 'warehouse_code')) {
+      values.warehouse_code = warehouseCode;
+      if (Object.hasOwn(values, 'warehouse_code_mode')) values.warehouse_code_mode = 'equal';
+    }
+    return values;
+  };
+  const expected = memberValues(member.values);
   const definition = config.queries[options.queryId];
   // Only an exact covered input uses this response. Filters and later pages retain their own queries.
   if (
@@ -111,6 +134,7 @@ export async function executeDailyBundle(
     config.agentId,
     config.queries[bundle.queryId],
     snapshot,
+    warehouseCode,
     freshAfter,
   ]);
   let entry = cache.get(key);
@@ -118,7 +142,7 @@ export async function executeDailyBundle(
   if (!entry || Date.now() - entry.started > 45000) {
     const values: Record<string, any> = {};
     for (const part of bundle.members) {
-      const inputs = dailyBundleValues(snapshot, part.values);
+      const inputs = memberValues(part.values);
       for (const [parameter, name] of Object.entries(part.bindings) as Array<[string, string]>)
         values[config.queries[bundle.queryId].parameterSpec[parameter].name] = inputs[name];
     }
@@ -138,7 +162,7 @@ export async function executeDailyBundle(
       for (let offset = 0; offset < total; offset += bundle.maxRows) {
         const pageValues = { ...values, bundle_offset: offset };
         const result =
-          offset === 0 && preloaded && Date.now() - preloaded.at < 45000
+          offset === 0 && !warehouseCode && preloaded && Date.now() - preloaded.at < 45000
             ? preloaded.result
             : await run(makeRequest(config, bundle.queryId, pageValues), {
                 ...options,
