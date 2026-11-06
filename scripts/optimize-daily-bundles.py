@@ -3,19 +3,21 @@
 Member matching still checks every input before consuming these rows. Physical output columns
 remain separate, so RETURN permission filtering retains its normal dependency checks.
 """
-import json, re, copy
+import argparse, json, re, copy
 from pathlib import Path
 import sqlglot
 from sqlglot import exp
 from sqlglot.optimizer.simplify import simplify
 from sqlglot.optimizer.eliminate_ctes import eliminate_ctes
 repo = Path(__file__).resolve().parents[1]
-for agent in ['fc', 'qll', 'aqkc']:
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--agents',nargs='+',choices=['fc','qll','aqkc'],default=['fc','qll','aqkc'])
+for agent in parser.parse_args().agents:
  cfg=json.loads((repo/f'business/inventory-{agent}/sql.config.json').read_text());original=copy.deepcopy(cfg);bundle=cfg['dailySummary']['bundle'];q=cfg['queries'][bundle['queryId']];sql=q['request']['sql'];fixed={}
  for member in bundle['members']:
   for param,name in member['bindings'].items():
    value=member['values'][name]
-   if not isinstance(value,dict):fixed[param]=value
+   if not isinstance(value,dict) and not (agent=='fc' and name in {'warehouse_code','warehouse_code_mode'}):fixed[param]=value
  def literal(v):
   if isinstance(v,list):return ', '.join(literal(x) for x in v)
   return exp.convert(v).sql()
@@ -26,7 +28,9 @@ for agent in ['fc', 'qll', 'aqkc']:
   if isinstance(node,exp.Alias) and node.alias in aliases:node.set('alias',exp.to_identifier(aliases[node.alias]))
  q['resultColumns']=[aliases.get(c,c) for c in q['resultColumns']]
  for member in bundle['members']:member['columns']={k:aliases.get(v,v) for k,v in member['columns'].items()}
- sql=tree.sql();used=set(re.findall(r':(gea_p\d+)\b',sql))
+ sql=tree.sql()
+ if agent=='qll':sql=re.sub(r'\bCOUNT\s*\(\s*\*\s*\)', 'COUNT(1)', sql, flags=re.I)
+ used=set(re.findall(r':(gea_p\d+)\b',sql))
  q['request']['sql']=sql;q['parameterSpec']={k:v for k,v in q['parameterSpec'].items() if k in used};q['request']['parameters']={k:v for k,v in q['request']['parameters'].items() if k in used}
  for member in bundle['members']:member['bindings']={k:v for k,v in member['bindings'].items() if k in used}
  bootstrap=copy.deepcopy(q)
@@ -38,7 +42,9 @@ for agent in ['fc', 'qll', 'aqkc']:
    replacement='0'
   else:
    name=next(name for member in bundle['members'] for key,name in member['bindings'].items() if key==param)
-   if name=='stock_month':
+   if agent=='fc' and name in {'warehouse_code','warehouse_code_mode'}:
+    replacement=literal(next(member['values'][name] for member in bundle['members'] if param in member['bindings']))
+   elif name=='stock_month':
     replacement="(SELECT CONCAT(SUBSTRING(CAST(s.stock_date AS VARCHAR), 1, 7), '-01') AS stock_month FROM selected_daily_batch AS s)"
    elif name not in source_columns:raise ValueError('Uncovered bootstrap input: '+name)
    else:replacement='(SELECT s.'+source_columns[name]+' AS '+source_columns[name]+' FROM selected_daily_batch AS s)'

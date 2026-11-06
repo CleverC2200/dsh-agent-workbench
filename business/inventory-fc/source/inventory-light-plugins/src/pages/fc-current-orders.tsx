@@ -1,79 +1,55 @@
-import React, { useEffect, useState, type FormEvent } from 'react';
-import { z } from 'zod';
-import { createAgentQueries } from '../../../../../shared/agent-query';
-import { unpackAtomicPage } from '../../../../../shared/atomic-page';
+import React, { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AgentSqlConfig } from '../../../../../shared/sql-config';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { currentOrderStatus, ORDER_STATUSES } from '../../../fc/src/lib/current-orders';
 import { useFcWorkflow } from './configured-fc-list';
 import { PlanPagination } from '../../../../../shared/plan-pagination';
 import { DashboardTableSkeleton } from '../dsh-ui/workbench-loading';
+import { ColumnResizeHandle } from '../../../../../shared/table-column-controls';
+import { downloadWorkbook } from '../dsh-ui/workbook';
+import {
+  readPage,
+  orderSchema,
+  lineSchema,
+  orderKey,
+  readOrderExport,
+  type Order,
+  type Line,
+  type ReadState,
+} from './fc-current-orders-data';
 import css from './fc-current-orders.module.css';
 import filtersCss from '../../../../../shared/original-business-list.module.css';
 
-const numeric = z
-  .union([
-    z.number().finite(),
-    z
-      .string()
-      .regex(/^-?\d+(\.\d+)?$/)
-      .transform(Number),
-  ])
-  .nullable();
-const lineSchema = z.object({
-  warehouse_code: z.string().min(1),
-  order_no: z.string().min(1),
-  customer_code: z.string().nullable(),
-  sku: z.string().nullable(),
-  material_name: z.string().nullable(),
-  ordered: numeric,
-  demand: numeric,
-  allocated: numeric,
-  shipped: numeric,
-  remaining: numeric,
-  shortage: numeric,
-  order_status: z.string().nullable(),
-});
-const orderSchema = lineSchema.omit({ sku: true, material_name: true }).extend({
-  warehouse_name: z.string().nullable(),
-  customer_name: z.string().nullable(),
-  requested_at: z.string().nullable(),
-  created_at: z.string().nullable(),
-  sku_count: numeric,
-  satisfaction: numeric,
-});
-type Order = z.infer<typeof orderSchema>;
-type Line = z.infer<typeof lineSchema>;
-type Page<T> = { rows: T[]; total: number };
-type ReadState<T> =
-  | { kind: 'loading' }
-  | { kind: 'ready'; data: Page<T> }
-  | { kind: 'failed'; message: string };
 const text = (value: string | null) => value || '-';
 const qty = (value: number | null) =>
   value === null ? '-' : value.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : '订单读取失败，请重试';
-const orderKey = (row: Order) =>
-  JSON.stringify([row.warehouse_code, row.order_no, row.customer_code]);
 
-async function readPage<T>(
-  config: AgentSqlConfig,
-  queryId: string,
-  values: Record<string, unknown>,
-  schema: z.ZodType<T>,
-  page: number,
-  pageSize: number,
-  signal: AbortSignal,
-): Promise<Page<T>> {
-  const definition = config.queries[queryId];
-  const result = await createAgentQueries(config).read(
-    queryId,
-    { ...values, page_size: pageSize, offset: (page - 1) * pageSize },
-    { signal, requiredColumns: definition.resultColumns },
-  );
-  const unpacked = unpackAtomicPage(result, page, pageSize);
-  return { rows: z.array(schema).parse(unpacked.rows), total: unpacked.total };
+const orderLabels = [
+  '订单号',
+  '分仓',
+  '下游客户',
+  '订单日期',
+  'SKU个数',
+  '需求量（件）',
+  '分仓已占用（件）',
+  '剩余需求量（件）',
+  '缺货量（件）',
+  '状态',
+];
+const lineLabels = ['产品', '需求量（件）', '分仓已占用（件）', '剩余需求量（件）', '缺货量（件）'];
+const widthOf = (widths: Record<string, number>, label: string) =>
+  widths[label] ?? (['产品', '订单号', '下游客户'].includes(label) ? 220 : 140);
+function SelectionCheckbox({
+  mixed = false,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement> & { mixed?: boolean }) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = mixed;
+  }, [mixed]);
+  return <input {...props} type="checkbox" ref={ref} />;
 }
 
 function OrderLines({
@@ -87,6 +63,7 @@ function OrderLines({
 }) {
   const [page, setPage] = useState(1);
   const [state, setState] = useState<ReadState<Line>>({ kind: 'loading' });
+  const [widths, setWidths] = useState<Record<string, number>>({});
   useEffect(() => {
     const controller = new AbortController();
     setState({ kind: 'loading' });
@@ -120,33 +97,55 @@ function OrderLines({
         <p role="alert">{state.message}</p>
       ) : (
         <>
-          <table className="data-table">
-            <thead>
-              <tr>
-                {[
-                  '产品',
-                  '需求量（件）',
-                  '分仓已占用（件）',
-                  '剩余需求量（件）',
-                  '缺货量（件）',
-                ].map((label) => (
-                  <th key={label}>{label}</th>
+          <div className="table-scroll">
+            <table
+              className="data-table"
+              data-resizable
+              style={{
+                width: lineLabels.reduce((n, label) => n + widthOf(widths, label), 0),
+                minWidth: 0,
+              }}
+            >
+              <colgroup>
+                {lineLabels.map((label) => (
+                  <col key={label} style={{ width: widthOf(widths, label) }} />
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {state.data.rows.map((row) => (
-                <tr key={row.sku}>
-                  <td>
-                    {text(row.sku)} {text(row.material_name)}
-                  </td>
-                  {[row.demand, row.allocated, row.remaining, row.shortage].map((value, index) => (
-                    <td key={index}>{qty(value)}</td>
+              </colgroup>
+              <thead>
+                <tr>
+                  {lineLabels.map((label) => (
+                    <th
+                      key={label}
+                      scope="col"
+                      aria-label={label}
+                      style={{ width: widthOf(widths, label) }}
+                    >
+                      {label}
+                      <ColumnResizeHandle
+                        label={label}
+                        width={widthOf(widths, label)}
+                        onResize={(width) => setWidths((old) => ({ ...old, [label]: width }))}
+                      />
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {state.data.rows.map((row) => (
+                  <tr key={row.sku}>
+                    <td>
+                      {text(row.sku)} {text(row.material_name)}
+                    </td>
+                    {[row.demand, row.allocated, row.remaining, row.shortage].map(
+                      (value, index) => (
+                        <td key={index}>{qty(value)}</td>
+                      ),
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {!state.data.rows.length && <p>暂无订单明细。</p>}
           <PlanPagination
             ariaLabel="订单明细分页"
@@ -192,8 +191,89 @@ export function FcCurrentOrders({
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [state, setState] = useState<ReadState<Order>>({ kind: 'loading' });
   const [identityRevision, reloadIdentity] = useState(0);
+  const [widths, setWidths] = useState<Record<string, number>>({});
+  const [selection, setSelection] = useState<
+    { kind: 'selected'; keys: Set<string> } | { kind: 'all'; excluded: Set<string> }
+  >({ kind: 'selected', keys: new Set() });
+  const exportRequest = useRef<AbortController | null>(null);
+  const [exportState, setExportState] = useState<
+    { kind: 'idle' | 'loading' } | { kind: 'done' | 'failed'; message: string }
+  >({ kind: 'idle' });
+  const queryValues = useMemo(
+    () => ({
+      warehouse_code: warehouseCode || null,
+      warehouse_search_pattern: filters.warehouse.trim()
+        ? '%' + filters.warehouse.trim().replace(/[\\%_]/g, '\\$&') + '%'
+        : null,
+      customer_code: null,
+      search_pattern: filters.search.trim()
+        ? '%' + filters.search.trim().replace(/[\\%_]/g, '\\$&') + '%'
+        : null,
+      shortage_only: filters.shortageOnly,
+    }),
+    [warehouseCode, filters],
+  );
+  useEffect(() => {
+    setSelection({ kind: 'selected', keys: new Set() });
+    setExportState({ kind: 'idle' });
+    return () => {
+      exportRequest.current?.abort();
+    };
+  }, [config, warehouseCode, filters, revision, identityRevision]);
+  const selected = (row: Order) =>
+    selection.kind === 'selected'
+      ? selection.keys.has(orderKey(row))
+      : !selection.excluded.has(orderKey(row));
+  const selectRows = (rows: Order[], checked: boolean) =>
+    setSelection((previous) => {
+      if (previous.kind === 'selected') {
+        const keys = new Set(previous.keys);
+        for (const row of rows) {
+          if (checked) keys.add(orderKey(row));
+          else keys.delete(orderKey(row));
+        }
+        return { kind: 'selected', keys };
+      }
+      const excluded = new Set(previous.excluded);
+      for (const row of rows) {
+        if (checked) excluded.delete(orderKey(row));
+        else excluded.add(orderKey(row));
+      }
+      return { kind: 'all', excluded };
+    });
+  const selectedCount =
+    selection.kind === 'selected'
+      ? selection.keys.size
+      : Math.max(0, (state.kind === 'ready' ? state.data.total : 0) - selection.excluded.size);
+  const exportOrders = async (all: boolean) => {
+    if (exportRequest.current || state.kind !== 'ready') return;
+    const controller = new AbortController();
+    exportRequest.current = controller;
+    setExportState({ kind: 'loading' });
+    try {
+      const result = await readOrderExport(
+        config,
+        queryValues,
+        all ? { kind: 'all', excluded: new Set() } : selection,
+        controller.signal,
+      );
+      controller.signal.throwIfAborted();
+      downloadWorkbook(result.rows, '分仓当前订单产品明细.xlsx', '订单产品明细');
+      setExportState({
+        kind: 'done',
+        message: `已导出${result.orderCount}个订单、${result.lineCount}条产品明细`,
+      });
+    } catch (error: unknown) {
+      if (!controller.signal.aborted) setExportState({ kind: 'failed', message: errorText(error) });
+    } finally {
+      controller.abort();
+      if (exportRequest.current === controller) exportRequest.current = null;
+    }
+  };
+
   useEffect(() => {
     const clear = () => {
+      exportRequest.current?.abort();
       setState({ kind: 'loading' });
       setExpanded(new Set());
       setDraft({ ...empty, search: '' });
@@ -208,19 +288,10 @@ export function FcCurrentOrders({
     const controller = new AbortController();
     setState({ kind: 'loading' });
     setExpanded(new Set());
-    const escaped = filters.search.trim().replace(/[\\%_]/g, '\\$&');
     void readPage(
       config,
       'branch-current-orders.page',
-      {
-        warehouse_code: warehouseCode || null,
-        warehouse_search_pattern: filters.warehouse.trim()
-          ? '%' + filters.warehouse.trim().replace(/[\\%_]/g, '\\$&') + '%'
-          : null,
-        customer_code: null,
-        search_pattern: escaped ? `%${escaped}%` : null,
-        shortage_only: filters.shortageOnly,
-      },
+      queryValues,
       orderSchema,
       page,
       pageSize,
@@ -251,7 +322,7 @@ export function FcCurrentOrders({
         });
       });
     return () => controller.abort();
-  }, [config, warehouseCode, revision, filters, page, pageSize, identityRevision]);
+  }, [config, warehouseCode, revision, filters, page, pageSize, identityRevision, queryValues]);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setPage(1);
@@ -319,6 +390,43 @@ export function FcCurrentOrders({
           清空筛选
         </button>
       </LocalQueryForm>
+      <div className={css.exportToolbar}>
+        <button
+          type="button"
+          disabled={state.kind !== 'ready' || !state.data.total || exportState.kind === 'loading'}
+          onClick={() => setSelection({ kind: 'all', excluded: new Set() })}
+        >
+          全选筛选结果
+        </button>
+        <button
+          type="button"
+          disabled={!selectedCount || exportState.kind === 'loading'}
+          onClick={() => setSelection({ kind: 'selected', keys: new Set() })}
+        >
+          取消选择
+        </button>
+        <span>已选 {selectedCount} 个订单</span>
+        <button
+          type="button"
+          disabled={!selectedCount || state.kind !== 'ready' || exportState.kind === 'loading'}
+          onClick={() => void exportOrders(false)}
+        >
+          导出已选明细
+        </button>
+        <button
+          type="button"
+          disabled={state.kind !== 'ready' || !state.data.total || exportState.kind === 'loading'}
+          onClick={() => void exportOrders(true)}
+        >
+          导出全部明细
+        </button>
+        {exportState.kind === 'loading' && <span role="status">正在读取完整订单明细…</span>}
+        {'message' in exportState && (
+          <span role={exportState.kind === 'failed' ? 'alert' : 'status'}>
+            {exportState.message}
+          </span>
+        )}
+      </div>
       {state.kind === 'loading' ? (
         <DashboardTableSkeleton label="当前订单加载中" embedded />
       ) : state.kind === 'failed' ? (
@@ -328,29 +436,61 @@ export function FcCurrentOrders({
       ) : (
         <>
           <div className="table-scroll">
-            <table className="data-table">
+            <table
+              className="data-table"
+              data-resizable
+              style={{
+                width: 48 + orderLabels.reduce((n, label) => n + widthOf(widths, label), 0),
+                minWidth: 0,
+              }}
+            >
+              <colgroup>
+                <col style={{ width: 48 }} />
+                {orderLabels.map((label) => (
+                  <col key={label} style={{ width: widthOf(widths, label) }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr>
-                  {[
-                    '订单号',
-                    '分仓',
-                    '下游客户',
-                    '订单日期',
-                    'SKU个数',
-                    '需求量（件）',
-                    '分仓已占用（件）',
-                    '剩余需求量（件）',
-                    '缺货量（件）',
-                    '状态',
-                  ].map((label) => (
-                    <th key={label}>{label}</th>
+                  <th className={css.selection}>
+                    <SelectionCheckbox
+                      aria-label="全选本页订单"
+                      checked={state.data.rows.length > 0 && state.data.rows.every(selected)}
+                      mixed={state.data.rows.some(selected) && !state.data.rows.every(selected)}
+                      onChange={(event) => selectRows(state.data.rows, event.target.checked)}
+                    />
+                  </th>
+                  {orderLabels.map((label) => (
+                    <th
+                      key={label}
+                      scope="col"
+                      aria-label={label}
+                      style={{ width: widthOf(widths, label) }}
+                    >
+                      {label}
+                      <ColumnResizeHandle
+                        label={label}
+                        width={widthOf(widths, label)}
+                        onResize={(width) => setWidths((old) => ({ ...old, [label]: width }))}
+                      />
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {state.data.rows.map((row) => (
                   <React.Fragment key={orderKey(row)}>
-                    <tr>
+                    <tr
+                      aria-selected={selected(row)}
+                      className={selected(row) ? css.selectedRow : undefined}
+                    >
+                      <td className={css.selection}>
+                        <SelectionCheckbox
+                          aria-label={`选择订单${row.order_no}`}
+                          checked={selected(row)}
+                          onChange={(event) => selectRows([row], event.target.checked)}
+                        />
+                      </td>
                       <td>
                         <button
                           type="button"
@@ -399,8 +539,8 @@ export function FcCurrentOrders({
                       </td>
                     </tr>
                     {expanded.has(orderKey(row)) && (
-                      <tr>
-                        <td colSpan={10}>
+                      <tr className="detail-row">
+                        <td colSpan={11}>
                           <OrderLines config={config} order={row} revision={revision} />
                         </td>
                       </tr>
@@ -408,6 +548,23 @@ export function FcCurrentOrders({
                   </React.Fragment>
                 ))}
               </tbody>
+              {state.data.totals && (
+                <tfoot aria-label="当前筛选合计">
+                  <tr>
+                    <td>-</td>
+                    <td>合计</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>{qty(state.data.totals.sku_count)}</td>
+                    <td>{qty(state.data.totals.demand)}</td>
+                    <td>{qty(state.data.totals.allocated)}</td>
+                    <td>{qty(state.data.totals.remaining)}</td>
+                    <td>{qty(state.data.totals.shortage)}</td>
+                    <td>-</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
           {!state.data.rows.length && <p>暂无未发货完成订单。</p>}

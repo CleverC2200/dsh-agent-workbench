@@ -498,3 +498,88 @@ test('Shanghai business-day rollover selects a new batch without a manual refres
   batch = '20261104083642623642';
   assert.equal((await createAgentQueries(cfg, execute).read('fact', {})).rows[0].value, batch);
 });
+
+test('category stock age keeps its snapshot date while actual movement follows the business-day window', () => {
+  const values = {
+    stat_date: '2026-11-01',
+    batch_rolling_start: '20261004',
+    batch_end_exclusive: '20261103',
+  };
+  assert.equal(dailySummaryQuery(route('age-movement'), snapshot, values).queryId, 'snapshot.fact');
+  assert.equal(dailySummaryQuery(route('age'), snapshot, values), null);
+  assert.equal(
+    dailySummaryQuery(route('age-movement'), snapshot, {
+      ...values,
+      batch_rolling_start: '20261003',
+      batch_end_exclusive: '20261102',
+    }),
+    null,
+  );
+  assert.equal(
+    dailySummaryQuery(route('age-movement'), snapshot, { ...values, stat_date: '2026-10-31' }),
+    null,
+  );
+});
+
+test('unavailable metadata coalesces initial readers and recovers after a short fixed retry window', async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  let available = false,
+    snapshotReads = 0;
+  const execute = async (request, options) => {
+    if (options.queryId === 'summary.snapshot') {
+      snapshotReads++;
+      return { rows: available ? [row] : [] };
+    }
+    return { rows: [{ value: request.parameters.gea_p1 }] };
+  };
+  const cfg = config();
+  assert.deepEqual(await createAgentQueries(cfg, execute).snapshot(), { kind: 'unavailable' });
+  available = true;
+  now += 44999;
+  assert.deepEqual(await createAgentQueries(cfg, execute).snapshot(), { kind: 'unavailable' });
+  assert.equal(snapshotReads, 1, 'one initial load must not repeat an empty bootstrap');
+  now += 1;
+  assert.equal((await createAgentQueries(cfg, execute).snapshot()).kind, 'ready');
+  assert.equal(snapshotReads, 2);
+});
+
+test('explicit refresh bypasses the unavailable metadata retry window immediately', async () => {
+  let available = false;
+  const execute = async () => ({ rows: available ? [row] : [] });
+  const cfg = config();
+  assert.equal(
+    (await createAgentQueries(cfg, execute, { freshAfter: 1 }).snapshot()).kind,
+    'unavailable',
+  );
+  available = true;
+  assert.equal(
+    (await createAgentQueries(cfg, execute, { freshAfter: 2 }).snapshot()).kind,
+    'ready',
+  );
+});
+
+test('a new branch read obtains a fresh batch at five minutes while an active read stays coherent', async (t) => {
+  let now = Date.now(),
+    batch = row.batch_id,
+    reads = 0;
+  t.mock.method(Date, 'now', () => now);
+  const cfg = { ...config(), agentId: 'inventory-fc' };
+  const execute = async (request, options) => {
+    if (options.queryId === 'summary.snapshot') {
+      reads++;
+      return { rows: [{ ...row, batch_id: batch }] };
+    }
+    return { rows: [{ value: request.parameters.gea_p1 }] };
+  };
+  const active = createAgentQueries(cfg, execute);
+  await active.read('fact', {});
+  now += 5 * 60 * 1000 - 1;
+  await createAgentQueries(cfg, execute).read('fact', {});
+  assert.equal(reads, 1);
+  now++;
+  batch = '20261102190000000000';
+  assert.equal((await createAgentQueries(cfg, execute).read('fact', {})).rows[0].value, batch);
+  assert.equal((await active.read('fact', {})).rows[0].value, row.batch_id);
+  assert.equal(reads, 2);
+});

@@ -4,7 +4,10 @@ import {
   computeWorkbenchMetrics,
   stockDaily,
 } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
-import { changesSql } from '../business/inventory-orderworkbench/document-queries.mjs';
+import {
+  changesSql,
+  amendmentChangesSql,
+} from '../business/inventory-orderworkbench/document-queries.mjs';
 import { workbenchQueries } from '../business/inventory-orderworkbench/queries.mjs';
 import { workbenchCellMissingReason } from '../prototypes/inventory-orderworkbench/missing-reasons.mjs';
 import {
@@ -136,7 +139,7 @@ test('factory and rented warehouses share the Hive age scope and unknown source 
   assert.equal(workbenchQueries.ages.scoped, true);
   assert.match(
     workbenchQueries.ages.sql,
-    /WHERE \(:gea_p900='' OR b.belong_base=:gea_p900\) AND b.dt/,
+    /WHERE \(:gea_p900='' OR CASE WHEN TRIM\(COALESCE\(NULLIF\(TRIM\(b.belong_base\),''\),snapshot_warehouse.base\)\)[\s\S]*?=:gea_p900\) AND b.dt/,
   );
 });
 
@@ -181,7 +184,8 @@ test('director historical comparisons use the matching period owner, not the lat
     (row) => row[0] === '甲',
   );
   assert.equal(row[9].text, '10.00');
-  assert.equal(row[10], '—');
+  assert.equal(row[10].text, '—');
+  assert.match(row[10].title, /比较期.*stock/);
 });
 test('base and item formulas retain documented weights instead of fitting the screenshot', () => {
   const p = stockPeriod([{ ...stock, transfer_plan: 620 }]);
@@ -203,11 +207,12 @@ test('split child creation times do not invalidate the original order and groupi
     changesSql.indexOf('GROUP BY cust_code,cust_order_no') <
       changesSql.indexOf('WHERE h.created>=:gea_p1'),
   );
-  assert.doesNotMatch(changesSql, /AND header_addtime>=:gea_p1/);
+  assert.match(amendmentChangesSql, /AND header_addtime>=:gea_p1/);
 });
-test('historical cutoffs retain uncertainty rather than including later amendments or guessing cancellation times', () => {
-  assert.match(changesSql, /changed>=locked AND changed<:gea_p2/);
-  assert.match(changesSql, /changed>=:gea_p2 OR invalid_lock>0/);
+test('amendments use only the creation cohort while cancellation retains its existing cutoff', () => {
+  assert.match(amendmentChangesSql, /changed>=locked/);
+  assert.doesNotMatch(amendmentChangesSql, /changed<:gea_p2|changed>=:gea_p2/);
+  assert.match(changesSql, /changed>=locked THEN ABS\(requested_qty-effective_qty\)/);
   assert.match(changesSql, /cancelled IS NULL OR cancel_conflict>0/);
   assert.doesNotMatch(changesSql, /COALESCE\(cancelled/);
 });

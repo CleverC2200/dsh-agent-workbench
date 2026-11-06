@@ -53,17 +53,23 @@ export function projectFcPlannedRows(
       ].some((key) => (knownNumber(row[key]) ?? 0) > 0)
     );
   });
+  return sortFcReplenishmentRows(filtered, input, viewId);
+}
+
+/** Confirmation reads may use a materialized key order; present them in the list's order. */
+export function sortFcReplenishmentRows(rows: FcRow[], input: FactInput, viewId = 'replenishment') {
+  const filters = input.filters ?? {};
+  const query = filters.search?.trim() ?? '';
+  const mode = filters.list_mode ?? 'all';
   const field =
-    !query && viewId === 'replenishment' && mode === 'urgent'
+    filters.sort_field ??
+    (!query && viewId === 'replenishment' && mode === 'urgent'
       ? 'current_order_shortage'
-      : !query && viewId === 'replenishment' && mode === 'recommended'
+      : viewId === 'replenishment'
         ? 'recommended_qty'
-        : (filters.sort_field ?? (viewId === 'replenishment' ? 'recommended_qty' : 'sku'));
-  const direction =
-    !query && viewId === 'replenishment' && ['urgent', 'recommended'].includes(mode)
-      ? 'desc'
-      : (filters.sort_direction ?? (viewId === 'replenishment' ? 'desc' : 'asc'));
-  return filtered.sort((a, b) => {
+        : 'sku');
+  const direction = filters.sort_direction ?? (viewId === 'replenishment' ? 'desc' : 'asc');
+  return [...rows].sort((a, b) => {
     const left = a[field],
       right = b[field];
     if (left == null) return right == null ? tie(a, b) : 1;
@@ -95,21 +101,27 @@ function tie(a: FcRow, b: FcRow) {
   );
 }
 
+function listTotals(rows: FcRow[], fields: string[]) {
+  return Object.fromEntries(
+    fields.map((field) => {
+      const values = rows.map((row) => knownNumber(row[field])).filter((value) => value !== null);
+      return [
+        field,
+        rows.length === 0
+          ? 0
+          : values.length
+            ? values.reduce((sum, value) => sum + value, 0)
+            : null,
+      ];
+    }),
+  );
+}
+
 /** Normal reads stay server-paged. Only active manual plans require a whole-scope recalculation. */
 export function fcPlannedReader(plans: ImportedPlan[]): typeof readConfiguredFacts {
   return async (config, viewId, input, options = {}) => {
     if (!plans.length || !['replenishment', 'plan'].includes(viewId) || options.summaryOnly)
       return readConfiguredFacts(config, viewId, input, options);
-    if (viewId === 'plan') {
-      const page = await readConfiguredFacts(config, viewId, input, options);
-      options.signal?.throwIfAborted();
-      return {
-        ...page,
-        rows: page.rows.map((row: FcRow) =>
-          applyFcPlan(row, plans, input.asOf, input.cycleDays ?? 7),
-        ),
-      };
-    }
     const filters = Object.fromEntries(
       Object.entries(input.filters ?? {}).filter(
         ([key]) => !['list_mode', 'sort_field', 'sort_direction'].includes(key),
@@ -146,6 +158,7 @@ export function fcPlannedReader(plans: ImportedPlan[]): typeof readConfiguredFac
       ...first,
       status: rows.length ? 'available' : 'empty',
       total: rows.length,
+      tableSummary: listTotals(rows, Object.keys(first.tableSummary ?? {})),
       rows: rows.slice((page - 1) * pageSize, page * pageSize),
       readContext: undefined,
     };

@@ -25,6 +25,24 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
   return function SourceDiagnostics({ draft, result, table }) {
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = react.useState(0);
+    const products = new Map();
+    for (const row of ['loading', 'failed'].includes(draft.productsRead?.status)
+      ? []
+      : (draft.products ?? [])) {
+      const code = text(row['产品编码']);
+      if (code) products.set(code, [...(products.get(code) ?? []), row]);
+    }
+    const productFields = ['产品名称', '大类', '系列', '物料组', '物料组名称'];
+    const productDetail = (row) => {
+      const candidates = products.get(text(row['产品编码'])) ?? [];
+      return Object.fromEntries(
+        productFields.map((field) => {
+          const values = new Set(candidates.map((product) => text(product[field])));
+          const unique = values.size === 1 && !values.has('') ? [...values][0] : '';
+          return [field, text(row[field]) || unique];
+        }),
+      );
+    };
     const diagnostics = ['report', 'history'].flatMap((source) =>
       result.months.slice(0, 3).map((month) => {
         const fiscal = previousFiscalYear(month);
@@ -123,13 +141,14 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
         };
         const detailColumns = [
           '月份',
-          ...(source === 'report' ? ['大区'] : []),
+          ...(source === 'report' && !sales ? ['大区'] : []),
           '基地',
           '产品编码',
           '产品名称',
           '大类',
           '系列',
           '物料组',
+          '物料组名称',
           ...(sales
             ? ['当前维度计划量']
             : source === 'report'
@@ -138,25 +157,41 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
           '当前口径',
           '当前数量状态',
           '产品池匹配',
+          '缺项说明',
           '读取状态',
         ];
         return {
           id: source + month,
           summary,
           detailColumns,
-          records: records.map((row) => ({
-            ...row,
-            ...(source === 'report' && !sales
-              ? {
-                  源月初数量: row['源月初数量'] ?? row['月初数量'],
-                  源纠偏数量: row['源纠偏数量'] ?? row['纠偏数量'],
-                }
-              : {}),
-            当前口径: column,
-            当前数量状态: usable(quantity(row)) ? '数量可用' : '缺数量',
-            产品池匹配: !hasKey(row) ? '缺业务键' : matched(row) ? '池内' : '池外',
-            读取状态: readLabel,
-          })),
+          records: [...records]
+            .sort((a, b) => Number(matched(b)) - Number(matched(a)))
+            .map((row) => {
+              const detail = productDetail(row);
+              return {
+                ...row,
+                ...detail,
+                ...(source === 'report' && !sales
+                  ? {
+                      源月初数量: row['源月初数量'] ?? row['月初数量'],
+                      源纠偏数量: row['源纠偏数量'] ?? row['纠偏数量'],
+                    }
+                  : {}),
+                当前口径: column,
+                当前数量状态: usable(quantity(row)) ? '数量可用' : '缺数量',
+                产品池匹配: !hasKey(row) ? '缺业务键' : matched(row) ? '池内' : '池外',
+                缺项说明: [
+                  !text(row['基地']) ? '源数据缺基地' : '',
+                  !text(row['产品编码']) ? '源数据缺产品编码' : '',
+                  ...['大类', '系列', '物料组']
+                    .filter((field) => !detail[field])
+                    .map((field) => `${field}未能唯一匹配当前产品清单`),
+                ]
+                  .filter(Boolean)
+                  .join('；'),
+                读取状态: readLabel,
+              };
+            }),
         };
       }),
     );
@@ -226,7 +261,7 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
           h(
             'p',
             null,
-            `读取状态：${selected.summary['读取状态']}；${selected.summary['原因'] || '按当前产品池与口径核对'}。`,
+            `读取状态：${selected.summary['读取状态']}；${selected.summary['原因'] || '按当前产品池与口径核对'}。池内源行${selected.summary['池内源行'] ?? '—'}条，缺基地或产品编码${selected.summary['缺业务键源行'] ?? '—'}条，池外${selected.summary['池外源行'] ?? '—'}条。优先展示池内明细，产品分类按编码补充当前产品清单的唯一对应值，缺基地的源行不能参与基地单品计算。`,
           ),
           table(
             '来源明细',
@@ -235,7 +270,11 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
               .slice(page * 25, (page + 1) * 25)
               .map((row) =>
                 selected.detailColumns.map((column) =>
-                  row[column] == null || row[column] === '' ? '—' : String(row[column]),
+                  column === '基地' && !text(row[column])
+                    ? '源数据缺基地'
+                    : row[column] == null || row[column] === ''
+                      ? '—'
+                      : String(row[column]),
                 ),
               ),
           ),

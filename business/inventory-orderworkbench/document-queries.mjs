@@ -1,3 +1,6 @@
+import { createOntimeQueries } from './ontime-queries.mjs';
+export { ontimeTraceHeadersSql } from './ontime-queries.mjs';
+import { skuAmendmentEventsSql, aggregateAmendmentSql } from './sku-amendments.mjs';
 // A refresh can empty the hourly table, and its retention does not cover history.
 // Prefer a whole hourly execution header, including cancelled/excluded rows, so
 // the daily snapshot cannot resurrect obsolete SKU membership or order status.
@@ -38,7 +41,7 @@ export const orderEventRowsSql = `SELECT h.cust_code,h.cust_order_no,h.belong_ba
   FROM ${dailySource}
   WHERE (:gea_p900='' OR d.belong_base=:gea_p900) AND ${dailyOnly}`;
 
-const orderHeaders = `SELECT cust_code,cust_order_no,
+const headersFor = (eventRowsSql) => `SELECT cust_code,cust_order_no,
   MAX(region_name) AS region,MAX(province_region_name) AS province,MAX(cust_name) AS name,
   MIN(header_addtime) AS created,MAX(requireddeliverytime) AS delivery,
   CASE WHEN COUNT(header_addtime)=COUNT(*)
@@ -50,53 +53,111 @@ const orderHeaders = `SELECT cust_code,cust_order_no,
   CASE WHEN MIN(orderstatus)=90 AND MAX(orderstatus)=90 THEN 90 ELSE MAX(CASE WHEN orderstatus<>90 THEN orderstatus END) END AS status,
   MAX(canceltime) AS cancelled,MAX(custchangetime) AS changed,
   CASE WHEN COUNT(DISTINCT canceltime)>1 THEN 1 ELSE 0 END AS cancel_conflict
-  FROM (${orderEventRowsSql}) event_rows
+  FROM (${eventRowsSql}) event_rows
   WHERE (:gea_p900='' OR belong_base=:gea_p900)
   GROUP BY cust_code,cust_order_no`;
 
-const lockedHeaders = `SELECT h.cust_code,h.cust_order_no,h.name,h.region,h.province,h.created,h.delivery,
+const orderHeaders = headersFor(orderEventRowsSql);
+const lockHeaders = (
+  headersSql,
+) => `SELECT h.cust_code,h.cust_order_no,h.name,h.region,h.province,h.created,h.delivery,
   h.invalid_header,h.invalid_lock,h.status,h.cancelled,h.changed,h.cancel_conflict,
   CASE WHEN delivery<=created + INTERVAL '7' DAY THEN created + INTERVAL '12' HOUR
     ELSE delivery - INTERVAL '7' DAY END AS locked
-  FROM (${orderHeaders}) h
+  FROM (${headersSql}) h
   WHERE h.created>=:gea_p1 AND h.created<:gea_p2`;
 
+const lockedHeaders = lockHeaders(orderHeaders);
+const dailyAmendmentHeaders = lockHeaders(
+  headersFor(`SELECT cust_code,cust_order_no,belong_base,
+  region_name,province_region_name,cust_name,header_addtime,requireddeliverytime,orderstatus,
+  canceltime,custchangetime FROM agents_scm_execute_detail_d
+  WHERE (:gea_p900='' OR belong_base=:gea_p900)
+    AND header_addtime>=:gea_p1 AND header_addtime<:gea_p2`),
+);
+
 const events = `SELECT cust_code,cust_order_no,name,region,province,
-  CASE WHEN status=90 AND cancelled<:gea_p2 AND cancelled<created + INTERVAL '12' HOUR THEN 0 ELSE 1 END AS cancel_denominator,
-  CASE WHEN status=90 AND cancelled<:gea_p2 AND cancelled>=locked AND cancelled>=created + INTERVAL '12' HOUR THEN 1 ELSE 0 END AS cancel_numerator,
-  CASE WHEN status<>90 OR cancelled>=:gea_p2 THEN 1 ELSE 0 END AS change_denominator,
-  CASE WHEN (status<>90 OR cancelled>=:gea_p2) AND changed>=locked AND changed<:gea_p2 THEN 1 ELSE 0 END AS change_numerator,
+  CASE WHEN status=90 AND cancelled<:gea_p2 AND cancelled<=created + INTERVAL '12' HOUR THEN 0 ELSE 1 END AS cancel_denominator,
+  CASE WHEN status=90 AND cancelled<:gea_p2 AND cancelled>=locked AND cancelled>created + INTERVAL '12' HOUR THEN 1 ELSE 0 END AS cancel_numerator,
   CASE WHEN invalid_header>0 OR (status=90 AND (cancelled IS NULL OR cancel_conflict>0 OR cancelled<created
-    OR (cancelled<:gea_p2 AND invalid_lock>0))) THEN 1 ELSE 0 END AS invalid_cancel,
-  CASE WHEN invalid_header>0 OR (status=90 AND cancelled IS NULL)
-    OR ((status<>90 OR cancelled>=:gea_p2) AND changed IS NOT NULL
-      AND (changed<created OR changed>=:gea_p2 OR invalid_lock>0)) THEN 1 ELSE 0 END AS invalid_change
+    OR (cancelled<:gea_p2 AND invalid_lock>0))) THEN 1 ELSE 0 END AS invalid_cancel
   FROM (${lockedHeaders}) locked_orders`;
 
-/** The original region/customer tables now receive order counts, not quantities. */
-export const changesSql =
-  `WITH change_events AS (${events}) ` +
-  [
-    ['1', 'cancel'],
-    ['2', 'change'],
-  ]
-    .map(
-      ([kind, field]) => `SELECT '${kind}' AS kind,region,province,
-  CASE WHEN SUM(invalid_${field})=0 THEN SUM(${field}_numerator) END AS numerator,
-  CASE WHEN SUM(invalid_${field})=0 THEN SUM(${field}_denominator) END AS denominator,
-  SUM(CASE WHEN invalid_${field}=0 THEN ${field}_numerator ELSE 0 END) AS sample_numerator,
-  SUM(CASE WHEN invalid_${field}=0 THEN ${field}_denominator ELSE 0 END) AS sample_denominator,
-  SUM(CASE WHEN invalid_${field}=0 THEN 1 ELSE 0 END) AS sample_records,
-  COUNT(*) AS records,SUM(invalid_${field}) AS invalid
-  FROM change_events order_events GROUP BY region,province`,
-    )
-    .join(' UNION ALL ');
+export const amendmentEventsSql = skuAmendmentEventsSql({
+  headers: dailyAmendmentHeaders,
+});
 
-export const customersSql = `SELECT region,province,cust_code AS customer,MAX(name) AS name,
-  CASE WHEN SUM(invalid_change)=0 THEN SUM(change_numerator) END AS numerator,
-  CASE WHEN SUM(invalid_change)=0 THEN SUM(change_denominator) END AS denominator,
-  COUNT(*) AS records,SUM(invalid_change) AS invalid
-  FROM (${events}) order_events GROUP BY region,province,cust_code`;
+export const amendmentCohortSql = skuAmendmentEventsSql({
+  headers: dailyAmendmentHeaders,
+  stage: 'cohort',
+});
+export const amendmentClassifiedSql = skuAmendmentEventsSql({
+  headers: dailyAmendmentHeaders,
+  stage: 'classified',
+});
+
+export const cancellationChangesSql = `SELECT '1' AS kind,region,province,
+  CASE WHEN SUM(invalid_cancel)=0 THEN SUM(cancel_numerator) END AS numerator,
+  CASE WHEN SUM(invalid_cancel)=0 THEN SUM(cancel_denominator) END AS denominator,
+  SUM(CASE WHEN invalid_cancel=0 THEN cancel_numerator ELSE 0 END) AS sample_numerator,
+  SUM(CASE WHEN invalid_cancel=0 THEN cancel_denominator ELSE 0 END) AS sample_denominator,
+  SUM(CASE WHEN invalid_cancel=0 THEN 1 ELSE 0 END) AS sample_records,
+  0 AS unknown_quantity,
+  COUNT(*) AS records,SUM(invalid_cancel) AS invalid
+  FROM (${events}) order_events GROUP BY region,province`;
+export const amendmentChangesSql = aggregateAmendmentSql(amendmentEventsSql);
+export const changesSql = cancellationChangesSql + ' UNION ALL ' + amendmentChangesSql;
+export const customersSql = aggregateAmendmentSql(amendmentEventsSql, true);
+
+export function periodChangesSql() {
+  const withoutPeriod = 'WHERE h.created>=:gea_p1 AND h.created<:gea_p2';
+  const cancellationHeaders = lockedHeaders.replace(withoutPeriod, '');
+  const cancellationEvents = events
+    .replace(
+      `FROM (${lockedHeaders}) locked_orders`,
+      'FROM period_cancel_headers locked_orders INNER JOIN report_windows rw ON rw.enabled=TRUE AND created>=rw.start_date AND created<rw.end_date',
+    )
+    .replace('SELECT cust_code,cust_order_no,', 'SELECT rw.period_index,cust_code,cust_order_no,')
+    .replaceAll(':gea_p2', 'rw.end_date');
+  const cancellation = cancellationChangesSql
+    .replace("SELECT '1' AS kind", "SELECT period_index,'1' AS kind")
+    .replace(
+      `FROM (${events}) order_events GROUP BY region,province`,
+      'FROM period_cancel_events order_events GROUP BY period_index,region,province',
+    );
+  const headerFields = [
+    'cust_code',
+    'cust_order_no',
+    'belong_base',
+    'region_name',
+    'province_region_name',
+    'cust_name',
+    'header_addtime',
+    'requireddeliverytime',
+    'orderstatus',
+    'canceltime',
+    'custchangetime',
+  ];
+  const rows = `SELECT rw.period_index,${headerFields.map((field) => 'd.' + field).join(',')}
+    FROM agents_scm_execute_detail_d d INNER JOIN report_windows rw
+      ON rw.enabled=TRUE AND d.header_addtime>=rw.start_date AND d.header_addtime<rw.end_date
+    WHERE (:gea_p900='' OR d.belong_base=:gea_p900)`;
+  const headers = headersFor(rows)
+    .replace('SELECT cust_code,cust_order_no,', 'SELECT period_index,cust_code,cust_order_no,')
+    .replace('GROUP BY cust_code,cust_order_no', 'GROUP BY period_index,cust_code,cust_order_no');
+  const locked = lockHeaders(headers)
+    .replace('SELECT h.cust_code,', 'SELECT h.period_index,h.cust_code,')
+    .replace(withoutPeriod, '');
+  const amendment = aggregateAmendmentSql(
+    skuAmendmentEventsSql({ headers: locked, periods: true }),
+    false,
+    true,
+  );
+  return {
+    ctes: `period_cancel_headers AS (${cancellationHeaders}),period_cancel_events AS (${cancellationEvents})`,
+    sql: cancellation + ' UNION ALL ' + amendment,
+  };
+}
 
 // Collapse the latest header observation before joining any product quantities.
 export const traceHeadersSql = `SELECT t.executeorderno,t.cust_code,
@@ -131,6 +192,17 @@ export const executionProductsSql = `SELECT cust_order_no,cust_code,material_cod
   WHERE detailstatus=10 AND is_stat='1' AND (:gea_p900='' OR belong_base=:gea_p900)
   GROUP BY cust_order_no,cust_code,material_code,executeorderno,belong_base,detailstatus`;
 
+const fulfillmentCohort = `SELECT fromorderno,cust_code,new_material_code
+  FROM agents_order_execute_isontime_mi
+  WHERE exp_flag='否' AND (order_qty_origin>0 OR need_qty_origin>0)
+    AND (:gea_p900='' OR belong_base=:gea_p900)
+  GROUP BY fromorderno,cust_code,new_material_code
+  HAVING MAX(fromorderno_month)>=:gea_p1 AND MIN(fromorderno_month)<:gea_p2`;
+const fulfillmentKey = (field) =>
+  `CASE WHEN ${field} IS NULL THEN 'N' ELSE CONCAT('V',${field}) END`;
+const fulfillmentCohortJoin = ['fromorderno', 'cust_code', 'new_material_code']
+  .map((field) => `${fulfillmentKey('source.' + field)}=${fulfillmentKey('cohort.' + field)}`)
+  .join(' AND ');
 const mergedProducts = `SELECT fromorderno,cust_code,new_material_code AS sku,
   MAX(belong_base) AS base,MAX(product_categ_name) AS category,MAX(pinxiang) AS item,
   MAX(new_material_name) AS name,MAX(need_qty_origin) AS demand,MAX(qtyshipped) AS sent,
@@ -139,11 +211,11 @@ const mergedProducts = `SELECT fromorderno,cust_code,new_material_code AS sku,
     AND COUNT(fromorderno_month)=1 AND MAX(need_qty_origin)>=0 AND MAX(qtyshipped)>=0
     AND NULLIF(TRIM(fromorderno),'') IS NOT NULL AND NULLIF(TRIM(cust_code),'') IS NOT NULL
     AND NULLIF(TRIM(new_material_code),'') IS NOT NULL THEN 0 ELSE 1 END AS invalid
-  FROM (SELECT DISTINCT fromorderno,cust_code,new_material_code,belong_base,product_categ_name,pinxiang,
-    new_material_name,need_qty_origin,qtyshipped,executeorderno,fromorderno_month
-    FROM agents_order_execute_isontime_mi
-    WHERE exp_flag='否' AND (order_qty_origin>0 OR need_qty_origin>0)
-      AND (:gea_p900='' OR belong_base=:gea_p900)) cleaned
+  FROM (SELECT DISTINCT source.fromorderno,source.cust_code,source.new_material_code,source.belong_base,source.product_categ_name,source.pinxiang,
+    source.new_material_name,source.need_qty_origin,source.qtyshipped,source.executeorderno,source.fromorderno_month
+    FROM agents_order_execute_isontime_mi source INNER JOIN (${fulfillmentCohort}) cohort ON ${fulfillmentCohortJoin}
+    WHERE source.exp_flag='否' AND (source.order_qty_origin>0 OR source.need_qty_origin>0)
+      AND (:gea_p900='' OR source.belong_base=:gea_p900)) cleaned
   GROUP BY fromorderno,cust_code,new_material_code`;
 
 // The fulfillment source also declares its exact child executions (comma list).
@@ -177,35 +249,22 @@ export const ordersSql = `SELECT m.base,m.category,m.item,m.sku,MAX(m.name) AS n
   WHERE m.period_end>=:gea_p1 AND m.period_start<:gea_p2
   GROUP BY m.base,m.category,m.item,m.sku`;
 
-const arrivedOrders = `SELECT h.cust_order_no,h.cust_code,
-  CASE WHEN COUNT(t.arrived)=COUNT(*) AND COUNT(t.deadline)=COUNT(*)
-    THEN MIN(CASE WHEN t.arrived<=t.deadline THEN 1 ELSE 0 END) END AS ontime,
-  MAX(t.arrived) AS arrival_date,
-  CASE WHEN COUNT(t.arrived)=COUNT(*) AND COUNT(t.deadline)=COUNT(*)
-    THEN 0 ELSE 1 END AS invalid
-  FROM (${executionProductsSql}) h LEFT JOIN (${traceHeadersSql}) t
-    ON t.executeorderno=h.executeorderno AND t.cust_code=h.cust_code
-  GROUP BY h.cust_order_no,h.cust_code
-  HAVING MAX(t.arrived)>=:gea_p1 AND MAX(t.arrived)<:gea_p2`;
-
-/** Repeat the whole-order verdict, never count one order once per SKU. */
-const tupleSql = (fields) =>
-  fields.map((field) => `LENGTH(COALESCE(${field},'')),':',COALESCE(${field},'')`).join(',');
-const memberFields = ['h.belong_base', 'd.product_categ_name', 'h.product_item', 'h.material_code'];
-const memberTuple = tupleSql(memberFields);
-const ontimeSources = `FROM (${executionProductsSql}) h INNER JOIN (${arrivedOrders}) a
-    ON a.cust_order_no=h.cust_order_no AND a.cust_code=h.cust_code
-  LEFT JOIN (SELECT material_code,CASE WHEN COUNT(DISTINCT product_categ_name)=1 THEN MAX(product_categ_name) END AS product_categ_name
-    FROM agents_scm_material_in_out_summary_d GROUP BY material_code) d ON d.material_code=h.material_code`;
-export const ontimeSql = `SELECT h.cust_order_no AS order_no,h.cust_code AS customer,
-  MAX(a.ontime) AS ontime,MAX(a.arrival_date) AS arrival_date,MAX(a.invalid) AS invalid,
-  ARRAY_AGG(CONCAT(${memberTuple})) AS members
-  ${ontimeSources} GROUP BY h.cust_order_no,h.cust_code`;
-
-// Pack flat members without changing the whole-order verdict or its customer key.
-export const ontimeSummarySql = `WITH ontime_products AS (${executionProductsSql}),
-  ontime_traces AS (${traceHeadersSql}),
-  ontime_arrivals AS (${arrivedOrders.replace(`(${executionProductsSql})`, 'ontime_products').replace(`(${traceHeadersSql})`, 'ontime_traces')})
-  SELECT h.belong_base AS base,a.invalid,a.ontime,
-  ARRAY_AGG(CONCAT(${tupleSql(['h.cust_order_no', 'h.cust_code', 'CAST(a.arrival_date AS CHAR)', ...memberFields])})) AS packed_orders
-  ${ontimeSources.replace(`(${executionProductsSql})`, 'ontime_products').replace(`(${arrivedOrders})`, 'ontime_arrivals')} GROUP BY h.belong_base,a.invalid,a.ontime`;
+// Virtual codes use OMS details, not the normalized trace label.
+export const ontimeExecutionProductsSql = `SELECT cust_order_no,cust_code,material_code,executeorderno,
+  belong_base,detailstatus,
+  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(product_item),''))=1 THEN MAX(NULLIF(TRIM(product_item),'')) END AS product_item,
+  MAX(CASE WHEN is_virtual IN (1,2) THEN 1 ELSE 0 END) AS virtual_excluded
+  FROM (${executionRows
+    .replace(
+      'belong_base,detailstatus,is_stat,product_item FROM',
+      'belong_base,detailstatus,is_stat,product_item,is_virtual FROM',
+    )
+    .replace(
+      'd.belong_base,d.detailstatus,d.is_stat,d.product_item FROM',
+      'd.belong_base,d.detailstatus,d.is_stat,d.product_item,d.is_virtual FROM',
+    )}) execution_rows
+  WHERE detailstatus=10 AND is_stat='1' AND (:gea_p900='' OR belong_base=:gea_p900)
+  GROUP BY cust_order_no,cust_code,material_code,executeorderno,belong_base,detailstatus`;
+export const { ontimeSql, ontimeSummarySql, ontimePeriodSummarySql } = createOntimeQueries(
+  ontimeExecutionProductsSql,
+);

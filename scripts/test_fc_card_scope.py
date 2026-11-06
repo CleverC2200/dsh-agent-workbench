@@ -18,7 +18,7 @@ class BranchCardScope(unittest.TestCase):
   self.f.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='BASE',warehouse_classify='01',material_code='S1',live_qty=100,available_qty=100)
   for w in ['BASE','UNKNOWN']:
    self.f.insert('agents_scm_warehouse_transfer_plan_data_d',warehouseid=w,material_code='S1',warehouse_name=w,stat_month='202610',warehouse_month_out_plan=310,warehouse_future30_qty=300,warehouse_transfer_qty=1000000,transfer_onway_qty=900000,transfer_prepare_qty=100000)
-  # These fixtures contain only plan totals, with no active transfer execution.
+  # Foreign and unclassified warehouses do not contribute reported transfer quantities.
   row=self.f.read('replenishment.summary')[0]
   self.assertEqual((row['warehouse_count'],row['known_in_transit'],row['known_preparing']),(1,0,0))
   detail=self.f.read('replenishment.detail');self.assertEqual({r['warehouse_code'] for r in detail},{'WH1'})

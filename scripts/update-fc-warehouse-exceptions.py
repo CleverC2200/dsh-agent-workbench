@@ -1,29 +1,41 @@
-"""Keep the user-confirmed N436 branch visible without changing source classifications."""
+"""Apply confirmed N436/Y204 branch exclusions to source and snapshot SQL."""
 import json
 import re
 from pathlib import Path
+from inventory_warehouse_scope import warehouse_scope, branch_read_scope, MARKER
+from optimize_base_scoped_queries import optimize as normalize_base_scope, SCOPED_QUERY_IDS
 
 ROOT = Path(__file__).resolve().parents[1]
-path = ROOT / 'business/inventory-fc/sql.config.json'
-config = json.loads(path.read_text())
-changed = []
-for query_id, query in config['queries'].items():
-    sql = query['request']['sql']
-    if '/* fc-warehouse-exceptions:N436 */' in sql:
-        continue
-    original = sql
-    # Delivery facts name their physical warehouse column `warehouse`.
-    shipping_aliases = set(re.findall(r'FROM agents_scm_cust_deliv_daily_di AS (\w+)', sql))
-    def branch(match):
-        alias = match.group(1)
-        column = 'warehouse' if alias in shipping_aliases else 'warehouseid'
-        return f"({match.group(0)} OR {alias}.{column} = 'N436')"
-    sql = re.sub(r"\b(\w+)\.warehouse_classify\s*=\s*'20'", branch, sql)
-    # The shared order/age pool must choose exactly one location kind.
-    sql = re.sub(r"\b(\w+)\.warehouse_classify\s+IN\s*\('01',\s*'02'\)",
-                 lambda m: f"({m.group(0)} AND {m.group(1)}.warehouseid <> 'N436')", sql)
-    if sql != original:
-        query['request']['sql'] = '/* fc-warehouse-exceptions:N436 */\n' + sql
-        changed.append(query_id)
-path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + '\n')
-print('Updated FC warehouse scope queries:', len(changed))
+for agent in ['fc', 'aqkc']:
+    path = ROOT / f'business/inventory-{agent}/sql.config.json'
+    config = json.loads(path.read_text())
+    changed = []
+    for query_id, query in config['queries'].items():
+        original = query['request']['sql']
+        sql = warehouse_scope(original)
+        if agent == 'fc':
+            sql = branch_read_scope(sql)
+        elif query_id in SCOPED_QUERY_IDS:
+            sql = normalize_base_scope({**query, 'request': {**query['request'], 'sql': sql}})
+        query['request']['sql'] = sql
+        if sql != original:
+            changed.append(query_id)
+    for template in config['templates'].values():
+        if len(template['segments']) == 1 and re.match(r'^\s*(?:/\*.*?\*/\s*)*(?:WITH|SELECT)\b', template['segments'][0], re.I | re.S):
+            sql = warehouse_scope(template['segments'][0])
+            template['segments'][0] = branch_read_scope(sql) if agent == 'fc' else sql
+    path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + '\n')
+    for source in path.parent.glob('*.sql'):
+        original = source.read_text()
+        updated = warehouse_scope(original)
+        if updated.startswith(MARKER + '\nWITH '):
+            updated = 'WITH ' + MARKER + '\n' + updated[len(MARKER + '\nWITH '):]
+        if updated != original:
+            source.write_text(updated)
+    materializations = path.parent / 'customer-order-materializations.json'
+    if agent == 'fc' and materializations.exists():
+        exports = json.loads(materializations.read_text())
+        for item in exports:
+            item['sourceSql'] = branch_read_scope(warehouse_scope(item['sourceSql']))
+        materializations.write_text(json.dumps(exports, ensure_ascii=False, indent=2) + '\n')
+    print('Updated warehouse scope queries:', agent, len(changed))

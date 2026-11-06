@@ -1,11 +1,14 @@
 """Rebuild governed first-screen bundles after member contracts change."""
 from pathlib import Path
-import json,re,copy,sqlglot
+import argparse,json,re,copy,sqlglot
 from sqlglot import exp
 from sqlglot.optimizer.scope import traverse_scope,Scope
 repo=Path(__file__).resolve().parents[1]
 pages=[]
-for agent in ['fc','qll','aqkc']:
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--agents',nargs='+',choices=['fc','qll','aqkc'],default=['fc','qll','aqkc'])
+agents=parser.parse_args().agents
+for agent in agents:
  cfg=json.loads((repo/f'business/inventory-{agent}/sql.config.json').read_text())
  calls=[]
  for member in cfg['dailySummary']['bundle']['members']:
@@ -67,7 +70,7 @@ for page in pages:
    assert all(values.get(k)==v for k,v in required.items()),values
    member_tree=sqlglot.parse_one(sql,read='postgres')
    for cte in member_tree.find_all(exp.CTE):
-    if cte.alias=='list_source':
+    if cte.alias=='list_source' and agent != 'fc':
      cte.this.set('where',None);cte.this.set('joins',None);cte.this.set('with_',None)
    sql=member_tree.sql()
   for old,sp in q['parameterSpec'].items():

@@ -12,8 +12,11 @@ const integer = (value) => {
 export const rowPacketSize = 64;
 
 /** Preserve every scalar, including null and decimal text, while reducing gateway pages. */
-export function rowPacketSql(sql, columns, order) {
+export function rowPacketSql(sql, columns, order, packetSize = rowPacketSize) {
   if (
+    !Number.isSafeInteger(packetSize) ||
+    packetSize < 1 ||
+    packetSize > 1024 ||
     !columns.length ||
     new Set(columns).size !== columns.length ||
     !order.length ||
@@ -30,10 +33,10 @@ export function rowPacketSql(sql, columns, order) {
   return `WITH packet_source AS (${sql}), packet_numbered AS (
     SELECT ${columns.join(',')}, ROW_NUMBER() OVER (ORDER BY ${order.join(',')}) AS packet_position,
       COUNT(*) OVER () AS packet_scope_total FROM packet_source
-  ) SELECT FLOOR((packet_position-1)/${rowPacketSize}) AS packet_index,
+  ) SELECT FLOOR((packet_position-1)/${packetSize}) AS packet_index,
     COUNT(*) AS packet_count, MAX(packet_scope_total) AS packet_scope_total,
     ARRAY_AGG(CONCAT(${fields.join(',')})) AS packet_rows
-    FROM packet_numbered GROUP BY FLOOR((packet_position-1)/${rowPacketSize}) ORDER BY packet_index`;
+    FROM packet_numbered GROUP BY FLOOR((packet_position-1)/${packetSize}) ORDER BY packet_index`;
 }
 
 function readTuple(bytes, columns, start) {
@@ -112,7 +115,14 @@ export function decodeScalarArray(value) {
 }
 
 /** ARRAY_AGG has no guaranteed order. Positions prove coverage and restore the source order. */
-export function unpackRowPackets(packets, columns, keyFields, maxRows = 100000) {
+export function unpackRowPackets(
+  packets,
+  columns,
+  keyFields,
+  maxRows = 100000,
+  packetSize = rowPacketSize,
+) {
+  if (!Number.isSafeInteger(packetSize) || packetSize < 1 || packetSize > 1024) fail();
   const rows = [],
     positions = new Set(),
     keys = new Set(),
@@ -127,7 +137,7 @@ export function unpackRowPackets(packets, columns, keyFields, maxRows = 100000) 
     total = scope;
     groups.add(index);
     const members = packetRows(packet.packet_rows, columns);
-    if (members.length !== count || count < 1 || count > rowPacketSize) fail();
+    if (members.length !== count || count < 1 || count > packetSize) fail();
     for (const row of members) {
       if (
         !row ||
@@ -145,7 +155,7 @@ export function unpackRowPackets(packets, columns, keyFields, maxRows = 100000) 
         position < 1 ||
         position > total ||
         positions.has(position) ||
-        Math.floor((position - 1) / rowPacketSize) !== index
+        Math.floor((position - 1) / packetSize) !== index
       )
         fail();
       const key = JSON.stringify(keyFields.map((name) => row[name]));
@@ -156,7 +166,6 @@ export function unpackRowPackets(packets, columns, keyFields, maxRows = 100000) 
       rows.push({ position, values });
     }
   }
-  if (rows.length !== (total ?? 0) || groups.size !== Math.ceil((total ?? 0) / rowPacketSize))
-    fail();
+  if (rows.length !== (total ?? 0) || groups.size !== Math.ceil((total ?? 0) / packetSize)) fail();
   return rows.sort((a, b) => a.position - b.position).map((row) => row.values);
 }

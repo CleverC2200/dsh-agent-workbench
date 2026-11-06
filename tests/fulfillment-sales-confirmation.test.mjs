@@ -80,11 +80,11 @@ test('Feishu template requires Host links and never embeds an unverified recipie
   assert.equal(card.header.title.content, '订单待确认');
   assert.deepEqual(
     buttons.map((b) => b.text.content),
-    ['确认发货', '暂缓发货'],
+    ['订单处理', '暂缓发货'],
   );
   assert.ok(buttons.every((b) => b.disabled && !b.behaviors && !b.value));
   assert.equal(
-    salesConfirmationCard({ ...order, rate: 40 }).body.elements[1].columns[1].elements.at(-1).text
+    salesConfirmationCard({ ...order, rate: 40 }).body.elements[1].columns[1].elements[0].text
       .content,
     '订单处理',
   );
@@ -103,7 +103,7 @@ test('client only initiates a group notification and never exposes sales executi
     ),
   );
   assert.equal(d.querySelector('select,input,tbody'), null);
-  assert.ok(card.body.elements[1].columns[1].elements.some((b) => b.text.content === '确认发货'));
+  assert.ok(card.body.elements[1].columns[1].elements.some((b) => b.text.content === '订单处理'));
   click('返回');
   assert.equal(d.getElementById('salesConfirmOverlay').hidden, true);
   assert.equal(d.activeElement.id, 'open');
@@ -114,7 +114,7 @@ test('shortage handling stays in the Feishu card; closing or switching orders cl
   const { dom, d, ui } = fixture();
   const source = { ...order, rate: 70 };
   const card = ui.open(source);
-  assert.equal(card.body.elements[1].columns[1].elements.at(-1).text.content, '订单处理');
+  assert.equal(card.body.elements[1].columns[1].elements[0].text.content, '订单处理');
   assert.equal(d.querySelector('input'), null);
   assert.equal(source.lines[0].rawQuantity, 100);
   ui.close();

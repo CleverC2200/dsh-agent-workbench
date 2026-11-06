@@ -3,8 +3,213 @@ import assert from 'node:assert/strict';
 import {
   createWorkbenchPresentationCache,
   createWorkbenchEvidenceCache,
+  createWorkbenchPeriodCacheLifecycle,
+  createWorkbenchScopedFactsCache,
 } from '../prototypes/inventory-orderworkbench/presentation-cache.mjs';
-import { computeWorkbenchMetrics } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
+import {
+  computeWorkbenchMetrics,
+  metricCalculationVersion,
+  retainableWorkbenchFacts,
+  reusableWorkbenchFacts,
+} from '../prototypes/inventory-orderworkbench/metric-model.mjs';
+
+test('fact-only Session recovery requires a freshly verified identical scope and retains its original expiry', () => {
+  let now = 1000;
+  const cache = createWorkbenchScopedFactsCache({
+    maxAge: 1200000,
+    now: () => now,
+    reusable: retainableWorkbenchFacts,
+  });
+  const facts = {
+    start: '2026-10-19',
+    end: '2026-10-26',
+    attributionVersion: 2,
+    metricCalculationVersion,
+    periods: { week: { sections: [{ id: 'orders', status: 'ready', rows: [] }] } },
+  };
+  cache.set({ key: 'server-scope-A' }, facts);
+  assert.deepEqual(cache.get(undefined), []);
+  assert.deepEqual(cache.get({ base: '' }), []);
+  assert.deepEqual(cache.get({ key: 'server-scope-B' }), []);
+  assert.deepEqual(cache.get({ key: 'server-scope-A' }), [facts]);
+  now += 19 * 60 * 1000;
+  cache.set({ key: 'server-scope-A' }, { ...facts });
+  now += 60 * 1000;
+  assert.deepEqual(cache.get({ key: 'server-scope-A' }), []);
+  cache.set({ key: 'server-scope-A' }, facts);
+  cache.clear();
+  assert.deepEqual(cache.get({ key: 'server-scope-A' }), []);
+});
+
+test('partial navigation cache keeps validated sections without treating failed comparisons as ready', () => {
+  const reports = new Map();
+  let now = 1000;
+  const lifecycle = createWorkbenchPeriodCacheLifecycle(reports, {
+    maxAge: 20 * 60 * 1000,
+    now: () => now,
+    reusable: retainableWorkbenchFacts,
+  });
+  lifecycle.resume('orders');
+  const good = { id: 'orders', status: 'ready', rows: [{ demand: 100 }] };
+  const facts = {
+    attributionVersion: 2,
+    metricCalculationVersion,
+    complete: false,
+    readAt: new Date(now).toISOString(),
+    periods: {
+      month: { sections: [good] },
+      yearMonth: {
+        sections: [{ id: 'ontime', status: 'error', code: 'QUERY_TIMEOUT', rows: [] }],
+      },
+    },
+  };
+  const entry = {
+    facts,
+    loaded: true,
+    started: true,
+    dirty: false,
+    controller: new AbortController(),
+    readController: new AbortController(),
+    persistence: { pending: () => false, cancel() {} },
+  };
+  reports.set('week', entry);
+  lifecycle.suspend();
+  lifecycle.resume('orders');
+  assert.equal(reports.get('week'), entry);
+  assert.equal(entry.started, false, 'interrupted reads can resume');
+  assert.equal(entry.facts.periods.month.sections[0], good);
+  assert.equal(entry.facts.periods.yearMonth.sections[0].status, 'error');
+  now += 20 * 60 * 1000;
+  lifecycle.suspend();
+  assert.equal(reports.size, 0, 'returning must not renew partial-cache expiry');
+  assert.equal(retainableWorkbenchFacts({ ...facts, metricCalculationVersion: -1 }), false);
+});
+
+test('failed customer metadata is not accepted as a complete cached report', () => {
+  const facts = {
+    complete: true,
+    attributionVersion: 2,
+    metricCalculationVersion,
+    periods: { month: { sections: [{ id: 'orders', status: 'ready', rows: [] }] } },
+    customers: { status: 'error', rows: [], code: 'QUERY_TIMEOUT' },
+  };
+  assert.equal(retainableWorkbenchFacts(facts), true);
+  assert.equal(reusableWorkbenchFacts(facts), false);
+  facts.customers.status = 'ready';
+  assert.equal(reusableWorkbenchFacts(facts), true);
+});
+
+function navigationCache() {
+  const reports = new Map();
+  let now = 1000;
+  const lifecycle = createWorkbenchPeriodCacheLifecycle(reports, {
+    maxAge: 20 * 60 * 1000,
+    now: () => now,
+    reusable: (facts) => facts.complete === true,
+  });
+  const add = (key, overrides = {}) => {
+    const entry = {
+      controller: new AbortController(),
+      readController: new AbortController(),
+      loaded: true,
+      finished: now,
+      dirty: false,
+      facts: { complete: true },
+      edits: { risk: '人工内容' },
+      persistence: {
+        pending: () => false,
+        cancel: () => {
+          entry.cancelled = true;
+        },
+      },
+      ...overrides,
+    };
+    reports.set(key, entry);
+    return entry;
+  };
+  return {
+    reports,
+    lifecycle,
+    add,
+    advance: (milliseconds) => {
+      now += milliseconds;
+    },
+  };
+}
+
+test('ordinary page disconnect and same-Session reconnect preserve completed reports and their presentation identity', () => {
+  const { reports, lifecycle, add } = navigationCache();
+  lifecycle.resume('orders-session');
+  const week = add('week-4'),
+    other = add('week-5');
+  const originalFacts = week.facts,
+    originalPersistence = week.persistence;
+  lifecycle.suspend();
+  assert.equal(week.readController.signal.aborted, true, 'old channel work is cancelled');
+  assert.equal(week.controller.signal.aborted, false, 'the completed cache owner is retained');
+  lifecycle.resume('orders-session');
+  assert.equal(reports.get('week-4'), week);
+  assert.equal(reports.get('week-5'), other);
+  assert.equal(week.facts, originalFacts, 'derived WeakMap caches remain reusable');
+  assert.equal(
+    week.persistence,
+    originalPersistence,
+    'version ownership is not reconstructed from a stale snapshot',
+  );
+  assert.equal(week.edits.risk, '人工内容');
+});
+
+test('Session replacement, identity invalidation and a missing Session clear retained reports', () => {
+  const { reports, lifecycle, add } = navigationCache();
+  lifecycle.resume('old');
+  const old = add('week');
+  lifecycle.suspend();
+  lifecycle.resume('new');
+  assert.equal(reports.size, 0);
+  assert.equal(old.controller.signal.aborted, true);
+  assert.equal(old.cancelled, true);
+  const current = add('new-week');
+  lifecycle.clear();
+  assert.equal(current.controller.signal.aborted, true);
+  assert.equal(reports.size, 0);
+  lifecycle.resume('new');
+  const missing = add('week');
+  assert.equal(lifecycle.resume(null), false);
+  assert.equal(missing.cancelled, true);
+  assert.equal(reports.size, 0);
+});
+
+test('unfinished, partial, dirty and saving reports are not revived across page reconnects', () => {
+  const { reports, lifecycle, add } = navigationCache();
+  lifecycle.resume('orders');
+  const entries = [
+    add('unfinished', { finished: undefined }),
+    add('partial', { facts: { complete: false } }),
+    add('dirty', { dirty: true }),
+    add('saving', { persistence: { pending: () => true, cancel() {} } }),
+    add('unloaded', { loaded: false }),
+  ];
+  const good = add('complete');
+  lifecycle.suspend();
+  assert.deepEqual([...reports.keys()], ['complete']);
+  for (const entry of entries) assert.equal(entry.controller.signal.aborted, true);
+  assert.equal(good.controller.signal.aborted, false);
+});
+
+test('navigation does not extend the twenty-minute report cache lifetime', () => {
+  const { reports, lifecycle, add, advance } = navigationCache();
+  lifecycle.resume('orders');
+  const entry = add('week');
+  advance(19 * 60 * 1000);
+  lifecycle.suspend();
+  lifecycle.resume('orders');
+  assert.equal(reports.get('week'), entry);
+  advance(60 * 1000);
+  lifecycle.suspend();
+  lifecycle.resume('orders');
+  assert.equal(reports.size, 0);
+  assert.equal(entry.controller.signal.aborted, true);
+});
 
 const factsFor = (orders) => {
   const period = {

@@ -86,8 +86,8 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
       if (['order_end_exclusive', 'shipment_end_exclusive'].includes(spec.name))
         value = shift(input.date, 1);
       if (spec.name === 'rolling_start') value = shift(input.date, -29);
-      if (spec.name === 'batch_rolling_start') value = shift(snapshot, -29);
-      if (spec.name === 'batch_end_exclusive') value = shift(snapshot, 1);
+      if (spec.name === 'batch_rolling_start') value = shift(input.date, -29);
+      if (spec.name === 'batch_end_exclusive') value = shift(input.date, 1);
       if (spec.format === 'YYYYMMDD') value = value.replaceAll('-', '');
       if (spec.format === 'YYYYMM') value = value.slice(0, 7).replace('-', '');
       values[spec.name] = value;
@@ -117,8 +117,6 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
       if (layer === 'base') {
         values.bases_enabled = true;
         values.bases = [input.organization];
-        values.order_bases_enabled = true;
-        values.order_bases = [input.organization];
       } else if (layer === 'branch') values.warehouse_code = input.organization;
     }
     const result = await client.read(id, values, { signal, requiredColumns: query.resultColumns });
@@ -158,8 +156,8 @@ export function categorySummary(category: string, layers: Partial<Record<ChainLa
     age_sum: sum('age_sum'),
     overaged: sum('overaged'),
     gap: base?.gap ?? null,
-    turnover_qty: base?.turnover_qty,
-    daily: base?.daily,
+    turnover_qty: sum('turnover_qty'),
+    daily: sum('daily'),
     target_turnover_qty: base?.target_turnover_qty,
     target_daily: base?.target_daily,
     risk_rank: ranks.length ? Math.min(...ranks) : null,

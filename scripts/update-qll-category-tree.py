@@ -14,7 +14,8 @@ sources = {
         'organization': 'r.base', 'organization_name': 'r.base', 'category': 'r.category',
         'sku': 'r.sku', 'material_name': 'r.material_name', 'inventory': 'r.inventory',
         'target': 'r.target', 'gap': 'r.gap', 'turnover_qty': 'r.inventory',
-        'daily': 'r.daily_demand', 'age_qty': 'r.age_qty', 'age_sum': 'r.age_weighted_sum',
+        'daily': 'r.rolling_ship_positive / 30.0', 'target_daily': 'r.daily_demand',
+        'age_qty': 'r.age_qty', 'age_sum': 'r.age_weighted_sum',
         'overaged': 'r.over60', 'source_date': 'r.stock_date',
         'risk': "CASE WHEN r.current_shortage > 0 THEN '缺货' WHEN r.inventory < r.target THEN '库存偏低' WHEN r.inventory > r.target THEN '库存偏高' WHEN r.target IS NULL THEN '无目标' WHEN r.inventory IS NULL THEN '待核实' ELSE '正常' END",
     }),
@@ -29,13 +30,15 @@ sources = {
     'customer': (config['queries']['dealer.stock.detail'], {
         'organization': 'r.province', 'organization_name': 'r.province',
         'category': 'r.category', 'sku': 'r.sku', 'material_name': 'r.material_name',
-        'inventory': 'r.inventory', 'target': 'r.analysis_target_inventory',
-        'gap': 'r.inventory - r.analysis_target_inventory', 'turnover_qty': 'r.inventory',
+        'inventory': 'CASE WHEN r.inventory >= 0 THEN r.inventory ELSE NULL END',
+        'target': 'CASE WHEN r.inventory >= 0 AND r.analysis_target_inventory >= 0 THEN r.analysis_target_inventory ELSE NULL END',
+        'gap': 'CASE WHEN r.inventory >= 0 AND r.analysis_target_inventory >= 0 THEN r.inventory - r.analysis_target_inventory ELSE NULL END',
+        'turnover_qty': 'r.inventory',
         'daily': 'r.sales30 / 30.0',
         'age_qty': 'CASE WHEN r.inventory > 0 AND r.analysis_avg_stock_age >= 0 THEN r.inventory ELSE NULL END',
         'age_sum': 'CASE WHEN r.inventory > 0 AND r.analysis_avg_stock_age >= 0 THEN r.inventory * r.analysis_avg_stock_age ELSE NULL END',
         'overaged': 'NULL', 'source_date': 'r.stat_date',
-        'risk': "CASE WHEN r.inventory < r.analysis_target_inventory THEN '库存偏低' WHEN r.inventory > r.analysis_target_inventory THEN '库存偏高' WHEN r.analysis_target_inventory IS NULL THEN '无目标' WHEN r.inventory IS NULL THEN '待核实' ELSE '正常' END",
+        'risk': "CASE WHEN r.inventory IS NULL OR r.inventory < 0 THEN '待核实' WHEN r.inventory < r.analysis_target_inventory THEN '库存偏低' WHEN r.inventory > r.analysis_target_inventory THEN '库存偏高' WHEN r.analysis_target_inventory IS NULL THEN '无目标' ELSE '正常' END",
     }),
 }
 for layer, (source, fields) in sources.items():
@@ -66,6 +69,7 @@ for layer, (source, fields) in sources.items():
         query['parameterSpec'][f'gea_p{i}'] = spec
         query['request']['parameters'][f'gea_p{i}'] = default
     normalized = ', '.join(("CAST(NULL AS DECIMAL(24, 6))" if v == 'NULL' else v) + ' AS ' + k for k, v in fields.items())
+    target_daily = 'n.target_daily' if layer == 'base' else 'n.daily'
     key = "CASE WHEN :gea_p9100 = 'category' THEN COALESCE(NULLIF(TRIM(n.category), ''), '未分类') WHEN :gea_p9100 = 'organization' THEN COALESCE(NULLIF(TRIM(n.organization), ''), '未归属') ELSE n.sku END"
     name = "CASE WHEN :gea_p9100 = 'category' THEN COALESCE(NULLIF(TRIM(n.category), ''), '未分类') WHEN :gea_p9100 = 'organization' THEN COALESCE(NULLIF(TRIM(n.organization_name), ''), NULLIF(TRIM(n.organization), ''), '未归属') ELSE COALESCE(n.material_name, n.sku) END"
     risk = "CASE n.risk WHEN '缺货' THEN 1 WHEN '库存偏低' THEN 2 WHEN '库存偏高' THEN 3 WHEN '滞库' THEN 4 WHEN '预警' THEN 5 WHEN '无目标' THEN 6 WHEN '正常' THEN 8 ELSE 7 END"
@@ -77,8 +81,8 @@ SUM(n.target) AS target, COUNT(*) - COUNT(n.target) AS missing_target,
 SUM(n.gap) AS gap,
 SUM(CASE WHEN n.turnover_qty >= 0 AND n.daily >= 0 THEN n.turnover_qty ELSE NULL END) AS turnover_qty,
 SUM(CASE WHEN n.turnover_qty >= 0 AND n.daily >= 0 THEN n.daily ELSE NULL END) AS daily,
-SUM(CASE WHEN n.target >= 0 AND n.daily >= 0 THEN n.target ELSE NULL END) AS target_turnover_qty,
-SUM(CASE WHEN n.target >= 0 AND n.daily >= 0 THEN n.daily ELSE NULL END) AS target_daily,
+SUM(CASE WHEN n.target >= 0 AND {target_daily} >= 0 THEN n.target ELSE NULL END) AS target_turnover_qty,
+SUM(CASE WHEN n.target >= 0 AND {target_daily} >= 0 THEN {target_daily} ELSE NULL END) AS target_daily,
 SUM(n.age_qty) AS age_qty, SUM(n.age_sum) AS age_sum,
 SUM(n.overaged) AS overaged, MIN({risk}) AS risk_rank,
 MIN(n.source_date) AS source_date, MAX(n.source_date) AS latest_date

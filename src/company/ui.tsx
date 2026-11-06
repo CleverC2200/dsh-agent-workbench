@@ -17,10 +17,14 @@ import type {
   PropsRuntime,
   PropsRenderSlots,
   PropsRenderFactories,
+  SessionProviderComponent,
 } from '@deepseek-ai/dsh-client-ui-slots';
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client';
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client';
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client';
+import type { SessionReference } from '@deepseek-ai/dsh-api-session-controller/client';
+import type { SessionId } from '@deepseek-ai/dsh-session/types';
+import type { WorkbenchFramePage } from '../frame.ts';
 import type { WorkbenchController } from '../workbench.ts';
 import type { BusinessAccount } from './account.ts';
 import { LoginDialog } from './login-dialog.tsx';
@@ -70,7 +74,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     companyWorkbench: CopyKey;
   }
   interface SlotMap {
-    'agent-workbench.documents': { kind: 'single'; scope: 'session-maybe' };
+    'agent-workbench.documents': { kind: 'single'; scope: 'root' };
+    'agent-workbench.main-session-observer': {
+      kind: 'single';
+      scope: 'session-maybe';
+      owner: { observe: (id: SessionId | undefined) => (() => void) | undefined };
+    };
   }
 }
 /** Formal AgentWelcome/GeaHomeHero JSX; only the input action comes from the current public scope. */
@@ -1025,11 +1034,44 @@ export function mountCompanyUI(
       </aside>
     );
   }
-  function Documents({
+  // A page borrows its own Core binding; moving the main conversation must not remount its iframe.
+  function RetainedDocument({
+    page,
     sessionId,
+    SessionProvider,
+    children,
+  }: {
+    page: WorkbenchFramePage;
+    sessionId?: SessionId;
+    SessionProvider: SessionProviderComponent;
+    children: React.ReactNode;
+  }) {
+    const [reference, setReference] = useState<SessionReference>();
+    useEffect(() => {
+      if (!sessionId) {
+        setReference(undefined);
+        return;
+      }
+      const owned = ctx.sessions.retain(sessionId, { source: 'agentResourceSelection' });
+      setReference(owned);
+      void owned.ready.catch(() => {});
+      return () => owned.release();
+    }, [page.id, sessionId]);
+    const current = reference?.sessionId === sessionId ? reference : undefined;
+    return (
+      <SessionProvider session={current} empty={() => children}>
+        {children}
+      </SessionProvider>
+    );
+  }
+  function Documents({
     useSessions,
     renderFactorySlot,
-  }: PropsRuntime<'agent-workbench.documents'> & PropsRenderFactories) {
+    renderSlot,
+    SessionProvider,
+  }: PropsRuntime<'agent-workbench.documents'> &
+    PropsRenderFactories &
+    PropsRenderSlots<'agent-workbench.main-session-observer'>) {
     useSyncExternalStore(
       (listener) => ctx.locale.subscribe(listener),
       () => ctx.locale.getSnapshot().active,
@@ -1082,27 +1124,38 @@ export function mountCompanyUI(
         authority,
       ],
     );
-    useEffect(() => pageSessions.observeMainSession(sessionId, setHistoryError), [sessionId]);
-    const documents = documentState.visitedDocuments.map((page) => (
-      <div
-        key={page.id}
-        style={{
-          height: '100%',
-          minHeight: 0,
-          display: documentState.selectedDocument?.id === page.id ? 'flex' : 'none',
-          flexDirection: 'column',
-        }}
-      >
-        {renderFactorySlot('agent-workbench.document', {
-          page,
-          active: documentState.selectedDocument?.id === page.id,
-          navigationError:
-            documentState.selectedDocument?.id === page.id ? historyError : undefined,
-        })}
-      </div>
-    ));
+    const observeMainSession = useCallback(
+      (id: SessionId | undefined) => pageSessions.observeMainSession(id, setHistoryError),
+      [],
+    );
+    const documents = documentState.visitedDocuments.map((page) => {
+      const savedSessionId = workbench.sessionForPage(page.id)?.sessionId;
+      const sessionId =
+        savedSessionId && catalogue.byId[savedSessionId] ? savedSessionId : undefined;
+      return (
+        <div
+          key={page.id}
+          style={{
+            height: '100%',
+            minHeight: 0,
+            display: documentState.selectedDocument?.id === page.id ? 'flex' : 'none',
+            flexDirection: 'column',
+          }}
+        >
+          <RetainedDocument page={page} sessionId={sessionId} SessionProvider={SessionProvider}>
+            {renderFactorySlot('agent-workbench.document', {
+              page,
+              active: documentState.selectedDocument?.id === page.id,
+              navigationError:
+                documentState.selectedDocument?.id === page.id ? historyError : undefined,
+            })}
+          </RetainedDocument>
+        </div>
+      );
+    });
     return (
       <>
+        {renderSlot('agent-workbench.main-session-observer', { observe: observeMainSession })}
         <div className="gea-workbench-documents" hidden={!documentState.selectedDocument}>
           {documents}
         </div>
@@ -1258,7 +1311,7 @@ export function mountCompanyUI(
       {
         name: 'shell.overlay',
         id: 'agent-workbench.documents',
-        children: { 'agent-workbench.documents': { kind: 'single', scope: 'session-maybe' } },
+        children: { 'agent-workbench.documents': { kind: 'single', scope: 'root' } },
       },
       ({
         renderSlot,
@@ -1268,8 +1321,23 @@ export function mountCompanyUI(
   );
   ctx.slots.inject('agent-workbench.documents', () =>
     ctx.slots.register(
-      { name: 'agent-workbench.documents', locale: 'companyWorkbench' },
+      {
+        name: 'agent-workbench.documents',
+        locale: 'companyWorkbench',
+        children: {
+          'agent-workbench.main-session-observer': { kind: 'single', scope: 'session-maybe' },
+        },
+      },
       Documents,
+    ),
+  );
+  ctx.slots.inject('agent-workbench.main-session-observer', () =>
+    ctx.slots.register(
+      { name: 'agent-workbench.main-session-observer' },
+      ({ sessionId, observe }: PropsRuntime<'agent-workbench.main-session-observer'>) => {
+        useEffect(() => observe(sessionId), [sessionId, observe]);
+        return null;
+      },
     ),
   );
   ctx.slots.inject('main.conversation', () => {

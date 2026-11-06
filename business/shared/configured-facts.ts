@@ -2,10 +2,64 @@ export { readBaseInventoryMetrics } from './base-inventory-metrics';
 import { fcCycleParameters, type FcCycleRule } from './fc-cycle-rules';
 import { unpackAtomicPage } from './atomic-page';
 import { configuredQueryFreshAfter, configuredQueryIdentity } from './query-cache';
+import { inventoryCacheTtl } from './inventory-cache-policy';
 import { requireColumns } from './configured-query-client.mjs';
 import { createAgentQueries } from './agent-query';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readConfiguredTargetScope } from './configured-target-scope';
+import type { ConfiguredExecution } from './agent-query';
+
+/** Independent base shortage views share the page's authorized daily batch. */
+export async function readBaseCurrentShortage(
+  config: AgentSqlConfig,
+  id: string,
+  values: Record<string, unknown>,
+  options: { signal: AbortSignal; execute: ConfiguredExecution },
+) {
+  const allowed = ['summary', 'locations', 'detail', 'sku-ranking'].map(
+    (view) => 'current-shortage.' + view,
+  );
+  const definition = config.queries[id];
+  if (
+    config.agentId !== 'inventory-aqkc' ||
+    !allowed.includes(id) ||
+    definition?.summaryRoute?.required !== true
+  )
+    throw Object.assign(Error('GEA_WORKBENCH_UPDATE_REQUIRED'), {
+      code: 'GEA_WORKBENCH_UPDATE_REQUIRED',
+    });
+  const client = createAgentQueries(config, options.execute);
+  const readOptions = { signal: options.signal, requiredColumns: definition.resultColumns };
+  if (definition.pagination?.countQuery) {
+    const result = await client.readAll(
+      id,
+      { ...values, page_size: 50, offset: 0 },
+      {
+        ...readOptions,
+        keyFields: definition.pagination.keyFields,
+        atomicPages: true,
+        maxRows: 100000,
+      },
+    );
+    return {
+      ...result,
+      returnedColumns: result.pages[0]?.returnedColumns ?? definition.resultColumns,
+      rejectedColumns: result.pages[0]?.rejectedColumns ?? [],
+      totalRowCount: result.total,
+      hasMorePages: false,
+    };
+  }
+  return client.read(id, values, readOptions);
+}
+
+/** Kept for already installed Hosts during the coordinated plugin update. */
+export function readBaseShortageSkuRanking(
+  config: AgentSqlConfig,
+  values: Record<string, unknown>,
+  options: { signal: AbortSignal; execute: ConfiguredExecution },
+) {
+  return readBaseCurrentShortage(config, 'current-shortage.sku-ranking', values, options);
+}
 
 export type FactReadContext = {
   key: string;
@@ -178,7 +232,9 @@ export async function readConfiguredFacts(
           'material_group',
           'page_scope_has_material_group',
         ])
-      : new Set<string>();
+      : config.agentId === 'inventory-fc' && viewId === 'inventory'
+        ? new Set(['product_tag'])
+        : new Set<string>();
   const read = async (id: string, values: Record<string, any>, snapshot = false) => {
     // Owned by one overview load, never reused across refreshes or identities.
     // Keep rejected promises too: a denied snapshot must not trigger a retry.
@@ -244,7 +300,9 @@ export async function readConfiguredFacts(
       previous?.key === contextKey &&
       typeof previous.configVersion === 'string' &&
       previous.configVersion &&
-      (!fcSnapshot || (previous.readAt != null && Date.now() - previous.readAt < 20 * 60 * 1000))
+      (!fcSnapshot ||
+        (previous.readAt != null &&
+          Date.now() - previous.readAt < inventoryCacheTtl(config.agentId)))
     ) {
       snapshotDate = previous.snapshotDate;
       snapshotReadAt = previous.readAt ?? Date.now();

@@ -1,16 +1,18 @@
+import { shippableReferenceVersion } from './historical-shippable-reference.mjs';
 import { encodeReportRequest } from './report-transfer.mjs';
 import { workbenchCellMissingReason } from './missing-reasons.mjs';
 import { createReportPersistence } from './report-persistence.mjs';
 import { createPageViewState } from '../../business/shared/view-state.js';
-import { ask, draft, ready, call } from '../../business/shared/channel.js';
+import { ask, draft, ready, call, currentSessionId } from '../../business/shared/channel.js';
 import { metricDetailsRequest } from './metric-details.mjs';
 import { loadWorkbenchFacts, loadWorkbenchSkuPage } from './live-source.js';
 import { createFrameProgress } from '../../business/shared/frame-progress.js';
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
+import { startWorkbenchStagedRead } from './staged-facts.mjs';
 import { workbenchPresentation, workbenchBaseIncluded } from './live-presentation.mjs';
-import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache } from './presentation-cache.mjs';
+import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache, createWorkbenchPeriodCacheLifecycle, createWorkbenchScopedFactsCache } from './presentation-cache.mjs';
 import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
-import { reusableWorkbenchFacts, compatibleWorkbenchFacts } from './metric-model.mjs';
+import { reusableWorkbenchFacts, compatibleWorkbenchFacts, retainableWorkbenchFacts } from './metric-model.mjs';
 import { publishReport } from './publication.js';
 import { mountReportImport } from './report-import.mjs';
 import { projectReportImports, importedSummary, summarySupplement } from './import-content.mjs';
@@ -35,6 +37,8 @@ const cachedWorkbenchEvidence = createWorkbenchEvidenceCache();
 let reportLoaded = false, savedPresentation = null, reportEdited = false;
 const periodCacheMaxAge = 20 * 60 * 1000;
 const periodReports = new Map();
+const scopedFactsCache = createWorkbenchScopedFactsCache({ maxAge: periodCacheMaxAge, reusable: retainableWorkbenchFacts });
+const periodCacheLifecycle = createWorkbenchPeriodCacheLifecycle(periodReports, { maxAge: periodCacheMaxAge, reusable: retainableWorkbenchFacts, now: () => Date.now() });
 let activePeriodReport;
 let reportImporter;
 let workbenchImportHistory = [];
@@ -810,7 +814,7 @@ const workbenchDimensions = {
   },
   'region-change': {
     title: '改单率—大区 / 省区聚焦',
-    note: '点击首列展开客户名称、编码、客户经理、改单订单数及订单总数（演示明细）。',
+    note: '点击首列展开客户名称、编码、客户经理、锁定期调整商品数量及有效商品数量。',
     summary:
       '10 个区域或渠道改单率异常，高势能渠道销售 27.55% 为最严重项；其余区域需按客户、品类和改单原因继续拆解。',
     columns: ['大区 / 渠道', '本期改单率', '上期', '环比', '状态'],
@@ -2351,7 +2355,7 @@ async function readCurrentPeriod() {
   liveReadKey=key;
   let entry=periodReports.get(key);
   if (entry?.controller.signal.aborted) { periodReports.delete(key); entry = null; }
-  if(entry && !entry.dirty && !entry.persistence.pending() && entry.finished && Date.now()-entry.finished>periodCacheMaxAge){entry.controller.abort();periodReports.delete(key);entry=null;}
+  if(entry && !entry.dirty && !entry.persistence.pending() && Date.now()-(entry.finished??Date.parse(entry.facts?.readAt))>=periodCacheMaxAge){entry.controller.abort();entry.persistence.cancel();periodReports.delete(key);entry=null;}
   if(!entry){
     entry={controller:new AbortController(),edits:null,dirty:false,loaded:false,facts:null,started:false};
     entry.persistence=createReportPersistence(async(request,signal)=>{const encoded=await encodeReportRequest(request);signal.throwIfAborted();return call('workspace',encoded,{signal});},(state,message)=>{
@@ -2388,9 +2392,10 @@ async function readCurrentPeriod() {
   const applyFacts = (facts, storedPresentation, { dimensionOnly = false } = {}) => {
     if (controller.signal.aborted) return;
     entry.facts=facts;
+    if (entry.loaded) scopedFactsCache.set(entry.persistence.scope(), facts);
     if (liveReadKey!==key) return;
     liveFacts=facts;
-    const presentation=storedPresentation&&!storedPresentation.lazy&&storedPresentation.performanceStyleVersion===performanceStyleVersion?storedPresentation:cachedWorkbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
+    const presentation=storedPresentation&&!storedPresentation.lazy&&storedPresentation.performanceStyleVersion===performanceStyleVersion&&storedPresentation.shippableReferenceVersion===shippableReferenceVersion?storedPresentation:cachedWorkbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
     savedPresentation=presentation;
     if (!dimensionOnly) for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
     if (!dimensionOnly) for(const metric of metricDefinitions) {
@@ -2436,10 +2441,15 @@ async function readCurrentPeriod() {
   const readController = entry.readController = new AbortController();
   const readSignal = AbortSignal.any([controller.signal, readController.signal]);
   const timing = startDashboardTiming('order-workbench', readSignal);
+  let staged;
   try {
     let saved;
     try {
-      entry.restore ??= entry.persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal);
+      const cold = !entry.facts && !scopedFactsCache.hasPeriod(start, end);
+      entry.restore ??= entry.persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal, { includeFacts: false });
+      if (cold)
+        staged = startWorkbenchStagedRead((signal, onProgress) =>
+          loadWorkbenchFacts(start,end,signal,{base:'',summary:true,periodQueries:true,onProgress}), readSignal);
       saved = await entry.restore;
       if(!entry.loaded && !entry.dirty)entry.edits=saved?.edits??{};
       entry.loaded=true;
@@ -2447,6 +2457,17 @@ async function readCurrentPeriod() {
     } catch (error) { entry.restore = undefined; controller.signal.throwIfAborted(); }
 
     readSignal.throwIfAborted();
+    const scopedFacts = scopedFactsCache.get(entry.persistence.scope());
+    const retained = scopedFacts.find(facts => facts.start === start && facts.end === end);
+    if (!entry.facts && retained) {
+      entry.apply(retained);
+      timing.mark('retained-report-ready');
+      if (reusableWorkbenchFacts(retained)) {
+        entry.finished=Date.parse(retained.readAt);
+        timing.finish('cached-complete');
+        return;
+      }
+    }
     if(!entry.facts && compatibleWorkbenchFacts(saved?.facts)) {
       entry.apply(saved.facts,saved.presentation);
       timing.mark('saved-report-ready');
@@ -2463,23 +2484,30 @@ async function readCurrentPeriod() {
           timing.mark('selected-period-ready');
       }
     }, readSignal);
-    let facts;
+    let facts, partial;
     try {
       const base = entry.persistence.scope()?.base;
       const seedFacts = [...periodReports.values()].filter(cached => cached.loaded &&
-        cached.persistence.scope()?.base === base && compatibleWorkbenchFacts(cached.facts) &&
+        cached.persistence.scope()?.base === base && retainableWorkbenchFacts(cached.facts) &&
         Date.now() - Date.parse(cached.facts.readAt) < periodCacheMaxAge)
-        .map(cached => cached.facts);
-      facts=await loadWorkbenchFacts(start,end,readSignal,{onProgress:progress.push,base,summary:true,seedFacts});
+        .map(cached => cached.facts).concat(scopedFacts);
+      // Publish only after the independent report scope is verified. A narrower
+      // scope discards the provisional result and performs its exact scoped read.
+      if (staged && entry.persistence.scope()?.key && base === '') facts = await staged.accept(progress.push);
+      else {
+        staged?.cancel();
+        facts=await loadWorkbenchFacts(start,end,readSignal,{onProgress:progress.push,base,summary:true,periodQueries:true,seedFacts});
+      }
       readSignal.throwIfAborted();
-      const partial = Object.values(facts.periods).some(period => period.sections.some(section => section.status === 'error')) ||
+      partial = Object.values(facts.periods).some(period => period.sections.some(section => section.status === 'error')) ||
         ['directors','customers','customerManagers'].some(name => facts[name]?.status === 'error');
-      timing.finish(partial ? 'partial' : 'complete');
+      timing.mark('facts-ready');
     } catch (error) {
       timing.finish(readSignal.aborted ? 'cancelled' : 'failed');
       throw error;
     } finally { progress.cancel(); }
-    entry.apply(facts);entry.finished=Date.now();
+    entry.apply(facts);entry.finished??=Date.now();
+    timing.finish(partial ? 'partial' : 'complete');
     if(entry.loaded){
       if(activePeriodReport===entry)entry.edits=structuredClone(reportEdits());
     }
@@ -2497,15 +2525,23 @@ async function readCurrentPeriod() {
       renderWorkbench();
       updateReport();
     }
-  }
+  } finally { staged?.cancel(); }
 }
 clearLiveMetrics();
-void ready.then(()=>{if(liveConnected)return;liveConnected=true;liveReadKey='';renderSelectedPeriod();});
-for (const name of ['gea-identity-changed','gea-session-changing','pagehide']) window.addEventListener(name,()=>{
-  for(const entry of periodReports.values()){entry.controller.abort();entry.persistence.cancel();}periodReports.clear();activePeriodReport=null;
-  liveConnected=false;liveController?.abort();persistence.cancel();reportEdited=false;reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
-});
-window.addEventListener('gea-session-changed',()=>{if(liveConnected)return;liveConnected=true;liveReadKey='';renderSelectedPeriod();});
+const resumeWorkbenchConnection = () => {
+  if (!periodCacheLifecycle.resume(currentSessionId()) || liveConnected) return;
+  liveConnected=true;liveReadKey='';renderSelectedPeriod();
+};
+const suspendWorkbenchConnection = (clear = false) => {
+  if (clear) scopedFactsCache.clear();
+  if (clear) periodCacheLifecycle.clear(); else periodCacheLifecycle.suspend();
+  activePeriodReport=null;liveController=undefined;
+  liveConnected=false;reportEdited=false;reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
+};
+void ready.then(resumeWorkbenchConnection);
+window.addEventListener('gea-session-changing',()=>suspendWorkbenchConnection());
+for (const name of ['gea-identity-changed','pagehide']) window.addEventListener(name,()=>suspendWorkbenchConnection(true));
+window.addEventListener('gea-session-changed',resumeWorkbenchConnection);
 
 function renderWorkbench() {
   renderWorkbenchSummary();
@@ -2515,7 +2551,7 @@ function renderWorkbench() {
   document.getElementById('wbKpis').innerHTML = topMetricCards
     .map((metric) => {
       const statusClass = ['未达', '严重'].includes(metric.status) ? 'bad' : metric.status === '预警' ? 'warn' : metric.status === '健康' ? '' : 'unknown';
-      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="生成${escapeHtml(metric.label)}明细表" title="发送到右侧 Agent 生成明细表"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
+      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="生成${escapeHtml(metric.label)}明细表" title="发送到右侧 Agent 生成明细表"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span>${metric.countsNote?`<span class="wb-kpi-counts">${escapeHtml(metric.countsNote)}</span>`:""}<span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
     })
     .join('');
   document.querySelectorAll('#wbKpis .wb-kpi').forEach((card,index)=>{
@@ -2628,13 +2664,13 @@ function renderWorkbenchSkuDetail(category) {
     .join('');
   const paging=liveSkuPagination[category];
   const nav=paging?`<nav class="wb-sku-pagination" aria-label="SKU明细分页"><span>共 ${paging.total} 条 · 第 ${paging.page+1} / ${Math.max(1,Math.ceil(paging.total/20))} 页</span><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page-1}" ${paging.page===0?'disabled':''}>上一页</button><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page+1}" ${(paging.page+1)*20>=paging.total?'disabled':''}>下一页</button></nav>`:'';
-  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为全部库存，月度需求计划有纠偏取纠偏，否则取月初计划。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
+  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为基地覆盖工厂仓及工厂外租仓现存量；需求与调拨计划按库存业务日取版本：1—16日初版、17—20日纠偏、21—26日滚动、27日起下月初版，日均需求除以库存日期所在月天数。全国及品项不计调拨，基地计入50%调拨。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
 }
 function renderWorkbenchRegionCustomerDetail(regionIndex) {
   const customers=workbenchDimensions['region-change'].customerDetails?.[regionIndex]??[];
-  const count=value=>value==null?'—':escapeHtml(String(value))+' 张';
+  const count=value=>value==null?'—':escapeHtml(String(value));
   const rows=customers.map(customer=>`<tr><td>${escapeHtml(customer.name)}（${escapeHtml(customer.code)}）</td><td>${escapeHtml(customer.manager)}</td><td>${count(customer.changedQuantity)}</td><td>${count(customer.orderedQuantity)}</td></tr>`).join('');
-  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>锁定期改单订单数</th><th>有效订单数</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户订单明细</td></tr>'}</tbody></table></div>`;
+  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>锁定期调整商品数量</th><th>有效商品数量</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户订单明细</td></tr>'}</tbody></table></div>`;
 }
 function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
   const groups = table.groups.map(group => baseColumnIndex === 0 && group.label.startsWith('可发货天数')

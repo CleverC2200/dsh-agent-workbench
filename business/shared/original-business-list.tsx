@@ -24,6 +24,15 @@ const optionalLabelNames: Record<string, string> = {
   category: '品类',
   material_group: '物料组',
   page_scope_has_material_group: '物料组覆盖情况',
+  product_tag: '产品标签',
+};
+const agingColumnWidths: Record<string, number> = {
+  material_name: 260,
+  material_group_name: 180,
+  missing_age_13: 220,
+  missing_age_10: 96,
+  warehouse_name: 140,
+  product_tag: 128,
 };
 
 /** Only presentation: the caller owns governed reads, errors and server pagination. */
@@ -47,6 +56,7 @@ export function OriginalBusinessList({
   onPage,
   onPageSize,
   renderCell,
+  renderSummaryCell,
   toolbarActions,
   quickFilterActions,
   emptyMessage = '暂无符合条件的数据。',
@@ -63,6 +73,7 @@ export function OriginalBusinessList({
   const fc = agentId === 'inventory-fc',
     qll = agentId === 'inventory-qll',
     aqkc = agentId === 'inventory-aqkc';
+  const compactAging = fc && view.id === 'inventory';
   const [localFrozen, setLocalFrozen] = useState<string[]>(
     fc && view.id === 'replenishment' ? ['sku', 'material_name', 'missing_actualQty'] : [],
   );
@@ -88,15 +99,17 @@ export function OriginalBusinessList({
   const resizable = Boolean(view.resizableColumns);
   const widthOf = (column: { field: string; format?: string }) =>
     columnWidths[column.field] ??
-    (column.field === 'material_name'
-      ? 280
-      : column.field === 'material_group_name'
-        ? 220
-        : column.field === 'missing_age_13'
-          ? 240
-          : column.format === 'quantity-share'
-            ? 170
-            : 140);
+    (compactAging
+      ? (agingColumnWidths[column.field] ?? (column.format === 'quantity-share' ? 144 : 112))
+      : column.field === 'material_name'
+        ? 280
+        : column.field === 'material_group_name'
+          ? 220
+          : column.field === 'missing_age_13'
+            ? 240
+            : column.format === 'quantity-share'
+              ? 170
+              : 140);
   const [offsets, setOffsets] = useState<Record<string, number>>({});
   const columnKey = columns.map((column: any) => column.field).join(':');
   useLayoutEffect(() => {
@@ -128,7 +141,8 @@ export function OriginalBusinessList({
           background: 'var(--ui-surface)',
         }
       : undefined;
-  const displayCell = (row: any, column: any) => {
+  const displayCell = (row: any, column: any, summary = false) => {
+    if (summary && renderSummaryCell) return renderSummaryCell(row, column);
     const unit = /[（(](件|箱)(?:[）)])/.exec(column.label ?? '')?.[1];
     if (!qll || !unit || column.unavailable || column.secondary) return renderCell(row, column);
     const raw =
@@ -191,7 +205,6 @@ export function OriginalBusinessList({
           ))}
         </colgroup>
       )}
-      {fc && view.id === 'plan' && <caption>当前使用计划 · 数量单位：件</caption>}
       {fc && view.id === 'base-resources' && (
         <caption>
           基地排产资源监控 · {filters.sku ? `SKU ${filters.sku}` : '按基地汇总'} · T～T+6
@@ -262,7 +275,16 @@ export function OriginalBusinessList({
           <React.Fragment key={getRowKey?.(row) ?? i}>
             <tr>
               {columns.map((c: any) => (
-                <td key={c.field} data-column={c.field} style={fixedStyle(c.field)}>
+                <td
+                  key={c.field}
+                  data-column={c.field}
+                  style={fixedStyle(c.field)}
+                  title={
+                    compactAging && typeof row[c.valueField ?? c.field] === 'string'
+                      ? row[c.valueField ?? c.field]
+                      : undefined
+                  }
+                >
                   {displayCell(row, c)}
                 </td>
               ))}
@@ -275,7 +297,7 @@ export function OriginalBusinessList({
           </React.Fragment>
         ))}
       </tbody>
-      {resizable && result?.tableSummary && !error && !loading && (
+      {result?.tableSummary && !error && !loading && (
         <tfoot>
           <tr>
             {columns.map((column: any, index: number) => {
@@ -286,7 +308,7 @@ export function OriginalBusinessList({
                     <span>合计{Object.hasOwn(result.tableSummary, field) ? ' · ' : ''}</span>
                   )}
                   {Object.hasOwn(result.tableSummary, field)
-                    ? displayCell(result.tableSummary, column)
+                    ? displayCell(result.tableSummary, column, true)
                     : index === 0
                       ? null
                       : '-'}
@@ -373,7 +395,14 @@ export function OriginalBusinessList({
       <div key={f.name} className={css.quickFilters} role="group" aria-label={f.label}>
         {f.options.map((option: any) =>
           f.multiple ? (
-            <label key={option.value}>
+            <label
+              key={option.value}
+              title={
+                fc && view.id === 'inventory' && f.name === 'age_filter'
+                  ? '仅统计所选货龄批次，库存量和合计同步筛选。'
+                  : undefined
+              }
+            >
               <input
                 type="checkbox"
                 checked={(appliedFilters?.[f.name] ?? '').split(',').includes(option.value)}
@@ -409,7 +438,11 @@ export function OriginalBusinessList({
     ));
 
   return (
-    <section className={css.list} aria-label={view.title} aria-busy={loading}>
+    <section
+      className={`${css.list}${compactAging ? ` ${css.compactAging}` : ''}`}
+      aria-label={view.title}
+      aria-busy={loading}
+    >
       {fc && (
         <div className={css.quickBar}>
           {quickFilters}

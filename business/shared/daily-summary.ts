@@ -182,10 +182,12 @@ export function dailySummaryQuery(
         return null;
       break;
     }
-    case 'age': {
+    case 'age':
+    case 'age-movement': {
+      const end = route.kind === 'age-movement' ? snapshot.businessDate : snapshot.stockDate;
       const expected = {
-        batch_rolling_start: shift(snapshot.stockDate, -29).replaceAll('-', ''),
-        batch_end_exclusive: shift(snapshot.stockDate, 1).replaceAll('-', ''),
+        batch_rolling_start: shift(end, -29).replaceAll('-', ''),
+        batch_end_exclusive: shift(end, 1).replaceAll('-', ''),
       };
       if (
         Object.entries(expected).some(([name, value]) => name in values && values[name] !== value)

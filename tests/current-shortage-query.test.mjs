@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -240,7 +241,9 @@ test('an invalid inventory pool does not erase another pool or known demand', as
 });
 
 test('missing order quantity marks only its own base unknown without hiding valid bases', async () => {
-  const active = JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8'));
+  const active = sourceDetailConfig(
+    JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8')),
+  );
   const result = await readCurrentShortage(
     active,
     'current-shortage.locations',

@@ -11,7 +11,10 @@ import { startDashboardTiming } from '../business/shared/dashboard-timing.js';
 import {
   createWorkbenchPresentationCache,
   createWorkbenchEvidenceCache,
+  createWorkbenchPeriodCacheLifecycle,
+  createWorkbenchScopedFactsCache,
 } from '../prototypes/inventory-orderworkbench/presentation-cache.mjs';
+import { startWorkbenchStagedRead } from '../prototypes/inventory-orderworkbench/staged-facts.mjs';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,6 +25,7 @@ import {
   metricCalculationVersion,
   reusableWorkbenchFacts,
   compatibleWorkbenchFacts,
+  retainableWorkbenchFacts,
 } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 import {
   shippableDaysTarget,
@@ -35,6 +39,8 @@ test('order workbench reference interactions', async () => {
   });
   const { window } = dom;
   window.structuredClone = structuredClone;
+  window.AbortController = AbortController;
+  window.AbortSignal = AbortSignal;
   Object.assign(window, {
     mountReportImport,
     projectReportImports,
@@ -46,6 +52,11 @@ test('order workbench reference interactions', async () => {
   window.startDashboardTiming = startDashboardTiming;
   window.createWorkbenchPresentationCache = createWorkbenchPresentationCache;
   window.createWorkbenchEvidenceCache = createWorkbenchEvidenceCache;
+  window.createWorkbenchPeriodCacheLifecycle = createWorkbenchPeriodCacheLifecycle;
+  window.createWorkbenchScopedFactsCache = createWorkbenchScopedFactsCache;
+  window.startWorkbenchStagedRead = startWorkbenchStagedRead;
+  window.retainableWorkbenchFacts = retainableWorkbenchFacts;
+  window.currentSessionId = () => 'order-reference-session';
   window.encodeReportRequest = async (request) => request;
   window.savedReports = new Map();
   window.savedEdits = new Map();
@@ -58,6 +69,7 @@ test('order workbench reference interactions', async () => {
       const edited = window.savedEdits.get(key);
       return {
         ...snapshot,
+        scope: { key: 'reference-scope', base: '' },
         editVersion: edited?.version ?? 0,
         report: edited
           ? { ...(snapshot.report ?? { schemaVersion: 1, facts: null }), edits: edited.edits }
@@ -92,8 +104,9 @@ test('order workbench reference interactions', async () => {
         period,
       ]),
     ),
-    directors: { rows: [] },
-    customers: { rows: [] },
+    directors: { status: 'ready', rows: [] },
+    customers: { status: 'ready', rows: [] },
+    customerManagers: { status: 'ready', rows: [] },
   };
   window.workbenchPresentation = model.workbenchPresentation;
   window.workbenchBaseIncluded = model.workbenchBaseIncluded;
@@ -400,6 +413,24 @@ test('order workbench reference interactions', async () => {
       window.reportLoads,
       loadsBeforeCache,
       '19-minute cache avoids database report reload',
+    );
+    window.dispatchEvent(new window.Event('gea-session-changing'));
+    assert.equal(document.querySelector('.wb-kpi-main strong').textContent, '—');
+    window.dispatchEvent(new window.Event('gea-session-changed'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(
+      window.reportLoads,
+      loadsBeforeCache,
+      'returning from another page to the same Session must not reload cached reports',
+    );
+    assert.equal(
+      window.pendingReads.length,
+      readCount,
+      'cross-page reconnect must not restart metric queries',
+    );
+    assert.equal(
+      document.querySelector('[data-wb-summary-content="positive"]').textContent,
+      '对比加载时编辑的摘要',
     );
     click('[data-period-month="2026-07"]');
     window.cacheClockOffset = 21 * 60 * 1000;

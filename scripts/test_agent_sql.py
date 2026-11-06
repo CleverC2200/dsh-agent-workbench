@@ -5,6 +5,8 @@ import re
 import sqlglot
 from test_current_shortage_source import SourceFormula
 from test_fc_aging_source import BranchAgingSource
+from test_fc_import_query_depth import FcImportQueryShape
+from test_base_shortage_ranking import BaseShortageRankingTests
 from test_batch_age_lists import BatchAgeLists
 from test_qll_structure import QllStructureAgeTests
 from unittest.mock import patch
@@ -365,7 +367,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
     """Execute the shipped config against independent inventory/plan/shipment grains."""
     def test_confirmation_pages_survive_gateway_default_limit_without_missing_rows(self):
         for index in range(250):
-            self.insert('agents_scm_warehouse_transfer_plan_data_d', warehouseid='WH1', material_code=f'PAGE{index:03}', warehouse_month_out_plan=310, warehouse_future30_qty=300, warehouse_transfer_qty=0, stat_month='202610')
+            self.insert('agents_scm_warehouse_transfer_plan_data_d', warehouseid='WH1', material_code=f'PAGE{index:03}', warehouse_month_out_plan=310, warehouse_future30_qty=300, warehouse_transfer_qty=0, transfer_onway_qty=0, transfer_prepare_qty=0, stat_month='202610')
             self.insert('agents_scm_inventory_sku_data_d', warehouseid='WH1', material_code=f'PAGE{index:03}', month_date='20261019', warehouse_classify='20', live_qty=0, available_qty=0, pack_unit_qty=0, freeze_qty=0)
         for query_id in ['replenishment.detail.atomic', 'replenishment-suggestions.detail.atomic']:
             query = self.config['queries'][query_id]
@@ -405,7 +407,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         empty = self.read('replenishment-suggestions.detail.atomic',page_size=1,offset=1)
         self.assertEqual((empty[0]['page_scope_total'],empty[0]['page_row_present']),(1,0))
         self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=0,live_qty=0 WHERE material_code='S2'")
-        self.insert('agents_scm_warehouse_transfer_plan_data_d',warehouseid='WH1',material_code='S2',stat_month='202610',warehouse_month_out_plan=62,warehouse_future30_qty=60,warehouse_transfer_qty=0)
+        self.insert('agents_scm_warehouse_transfer_plan_data_d',warehouseid='WH1',material_code='S2',stat_month='202610',warehouse_month_out_plan=62,warehouse_future30_qty=60,warehouse_transfer_qty=0,transfer_onway_qty=0,transfer_prepare_qty=0)
         page1=self.read('replenishment-suggestions.detail.atomic',page_size=1,offset=0)
         page2=self.read('replenishment-suggestions.detail.atomic',page_size=1,offset=1)
         self.assertEqual([page1[0]['sku'],page2[0]['sku']],['S1','S2'])
@@ -438,7 +440,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         # Establish an independently loaded ASN source without adding demand to WH1.
         self.db.execute("INSERT INTO agents_scm_asn_detail_d (warehouseid,warehouse_name,warehouse_classify,source_warehouseid,asnreference1,asnno,asnlineno,material_code,header_addtime,asnstatus,load_time,expectedqty,receivedqty,asntype) VALUES ('WH1','分仓1','20','BASE','OTHER-ORDER','ASN-OTHER','1','S2','2026-10-01','00','2026-10-19',0,0,'TT')")
         self.addCleanup(self.db.close)
-        self.insert('agents_scm_warehouse_transfer_plan_data_d', warehouseid='WH1', material_code='S1', warehouse_name='分仓1', material_name='商品1', future30_avg_plan=10, warehouse_month_out_plan=310, warehouse_future30_qty=300, warehouse_transfer_qty=40, transfer_onway_qty=20, transfer_prepare_qty=20, stat_month='202610')
+        self.insert('agents_scm_warehouse_transfer_plan_data_d', warehouseid='WH1', material_code='S1', warehouse_name='分仓1', material_name='商品1', future30_avg_plan=10, warehouse_month_out_plan=310, warehouse_future30_qty=300, warehouse_transfer_qty=40, transfer_onway_qty=0, transfer_prepare_qty=0, stat_month='202610')
         for sku, stock, available in [('S1',50,25),('S2',80,60)]:
             self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='WH1',warehouse_name='分仓1',belong_base='基地1',material_code=sku,prod_date='2026-09-30',warehouse_classify='20',live_qty=stock,available_qty=available,pack_unit_qty=0,freeze_qty=0)
         for sku, amount in [('S1',30),('S2',60)]:

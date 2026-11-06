@@ -2,6 +2,7 @@ import { executeDailyBundle } from './daily-summary-bundle';
 import { businessDay } from './business-day';
 import { inFlightQueries } from './in-flight-query';
 import { configuredQueryFreshAfter } from './query-cache';
+import { inventoryCacheTtl } from './inventory-cache-policy';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { createQueryClient } from './configured-query-client.mjs';
 import {
@@ -26,7 +27,7 @@ type SummaryRead = {
   snapshot: DailySummarySnapshot;
   preloaded?: { at: number; result: any };
 };
-type SummaryReads = Map<string, { result: Promise<SummaryRead> }>;
+type SummaryReads = Map<string, { expiresAt: number; result: Promise<SummaryRead> }>;
 const pageSummaries: SummaryReads = new Map();
 const suppliedSummaries = new WeakMap<ConfiguredExecution, SummaryReads>();
 
@@ -106,6 +107,7 @@ export function createAgentQueries(
       );
     });
   let selectedSnapshot: DailySummarySnapshot | undefined;
+  let selectedIdentity = identityGeneration;
   let preloaded: SummaryRead['preloaded'];
   const client = createQueryClient(config, (request, options) =>
     executeDailyBundle(
@@ -135,8 +137,15 @@ export function createAgentQueries(
         return reads;
       })())
     : pageSummaries;
-  const selectRead = async (id: string, values: Record<string, unknown>) => {
-    if (!config.dailySummary || !config.queries[id]?.summaryRoute) return { id, values };
+  const readSnapshot = async (): Promise<DailySummarySnapshot> => {
+    const readIdentity = identityGeneration;
+    if (selectedIdentity !== identityGeneration) {
+      selectedSnapshot = undefined;
+      preloaded = undefined;
+      selectedIdentity = identityGeneration;
+    }
+    if (selectedSnapshot?.kind === 'ready') return selectedSnapshot;
+    if (!config.dailySummary) return { kind: 'unavailable' };
     const bootstrapId = config.dailySummary.bundle?.bootstrapQueryId;
     const snapshotId = bootstrapId ?? config.dailySummary.snapshotQueryId;
     if (typeof snapshotId !== 'string' || !config.queries[snapshotId])
@@ -148,8 +157,12 @@ export function createAgentQueries(
       businessDay(),
       freshAfter,
     ]);
-    // Keep cards and later pages on one daily batch until the whole view refreshes.
+    // Active reads pin their batch; a new branch read can advance after five minutes.
     let snapshot = summaryReads.get(key);
+    if (snapshot && Date.now() >= snapshot.expiresAt) {
+      summaryReads.delete(key);
+      snapshot = undefined;
+    }
     if (!snapshot) {
       const metadataColumns = config.queries[config.dailySummary.snapshotQueryId].resultColumns;
       const result = client
@@ -187,7 +200,13 @@ export function createAgentQueries(
             },
           };
         });
-      snapshot = { result };
+      snapshot = {
+        expiresAt:
+          config.agentId === 'inventory-fc'
+            ? Date.now() + inventoryCacheTtl(config.agentId)
+            : Infinity,
+        result,
+      };
       summaryReads.set(key, snapshot);
       result.catch((error) => {
         const code = error?.failure?.reasonCode ?? error?.code ?? '';
@@ -202,20 +221,41 @@ export function createAgentQueries(
       if (summaryReads.size > 32) summaryReads.delete(summaryReads.keys().next().value ?? '');
     }
     const selectedRead = await snapshot.result;
+    if (readIdentity !== identityGeneration)
+      throw Object.assign(Error('身份已变化，请重新读取当前账号的数据'), {
+        code: 'IDENTITY_CHANGED',
+      });
+    // Coalesce one initial load, without retaining a temporary empty publication indefinitely.
+    if (selectedRead.snapshot.kind === 'unavailable')
+      snapshot.expiresAt = Math.min(snapshot.expiresAt, Date.now() + 45000);
     selectedSnapshot = selectedRead.snapshot;
     preloaded = selectedRead.preloaded;
-    const selected = dailySummaryQuery(config.queries[id], selectedSnapshot, values);
+    return selectedRead.snapshot;
+  };
+  const selectRead = async (id: string, values: Record<string, unknown>) => {
+    if (!config.dailySummary || !config.queries[id]?.summaryRoute) return { id, values };
+    const snapshot = await readSnapshot();
+    const selected = dailySummaryQuery(config.queries[id], snapshot, values);
     if (!selected && config.queries[id].summaryRoute.required === true)
       throw Object.assign(Error('当前范围的汇总数据尚未就绪'), {
         code:
-          selectedSnapshot.kind === 'unavailable'
-            ? 'SUMMARY_NOT_AVAILABLE'
-            : 'SUMMARY_SCOPE_NOT_COVERED',
+          snapshot.kind === 'unavailable' ? 'SUMMARY_NOT_AVAILABLE' : 'SUMMARY_SCOPE_NOT_COVERED',
       });
     return selected ? { id: selected.queryId, values: selected.values } : { id, values };
   };
   return {
     config,
+    async snapshot(options: { signal?: AbortSignal } = {}) {
+      const generation = identityGeneration;
+      options.signal?.throwIfAborted();
+      const snapshot = await readSnapshot();
+      options.signal?.throwIfAborted();
+      if (generation !== identityGeneration)
+        throw Object.assign(Error('身份已变化，请重新读取当前账号的数据'), {
+          code: 'IDENTITY_CHANGED',
+        });
+      return structuredClone(snapshot);
+    },
     read(id: string, values: Record<string, unknown>, options: any = {}) {
       const generation = identityGeneration;
       const key = JSON.stringify([
