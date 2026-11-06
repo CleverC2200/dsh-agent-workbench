@@ -110,7 +110,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
           const failure = shipmentSnapshot?.adjustForecast?.(
             entry.keys,
             entry.value,
-            `第三步 ${entry.category} ${entry.group ?? ''} ${entry.code ?? ''} ${entry.base ?? ''} ${entry.reason}`.trim(),
+            `第三步 ${label(entry)} ${entry.reason}`.trim(),
           );
           if (failure || !shipmentSnapshot?.adjustForecast)
             throw Error(failure || '第二步同版预估发货尚未就绪。');
@@ -276,6 +276,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
     const indexed = react.useMemo(() => {
       const all = new Map();
       const children = new Map();
+      const bases = new Map();
       const groupNames = new Map();
       for (const product of draft.products ?? []) {
         const key = JSON.stringify([product['大类'], product['物料组']]);
@@ -288,9 +289,9 @@ export function createProcessedDemand(react, { downloadCsv }) {
         map.get(key).push(row);
       };
       const path = (row) => [
-        { kind: 'categoryDemand', category: row.category },
-        { kind: 'group', category: row.category, group: row.group },
-        { kind: 'sku', category: row.category, group: row.group, code: row.code },
+        { kind: 'base', base: row.base },
+        { kind: 'base-category', base: row.base, category: row.category },
+        { kind: 'base-group', base: row.base, category: row.category, group: row.group },
         {
           kind: 'base-sku',
           category: row.category,
@@ -302,6 +303,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
       for (const row of result.rows) for (const entry of path(row)) add(all, entry, row);
       for (const row of rows) {
         const entries = path(row);
+        bases.set(nodeKey(entries[0]), entries[0]);
         for (let index = 0; index < entries.length - 1; index++) {
           const parent = nodeKey(entries[index]);
           if (!children.has(parent)) children.set(parent, new Map());
@@ -320,7 +322,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
         if (!forecasts.has(key)) forecasts.set(key, []);
         forecasts.get(key).push(row);
       }
-      return { all, children, groupNames, shipment, forecasts };
+      return { all, children, bases, groupNames, shipment, forecasts };
     }, [result, rows, draft.products]);
     const sourceSummary = (values) => {
       const available = values.filter((value) => value != null);
@@ -377,17 +379,16 @@ export function createProcessedDemand(react, { downloadCsv }) {
       };
     };
     const nodeName = (entry, data) => {
-      if (entry.kind === 'categoryDemand') return `大类 · ${entry.category}`;
-      if (entry.kind === 'group') {
+      if (entry.kind === 'base') return `基地 · ${entry.base || '基地缺失'}`;
+      if (entry.kind === 'base-category') return `大类 · ${entry.category}`;
+      if (entry.kind === 'base-group') {
         const names = indexed.groupNames.get(JSON.stringify([entry.category, entry.group]));
         return `物料组 · ${[entry.group || '物料组缺失', names?.size === 1 ? [...names][0] : ''].filter(Boolean).join(' ')}`;
       }
-      return entry.kind === 'sku'
-        ? `SKU · ${entry.code} ${data.full[0]?.name ?? ''}`
-        : `基地 · ${entry.base || '基地缺失'}`;
+      return `SKU · ${entry.code} ${data.full[0]?.name ?? ''}`;
     };
     const detailColumns = [
-      '大类 / 物料组 / SKU / 基地',
+      '基地 / 大类 / 物料组 / SKU',
       `M+1 ${months[0]} 计划提报`,
       `上一财年发货 ${result.comparisonSources.historyPeriod.start.slice(0, 7)}至${result.comparisonSources.historyPeriod.end.slice(0, 7)}`,
       `${result.shipmentMonth} 本月预估发货（系统）`,
@@ -405,7 +406,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
       if (expanded.has(key))
         for (const child of indexed.children.get(key)?.values() ?? []) append(child, depth + 1);
     };
-    for (const category of categories) append({ kind: 'categoryDemand', category }, 0);
+    for (const entry of indexed.bases.values()) append(entry, 0);
     const detailRows = visible.map(({ entry, depth }) => {
       const key = nodeKey(entry);
       const data = nodeData(entry);
@@ -427,6 +428,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
                   'button',
                   {
                     className: 'wf-demand-toggle',
+                    'aria-label': entry.kind === 'base' ? name : `${entry.base} ${name}`,
                     'aria-expanded': expanded.has(key),
                     onClick: () => toggle(key),
                   },
@@ -485,24 +487,14 @@ export function createProcessedDemand(react, { downloadCsv }) {
         ),
         ...months.flatMap((month, index) => {
           const selected = data.full.filter((row) => row.month === month);
-          const category =
-            entry.kind === 'categoryDemand' ? categoryValue(entry.category, month) : null;
-          const value =
-            entry.kind === 'categoryDemand' ? category?.quantity : sum(selected, 'demand');
-          const system =
-            entry.kind === 'categoryDemand'
-              ? category?.systemQuantity
-              : sum(selected, 'systemDemand');
+          const value = sum(selected, 'demand');
+          const system = sum(selected, 'systemDemand');
           const cell = h(
             'td',
             { key: month },
-            controls(
-              { ...entry, month },
-              system,
-              value,
-              entry.kind === 'categoryDemand' ? '加工明细 ' : '',
-              true,
-            ),
+            entry.kind === 'base-sku'
+              ? controls({ ...entry, month }, system, value, '', true)
+              : h('strong', { title: `当前基地汇总；系统数量 ${number(system)}` }, number(value)),
             value == null &&
               known(selected, 'demand') !== '—' &&
               h('small', null, known(selected, 'demand')),
@@ -602,7 +594,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
           h(
             'p',
             { className: 'wf-note' },
-            '按大类、物料组、SKU、基地展开。来源对照统计当前拆分范围内的基地SKU。展开基地可查看运算过程。已知小计含待补项，缺值不补零。',
+            '按基地、大类、物料组、SKU展开。各层汇总仅包含当前基地，SKU可查看运算过程并调整数量。跨基地大类总量仍在上方总表调整。已知小计含待补项，缺值不补零。',
           ),
           detailTable,
           h(

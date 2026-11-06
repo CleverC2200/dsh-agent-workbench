@@ -41,6 +41,98 @@ async function version(frame, month) {
   await dialog.getByLabel('评估月份', { exact: true }).fill(month);
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
 }
+
+test('Tab3 expands base then category, group and SKU with base-scoped totals and explanations', async (t) => {
+  const { page, frame } = await workflowPage(t);
+  await version(frame, '2026-12');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n,A,产品甲,汤圆,系列,组,,\n,B,产品乙,汤圆,系列,组,,',
+  );
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,产品甲,汤圆,系列,组,60,60\n2026-12,郑州,B,产品乙,汤圆,系列,组,20,20\n2026-12,华东,A,产品甲,汤圆,系列,组,40,40\n2026-12,华东,B,产品乙,汤圆,系列,组,80,80',
+  );
+  await upload(
+    frame,
+    '设置上一财年发货夹具',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,汤圆,系列,组,60\n2025-12,郑州,B,产品乙,汤圆,系列,组,20\n2025-12,华东,A,产品甲,汤圆,系列,组,40\n2025-12,华东,B,产品乙,汤圆,系列,组,80',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
+  await view.getByRole('button', { name: '调整数量 汤圆 2026-12', exact: true }).click();
+  const editor = view.getByRole('group', { name: '分层需求数量调整' });
+  await editor.getByLabel('有效需求数量').fill('200');
+  await editor.getByLabel('数量调整原因').fill('基地层级核对');
+  await editor.getByRole('button', { name: '应用数量调整', exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  const detail = view.getByRole('table', { name: '加工后的需求明细', exact: true });
+  await expect(
+    detail.getByRole('columnheader', { name: '基地 / 大类 / 物料组 / SKU', exact: true }),
+  ).toBeVisible();
+  await expect(detail.locator('tbody tr')).toHaveCount(2);
+  const zhengzhou = detail
+    .getByRole('row')
+    .filter({ has: frame.getByRole('button', { name: '基地 · 郑州', exact: true }) });
+  await expect(zhengzhou.getByRole('cell').first()).toHaveText('80');
+  await detail.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
+  await detail.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).click();
+  await detail.getByRole('button', { name: '郑州 物料组 · 组', exact: true }).click();
+  await expect(detail.getByText('SKU · A 产品甲', { exact: true })).toHaveCount(1);
+  await expect(detail.getByText('SKU · B 产品乙', { exact: true })).toHaveCount(1);
+  await expect(
+    detail.getByRole('button', { name: '运算过程 华东 A 2026-12', exact: true }),
+  ).toHaveCount(0);
+  await detail.getByRole('button', { name: '运算过程 郑州 A 2026-12', exact: true }).click();
+  await expect(frame.getByRole('dialog')).toContainText('结果：60');
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await detail
+    .getByRole('button', { name: '调整数量 汤圆 组 A 郑州 2026-12', exact: true })
+    .click();
+  await editor.getByLabel('有效需求数量').fill('50');
+  await editor.getByLabel('数量调整原因').fill('基地单品调整核对');
+  await editor.getByRole('button', { name: '应用数量调整', exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  const adjusted = XLSX.utils.sheet_to_json(
+    XLSX.read(await download(page, view, '下载需求拆分'), { type: 'string', raw: true }).Sheets[
+      'Sheet1'
+    ],
+  );
+  for (const base of ['郑州', '华东'])
+    assert.equal(
+      adjusted.find(
+        (row) => row['月份'] === '2026-12' && row['基地'] === base && row['产品编码'] === 'A',
+      )['需求数量'],
+      '50',
+    );
+  await detail
+    .getByRole('button', { name: '撤销数量 汤圆 组 A 郑州 2026-12', exact: true })
+    .click();
+  await detail.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
+  await detail.getByRole('button', { name: '基地 · 华东', exact: true }).click();
+  await detail.getByRole('button', { name: '华东 大类 · 汤圆', exact: true }).click();
+  await detail.getByRole('button', { name: '华东 物料组 · 组', exact: true }).click();
+  const product = detail.getByRole('row').filter({ hasText: 'SKU · A 产品甲' });
+  await expect(product.getByRole('cell').first()).toHaveText('40');
+  const csv = await download(page, view, '下载需求拆分');
+  const book = XLSX.read(csv, { type: 'string', raw: true });
+  const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  for (const [base, code, quantity] of [
+    ['郑州', 'A', '60'],
+    ['郑州', 'B', '20'],
+    ['华东', 'A', '40'],
+    ['华东', 'B', '80'],
+  ]) {
+    assert.equal(
+      rows.find(
+        (row) => row['月份'] === '2026-12' && row['基地'] === base && row['产品编码'] === code,
+      )['需求数量'],
+      quantity,
+    );
+  }
+});
 async function download(page, view, name) {
   const waiting = page.waitForEvent('download');
   await view.getByRole('button', { name, exact: true }).click();
@@ -1330,12 +1422,29 @@ test('MPS processing compares both forecast months and persists fixed quantities
   await expect(categoryDetail.getByRole('cell').nth(2)).toHaveText('300');
   await expect(categoryDetail.getByRole('cell').nth(4)).toContainText('0');
   await expect(categoryDetail.getByRole('cell').nth(4)).toContainText('已知小计');
+  await view.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
   await view.getByText('大类 · 汤圆', { exact: true }).click();
   await view.getByText('物料组 · 组', { exact: true }).click();
-  await view.getByText('SKU · B 产品乙', { exact: true }).click();
-  await apply('汤圆 组 B 2026-12', 20);
+  await page.evaluate(async () => {
+    const seed = structuredClone(window.readView());
+    const selected = seed.localDrafts;
+    selected.drafts.find((draft) => draft.id === selected.selected).adjustments.quantities = [
+      {
+        kind: 'sku',
+        month: '2026-12',
+        category: '汤圆',
+        group: '组',
+        code: 'B',
+        quantity: 20,
+        systemValue: 40,
+        at: new Date().toISOString(),
+        reason: '已有全国单品调整',
+      },
+    ];
+    await window.openAuthor('mps', 1200, seed);
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   await apply('汤圆 2026-12', 200, '上游大类变化后保留固定单品');
-  await apply('汤圆 组 2026-12', 200);
   await view.getByText('拆分过程与基地SKU明细', { exact: true }).click();
   await expect(
     view.getByRole('button', { name: '郑州 A 2026-12 需求数量 计算过程', exact: true }),
@@ -1353,13 +1462,14 @@ test('MPS processing compares both forecast months and persists fixed quantities
         return state.drafts.find((row) => row.id === state.selected).adjustments.quantities.length;
       }),
     )
-    .toBe(2);
+    .toBe(1);
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await view.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
   await view.getByText('大类 · 汤圆', { exact: true }).click();
   await view.getByText('物料组 · 组', { exact: true }).click();
-  await view.getByText('SKU · B 产品乙', { exact: true }).click();
-  await view.getByRole('button', { name: '撤销数量 汤圆 组 B 2026-12', exact: true }).click();
+  await view.getByText('数量调整与撤销记录（0）', { exact: true }).click();
+  await view.getByRole('button', { name: '撤销固定数量 汤圆 组 B 2026-12', exact: true }).click();
   await view.getByText('拆分过程与基地SKU明细', { exact: true }).click();
   await expect(
     view.getByRole('button', { name: '郑州 B 2026-12 需求数量 计算过程', exact: true }),
@@ -1381,11 +1491,10 @@ test('MPS processing compares both forecast months and persists fixed quantities
     await view
       .getByRole('heading', { name: '加工后的需求', exact: true })
       .evaluate((element) => element.scrollIntoView({ block: 'start' }));
-    const longName = view.getByRole('button', {
-      name: 'SKU · A 麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）',
+    const longName = view.getByText('SKU · A 麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）', {
       exact: true,
     });
-    const textBox = await longName.locator('span').boundingBox();
+    const textBox = await longName.boundingBox();
     const identityBox = await longName.locator('xpath=ancestor::th').boundingBox();
     assert.ok(
       textBox.x + textBox.width <= identityBox.x + identityBox.width + 1,
@@ -1423,7 +1532,7 @@ test('MPS processing compares both forecast months and persists fixed quantities
     80,
   );
   await view.getByLabel('月份筛选').selectOption('');
-  await view.getByRole('button', { name: '调整本月预估 汤圆', exact: true }).click();
+  await view.getByRole('button', { name: '调整本月预估 汤圆 郑州', exact: true }).click();
   const shipmentEditor = view.getByRole('group', { name: '分层需求数量调整' });
   await shipmentEditor.getByLabel('本月预估发货数量').fill('600');
   await shipmentEditor.getByRole('button', { name: '应用本月预估调整', exact: true }).click();
@@ -1431,11 +1540,9 @@ test('MPS processing compares both forecast months and persists fixed quantities
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await expect(frame.getByLabel('全国合计 整月预估发货', { exact: true })).toHaveValue('600');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await view.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
   await view.getByText('大类 · 汤圆', { exact: true }).click();
   await view.getByText('物料组 · 组', { exact: true }).click();
-  await view
-    .getByText('SKU · A 麦德龙定制思念1000g小小玉珍珠黑芝麻汤圆（10袋）', { exact: true })
-    .click();
   await view.getByRole('button', { name: '运算过程 郑州 A 2026-12', exact: true }).click();
   await expect(frame.getByRole('dialog')).toContainText('提报三层占比');
   await expect(frame.getByRole('dialog')).toContainText('历史三层占比');
