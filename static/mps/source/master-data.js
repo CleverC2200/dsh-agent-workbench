@@ -160,13 +160,28 @@ export async function readCapacityAnnual(months, signal) {
     { months: [...new Set(months.flatMap(sourceMonthValues))], page_size: 200, offset: 0 },
     { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
   );
+  return capacityAnnualRows(result.rows, months);
+}
+export function capacityAnnualRows(source, months) {
   const groups = new Map();
-  for (const row of result.rows) {
+  const unmapped = [];
+  let excludedRows = 0;
+  for (const row of source) {
     const month = normalizedMonth(row.stat_month);
-    const base = text(row.belong_base),
-      code = text(row.material_code);
-    if (!month || !base || !code || !months.includes(month))
-      throw Error('年度SKU需求缺有效月份、基地或编码');
+    const base = text(row.belong_base).trim(),
+      code = text(row.material_code).trim();
+    if (!code) {
+      excludedRows++;
+      continue;
+    }
+    if (!month || !base || !months.includes(month)) {
+      unmapped.push({
+        month,
+        code,
+        reason: !month || !months.includes(month) ? 'stat_month未匹配本财年' : 'belong_base为空',
+      });
+      continue;
+    }
     const key = JSON.stringify([month, base, code]);
     const group = groups.get(key) ?? [];
     group.push({
@@ -178,6 +193,8 @@ export async function readCapacityAnnual(months, signal) {
     groups.set(key, group);
   }
   return {
+    excludedRows,
+    unmapped,
     rows: [...groups.values()].map((rows) => ({
       ...rows[0],
       quantity: new Set(rows.map((row) => row.quantity)).size === 1 ? rows[0].quantity : null,

@@ -386,48 +386,74 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
           h(
             'p',
             { className: 'wf-note' },
-            `年度需求独立取${report.annualSource.table}，读取${report.annualSource.records}个基地SKU月份。${report.annualSource.error || '按SKU有效吨/件折算，空值、冲突及缺件吨系数的月份保留待评估。'}2027年2月按已确认15天计算。首表超出本轮拆分的月份仅作年度需求参考，不参与排产。`,
+            `年度需求独立取${report.annualSource.table}，读取${report.annualSource.records}个基地SKU月份，另有${report.annualSource.excludedRows}行无SKU编码未纳入折吨、${report.annualSource.unmappedCount}行维度待核对。${report.annualSource.error || '按SKU有效吨/件折算，空值、冲突及缺件吨系数的月份保留待评估。'}2027年2月按已确认15天计算。首表超出本轮拆分的月份仅作年度需求参考，不参与排产。`,
           ),
-          table(
-            '全年月度负荷率矩阵',
-            [
-              '基地',
-              ...report.fiscalMonths.map((period) =>
-                period === '2027-02' ? `${period} 春节月` : period,
-              ),
-              '全年需求（吨）',
-            ],
-            [
-              ...(filters.base ? [filters.base] : report.bases),
-              ...(!filters.base ? ['全国'] : []),
-            ].map((base) => {
-              const items = report.fiscalMonths.map((period) =>
-                annualIndex.get(JSON.stringify([period, base])),
-              );
-              return [
-                base,
-                ...items.map((row, index) =>
-                  h(
-                    'span',
-                    {
-                      className:
-                        report.fiscalMonths[index] === '2027-02' ? 'wf-capacity-holiday' : '',
-                      title: row
-                        ? `年度需求已知小计${numberText(row.demand.known, false, 3)}吨；${row.demand.missing}项缺需求或有效件吨系数`
-                        : '未取得年度需求',
-                    },
-                    row ? load(row.load, row.band) : '缺来源',
-                  ),
+          report.annualSource.unmappedCount
+            ? h(
+                'details',
+                { className: 'wf-plan-disclosure' },
+                h(
+                  'summary',
+                  null,
+                  `年度来源维度待核对 ${report.annualSource.unmappedCount}行，预览前25行`,
                 ),
-                items.every((row) => row?.demand.value !== null && row?.demand.value !== undefined)
-                  ? numberText(
-                      items.reduce((total, row) => total + row.demand.value, 0),
-                      false,
-                      3,
-                    )
-                  : '全年来源未齐',
-              ];
-            }),
+                table(
+                  '年度来源维度待核对',
+                  ['月份', 'SKU', '待补字段'],
+                  report.annualSource.unmappedPreview.map((row) => [
+                    row.month || '无法识别',
+                    row.code,
+                    row.reason,
+                  ]),
+                ),
+              )
+            : null,
+          h(
+            'div',
+            { 'data-holiday-year': report.fiscalMonths.includes('2027-02') ? '2027' : '' },
+            table(
+              '全年月度负荷率矩阵',
+              [
+                '基地',
+                ...report.fiscalMonths.map((period) =>
+                  period === '2027-02' ? `${period} 春节月` : period,
+                ),
+                '全年需求（吨）',
+              ],
+              [
+                ...(filters.base ? [filters.base] : report.bases),
+                ...(!filters.base ? ['全国'] : []),
+              ].map((base) => {
+                const items = report.fiscalMonths.map((period) =>
+                  annualIndex.get(JSON.stringify([period, base])),
+                );
+                return [
+                  base,
+                  ...items.map((row, index) =>
+                    h(
+                      'span',
+                      {
+                        className:
+                          report.fiscalMonths[index] === '2027-02' ? 'wf-capacity-holiday' : '',
+                        title: row
+                          ? `年度需求已知小计${numberText(row.demand.known, false, 3)}吨；${row.demand.missing}项缺需求或有效件吨系数`
+                          : '未取得年度需求',
+                      },
+                      row ? load(row.load, row.band) : '缺来源',
+                    ),
+                  ),
+                  items.every(
+                    (row) => row?.demand.value !== null && row?.demand.value !== undefined,
+                  )
+                    ? numberText(
+                        items.reduce((total, row) => total + row.demand.value, 0),
+                        false,
+                        3,
+                      )
+                    : '全年来源未齐',
+                ];
+              }),
+            ),
           ),
         ),
       ),

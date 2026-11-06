@@ -859,12 +859,11 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                       ),
                     ),
                   ),
-                  card(
-                    '调拨求解校验明细',
+                  disclosure('调拨求解校验明细', plan.transfers.length, () =>
                     h(
                       react.Fragment,
                       null,
-                      table(
+                      paginate(
                         '求解调拨明细',
                         ['月份', '发出基地', '接收基地', '单品', '调出/调入件数', '吨数'],
                         plan.transfers
@@ -881,6 +880,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                             numberText(row.quantity, false, 3),
                             numberText(row.tons, false, 3),
                           ]),
+                        'transferChecks',
                       ),
                       h(
                         'p',
