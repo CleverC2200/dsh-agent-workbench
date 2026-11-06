@@ -110,17 +110,9 @@
     <p id="summary"></p>
     <section id="items" hidden></section>
     <label id="defer" hidden
-      >暂缓天数
-      <select id="days" aria-label="暂缓天数">
-        <option value="">请选择 1—7 天</option>
-        <option value="1">1 天</option>
-        <option value="2">2 天</option>
-        <option value="3">3 天</option>
-        <option value="4">4 天</option>
-        <option value="5">5 天</option>
-        <option value="6">6 天</option>
-        <option value="7">7 天</option>
-      </select></label
+      >预计交货日期
+      <input id="days" type="date" aria-label="预计交货日期" />
+      <small>选择未来1—7天，与现有暂缓决定接口保持一致。</small></label
     >
     <p id="quantity"></p>
     <p id="notice" role="alert"></p>
@@ -136,7 +128,7 @@
     </div>
   </main>
   <!--update-begin---author:Codex ---date:2026-11-02 for：【订单履约正式确认链路本地联调】避开测试代理静态JS路由----------- -->
-  <main id="orderEditor" hidden aria-label="缺货订单处理"></main>
+  <main id="orderEditor" hidden aria-label="订单履约"></main>
   <style>
     /* update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅订单处理窗口布局----------- */
     #orderEditor {
@@ -232,6 +224,8 @@
       font-size: 13px;
     }
     #orderEditor .editor-add {
+      margin-left: auto;
+      align-self: center;
       border: 0;
       padding: 6px 0;
       color: #ed2232;
@@ -687,6 +681,161 @@
       #orderEditor .editor-category-tabs {
         gap: 20px;
         padding: 0 14px;
+      }
+    }
+    #orderEditor .editor-basic-info {
+      padding: 12px 24px;
+      color: #858b95;
+      font-size: 12px;
+      flex-shrink: 0;
+      border-bottom: 1px solid #eceef0;
+    }
+    #orderEditor .editor-basic-info h2 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      color: #333b46;
+    }
+    #orderEditor .editor-basic-info dl {
+      display: grid;
+      grid-template-columns: auto 1fr auto 1fr;
+      gap: 7px 12px;
+      margin: 0;
+    }
+    #orderEditor .editor-basic-info dt {
+      color: #8b919b;
+    }
+    #orderEditor .editor-basic-info dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      color: #5b6370;
+    }
+    #orderEditor .editor-order-rules {
+      font-size: 11px;
+      color: #9096a1;
+      margin: 7px 0;
+    }
+    #orderEditor .editor-quantity-error {
+      display: block;
+      color: #c92838;
+      font-size: 12px;
+    }
+    #orderEditor .editor-readonly-quantity {
+      background: #f2f3f5;
+      padding: 4px 18px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    #orderEditor .editor-delivery-date {
+      font-size: 11px;
+      color: #8a909b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    #orderEditor .editor-delivery-date input {
+      font: inherit;
+      border: 1px solid #e8e8eb;
+      border-radius: 5px;
+      padding: 6px;
+      min-width: 120px;
+      color: #4c5562;
+    }
+    #orderEditor .editor-toolbar select {
+      max-width: 180px;
+      min-width: 0;
+      font-size: 12px;
+      padding: 6px 8px;
+    }
+    #orderEditor .editor-products {
+      padding-bottom: 8px;
+    }
+    #orderEditor .editor-credit-panel {
+      padding: 40px 28px;
+      text-align: center;
+    }
+    #orderEditor .editor-credit-panel h2 {
+      color: #343b46;
+      font-size: 20px;
+    }
+    #orderEditor .editor-credit-panel p {
+      font-size: 13px;
+      color: #868d98;
+    }
+    #orderEditor .editor-credit-panel button {
+      margin: 16px 6px;
+    }
+    #orderEditor .editor-modal-overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: #1d253750;
+      z-index: 5;
+      padding: 24px;
+    }
+    #orderEditor {
+      position: relative;
+    }
+    #orderEditor .editor-confirm-dialog {
+      background: white;
+      padding: 28px;
+      border-radius: 10px;
+      text-align: center;
+      width: min(360px, 100%);
+      box-shadow: 0 12px 40px #16213522;
+    }
+    #orderEditor .editor-confirm-dialog h2 {
+      margin: 0 0 12px;
+      font-size: 19px;
+    }
+    #orderEditor .editor-confirm-dialog p {
+      color: #838a96;
+      font-size: 13px;
+    }
+    #orderEditor .editor-confirm-dialog button {
+      margin: 12px 5px 0;
+    }
+    #orderEditor[data-page='details'] .editor-body {
+      overflow: hidden;
+    }
+    #orderEditor .editor-order-products {
+      overflow-y: auto;
+    }
+    #confirmationMain input[type='date'] {
+      font: inherit;
+      padding: 8px;
+      border: 1px solid #d8dde5;
+      border-radius: 6px;
+      margin-left: 12px;
+    }
+    #confirmationMain button.primary {
+      background: #ed2232;
+      border-color: #ed2232;
+    }
+    @media (max-width: 500px) {
+      #orderEditor .editor-basic-info {
+        padding: 12px 14px;
+      }
+      #orderEditor .editor-basic-info dl {
+        grid-template-columns: auto 1fr;
+      }
+      #orderEditor .editor-toolbar {
+        padding: 12px 14px;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      #orderEditor .editor-toolbar select {
+        max-width: 130px;
+      }
+      #orderEditor .editor-order-rules {
+        font-size: 10px;
+        line-height: 1.7;
+      }
+      #orderEditor .editor-product-trading {
+        flex-wrap: wrap;
+        gap: 7px;
       }
     }
     /* update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅订单处理窗口布局----------- */
