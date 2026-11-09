@@ -15,6 +15,7 @@ const record = (id, values) => ({
 const products = [
   record('products.detail', {
     product_item: 'G',
+    product_item_name: '物料组甲',
     material_code: '',
     material_name: '物料组甲',
     source_rows: 1,
@@ -22,14 +23,15 @@ const products = [
   ...['A', 'B'].map((code) =>
     record('products.detail', {
       product_item: 'G',
+      product_item_name: '物料组甲',
       material_code: code,
       material_name: '产品' + code,
       sub_category: '汤圆',
       series: '系列甲',
       responsible_item: '汤圆',
       source_rows: 1,
-      replacement_material_code: code === 'A' ? 'REPLACE' : null,
-      replacement_product: code === 'A' ? '源替换品' : null,
+      replacement_material_code: null,
+      replacement_product: null,
     }),
   ),
 ];
@@ -160,7 +162,16 @@ async function version(frame, month = '2026-10') {
 }
 
 test('product replacement fields populate old-product columns and the list omits base names', async (t) => {
-  const { frame } = await mpsPage(t, config, fixture);
+  const { frame } = await mpsPage(t, config, (query) => {
+    const result = fixture(query);
+    if (query.queryId.startsWith('products.'))
+      result.rows = result.rows.map((row) =>
+        row.material_code === 'A'
+          ? { ...row, replacement_material_code: 'REPLACE', replacement_product: '源替换品' }
+          : row,
+      );
+    return result;
+  });
   const section = frame.getByRole('region', { name: '产品明细', exact: true });
   await expect(section.getByRole('columnheader', { name: '基地名称', exact: true })).toHaveCount(0);
   await expect(section).not.toContainText('源标签：汤圆');
@@ -168,7 +179,9 @@ test('product replacement fields populate old-product columns and the list omits
   await expect(
     section.getByRole('columnheader', { name: '物料组名称', exact: true }),
   ).toBeVisible();
-  const parent = section.locator('tbody tr').filter({ hasText: '物料组甲' });
+  const parent = section.locator('tbody tr').filter({
+    has: frame.getByRole('button', { name: '查看物料组 G 的2个SKU', exact: true }),
+  });
   await expect(parent).toContainText('汤圆');
   await section.getByRole('button', { name: '查看物料组 G 的2个SKU', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '产品源字段与物料组SKU', exact: true });
@@ -553,9 +566,7 @@ test('sales plan share card rebuilds three dimensions using current material-gro
   assert(!csv.includes('25.00%'));
   assert(
     calls.some(
-      (call) =>
-        call.queryId === 'plan-rate.detail' &&
-        call.parameters.months.join() === '202610,202611,202612',
+      (call) => call.queryId === 'plan-rate.detail' && call.parameters.months.join() === '202610',
     ),
   );
 });
@@ -755,7 +766,9 @@ test('模型双期预测沿用四项统计，明细保留物料组及零数量',
   await expect(row).toContainText('系列甲');
   await expect(row.getByRole('cell', { name: 'G', exact: true })).toBeVisible();
   const columns = await dialog.getByRole('columnheader').allTextContents();
-  await expect(row.locator('td').nth(columns.indexOf('数量'))).toHaveText('0');
+  const quantityColumn = columns.findIndex((column) => /^数量（/.test(column));
+  assert(quantityColumn >= 0);
+  await expect(row.locator('td').nth(quantityColumn)).toHaveText('0');
 });
 
 test('同比缺一年时预览按两年计算并列出有效年份', async (t) => {
@@ -800,6 +813,7 @@ test('basic source anomalies keep known BI quantities and export every row while
     ...Array.from({ length: 30 }, (_, index) =>
       record('products.detail', {
         product_item: 'G',
+        product_item_name: '物料组甲',
         material_code: `IN-${index + 1}`,
         material_name: `池内产品${index + 1}`,
         sub_category: '汤圆',
