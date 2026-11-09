@@ -204,9 +204,14 @@ test('stock health without a summary route still shares the completed inventory 
     return {
       rows: call.queryId.startsWith('source.')
         ? [{ day: '2026-11-06' }]
-        : call.queryId.endsWith('.count')
-          ? [{ total: 0 }]
-          : [],
+        : [
+            {
+              ...Object.fromEntries(
+                daily.queries[call.queryId].resultColumns.map((k) => [k, null]),
+              ),
+              row_count: 0,
+            },
+          ],
       returnedColumns: daily.queries[call.queryId].resultColumns,
       rejectedColumns: [],
       configVersion: 'fixed',
@@ -216,7 +221,7 @@ test('stock health without a summary route still shares the completed inventory 
     daily,
     'branch-stock',
     { asOf: '2026-11-09' },
-    { execute },
+    { execute, summaryOnly: true },
   );
   assert.equal(result.snapshotDate, '2026-11-06');
   assert.equal(
