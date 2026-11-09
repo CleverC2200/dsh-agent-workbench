@@ -178,7 +178,6 @@ export function createProcessedDemand(react, { downloadCsv }) {
           label: `${label(entry)} 需求数量`,
           value,
           meta: { ...entry, systemValue },
-          integer: true,
           disabled,
           format: number,
           editFormat: (value) => String(Math.round(value)),

@@ -135,7 +135,7 @@ test('processing shares one edit mode for category months and expanded SKUs and 
   const original = (await draft(page)).adjustments;
   await begin(view);
   await expect(view.locator('.mps-batch-input')).toHaveCount(4);
-  await view.getByLabel('汤圆 2026-12 需求数量', { exact: true }).fill('120');
+  await view.getByLabel('汤圆 2026-12 需求数量', { exact: true }).fill('120.75');
   await view.getByLabel('汤圆 2027-01 需求数量', { exact: true }).fill('220');
   await view.getByLabel('搜索当前步骤').fill('产品甲');
   await view.getByLabel('搜索当前步骤').fill('');
@@ -156,9 +156,10 @@ test('processing shares one edit mode for category months and expanded SKUs and 
         (await draft(page)).adjustments?.categoryDemand?.find((row) => row.month === '2026-12')
           ?.quantity,
     )
-    .toBe(120);
+    .toBe(120.75);
   const changed = (await draft(page)).adjustments;
-  assert.equal(changed.categoryDemand.find((row) => row.month === '2026-12').quantity, 120);
+  assert.equal(changed.categoryDemand.find((row) => row.month === '2026-12').quantity, 120.75);
+  await expect(view.getByLabel('汤圆 2026-12 需求数量', { exact: true })).toHaveText('121');
   assert.equal(changed.categoryDemand.find((row) => row.month === '2027-01').quantity, 220);
   assert.equal(changed.quantities[0].quantity, 50);
   assert.equal(changed.quantities[0].reason, '同批调整三处');
