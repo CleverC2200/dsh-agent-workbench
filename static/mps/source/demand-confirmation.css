@@ -308,13 +308,9 @@
   min-width: 120px;
   font-variant-numeric: tabular-nums;
 }
-.dc-demand-amount {
-  display: grid;
-  gap: 4px;
-}
-.dc-demand-amount small {
+.dc-demand-missing {
   color: #956900;
-  font-size: 11px;
+  white-space: nowrap;
 }
 .dc-calculation-evidence {
   margin: 0 0 16px;

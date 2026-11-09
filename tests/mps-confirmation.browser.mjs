@@ -237,7 +237,7 @@ test('MPS annual grid retains July to June and unresolved business calculations 
   await expect(results.getByRole('row')).toHaveCount(2);
   await expect(results.getByRole('button', { name: '调整', exact: true })).toHaveCount(1);
   await expect(results.getByRole('button', { name: /^调整 / })).toHaveCount(0);
-  await expect(results.locator('.dc-demand-amount small')).toHaveCount(4);
+  await expect(results.locator('.dc-demand-missing')).toHaveText(['待补', '待补', '待补', '待补']);
 });
 
 test('MPS bounds large previews without silently dropping rows and rejects an oversized replacement as a whole', async (t) => {

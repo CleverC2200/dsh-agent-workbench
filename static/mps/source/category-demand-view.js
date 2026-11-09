@@ -187,11 +187,13 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
             : h(
                 'span',
                 {
-                  className: 'dc-demand-amount',
+                  className:
+                    row.quantity == null
+                      ? 'dc-demand-amount dc-demand-missing'
+                      : 'dc-demand-amount',
                   title: missing.join('；') || (edit ? `已调整：${edit.reason}` : undefined),
                 },
-                row.quantity == null ? '-' : String(Math.round(row.quantity)),
-                row.quantity == null && h('small', {}, '待补'),
+                row.quantity == null ? '待补' : String(Math.round(row.quantity)),
               ),
           edit && h('small', { className: 'dc-adjusted-mark' }, '已调整'),
         ),
