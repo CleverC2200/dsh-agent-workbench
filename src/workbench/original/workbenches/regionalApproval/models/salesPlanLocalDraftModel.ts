@@ -10,6 +10,7 @@ import {
   subtractExactDecimals,
 } from '../regionalApprovalQueryModel.ts';
 import { salesPlanEditableQuantity } from './salesPlanAccessModel.ts';
+import { roundPlanQuantity } from './salesPlanQuantityModel.ts';
 import { salesPlanSkusMatchVersion } from './salesPlanDetailModel.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 
@@ -29,10 +30,12 @@ const DECIMAL = /^[+-]?\d{1,15}(?:\.\d{1,3})?$/;
 
 export const salesPlanApprovalDraftValues = (
   detail: GeaSalesPlanDetail | undefined,
-  row: Pick<GeaSalesPlanListItem, 'status' | 'planTypeCode'>,
+  row: Pick<GeaSalesPlanListItem, 'status' | 'planTypeCode'> &
+    Partial<Pick<GeaSalesPlanListItem, 'orderType'>>,
   role: ApprovalStageId | undefined,
   stored: readonly GeaSalesPlanSkuAdjustment[],
   pendingValues: Record<string, string> = {},
+  roundMonthly = true,
 ): Record<string, string> => {
   const values = Object.fromEntries(stored.map((item) => [item.skuCode, item.adjustQty]));
   for (const [skuCode, value] of Object.entries(pendingValues)) {
@@ -48,6 +51,25 @@ export const salesPlanApprovalDraftValues = (
     const adjustQty = subtractExactDecimals(value.trim(), baseline);
     if (!DECIMAL.test(adjustQty)) throw new Error('确认计划数量不合法，请核对本节点调整');
     values[skuCode] = adjustQty;
+  }
+  if (
+    roundMonthly &&
+    (row.orderType ?? detail?.currentVersion.orderType) === 'M' &&
+    role &&
+    role !== 'category'
+  ) {
+    for (const sku of detail?.skus ?? []) {
+      const code = String(sku.skuCode);
+      const baseline = salesPlanEditableQuantity(sku, row.status, row.planTypeCode, role);
+      if (baseline === undefined) continue;
+      const confirmed = addExactDecimals([baseline, values[code] ?? '0']);
+      const rounded = roundPlanQuantity(confirmed);
+      if (!DECIMAL.test(rounded) || rounded.startsWith('-'))
+        throw new Error('确认计划数量不合法，请核对本节点调整');
+      const adjustment = subtractExactDecimals(rounded, baseline);
+      if (values[code] !== undefined || !/^[+-]?0+(?:\.0+)?$/.test(adjustment))
+        values[code] = adjustment;
+    }
   }
   return values;
 };

@@ -2,11 +2,39 @@ import type { Context } from '@deepseek-ai/cordis';
 import type {} from '@deepseek-ai/dsh-api-session-controller/client';
 import type {} from '@deepseek-ai/dsh-api-workspace-controller/client';
 
-export function conversationWorkspace(ctx: Pick<Context, 'sessions' | 'workspaces'>) {
+export async function conversationWorkspace(
+  ctx: Pick<Context, 'sessions' | 'workspaces'>,
+  signal: AbortSignal,
+) {
+  signal.throwIfAborted();
+  if (
+    ctx.workspaces.list.getSnapshot().phase !== 'ready' ||
+    ctx.sessions.list.getSnapshot().phase !== 'ready'
+  )
+    await new Promise<void>((resolve, reject) => {
+      const finish = (error?: unknown) => {
+        stopWorkspaces();
+        stopSessions();
+        signal.removeEventListener('abort', abort);
+        if (error) reject(error);
+        else resolve();
+      };
+      const abort = () => finish(signal.reason);
+      const check = () => {
+        const workspaces = ctx.workspaces.list.getSnapshot();
+        const sessions = ctx.sessions.list.getSnapshot();
+        if (workspaces.state === 'error') finish(Error('WORKBENCH_WORKSPACE_UNAVAILABLE'));
+        else if (workspaces.phase === 'ready' && sessions.phase === 'ready') finish();
+      };
+      const stopWorkspaces = ctx.workspaces.list.subscribe(check);
+      const stopSessions = ctx.sessions.list.subscribe(check);
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+      else check();
+    });
+  signal.throwIfAborted();
   const workspaces = ctx.workspaces.list.getSnapshot();
   const sessions = ctx.sessions.list.getSnapshot();
-  if (workspaces.phase !== 'ready' || sessions.phase !== 'ready')
-    throw Error('WORKBENCH_WORKSPACE_UNAVAILABLE');
   const current = Object.values(sessions.byId).find((row) => (row.retainedBy.mainView ?? 0) > 0);
   let target = workspaces.items.find(
     (item) => current !== undefined && item.sessionIds.includes(current.id),

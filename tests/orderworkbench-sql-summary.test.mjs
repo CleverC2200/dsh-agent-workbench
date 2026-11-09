@@ -58,7 +58,7 @@ test('gateway-compatible stock join preserves the full-join result including unm
   }
 });
 
-test('SQL summary keeps independent nationwide contributions from stock-only and plan-only SKUs', () => {
+test('SQL summary keeps independent nationwide and base contributions from unmatched SKUs', () => {
   const db = new DatabaseSync(':memory:');
   try {
     const config = { queries: {} };
@@ -95,6 +95,7 @@ test('SQL summary keeps independent nationwide contributions from stock-only and
         national_stock_records: 0,
         national_plan_records: 1,
         sales_plan: 310,
+        base_transfer_plan: 62,
         source_rows: 1,
         invalid: 1,
       },
@@ -116,6 +117,8 @@ test('SQL summary keeps independent nationwide contributions from stock-only and
       stock_date: '2026-10-25',
       national_stock_invalid: 0,
       national_plan_invalid: 0,
+      base_transfer_plan: 0,
+      base_plan_invalid: 0,
       ...row,
     }));
     const columns = workbenchQueries.stock.columns;
@@ -131,6 +134,24 @@ test('SQL summary keeps independent nationwide contributions from stock-only and
     assert.equal(summary[0].inventory, null, 'paired detail totals remain incomplete');
     assert.equal(model.nationalStockDays(summary), 7.5);
     assert.equal(model.nationalStockDays(summary), model.nationalStockDays(rows));
+    const baseDays = (values) =>
+      model.computeWorkbenchMetrics(
+        {
+          sections: [{ id: 'stock', status: 'ready', rows: values }],
+        },
+        undefined,
+        { turnoverScope: 'base' },
+      )['周转天数'].value;
+    assert.ok(Math.abs(baseDays(summary) - (150 * 31) / (620 + 62 * 0.5)) < 1e-12);
+    assert.equal(baseDays(summary), baseDays(rows));
+    db.exec(
+      "UPDATE independent_stock SET base_transfer_plan=NULL,base_plan_invalid=1 WHERE sku='plan-only'",
+    );
+    const missing = db
+      .prepare(config.queries['workbench.stock.summary'].request.sql)
+      .all({ gea_p1001: 200, gea_p1002: 0 });
+    assert.equal(baseDays(missing), null);
+    assert.equal(model.nationalStockDays(missing), 7.5);
   } finally {
     db.close();
   }
@@ -287,6 +308,9 @@ test('SQL summaries preserve NULL, zero, duplicate-stock guards and every visibl
         national_plan_records: 1,
         national_stock_invalid: row.inventory === null ? 1 : 0,
         national_plan_invalid: row.sales_plan === null || row.source_rows !== 1 ? 1 : 0,
+        base_transfer_plan: row.transfer_plan,
+        base_plan_invalid:
+          row.sales_plan === null || row.transfer_plan === null || row.source_rows !== 1 ? 1 : 0,
       });
     const config = { queries: {} };
     for (const [name, rows] of Object.entries(source)) {

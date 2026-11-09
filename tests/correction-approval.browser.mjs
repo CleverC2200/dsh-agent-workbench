@@ -204,9 +204,17 @@ test('纠偏暂存后批量通过携带草稿，批量退回复用原原因和�
     else
       assert.ok(
         actions.every(
-          (p) => p.request.remark === '核对客户数量' && p.request.adjustments === undefined,
+          (p) => p.request.remark === '核对客户数量' && p.request.expectedReturnTargetStage === 1,
         ),
       );
+    if (kind === 'REJECT') {
+      assert.deepEqual(actions.find((p) => p.planId === 'p1').request.adjustments, [
+        { skuCode: '1001', adjustQty: '8' },
+      ]);
+      assert.deepEqual(actions.find((p) => p.planId === 'p2').request.adjustments, [
+        { skuCode: '1001', adjustQty: '0' },
+      ]);
+    }
   }
 });
 

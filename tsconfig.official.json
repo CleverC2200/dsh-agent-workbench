@@ -1162,6 +1162,9 @@
       "@deepseek-ai/dsh-client-ui-primitives": [
         "../../official-latest-standard/packages/client/ui-primitives/lib/types/index.d.ts"
       ],
+      "@deepseek-ai/dsh-client-ui-primitives/src/icons/index.tsx": [
+        "../../official-latest-standard/packages/client/ui-primitives/lib/types/icons/index.d.ts"
+      ],
       "@deepseek-ai/dsh-client-ui-sidebar-files": [
         "../../official-latest-standard/packages/client/ui-sidebar-files/lib/types/index.d.ts"
       ],
