@@ -6,7 +6,7 @@ const config = JSON.parse(await readFile('business/inventory-qll/sql.config.json
 const out = await build({
   stdin: {
     contents:
-      "export {qllPublishedDate} from './business/shared/qll-published-date'; export {categoryTreeReader} from './business/shared/qll-category-tree'; export {readConfiguredOverview} from './business/shared/configured-overview';",
+      "export {readConfiguredFacts} from './business/shared/configured-facts';export {qllPublishedDate} from './business/shared/qll-published-date'; export {categoryTreeReader} from './business/shared/qll-category-tree'; export {readConfiguredOverview} from './business/shared/configured-overview';",
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -14,9 +14,10 @@ const out = await build({
   platform: 'node',
   format: 'esm',
 });
-const { qllPublishedDate, categoryTreeReader, readConfiguredOverview } = await import(
-  'data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64')
-);
+const { readConfiguredFacts, qllPublishedDate, categoryTreeReader, readConfiguredOverview } =
+  await import(
+    'data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64')
+  );
 const metadata = {
   batch_id: 'batch',
   business_date: '2026-11-06',
@@ -187,4 +188,39 @@ test('base fulfillment retains the base workbench current period while branch fu
     ['分仓', '2026-11-07'],
     ['工厂', '2026-11-10'],
   ]);
+});
+
+test('stock health without a summary route still shares the completed inventory cutoff', async () => {
+  const daily = structuredClone(config);
+  delete daily.dailySummary.bundle;
+  const calls = [];
+  const execute = async (_, call) => {
+    calls.push(call);
+    if (call.queryId === 'summary.snapshot')
+      return snapshotReply(call, {
+        ...metadata,
+        stock_date: '2026-11-06',
+      });
+    return {
+      rows: call.queryId.startsWith('source.')
+        ? [{ day: '2026-11-06' }]
+        : call.queryId.endsWith('.count')
+          ? [{ total: 0 }]
+          : [],
+      returnedColumns: daily.queries[call.queryId].resultColumns,
+      rejectedColumns: [],
+      configVersion: 'fixed',
+    };
+  };
+  const result = await readConfiguredFacts(
+    daily,
+    'branch-stock',
+    { asOf: '2026-11-09' },
+    { execute },
+  );
+  assert.equal(result.snapshotDate, '2026-11-06');
+  assert.equal(
+    calls.find((c) => c.queryId === 'source.branch-stock-date').values.as_of,
+    '2026-11-06',
+  );
 });
