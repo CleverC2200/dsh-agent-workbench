@@ -21,7 +21,7 @@ export function createConversationStarter(
     const navigation = AbortSignal.any([ctx.layout.beginNavigation(), lifetime.signal]);
     state.set({ kind: 'creating' });
     try {
-      let target = conversationWorkspace(ctx);
+      let target = await conversationWorkspace(ctx, navigation);
       if (target === undefined) target = await ctx.workspaces.initializeDefault(navigation);
       navigation.throwIfAborted();
       if (target === undefined) throw Error('WORKBENCH_WORKSPACE_REQUIRED');

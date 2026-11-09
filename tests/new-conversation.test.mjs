@@ -21,7 +21,8 @@ const { createConversationStarter } = module.exports;
 
 function fixture() {
   const calls = [],
-    disposers = [];
+    disposers = [],
+    listeners = new Set();
   let navigation = new AbortController();
   const sessions = {
     phase: 'ready',
@@ -54,14 +55,26 @@ function fixture() {
   };
   const ctx = {
     sessions: {
-      list: { getSnapshot: () => sessions },
+      list: {
+        getSnapshot: () => sessions,
+        subscribe: (fn) => {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+      },
       create: async (input) => {
         calls.push(['create', input]);
         return 'fresh';
       },
     },
     workspaces: {
-      list: { getSnapshot: () => workspaces },
+      list: {
+        getSnapshot: () => workspaces,
+        subscribe: (fn) => {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+      },
       initializeDefault: async () => {
         calls.push(['initialize']);
         return { workspaceId: 'default' };
@@ -88,6 +101,8 @@ function fixture() {
     workspaces,
     original,
     starter,
+    notify: () => [...listeners].forEach((fn) => fn()),
+    listenerCount: () => listeners.size,
     dispose: () => disposers.forEach((dispose) => dispose()),
   };
 }
@@ -125,6 +140,7 @@ for (const outcome of ['success', 'failure']) {
       result = Promise.withResolvers();
     f.ctx.sessions.create = () => result.promise;
     const pending = f.starter.start();
+    await Promise.resolve();
     f.ctx.layout.beginNavigation();
     if (outcome === 'success') result.resolve('fresh');
     else result.reject(Error('late failure'));
@@ -144,6 +160,7 @@ test('plugin disposal prevents late navigation and further creation', async () =
     return result.promise;
   };
   const pending = f.starter.start();
+  await Promise.resolve();
   f.dispose();
   result.resolve('fresh');
   await pending;
@@ -202,13 +219,53 @@ test('a late first-use workspace cannot start creation after another navigation'
   assert.deepEqual(f.calls, []);
 });
 
-test('unready Core catalogs do not create in a different workspace', async () => {
+test('first-use creation waits for both Core catalogs without reporting a workspace failure', async () => {
   const f = fixture();
-  f.workspaces.phase = 'loading';
-  await f.starter.start();
+  f.workspaces.phase = 'pending';
+  f.sessions.phase = 'pending';
+  const pending = f.starter.start();
+  await Promise.resolve();
+  assert.deepEqual(f.starter.state.getSnapshot(), { kind: 'creating' });
+  assert.deepEqual(f.calls, []);
+  f.workspaces.phase = 'ready';
+  f.notify();
+  await Promise.resolve();
+  assert.deepEqual(f.calls, []);
+  f.sessions.phase = 'ready';
+  f.notify();
+  await pending;
+  assert.deepEqual(f.calls, [
+    ['create', { workspaceId: 'current' }],
+    ['leaveDocument'],
+    ['open', 'fresh'],
+  ]);
+  assert.equal(f.listenerCount(), 0);
+});
+
+test('navigation cancels a pending catalog wait and releases both subscriptions', async () => {
+  const f = fixture();
+  f.workspaces.phase = 'pending';
+  const pending = f.starter.start();
+  f.ctx.layout.beginNavigation();
+  await pending;
+  f.workspaces.phase = 'ready';
+  f.notify();
+  assert.deepEqual(f.calls, []);
+  assert.deepEqual(f.starter.state.getSnapshot(), { kind: 'idle' });
+  assert.equal(f.listenerCount(), 0);
+});
+
+test('a failed Core workspace load remains a failure and releases catalog subscriptions', async () => {
+  const f = fixture();
+  f.workspaces.phase = 'pending';
+  const pending = f.starter.start();
+  f.workspaces.state = 'error';
+  f.notify();
+  await pending;
   assert.deepEqual(f.calls, []);
   assert.deepEqual(f.starter.state.getSnapshot(), {
     kind: 'failed',
     message: 'WORKBENCH_WORKSPACE_UNAVAILABLE',
   });
+  assert.equal(f.listenerCount(), 0);
 });
