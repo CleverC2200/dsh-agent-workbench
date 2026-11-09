@@ -1,5 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 26;
+export const metricCalculationVersion = 27;
 export function retainableWorkbenchFacts(facts) {
   return (
     facts?.attributionVersion === 2 &&
@@ -67,10 +67,11 @@ export function stockDaily(row, scope = 'national') {
   ).getUTCDate();
   return (Number(sales) + (scope === 'base' ? 0.5 * Number(row.transfer_plan) : 0)) / days;
 }
-// Nationwide stock and plans are two complete sets, not an intersection of SKUs.
+// Each dimension sums stock and plans independently, not an intersection of SKUs.
 // A missing counterpart contributes no record; a NULL inside an existing source
 // remains an error, including after SQL summaries have summed the contributions.
-export function nationalStockDays(rows) {
+function scopedStockDays(rows, scope = 'national') {
+  const planInvalid = scope === 'base' ? 'base_plan_invalid' : 'national_plan_invalid';
   if (
     !rows.length ||
     rows.some(
@@ -78,9 +79,9 @@ export function nationalStockDays(rows) {
         !finite(row.national_stock_records) ||
         !finite(row.national_plan_records) ||
         !finite(row.national_stock_invalid) ||
-        !finite(row.national_plan_invalid) ||
+        !finite(row[planInvalid]) ||
         Number(row.national_stock_invalid) !== 0 ||
-        Number(row.national_plan_invalid) !== 0,
+        Number(row[planInvalid]) !== 0,
     )
   )
     return null;
@@ -89,11 +90,17 @@ export function nationalStockDays(rows) {
   const inventory = sum(stock, 'national_inventory');
   if (!stock.length || !plans.length || inventory === null || inventory < 0) return null;
   const daily = plans.map((row) =>
-    stockDaily({ ...row, sales_plan: row.national_sales_plan }, 'national'),
+    stockDaily(
+      { ...row, sales_plan: row.national_sales_plan, transfer_plan: row.base_transfer_plan },
+      scope,
+    ),
   );
   if (daily.some((value) => value === null)) return null;
   const demand = daily.reduce((total, value) => total + value, 0);
   return demand > 0 ? inventory / demand : null;
+}
+export function nationalStockDays(rows) {
+  return scopedStockDays(rows);
 }
 export function computeWorkbenchMetrics(
   period,
@@ -175,8 +182,8 @@ export function computeWorkbenchMetrics(
   );
   put(
     '周转天数',
-    turnoverScope !== 'base' && stock.some((row) => 'national_stock_records' in row)
-      ? nationalStockDays(stock)
+    stock.some((row) => 'national_stock_records' in row)
+      ? scopedStockDays(stock, turnoverScope)
       : !invalid(stock) &&
           sum(stock, 'inventory') !== null &&
           sum(stock, 'inventory') >= 0 &&
@@ -191,7 +198,7 @@ export function computeWorkbenchMetrics(
       (turnoverScope === 'base'
         ? '基地日均=(月度需求计划+调拨出库计划×0.5)÷当月天数'
         : '全国及品项日均=月度需求计划÷当月天数；取库存计划表对应初版、纠偏、滚动或下月字段，不以客户需求表allnum替代') +
-      '；全国库存与计划独立汇总，不要求商品逐条匹配；负库存按来源原值汇总；源内缺值、负计划、负库存合计或重复计划粒度不计算',
+      '；各维度库存与计划在同范围内独立汇总，不要求商品逐条匹配；负库存按来源原值汇总；源内缺值、负计划、负库存合计或重复计划粒度不计算',
     '天',
   );
   // A partial rate has its own proven numerator/denominator; never reinterpret missing rows as zero.
@@ -379,6 +386,22 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
   const source = part.rows.filter(filter);
   if (!source.length)
     return `源数据未提供：所选周期及当前授权、分组范围的 ${id} 查询结果无记录；不代表整张表为空。`;
+  if (name === '周转天数' && source.some((row) => 'national_stock_records' in row)) {
+    if (!source.some((row) => Number(row.national_stock_records) > 0))
+      return '源数据未提供：当前维度没有工厂仓＋工厂外租仓现存量记录；未按0库存计算。';
+    if (!source.some((row) => Number(row.national_plan_records) > 0))
+      return '源数据未提供：当前维度没有对应版本的月度计划记录；未按0需求计算。';
+    if (
+      source.some(
+        (row) =>
+          Number(row.national_stock_invalid) > 0 ||
+          Number(row.national_plan_invalid) > 0 ||
+          Number(row.base_plan_invalid) > 0,
+      )
+    )
+      return '系统未能计算：来源内的现存量、月度需求或调拨计划缺失，或计划为负数、存在重复粒度；不是商品跨表未匹配导致的空值。';
+    return '系统未能计算：当前维度的快照日期、现存量合计或计划日均需求无效；日均需求为0时不计算天数。';
+  }
   if (name === '订单满足率' && source.some((row) => Number(row.missing_ship_date) > 0))
     return (
       '源数据未提供或未唯一匹配：部分来源单＋客户＋产品没有完整匹配最后拆单实际发货日期；' +

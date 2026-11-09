@@ -234,7 +234,9 @@ export function addPeriodSummaryQuery(config, name, fields, group, columns) {
       title: id,
       parameterSpec,
       request: {
-        sql: sql + ` ORDER BY ${keys.join(',')} LIMIT :gea_p1001 OFFSET :gea_p1002`,
+        sql:
+          sql.replace(/ ORDER BY packet_index$/, '') +
+          ` ORDER BY ${keys.join(',')} LIMIT :gea_p1001 OFFSET :gea_p1002`,
         parameters,
         includeTotal: false,
       },
