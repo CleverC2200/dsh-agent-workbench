@@ -1244,6 +1244,24 @@ test(
   },
 );
 
+for (const scenario of ['return-edits', 'return-continued-province'])
+  test(
+    'return transport values do not create an unsaved draft on cancellation: ' + scenario,
+    { timeout: 30000 },
+    async (t) => {
+      const { page } = await openWorkbench(t, false, scenario);
+      await page.locator('tbody label.arco-checkbox').first().click();
+      await page.getByRole('button', { name: '退回', exact: true }).click();
+      const modal = page.getByRole('dialog', { name: '退回', exact: true });
+      await expect(modal.getByRole('textbox')).toBeVisible();
+      await expect(modal.locator('[role="status"]')).toHaveCount(0);
+      await modal.getByRole('button', { name: '取消', exact: true }).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      assert.deepEqual(await page.evaluate(() => window.sentReturns), []);
+      assert.deepEqual(await page.evaluate(() => window.savedDrafts), []);
+    },
+  );
+
 for (const [scenario, target] of [
   ['return-edits', 1],
   ['return-continued-region', 1],
