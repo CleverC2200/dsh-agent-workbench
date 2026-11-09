@@ -11,7 +11,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import {
   IconPanelLeftOutlineRegular,
   IconNewChatOutlineRegular,
-} from '@deepseek-ai/dsh-client-ui-primitives';
+} from '@deepseek-ai/dsh-client-ui-primitives/src/icons/index.tsx';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import type {
   PropsRuntime,

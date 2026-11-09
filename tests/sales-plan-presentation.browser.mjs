@@ -107,7 +107,6 @@ const continued = {
   'return-continued-region': [7, 'region', 1],
   'return-continued-province': [8, 'province', 2],
   'return-continued-skipped': [9, 'area', 2],
-  'return-continued-field': [9, 'area', 2],
 }[comparison];
 const approvalRole = continued?.[1] ?? (comparison === 'return-unavailable' ? 'province' : 'region');
 if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50';
@@ -139,7 +138,7 @@ const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
   list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
-  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:skusFor(plan.versionId),versions:versionsFor(plan),logs:continued && comparison!=='return-continued-field'?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],...(comparison==='return-continued-field'?{returnTargetStage:continued[2]}:{}),actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:2,allowedActions:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
+  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:skusFor(plan.versionId),versions:versionsFor(plan),logs:continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:2,allowedActions:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
     readCalls.push({review:planId});
@@ -1250,7 +1249,6 @@ for (const [scenario, target] of [
   ['return-continued-region', 1],
   ['return-continued-province', 2],
   ['return-continued-skipped', 2],
-  ['return-continued-field', 2],
 ])
   test(
     'single return carries the current edited quantity: ' + scenario,
@@ -1282,7 +1280,6 @@ for (const [scenario, target] of [
 for (const [scenario, target] of [
   ['return-edits', 1],
   ['return-continued-skipped', 2],
-  ['return-continued-field', 2],
 ])
   test(
     'batch return carries each customer allocation of the current edited group quantity: ' +

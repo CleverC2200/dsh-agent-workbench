@@ -65,7 +65,6 @@ export function salesPlanReturnDestination(
         targets.add(log.toStatus - 5);
     }
   }
-  if (detail.returnTargetStage != null) targets.add(detail.returnTargetStage);
   const [targetStage] = targets;
   if (
     targets.size !== 1 ||

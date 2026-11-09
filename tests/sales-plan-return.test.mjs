@@ -43,11 +43,10 @@ test('pending approval derives the receiving stage from existing detail', () => 
     assert.equal(result.targetStatus, status + 5);
   }
 });
-const returnedDetail = (status, logs = [], extra = {}) => ({
+const returnedDetail = (status, logs = []) => ({
   ...detail,
   currentVersion: { ...detail.currentVersion, status },
   logs: logs.map((log) => ({ planId: 'p', versionId: 'v', ...log })),
-  ...extra,
 });
 test('continued returns use the same version history, including skipped approval stages', () => {
   for (const [status, role, previous] of [
@@ -68,33 +67,24 @@ test('continued returns use the same version history, including skipped approval
   const priorReturn = returnedDetail(9, [{ actionCode: 'REJECT', fromStatus: 9, toStatus: 7 }]);
   assert.equal(m.salesPlanReturnDestination(priorReturn, 'area').targetStage, 2);
 });
-test('existing detail can supply the frozen destination when submission started midway', () => {
-  assert.equal(
-    m.salesPlanReturnDestination(returnedDetail(9, [], { returnTargetStage: 2 }), 'area')
-      .targetStage,
-    2,
-  );
-  const oldVersion = returnedDetail(
-    9,
-    [
-      { versionId: 'old', actionCode: 'APPROVE', fromStatus: 3, toStatus: 4 },
-      { planId: 'other', actionCode: 'APPROVE', fromStatus: 3, toStatus: 4 },
-    ],
-    { returnTargetStage: 2 },
-  );
+test('only the same plan and version history can determine the destination', () => {
+  const oldVersion = returnedDetail(9, [
+    { versionId: 'old', actionCode: 'APPROVE', fromStatus: 3, toStatus: 4 },
+    { planId: 'other', actionCode: 'APPROVE', fromStatus: 3, toStatus: 4 },
+    { actionCode: 'APPROVE', fromStatus: 2, toStatus: 4 },
+  ]);
   assert.equal(m.salesPlanReturnDestination(oldVersion, 'area').targetStage, 2);
 });
 test('missing, inconsistent or malformed destinations never guess from current configuration', () => {
   for (const d of [
     returnedDetail(9),
-    returnedDetail(9, [{ actionCode: 'APPROVE', fromStatus: 2, toStatus: 4 }], {
-      returnTargetStage: 3,
-    }),
     returnedDetail(9, [
       { actionCode: 'APPROVE', fromStatus: 2, toStatus: 4 },
       { actionCode: 'APPROVE', fromStatus: 3, toStatus: 4 },
     ]),
-    ...[0, 4, 2.5, '2'].map((returnTargetStage) => returnedDetail(9, [], { returnTargetStage })),
+    ...[0, 4, 2.5, '2'].map((fromStatus) =>
+      returnedDetail(9, [{ actionCode: 'APPROVE', fromStatus, toStatus: 4 }]),
+    ),
   ])
     assert.throws(() => m.salesPlanReturnDestination(d, 'area'), /实际退回节点/);
   for (const status of [0, 5, 6, 8, 10])
