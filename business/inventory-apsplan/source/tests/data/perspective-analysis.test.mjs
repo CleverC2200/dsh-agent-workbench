@@ -9,9 +9,10 @@ const result = await build({
   format: 'esm',
   write: false,
 });
-const { analyzePerspective, analyzeProductionMatrix, matrixCellsFromData } = await import(
-  'data:text/javascript;base64,' + Buffer.from(result.outputFiles[0].text).toString('base64')
-);
+const { analyzePerspective, analyzeProductionMatrix, matrixCellsFromData, judgeMetric } =
+  await import(
+    'data:text/javascript;base64,' + Buffer.from(result.outputFiles[0].text).toString('base64')
+  );
 test('four perspectives use visible values without missing-data list', () => {
   const metrics = [
     { name: '销售预算达成率', value: 90, unit: '%' },
@@ -151,4 +152,55 @@ test('production matrix uses grouped MES quantities, with the same zero-fill rul
     matrixCellsFromData(data, '生产计划达成率').map(({ scope, value }) => ({ scope, value })),
     [{ scope: '华东 × 汤圆', value: 92 }],
   );
+});
+
+test('metric judgement uses exact configured boundaries instead of update availability', () => {
+  const cases = [
+    ['订单满足率', 98.08, '健康'],
+    ['订单满足率', 95, '预警'],
+    ['订单满足率', 90, '预警'],
+    ['订单满足率', 89.99, '严重'],
+    ['订单缺货量', 0, '健康'],
+    ['订单缺货量', 0.000001, '预警'],
+    ['订单缺货量', 3, '预警'],
+    ['订单缺货量', 3.001, '严重'],
+    ['生产计划达成率', 99.01, '健康'],
+    ['生产计划达成率', 99, '预警'],
+    ['生产计划达成率', 95, '严重'],
+    ['需求预测准确率', 80.01, '健康'],
+    ['需求预测准确率', 80, '预警'],
+    ['需求预测准确率', 75, '严重'],
+    ['可发货天数', 8, '预警'],
+    ['可发货天数', 8.01, '健康'],
+    ['可发货天数', 11.99, '健康'],
+    ['可发货天数', 12, '预警'],
+    ['可发货天数', 15, '预警'],
+    ['可发货天数', 15.01, '严重'],
+  ];
+  for (const [name, value, risk] of cases)
+    assert.deepEqual(
+      judgeMetric(name, value),
+      { kind: 'evaluated', risk, achieved: risk === '健康' },
+      `${name}:${value}`,
+    );
+});
+
+test('missing and observation metrics never become a healthy risk verdict', () => {
+  for (const value of [NaN, Infinity, -Infinity])
+    assert.deepEqual(judgeMetric('订单满足率', value), {
+      kind: 'missing',
+      risk: null,
+      achieved: null,
+    });
+  assert.deepEqual(judgeMetric('库存量', 0), { kind: 'observation', risk: null, achieved: null });
+  assert.deepEqual(judgeMetric('unknown', 10), { kind: 'observation', risk: null, achieved: null });
+});
+
+test('shortage analysis and drill judgement share the same zero target and risk grades', () => {
+  const result = analyzePerspective('production', '本月', [
+    { name: '订单缺货量', value: 0.25, unit: '万箱' },
+  ]);
+  assert.equal(result.total, 1);
+  assert.equal(result.score, 0);
+  assert.match(result.copy, /订单缺货量0.25万箱（预警/);
 });

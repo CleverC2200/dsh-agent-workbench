@@ -4,6 +4,7 @@ import { readConfiguredFacts, type FactInput } from './configured-facts';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readCurrentShortage } from './current-shortage';
 import { readGroupedOrderOverview } from './grouped-order-overview';
+import { qllPublishedDate } from './qll-published-date';
 
 export { businessDay } from './business-day';
 export function knownNumber(value: unknown): number | null {
@@ -46,6 +47,18 @@ export async function readConfiguredOverview(
   } = {},
 ) {
   config = agentSqlConfig(config);
+  const requestedAsOf = asOf;
+  let publicationError: unknown;
+  try {
+    asOf = await qllPublishedDate(config, asOf, options);
+  } catch (error) {
+    options.signal?.throwIfAborted();
+    publicationError = error;
+  }
+  const readDateFor = (id: string) =>
+    id.startsWith('channel-') || (config.agentId === 'inventory-qll' && id === 'factory-overview')
+      ? requestedAsOf
+      : asOf;
   const ids: string[] = [
     ...(options.viewIds ??
       config.overviewViewIds ??
@@ -83,7 +96,10 @@ export async function readConfiguredOverview(
         code: 'QUERY_CONFIG_CHANGED',
       });
     if (invalid) throw invalid;
-    parts[id] = part;
+    parts[id] = {
+      ...part,
+      readDate: readDateFor(id),
+    };
     const replenishment = parts.replenishment;
     if (replenishment?.summary && config.queries[replenishment.queryId]?.orderCountFromOverview) {
       const orders = parts['current-shortage'];
@@ -119,6 +135,7 @@ export async function readConfiguredOverview(
         };
   let quickStockFailed = false;
   const quickStock = (async () => {
+    if (publicationError) return;
     if (config.overviewQuickStock && ids.some((id) => ['health', 'branch-stock'].includes(id))) {
       try {
         const result = await createAgentQueries(config, options.execute).read(
@@ -169,7 +186,7 @@ export async function readConfiguredOverview(
       }
     }
   })();
-  let groupedOrders: ReturnType<typeof readGroupedOrderOverview> | undefined;
+  const groupedOrders = new Map<string, ReturnType<typeof readGroupedOrderOverview>>();
   await Promise.all(
     ids.map(async (id) => {
       let part: any;
@@ -184,6 +201,7 @@ export async function readConfiguredOverview(
         if (quickStockFailed && ['health', 'branch-stock'].includes(id)) return;
       }
       try {
+        if (publicationError && !id.startsWith('channel-')) throw publicationError;
         if (id === 'current-shortage') {
           const result = await readCurrentShortage(
             config,
@@ -200,11 +218,19 @@ export async function readConfiguredOverview(
             snapshotDate: result.rows[0]?.snapshot_date,
           };
         } else if (config.overviewOrderGroups?.views[id] && !customer && !options.warehouseCode) {
-          groupedOrders ??= readGroupedOrderOverview(config, asOf, options);
-          part = (await groupedOrders)[id];
+          const day = readDateFor(id);
+          let group = groupedOrders.get(day);
+          if (!group) {
+            const viewIds = Object.keys(config.overviewOrderGroups.views).filter(
+              (viewId) => readDateFor(viewId) === day,
+            );
+            group = readGroupedOrderOverview(config, day, { ...options, viewIds });
+            groupedOrders.set(day, group);
+          }
+          part = (await group)[id];
         } else {
           const input: FactInput = {
-            asOf,
+            asOf: config.agentId === 'inventory-qll' ? requestedAsOf : readDateFor(id),
             customer,
             cycleDays: options.cycleDays,
             fcCycleRules: options.fcCycleRules,

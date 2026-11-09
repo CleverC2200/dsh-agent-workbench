@@ -57,7 +57,7 @@ class AccuracyBaseSqlTests(unittest.TestCase):
         self.addCleanup(self.db.close)
         self.db.execute('CREATE TABLE agents_order_execute_isontime_mi (new_material_code TEXT, product_categ_name TEXT, pinxiang TEXT, material_group_name TEXT)')
         self.db.execute('CREATE TABLE agents_scm_material_in_out_summary_d (material_code TEXT, product_categ_name TEXT, material_group_name TEXT)')
-        self.db.execute('CREATE TABLE agents_scm_demand_sales_f (source_flag TEXT, stat_month TEXT, belong_name TEXT, product_categ_name TEXT, material_group_name TEXT, material_code TEXT, region_code TEXT, province_region_code TEXT, region_name TEXT, province_region_name TEXT, material_name TEXT, plan_qty_initial REAL, plan_qty_adjusted REAL, order_qty_origin REAL, act_dl_qty REAL)')
+        self.db.execute('CREATE TABLE agents_scm_demand_sales_f (source_flag TEXT, stat_month TEXT, belong_base TEXT, product_categ_name TEXT, material_group_name TEXT, material_code TEXT, region_code TEXT, province_region_code TEXT, region_name TEXT, province_region_name TEXT, material_name TEXT, plan_qty_initial REAL, plan_qty_adjusted REAL, order_qty_origin REAL, act_dl_qty REAL)')
         for source in ['基地口径', '销售口径']:
             for base, plan, actual in [('华东', 100, 100), ('郑州', 900, 0)]:
                 self.insert(source, base, plan, actual)

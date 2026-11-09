@@ -86,6 +86,7 @@ import { askHost, setViewContext, acknowledgePendingView } from './data/host-bri
 import { summarizePage } from 'dsh-agent-manage/aps-compute/page-analysis';
 import {
   analyzePerspective,
+  judgeMetric,
   analyzeProductionMatrix,
   matrixCellsFromData,
 } from 'dsh-agent-manage/aps-compute/perspective-analysis';
@@ -384,7 +385,7 @@ const _metricMeta: Array<{
     name: '可发货天数',
     unit: '天',
     target: 12,
-    targetText: '目标 < 12天',
+    targetText: '目标 8–12天（不含边界）',
     lowerBetter: true,
   },
   {
@@ -477,7 +478,7 @@ const demoOverviewMetricMeta: Array<{
     name: '可发货天数',
     unit: '天',
     target: 12,
-    targetText: '目标 < 12天',
+    targetText: '目标 8–12天（不含边界）',
     lowerBetter: true,
   },
   {
@@ -1531,13 +1532,20 @@ function productionMetricDisplay(name: ProductionDrillMetricName, value: number)
   return `${formatNumber(value, 2)}%`;
 }
 
-function productionMetricState(name: ProductionDrillMetricName, value: number) {
-  if (!Number.isFinite(value)) return 'neutral';
-  if (name === '库存量') return 'neutral';
-  if (name === '可发货天数') return value <= 12 ? 'good' : 'bad';
-  if (name === '订单缺货量') return value <= 0 ? 'good' : 'bad';
-  if (name === '订单满足率') return value >= 95 ? 'good' : 'bad';
-  return value >= 100 ? 'good' : 'bad';
+function metricValueState(name: OverviewMetricName, value: number) {
+  const judgement = judgeMetric(name, value);
+  return judgement.kind !== 'evaluated' ? 'neutral' : judgement.achieved ? 'good' : 'bad';
+}
+
+function metricStatus(name: OverviewMetricName, value: number) {
+  const judgement = judgeMetric(name, value);
+  return judgement.kind === 'missing'
+    ? '无数据'
+    : judgement.kind === 'observation'
+      ? '无目标'
+      : judgement.achieved
+        ? '达标'
+        : '未达';
 }
 
 const categories = ['休闲', '水饺', '汤圆', '火锅料', '面点', '预制食材', '馄饨'];
@@ -5581,8 +5589,9 @@ export default function Home({
     const value = periodConfig.current[meta.name];
     const previous = periodConfig.previous[meta.name];
     const delta = activeComparison[meta.name].change;
-    const ok =
-      !Number.isFinite(value) || meta.target === null
+    const ok = productionMetricNames.some((name) => name === meta.name)
+      ? judgeMetric(meta.name, value).achieved
+      : !Number.isFinite(value) || meta.target === null
         ? null
         : meta.lowerBetter
           ? meta.target === 0
@@ -6017,78 +6026,48 @@ export default function Home({
   };
   const renderSalesMetricCells = (path: string) => {
     const values = salesOrgMetrics(path);
+    const statusCell = (name: OverviewMetricName, value: number) => {
+      const judgement = judgeMetric(name, value);
+      return (
+        <span
+          role="gridcell"
+          className={`achievement-status ${judgement.kind !== 'evaluated' ? 'status-neutral' : judgement.achieved ? 'status-ok' : 'status-bad'}`}
+        >
+          {metricStatus(name, value)}
+        </span>
+      );
+    };
+    const percent = (value: number) =>
+      Number.isFinite(value) ? `${formatNumber(value, 2)}%` : '-';
     if (salesMetricTab === 'overview')
       return (
         <>
           <span role="gridcell">
-            {Number.isFinite(values.sales) ? values.sales.toLocaleString('zh-CN') : '—'}
-            {'万元'}
+            {Number.isFinite(values.sales) ? `${values.sales.toLocaleString('zh-CN')}万元` : '-'}
           </span>
-          <b
-            role="gridcell"
-            className={liveData ? 'neutral' : values.budget >= 100 ? 'good' : 'bad'}
-          >
-            {formatNumber(values.budget, 2)}
-            {'%'}
+          <b role="gridcell" className={metricValueState('销售预算达成率', values.budget)}>
+            {percent(values.budget)}
           </b>
-          <span
-            role="gridcell"
-            className={`achievement-status ${liveData ? 'status-neutral' : values.budget >= 100 ? 'status-ok' : 'status-bad'}`}
-          >
-            {!Number.isFinite(values.budget)
-              ? '无数据'
-              : liveData
-                ? '目标待接入'
-                : values.budget >= 100
-                  ? '达标'
-                  : '未达'}
-          </span>
-          <b
-            role="gridcell"
-            className={liveData ? 'neutral' : values.reporting >= 100 ? 'good' : 'bad'}
-          >
-            {formatNumber(values.reporting, 2)}
-            {'%'}
+          {statusCell('销售预算达成率', values.budget)}
+          <b role="gridcell" className={metricValueState('销售提报准确率', values.reporting)}>
+            {percent(values.reporting)}
           </b>
-          <span
-            role="gridcell"
-            className={`achievement-status ${liveData ? 'status-neutral' : values.reporting >= 100 ? 'status-ok' : 'status-bad'}`}
-          >
-            {!Number.isFinite(values.reporting)
-              ? '无数据'
-              : liveData
-                ? '目标待接入'
-                : values.reporting >= 100
-                  ? '达标'
-                  : '未达'}
-          </span>
+          {statusCell('销售提报准确率', values.reporting)}
         </>
       );
+    const name = salesMetricTab === 'budget' ? '销售预算达成率' : '销售提报准确率';
     const current = salesMetricTab === 'budget' ? values.budget : values.reporting;
     const previous = salesMetricTab === 'budget' ? values.budgetPrevious : values.reportingPrevious;
     return (
       <>
-        <span role="gridcell">{liveData ? '目标待确认' : '≥ 100%'}</span>
-        <span
-          role="gridcell"
-          className={`achievement-status ${liveData ? 'status-neutral' : current >= 100 ? 'status-ok' : 'status-bad'}`}
-        >
-          {!Number.isFinite(current)
-            ? '无数据'
-            : liveData
-              ? '目标待接入'
-              : current >= 100
-                ? '达标'
-                : '未达'}
-        </span>
-        <b role="gridcell" className={liveData ? 'neutral' : current >= 100 ? 'good' : 'bad'}>
-          {formatNumber(current, 2)}
-          {'%'}
-        </b>
         <span role="gridcell">
-          {formatNumber(previous, 2)}
-          {'%'}
+          {overviewMetricMeta.find((meta) => meta.name === name)?.targetText.replace('健康 ', '')}
         </span>
+        {statusCell(name, current)}
+        <b role="gridcell" className={metricValueState(name, current)}>
+          {percent(current)}
+        </b>
+        <span role="gridcell">{percent(previous)}</span>
         <span
           role="gridcell"
           className={
@@ -6106,38 +6085,32 @@ export default function Home({
   };
   const renderSalesWorkflowCells = (metricPath: string, taskScope: string) => {
     const values = salesOrgMetrics(metricPath);
-    const metrics =
-      salesMetricTab === 'budget'
-        ? [{ name: '销售预算达成率', value: values.budget, severe: 80 }]
-        : salesMetricTab === 'reporting'
-          ? [{ name: '销售提报准确率', value: values.reporting, severe: 90 }]
-          : [
-              { name: '销售预算达成率', value: values.budget, severe: 80 },
-              { name: '销售提报准确率', value: values.reporting, severe: 90 },
-            ];
-    const active = metrics.sort((a, b) => a.value - b.value)[0];
-    const risk: MatrixRiskLevel = liveData
-      ? '健康'
-      : active.value >= 100
-        ? '健康'
-        : active.value < active.severe
-          ? '严重'
-          : '预警';
+    const metrics = [
+      { name: '销售预算达成率', value: values.budget },
+      { name: '销售提报准确率', value: values.reporting },
+    ].filter(
+      (_, index) =>
+        salesMetricTab === 'overview' || index === (salesMetricTab === 'budget' ? 0 : 1),
+    );
+    const evaluated = metrics.flatMap((metric) => {
+      const judgement = judgeMetric(metric.name, metric.value);
+      return judgement.kind === 'evaluated' ? [{ ...metric, risk: judgement.risk }] : [];
+    });
+    const risk = evaluated.length ? worstRiskLevel(evaluated.map((metric) => metric.risk)) : null;
+    const anomalies = evaluated
+      .filter((metric) => metric.risk === risk)
+      .map((metric) => metric.name);
     return (
       <>
         <span role="gridcell" className="sales-org-risk">
           <em
-            className={`task-risk-indicator ${liveData ? 'status-neutral' : `level-${riskLevelClass[risk]}`}`}
+            className={`task-risk-indicator ${risk === null ? 'status-neutral' : `level-${riskLevelClass[risk]}`}`}
           >
-            {liveData ? '未判定' : risk}
+            {risk ?? '无数据'}
           </em>
         </span>
         <span role="gridcell" className="sales-org-task">
-          {risk === '健康' ? (
-            <span className="no-task-needed">{liveData ? '待判定' : '无需派发'}</span>
-          ) : (
-            renderTaskDispatch('销售组织', taskScope, [active.name], risk, false)
-          )}
+          {renderTaskDispatch('销售组织', taskScope, anomalies, risk, false)}
         </span>
       </>
     );
@@ -6242,7 +6215,7 @@ export default function Home({
     scopeType: TaskScope,
     scope: string,
     metrics: string[],
-    riskLevel: MatrixRiskLevel,
+    riskLevel: MatrixRiskLevel | null,
     showRiskIndicator = true,
   ) => {
     const directTask = assignedTasks.find(
@@ -6268,20 +6241,20 @@ export default function Home({
       <span className="task-dispatch-cell">
         {shouldShowRiskIndicator && (
           <em
-            className={`task-risk-indicator ${liveData ? 'status-neutral' : `level-${riskLevelClass[riskLevel]}`}`}
+            className={`task-risk-indicator ${riskLevel === null ? 'status-neutral' : `level-${riskLevelClass[riskLevel]}`}`}
           >
-            {liveData ? '未判定' : riskLevel}
+            {riskLevel ?? '未判定'}
           </em>
         )}
         <button
           className={`dispatch-task-button ${taskStateClass}`}
-          title={`${liveData ? '风险未判定' : riskLevel} · ${taskActionLabel}`}
+          title={`${riskLevel ?? '风险未判定'} · ${taskActionLabel}`}
           aria-label={
             isCompleted
               ? `查看${scope}${existingTask.metric}任务的完成结果`
               : existingTask
                 ? `查看并修改${scope}${existingTask.metric}任务，当前责任人${existingTask.owner}`
-                : `${scope}${liveData ? '风险未判定' : `当前为${riskLevel}`}，${taskActionLabel}`
+                : `${scope}${riskLevel === null ? '风险未判定' : `当前为${riskLevel}`}，${taskActionLabel}`
           }
           onClick={() => {
             if (isCompleted) {
@@ -6309,31 +6282,24 @@ export default function Home({
   const drillMetricRiskLevel = (
     name: ProductionDrillMetricName,
     values: ProductionDrillValues,
-  ): MatrixRiskLevel => {
-    if (liveData) return '健康'; // No formal targets: callers render availability instead of a risk verdict.
-    const value = categoryPeriodDatum(name, values).current;
-    if (name === '可发货天数') return matrixRiskLevel('stock', value);
-    if (name === '订单满足率') return matrixRiskLevel('rate', value);
-    if (name === '订单缺货量') return value > 3 ? '严重' : value > 0 ? '预警' : '健康';
-    if (name === '库存量') return '健康';
-    return matrixRiskLevel('plan', value);
-  };
-  const periodizedDrillValues = (values: ProductionDrillValues): ProductionDrillValues =>
-    Object.fromEntries(
-      productionMetricNames.map((name) => [name, categoryPeriodDatum(name, values).current]),
-    ) as ProductionDrillValues;
+  ): MatrixRiskLevel | null => judgeMetric(name, values[name]).risk;
+  const periodizedDrillValues = (values: ProductionDrillValues): ProductionDrillValues => ({
+    需求预测准确率: categoryPeriodDatum('需求预测准确率', values).current,
+    生产计划达成率: categoryPeriodDatum('生产计划达成率', values).current,
+    库存量: categoryPeriodDatum('库存量', values).current,
+    可发货天数: categoryPeriodDatum('可发货天数', values).current,
+    订单缺货量: categoryPeriodDatum('订单缺货量', values).current,
+    订单满足率: categoryPeriodDatum('订单满足率', values).current,
+  });
   const drillRowRiskLevel = (
     values: ProductionDrillValues,
     activeMetric?: ProductionDrillMetricName | null,
-  ): MatrixRiskLevel => {
+  ): MatrixRiskLevel | null => {
     const periodValues = periodizedDrillValues(values);
-    return activeMetric
-      ? drillMetricRiskLevel(activeMetric, periodValues)
-      : worstRiskLevel(
-          activeProductionMetricNames
-            .filter((name) => name !== '库存量')
-            .map((name) => drillMetricRiskLevel(name, periodValues)),
-        );
+    const levels = (activeMetric ? [activeMetric] : activeProductionMetricNames)
+      .map((name) => drillMetricRiskLevel(name, periodValues))
+      .filter((level) => level !== null);
+    return levels.length ? worstRiskLevel(levels) : null;
   };
   const drillTaskMetrics = (
     values: ProductionDrillValues,
@@ -6341,8 +6307,8 @@ export default function Home({
   ) => {
     const periodValues = periodizedDrillValues(values);
     const visibleMetrics = activeMetric ? [activeMetric] : activeProductionMetricNames;
-    const anomalies = visibleMetrics.filter(
-      (name) => drillMetricRiskLevel(name, periodValues) !== '健康',
+    const anomalies = visibleMetrics.filter((name) =>
+      ['预警', '严重'].includes(drillMetricRiskLevel(name, periodValues) ?? ''),
     );
     return anomalies.length ? anomalies : visibleMetrics;
   };
@@ -6357,9 +6323,9 @@ export default function Home({
       <>
         <span role="gridcell" className="category-drill-risk">
           <em
-            className={`task-risk-indicator ${liveData ? 'status-neutral' : `level-${riskLevelClass[riskLevel]}`}`}
+            className={`task-risk-indicator ${riskLevel === null ? 'status-neutral' : `level-${riskLevelClass[riskLevel]}`}`}
           >
-            {liveData ? '未判定' : riskLevel}
+            {riskLevel ?? (activeMetric === '库存量' ? '无目标' : '无数据')}
           </em>
         </span>
         <span role="gridcell" className="category-drill-action">
@@ -6379,7 +6345,7 @@ export default function Home({
       return activeProductionMetricNames.map((name) => {
         const datum = categoryPeriodDatum(name, values);
         return (
-          <b role="gridcell" className={productionMetricState(name, datum.current)} key={name}>
+          <b role="gridcell" className={metricValueState(name, datum.current)} key={name}>
             {drillMetricDisplay(name, datum.current, values)}
           </b>
         );
@@ -6387,12 +6353,7 @@ export default function Home({
     }
     const datum = categoryPeriodDatum(activeCategoryMetric, values);
     const hasTarget = categoryMetricMeta.target !== null;
-    const periodOk =
-      hasTarget && Number.isFinite(datum.current)
-        ? categoryMetricMeta.lowerBetter
-          ? datum.current <= categoryMetricMeta.target!
-          : datum.current > categoryMetricMeta.target!
-        : null;
+    const periodOk = judgeMetric(activeCategoryMetric, datum.current).achieved;
     const improved =
       hasTarget && Number.isFinite(datum.change)
         ? categoryMetricMeta.lowerBetter
@@ -6406,15 +6367,7 @@ export default function Home({
           role="gridcell"
           className={`category-drill-status achievement-status ${periodOk === null ? 'status-neutral' : periodOk ? 'status-ok' : 'status-bad'}`}
         >
-          {!Number.isFinite(datum.current)
-            ? '无数据'
-            : liveData
-              ? '已更新'
-              : periodOk === null
-                ? '无目标'
-                : periodOk
-                  ? '达标'
-                  : '未达'}
+          {metricStatus(activeCategoryMetric, datum.current)}
         </span>
         <b role="gridcell" className={periodOk === null ? 'neutral' : periodOk ? 'good' : 'bad'}>
           {drillMetricDisplay(activeCategoryMetric, datum.current, values)}
@@ -6450,7 +6403,7 @@ export default function Home({
       return activeProductionMetricNames.map((name) => {
         const datum = categoryPeriodDatum(name, values);
         return (
-          <b role="gridcell" className={productionMetricState(name, datum.current)} key={name}>
+          <b role="gridcell" className={metricValueState(name, datum.current)} key={name}>
             {drillMetricDisplay(name, datum.current, values)}
           </b>
         );
@@ -6458,12 +6411,7 @@ export default function Home({
     }
     const datum = categoryPeriodDatum(activeBaseMetric, values);
     const hasTarget = baseMetricMeta.target !== null;
-    const periodOk =
-      hasTarget && Number.isFinite(datum.current)
-        ? baseMetricMeta.lowerBetter
-          ? datum.current <= baseMetricMeta.target!
-          : datum.current > baseMetricMeta.target!
-        : null;
+    const periodOk = judgeMetric(activeBaseMetric, datum.current).achieved;
     const improved =
       hasTarget && Number.isFinite(datum.change)
         ? baseMetricMeta.lowerBetter
@@ -6477,15 +6425,7 @@ export default function Home({
           role="gridcell"
           className={`category-drill-status achievement-status ${periodOk === null ? 'status-neutral' : periodOk ? 'status-ok' : 'status-bad'}`}
         >
-          {!Number.isFinite(datum.current)
-            ? '无数据'
-            : liveData
-              ? '已更新'
-              : periodOk === null
-                ? '无目标'
-                : periodOk
-                  ? '达标'
-                  : '未达'}
+          {metricStatus(activeBaseMetric, datum.current)}
         </span>
         <b role="gridcell" className={periodOk === null ? 'neutral' : periodOk ? 'good' : 'bad'}>
           {drillMetricDisplay(activeBaseMetric, datum.current, values)}
@@ -6522,16 +6462,7 @@ export default function Home({
   ) => {
     const datum = categoryPeriodDatum(name, values);
     const meta = overviewMetricMeta.find((item) => item.name === name)!;
-    const state =
-      liveData || meta.target === null
-        ? 'neutral'
-        : meta.lowerBetter
-          ? datum.current <= meta.target
-            ? 'good'
-            : 'bad'
-          : datum.current > meta.target
-            ? 'good'
-            : 'bad';
+    const state = metricValueState(name, datum.current);
     const gap =
       liveData && !Number.isFinite(datum.current)
         ? '缺少完整同口径数据'
@@ -7078,23 +7009,16 @@ export default function Home({
   ): DiagnosticRiskItem | null => {
     const periodValues = periodizedDrillValues(values);
     const ranked = activeProductionMetricNames
-      .filter((name) => name !== '库存量')
-      .map((metric) => {
+      .flatMap((metric) => {
         const value = periodValues[metric];
         const risk = drillMetricRiskLevel(metric, periodValues);
-        const target =
-          metric === '可发货天数'
-            ? 12
-            : metric === '订单缺货量'
-              ? 0
-              : metric === '订单满足率'
-                ? 95
-                : 100;
-        const unit = metric === '可发货天数' ? '天' : metric === '订单缺货量' ? '万箱' : '%';
+        const meta = overviewMetricMeta.find((entry) => entry.name === metric);
+        if ((risk !== '预警' && risk !== '严重') || !meta || meta.target === null) return [];
+        const target = meta.target;
+        const unit = meta.unit;
         const rawGap = value - target;
-        return { metric, value, risk, target, unit, rawGap };
+        return [{ metric, value, risk, target, unit, rawGap, targetText: meta.targetText }];
       })
-      .filter((item) => item.risk !== '健康')
       .sort((a, b) =>
         a.risk === b.risk ? Math.abs(b.rawGap) - Math.abs(a.rawGap) : a.risk === '严重' ? -1 : 1,
       );
@@ -7108,9 +7032,9 @@ export default function Home({
       levelLabel: `${levelLabel} · ${periodMeta.shortLabel}`,
       metric: top.metric,
       value: `${formatNumber(top.value, 2)}${top.unit}`,
-      target: `${top.metric === '可发货天数' ? '<' : top.metric === '订单缺货量' ? '=' : '≥'} ${top.target}${top.unit}`,
+      target: top.targetText.replace(/^(目标|健康) /, ''),
       gap: `${top.rawGap > 0 ? '+' : ''}${formatNumber(top.rawGap, 2)}${top.unit === '%' ? 'pp' : top.unit}`,
-      risk: top.risk as Exclude<MatrixRiskLevel, '健康'>,
+      risk: top.risk,
       rawGap: Math.abs(top.rawGap),
       jump: () => jump(top.metric),
     };
@@ -8070,8 +7994,9 @@ export default function Home({
                   {scopedOverviewMetricMeta.map((meta) => {
                     const datum = activeComparison[meta.name];
                     const hasTarget = meta.target !== null;
-                    const periodOk =
-                      hasTarget && Number.isFinite(datum.current)
+                    const periodOk = productionMetricNames.some((name) => name === meta.name)
+                      ? judgeMetric(meta.name, datum.current).achieved
+                      : hasTarget && Number.isFinite(datum.current)
                         ? meta.lowerBetter
                           ? datum.current <= meta.target!
                           : datum.current > meta.target!
@@ -8225,19 +8150,16 @@ export default function Home({
                           >
                             <span>
                               {'销售预算达成率'}
-                              <small>{liveData ? '目标待接入' : '目标 ≥ 100%'}</small>
+                              <small>{'目标 > 95%'}</small>
                             </span>
-                            <b
-                              className={
-                                liveData ? 'neutral' : values.budget >= 100 ? 'good' : 'bad'
-                              }
-                            >
-                              {formatNumber(values.budget, 2)}
-                              {'%'}
+                            <b className={metricValueState('销售预算达成率', values.budget)}>
+                              {Number.isFinite(values.budget)
+                                ? `${formatNumber(values.budget, 2)}%`
+                                : '-'}
                               <small>
-                                {liveData
-                                  ? '实际值'
-                                  : `差距 ${formatDelta(values.budget - 100, '%')}`}
+                                {Number.isFinite(values.budget)
+                                  ? `差距 ${formatDelta(values.budget - 95, '%')}`
+                                  : '无数据'}
                               </small>
                             </b>
                           </button>
@@ -8248,19 +8170,16 @@ export default function Home({
                           >
                             <span>
                               {'销售提报准确率'}
-                              <small>{liveData ? '目标待接入' : '目标 ≥ 100%'}</small>
+                              <small>{'目标 > 70%'}</small>
                             </span>
-                            <b
-                              className={
-                                liveData ? 'neutral' : values.reporting >= 100 ? 'good' : 'bad'
-                              }
-                            >
-                              {formatNumber(values.reporting, 2)}
-                              {'%'}
+                            <b className={metricValueState('销售提报准确率', values.reporting)}>
+                              {Number.isFinite(values.reporting)
+                                ? `${formatNumber(values.reporting, 2)}%`
+                                : '-'}
                               <small>
-                                {liveData
-                                  ? '实际值'
-                                  : `差距 ${formatDelta(values.reporting - 100, '%')}`}
+                                {Number.isFinite(values.reporting)
+                                  ? `差距 ${formatDelta(values.reporting - 70, '%')}`
+                                  : '无数据'}
                               </small>
                             </b>
                           </button>
@@ -8453,15 +8372,9 @@ export default function Home({
                           >
                             <strong>{item.name}</strong>
                             <em
-                              className={`achievement-status ${liveData ? 'status-neutral' : risk === '健康' ? 'status-ok' : 'status-bad'}`}
+                              className={`achievement-status ${risk === null ? 'status-neutral' : risk === '健康' ? 'status-ok' : 'status-bad'}`}
                             >
-                              {liveData
-                                ? activeProductionMetricNames.some((name) =>
-                                    Number.isFinite(values[name]),
-                                  )
-                                  ? '已更新'
-                                  : '数据不足'
-                                : risk}
+                              {risk ?? '无数据'}
                             </em>
                           </button>
                           {categoryMetrics.map((metric) => (
@@ -8779,9 +8692,9 @@ export default function Home({
                           >
                             <strong>{base.name}</strong>
                             <em
-                              className={`achievement-status ${liveData ? 'status-neutral' : risk === '健康' ? 'status-ok' : 'status-bad'}`}
+                              className={`achievement-status ${risk === null ? 'status-neutral' : risk === '健康' ? 'status-ok' : 'status-bad'}`}
                             >
-                              {liveData ? '未判定' : risk}
+                              {risk ?? '无数据'}
                             </em>
                           </button>
                           {baseMetrics.map((metric) => (

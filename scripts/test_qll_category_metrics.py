@@ -9,6 +9,45 @@ from sqlglot import exp
 ROOT = Path(__file__).resolve().parents[1]
 
 class QllCategoryMetrics(unittest.TestCase):
+    def test_raw_branch_organization_keeps_ninety_day_risk_boundary(self):
+        config = json.loads((ROOT / 'business/inventory-qll/sql.config.json').read_text())
+        tree = sqlglot.parse_one(config['queries']['branch-structure.groups']['request']['sql'], read='postgres')
+        risk = next(e for select in tree.find_all(exp.Select) for e in select.expressions
+                    if e.alias_or_name == 'risk_current' and isinstance(e.this, exp.Sum)
+                    and any(c.table == 'a' for c in e.find_all(exp.Column)))
+        db = sqlite3.connect(':memory:')
+        self.addCleanup(db.close)
+        db.execute('CREATE TABLE fixture (warehouse_classify, age_days, live_qty)')
+        db.executemany('INSERT INTO fixture VALUES (?,?,?)', [('20',70,10),('20',95,5)])
+        value = db.execute('SELECT ' + risk.sql(dialect='sqlite') + ' FROM fixture AS a').fetchone()[0]
+        self.assertEqual(value, 5)
+
+    def test_branch_organization_keeps_physical_stock_but_uses_available_movement_pool(self):
+        config = json.loads((ROOT / 'business/inventory-qll/sql.config.json').read_text())
+        query = config['queries']['snapshot.branch-structure.groups']
+        tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
+        db = sqlite3.connect(':memory:')
+        self.addCleanup(db.close)
+        db.row_factory = sqlite3.Row
+        columns = sorted({c.name for c in tree.find_all(exp.Column) if c.table in ['m', 'movement']})
+        db.execute('CREATE TABLE agents_inv_branch_sku_day (' + ','.join('"'+c+'"' for c in columns) + ')')
+        rows = []
+        for sku, inventory, available, daily in [('a',100,60,10), ('b',40,40,0), ('c',20,-1,20)]:
+            common = dict(inv_batch_id='batch', stock_date='2026-11-06', warehouseid='A110',
+                          belong_base='郑州', sku=sku, material_name=sku, warehouse_name='沈阳分仓')
+            rows += [{**common, 'inv_variant_id':'BRANCH_TREE', 'inventory_qty':inventory,
+                      'available_qty':available, 'daily_movement':999},
+                     {**common, 'inv_variant_id':'BRANCH_DEFAULT', 'rolling_ship_daily':daily}]
+        db.executemany('INSERT INTO agents_inv_branch_sku_day VALUES (' + ','.join('?' for _ in columns) + ')',
+                       [[r.get(c) for c in columns] for r in rows])
+        params = dict(query['request']['parameters'])
+        params.update(gea_p1='2026-11-06', gea_p2=False, gea_p3='郑州', gea_p4=None,
+                      gea_p5=None, gea_p8=None, gea_p9='detail', gea_p10=200, gea_p11=0,
+                      gea_p12=None, gea_p13='key', gea_p14='asc', gea_p90001='batch')
+        result = [dict(r) for r in db.execute(tree.sql(dialect='sqlite'), params)]
+        self.assertEqual(sum(r['total_qty'] for r in result), 160)
+        self.assertEqual([r['historical_turnover'] for r in result], [6, None, None])
+
     def read(self, layer, rows):
         config = json.loads((ROOT / 'business/inventory-qll/sql.config.json').read_text())
         query = config['queries']['category-tree.' + layer]
@@ -42,12 +81,26 @@ class QllCategoryMetrics(unittest.TestCase):
         self.assertEqual(result['turnover_qty'], 100)
         self.assertEqual(result['daily'], 1)
 
-    def test_base_actual_turnover_does_not_use_planned_movement(self):
+    def test_base_turnover_uses_the_same_plan_as_the_base_workbench(self):
         result = self.read('base', [dict(base='华南',category='汤圆',sku='SKU', inventory=100,
                           daily_demand=20,rolling_ship_positive=300,target=80,gap=20)])[0]
         self.assertEqual(result['turnover_qty'], 100)
-        self.assertEqual(result['daily'], 10)
+        self.assertEqual(result['daily'], 20)
         self.assertEqual(result['target_daily'], 20)
+
+    def test_base_target_turnover_only_uses_inventory_and_target_matched_keys(self):
+        result = self.read('base', [dict(base='华南', category='汤圆', sku='ok', inventory=100, target=80, daily_demand=20),
+            dict(base='华南', category='汤圆', sku='no-stock', inventory=None, target=500, daily_demand=100),
+            dict(base='华南', category='汤圆', sku='no-plan', inventory=200, target=50, daily_demand=None)])[0]
+        self.assertEqual((result['turnover_qty'], result['daily']), (100, 20))
+        self.assertEqual((result['target_turnover_qty'], result['target_daily']), (80, 20))
+
+    def test_branch_turnover_keeps_inventory_display_but_excludes_no_movement_or_negative_availability(self):
+        result = self.read('branch', [dict(warehouseid='A', product_categ_name='汤圆', material_code='ok', total_qty=100, available_qty=60, daily_movement=10),
+            dict(warehouseid='A', product_categ_name='汤圆', material_code='no-demand', total_qty=50, available_qty=40, daily_movement=0),
+            dict(warehouseid='A', product_categ_name='汤圆', material_code='invalid', total_qty=10, available_qty=-5, daily_movement=5)])[0]
+        self.assertEqual(result['inventory'], 160)
+        self.assertEqual((result['turnover_qty'], result['daily']), (60, 10))
 
     def test_snapshot_branch_movement_matches_the_same_batch_warehouse_and_sku(self):
         config = json.loads((ROOT / 'business/inventory-qll/sql.config.json').read_text())

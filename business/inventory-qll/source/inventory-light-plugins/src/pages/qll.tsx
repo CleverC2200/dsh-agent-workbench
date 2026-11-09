@@ -98,7 +98,7 @@ const KPI_COPY: Record<
 function formatMetric(value: number | null, unit: MetricValue['unit'], _compact = false) {
   if (value == null) return '-';
   if (unit === '%') return `${value.toFixed(2)}%`;
-  if (unit === '天') return `${value.toFixed(1)} 天`;
+  if (unit === '天') return `${value.toFixed(2)} 天`;
   return formatChainValue(value, unit);
 }
 
@@ -122,7 +122,10 @@ export function KpiCard({
     date?: string;
   };
 }) {
-  const copy = KPI_COPY[metricKey];
+  const copy =
+    metricKey === 'turnover' && metric.explanation
+      ? { ...KPI_COPY[metricKey], definition: metric.explanation, eyebrow: '节点库存工作台口径' }
+      : KPI_COPY[metricKey];
   const definitionId = React.useId();
   const inventoryMetric =
     metricKey === 'inventoryLevel'
@@ -256,7 +259,11 @@ export function KpiCard({
           metricKey === 'inventoryLevel'
             ? '占公司库存比例 / 库存量'
             : metricKey === 'turnover'
-              ? '当前库存÷近30日日均动销'
+              ? metric.explanation
+                ? layer === 'base'
+                  ? '同版本计划日均需求'
+                  : '同范围可用库存÷正向发货日均'
+                : '当前库存÷近30日日均动销'
               : metricKey === 'aging'
                 ? '平均货龄 / >30天库存量；分层展示'
                 : metricKey === 'fulfillment'
