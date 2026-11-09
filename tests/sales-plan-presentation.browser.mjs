@@ -118,7 +118,7 @@ const skuFor=(versionId)=>{
   return {...base,qty,price,amt:String(Number(qty)*Number(price))};
 };
 const skusFor=versionId=>comparison?.startsWith('sku-review')?[skuFor(versionId),{...skuFor(versionId),skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
-window.sentReturns=[];window.returnContextReads=0;
+window.sentReturns=[];
 window.savedDrafts=[];
 if (['history','forbidden','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
 const readCalls=window.readCalls=[];
@@ -133,7 +133,6 @@ const host={salesPlan:{
   list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=q?.status===undefined||q.status===1?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
   detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:skusFor(plan.versionId),versions:versionsFor(plan),logs:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:2,allowedActions:['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
-  returnContext:{invoke:async({versionId})=>{window.returnContextReads++;if(['return-unavailable','return-edits'].includes(comparison))throw Error('preview unavailable');return {versionId,status:plans.find(row=>row.versionId===versionId).status,currentStage:2,targetStage:1,targetStatus:6};}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
     readCalls.push({review:planId});
     if(comparison==='sku-review-failure') throw Error('fixture failure');
@@ -1257,7 +1256,6 @@ test('single return carries the current edited quantity', { timeout: 30000 }, as
   await modal.getByRole('button', { name: '确认退回', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(1);
   const request = await page.evaluate(() => window.sentReturns[0].request);
-  assert.equal(await page.evaluate(() => window.returnContextReads), 0);
   assert.equal(request.expectedReturnTargetStage, 1);
   assert.equal(request.action, 'REJECT');
   assert.deepEqual(request.adjustments, [{ skuCode: '1001', adjustQty: '11' }]);
@@ -1283,7 +1281,6 @@ test(
     await modal.getByRole('textbox').fill('按调整后的数量核对');
     await modal.getByRole('button', { name: '确认批量退回', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(2);
-    assert.equal(await page.evaluate(() => window.returnContextReads), 0);
     const sent = await page.evaluate(() => window.sentReturns);
     assert.deepEqual(
       sent
@@ -1302,7 +1299,7 @@ test(
 );
 
 test(
-  'return preview failure blocks submission and never guesses a destination',
+  'unresolved return destination blocks submission without a query',
   { timeout: 30000 },
   async (t) => {
     const { page } = await openWorkbench(t, false, 'return-unavailable');
@@ -1319,7 +1316,7 @@ test(
 );
 
 test(
-  'batch return preview failure reports a failed precheck without an unknown write',
+  'unresolved batch return destination fails before any write',
   { timeout: 30000 },
   async (t) => {
     const { page, groupBox } = await openWorkbench(t, true, 'return-unavailable');

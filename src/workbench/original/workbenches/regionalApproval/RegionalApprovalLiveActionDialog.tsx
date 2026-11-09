@@ -5,7 +5,6 @@ import {
   type GeaSalesPlanActionRequest,
   type GeaSalesPlanDetail,
   type GeaSalesPlanSku,
-  type GeaSalesPlanReturnContext,
 } from '../../bridge.ts';
 import { isBackendHttpError } from '../../http-error.ts';
 import { Alert, Button, Checkbox, Input, Modal, Radio, Select, Spin } from '@arco-design/web-react';
@@ -36,7 +35,8 @@ import type { ApprovalStageId } from './salesPlanDomain.ts';
 import { SALES_PLAN_ROLES, salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
 import { salesPlanAccessForRow, salesPlanEditableQuantity } from './models/salesPlanAccessModel.ts';
 import {
-  resolveSalesPlanReturnContext,
+  salesPlanReturnDestination,
+  type SalesPlanReturnDestination,
   salesPlanReturnAdjustments,
 } from './models/salesPlanReturnModel.ts';
 import { salesPlanApprovalDraftValues } from './models/salesPlanLocalDraftModel.ts';
@@ -215,13 +215,13 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   const [adjustmentValues, setAdjustmentValues] = useState<Record<string, string>>({});
   const [draftReady, setDraftReady] = useState(initialAction === 'SAVE');
   const [draftError, setDraftError] = useState('');
-  const [returnContext, setReturnContext] = useState<GeaSalesPlanReturnContext>();
+  const [returnDestination, setReturnDestination] = useState<SalesPlanReturnDestination>();
   useEffect(() => {
     if (initialAction === 'SAVE') return;
     const controller = new AbortController();
     setDraftReady(false);
     setDraftError('');
-    setReturnContext(undefined);
+    setReturnDestination(undefined);
     void salesPlan
       .draft!.invoke({ planId: row.planId, versionId: row.versionId, signal: controller.signal })
       .then(async (result) => {
@@ -231,18 +231,8 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           return;
         }
         if (initialAction === 'REJECT') {
-          if (!snapshot || !selectedRole) throw new Error('RETURN_CONTEXT_UNAVAILABLE');
-          const context = await resolveSalesPlanReturnContext(
-            snapshot,
-            selectedRole,
-            salesPlan.returnContext
-              ? () =>
-                  salesPlan.returnContext!.invoke({
-                    versionId: row.versionId,
-                    signal: controller.signal,
-                  })
-              : undefined,
-          );
+          if (!snapshot || !selectedRole) throw new Error('RETURN_DESTINATION_UNAVAILABLE');
+          const context = salesPlanReturnDestination(snapshot, selectedRole);
           if (controller.signal.aborted) return;
           const changes = salesPlanReturnAdjustments(
             snapshot,
@@ -254,7 +244,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
               : (result.draft?.adjustments ?? []),
             selectedRole === approvalStage ? pendingValues : undefined,
           );
-          setReturnContext(context);
+          setReturnDestination(context);
           setAdjustmentValues(
             Object.fromEntries(changes.map((item) => [item.skuCode, item.adjustQty])),
           );
@@ -290,7 +280,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     (action.state.status === 'error' && action.state.error.retrySameIntent);
   const targetStatus =
     kind === 'REJECT'
-      ? returnContext?.targetStatus
+      ? returnDestination?.targetStatus
       : access?.roleContractSupported
         ? row.status
         : salesPlanActionTargetStatus(kind, row.status, row.planTypeCode);
@@ -393,7 +383,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     targetStatus === undefined ||
     (kind === 'REJECT'
       ? !draftReady ||
-        !returnContext ||
+        !returnDestination ||
         adjustmentsInvalid ||
         !remark.trim() ||
         Array.from(remark.trim()).length > 1000
@@ -502,7 +492,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
       ...(access?.snapshotHash ? { expectedSnapshot: access.snapshotHash } : {}),
       ...(remark.trim() ? { remark: remark.trim() } : {}),
       ...(kind === 'REJECT'
-        ? { adjustments, expectedReturnTargetStage: returnContext?.targetStage }
+        ? { adjustments, expectedReturnTargetStage: returnDestination?.targetStage }
         : adjustments.length > 0
           ? { adjustments }
           : {}),
@@ -624,7 +614,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
             {draftError ? (
               <Alert
                 type="error"
-                content={t('common.assistantSurface.regionalApproval.returnContextUnavailable')}
+                content={t('common.assistantSurface.regionalApproval.returnDestinationUnavailable')}
               />
             ) : null}
             <label className={styles.formControl}>

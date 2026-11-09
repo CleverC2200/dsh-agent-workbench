@@ -341,14 +341,6 @@ export type GeaSalesPlanActionRequest = {
   adjustments?: GeaSalesPlanSkuAdjustment[];
 };
 
-export type GeaSalesPlanReturnContext = {
-  versionId: string;
-  status: number;
-  currentStage: number;
-  targetStage: number;
-  targetStatus: number;
-};
-
 export type GeaSalesPlanActionReceipt = {
   approvalRole?: GeaSalesPlanApprovalRole;
   /** 对结果数据快照仍然有效的角色决策。 */

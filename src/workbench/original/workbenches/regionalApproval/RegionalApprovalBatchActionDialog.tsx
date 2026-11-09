@@ -8,7 +8,7 @@ import {
   type GeaSalesPlanDetail,
 } from '../../bridge.ts';
 import {
-  resolveSalesPlanReturnContext,
+  salesPlanReturnDestination,
   salesPlanReturnAdjustments,
 } from './models/salesPlanReturnModel.ts';
 import { salesPlanApprovalDraftValues } from './models/salesPlanLocalDraftModel.ts';
@@ -161,15 +161,9 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           if (kind === 'REJECT') {
             if (!item.detail)
               throw new Error(
-                t('common.assistantSurface.regionalApproval.returnContextUnavailable'),
+                t('common.assistantSurface.regionalApproval.returnDestinationUnavailable'),
               );
-            const context = await resolveSalesPlanReturnContext(
-              item.detail,
-              item.access.approvalRole,
-              salesPlan.returnContext
-                ? () => salesPlan.returnContext!.invoke({ versionId: item.row.versionId })
-                : undefined,
-            );
+            const context = salesPlanReturnDestination(item.detail, item.access.approvalRole);
             request.adjustments = salesPlanReturnAdjustments(
               item.detail,
               item.row,
@@ -225,7 +219,7 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           status: 'failed',
           detail:
             kind === 'REJECT' && !actionSubmitted
-              ? t('common.assistantSurface.regionalApproval.returnContextUnavailable')
+              ? t('common.assistantSurface.regionalApproval.returnDestinationUnavailable')
               : actionErrorText(t, classified as SalesPlanActionError),
         });
       }

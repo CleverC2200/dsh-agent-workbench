@@ -1,7 +1,6 @@
 import type {
   GeaSalesPlanDetail,
   GeaSalesPlanListItem,
-  GeaSalesPlanReturnContext,
   GeaSalesPlanSkuAdjustment,
   GeaSalesPlanActionRequest,
   GeaSalesPlanActionReceipt,
@@ -20,11 +19,18 @@ const receiverQuantity = (sku: GeaSalesPlanDetail['skus'][number], stage: number
   throw new Error('接收节点缺少确认数量，请刷新后核对');
 };
 
-export async function resolveSalesPlanReturnContext(
+export type SalesPlanReturnDestination = {
+  versionId: string;
+  status: number;
+  currentStage: number;
+  targetStage: number;
+  targetStatus: number;
+};
+
+export function salesPlanReturnDestination(
   detail: GeaSalesPlanDetail,
   role: ApprovalStageId,
-  readContext?: () => Promise<GeaSalesPlanReturnContext>,
-): Promise<GeaSalesPlanReturnContext> {
+): SalesPlanReturnDestination {
   const version = detail.currentVersion;
   const currentStage = SALES_PLAN_ROLES.indexOf(role) + 1;
   if (!version.effective || currentStage < 2)
@@ -39,16 +45,14 @@ export async function resolveSalesPlanReturnContext(
       targetStatus: version.status + 5,
     };
   }
-  if (![7, 8, 9].includes(version.status) || !readContext)
-    throw new Error('无法确认继续退回的实际接收节点，请刷新后核对');
-  return readContext();
+  throw new Error('现有计划详情无法确认继续退回的实际接收节点');
 }
 
 export function salesPlanReturnAdjustments(
   detail: GeaSalesPlanDetail,
   row: Pick<GeaSalesPlanListItem, 'planId' | 'versionId' | 'status' | 'planTypeCode' | 'orderType'>,
   role: ApprovalStageId,
-  context: GeaSalesPlanReturnContext,
+  context: SalesPlanReturnDestination,
   stored: readonly GeaSalesPlanSkuAdjustment[] = [],
   pending: Readonly<Record<string, string>> = {},
 ): GeaSalesPlanSkuAdjustment[] {

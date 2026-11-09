@@ -37,12 +37,6 @@ export interface WorkbenchHost {
     versions: { invoke(query: Api.GeaSalesPlanResourceQuery): Promise<Api.GeaSalesPlanVersion[]> };
     logs: { invoke(query: Api.GeaSalesPlanResourceQuery): Promise<Api.GeaSalesPlanApprovalLog[]> };
     versionSkus: { invoke(query: Api.GeaSalesPlanVersionSkuQuery): Promise<Api.GeaSalesPlanSku[]> };
-    returnContext?: {
-      invoke(query: {
-        versionId: string;
-        signal?: AbortSignal;
-      }): Promise<Api.GeaSalesPlanReturnContext>;
-    };
     skuReview?: {
       invoke(query: {
         planId: string;
