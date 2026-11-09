@@ -106,6 +106,8 @@
   },
   "files": [
     "lib/",
+    "scripts/sync-fulfillment-plugin-resources.mjs",
+    "scripts/publish-fulfillment-sales-window.mjs",
     "README.md",
     "LICENSE",
     "UPSTREAM.md",

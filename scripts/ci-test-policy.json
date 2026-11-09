@@ -11,6 +11,9 @@
     "tests/final-group-input.contract.mjs"
   ],
   "sourceFixtures": {
+    "tests/fulfillment-plugin-resource-sync.test.mjs": {
+      "dependencies": false
+    },
     "scripts/workflow-preflight.test.mjs": {
       "dependencies": false
     },
