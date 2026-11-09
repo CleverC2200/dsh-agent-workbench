@@ -1119,6 +1119,7 @@ export function mountCompanyUI(
         identity.state,
         identity.scope,
         identity.subject,
+        identity.pagesReady,
         identity.status?.authenticated,
         identity.error,
         authority,

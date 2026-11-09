@@ -126,9 +126,14 @@ export const validateSalesPlanActionInput = (
   ) {
     throw new SalesPlanActionError('validation', false);
   }
-  if (request.action === 'REJECT' && request.adjustments?.length) {
+  if (
+    request.expectedReturnTargetStage !== undefined &&
+    (request.action !== 'REJECT' ||
+      !Number.isInteger(request.expectedReturnTargetStage) ||
+      request.expectedReturnTargetStage < 1 ||
+      request.expectedReturnTargetStage >= approvalNodeOrder)
+  )
     throw new SalesPlanActionError('validation', false);
-  }
   if (approvalNodeOrder === 1 && request.adjustments?.length) {
     throw new SalesPlanActionError('validation', false);
   }
@@ -256,6 +261,12 @@ export const salesPlanActionReceiptMatches = (
     (receipt.auditId != null && typeof receipt.auditId !== 'string')
   )
     return false;
+  if (input.request.action === 'REJECT' && input.request.expectedReturnTargetStage !== undefined) {
+    return (
+      receipt.toStatus === input.request.expectedReturnTargetStage + 5 &&
+      (!input.serverRoleResult || receipt.approvalRole === input.request.approvalRole)
+    );
+  }
   const flow = salesPlanWorkflow(input.planTypeCode ?? 'Y');
   if (input.serverRoleResult) {
     const role = input.request.approvalRole;

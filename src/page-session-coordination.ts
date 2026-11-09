@@ -55,6 +55,7 @@ export function usePageSessionCoordination({
   );
   const identityReady =
     identity.state === 'confirmed' &&
+    identity.pagesReady !== false &&
     identity.error === undefined &&
     identity.status?.authenticated === true;
   const documentState = useSyncExternalStore(workbench.subscribe, workbench.getSnapshot);
@@ -428,7 +429,7 @@ export function createPageSessionNavigation({
       if (recovery.resourceId) {
         // Presentation memory supplies a hint; recovery waits for GEA's current identity.
         const account = identity();
-        if (account?.state !== 'confirmed' || account.error) return;
+        if (account?.state !== 'confirmed' || account.error || account.pagesReady === false) return;
         if (
           !account.status?.authenticated ||
           !recovery.subject ||
