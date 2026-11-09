@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import {
+  ontimeAgentSummarySql,
+  ontimeAgentDetailsSql,
   ontimeSql,
   ontimeSummarySql,
 } from '../business/inventory-orderworkbench/document-queries.mjs';
@@ -147,6 +149,12 @@ test('execution arrival cohort, all exclusions, missing evidence and summary par
     assert.equal(metric.sample.known, 8);
     assert.equal(metric.value, 500 / 11);
     assert.equal(metric.sample.value, 500 / 8);
+    const agentSummary = db.prepare(translate(ontimeAgentSummarySql)).get(params);
+    assert.deepEqual(
+      { ...agentSummary },
+      { numerator: 5, denominator: 11, known: 8, pending: 3, late: 3 },
+    );
+    assert.equal(db.prepare(translate(ontimeAgentDetailsSql)).all(params).length, 11);
     for (const cust_type of ['kamd', 'dc', 'jxs']) {
       const hour = cust_type === 'jxs' ? '09' : '15';
       for (const [suffix, arrival, expected] of [
@@ -193,6 +201,14 @@ test('execution arrival cohort, all exclusions, missing evidence and summary par
     assert.equal(updated.find((r) => r.order_no === 'missing-at').invalid, 1);
     assert.equal(updated.find((r) => r.order_no === 'missing-before').ontime, 1);
     assert.equal(updated.find((r) => r.order_no === 'type-conflict').invalid, 1);
+    const currentMetric = computeWorkbenchMetrics({
+      sections: [{ id: 'ontime', status: 'ready', rows: updated }],
+    })['准交率'];
+    const updatedSummary = db.prepare(translate(ontimeAgentSummarySql)).get(params);
+    assert.equal(updatedSummary.numerator, currentMetric.counts.onTime);
+    assert.equal(updatedSummary.denominator, currentMetric.counts.total);
+    assert.equal(updatedSummary.pending, currentMetric.counts.pending);
+    assert.equal(updatedSummary.known, currentMetric.counts.known);
   } finally {
     db.close();
   }

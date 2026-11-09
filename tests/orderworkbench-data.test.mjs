@@ -930,6 +930,7 @@ test('presentation fills both period tables, actual categories and shared direct
   const period = fixturePeriod();
   period.metrics = model.computeWorkbenchMetrics(period);
   const facts = {
+    metricCalculationVersion: model.metricCalculationVersion,
     selected: 'month',
     periods: Object.fromEntries(
       ['month', 'week', 'previousMonth', 'yearMonth', 'previousWeek', 'yearWeek'].map((key) => [

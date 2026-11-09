@@ -1,4 +1,23 @@
 // Quantity sums over daily execution details; no source-order/SKU deduplication.
+export const amendmentMetricContract = {
+  version: 'quantity-nonnegative-no-lock-v1',
+  source: 'agents_scm_execute_detail_d',
+  warehouseSource: 'agents_dim_bas_warehouse_d',
+  dateField: 'header_addtime',
+  aggregation: '商品明细数量合计，不按订单张数、SKU种类数或明细条数计率',
+  effectiveQuantity: 'COALESCE(dms_last_update_qty,need_qty_origin,0)',
+  numerator:
+    'SUM(CASE WHEN change_order_qty>=0 THEN ABS(change_order_qty-COALESCE(dms_last_update_qty,need_qty_origin,0)) ELSE 0 END)',
+  denominator: 'SUM(COALESCE(dms_last_update_qty,need_qty_origin,0))',
+  denominatorScope: '全部有效明细；客户要求改单量为空或负值的有效量仍保留在分母，三个数量全空剔除',
+  lockPeriod: false,
+  changeTimeRequired: false,
+  filters:
+    'detailstatus=10、is_stat=1、剔除作废单；仅createsource=20，剔除is_virtual=1/2和timeout_code=14/16；两端仓库同提货点且均为01/02工厂仓类型才剔除短驳；郑州仅pickup_point=01',
+  answer:
+    '分子、分母均为商品数量，不使用张；明细条数或订单张数只能另列，不能替代数量；旧快照或小时表结果不能冒充本口径',
+};
+
 const warehousePointsSql = `SELECT warehouseid AS warehouse_id,
   CASE WHEN COUNT(pickup_point)=COUNT(*) AND COUNT(DISTINCT pickup_point)=1
     THEN MAX(pickup_point) END AS pickup_point,
@@ -75,8 +94,8 @@ export function skuAmendmentEventsSql({ stage = 'events', periods = false } = {}
       OR orderstatus IS NULL`;
   const classified = `SELECT ${periods ? 'period_index,' : ''}cust_code,cust_order_no,material_code,cust_name,region_name,province_region_name,
     requested_qty,effective_qty,
-    CASE WHEN requested_qty IS NOT NULL THEN ABS(requested_qty-effective_qty) ELSE 0 END AS difference_qty,
-    CASE WHEN requested_qty IS NOT NULL THEN ABS(requested_qty-effective_qty) ELSE 0 END AS changed_quantity,
+    CASE WHEN requested_qty>=0 THEN ABS(requested_qty-effective_qty) ELSE 0 END AS difference_qty,
+    CASE WHEN requested_qty>=0 THEN ABS(requested_qty-effective_qty) ELSE 0 END AS changed_quantity,
     CASE WHEN ${invalid} THEN 1 ELSE 0 END AS invalid_denominator,
     CASE WHEN ${invalid} THEN 1 ELSE 0 END AS invalid_line
     FROM (${lines}) amendment_lines`;

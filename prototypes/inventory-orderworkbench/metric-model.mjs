@@ -136,7 +136,7 @@ export function computeWorkbenchMetrics(
         : null,
       kind === '1'
         ? '按传到OMS的单据新增日期，客户编码＋原订单号去重：锁定期内且接单超过12小时后作废订单数 ÷ O接收订单数（剔除接单后12小时以内、含恰好12小时作废的订单）；缺作废时间不计算'
-        : '按日表header_addtime归属OMS创建周期；郑州筛选仅取提货点pickup_point=01，不以belong_base替代；按商品明细数量合计：仅客户要求改单量change_order_qty非空时计入ΣABS(客户要求量－有效量)，真实0保留；分母为全部有效量之和，优先dms_last_update_qty，否则need_qty_origin，数量缺失按0；三个数量全空剔除，作废及无效明细剔除；仅接口createsource=20，剔除虚拟出1/2和超时原因14/16；按仓库维表剔除发收仓同提货点且双方均为工厂仓或工厂外租库的短拨，未分配发货仓仅按同执行单、同提货点及收货仓的有效明细唯一已知发货仓补齐，冲突不推断；不使用锁定期、交期或改单时间作为条件',
+        : '按日表header_addtime归属OMS创建周期；郑州筛选仅取提货点pickup_point=01，不以belong_base替代；按商品明细数量合计：仅客户要求改单量change_order_qty≥0时计入ΣABS(客户要求量－有效量)，真实0保留；分母为全部有效量之和，优先dms_last_update_qty，否则need_qty_origin，数量缺失按0；三个数量全空剔除，作废及无效明细剔除；仅接口createsource=20，剔除虚拟出1/2和超时原因14/16；按仓库维表剔除发收仓同提货点且双方均为工厂仓或工厂外租库的短拨，未分配发货仓仅按同执行单、同提货点及收货仓的有效明细唯一已知发货仓补齐，冲突不推断；不使用锁定期、交期或改单时间作为条件',
     );
   }
   const need = sum(orders, 'demand'),
@@ -268,7 +268,7 @@ export function computeWorkbenchMetrics(
         minimumPercent: (100 * knownNumerator) / denominator,
         maximumPercent: (100 * (knownNumerator + unknownQuantity)) / denominator,
       };
-      amendment.note += `；有效商品数量分母${denominator}，按现有时间已判定调整量${knownNumerator}，待判定${unknown}条明细、数量差额${unknownQuantity}`;
+      amendment.note += `；有效商品数量分母${denominator}，已确认有效明细调整量${knownNumerator}，待判定${unknown}条明细、数量差额${unknownQuantity}`;
       if (unknown > 0) {
         amendment.value = (100 * knownNumerator) / denominator;
         amendment.provisional = true;
@@ -439,14 +439,16 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
   if (['作废率', '改单率'].includes(name)) {
     const selected = source.filter((row) => String(row.kind) === (name === '作废率' ? '1' : '2'));
     if (!selected.length)
-      return `源数据未提供：agents_scm_execute_detail_hourly_d 在当前分组没有订单计数记录。`;
+      return name === '改单率'
+        ? '源数据未提供：agents_scm_execute_detail_d 在当前分组没有有效商品数量记录。'
+        : '源数据未提供：agents_scm_execute_detail_hourly_d 在当前分组没有订单计数记录。';
     if (
       name === '改单率' &&
       selected.some(
         (row) => Number(row.invalid) > 0 || row.numerator == null || row.denominator == null,
       )
     )
-      return '改单数量或有效明细标识不足：需客户要求改单量change_order_qty、D最后修改量dms_last_update_qty、调整需求量备份need_qty_origin及完整的客户、原订单、商品和订单状态；客户要求量为空不计分子，真实0保留；不要求交期或改单时间。';
+      return '改单数量或有效明细标识不足：需客户要求改单量change_order_qty、D最后修改量dms_last_update_qty、调整需求量备份need_qty_origin及完整的客户、原订单、商品和订单状态；客户要求量为空或负值不计分子，真实0保留；不要求交期或改单时间。';
     if (
       selected.some(
         (row) => Number(row.invalid) > 0 || row.numerator == null || row.denominator == null,

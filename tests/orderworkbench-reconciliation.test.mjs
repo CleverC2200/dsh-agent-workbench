@@ -210,12 +210,9 @@ test('split child creation times do not invalidate the original order and groupi
   assert.match(amendmentChangesSql, /AND d\.header_addtime>=:gea_p1/);
 });
 test('amendments use only the creation cohort while cancellation retains its existing cutoff', () => {
-  assert.match(
-    amendmentChangesSql,
-    /requested_qty IS NOT NULL THEN ABS\(requested_qty-effective_qty\)/,
-  );
+  assert.match(amendmentChangesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
   assert.doesNotMatch(amendmentChangesSql, /custchangetime|requireddeliverytime|\blocked\b/);
-  assert.match(changesSql, /requested_qty IS NOT NULL THEN ABS\(requested_qty-effective_qty\)/);
+  assert.match(changesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
   assert.match(changesSql, /cancelled IS NULL OR cancel_conflict>0/);
   assert.doesNotMatch(changesSql, /COALESCE\(cancelled/);
 });

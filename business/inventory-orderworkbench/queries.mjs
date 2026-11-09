@@ -1,5 +1,14 @@
-import { changesSql, customersSql, ordersSql, ontimeSql } from './document-queries.mjs';
+import {
+  changesSql,
+  customersSql,
+  ordersSql,
+  ontimeSql,
+  ontimeAgentSummarySql,
+  ontimeAgentDetailsSql,
+} from './document-queries.mjs';
+import { ontimeMetricContract } from './ontime-queries.mjs';
 import { workbenchBaseSql } from './base-scope.mjs';
+import { amendmentMetricContract, skuAmendmentEventsSql } from './sku-amendments.mjs';
 // Filter native date columns before UNION coerces the mixed date types to text.
 // Keep native datetime predicates available to Doris during the owner joins.
 const attributionSources = `SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_d
@@ -96,6 +105,50 @@ const ageBase = workbenchBaseSql(
 );
 
 export const workbenchQueries = {
+  'ontime.agent.summary': {
+    scoped: true,
+    metricContract: ontimeMetricContract,
+    columns: ['numerator', 'denominator', 'known', 'pending', 'late'],
+    sql: ontimeAgentSummarySql,
+  },
+  'ontime.agent.details': {
+    scoped: true,
+    metricContract: ontimeMetricContract,
+    keys: ['order_no'],
+    columns: ['order_no', 'customer', 'arrival_date', 'ontime', 'invalid'],
+    sql: ontimeAgentDetailsSql,
+  },
+  'amendment.summary': {
+    scoped: true,
+    metricContract: amendmentMetricContract,
+    columns: ['numerator', 'denominator', 'records', 'invalid'],
+    sql: `SELECT CASE WHEN SUM(invalid_change)=0 THEN SUM(change_numerator) END AS numerator,
+      CASE WHEN SUM(invalid_denominator)=0 THEN SUM(change_denominator) END AS denominator,
+      COUNT(*) AS records,SUM(invalid_change) AS invalid
+      FROM (${skuAmendmentEventsSql()}) approved_events`,
+  },
+  'amendment.details': {
+    scoped: true,
+    metricContract: amendmentMetricContract,
+    keys: ['executeorderno', 'cust_code', 'material_code', 'effective_qty', 'change_order_qty'],
+    columns: [
+      'executeorderno',
+      'cust_order_no',
+      'cust_code',
+      'cust_name',
+      'material_code',
+      'header_addtime',
+      'pickup_point',
+      'change_order_qty',
+      'dms_last_update_qty',
+      'need_qty_origin',
+      'effective_qty',
+      'changed_quantity',
+    ],
+    sql: `SELECT executeorderno,cust_order_no,cust_code,cust_name,material_code,header_addtime,pickup_point,change_order_qty,dms_last_update_qty,need_qty_origin,effective_qty,
+      CASE WHEN requested_qty>=0 THEN ABS(requested_qty-effective_qty) ELSE 0 END AS changed_quantity
+      FROM (${skuAmendmentEventsSql({ stage: 'lines' })}) approved_lines`,
+  },
   orders: {
     keys: ['base', 'category', 'item', 'sku'],
     columns: [
@@ -342,6 +395,7 @@ export function addWorkbenchQueries(config) {
       ...definition.extra,
     };
     const make = (sql, spec, columns) => ({
+      ...(definition.metricContract ? { metricContract: definition.metricContract } : {}),
       title: '订单工作台：' + name,
       parameterSpec: spec,
       request: {
