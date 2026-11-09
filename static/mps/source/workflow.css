@@ -469,7 +469,10 @@
   width: 100%;
 }
 .wf-plan-detail-row .dc-card-foot {
-  justify-content: flex-end;
+  position: sticky;
+  left: 0;
+  max-width: calc(100vw - 80px);
+  justify-content: flex-start;
   gap: 8px;
   padding: 12px 0;
   border: 0;
@@ -808,4 +811,9 @@
 
 .wf-toolbar:has(.mps-batch-actions input) .wf-filters {
   flex-basis: 100%;
+}
+
+.wf-filters > .dc-card-note {
+  flex: none;
+  white-space: nowrap;
 }

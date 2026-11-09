@@ -964,6 +964,36 @@ test('MPS effective category and share edits drive the same unconstrained invent
   const skuTable = await skuScroll.getByRole('table').boundingBox();
   const skuPager = await report.locator('.wf-plan-detail-row .dc-card-foot').boundingBox();
   assert.ok(skuPager.y >= skuTable.y + skuTable.height - 2);
+  for (const width of [1200, 720]) {
+    await page.evaluate((width) => {
+      document.getElementById('root').style.width = `${width + 520}px`;
+    }, width);
+    const frameBounds = await page.locator('iframe').boundingBox();
+    const next = await report
+      .getByRole('button', { name: '下一页单品', exact: true })
+      .boundingBox();
+    assert.ok(
+      next.x >= frameBounds.x && next.x + next.width <= frameBounds.x + frameBounds.width,
+      `pagination remains visible at ${width}px`,
+    );
+    await report.locator('.wf-plan-balances').evaluate((element) => {
+      element.scrollLeft = element.scrollWidth;
+    });
+    const scrolled = await report
+      .getByRole('button', { name: '下一页单品', exact: true })
+      .boundingBox();
+    assert.ok(
+      scrolled.x >= frameBounds.x &&
+        scrolled.x + scrolled.width <= frameBounds.x + frameBounds.width,
+      `pagination remains visible after horizontal scrolling at ${width}px`,
+    );
+    await report.locator('.wf-plan-balances').evaluate((element) => {
+      element.scrollLeft = 0;
+    });
+  }
+  await page.evaluate(() => {
+    document.getElementById('root').style.width = '1720px';
+  });
   await report
     .getByRole('button', { name: '郑州 A 2026-12 实际主计划量 求解过程', exact: true })
     .click();
