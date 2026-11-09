@@ -92,11 +92,14 @@ test('unknown periods and metrics do not invent dates or detail data', () => {
 
 test('amendment handoff rejects old snapshots and carries the same quantity queries as the dashboard', () => {
   assert.throws(
-    () => metricDetailsRequest({ ...facts, metricCalculationVersion: 26 }, '改单率', selection),
+    () => metricDetailsRequest({ ...facts, metricCalculationVersion: 27 }, '改单率', selection),
     /口径已更新/,
   );
   const request = metricDetailsRequest(facts, '改单率', selection);
   const detail = request.context.metricDetails;
+  assert.equal(detail.contract.dateField, 'lastshipmenttime');
+  assert.equal(detail.contract.dateSource, 'agents_scm_order_trace_final_di');
+  assert.match(request.text, /装车完成时间归属实际发货周期/);
   assert.equal(detail.contract.lockPeriod, false);
   assert.equal(detail.contract.changeTimeRequired, false);
   for (const query of Object.values(detail.queries)) {

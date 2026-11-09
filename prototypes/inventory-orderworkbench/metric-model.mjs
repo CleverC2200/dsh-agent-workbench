@@ -1,5 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 27;
+export const metricCalculationVersion = 28;
 export function retainableWorkbenchFacts(facts) {
   return (
     facts?.attributionVersion === 2 &&
@@ -136,7 +136,7 @@ export function computeWorkbenchMetrics(
         : null,
       kind === '1'
         ? '按传到OMS的单据新增日期，客户编码＋原订单号去重：锁定期内且接单超过12小时后作废订单数 ÷ O接收订单数（剔除接单后12小时以内、含恰好12小时作废的订单）；缺作废时间不计算'
-        : '按日表header_addtime归属OMS创建周期；郑州筛选仅取提货点pickup_point=01，不以belong_base替代；按商品明细数量合计：仅客户要求改单量change_order_qty≥0时计入ΣABS(客户要求量－有效量)，真实0保留；分母为全部有效量之和，优先dms_last_update_qty，否则need_qty_origin，数量缺失按0；三个数量全空剔除，作废及无效明细剔除；仅接口createsource=20，剔除虚拟出1/2和超时原因14/16；按仓库维表剔除发收仓同提货点且双方均为工厂仓或工厂外租库的短拨，未分配发货仓仅按同执行单、同提货点及收货仓的有效明细唯一已知发货仓补齐，冲突不推断；不使用锁定期、交期或改单时间作为条件',
+        : '按物流追踪表lastshipmenttime装车完成时间归属实际发货周期，执行单号＋客户关联日表，按update_time及load_time最新批次取最后装车完成；缺时间不归属、不回退OMS创建或WMS关单时间；郑州筛选仅取提货点pickup_point=01，不以belong_base替代；按商品明细数量合计：仅客户要求改单量change_order_qty≥0时计入ΣABS(客户要求量－有效量)，真实0保留；分母为全部有效量之和，优先dms_last_update_qty，否则need_qty_origin，数量缺失按0；三个数量全空剔除，作废及无效明细剔除；仅接口createsource=20，剔除虚拟出1/2和超时原因14/16；按仓库维表剔除发收仓同提货点且双方均为工厂仓或工厂外租库的短拨，未分配发货仓仅按同执行单、同提货点及收货仓的有效明细唯一已知发货仓补齐，冲突不推断；不使用锁定期、交期或改单时间作为条件',
     );
   }
   const need = sum(orders, 'demand'),
@@ -440,7 +440,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
     const selected = source.filter((row) => String(row.kind) === (name === '作废率' ? '1' : '2'));
     if (!selected.length)
       return name === '改单率'
-        ? '源数据未提供：agents_scm_execute_detail_d 在当前分组没有有效商品数量记录。'
+        ? '当前实际发货周期没有可归属的有效商品数量记录：日表需按执行单号＋客户关联物流lastshipmenttime装车完成时间；缺时间不以OMS新增或WMS关单时间替代。'
         : '源数据未提供：agents_scm_execute_detail_hourly_d 在当前分组没有订单计数记录。';
     if (
       name === '改单率' &&
