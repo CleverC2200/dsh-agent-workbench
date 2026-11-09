@@ -5,7 +5,11 @@ import type { AgentSqlConfig } from './sql-config';
 export async function readGroupedOrderOverview(
   config: AgentSqlConfig,
   asOf: string,
-  options: { signal?: AbortSignal; execute?: ConfiguredExecution } = {},
+  options: {
+    signal?: AbortSignal;
+    execute?: ConfiguredExecution;
+    viewIds?: readonly string[];
+  } = {},
 ) {
   const definition = config.overviewOrderGroups;
   const query = config.queries[definition.queryId];
@@ -23,7 +27,10 @@ export async function readGroupedOrderOverview(
           : structuredClone(query.request.parameters[key]),
     ]),
   );
-  const pickupTypes = [...new Set(Object.values(definition.views))];
+  const views = Object.entries(definition.views).filter(
+    ([id]) => !options.viewIds || options.viewIds.includes(id),
+  );
+  const pickupTypes = [...new Set(views.map(([, type]) => type))];
   values.pickup_type_mode = pickupTypes.length === 1 ? 'equal' : 'all';
   values.pickup_type = pickupTypes.length === 1 ? pickupTypes[0] : null;
   const result = await createAgentQueries(config, options.execute).read(
@@ -32,7 +39,7 @@ export async function readGroupedOrderOverview(
     { signal: options.signal, requiredColumns: query.resultColumns },
   );
   const parts: Record<string, any> = {};
-  for (const [id, type] of Object.entries(definition.views)) {
+  for (const [id, type] of views) {
     const rows = result.rows.filter((row: any) => row.pickup_type === type);
     const count = rows[0]?.row_count;
     if (

@@ -15,6 +15,9 @@ export function sqlQueryError(cause) {
     /(?:SESSION_(?:EXPIRED|REJECTED|NOT_FOUND|MAX_LIFETIME_EXCEEDED)|会话已失效)/.test(
       code + ' ' + message,
     );
+  const tenantDatasetDisabled =
+    /AUTHORIZATION_REWRITE/.test(code + ' ' + message) &&
+    /数据表不在当前租户启用数据集范围内|当前租户(?:尚未|未)启用此数据集/.test(message);
   const unavailable = /(?:RESOURCE_NOT_IN_DATASET|RESOURCE_NOT_PUBLISHED|FIELD_NOT_PUBLISHED)/.test(
     code + ' ' + message,
   );
@@ -23,9 +26,11 @@ export function sqlQueryError(cause) {
       ? DATA_PERMISSION_MESSAGE
       : expired
         ? '数据会话已失效，请刷新页面重试'
-        : unavailable
-          ? '当前环境所需数据源或字段尚未发布或授权，请联系管理员核对；暂时无法读取，不能判断数据是否为空。'
-          : '数据读取失败，请刷新重试；若仍失败，请查看接口错误详情',
+        : tenantDatasetDisabled
+          ? '当前租户尚未启用此数据集，请联系管理员启用；暂时无法读取，不能判断数据是否为空。'
+          : unavailable
+            ? '当前环境所需数据源或字段尚未发布或授权，请联系管理员核对；暂时无法读取，不能判断数据是否为空。'
+            : '数据读取失败，请刷新重试；若仍失败，请查看接口错误详情',
     { cause },
   );
   error.code = 'GEA_SQL_DISPLAY_ERROR';

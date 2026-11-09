@@ -8,6 +8,7 @@ import { createAgentQueries } from './agent-query';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readConfiguredTargetScope } from './configured-target-scope';
 import type { ConfiguredExecution } from './agent-query';
+import { qllPublishedDate } from './qll-published-date';
 
 /** Independent base shortage views share the page's authorized daily batch. */
 export async function readBaseCurrentShortage(
@@ -212,6 +213,12 @@ export async function readConfiguredFacts(
       freshAfter: options.freshAfter,
     }),
     q = config.queries[view.queryId];
+  const requestedAsOf = input.asOf;
+  if (
+    !viewId.startsWith('channel-') &&
+    (q.summaryRoute || ['stock', 'health', 'shipment'].includes(view.timeMode))
+  )
+    input = { ...input, asOf: await qllPublishedDate(config, input.asOf, options) };
   // Display reads fetch only the requested page; full-scope totals and explicit
   // export/submission reads retain their independent contracts.
   const readSize = pageSize;
@@ -263,7 +270,7 @@ export async function readConfiguredFacts(
   const targetScope = Object.values<{ name: string }>(q.parameterSpec).some(
     (spec) => spec.name === 'inventory_version',
   )
-    ? await readConfiguredTargetScope(client, input.asOf, options.signal)
+    ? await readConfiguredTargetScope(client, requestedAsOf, options.signal)
     : null;
   if (targetScope) {
     version = targetScope.configVersion;

@@ -716,16 +716,17 @@ test('qll original current-order card retains new base snapshot quantities witho
   );
   assert.deepEqual(errors, []);
 });
-test('QLL branch turnover uses shipment quantities after its summary arrives and keeps the Chinese date display', async (t) => {
+test('QLL branch turnover uses the standalone workbench matched summary and keeps the Chinese date display', async (t) => {
   const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
     if (query.queryId === 'branch-turnover.cards')
       Object.assign(result.rows[0], {
-        historical_turnover_days: 999,
+        historical_turnover_days: 12.5,
+        matched_turnover_inventory: 5000,
         turnover_count: 30,
-        rolling_ship_daily: 446.4,
+        rolling_ship_daily: 400,
       });
     if (query.queryId === 'base_shipments.summary')
-      Object.assign(result.rows[0], { rolling_ship_positive: 13392, rolling_missing_qty: 0 });
+      Object.assign(result.rows[0], { rolling_ship_positive: 1339.2, rolling_missing_qty: 0 });
     return result;
   });
   const card = frame
@@ -734,8 +735,7 @@ test('QLL branch turnover uses shipment quantities after its summary arrives and
   await expect
     .poll(() => calls.filter((query) => query.queryId === 'branch-turnover.cards').length)
     .toBe(1);
-  await expect(card.getByText('分仓周转', { exact: true }).locator('..')).toContainText('12.5天');
-  await expect(card).not.toContainText('999.0天');
+  await expect(card.getByText('分仓周转', { exact: true }).locator('..')).toContainText('12.50天');
   await expect(frame.getByLabel('读取时点')).toHaveValue('2026-10-20');
   await expect(frame.getByText('2026年10月20日', { exact: true })).toBeVisible();
   assert.deepEqual(errors, []);
@@ -762,10 +762,10 @@ test('QLL cards show batch-weighted average ages and independent current gaps, i
   const age = frame
     .getByRole('button')
     .filter({ has: frame.getByText('平均货龄', { exact: true }) });
-  await expect(age.locator('strong').first()).toHaveText('13.6天');
+  await expect(age.locator('strong').first()).toHaveText('13.64天');
   await expect(age).not.toContainText('405');
-  await expect(age).toContainText('基地货龄10.0天');
-  await expect(age).toContainText('分仓货龄50.0天');
+  await expect(age).toContainText('基地货龄10.00天');
+  await expect(age).toContainText('分仓货龄50.00天');
   const orders = frame
     .getByRole('button')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
@@ -2011,7 +2011,7 @@ for (const [inventory, inTransit, stockDays] of [
       inTransit === null ? '-' : inTransit === 0 ? '0件' : '2,412件',
     );
     await expect(value(turnover, '客户库存支撑')).toHaveText(
-      stockDays === null ? '-' : stockDays === 0 ? '0.0天' : '18.0天',
+      stockDays === null ? '-' : stockDays === 0 ? '0.00天' : '18.00天',
     );
     await expect(stock.locator('strong').last()).toHaveText(
       inventory === null ? '-' : inventory === 0 ? '1.12万件' : '2.32万件',

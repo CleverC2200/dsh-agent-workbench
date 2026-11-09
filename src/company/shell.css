@@ -1789,6 +1789,25 @@
   padding-inline: 8px;
 }
 
+.gea-conversation-toolbar-status {
+  position: absolute;
+  right: 10px;
+  top: 100%;
+  box-sizing: border-box;
+  max-width: calc(100% - 20px);
+  padding: 5px 8px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 5px;
+  background: var(--workbench-surface);
+  color: var(--workbench-muted);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
 .gea-conversation-toolbar-error {
   position: absolute;
   right: 10px;
