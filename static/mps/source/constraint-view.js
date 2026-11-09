@@ -546,7 +546,7 @@ export function createConstraintPanel(react, { Dialog }) {
             'p',
             null,
             proposal.before !== null && proposal.after !== null
-              ? `本版各月最大资源缺口：${proposal.before.toFixed(2)}吨；停用此规则后：${proposal.after.toFixed(2)}吨。`
+              ? `本版各月最大资源缺口：${Math.round(proposal.before)}吨；停用此规则后：${Math.round(proposal.after)}吨。`
               : '当前资源分配或生产输入不完整，无法量化放宽收益。停用规则也不能证明计划已可执行。',
           ),
           h(

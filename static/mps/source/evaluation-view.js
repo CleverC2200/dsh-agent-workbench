@@ -235,7 +235,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             ? `${data.missing}项缺失${data.value === null ? '' : '，当前为已知小计'}`
             : undefined,
         },
-        numberText(data.value, false, 3),
+        numberText(data.value),
         data.missing && data.value !== null
           ? h('sup', { 'aria-label': '已知小计，含缺项' }, '*')
           : null,
@@ -373,7 +373,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           onClick: () => formula(row, field),
           'aria-label': `${row.base} ${row.code} ${row.month} ${labels[plannedFields.indexOf(field)]} 求解过程`,
         },
-        numberText(row[field], false, 3),
+        numberText(row[field]),
       );
     const detail = (rows, key) => {
       const selection = detailSelection[key] ?? {};
@@ -822,16 +822,12 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                               row.month,
                               row.base,
                               row.code,
-                              numberText(row.requiredProduction, false, 3),
+                              numberText(row.requiredProduction),
                               row.fulfillment === null
                                 ? '—'
-                                : numberText(
-                                    (row.requiredProduction ?? 0) * row.fulfillment,
-                                    false,
-                                    3,
-                                  ),
+                                : numberText((row.requiredProduction ?? 0) * row.fulfillment),
                               numberText(row.fulfillment, true),
-                              numberText(row.unfulfilled, false, 3),
+                              numberText(row.unfulfilled),
                               reportStatus(row),
                             ]),
                           'gaps',

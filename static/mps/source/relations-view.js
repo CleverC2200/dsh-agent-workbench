@@ -342,7 +342,18 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
                           'tr',
                           { key: pageIndex * 25 + index },
                           cells(kind, row).map((value, cell) =>
-                            h('td', { key: cell }, display(value)),
+                            h(
+                              'td',
+                              { key: cell },
+                              columns[kind][cell].startsWith('组合标准日产') &&
+                                value !== '' &&
+                                value != null &&
+                                Number.isFinite(Number(value))
+                                ? new Intl.NumberFormat('zh-CN', {
+                                    maximumFractionDigits: 0,
+                                  }).format(value)
+                                : display(value),
+                            ),
                           ),
                         ),
                       ),

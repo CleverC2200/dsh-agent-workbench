@@ -695,7 +695,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           源产能候选: row.capacities
             .map(
               (item) =>
-                `${display(item.line)}：${display(item.dailyPieces)}件/日，${display(item.dailyTons)}吨/日`,
+                `${display(item.line)}：${numberText(item.dailyPieces)}件/日，${numberText(item.dailyTons)}吨/日`,
             )
             .join('；'),
           来源: sourceText,
@@ -1306,8 +1306,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                       result.excludedCategoryDemand.map((row) => [
                         row.month,
                         row.category,
-                        display(row.quantity),
-                        display(row.systemQuantity),
+                        numberText(row.quantity),
+                        numberText(row.systemQuantity),
                         row.reason,
                       ]),
                     ),

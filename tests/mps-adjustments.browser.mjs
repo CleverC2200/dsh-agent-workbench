@@ -48,7 +48,7 @@ test('MPS category override records a reason and time, survives reload and undo 
   const period = month.match(/\d{4}-\d{2}/)[0];
   await frame.getByRole('button', { name: `调整 汤圆 ${period}`, exact: true }).click();
   const form = frame.getByRole('group', { name: '大类需求调整' });
-  await form.getByLabel('调整需求数量').fill('120');
+  await form.getByLabel('调整需求数量').fill('120.375');
   await form.getByLabel('调整原因').fill('客户已确认增量');
   await form.getByRole('button', { name: '应用大类调整' }).click();
   await expect
@@ -58,7 +58,7 @@ test('MPS category override records a reason and time, survives reload and undo 
           window.readView()?.localDrafts?.drafts?.[0]?.adjustments?.categoryDemand?.[0]?.quantity,
       ),
     )
-    .toBe(120);
+    .toBe(120.375);
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await expect(
     frame
@@ -71,6 +71,15 @@ test('MPS category override records a reason and time, survives reload and undo 
   );
   assert.equal(edit.reason, '客户已确认增量');
   assert.match(edit.at, /^\d{4}-\d{2}-\d{2}T/);
+  await frame.getByRole('button', { name: `调整 汤圆 ${period}`, exact: true }).click();
+  await expect(form.getByLabel('调整需求数量')).toHaveValue('120');
+  await form.getByRole('button', { name: '应用大类调整' }).click();
+  assert.equal(
+    await page.evaluate(
+      () => window.readView().localDrafts.drafts[0].adjustments.categoryDemand[0].quantity,
+    ),
+    120.375,
+  );
   await frame.getByRole('button', { name: `撤销 汤圆 ${period}`, exact: true }).click();
   await expect
     .poll(async () =>
@@ -84,9 +93,9 @@ test('MPS category override records a reason and time, survives reload and undo 
   );
   assert.deepEqual(
     history.map((entry) => entry.action),
-    ['set', 'undo'],
+    ['set', 'set', 'undo'],
   );
-  assert.equal(history[1].value, null);
+  assert.equal(history[2].value, null);
   await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toBeDisabled();
 });
 

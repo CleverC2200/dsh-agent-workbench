@@ -362,7 +362,7 @@ test('source previews omit missing-count columns while downloads preserve decima
     return response;
   });
   const history = frame.getByRole('region', { name: '历史同期发货', exact: true });
-  await expect(history).toContainText('发货数量：8件；含赠品数量：0件；不含税收入：11元');
+  await expect(history).toContainText('发货数量：8件；含赠品数量：0件；不含税收入：10.50元');
   for (const [title, expected] of [
     ['计划提报数据', '13'],
     ['历史同期发货', '8'],
@@ -370,7 +370,7 @@ test('source previews omit missing-count columns while downloads preserve decima
     const section = frame.getByRole('region', { name: title, exact: true });
     await section.getByRole('button', { name: '基地 1', exact: true }).click();
     const dialog = frame.getByRole('dialog');
-    await expect(dialog.locator('th')).toHaveText(['名称', '数量合计']);
+    await expect(dialog.locator('th')).toHaveText(['名称', '数量合计（件）']);
     await expect(dialog.locator('tbody tr').first().locator('td').nth(1)).toHaveText(expected);
     await expect(dialog).not.toContainText('公式');
     await expect(dialog).not.toContainText('代入');

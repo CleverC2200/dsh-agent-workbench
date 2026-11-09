@@ -168,6 +168,11 @@ const integer = new Intl.NumberFormat('zh-CN', {
   useGrouping: false,
   maximumFractionDigits: 0,
 }).format;
+const amount = new Intl.NumberFormat('zh-CN', {
+  useGrouping: false,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+}).format;
 const quantity = (rows, column) =>
   rows.reduce((sum, row) => (row[column] === '' ? sum : sum + Number(row[column])), 0);
 const currentMonth = () => {
@@ -326,26 +331,36 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   { key: column },
                   row[column] === '' || row[column] == null
                     ? '-'
-                    : (/数量|收入|金额|合计/.test(column) ||
-                          /^M\+\d$/.test(column) ||
-                          ['① 环比法', '② 占比法', '加权'].includes(column)) &&
-                        Number.isFinite(Number(row[column]))
-                      ? integer(row[column])
-                      : [
-                            '历史平均环比',
-                            '环比链',
-                            '同期平均占比',
-                            '三年月占比',
-                            '月发货占财年比例',
-                            '同比增长率',
-                            '环比增长率',
-                          ].includes(column) && Number.isFinite(Number(row[column]))
-                        ? new Intl.NumberFormat('zh-CN', {
-                            style: 'percent',
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          }).format(Number(row[column]))
-                        : row[column],
+                    : /收入|金额/.test(column) && Number.isFinite(Number(row[column]))
+                      ? amount(row[column])
+                      : (/数量|合计/.test(column) ||
+                            /^M\+\d$/.test(column) ||
+                            [
+                              '① 环比法',
+                              '② 占比法',
+                              '加权',
+                              '系统值',
+                              '有效值',
+                              '组合标准日产/件',
+                              '组合标准日产/吨',
+                            ].includes(column)) &&
+                          Number.isFinite(Number(row[column]))
+                        ? integer(row[column])
+                        : [
+                              '历史平均环比',
+                              '环比链',
+                              '同期平均占比',
+                              '三年月占比',
+                              '月发货占财年比例',
+                              '同比增长率',
+                              '环比增长率',
+                            ].includes(column) && Number.isFinite(Number(row[column]))
+                          ? new Intl.NumberFormat('zh-CN', {
+                              style: 'percent',
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            }).format(Number(row[column]))
+                          : row[column],
                 ),
               ),
             ),
@@ -514,7 +529,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             ['数量', '含赠品数量', '不含税收入']
               .map((field) => {
                 const known = rows.length && rows.every((row) => row[field] !== '');
-                return `${field === '数量' ? '发货数量' : field}：${known ? integer(quantity(rows, field)) + (field === '不含税收入' ? '元' : '件') : '未提供'}`;
+                return `${field === '数量' ? '发货数量' : field}：${known ? (field === '不含税收入' ? amount(quantity(rows, field)) + '元' : integer(quantity(rows, field)) + '件') : '未提供'}`;
               })
               .join('；'),
           ),
@@ -644,7 +659,20 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               preview === '明细' ? '下载明细' : '导出维度汇总',
             ),
           },
-          table(columns, displayed.slice(page * 25, (page + 1) * 25)),
+          table(
+            columns,
+            displayed.slice(page * 25, (page + 1) * 25),
+            Object.fromEntries(
+              columns.map((column) => [
+                column,
+                /收入|金额/.test(column)
+                  ? `${column}（元）`
+                  : /数量/.test(column)
+                    ? `${column}（${unit === '件' ? '件' : '单位待确认'}）`
+                    : column,
+              ]),
+            ),
+          ),
           h(
             'div',
             { className: 'dc-pagination' },

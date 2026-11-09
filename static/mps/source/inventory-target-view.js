@@ -1,7 +1,9 @@
 import { inventoryVersionOrder } from './inventory-selection.js';
 
-const number = (value) =>
-  value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 }).format(value);
+const number = (value, decimals = 4) =>
+  value == null
+    ? '—'
+    : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: decimals }).format(value);
 export const turnoverDaysSources = {
   'target-turnover-days': '源最终目标周转天数',
   'manual-turnover-days': '人工补充目标周转天数',
@@ -385,9 +387,9 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
             '基地',
             '月份',
             '有效安全天数',
-            '下月需求已知小计',
+            '下月需求已知小计（件）',
             '下月自然天数',
-            '推导目标库存已知小计',
+            '推导目标库存已知小计（件）',
             '缺下月需求单品',
             '推导库存缺项单品',
           ],
@@ -403,12 +405,14 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
                 days.length === 1 ? number(days[0]) : '按单品天数',
                 number(
                   demand.length ? demand.reduce((sum, row) => sum + row.nextMonthDemand, 0) : null,
+                  0,
                 ),
                 group[0]?.nextMonthDays ?? '—',
                 number(
                   targets.length
                     ? targets.reduce((sum, row) => sum + row.targetInventory, 0)
                     : null,
+                  0,
                 ),
                 group.length - demand.length,
                 group.filter((row) => row.targetInventory === null).length,

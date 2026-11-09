@@ -26,6 +26,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
     const result = react.useMemo(() => buildCategoryDemand(draft), [draft]);
     const [editing, setEditing] = react.useState(null);
     const [quantity, setQuantity] = react.useState('');
+    const [quantityChanged, setQuantityChanged] = react.useState(false);
     const [reason, setReason] = react.useState('');
     const [error, setError] = react.useState('');
     const editorRef = react.useRef(null);
@@ -116,6 +117,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
               onClick: () => {
                 setEditing(row);
                 setQuantity(row.quantity == null ? '' : String(row.quantity));
+                setQuantityChanged(false);
                 setReason(edit?.reason ?? '');
                 setError('');
               },
@@ -242,7 +244,12 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
       h(
         'section',
         { 'aria-label': '大类预估需求数量', className: 'dc-card dc-results dc-demand-summary' },
-        h('div', { className: 'dc-card-head' }, h('h3', {}, '大类预估需求数量')),
+        h(
+          'div',
+          { className: 'dc-card-head' },
+          h('h3', {}, '大类预估需求数量'),
+          h('span', { className: 'dc-card-note' }, '单位：件'),
+        ),
         table(
           ['大类', 'M+1', 'M+2', 'M+3', 'M+4'],
           summary,
@@ -263,7 +270,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
             h(
               'p',
               {},
-              `系统需求：${editing.systemQuantity ?? '待定'}件；有效需求：${editing.quantity ?? '待定'}件。仅调整当前本地版本。`,
+              `系统需求：${editing.systemQuantity == null ? '待定' : Math.round(editing.systemQuantity)}件；有效需求：${editing.quantity == null ? '待定' : Math.round(editing.quantity)}件。仅调整当前本地版本。`,
             ),
             h(
               'label',
@@ -275,8 +282,14 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
                 type: 'number',
                 min: 0,
                 step: 'any',
-                value: quantity,
-                onChange: (event) => setQuantity(event.target.value),
+                value:
+                  quantityChanged || quantity === ''
+                    ? quantity
+                    : String(Math.round(Number(quantity))),
+                onChange: (event) => {
+                  setQuantity(event.target.value);
+                  setQuantityChanged(true);
+                },
               }),
             ),
             h(

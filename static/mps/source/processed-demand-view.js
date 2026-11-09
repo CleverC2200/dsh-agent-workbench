@@ -2,7 +2,7 @@ import { buildMpsWorkflow } from './workflow-inputs.js';
 import { changeAdjustment, quantityAdjustmentKey } from './local-draft.js';
 
 const number = (value) =>
-  value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 }).format(value);
+  value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format(value);
 const sum = (rows, field) =>
   rows.length && rows.every((row) => row[field] != null)
     ? rows.reduce((total, row) => total + row[field], 0)
@@ -119,7 +119,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
           return;
         }
         const kind = entry.kind === 'categoryDemand' ? 'categoryDemand' : 'quantities';
-        const { kind: level, value: _value, ...fields } = entry;
+        const { kind: level, value: _value, changed: _changed, ...fields } = entry;
         delete fields.effectiveValue;
         const input = { ...fields, ...(kind === 'quantities' ? { kind: level } : {}) };
         const provisional = changeAdjustment(draft.adjustments, kind, input, undo);
@@ -577,7 +577,12 @@ export function createProcessedDemand(react, { downloadCsv }) {
       null,
       card(
         '大类需求总表',
-        h(react.Fragment, null, table('大类需求总表', summaryColumns, summaryRows)),
+        h(
+          react.Fragment,
+          null,
+          h('p', { className: 'wf-note' }, '单位：件'),
+          table('大类需求总表', summaryColumns, summaryRows),
+        ),
         h('button', { onClick: exportSummary }, '下载大类需求总表'),
       ),
       card(
@@ -621,8 +626,12 @@ export function createProcessedDemand(react, { downloadCsv }) {
               min: editing.kind === 'shipment' ? undefined : 0,
               step: editing.kind === 'shipment' ? 1 : 'any',
               'aria-label': editing.kind === 'shipment' ? '本月预估发货数量' : '有效需求数量',
-              value: editing.value,
-              onChange: (event) => setEditing({ ...editing, value: event.target.value }),
+              value:
+                editing.changed || editing.value === ''
+                  ? editing.value
+                  : String(Math.round(Number(editing.value))),
+              onChange: (event) =>
+                setEditing({ ...editing, value: event.target.value, changed: true }),
             }),
           ),
           h(

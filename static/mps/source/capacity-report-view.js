@@ -43,9 +43,9 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
     const metric = (value) =>
       value.value === null
         ? value.missing
-          ? `${numberText(value.known, false, 3)} · ${value.missing}项待补`
+          ? `${numberText(value.known)} · ${value.missing}项待补`
           : '缺本月需求来源'
-        : numberText(value.value, false, 3);
+        : numberText(value.value);
     const load = (row) => {
       if (row.load !== null)
         return h(
@@ -222,10 +222,10 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
             row.lines,
             metric(row.demand),
             row.days ?? '待补',
-            numberText(row.dailyTons, false, 3),
-            numberText(row.capacity, false, 3),
+            numberText(row.dailyTons),
+            numberText(row.capacity),
             load(row),
-            numberText(row.margin, false, 3),
+            numberText(row.margin),
             ...Array.from({ length: 4 }, (_, index) => {
               const period = offset(month, index + 1);
               const reference = !plan.months.includes(period);
@@ -278,10 +278,10 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                     ),
                   ),
                   metric(row.demand),
-                  numberText(row.dailyTons, false, 3),
-                  numberText(row.capacity, false, 3),
+                  numberText(row.dailyTons),
+                  numberText(row.capacity),
                   load(row),
-                  numberText(row.margin, false, 3),
+                  numberText(row.margin),
                   later ? load(later) : '缺需求来源',
                   metric(row.unassigned),
                 ],
@@ -317,12 +317,8 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                                         ? '大类需求为0'
                                         : '大类需求未齐'
                                       : numberText(item.share, true),
-                                    item.quota === null
-                                      ? '暂不分摊'
-                                      : numberText(item.quota, false, 3),
-                                    item.excess === null
-                                      ? '暂不计算'
-                                      : numberText(item.excess, false, 3),
+                                    item.quota === null ? '暂不分摊' : numberText(item.quota),
+                                    item.excess === null ? '暂不计算' : numberText(item.excess),
                                     future ? metric(future.demand) : '缺需求来源',
                                     metric(item.unassigned),
                                   ];
@@ -330,14 +326,14 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                                 [
                                   '合计',
                                   metric(row.demand),
-                                  row.demand.value !== null && row.demand.value > 0 ? '100%' : '—',
-                                  numberText(row.demand.value > 0 ? row.capacity : null, false, 3),
+                                  row.demand.value !== null && row.demand.value > 0
+                                    ? numberText(1, true)
+                                    : '—',
+                                  numberText(row.demand.value > 0 ? row.capacity : null),
                                   numberText(
                                     row.demand.value > 0 && row.margin !== null
                                       ? -row.margin
                                       : null,
-                                    false,
-                                    3,
                                   ),
                                   later ? metric(later.demand) : '缺需求来源',
                                   metric(row.unassigned),
@@ -473,8 +469,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                               null,
                               `${from} → ${to} · 线路小计 ${numberText(
                                 items.reduce((total, row) => total + row.quantity, 0),
-                                false,
-                                3,
                               )}件`,
                             ),
                             openTransfers[key]
@@ -492,7 +486,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                                       product?.category ?? '待核对',
                                       product?.group ?? '待核对',
                                       item.code,
-                                      numberText(item.quantity, false, 3),
+                                      numberText(item.quantity),
                                     ];
                                   }),
                                 )
@@ -612,7 +606,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                           ? 'wf-capacity-holiday'
                           : '',
                         title: row
-                          ? `年度需求已知小计${numberText(row.demand.known, false, 3)}吨；${row.demand.missing}项缺需求或有效件吨系数`
+                          ? `年度需求已知小计${numberText(row.demand.known)}吨；${row.demand.missing}项缺需求或有效件吨系数`
                           : '未取得年度需求',
                       },
                       row ? load(row) : '缺来源',
@@ -621,15 +615,9 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                   items.every(
                     (row) => row?.demand.value !== null && row?.demand.value !== undefined,
                   )
-                    ? numberText(
-                        items.reduce((total, row) => total + row.demand.value, 0),
-                        false,
-                        3,
-                      )
+                    ? numberText(items.reduce((total, row) => total + row.demand.value, 0))
                     : `全年已知${numberText(
                         items.reduce((total, row) => total + (row?.demand.known ?? 0), 0),
-                        false,
-                        3,
                       )}吨；${items.reduce((total, row) => total + (row?.demand.missing ?? 0), 0)}项月待补`,
                 ];
               }),
@@ -679,9 +667,9 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                           info?.tunnel || '待补',
                           info?.specification || '待补',
                           row.name,
-                          numberText(row.dailyTons, false, 3),
+                          numberText(row.dailyTons),
                           row.days ?? '待补',
-                          numberText(row.capacity, false, 3),
+                          numberText(row.capacity),
                           info?.outsourced ? '代工厂' : '隧道',
                         ];
                       }),
@@ -718,9 +706,9 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                   row.base,
                   row.category,
                   row.month,
-                  numberText(row.demand.value, false, 3),
-                  numberText(row.capacity, false, 3),
-                  numberText(row.gap, false, 3),
+                  numberText(row.demand.value),
+                  numberText(row.capacity),
+                  numberText(row.gap),
                   load(row),
                   '隧道；处置类型待人工确认',
                 ]),
