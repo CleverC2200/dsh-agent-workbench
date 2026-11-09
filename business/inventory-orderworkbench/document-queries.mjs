@@ -226,6 +226,10 @@ export const ontimeExecutionProductsSql = `SELECT cust_order_no,cust_code,materi
     )}) execution_rows
   WHERE (:gea_p900='' OR belong_base=:gea_p900)
   GROUP BY cust_order_no,cust_code,material_code,executeorderno,belong_base,detailstatus`;
-export const { ontimeSql, ontimeSummarySql, ontimePeriodSummarySql } = createOntimeQueries(
-  ontimeExecutionProductsSql,
-);
+export const {
+  ontimeSql,
+  ontimeSummarySql,
+  ontimePeriodSummarySql,
+  ontimeAgentSummarySql,
+  ontimeAgentDetailsSql,
+} = createOntimeQueries(ontimeExecutionProductsSql);

@@ -1,4 +1,6 @@
 import { shippableReferenceVersion } from './historical-shippable-reference.mjs';
+import { amendmentMetricContract } from '../../business/inventory-orderworkbench/sku-amendments.mjs';
+import { ontimeMetricContract } from '../../business/inventory-orderworkbench/ontime-queries.mjs';
 import {
   computeWorkbenchMetrics,
   metricDelta,
@@ -10,6 +12,7 @@ import {
   stockDaily,
   dayOffset,
   workbenchMetricMissingReason,
+  metricCalculationVersion,
 } from './metric-model.mjs';
 import {
   performanceCurrentCell,
@@ -621,6 +624,8 @@ export function workbenchEvidence(facts) {
   if (!facts) return null;
   return {
     source: facts.source,
+    metricCalculationVersion: facts.metricCalculationVersion,
+    metricContracts: { 改单率: amendmentMetricContract, 准交率: ontimeMetricContract },
     complete: facts.complete !== false,
     pendingPeriods: facts.pendingPeriods ?? [],
     pendingSources: facts.pendingSources ?? [],
@@ -642,9 +647,60 @@ export function workbenchEvidence(facts) {
             Object.entries(period.metrics).map(([key, metric]) => [
               key,
               {
-                value: metric.value,
+                value:
+                  ['改单率', '准交率'].includes(key) &&
+                  facts.metricCalculationVersion !== metricCalculationVersion
+                    ? null
+                    : metric.value,
                 unit: metric.unit,
-                ...(metric.value === null || metric.sample || metric.provisional
+                ...(key === '准交率' &&
+                facts.metricCalculationVersion === metricCalculationVersion &&
+                metric.counts
+                  ? {
+                      numerator: metric.counts.onTime,
+                      denominator: metric.counts.total,
+                      pending: metric.counts.pending,
+                      known: metric.counts.known,
+                      late: metric.counts.known - metric.counts.onTime,
+                      counts: { ...metric.counts },
+                      quantityUnit: '张执行单（执行单号去重）',
+                    }
+                  : {}),
+                ...(['改单率', '准交率'].includes(key) &&
+                facts.metricCalculationVersion !== metricCalculationVersion
+                  ? {
+                      note:
+                        key === '改单率'
+                          ? '改单率快照版本已过期，请刷新看板；旧张数或锁定期结果不可作为当前数量率。'
+                          : '准交率快照版本已过期，请刷新看板后按当前执行单到货口径读取。',
+                    }
+                  : {}),
+                ...(key === '改单率' && facts.metricCalculationVersion === metricCalculationVersion
+                  ? {
+                      numerator: (() => {
+                        const detail = rows(period, 'changes').filter(
+                          (row) => String(row.kind) === '2',
+                        );
+                        return detail.length &&
+                          detail.every((row) => Number.isFinite(row.numerator))
+                          ? detail.reduce((sum, row) => sum + row.numerator, 0)
+                          : null;
+                      })(),
+                      denominator: (() => {
+                        const detail = rows(period, 'changes').filter(
+                          (row) => String(row.kind) === '2',
+                        );
+                        return detail.length &&
+                          detail.every((row) => Number.isFinite(row.denominator))
+                          ? detail.reduce((sum, row) => sum + row.denominator, 0)
+                          : null;
+                      })(),
+                      quantityUnit: '商品数量（非订单张数）',
+                    }
+                  : {}),
+                ...((!['改单率', '准交率'].includes(key) ||
+                  facts.metricCalculationVersion === metricCalculationVersion) &&
+                (metric.value === null || metric.sample || metric.provisional)
                   ? {
                       note:
                         metric.value === null &&
@@ -654,8 +710,16 @@ export function workbenchEvidence(facts) {
                           : metric.note,
                     }
                   : {}),
-                ...(metric.sample ? { sample: metric.sample } : {}),
-                ...(metric.provisional ? { provisional: true, population: metric.population } : {}),
+                ...(metric.sample &&
+                (!['改单率', '准交率'].includes(key) ||
+                  facts.metricCalculationVersion === metricCalculationVersion)
+                  ? { sample: metric.sample }
+                  : {}),
+                ...(metric.provisional &&
+                (!['改单率', '准交率'].includes(key) ||
+                  facts.metricCalculationVersion === metricCalculationVersion)
+                  ? { provisional: true, population: metric.population }
+                  : {}),
               },
             ]),
           ),

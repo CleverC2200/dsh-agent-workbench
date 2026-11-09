@@ -139,6 +139,28 @@ test('interface source, virtual 1/2 and timeout 14/16 remove numerator and denom
   assert.equal(r.summary[0].numerator, 8);
   assert.equal(r.summary[0].denominator, 32);
 });
+
+test('only nonnegative requests contribute differences while negative and null requests retain the full denominator', () => {
+  const source = [
+    row('positive', { change_order_qty: 5, dms_last_update_qty: 2 }),
+    row('zero', { change_order_qty: 0, dms_last_update_qty: 7 }),
+    row('null', { change_order_qty: null, dms_last_update_qty: 11 }),
+    row('negative', { change_order_qty: -1, dms_last_update_qty: 13 }),
+    row('negative-only', {
+      change_order_qty: -2,
+      dms_last_update_qty: null,
+      need_qty_origin: null,
+    }),
+  ];
+  const result = read(source, { base: '郑州' });
+  assert.equal(result.events.length, 5);
+  assert.equal(result.summary[0].numerator, 10);
+  assert.equal(result.summary[0].denominator, 33);
+  assert.equal(result.customers[0].numerator, 10);
+  assert.equal(result.customers[0].denominator, 33);
+  assert.equal(read(source, { base: '郑州', period: true }).period[0].numerator, 10);
+  assert.equal(read(source, { base: '郑州', period: true }).period[0].denominator, 33);
+});
 test('short transfers require matching pickup and factory types on both ends; duplicate dimension rows do not multiply quantities', () => {
   const r = read(
     [
@@ -273,7 +295,7 @@ test('warehouse fallback does not cross executions, receive routes, cancelled ro
 test('amendment SQL requires exact warehouse mapping and no lock or event-time fields', () => {
   for (const sql of [amendmentEventsSql, amendmentChangesSql, customersSql]) {
     assert.match(sql, /shipping.pickup_point=receiving.pickup_point/);
-    assert.match(sql, /requested_qty IS NOT NULL/);
+    assert.match(sql, /requested_qty>=0/);
     assert.match(sql, /COALESCE\(s.dms_last_update_qty,s.need_qty_origin,0\)/);
     assert.doesNotMatch(
       sql,
