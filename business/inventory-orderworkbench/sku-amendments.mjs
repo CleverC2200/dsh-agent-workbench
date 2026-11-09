@@ -1,4 +1,38 @@
 // Quantity sums over daily execution details; no source-order/SKU deduplication.
+export const amendmentMetricContract = {
+  version: 'quantity-shipment-nonnegative-no-lock-v2',
+  source: 'agents_scm_execute_detail_d',
+  warehouseSource: 'agents_dim_bas_warehouse_d',
+  dateField: 'lastshipmenttime',
+  dateSource: 'agents_scm_order_trace_final_di',
+  dateBasis:
+    '实际发货：装车完成时间；按执行单号＋客户关联，取update_time、load_time最新批次并列记录的最后装车完成时间',
+  missingDate:
+    '缺装车完成时间或无法关联的执行单不能归属发货周期，不用OMS新增、WMS关单或预计到货时间替代',
+  countFields: {
+    records: '通过时间及业务筛选的明细条数，不是订单张数',
+    invalid: '保留集合内关键字段不足的待判定明细条数，不是被剔除的明细条数；本查询未返回剔除数量',
+  },
+  aggregation: '商品明细数量合计，不按订单张数、SKU种类数或明细条数计率',
+  effectiveQuantity: 'COALESCE(dms_last_update_qty,need_qty_origin,0)',
+  numerator:
+    'SUM(CASE WHEN change_order_qty>=0 THEN ABS(change_order_qty-COALESCE(dms_last_update_qty,need_qty_origin,0)) ELSE 0 END)',
+  denominator: 'SUM(COALESCE(dms_last_update_qty,need_qty_origin,0))',
+  denominatorScope: '全部有效明细；客户要求改单量为空或负值的有效量仍保留在分母，三个数量全空剔除',
+  lockPeriod: false,
+  changeTimeRequired: false,
+  filters:
+    'detailstatus=10、is_stat=1、剔除作废单；仅createsource=20，剔除is_virtual=1/2和timeout_code=14/16；两端仓库同提货点且均为01/02工厂仓类型才剔除短驳；郑州仅pickup_point=01',
+  answer:
+    '分子、分母均为商品数量，不使用张；明细条数或订单张数只能另列，不能替代数量；旧快照或小时表结果不能冒充本口径',
+};
+
+export const amendmentShipmentSql = `SELECT executeorderno,cust_code,MAX(lastshipmenttime) AS shipped_at
+  FROM (SELECT executeorderno,cust_code,lastshipmenttime,
+    DENSE_RANK() OVER (PARTITION BY executeorderno,cust_code ORDER BY update_time DESC,load_time DESC) AS version_rank
+    FROM agents_scm_order_trace_final_di) latest_shipments
+  WHERE version_rank=1 GROUP BY executeorderno,cust_code`;
+
 const warehousePointsSql = `SELECT warehouseid AS warehouse_id,
   CASE WHEN COUNT(pickup_point)=COUNT(*) AND COUNT(DISTINCT pickup_point)=1
     THEN MAX(pickup_point) END AS pickup_point,
@@ -18,6 +52,7 @@ export function skuAmendmentEventsSql({ stage = 'events', periods = false } = {}
     'province_region_name',
     'cust_name',
     'header_addtime',
+    'shipped_at',
     'orderstatus',
     'detailstatus',
     'is_stat',
@@ -30,14 +65,22 @@ export function skuAmendmentEventsSql({ stage = 'events', periods = false } = {}
     'is_virtual',
     'timeout_code',
   ];
-  const projection = (alias) => fields.map((field) => `${alias}.${field}`).join(',');
+  const projection = (alias) =>
+    fields
+      .map((field) =>
+        alias === 'd' && field === 'shipped_at'
+          ? 'shipment.shipped_at AS shipped_at'
+          : `${alias}.${field}`,
+      )
+      .join(',');
   const source = `SELECT ${periods ? 'rw.period_index,' : ''}${projection('d')}
     FROM agents_scm_execute_detail_d d
-    ${periods ? 'INNER JOIN report_windows rw ON rw.enabled=TRUE AND d.header_addtime>=rw.start_date AND d.header_addtime<rw.end_date' : ''}
+    INNER JOIN (${amendmentShipmentSql}) shipment ON shipment.executeorderno=d.executeorderno AND shipment.cust_code=d.cust_code
+    ${periods ? 'INNER JOIN report_windows rw ON rw.enabled=TRUE AND shipment.shipped_at>=rw.start_date AND shipment.shipped_at<rw.end_date' : ''}
     WHERE (:gea_p900=''
       OR (:gea_p900='郑州' AND d.pickup_point='01')
       OR (:gea_p900<>'郑州' AND d.belong_base=:gea_p900))
-      ${periods ? '' : 'AND d.header_addtime>=:gea_p1 AND d.header_addtime<:gea_p2'}
+      ${periods ? '' : 'AND shipment.shipped_at>=:gea_p1 AND shipment.shipped_at<:gea_p2'}
       AND d.createsource='20'
       AND (d.is_virtual IS NULL OR d.is_virtual NOT IN ('1','2'))
       AND (d.timeout_code IS NULL OR d.timeout_code NOT IN ('14','16'))`;
@@ -75,8 +118,8 @@ export function skuAmendmentEventsSql({ stage = 'events', periods = false } = {}
       OR orderstatus IS NULL`;
   const classified = `SELECT ${periods ? 'period_index,' : ''}cust_code,cust_order_no,material_code,cust_name,region_name,province_region_name,
     requested_qty,effective_qty,
-    CASE WHEN requested_qty IS NOT NULL THEN ABS(requested_qty-effective_qty) ELSE 0 END AS difference_qty,
-    CASE WHEN requested_qty IS NOT NULL THEN ABS(requested_qty-effective_qty) ELSE 0 END AS changed_quantity,
+    CASE WHEN requested_qty>=0 THEN ABS(requested_qty-effective_qty) ELSE 0 END AS difference_qty,
+    CASE WHEN requested_qty>=0 THEN ABS(requested_qty-effective_qty) ELSE 0 END AS changed_quantity,
     CASE WHEN ${invalid} THEN 1 ELSE 0 END AS invalid_denominator,
     CASE WHEN ${invalid} THEN 1 ELSE 0 END AS invalid_line
     FROM (${lines}) amendment_lines`;

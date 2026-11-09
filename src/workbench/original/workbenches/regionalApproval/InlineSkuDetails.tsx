@@ -99,8 +99,13 @@ export function InlineSkuDetails({
         categoryName === undefined || (sku.productCategName.trim() || '其他') === categoryName,
     );
   }, [skus, comparedSkus, categoryName, row.versionId]);
-  const [confirmedValues, setConfirmedValues] = useState<Record<string, string>>(
-    () => initialInputValues ?? {},
+  const [confirmedValues, setConfirmedValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      Object.entries(initialInputValues ?? {}).map(([code, value]) => [
+        code,
+        integerQuantity ? roundPlanQuantity(value) : value,
+      ]),
+    ),
   );
   const userEdited = useRef(false);
   const [draftState, setDraftState] = useState<'idle' | 'loading' | 'saved' | 'saving' | 'failed'>(
@@ -184,7 +189,8 @@ export function InlineSkuDetails({
           (result.draft?.adjustments ?? []).map((item) => {
             const sku = detail.skus.find((candidate) => String(candidate.skuCode) === item.skuCode);
             if (!sku) return [item.skuCode, item.adjustQty];
-            return [item.skuCode, addExactDecimals([baseline(sku), item.adjustQty])];
+            const value = addExactDecimals([baseline(sku), item.adjustQty]);
+            return [item.skuCode, integerQuantity ? roundPlanQuantity(value) : value];
           }),
         );
         setSavedDraft(JSON.stringify(next)); // 已落盘基线，用来判断哪几行还没存成功
@@ -531,11 +537,14 @@ export function InlineSkuDetails({
                                     : (confirmedValues[code] ?? confirmed)
                                 }
                                 onBlur={() => {
-                                  if (integerQuantity && confirmedValues[code] !== undefined)
+                                  if (integerQuantity && confirmedValues[code] !== undefined) {
+                                    const rounded = roundPlanQuantity(confirmedValues[code]);
                                     setConfirmedValues((current) => ({
                                       ...current,
-                                      [code]: roundPlanQuantity(current[code]),
+                                      [code]: rounded,
                                     }));
+                                    onInputChange?.({ [code]: rounded });
+                                  }
                                 }}
                                 aria-label={`${orderType === 'Z' ? t('common.correction.adjustment') : tr('columns.qty')} ${code}`}
                                 onChange={(value) => {

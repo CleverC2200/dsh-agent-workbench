@@ -222,7 +222,12 @@ test('amendment card uses the full denominator for the audited creation week', (
   const metric = period.metrics['改单率'];
   assert.ok(Math.abs(metric.value - (4187 / 3059039) * 100) < 1e-12);
   assert.equal(metric.sample, undefined);
-  const facts = { selected: 'week', complete: true, periods: { month: period, week: period } };
+  const facts = {
+    metricCalculationVersion,
+    selected: 'week',
+    complete: true,
+    periods: { month: period, week: period },
+  };
   const card = workbenchPresentation(facts).cards.find((card) => card.key === '改单率');
   assert.equal(card.value, '0.14');
   assert.equal(card.status, '健康');
@@ -232,4 +237,20 @@ test('amendment card uses the full denominator for the audited creation week', (
   assert.equal(evidence.provisional, true);
   assert.equal(evidence.population.denominator, 3059039);
   assert.match(evidence.note, /不代表完整改单率/);
+});
+
+test('old amendment evidence cannot publish its order-count rate under the quantity contract', () => {
+  const period = make();
+  period.metrics = computeWorkbenchMetrics(period);
+  period.metrics['改单率'].sample = { known: 25, total: 26, unit: '张' };
+  const evidence = workbenchEvidence({
+    metricCalculationVersion: 26,
+    selected: 'month',
+    periods: { month: period },
+  });
+  assert.equal(evidence.periods.month.metrics['改单率'].value, null);
+  assert.match(evidence.periods.month.metrics['改单率'].note, /快照版本已过期/);
+  assert.equal(evidence.periods.month.metrics['改单率'].numerator, undefined);
+  assert.equal(evidence.periods.month.metrics['改单率'].sample, undefined);
+  assert.equal(evidence.periods.month.metrics['改单率'].population, undefined);
 });

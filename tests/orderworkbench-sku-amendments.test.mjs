@@ -51,6 +51,7 @@ function row(order, overrides = {}) {
     province_region_name: '河南',
     cust_name: '客户',
     header_addtime: '2026-10-01 00:00:00',
+    lastshipmenttime: '2026-10-01 00:00:00',
     orderstatus: 10,
     detailstatus: 10,
     is_stat: '1',
@@ -65,7 +66,7 @@ function row(order, overrides = {}) {
     ...overrides,
   };
 }
-function read(rows, { base = '', dims = warehouses, period = false } = {}) {
+function read(rows, { base = '', dims = warehouses, period = false, shipments } = {}) {
   const db = new DatabaseSync(':memory:');
   try {
     db.exec(
@@ -75,6 +76,18 @@ function read(rows, { base = '', dims = warehouses, period = false } = {}) {
       `INSERT INTO agents_scm_execute_detail_d VALUES(${columns.map(() => '?').join(',')})`,
     );
     for (const r of rows) insert.run(...columns.map((c) => r[c]));
+    db.exec(
+      'CREATE TABLE agents_scm_order_trace_final_di(executeorderno,cust_code,lastshipmenttime,update_time,load_time)',
+    );
+    const shipment = db.prepare('INSERT INTO agents_scm_order_trace_final_di VALUES(?,?,?,?,?)');
+    for (const r of shipments ?? rows)
+      shipment.run(
+        r.executeorderno,
+        r.cust_code,
+        r.lastshipmenttime ?? null,
+        r.update_time ?? '2026-11-09 12:00:00',
+        r.load_time ?? '2026-11-09 13:00:00',
+      );
     db.exec('CREATE TABLE agents_dim_bas_warehouse_d(warehouseid,pickup_point,warehouse_classify)');
     const w = db.prepare('INSERT INTO agents_dim_bas_warehouse_d VALUES(?,?,?)');
     for (const r of dims) w.run(...r);
@@ -83,7 +96,12 @@ function read(rows, { base = '', dims = warehouses, period = false } = {}) {
       ? {
           period: `WITH report_windows(period_index,enabled,start_date,end_date) AS (VALUES(0,TRUE,'2026-10-01','2026-11-01'),(1,TRUE,'2026-09-01','2026-10-01')) ${aggregateAmendmentSql(skuAmendmentEventsSql({ periods: true }), false, true)}`,
         }
-      : { events: amendmentEventsSql, summary: amendmentChangesSql, customers: customersSql };
+      : {
+          events: amendmentEventsSql,
+          summary: amendmentChangesSql,
+          customers: customersSql,
+          lines: skuAmendmentEventsSql({ stage: 'lines' }),
+        };
     return Object.fromEntries(
       Object.entries(sqls).map(([name, sql]) => [
         name,
@@ -139,6 +157,28 @@ test('interface source, virtual 1/2 and timeout 14/16 remove numerator and denom
   assert.equal(r.summary[0].numerator, 8);
   assert.equal(r.summary[0].denominator, 32);
 });
+
+test('only nonnegative requests contribute differences while negative and null requests retain the full denominator', () => {
+  const source = [
+    row('positive', { change_order_qty: 5, dms_last_update_qty: 2 }),
+    row('zero', { change_order_qty: 0, dms_last_update_qty: 7 }),
+    row('null', { change_order_qty: null, dms_last_update_qty: 11 }),
+    row('negative', { change_order_qty: -1, dms_last_update_qty: 13 }),
+    row('negative-only', {
+      change_order_qty: -2,
+      dms_last_update_qty: null,
+      need_qty_origin: null,
+    }),
+  ];
+  const result = read(source, { base: '郑州' });
+  assert.equal(result.events.length, 5);
+  assert.equal(result.summary[0].numerator, 10);
+  assert.equal(result.summary[0].denominator, 33);
+  assert.equal(result.customers[0].numerator, 10);
+  assert.equal(result.customers[0].denominator, 33);
+  assert.equal(read(source, { base: '郑州', period: true }).period[0].numerator, 10);
+  assert.equal(read(source, { base: '郑州', period: true }).period[0].denominator, 33);
+});
 test('short transfers require matching pickup and factory types on both ends; duplicate dimension rows do not multiply quantities', () => {
   const r = read(
     [
@@ -154,13 +194,13 @@ test('short transfers require matching pickup and factory types on both ends; du
   assert.equal(r.summary[0].numerator, 8);
   assert.equal(r.summary[0].denominator, 32);
 });
-test('creation and base select the cohort; partial cancellations preserve valid detail rows', () => {
+test('shipment and pickup select the cohort; partial cancellations preserve valid detail rows', () => {
   const r = read(
     [
       row('partial', { executeorderno: 'cancelled', orderstatus: 90, detailstatus: 20 }),
       row('partial'),
       row('not-stat', { is_stat: '0' }),
-      row('outside', { header_addtime: '2026-11-01' }),
+      row('outside', { header_addtime: '2026-10-20', lastshipmenttime: '2026-11-01' }),
       row('other-base', { belong_base: '华南', pickup_point: '02' }),
     ],
     { base: '郑州' },
@@ -173,8 +213,12 @@ test('multi-period reports use the same no-lock business scope', () => {
   const r = read(
     [
       row('oct'),
-      row('sep', { header_addtime: '2026-09-20' }),
-      row('excluded', { header_addtime: '2026-09-20', receive_wh: 'SAME' }),
+      row('sep', { header_addtime: '2026-09-20', lastshipmenttime: '2026-09-20' }),
+      row('excluded', {
+        header_addtime: '2026-09-20',
+        lastshipmenttime: '2026-09-20',
+        receive_wh: 'SAME',
+      }),
     ],
     { period: true },
   );
@@ -206,9 +250,14 @@ test('Zhengzhou period comparisons use the same pickup scope as current totals',
   const r = read(
     [
       row('oct'),
-      row('sep', { header_addtime: '2026-09-20' }),
+      row('sep', { header_addtime: '2026-09-20', lastshipmenttime: '2026-09-20' }),
       row('oct-other', { pickup_point: '34', change_order_qty: 100 }),
-      row('sep-other', { header_addtime: '2026-09-20', pickup_point: 'C9', change_order_qty: 200 }),
+      row('sep-other', {
+        header_addtime: '2026-09-20',
+        lastshipmenttime: '2026-09-20',
+        pickup_point: 'C9',
+        change_order_qty: 200,
+      }),
     ],
     { base: '郑州', period: true },
   );
@@ -273,11 +322,90 @@ test('warehouse fallback does not cross executions, receive routes, cancelled ro
 test('amendment SQL requires exact warehouse mapping and no lock or event-time fields', () => {
   for (const sql of [amendmentEventsSql, amendmentChangesSql, customersSql]) {
     assert.match(sql, /shipping.pickup_point=receiving.pickup_point/);
-    assert.match(sql, /requested_qty IS NOT NULL/);
+    assert.match(sql, /requested_qty>=0/);
     assert.match(sql, /COALESCE\(s.dms_last_update_qty,s.need_qty_origin,0\)/);
     assert.doesNotMatch(
       sql,
       /custchangetime|requireddeliverytime|INTERVAL|is_short_transfer|order_qty_origin|agents_scm_execute_detail_hourly_d/,
     );
   }
+});
+
+test('shipment month includes earlier creations and never substitutes creation or WMS close for missing shipment', () => {
+  const r = read([
+    row('earlier', { header_addtime: '2026-09-20', lastshipmenttime: '2026-10-03' }),
+    row('next', { lastshipmenttime: '2026-11-01' }),
+    row('unknown', { lastshipmenttime: null }),
+  ]);
+  assert.equal(r.events.length, 1);
+  assert.equal(r.summary[0].numerator, 2);
+  assert.equal(r.summary[0].denominator, 8);
+  assert.equal(r.lines[0].shipped_at, '2026-10-03');
+});
+test('latest shipment batch retains tied transports and uses the last load without multiplying SKU quantities', () => {
+  const rows = [row('same'), row('same', { material_code: 'T' })];
+  const shipments = [
+    {
+      executeorderno: 'E-same',
+      cust_code: 'C',
+      lastshipmenttime: '2026-10-10',
+      update_time: '2026-11-08',
+    },
+    {
+      executeorderno: 'E-same',
+      cust_code: 'C',
+      lastshipmenttime: '2026-10-11',
+      update_time: '2026-11-09',
+      load_time: '2026-11-09 10:00:00',
+    },
+    {
+      executeorderno: 'E-same',
+      cust_code: 'C',
+      lastshipmenttime: '2026-10-12',
+      update_time: '2026-11-09',
+      load_time: '2026-11-09 11:00:00',
+    },
+    {
+      executeorderno: 'E-same',
+      cust_code: 'C',
+      lastshipmenttime: '2026-10-13',
+      update_time: '2026-11-09',
+      load_time: '2026-11-09 11:00:00',
+    },
+    {
+      executeorderno: 'E-same',
+      cust_code: 'OTHER',
+      lastshipmenttime: '2026-11-01',
+      update_time: '2026-11-09',
+    },
+  ];
+  const r = read(rows, { shipments });
+  assert.equal(r.lines.length, 2);
+  assert.equal(r.summary[0].numerator, 4);
+  assert.equal(r.summary[0].denominator, 16);
+  assert.ok(r.lines.every((x) => x.shipped_at === '2026-10-13'));
+  shipments.push({
+    ...shipments[2],
+    lastshipmenttime: '2026-11-01',
+    load_time: '2026-11-09 11:00:00',
+  });
+  assert.equal(read(rows, { shipments }).events.length, 0);
+  assert.equal(read(rows, { shipments, period: true }).period.length, 0);
+});
+test('a current missing shipment cannot resurrect an older timestamp', () => {
+  const shipments = [
+    {
+      executeorderno: 'E-latest',
+      cust_code: 'C',
+      lastshipmenttime: '2026-10-15',
+      update_time: '2026-11-08',
+    },
+    {
+      executeorderno: 'E-latest',
+      cust_code: 'C',
+      lastshipmenttime: null,
+      update_time: '2026-11-09',
+    },
+  ];
+  assert.equal(read([row('latest')], { shipments }).events.length, 0);
 });

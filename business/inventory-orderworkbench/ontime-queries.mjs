@@ -1,5 +1,27 @@
 // User definition, 2026-11-06: kamd/dc are late at 18h; other types at 12h.
 // Warehouse facts are reduced before joins; product movements must never multiply orders.
+export const ontimeMetricContract = {
+  version: 'execution-arrival-18-12-complete-v1',
+  source: 'agents_scm_order_trace_final_di',
+  executionSources: ['agents_scm_execute_detail_d', 'agents_scm_execute_detail_hourly_d'],
+  dateField: 'COALESCE(gpsisinraildate_to,arriveconfirm_time)',
+  dateBasis: '按TMS实际到货时间归属周期；优先目的地GPS围栏，其次到货确认',
+  grain: '执行单号去重，单位张；不按SKU、来源单或执行记录行计率',
+  numerator: '已确认准交执行单数',
+  denominator: '所选实际到货周期内符合剔除规则的全部已发货候选执行单数，包含待判定',
+  deadline:
+    'MAX(客户期望到货requireddeliverytimebak,开单确认到货requireddeliverytime,系统计算到货expected_deliv_time)',
+  graceHours: { kamd: 18, dc: 18, other: 12 },
+  customerType:
+    "agents_scm_order_trace_final_di.cust_type；LOWER(TRIM(cust_type)) IN ('kamd','dc')取18小时，否则12小时",
+  lateBoundary: '到货时间>=基准交期+对应18/12小时为逾期；严格早于为准交',
+  unknown: '待判定保留在完整分母，暂不计分子，不视为已确认逾期；样本率不能替代主率',
+  missingDeadline:
+    '系统交期缺失时，仅到货严格早于已有两交期最大值+对应时限才可确认准交，否则待判定',
+  scope:
+    '复用当前看板：短驳按两端同提货点且均工厂仓/工厂外租仓；剔除海外/国外/港澳、未派车、虚拟1/2、空车型及指定车型、超时原因14/16；不加OMS新增时间、最后发货时间非空或detailstatus/is_stat条件',
+  baseScope: '按看板belong_base筛选；郑州庞丽娟使用郑州基地准交率',
+};
 export const ontimeWarehousesSql = `SELECT warehouseid,
   CASE WHEN COUNT(DISTINCT NULLIF(TRIM(pickup_point),''))=1
     THEN MAX(NULLIF(TRIM(pickup_point),'')) END AS pickup_point,
@@ -119,7 +141,27 @@ export function createOntimeQueries(productsSql) {
     )
     .join(' UNION ALL ')}),
     ontime_traces AS (${periodTraces}),ontime_arrivals AS (${periodArrivals}),ontime_products AS (${scopedProducts}) `;
+  const executionPrefix = `${prefix.trimEnd()},ontime_executions AS (
+    SELECT h.executeorderno AS order_no,
+      CASE WHEN COUNT(DISTINCT h.cust_code)=1 THEN MAX(h.cust_code) END AS customer,
+      MAX(a.arrival_date) AS arrival_date,MIN(a.ontime) AS ontime,
+      MAX(CASE WHEN NULLIF(TRIM(h.executeorderno),'') IS NULL OR NULLIF(TRIM(h.cust_code),'') IS NULL
+        THEN 1 ELSE a.invalid END) AS invalid
+      ${from} GROUP BY h.executeorderno) `;
   return {
+    ontimeAgentSummarySql:
+      executionPrefix +
+      `SELECT
+      COALESCE(SUM(CASE WHEN invalid=0 AND ontime=1 THEN 1 ELSE 0 END),0) AS numerator,
+      COUNT(*) AS denominator,
+      COALESCE(SUM(CASE WHEN invalid=0 AND ontime IN (0,1) THEN 1 ELSE 0 END),0) AS known,
+      COALESCE(SUM(CASE WHEN invalid<>0 OR ontime IS NULL THEN 1 ELSE 0 END),0) AS pending,
+      COALESCE(SUM(CASE WHEN invalid=0 AND ontime=0 THEN 1 ELSE 0 END),0) AS late
+      FROM ontime_executions`,
+    ontimeAgentDetailsSql:
+      executionPrefix +
+      `SELECT order_no,customer,arrival_date,ontime,invalid
+      FROM ontime_executions`,
     ontimePeriodSummarySql:
       periodPrefix +
       `SELECT rw.period_index,h.belong_base AS base,a.invalid,a.ontime,

@@ -207,15 +207,13 @@ test('split child creation times do not invalidate the original order and groupi
     changesSql.indexOf('GROUP BY cust_code,cust_order_no') <
       changesSql.indexOf('WHERE h.created>=:gea_p1'),
   );
-  assert.match(amendmentChangesSql, /AND d\.header_addtime>=:gea_p1/);
+  assert.match(amendmentChangesSql, /AND shipment\.shipped_at>=:gea_p1/);
+  assert.doesNotMatch(amendmentChangesSql, /d\.header_addtime>=/);
 });
-test('amendments use only the creation cohort while cancellation retains its existing cutoff', () => {
-  assert.match(
-    amendmentChangesSql,
-    /requested_qty IS NOT NULL THEN ABS\(requested_qty-effective_qty\)/,
-  );
+test('amendments use the actual shipment cohort while cancellation retains its existing cutoff', () => {
+  assert.match(amendmentChangesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
   assert.doesNotMatch(amendmentChangesSql, /custchangetime|requireddeliverytime|\blocked\b/);
-  assert.match(changesSql, /requested_qty IS NOT NULL THEN ABS\(requested_qty-effective_qty\)/);
+  assert.match(changesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
   assert.match(changesSql, /cancelled IS NULL OR cancel_conflict>0/);
   assert.doesNotMatch(changesSql, /COALESCE\(cancelled/);
 });
