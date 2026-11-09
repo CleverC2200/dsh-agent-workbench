@@ -82,6 +82,7 @@ async function save(view) {
 test('shipment stages multiple hierarchy edits atomically, cancels across pages and preserves source precision', async (t) => {
   const { page, frame } = await setup(t);
   await step(frame, '本月预估发货');
+  await frame.getByLabel('数据截止日').fill('2026-11-22');
   await upload(
     frame,
     '选择发货输入CSV',
