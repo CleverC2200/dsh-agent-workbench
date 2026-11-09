@@ -28,6 +28,8 @@ const stockProjection = `SELECT COALESCE(s.belong_base,b.belong_base) AS base,CO
       CASE WHEN s.source_rows IS NOT NULL THEN 1 ELSE 0 END AS national_plan_records,
       COALESCE(b.invalid,0) AS national_stock_invalid,
       CASE WHEN s.source_rows>1 THEN 1 ELSE COALESCE(s.sales_invalid,0) END AS national_plan_invalid,
+      s.transfer_plan AS base_transfer_plan,
+      CASE WHEN s.source_rows>1 THEN 1 ELSE COALESCE(s.sales_invalid,0)+COALESCE(s.transfer_invalid,0) END AS base_plan_invalid,
       CASE WHEN b.inventory IS NULL OR b.invalid>0 OR s.source_rows IS NULL OR s.sales_invalid>0 OR s.transfer_invalid>0 THEN 1 ELSE 0 END AS invalid
 `;
 // Both plans use the inventory business day, including historical reports.
@@ -180,6 +182,8 @@ export const workbenchQueries = {
       'national_plan_records',
       'national_stock_invalid',
       'national_plan_invalid',
+      'base_transfer_plan',
+      'base_plan_invalid',
     ],
     sql:
       `WITH stock_plans AS (${stockPlans}), stock_batches AS (${stockBatches}),
