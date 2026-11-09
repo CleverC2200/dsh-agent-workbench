@@ -220,6 +220,7 @@ export type GeaSalesPlanActionContext = {
 };
 
 export type GeaSalesPlanDetail = {
+  returnTargetStage?: number | null;
   correctionContext?: {
     contract?: 'absolute-net-v1';
     monthlyApproved: boolean;

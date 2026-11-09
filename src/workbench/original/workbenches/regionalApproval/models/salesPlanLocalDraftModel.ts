@@ -35,6 +35,7 @@ export const salesPlanApprovalDraftValues = (
   role: ApprovalStageId | undefined,
   stored: readonly GeaSalesPlanSkuAdjustment[],
   pendingValues: Record<string, string> = {},
+  roundMonthly = true,
 ): Record<string, string> => {
   const values = Object.fromEntries(stored.map((item) => [item.skuCode, item.adjustQty]));
   for (const [skuCode, value] of Object.entries(pendingValues)) {
@@ -51,7 +52,12 @@ export const salesPlanApprovalDraftValues = (
     if (!DECIMAL.test(adjustQty)) throw new Error('确认计划数量不合法，请核对本节点调整');
     values[skuCode] = adjustQty;
   }
-  if ((row.orderType ?? detail?.currentVersion.orderType) === 'M' && role && role !== 'category') {
+  if (
+    roundMonthly &&
+    (row.orderType ?? detail?.currentVersion.orderType) === 'M' &&
+    role &&
+    role !== 'category'
+  ) {
     for (const sku of detail?.skus ?? []) {
       const code = String(sku.skuCode);
       const baseline = salesPlanEditableQuantity(sku, row.status, row.planTypeCode, role);

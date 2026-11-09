@@ -35,17 +35,52 @@ export function salesPlanReturnDestination(
   const currentStage = SALES_PLAN_ROLES.indexOf(role) + 1;
   if (!version.effective || currentStage < 2)
     throw new Error('退回节点或计划版本已变化，请刷新后重试');
-  if (Number.isInteger(version.status) && version.status >= 1 && version.status <= 4) {
-    if (version.status >= currentStage) throw new Error('退回节点或计划版本已变化，请刷新后重试');
-    return {
-      versionId: version.id,
-      status: version.status,
-      currentStage,
-      targetStage: version.status,
-      targetStatus: version.status + 5,
-    };
+  const forward = Number.isInteger(version.status) && version.status >= 1 && version.status <= 4;
+  if (
+    forward
+      ? version.status >= currentStage
+      : version.status < 7 || version.status > 9 || version.status !== currentStage + 5
+  )
+    throw new Error('退回节点或计划版本已变化，请刷新后重试');
+  const targets = new Set<number>();
+  if (forward) targets.add(version.status);
+  else {
+    if (currentStage === 2) targets.add(1);
+    for (const log of detail.logs ?? []) {
+      if (log.versionId !== version.id || log.planId !== version.planId) continue;
+      if (
+        log.actionCode === 'APPROVE' &&
+        log.toStatus === currentStage &&
+        log.fromStatus != null &&
+        log.fromStatus >= 1 &&
+        log.fromStatus < currentStage
+      )
+        targets.add(log.fromStatus);
+      if (
+        log.actionCode === 'REJECT' &&
+        log.fromStatus === currentStage + 5 &&
+        log.toStatus >= 6 &&
+        log.toStatus < currentStage + 5
+      )
+        targets.add(log.toStatus - 5);
+    }
   }
-  throw new Error('现有计划详情无法确认继续退回的实际接收节点');
+  if (detail.returnTargetStage != null) targets.add(detail.returnTargetStage);
+  const [targetStage] = targets;
+  if (
+    targets.size !== 1 ||
+    !Number.isInteger(targetStage) ||
+    targetStage < 1 ||
+    targetStage >= currentStage
+  )
+    throw new Error('计划详情缺少一致的实际退回节点，请刷新或联系管理员核对审批链');
+  return {
+    versionId: version.id,
+    status: version.status,
+    currentStage,
+    targetStage,
+    targetStatus: targetStage + 5,
+  };
 }
 
 export function salesPlanReturnAdjustments(

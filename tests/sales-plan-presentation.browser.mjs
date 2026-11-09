@@ -103,12 +103,20 @@ const baseSkuFor = (versionId) => ({
 });
 
 const comparison=new URL(location.href).searchParams.get('comparison');
+const continued = {
+  'return-continued-region': [7, 'region', 1],
+  'return-continued-province': [8, 'province', 2],
+  'return-continued-skipped': [9, 'area', 2],
+  'return-continued-field': [9, 'area', 2],
+}[comparison];
+const approvalRole = continued?.[1] ?? (comparison === 'return-unavailable' ? 'province' : 'region');
 if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50';
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 if(comparison?.startsWith('sku-review')) for(const plan of sourcePlans) plan.skuCount=2;
-const plans=['returned','return-unavailable'].includes(comparison)?sourcePlans.map(plan=>({...plan,status:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
+const plans=continued?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1).map(plan=>({...plan,status:continued[0]})):['returned','return-unavailable'].includes(comparison)?(comparison==='return-unavailable'?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1):sourcePlans).map(plan=>({...plan,status:comparison==='return-unavailable'?8:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 const skuFor=(versionId)=>{
   const base=baseSkuFor(versionId);
+  if(continued) return {...base,regionConfirmedQty:'10',regionConfirmedAmount:'100',provinceConfirmedQty:'15',provinceConfirmedAmount:'150',areaConfirmedQty:'25',areaConfirmedAmount:'250'};
   if(comparison==='integer')return {...base,qty:'501.600',amt:'5016.00'};
   if(!['inline','missing'].includes(comparison)) return base;
   const old=versionId.includes('previous'),older=versionId.includes('older');
@@ -130,8 +138,8 @@ const forbidden=async()=>{writes.push('write');throw Error('LOCAL_RENDER_ACTION_
 const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
-  list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=q?.status===undefined||q.status===1?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
-  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:skusFor(plan.versionId),versions:versionsFor(plan),logs:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:2,allowedActions:['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
+  list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
+  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:skusFor(plan.versionId),versions:versionsFor(plan),logs:continued && comparison!=='return-continued-field'?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],...(comparison==='return-continued-field'?{returnTargetStage:continued[2]}:{}),actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:2,allowedActions:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
     readCalls.push({review:planId});
@@ -146,9 +154,9 @@ const host={salesPlan:{
     readCalls.push({planId,fromVersionId,toVersionId});
     if(comparison==='forbidden')throw Object.assign(Error('forbidden'),{status:403});
     return [{skuCode:'1001',changeType:'UPDATED',before:{...skuFor(fromVersionId),qty:'10',amt:'100'},after:skuFor(toVersionId),qtyDelta:'10',amountDelta:'100'}];
-  }},action:{invoke:async(command)=>{if(comparison!=='return-edits')return forbidden();window.sentReturns.push(command);return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
+  }},action:{invoke:async(command)=>{if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
 },modelInference:{invoke:forbidden}};
-createRoot(document.getElementById('root')).render(<WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={i18n.t.bind(i18n)} onContextChange={()=>{}} approvalStages={['region']} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
+createRoot(document.getElementById('root')).render(<WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={i18n.t.bind(i18n)} onContextChange={()=>{}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
 `,
   },
   outfile: '/fixture/app.js',
@@ -646,7 +654,7 @@ test('collapsing the flow lane keeps filters and inline edits', { timeout: 30000
 
   await toggle.click();
   await expect(frame.getByRole('spinbutton', { name: '确认计划量 1001', exact: true })).toHaveValue(
-    '22.125',
+    '22',
   );
   await expect(area).toContainText('华南大区');
 });
@@ -1237,83 +1245,95 @@ test(
   },
 );
 
-test('single return carries the current edited quantity', { timeout: 30000 }, async (t) => {
-  const { page } = await openWorkbench(t, false, 'return-edits');
-  await page
-    .getByRole('button', { name: /宝阳销售组/ })
-    .first()
-    .click();
-  const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
-  await expect(input).toBeVisible();
-  await input.fill('30.600');
-  await input.blur();
+for (const [scenario, target] of [
+  ['return-edits', 1],
+  ['return-continued-region', 1],
+  ['return-continued-province', 2],
+  ['return-continued-skipped', 2],
+  ['return-continued-field', 2],
+])
+  test(
+    'single return carries the current edited quantity: ' + scenario,
+    { timeout: 30000 },
+    async (t) => {
+      const { page } = await openWorkbench(t, false, scenario);
+      await page.locator('tbody').getByRole('button').first().click();
+      const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+      await expect(input).toBeVisible();
+      await input.fill('30.600');
+      await input.blur();
+      await page.locator('tbody label.arco-checkbox').first().click();
+      await page.getByRole('button', { name: '退回', exact: true }).click();
+      const modal = page.getByRole('dialog', { name: '退回', exact: true });
+      await modal
+        .getByRole('textbox', { name: '退回原因（必填）', exact: true })
+        .fill('请核对修改后的数量');
+      await modal.getByRole('button', { name: '确认退回', exact: true }).click();
+      await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(1);
+      const request = await page.evaluate(() => window.sentReturns[0].request);
+      assert.equal(request.expectedReturnTargetStage, target);
+      assert.equal(request.action, 'REJECT');
+      assert.deepEqual(request.adjustments, [
+        { skuCode: '1001', adjustQty: target === 1 ? '11' : '21' },
+      ]);
+    },
+  );
+
+for (const [scenario, target] of [
+  ['return-edits', 1],
+  ['return-continued-skipped', 2],
+  ['return-continued-field', 2],
+])
+  test(
+    'batch return carries each customer allocation of the current edited group quantity: ' +
+      scenario,
+    { timeout: 30000 },
+    async (t) => {
+      const { page, groupBox } = await openWorkbench(t, true, scenario);
+      const queue = groupBox.locator('xpath=ancestor::tr');
+      await queue.getByRole('button').first().click();
+      const input = page
+        .getByTestId('regional-approval-group-sku-summary')
+        .first()
+        .getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+      await expect(input).toBeVisible();
+      await input.fill('60');
+      await input.blur();
+      await groupBox.check();
+      await page.getByRole('button', { name: '退回', exact: true }).click();
+      const modal = page.getByRole('dialog');
+      await modal.getByRole('textbox').fill('按调整后的数量核对');
+      await modal.getByRole('button', { name: '确认批量退回', exact: true }).click();
+      await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(2);
+      const sent = await page.evaluate(() => window.sentReturns);
+      assert.deepEqual(
+        sent
+          .toSorted((a, b) => a.planId.localeCompare(b.planId))
+          .map((item) => [
+            item.planId,
+            item.request.expectedReturnTargetStage,
+            item.request.adjustments,
+          ]),
+        [
+          ['p1', target, [{ skuCode: '1001', adjustQty: target === 1 ? '10' : '20' }]],
+          ['p2', target, [{ skuCode: '1001', adjustQty: target === 1 ? '10' : '20' }]],
+        ],
+      );
+    },
+  );
+
+test('unresolved return destination prevents business writes', { timeout: 30000 }, async (t) => {
+  const { page } = await openWorkbench(t, false, 'return-unavailable');
   await page.locator('tbody label.arco-checkbox').first().click();
   await page.getByRole('button', { name: '退回', exact: true }).click();
   const modal = page.getByRole('dialog', { name: '退回', exact: true });
-  await modal
-    .getByRole('textbox', { name: '退回原因（必填）', exact: true })
-    .fill('请核对修改后的数量');
-  await modal.getByRole('button', { name: '确认退回', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(1);
-  const request = await page.evaluate(() => window.sentReturns[0].request);
-  assert.equal(request.expectedReturnTargetStage, 1);
-  assert.equal(request.action, 'REJECT');
-  assert.deepEqual(request.adjustments, [{ skuCode: '1001', adjustQty: '11' }]);
+  await modal.getByRole('textbox', { name: '退回原因（必填）', exact: true }).fill('核对数量');
+  await expect(
+    modal.getByText('未能核对实际退回节点或修改后的数量，请刷新后重试。', { exact: true }),
+  ).toBeVisible();
+  await expect(modal.getByRole('button', { name: '确认退回', exact: true })).toBeDisabled();
+  assert.deepEqual(await page.evaluate(() => window.sentReturns), []);
 });
-
-test(
-  'batch return carries each customer allocation of the current edited group quantity',
-  { timeout: 30000 },
-  async (t) => {
-    const { page, groupBox } = await openWorkbench(t, true, 'return-edits');
-    const queue = groupBox.locator('xpath=ancestor::tr');
-    await queue.getByRole('button').first().click();
-    const input = page
-      .getByTestId('regional-approval-group-sku-summary')
-      .first()
-      .getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
-    await expect(input).toBeVisible();
-    await input.fill('60');
-    await input.blur();
-    await groupBox.check();
-    await page.getByRole('button', { name: '退回', exact: true }).click();
-    const modal = page.getByRole('dialog');
-    await modal.getByRole('textbox').fill('按调整后的数量核对');
-    await modal.getByRole('button', { name: '确认批量退回', exact: true }).click();
-    await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(2);
-    const sent = await page.evaluate(() => window.sentReturns);
-    assert.deepEqual(
-      sent
-        .toSorted((a, b) => a.planId.localeCompare(b.planId))
-        .map((item) => [
-          item.planId,
-          item.request.expectedReturnTargetStage,
-          item.request.adjustments,
-        ]),
-      [
-        ['p1', 1, [{ skuCode: '1001', adjustQty: '10' }]],
-        ['p2', 1, [{ skuCode: '1001', adjustQty: '10' }]],
-      ],
-    );
-  },
-);
-
-test(
-  'unresolved return destination blocks submission without a query',
-  { timeout: 30000 },
-  async (t) => {
-    const { page } = await openWorkbench(t, false, 'return-unavailable');
-    await page.locator('tbody label.arco-checkbox').first().click();
-    await page.getByRole('button', { name: '退回', exact: true }).click();
-    const modal = page.getByRole('dialog', { name: '退回', exact: true });
-    await modal.getByRole('textbox', { name: '退回原因（必填）', exact: true }).fill('核对数量');
-    await expect(
-      modal.getByText('未能核对实际退回节点或修改后的数量，请刷新后重试。', { exact: true }),
-    ).toBeVisible();
-    await expect(modal.getByRole('button', { name: '确认退回', exact: true })).toBeDisabled();
-    assert.deepEqual(await page.evaluate(() => window.sentReturns), []);
-  },
-);
 
 test(
   'unresolved batch return destination fails before any write',
