@@ -32,7 +32,10 @@ test('attributions remain scoped to the period and base/SKU, reject ambiguity an
         ('华东','B','乙','汤圆','2026-10-11'),
         ('华东','C','小时负责人','面点','2026-10-11');
       INSERT INTO agents_scm_stock_detail_d VALUES ('华东','D','馄饨','2026-10-01');
-      INSERT INTO agents_order_execute_isontime_mi VALUES ('华东','E','粽子','2026-10-02');`);
+      INSERT INTO agents_order_execute_isontime_mi VALUES ('华东','E','粽子','2026-10-02');
+      ALTER TABLE agents_scm_execute_detail_d ADD COLUMN executeorderno;
+      ALTER TABLE agents_scm_execute_detail_d ADD COLUMN cust_code;
+      CREATE TABLE agents_scm_order_trace_final_di(executeorderno,cust_code,lastshipmenttime,update_time,load_time);`);
     const sql = workbenchQueries.directors.sql;
     const read = (start, end) => db.prepare(sql).all({ gea_p1: start, gea_p2: end });
     const current = read('2026-10-01', '2026-11-01');
