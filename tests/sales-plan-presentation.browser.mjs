@@ -18,6 +18,7 @@ import './src/workbench/workbench.css';
 import './theme/tokens.css';
 import zh from './src/workbench/original/zh-CN.json';
 import Workbench from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalWorkbench.tsx';
+import { InlineSkuDetails } from './src/workbench/original/workbenches/regionalApproval/InlineSkuDetails.tsx';
 import { WorkbenchHostProvider } from './src/workbench/original/bridge.ts';
 const i18n=i18next.createInstance();
 await i18n.init({lng:'zh-CN',resources:{'zh-CN':{translation:{common:zh}}},interpolation:{escapeValue:false}});
@@ -155,7 +156,13 @@ const host={salesPlan:{
     return [{skuCode:'1001',changeType:'UPDATED',before:{...skuFor(fromVersionId),qty:'10',amt:'100'},after:skuFor(toVersionId),qtyDelta:'10',amountDelta:'100'}];
   }},action:{invoke:async(command)=>{if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
 },modelInference:{invoke:forbidden}};
-createRoot(document.getElementById('root')).render(<WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={i18n.t.bind(i18n)} onContextChange={()=>{}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
+const root=createRoot(document.getElementById('root'));
+window.restoreIntegerInput=async(mode)=>{
+ const row=plans[0],detail=await host.salesPlan.detail.invoke({planId:row.planId});
+ if(mode==='draft')drafts.set(row.planId+':'+row.versionId,{role:'region',adjustments:[{skuCode:'1001',adjustQty:'481.600'}]});
+ root.render(<WorkbenchHostProvider value={host}><InlineSkuDetails row={row} detail={detail} canEdit approvalRole="region" t={i18n.t.bind(i18n)} initialInputValues={mode==='input'?{'1001':'501.600'}:undefined}/></WorkbenchHostProvider>);
+};
+root.render(<WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={i18n.t.bind(i18n)} onContextChange={()=>{}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
 `,
   },
   outfile: '/fixture/app.js',
@@ -1243,6 +1250,21 @@ test(
     await expect(input.locator('xpath=ancestor::td[1]')).toContainText('¥5,010.00');
   },
 );
+
+for (const mode of ['input', 'draft'])
+  test(
+    'restored monthly quantities remain integers without writing: ' + mode,
+    { timeout: 30000 },
+    async (t) => {
+      const { page } = await openWorkbench(t);
+      await page.evaluate((value) => window.restoreIntegerInput(value), mode);
+      await expect(
+        page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }),
+      ).toHaveValue('502');
+      assert.deepEqual(await page.evaluate(() => window.savedDrafts), []);
+      assert.deepEqual(await page.evaluate(() => window.writes), []);
+    },
+  );
 
 for (const scenario of ['return-edits', 'return-continued-province'])
   test(
