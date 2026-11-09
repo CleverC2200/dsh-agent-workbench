@@ -110,7 +110,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     update,
     relations,
     shipmentSnapshot,
-    onNext,
     onUndoShareAdjustment,
   }) {
     const [search, setSearch] = react.useState('');
@@ -441,12 +440,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         h('div', { className: 'dc-card-head' }, h('h3', null, name), actions),
         body,
       );
-    const next =
-      step === 'process'
-        ? '主数据对应关系'
-        : step === 'constraints'
-          ? '产能评估与缺口'
-          : '产销存报告';
     const select = (label, value, values, setter) =>
       h(
         'label',
@@ -1660,13 +1653,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             ),
           )
         : null,
-      h(
-        'div',
-        { className: 'wf-actions' },
-        step !== 'report'
-          ? h('button', { className: 'dc-primary', onClick: onNext }, `下一步：${next}`)
-          : h('button', { disabled: true }, '保存正式报告'),
-      ),
+      step === 'report' &&
+        h('div', { className: 'wf-actions' }, h('button', { disabled: true }, '保存正式报告')),
       formula
         ? h(
             Dialog,

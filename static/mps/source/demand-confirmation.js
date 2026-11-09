@@ -901,7 +901,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     active = true,
     assistant,
     step = 'check',
-    onNext,
     onScopeChange,
     relations,
     masterData,
@@ -1836,7 +1835,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           update,
           active: active && step === 'ship',
           onSnapshot: receiveShipment,
-          onNext,
         }),
       ),
       h('div', { hidden: step !== 'masterdata' }, masterData),
@@ -1859,7 +1857,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               : null,
           shipmentSnapshot:
             shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
-          onNext,
         }),
       h(
         'div',
@@ -1869,7 +1866,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           draft,
           update,
           active: active && step === 'check',
-          onNext,
           onEditingChange: setAdjusting,
         }),
         h(

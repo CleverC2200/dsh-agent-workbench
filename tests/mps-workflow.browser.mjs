@@ -560,7 +560,7 @@ test('MPS capacity and report keep missing formula dependencies empty and export
   const book = XLSX.read(capacityCsv, { type: 'string', raw: true });
   const exportedRows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
   assert.ok(exportedRows.every((row) => !row['月份'] || row['月份'] === '2026-10'));
-  await capacity.getByRole('button', { name: '下一步：产销存报告', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
   const report = frame.getByRole('region', { name: '产销存报告', exact: true });
   await report.getByLabel('月份筛选', { exact: true }).selectOption('2026-10');
   const reportCsv = await download(page, report, '下载需求推导参考');

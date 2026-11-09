@@ -615,15 +615,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                 { className: 'dc-primary', disabled: executing, onClick: onExecute },
                 executing ? '评估中…' : plan ? '重新评估' : '执行评估',
               )
-            : h(
-                'button',
-                {
-                  onClick: () => {
-                    window.location.hash = '#capacity';
-                  },
-                },
-                '返回产能评估',
-              ),
+            : null,
           h(
             'button',
             { disabled: !active, onClick: exportPlan },

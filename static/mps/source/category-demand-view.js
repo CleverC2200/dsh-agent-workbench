@@ -22,7 +22,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
     '调整时间',
     '缺项说明',
   ];
-  return function CategoryDemand({ draft, update, active, onNext, onEditingChange }) {
+  return function CategoryDemand({ draft, update, active, onEditingChange }) {
     const result = react.useMemo(() => buildCategoryDemand(draft), [draft]);
     const [pending, setPending] = react.useState(null);
     const [reason, setReason] = react.useState('');
@@ -296,16 +296,6 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
               ]),
           ),
         ),
-        onNext &&
-          h(
-            'div',
-            { className: 'dc-card-foot' },
-            h(
-              'button',
-              { className: 'dc-primary', disabled: pending !== null, onClick: onNext },
-              '下一步：本月预估发货',
-            ),
-          ),
       ),
       h(
         'details',

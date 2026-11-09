@@ -261,7 +261,7 @@ test('MPS shipment calendars cross the year and leap February while shared evalu
   await expect(table.getByLabel('郑州 整月预估发货', { exact: true })).toHaveValue('310');
   await frame.getByLabel('评估版本选择').selectOption('local-2');
   await expect(table.getByLabel('郑州 整月预估发货', { exact: true })).toHaveValue('291');
-  await frame.getByRole('button', { name: '下一步：需求加工与收敛', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   await expect(frame.locator('.ap-app')).toHaveAttribute('data-step', 'process');
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await expect(table.getByLabel('郑州 整月预估发货', { exact: true })).toHaveValue('291');

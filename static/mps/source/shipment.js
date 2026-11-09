@@ -101,7 +101,7 @@ export function createShipment(
 ) {
   const h = react.createElement;
   const { NumberInput } = createInlineEdit(react);
-  return function Shipment({ draft, update, active, onNext, scopeGeneration, onSnapshot }) {
+  return function Shipment({ draft, update, active, scopeGeneration, onSnapshot }) {
     const month = monthOffset(draft.month, -1);
     const state = draft.shipment ?? {};
     const cutoff = state.cutoff ?? `${month}-22`;
@@ -1058,7 +1058,6 @@ export function createShipment(
           h('button', { onClick: () => downloadCsv('发货输入-模板.csv', columns, []) }, 'CSV模板'),
           h('span', { className: 'sp-spacer' }),
           h('button', { onClick: download, disabled: !rows.length }, '下载明细'),
-          h('button', { className: 'dc-primary', onClick: onNext }, '下一步：需求加工与收敛'),
         ),
       ),
       formulas,

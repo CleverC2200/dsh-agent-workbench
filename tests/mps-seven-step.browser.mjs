@@ -37,6 +37,9 @@ test('MPS seven steps share the selected evaluation without legacy simulation co
       '2026-12',
     );
     await expect(frame.getByText('需求权重', { exact: true })).toHaveCount(0);
+    await expect(
+      frame.locator('button').filter({ hasText: /下一步|上一步|返回产能评估/ }),
+    ).toHaveCount(0);
     const badge = frame.locator('.ap-page-tab[data-active="true"] .ap-page-tab-step');
     assert.ok(
       await badge.evaluate((e) => {
