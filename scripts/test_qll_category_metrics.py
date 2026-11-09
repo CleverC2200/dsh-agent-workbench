@@ -9,6 +9,19 @@ from sqlglot import exp
 ROOT = Path(__file__).resolve().parents[1]
 
 class QllCategoryMetrics(unittest.TestCase):
+    def test_raw_branch_organization_keeps_ninety_day_risk_boundary(self):
+        config = json.loads((ROOT / 'business/inventory-qll/sql.config.json').read_text())
+        tree = sqlglot.parse_one(config['queries']['branch-structure.groups']['request']['sql'], read='postgres')
+        risk = next(e for select in tree.find_all(exp.Select) for e in select.expressions
+                    if e.alias_or_name == 'risk_current' and isinstance(e.this, exp.Sum)
+                    and any(c.table == 'a' for c in e.find_all(exp.Column)))
+        db = sqlite3.connect(':memory:')
+        self.addCleanup(db.close)
+        db.execute('CREATE TABLE fixture (warehouse_classify, age_days, live_qty)')
+        db.executemany('INSERT INTO fixture VALUES (?,?,?)', [('20',70,10),('20',95,5)])
+        value = db.execute('SELECT ' + risk.sql(dialect='sqlite') + ' FROM fixture AS a').fetchone()[0]
+        self.assertEqual(value, 5)
+
     def test_branch_organization_keeps_physical_stock_but_uses_available_movement_pool(self):
         config = json.loads((ROOT / 'business/inventory-qll/sql.config.json').read_text())
         query = config['queries']['snapshot.branch-structure.groups']

@@ -85,12 +85,15 @@ def update(config):
         query['request']['sql'] = query['request']['sql'].replace('BASE_CHAIN_SUMMARY:', 'BASE_STOCK:').replace('BASE_METRICS:qll:', 'BASE_STOCK:')
         if 'chain_age AS' in query['request']['sql']:
             tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
+            changed_age = False
             for cte in tree.find_all(exp.CTE):
                 if cte.alias == 'chain_age':
                     for literal in cte.find_all(exp.Literal):
                         if literal.is_string and literal.this == 'CHAIN_COMPARISON':
                             literal.set('this', 'BASE_AGE')
-            query['request']['sql'] = tree.sql()
+                            changed_age = True
+            if changed_age:
+                query['request']['sql'] = tree.sql()
     for query_id in ['category-tree.base','snapshot.category-tree.base','category-tree.customer',
                      'category-tree.branch','snapshot.category-tree.branch','summary.first-screen','summary.bootstrap']:
         query = config['queries'][query_id]
@@ -122,7 +125,8 @@ def branch_organization(config):
                     field.replace(expression('CAST(movement.rolling_ship_daily AS DECIMAL(38, 7)) AS daily_movement'))
         else:
             for node in list(tree.find_all(exp.In)):
-                if isinstance(node.this, exp.Column) and node.this.name == 'warehouse_classify':
+                if (node.find_ancestor(exp.Where) and isinstance(node.this, exp.Column)
+                        and node.this.name == 'warehouse_classify'):
                     node.replace(exp.EQ(this=node.this.copy(), expression=exp.Literal.string('20')))
             for select in tree.find_all(exp.Select):
                 source = select.args.get('from_') or select.args.get('from')
