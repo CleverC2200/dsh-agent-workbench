@@ -11,6 +11,9 @@
     "tests/final-group-input.contract.mjs"
   ],
   "sourceFixtures": {
+    "tests/fulfillment-plugin-resource-sync.test.mjs": {
+      "dependencies": false
+    },
     "scripts/workflow-preflight.test.mjs": {
       "dependencies": false
     },
@@ -43,6 +46,11 @@
     }
   },
   "rules": [
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/sync-fulfillment-plugin-resources\\.mjs$",
+      "tests": ["tests/fulfillment-plugin-resource-sync.test.mjs"]
+    },
     {
       "repo": "dsh-agent-workbench",
       "pattern": "^(?:business/inventory-apsplan/plugin\\.json|scripts/build-(?:aps-metrics|output)\\.mjs)$",
