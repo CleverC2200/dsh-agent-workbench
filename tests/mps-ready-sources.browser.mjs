@@ -766,7 +766,7 @@ test('模型双期预测沿用四项统计，明细保留物料组及零数量',
   await expect(row).toContainText('系列甲');
   await expect(row.getByRole('cell', { name: 'G', exact: true })).toBeVisible();
   const columns = await dialog.getByRole('columnheader').allTextContents();
-  const quantityColumn = columns.findIndex((column) => /^数量（/.test(column));
+  const quantityColumn = columns.findIndex((column) => column.startsWith('数量（'));
   assert(quantityColumn >= 0);
   await expect(row.locator('td').nth(quantityColumn)).toHaveText('0');
 });
