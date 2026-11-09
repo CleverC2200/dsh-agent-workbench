@@ -1,3 +1,4 @@
+import { commitNumber } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from './helpers/prepared-assets.mjs';
@@ -727,7 +728,7 @@ test('received MPS context covers the seven current steps and preserves unassess
       )
       .toEqual([
         ...(key === 'check'
-          ? ['step:source-inputs-parameters', 'step:source-inputs-basic', 'step:category-demand']
+          ? ['step:category-demand', 'step:source-inputs-parameters', 'step:source-inputs-basic']
           : []),
         'step:' + key,
       ]);
@@ -760,7 +761,11 @@ test('received MPS context covers the seven current steps and preserves unassess
       assert.ok(
         data.rows.every((row) => row.demand === null && row.mainPlan === null && row.gap === null),
       );
-      assert.ok(data.missing.length);
+      if (['capacity', 'report'].includes(key)) {
+        assert.equal(data.plan, null);
+        assert.deepEqual(data.rows, []);
+        assert.equal(Object.hasOwn(data, 'missing'), false);
+      } else assert.ok(data.missing.length);
       assert.equal(Object.hasOwn(data, 'weights'), false);
     }
     if (key === 'masterdata') {
@@ -846,7 +851,10 @@ test('received MPS commits restored navigation and isolates restored local input
   assert.ok(returning.length > 0);
   for (const row of returning) {
     assert.deepEqual(Object.keys(row.context.parts).sort(), ['navigation', 'process']);
-    assert.equal(row.context.parts.process.rows.length, 1);
+    assert.deepEqual(
+      row.context.parts.process.rows.map((item) => item.month),
+      ['2026-10', '2026-11', '2026-12'],
+    );
     assert.ok(
       row.context.parts.process.rows.every(
         (item) => item.reportQuantity === 18 && item.demand === null,
@@ -1079,8 +1087,6 @@ test('MPS Host context stays at the latest visible step when an earlier transpor
   await expect
     .poll(() => page.evaluate(() => window.heldHostContext?.parts?.navigation?.tab))
     .toBe('ship');
-  await frame.getByLabel('西南 剩余天数入库', { exact: true }).fill('2100000');
-  await frame.getByLabel('西南 剩余天数入库', { exact: true }).blur();
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估' }).click();
   await expect(frame.locator('.ap-board-title')).toHaveText('产能评估与缺口');
   await page.evaluate(() => window.releaseHostContext());
@@ -1107,14 +1113,11 @@ test('MPS Host context keeps the latest edited shipment input when an earlier va
   await expect.poll(async () => (await readHost())?.parts?.ship?.rowCount).toBe(1);
   await page.evaluate(() => window.holdHostContext('ship'));
   const input = frame.getByLabel('西南 剩余天数入库', { exact: true });
-  await input.fill('1000000');
-  await input.blur();
+  await commitNumber(input, '1000000');
   await expect
     .poll(() => page.evaluate(() => window.heldHostContext?.parts?.navigation?.tab))
     .toBe('ship');
-  await input.fill('2100000');
-  await input.blur();
-  await expect(input).toHaveValue('2100000');
+  await commitNumber(input, '2100000');
   await page.evaluate(() => window.releaseHostContext());
   await expect
     .poll(
@@ -1300,7 +1303,9 @@ for (const boundary of ['Session', 'identity']) {
         '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-09,郑州,OLD,旧身份输入,汤圆,系列,组,1,0,0,1,0,0,0',
       ),
     });
-    await expect(frame.getByRole('status')).toContainText('正在读取或校验输入');
+    await expect(
+      frame.getByRole('region', { name: '发货本地核对' }).getByRole('status'),
+    ).toContainText('正在读取或校验输入');
     if (boundary === 'Session')
       await page.evaluate(() =>
         window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),
@@ -1344,7 +1349,7 @@ test('MPS S2 publishes actual local inputs and carry output within the Host cont
   assert.equal(data.rows[0][data.rowFields.indexOf('end')], 80);
   assert.equal(data.carryToMonth, '2026-10');
   assert.equal(data.nextStage, 'shared-snapshot');
-  await frame.getByRole('button', { name: '下一步：需求加工与收敛', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工' }).click();
   await expect
     .poll(async () => Object.keys((await readHost())?.parts ?? {}).sort())
     .toEqual(['navigation', 'process']);
