@@ -166,10 +166,26 @@ test('Tab1 adjusts the existing demand matrix without a duplicate review table',
       .click();
     const editor = matrix.getByRole('group', { name: '大类需求调整', exact: true });
     await expect(editor.getByLabel('调整需求数量', { exact: true })).toBeFocused();
-    const table = await matrix.getByRole('table').boundingBox();
-    const form = await editor.boundingBox();
-    assert.ok(form.y >= table.y + table.height - 2);
-    await editor.getByRole('button', { name: '取消', exact: true }).click();
+    assert.equal(
+      await editor.evaluate((element) => {
+        const row = element.closest('tr');
+        return (
+          row?.classList.contains('mps-inline-edit-row') &&
+          row.previousElementSibling?.querySelector('[aria-expanded="true"]') != null
+        );
+      }),
+      true,
+    );
+    await expect(editor.getByLabel('调整需求数量', { exact: true })).toBeFocused();
+    await editor.getByLabel('调整需求数量', { exact: true }).fill('100');
+    await editor.getByLabel('调整需求数量', { exact: true }).press('Enter');
+    await expect(editor.getByRole('alert')).toContainText('原因');
+    await expect(editor.getByLabel('调整原因', { exact: true })).toBeFocused();
+    if (width === 600) {
+      await editor.getByRole('button', { name: '取消', exact: true }).focus();
+      await editor.getByRole('button', { name: '取消', exact: true }).press('Enter');
+    } else await editor.getByLabel('调整原因', { exact: true }).press('Escape');
     await expect(editor).toHaveCount(0);
+    await expect(matrix.getByRole('button', { name: /^调整 / }).first()).toBeFocused();
   }
 });

@@ -302,7 +302,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       }),
     );
   }
-  const table = (columns, rows, headers = {}) =>
+  const table = (columns, rows, headers = {}, renderDetail) =>
     h(
       'div',
       { className: 'dc-table-scroll' },
@@ -323,46 +323,51 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           {},
           rows.map((row, index) =>
             h(
-              'tr',
+              react.Fragment,
               { key: index },
-              columns.map((column) =>
-                h(
-                  'td',
-                  { key: column },
-                  row[column] === '' || row[column] == null
-                    ? '-'
-                    : /收入|金额/.test(column) && Number.isFinite(Number(row[column]))
-                      ? amount(row[column])
-                      : (/数量|合计/.test(column) ||
-                            /^M\+\d$/.test(column) ||
-                            [
-                              '① 环比法',
-                              '② 占比法',
-                              '加权',
-                              '系统值',
-                              '有效值',
-                              '组合标准日产/件',
-                              '组合标准日产/吨',
-                            ].includes(column)) &&
-                          Number.isFinite(Number(row[column]))
-                        ? integer(row[column])
-                        : [
-                              '历史平均环比',
-                              '环比链',
-                              '同期平均占比',
-                              '三年月占比',
-                              '月发货占财年比例',
-                              '同比增长率',
-                              '环比增长率',
-                            ].includes(column) && Number.isFinite(Number(row[column]))
-                          ? new Intl.NumberFormat('zh-CN', {
-                              style: 'percent',
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            }).format(Number(row[column]))
-                          : row[column],
+              h(
+                'tr',
+                {},
+                columns.map((column) =>
+                  h(
+                    'td',
+                    { key: column },
+                    row[column] === '' || row[column] == null
+                      ? '-'
+                      : /收入|金额/.test(column) && Number.isFinite(Number(row[column]))
+                        ? amount(row[column])
+                        : (/数量|合计/.test(column) ||
+                              /^M\+\d$/.test(column) ||
+                              [
+                                '① 环比法',
+                                '② 占比法',
+                                '加权',
+                                '系统值',
+                                '有效值',
+                                '组合标准日产/件',
+                                '组合标准日产/吨',
+                              ].includes(column)) &&
+                            Number.isFinite(Number(row[column]))
+                          ? integer(row[column])
+                          : [
+                                '历史平均环比',
+                                '环比链',
+                                '同期平均占比',
+                                '三年月占比',
+                                '月发货占财年比例',
+                                '同比增长率',
+                                '环比增长率',
+                              ].includes(column) && Number.isFinite(Number(row[column]))
+                            ? new Intl.NumberFormat('zh-CN', {
+                                style: 'percent',
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              }).format(Number(row[column]))
+                            : row[column],
+                  ),
                 ),
               ),
+              renderDetail?.(row, index),
             ),
           ),
         ),
@@ -1606,7 +1611,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               '版本对比',
             ),
             hasMpsSource() && h('button', { onClick: () => setMasterOpen(true) }, '数据源'),
-            h('button', { disabled: true, title: '正式保存合同与权限未接入' }, '保存调整'),
+            h(
+              'span',
+              {
+                role: 'status',
+                className: 'dc-draft-status',
+                title: '修改保存到当前本地草稿，尚未正式提交',
+              },
+              '本地草稿',
+            ),
           ),
         ),
       ),
@@ -1843,6 +1856,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       h(
         'div',
         { hidden: step !== 'check' },
+        h(CategoryDemand, { draft, update, active: active && step === 'check', onNext }),
         h(
           'section',
           { 'aria-label': '产品明细', className: 'dc-card dc-products' },
@@ -2262,13 +2276,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           active,
           contextActive: active && step === 'check',
         }),
-        h(CategoryDemand, { draft, update, active: active && step === 'check' }),
-        step === 'check' &&
-          h(
-            'div',
-            { className: 'dc-card-foot' },
-            h('button', { className: 'dc-primary', onClick: onNext }, '下一步：本月预估发货'),
-          ),
       ),
       !helpOpen && assistant,
     );

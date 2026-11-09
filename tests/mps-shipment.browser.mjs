@@ -201,11 +201,15 @@ test('MPS shipment distinguishes missing input from zero, uses the monthly fallb
   await expect(table.getByLabel('西南 整月预估发货', { exact: true })).toHaveValue('0');
   await edit(table, '西南 整月预估发货', 1);
   await expect(frame.getByRole('alert')).toContainText('非零目标的分摊口径待确认');
+  await expect(table.getByLabel('西南 整月预估发货', { exact: true })).toHaveValue('1');
+  await table.getByLabel('西南 整月预估发货', { exact: true }).press('Escape');
   await expect(table.getByLabel('西南 整月预估发货', { exact: true })).toHaveValue('0');
   await edit(table, '西南 剩余天数入库', 1);
   await expect(frame.getByRole('alert')).toContainText('非零目标的分摊口径待确认');
+  await table.getByLabel('西南 剩余天数入库', { exact: true }).press('Escape');
   await edit(table, '郑州 剩余天数入库', -1);
-  await expect(frame.getByRole('alert')).toContainText('须大于或等于0');
+  await expect(frame.getByRole('alert')).toContainText('非负整数');
+  await table.getByLabel('郑州 剩余天数入库', { exact: true }).press('Escape');
   await table
     .getByRole('button', { name: '郑州 F 已备未备预估发运天数 计算过程', exact: true })
     .click();
@@ -455,10 +459,12 @@ test('MPS stock inputs preserve paging, zero, NULL and incomplete source status'
   for (const [code, value] of [
     ['00000', '0'],
     ['00200', '待定'],
-  ])
+  ]) {
+    await frame.getByLabel('搜索发货单品', { exact: true }).fill(code);
     await expect(
       table.getByRole('button', { name: `郑州 ${code} 本月已发货 计算过程`, exact: true }),
     ).toHaveText(value);
+  }
   assert.deepEqual(
     calls.filter((q) => q.queryId === 'facts.shipment').map((q) => q.parameters.offset),
     [0, 200],
@@ -532,7 +538,7 @@ test('MPS stock input missing product dimensions retain quantities without inven
 
 test('MPS shipment rounds displayed quantities while keeping decimal source values in exports', async (t) => {
   const { page, frame, table } = await shipment(t);
-  await upload(frame, ['2026-09,郑州,A,产品A,汤圆,系列,组,12.5,0,0,1.5,100,200,80']);
+  await upload(frame, ['2026-09,郑州,A,产品A,汤圆,系列,组,12.5,0,0,1.5,100,200,80.375']);
   await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
   await expect(
     table.getByRole('button', { name: '郑州 A 本月已发货 计算过程', exact: true }),
@@ -542,4 +548,41 @@ test('MPS shipment rounds displayed quantities while keeping decimal source valu
   ).toHaveText('2');
   const csv = await exported(page, frame);
   assert(csv.includes('12.5,0,0,1.5'));
+  await expect(table.getByLabel('郑州 剩余天数入库', { exact: true })).toHaveValue('80');
+  assert(csv.includes('80.375'));
+});
+
+test('shipment requires an explicit save and paginates SKU display without changing complete totals or export', async (t) => {
+  const { page, frame, table } = await shipment(t);
+  await upload(
+    frame,
+    Array.from(
+      { length: 53 },
+      (_, index) => `2026-09,郑州,P${index},产品${index},汤圆,系列,组,220,10,10,10,100,200,80`,
+    ),
+  );
+  const total = table.getByLabel('全国合计 整月预估发货', { exact: true });
+  await expect(total).toHaveValue('15900');
+  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
+  await expect(table.getByRole('textbox', { name: /^郑州 P\d+ 整月预估发货$/ })).toHaveCount(25);
+  const original = await exported(page, frame);
+  await table.getByRole('button', { name: '郑州 下一页单品', exact: true }).click();
+  await expect(table.getByText('共53个单品 · 第2页')).toBeVisible();
+  await frame.getByLabel('搜索发货单品', { exact: true }).fill('P52');
+  await expect(table.getByRole('textbox', { name: /^郑州 P\d+ 整月预估发货$/ })).toHaveCount(1);
+  await expect(total).toHaveValue('15900');
+  assert.equal(await exported(page, frame), original);
+  const input = table.getByLabel('郑州 P52 整月预估发货', { exact: true });
+  await input.fill('400');
+  await input.press('Tab');
+  await expect(total).toHaveValue('15900');
+  await expect(
+    table.getByRole('button', { name: '郑州 P52 整月预估发货 保存', exact: true }),
+  ).toBeVisible();
+  await input.press('Escape');
+  await expect(input).toHaveValue('300');
+  await input.fill('400');
+  await input.press('Enter');
+  await expect(total).toHaveValue('16000');
+  await expect(table.getByRole('status')).toContainText('已保存到本地草稿');
 });

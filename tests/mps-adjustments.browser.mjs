@@ -50,7 +50,7 @@ test('MPS category override records a reason and time, survives reload and undo 
   const form = frame.getByRole('group', { name: '大类需求调整' });
   await form.getByLabel('调整需求数量').fill('120.375');
   await form.getByLabel('调整原因').fill('客户已确认增量');
-  await form.getByRole('button', { name: '应用大类调整' }).click();
+  await form.getByRole('button', { name: '保存' }).click();
   await expect
     .poll(async () =>
       page.evaluate(
@@ -73,7 +73,7 @@ test('MPS category override records a reason and time, survives reload and undo 
   assert.match(edit.at, /^\d{4}-\d{2}-\d{2}T/);
   await frame.getByRole('button', { name: `调整 汤圆 ${period}`, exact: true }).click();
   await expect(form.getByLabel('调整需求数量')).toHaveValue('120');
-  await form.getByRole('button', { name: '应用大类调整' }).click();
+  await form.getByRole('button', { name: '保存' }).click();
   assert.equal(
     await page.evaluate(
       () => window.readView().localDrafts.drafts[0].adjustments.categoryDemand[0].quantity,
@@ -96,7 +96,8 @@ test('MPS category override records a reason and time, survives reload and undo 
     ['set', 'set', 'undo'],
   );
   assert.equal(history[2].value, null);
-  await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toBeDisabled();
+  await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
+  await expect(frame.getByRole('status').filter({ hasText: /^本地草稿$/ })).toBeVisible();
 });
 
 test('MPS shipment local overrides and remaining intake survive a business-source switch and Document replacement', async (t) => {

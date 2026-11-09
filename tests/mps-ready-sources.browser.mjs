@@ -1,3 +1,4 @@
+import { openCategoryCalculation } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -250,6 +251,7 @@ test('missing recent plans preserve the independent annual estimate and disclose
   await expect(row.locator('td').nth(2)).toHaveText('120');
   await expect(row.locator('td').nth(5)).toHaveText('400');
   await expect(row.locator('td').nth(6)).toHaveText('-');
+  await openCategoryCalculation(frame);
   const calculation = frame.getByRole('region', { name: '逐月测算', exact: true });
   await expect(
     frame
@@ -595,6 +597,7 @@ test('confirmed category computation reaches the monthly table and keeps raw dow
   await expect(result.locator('td').nth(2).locator('.dc-demand-amount')).toHaveText('59');
   await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('89');
   await expect(result.locator('td').nth(4).locator('.dc-demand-amount')).toHaveText('177');
+  await openCategoryCalculation(frame);
   const calculation = frame
     .getByRole('region', { name: '逐月测算', exact: true })
     .locator('tbody tr')
@@ -649,6 +652,7 @@ test('current pool category demand fills all four months and exports correction 
   const { page, frame } = await mpsPage(t, config, fixture);
   await version(frame);
   await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
+  await openCategoryCalculation(frame);
   const methods = frame.getByRole('region', { name: '逐月测算', exact: true });
   await expect(methods).toContainText('4 / 4 项可计算');
   const summary = frame.getByRole('region', { name: '大类预估需求数量', exact: true });

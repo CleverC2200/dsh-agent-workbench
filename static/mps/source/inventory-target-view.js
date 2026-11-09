@@ -12,7 +12,7 @@ export const turnoverDaysSources = {
   rule: '库存下限规则',
   missing: '缺输入',
 };
-export function createInventoryTargetPanel(react, { downloadCsv }) {
+export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) {
   const h = react.createElement;
   return function InventoryTargetPanel({
     draft,
@@ -75,22 +75,11 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
         row.code,
         row.name,
         row.turnoverPolicy.missing.join('；'),
-        h('input', {
-          type: 'number',
-          min: 0,
-          max: Number.MAX_SAFE_INTEGER,
-          step: 'any',
-          'aria-label': `${row.base} ${row.code} 补充目标周转天数`,
-          value: supplements.get(supplementKey(row))?.days ?? '',
-          onChange: (event) => {
-            const value = event.target.value;
-            if (
-              value !== '' &&
-              (!Number.isFinite(Number(value)) ||
-                Number(value) < 0 ||
-                Number(value) > Number.MAX_SAFE_INTEGER)
-            )
-              return;
+        h(NumberInput, {
+          key: `${draft.id}-${supplementKey(row)}`,
+          label: `${row.base} ${row.code} 补充目标周转天数`,
+          value: supplements.get(supplementKey(row))?.days,
+          commit: (text) =>
             update({
               constraints: {
                 ...draft.constraints,
@@ -100,11 +89,10 @@ export function createInventoryTargetPanel(react, { downloadCsv }) {
                   ...(draft.constraints?.turnoverDays ?? []).filter(
                     (item) => supplementKey(item) !== supplementKey(row),
                   ),
-                  { base: row.base, code: row.code, days: value === '' ? null : Number(value) },
+                  { base: row.base, code: row.code, days: text === '' ? null : Number(text) },
                 ],
               },
-            });
-          },
+            }),
         }),
         number(row.safetyDays),
         turnoverDaysSources[row.safetyDaysSource],

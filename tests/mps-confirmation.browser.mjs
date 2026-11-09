@@ -1,3 +1,4 @@
+import { openCategoryCalculation } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
@@ -28,7 +29,8 @@ test('MPS keeps confirmed sources awaiting a Host, including forecast awaiting a
     '通过工作台草稿恢复',
   );
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
-  await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toBeDisabled();
+  await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
+  await expect(frame.getByRole('status').filter({ hasText: /^本地草稿$/ })).toBeVisible();
   await expect(frame.locator('.ap-page-tab')).toHaveCount(7);
   for (const name of ['计划提报数据', '模型双期预测', '历史同期发货']) {
     const source = frame.getByRole('region', { name, exact: true });
@@ -181,6 +183,7 @@ test('MPS forecast crosses the year and historical periods do not borrow other r
     columns + '\n2026-12,郑州,F1,=1+1,汤圆,系列甲,组甲,7\n2027-01,华东,F2,一月,饺子,系列乙,组乙,9',
   );
   const forecast = frame.getByRole('region', { name: '模型双期预测' });
+  await openCategoryCalculation(frame);
   const monthly = frame.getByRole('region', { name: '逐月测算', exact: true });
   await expect(monthly.getByRole('cell', { name: '2026-12（M+1）', exact: true })).toHaveCount(0);
   await expect(monthly.getByRole('cell', { name: '2027-01（M+2）', exact: true })).toHaveCount(0);
@@ -334,14 +337,14 @@ test('MPS starts without sample products when no source is configured and still 
   assert.equal((await download).suggestedFilename(), '产品关系.xlsx');
 });
 
-test('MPS creates and compares local evaluation versions in dialogs without occupying the product first card', async (t) => {
+test('MPS creates and compares local evaluation versions in dialogs without displacing the primary demand matrix', async (t) => {
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
   await expect(frame.getByRole('heading', { name: '需求确认', exact: true })).toBeVisible();
   await expect(frame.locator('.dc-page section:visible').first()).toHaveAttribute(
     'aria-label',
-    '产品明细',
+    '大类预估需求数量',
   );
   await expect(frame.getByRole('button', { name: 'Studio / 人物设置', exact: true })).toHaveCount(
     0,
@@ -386,7 +389,7 @@ test('MPS keeps source review in cards and opens current-period final results af
   const review = frame.getByRole('dialog', { name: '计划提报 · 2026-12 · 基地核对', exact: true });
   await expect(review.getByRole('row').filter({ hasText: '郑州' })).toContainText('15');
   await expect(review).not.toContainText('公式：');
-  await expect(review.locator('th')).toHaveText(['名称', '数量合计']);
+  await expect(review.locator('th')).toHaveText(['名称', '数量合计（件）']);
   await review.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await source.getByRole('button', { name: '预览当前明细', exact: true }).click();
   await expect(

@@ -281,19 +281,23 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         expanded[name] ? body() : null,
       );
     const active = Boolean(plan?.summary.totalRows && !stale && !executing && !error);
-    const status = error
-      ? '本次评估失败，上次结果仅供参考'
-      : !plan
-        ? '尚未评估'
-        : stale
-          ? '输入已变化，需重新评估'
-          : plan.status === 'complete'
-            ? '已完成求解'
-            : plan.summary.evaluatedRows
-              ? '部分可评估，缺项已单列'
-              : plan.summary.totalRows
-                ? '当前单品输入不完整，尚不能排产'
-                : '缺需求单品范围，尚未生成排产';
+    const status = executing
+      ? '正在评估当前版本'
+      : error
+        ? error.includes('已取消')
+          ? '本轮评估已取消，请重新评估'
+          : '本次评估失败，上次结果仅供参考'
+        : !plan
+          ? '尚未评估'
+          : stale
+            ? '输入已变化，需重新评估'
+            : plan.status === 'complete'
+              ? '已完成求解'
+              : plan.summary.evaluatedRows
+                ? '部分可评估，缺项已单列'
+                : plan.summary.totalRows
+                  ? '当前单品输入不完整，尚不能排产'
+                  : '缺需求单品范围，尚未生成排产';
     const exportPlan = () => {
       if (!active) return;
       const rows = reportRows.map((row) => ({

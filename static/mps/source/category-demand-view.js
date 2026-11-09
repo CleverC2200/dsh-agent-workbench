@@ -1,8 +1,10 @@
 import { buildCategoryDemand } from './category-demand.js';
 import { changeAdjustment } from './local-draft.js';
+import { createInlineEdit } from './inline-edit.js';
 
 export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
+  const { EditButton, QuantityEditor } = createInlineEdit(react);
   const columns = [
     '大类',
     '月份',
@@ -22,7 +24,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
     '调整时间',
     '缺项说明',
   ];
-  return function CategoryDemand({ draft, update, active }) {
+  return function CategoryDemand({ draft, update, active, onNext }) {
     const result = react.useMemo(() => buildCategoryDemand(draft), [draft]);
     const [editing, setEditing] = react.useState(null);
     const [quantity, setQuantity] = react.useState('');
@@ -30,6 +32,13 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
     const [reason, setReason] = react.useState('');
     const [error, setError] = react.useState('');
     const editorRef = react.useRef(null);
+    const triggerRef = react.useRef(null);
+    const [notice, setNotice] = react.useState('');
+    const closeEditor = () => {
+      setEditing(null);
+      setError('');
+      requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+    };
     react.useEffect(() => {
       if (editing) editorRef.current?.scrollIntoView({ block: 'nearest' });
     }, [editing]);
@@ -109,29 +118,47 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
         调整时间: edit?.at ?? '',
         缺项说明: missing.join('；'),
         操作: h(
-          react.Fragment,
-          {},
+          'div',
+          { className: 'dc-demand-quantity' },
           h(
-            'button',
+            EditButton,
             {
-              onClick: () => {
+              label: `调整 ${row.category} ${row.month}`,
+              active: editing?.category === row.category && editing?.month === row.month,
+              disabled: Boolean(
+                editing && (editing.category !== row.category || editing.month !== row.month),
+              ),
+              onClick: (event) => {
+                if (editing) {
+                  editorRef.current?.querySelector('input')?.focus();
+                  return;
+                }
+                triggerRef.current = event.currentTarget;
                 setEditing(row);
                 setQuantity(row.quantity == null ? '' : String(row.quantity));
                 setQuantityChanged(false);
                 setReason(edit?.reason ?? '');
                 setError('');
+                setNotice('');
               },
-              className: 'dc-link',
-              'aria-label': `调整 ${row.category} ${row.month}`,
             },
-            '调整',
+            h(
+              'span',
+              { className: 'dc-demand-amount', title: missing.join('；') || undefined },
+              row.quantity == null ? '-' : String(Math.round(row.quantity)),
+              row.quantity == null && h('small', {}, '待补'),
+            ),
           ),
           edit &&
             h(
               'button',
               {
-                onClick: () => undo(row),
                 className: 'dc-link',
+                disabled: Boolean(editing),
+                onClick: () => {
+                  undo(row);
+                  setNotice('已撤销本地调整');
+                },
                 'aria-label': `撤销 ${row.category} ${row.month}`,
               },
               '撤销',
@@ -146,20 +173,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
           .filter((row) => row.category === basis.category)
           .map((row, index) => {
             const detail = rows[result.rows.indexOf(row)];
-            return [
-              `M+${index + 1}`,
-              h(
-                'div',
-                { className: 'dc-demand-quantity' },
-                h(
-                  'span',
-                  { className: 'dc-demand-amount', title: detail['缺项说明'] || undefined },
-                  row.quantity == null ? '-' : String(Math.round(row.quantity)),
-                  row.quantity == null && h('small', {}, '待补'),
-                ),
-                h('div', { className: 'dc-demand-cell-actions' }, detail['操作']),
-              ),
-            ];
+            return [`M+${index + 1}`, detail['操作']];
           }),
       ),
     }));
@@ -179,8 +193,8 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
         const candidate = buildCategoryDemand({ ...draft, adjustments });
         if (candidate.adjustmentIssues.length) throw Error(candidate.adjustmentIssues.join('；'));
         update({ adjustments });
-        setEditing(null);
-        setError('');
+        closeEditor();
+        setNotice('已保存到本地草稿');
       } catch (failure) {
         setError(failure.message);
       }
@@ -197,58 +211,13 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
       {},
       h(
         'section',
-        { 'aria-label': '逐月测算', className: 'dc-card dc-results dc-category-demand' },
-        h(
-          'div',
-          { className: 'dc-card-head' },
-          h('h3', {}, '逐月测算（到大类预估需求数量）'),
-          h(
-            'span',
-            { className: 'dc-card-note' },
-            `${result.rows.filter((row) => row.quantity !== null).length} / ${rows.length} 项可计算 · 单位：件`,
-          ),
-          h(
-            'button',
-            {
-              onClick: () =>
-                downloadCsv(
-                  `大类逐月测算-${draft.month}.csv`,
-                  [...columns, ...detailColumns.filter((column) => !columns.includes(column))],
-                  rows,
-                ),
-            },
-            '下载测算明细',
-          ),
-        ),
-        result.adjustmentIssues.length > 0 &&
-          h('p', { role: 'alert' }, `以下调整未生效：${result.adjustmentIssues.join('；')}`),
-        h(
-          'div',
-          { className: 'dc-category-demand-main' },
-          table(
-            columns,
-            rows,
-            Object.fromEntries(
-              [
-                ['① 环比法', '基期 × 环比链'],
-                ['② 占比法', '全年预估 × 占比'],
-                ['加权', '①②各占一半'],
-              ].map(([name, formula]) => [
-                name,
-                h(react.Fragment, {}, name, h('small', {}, formula)),
-              ]),
-            ),
-          ),
-        ),
-      ),
-      h(
-        'section',
         { 'aria-label': '大类预估需求数量', className: 'dc-card dc-results dc-demand-summary' },
         h(
           'div',
           { className: 'dc-card-head' },
           h('h3', {}, '大类预估需求数量'),
           h('span', { className: 'dc-card-note' }, '单位：件'),
+          notice && h('span', { role: 'status', className: 'mps-edit-notice' }, notice),
         ),
         table(
           ['大类', 'M+1', 'M+2', 'M+3', 'M+4'],
@@ -261,52 +230,95 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
                 `M+${index + 1} · ${row.month}${index === 3 ? ' 库存参考' : ''}`,
               ]),
           ),
+          (row) =>
+            editing?.category === row['大类']
+              ? h(
+                  'tr',
+                  { className: 'mps-inline-edit-row' },
+                  h(
+                    'td',
+                    { colSpan: 5 },
+                    h(QuantityEditor, {
+                      editorRef,
+                      title: `${editing.category} · ${editing.month}`,
+                      groupLabel: '大类需求调整',
+                      quantityLabel: '调整需求数量',
+                      reasonLabel: '调整原因',
+                      value:
+                        quantityChanged || quantity === ''
+                          ? quantity
+                          : String(Math.round(Number(quantity))),
+                      reason,
+                      error,
+                      onChange: (value) => {
+                        setQuantity(value);
+                        setQuantityChanged(true);
+                      },
+                      onReasonChange: setReason,
+                      onSave: apply,
+                      onCancel: closeEditor,
+                    }),
+                  ),
+                )
+              : null,
         ),
-        editing &&
+        onNext &&
           h(
-            'fieldset',
-            { ref: editorRef, 'aria-label': '大类需求调整', className: 'dc-category-editor' },
-            h('legend', {}, `${editing.category} · ${editing.month}`),
-            h(
-              'p',
-              {},
-              `系统需求：${editing.systemQuantity == null ? '待定' : Math.round(editing.systemQuantity)}件；有效需求：${editing.quantity == null ? '待定' : Math.round(editing.quantity)}件。仅调整当前本地版本。`,
-            ),
-            h(
-              'label',
-              {},
-              '调整需求数量',
-              h('input', {
-                autoFocus: true,
-                'aria-label': '调整需求数量',
-                type: 'number',
-                min: 0,
-                step: 'any',
-                value:
-                  quantityChanged || quantity === ''
-                    ? quantity
-                    : String(Math.round(Number(quantity))),
-                onChange: (event) => {
-                  setQuantity(event.target.value);
-                  setQuantityChanged(true);
-                },
-              }),
-            ),
-            h(
-              'label',
-              {},
-              '调整原因',
-              h('input', {
-                'aria-label': '调整原因',
-                value: reason,
-                maxLength: 1000,
-                onChange: (event) => setReason(event.target.value),
-              }),
-            ),
-            error && h('p', { role: 'alert' }, error),
-            h('button', { className: 'dc-primary', onClick: apply }, '应用大类调整'),
-            h('button', { onClick: () => setEditing(null) }, '取消'),
+            'div',
+            { className: 'dc-card-foot' },
+            h('button', { className: 'dc-primary', onClick: onNext }, '下一步：本月预估发货'),
           ),
+      ),
+      h(
+        'details',
+        { className: 'dc-calculation-evidence' },
+        h('summary', {}, '逐月测算依据'),
+        h(
+          'section',
+          { 'aria-label': '逐月测算', className: 'dc-card dc-results dc-category-demand' },
+          h(
+            'div',
+            { className: 'dc-card-head' },
+            h('h3', {}, '逐月测算（到大类预估需求数量）'),
+            h(
+              'span',
+              { className: 'dc-card-note' },
+              `${result.rows.filter((row) => row.quantity !== null).length} / ${rows.length} 项可计算 · 单位：件`,
+            ),
+            h(
+              'button',
+              {
+                onClick: () =>
+                  downloadCsv(
+                    `大类逐月测算-${draft.month}.csv`,
+                    [...columns, ...detailColumns.filter((column) => !columns.includes(column))],
+                    rows,
+                  ),
+              },
+              '下载测算明细',
+            ),
+          ),
+          result.adjustmentIssues.length > 0 &&
+            h('p', { role: 'alert' }, `以下调整未生效：${result.adjustmentIssues.join('；')}`),
+          h(
+            'div',
+            { className: 'dc-category-demand-main' },
+            table(
+              columns,
+              rows,
+              Object.fromEntries(
+                [
+                  ['① 环比法', '基期 × 环比链'],
+                  ['② 占比法', '全年预估 × 占比'],
+                  ['加权', '①②各占一半'],
+                ].map(([name, formula]) => [
+                  name,
+                  h(react.Fragment, {}, name, h('small', {}, formula)),
+                ]),
+              ),
+            ),
+          ),
+        ),
       ),
       (draft.adjustments?.history ?? []).some((entry) => entry.kind === 'categoryDemand') &&
         h(

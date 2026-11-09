@@ -1,6 +1,7 @@
 import { prototypeShipments } from './prototype-shipments.js';
 import { readShipmentInputs } from './facts.js';
 import { hasMpsSource } from './master-data.js';
+import { createInlineEdit } from './inline-edit.js';
 const emptyRows = [];
 const bases = ['西南', '郑州', '遂平', '华东', '华南'];
 const fields = [
@@ -99,30 +100,7 @@ export function createShipment(
   { Dialog, Upload, parseCsv, downloadCsv, monthOffset },
 ) {
   const h = react.createElement;
-  function Editable({ value, label, commit, explain }) {
-    const [text, setText] = react.useState(value == null ? '' : String(value));
-    react.useEffect(() => setText(value == null ? '' : String(value)), [value]);
-    return h('input', {
-      type: 'text',
-      inputMode: 'numeric',
-      'aria-label': label,
-      value: text,
-      placeholder: value == null ? '待定' : undefined,
-      onDoubleClick: explain,
-      title: '双击或Alt+Enter查看计算过程',
-      onChange: (event) => setText(event.target.value),
-      onBlur: () => {
-        if (text !== (value == null ? '' : String(value))) {
-          setText(value == null ? '' : String(value));
-          commit(text);
-        }
-      },
-      onKeyDown: (event) => {
-        if (event.key === 'Enter' && event.altKey) explain();
-        else if (event.key === 'Enter') event.currentTarget.blur();
-      },
-    });
-  }
+  const { NumberInput } = createInlineEdit(react);
   return function Shipment({ draft, update, active, onNext, scopeGeneration, onSnapshot }) {
     const month = monthOffset(draft.month, -1);
     const state = draft.shipment ?? {};
@@ -157,6 +135,8 @@ export function createShipment(
     const controller = react.useRef(null);
     const [syncStatus, setSyncStatus] = react.useState('unread');
     const [expanded, setExpanded] = react.useState([]);
+    const [skuSearch, setSkuSearch] = react.useState('');
+    const [skuPages, setSkuPages] = react.useState({});
     const [formula, setFormula] = react.useState(null);
     const [error, setError] = react.useState('');
     const [busy, setBusy] = react.useState(false);
@@ -405,7 +385,6 @@ export function createShipment(
         setError('');
         return null;
       } catch (failure) {
-        setError(failure.message);
         return failure.message;
       }
     };
@@ -573,8 +552,11 @@ export function createShipment(
             : undefined,
         },
         editable
-          ? h(Editable, {
+          ? h(NumberInput, {
               value: row[field],
+              integer: true,
+              placeholder: '待定',
+              min: field === 'remaining' ? 0 : null,
               label: `${who} ${names[fields.indexOf(field)]}`,
               commit: (text) => change(row, field, text, who),
               explain: () => explain(row, field, who),
@@ -811,6 +793,15 @@ export function createShipment(
           'div',
           { className: 'dc-card-head sp-toolbar' },
           h('h3', {}, '本月预估发货'),
+          h('input', {
+            'aria-label': '搜索发货单品',
+            placeholder: '搜索编码或名称',
+            value: skuSearch,
+            onChange: (event) => {
+              setSkuSearch(event.target.value);
+              setSkuPages({});
+            },
+          }),
           sourceKind === 'demo' && h('span', { className: 'dc-status' }, '演示数据'),
           h(
             'span',
@@ -935,70 +926,115 @@ export function createShipment(
             h(
               'tbody',
               {},
-              ...groups.flatMap((group) => [
-                renderRow(
-                  group,
-                  group.who,
-                  h(
-                    react.Fragment,
-                    {},
-                    h(
-                      'button',
-                      {
-                        className: 'sp-toggle',
-                        'aria-label': `${expanded.includes(group.who) ? '收起' : '展开'} ${group.who}`,
-                        'aria-expanded': expanded.includes(group.who),
-                        onClick: () =>
-                          setExpanded(
-                            expanded.includes(group.who)
-                              ? expanded.filter((base) => base !== group.who)
-                              : [...expanded, group.who],
-                          ),
-                      },
-                      h(
-                        'svg',
-                        {
-                          width: 12,
-                          height: 12,
-                          viewBox: '0 0 12 12',
-                          fill: 'none',
-                          stroke: 'currentColor',
-                          style: {
-                            transform: expanded.includes(group.who) ? 'rotate(90deg)' : undefined,
-                          },
-                          'aria-hidden': true,
-                        },
-                        h('path', { d: 'M4 2l4 4-4 4' }),
-                      ),
-                    ),
+              ...groups.flatMap((group) => {
+                const children = group.children.filter(
+                  (row) =>
+                    !skuSearch || [row.code, row.name].some((value) => value?.includes(skuSearch)),
+                );
+                const page = Math.min(
+                  skuPages[group.who] ?? 0,
+                  Math.max(0, Math.ceil(children.length / 25) - 1),
+                );
+                return [
+                  renderRow(
+                    group,
                     group.who,
-                    h('span', { className: 'sp-count' }, `${group.children.length} 个单品`),
-                  ),
-                  'sp-base',
-                ),
-                ...(expanded.includes(group.who)
-                  ? group.children.map((row) =>
-                      renderRow(
-                        row,
-                        `${row.base} ${row.code}`,
+                    h(
+                      react.Fragment,
+                      {},
+                      h(
+                        'button',
+                        {
+                          className: 'sp-toggle',
+                          'aria-label': `${expanded.includes(group.who) ? '收起' : '展开'} ${group.who}`,
+                          'aria-expanded': expanded.includes(group.who),
+                          onClick: () =>
+                            setExpanded(
+                              expanded.includes(group.who)
+                                ? expanded.filter((base) => base !== group.who)
+                                : [...expanded, group.who],
+                            ),
+                        },
                         h(
-                          react.Fragment,
-                          {},
-                          h('span', { className: 'sp-code' }, row.code),
-                          h(
-                            'span',
-                            {
-                              className: 'sp-product-name',
-                              title: `${row.name} · ${row.category} · ${row.series} · ${row.group}`,
+                          'svg',
+                          {
+                            width: 12,
+                            height: 12,
+                            viewBox: '0 0 12 12',
+                            fill: 'none',
+                            stroke: 'currentColor',
+                            style: {
+                              transform: expanded.includes(group.who) ? 'rotate(90deg)' : undefined,
                             },
-                            row.name || '产品名称未提供',
+                            'aria-hidden': true,
+                          },
+                          h('path', { d: 'M4 2l4 4-4 4' }),
+                        ),
+                      ),
+                      group.who,
+                      h('span', { className: 'sp-count' }, `${group.children.length} 个单品`),
+                    ),
+                    'sp-base',
+                  ),
+                  ...(expanded.includes(group.who)
+                    ? [
+                        ...children.slice(page * 25, (page + 1) * 25).map((row) =>
+                          renderRow(
+                            row,
+                            `${row.base} ${row.code}`,
+                            h(
+                              react.Fragment,
+                              {},
+                              h('span', { className: 'sp-code' }, row.code),
+                              h(
+                                'span',
+                                {
+                                  className: 'sp-product-name',
+                                  title: `${row.name} · ${row.category} · ${row.series} · ${row.group}`,
+                                },
+                                row.name || '产品名称未提供',
+                              ),
+                            ),
+                            'sp-sku',
                           ),
                         ),
-                        'sp-sku',
-                      ),
-                    )
-                  : []),
-              ]),
+                        h(
+                          'tr',
+                          { key: `${group.who}-page` },
+                          h(
+                            'td',
+                            { colSpan: 13 },
+                            h(
+                              'div',
+                              { className: 'sp-sku-pages' },
+                              h('span', null, `共${children.length}个单品 · 第${page + 1}页`),
+                              h(
+                                'button',
+                                {
+                                  'aria-label': `${group.who} 上一页单品`,
+                                  disabled: !page,
+                                  onClick: () =>
+                                    setSkuPages({ ...skuPages, [group.who]: page - 1 }),
+                                },
+                                '上一页',
+                              ),
+                              h(
+                                'button',
+                                {
+                                  'aria-label': `${group.who} 下一页单品`,
+                                  disabled: (page + 1) * 25 >= children.length,
+                                  onClick: () =>
+                                    setSkuPages({ ...skuPages, [group.who]: page + 1 }),
+                                },
+                                '下一页',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ]
+                    : []),
+                ];
+              }),
               renderRow(national, '全国合计', '全国合计', 'sp-total'),
             ),
           ),

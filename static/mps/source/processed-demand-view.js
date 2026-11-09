@@ -1,5 +1,6 @@
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { changeAdjustment, quantityAdjustmentKey } from './local-draft.js';
+import { createInlineEdit } from './inline-edit.js';
 
 const number = (value) =>
   value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format(value);
@@ -39,6 +40,7 @@ const label = (entry) =>
 
 export function createProcessedDemand(react, { downloadCsv }) {
   const h = react.createElement;
+  const { EditButton, QuantityEditor } = createInlineEdit(react);
   return function ProcessedDemand({
     draft,
     result,
@@ -49,14 +51,26 @@ export function createProcessedDemand(react, { downloadCsv }) {
     table,
     card,
     onExplain,
+    onEditingChange,
   }) {
     const [editing, setEditing] = react.useState(null);
     const [error, setError] = react.useState('');
+    react.useEffect(() => {
+      onEditingChange?.(Boolean(editing));
+      return () => onEditingChange?.(false);
+    }, [Boolean(editing), onEditingChange]);
     const [expanded, setExpanded] = react.useState(() => new Set());
     const editorRef = react.useRef(null);
+    const triggerRef = react.useRef(null);
+    const [notice, setNotice] = react.useState('');
+    const closeEditor = () => {
+      setEditing(null);
+      setError('');
+      requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+    };
     react.useEffect(() => {
       if (editing) {
-        editorRef.current?.scrollIntoView({ block: 'center' });
+        editorRef.current?.scrollIntoView({ block: 'nearest' });
         editorRef.current?.querySelector('input')?.focus({ preventScroll: true });
       }
     }, [
@@ -114,12 +128,18 @@ export function createProcessedDemand(react, { downloadCsv }) {
           );
           if (failure || !shipmentSnapshot?.adjustForecast)
             throw Error(failure || '第二步同版预估发货尚未就绪。');
-          setEditing(null);
-          setError('');
+          closeEditor();
+          setNotice('已保存到本地草稿');
           return;
         }
         const kind = entry.kind === 'categoryDemand' ? 'categoryDemand' : 'quantities';
-        const { kind: level, value: _value, changed: _changed, ...fields } = entry;
+        const {
+          kind: level,
+          value: _value,
+          changed: _changed,
+          editorRow: _editorRow,
+          ...fields
+        } = entry;
         delete fields.effectiveValue;
         const input = { ...fields, ...(kind === 'quantities' ? { kind: level } : {}) };
         const provisional = changeAdjustment(draft.adjustments, kind, input, undo);
@@ -151,8 +171,8 @@ export function createProcessedDemand(react, { downloadCsv }) {
               )
             : provisional,
         });
-        setEditing(null);
-        setError('');
+        closeEditor();
+        setNotice(undo ? '已撤销本地调整' : '已保存到本地草稿');
       } catch (failure) {
         setError(failure.message);
       }
@@ -167,7 +187,13 @@ export function createProcessedDemand(react, { downloadCsv }) {
               row.id === item.rowId && row.month === entry.month && row.category === entry.category,
           ),
         );
-      const edit = () => {
+      const active = editing?.editorRow === entry.editorRow && editing?.month === entry.month;
+      const edit = (event) => {
+        if (editing) {
+          editorRef.current?.querySelector('input')?.focus();
+          return;
+        }
+        triggerRef.current = event.currentTarget;
         setEditing({
           ...entry,
           systemValue,
@@ -175,67 +201,40 @@ export function createProcessedDemand(react, { downloadCsv }) {
           reason: fixed?.reason ?? '',
         });
         setError('');
+        setNotice('');
       };
-      if (compact) {
-        if (!months.slice(0, 2).includes(entry.month))
-          return h('strong', { title: `系统数量 ${number(systemValue)}` }, number(value));
-        return h(
-          'div',
-          { className: 'wf-quantity-cell' },
-          h(
-            'button',
-            {
-              className: 'wf-edit-number',
-              'aria-label': `${prefix}调整数量 ${label(entry)}`,
-              title: `系统数量 ${number(systemValue)}${shareConflict ? '；先撤销同月大类占比调整' : '；点击调整数量'}`,
-              disabled:
-                shareConflict ||
-                (entry.kind !== 'categoryDemand' && (!entry.group || value == null)),
-              onClick: edit,
-            },
-            number(value),
-          ),
-          fixed &&
-            h(
-              'button',
-              {
-                'aria-label': `${prefix}撤销数量 ${label(entry)}`,
-                onClick: () => save(entry, true),
-              },
-              '撤销固定',
-            ),
-        );
-      }
+      if (entry.kind !== 'categoryDemand' && !months.slice(0, 2).includes(entry.month))
+        return h('strong', null, number(value));
       return h(
         'div',
         { className: 'wf-quantity-cell' },
-        h('strong', null, number(value)),
-        h('small', null, `系统 ${number(systemValue)}${fixed ? ' · 已固定' : ''}`),
-        entry.kind !== 'categoryDemand' && !months.slice(0, 2).includes(entry.month)
-          ? null
-          : h(
-              'div',
-              { className: 'wf-actions' },
-              h(
-                'button',
-                {
-                  'aria-label': `${prefix}调整数量 ${label(entry)}`,
-                  disabled:
-                    shareConflict ||
-                    (entry.kind !== 'categoryDemand' && (!entry.group || value == null)),
-                  title: shareConflict ? '同月大类已有占比调整，请先在拆分过程撤销占比调整' : '',
-                  onClick: edit,
-                },
-                '调整',
-              ),
-              fixed &&
-                h(
-                  'button',
-                  { 'aria-label': `撤销数量 ${label(entry)}`, onClick: () => save(entry, true) },
-                  '撤销',
-                ),
-              shareConflict && h('small', null, '先撤销同月大类占比调整'),
+        h(
+          EditButton,
+          {
+            label: `${prefix}调整数量 ${label(entry)}`,
+            active,
+            disabled: Boolean(
+              (editing && !active) ||
+              shareConflict ||
+              (entry.kind !== 'categoryDemand' && (!entry.group || value == null)),
             ),
+            onClick: edit,
+          },
+          number(value),
+        ),
+        fixed && h('small', null, '已调整'),
+        fixed &&
+          h(
+            'button',
+            {
+              className: 'dc-link',
+              disabled: Boolean(editing),
+              'aria-label': `${prefix}撤销数量 ${label(entry)}`,
+              onClick: () => save(entry, true),
+            },
+            compact ? '撤销固定' : '撤销',
+          ),
+        shareConflict && h('small', null, '先撤销同月大类占比调整'),
       );
     };
     const summaryColumns = [
@@ -255,7 +254,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
       const demand = (month) => {
         const row = categoryValue(category, month);
         return controls(
-          { kind: 'categoryDemand', category, month },
+          { kind: 'categoryDemand', category, month, editorRow: `summary:${category}` },
           row?.systemQuantity,
           row?.quantity,
         );
@@ -407,6 +406,42 @@ export function createProcessedDemand(react, { downloadCsv }) {
         for (const child of indexed.children.get(key)?.values() ?? []) append(child, depth + 1);
     };
     for (const entry of indexed.bases.values()) append(entry, 0);
+    const editorFor = (key, count) =>
+      editing?.editorRow === key
+        ? h(
+            'tr',
+            { className: 'mps-inline-edit-row' },
+            h(
+              'td',
+              { colSpan: count },
+              h(QuantityEditor, {
+                editorRef,
+                title:
+                  editing.kind === 'shipment' ? `本月预估发货 ${label(editing)}` : label(editing),
+                groupLabel: '分层需求数量调整',
+                quantityLabel: editing.kind === 'shipment' ? '本月预估发货数量' : '有效需求数量',
+                reasonLabel: '数量调整原因',
+                min: editing.kind === 'shipment' ? null : 0,
+                value:
+                  editing.changed || editing.value === ''
+                    ? editing.value
+                    : String(Math.round(Number(editing.value))),
+                reason: editing.reason,
+                error,
+                onChange: (value) => setEditing({ ...editing, value, changed: true }),
+                onReasonChange: (reason) => setEditing({ ...editing, reason }),
+                onSave: () => {
+                  if (editing.value.trim() === '') {
+                    setError('请填写数量，留空不代表0。');
+                    return;
+                  }
+                  save({ ...editing, quantity: Number(editing.value) });
+                },
+                onCancel: closeEditor,
+              }),
+            ),
+          )
+        : null;
     const detailRows = visible.map(({ entry, depth }) => {
       const key = nodeKey(entry);
       const data = nodeData(entry);
@@ -414,7 +449,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
       const name = nodeName(entry, data);
       const currentShipment = data.shipmentEffective.quantity;
       const processRow = data.first[0] ?? data.full[0];
-      return h(
+      const rendered = h(
         'tr',
         { key, className: `wf-demand-row wf-demand-level-${depth}` },
         h(
@@ -428,6 +463,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
                   'button',
                   {
                     className: 'wf-demand-toggle',
+                    disabled: Boolean(editing),
                     'aria-label': entry.kind === 'base' ? name : `${entry.base} ${name}`,
                     'aria-expanded': expanded.has(key),
                     onClick: () => toggle(key),
@@ -472,16 +508,23 @@ export function createProcessedDemand(react, { downloadCsv }) {
             {
               className: 'wf-edit-number',
               'aria-label': `调整本月预估 ${label(entry)}`,
-              disabled: currentShipment == null || !shipmentSnapshot?.adjustForecast,
-              onClick: () =>
+              disabled:
+                Boolean(editing) || currentShipment == null || !shipmentSnapshot?.adjustForecast,
+              onClick: (event) => {
+                triggerRef.current = event.currentTarget;
+                setNotice('');
+                setError('');
                 setEditing({
                   ...entry,
                   kind: 'shipment',
+                  editorRow: key,
+                  month: result.shipmentMonth,
                   keys: data.identities.map((row) => productKey(row.base, row.code)),
                   systemValue: data.shipmentSystem.quantity,
                   value: String(currentShipment),
                   reason: '',
-                }),
+                });
+              },
             },
             number(data.shipmentEffective.quantity ?? data.shipmentEffective.knownQuantity),
           ),
@@ -496,7 +539,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
             'td',
             { key: month },
             entry.kind === 'base-sku'
-              ? controls({ ...entry, month }, system, value, '', true)
+              ? controls({ ...entry, month, editorRow: key }, system, value, '', true)
               : h('strong', { title: `当前基地汇总；系统数量 ${number(system)}` }, number(value)),
             value == null &&
               known(selected, 'demand') !== '—' &&
@@ -507,6 +550,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
             : [cell];
         }),
       );
+      return h(react.Fragment, { key }, rendered, editorFor(key, detailColumns.length));
     });
     const detailTable = h(
       'div',
@@ -581,7 +625,9 @@ export function createProcessedDemand(react, { downloadCsv }) {
           react.Fragment,
           null,
           h('p', { className: 'wf-note' }, '单位：件'),
-          table('大类需求总表', summaryColumns, summaryRows),
+          table('大类需求总表', summaryColumns, summaryRows, (row) =>
+            editorFor(`summary:${row[0]}`, summaryColumns.length),
+          ),
         ),
         h('button', { onClick: exportSummary }, '下载大类需求总表'),
       ),
@@ -600,75 +646,8 @@ export function createProcessedDemand(react, { downloadCsv }) {
           `${new Set(rows.map((row) => row.code)).size}个单品 · ${new Set(rows.map((row) => row.base)).size}个基地 · 单位：件`,
         ),
       ),
-      error && h('p', { role: 'alert', className: 'wf-note wf-unavailable' }, error),
-      editing &&
-        h(
-          'fieldset',
-          { ref: editorRef, className: 'wf-quantity-editor', 'aria-label': '分层需求数量调整' },
-          h(
-            'legend',
-            null,
-            editing.kind === 'shipment' ? `本月预估发货 ${label(editing)}` : label(editing),
-          ),
-          h(
-            'p',
-            null,
-            editing.kind === 'shipment'
-              ? `系统预估 ${number(editing.systemValue)}；按当前有效量重摊，并同步第二步的预估发货与结存。`
-              : `系统数量 ${number(editing.systemValue)}；下级固定值保留，未固定项重摊。`,
-          ),
-          h(
-            'label',
-            null,
-            editing.kind === 'shipment' ? '本月预估发货数量' : '有效需求数量',
-            h('input', {
-              type: 'number',
-              min: editing.kind === 'shipment' ? undefined : 0,
-              step: editing.kind === 'shipment' ? 1 : 'any',
-              'aria-label': editing.kind === 'shipment' ? '本月预估发货数量' : '有效需求数量',
-              value:
-                editing.changed || editing.value === ''
-                  ? editing.value
-                  : String(Math.round(Number(editing.value))),
-              onChange: (event) =>
-                setEditing({ ...editing, value: event.target.value, changed: true }),
-            }),
-          ),
-          h(
-            'label',
-            null,
-            '数量调整原因',
-            h('input', {
-              'aria-label': '数量调整原因',
-              value: editing.reason,
-              maxLength: 1000,
-              onChange: (event) => setEditing({ ...editing, reason: event.target.value }),
-            }),
-          ),
-          h(
-            'button',
-            {
-              onClick: () => {
-                if (editing.value.trim() === '') {
-                  setError('请填写数量，留空不代表0。');
-                  return;
-                }
-                save({ ...editing, quantity: Number(editing.value) });
-              },
-            },
-            editing.kind === 'shipment' ? '应用本月预估调整' : '应用数量调整',
-          ),
-          h(
-            'button',
-            {
-              onClick: () => {
-                setEditing(null);
-                setError('');
-              },
-            },
-            '取消数量调整',
-          ),
-        ),
+      notice && h('p', { role: 'status', className: 'mps-edit-notice' }, notice),
+      !editing && error && h('p', { role: 'alert' }, error),
       h(
         'details',
         { className: 'wf-disclosure' },
@@ -702,7 +681,11 @@ export function createProcessedDemand(react, { downloadCsv }) {
               item.at,
               h(
                 'button',
-                { 'aria-label': `撤销固定数量 ${label(item)}`, onClick: () => save(item, true) },
+                {
+                  'aria-label': `撤销固定数量 ${label(item)}`,
+                  disabled: Boolean(editing),
+                  onClick: () => save(item, true),
+                },
                 '撤销',
               ),
             ]),

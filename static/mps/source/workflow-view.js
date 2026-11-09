@@ -1,3 +1,4 @@
+import { createInlineEdit } from './inline-edit.js';
 import { createProcessedDemand } from './processed-demand-view.js';
 import { createInventoryTargetPanel } from './inventory-target-view.js';
 import { createConstraintPanel } from './constraint-view.js';
@@ -92,9 +93,10 @@ const sourceText = '①大类需求；②月末结存；③两路占比；④源
 
 export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
   const h = react.createElement;
+  const { NumberInput } = createInlineEdit(react);
   const ProcessedDemand = createProcessedDemand(react, { downloadCsv });
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
-  const InventoryTargetPanel = createInventoryTargetPanel(react, { downloadCsv });
+  const InventoryTargetPanel = createInventoryTargetPanel(react, { downloadCsv, NumberInput });
   const ConstraintPanel = createConstraintPanel(react, { Dialog });
   const EvaluationOverview = createEvaluationOverview(react, { downloadCsv, Dialog });
   return function Workflow({
@@ -112,6 +114,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     onUndoShareAdjustment,
   }) {
     const [search, setSearch] = react.useState('');
+    const [editingQuantity, setEditingQuantity] = react.useState(false);
     const [base, setBase] = react.useState('');
     const [category, setCategory] = react.useState('');
     const [month, setMonth] = react.useState('');
@@ -123,10 +126,13 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const [evaluationError, setEvaluationError] = react.useState('');
     const executionGeneration = react.useRef(0);
     const executionController = react.useRef(null);
+    const executingRef = react.useRef(false);
     react.useEffect(() => {
       executionGeneration.current++;
       setExecuting(false);
-      setEvaluationError('');
+      if (executingRef.current)
+        setEvaluationError('输入或数据来源已更新，本轮评估已取消。请重新评估。');
+      executingRef.current = false;
       return () => {
         executionGeneration.current++;
         executionController.current?.abort();
@@ -216,6 +222,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       const controller = new AbortController();
       executionController.current = controller;
       setExecuting(true);
+      executingRef.current = true;
       setEvaluationError('');
       try {
         const config = JSON.parse(document.getElementById('agent-sql-config').textContent);
@@ -293,7 +300,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       } catch (error) {
         if (ticket === executionGeneration.current) setEvaluationError(error.message);
       } finally {
-        if (ticket === executionGeneration.current) setExecuting(false);
+        if (ticket === executionGeneration.current) {
+          setExecuting(false);
+          executingRef.current = false;
+        }
       }
     };
     const fields = step === 'process' ? processFields : planFields;
@@ -384,7 +394,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       },
       titles[step],
     );
-    const table = (name, columns, rows) =>
+    const table = (name, columns, rows, renderDetail) =>
       h(
         'div',
         { className: 'dc-table-scroll wf-table-scroll' },
@@ -406,9 +416,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             rows.length
               ? rows.map((cells, index) =>
                   h(
-                    'tr',
+                    react.Fragment,
                     { key: index },
-                    cells.map((cell, position) => h('td', { key: position }, cell)),
+                    h(
+                      'tr',
+                      {},
+                      cells.map((cell, position) => h('td', { key: position }, cell)),
+                    ),
+                    renderDetail?.(cells, index),
                   ),
                 )
               : h(
@@ -441,6 +456,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           'select',
           {
             'aria-label': label,
+            disabled: editingQuantity,
             value,
             onChange: (event) => {
               setter(event.target.value);
@@ -828,6 +844,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         h('input', {
           type: 'search',
           'aria-label': '搜索当前步骤',
+          disabled: editingQuantity,
           placeholder: '编码、名称、系列、物料组',
           value: search,
           onChange: (event) => {
@@ -842,6 +859,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         h('input', {
           type: 'checkbox',
           checked: onlyMissing,
+          disabled: editingQuantity,
           onChange: (event) => {
             setOnlyMissing(event.target.checked);
             setPage(0);
@@ -889,21 +907,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         const current = matches.length === 1 ? matches[0] : null;
         return [
           sourceBase,
-          h('input', {
-            type: 'number',
-            min: 0,
-            step: 'any',
-            value: current?.days ?? '',
-            'aria-label': `${sourceBase} 安全天数`,
-            onChange: (event) => {
-              const text = event.target.value;
-              if (
-                text !== '' &&
-                (!Number.isFinite(Number(text)) ||
-                  Number(text) < 0 ||
-                  Number(text) > Number.MAX_SAFE_INTEGER)
-              )
-                return;
+          h(NumberInput, {
+            key: `${draft.id}-${sourceBase}-days`,
+            label: `${sourceBase} 安全天数`,
+            value: current?.days,
+            commit: (text) =>
               update({
                 constraints: {
                   ...draft.constraints,
@@ -913,8 +921,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                     { base: sourceBase, days: text === '' ? null : Number(text) },
                   ],
                 },
-              });
-            },
+              }),
           }),
           matches.length > 1
             ? '重复策略，请维护唯一值'
@@ -925,22 +932,12 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         ];
       });
     const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER) =>
-      h('input', {
-        type: 'number',
-        min: 0,
+      h(NumberInput, {
+        key: `${draft.id}-${label}`,
+        label,
+        value,
         max,
-        step: 'any',
-        value: value ?? '',
-        'aria-label': label,
-        onChange: (event) => {
-          const value = event.target.value;
-          if (
-            value !== '' &&
-            (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > max)
-          )
-            return;
-          change(value === '' ? null : Number(value));
-        },
+        commit: (text) => change(text === '' ? null : Number(text)),
       });
     const productionDays = draft.productionDays ?? [];
     const weights = draft.unitWeights ?? [];
@@ -1250,6 +1247,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               table,
               card,
               onExplain: explain,
+              onEditingChange: setEditingQuantity,
             }),
             shareError
               ? h('p', { role: 'alert', className: 'wf-note wf-unavailable' }, shareError)

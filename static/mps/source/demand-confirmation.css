@@ -303,9 +303,8 @@
 .dc-demand-quantity {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 160px;
+  gap: 8px;
+  min-width: 120px;
   font-variant-numeric: tabular-nums;
 }
 .dc-demand-amount {
@@ -316,24 +315,21 @@
   color: #956900;
   font-size: 11px;
 }
-.dc-demand-cell-actions {
-  display: flex;
-  flex: none;
-  gap: 8px;
+.dc-calculation-evidence {
+  margin: 0 0 16px;
 }
-.dc-category-editor {
-  display: flex;
-  align-items: end;
-  flex-wrap: wrap;
-  gap: 12px;
-  min-width: 0;
-  margin: 0;
-  padding: 16px 18px;
-  border: 0;
-  border-top: 1px solid var(--dc-border);
+.dc-calculation-evidence > summary {
+  padding: 10px 16px;
+  cursor: pointer;
+  color: var(--dc-muted);
 }
-.dc-category-editor > p {
-  flex-basis: 100%;
+.dc-calculation-evidence > section {
+  margin-top: 8px;
+}
+.dc-draft-status {
+  color: var(--dc-muted);
+  padding-inline: 8px;
+  white-space: nowrap;
 }
 .dc-page table {
   width: 100%;
