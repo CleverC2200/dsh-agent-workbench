@@ -945,7 +945,7 @@ test('presentation fills both period tables, actual categories and shared direct
   assert.equal(presentation.cards[0].footer, '本周作废率 10.00%');
   assert.equal(presentation.cards[4].footer, '本周货龄占比 10.00%');
   assert.equal(presentation.cards[5].footer, '本周可发货天数 30.0天');
-  assert.match(presentation.cards[0].formula, /订单数/);
+  assert.match(presentation.cards[0].formula, /有效商品数量/);
   const differentWeek = {
     ...period,
     metrics: { ...period.metrics, 作废率: { ...period.metrics['作废率'], value: 3 } },

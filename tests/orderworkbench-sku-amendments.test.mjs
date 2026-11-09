@@ -31,6 +31,14 @@ const columns = [
   'need_qty_origin',
   'custchangetime',
   'canceltime',
+  'executeorderlineno',
+  'createsource',
+  'is_virtual',
+  'timeout_code',
+  'warehouseid',
+  'receive_wh',
+  'pickup_point',
+  'warehouse_classify',
 ];
 function row(order, sku, overrides = {}) {
   return {
@@ -54,6 +62,12 @@ function row(order, sku, overrides = {}) {
     need_qty_origin: 10,
     custchangetime: '2026-10-01 12:00:00',
     canceltime: null,
+    executeorderlineno: 1,
+    createsource: '20',
+    is_virtual: null,
+    timeout_code: null,
+    warehouseid: null,
+    receive_wh: null,
     ...overrides,
   };
 }
@@ -66,9 +80,12 @@ function read(daily, hourly = [], base = '') {
     ]) {
       db.exec(`CREATE TABLE ${table}(${columns.join(',')})`);
       const insert = db.prepare(`INSERT INTO ${table} VALUES(${columns.map(() => '?').join(',')})`);
-      for (const value of rows) insert.run(...columns.map((key) => value[key]));
+      for (const value of rows) insert.run(...columns.map((key) => value[key] ?? null));
     }
     db.function('CONCAT', { varargs: true }, (...v) => v.join(''));
+    db.exec(`CREATE TABLE dim_bas_warehouse(warehouse_id,warehouse_classify);
+      CREATE TABLE agents_scm_order_trace_final_di(executeorderno,cust_code,fromorderno,receive_wh,deliver_wh,update_time);
+      CREATE TABLE agents_scm_material_in_out_summary_d(warehouseid,pickup_point,warehouse_classify);`);
     const translate = (sql) =>
       sql
         .replaceAll(/([a-z_.]+) \+ INTERVAL '12' HOUR/gi, "datetime($1, '+12 hours')")
