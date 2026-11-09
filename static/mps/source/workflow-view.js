@@ -559,6 +559,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         title: `${row.base} ${row.code} ${row.month} ${labels[field]} 计算过程`,
         expression,
         value: row[field],
+        percent: ['reportShare', 'historyShare', 'systemShare', 'share', 'load'].includes(field),
         missing,
       });
     };
@@ -1789,7 +1790,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             h(
               'p',
               { className: formula.missing.length ? 'wf-unavailable' : undefined },
-              `${formula.value == null ? '未评估' : `结果：${formula.value}`}`,
+              `${formula.value == null ? '未评估' : `结果：${numberText(formula.value, formula.percent)}`}`,
             ),
           )
         : null,

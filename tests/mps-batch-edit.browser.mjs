@@ -163,6 +163,12 @@ test('processing shares one edit mode for category months and expanded SKUs and 
   assert.equal(changed.categoryDemand.find((row) => row.month === '2027-01').quantity, 220);
   assert.equal(changed.quantities[0].quantity, 50);
   assert.equal(changed.quantities[0].reason, '同批调整三处');
+  await view.getByRole('button', { name: '基地 · 华东', exact: true }).click();
+  await view.getByRole('button', { name: '华东 大类 · 汤圆', exact: true }).click();
+  await view.getByRole('button', { name: '华东 物料组 · 组', exact: true }).click();
+  await view.getByRole('button', { name: '运算过程 华东 A 2026-12', exact: true }).click();
+  await expect(frame.getByRole('dialog').locator('p').last()).toHaveText('结果：22');
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await begin(view);
   await view.getByLabel('汤圆 2026-12 需求数量', { exact: true }).fill('999');
   await view.getByRole('button', { name: '取消', exact: true }).click();
