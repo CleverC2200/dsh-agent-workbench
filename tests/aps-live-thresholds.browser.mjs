@@ -169,3 +169,67 @@ test('live production drilldowns judge attainment and risk from the prototype th
   await expect(base.locator('.category-drill-risk')).toHaveText('预警');
   expect(errors).toEqual([]);
 });
+
+test('live sales organization metrics use configured targets and preserve unavailable organizations', async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.route('http://aps.test/**', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }),
+  );
+  await page.goto('http://aps.test/');
+  await page.evaluate(() => {
+    const scope = {
+      month: '202611',
+      region: '国外大区',
+      province: '北美区',
+      sales_group: '加拿大销售组',
+      invalid: 0,
+    };
+    window.fixture = {
+      data: {
+        start: '2026-11-01',
+        end: '2026-11-09',
+        granularity: 'month',
+        missingValuePolicy: 'zero',
+        readAt: '2026-11-09',
+        limitations: [],
+        sections: [
+          { id: 'finance', status: 'ready', rows: [{ ...scope, actual: 9700 }] },
+          { id: 'sales-budget', status: 'ready', rows: [{ ...scope, budget: 10000 }] },
+          {
+            id: 'sales-accuracy',
+            status: 'ready',
+            rows: [
+              {
+                ...scope,
+                initial_plan: 100,
+                adjusted_plan: 100,
+                initial_deviation: 30,
+                adjusted_deviation: 30,
+                actual: 100,
+              },
+            ],
+          },
+        ],
+      },
+      previous: null,
+      annual: null,
+      busy: false,
+      comparisonBusy: false,
+      error: '',
+    };
+  });
+  await page.addScriptTag({ content: bundle.outputFiles.find((x) => x.path.endsWith('.js')).text });
+  await page.getByRole('tab', { name: '销售视角', exact: true }).click();
+  const region = page.locator('.sales-org-row.sales-org-region').filter({ hasText: '国外大区' });
+  await expect(region.locator('.achievement-status')).toHaveText(['达标', '未达']);
+  await expect(region.locator('.sales-org-risk')).toHaveText('预警');
+  const missing = page.locator('.sales-org-row.sales-org-region').filter({ hasText: 'B端营销部' });
+  await expect(missing.locator('.achievement-status')).toHaveText(['无数据', '无数据']);
+  await expect(missing.locator('.sales-org-risk')).toHaveText('无数据');
+  await page.getByRole('tab', { name: '销售预算达成率', exact: true }).last().click();
+  await expect(region).toContainText('> 95%');
+  await expect(region.locator('.achievement-status')).toHaveText('达标');
+  await expect(region.locator('.sales-org-risk')).toHaveText('健康');
+});
