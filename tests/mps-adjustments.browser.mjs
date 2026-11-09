@@ -1,3 +1,4 @@
+import { beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
 import { adjustCategory } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -117,11 +118,12 @@ test('MPS shipment local overrides and remaining intake survive a business-sourc
   const table = frame.getByRole('table', { name: '本月预估发货明细' });
   await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
   const forecast = table.getByLabel('郑州 A 整月预估发货', { exact: true });
+  await beginAdjustment(frame);
   await forecast.fill('301');
-  await forecast.press('Enter');
+
   const remaining = table.getByLabel('郑州 剩余天数入库', { exact: true });
   await remaining.fill('11');
-  await remaining.press('Enter');
+  await saveAdjustment(frame);
   await frame.getByLabel('发货数据来源', { exact: true }).selectOption('business');
   await expect
     .poll(() =>
@@ -138,8 +140,12 @@ test('MPS shipment local overrides and remaining intake survive a business-sourc
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await frame.getByLabel('发货数据来源', { exact: true }).selectOption('local-file');
   await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
-  await expect(forecast).toHaveValue('301');
-  await expect(remaining).toHaveValue('11');
+  await expect(
+    table.getByRole('button', { name: '郑州 A 整月预估发货 计算过程', exact: true }),
+  ).toHaveText('301');
+  await expect(
+    table.getByRole('button', { name: '郑州 剩余天数入库 计算过程', exact: true }),
+  ).toHaveText('11');
   await expect(
     table.getByRole('button', { name: '郑州 A 剩余天数入库 计算过程', exact: true }),
   ).toHaveText('11');

@@ -1835,6 +1835,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           update,
           active: active && step === 'ship',
           onSnapshot: receiveShipment,
+          onEditingChange: setAdjusting,
         }),
       ),
       h('div', { hidden: step !== 'masterdata' }, masterData),
@@ -1849,6 +1850,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           draft,
           scopeGeneration,
           update,
+          onEditingChange: setAdjusting,
           onUndoShareAdjustment: (input) =>
             update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input, true) }),
           relations:

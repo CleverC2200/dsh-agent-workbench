@@ -218,17 +218,6 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
       { className: 'mps-relations', 'aria-label': '主数据关系核对' },
       h(
         'div',
-        { className: 'mps-relations-scope' },
-        h('strong', null, scope ? `${scope.name} · ${scope.month}` : '等待评估范围'),
-        h('span', null, '授权源记录 · 只读核对'),
-        h(
-          'button',
-          { type: 'button', disabled: state.busy, onClick: () => setAttempt((value) => value + 1) },
-          '重新读取',
-        ),
-      ),
-      h(
-        'div',
         { className: 'ap-grid-3 mps-relation-groups', role: 'tablist', 'aria-label': '关系分组' },
         groups.map((group) => {
           const rows = state.records?.[group.key];
@@ -268,6 +257,15 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
           'div',
           { className: 'ap-card-head mps-relations-tools' },
           h('h3', null, selected.name),
+          h(
+            'button',
+            {
+              type: 'button',
+              disabled: state.busy,
+              onClick: () => setAttempt((value) => value + 1),
+            },
+            '重新读取',
+          ),
           h(
             'button',
             {

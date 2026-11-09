@@ -1,6 +1,6 @@
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { changeAdjustment, quantityAdjustmentKey } from './local-draft.js';
-import { createInlineEdit } from './inline-edit.js';
+import { createBatchEdit } from './batch-edit.js';
 
 const number = (value) =>
   value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format(value);
@@ -40,7 +40,7 @@ const label = (entry) =>
 
 export function createProcessedDemand(react, { downloadCsv }) {
   const h = react.createElement;
-  const { EditButton, QuantityEditor } = createInlineEdit(react);
+  const { Field } = createBatchEdit(react);
   return function ProcessedDemand({
     draft,
     result,
@@ -51,41 +51,10 @@ export function createProcessedDemand(react, { downloadCsv }) {
     table,
     card,
     onExplain,
-    onEditingChange,
+    batch,
   }) {
-    const [editing, setEditing] = react.useState(null);
-    const [error, setError] = react.useState('');
-    react.useEffect(() => {
-      onEditingChange?.(Boolean(editing));
-      return () => onEditingChange?.(false);
-    }, [Boolean(editing), onEditingChange]);
     const [expanded, setExpanded] = react.useState(() => new Set());
-    const editorRef = react.useRef(null);
-    const triggerRef = react.useRef(null);
-    const [notice, setNotice] = react.useState('');
-    const closeEditor = () => {
-      setEditing(null);
-      setError('');
-      requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
-    };
-    react.useEffect(() => {
-      if (editing) {
-        editorRef.current?.scrollIntoView({ block: 'nearest' });
-        editorRef.current?.querySelector('input')?.focus({ preventScroll: true });
-      }
-    }, [
-      editing?.kind,
-      editing?.month,
-      editing?.category,
-      editing?.group,
-      editing?.code,
-      editing?.base,
-    ]);
-    react.useEffect(() => {
-      setEditing(null);
-      setError('');
-      setExpanded(new Set());
-    }, [draft.id, draft.month]);
+    react.useEffect(() => setExpanded(new Set()), [draft.id, draft.month]);
     const quantities = draft.adjustments?.quantities ?? [];
     const toggle = (key) => {
       setExpanded((previous) => {
@@ -118,66 +87,73 @@ export function createProcessedDemand(react, { downloadCsv }) {
             computed.rows.filter((row) => matches(row, entry)),
             'demand',
           );
-    const save = (entry, undo = false) => {
-      try {
-        if (entry.kind === 'shipment') {
-          const failure = shipmentSnapshot?.adjustForecast?.(
-            entry.keys,
-            entry.value,
-            `第三步 ${label(entry)} ${entry.reason}`.trim(),
-          );
-          if (failure || !shipmentSnapshot?.adjustForecast)
-            throw Error(failure || '第二步同版预估发货尚未就绪。');
-          closeEditor();
-          setNotice('已保存到本地草稿');
-          return;
-        }
-        const kind = entry.kind === 'categoryDemand' ? 'categoryDemand' : 'quantities';
-        const {
-          kind: level,
-          value: _value,
-          changed: _changed,
-          editorRow: _editorRow,
-          ...fields
-        } = entry;
-        delete fields.effectiveValue;
-        const input = { ...fields, ...(kind === 'quantities' ? { kind: level } : {}) };
-        const provisional = changeAdjustment(draft.adjustments, kind, input, undo);
-        const candidate = buildMpsWorkflow(
-          { ...draft, adjustments: provisional },
-          relations,
-          shipmentSnapshot,
-        );
-        const introduced = (candidate.adjustmentIssues ?? []).filter(
-          (issue) => !(result.adjustmentIssues ?? []).includes(issue),
-        );
-        if (introduced.length) throw Error(introduced.join('；'));
-        if (
-          kind === 'quantities' &&
-          !undo &&
-          !candidate.rows.some((row) => matches(row, entry) && row.quantityAdjusted)
-        )
-          throw Error(
-            candidate.adjustmentIssues?.join('；') ||
-              '当前分层数量未生效，请先补齐权重或撤销冲突调整。',
-          );
-        update({
-          adjustments: undo
-            ? changeAdjustment(
-                draft.adjustments,
-                kind,
-                { ...input, effectiveValue: effective(candidate, entry) },
-                true,
-              )
-            : provisional,
-        });
-        closeEditor();
-        setNotice(undo ? '已撤销本地调整' : '已保存到本地草稿');
-      } catch (failure) {
-        setError(failure.message);
+    const fieldKey = (entry) =>
+      entry.kind === 'categoryDemand'
+        ? JSON.stringify(['categoryDemand', entry.month, entry.category])
+        : quantityAdjustmentKey(entry);
+    const applyBatch = (entries, reason) => {
+      if (!entries.length) return;
+      const shipments = entries.filter((entry) => entry.meta.kind === 'shipment');
+      if (shipments.length && !shipmentSnapshot?.prepareForecast)
+        throw Error('第二步同版预估发货尚未就绪。');
+      const shipping = shipments.length
+        ? shipmentSnapshot.prepareForecast(
+            shipments
+              .sort((a, b) => b.meta.keys.length - a.meta.keys.length)
+              .map((entry) => ({
+                keys: entry.meta.keys,
+                value: entry.value,
+                label: `第三步 ${entry.label} ${reason}`,
+              })),
+          )
+        : null;
+      const snapshot = shipping ? { ...shipmentSnapshot, rows: shipping.rows } : shipmentSnapshot;
+      let adjustments = draft.adjustments;
+      const undos = new Map();
+      const quantities = entries.filter((entry) => entry.meta.kind !== 'shipment');
+      for (const entry of quantities) {
+        const { kind: level, editorRow: _editorRow, ...fields } = entry.meta;
+        const kind = level === 'categoryDemand' ? 'categoryDemand' : 'quantities';
+        const input = {
+          ...fields,
+          ...(kind === 'quantities' ? { kind: level } : {}),
+          quantity: entry.value,
+          reason,
+        };
+        const before = adjustments?.history?.length ?? 0;
+        adjustments = changeAdjustment(adjustments, kind, input, entry.value === null);
+        if (entry.value === null && adjustments.history.length > before)
+          undos.set(before, entry.meta);
       }
+      const candidate = buildMpsWorkflow({ ...draft, adjustments }, relations, snapshot);
+      const introduced = (candidate.adjustmentIssues ?? []).filter(
+        (issue) => !(result.adjustmentIssues ?? []).includes(issue),
+      );
+      if (introduced.length) throw Error(introduced.join('；'));
+      for (const entry of quantities) {
+        if (
+          entry.value !== null &&
+          entry.meta.kind !== 'categoryDemand' &&
+          !candidate.rows.some((row) => matches(row, entry.meta) && row.quantityAdjusted)
+        )
+          throw Error('当前分层数量未生效，请先补齐权重或撤销冲突调整。');
+      }
+      if (undos.size)
+        adjustments = {
+          ...adjustments,
+          history: adjustments.history.map((item, index) =>
+            undos.has(index) ? { ...item, value: effective(candidate, undos.get(index)) } : item,
+          ),
+        };
+      update({ adjustments, ...(shipping ? { shipment: shipping.state } : {}) });
     };
-    const controls = (entry, systemValue, value, prefix = '', compact = false) => {
+    react.useLayoutEffect(() => {
+      batch.commit.current = applyBatch;
+      return () => {
+        if (batch.commit.current === applyBatch) batch.commit.current = null;
+      };
+    }, [batch.commit, applyBatch]);
+    const controls = (entry, systemValue, value) => {
       const fixed = saved(entry);
       const shareConflict =
         entry.kind !== 'categoryDemand' &&
@@ -187,53 +163,28 @@ export function createProcessedDemand(react, { downloadCsv }) {
               row.id === item.rowId && row.month === entry.month && row.category === entry.category,
           ),
         );
-      const active = editing?.editorRow === entry.editorRow && editing?.month === entry.month;
-      const edit = (event) => {
-        if (editing) {
-          editorRef.current?.querySelector('input')?.focus();
-          return;
-        }
-        triggerRef.current = event.currentTarget;
-        setEditing({
-          ...entry,
-          systemValue,
-          value: value == null ? '' : String(value),
-          reason: fixed?.reason ?? '',
-        });
-        setError('');
-        setNotice('');
-      };
-      if (entry.kind !== 'categoryDemand' && !months.slice(0, 2).includes(entry.month))
-        return h('strong', null, number(value));
+      const disabled =
+        entry.kind !== 'categoryDemand' &&
+        (!months.slice(0, 2).includes(entry.month) ||
+          !entry.group ||
+          value == null ||
+          shareConflict);
       return h(
         'div',
         { className: 'wf-quantity-cell' },
-        h(
-          EditButton,
-          {
-            label: `${prefix}调整数量 ${label(entry)}`,
-            active,
-            disabled: Boolean(
-              (editing && !active) ||
-              shareConflict ||
-              (entry.kind !== 'categoryDemand' && (!entry.group || value == null)),
-            ),
-            onClick: edit,
-          },
-          number(value),
-        ),
+        h(Field, {
+          batch,
+          id: fieldKey(entry),
+          label: `${label(entry)} 需求数量`,
+          value,
+          meta: { ...entry, systemValue },
+          integer: true,
+          disabled,
+          format: number,
+          editFormat: (value) => String(Math.round(value)),
+          title: shareConflict ? '先撤销同月大类占比调整' : '留空恢复系统值',
+        }),
         fixed && h('small', null, '已调整'),
-        fixed &&
-          h(
-            'button',
-            {
-              className: 'dc-link',
-              disabled: Boolean(editing),
-              'aria-label': `${prefix}撤销数量 ${label(entry)}`,
-              onClick: () => save(entry, true),
-            },
-            compact ? '撤销固定' : '撤销',
-          ),
         shareConflict && h('small', null, '先撤销同月大类占比调整'),
       );
     };
@@ -347,8 +298,12 @@ export function createProcessedDemand(react, { downloadCsv }) {
       h(
         'div',
         { className: 'wf-source-value' },
-        number(value.quantity ?? value.knownQuantity),
-        sourceStatus(value) && h('small', null, sourceStatus(value)),
+        value.quantity == null && value.knownQuantity == null
+          ? h('span', { className: 'dc-demand-missing', title: sourceStatus(value) }, '待补')
+          : number(value.quantity ?? value.knownQuantity),
+        (value.quantity != null || value.knownQuantity != null) &&
+          sourceStatus(value) &&
+          h('small', null, sourceStatus(value)),
       );
     const nodeData = (entry) => {
       const full = indexed.all.get(nodeKey(entry)) ?? [];
@@ -406,42 +361,6 @@ export function createProcessedDemand(react, { downloadCsv }) {
         for (const child of indexed.children.get(key)?.values() ?? []) append(child, depth + 1);
     };
     for (const entry of indexed.bases.values()) append(entry, 0);
-    const editorFor = (key, count) =>
-      editing?.editorRow === key
-        ? h(
-            'tr',
-            { className: 'mps-inline-edit-row' },
-            h(
-              'td',
-              { colSpan: count },
-              h(QuantityEditor, {
-                editorRef,
-                title:
-                  editing.kind === 'shipment' ? `本月预估发货 ${label(editing)}` : label(editing),
-                groupLabel: '分层需求数量调整',
-                quantityLabel: editing.kind === 'shipment' ? '本月预估发货数量' : '有效需求数量',
-                reasonLabel: '数量调整原因',
-                min: editing.kind === 'shipment' ? null : 0,
-                value:
-                  editing.changed || editing.value === ''
-                    ? editing.value
-                    : String(Math.round(Number(editing.value))),
-                reason: editing.reason,
-                error,
-                onChange: (value) => setEditing({ ...editing, value, changed: true }),
-                onReasonChange: (reason) => setEditing({ ...editing, reason }),
-                onSave: () => {
-                  if (editing.value.trim() === '') {
-                    setError('请填写数量，留空不代表0。');
-                    return;
-                  }
-                  save({ ...editing, quantity: Number(editing.value) });
-                },
-                onCancel: closeEditor,
-              }),
-            ),
-          )
-        : null;
     const detailRows = visible.map(({ entry, depth }) => {
       const key = nodeKey(entry);
       const data = nodeData(entry);
@@ -463,7 +382,6 @@ export function createProcessedDemand(react, { downloadCsv }) {
                   'button',
                   {
                     className: 'wf-demand-toggle',
-                    disabled: Boolean(editing),
                     'aria-label': entry.kind === 'base' ? name : `${entry.base} ${name}`,
                     'aria-expanded': expanded.has(key),
                     onClick: () => toggle(key),
@@ -503,32 +421,25 @@ export function createProcessedDemand(react, { downloadCsv }) {
         h(
           'td',
           null,
-          h(
-            'button',
-            {
-              className: 'wf-edit-number',
-              'aria-label': `调整本月预估 ${label(entry)}`,
-              disabled:
-                Boolean(editing) || currentShipment == null || !shipmentSnapshot?.adjustForecast,
-              onClick: (event) => {
-                triggerRef.current = event.currentTarget;
-                setNotice('');
-                setError('');
-                setEditing({
-                  ...entry,
-                  kind: 'shipment',
-                  editorRow: key,
-                  month: result.shipmentMonth,
-                  keys: data.identities.map((row) => productKey(row.base, row.code)),
-                  systemValue: data.shipmentSystem.quantity,
-                  value: String(currentShipment),
-                  reason: '',
-                });
-              },
+          h(Field, {
+            batch,
+            id: `shipment:${key}`,
+            label: `${label(entry)} 本月预估发货数量`,
+            value: currentShipment,
+            meta: {
+              kind: 'shipment',
+              keys: data.identities.map((row) => productKey(row.base, row.code)),
             },
-            number(data.shipmentEffective.quantity ?? data.shipmentEffective.knownQuantity),
-          ),
-          sourceStatus(data.shipmentEffective) &&
+            disabled: currentShipment == null || !shipmentSnapshot?.prepareForecast,
+            integer: true,
+            min: null,
+            format: number,
+            editFormat: (value) => String(Math.round(value)),
+            title:
+              currentShipment == null ? sourceStatus(data.shipmentEffective) : '留空恢复系统值',
+          }),
+          currentShipment != null &&
+            sourceStatus(data.shipmentEffective) &&
             h('small', { className: 'wf-source-status' }, sourceStatus(data.shipmentEffective)),
         ),
         ...months.flatMap((month, index) => {
@@ -540,17 +451,24 @@ export function createProcessedDemand(react, { downloadCsv }) {
             { key: month },
             entry.kind === 'base-sku'
               ? controls({ ...entry, month, editorRow: key }, system, value, '', true)
-              : h('strong', { title: `当前基地汇总；系统数量 ${number(system)}` }, number(value)),
-            value == null &&
-              known(selected, 'demand') !== '—' &&
-              h('small', null, known(selected, 'demand')),
+              : h(
+                  'strong',
+                  {
+                    title: `当前基地汇总；系统数量 ${number(system)}${value == null ? '；完整需求待补' : ''}`,
+                  },
+                  value == null
+                    ? known(selected, 'demand') === '—'
+                      ? '待补'
+                      : known(selected, 'demand')
+                    : number(value),
+                ),
           );
           return index < 2
             ? [h('td', { key: `${month}-model` }, sourceCell(data.forecasts[index])), cell]
             : [cell];
         }),
       );
-      return h(react.Fragment, { key }, rendered, editorFor(key, detailColumns.length));
+      return rendered;
     });
     const detailTable = h(
       'div',
@@ -621,15 +539,13 @@ export function createProcessedDemand(react, { downloadCsv }) {
       null,
       card(
         '大类需求总表',
+        h(react.Fragment, null, table('大类需求总表', summaryColumns, summaryRows)),
         h(
-          react.Fragment,
-          null,
-          h('p', { className: 'wf-note' }, '单位：件'),
-          table('大类需求总表', summaryColumns, summaryRows, (row) =>
-            editorFor(`summary:${row[0]}`, summaryColumns.length),
-          ),
+          'div',
+          { className: 'wf-card-actions' },
+          h('span', { className: 'dc-card-note' }, '单位：件'),
+          h('button', { onClick: exportSummary }, '下载大类需求总表'),
         ),
-        h('button', { onClick: exportSummary }, '下载大类需求总表'),
       ),
       card(
         '加工后的需求',
@@ -642,12 +558,10 @@ export function createProcessedDemand(react, { downloadCsv }) {
         ),
         h(
           'span',
-          { className: 'wf-note' },
+          { className: 'dc-card-note' },
           `${new Set(rows.map((row) => row.code)).size}个单品 · ${new Set(rows.map((row) => row.base)).size}个基地 · 单位：件`,
         ),
       ),
-      notice && h('p', { role: 'status', className: 'mps-edit-notice' }, notice),
-      !editing && error && h('p', { role: 'alert' }, error),
       h(
         'details',
         { className: 'wf-disclosure' },
@@ -683,8 +597,14 @@ export function createProcessedDemand(react, { downloadCsv }) {
                 'button',
                 {
                   'aria-label': `撤销固定数量 ${label(item)}`,
-                  disabled: Boolean(editing),
-                  onClick: () => save(item, true),
+                  disabled: !batch.active,
+                  onClick: () =>
+                    batch.stage(fieldKey(item), {
+                      label: label(item),
+                      text: '',
+                      meta: item,
+                      min: 0,
+                    }),
                 },
                 '撤销',
               ),

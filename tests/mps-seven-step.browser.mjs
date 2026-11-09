@@ -103,8 +103,9 @@ test('MPS shipment closing inventory feeds the same-version assessment and repor
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
   const estimate = frame.getByLabel('郑州 A 整月预估发货', { exact: true });
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
   await estimate.fill('500');
-  await estimate.press('Enter');
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
   await expectWorkflowExportValue(frame, '郑州 A 2026-10 期初库存 计算过程', '800');
   await frame.getByLabel('评估版本选择').selectOption('local-1');

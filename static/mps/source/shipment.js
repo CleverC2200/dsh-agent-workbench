@@ -1,7 +1,7 @@
 import { prototypeShipments } from './prototype-shipments.js';
 import { readShipmentInputs } from './facts.js';
 import { hasMpsSource } from './master-data.js';
-import { createInlineEdit } from './inline-edit.js';
+import { createBatchEdit } from './batch-edit.js';
 const emptyRows = [];
 const bases = ['西南', '郑州', '遂平', '华东', '华南'];
 const fields = [
@@ -45,7 +45,9 @@ const columns = [
 ];
 const keyOf = (row) => JSON.stringify([row.base, row.code]);
 const display = (value) =>
-  value == null ? '待定' : value.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
+  value == null
+    ? '待定'
+    : (Object.is(value, -0) ? 0 : value).toLocaleString('zh-CN', { maximumFractionDigits: 0 });
 const knownSum = (rows, field) => {
   const known = rows.filter((row) => row[field] != null);
   return known.length ? finite(known.reduce((sum, row) => sum + row[field], 0)) : null;
@@ -100,8 +102,19 @@ export function createShipment(
   { Dialog, Upload, parseCsv, downloadCsv, monthOffset },
 ) {
   const h = react.createElement;
-  const { NumberInput } = createInlineEdit(react);
-  return function Shipment({ draft, update, active, scopeGeneration, onSnapshot }) {
+  const { useBatchEdit, Actions, Field } = createBatchEdit(react);
+  return function Shipment({
+    draft,
+    update,
+    active,
+    scopeGeneration,
+    onSnapshot,
+    onEditingChange,
+  }) {
+    const batch = useBatchEdit({
+      scope: `${draft.id}:${draft.month}:${scopeGeneration.current}`,
+      onEditingChange,
+    });
     const month = monthOffset(draft.month, -1);
     const state = draft.shipment ?? {};
     const cutoff = state.cutoff ?? `${month}-22`;
@@ -153,30 +166,31 @@ export function createShipment(
         controller.current?.abort();
       };
     }, [draft.id, draft.month, cutoff]);
+    const deriveRows = (currentState) =>
+      sourceRows
+        .filter((row) => row.month === month && bases.includes(row.base))
+        .map((row) => {
+          const derived = derive(row, passed, totalDays);
+          const adjustment = currentState.values?.[keyOf(row)];
+          const remainingEdit = currentState.remaining?.[row.base];
+          const remaining = remainingEdit ? remainingEdit.values[keyOf(row)] : row.remaining;
+          const fin = adjustment ? adjustment.value : derived.prediction;
+          const end = [row.open, row.inbound, remaining, fin].every((value) => value != null)
+            ? finite(row.open + row.inbound + remaining - fin)
+            : null;
+          return {
+            ...derived,
+            fin,
+            remaining,
+            inputRemaining: row.remaining,
+            end,
+            adjustment: adjustment ?? null,
+            remainingSource: remainingEdit?.source ?? null,
+            missingFields: inputFields.filter((field) => row[field] == null),
+          };
+        });
     const rows = react.useMemo(
-      () =>
-        sourceRows
-          .filter((row) => row.month === month && bases.includes(row.base))
-          .map((row) => {
-            const derived = derive(row, passed, totalDays);
-            const adjustment = state.values?.[keyOf(row)];
-            const remainingEdit = state.remaining?.[row.base];
-            const remaining = remainingEdit ? remainingEdit.values[keyOf(row)] : row.remaining;
-            const fin = adjustment ? adjustment.value : derived.prediction;
-            const end = [row.open, row.inbound, remaining, fin].every((value) => value != null)
-              ? finite(row.open + row.inbound + remaining - fin)
-              : null;
-            return {
-              ...derived,
-              fin,
-              remaining,
-              inputRemaining: row.remaining,
-              end,
-              adjustment: adjustment ?? null,
-              remainingSource: remainingEdit?.source ?? null,
-              missingFields: inputFields.filter((field) => row[field] == null),
-            };
-          }),
+      () => deriveRows(state),
       [sourceRows, month, passed, totalDays, state.values, state.remaining],
     );
     const aggregate = (children, who) => {
@@ -231,6 +245,7 @@ export function createShipment(
             ? `业务来源：ai_db.agents_scm_stock_detail_d，${month}-01 至 ${cutoff}`
             : '数仓输入尚未同步';
     react.useEffect(() => {
+      if (batch.active) return;
       snapshotCallback.current?.({
         draftId: draft.id,
         month: draft.month,
@@ -243,14 +258,21 @@ export function createShipment(
         sourceRows,
         sourceRecords: sourceKind === 'business' ? business.sourceRecords : sourceRows,
         rows,
-        adjustForecast: (keys, value, label) => {
-          const selected = rows.filter((row) => keys.includes(keyOf(row)));
-          if (!selected.length) return '当前对象无本月发货明细，未修改。';
-          return change({ children: selected }, 'fin', value, label);
-        },
+        prepareForecast: (changes) => prepareForecast(changes),
         metadata: sourceKind === 'business' ? business.metadata : null,
       });
-    }, [draft.id, draft.month, month, cutoff, source, sourceKind, sourceRows, rows, business]);
+    }, [
+      draft.id,
+      draft.month,
+      month,
+      cutoff,
+      source,
+      sourceKind,
+      sourceRows,
+      rows,
+      business,
+      batch.active,
+    ]);
     const sync = async () => {
       controller.current?.abort();
       const stop = new AbortController();
@@ -324,70 +346,139 @@ export function createShipment(
       }
     };
     const explain = (row, field, who) => setFormula({ row, field, who });
-    const change = (row, kind, text, who) => {
-      try {
-        if (!/^[+-]?\d+$/.test(text) || !Number.isSafeInteger(Number(text)))
-          throw Error('请输入安全范围内的整数件数，留空不是0。');
-        const target = Number(text);
-        if (kind === 'remaining' && target < 0) throw Error('剩余天数入库须大于或等于0。');
-        if (kind === 'remaining') {
-          const original = row.children.map((child) => child.inputRemaining);
-          const values = allocate(original, target);
-          updateState({
-            remaining: {
-              ...state.remaining,
-              [who]: {
-                values: Object.fromEntries(
-                  row.children.map((child, index) => [keyOf(child), values[index]]),
-                ),
-                source: `${who}基地覆盖${target}件，按原剩余入库权重重摊并补偿舍入残差`,
-              },
-            },
-          });
-        } else {
-          const values = { ...state.values };
-          const assign = (children, amount, label) => {
-            const weights = children.map((child) => child.fin);
-            const allocated = allocate(weights, amount);
-            children.forEach((child, index) => {
-              values[keyOf(child)] = {
-                value: allocated[index],
-                source: label,
-                target: amount,
-                previous: child.fin,
-                weightTotal: weights.reduce((sum, value) => sum + value, 0),
-              };
-            });
-          };
-          if (who === '全国合计') {
-            const present = groups.filter((group) => group.children.length);
-            if (!present.length) throw Error('当前月份无明细，无法重摊。');
-            const amounts = allocate(
-              present.map((group) => group.fin),
-              target,
-            );
-            present.forEach((group, index) =>
-              assign(
-                group.children,
-                amounts[index],
-                `全国合计覆盖${target}件→${group.who}分配${amounts[index]}件，按当前有效量两级重摊并补偿舍入残差`,
-              ),
-            );
-          } else if (row.children)
-            assign(
-              row.children,
-              target,
-              `${who}覆盖${target}件，按明细当前有效量重摊并补偿舍入残差，替换单品覆盖`,
-            );
-          else values[keyOf(row)] = { value: target, source: '单品人工覆盖', previous: row.fin };
-          updateState({ values });
-        }
-        setError('');
-        return null;
-      } catch (failure) {
-        return failure.message;
-      }
+    const calculate = (currentState) => {
+      const currentRows = deriveRows(currentState);
+      return {
+        rows: currentRows,
+        groups: bases.map((base) =>
+          aggregate(
+            currentRows.filter((row) => row.base === base),
+            base,
+          ),
+        ),
+        national: aggregate(currentRows, '全国合计'),
+      };
     };
+    const changeState = (currentState, row, kind, target, who, currentGroups) => {
+      if (target === null) {
+        if (kind === 'remaining') {
+          const remaining = { ...currentState.remaining };
+          delete remaining[who];
+          return { ...currentState, remaining };
+        }
+        const values = { ...currentState.values };
+        for (const child of row.children ?? [row]) delete values[keyOf(child)];
+        return { ...currentState, values };
+      }
+      if (!Number.isSafeInteger(target)) throw Error('请输入安全范围内的整数件数。');
+      if (kind === 'remaining') {
+        if (target < 0) throw Error('剩余天数入库须大于或等于0。');
+        const allocated = allocate(
+          row.children.map((child) => child.inputRemaining),
+          target,
+        );
+        return {
+          ...currentState,
+          remaining: {
+            ...currentState.remaining,
+            [who]: {
+              values: Object.fromEntries(
+                row.children.map((child, index) => [keyOf(child), allocated[index]]),
+              ),
+              source: `${who}基地覆盖${target}件，按原剩余入库权重重摊并补偿舍入残差`,
+            },
+          },
+        };
+      }
+      const values = { ...currentState.values };
+      const assign = (children, amount, label) => {
+        const weights = children.map((child) => child.fin);
+        const allocated = allocate(weights, amount);
+        children.forEach((child, index) => {
+          values[keyOf(child)] = {
+            value: allocated[index],
+            source: label,
+            target: amount,
+            previous: child.fin,
+            weightTotal: weights.reduce((sum, value) => sum + value, 0),
+          };
+        });
+      };
+      if (who === '全国合计') {
+        const present = currentGroups.filter((group) => group.children.length);
+        if (!present.length) throw Error('当前月份无明细，无法重摊。');
+        const amounts = allocate(
+          present.map((group) => group.fin),
+          target,
+        );
+        present.forEach((group, index) =>
+          assign(
+            group.children,
+            amounts[index],
+            `全国合计覆盖${target}件→${group.who}分配${amounts[index]}件，按当前有效量两级重摊并补偿舍入残差`,
+          ),
+        );
+      } else if (row.children)
+        assign(
+          row.children,
+          target,
+          `${who}覆盖${target}件，按明细当前有效量重摊并补偿舍入残差，替换单品覆盖`,
+        );
+      else values[keyOf(row)] = { value: target, source: '单品人工覆盖', previous: row.fin };
+      return { ...currentState, values };
+    };
+    const prepareForecast = (changes) => {
+      let next = stateRef.current;
+      for (const change of changes) {
+        const current = calculate(next);
+        const selected = current.rows.filter((row) => change.keys.includes(keyOf(row)));
+        if (!selected.length) throw Error('当前对象无本月发货明细，未修改。');
+        next = changeState(
+          next,
+          { children: selected },
+          'fin',
+          change.value,
+          change.label,
+          current.groups,
+        );
+      }
+      return { state: next, rows: deriveRows(next) };
+    };
+    const applyBatch = (entries) => {
+      if (!entries.length) return;
+      let next = stateRef.current;
+      for (const entry of entries.sort((a, b) => a.meta.level - b.meta.level)) {
+        const current = calculate(next);
+        const row =
+          entry.meta.level === 0
+            ? current.national
+            : entry.meta.level === 1
+              ? current.groups.find((row) => row.who === entry.meta.who)
+              : current.rows.find(
+                  (row) => row.base === entry.meta.base && row.code === entry.meta.code,
+                );
+        if (!row) throw Error(`${entry.label} 已不在当前范围，请取消后重新调整。`);
+        try {
+          next = changeState(
+            next,
+            row,
+            entry.meta.kind,
+            entry.value,
+            entry.meta.who,
+            current.groups,
+          );
+        } catch (failure) {
+          throw Error(`${entry.label}：${failure.message}`);
+        }
+      }
+      update({ shipment: next });
+    };
+    react.useLayoutEffect(() => {
+      batch.commit.current = applyBatch;
+      return () => {
+        if (batch.commit.current === applyBatch) batch.commit.current = null;
+      };
+    }, [batch.commit, applyBatch]);
     const read = async (file) => {
       controller.current?.abort();
       const request = ++generation.current;
@@ -552,14 +643,24 @@ export function createShipment(
             : undefined,
         },
         editable
-          ? h(NumberInput, {
+          ? h(Field, {
+              batch,
+              id: `${who}:${field}`,
+              meta: {
+                who,
+                kind: field,
+                level: who === '全国合计' ? 0 : row.children ? 1 : 2,
+                base: row.base,
+                code: row.code,
+              },
               value: row[field],
               integer: true,
               placeholder: '待定',
               min: field === 'remaining' ? 0 : null,
               label: `${who} ${names[fields.indexOf(field)]}`,
-              commit: (text) => change(row, field, text, who),
-              explain: () => explain(row, field, who),
+              format: display,
+              editFormat: (value) => String(Math.round(value)),
+              onExplain: () => explain(row, field, who),
             })
           : h(
               'button',
@@ -777,7 +878,7 @@ export function createShipment(
               {
                 'aria-label': '发货数据来源',
                 value: activeSource,
-                disabled: busy,
+                disabled: busy || batch.active,
                 onChange: (event) => selectSource(event.target.value),
               },
               h('option', { value: 'business' }, '实际发货'),
@@ -788,7 +889,7 @@ export function createShipment(
       ),
       h(
         'div',
-        { className: 'dc-card sp-card' },
+        { className: 'dc-card sp-card', onKeyDown: batch.keyDown },
         h(
           'div',
           { className: 'dc-card-head sp-toolbar' },
@@ -820,8 +921,10 @@ export function createShipment(
             ' 件',
           ),
           h('span', { className: 'sp-spacer' }),
-          (Object.keys(state.values ?? {}).length > 0 ||
-            Object.keys(state.remaining ?? {}).length > 0) &&
+          h(Actions, { batch, disabled: busy || !rows.length }),
+          batch.active &&
+            (Object.keys(state.values ?? {}).length > 0 ||
+              Object.keys(state.remaining ?? {}).length > 0) &&
             h(
               'button',
               {
@@ -829,7 +932,26 @@ export function createShipment(
                   !Object.keys(state.values ?? {}).length &&
                   !Object.keys(state.remaining ?? {}).length,
                 onClick: () => {
-                  updateState({ values: {}, remaining: {} });
+                  batch.replace(
+                    Object.fromEntries([
+                      [
+                        '全国合计:fin',
+                        {
+                          label: '全国合计 整月预估发货',
+                          text: '',
+                          meta: { who: '全国合计', kind: 'fin', level: 0 },
+                        },
+                      ],
+                      ...groups.map((group) => [
+                        `${group.who}:remaining`,
+                        {
+                          label: `${group.who} 剩余天数入库`,
+                          text: '',
+                          meta: { who: group.who, kind: 'remaining', level: 1 },
+                        },
+                      ]),
+                    ]),
+                  );
                   setError('');
                   setFormula(null);
                 },
@@ -1053,8 +1175,12 @@ export function createShipment(
         h(
           'div',
           { className: 'dc-card-foot' },
-          h('button', { onClick: sync, disabled: busy || !hasMpsSource() }, '同步实际发货'),
-          h(Upload, { label: '选择发货输入CSV', text: '上传输入', read }),
+          h(
+            'button',
+            { onClick: sync, disabled: busy || batch.active || !hasMpsSource() },
+            '同步实际发货',
+          ),
+          !batch.active && h(Upload, { label: '选择发货输入CSV', text: '上传输入', read }),
           h('button', { onClick: () => downloadCsv('发货输入-模板.csv', columns, []) }, 'CSV模板'),
           h('span', { className: 'sp-spacer' }),
           h('button', { onClick: download, disabled: !rows.length }, '下载明细'),

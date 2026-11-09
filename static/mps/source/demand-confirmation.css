@@ -211,8 +211,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 54px;
-  padding: 12px 18px;
+  min-height: 42px;
+  padding: 6px 16px;
   border-bottom: 1px solid var(--dc-border);
   background: #fcfcfe;
 }
@@ -343,7 +343,8 @@
   vertical-align: middle;
 }
 .dc-page th {
-  height: 36px;
+  height: 32px;
+  padding: 6px 12px;
   border-bottom-color: var(--dc-border);
   background: #fbfbfd;
   color: #687487;
@@ -982,4 +983,10 @@
   .dc-batch-actions input {
     width: min(240px, calc(100vw - 150px));
   }
+}
+
+.dc-page .sp-card > p {
+  margin: 0;
+  padding: 4px 16px;
+  max-width: none;
 }

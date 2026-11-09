@@ -1,4 +1,4 @@
-import { createInlineEdit } from './inline-edit.js';
+import { createBatchEdit } from './batch-edit.js';
 import { createProcessedDemand } from './processed-demand-view.js';
 import { createInventoryTargetPanel } from './inventory-target-view.js';
 import { createConstraintPanel } from './constraint-view.js';
@@ -93,7 +93,17 @@ const sourceText = '①大类需求；②月末结存；③两路占比；④源
 
 export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
   const h = react.createElement;
-  const { NumberInput } = createInlineEdit(react);
+  const { useBatchEdit, Actions, Field } = createBatchEdit(react);
+  const NumberInput = ({ batch, label, value, commit, max }) =>
+    h(Field, {
+      batch,
+      id: label,
+      label,
+      value,
+      max,
+      placeholder: '未填写',
+      onStage: commit,
+    });
   const ProcessedDemand = createProcessedDemand(react, { downloadCsv });
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
   const InventoryTargetPanel = createInventoryTargetPanel(react, { downloadCsv, NumberInput });
@@ -103,17 +113,32 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     evaluation,
     setEvaluation,
     step,
-    draft,
+    draft: savedDraft,
     scopeGeneration,
     syncInventoryTargets,
     inventoryTargetsBusy,
-    update,
+    update: persistUpdate,
     relations,
     shipmentSnapshot,
     onUndoShareAdjustment,
+    onEditingChange,
   }) {
     const [search, setSearch] = react.useState('');
-    const [editingQuantity, setEditingQuantity] = react.useState(false);
+    const [configuration, setConfiguration] = react.useState({});
+    const batch = useBatchEdit({
+      scope: `${savedDraft.id}:${savedDraft.month}:${step}:${scopeGeneration}`,
+      onEditingChange,
+      requireReason: step === 'process',
+      onStart: () => setConfiguration({}),
+      onCancel: () => setConfiguration({}),
+    });
+    const draft =
+      step === 'constraints' && batch.active ? { ...savedDraft, ...configuration } : savedDraft;
+    const update = (changes) => {
+      if (step === 'constraints' && batch.active)
+        setConfiguration((current) => ({ ...current, ...changes }));
+      else persistUpdate(changes);
+    };
     const [base, setBase] = react.useState('');
     const [category, setCategory] = react.useState('');
     const [month, setMonth] = react.useState('');
@@ -136,10 +161,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         executionGeneration.current++;
         executionController.current?.abort();
       };
-    }, [draft, relations, shipmentSnapshot, scopeGeneration]);
+    }, [savedDraft, relations, shipmentSnapshot, scopeGeneration]);
     const result = react.useMemo(
-      () => buildMpsWorkflow(draft, relations, shipmentSnapshot),
-      [draft, relations, shipmentSnapshot],
+      () => buildMpsWorkflow(savedDraft, relations, shipmentSnapshot),
+      [savedDraft, relations, shipmentSnapshot],
     );
     const coverage = result.scopeCoverage === 'national' ? '全国' : '范围内';
     const [weightRead, setWeightRead] = react.useState(null);
@@ -210,7 +235,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         : null;
     const evaluationStale = Boolean(
       currentEvaluation &&
-      (currentEvaluation.draft !== draft ||
+      (currentEvaluation.draft !== savedDraft ||
         currentEvaluation.relations !== relations ||
         currentEvaluation.shipmentSnapshot !== shipmentSnapshot ||
         (weightRead && weightRead !== currentEvaluation.weights)),
@@ -449,7 +474,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           'select',
           {
             'aria-label': label,
-            disabled: editingQuantity,
             value,
             onChange: (event) => {
               setter(event.target.value);
@@ -837,7 +861,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         h('input', {
           type: 'search',
           'aria-label': '搜索当前步骤',
-          disabled: editingQuantity,
           placeholder: '编码、名称、系列、物料组',
           value: search,
           onChange: (event) => {
@@ -852,7 +875,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         h('input', {
           type: 'checkbox',
           checked: onlyMissing,
-          disabled: editingQuantity,
           onChange: (event) => {
             setOnlyMissing(event.target.checked);
             setPage(0);
@@ -860,6 +882,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         }),
         '仅未评估',
       ),
+      h('span', { className: 'dc-card-note' }, `发货所属月 ${result.shipmentMonth}`),
     );
     const undoShare = (rowId) => {
       const shares = (draft.adjustments?.shares ?? []).filter((item) => item.rowId !== rowId);
@@ -896,11 +919,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const constraintRows = bases
       .filter((sourceBase) => !base || sourceBase === base)
       .map((sourceBase) => {
-        const matches = result.constraints.safetyDays.filter((item) => item.base === sourceBase);
+        const matches = (draft.constraints?.safetyDays ?? result.constraints.safetyDays).filter(
+          (item) => item.base === sourceBase,
+        );
         const current = matches.length === 1 ? matches[0] : null;
         return [
           sourceBase,
           h(NumberInput, {
+            batch,
             key: `${draft.id}-${sourceBase}-days`,
             label: `${sourceBase} 安全天数`,
             value: current?.days,
@@ -910,8 +936,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                   ...draft.constraints,
                   rules: draft.constraints?.rules ?? { local: [] },
                   safetyDays: [
-                    ...result.constraints.safetyDays.filter((item) => item.base !== sourceBase),
-                    { base: sourceBase, days: text === '' ? null : Number(text) },
+                    ...(draft.constraints?.safetyDays ?? result.constraints.safetyDays).filter(
+                      (item) => item.base !== sourceBase,
+                    ),
+                    { base: sourceBase, days: text === '' ? null : text },
                   ],
                 },
               }),
@@ -926,11 +954,12 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       });
     const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER) =>
       h(NumberInput, {
+        batch,
         key: `${draft.id}-${label}`,
         label,
         value,
         max,
-        commit: (text) => change(text === '' ? null : Number(text)),
+        commit: (text) => change(text === '' ? null : text),
       });
     const productionDays = draft.productionDays ?? [];
     const weights = draft.unitWeights ?? [];
@@ -960,7 +989,13 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             sourceMonth,
             numberInput(
               `${sourceBase} ${sourceMonth} 生产天数`,
-              productionCalendarDays(sourceBase, sourceMonth, productionDays),
+              productionDays.filter(
+                (item) => item.base === sourceBase && item.month === sourceMonth,
+              ).length === 1
+                ? productionDays.find(
+                    (item) => item.base === sourceBase && item.month === sourceMonth,
+                  ).days
+                : productionCalendarDays(sourceBase, sourceMonth, productionDays),
               (days) => setDays(sourceBase, sourceMonth, days),
               31,
             ),
@@ -968,6 +1003,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               'button',
               {
                 'aria-label': `${sourceBase} ${sourceMonth} 恢复默认生产天数`,
+                disabled: !batch.active,
                 onClick: () =>
                   update({
                     productionDays: productionDays.filter(
@@ -1024,6 +1060,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         ),
         h('input', {
           'aria-label': `${row.base} ${row.code} 适用渠道`,
+          disabled: !batch.active,
           placeholder: '填写本基地SKU实际适用渠道，多个用逗号分隔',
           value: current?.channels ?? '',
           onChange: (event) =>
@@ -1045,7 +1082,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           'button',
           {
             'aria-label': `${row.base} ${row.code} 使用来源系数`,
-            disabled: !weightRead || candidate.tonsPerPiece === null,
+            disabled: !batch.active || !weightRead || candidate.tonsPerPiece === null,
             onClick: () =>
               setWeight({
                 tonsPerPiece: candidate.tonsPerPiece,
@@ -1105,6 +1142,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const textEntry = (label, value, change) =>
       h('input', {
         'aria-label': label,
+        disabled: !batch.active,
         value: value ?? '',
         onChange: (event) => change(event.target.value),
       });
@@ -1119,6 +1157,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         'select',
         {
           'aria-label': `资源${index + 1} 类型`,
+          disabled: !batch.active,
           value: resource.kind,
           onChange: (event) =>
             editEntry('resources', resources, index, { kind: event.target.value }),
@@ -1136,6 +1175,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         'button',
         {
           'aria-label': `删除资源${index + 1}`,
+          disabled: !batch.active,
           onClick: () =>
             update({ resources: resources.filter((_, position) => position !== index) }),
         },
@@ -1147,6 +1187,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         'select',
         {
           'aria-label': `分配${index + 1} 月份`,
+          disabled: !batch.active,
           value: assignment.month,
           onChange: (event) =>
             editEntry('resourceAssignments', assignments, index, { month: event.target.value }),
@@ -1163,6 +1204,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         'select',
         {
           'aria-label': `分配${index + 1} 资源`,
+          disabled: !batch.active,
           value: assignment.resourceId,
           onChange: (event) =>
             editEntry('resourceAssignments', assignments, index, {
@@ -1190,6 +1232,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         'button',
         {
           'aria-label': `删除分配${index + 1}`,
+          disabled: !batch.active,
           onClick: () =>
             update({
               resourceAssignments: assignments.filter((_, position) => position !== index),
@@ -1198,38 +1241,117 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         '删除',
       ),
     ]);
-    const localRules = result.constraints.rules.local ?? [];
+    const applyConfiguration = () => {
+      const number = (value, label, max = Number.MAX_SAFE_INTEGER) => {
+        if (typeof value !== 'string') return value;
+        if (!value.trim()) return null;
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed) || parsed < 0 || parsed > max) {
+          const field = batch.fields.current.get(label);
+          let fold = field?.closest('details');
+          while (fold) {
+            fold.open = true;
+            fold = fold.parentElement?.closest('details');
+          }
+          field?.focus();
+          throw Error(`${label}：请输入0至${max}之间的数值。`);
+        }
+        return parsed;
+      };
+      const changes = { ...configuration };
+      if (changes.constraints)
+        changes.constraints = {
+          ...changes.constraints,
+          ...(changes.constraints.safetyDays
+            ? {
+                safetyDays: changes.constraints.safetyDays.map((row) => ({
+                  ...row,
+                  days: number(row.days, `${row.base} 安全天数`),
+                })),
+              }
+            : {}),
+          ...(changes.constraints.turnoverDays
+            ? {
+                turnoverDays: changes.constraints.turnoverDays.map((row) => ({
+                  ...row,
+                  days: number(row.days, `${row.base} ${row.code} 补充目标周转天数`),
+                })),
+              }
+            : {}),
+        };
+      if (changes.productionDays)
+        changes.productionDays = changes.productionDays.map((row) => ({
+          ...row,
+          days: number(row.days, `${row.base} ${row.month} 生产天数`, 31),
+        }));
+      if (changes.unitWeights)
+        changes.unitWeights = changes.unitWeights.map((row) => ({
+          ...row,
+          tonsPerPiece: number(row.tonsPerPiece, `${row.base} ${row.code} 件吨系数`),
+        }));
+      if (changes.resources)
+        changes.resources = changes.resources.map((row, index) => ({
+          ...row,
+          dailyTons: number(row.dailyTons, `资源${index + 1} 日产吨数`),
+        }));
+      if (changes.resourceAssignments)
+        changes.resourceAssignments = changes.resourceAssignments.map((row, index) => ({
+          ...row,
+          share: number(row.share, `分配${index + 1} 分配比例`, 1),
+        }));
+      if (Object.keys(changes).length) persistUpdate(changes);
+      setConfiguration({});
+    };
+    react.useLayoutEffect(() => {
+      if (step !== 'constraints') return;
+      batch.commit.current = applyConfiguration;
+      return () => {
+        if (batch.commit.current === applyConfiguration) batch.commit.current = null;
+      };
+    }, [step, batch.commit, applyConfiguration]);
+    const localRules = draft.constraints?.rules?.local ?? result.constraints.rules.local ?? [];
     return h(
       'section',
-      { className: 'wf-page', 'data-planning': planning, 'aria-label': titles[step] },
-      !planning &&
+      {
+        className: 'wf-page',
+        'data-planning': planning,
+        'aria-label': titles[step],
+        onKeyDown: batch.keyDown,
+      },
+      h(
+        'div',
+        { className: 'wf-toolbar' },
+        step !== 'constraints' && filterBar,
         h(
           'div',
-          { className: 'wf-scope' },
-          h('strong', null, `${draft.name} · ${draft.month}`),
-          h('span', null, `发货所属月 ${result.shipmentMonth}`),
+          { className: 'wf-toolbar-actions' },
+          step === 'process' &&
+            h(
+              'button',
+              { onClick: () => exportRows('需求拆分', processFields, true) },
+              '下载需求拆分',
+            ),
+          ['process', 'constraints'].includes(step) &&
+            h(Actions, {
+              batch,
+              requireReason: step === 'process',
+              hint: step === 'constraints' ? '' : '留空恢复系统值',
+            }),
         ),
-      step !== 'constraints' && filterBar,
+      ),
       step !== 'constraints' &&
         result.scopeCoverage !== 'national' &&
         h(
           'p',
-          { className: planning ? 'wf-plan-coverage' : 'wf-note' },
+          {
+            className: 'wf-pool-note',
+          },
           '产品池全国覆盖尚未取得实际证明，仅报告范围内结果',
         ),
       step === 'process'
         ? h(
             react.Fragment,
             null,
-            h(
-              'div',
-              { className: 'wf-actions' },
-              h(
-                'button',
-                { onClick: () => exportRows('需求拆分', processFields, true) },
-                '下载需求拆分',
-              ),
-            ),
             h(ProcessedDemand, {
               draft,
               result,
@@ -1240,7 +1362,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               table,
               card,
               onExplain: explain,
-              onEditingChange: setEditingQuantity,
+              batch,
             }),
             shareError
               ? h('p', { role: 'alert', className: 'wf-note wf-unavailable' }, shareError)
@@ -1315,6 +1437,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 draft,
                 result,
                 update,
+                disabled: !batch.active,
                 bases,
                 table,
                 card,
@@ -1332,6 +1455,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                   ),
               },
               h(InventoryTargetPanel, {
+                batch,
                 key: JSON.stringify([draft.id, draft.month, scopeGeneration]),
                 draft,
                 result,
@@ -1442,6 +1566,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 h(
                   'button',
                   {
+                    disabled: !batch.active,
                     onClick: () =>
                       update({
                         resources: [
@@ -1472,6 +1597,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 h(
                   'button',
                   {
+                    disabled: !batch.active,
                     onClick: () =>
                       update({
                         resourceAssignments: [

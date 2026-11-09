@@ -29,6 +29,7 @@ export function createConstraintPanel(react, { Dialog }) {
     card,
     previewRules,
     children,
+    disabled,
   }) {
     const [hardOnly, setHardOnly] = react.useState(false);
     const [advancedOpen, setAdvancedOpen] = react.useState(false);
@@ -126,12 +127,13 @@ export function createConstraintPanel(react, { Dialog }) {
         { className: 'wf-rule-actions' },
         h(
           'button',
-          { onClick: () => edit(rule, index), 'aria-label': `编辑约束${index + 1}` },
+          { disabled, onClick: () => edit(rule, index), 'aria-label': `编辑约束${index + 1}` },
           '编辑',
         ),
         h(
           'button',
           {
+            disabled,
             onClick: () => toggle(rule, index, rule.enabled === false),
             'aria-label': `${rule.enabled === false ? '启用' : '停用'}约束${index + 1}`,
           },
@@ -140,6 +142,7 @@ export function createConstraintPanel(react, { Dialog }) {
         h(
           'button',
           {
+            disabled,
             onClick: () =>
               saveRules(
                 rules.filter((_, position) => position !== index),
@@ -234,6 +237,7 @@ export function createConstraintPanel(react, { Dialog }) {
             'button',
             {
               className: 'dc-primary',
+              disabled,
               onClick: () =>
                 edit(
                   {
@@ -334,7 +338,8 @@ export function createConstraintPanel(react, { Dialog }) {
           },
         },
         h('summary', null, '高级配置：生产日历、件吨系数与资源分配'),
-        advancedOpen && h('div', { className: 'wf-advanced-body' }, children.slice(1)),
+        (advancedOpen || !disabled) &&
+          h('div', { className: 'wf-advanced-body' }, children.slice(1)),
       ),
       editor &&
         h(
@@ -532,6 +537,7 @@ export function createConstraintPanel(react, { Dialog }) {
               h(
                 'button',
                 {
+                  disabled,
                   onClick: () => {
                     toggle(rules[proposal.index], proposal.index, false);
                     setProposal(null);

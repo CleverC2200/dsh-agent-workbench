@@ -16,6 +16,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
   const h = react.createElement;
   return function InventoryTargetPanel({
     draft,
+    batch,
     result,
     update,
     sync,
@@ -76,6 +77,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
         row.name,
         row.turnoverPolicy.missing.join('；'),
         h(NumberInput, {
+          batch,
           key: `${draft.id}-${supplementKey(row)}`,
           label: `${row.base} ${row.code} 补充目标周转天数`,
           value: supplements.get(supplementKey(row))?.days,
@@ -89,7 +91,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
                   ...(draft.constraints?.turnoverDays ?? []).filter(
                     (item) => supplementKey(item) !== supplementKey(row),
                   ),
-                  { base: row.base, code: row.code, days: text === '' ? null : Number(text) },
+                  { base: row.base, code: row.code, days: text === '' ? null : text },
                 ],
               },
             }),
@@ -212,39 +214,6 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
         ),
         read?.status === 'failed' &&
           h('p', { role: 'alert' }, read.error || '目标库存读取失败，请重试'),
-        h(
-          'div',
-          { className: 'wf-actions' },
-          h(
-            'label',
-            null,
-            '源库存版本 ',
-            h(
-              'select',
-              {
-                'aria-label': '目标库存版本',
-                value: version,
-                onChange: (event) => {
-                  update({
-                    constraints: {
-                      ...draft.constraints,
-                      safetyDays: draft.constraints?.safetyDays ?? [],
-                      rules: draft.constraints?.rules ?? { local: [] },
-                      targetVersion: event.target.value,
-                    },
-                  });
-                },
-              },
-              [
-                ['auto', `自动：${inventoryVersionOrder(draft.month).join(' → ')}`],
-                ['纠偏', '纠偏版'],
-                ['月初', '月初版'],
-                ['滚动', '滚动版'],
-              ].map(([value, title]) => h('option', { key: value, value }, title)),
-            ),
-          ),
-          h('button', { onClick: sync, disabled: busy }, busy ? '读取目标库存中…' : '同步目标库存'),
-        ),
         table(
           '基地安全天数策略',
           ['基地', '缺源时基地补充天数（天）', '维护状态', '适用范围'],
@@ -425,6 +394,44 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
             },
             '下载完整目标源记录',
           ),
+        ),
+      ),
+      h(
+        'div',
+        { className: 'wf-card-actions' },
+        h(
+          'label',
+          null,
+          '源库存版本 ',
+          h(
+            'select',
+            {
+              'aria-label': '目标库存版本',
+              disabled: !batch.active,
+              value: version,
+              onChange: (event) => {
+                update({
+                  constraints: {
+                    ...draft.constraints,
+                    safetyDays: draft.constraints?.safetyDays ?? [],
+                    rules: draft.constraints?.rules ?? { local: [] },
+                    targetVersion: event.target.value,
+                  },
+                });
+              },
+            },
+            [
+              ['auto', `自动：${inventoryVersionOrder(draft.month).join(' → ')}`],
+              ['纠偏', '纠偏版'],
+              ['月初', '月初版'],
+              ['滚动', '滚动版'],
+            ].map(([value, title]) => h('option', { key: value, value }, title)),
+          ),
+        ),
+        h(
+          'button',
+          { onClick: sync, disabled: busy || batch.active },
+          busy ? '读取目标库存中…' : '同步目标库存',
         ),
       ),
     );
