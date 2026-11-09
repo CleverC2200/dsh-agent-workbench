@@ -214,7 +214,7 @@ export async function readConfiguredFacts(
     }),
     q = config.queries[view.queryId];
   const requestedAsOf = input.asOf;
-  if (!viewId.startsWith('channel-'))
+  if (!viewId.startsWith('channel-') && q.summaryRoute)
     input = { ...input, asOf: await qllPublishedDate(config, input.asOf, options) };
   // Display reads fetch only the requested page; full-scope totals and explicit
   // export/submission reads retain their independent contracts.
