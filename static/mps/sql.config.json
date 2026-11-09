@@ -561,6 +561,27 @@
         }
       }
     },
+    "facts.shipment-latest": {
+      "title": "最新可用发货日期",
+      "columns": ["latest_date"],
+      "parameterSpec": {
+        "month": {
+          "name": "month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
+        "month_end": {
+          "name": "month_end",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        }
+      },
+      "request": {
+        "sql": "SELECT MAX(the_date) AS latest_date FROM agents_scm_stock_detail_d WHERE data_month = :month AND the_date >= :month AND the_date <= :month_end"
+      }
+    },
     "facts.shipment": {
       "title": "本月预估发货数仓输入",
       "grain": ["belong_base", "material_code"],

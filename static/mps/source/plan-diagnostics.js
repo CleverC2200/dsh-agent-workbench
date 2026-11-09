@@ -124,15 +124,41 @@ export function attachPlanReport(plan, sources, relations) {
           '补充本基地本月生产天数',
         );
       } else if (monthRoutes.length) {
-        if (!donorResources.length)
-          add(
-            '缺产线产能',
-            `调拨关系已存在，但发出基地${donorBases.join('、')}缺可用产线能力`,
-            'ai_db.agents_dim_production_line_sku_capacity_mi / ai_db.agents_dim_tunnel_capacity_mi',
-            'belong_base / material_code / workshop / tunnel_no / standard_daily_output_ton',
-            '补充发出基地的产线归属及有效日产吨数',
-          );
-        else if (!usable(donorResources).length)
+        if (!donorResources.length) {
+          for (const base of donorBases) {
+            const sourceTags = [
+              ...new Set(
+                (labels.get(period(row.month, base, row.code)) ?? [])
+                  .map((item) => item.transfer_tag?.trim())
+                  .filter(Boolean),
+              ),
+            ];
+            if (sourceTags.length === 1 && sourceTags[0] === 'ODM代工品')
+              add(
+                '缺产线产能',
+                `调拨关系已存在，发出基地${base}标注ODM代工品，当前未取得可用代工能力；不作为内部隧道产能`,
+                'ai_db.agents_dim_transfer_direction_mi / ai_db.agents_dim_production_line_sku_capacity_mi',
+                'stat_period / target_base / material_code / transfer_tag / standard_daily_output_ton',
+                '确认代工供应能力及承接口径',
+              );
+            else if (sourceTags.length === 1 && sourceTags[0] === '调拨品')
+              add(
+                '缺调拨关系',
+                `发出基地${base}自身标注调拨品，当前多级关系未取得可用于直接生产的承接能力`,
+                'ai_db.agents_dim_transfer_direction_mi',
+                'stat_period / target_base / material_code / transfer_direction / transfer_tag',
+                '确认直接生产基地或中转规则后维护合法供应关系',
+              );
+            else
+              add(
+                '缺产线产能',
+                `调拨关系已存在，但发出基地${base}缺可用产线能力`,
+                'ai_db.agents_dim_production_line_sku_capacity_mi / ai_db.agents_dim_tunnel_capacity_mi',
+                'belong_base / material_code / workshop / tunnel_no / standard_daily_output_ton',
+                '补充发出基地的产线归属及有效日产吨数',
+              );
+          }
+        } else if (!usable(donorResources).length)
           add(
             '其他计算缺项',
             `调拨关系及发出基地产能已存在，缺${donorBases.join('、')}的有效生产日历`,

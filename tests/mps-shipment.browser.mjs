@@ -17,6 +17,9 @@ async function shipment(t, month = '2026-10') {
   await dialog.getByLabel('评估月份', { exact: true }).fill(month);
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  const previous = new Date(month + '-01T00:00:00Z');
+  previous.setUTCMonth(previous.getUTCMonth() - 1);
+  await frame.getByLabel('数据截止日').fill(previous.toISOString().slice(0, 7) + '-22');
   return { page, frame, table: frame.getByRole('table', { name: '本月预估发货明细' }) };
 }
 async function upload(frame, rows) {
@@ -256,6 +259,7 @@ test('MPS shipment calendars cross the year and leap February while shared evalu
   await creation.getByLabel('评估月份', { exact: true }).fill('2027-01');
   await creation.getByLabel('参考版本', { exact: true }).selectOption('local-2');
   await creation.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('数据截止日').fill('2026-12-22');
   await expect(frame.getByLabel('数据截止日')).toHaveValue('2026-12-22');
   await expect(frame.getByRole('region', { name: '发货本地核对' })).toContainText(
     '本月共计天数 31 天',
@@ -273,6 +277,12 @@ test('MPS shipment calendars cross the year and leap February while shared evalu
 
 const sourceConfig = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 function shipmentFacts(query) {
+  if (query.queryId === 'facts.shipment-latest')
+    return {
+      rows: [{ latest_date: '2026-09-22' }],
+      returnedColumns: ['latest_date'],
+      configVersion: 'ship-v2',
+    };
   const count = query.queryId === 'facts.shipment.count';
   const stock = query.queryId === 'facts.shipment';
   const rows = count
@@ -315,6 +325,7 @@ async function businessShipment(t, execute = shipmentFacts) {
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-10');
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await expect(frame.getByLabel('数据截止日')).toHaveValue('2026-09-22');
   return { ...result, table: frame.getByRole('table', { name: '本月预估发货明细' }) };
 }
 test('MPS shipment finishes the current sync after moving to processing', async (t) => {

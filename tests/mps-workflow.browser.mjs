@@ -396,6 +396,8 @@ test('MPS processing includes every current product category in its summary, fil
 });
 
 async function upload(frame, label, text) {
+  if (label === '选择发货输入CSV')
+    await frame.getByLabel('数据截止日').fill(text.split('\n')[1].split(',')[0] + '-22');
   if (label === '设置上一财年发货夹具') {
     const [header, ...lines] = text
       .trim()

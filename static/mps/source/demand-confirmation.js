@@ -1653,15 +1653,21 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ...(base ? structuredClone(base) : makeDraft(id, month)),
                       id,
                       month,
+                      ...(base
+                        ? {
+                            shipment: base.shipment?.rows
+                              ? {
+                                  rows: structuredClone(base.shipment.rows),
+                                  file: base.shipment.file,
+                                  values: {},
+                                  remaining: {},
+                                }
+                              : undefined,
+                          }
+                        : {}),
                       ...(base && base.month !== month
                         ? {
                             adjustments: undefined,
-                            shipment: {
-                              rows: base.shipment?.rows ?? [],
-                              file: base.shipment?.file,
-                              values: {},
-                              remaining: {},
-                            },
                           }
                         : {}),
                       name: versionName.trim() || makeDraft(id, month).name,

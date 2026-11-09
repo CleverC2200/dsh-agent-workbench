@@ -41,6 +41,8 @@ async function readFacts(id, parameters, signal, type, month) {
       { signal: options.signal },
     ),
   );
+  if (type === 'shipmentDate')
+    return client.read(id, parameters, { signal, requiredColumns: definition.columns });
   if (
     type === 'report' ||
     type === 'plan-quantity' ||
@@ -190,13 +192,34 @@ async function readFacts(id, parameters, signal, type, month) {
   };
 }
 
+const validShipmentDate = (value) =>
+  typeof value === 'string' &&
+  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  Number.isFinite(Date.parse(value + 'T00:00:00Z')) &&
+  new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
+
+export async function readLatestShipmentDate(month, signal) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw Error('发货统计月份无效');
+  const [year, monthNumber] = month.split('-').map(Number);
+  const monthEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+  const result = await readFacts(
+    'facts.shipment-latest',
+    { month: month + '-01', month_end: monthEnd },
+    signal,
+    'shipmentDate',
+  );
+  if (result.rows.length !== 1) throw Error('最新发货日期来源未返回唯一结果');
+  const date = result.rows[0].latest_date;
+  if (date !== null && (!validShipmentDate(date) || !date.startsWith(month + '-')))
+    throw Error('源端最新发货日期无效或不属于当前统计月份');
+  return {
+    date,
+    metadata: { month, configVersion: result.configVersion, readAt: new Date().toISOString() },
+  };
+}
+
 export async function readShipmentInputs(cutoff, signal) {
-  const valid = (value) =>
-    typeof value === 'string' &&
-    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-    Number.isFinite(Date.parse(value + 'T00:00:00Z')) &&
-    new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
-  if (!valid(cutoff)) throw Error('发货输入须限定有效截止日期');
+  if (!validShipmentDate(cutoff)) throw Error('发货输入须限定有效截止日期');
   const month = cutoff.slice(0, 7);
   const passed = Number(cutoff.slice(8));
   const [year, monthNumber] = month.split('-').map(Number);

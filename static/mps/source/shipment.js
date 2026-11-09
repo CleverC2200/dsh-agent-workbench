@@ -1,5 +1,5 @@
 import { prototypeShipments } from './prototype-shipments.js';
-import { readShipmentInputs } from './facts.js';
+import { readLatestShipmentDate, readShipmentInputs } from './facts.js';
 import { hasMpsSource } from './master-data.js';
 import { createBatchEdit } from './batch-edit.js';
 const emptyRows = [];
@@ -117,7 +117,7 @@ export function createShipment(
     });
     const month = monthOffset(draft.month, -1);
     const state = draft.shipment ?? {};
-    const cutoff = state.cutoff ?? `${month}-22`;
+    const cutoff = state.cutoff ?? state.business?.cutoff ?? '';
     const passed = Number(cutoff.slice(8));
     const [year, monthNumber] = month.split('-').map(Number);
     const totalDays = new Date(year, monthNumber, 0).getDate();
@@ -224,6 +224,35 @@ export function createShipment(
     );
     const national = aggregate(rows, '全国合计');
     const updateState = (changes) => update({ shipment: { ...stateRef.current, ...changes } });
+    const readLatestDate = async () => {
+      controller.current?.abort();
+      const stop = new AbortController();
+      controller.current = stop;
+      const request = ++generation.current;
+      const scope = scopeGeneration.current;
+      const valid = () =>
+        !stop.signal.aborted && request === generation.current && scope === scopeGeneration.current;
+      setBusy(true);
+      setError('');
+      try {
+        const result = await readLatestShipmentDate(month, stop.signal);
+        if (!valid()) return;
+        if (result.date === null) {
+          setError('该统计月份暂无可用发货日期，请补齐来源或手动选择截止日');
+          return;
+        }
+        updateState({ cutoff: result.date, cutoffMetadata: result.metadata });
+      } catch (failure) {
+        if (valid()) setError('读取最新发货日期失败：' + failure.message);
+      } finally {
+        if (valid()) setBusy(false);
+      }
+    };
+    react.useEffect(() => {
+      if (!active || cutoff) return;
+      void readLatestDate();
+      return () => controller.current?.abort();
+    }, [active, draft.id, month, cutoff]);
     const selectSource = (next) => {
       updateState({
         activeSource: next,
@@ -274,6 +303,7 @@ export function createShipment(
       batch.active,
     ]);
     const sync = async () => {
+      if (!cutoff) return;
       controller.current?.abort();
       const stop = new AbortController();
       controller.current = stop;
@@ -840,7 +870,7 @@ export function createShipment(
         'div',
         { className: 'sp-parameters' },
         h('span', { className: 'sp-parameter-label' }, '算法参数'),
-        h('span', {}, '已过天数 ', h('b', {}, `${passed} 天`)),
+        h('span', {}, '已过天数 ', h('b', {}, cutoff ? `${passed} 天` : '待定')),
         h('span', {}, '本月共计天数 ', h('b', {}, `${totalDays} 天`)),
         h('span', { className: 'sp-spacer' }),
         h(
@@ -862,12 +892,24 @@ export function createShipment(
               ) {
                 generation.current++;
                 controller.current?.abort();
-                updateState({ cutoff: value, business: null, values: {}, remaining: {} });
+                updateState({
+                  cutoff: value,
+                  cutoffMetadata: undefined,
+                  business: null,
+                  values: {},
+                  remaining: {},
+                });
                 setFormula(null);
               }
             },
           }),
         ),
+        !cutoff &&
+          h(
+            'button',
+            { disabled: busy, onClick: readLatestDate },
+            busy ? '读取最新日期中…' : '读取最新可用日期',
+          ),
         (state.rows != null || state.businessAttempted || business) &&
           h(
             'label',
@@ -1177,13 +1219,13 @@ export function createShipment(
           { className: 'dc-card-foot' },
           h(
             'button',
-            { onClick: sync, disabled: busy || batch.active || !hasMpsSource() },
+            { onClick: sync, disabled: busy || batch.active || !cutoff || !hasMpsSource() },
             '同步实际发货',
           ),
           !batch.active && h(Upload, { label: '选择发货输入CSV', text: '上传输入', read }),
           h('button', { onClick: () => downloadCsv('发货输入-模板.csv', columns, []) }, 'CSV模板'),
           h('span', { className: 'sp-spacer' }),
-          h('button', { onClick: download, disabled: !rows.length }, '下载明细'),
+          h('button', { onClick: download, disabled: !cutoff || !rows.length }, '下载明细'),
         ),
       ),
       formulas,

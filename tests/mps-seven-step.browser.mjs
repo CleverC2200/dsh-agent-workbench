@@ -90,6 +90,7 @@ test('MPS shipment closing inventory feeds the same-version assessment and repor
   });
   await monthlyScope(frame);
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await frame.getByLabel('数据截止日').fill('2026-09-22');
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
     name: '发货核对.csv',
     mimeType: 'text/csv',
