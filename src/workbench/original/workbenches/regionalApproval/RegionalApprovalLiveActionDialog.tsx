@@ -35,7 +35,10 @@ import {
 import type { ApprovalStageId } from './salesPlanDomain.ts';
 import { SALES_PLAN_ROLES, salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
 import { salesPlanAccessForRow, salesPlanEditableQuantity } from './models/salesPlanAccessModel.ts';
-import { salesPlanReturnAdjustments } from './models/salesPlanReturnModel.ts';
+import {
+  resolveSalesPlanReturnContext,
+  salesPlanReturnAdjustments,
+} from './models/salesPlanReturnModel.ts';
 import { salesPlanApprovalDraftValues } from './models/salesPlanLocalDraftModel.ts';
 import styles from './RegionalApprovalActionDialog.module.css';
 
@@ -228,12 +231,18 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           return;
         }
         if (initialAction === 'REJECT') {
-          if (!salesPlan.returnContext || !snapshot || !selectedRole)
-            throw new Error('RETURN_CONTEXT_UNAVAILABLE');
-          const context = await salesPlan.returnContext.invoke({
-            versionId: row.versionId,
-            signal: controller.signal,
-          });
+          if (!snapshot || !selectedRole) throw new Error('RETURN_CONTEXT_UNAVAILABLE');
+          const context = await resolveSalesPlanReturnContext(
+            snapshot,
+            selectedRole,
+            salesPlan.returnContext
+              ? () =>
+                  salesPlan.returnContext!.invoke({
+                    versionId: row.versionId,
+                    signal: controller.signal,
+                  })
+              : undefined,
+          );
           if (controller.signal.aborted) return;
           const changes = salesPlanReturnAdjustments(
             snapshot,

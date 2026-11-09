@@ -7,7 +7,10 @@ import {
   type GeaSalesPlanActionRequest,
   type GeaSalesPlanDetail,
 } from '../../bridge.ts';
-import { salesPlanReturnAdjustments } from './models/salesPlanReturnModel.ts';
+import {
+  resolveSalesPlanReturnContext,
+  salesPlanReturnAdjustments,
+} from './models/salesPlanReturnModel.ts';
 import { salesPlanApprovalDraftValues } from './models/salesPlanLocalDraftModel.ts';
 import {
   SalesPlanActionAttempt,
@@ -156,11 +159,17 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           });
           if (stored?.stale) throw new Error('草稿版本已变化，请刷新后重试');
           if (kind === 'REJECT') {
-            if (!item.detail || !salesPlan.returnContext)
+            if (!item.detail)
               throw new Error(
                 t('common.assistantSurface.regionalApproval.returnContextUnavailable'),
               );
-            const context = await salesPlan.returnContext.invoke({ versionId: item.row.versionId });
+            const context = await resolveSalesPlanReturnContext(
+              item.detail,
+              item.access.approvalRole,
+              salesPlan.returnContext
+                ? () => salesPlan.returnContext!.invoke({ versionId: item.row.versionId })
+                : undefined,
+            );
             request.adjustments = salesPlanReturnAdjustments(
               item.detail,
               item.row,

@@ -20,6 +20,30 @@ const receiverQuantity = (sku: GeaSalesPlanDetail['skus'][number], stage: number
   throw new Error('接收节点缺少确认数量，请刷新后核对');
 };
 
+export async function resolveSalesPlanReturnContext(
+  detail: GeaSalesPlanDetail,
+  role: ApprovalStageId,
+  readContext?: () => Promise<GeaSalesPlanReturnContext>,
+): Promise<GeaSalesPlanReturnContext> {
+  const version = detail.currentVersion;
+  const currentStage = SALES_PLAN_ROLES.indexOf(role) + 1;
+  if (!version.effective || currentStage < 2)
+    throw new Error('退回节点或计划版本已变化，请刷新后重试');
+  if (Number.isInteger(version.status) && version.status >= 1 && version.status <= 4) {
+    if (version.status >= currentStage) throw new Error('退回节点或计划版本已变化，请刷新后重试');
+    return {
+      versionId: version.id,
+      status: version.status,
+      currentStage,
+      targetStage: version.status,
+      targetStatus: version.status + 5,
+    };
+  }
+  if (![7, 8, 9].includes(version.status) || !readContext)
+    throw new Error('无法确认继续退回的实际接收节点，请刷新后核对');
+  return readContext();
+}
+
 export function salesPlanReturnAdjustments(
   detail: GeaSalesPlanDetail,
   row: Pick<GeaSalesPlanListItem, 'planId' | 'versionId' | 'status' | 'planTypeCode' | 'orderType'>,

@@ -106,7 +106,7 @@ const comparison=new URL(location.href).searchParams.get('comparison');
 if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50';
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 if(comparison?.startsWith('sku-review')) for(const plan of sourcePlans) plan.skuCount=2;
-const plans=comparison==='returned'?sourcePlans.map(plan=>({...plan,status:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
+const plans=['returned','return-unavailable'].includes(comparison)?sourcePlans.map(plan=>({...plan,status:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 const skuFor=(versionId)=>{
   const base=baseSkuFor(versionId);
   if(comparison==='integer')return {...base,qty:'501.600',amt:'5016.00'};
@@ -118,7 +118,7 @@ const skuFor=(versionId)=>{
   return {...base,qty,price,amt:String(Number(qty)*Number(price))};
 };
 const skusFor=versionId=>comparison?.startsWith('sku-review')?[skuFor(versionId),{...skuFor(versionId),skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
-window.sentReturns=[];
+window.sentReturns=[];window.returnContextReads=0;
 window.savedDrafts=[];
 if (['history','forbidden','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
 const readCalls=window.readCalls=[];
@@ -131,9 +131,9 @@ const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
   list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=q?.status===undefined||q.status===1?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
-  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:skusFor(plan.versionId),versions:versionsFor(plan),logs:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:2,allowedActions:comparison==='returned'?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
+  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:skusFor(plan.versionId),versions:versionsFor(plan),logs:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:2,allowedActions:['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
-  returnContext:{invoke:async({versionId})=>{if(comparison==='return-unavailable')throw Error('preview unavailable');return {versionId,status:plans.find(row=>row.versionId===versionId).status,currentStage:2,targetStage:1,targetStatus:6};}},
+  returnContext:{invoke:async({versionId})=>{window.returnContextReads++;if(['return-unavailable','return-edits'].includes(comparison))throw Error('preview unavailable');return {versionId,status:plans.find(row=>row.versionId===versionId).status,currentStage:2,targetStage:1,targetStatus:6};}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
     readCalls.push({review:planId});
     if(comparison==='sku-review-failure') throw Error('fixture failure');
@@ -1257,6 +1257,7 @@ test('single return carries the current edited quantity', { timeout: 30000 }, as
   await modal.getByRole('button', { name: '确认退回', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(1);
   const request = await page.evaluate(() => window.sentReturns[0].request);
+  assert.equal(await page.evaluate(() => window.returnContextReads), 0);
   assert.equal(request.expectedReturnTargetStage, 1);
   assert.equal(request.action, 'REJECT');
   assert.deepEqual(request.adjustments, [{ skuCode: '1001', adjustQty: '11' }]);
@@ -1282,6 +1283,7 @@ test(
     await modal.getByRole('textbox').fill('按调整后的数量核对');
     await modal.getByRole('button', { name: '确认批量退回', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(2);
+    assert.equal(await page.evaluate(() => window.returnContextReads), 0);
     const sent = await page.evaluate(() => window.sentReturns);
     assert.deepEqual(
       sent
