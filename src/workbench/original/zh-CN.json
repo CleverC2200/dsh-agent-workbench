@@ -1242,7 +1242,8 @@
         "retry": "重试",
         "empty": "当前筛选范围没有 SKU",
         "shipmentUnavailable": "部分历史发货量未能取得，相关发货量及合计显示为 —。"
-      }
+      },
+      "returnContextUnavailable": "未能核对实际退回节点或修改后的数量，请刷新后重试。"
     },
     "contract": {
       "name": "合同审查 Agent",

@@ -1238,7 +1238,8 @@
         "retry": "Retry",
         "empty": "No SKUs match these filters",
         "shipmentUnavailable": "Some historical shipments are unavailable. Affected quantities and totals show —."
-      }
+      },
+      "returnContextUnavailable": "Could not verify the return destination or edited quantities. Refresh and try again."
     },
     "contract": {
       "name": "Contract Review Agent",

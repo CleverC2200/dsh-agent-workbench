@@ -118,6 +118,7 @@ const skuFor=(versionId)=>{
   return {...base,qty,price,amt:String(Number(qty)*Number(price))};
 };
 const skusFor=versionId=>comparison?.startsWith('sku-review')?[skuFor(versionId),{...skuFor(versionId),skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
+window.sentReturns=[];
 window.savedDrafts=[];
 if (['history','forbidden','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
 const readCalls=window.readCalls=[];
@@ -132,6 +133,7 @@ const host={salesPlan:{
   list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=q?.status===undefined||q.status===1?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
   detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:skusFor(plan.versionId),versions:versionsFor(plan),logs:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:2,allowedActions:comparison==='returned'?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
+  returnContext:{invoke:async({versionId})=>{if(comparison==='return-unavailable')throw Error('preview unavailable');return {versionId,status:plans.find(row=>row.versionId===versionId).status,currentStage:2,targetStage:1,targetStatus:6};}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
     readCalls.push({review:planId});
     if(comparison==='sku-review-failure') throw Error('fixture failure');
@@ -145,7 +147,7 @@ const host={salesPlan:{
     readCalls.push({planId,fromVersionId,toVersionId});
     if(comparison==='forbidden')throw Object.assign(Error('forbidden'),{status:403});
     return [{skuCode:'1001',changeType:'UPDATED',before:{...skuFor(fromVersionId),qty:'10',amt:'100'},after:skuFor(toVersionId),qtyDelta:'10',amountDelta:'100'}];
-  }},action:{invoke:forbidden},submit:{invoke:forbidden}
+  }},action:{invoke:async(command)=>{if(comparison!=='return-edits')return forbidden();window.sentReturns.push(command);return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
 },modelInference:{invoke:forbidden}};
 createRoot(document.getElementById('root')).render(<WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={i18n.t.bind(i18n)} onContextChange={()=>{}} approvalStages={['region']} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
 `,
@@ -1233,5 +1235,83 @@ test(
     const draft = await page.evaluate(() => window.savedDrafts.at(-1));
     assert.equal(Number(draft.adjustments[0].adjustQty), -0.6);
     await expect(input.locator('xpath=ancestor::td[1]')).toContainText('¥5,010.00');
+  },
+);
+
+test('single return carries the current edited quantity', { timeout: 30000 }, async (t) => {
+  const { page } = await openWorkbench(t, false, 'return-edits');
+  await page
+    .getByRole('button', { name: /宝阳销售组/ })
+    .first()
+    .click();
+  const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await expect(input).toBeVisible();
+  await input.fill('30.600');
+  await input.blur();
+  await page.locator('tbody label.arco-checkbox').first().click();
+  await page.getByRole('button', { name: '退回', exact: true }).click();
+  const modal = page.getByRole('dialog', { name: '退回', exact: true });
+  await modal
+    .getByRole('textbox', { name: '退回原因（必填）', exact: true })
+    .fill('请核对修改后的数量');
+  await modal.getByRole('button', { name: '确认退回', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(1);
+  const request = await page.evaluate(() => window.sentReturns[0].request);
+  assert.equal(request.expectedReturnTargetStage, 1);
+  assert.equal(request.action, 'REJECT');
+  assert.deepEqual(request.adjustments, [{ skuCode: '1001', adjustQty: '11' }]);
+});
+
+test(
+  'batch return carries each customer allocation of the current edited group quantity',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, groupBox } = await openWorkbench(t, true, 'return-edits');
+    const queue = groupBox.locator('xpath=ancestor::tr');
+    await queue.getByRole('button').first().click();
+    const input = page
+      .getByTestId('regional-approval-group-sku-summary')
+      .first()
+      .getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+    await expect(input).toBeVisible();
+    await input.fill('60');
+    await input.blur();
+    await groupBox.check();
+    await page.getByRole('button', { name: '退回', exact: true }).click();
+    const modal = page.getByRole('dialog');
+    await modal.getByRole('textbox').fill('按调整后的数量核对');
+    await modal.getByRole('button', { name: '确认批量退回', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(2);
+    const sent = await page.evaluate(() => window.sentReturns);
+    assert.deepEqual(
+      sent
+        .toSorted((a, b) => a.planId.localeCompare(b.planId))
+        .map((item) => [
+          item.planId,
+          item.request.expectedReturnTargetStage,
+          item.request.adjustments,
+        ]),
+      [
+        ['p1', 1, [{ skuCode: '1001', adjustQty: '10' }]],
+        ['p2', 1, [{ skuCode: '1001', adjustQty: '10' }]],
+      ],
+    );
+  },
+);
+
+test(
+  'return preview failure blocks submission and never guesses a destination',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t, false, 'return-unavailable');
+    await page.locator('tbody label.arco-checkbox').first().click();
+    await page.getByRole('button', { name: '退回', exact: true }).click();
+    const modal = page.getByRole('dialog', { name: '退回', exact: true });
+    await modal.getByRole('textbox', { name: '退回原因（必填）', exact: true }).fill('核对数量');
+    await expect(
+      modal.getByText('未能核对实际退回节点或修改后的数量，请刷新后重试。', { exact: true }),
+    ).toBeVisible();
+    await expect(modal.getByRole('button', { name: '确认退回', exact: true })).toBeDisabled();
+    assert.deepEqual(await page.evaluate(() => window.sentReturns), []);
   },
 );

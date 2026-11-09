@@ -330,6 +330,7 @@ export type GeaSalesPlanSkuAdjustment = {
 };
 
 export type GeaSalesPlanActionRequest = {
+  expectedReturnTargetStage?: number;
   approvalPolicy?: 'role-visible-v1';
   approvalRole?: GeaSalesPlanApprovalRole;
   adjustmentMode?: 'ABSOLUTE_NET';
@@ -338,6 +339,14 @@ export type GeaSalesPlanActionRequest = {
   expectedStatus: number;
   remark?: string;
   adjustments?: GeaSalesPlanSkuAdjustment[];
+};
+
+export type GeaSalesPlanReturnContext = {
+  versionId: string;
+  status: number;
+  currentStage: number;
+  targetStage: number;
+  targetStatus: number;
 };
 
 export type GeaSalesPlanActionReceipt = {

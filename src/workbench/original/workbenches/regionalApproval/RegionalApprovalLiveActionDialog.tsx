@@ -5,6 +5,7 @@ import {
   type GeaSalesPlanActionRequest,
   type GeaSalesPlanDetail,
   type GeaSalesPlanSku,
+  type GeaSalesPlanReturnContext,
 } from '../../bridge.ts';
 import { isBackendHttpError } from '../../http-error.ts';
 import { Alert, Button, Checkbox, Input, Modal, Radio, Select, Spin } from '@arco-design/web-react';
@@ -34,6 +35,7 @@ import {
 import type { ApprovalStageId } from './salesPlanDomain.ts';
 import { SALES_PLAN_ROLES, salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
 import { salesPlanAccessForRow, salesPlanEditableQuantity } from './models/salesPlanAccessModel.ts';
+import { salesPlanReturnAdjustments } from './models/salesPlanReturnModel.ts';
 import { salesPlanApprovalDraftValues } from './models/salesPlanLocalDraftModel.ts';
 import styles from './RegionalApprovalActionDialog.module.css';
 
@@ -210,15 +212,44 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   const [adjustmentValues, setAdjustmentValues] = useState<Record<string, string>>({});
   const [draftReady, setDraftReady] = useState(initialAction === 'SAVE');
   const [draftError, setDraftError] = useState('');
+  const [returnContext, setReturnContext] = useState<GeaSalesPlanReturnContext>();
   useEffect(() => {
     if (initialAction === 'SAVE') return;
     const controller = new AbortController();
+    setDraftReady(false);
+    setDraftError('');
+    setReturnContext(undefined);
     void salesPlan
       .draft!.invoke({ planId: row.planId, versionId: row.versionId, signal: controller.signal })
-      .then((result) => {
+      .then(async (result) => {
         if (controller.signal.aborted) return;
         if (result.stale) {
           setDraftError('stale');
+          return;
+        }
+        if (initialAction === 'REJECT') {
+          if (!salesPlan.returnContext || !snapshot || !selectedRole)
+            throw new Error('RETURN_CONTEXT_UNAVAILABLE');
+          const context = await salesPlan.returnContext.invoke({
+            versionId: row.versionId,
+            signal: controller.signal,
+          });
+          if (controller.signal.aborted) return;
+          const changes = salesPlanReturnAdjustments(
+            snapshot,
+            row,
+            selectedRole,
+            context,
+            result.draft?.role && result.draft.role !== selectedRole
+              ? []
+              : (result.draft?.adjustments ?? []),
+            selectedRole === approvalStage ? pendingValues : undefined,
+          );
+          setReturnContext(context);
+          setAdjustmentValues(
+            Object.fromEntries(changes.map((item) => [item.skuCode, item.adjustQty])),
+          );
+          setDraftReady(true);
           return;
         }
         setAdjustmentValues(
@@ -248,23 +279,23 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     loading ||
     action.state.status === 'success' ||
     (action.state.status === 'error' && action.state.error.retrySameIntent);
-  const targetStatus = access?.roleContractSupported
-    ? kind === 'REJECT'
-      ? salesPlanActionTargetStatus(
-          'REJECT',
-          salesPlanWorkflow(row.planTypeCode).pending(access.approvalRole) ?? -1,
-          row.planTypeCode,
-        )
-      : row.status
-    : salesPlanActionTargetStatus(kind, row.status, row.planTypeCode);
+  const targetStatus =
+    kind === 'REJECT'
+      ? returnContext?.targetStatus
+      : access?.roleContractSupported
+        ? row.status
+        : salesPlanActionTargetStatus(kind, row.status, row.planTypeCode);
   const approvalNodeOrder = access?.nodeOrder ?? undefined;
   const supportsAdjustments = approvalNodeOrder !== undefined && approvalNodeOrder >= 2;
   const adjustments = useMemo(
     () =>
       Object.entries(adjustmentValues)
         .map(([skuCode, adjustQty]) => ({ skuCode, adjustQty: adjustQty.trim() }))
-        .filter(({ adjustQty }) => adjustQty && !ZERO_DECIMAL_PATTERN.test(adjustQty)),
-    [adjustmentValues],
+        .filter(
+          ({ adjustQty }) =>
+            adjustQty && (kind === 'REJECT' || !ZERO_DECIMAL_PATTERN.test(adjustQty)),
+        ),
+    [adjustmentValues, kind],
   );
   const adjustmentsInvalid = Object.values(adjustmentValues).some((value) => {
     const normalized = value.trim();
@@ -352,7 +383,11 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     !access?.allowedActions.includes(kind) ||
     targetStatus === undefined ||
     (kind === 'REJECT'
-      ? !remark.trim() || Array.from(remark.trim()).length > 1000
+      ? !draftReady ||
+        !returnContext ||
+        adjustmentsInvalid ||
+        !remark.trim() ||
+        Array.from(remark.trim()).length > 1000
       : kind === 'SAVE'
         ? !draftReady ||
           !confirmed ||
@@ -457,7 +492,11 @@ const RegionalApprovalLiveActionDialog: React.FC<{
       expectedStatus: row.status,
       ...(access?.snapshotHash ? { expectedSnapshot: access.snapshotHash } : {}),
       ...(remark.trim() ? { remark: remark.trim() } : {}),
-      ...(kind !== 'REJECT' && adjustments.length > 0 ? { adjustments } : {}),
+      ...(kind === 'REJECT'
+        ? { adjustments, expectedReturnTargetStage: returnContext?.targetStage }
+        : adjustments.length > 0
+          ? { adjustments }
+          : {}),
     };
     submittedRequest.current = request;
     void complete(
@@ -572,6 +611,13 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           onOk={submit}
         >
           <div className={styles.compactRejectBody}>
+            {!draftReady && !draftError ? <Spin size={16} /> : null}
+            {draftError ? (
+              <Alert
+                type="error"
+                content={t('common.assistantSurface.regionalApproval.returnContextUnavailable')}
+              />
+            ) : null}
             <label className={styles.formControl}>
               <span>{t('common.assistantSurface.regionalApproval.liveAction.rejectRemark')}</span>
               <Input.TextArea

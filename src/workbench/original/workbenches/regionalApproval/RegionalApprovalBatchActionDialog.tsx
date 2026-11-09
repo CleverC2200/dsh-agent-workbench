@@ -7,6 +7,7 @@ import {
   type GeaSalesPlanActionRequest,
   type GeaSalesPlanDetail,
 } from '../../bridge.ts';
+import { salesPlanReturnAdjustments } from './models/salesPlanReturnModel.ts';
 import { salesPlanApprovalDraftValues } from './models/salesPlanLocalDraftModel.ts';
 import {
   SalesPlanActionAttempt,
@@ -146,27 +147,46 @@ const RegionalApprovalBatchActionDialog: React.FC<{
       };
       const attempt = new SalesPlanActionAttempt(client);
       try {
-        if (kind === 'APPROVE') {
+        if (kind === 'APPROVE' || kind === 'REJECT') {
           const stored = await salesPlan.draft?.invoke({
             planId: item.row.planId,
             versionId: item.row.versionId,
             approvalRole: item.access.approvalRole,
           });
           if (stored?.stale) throw new Error('草稿版本已变化，请刷新后重试');
-          const adjustments = Object.entries(
-            salesPlanApprovalDraftValues(
+          if (kind === 'REJECT') {
+            if (!item.detail || !salesPlan.returnContext)
+              throw new Error(
+                t('common.assistantSurface.regionalApproval.returnContextUnavailable'),
+              );
+            const context = await salesPlan.returnContext.invoke({ versionId: item.row.versionId });
+            request.adjustments = salesPlanReturnAdjustments(
               item.detail,
               item.row,
               item.access.approvalRole,
+              context,
               stored?.draft?.role && stored.draft.role !== item.access.approvalRole
                 ? []
                 : (stored?.draft?.adjustments ?? []),
               item.pendingValues,
-            ),
-          )
-            .filter(([, value]) => value.trim() && !/^[+-]?0+(?:\.0{1,3})?$/.test(value.trim()))
-            .map(([skuCode, adjustQty]) => ({ skuCode, adjustQty: adjustQty.trim() }));
-          if (adjustments.length) request.adjustments = adjustments;
+            );
+            request.expectedReturnTargetStage = context.targetStage;
+          } else {
+            const adjustments = Object.entries(
+              salesPlanApprovalDraftValues(
+                item.detail,
+                item.row,
+                item.access.approvalRole,
+                stored?.draft?.role && stored.draft.role !== item.access.approvalRole
+                  ? []
+                  : (stored?.draft?.adjustments ?? []),
+                item.pendingValues,
+              ),
+            )
+              .filter(([, value]) => value.trim() && !/^[+-]?0+(?:\.0{1,3})?$/.test(value.trim()))
+              .map(([skuCode, adjustQty]) => ({ skuCode, adjustQty: adjustQty.trim() }));
+            if (adjustments.length) request.adjustments = adjustments;
+          }
         }
         // 逐笔串行提交：每笔都有自己的幂等键，失败不会影响已提交的其它计划。
         // eslint-disable-next-line no-await-in-loop
