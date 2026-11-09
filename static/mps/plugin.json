@@ -17,7 +17,8 @@
   "gea": {
     "consumerCode": "mps",
     "readonly": true,
-    "contract": "gea-html-v2"
+    "contract": "gea-html-v2",
+    "localComputeWorker": true
   },
   "declarations": {
     "page": "page.json",

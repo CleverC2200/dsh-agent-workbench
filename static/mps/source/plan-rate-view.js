@@ -88,7 +88,7 @@ export function createPlanRates(react, { Dialog, table, downloadCsv }) {
         h(
           'p',
           {},
-          '自然月当月及后两月，取销售提报allnum；按当前产品明细的物料编码、物料组编码重新汇总。物料组占大类、产品占物料组、基地产品占范围内同SKU；池外记录不混入分母。',
+          '提报期间为评估月份，同一套提报与历史拆分系数用于M+1至M+3。按当前产品明细重新汇总；Top1在物料组和SKU层承接可确认的剩余占比，基地份额缺失时保留缺项。池外记录不混入分母。',
         ),
         state?.error && h('p', { role: 'alert' }, state.error),
       ),
@@ -171,7 +171,7 @@ export function createPlanRates(react, { Dialog, table, downloadCsv }) {
 export function planRatePreviewRows(workflow) {
   const rows = new Map();
   for (const row of workflow?.rows ?? []) {
-    if (!workflow.months.slice(0, 3).includes(row.month)) continue;
+    if (row.month !== workflow.months[0]) continue;
     const layers = row.reportLayers;
     for (const dimension of ['大类+物料组', '物料组+产品', '基地+产品']) {
       const base = dimension === '基地+产品' ? row.base : '';

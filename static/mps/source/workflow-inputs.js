@@ -1,5 +1,12 @@
+import { sourceDimensions } from './source-projections.js';
 import { buildCategoryDemand } from './category-demand.js';
 import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
+import { solveMpsPlan } from 'dsh-agent-manage/mps-compute/plan';
+import { buildPlanSources, resolveWeightPairs } from './plan-inputs.js';
+import { attachPlanReport } from './plan-diagnostics.js';
+import { inventoryVersionOrder } from './inventory-selection.js';
+import { buildCapacityReport } from 'dsh-agent-manage/mps-compute/capacity-report';
+import { productionCalendarDays } from './production-calendar.js';
 
 const number = (value) => {
   if (
@@ -28,7 +35,7 @@ const sourceIssues = (draft, source, month) => {
   ];
 };
 
-export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
+export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation) {
   const context = { id: draft.id, name: draft.name, month: draft.month };
   const reportColumn = draft.pull === 'monthly' ? '月初数量' : '纠偏数量';
   const readQuantity = (rows, column) =>
@@ -49,38 +56,38 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
     date.setUTCMonth(date.getUTCMonth() + offset);
     return date.toISOString().slice(0, 7);
   });
-  const reportIssues = (month) => {
+  const reportIssues = () => {
     const source = draft.reportSource === 'business' ? 'planRates' : 'report';
-    const issues = sourceIssues(draft, source, month);
+    const issues = sourceIssues(draft, source, draft.month);
     return source === 'planRates' && draft.planRatesRead?.status !== 'ready' && !issues.length
       ? ['销售提报占比尚未同步']
       : issues;
   };
   const planKeys = new Map();
   for (const row of draft.planRates ?? []) {
-    if (row['维度类型'] !== '基地+产品') continue;
+    if (row['维度类型'] !== '基地+产品' || row['月份'] !== draft.month) continue;
     const key = JSON.stringify([text(row['月份']), text(row['基地']), text(row['产品编码'])]);
     planKeys.set(key, (planKeys.get(key) ?? 0) + 1);
   }
   const report =
     draft.reportSource === 'business'
       ? (draft.planRates ?? [])
-          .filter((row) => row['维度类型'] === '基地+产品')
+          .filter((row) => row['维度类型'] === '基地+产品' && row['月份'] === draft.month)
           .map((row) => ({
             month: text(row['月份']),
             base: text(row['基地']),
             code: text(row['产品编码']),
             quantity:
-              reportIssues(row['月份']).length ||
+              reportIssues().length ||
               planKeys.get(
                 JSON.stringify([text(row['月份']), text(row['基地']), text(row['产品编码'])]),
               ) !== 1
                 ? null
                 : number(row['当前维度计划量']),
           }))
-      : availableQuantity('report', reportColumn);
-  const annualIssues = (month) => {
-    const period = previousFiscalYear(month);
+      : availableQuantity('report', reportColumn).filter((row) => row.month === draft.month);
+  const annualIssues = () => {
+    const period = previousFiscalYear(draft.month);
     const data = draft.historyAnnual?.periods?.find(
       (entry) => entry.start === period.start && entry.end === period.end,
     );
@@ -95,11 +102,11 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
     ];
   };
   const history = months.flatMap((month) => {
-    const period = previousFiscalYear(month);
+    const period = previousFiscalYear(draft.month);
     const data = draft.historyAnnual?.periods?.find(
       (entry) => entry.start === period.start && entry.end === period.end,
     );
-    const issues = annualIssues(month);
+    const issues = annualIssues();
     return (data?.rows ?? []).map((row) => ({
       month,
       base: text(row['基地']),
@@ -150,24 +157,88 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
         category: text(row['大类']),
         series: text(row['系列']),
         group: text(row['物料组']),
+        ...(text(row['老品编码']) ? { historyCode: text(row['老品编码']) } : {}),
       }));
   const productMonths = new Map();
   for (const source of ['report', 'history']) {
     for (const row of source === 'report' ? report : history) {
       if (!row.base || !row.code || !/^\d{4}-(0[1-9]|1[0-2])$/.test(row.month)) continue;
-      const month = row.month;
+      const month = draft.month;
       productMonths.set(JSON.stringify([month, row.base, row.code]), {
         month,
         base: row.base,
         code: row.code,
       });
+      if (source === 'history') {
+        for (const product of products.filter(
+          (product) =>
+            product.historyCode === row.code && (!product.base || product.base === row.base),
+        )) {
+          productMonths.set(JSON.stringify([month, row.base, product.code]), {
+            month,
+            base: row.base,
+            code: product.code,
+          });
+        }
+      }
+    }
+  }
+  const reportRead =
+    draft.reportSource === 'business'
+      ? draft.planRatesRead
+      : (draft.reportRead?.periods?.[draft.month] ?? draft.reportRead);
+  const reportMissingAsZero = new Set();
+  if (
+    reportRead?.status === 'ready' &&
+    (!reportRead.month || reportRead.month === draft.month) &&
+    reportRead.metadata?.partial !== true &&
+    !reportIssues().length
+  ) {
+    const reported = new Set(report.map(rowKey));
+    for (const product of productMonths.values()) {
+      if (reported.has(rowKey(product))) continue;
+      report.push({ ...product, quantity: 0 });
+      reportMissingAsZero.add(rowKey(product));
+    }
+  }
+  const reportRatios = [];
+  if (draft.reportSource === 'business' && !reportIssues().length) {
+    for (const row of draft.planRates ?? []) {
+      if (row['月份'] !== draft.month) continue;
+      if (!Object.hasOwn(row, '计划占比')) continue;
+      const matches = (draft.products ?? []).filter((product) =>
+        row['维度类型'] === '大类+物料组'
+          ? product['大类'] === row['大类'] &&
+            [product['物料组'], product['物料组名称']].includes(row['物料组名称'])
+          : product['产品编码'] === row['产品编码'] &&
+            (row['维度类型'] !== '物料组+产品' ||
+              [product['物料组'], product['物料组名称']].includes(row['物料组名称'])),
+      );
+      const scopes = [
+        ...new Map(
+          matches.map((product) => [
+            JSON.stringify([product['大类'], product['物料组']]),
+            { category: product['大类'], group: product['物料组'] },
+          ]),
+        ).values(),
+      ];
+      if (scopes.length !== 1) continue;
+      const common = { ...scopes[0], share: number(row['计划占比']) };
+      if (row['维度类型'] === '大类+物料组') reportRatios.push({ ...common, kind: 'group' });
+      if (row['维度类型'] === '物料组+产品')
+        reportRatios.push({ ...common, kind: 'sku', code: row['产品编码'] });
+      if (row['维度类型'] === '基地+产品')
+        reportRatios.push({ ...common, kind: 'base', code: row['产品编码'], base: row['基地'] });
     }
   }
   const productIssues = sourceIssues(draft, 'products');
-  const result = computeMpsWorkflow({
+  const workflowInput = {
     context,
     inventoryTargets: draft.inventoryTargets ?? [],
     inventoryTargetVersion: draft.constraints?.targetVersion ?? 'auto',
+    inventoryTargetPriority: inventoryVersionOrder(draft.month),
+    requireSourceTurnoverDays: draft.productSource === 'business',
+    missingTurnoverDaysAsZero: draft.productSource === 'business',
     inventoryTargetIssues:
       draft.inventoryTargetsRead?.status === 'ready'
         ? []
@@ -189,6 +260,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
         : {}),
     })),
     report,
+    reportRatios,
     history,
     sourceIssues: {
       report: productIssues,
@@ -200,13 +272,28 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
       categoryDemand: (draft.adjustments?.categoryDemand ?? []).map(
         ({ month, category, quantity }) => ({ month, category, quantity }),
       ),
+      quantities: (draft.adjustments?.quantities ?? []).map(
+        ({ kind, month, category, group, code, base, quantity }) => ({
+          kind,
+          month,
+          category,
+          group,
+          ...(kind !== 'group' ? { code } : {}),
+          ...(kind === 'base-sku' ? { base } : {}),
+          quantity,
+        }),
+      ),
       shares: (draft.adjustments?.shares ?? []).map(({ rowId, share }) => ({ rowId, share })),
     },
-    productionDays: (draft.productionDays ?? []).map((row) => ({
-      base: text(row.base),
-      month: text(row.month),
-      days: number(row.days),
-    })),
+    productionDays: [
+      ...new Set([...productMonths.values()].map((row) => row.base).filter(Boolean)),
+    ].flatMap((base) =>
+      months.map((month) => ({
+        base,
+        month,
+        days: productionCalendarDays(base, month, draft.productionDays),
+      })),
+    ),
     unitWeights: (draft.unitWeights ?? []).map((row) => ({
       base: text(row.base),
       code: text(row.code),
@@ -231,20 +318,122 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
         base: text(row.base),
         days: number(row.days),
       })),
+      turnoverDays: (draft.constraints?.turnoverDays ?? []).map((row) => ({
+        base: text(row.base),
+        code: text(row.code),
+        days: number(row.days),
+      })),
       rules: structuredClone(draft.constraints?.rules ?? {}),
     },
-  });
+  };
+  const result = computeMpsWorkflow(workflowInput);
+  const forecast = sourceDimensions(draft.forecast ?? [], draft.products ?? []);
+  const shipment = validShipment
+    ? sourceDimensions(
+        (shipmentSnapshot.rows ?? []).map((row) => ({
+          ...row,
+          基地: row.base,
+          产品编码: row.code,
+        })),
+        draft.products ?? [],
+      )
+    : [];
+  const summarize = (rows, field, issues = []) => {
+    const known = rows.map((row) => number(row[field])).filter((value) => value !== null);
+    const total = known.reduce((sum, value) => sum + value, 0);
+    return {
+      quantity: !issues.length && rows.length && known.length === rows.length ? total : null,
+      knownQuantity: !issues.length && known.length ? total : null,
+      missingCount: issues.length ? Math.max(1, rows.length) : rows.length - known.length,
+      count: rows.length,
+      issues,
+    };
+  };
+  result.comparisonSources = {
+    historyPeriod: previousFiscalYear(draft.month),
+    shipment,
+    forecast: forecast.map((row) => ({
+      ...row,
+      数量: sourceIssues(draft, 'forecast', row['月份']).length ? null : row['数量'],
+    })),
+  };
+  result.categoryComparisons = [...new Set(result.categoryRows.map((row) => row.category))].map(
+    (category) => ({
+      category,
+      shipment: summarize(
+        shipment.filter((row) => row['大类'] === category),
+        'fin',
+        validShipment ? [] : ['第二步同版预估发货尚未就绪'],
+      ),
+      forecast: Object.fromEntries(
+        months.slice(0, 2).map((month) => [
+          month,
+          summarize(
+            forecast.filter((row) => row['月份'] === month && row['大类'] === category),
+            '数量',
+            sourceIssues(draft, 'forecast', month),
+          ),
+        ]),
+      ),
+    }),
+  );
+  if (evaluation) {
+    const planSources = buildPlanSources(draft, relations, evaluation.weights, [
+      ...productMonths.values(),
+    ]);
+    const planInput = {
+      ...workflowInput,
+      ...planSources,
+      planSourceIssues: [...planSources.planSourceIssues, ...(evaluation.sourceIssues ?? [])],
+    };
+    result.plan = solveMpsPlan(planInput);
+    const annualWeights = resolveWeightPairs(
+      draft.unitWeights ?? [],
+      evaluation.annual?.rows ?? [],
+      {
+        rows: [
+          ...(evaluation.weights?.rows ?? []),
+          ...(evaluation.annual?.extraWeights?.rows ?? []),
+        ],
+      },
+    );
+    result.plan.capacityReport = buildCapacityReport(
+      { ...planInput, unitWeights: annualWeights.weights },
+      result.plan,
+      evaluation.annual
+        ? { ...evaluation.annual, unitWeightGaps: annualWeights.issues }
+        : undefined,
+    );
+    result.plan.capacityLineDetails = planSources.resources.map((resource) => {
+      const source = (relations?.sources?.tunnels ?? []).find(
+        (row) =>
+          row.belong_base === resource.base &&
+          row.production_unit === resource.workshop &&
+          row.tunnel_no === resource.tunnel,
+      );
+      return {
+        resourceId: resource.id,
+        workshop: resource.workshop ?? '',
+        tunnel: resource.tunnel ?? '',
+        specification: source?.tunnel_tonnage ?? '',
+        outsourced: /濮阳|代工/.test(resource.workshop ?? resource.name),
+      };
+    });
+    result.plan.sources = planSources.metadata;
+    attachPlanReport(result.plan, planSources, relations);
+  }
   for (const row of result.rows) {
+    row.reportMissingAsZero = reportMissingAsZero.has(rowKey(row));
     for (const source of ['report', 'history']) {
-      const issues = source === 'report' ? reportIssues(row.month) : annualIssues(row.month);
+      const issues = source === 'report' ? reportIssues() : annualIssues();
       for (const field of [source + 'Quantity', source + 'Share', 'share', 'demand'])
         row.missing[field] = [...new Set([...row.missing[field], ...issues])];
     }
   }
   const knownProducts = new Set(result.rows.filter((row) => row.month === draft.month).map(rowKey));
   const readIssues = months.flatMap((month) => [
-    ...reportIssues(month).map((issue) => `${month} 销售提报占比：${issue}`),
-    ...annualIssues(month).map((issue) => `${month} 上一财年发货：${issue}`),
+    ...reportIssues().map((issue) => `${month} 销售提报占比：${issue}`),
+    ...annualIssues().map((issue) => `${month} 上一财年发货：${issue}`),
   ]);
   if (readIssues.length) result.summary.requiredProductionTons = null;
   result.summary.missing.push(...readIssues);
