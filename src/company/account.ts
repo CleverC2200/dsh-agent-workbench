@@ -12,6 +12,7 @@ export type PasswordLoginInput = {
 export interface BusinessAccount {
   getSnapshot(): Readonly<{
     state: string;
+    pagesReady?: boolean;
     scope: string | null;
     subject?: string | null;
     status: Readonly<{

@@ -2,7 +2,7 @@ import type { GeaSalesPlanSku } from '../../../bridge.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 import type { RegionalApprovalLiveRow } from '../regionalApprovalQueryModel.ts';
 import { addExactDecimals, multiplyExactDecimals } from '../regionalApprovalQueryModel.ts';
-import { salesPlanEditableQuantity } from './salesPlanQuantityModel.ts';
+import { salesPlanEditableQuantity, roundPlanQuantity } from './salesPlanQuantityModel.ts';
 
 type GroupSkuSource = {
   plan: RegionalApprovalLiveRow;
@@ -46,10 +46,14 @@ export const summarizeGroupSkus = (
       const code = String(sku.skuCode).trim();
       if (!code || codes.has(code)) throw new Error('INCOMPLETE_GROUP_SKUS');
       codes.add(code);
-      const qty =
+      const originalQty =
         pendingValues[plan.planId]?.[code] ??
         salesPlanEditableQuantity(sku, plan.status, plan.planTypeCode, approvalRole) ??
         String(sku.qty);
+      const qty =
+        plan.orderType === 'M' && approvalRole !== 'category'
+          ? roundPlanQuantity(originalQty)
+          : originalQty;
       const baseQty = String(plan.orderType === 'Z' ? (sku.corrBaseQty ?? sku.qty) : sku.baseQty);
       const baseAmount = String(plan.orderType === 'Z' ? sku.amt : sku.amtBase);
       const amount = multiplyExactDecimals(qty, String(sku.price));

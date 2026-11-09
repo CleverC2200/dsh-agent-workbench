@@ -28,3 +28,10 @@ export const salesPlanEditableQuantity = (
   }
   return undefined;
 };
+
+export const roundPlanQuantity = (value: string): string => {
+  const match = value.trim().match(/^([+-]?)(\d+)(?:\.(\d+))?$/);
+  if (!match) return value;
+  const rounded = BigInt(match[2]) + ((match[3]?.[0] ?? '0') >= '5' ? 1n : 0n);
+  return `${match[1] === '-' && rounded !== 0n ? '-' : ''}${rounded}`;
+};

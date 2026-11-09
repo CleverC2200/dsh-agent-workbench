@@ -193,6 +193,7 @@ export function RegionalApprovalResubmitDialog({
               role,
               draft?.draft?.adjustments ?? [],
               item.pendingValues,
+              item.kind === 'approve',
             );
             const changes = Object.entries(adjustments).flatMap(([code, delta]) => {
               if (correctionDecimal(delta).isZero()) return [];

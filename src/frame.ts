@@ -18,6 +18,7 @@ export type WorkbenchFramePage = WorkbenchPage & {
   );
 export interface PageIdentitySnapshot {
   readonly state: string;
+  readonly pagesReady?: boolean;
   readonly scope: string | null;
   readonly subject?: string | null;
   readonly error?: string;
