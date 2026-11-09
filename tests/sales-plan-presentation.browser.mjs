@@ -1315,3 +1315,24 @@ test(
     assert.deepEqual(await page.evaluate(() => window.sentReturns), []);
   },
 );
+
+test(
+  'batch return preview failure reports a failed precheck without an unknown write',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, groupBox } = await openWorkbench(t, true, 'return-unavailable');
+    await groupBox.check();
+    await page.getByRole('button', { name: '退回', exact: true }).click();
+    const modal = page.getByRole('dialog');
+    await modal.getByRole('textbox').fill('开发验收');
+    await modal.getByRole('button', { name: '确认批量退回', exact: true }).click();
+    await expect(
+      modal.getByText('本次提交完成：成功 0 笔，失败 2 笔，跳过 0 笔。', { exact: true }),
+    ).toBeVisible();
+    await expect(modal.getByText(/未能核对实际退回节点或修改后的数量，请刷新后重试。/)).toHaveCount(
+      2,
+    );
+    await expect(modal.getByText(/结果暂时未知/)).toHaveCount(0);
+    assert.deepEqual(await page.evaluate(() => window.sentReturns), []);
+  },
+);

@@ -146,6 +146,7 @@ const RegionalApprovalBatchActionDialog: React.FC<{
         ...(remark.trim() ? { remark: remark.trim() } : {}),
       };
       const attempt = new SalesPlanActionAttempt(client);
+      let actionSubmitted = false;
       try {
         if (kind === 'APPROVE' || kind === 'REJECT') {
           const stored = await salesPlan.draft?.invoke({
@@ -188,6 +189,7 @@ const RegionalApprovalBatchActionDialog: React.FC<{
             if (adjustments.length) request.adjustments = adjustments;
           }
         }
+        actionSubmitted = true;
         // 逐笔串行提交：每笔都有自己的幂等键，失败不会影响已提交的其它计划。
         // eslint-disable-next-line no-await-in-loop
         await attempt.submit({
@@ -212,7 +214,10 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           label,
           ...(context ? { context } : {}),
           status: 'failed',
-          detail: actionErrorText(t, classified as SalesPlanActionError),
+          detail:
+            kind === 'REJECT' && !actionSubmitted
+              ? t('common.assistantSurface.regionalApproval.returnContextUnavailable')
+              : actionErrorText(t, classified as SalesPlanActionError),
         });
       }
     }
