@@ -34,7 +34,7 @@ export const salesCardTemplate = {
     template: 'blue',
     title: {
       tag: 'lark_md',
-      content: conditional('needsProcessing', '${mentions}订单待处理', '${mentions}订单待确认'),
+      content: '${mentions}订单待确认',
     },
   },
   body: {
@@ -49,14 +49,14 @@ export const salesCardTemplate = {
             text: {
               tag: 'plain_text',
               text_color: 'red',
-              content: {
+              content: conditional('section.hasInstruction', '${section.instruction}', {
                 $concat: [
                   conditional(
                     'section.rateKnown',
                     conditional(
                       'section.ready',
-                      '订单满足率达到90%，请确认是否开单？',
-                      '订单满足率未达到90%，请先处理缺货订单。',
+                      '请核对订单信息并处理。',
+                      '请核对订单信息并处理。',
                     ),
                     '订单满足率暂未完整提供，请核对后处理。',
                   ),
@@ -67,7 +67,7 @@ export const salesCardTemplate = {
                   },
                   conditional('section.moreShortages', '\n其余缺货商品请在“订单处理”中核对。'),
                 ],
-              },
+              }),
             },
           },
           {
@@ -82,14 +82,32 @@ export const salesCardTemplate = {
                   {
                     tag: 'markdown',
                     content: conditional(
+                      'section.hasExecutionOrderNo',
+                      conditional(
+                        'section.hasEntry',
+                        grey(
+                          '执行单号：[${section.executionOrderNo}](${section.entryUrl}%26view%3Ddetails)',
+                        ),
+                        conditional(
+                          'section.hasDetails',
+                          grey('执行单号：[${section.executionOrderNo}](${section.detailsUrl})'),
+                          grey('执行单号：${section.executionOrderNo}'),
+                        ),
+                      ),
+                      grey('执行单号：—'),
+                    ),
+                  },
+                  {
+                    tag: 'markdown',
+                    content: conditional(
                       'section.hasEntry',
                       grey(
-                        '订单号：[${section.orderNoMarkdown}](${section.entryUrl}%26view%3Ddetails)',
+                        'DMS订单号：[${section.orderNoMarkdown}](${section.entryUrl}%26view%3Ddetails)',
                       ),
                       conditional(
                         'section.hasDetails',
-                        grey('订单号：[${section.orderNoMarkdown}](${section.detailsUrl})'),
-                        grey('订单号：${section.orderNoMarkdown}'),
+                        grey('DMS订单号：[${section.orderNoMarkdown}](${section.detailsUrl})'),
+                        grey('DMS订单号：${section.orderNoMarkdown}'),
                       ),
                     ),
                   },
@@ -97,6 +115,7 @@ export const salesCardTemplate = {
                     '客户：${section.customer}',
                     '订单满足率：${section.rate}',
                     '总数量：${section.quantity}',
+                    '订单交货日期：${section.deliveryDate}',
                   ].map(secondary),
                 ],
               },
@@ -108,12 +127,16 @@ export const salesCardTemplate = {
                   conditional(
                     'section.pending',
                     [
-                      conditional('section.ready', button('确认发货', 'Confirm', 'primary')),
-                      button('暂缓发货', 'Defer', 'text'),
                       conditional(
-                        'section.ready',
-                        undefined,
-                        button('订单处理', 'Edit', 'primary'),
+                        'section.creditInsufficient',
+                        [
+                          button('额度已补充', 'Process', 'primary'),
+                          secondary('订单处理（额度待核验）'),
+                        ],
+                        [
+                          button('订单处理', 'Process', 'primary'),
+                          button('暂缓发货', 'Defer', 'text'),
+                        ],
                       ),
                     ],
                     {

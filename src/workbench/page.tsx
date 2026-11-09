@@ -206,6 +206,7 @@ export const workbenchHost: WorkbenchHost = {
     versions: { invoke: (input) => query('versions', input) },
     logs: { invoke: (input) => query('logs', input) },
     versionSkus: { invoke: (input) => query('versionSkus', input) },
+    skuReview: { invoke: (input) => query('skuReview', input) },
     compare: { invoke: (input) => query('compare', input) },
     action: { invoke: (input) => rpc('sales-plan/action', input) },
     submit: { invoke: (input) => rpc('sales-plan/submit', input) },

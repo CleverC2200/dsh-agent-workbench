@@ -32,7 +32,7 @@ export async function openNativeAgentSession(
 export interface NativeResourceSelection {
   fetch: typeof fetch;
   pickDirectory?(): Promise<string | null>;
-  workspaceCwd?(): string | undefined;
+  workspaceCwd?(signal: AbortSignal): string | undefined | Promise<string | undefined>;
   workspace(path: string): Promise<{ workspaceId: string; path: string }>;
   create(options: { workspaceId: string }): Promise<string>;
   select(sessionId: string, preset: string): Promise<void>;
@@ -77,7 +77,8 @@ export async function resourceWorkspace(
   const config = (await configResponse.json()) as { cwd?: unknown };
   if (typeof config.cwd === 'string' && config.cwd.trim()) return config.cwd;
   signal.throwIfAborted();
-  const knownCwd = host.workspaceCwd?.();
+  const knownCwd = await host.workspaceCwd?.(signal);
+  signal.throwIfAborted();
   if (knownCwd) return knownCwd;
   const selected = await host.pickDirectory?.();
   signal.throwIfAborted();
@@ -152,7 +153,7 @@ export function mountNativeResourceSelection(
       const host: NativeResourceSelection = {
         fetch: (...args) => fetch(...args),
         pickDirectory: pickDirectory ?? (() => scope.uiWorkspace.pickDirectory()),
-        workspaceCwd: () => conversationWorkspace(scope)?.path,
+        workspaceCwd: async (signal) => (await conversationWorkspace(scope, signal))?.path,
         workspace: (path) => scope.workspaces.create({ path }),
         create: (options) =>
           scope.sessions.create({ workspaceId: options.workspaceId as WorkspaceId }),

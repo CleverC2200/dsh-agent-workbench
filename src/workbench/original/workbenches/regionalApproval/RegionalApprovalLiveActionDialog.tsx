@@ -13,6 +13,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSalesPlanAction } from './hooks/useSalesPlanAction.ts';
 import {
   businessSafeErrorMessage,
+  salesPlanRejectionMessage,
   reportSalesPlanError,
   salesPlanActionTargetStatus,
   type SalesPlanActionClient,
@@ -33,6 +34,11 @@ import {
 import type { ApprovalStageId } from './salesPlanDomain.ts';
 import { SALES_PLAN_ROLES, salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
 import { salesPlanAccessForRow, salesPlanEditableQuantity } from './models/salesPlanAccessModel.ts';
+import {
+  salesPlanReturnDestination,
+  type SalesPlanReturnDestination,
+  salesPlanReturnAdjustments,
+} from './models/salesPlanReturnModel.ts';
 import { salesPlanApprovalDraftValues } from './models/salesPlanLocalDraftModel.ts';
 import styles from './RegionalApprovalActionDialog.module.css';
 
@@ -70,7 +76,13 @@ const errorKey = (kind: SalesPlanActionErrorKind) =>
 export const actionErrorText = (t: TFunction, error: SalesPlanActionError): string => {
   const fallback = t(errorKey(error.kind));
   const cause = error.cause;
-  if (!isBackendHttpError(cause) || cause.status >= 500) return fallback;
+  if (!isBackendHttpError(cause)) return fallback;
+  if (cause.status >= 500) {
+    const reason = salesPlanRejectionMessage(cause);
+    if (!reason) return fallback;
+    const id = reportSalesPlanError('sales-plan-action', cause);
+    return `${reason}${t('common.assistantSurface.regionalApproval.liveAction.errors.reference', { id })}`;
+  }
   // 服务端业务拒绝的原文通常是「GEA_HTTP_409：…」，会被判成技术文案而统一换成
   // "版本状态已变化或存在并发操作、请刷新"——把"该重提"和"该找后端"这两种完全不同的
   // 结论都盖掉了。这里按上游原因码给出能落地的说法（不暴露原因码本身）。
@@ -203,15 +215,40 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   const [adjustmentValues, setAdjustmentValues] = useState<Record<string, string>>({});
   const [draftReady, setDraftReady] = useState(initialAction === 'SAVE');
   const [draftError, setDraftError] = useState('');
+  const [returnDestination, setReturnDestination] = useState<SalesPlanReturnDestination>();
   useEffect(() => {
     if (initialAction === 'SAVE') return;
     const controller = new AbortController();
+    setDraftReady(false);
+    setDraftError('');
+    setReturnDestination(undefined);
     void salesPlan
       .draft!.invoke({ planId: row.planId, versionId: row.versionId, signal: controller.signal })
-      .then((result) => {
+      .then(async (result) => {
         if (controller.signal.aborted) return;
         if (result.stale) {
           setDraftError('stale');
+          return;
+        }
+        if (initialAction === 'REJECT') {
+          if (!snapshot || !selectedRole) throw new Error('RETURN_DESTINATION_UNAVAILABLE');
+          const context = salesPlanReturnDestination(snapshot, selectedRole);
+          if (controller.signal.aborted) return;
+          const changes = salesPlanReturnAdjustments(
+            snapshot,
+            row,
+            selectedRole,
+            context,
+            result.draft?.role && result.draft.role !== selectedRole
+              ? []
+              : (result.draft?.adjustments ?? []),
+            selectedRole === approvalStage ? pendingValues : undefined,
+          );
+          setReturnDestination(context);
+          setAdjustmentValues(
+            Object.fromEntries(changes.map((item) => [item.skuCode, item.adjustQty])),
+          );
+          setDraftReady(true);
           return;
         }
         setAdjustmentValues(
@@ -241,23 +278,23 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     loading ||
     action.state.status === 'success' ||
     (action.state.status === 'error' && action.state.error.retrySameIntent);
-  const targetStatus = access?.roleContractSupported
-    ? kind === 'REJECT'
-      ? salesPlanActionTargetStatus(
-          'REJECT',
-          salesPlanWorkflow(row.planTypeCode).pending(access.approvalRole) ?? -1,
-          row.planTypeCode,
-        )
-      : row.status
-    : salesPlanActionTargetStatus(kind, row.status, row.planTypeCode);
+  const targetStatus =
+    kind === 'REJECT'
+      ? returnDestination?.targetStatus
+      : access?.roleContractSupported
+        ? row.status
+        : salesPlanActionTargetStatus(kind, row.status, row.planTypeCode);
   const approvalNodeOrder = access?.nodeOrder ?? undefined;
   const supportsAdjustments = approvalNodeOrder !== undefined && approvalNodeOrder >= 2;
   const adjustments = useMemo(
     () =>
       Object.entries(adjustmentValues)
         .map(([skuCode, adjustQty]) => ({ skuCode, adjustQty: adjustQty.trim() }))
-        .filter(({ adjustQty }) => adjustQty && !ZERO_DECIMAL_PATTERN.test(adjustQty)),
-    [adjustmentValues],
+        .filter(
+          ({ adjustQty }) =>
+            adjustQty && (kind === 'REJECT' || !ZERO_DECIMAL_PATTERN.test(adjustQty)),
+        ),
+    [adjustmentValues, kind],
   );
   const adjustmentsInvalid = Object.values(adjustmentValues).some((value) => {
     const normalized = value.trim();
@@ -345,7 +382,11 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     !access?.allowedActions.includes(kind) ||
     targetStatus === undefined ||
     (kind === 'REJECT'
-      ? !remark.trim() || Array.from(remark.trim()).length > 1000
+      ? !draftReady ||
+        !returnDestination ||
+        adjustmentsInvalid ||
+        !remark.trim() ||
+        Array.from(remark.trim()).length > 1000
       : kind === 'SAVE'
         ? !draftReady ||
           !confirmed ||
@@ -450,7 +491,11 @@ const RegionalApprovalLiveActionDialog: React.FC<{
       expectedStatus: row.status,
       ...(access?.snapshotHash ? { expectedSnapshot: access.snapshotHash } : {}),
       ...(remark.trim() ? { remark: remark.trim() } : {}),
-      ...(kind !== 'REJECT' && adjustments.length > 0 ? { adjustments } : {}),
+      ...(kind === 'REJECT'
+        ? { adjustments, expectedReturnTargetStage: returnDestination?.targetStage }
+        : adjustments.length > 0
+          ? { adjustments }
+          : {}),
     };
     submittedRequest.current = request;
     void complete(
@@ -565,6 +610,13 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           onOk={submit}
         >
           <div className={styles.compactRejectBody}>
+            {!draftReady && !draftError ? <Spin size={16} /> : null}
+            {draftError ? (
+              <Alert
+                type="error"
+                content={t('common.assistantSurface.regionalApproval.returnDestinationUnavailable')}
+              />
+            ) : null}
             <label className={styles.formControl}>
               <span>{t('common.assistantSurface.regionalApproval.liveAction.rejectRemark')}</span>
               <Input.TextArea

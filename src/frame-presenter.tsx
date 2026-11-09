@@ -809,6 +809,11 @@ export function mountFramePresentation(
               <div className="agent-workbench-html">
                 <Body />
               </div>
+            ) : page.resourceId &&
+              (identity.pagesReady === false || (identity.state === 'unknown' && loaded === 0)) ? (
+              <div className="agent-workbench-page-status" role="status">
+                {t('pageWait')}
+              </div>
             ) : (
               <iframe
                 key={frameKey}

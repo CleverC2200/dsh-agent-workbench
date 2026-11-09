@@ -342,7 +342,12 @@ export function GroupSkuSummary(props: {
                           {editable && isCurrentSku ? (
                             <Input
                               type="number"
-                              step={0.001}
+                              step={
+                                members.every((plan) => plan.orderType === 'M') &&
+                                approvalRole !== 'category'
+                                  ? 1
+                                  : 0.001
+                              }
                               size="small"
                               className={styles.quantityInput}
                               aria-label={`${text(comparison ? 'confirmedPrimary' : 'confirmed')} ${row.skuCode}`}

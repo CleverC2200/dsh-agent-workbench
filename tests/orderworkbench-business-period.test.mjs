@@ -25,6 +25,15 @@ test('upstream business period includes all original-order SKUs without any logi
     const rows = db
       .prepare(ordersSql)
       .all({ gea_p1: '2026-10-19', gea_p2: '2026-10-26', gea_p900: '' });
+    assert.deepEqual(
+      db
+        .prepare(ordersSql)
+        .columns()
+        .map((column) => column.name)
+        .sort(),
+      [...workbenchQueries.orders.columns].sort(),
+      'published fulfillment columns must exactly match SQL output',
+    );
     assert.equal(rows.length, 3);
     assert.equal(
       rows.reduce((sum, row) => sum + row.sample_demand, 0),
@@ -36,6 +45,18 @@ test('upstream business period includes all original-order SKUs without any logi
     );
     assert.equal(rows.find((row) => row.sku === 'S5').invalid, 1);
     assert.equal(rows.find((row) => row.sku === 'S5').sample_records, 0);
+    // Native-date preselection must retain *all* observations of a spanning
+    // original order; filtering its lines before grouping hides this conflict.
+    db.exec(`INSERT INTO agents_order_execute_isontime_mi VALUES
+      ('spanning','C','S6','华南','食品','水饺','六',100,80,'E6','2026-10-18','否',100),
+      ('spanning','C','S6','华南','食品','水饺','六',100,80,'E6','2026-10-25','否',100);`);
+    db.function('CONCAT', { varargs: true }, (...values) => values.join(''));
+    const spanning = db
+      .prepare(ordersSql)
+      .all({ gea_p1: '2026-10-19', gea_p2: '2026-10-26', gea_p900: '' })
+      .find((row) => row.sku === 'S6');
+    assert.equal(spanning.invalid, 1);
+    assert.equal(spanning.sample_records, 0);
   } finally {
     db.close();
   }
@@ -65,6 +86,17 @@ test('covered stock retains factory and rented warehouses and exposes unmatched 
       UPDATE agents_scm_inventory_sku_data_d SET warehouse_classify_name=CASE warehouse_classify WHEN '01' THEN '工厂成品仓' WHEN '02' THEN '工厂外租库' ELSE '分仓成品仓' END;
       INSERT INTO agents_scm_inventory_sku_data_d VALUES ('郑州','wrong-code','误分类','20261025',999,999,'02','分仓成品仓');`);
     db.function('CONCAT', { varargs: true }, (...values) => values.join(''));
+    db.exec(`ALTER TABLE agents_scm_stock_detail_d ADD COLUMN roll_sales_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN transfer_out_plan_roll;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_sales_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_out_plan;
+      UPDATE agents_scm_stock_detail_d SET roll_sales_plan=main_sales_plan_adj,
+        transfer_out_plan_roll=transfer_out_plan_adj;`);
+    db.exec(`CREATE TABLE agents_sales_plan_demand_m(stat_month,belong_base,material_code,plannum,allnum);
+      CREATE TABLE agents_dim_material_prod_sales_info_d(material_code,channel_name);
+      INSERT INTO agents_sales_plan_demand_m SELECT '2026-10-01',belong_base,material_code,main_sales_plan_adj,main_sales_plan_adj
+        FROM agents_scm_stock_detail_d WHERE belong_base IS NOT NULL;
+      INSERT INTO agents_dim_material_prod_sales_info_d SELECT DISTINCT material_code,'思念' FROM agents_scm_stock_detail_d;`);
     const rows = db
       .prepare(workbenchQueries.stock.sql)
       .all({ gea_p1: '2026-10-19', gea_p2: '2026-10-26' });

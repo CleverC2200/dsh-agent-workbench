@@ -348,8 +348,19 @@ export const classifySalesPlanSubmitError = (error: unknown): SalesPlanSubmitErr
       error.details.retrySameIntent === true
     )
       return new SalesPlanSubmitError('unavailable', true, undefined, { cause: error });
-    if (error.status >= 500)
-      return new SalesPlanSubmitError('serviceUnavailable', false, undefined, { cause: error });
+    if (error.status >= 500) {
+      const rejected =
+        error.details &&
+        typeof error.details === 'object' &&
+        'retryable' in error.details &&
+        error.details.retryable === false;
+      return new SalesPlanSubmitError(
+        rejected ? 'failed' : 'serviceUnavailable',
+        false,
+        undefined,
+        { cause: error },
+      );
+    }
     return new SalesPlanSubmitError('failed', false, undefined, { cause: error });
   }
   if (error instanceof TypeError)

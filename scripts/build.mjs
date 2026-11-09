@@ -23,6 +23,7 @@ await copyFile('business/shared/configured-facts.d.mts', 'lib/configured-facts.d
 await build({
   entryPoints: ['business/shared/configured-facts.ts'],
   bundle: true,
+  external: ['./configured-query-client.mjs'],
   format: 'esm',
   platform: 'node',
   outfile: 'lib/configured-facts.mjs',

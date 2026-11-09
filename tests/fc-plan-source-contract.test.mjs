@@ -79,3 +79,46 @@ test('no local plan preserves the monthly transfer gap; explicit local input sta
   assert.equal(applied.plan_source, '人工导入试算');
   assert.equal(source[0].warehouse_month_transfer_plan, null);
 });
+
+test('a 92-row import retains every valid row and reports all invalid rows with their Excel numbers', () => {
+  const allowed = Array.from({ length: 92 }, (_, index) => ({
+    warehouse_code: 'A160',
+    warehouse_name: '南京分仓',
+    sku: String(10000000 + index),
+    available_qty: 0,
+    calculation_order_remaining: 0,
+    open_transfer_reported_qty: 0,
+    cycle_days: 5,
+  }));
+  const rows = allowed.map((row, index) => ({
+    仓库编号: row.warehouse_code,
+    SKU编码: row.sku,
+    月份: currentPlanningMonth(),
+    产品名称: '导入验证商品' + index,
+    本月出货计划: 90 + index,
+    本月调拨计划: 100 + index,
+  }));
+  const imported = validateFcImport(rows, allowed);
+  assert.deepEqual(imported.errors, []);
+  assert.equal(imported.plans.length, 92);
+  const calculated = allowed.map((row) =>
+    applyFcPlan(row, imported.plans, currentPlanningMonth() + '-05', 5),
+  );
+  assert.equal(calculated.length, 92);
+  const [year, month] = currentPlanningMonth().split('-').map(Number);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  for (const [index, row] of calculated.entries()) {
+    assert.equal(row.month_out_plan, 90 + index);
+    assert.equal(row.warehouse_month_transfer_plan, 100 + index);
+    assert.equal(row.recommended_qty, Math.ceil((90 + index) / daysInMonth) * 8);
+  }
+  const invalid = rows.map((row) => ({ ...row }));
+  invalid[2].本月出货计划 = '不是数字';
+  invalid[60].本月调拨计划 = -1;
+  const result = validateFcImport(invalid, allowed);
+  assert.deepEqual(
+    result.errors.map((error) => error.row),
+    [4, 62],
+  );
+  assert.equal(invalid.length, 92);
+});

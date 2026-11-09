@@ -24,6 +24,15 @@ const optionalLabelNames: Record<string, string> = {
   category: '品类',
   material_group: '物料组',
   page_scope_has_material_group: '物料组覆盖情况',
+  product_tag: '产品标签',
+};
+const agingColumnWidths: Record<string, number> = {
+  material_name: 260,
+  material_group_name: 180,
+  missing_age_13: 220,
+  missing_age_10: 96,
+  warehouse_name: 140,
+  product_tag: 128,
 };
 
 /** Only presentation: the caller owns governed reads, errors and server pagination. */
@@ -64,6 +73,7 @@ export function OriginalBusinessList({
   const fc = agentId === 'inventory-fc',
     qll = agentId === 'inventory-qll',
     aqkc = agentId === 'inventory-aqkc';
+  const compactAging = fc && view.id === 'inventory';
   const [localFrozen, setLocalFrozen] = useState<string[]>(
     fc && view.id === 'replenishment' ? ['sku', 'material_name', 'missing_actualQty'] : [],
   );
@@ -89,15 +99,17 @@ export function OriginalBusinessList({
   const resizable = Boolean(view.resizableColumns);
   const widthOf = (column: { field: string; format?: string }) =>
     columnWidths[column.field] ??
-    (column.field === 'material_name'
-      ? 280
-      : column.field === 'material_group_name'
-        ? 220
-        : column.field === 'missing_age_13'
-          ? 240
-          : column.format === 'quantity-share'
-            ? 170
-            : 140);
+    (compactAging
+      ? (agingColumnWidths[column.field] ?? (column.format === 'quantity-share' ? 144 : 112))
+      : column.field === 'material_name'
+        ? 280
+        : column.field === 'material_group_name'
+          ? 220
+          : column.field === 'missing_age_13'
+            ? 240
+            : column.format === 'quantity-share'
+              ? 170
+              : 140);
   const [offsets, setOffsets] = useState<Record<string, number>>({});
   const columnKey = columns.map((column: any) => column.field).join(':');
   useLayoutEffect(() => {
@@ -263,7 +275,16 @@ export function OriginalBusinessList({
           <React.Fragment key={getRowKey?.(row) ?? i}>
             <tr>
               {columns.map((c: any) => (
-                <td key={c.field} data-column={c.field} style={fixedStyle(c.field)}>
+                <td
+                  key={c.field}
+                  data-column={c.field}
+                  style={fixedStyle(c.field)}
+                  title={
+                    compactAging && typeof row[c.valueField ?? c.field] === 'string'
+                      ? row[c.valueField ?? c.field]
+                      : undefined
+                  }
+                >
                   {displayCell(row, c)}
                 </td>
               ))}
@@ -417,7 +438,11 @@ export function OriginalBusinessList({
     ));
 
   return (
-    <section className={css.list} aria-label={view.title} aria-busy={loading}>
+    <section
+      className={`${css.list}${compactAging ? ` ${css.compactAging}` : ''}`}
+      aria-label={view.title}
+      aria-busy={loading}
+    >
       {fc && (
         <div className={css.quickBar}>
           {quickFilters}
