@@ -360,7 +360,7 @@ export function ConfiguredFactsPage({
             setReplenishment((current) =>
               current ? { ...current, neededOnly: false, businessOnly: false } : current,
             );
-          const sort =
+          const sort: Record<string, string> =
             config.agentId === 'inventory-fc' &&
             name === 'list_mode' &&
             ['urgent', 'recommended'].includes(value)

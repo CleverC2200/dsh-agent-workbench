@@ -213,6 +213,7 @@ export async function readConfiguredFacts(
       freshAfter: options.freshAfter,
     }),
     q = config.queries[view.queryId];
+  const requestedAsOf = input.asOf;
   if (!viewId.startsWith('channel-'))
     input = { ...input, asOf: await qllPublishedDate(config, input.asOf, options) };
   // Display reads fetch only the requested page; full-scope totals and explicit
@@ -266,7 +267,7 @@ export async function readConfiguredFacts(
   const targetScope = Object.values<{ name: string }>(q.parameterSpec).some(
     (spec) => spec.name === 'inventory_version',
   )
-    ? await readConfiguredTargetScope(client, input.asOf, options.signal)
+    ? await readConfiguredTargetScope(client, requestedAsOf, options.signal)
     : null;
   if (targetScope) {
     version = targetScope.configVersion;

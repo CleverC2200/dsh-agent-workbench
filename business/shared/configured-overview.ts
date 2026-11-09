@@ -55,6 +55,10 @@ export async function readConfiguredOverview(
     options.signal?.throwIfAborted();
     publicationError = error;
   }
+  const readDateFor = (id: string) =>
+    id.startsWith('channel-') || (config.agentId === 'inventory-qll' && id === 'factory-overview')
+      ? requestedAsOf
+      : asOf;
   const ids: string[] = [
     ...(options.viewIds ??
       config.overviewViewIds ??
@@ -94,7 +98,7 @@ export async function readConfiguredOverview(
     if (invalid) throw invalid;
     parts[id] = {
       ...part,
-      readDate: id.startsWith('channel-') ? requestedAsOf : asOf,
+      readDate: readDateFor(id),
     };
     const replenishment = parts.replenishment;
     if (replenishment?.summary && config.queries[replenishment.queryId]?.orderCountFromOverview) {
@@ -182,7 +186,7 @@ export async function readConfiguredOverview(
       }
     }
   })();
-  let groupedOrders: ReturnType<typeof readGroupedOrderOverview> | undefined;
+  const groupedOrders = new Map<string, ReturnType<typeof readGroupedOrderOverview>>();
   await Promise.all(
     ids.map(async (id) => {
       let part: any;
@@ -214,11 +218,19 @@ export async function readConfiguredOverview(
             snapshotDate: result.rows[0]?.snapshot_date,
           };
         } else if (config.overviewOrderGroups?.views[id] && !customer && !options.warehouseCode) {
-          groupedOrders ??= readGroupedOrderOverview(config, asOf, options);
-          part = (await groupedOrders)[id];
+          const day = readDateFor(id);
+          let group = groupedOrders.get(day);
+          if (!group) {
+            const viewIds = Object.keys(config.overviewOrderGroups.views).filter(
+              (viewId) => readDateFor(viewId) === day,
+            );
+            group = readGroupedOrderOverview(config, day, { ...options, viewIds });
+            groupedOrders.set(day, group);
+          }
+          part = (await group)[id];
         } else {
           const input: FactInput = {
-            asOf: id.startsWith('channel-') ? requestedAsOf : asOf,
+            asOf: config.agentId === 'inventory-qll' ? requestedAsOf : readDateFor(id),
             customer,
             cycleDays: options.cycleDays,
             fcCycleRules: options.fcCycleRules,

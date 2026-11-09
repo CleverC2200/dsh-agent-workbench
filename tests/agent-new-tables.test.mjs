@@ -35,8 +35,9 @@ for (const [agent, viewId, field] of [
     const execute = async (_, call) => {
       calls.push(call);
       const q = config.queries[call.queryId];
-      const rows =
-        call.queryId === 'source.customer-analysis-date'
+      const rows = ['summary.bootstrap', 'summary.snapshot'].includes(call.queryId)
+        ? []
+        : call.queryId === 'source.customer-analysis-date'
           ? [{ day: '2026-10-18' }]
           : call.queryId.endsWith('.count')
             ? [{ total: 21 }]

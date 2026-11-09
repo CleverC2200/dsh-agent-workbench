@@ -50,6 +50,7 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
     },
     signal: AbortSignal,
   ) => {
+    const requestedDate = input.date;
     if (layer !== 'customer')
       input = { ...input, date: await qllPublishedDate(config, input.date, { execute, signal }) };
     const id = `category-tree.${layer}`;
@@ -102,7 +103,7 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
       config.dailySummary &&
       (await client.snapshot({ signal })).kind === 'ready'
     ) {
-      const targetScope = await readConfiguredTargetScope(client, input.date, signal);
+      const targetScope = await readConfiguredTargetScope(client, requestedDate, signal);
       values.month = targetScope.targetMonth;
       values.inventory_version = targetScope.inventoryVersion;
     }

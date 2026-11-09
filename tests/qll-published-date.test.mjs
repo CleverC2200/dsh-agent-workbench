@@ -138,3 +138,53 @@ test('company metadata denial remains an error while an independently authorized
   assert.ok(parts['channel-overview'].summary);
   assert.equal(calls.filter((id) => id === 'summary.bootstrap').length, 1);
 });
+
+test('base fulfillment retains the base workbench current period while branch fulfillment follows the branch data day', async () => {
+  const daily = structuredClone(config);
+  delete daily.dailySummary.bundle;
+  const calls = [];
+  const execute = async (_, o) => {
+    calls.push({ id: o.queryId, values: o.values });
+    if (o.queryId === 'summary.snapshot') return snapshotReply(o);
+    if (o.queryId.endsWith('overview.orders-by-pickup')) {
+      const pickup = o.values.pickup_type;
+      const base = pickup === '工厂';
+      return {
+        rows: [
+          {
+            ...Object.fromEntries(daily.queries[o.queryId].resultColumns.map((c) => [c, 0])),
+            pickup_type: pickup,
+            row_count: 1,
+            fulfillment_order_quantity: 100,
+            fulfillment_shipped_quantity: base ? 80 : 95,
+            fulfillment_rate: base ? 0.8 : 0.95,
+          },
+        ],
+        returnedColumns: daily.queries[o.queryId].resultColumns,
+        rejectedColumns: [],
+        configVersion: 'fixed',
+      };
+    }
+    if (o.queryId.includes('current-shortage'))
+      return {
+        rows: [],
+        returnedColumns: daily.queries[o.queryId].resultColumns,
+        rejectedColumns: [],
+        configVersion: 'fixed',
+      };
+    throw Error('Unexpected query ' + o.queryId);
+  };
+  const parts = await readConfiguredOverview(daily, '2026-11-09', '', {
+    execute,
+    viewIds: ['factory-overview', 'branch-overview'],
+  });
+  assert.equal(parts['factory-overview'].readDate, '2026-11-09');
+  assert.equal(parts['factory-overview'].summary.fulfillment_rate, 0.8);
+  assert.equal(parts['branch-overview'].readDate, '2026-11-06');
+  assert.equal(parts['branch-overview'].summary.fulfillment_rate, 0.95);
+  const orders = calls.filter((c) => c.id.endsWith('overview.orders-by-pickup'));
+  assert.deepEqual(orders.map((c) => [c.values.pickup_type, c.values.end_exclusive]).sort(), [
+    ['分仓', '2026-11-07'],
+    ['工厂', '2026-11-10'],
+  ]);
+});
