@@ -286,7 +286,8 @@
   background: #f2f3f5;
   font-size: 12px;
 }
-.dc-page .dc-product-toolbar .dc-primary {
+.dc-page .dc-product-toolbar .dc-primary,
+.dc-page .dc-demand-edit-bar .dc-primary {
   background: #165dff;
 }
 .dc-table-scroll {
@@ -937,4 +938,52 @@
 .dc-master-dialog table {
   min-width: 1600px;
   white-space: nowrap;
+}
+
+.dc-demand-summary .dc-demand-edit-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  flex-wrap: wrap;
+}
+.dc-batch-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dc-batch-actions label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.dc-batch-actions input {
+  width: 240px;
+}
+.dc-demand-summary .dc-batch-quantity {
+  width: 100%;
+  max-width: 180px;
+  min-width: 100px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.dc-batch-feedback {
+  flex-basis: 100%;
+  margin: 0;
+}
+.dc-adjusted-mark {
+  color: var(--dc-muted);
+  font-size: 11px;
+}
+@media (max-width: 700px) {
+  .dc-batch-actions {
+    flex-basis: 100%;
+  }
+  .dc-batch-actions label {
+    flex-basis: 100%;
+  }
+  .dc-batch-actions input {
+    width: min(240px, calc(100vw - 150px));
+  }
 }

@@ -34,21 +34,28 @@ function Mps() {
   }, [step]);
   const [assistantDraft, setAssistantDraft] = usePageViewField(y, mpsView, 'assistantDraft', '');
   const [scope, setScope] = y.useState(null);
+  const [adjusting, setAdjusting] = y.useState(false);
   const [relations, setRelations] = y.useState(null);
   const actions = useAuthorQuote(y);
   const select = y.useCallback(
     (key) => {
-      if (!mpsSteps.some((item) => item.key === key)) return;
+      if (adjusting || !mpsSteps.some((item) => item.key === key)) return;
       setStep(key);
       if (window.location.hash !== '#' + key) window.location.hash = key;
     },
-    [setStep],
+    [setStep, adjusting],
   );
   y.useEffect(() => {
-    const changed = () => setStep(selectedStep());
+    const changed = () => {
+      if (adjusting) {
+        if (window.location.hash !== '#' + step) window.location.hash = step;
+        return;
+      }
+      setStep(selectedStep());
+    };
     window.addEventListener('hashchange', changed);
     return () => window.removeEventListener('hashchange', changed);
-  }, [setStep]);
+  }, [setStep, adjusting, step]);
   const assistant = y.createElement(AuthorQuestions, {
     react: y,
     jsx: c,
@@ -91,6 +98,7 @@ function Mps() {
                 key: item.key,
                 className: 'ap-page-tab',
                 'data-active': step === item.key,
+                disabled: adjusting && step !== item.key,
                 onClick: () => select(item.key),
               },
               y.createElement(
@@ -108,6 +116,7 @@ function Mps() {
         { className: 'ap-board-body', ref: bodyRef },
         y.createElement(DemandConfirmation, {
           active: true,
+          onEditingChange: setAdjusting,
           step,
           onScopeChange: setScope,
           relations,

@@ -139,7 +139,7 @@ test('MPS data disclosures span the page at desktop and narrow widths', async (t
   }
 });
 
-test('Tab1 adjusts the existing demand matrix without a duplicate review table', async (t) => {
+test('Tab1 opens the entire matrix with one adjustment action and cancels the batch at either width', async (t) => {
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
@@ -147,45 +147,62 @@ test('Tab1 adjusts the existing demand matrix without a duplicate review table',
     name: '产品.csv',
     mimeType: 'text/csv',
     buffer: Buffer.from(
-      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,\n郑州,B,产品乙,水饺,系列,组,,',
     ),
   });
   const matrix = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
-  await expect(matrix).toBeVisible();
-  await expect(frame.getByText('查看系统值、调整与缺项说明', { exact: true })).toHaveCount(0);
-  await expect(matrix.getByRole('button', { name: /^调整 / })).toHaveCount(4);
-  await expect(matrix.locator('.dc-demand-amount small')).toHaveCount(4);
+  const selected = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
+  const month = selected.match(/\d{4}-\d{2}/)[0];
+  await expect(matrix.getByRole('button', { name: '调整', exact: true })).toHaveCount(1);
+  await expect(matrix.getByRole('button', { name: /^调整 / })).toHaveCount(0);
+  await expect(matrix.locator('tbody input')).toHaveCount(0);
+  const original = await page.evaluate(() => window.readView().localDrafts);
   for (const width of [1200, 600]) {
     await page.evaluate(
       (width) => (document.getElementById('root').style.width = `${width + 520}px`),
       width,
     );
-    await matrix
-      .getByRole('button', { name: /^调整 / })
-      .first()
-      .click();
-    const editor = matrix.getByRole('group', { name: '大类需求调整', exact: true });
-    await expect(editor.getByLabel('调整需求数量', { exact: true })).toBeFocused();
-    assert.equal(
-      await editor.evaluate((element) => {
-        const row = element.closest('tr');
-        return (
-          row?.classList.contains('mps-inline-edit-row') &&
-          row.previousElementSibling?.querySelector('[aria-expanded="true"]') != null
-        );
-      }),
-      true,
-    );
-    await expect(editor.getByLabel('调整需求数量', { exact: true })).toBeFocused();
-    await editor.getByLabel('调整需求数量', { exact: true }).fill('100');
-    await editor.getByLabel('调整需求数量', { exact: true }).press('Enter');
-    await expect(editor.getByRole('alert')).toContainText('原因');
-    await expect(editor.getByLabel('调整原因', { exact: true })).toBeFocused();
-    if (width === 600) {
-      await editor.getByRole('button', { name: '取消', exact: true }).focus();
-      await editor.getByRole('button', { name: '取消', exact: true }).press('Enter');
-    } else await editor.getByLabel('调整原因', { exact: true }).press('Escape');
-    await expect(editor).toHaveCount(0);
-    await expect(matrix.getByRole('button', { name: /^调整 / }).first()).toBeFocused();
+    await matrix.getByRole('button', { name: '调整', exact: true }).click();
+    await expect(matrix.locator('tbody input')).toHaveCount(8);
+    await expect(matrix.locator('tbody input').first()).toBeFocused();
+    await expect(frame.getByLabel('评估版本选择')).toBeDisabled();
+    await expect(frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' })).toBeDisabled();
+    await matrix.getByLabel(`汤圆 ${month} 需求数量`, { exact: true }).fill('100');
+    await matrix.getByLabel(`水饺 ${month} 需求数量`, { exact: true }).fill('200');
+    assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), original);
+    await matrix.getByRole('button', { name: '保存调整', exact: true }).click();
+    await expect(matrix.getByRole('alert')).toContainText('原因');
+    await expect(matrix.getByLabel('批量调整原因', { exact: true })).toBeFocused();
+    if (width === 600)
+      await matrix.getByRole('button', { name: '取消', exact: true }).press('Enter');
+    else await matrix.getByLabel('批量调整原因', { exact: true }).press('Escape');
+    await expect(matrix.locator('tbody input')).toHaveCount(0);
+    await expect(matrix.getByRole('button', { name: '调整', exact: true })).toBeFocused();
+    await expect(frame.getByLabel('评估版本选择')).toBeEnabled();
+    assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), original);
   }
+  await matrix.getByRole('button', { name: '调整', exact: true }).click();
+  await matrix.getByLabel(`汤圆 ${month} 需求数量`, { exact: true }).fill('100.375');
+  await matrix.getByLabel(`水饺 ${month} 需求数量`, { exact: true }).fill('-1');
+  await matrix.getByLabel('批量调整原因', { exact: true }).fill('批量校验');
+  await matrix.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect(matrix.getByRole('alert')).toContainText('水饺');
+  assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), original);
+  await matrix.getByLabel(`水饺 ${month} 需求数量`, { exact: true }).fill('200.125');
+  await matrix.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect(matrix.locator('tbody input')).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.readView().localDrafts.drafts[0].adjustments.categoryDemand.length,
+      ),
+    )
+    .toBe(2);
+  const adjusted = await page.evaluate(() => window.readView().localDrafts.drafts[0].adjustments);
+  assert.equal(adjusted.categoryDemand.length, 2);
+  assert.deepEqual(
+    adjusted.categoryDemand.map((row) => row.quantity).sort((a, b) => a - b),
+    [100.375, 200.125],
+  );
+  assert.ok(adjusted.categoryDemand.every((row) => row.reason === '批量校验'));
 });

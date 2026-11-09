@@ -905,6 +905,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     onScopeChange,
     relations,
     masterData,
+    onEditingChange,
   }) {
     const initialDrafts = () => ({
       drafts: [makeDraft('local-1', currentMonth())],
@@ -916,6 +917,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const { drafts, selected } = localState;
     const localRef = react.useRef(localState);
     localRef.current = localState;
+    const [adjusting, setAdjusting] = react.useState(false);
+    react.useEffect(() => {
+      onEditingChange?.(adjusting);
+      return () => onEditingChange?.(false);
+    }, [adjusting, onEditingChange]);
     const [retentionError, setRetentionError] = react.useState('');
     const saveLocal = (next) => {
       localRef.current = next;
@@ -1577,6 +1583,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               'select',
               {
                 'aria-label': '评估版本选择',
+                disabled: adjusting,
                 value: draft.id,
                 onChange: (event) => {
                   clearFiles();
@@ -1591,6 +1598,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'button',
               {
+                disabled: adjusting,
                 onClick: () => {
                   setVersionName('');
                   setMonth(currentMonth());
@@ -1856,7 +1864,14 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       h(
         'div',
         { hidden: step !== 'check' },
-        h(CategoryDemand, { draft, update, active: active && step === 'check', onNext }),
+        h(CategoryDemand, {
+          key: `${draft.id}-${scopeGeneration}`,
+          draft,
+          update,
+          active: active && step === 'check',
+          onNext,
+          onEditingChange: setAdjusting,
+        }),
         h(
           'section',
           { 'aria-label': '产品明细', className: 'dc-card dc-products' },

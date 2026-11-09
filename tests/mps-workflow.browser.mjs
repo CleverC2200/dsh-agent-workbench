@@ -1,4 +1,4 @@
-import { commitNumber } from './helpers/mps-edit.mjs';
+import { commitNumber, adjustCategory } from './helpers/mps-edit.mjs';
 import { expectWorkflowExportValue, workflowExportRows } from './helpers/mps-workflow-export.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -698,11 +698,7 @@ test('MPS report and CSV derive all three months from evaluation-month coefficie
     '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,汤圆,系列,组,100',
   );
   for (const month of ['2026-12', '2027-01', '2027-02']) {
-    await frame.getByRole('button', { name: `调整 汤圆 ${month}`, exact: true }).click();
-    const form = frame.getByRole('group', { name: '大类需求调整', exact: true });
-    await form.getByLabel('调整需求数量', { exact: true }).fill('100');
-    await form.getByLabel('调整原因', { exact: true }).fill('核对缺月域汇总');
-    await form.getByRole('button', { name: '保存', exact: true }).click();
+    await adjustCategory(frame, '汤圆', month, '100', '核对缺月域汇总');
   }
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await upload(
@@ -770,11 +766,7 @@ async function preparedPlan(t, partialHistory = false) {
     ['2027-02', 300],
     ['2027-03', 400],
   ]) {
-    await frame.getByRole('button', { name: `调整 汤圆 ${month}`, exact: true }).click();
-    const form = frame.getByRole('group', { name: '大类需求调整', exact: true });
-    await form.getByLabel('调整需求数量', { exact: true }).fill(String(quantity));
-    await form.getByLabel('调整原因', { exact: true }).fill('公开页面计算验收');
-    await form.getByRole('button', { name: '保存', exact: true }).click();
+    await adjustCategory(frame, '汤圆', month, String(quantity), '公开页面计算验收');
   }
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
@@ -1132,16 +1124,16 @@ test('MPS category undo audits the current inherited quantity after an upstream 
   await frame.getByRole('button', { name: '读取三年同比源值', exact: true }).click();
   await expect(frame.getByRole('button', { name: '读取三年同比源值', exact: true })).toBeEnabled();
   const adjust = async (month, quantity) => {
-    await frame.getByRole('button', { name: `调整 汤圆 ${month}`, exact: true }).click();
-    const form = frame.getByRole('group', { name: '大类需求调整' });
-    await form.getByLabel('调整需求数量').fill(quantity);
-    await form.getByLabel('调整原因').fill('已确认月需求');
-    await form.getByRole('button', { name: '保存', exact: true }).click();
+    await adjustCategory(frame, '汤圆', month, quantity, '已确认月需求');
   };
   await adjust('2026-11', '200');
   await adjust('2026-12', '350');
-  await adjust('2026-11', '400');
-  await frame.getByRole('button', { name: '撤销 汤圆 2026-12', exact: true }).click();
+  const matrix = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
+  await matrix.getByRole('button', { name: '调整', exact: true }).click();
+  await matrix.getByLabel('汤圆 2026-11 需求数量', { exact: true }).fill('400');
+  await matrix.getByLabel('汤圆 2026-12 需求数量', { exact: true }).fill('');
+  await matrix.getByLabel('批量调整原因', { exact: true }).fill('同时调整上游并恢复后月系统值');
+  await matrix.getByRole('button', { name: '保存调整', exact: true }).click();
   const row = frame
     .getByRole('region', { name: '大类预估需求数量', exact: true })
     .getByRole('row')
@@ -1331,11 +1323,7 @@ test('MPS Tab5 reuses a base policy across three months while SKU inventory vers
     ['2027-02', 300],
     ['2027-03', 400],
   ]) {
-    await frame.getByRole('button', { name: `调整 汤圆 ${month}`, exact: true }).click();
-    const form = frame.getByRole('group', { name: '大类需求调整', exact: true });
-    await form.getByLabel('调整需求数量', { exact: true }).fill(String(quantity));
-    await form.getByLabel('调整原因', { exact: true }).fill('基地策略计算测试');
-    await form.getByRole('button', { name: '保存', exact: true }).click();
+    await adjustCategory(frame, '汤圆', month, String(quantity), '基地策略计算测试');
   }
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
