@@ -191,7 +191,7 @@ test('MPS reads complete channel coefficients and adopts only an explicitly appl
   }
   await expect(view).toContainText('缺正数吨/件系数');
   await expect(view).toContainText('系数冲突');
-  await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('');
+  await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('25');
   await commitNumber(view.getByLabel('郑州 安全天数', { exact: true }), '0');
   const waiting = page.waitForEvent('download');
   await view.getByRole('button', { name: '下载本地配置', exact: true }).click();
