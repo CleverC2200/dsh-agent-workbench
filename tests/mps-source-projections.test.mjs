@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { productProjections, sourceCheckRows } from '../static/mps/source/source-projections.js';
+import {
+  productProjections,
+  sourceCheckRows,
+  sourceDimensions,
+} from '../static/mps/source/source-projections.js';
 
 const row = (code, group = 'G') => ({
   基地: '',
@@ -68,14 +72,14 @@ const history = (quantity, extra = {}) => ({
 const report = (monthly, adjusted, extra = {}) => ({
   基地: '郑州',
   产品编码: 'A',
-  DMS发货数量: monthly,
+  计划数量: monthly,
   ...extra,
 });
 const checks = (actual, plan) => ({
   periods: [{ month: '2026-09', history: { rows: actual }, report: { rows: plan } }],
 });
 
-test('source checks use DMS shipped pieces independently of obsolete report-version quantities', () => {
+test('source checks use allnum plan quantities independently of obsolete report-version quantities', () => {
   const input = checks([history(12)], [report(10, 20)]);
   const monthly = sourceCheckRows(input, [raw('A', { sub_category: '汤圆' })], 'monthly', ['汤圆'])
     .rows[0];
@@ -130,7 +134,7 @@ test('current pool remaps BI and DMS by SKU; excluded nonzero historical SKUs do
   assert.equal(result.excluded.length, 2);
   assert.deepEqual(
     result.excluded.map((r) => r['来源']),
-    ['BI', 'DMS'],
+    ['BI', '计划量'],
   );
   assert(result.excluded.every((r) => r['原因'] === '不在当前产品池'));
 });
@@ -138,16 +142,61 @@ test('current pool remaps BI and DMS by SKU; excluded nonzero historical SKUs do
 test('nationwide pool totals retain source quantities without a base; ambiguous current classifications are listed for completion', () => {
   const result = sourceCheckRows(
     checks([history(8, { 基地: '' })], [report(20, 20, { 基地: '' })]),
-    [raw('A', { sub_category: '汤圆' })],
+    [raw('A', { sub_category: '汤圆', belong_base: '郑州' })],
     'adjust',
   );
+  assert.equal(result.rows[0].actual.quantity, 8);
+  assert.equal(result.rows[0].plan.quantity, 20);
   assert.equal(result.rows[0].ratio, 0.4);
+  assert.equal(result.excluded.length, 0);
   const ambiguous = sourceCheckRows(
     checks([history(8)], [report(10, 10)]),
-    [raw('A', { sub_category: '汤圆' }), raw('A', { sub_category: '水饺' })],
+    [
+      raw('A', { sub_category: '汤圆', belong_base: '郑州' }),
+      raw('A', { sub_category: '水饺', belong_base: '乙' }),
+    ],
     'monthly',
   );
-  assert.equal(ambiguous.rows.length, 0);
+  assert.equal(ambiguous.rows.length, 2);
   assert.equal(ambiguous.excluded.length, 2);
   assert(ambiguous.excluded.every((r) => r['原因'] === '当前产品池大类不唯一'));
+  assert(ambiguous.rows.every((row) => row.actual.quantity === null && row.plan.quantity === null));
+});
+
+test('历史事实按基地物料唯一补齐系列，保留源值、零数量与无映射原因', () => {
+  const facts = [
+    history(0, { 系列: '', 物料组: '旧组' }),
+    history(5, { 基地: '乙' }),
+    history(7, { 产品编码: 'OLD' }),
+    history(9, { 基地: '未知基地' }),
+  ];
+  const products = [
+    { 产品编码: 'A', 基地: '郑州', 大类: '水饺', 系列: '甲系列', 物料组: 'G', 物料组名称: '组甲' },
+    { 产品编码: 'A', 基地: '乙', 大类: '水饺', 系列: '乙系列', 物料组: 'G', 物料组名称: '组甲' },
+    { 产品编码: 'A', 基地: '乙', 大类: '水饺', 系列: '另一系列', 物料组: 'G', 物料组名称: '组甲' },
+  ];
+  const mapped = sourceDimensions(facts, products);
+  assert.equal(mapped[0]['系列'], '甲系列');
+  assert.equal(mapped[0]['物料组'], 'G');
+  assert.equal(mapped[0]['源大类'], '汤圆');
+  assert.equal(mapped[0]['数量'], 0);
+  assert.equal(mapped[1]['系列'], '');
+  assert.match(mapped[1]['缺项原因'], /系列.*多个/);
+  assert.match(mapped[2]['缺项原因'], /未匹配/);
+  assert.equal(mapped[3]['大类'], '');
+  assert.equal(mapped[3]['系列'], '');
+  assert.match(mapped[3]['缺项原因'], /未匹配/);
+  assert.equal(facts[0]['系列'], '');
+});
+
+test('产品列表的大类覆盖保留无来源及分类冲突涉及的大类，不由数量或唯一映射缩减范围', () => {
+  const result = sourceCheckRows(checks([history(0)], []), [
+    raw('A', { sub_category: '饺子' }),
+    raw('A', { sub_category: '汤圆' }),
+    raw('B', { sub_category: '调理肉制品' }),
+    raw('C', { sub_category: '饼类' }),
+  ]);
+  assert.deepEqual(result.categories, ['饺子', '汤圆', '调理肉制品', '饼类']);
+  assert.equal(result.rows.length, 4);
+  assert.equal(result.excluded.length, 1);
 });

@@ -566,3 +566,70 @@ test('structured MPS rules, monthly evidence and change history round-trip throu
     /INVALID_HTML_VIEW_STATE/,
   );
 });
+
+test('MPS quantity adjustments persist their level and audit while old drafts default to no fixed quantities', () => {
+  const adjustment = {
+    kind: 'sku',
+    month: '2026-10',
+    category: '汤圆',
+    group: 'G',
+    code: 'A',
+    quantity: 0,
+    systemValue: 30,
+    reason: '取消需求',
+    at: '2026-11-05T00:00:00.000Z',
+  };
+  const draft = {
+    id: 'v1',
+    name: '数量调整',
+    month: '2026-10',
+    pull: 'monthly',
+    files: {},
+    adjustments: {
+      categoryDemand: [],
+      shares: [],
+      quantities: [adjustment],
+      history: [
+        {
+          kind: 'quantities',
+          key: '["2026-10","汤圆","G","sku","A",""]',
+          action: 'set',
+          value: 0,
+          systemValue: 30,
+          reason: '取消需求',
+          at: adjustment.at,
+        },
+      ],
+    },
+  };
+  const saved = encodeLocalDrafts([draft], 'v1');
+  const recovered = decodeLocalDrafts(
+    saved,
+    (id, month) => ({ id, month, files: {} }),
+    () => {
+      throw Error('Unexpected fallback');
+    },
+  );
+  assert.deepEqual(recovered.drafts[0].adjustments.quantities, [adjustment]);
+  delete saved.drafts[0].adjustments.quantities;
+  assert.deepEqual(
+    decodeLocalDrafts(
+      saved,
+      (id, month) => ({ id, month, files: {} }),
+      () => {
+        throw Error('Unexpected fallback');
+      },
+    ).drafts[0].adjustments.quantities,
+    [],
+  );
+  const invalid = structuredClone(saved);
+  invalid.drafts[0].adjustments.quantities = [{ ...adjustment, quantity: -1 }];
+  assert.deepEqual(
+    decodeLocalDrafts(
+      invalid,
+      () => ({}),
+      () => ({ invalid: true }),
+    ),
+    { invalid: true },
+  );
+});

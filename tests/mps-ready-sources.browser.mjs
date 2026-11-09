@@ -1,3 +1,4 @@
+import { openCategoryCalculation } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -14,6 +15,7 @@ const record = (id, values) => ({
 const products = [
   record('products.detail', {
     product_item: 'G',
+    product_item_name: '物料组甲',
     material_code: '',
     material_name: '物料组甲',
     source_rows: 1,
@@ -21,14 +23,15 @@ const products = [
   ...['A', 'B'].map((code) =>
     record('products.detail', {
       product_item: 'G',
+      product_item_name: '物料组甲',
       material_code: code,
       material_name: '产品' + code,
       sub_category: '汤圆',
       series: '系列甲',
       responsible_item: '汤圆',
       source_rows: 1,
-      replacement_material_code: code === 'A' ? 'REPLACE' : null,
-      replacement_product: code === 'A' ? '源替换品' : null,
+      replacement_material_code: null,
+      replacement_product: null,
     }),
   ),
 ];
@@ -44,12 +47,16 @@ function fixture({ queryId, parameters }) {
         allnum_total: index ? 60 : 20,
       }),
     );
-  if (queryId.startsWith('facts.execution-delivery'))
+  if (queryId.startsWith('facts.plan-quantity'))
     rows = ['A', 'B'].map((material_code, index) =>
-      record('facts.execution-delivery', {
+      record('facts.plan-quantity', {
         belong_base: '郑州',
         material_code,
-        shipment_qty_total: index ? 30 : 10,
+        plan_qty_total: index ? 30 : 10,
+        known_plan_qty_total: index ? 30 : 10,
+        source_plan_qty_total: index ? 30 : 10,
+        source_date_start: '20260101',
+        source_date_end: '20261231',
         source_rows: 1,
         missing_rows: 0,
         duplicate_rows: 0,
@@ -155,7 +162,16 @@ async function version(frame, month = '2026-10') {
 }
 
 test('product replacement fields populate old-product columns and the list omits base names', async (t) => {
-  const { frame } = await mpsPage(t, config, fixture);
+  const { frame } = await mpsPage(t, config, (query) => {
+    const result = fixture(query);
+    if (query.queryId.startsWith('products.'))
+      result.rows = result.rows.map((row) =>
+        row.material_code === 'A'
+          ? { ...row, replacement_material_code: 'REPLACE', replacement_product: '源替换品' }
+          : row,
+      );
+    return result;
+  });
   const section = frame.getByRole('region', { name: '产品明细', exact: true });
   await expect(section.getByRole('columnheader', { name: '基地名称', exact: true })).toHaveCount(0);
   await expect(section).not.toContainText('源标签：汤圆');
@@ -163,7 +179,9 @@ test('product replacement fields populate old-product columns and the list omits
   await expect(
     section.getByRole('columnheader', { name: '物料组名称', exact: true }),
   ).toBeVisible();
-  const parent = section.locator('tbody tr').filter({ hasText: '物料组甲' });
+  const parent = section.locator('tbody tr').filter({
+    has: frame.getByRole('button', { name: '查看物料组 G 的2个SKU', exact: true }),
+  });
   await expect(parent).toContainText('汤圆');
   await section.getByRole('button', { name: '查看物料组 G 的2个SKU', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '产品源字段与物料组SKU', exact: true });
@@ -199,12 +217,14 @@ test('historical shares reuse the existing computation while final category dema
   assert.match(csv, /,1,0\.5,/);
   assert.doesNotMatch(csv, /\d+\.\d+%/);
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await expect(frame.getByRole('region', { name: '大类预估需求数量', exact: true })).toContainText(
-    'M+4只到大类',
-  );
+  await expect(
+    frame
+      .getByRole('region', { name: '大类预估需求数量', exact: true })
+      .getByRole('columnheader', { name: /M\+4.*库存参考/ }),
+  ).toBeVisible();
 });
 
-test('source checks read DMS shipped pieces for the same explicit window in both evaluation modes', async (t) => {
+test('source checks read allnum planned pieces for the same explicit window in both evaluation modes', async (t) => {
   const { frame, calls } = await mpsPage(t, config, fixture);
   await version(frame, '2026-11');
   const section = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
@@ -221,7 +241,7 @@ test('source checks read DMS shipped pieces for the same explicit window in both
   for (const month of ['2026-07-01', '2026-08-01', '2026-09-01'])
     assert(
       calls.some(
-        (call) => call.queryId === 'facts.execution-delivery' && call.parameters.month === month,
+        (call) => call.queryId === 'facts.plan-quantity' && call.parameters.month === month,
       ),
     );
   await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
@@ -234,7 +254,7 @@ test('source checks read DMS shipped pieces for the same explicit window in both
 test('missing recent plans preserve the independent annual estimate and disclose the monthly dependency', async (t) => {
   const { frame } = await mpsPage(t, config, (query) => {
     const result = fixture(query);
-    return query.queryId === 'facts.execution-delivery'
+    return query.queryId === 'facts.plan-quantity'
       ? { ...result, rows: [], totalRowCount: 0, hasMorePages: false }
       : result;
   });
@@ -244,9 +264,105 @@ test('missing recent plans preserve the independent annual estimate and disclose
   await expect(row.locator('td').nth(2)).toHaveText('120');
   await expect(row.locator('td').nth(5)).toHaveText('400');
   await expect(row.locator('td').nth(6)).toHaveText('-');
+  await openCategoryCalculation(frame);
   const calculation = frame.getByRole('region', { name: '逐月测算', exact: true });
-  await expect(calculation).toContainText('2026-07至2026-09 DMS发货量缺失或不完整');
+  await expect(
+    frame
+      .getByRole('region', { name: '大类预估需求数量', exact: true })
+      .locator('.dc-demand-amount')
+      .first(),
+  ).toHaveAttribute('title', /2026-07至2026-09 计划量缺失或不完整/);
   await expect(calculation.locator('tbody tr').first().locator('td').nth(6)).toHaveText('40');
+});
+
+test('nationwide source checks accept base-free plan quantities while retaining missing-code, duplicate and missing-quantity anomalies', async (t) => {
+  let invalid = false;
+  const { page, frame } = await mpsPage(t, config, (query) => {
+    const result = fixture(query);
+    if (query.queryId === 'facts.plan-quantity.count' && invalid)
+      return { ...result, rows: [{ total: 3 }] };
+    if (query.queryId !== 'facts.plan-quantity') return result;
+    result.rows.forEach((row, index) => {
+      row.belong_base = '';
+      row.plan_qty_total = invalid ? null : index ? 0 : 20;
+      row.known_plan_qty_total = index ? 0 : 20;
+      row.source_plan_qty_total = index ? 0 : 20;
+      row.duplicate_rows = invalid && !index ? 2 : 0;
+      row.source_rows = invalid && !index ? 2 : 1;
+      row.missing_rows = invalid && index ? 1 : 0;
+    });
+    if (invalid)
+      result.rows.push(
+        record('facts.plan-quantity', {
+          belong_base: '',
+          material_code: '',
+          plan_qty_total: 5,
+          known_plan_qty_total: 5,
+          source_plan_qty_total: 5,
+          source_rows: 1,
+          duplicate_rows: 0,
+          missing_rows: 0,
+        }),
+      );
+    return { ...result, totalRowCount: result.rows.length };
+  });
+  await version(frame, '2026-11');
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '有基地产品.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,G,,\n郑州,B,产品乙,汤圆,系列甲,G,,',
+    ),
+  });
+  const source = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
+  const category = source.locator('tbody tr').filter({
+    has: frame.getByRole('cell', { name: '汤圆', exact: true }),
+  });
+  await expect(category.locator('td').nth(3)).toHaveText('60');
+  await expect(category.locator('td').nth(6)).toHaveText('200.00%');
+  await expect(category).not.toContainText('缺基地');
+  const exportRows = async (name) => {
+    const pending = page.waitForEvent('download');
+    await source.getByRole('button', { name, exact: true }).click();
+    const text = await mpsDownloadText(await (await pending).path());
+    const book = XLSX.read(text, { type: 'string', raw: true });
+    return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  };
+  const checks = await exportRows('下载源值核对');
+  assert.equal(checks.length, 3);
+  assert(checks.every((row) => row['计划源数量'] === '20' && row['核对比值'] === '2'));
+  const valid = (await exportRows('下载完整来源明细')).filter((row) => row['来源'] === '计划量');
+  assert.equal(valid.length, 6);
+  assert(valid.every((row) => !row['基地'] && !row['缺项原因']));
+  assert.equal(valid.filter((row) => row['产品编码'] === 'B' && row['计划数量'] === '0').length, 3);
+  invalid = true;
+  await source.getByRole('button', { name: '读取三月源值', exact: true }).click();
+  await expect(category.locator('td').nth(6)).toHaveText('-');
+  await expect(category).toContainText('计划来源六维业务键重复');
+  await expect(category).toContainText('计划数量缺失');
+  const incomplete = (await exportRows('下载完整来源明细')).filter(
+    (row) => row['来源'] === '计划量',
+  );
+  assert.equal(incomplete.length, 9);
+  assert.equal(
+    incomplete.filter(
+      (row) =>
+        !row['产品编码'] && row['原因'] === '不在当前产品池' && row['缺项原因'] === '缺物料编码',
+    ).length,
+    3,
+  );
+  assert.equal(
+    incomplete.filter(
+      (row) => row['产品编码'] === 'A' && !row['计划数量'] && row['重复键条数'] === '2',
+    ).length,
+    3,
+  );
+  assert.equal(
+    incomplete.filter(
+      (row) => row['产品编码'] === 'B' && !row['计划数量'] && row['缺数量条数'] === '1',
+    ).length,
+    3,
+  );
 });
 
 test('three-year cards read complete historical periods and disclose the valid years of the mean', async (t) => {
@@ -273,12 +389,16 @@ test('three-year cards read complete historical periods and disclose the valid y
   await expect(dialog).toContainText('1.1111111111111112');
   await expect(dialog).toContainText('等权平均');
   await expect(dialog).toContainText('2025、2024、2023（3年）');
+  await expect(dialog).toContainText('2022-10');
+  await expect(dialog).toContainText('3/3组 · 三年齐备');
+  for (const label of ['分子年月', '分母年月', '分子数量', '分母数量', '参与平均', '排除原因'])
+    await expect(dialog.getByRole('columnheader', { name: label, exact: true })).toBeVisible();
 });
 
 test('failed source-check refresh retracts old comparisons instead of leaving an earlier ratio visible', async (t) => {
   let deny = false;
   const { frame } = await mpsPage(t, config, (query) => {
-    if (deny && query.queryId === 'facts.execution-delivery') throw Error('SOURCE_READ_DENIED');
+    if (deny && query.queryId === 'facts.plan-quantity') throw Error('SOURCE_READ_DENIED');
     return fixture(query);
   });
   const section = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
@@ -412,7 +532,7 @@ test('source-check displays round quantities but its download keeps monthly deci
   await section.getByRole('button', { name: '下载源值核对', exact: true }).click();
   const csv = await mpsDownloadText(await (await waiting).path());
   assert.match(csv, /评估版本,评估月份,源月份/);
-  assert.match(csv, /,汤圆,DMS发货数量,40\.75,40,40\.75,40,/);
+  assert.match(csv, /,汤圆,计划数量,40\.75,40,40\.75,40,/);
 });
 
 test('entering demand confirmation reads the three-month source check without a separate click', async (t) => {
@@ -446,9 +566,7 @@ test('sales plan share card rebuilds three dimensions using current material-gro
   assert(!csv.includes('25.00%'));
   assert(
     calls.some(
-      (call) =>
-        call.queryId === 'plan-rate.detail' &&
-        call.parameters.months.join() === '202610,202611,202612',
+      (call) => call.queryId === 'plan-rate.detail' && call.parameters.months.join() === '202610',
     ),
   );
 });
@@ -486,10 +604,11 @@ test('confirmed category computation reaches the monthly table and keeps raw dow
     .getByRole('region', { name: '大类预估需求数量', exact: true })
     .locator('tbody tr')
     .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
-  await expect(result.locator('td').nth(1)).toHaveText('51');
-  await expect(result.locator('td').nth(2)).toHaveText('59');
-  await expect(result.locator('td').nth(3)).toHaveText('89');
-  await expect(result.locator('td').nth(4)).toHaveText('177');
+  await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('51');
+  await expect(result.locator('td').nth(2).locator('.dc-demand-amount')).toHaveText('59');
+  await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('89');
+  await expect(result.locator('td').nth(4).locator('.dc-demand-amount')).toHaveText('177');
+  await openCategoryCalculation(frame);
   const calculation = frame
     .getByRole('region', { name: '逐月测算', exact: true })
     .locator('tbody tr')
@@ -544,12 +663,13 @@ test('current pool category demand fills all four months and exports correction 
   const { page, frame } = await mpsPage(t, config, fixture);
   await version(frame);
   await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
+  await openCategoryCalculation(frame);
   const methods = frame.getByRole('region', { name: '逐月测算', exact: true });
   await expect(methods).toContainText('4 / 4 项可计算');
   const summary = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
   await expect(summary.locator('tbody tr')).toHaveCount(1);
-  const cells = await summary.locator('tbody tr td').allTextContents();
-  assert(cells.slice(1, 5).every((value) => /^\d+$/.test(value)));
+  const cells = await summary.locator('.dc-demand-amount').allTextContents();
+  assert(cells.length === 4 && cells.every((value) => /^\d+$/.test(value)));
   const waiting = page.waitForEvent('download');
   await methods.getByRole('button', { name: '下载测算明细', exact: true }).click();
   const csv = await mpsDownloadText(await (await waiting).path());
@@ -646,7 +766,9 @@ test('模型双期预测沿用四项统计，明细保留物料组及零数量',
   await expect(row).toContainText('系列甲');
   await expect(row.getByRole('cell', { name: 'G', exact: true })).toBeVisible();
   const columns = await dialog.getByRole('columnheader').allTextContents();
-  await expect(row.locator('td').nth(columns.indexOf('数量'))).toHaveText('0');
+  const quantityColumn = columns.findIndex((column) => column.startsWith('数量（'));
+  assert(quantityColumn >= 0);
+  await expect(row.locator('td').nth(quantityColumn)).toHaveText('0');
 });
 
 test('同比缺一年时预览按两年计算并列出有效年份', async (t) => {
@@ -683,4 +805,86 @@ test('同比缺一年时预览按两年计算并列出有效年份', async (t) =
       ),
     )
     .toBe(true);
+});
+
+test('basic source anomalies keep known BI quantities and export every row while the plan dataset is denied', async (t) => {
+  const currentProducts = [
+    ...products,
+    ...Array.from({ length: 30 }, (_, index) =>
+      record('products.detail', {
+        product_item: 'G',
+        product_item_name: '物料组甲',
+        material_code: `IN-${index + 1}`,
+        material_name: `池内产品${index + 1}`,
+        sub_category: '汤圆',
+        series: '系列甲',
+        source_rows: 1,
+      }),
+    ),
+  ];
+  const { page, frame } = await mpsPage(t, config, (query) => {
+    if (query.queryId.startsWith('facts.plan-quantity'))
+      throw Error('AUTHORIZATION_REWRITE：数据表不在当前租户启用数据集范围内');
+    if (!query.queryId.startsWith('products.') && query.queryId !== 'facts.history')
+      return fixture(query);
+    const rows = query.queryId.startsWith('products.')
+      ? currentProducts
+      : Array.from({ length: 32 }, (_, index) =>
+          record('facts.history', {
+            'agents_scm_cust_deliv_daily_di.belong_base': '郑州',
+            'agents_scm_cust_deliv_daily_di.material_code':
+              index === 0 ? 'A' : index < 31 ? `IN-${index}` : 'OUT-31',
+            'agents_scm_cust_deliv_daily_di.material_name': `来源产品${index}`,
+            'agents_scm_cust_deliv_daily_di.act_dl_qty_total': index === 0 ? 0 : index,
+            'agents_scm_cust_deliv_daily_di.act_dl_qty_all_total': index,
+          }),
+        );
+    return {
+      rows: query.queryId.endsWith('.count') ? [{ total: rows.length }] : rows,
+      returnedColumns: query.queryId.endsWith('.count')
+        ? ['total']
+        : config.queries[query.queryId].columns,
+      configVersion: 'denied-plan-fixture',
+      totalRowCount: rows.length,
+      offset: 0,
+      hasMorePages: false,
+      dataStatus: 'ok',
+      warnings: [],
+    };
+  });
+  await version(frame);
+  const source = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
+  await expect(source).toContainText('当前租户尚未启用此数据集，请联系管理员启用');
+  const category = source
+    .locator('tbody tr')
+    .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
+  await expect(category.locator('td').nth(2)).toHaveText('1,395');
+  await source
+    .getByRole('button', { name: '查看异常与来源明细（6条异常，共99条）', exact: true })
+    .click();
+  const dialog = frame.getByRole('dialog', { name: '基础核对异常与来源明细', exact: true });
+  await expect(dialog.locator('tbody tr')).toHaveCount(25);
+  await expect(dialog).toContainText('2026-06至2026-08');
+  await expect(dialog).toContainText('异常6条');
+  await expect(dialog.locator('tbody tr').nth(0)).toContainText('读取失败');
+  await expect(dialog.locator('tbody tr').nth(3)).toContainText('OUT-31');
+  await expect(dialog.locator('tbody tr').nth(3)).toContainText('不在当前产品池');
+  await expect(dialog.locator('tbody tr').nth(6).locator('td').nth(3)).toHaveText('A');
+  await expect(dialog.locator('tbody tr').nth(7).locator('td').nth(3)).toHaveText('IN-1');
+  await dialog.getByRole('button', { name: '下一页来源明细', exact: true }).click();
+  await expect(dialog.locator('tbody tr').nth(0).locator('td').nth(3)).toHaveText('IN-19');
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  const pending = page.waitForEvent('download');
+  await source.getByRole('button', { name: '下载完整来源明细', exact: true }).click();
+  const csv = await mpsDownloadText(await (await pending).path());
+  const book = XLSX.read(csv, { type: 'string', raw: true });
+  const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  assert.equal(rows.length, 99);
+  assert.equal(rows.filter((row) => row['来源'] === '计划量').length, 3);
+  assert.equal(rows[0]['产品编码'], 'A');
+  assert.equal(rows[1]['产品编码'], 'IN-1');
+  assert.equal(
+    rows.filter((row) => row['产品编码'] === 'OUT-31' && row['原因'] === '不在当前产品池').length,
+    3,
+  );
 });
