@@ -28,7 +28,7 @@ const {
   getAssistantSurfaceWorkbenchScope,
 } = module.exports;
 
-test('restored unsent SKU input stays exact without replaying the original draft writer', async (t) => {
+test('restored monthly SKU input rounds without replaying the original draft writer', async (t) => {
   const dom = new JSDOM('<main id="root"></main>', { pretendToBeVisual: true });
   const saved = [
     'window',
@@ -105,7 +105,7 @@ test('restored unsent SKU input stays exact without replaying the original draft
       ),
     ),
   );
-  assert.equal(document.querySelector('input').value, '1111.125');
+  assert.equal(document.querySelector('input').value, '1111');
   await act(async () => new Promise((resolve) => setTimeout(resolve, 550)));
   assert.equal(
     writes.length,

@@ -216,12 +216,14 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   const [draftReady, setDraftReady] = useState(initialAction === 'SAVE');
   const [draftError, setDraftError] = useState('');
   const [returnDestination, setReturnDestination] = useState<SalesPlanReturnDestination>();
+  const [returnHasAdjustmentDraft, setReturnHasAdjustmentDraft] = useState(false);
   useEffect(() => {
     if (initialAction === 'SAVE') return;
     const controller = new AbortController();
     setDraftReady(false);
     setDraftError('');
     setReturnDestination(undefined);
+    setReturnHasAdjustmentDraft(false);
     void salesPlan
       .draft!.invoke({ planId: row.planId, versionId: row.versionId, signal: controller.signal })
       .then(async (result) => {
@@ -245,6 +247,14 @@ const RegionalApprovalLiveActionDialog: React.FC<{
             selectedRole === approvalStage ? pendingValues : undefined,
           );
           setReturnDestination(context);
+          setReturnHasAdjustmentDraft(
+            Boolean(
+              (result.draft?.role && result.draft.role !== selectedRole
+                ? 0
+                : result.draft?.adjustments.length) ||
+              (selectedRole === approvalStage && Object.keys(pendingValues ?? {}).length),
+            ),
+          );
           setAdjustmentValues(
             Object.fromEntries(changes.map((item) => [item.skuCode, item.adjustQty])),
           );
@@ -400,9 +410,10 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           (adjustments.length > 0 && adjustmentSkus.status !== 'success') ||
           nodeComparisons.some((item) => !item.confirmedQty || item.confirmedQty.startsWith('-')));
   const unknown = t('common.assistantSurface.regionalApproval.liveAction.checksum.unknown');
-  const hasAdjustmentDraft = Object.values(adjustmentValues).some(
-    (value) => value.trim().length > 0,
-  );
+  const hasAdjustmentDraft =
+    initialAction === 'REJECT'
+      ? returnHasAdjustmentDraft
+      : Object.values(adjustmentValues).some((value) => value.trim().length > 0);
   const displayDecimal = (value: unknown, currency = false) =>
     typeof value === 'string' && /^-?\d+(?:\.\d+)?$/.test(value.trim())
       ? `${currency ? '¥' : ''}${formatExactDecimal(value)}`
