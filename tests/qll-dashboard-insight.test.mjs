@@ -60,8 +60,16 @@ test('chain turnover divides summed stock by summed daily movement and includes 
   const parts = {
     health: { summary: { total_qty: 100 }, snapshotDate: '2026-11-02' },
     'branch-stock': { summary: { total_qty: 50 }, snapshotDate: '2026-11-02' },
+    base: { summary: { matched_turnover_inventory: 100, matched_turnover_demand: 10 } },
     'base-shipments': { summary: { rolling_ship_positive: 300, rolling_missing_qty: 0 } },
-    'branch-replenishment': { summary: { rolling_ship_daily: 20 } },
+    'branch-replenishment': {
+      summary: {
+        rolling_ship_daily: 20,
+        historical_turnover_days: 2.5,
+        matched_turnover_inventory: 50,
+        matched_turnover_daily: 20,
+      },
+    },
     'channel-overview': {
       summary: {
         inventory: 120,
@@ -142,5 +150,44 @@ test('company fulfillment adds shipped-pool quantities and never averages rates'
       },
     }).rate,
     null,
+  );
+});
+
+test('branch turnover uses the same available-stock movement scope as the branch workbench', () => {
+  const parts = {
+    health: { summary: { total_qty: 300 }, snapshotDate: '2026-11-06' },
+    'branch-stock': { summary: { total_qty: 100 }, snapshotDate: '2026-11-06' },
+    base: { summary: { matched_turnover_inventory: 300, matched_turnover_demand: 30 } },
+    'base-shipments': { summary: { rolling_ship_positive: 900, rolling_missing_qty: 0 } },
+    'branch-replenishment': {
+      summary: {
+        rolling_ship_daily: 10,
+        historical_turnover_days: 6,
+        turnover_count: 2,
+        matched_turnover_inventory: 60,
+        matched_turnover_daily: 10,
+      },
+    },
+  };
+  assert.equal(chainStockMetrics(parts, false).branchTurnover, 6);
+  assert.equal(chainStockMetrics(parts, false).turnover, 9);
+  assert.equal(
+    chainStockMetrics(
+      { ...parts, 'branch-replenishment': { summary: { rolling_ship_daily: 10 } } },
+      false,
+    ).branchTurnover,
+    null,
+  );
+  assert.equal(
+    chainStockMetrics(
+      {
+        ...parts,
+        'branch-replenishment': {
+          summary: { rolling_ship_daily: 10, historical_turnover_days: 0 },
+        },
+      },
+      false,
+    ).branchTurnover,
+    0,
   );
 });

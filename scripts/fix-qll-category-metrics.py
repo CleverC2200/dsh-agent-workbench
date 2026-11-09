@@ -1,9 +1,10 @@
-"""Keep category actual turnover, channel validity and prefetched SQL on the same definitions.
+"""Keep category workbench turnover, channel validity and prefetched SQL on the same definitions.
 
 Run after regenerating source/snapshot SQL. Existing schemas, filters and public aliases stay intact.
 """
 import json
 import re
+import copy
 from pathlib import Path
 import sqlglot
 from sqlglot import exp
@@ -28,12 +29,21 @@ def patch(sql):
         source = fields['organization'].this
         if isinstance(source, exp.Column) and source.table == 'r' and source.name == 'base':
             base_sources.add(cte.alias)
-            if fields['daily'].this.sql() == 'r.daily_demand':
-                fields['daily'].replace(expression('r.rolling_ship_positive / 30.0 AS daily'))
+            if fields['daily'].this.sql() != 'r.daily_demand':
+                fields['daily'].replace(expression('r.daily_demand AS daily'))
                 changed = True
             if 'target_daily' not in fields:
                 select.select('r.daily_demand AS target_daily', append=True, copy=False)
                 changed = True
+        elif isinstance(source, exp.Column) and source.table == 'r' and source.name == 'warehouseid':
+            for name, value in {
+                'turnover_qty': 'CASE WHEN r.daily_movement > 0 AND r.available_qty >= 0 THEN r.available_qty ELSE NULL END',
+                'daily': 'CASE WHEN r.daily_movement > 0 AND r.available_qty >= 0 THEN r.daily_movement ELSE NULL END',
+            }.items():
+                replacement = expression(value + ' AS ' + name)
+                if fields[name] != replacement:
+                    fields[name].replace(replacement)
+                    changed = True
         elif isinstance(source, exp.Column) and source.table == 'r' and source.name == 'province':
             replacements = {
                 'inventory': 'CASE WHEN r.inventory >= 0 THEN r.inventory ELSE NULL END',
@@ -51,10 +61,12 @@ def patch(sql):
         if source and isinstance(source.this, exp.Table) and source.this.name in base_sources:
             for value in select.expressions:
                 if value.alias_or_name in ['target_turnover_qty','target_daily']:
-                    for column in value.find_all(exp.Column):
-                        if column.name == 'daily':
-                            column.set('this', exp.to_identifier('target_daily'))
-                            changed = True
+                    alias = source.this.alias_or_name
+                    field = 'target' if value.alias_or_name == 'target_turnover_qty' else 'daily'
+                    replacement = expression(f'SUM(CASE WHEN {alias}.inventory >= 0 AND {alias}.target >= 0 AND {alias}.daily >= 0 THEN {alias}.{field} ELSE NULL END) AS {value.alias_or_name}')
+                    if value != replacement:
+                        value.replace(replacement)
+                        changed = True
         fields = {e.alias_or_name: e for e in select.expressions}
         where = select.args.get('where')
         if (where and 'daily_movement' in fields and
@@ -69,8 +81,21 @@ def patch(sql):
     return tree.sql() if changed else sql
 
 def update(config):
+    for query in config['queries'].values():
+        query['request']['sql'] = query['request']['sql'].replace('BASE_CHAIN_SUMMARY:', 'BASE_STOCK:').replace('BASE_METRICS:qll:', 'BASE_STOCK:')
+        if 'chain_age AS' in query['request']['sql']:
+            tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
+            changed_age = False
+            for cte in tree.find_all(exp.CTE):
+                if cte.alias == 'chain_age':
+                    for literal in cte.find_all(exp.Literal):
+                        if literal.is_string and literal.this == 'CHAIN_COMPARISON':
+                            literal.set('this', 'BASE_AGE')
+                            changed_age = True
+            if changed_age:
+                query['request']['sql'] = tree.sql()
     for query_id in ['category-tree.base','snapshot.category-tree.base','category-tree.customer',
-                     'snapshot.category-tree.branch','summary.first-screen','summary.bootstrap']:
+                     'category-tree.branch','snapshot.category-tree.branch','summary.first-screen','summary.bootstrap']:
         query = config['queries'][query_id]
         sql = patch(query['request']['sql'])
         if query_id in ['summary.first-screen','summary.bootstrap']:
@@ -81,7 +106,44 @@ def update(config):
         if member['queryId'] == 'snapshot.category-tree.branch':
             member['values']['batch_rolling_start'] = {'snapshotValue':'rollingStart','format':'YYYYMMDD'}
             member['values']['batch_end_exclusive'] = {'snapshotValue':'nextDay','format':'YYYYMMDD'}
+    branch_organization(config)
     return config
+
+def branch_organization(config):
+    # Organization drill rows must retain the branch workbench stock/movement pool.
+    for prefix, suffix in [(p, s) for p in ['', 'snapshot.'] for s in ['groups', 'atomic']]:
+        query = copy.deepcopy(config['queries'][prefix + 'batch-age.' + suffix])
+        tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
+        if prefix:
+            facts = next(c for c in tree.ctes if c.alias == 'batch_facts')
+            facts.set('this', facts.this.expression.copy())
+            select = facts.this
+            select.join('agents_inv_branch_sku_day AS movement', join_type='LEFT',
+                        on="movement.inv_batch_id = m.inv_batch_id AND movement.inv_variant_id = 'BRANCH_DEFAULT' AND movement.warehouseid = m.warehouseid AND movement.sku = m.sku", copy=False)
+            for field in select.expressions:
+                if field.alias_or_name == 'daily_movement':
+                    field.replace(expression('CAST(movement.rolling_ship_daily AS DECIMAL(38, 7)) AS daily_movement'))
+        else:
+            for node in list(tree.find_all(exp.In)):
+                if (node.find_ancestor(exp.Where) and isinstance(node.this, exp.Column)
+                        and node.this.name == 'warehouse_classify'):
+                    node.replace(exp.EQ(this=node.this.copy(), expression=exp.Literal.string('20')))
+            for select in tree.find_all(exp.Select):
+                source = select.args.get('from_') or select.args.get('from')
+                if source and isinstance(source.this, exp.Table) and source.this.name == 'agents_scm_inventory_sku_data_d':
+                    select.where("b.warehouseid NOT IN ('Y204', 'N436')", append=True, copy=False)
+        groups = next(c.this for c in tree.ctes if c.alias == 'batch_groups')
+        for field in groups.expressions:
+            if field.alias_or_name == 'historical_turnover':
+                field.replace(expression('SUM(CASE WHEN b.daily_movement > 0 AND b.available_qty >= 0 THEN b.available_qty ELSE NULL END) * 1.0 / NULLIF(SUM(CASE WHEN b.daily_movement > 0 AND b.available_qty >= 0 THEN b.daily_movement ELSE NULL END), 0) AS historical_turnover'))
+        query['request']['sql'] = tree.sql()
+        query['title'] = '分仓组织库存与回顾周转'
+        if not prefix:
+            query['summaryRoute']['queryId'] = 'snapshot.branch-structure.' + suffix
+        if suffix == 'groups':
+            query['pagination']['atomicQuery'] = 'branch-structure.atomic'
+        config['queries'][prefix + 'branch-structure.' + suffix] = query
+    next(v for v in config['sourceViews']['views'] if v['id'] == 'branch-structure')['queryId'] = 'branch-structure.groups'
 
 if __name__ == '__main__':
     config = json.loads(PATH.read_text())

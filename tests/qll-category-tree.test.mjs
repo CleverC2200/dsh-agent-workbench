@@ -207,6 +207,13 @@ test('base SKU drilldown stays on its authorized materialized rows instead of en
         rejectedColumns: [],
         configVersion: 'fixed',
       };
+    if (options.queryId === 'snapshot.calendar.target_versions')
+      return {
+        rows: [{ month: '2026-11-01', inventory_version: '月初' }],
+        returnedColumns: columns,
+        rejectedColumns: [],
+        configVersion: 'fixed',
+      };
     assert.equal(
       options.queryId,
       'snapshot.category-tree.base',
@@ -235,4 +242,80 @@ test('base SKU drilldown stays on its authorized materialized rows instead of en
   assert.equal(values.bases_enabled, true);
   assert.deepEqual(values.bases, ['华南']);
   assert.equal(values.order_bases_enabled, false);
+});
+
+test('latest published company snapshot keeps a later as-of read out of raw permission scopes', async () => {
+  const daily = JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8'));
+  delete daily.dailySummary.bundle;
+  const calls = [];
+  const read = categoryTreeReader(daily, async (_request, options) => {
+    calls.push(options);
+    const columns = daily.queries[options.queryId].resultColumns;
+    if (options.queryId === 'summary.snapshot')
+      return {
+        rows: [
+          {
+            batch_id: 'inventory_20261106194224000000',
+            business_date: '2026-11-06',
+            stock_date: '2026-11-06',
+            target_month: '2026-11-01',
+          },
+        ],
+        returnedColumns: columns,
+        rejectedColumns: [],
+        configVersion: 'fixed',
+      };
+    if (options.queryId === 'snapshot.overview.quick-stock')
+      return {
+        rows: [
+          {
+            location_type: '基地',
+            snapshot_date: '2026-11-06',
+            row_count: 1,
+            total_qty: 100,
+            available_qty: 80,
+            pack_unit_qty: 1,
+            freeze_qty: 0,
+          },
+        ],
+        returnedColumns: columns,
+        rejectedColumns: [],
+        configVersion: 'fixed',
+      };
+    if (options.queryId === 'snapshot.calendar.target_versions')
+      return {
+        rows: [{ month: '2026-11-01', inventory_version: '月初' }],
+        returnedColumns: columns,
+        rejectedColumns: [],
+        configVersion: 'fixed',
+      };
+    assert.equal(
+      options.queryId,
+      'snapshot.category-tree.base',
+      'a covered stock batch must not query raw orders at a different cutoff',
+    );
+    return {
+      rows: [
+        Object.fromEntries(
+          columns.map((c) => [c, c === 'node_key' ? '汤圆' : c === 'inventory' ? 100 : null]),
+        ),
+      ],
+      returnedColumns: columns,
+      rejectedColumns: [],
+      configVersion: 'fixed',
+    };
+  });
+  const result = await read(
+    'base',
+    { date: '2026-11-09', level: 'category' },
+    new AbortController().signal,
+  );
+  assert.equal(result.rows[0].inventory, 100);
+  assert.equal(result.readDate, '2026-11-06');
+  const values = calls.at(-1).values;
+  assert.equal(values.stock_date, '2026-11-06');
+  assert.equal(values.order_end_exclusive, '2026-11-07');
+  assert.equal(values.shipment_end_exclusive, '20261107');
+  assert.equal(values.rolling_start, '20261008');
+  assert.equal(values.inventory_version, '月初');
 });

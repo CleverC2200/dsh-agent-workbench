@@ -6,6 +6,7 @@ type InsightPart = {
   summary?: Record<string, unknown>;
   rows?: Array<Record<string, unknown>>;
   snapshotDate?: string | null;
+  readDate?: string;
   error?: string;
 };
 
@@ -27,13 +28,12 @@ export function chainStockMetrics(
     : company !== null && customerInventory !== null
       ? company + customerInventory
       : null;
-  const shipments = parts['base-shipments']?.summary;
-  const baseShipment = knownNumber(shipments?.rolling_ship_positive);
-  const baseDaily =
-    knownNumber(shipments?.rolling_missing_qty) === 0 && baseShipment !== null
-      ? baseShipment / 30
-      : null;
-  const branchDaily = knownNumber(parts['branch-replenishment']?.summary?.rolling_ship_daily);
+  const baseMetrics = parts.base?.summary;
+  const baseTurnoverInventory = knownNumber(baseMetrics?.matched_turnover_inventory);
+  const baseDaily = knownNumber(baseMetrics?.matched_turnover_demand);
+  const branchMetrics = parts['branch-replenishment']?.summary;
+  const branchTurnoverInventory = knownNumber(branchMetrics?.matched_turnover_inventory);
+  const branchDaily = knownNumber(branchMetrics?.matched_turnover_daily);
   const ratio = (quantity: number | null, daily: number | null) =>
     quantity !== null && quantity >= 0 && daily !== null && daily > 0 ? quantity / daily : null;
   const customerCover = knownNumber(customer?.onhand_cover_inventory);
@@ -43,13 +43,17 @@ export function chainStockMetrics(
     baseDaily !== null && branchDaily !== null && baseDaily >= 0 && branchDaily >= 0
       ? baseDaily + branchDaily
       : null;
+  const matchedCompany =
+    sameDate && baseTurnoverInventory !== null && branchTurnoverInventory !== null
+      ? baseTurnoverInventory + branchTurnoverInventory
+      : null;
   const turnoverInventory = !channel
-    ? company
-    : company !== null &&
+    ? matchedCompany
+    : matchedCompany !== null &&
         customerCover !== null &&
         validCustomerCover !== null &&
         validCustomerCover > 0
-      ? company + customerCover
+      ? matchedCompany + customerCover
       : null;
   const turnoverDaily = !channel
     ? companyDaily
@@ -67,10 +71,12 @@ export function chainStockMetrics(
     company,
     inventory,
     customerInventory,
+    baseTurnoverInventory,
+    branchTurnoverInventory,
     baseDaily,
     branchDaily,
-    baseTurnover: ratio(base, baseDaily),
-    branchTurnover: ratio(branch, branchDaily),
+    baseTurnover: ratio(baseTurnoverInventory, baseDaily),
+    branchTurnover: knownNumber(parts['branch-replenishment']?.summary?.historical_turnover_days),
     turnover: ratio(turnoverInventory, turnoverDaily),
     turnoverInventory,
     turnoverDaily,
@@ -102,7 +108,8 @@ export function chainDashboardEvidence(
   const customer = parts['channel-overview'];
   return {
     scope: {
-      asOf: date,
+      asOf: parts.health?.readDate ?? date,
+      requestedAsOf: date,
       primaryBasis: channel ? '全链库存（基地＋分仓＋客户在仓）' : '公司体系库存（基地＋分仓）',
       channelSwitch: channel,
       unit: '件',
