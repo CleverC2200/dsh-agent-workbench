@@ -5,6 +5,31 @@ import { DatabaseSync } from 'node:sqlite';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 
+test('latest shipment date is scoped to the statistical month and excludes misdated or other-month rows', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec('CREATE TABLE agents_scm_stock_detail_d (data_month TEXT, the_date TEXT)');
+  const insert = db.prepare('INSERT INTO agents_scm_stock_detail_d VALUES (?, ?)');
+  for (const [month, date] of [
+    ['2026-10-01', '2026-10-22'],
+    ['2026-10-01', '2026-10-31'],
+    ['2026-10-01', '2026-11-09'],
+    ['2026-11-01', '2026-11-08'],
+    ['2026-12-01', null],
+  ])
+    insert.run(month, date);
+  const query = db.prepare(config.queries['facts.shipment-latest'].request.sql);
+  assert.equal(
+    query.get({ month: '2026-10-01', month_end: '2026-10-31' }).latest_date,
+    '2026-10-31',
+  );
+  assert.equal(
+    query.get({ month: '2026-11-01', month_end: '2026-11-30' }).latest_date,
+    '2026-11-08',
+  );
+  assert.equal(query.get({ month: '2026-12-01', month_end: '2026-12-31' }).latest_date, null);
+});
+
 test('计划量按实证月份和六维来源键读取 allnum，缺量和重复分开，日期跨自然月不丢量', (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
