@@ -6,6 +6,7 @@ type InsightPart = {
   summary?: Record<string, unknown>;
   rows?: Array<Record<string, unknown>>;
   snapshotDate?: string | null;
+  readDate?: string;
   error?: string;
 };
 
@@ -102,7 +103,8 @@ export function chainDashboardEvidence(
   const customer = parts['channel-overview'];
   return {
     scope: {
-      asOf: date,
+      asOf: parts.health?.readDate ?? date,
+      requestedAsOf: date,
       primaryBasis: channel ? '全链库存（基地＋分仓＋客户在仓）' : '公司体系库存（基地＋分仓）',
       channelSwitch: channel,
       unit: '件',

@@ -8,6 +8,7 @@ import { createAgentQueries } from './agent-query';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readConfiguredTargetScope } from './configured-target-scope';
 import type { ConfiguredExecution } from './agent-query';
+import { qllPublishedDate } from './qll-published-date';
 
 /** Independent base shortage views share the page's authorized daily batch. */
 export async function readBaseCurrentShortage(
@@ -212,6 +213,8 @@ export async function readConfiguredFacts(
       freshAfter: options.freshAfter,
     }),
     q = config.queries[view.queryId];
+  if (!viewId.startsWith('channel-'))
+    input = { ...input, asOf: await qllPublishedDate(config, input.asOf, options) };
   // Display reads fetch only the requested page; full-scope totals and explicit
   // export/submission reads retain their independent contracts.
   const readSize = pageSize;

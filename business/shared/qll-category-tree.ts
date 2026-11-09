@@ -1,5 +1,7 @@
 import { createAgentQueries, type ConfiguredExecution } from './agent-query';
 import type { AgentSqlConfig } from './sql-config';
+import { qllPublishedDate } from './qll-published-date';
+import { readConfiguredTargetScope } from './configured-target-scope';
 
 export type ChainLayer = 'base' | 'branch' | 'customer';
 export type TreeRow = Record<string, any> & { node_key: string; node_name: string };
@@ -48,6 +50,8 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
     },
     signal: AbortSignal,
   ) => {
+    if (layer !== 'customer')
+      input = { ...input, date: await qllPublishedDate(config, input.date, { execute, signal }) };
     const id = `category-tree.${layer}`;
     const query = client.config.queries[id];
     if (!query) throw Error('品类下钻查询未装载，请更新全链库存插件');
@@ -76,7 +80,8 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
       if (snapshot && (!/^20\d{2}-\d{2}-\d{2}$/.test(snapshot) || snapshot > input.date))
         throw Object.assign(Error('库存快照日期无效'), { code: 'INVALID_SOURCE_DATE' });
     }
-    if (!snapshot) return { rows: [] as TreeRow[], hasNext: false, snapshot: undefined };
+    if (!snapshot)
+      return { rows: [] as TreeRow[], hasNext: false, snapshot: undefined, readDate: input.date };
     const values: Record<string, any> = {};
     for (const [key, spec] of Object.entries(query.parameterSpec) as [string, any][]) {
       let value = structuredClone(query.request.parameters[key]);
@@ -91,6 +96,15 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
       if (spec.format === 'YYYYMMDD') value = value.replaceAll('-', '');
       if (spec.format === 'YYYYMM') value = value.slice(0, 7).replace('-', '');
       values[spec.name] = value;
+    }
+    if (
+      layer === 'base' &&
+      config.dailySummary &&
+      (await client.snapshot({ signal })).kind === 'ready'
+    ) {
+      const targetScope = await readConfiguredTargetScope(client, input.date, signal);
+      values.month = targetScope.targetMonth;
+      values.inventory_version = targetScope.inventoryVersion;
     }
     Object.assign(values, {
       level: input.level,
@@ -124,6 +138,7 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
       rows: result.rows.slice(0, 10) as TreeRow[],
       hasNext: result.rows.length > 10,
       snapshot,
+      readDate: input.date,
     };
   };
 }

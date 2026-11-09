@@ -35,3 +35,7 @@
 基地组织下钻保留已物化的订单输入，只绑定当前基地和品类；不再因冗余订单过滤开关使合法摘要失配并回退原始明细。最终基地筛选和服务端权限继续生效。
 
 重新生成源与快照查询后运行 `scripts/fix-qll-category-metrics.py`；首屏汇总仍保留显式返回字段和原权限条件，使用等价 COUNT(1) 避免当前网关的嵌套通配计数处理开销。回归见 `tests/qll-category-tree.test.mjs`、`tests/daily-summary.test.mjs` 与 `scripts/test_qll_category_metrics.py`。
+
+## 完整批次与默认目标版本（2026-11-09）
+
+同月的公司卡片和列表使用已授权完整批次的业务时点绑定窗口，所选时点早于该批次时不使用未来事实。渠道来源保持独立。基地品类下钻复用 `readConfiguredTargetScope` 的已发布月份/版本规则，不固定滚动版本。权限错误不切换资源重试，不补0；页面不新增数据日期提示。回归见 `tests/qll-published-date.test.mjs` 和 `tests/qll-category-tree.browser.mjs`。
