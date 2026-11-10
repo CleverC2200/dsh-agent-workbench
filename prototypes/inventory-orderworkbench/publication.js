@@ -56,10 +56,16 @@ export function publishReport(snapshot, disposePage, importer) {
           importer?.apply,
         );
       } catch (error) {
-        if (active && connected && identity === epoch && version === revision)
+        if (active && connected && identity === epoch && version === revision) {
+          const reason = String(error?.cause?.message ?? error?.message ?? error);
           showStatus(
-            `页面上下文同步失败：${error.message}；当前页仍可本地查看，请重新操作或打开页面。`,
+            /SESSION_(?:EXPIRED|REJECTED|NOT_FOUND|IDENTITY_MISMATCH|MAX_LIFETIME_EXCEEDED)|PAGE_AGENT_SESSION_MISMATCH|会话已失效/.test(
+              reason,
+            )
+              ? '页面会话已失效，请重新打开页面。'
+              : `页面上下文同步失败：${error.message}；当前页仍可本地查看，请重新操作或打开页面。`,
           );
+        }
       }
     }
     running = false;
@@ -93,7 +99,7 @@ export function publishReport(snapshot, disposePage, importer) {
     timer = undefined;
     withdraw();
     withdraw = () => {};
-    showStatus('页面会话已失效，请重新打开页面。');
+    showStatus('正在重新连接订单工作台，连接完成后自动加载…');
   };
   const heartbeat = setInterval(() => {
     if (connected) update();
@@ -110,6 +116,7 @@ export function publishReport(snapshot, disposePage, importer) {
     clearTimeout(window.toastTimer);
     disposePage();
     window.removeEventListener('gea-session-changed', changed);
+    window.removeEventListener('gea-session-changing', invalidated);
     window.removeEventListener('gea-identity-changed', invalidated);
     window.removeEventListener('pagehide', dispose);
     document.removeEventListener('click', update);
@@ -120,6 +127,7 @@ export function publishReport(snapshot, disposePage, importer) {
   document.addEventListener('change', update);
   document.addEventListener('submit', update);
   window.addEventListener('gea-session-changed', changed);
+  window.addEventListener('gea-session-changing', invalidated);
   window.addEventListener('gea-identity-changed', invalidated);
   window.addEventListener('pagehide', dispose);
   void ready.then(() => {
