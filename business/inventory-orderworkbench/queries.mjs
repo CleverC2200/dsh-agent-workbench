@@ -88,14 +88,19 @@ const stockBatches = `SELECT belong_base,material_code,MAX(material_name) AS nam
           FROM agents_scm_stock_detail_d) production_sales
         WHERE month_date=REPLACE(CAST((SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2) AS CHAR),'-','')
         GROUP BY belong_base,material_code`;
-const stockJoin = (inventoryOnly = false) =>
+const stockJoin = (inventoryOnly = false, scoped = false) =>
   stockProjection +
   (inventoryOnly
     ? ` FROM stock_batches b LEFT JOIN stock_plans s`
     : ` FROM stock_plans s LEFT JOIN stock_batches b`) +
   ` ON (b.belong_base=s.belong_base OR (b.belong_base IS NULL AND s.belong_base IS NULL)) AND b.material_code=s.material_code
       LEFT JOIN stock_dictionary d ON d.sku=COALESCE(s.material_code,b.material_code)` +
-  (inventoryOnly ? ' WHERE s.source_rows IS NULL' : '');
+  (scoped
+    ? ` WHERE (:gea_p900='' OR ${workbenchBaseSql('COALESCE(s.belong_base,b.belong_base)')}=:gea_p900)` +
+      (inventoryOnly ? ' AND s.source_rows IS NULL' : '')
+    : inventoryOnly
+      ? ' WHERE s.source_rows IS NULL'
+      : '');
 
 const ageBase = workbenchBaseSql('b.belong_base');
 
@@ -366,7 +371,11 @@ export function addWorkbenchQueries(config) {
           : ['directors', 'items'].includes(name)
             ? 'd.'
             : '';
-    if (!definition.scoped)
+    if (name === 'stock')
+      definition.sql = definition.sql
+        .replace(stockJoin(), stockJoin(false, true))
+        .replace(stockJoin(true), stockJoin(true, true));
+    else if (!definition.scoped)
       definition.sql = definition.sql.replace(
         name === 'stock'
           ? 'WHERE s.the_date='

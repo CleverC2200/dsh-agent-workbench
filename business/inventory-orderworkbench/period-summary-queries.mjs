@@ -124,7 +124,7 @@ function periodStock() {
   const arm = (inventoryOnly) =>
     replace(
       replace(
-        parts.stockJoin(inventoryOnly),
+        parts.stockJoin(inventoryOnly, true),
         'SELECT COALESCE(s.belong_base,b.belong_base)',
         'SELECT COALESCE(s.stock_date,b.stock_date) AS batch_date,COALESCE(s.belong_base,b.belong_base)',
       ),
