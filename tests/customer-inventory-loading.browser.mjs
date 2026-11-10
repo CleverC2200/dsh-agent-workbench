@@ -351,9 +351,27 @@ test('missing resources and expired sessions have distinct inventory-pane messag
   assert.deepEqual(errors, []);
 });
 
+test('ordinary customer port renewal shows connecting and resumes loading without an expired warning', async (t) => {
+  const { frame, errors } = await fixture(t);
+  await expect(frame.locator('#customer-load-status')).toHaveAttribute('data-state', 'empty');
+  await frame
+    .locator('#root')
+    .evaluate(() => window.dispatchEvent(new Event('gea-session-changing')));
+  await expect(frame.locator('#customer-load-status')).toContainText('正在重新连接客户库存');
+  await expect(frame.locator('#customer-load-status')).not.toContainText('失效');
+  await expect(frame.locator('#customer-load-status')).not.toContainText('重新进入');
+  await expect(frame.locator('#root')).toHaveAttribute('aria-busy', 'true');
+  await frame
+    .locator('#root')
+    .evaluate(() => window.dispatchEvent(new Event('gea-session-changed')));
+  await expect(frame.locator('#customer-load-status')).toHaveAttribute('data-state', 'empty');
+  await expect(frame.locator('#root')).toHaveAttribute('aria-busy', 'false');
+  assert.deepEqual(errors, []);
+});
+
 test('a connection that never arrives gets a finite diagnostic without removing the shell', async (t) => {
   const { frame, errors } = await fixture(t, { connect: false });
-  await expect(frame.locator('#customer-load-status')).toContainText('连接尚未就绪', {
+  await expect(frame.locator('#customer-load-status')).toContainText('连接时间较长', {
     timeout: 18000,
   });
   await expect(frame.locator('.metric-card')).toHaveCount(7);
@@ -441,7 +459,9 @@ test('successful reads fill the same shell; identity changes remove previous inv
   await frame
     .locator('#root')
     .evaluate(() => window.dispatchEvent(new Event('gea-identity-changed')));
-  await expect(frame.locator('#customer-load-status')).toContainText('已清除旧数据');
+  await expect(frame.locator('#customer-load-status')).toContainText('正在重新连接客户库存');
+  await expect(frame.locator('#customer-load-status')).not.toContainText('失效');
+  await expect(frame.locator('#root')).toHaveAttribute('aria-busy', 'true');
   await expect(frame.locator('.dealer-table-card')).not.toContainText('离线测试客户');
   await expect(frame.locator('.metric-card')).toHaveCount(7);
   assert.deepEqual(errors, []);
