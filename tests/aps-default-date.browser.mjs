@@ -120,12 +120,18 @@ test('default uses latest day; manual day stays exact and wins a late calendar r
     .click();
   await expect(page.locator('.date-picker-button')).toHaveText('2026年11月9日');
   await expect
-    .poll(() => page.evaluate(() => window.periodReads.filter((x) => x.enabled && !x.paused).at(-1)?.date))
+    .poll(() =>
+      page.evaluate(() => window.periodReads.filter((x) => x.enabled && !x.paused).at(-1)?.date),
+    )
     .toBe('2026-11-09');
   const restored = await pageFor(false, true);
   await expect(restored.locator('.date-picker-button')).toHaveText('2026年11月9日');
   await expect
-    .poll(() => restored.evaluate(() => window.periodReads.filter((x) => x.enabled && !x.paused).at(-1)?.date))
+    .poll(() =>
+      restored.evaluate(
+        () => window.periodReads.filter((x) => x.enabled && !x.paused).at(-1)?.date,
+      ),
+    )
     .toBe('2026-11-09');
   const racing = await pageFor(true);
   await racing.locator('.date-picker-button').click();
@@ -136,6 +142,8 @@ test('default uses latest day; manual day stays exact and wins a late calendar r
   await racing.evaluate(() => window.resolveCalendar());
   await expect(racing.locator('.date-picker-button')).toHaveText('2026年11月9日');
   await expect
-    .poll(() => racing.evaluate(() => window.periodReads.filter((x) => x.enabled && !x.paused).at(-1)?.date))
+    .poll(() =>
+      racing.evaluate(() => window.periodReads.filter((x) => x.enabled && !x.paused).at(-1)?.date),
+    )
     .toBe('2026-11-09');
 });
