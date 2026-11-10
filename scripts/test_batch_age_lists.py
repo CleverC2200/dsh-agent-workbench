@@ -10,6 +10,7 @@ class BatchAgeLists(unittest.TestCase):
   self.db.execute('CREATE TABLE agents_scm_material_in_out_summary_d (warehouseid TEXT,material_code TEXT,product_categ_name TEXT,material_group_name TEXT)')
   self.db.execute('CREATE TABLE agents_scm_cust_deliv_daily_di (warehouse TEXT,material_code TEXT,act_ship_date TEXT,act_dl_qty NUMERIC)')
   self.db.execute('CREATE TABLE agents_dim_material_prod_sales_info_d (material_code TEXT,tag TEXT)')
+  self.db.execute('CREATE VIEW agents_scm_warehouse_total_data_d AS SELECT warehouseid,material_code,MAX(warehouse_name) AS warehouse_name,MAX(material_name) AS material_name,SUM(live_qty) AS live_qty,SUM(available_qty) AS available_qty,SUM(pack_unit_qty) AS pack_unit_qty,SUM(freeze_qty) AS freeze_qty,NULL AS warehouse_transfer_qty,NULL AS transfer_onway_qty,NULL AS transfer_prepare_qty FROM agents_scm_inventory_sku_data_d GROUP BY warehouseid,material_code')
   self.day=datetime.date(2026,10,22)
  def batch(self,age,qty,sku='S',warehouse='W',base='郑州',kind='01'):
   prod=(self.day-datetime.timedelta(days=age)).isoformat() if age is not None else None

@@ -17,14 +17,21 @@ class CustomerOrders(unittest.TestCase):
    for column in select.find_all(exp.Column):
     if column.table in tables:schema.setdefault(tables[column.table],set()).add(column.name)
   for table,cols in schema.items():
-   self.db.execute('CREATE TABLE '+table+' ('+', '.join(c+(' REAL' if c.startswith('qty') or c in ['available_qty','bizunitconvertrate','executeorderlineno','detailstatus'] else ' TEXT') for c in sorted(cols))+')')
+   self.db.execute('CREATE TABLE '+table+' ('+', '.join(c+(' REAL' if c.startswith('qty') or c in ['available_qty','live_qty','pack_unit_qty','freeze_qty','warehouse_transfer_qty','transfer_prepare_qty','transfer_onway_qty','adjust_order_qty','pack_unitqty','delivery_qty','bizunitconvertrate','executeorderlineno','detailstatus'] else ' TEXT') for c in sorted(cols))+')')
   self.add('agents_scm_inventory_sku_data_d',month_date='20261102',warehouseid='BR1',warehouse_name='分仓甲',belong_base='基地甲',material_code='SKU',available_qty=10,prod_date='20261001',warehouse_classify='20')
+  self.add('agents_scm_warehouse_total_data_d',warehouseid='BR1',material_code='SKU',available_qty=10,live_qty=10,pack_unit_qty=0,freeze_qty=0)
   self.add('agents_scm_material_in_out_summary_d',material_code='SKU',product_categ_name='汤圆',material_group_name='A')
  def add(self,table,**values):
   self.db.execute('INSERT INTO '+table+' ('+', '.join(values)+') VALUES ('+', '.join('?' for _ in values)+')',list(values.values()))
  def order(self,key,**overrides):
   row=dict(executeorderno=key,executeorderlineno=1,load_time='2026-11-03',warehouseid='BR1',cust_order_no=key,cust_code='C1',cust_name='经销商',material_code='SKU',material_name='汤圆',header_addtime='2026-11-01',qtyordered=40,qtyallocated=10,qtyshipped=0,bizunitconvertrate=2,detailstatus=10,order_type='ZO11')
-  self.add('agents_scm_execute_detail_d',**(row|overrides))
+  row.update(overrides)
+  self.add('agents_scm_execute_detail_d',executeorderno=key,executeorderlineno=1,cust_name=row['cust_name'],material_name=row['material_name'])
+  conversion=row['bizunitconvertrate']
+  demand=row['qtyallocated'] if row.get('prapare_order_status')=='备单完成' else row['qtyordered']
+  for key in ['load_time','cust_name','material_name']:row.pop(key,None)
+  row.update(organizationid='ORG',ownerid='OWNER',adjust_order_qty=demand/conversion if conversion else None,pack_unitqty=row['qtyallocated']/conversion if conversion else None,delivery_qty=row['qtyshipped']/conversion if conversion else None)
+  self.add('agents_dwd_scm_execute_detail_mi',**row)
  def read(self,name='customer_current'):
   return [dict(r) for r in self.db.execute(mod.render(mod.select_cte(self.source,name)))]
  def test_downstream_stock_is_deducted_once_across_orders(self):
