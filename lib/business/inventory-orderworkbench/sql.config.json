@@ -10296,5 +10296,12 @@
   "planVersionPolicy": {
     "status": "configured",
     "queryId": "workbench.plan-policy"
+  },
+  "metricRuntime": {
+    "schemaVersion": 1,
+    "version": 263505785041750,
+    "revision": "efa838b6b356f59af7853a2845343ed5feb893dd893237643a700ddc9ab8a76c",
+    "file": "metric-runtime.mjs",
+    "sha256": "e9dcf52c9399eee3db5be4e9b1cfdfaf34aa37d42fc64c6546889ad3bac7c857"
   }
 }
