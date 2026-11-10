@@ -74,6 +74,7 @@ import {
 } from 'dsh-agent-manage/aps-compute/base-product-hierarchy';
 import { browserStorage } from './data/browser-storage';
 import { useWorkspace } from './data/use-workspace';
+import { useDefaultProductionDate } from './data/use-default-production-date';
 import { comparisonEvidence } from './data/comparison-evidence';
 import { deriveMetrics } from 'dsh-agent-manage/aps-compute/metrics';
 import {
@@ -4916,6 +4917,12 @@ export default function Home({
         ? (value as WorkspaceName)
         : initialWorkspace,
   );
+  const [boardDateMode, setBoardDateMode] = usePageViewField<'latest' | 'manual'>(
+    React,
+    apsView,
+    'boardDateMode',
+    'latest',
+  );
   const [boardYearKey, setBoardYearKey] = usePageViewField(
     React,
     apsView,
@@ -5176,8 +5183,27 @@ export default function Home({
     timeGranularityOptions.find((item) => item.key === timeGranularity)?.label || periodMeta.label;
   const _overviewPeriodLabel = activeAnalysisPeriod;
   const liveDate = effectiveEnd.iso;
-  const live = useWorkspace(
-    liveData && ['intelligent', 'plan'].includes(activeWorkspace),
+  const applyDefaultDate = React.useCallback(
+    (date: string) => {
+      if (apsView.get().boardDateMode === 'manual') return;
+      const [year, month, day] = date.split('-');
+      setBoardYearKey(year);
+      setBoardMonthKey(month);
+      setBoardDay(Number(day));
+      const weeks = buildNaturalWeeks(Number(year), Number(month));
+      const week = weeks.find((item) => Number(day) >= item.startDay && Number(day) <= item.endDay);
+      if (week) setSelectedWeekKey(week.key);
+    },
+    [setBoardYearKey, setBoardMonthKey, setBoardDay, setSelectedWeekKey],
+  );
+  const defaultProductionDate = useDefaultProductionDate({
+    enabled: liveData && !APS_MOCK && activeWorkspace === 'plan',
+    manual: boardDateMode === 'manual',
+    base: selectedBase === '全部基地' ? '' : selectedBase,
+    onDate: applyDefaultDate,
+  });
+  const periodLive = useWorkspace(
+    liveData && ['intelligent', 'plan'].includes(activeWorkspace) && !defaultProductionDate.pending,
     liveDate,
     timeGranularity,
     activeWorkspace === 'intelligent' ||
@@ -5199,6 +5225,11 @@ export default function Home({
             items: productionDimension === 'category' ? expandedCategoryListItems : [],
           },
   );
+  const live = {
+    ...periodLive,
+    busy: periodLive.busy || defaultProductionDate.pending,
+    comparisonBusy: periodLive.comparisonBusy || defaultProductionDate.pending,
+  };
   const attainmentTarget =
     timeGranularity === 'month' ? ((effectiveEnd.day - 1) / daysInSelectedMonth) * 100 - 3 : null;
   const metricMetaWithDynamicTargets = demoOverviewMetricMeta.map((meta) =>
@@ -6536,6 +6567,7 @@ export default function Home({
     setTimeout(() => setToast(''), 1600);
   };
   const chooseYear = (year: YearOption) => {
+    if (!intelligentPeriod) setBoardDateMode('manual');
     setSelectedYearKey(year.key);
     const maxDay = new Date(Number(year.key), selectedMonth.value, 0).getDate();
     const nextDay = Math.min(selectedDay, maxDay);
@@ -6551,6 +6583,7 @@ export default function Home({
     setTimeout(() => setToast(''), 1800);
   };
   const chooseMonth = (month: MonthOption) => {
+    if (!intelligentPeriod) setBoardDateMode('manual');
     setSelectedMonthKey(month.key);
     const maxDay = new Date(Number(selectedYear.key), month.value, 0).getDate();
     const nextDay = Math.min(selectedDay, maxDay);
@@ -6566,12 +6599,14 @@ export default function Home({
     setTimeout(() => setToast(''), 1800);
   };
   const chooseWeek = (week: WeekOption) => {
+    if (!intelligentPeriod) setBoardDateMode('manual');
     setSelectedWeekKey(week.key);
     closePeriodMenus();
     setToast(`已筛选${selectedPeriodLabel}${week.label}（${week.range}）数据`);
     setTimeout(() => setToast(''), 1800);
   };
   const chooseDay = (day: number) => {
+    if (!intelligentPeriod) setBoardDateMode('manual');
     setSelectedDay(day);
     closePeriodMenus();
     setToast(`已筛选${selectedPeriodLabel}${day}日数据`);
@@ -7602,7 +7637,7 @@ export default function Home({
           </p>
         )}
         <QueryErrors
-          errors={liveData && live.error ? [live.error] : []}
+          errors={liveData ? [defaultProductionDate.error, live.error].filter(Boolean) : []}
           scope="inventory-apsplan"
         />
         {contextSelectionMode && (
