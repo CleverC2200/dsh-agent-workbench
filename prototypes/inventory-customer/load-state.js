@@ -2,7 +2,7 @@
 export const customerLoadLocales = {
   zh: {
     waiting: '正在连接客户库存，数据尚未读取。',
-    timeout: '客户库存连接尚未就绪，请重新进入；当前未取得数据。',
+    timeout: '客户库存连接时间较长，请稍后重试；当前未取得数据。',
     loading: '正在读取客户库存数据…',
     enriching: '库存数据已加载，正在补充计划与在途信息…',
     denied: '当前用户无权访问客户库存，请联系管理员授权。',
@@ -13,12 +13,13 @@ export const customerLoadLocales = {
     connection: '客户库存连接失败，请重新进入；数据尚未读取。',
     query: '客户库存读取失败，请刷新重试；当前未取得数据。',
     empty: '当前授权范围暂无客户库存数据。',
-    changed: '登录身份或页面会话已变化，已清除旧数据，请重新进入。',
+    changed: '正在重新连接客户库存，连接完成后自动加载…',
     render: '客户库存界面加载失败，请核对 Workbench 安装包并重新进入。',
   },
   en: {
     waiting: 'Connecting to customer inventory. Data has not been read.',
-    timeout: 'The inventory connection is not ready. Reopen this page; no data was received.',
+    timeout:
+      'The inventory connection is taking longer than expected. Retry shortly; no data was received.',
     loading: 'Loading customer inventory…',
     enriching: 'Inventory loaded. Loading plan and in-transit details…',
     denied: 'You do not have access to customer inventory. Contact an administrator.',
@@ -31,7 +32,7 @@ export const customerLoadLocales = {
     connection: 'The inventory connection failed. Reopen this page; data has not been read.',
     query: 'Inventory could not be read. Refresh and retry; no data was received.',
     empty: 'No customer inventory data is available within the current grant.',
-    changed: 'The identity or page session changed. Previous data was cleared. Reopen this page.',
+    changed: 'Reconnecting to customer inventory. Data will load when connected…',
     render: 'The inventory UI could not load. Check the Workbench package and reopen this page.',
   },
 };
