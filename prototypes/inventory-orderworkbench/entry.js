@@ -11,7 +11,7 @@ import { startDashboardTiming } from '../../business/shared/dashboard-timing.js'
 import { startWorkbenchStagedRead } from './staged-facts.mjs';
 import { workbenchPresentation, workbenchBaseIncluded } from './live-presentation.mjs';
 import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache, createWorkbenchPeriodCacheLifecycle, createWorkbenchScopedFactsCache } from './presentation-cache.mjs';
-import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
+import { shippableDaysTarget, performanceStyleVersion, metricTarget } from './performance-rules.mjs';
 import { reusableWorkbenchFacts, compatibleWorkbenchFacts, retainableWorkbenchFacts } from './metric-model.mjs';
 import { publishReport } from './publication.js';
 import { mountReportImport } from './report-import.mjs';
@@ -3956,7 +3956,7 @@ async function openMetricDetail(key) {
   try {
     const request = metricDetailsRequest(liveFacts, key, {
       mode: periodMode, month: selectedMonth, week: selectedWeek, label: selectedPeriodLabel(),
-    });
+    }, topMetricCards.find(item => item.key === key));
     sendingMetricDetails = true;
     button?.setAttribute('aria-busy', 'true');
     await ask(request.text, request.context);

@@ -7,7 +7,7 @@ import {
   computeWorkbenchMetrics, dayOffset, reportPeriods, metricCalculationVersion,
 } from './metric-model.mjs';
 
-const config = ORDER_WORKBENCH_APS_CONFIG;
+const defaultConfig = typeof ORDER_WORKBENCH_APS_CONFIG === 'undefined' ? null : ORDER_WORKBENCH_APS_CONFIG;
 const numbers = new Set([
   'demand',
   'shortage',
@@ -56,8 +56,15 @@ export function decodeWorkbenchTuple(value, count) {
   return cursor === bytes.length ? tuple : null;
 }
 export async function loadWorkbenchReport(start, end, signal, options = {}) {
+  const config = options.config ?? defaultConfig;
+  if (!config) throw Error('ORDER_METRIC_CONFIG_REQUIRED');
   const client = createAgentQueries(config, options.execute);
-  const specs = reportPeriods(start, end, options.now);
+  const specs = options.singlePeriod
+    ? { selected: 'month', month: options.singlePeriod }
+    : reportPeriods(start, end, options.now);
+  const primaryNames = ['month', 'week'].filter(name => specs[name]);
+  const sectionIds = options.sections ?? ['orders', 'ontime', 'changes', 'stock', 'ages', 'directors'];
+  const calculate = period => computeWorkbenchMetrics(period, undefined, { turnoverScope: options.turnoverScope ?? 'national' });
   const restoredPeriod = spec => options.summary && (options.seedFacts ?? []).flatMap(facts =>
     facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true && facts.attributionVersion === 2
       ? Object.values(facts.periods ?? {}) : [],
@@ -294,21 +301,21 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     const values = { start: spec.start, end_exclusive: spec.end };
     const priority = name === 'month' ? 30 : name === 'week' ? 20 : -10;
     if (spec.start >= spec.end)
-      return { ...spec, sections: [], metrics: computeWorkbenchMetrics({ ...spec, sections: [] }) };
+      return { ...spec, sections: [], metrics: calculate({ ...spec, sections: [] }) };
     const restored = restoredPeriod(spec);
-    const pending = ['orders', 'ontime', 'changes', 'stock', 'ages', 'directors'].map((id) =>
+    const pending = sectionIds.map((id) =>
       restored?.sections?.find(part => part.id === id && part.status === 'ready') ?? { id, status: 'loading', rows: [] });
     const update = () => {
       periods[name] = {
         ...spec,
         sections: [...pending],
-        metrics: computeWorkbenchMetrics({ ...spec, sections: pending }),
+        metrics: calculate({ ...spec, sections: pending }),
       };
       progress();
     };
     if (pending.some(part => part.status === 'ready')) update();
     const [sections, attribution, sharedItems] = await Promise.all([Promise.all(
-      ['orders', 'ontime', 'changes', 'stock', 'ages', 'directors'].map((id) =>
+      sectionIds.map((id) =>
         section(id, async () => {
           const cached = pending.find(part => part.id === id && part.status === 'ready');
           if (cached) return cached.rows;
@@ -333,7 +340,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     ), options.summary ? null : section('directors', () => read('directors', values)),
       options.summary ? null : section('items', () => read('items', values))]);
     if (!options.summary) applyPeriodAttributions(sections, attribution.rows, sharedItems.rows);
-    return { ...spec, sections, metrics: computeWorkbenchMetrics({ ...spec, sections }) };
+    return { ...spec, sections, metrics: calculate({ ...spec, sections }) };
   };
   const periods = {};
   const selected = specs.selected;
@@ -367,7 +374,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     signal?.throwIfAborted();
     if (periods.month || periods[selected]) options.onProgress?.(snapshot());
   };
-  const primary = Promise.all(['month', 'week'].map(async name => {
+  const primary = Promise.all(primaryNames.map(async name => {
     periods[name] = await load(specs[name], name);
     progress();
   }));
@@ -380,6 +387,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   const loadMetadata = async () =>
     Promise.all(
       ['directors', 'customers', 'customerManagers'].map(async (id) => {
+        if (options.metadata === false) { metadata[id] = { id, status: 'ready', rows: [] }; return; }
         if (id === 'directors') await primary;
         const range = id === 'directors' ? specs.month : specs[selected];
         metadata[id] = restoredMetadata?.[id]?.status === 'ready'
@@ -409,6 +417,8 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   return snapshot(true);
 }
 export async function loadWorkbenchSkuPage(start,end,category,page,signal,base='',options={}) {
+ const config = options.config ?? defaultConfig;
+ if (!config) throw Error('ORDER_METRIC_CONFIG_REQUIRED');
  const client=createAgentQueries(config,options.execute);
  const periods=reportPeriods(start,end,options.now);
  const dates=await client.read('workbench.agedate',{start:start.replaceAll('-',''),end_exclusive:(periods[periods.selected].inventoryEnd??end).replaceAll('-',''),report_base:base},{signal,priority:20,requiredColumns:['day']});
