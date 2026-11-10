@@ -36,6 +36,7 @@ export function useWorkspace(
   summary = false,
   detailMode?: 'organization' | 'product',
   productScope?: ProductScope,
+  { paused = false }: { paused?: boolean } = {},
 ) {
   const periodKey = JSON.stringify([date, granularity, summary, detailMode, productScope?.mode]);
   // Closing a branch changes visibility, not the data required for this period.
@@ -98,6 +99,7 @@ export function useWorkspace(
       orderType: 'M',
     };
     async function load(refresh = false, externalSignal?: AbortSignal) {
+      if (paused) return;
       controller?.abort();
       controller = new AbortController();
       const signal = externalSignal
@@ -306,7 +308,7 @@ export function useWorkspace(
       window.removeEventListener('gea-session-changing', logout);
       window.removeEventListener('gea-session-changed', sessionChanged);
     };
-  }, [enabled, key, date, granularity, summary, detailMode]);
+  }, [enabled, key, date, granularity, summary, detailMode, paused]);
   const visible =
     result.key === key
       ? result

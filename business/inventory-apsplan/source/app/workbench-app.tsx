@@ -5203,7 +5203,7 @@ export default function Home({
     onDate: applyDefaultDate,
   });
   const periodLive = useWorkspace(
-    liveData && ['intelligent', 'plan'].includes(activeWorkspace) && !defaultProductionDate.pending,
+    liveData && ['intelligent', 'plan'].includes(activeWorkspace),
     liveDate,
     timeGranularity,
     activeWorkspace === 'intelligent' ||
@@ -5224,6 +5224,7 @@ export default function Home({
             categories: productionDimension === 'category' ? expandedCategoryListCategories : [],
             items: productionDimension === 'category' ? expandedCategoryListItems : [],
           },
+    { paused: defaultProductionDate.pending },
   );
   const live = {
     ...periodLive,
