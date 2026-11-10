@@ -14,6 +14,7 @@ function calculate(rows) {
       cancellationLine(id, {
         header_addtime: '2026-11-01 00:00:00',
         requireddeliverytime: delivery,
+        latestsendcardate: '2026-11-01 12:00:00',
         orderstatus: status,
         canceltime: cancelled,
         need_qty_origin: 1,

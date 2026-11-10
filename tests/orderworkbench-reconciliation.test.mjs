@@ -215,7 +215,7 @@ test('amendments retain creation selection while cancellation uses quantities an
   assert.match(changesSql, /changed>=locked THEN ABS\(requested_qty-effective_qty\)/);
   assert.match(
     changesSql,
-    /COALESCE\(s.dms_last_update_qty,s.need_qty_origin,s.daily_recovered_qty\)/,
+    /COALESCE\(s.change_order_qty,s.dms_last_update_qty,s.need_qty_origin\)/,
   );
   assert.match(
     changesSql,
