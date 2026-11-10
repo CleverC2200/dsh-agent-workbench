@@ -258,7 +258,7 @@ export function createQueryClient(config, execute) {
     // A full page may be truncated: discard it and use the counted multi-page path.
     if (singlePageFirst && !atomicId) {
       const result = await read(
-        id,
+        q.pagination?.initialQuery ?? id,
         { ...values, offset: 0 },
         {
           signal,
