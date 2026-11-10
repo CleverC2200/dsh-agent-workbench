@@ -1,6 +1,7 @@
 export * from './workbench/original/salesPlanWorkflow.ts';
 export * from './workbench/original/contracts.ts';
 export * from './workbench/original/workbenches/regionalApproval/models/salesPlanLocalDraftModel.ts';
+export * from './workbench/original/workbenches/regionalApproval/models/salesPlanReturnModel.ts';
 export * from './workbench/original/workbenches/regionalApproval/models/salesPlanCorrectionModel.ts';
 export * from './workbench/original/workbenches/regionalApproval/models/salesPlanAccessModel.ts';
 export * from './workbench/original/workbenches/regionalApproval/models/salesPlanActionModel.ts';

@@ -32,7 +32,7 @@ sql='WITH '+', '.join(kept)+''', card_stock AS (
  WHERE s.warehouse_classify='20' AND s.act_ship_date>=:gea_p2000 AND s.act_ship_date<:gea_p2001
  GROUP BY s.warehouse,s.material_code
 ) SELECT COUNT(*) AS row_count,
- SUM(CASE WHEN s.daily>0 THEN COALESCE(i.available_qty,0) ELSE 0 END)/NULLIF(SUM(CASE WHEN s.daily>0 THEN s.daily ELSE 0 END),0) AS historical_turnover_days,
+ SUM(CASE WHEN s.daily>0 AND COALESCE(i.available_qty,0)>=0 THEN COALESCE(i.available_qty,0) ELSE 0 END)/NULLIF(SUM(CASE WHEN s.daily>0 AND COALESCE(i.available_qty,0)>=0 THEN s.daily ELSE 0 END),0) AS historical_turnover_days,
  SUM(CASE WHEN s.daily>0 THEN 1 ELSE 0 END) AS turnover_count
  FROM card_keys AS k LEFT JOIN card_stock AS i ON i.warehouse_code=k.warehouse_code AND i.material_code=k.material_code
  LEFT JOIN card_shipments AS s ON s.warehouse_code=k.warehouse_code AND s.material_code=k.material_code'''

@@ -40,10 +40,10 @@ FROM {prefix}_quantities AS q CROSS JOIN {prefix}_latest AS l WHERE l.day_key IS
     for query_id in ['overview.quick-stock', 'health.cards', 'branch-health.cards',
                      'branch-turnover.cards', 'base_shipments.summary', 'overview.orders-by-pickup']:
         queries[query_id]['priority'] = 30
-    # Full-chain cards need movement, not recommendation calculations or plan targets.
+    # Full-chain branch cards reuse the independent workbench turnover pair.
     turnover = queries['branch-turnover.cards']
     tree = sqlglot.parse_one(turnover['request']['sql'], read='postgres')
-    columns = ['row_count', 'rolling_ship_daily', 'historical_turnover_days', 'turnover_count']
+    columns = ['row_count', 'rolling_ship_daily', 'historical_turnover_days', 'turnover_count', 'matched_turnover_inventory', 'matched_turnover_daily']
     tree.set('expressions', [e for e in tree.expressions if e.alias_or_name in columns])
     tree = eliminate_ctes(pushdown_projections(tree))
     for substring in list(tree.find_all(exp.Substring)):
@@ -54,8 +54,8 @@ FROM {prefix}_quantities AS q CROSS JOIN {prefix}_latest AS l WHERE l.day_key IS
     turnover['parameterSpec'] = {k: v for k, v in turnover['parameterSpec'].items() if k in names}
     turnover['request']['parameters'] = {k: v for k, v in turnover['request']['parameters'].items() if k in names}
     turnover['resultColumns'] = tree.named_selects
-    # The rendered cards use batch inventory; this target-stock summary is unused.
-    config['overviewViewIds'] = [view for view in config['overviewViewIds'] if view != 'base']
+    # Base turnover shares the plan-matched stock summary with the base workbench.
+    config['overviewViewIds'] = list(dict.fromkeys([*config['overviewViewIds'], 'base']))
     return config
 
 

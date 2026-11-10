@@ -152,6 +152,70 @@ export async function readAnnual(signal) {
   );
   return annualRows(result.rows);
 }
+export async function readCapacityAnnual(months, signal) {
+  const { config, query } = client();
+  const definition = config.queries['annual.detail'];
+  const result = await query.readAll(
+    'annual.detail',
+    { months: [...new Set(months.flatMap(sourceMonthValues))], page_size: 200, offset: 0 },
+    { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
+  );
+  return capacityAnnualRows(result.rows, months);
+}
+export function capacityAnnualRows(source, months) {
+  const groups = new Map();
+  const unmapped = [];
+  let excludedRows = 0;
+  for (const row of source) {
+    const month = normalizedMonth(row.stat_month);
+    const base = text(row.belong_base).trim(),
+      code = text(row.material_code).trim();
+    if (!code) {
+      excludedRows++;
+      continue;
+    }
+    if (!month || !base || !months.includes(month)) {
+      unmapped.push({
+        month,
+        code,
+        reason: !month || !months.includes(month) ? 'stat_month未匹配本财年' : 'belong_base为空',
+      });
+      continue;
+    }
+    const key = JSON.stringify([month, base, code]);
+    const group = groups.get(key) ?? [];
+    group.push({
+      month,
+      base,
+      code,
+      ...(typeof row.sub_category === 'string' && row.sub_category.trim()
+        ? { category: row.sub_category.trim() }
+        : {}),
+      ...((typeof row.product_item === 'string' && row.product_item.trim()) ||
+      Number.isSafeInteger(row.product_item)
+        ? { group: String(row.product_item).trim() }
+        : {}),
+      ...(typeof row.product_item_name === 'string' && row.product_item_name.trim()
+        ? { series: row.product_item_name.trim() }
+        : {}),
+      quantity: row.demand_qty === null ? null : number(row.demand_qty),
+    });
+    groups.set(key, group);
+  }
+  return {
+    excludedRows,
+    unmapped,
+    rows: [...groups.values()].map((rows) => {
+      const row = {
+        ...rows[0],
+        quantity: new Set(rows.map((row) => row.quantity)).size === 1 ? rows[0].quantity : null,
+      };
+      for (const field of ['category', 'group', 'series'])
+        if (new Set(rows.map((item) => item[field])).size > 1) delete row[field];
+      return row;
+    }),
+  };
+}
 export async function readAnnualDetails(months, base, signal) {
   const { config, query } = client();
   const definition = config.queries['annual.export'];

@@ -119,18 +119,16 @@ test('unknown stock is never replaced with zero and a negative total is not a va
 
 test('all inventory is the numerator, never silently replaced with available stock', () => {
   assert.equal(computeWorkbenchMetrics(stockPeriod([stock]))['周转天数'].value, 10);
-  assert.match(
-    computeWorkbenchMetrics(stockPeriod([stock]))['周转天数'].note,
-    /工厂仓＋工厂外租仓/,
-  );
+  assert.match(computeWorkbenchMetrics(stockPeriod([stock]))['周转天数'].note, /current_stock/);
   assert.match(workbenchQueries.stock.sql, /b.inventory IS NULL/);
 });
 
-test('factory and rented warehouses share the Hive age scope and unknown source ages invalidate age', () => {
-  assert.match(workbenchQueries.ages.sql, /warehouse_classify IN \('01','02'\)/);
-  assert.match(workbenchQueries.ageDate.sql, /warehouse_classify IN \('01','02'\)/);
+test('stock and aged quantities share the published stock population and missing fields invalidate age', () => {
+  assert.match(workbenchQueries.ages.sql, /FROM agents_scm_stock_detail_d/);
+  assert.match(workbenchQueries.ageDate.sql, /FROM agents_scm_stock_detail_d/);
   assert.match(workbenchQueries.ages.sql, /SUM\(b.inv_qty\) AS stock_qty/);
-  assert.match(workbenchQueries.ages.sql, /b.age_days IS NULL OR b.age_days<0/);
+  assert.match(workbenchQueries.ages.sql, /COUNT\(current_stock_60\)<>COUNT\(\*\)/);
+  assert.doesNotMatch(workbenchQueries.ages.sql, /dwd_scm_material_age_his|snapshot_warehouse/);
   assert.match(
     workbenchQueries.ages.sql,
     /MAX\(s.names\)>1 THEN NULL ELSE COALESCE\(MAX\(s.item\),MAX\(m.item\)\)/,
@@ -139,7 +137,7 @@ test('factory and rented warehouses share the Hive age scope and unknown source 
   assert.equal(workbenchQueries.ages.scoped, true);
   assert.match(
     workbenchQueries.ages.sql,
-    /WHERE \(:gea_p900='' OR CASE WHEN TRIM\(COALESCE\(NULLIF\(TRIM\(b.belong_base\),''\),snapshot_warehouse.base\)\)[\s\S]*?=:gea_p900\) AND b.dt/,
+    /WHERE \(:gea_p900='' OR CASE WHEN TRIM\(b.belong_base\)[\s\S]*?=:gea_p900\) AND b.dt/,
   );
 });
 
@@ -200,26 +198,22 @@ test('base and item formulas retain documented weights instead of fitting the sc
     10,
   );
 });
-test('split child creation times do not invalidate the original order and grouping precedes period selection', () => {
-  assert.match(changesSql, /MIN\(header_addtime\) AS created/);
-  assert.doesNotMatch(changesSql, /COUNT\(DISTINCT header_addtime\)=1/);
-  assert.ok(
-    changesSql.indexOf('GROUP BY cust_code,cust_order_no') <
-      changesSql.indexOf('WHERE h.created>=:gea_p1'),
-  );
-  assert.match(amendmentChangesSql, /AND header_addtime>=:gea_p1/);
-});
-test('amendments retain creation selection while cancellation uses quantities and its event cohort', () => {
-  assert.match(amendmentChangesSql, /changed>=locked/);
-  assert.doesNotMatch(amendmentChangesSql, /changed<:gea_p2|changed>=:gea_p2/);
-  assert.match(changesSql, /changed>=locked THEN ABS\(requested_qty-effective_qty\)/);
-  assert.match(
-    changesSql,
-    /COALESCE\(s.change_order_qty,s.dms_last_update_qty,s.need_qty_origin\)/,
-  );
+test('cancellations retain execution business time while amendments select actual shipment time', () => {
   assert.match(
     changesSql,
     /CASE WHEN s.orderstatus=90 THEN s.cancelled ELSE s.header_addtime END AS business_time/,
+  );
+  assert.doesNotMatch(changesSql, /COUNT\(DISTINCT header_addtime\)=1/);
+  assert.match(amendmentChangesSql, /AND shipment\.shipped_at>=:gea_p1/);
+  assert.doesNotMatch(amendmentChangesSql, /d\.header_addtime>=/);
+});
+test('amendments use the actual shipment cohort while cancellations use quantities and their event cohort', () => {
+  assert.match(amendmentChangesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
+  assert.doesNotMatch(amendmentChangesSql, /custchangetime|requireddeliverytime|\blocked\b/);
+  assert.match(changesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
+  assert.match(
+    changesSql,
+    /COALESCE\(s.change_order_qty,s.dms_last_update_qty,s.need_qty_origin\)/,
   );
   assert.doesNotMatch(changesSql, /COALESCE\(cancelled/);
 });

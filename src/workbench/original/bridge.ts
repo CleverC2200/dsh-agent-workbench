@@ -37,6 +37,13 @@ export interface WorkbenchHost {
     versions: { invoke(query: Api.GeaSalesPlanResourceQuery): Promise<Api.GeaSalesPlanVersion[]> };
     logs: { invoke(query: Api.GeaSalesPlanResourceQuery): Promise<Api.GeaSalesPlanApprovalLog[]> };
     versionSkus: { invoke(query: Api.GeaSalesPlanVersionSkuQuery): Promise<Api.GeaSalesPlanSku[]> };
+    skuReview?: {
+      invoke(query: {
+        planId: string;
+        versionId: string;
+        signal?: AbortSignal;
+      }): Promise<Api.GeaSalesPlanSkuReview>;
+    };
     compare: { invoke(query: Api.GeaSalesPlanCompareQuery): Promise<Api.GeaSalesPlanSkuDiff[]> };
     action: {
       invoke(params: Api.GeaSalesPlanActionParams): Promise<Api.GeaSalesPlanActionReceipt>;

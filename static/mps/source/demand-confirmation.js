@@ -14,8 +14,8 @@ import { readFactMonth, readInventoryTargets } from './facts.js';
 import { readSourceTable, forecastDimensions } from './source-tables.js';
 import { createDeliveryMetrics } from './delivery-metrics.js';
 import { createWorkflow } from './workflow-view.js';
-import { mpsCategories as categories } from 'dsh-agent-manage/mps-compute/workflow';
-import { productProjections } from './source-projections.js';
+import { defaultInventoryMonth } from './inventory-selection.js';
+import { productProjections, sourceDimensions } from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
 import { productFileText, productReplacementErrors } from './product-file.js';
 import { workbookBytes } from './workbook.js';
@@ -126,8 +126,6 @@ function parseCsv(text, columns) {
       errors.push(`第${index + 2}行老品编码和名称须同时填写或留空`);
     return record;
   });
-  if (columns === annualColumns && rows.some((row) => !categories.includes(row['大类'])))
-    errors.push('年度计划大类须属于本页八大类范围');
   if (columns === productColumns) {
     const seen = new Set();
     rows.forEach((record, index) => {
@@ -163,18 +161,22 @@ async function downloadWorkbook(name, tables) {
   const bytes = await workbookBytes(tables);
   downloadFile(name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bytes);
 }
-function downloadCsv(name, columns, rows) {
+export function downloadCsv(name, columns, rows) {
   return downloadWorkbook(name.replace(/\.csv$/i, '.xlsx'), [{ name: '数据', columns, rows }]);
 }
 const integer = new Intl.NumberFormat('zh-CN', {
   useGrouping: false,
   maximumFractionDigits: 0,
 }).format;
+const amount = new Intl.NumberFormat('zh-CN', {
+  useGrouping: false,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+}).format;
 const quantity = (rows, column) =>
   rows.reduce((sum, row) => (row[column] === '' ? sum : sum + Number(row[column])), 0);
 const currentMonth = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return defaultInventoryMonth();
 };
 const blankProduct = () => Object.fromEntries(productColumns.map((column) => [column, '']));
 const makeDraft = (id, month) => ({
@@ -227,9 +229,15 @@ function sourceSelection(draft, type) {
   return {
     period,
     column,
-    rows: (type === 'forecast' ? forecastSourceRows(draft) : draft[type]).filter(
-      (row) => row['月份'] === period,
-    ),
+    rows: (type === 'forecast'
+      ? forecastSourceRows(draft)
+      : ['report', 'history'].includes(type)
+        ? sourceDimensions(
+            draft[type],
+            ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : draft.products,
+          )
+        : draft[type]
+    ).filter((row) => row['月份'] === period),
   };
 }
 function downloadFile(name, mime, text) {
@@ -245,7 +253,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
   const CategoryDemand = createCategoryDemand(react, {
     table: (...args) => table(...args),
     downloadCsv,
-    categories,
     useMpsPart,
   });
   function Dialog({ title, children, footer, close, className = '' }) {
@@ -295,7 +302,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       }),
     );
   }
-  const table = (columns, rows, headers = {}) =>
+  const table = (columns, rows, headers = {}, renderDetail) =>
     h(
       'div',
       { className: 'dc-table-scroll' },
@@ -316,36 +323,51 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           {},
           rows.map((row, index) =>
             h(
-              'tr',
+              react.Fragment,
               { key: index },
-              columns.map((column) =>
-                h(
-                  'td',
-                  { key: column },
-                  row[column] === '' || row[column] == null
-                    ? '-'
-                    : (/数量|收入|金额|合计/.test(column) ||
-                          /^M\+\d$/.test(column) ||
-                          ['① 环比法', '② 占比法', '加权'].includes(column)) &&
-                        Number.isFinite(Number(row[column]))
-                      ? integer(row[column])
-                      : [
-                            '历史平均环比',
-                            '环比链',
-                            '同期平均占比',
-                            '三年月占比',
-                            '月发货占财年比例',
-                            '同比增长率',
-                            '环比增长率',
-                          ].includes(column) && Number.isFinite(Number(row[column]))
-                        ? new Intl.NumberFormat('zh-CN', {
-                            style: 'percent',
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          }).format(Number(row[column]))
-                        : row[column],
+              h(
+                'tr',
+                {},
+                columns.map((column) =>
+                  h(
+                    'td',
+                    { key: column },
+                    row[column] === '' || row[column] == null
+                      ? '-'
+                      : /收入|金额/.test(column) && Number.isFinite(Number(row[column]))
+                        ? amount(row[column])
+                        : (/数量|合计/.test(column) ||
+                              /^M\+\d$/.test(column) ||
+                              [
+                                '① 环比法',
+                                '② 占比法',
+                                '加权',
+                                '系统值',
+                                '有效值',
+                                '组合标准日产/件',
+                                '组合标准日产/吨',
+                              ].includes(column)) &&
+                            Number.isFinite(Number(row[column]))
+                          ? integer(row[column])
+                          : [
+                                '历史平均环比',
+                                '环比链',
+                                '同期平均占比',
+                                '三年月占比',
+                                '月发货占财年比例',
+                                '同比增长率',
+                                '环比增长率',
+                              ].includes(column) && Number.isFinite(Number(row[column]))
+                            ? new Intl.NumberFormat('zh-CN', {
+                                style: 'percent',
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              }).format(Number(row[column]))
+                            : row[column],
+                  ),
                 ),
               ),
+              renderDetail?.(row, index),
             ),
           ),
         ),
@@ -380,6 +402,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   '读取状态',
                 ]
               : ['数量', '含赠品数量', '不含税收入']),
+          '源大类',
+          '源系列',
+          '源物料组',
+          '缺项原因',
         ]
       : [...sourceColumns, column];
     react.useEffect(() => setPage(0), [draft[type]]);
@@ -508,7 +534,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             ['数量', '含赠品数量', '不含税收入']
               .map((field) => {
                 const known = rows.length && rows.every((row) => row[field] !== '');
-                return `${field === '数量' ? '发货数量' : field}：${known ? integer(quantity(rows, field)) + (field === '不含税收入' ? '元' : '件') : '未提供'}`;
+                return `${field === '数量' ? '发货数量' : field}：${known ? (field === '不含税收入' ? amount(quantity(rows, field)) + '元' : integer(quantity(rows, field)) + '件') : '未提供'}`;
               })
               .join('；'),
           ),
@@ -549,25 +575,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'p',
             {},
-            type === 'forecast'
-              ? 'M+1为评估月份，M+2为下一月，后续月份依次顺延，跨年按实际年月核对。'
-              : business
-                ? '业务数量单位为件，收入单位为元；来源缺失的分类维度保持空。任一数量缺失时，其汇总留空。'
-                : '本页CSV仅用于本地核对。数量保留文件原值，不推断正负号的业务含义。',
-          ),
-          h(
-            'p',
-            {},
             dimensions
               .map(
                 (dimension) => `${dimension}缺失${rows.filter((row) => !row[dimension]).length}条`,
               )
-              .join('；') + '。空字段不计入覆盖，汇总保留未提供分组。',
-          ),
-          h(
-            'p',
-            {},
-            '缺失不补零，真实0参与统计。四维条目数按当前期间对应字段去重，无总量分母。系列与物料组独立展示。',
+              .join('；'),
           ),
           h(
             'button',
@@ -578,7 +590,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 downloadCsv(
                   `${definition.short}-全部已读.csv`,
                   business ? detailColumns : definition.columns,
-                  type === 'forecast' ? forecastSourceRows(draft) : draft[type],
+                  type === 'forecast'
+                    ? forecastSourceRows(draft)
+                    : sourceDimensions(draft[type], draft.products),
                 ),
             },
             '导出全部已读明细',
@@ -650,7 +664,20 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               preview === '明细' ? '下载明细' : '导出维度汇总',
             ),
           },
-          table(columns, displayed.slice(page * 25, (page + 1) * 25)),
+          table(
+            columns,
+            displayed.slice(page * 25, (page + 1) * 25),
+            Object.fromEntries(
+              columns.map((column) => [
+                column,
+                /收入|金额/.test(column)
+                  ? `${column}（元）`
+                  : /数量/.test(column)
+                    ? `${column}（${unit === '件' ? '件' : '单位待确认'}）`
+                    : column,
+              ]),
+            ),
+          ),
           h(
             'div',
             { className: 'dc-pagination' },
@@ -757,7 +784,14 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
       );
     };
-    const displayedCategories = live ? [...new Set(annual.map((row) => row['大类']))] : categories;
+    const displayedCategories = [
+      ...new Set(
+        annual
+          .map((row) => row['大类'])
+          .concat(draft.products.map((row) => row['大类']))
+          .filter(Boolean),
+      ),
+    ];
     const rows = displayedCategories.map((category) => ({
       大类: category || '-',
       ...Object.fromEntries(
@@ -843,12 +877,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         busy && h('p', { role: 'status' }, '正在读取…'),
         error && h('p', { role: 'alert' }, error),
         exportError && h('p', { role: 'alert' }, exportError),
-        live &&
-          h(
-            'p',
-            { className: 'dc-card-note' },
-            '下载当前基地全年SKU明细、大类汇总及物料组核对表。各表冻结首行；缺失月份不补零，物料组汇总不重复计入大类。',
-          ),
         h('div', { hidden: !expanded }, table(['大类', ...months, '全年合计'], rows)),
       ),
     );
@@ -861,7 +889,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     table,
     downloadCsv,
     useMpsPart,
-    categories,
   });
   const Shipment = createShipment(react, useMpsPart, {
     Dialog,
@@ -874,10 +901,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     active = true,
     assistant,
     step = 'check',
-    onNext,
     onScopeChange,
     relations,
     masterData,
+    onEditingChange,
   }) {
     const initialDrafts = () => ({
       drafts: [makeDraft('local-1', currentMonth())],
@@ -889,6 +916,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const { drafts, selected } = localState;
     const localRef = react.useRef(localState);
     localRef.current = localState;
+    const [adjusting, setAdjusting] = react.useState(false);
+    react.useEffect(() => {
+      onEditingChange?.(adjusting);
+      return () => onEditingChange?.(false);
+    }, [adjusting, onEditingChange]);
     const [retentionError, setRetentionError] = react.useState('');
     const saveLocal = (next) => {
       localRef.current = next;
@@ -926,6 +958,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [busy, setBusy] = react.useState({});
     const [scopeGeneration, setScopeGeneration] = react.useState(0);
     const [shipmentSnapshot, setShipmentSnapshot] = react.useState(null);
+    const [evaluation, setEvaluation] = react.useState(null);
     const receiveShipment = react.useCallback(
       (snapshot) => setShipmentSnapshot({ ...snapshot, scopeGeneration }),
       [scopeGeneration],
@@ -1549,6 +1582,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               'select',
               {
                 'aria-label': '评估版本选择',
+                disabled: adjusting,
                 value: draft.id,
                 onChange: (event) => {
                   clearFiles();
@@ -1563,9 +1597,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'button',
               {
+                disabled: adjusting,
                 onClick: () => {
                   setVersionName('');
-                  setMonth(draft.month);
+                  setMonth(currentMonth());
                   setReference('');
                   setVersionOpen(true);
                 },
@@ -1583,7 +1618,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               '版本对比',
             ),
             hasMpsSource() && h('button', { onClick: () => setMasterOpen(true) }, '数据源'),
-            h('button', { disabled: true, title: '正式保存合同与权限未接入' }, '保存调整'),
+            h(
+              'span',
+              {
+                role: 'status',
+                className: 'dc-draft-status',
+                title: '修改保存到当前本地草稿，尚未正式提交',
+              },
+              '本地草稿',
+            ),
           ),
         ),
       ),
@@ -1610,15 +1653,21 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ...(base ? structuredClone(base) : makeDraft(id, month)),
                       id,
                       month,
+                      ...(base
+                        ? {
+                            shipment: base.shipment?.rows
+                              ? {
+                                  rows: structuredClone(base.shipment.rows),
+                                  file: base.shipment.file,
+                                  values: {},
+                                  remaining: {},
+                                }
+                              : undefined,
+                          }
+                        : {}),
                       ...(base && base.month !== month
                         ? {
                             adjustments: undefined,
-                            shipment: {
-                              rows: base.shipment?.rows ?? [],
-                              file: base.shipment?.file,
-                              values: {},
-                              remaining: {},
-                            },
                           }
                         : {}),
                       name: versionName.trim() || makeDraft(id, month).name,
@@ -1792,21 +1841,22 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           update,
           active: active && step === 'ship',
           onSnapshot: receiveShipment,
-          onNext,
+          onEditingChange: setAdjusting,
         }),
       ),
       h('div', { hidden: step !== 'masterdata' }, masterData),
       active &&
         ['process', 'constraints', 'capacity', 'report'].includes(step) &&
         h(Workflow, {
+          evaluation,
+          setEvaluation,
           syncInventoryTargets,
           inventoryTargetsBusy: busy.inventoryTargets,
           step,
           draft,
           scopeGeneration,
           update,
-          onShareAdjustment: (input) =>
-            update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input) }),
+          onEditingChange: setAdjusting,
           onUndoShareAdjustment: (input) =>
             update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input, true) }),
           relations:
@@ -1815,11 +1865,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               : null,
           shipmentSnapshot:
             shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
-          onNext,
         }),
       h(
         'div',
         { hidden: step !== 'check' },
+        h(CategoryDemand, {
+          key: `${draft.id}-${scopeGeneration}`,
+          draft,
+          update,
+          active: active && step === 'check',
+          onEditingChange: setAdjusting,
+        }),
         h(
           'section',
           { 'aria-label': '产品明细', className: 'dc-card dc-products' },
@@ -2110,7 +2166,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h(
                 'p',
                 { className: 'dc-muted' },
-                '仅维护当前本地版本的产品关系。老品历史继承规则尚未确认，本次修改不改变历史发货与需求数量。',
+                '对应老品编码用于引用同基地、同财年的历史发货并计算需求拆分系数。按所填编码直接引用，不递归替换；原始发货记录保留。',
               ),
             ),
         ),
@@ -2239,13 +2295,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           active,
           contextActive: active && step === 'check',
         }),
-        h(CategoryDemand, { draft, update, active: active && step === 'check' }),
-        step === 'check' &&
-          h(
-            'div',
-            { className: 'dc-card-foot' },
-            h('button', { className: 'dc-primary', onClick: onNext }, '下一步：本月预估发货'),
-          ),
       ),
       !helpOpen && assistant,
     );

@@ -1,4 +1,4 @@
-import { createDemandConfirmation } from './demand-confirmation.js';
+import { createDemandConfirmation, downloadCsv } from './demand-confirmation.js';
 import { createRelations } from './relations-view.js';
 import { mpsView, useMpsPart, useMpsNavigation } from './context.js';
 import { AuthorQuestions, useAuthorQuote } from '../../../business/shared/author-questions.js';
@@ -14,7 +14,7 @@ const mpsSteps = [
   ['report', '产销存报告'],
 ].map(([key, label], index) => ({ key, label, step: String(index + 1) }));
 const DemandConfirmation = createDemandConfirmation(y, useMpsPart, mpsView);
-const Relations = createRelations(y, useMpsPart);
+const Relations = createRelations(y, useMpsPart, { downloadCsv });
 const selectedStep = () => {
   const key = window.location.hash.replace(/^#\/?/, '').split('/')[0];
   return mpsSteps.some((step) => step.key === key) ? key : 'check';
@@ -28,23 +28,34 @@ function Mps() {
     (value) => value,
     (value) => (mpsSteps.some((item) => item.key === value) ? value : 'check'),
   );
+  const bodyRef = y.useRef(null);
+  y.useEffect(() => {
+    bodyRef.current?.scrollTo({ top: 0 });
+  }, [step]);
   const [assistantDraft, setAssistantDraft] = usePageViewField(y, mpsView, 'assistantDraft', '');
   const [scope, setScope] = y.useState(null);
+  const [adjusting, setAdjusting] = y.useState(false);
   const [relations, setRelations] = y.useState(null);
   const actions = useAuthorQuote(y);
   const select = y.useCallback(
     (key) => {
-      if (!mpsSteps.some((item) => item.key === key)) return;
+      if (adjusting || !mpsSteps.some((item) => item.key === key)) return;
       setStep(key);
       if (window.location.hash !== '#' + key) window.location.hash = key;
     },
-    [setStep],
+    [setStep, adjusting],
   );
   y.useEffect(() => {
-    const changed = () => setStep(selectedStep());
+    const changed = () => {
+      if (adjusting) {
+        if (window.location.hash !== '#' + step) window.location.hash = step;
+        return;
+      }
+      setStep(selectedStep());
+    };
     window.addEventListener('hashchange', changed);
     return () => window.removeEventListener('hashchange', changed);
-  }, [setStep]);
+  }, [setStep, adjusting, step]);
   const assistant = y.createElement(AuthorQuestions, {
     react: y,
     jsx: c,
@@ -87,6 +98,7 @@ function Mps() {
                 key: item.key,
                 className: 'ap-page-tab',
                 'data-active': step === item.key,
+                disabled: adjusting && step !== item.key,
                 onClick: () => select(item.key),
               },
               y.createElement(
@@ -101,9 +113,10 @@ function Mps() {
       ),
       y.createElement(
         'div',
-        { className: 'ap-board-body' },
+        { className: 'ap-board-body', ref: bodyRef },
         y.createElement(DemandConfirmation, {
           active: true,
+          onEditingChange: setAdjusting,
           step,
           onScopeChange: setScope,
           relations,
@@ -113,8 +126,6 @@ function Mps() {
             active: step === 'masterdata',
             enabled: !['check', 'ship'].includes(step) || Boolean(relations?.sources),
           }),
-          onNext: () =>
-            select(mpsSteps[Math.min(mpsSteps.findIndex((item) => item.key === step) + 1, 6)].key),
           assistant,
         }),
       ),

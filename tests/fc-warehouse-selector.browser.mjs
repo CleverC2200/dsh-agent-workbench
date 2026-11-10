@@ -95,6 +95,7 @@ test('confirmation keeps the replenishment list order and quantities for the sam
   await page.locator('[role=option][data-value="A110"]').click();
   await page.getByRole('checkbox', { name: '需补货', exact: true }).check();
   const list = page.locator('table.replenishment-table');
+  await expect(list.getByRole('spinbutton').first()).toHaveValue('80');
   assert.deepEqual(
     await list
       .locator('thead th')
@@ -115,7 +116,6 @@ test('confirmation keeps the replenishment list order and quantities for the sam
       .evaluateAll((inputs) =>
         inputs.map((input) => [input.getAttribute('aria-label'), input.value]),
       );
-  await expect(list.getByRole('spinbutton').first()).toHaveValue('80');
   const before = await listQuantities();
   await page.getByRole('button', { name: '提交', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '确认补货订单', exact: true });

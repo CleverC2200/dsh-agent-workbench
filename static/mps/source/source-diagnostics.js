@@ -1,3 +1,4 @@
+import { sourceDimensions } from './source-projections.js';
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const key = (base, code) => JSON.stringify([text(base), text(code)]);
 const hasKey = (row) => text(row['基地']) && text(row['产品编码']);
@@ -32,16 +33,15 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
       const code = text(row['产品编码']);
       if (code) products.set(code, [...(products.get(code) ?? []), row]);
     }
-    const productFields = ['产品名称', '大类', '系列', '物料组', '物料组名称'];
+    const currentProducts = [...products.values()].flat();
     const productDetail = (row) => {
-      const candidates = products.get(text(row['产品编码'])) ?? [];
-      return Object.fromEntries(
-        productFields.map((field) => {
-          const values = new Set(candidates.map((product) => text(product[field])));
-          const unique = values.size === 1 && !values.has('') ? [...values][0] : '';
-          return [field, text(row[field]) || unique];
-        }),
+      const candidates = (products.get(text(row['产品编码'])) ?? []).filter(
+        (product) => !text(product['基地']) || product['基地'] === row['基地'],
       );
+      const names = [
+        ...new Set(candidates.map((product) => text(product['产品名称'])).filter(Boolean)),
+      ];
+      return { ...row, 产品名称: text(row['产品名称']) || (names.length === 1 ? names[0] : '') };
     };
     const diagnostics = ['report', 'history'].flatMap((source) =>
       result.months.slice(0, 3).map((month) => {
@@ -149,6 +149,10 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
           '系列',
           '物料组',
           '物料组名称',
+          '源大类',
+          '源系列',
+          '源物料组',
+          '缺项原因',
           ...(sales
             ? ['当前维度计划量']
             : source === 'report'
@@ -164,34 +168,36 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
           id: source + month,
           summary,
           detailColumns,
-          records: [...records]
-            .sort((a, b) => Number(matched(b)) - Number(matched(a)))
-            .map((row) => {
-              const detail = productDetail(row);
-              return {
-                ...row,
-                ...detail,
-                ...(source === 'report' && !sales
-                  ? {
-                      源月初数量: row['源月初数量'] ?? row['月初数量'],
-                      源纠偏数量: row['源纠偏数量'] ?? row['纠偏数量'],
-                    }
-                  : {}),
-                当前口径: column,
-                当前数量状态: usable(quantity(row)) ? '数量可用' : '缺数量',
-                产品池匹配: !hasKey(row) ? '缺业务键' : matched(row) ? '池内' : '池外',
-                缺项说明: [
-                  !text(row['基地']) ? '源数据缺基地' : '',
-                  !text(row['产品编码']) ? '源数据缺产品编码' : '',
-                  ...['大类', '系列', '物料组']
-                    .filter((field) => !detail[field])
-                    .map((field) => `${field}未能唯一匹配当前产品清单`),
-                ]
-                  .filter(Boolean)
-                  .join('；'),
-                读取状态: readLabel,
-              };
-            }),
+          records: sourceDimensions(
+            [...records].sort((a, b) => Number(matched(b)) - Number(matched(a))),
+            currentProducts,
+          ).map((row) => {
+            const detail = productDetail(row);
+            return {
+              ...row,
+              ...detail,
+              ...(source === 'report' && !sales
+                ? {
+                    源月初数量: row['源月初数量'] ?? row['月初数量'],
+                    源纠偏数量: row['源纠偏数量'] ?? row['纠偏数量'],
+                  }
+                : {}),
+              当前口径: column,
+              当前数量状态: usable(quantity(row)) ? '数量可用' : '缺数量',
+              产品池匹配: !hasKey(row) ? '缺业务键' : matched(row) ? '池内' : '池外',
+              缺项说明: [
+                detail['缺项原因'],
+                !text(row['基地']) ? '源数据缺基地' : '',
+                !text(row['产品编码']) ? '源数据缺产品编码' : '',
+                ...['大类', '系列', '物料组']
+                  .filter((field) => !detail[field])
+                  .map((field) => `${field}未能唯一匹配当前产品清单`),
+              ]
+                .filter(Boolean)
+                .join('；'),
+              读取状态: readLabel,
+            };
+          }),
         };
       }),
     );
@@ -225,7 +231,7 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
       h(
         'p',
         { className: 'wf-note' },
-        `业务提报使用销售提报占比表的基地产品计划量，历史使用上一完整财年发货量，与当前计算同源；本地提报使用${draft.pull === 'monthly' ? '月初数量' : '纠偏数量'}。数量覆盖按基地与产品编码去重，产品池缺键条目仍计入分母；同键全部源行数量可用才计入覆盖，真实0有效。其他字段缺失单列警告，不影响当前数量核对；缺业务键与池外行分别统计，缺数量含无效值，可与两者重叠。未完整返回、失败、未读取或部分结果无记录时，完整总条数及覆盖留空，保留明细仅供核对。`,
+        `业务提报使用销售提报占比表的基地产品计划量，历史使用上一完整财年发货量，与当前计算同源；本地提报使用${draft.pull === 'monthly' ? '月初数量' : '纠偏数量'}。此处按源记录统计覆盖；完整读取后未提报的基地SKU在拆分中按0，源缺行仍在此处列出。已有空值和冲突不转0。数量覆盖按基地与产品编码去重，产品池缺键条目仍计入分母；同键全部源行数量可用才计入覆盖，真实0有效。其他字段缺失单列警告，不影响当前数量核对；缺业务键与池外行分别统计，缺数量含无效值，可与两者重叠。未完整返回、失败、未读取或部分结果无记录时，完整总条数及覆盖留空，保留明细仅供核对。`,
       ),
       table(
         '逐期来源诊断',

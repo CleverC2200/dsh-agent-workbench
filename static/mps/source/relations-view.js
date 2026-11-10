@@ -19,11 +19,18 @@ const columns = {
     '源基地',
     '车间',
     '隧道号',
+    '隧道吨位/吨',
+    '隧道类型',
     '源系列',
     '组合系列',
     '源生产品类',
     '组合标准日产/件',
     '组合标准日产/吨',
+    '源记录数',
+    '更新时间',
+    '生产单位与车间匹配',
+    '物理资源键',
+    '候选物理资源',
     '核对状态',
   ],
   lines: [
@@ -36,6 +43,8 @@ const columns = {
     '源系列',
     '组合标准日产/件',
     '组合标准日产/吨',
+    '源记录数',
+    '更新时间',
     '核对状态',
   ],
   transfers: [
@@ -65,11 +74,23 @@ function cells(kind, row) {
       source.belong_base,
       source.workshop,
       source.tunnel_no,
+      source.tunnel_tonnage,
+      source.tunnel_type,
       source.series,
       source.combined_series,
       source.production_category,
       source.standard_daily_output_pc,
       source.standard_daily_output_ton,
+      source.source_rows,
+      source.update_time,
+      {
+        matched: '唯一对应',
+        multiple: '多匹配待核',
+        unmatched: '未匹配',
+        'missing-key': '业务键缺失',
+      }[row.tunnelMatch?.status] ?? '无候选来源',
+      row.tunnelMatch?.resourceKey,
+      row.tunnelMatch?.candidateResourceKeys?.join('；'),
       status(row),
     ];
   if (kind === 'lines')
@@ -83,6 +104,8 @@ function cells(kind, row) {
       source.series,
       source.standard_daily_output_pc,
       source.standard_daily_output_ton,
+      source.source_rows,
+      source.update_time,
       status(row),
     ];
   return [
@@ -99,7 +122,7 @@ function cells(kind, row) {
     status(row),
   ];
 }
-export function createRelations(react, useMpsPart) {
+export function createRelations(react, useMpsPart, { downloadCsv }) {
   const h = react.createElement;
   return function Relations({ scope, onResult, active = true, enabled = true }) {
     const [kind, setKind] = react.useState('sku');
@@ -195,17 +218,6 @@ export function createRelations(react, useMpsPart) {
       { className: 'mps-relations', 'aria-label': '主数据关系核对' },
       h(
         'div',
-        { className: 'mps-relations-scope' },
-        h('strong', null, scope ? `${scope.name} · ${scope.month}` : '等待评估范围'),
-        h('span', null, '授权源记录 · 只读核对'),
-        h(
-          'button',
-          { type: 'button', disabled: state.busy, onClick: () => setAttempt((value) => value + 1) },
-          '重新读取',
-        ),
-      ),
-      h(
-        'div',
         { className: 'ap-grid-3 mps-relation-groups', role: 'tablist', 'aria-label': '关系分组' },
         groups.map((group) => {
           const rows = state.records?.[group.key];
@@ -245,6 +257,33 @@ export function createRelations(react, useMpsPart) {
           'div',
           { className: 'ap-card-head mps-relations-tools' },
           h('h3', null, selected.name),
+          h(
+            'button',
+            {
+              type: 'button',
+              disabled: state.busy,
+              onClick: () => setAttempt((value) => value + 1),
+            },
+            '重新读取',
+          ),
+          h(
+            'button',
+            {
+              disabled: state.busy || Boolean(state.error) || !records.length,
+              onClick: () =>
+                downloadCsv(
+                  `${scope.month}-${selected.name}-完整来源.csv`,
+                  ['评估版本', ...columns[kind]],
+                  records.map((row) => ({
+                    评估版本: scope.name,
+                    ...Object.fromEntries(
+                      columns[kind].map((column, index) => [column, cells(kind, row)[index]]),
+                    ),
+                  })),
+                ),
+            },
+            '下载完整关系明细',
+          ),
           h('input', {
             type: 'search',
             'aria-label': '搜索关系记录',
@@ -301,7 +340,18 @@ export function createRelations(react, useMpsPart) {
                           'tr',
                           { key: pageIndex * 25 + index },
                           cells(kind, row).map((value, cell) =>
-                            h('td', { key: cell }, display(value)),
+                            h(
+                              'td',
+                              { key: cell },
+                              columns[kind][cell].startsWith('组合标准日产') &&
+                                value !== '' &&
+                                value != null &&
+                                Number.isFinite(Number(value))
+                                ? new Intl.NumberFormat('zh-CN', {
+                                    maximumFractionDigits: 0,
+                                  }).format(value)
+                                : display(value),
+                            ),
                           ),
                         ),
                       ),

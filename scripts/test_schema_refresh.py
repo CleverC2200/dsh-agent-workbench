@@ -79,6 +79,8 @@ class BasePlanSourceFieldTests(unittest.TestCase):
         db.execute("INSERT INTO agents_sales_plan_demand_m VALUES ('2026-10-01','C1','S1','基地1',2,3,4,5,6,7,8,10,9,14,12)")
         db.execute("INSERT INTO agents_sales_plan_demand_m VALUES ('2026-10-01','C2','S1','基地1',2,3,4,5,6,7,8,0,0,0,0)")
         db.execute("INSERT INTO agents_sales_plan_demand_m VALUES ('2026-09-01','C1','S1','基地1',200,300,4,5,6,7,8,1000,900,1400,1200)")
+        for field in ['product_categ_name','material_group_name','region_name','province_region_name','sales_group_name']:
+            db.execute(f'ALTER TABLE agents_sales_plan_demand_m ADD COLUMN {field} TEXT')
         for qid in ['page.plans-source','overview.plans-source']:
             q=config_for('apsplan')['queries'][qid]
             values={k:v for k,v in q['request']['parameters'].items()};values.update(gea_p1='2026-10-01',gea_p2='2026-11-01')

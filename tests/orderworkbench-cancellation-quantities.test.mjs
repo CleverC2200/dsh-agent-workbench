@@ -506,6 +506,9 @@ test('six-window combined queries use the same cancellation event period and qua
       ['order_qty_origin', 'REAL'],
     ])
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${field} ${type}`);
+  db.exec(`ALTER TABLE agents_scm_order_trace_final_di ADD COLUMN lastshipmenttime;
+    ALTER TABLE agents_scm_order_trace_final_di ADD COLUMN load_time;
+    CREATE TABLE agents_dim_bas_warehouse_d(warehouseid,pickup_point,warehouse_classify);`);
   const q = periodChangesSql();
   const windows =
     "SELECT 0 AS period_index,'2026-10-01' AS start_date,'2026-11-01' AS end_date,TRUE AS enabled UNION ALL SELECT 1,'2026-09-01','2026-10-01',TRUE";

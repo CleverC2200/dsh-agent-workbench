@@ -19,8 +19,7 @@ const text = (value) => {
   return value;
 };
 export async function readFactMonth(type, month, signal) {
-  if (!['report', 'history', 'execution-delivery'].includes(type))
-    throw Error('该事实来源尚未接入');
+  if (!['report', 'history', 'plan-quantity'].includes(type)) throw Error('该事实来源尚未接入');
   return readFacts('facts.' + type, { month: month + '-01' }, signal, type, month);
 }
 export async function readHistoryAnnual(month, signal) {
@@ -42,9 +41,11 @@ async function readFacts(id, parameters, signal, type, month) {
       { signal: options.signal },
     ),
   );
+  if (type === 'shipmentDate')
+    return client.read(id, parameters, { signal, requiredColumns: definition.columns });
   if (
     type === 'report' ||
-    type === 'execution-delivery' ||
+    type === 'plan-quantity' ||
     type === 'shipment' ||
     type === 'inventoryTargets'
   ) {
@@ -68,18 +69,24 @@ async function readFacts(id, parameters, signal, type, month) {
       rows: result.rows.map((row) => {
         const base = text(row.belong_base),
           code = text(row.material_code);
-        if (type === 'execution-delivery')
+        if (type === 'plan-quantity')
           return {
             月份: month,
             基地: base,
             产品编码: code,
-            DMS发货数量: number(row.shipment_qty_total),
-            缺项原因:
-              Number(row.duplicate_rows) > 0
-                ? '出库执行单行重复，发货量未合计'
-                : Number(row.missing_rows) > 0
-                  ? '发货量或出库执行单行标识缺失'
-                  : '',
+            计划数量: number(row.plan_qty_total),
+            已知计划数量: number(row.known_plan_qty_total),
+            源计划数量: number(row.source_plan_qty_total),
+            源记录数: number(row.source_rows),
+            缺数量条数: number(row.missing_rows),
+            重复键条数: number(row.duplicate_rows),
+            源日期开始: text(row.source_date_start),
+            源日期结束: text(row.source_date_end),
+            缺项原因: [
+              ...(Number(row.duplicate_rows) > 0 ? ['计划来源六维业务键重复，未合计有效量'] : []),
+              ...(Number(row.missing_rows) > 0 ? ['计划数量缺失，保留已知小计'] : []),
+              ...(!code ? ['缺物料编码'] : []),
+            ].join('；'),
           };
         const dimensions = {
           产品名称: text(row.material_name),
@@ -102,6 +109,9 @@ async function readFacts(id, parameters, signal, type, month) {
       }),
       metadata: {
         period: month,
+        ...(type === 'plan-quantity'
+          ? { sourceTable: 'ai_db.agents_scm_dws_scm_cust_plan_exe_di', quantityField: 'allnum' }
+          : {}),
         partial: false,
         warnings: [],
         total: result.total,
@@ -182,13 +192,34 @@ async function readFacts(id, parameters, signal, type, month) {
   };
 }
 
+const validShipmentDate = (value) =>
+  typeof value === 'string' &&
+  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  Number.isFinite(Date.parse(value + 'T00:00:00Z')) &&
+  new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
+
+export async function readLatestShipmentDate(month, signal) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw Error('发货统计月份无效');
+  const [year, monthNumber] = month.split('-').map(Number);
+  const monthEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+  const result = await readFacts(
+    'facts.shipment-latest',
+    { month: month + '-01', month_end: monthEnd },
+    signal,
+    'shipmentDate',
+  );
+  if (result.rows.length !== 1) throw Error('最新发货日期来源未返回唯一结果');
+  const date = result.rows[0].latest_date;
+  if (date !== null && (!validShipmentDate(date) || !date.startsWith(month + '-')))
+    throw Error('源端最新发货日期无效或不属于当前统计月份');
+  return {
+    date,
+    metadata: { month, configVersion: result.configVersion, readAt: new Date().toISOString() },
+  };
+}
+
 export async function readShipmentInputs(cutoff, signal) {
-  const valid = (value) =>
-    typeof value === 'string' &&
-    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-    Number.isFinite(Date.parse(value + 'T00:00:00Z')) &&
-    new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
-  if (!valid(cutoff)) throw Error('发货输入须限定有效截止日期');
+  if (!validShipmentDate(cutoff)) throw Error('发货输入须限定有效截止日期');
   const month = cutoff.slice(0, 7);
   const passed = Number(cutoff.slice(8));
   const [year, monthNumber] = month.split('-').map(Number);
@@ -246,7 +277,20 @@ export async function readInventoryTargets(month, endMonth, signal) {
       finalTarget: row.final_target_inventory === null ? null : number(row.final_target_inventory),
       dailyDemand:
         row.avg_daily_planned_demand === null ? null : number(row.avg_daily_planned_demand),
+      finalTurnoverDays:
+        row.final_target_turnover_days == null ? null : number(row.final_target_turnover_days),
+      turnoverDaysValueCount: number(row.turnover_days_value_count),
+      missingTurnoverDaysRows: number(row.missing_turnover_days_rows),
       sourceRows: number(row.source_rows),
+      finalTargetValueCount: number(row.final_target_value_count),
+      dailyDemandValueCount: number(row.daily_demand_value_count),
+      missingTargetRows: number(row.missing_target_rows),
+      missingDailyRows: number(row.missing_daily_rows),
+      conflictFields: [
+        ...(Number(row.final_target_value_count) > 1 ? ['finalTarget'] : []),
+        ...(Number(row.daily_demand_value_count) > 1 ? ['dailyDemand'] : []),
+        ...(Number(row.turnover_days_value_count) > 1 ? ['finalTurnoverDays'] : []),
+      ],
     })),
     metadata: {
       ...result.metadata,

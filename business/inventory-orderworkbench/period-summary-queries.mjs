@@ -49,6 +49,10 @@ const ownerWindow = (field) =>
   );
 const attributionSource = parts.attributionSources
   .replaceAll('header_addtime>=:gea_p1 AND header_addtime<:gea_p2', ownerWindow('header_addtime'))
+  .replaceAll(
+    'shipment.shipped_at>=:gea_p1 AND shipment.shipped_at<:gea_p2',
+    ownerWindow('shipment.shipped_at'),
+  )
   .replaceAll('the_date>=:gea_p1 AND the_date<:gea_p2', ownerWindow('the_date'))
   .replaceAll(
     'fromorderno_month>=:gea_p1 AND fromorderno_month<:gea_p2',
@@ -93,11 +97,9 @@ function periodOrders() {
 }
 
 function periodStock() {
-  let plans = replace(
-    parts.stockPlans,
-    'SELECT belong_base,material_code,',
-    'SELECT the_date AS batch_date,belong_base,material_code,',
-  );
+  // stock_date already identifies each snapshot; extra batch_date projections
+  // inside these CTEs are rejected by the gateway's published-field analysis.
+  let plans = parts.stockPlans;
   plans = replace(
     plans,
     'the_date=(SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2)',
@@ -108,11 +110,7 @@ function periodStock() {
     'GROUP BY belong_base,material_code',
     'GROUP BY the_date,belong_base,material_code',
   );
-  let batches = replace(
-    parts.stockBatches,
-    'SELECT belong_base,material_code,',
-    'SELECT month_date AS batch_date,belong_base,material_code,',
-  );
+  let batches = parts.stockBatches;
   batches = replace(
     batches,
     "month_date=REPLACE(CAST((SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2) AS CHAR),'-','')",
@@ -130,8 +128,8 @@ function periodStock() {
         'SELECT COALESCE(s.belong_base,b.belong_base)',
         'SELECT COALESCE(s.stock_date,b.stock_date) AS batch_date,COALESCE(s.belong_base,b.belong_base)',
       ),
-      'ON b.belong_base=s.belong_base AND b.material_code=s.material_code',
-      'ON b.belong_base=s.belong_base AND b.material_code=s.material_code AND b.stock_date=s.stock_date',
+      'ON (b.belong_base=s.belong_base OR (b.belong_base IS NULL AND s.belong_base IS NULL)) AND b.material_code=s.material_code',
+      'ON (b.belong_base=s.belong_base OR (b.belong_base IS NULL AND s.belong_base IS NULL)) AND b.material_code=s.material_code AND b.stock_date=s.stock_date',
     );
   return {
     ctes: `stock_plans AS (${plans}),stock_batches AS (${batches}),stock_dictionary AS (${parts.dictionary})`,
@@ -146,7 +144,6 @@ function periodAges() {
     `SELECT ${parts.ageBase} AS base,`,
     `SELECT b.dt AS batch_date,${parts.ageBase} AS base,`,
   );
-  sql = replace(sql, 'month_date=:gea_p1', `month_date IN (${list('age')})`);
   sql = replace(sql, 'b.dt=:gea_p1', `b.dt IN (${list('age')})`);
   sql = replace(
     sql,
@@ -234,7 +231,9 @@ export function addPeriodSummaryQuery(config, name, fields, group, columns) {
       title: id,
       parameterSpec,
       request: {
-        sql: sql + ` ORDER BY ${keys.join(',')} LIMIT :gea_p1001 OFFSET :gea_p1002`,
+        sql:
+          sql.replace(/ ORDER BY packet_index$/, '') +
+          ` ORDER BY ${keys.join(',')} LIMIT :gea_p1001 OFFSET :gea_p1002`,
         parameters,
         includeTotal: false,
       },
@@ -245,11 +244,10 @@ export function addPeriodSummaryQuery(config, name, fields, group, columns) {
   if (name === 'orders') {
     const stock = `SELECT ${windows.map((window) => `MAX(CASE WHEN ${window.enabled}=TRUE AND s.the_date>=${window.start} AND s.the_date<${window.end} THEN s.the_date END) AS stock_${window.index}`).join(',')}
       FROM agents_scm_stock_detail_d s WHERE ${inWindows('s.the_date')}`;
-    const age = `SELECT ${windows.map((window) => `MAX(CASE WHEN ${window.enabled}=TRUE AND b.dt>=${compact(window.start)} AND b.dt<${compact(window.inventoryEnd)} THEN b.dt END) AS age_${window.index}`).join(',')}
-      FROM dwd_scm_material_age_his b INNER JOIN (${parts.ageWarehouses}) w ON w.warehouse_id=b.warehouseid
-      LEFT JOIN (${parts.ageWarehouseSnapshots(ageInWindows('month_date'))}) snapshot_warehouse
-        ON snapshot_warehouse.warehouseid=b.warehouseid AND snapshot_warehouse.month_date=b.dt
-      WHERE (:gea_p900='' OR ${parts.ageBase}=:gea_p900) AND ${ageInWindows('b.dt')} AND COALESCE(snapshot_warehouse.excluded,0)=0`;
+    const ageDay = "REPLACE(CAST(b.the_date AS CHAR),'-','')";
+    const age = `SELECT ${windows.map((window) => `MAX(CASE WHEN ${window.enabled}=TRUE AND ${ageDay}>=${compact(window.start)} AND ${ageDay}<${compact(window.inventoryEnd)} THEN ${ageDay} END) AS age_${window.index}`).join(',')}
+      FROM agents_scm_stock_detail_d b
+      WHERE (:gea_p900='' OR ${parts.ageBase}=:gea_p900) AND ${ageInWindows(ageDay)}`;
     register(
       'workbench.period-snapshots',
       `SELECT ${windows.flatMap((window) => [`stock_dates.stock_${window.index} AS stock_${window.index}`, `age_dates.age_${window.index} AS age_${window.index}`]).join(',')} FROM (${stock}) stock_dates CROSS JOIN (${age}) age_dates`,

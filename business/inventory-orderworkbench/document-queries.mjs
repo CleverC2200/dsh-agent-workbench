@@ -42,51 +42,14 @@ export const orderEventRowsSql = `SELECT h.cust_code,h.cust_order_no,h.belong_ba
   FROM ${dailySource}
   WHERE (:gea_p900='' OR d.belong_base=:gea_p900) AND ${dailyOnly}`;
 
-const headersFor = (eventRowsSql) => `SELECT cust_code,cust_order_no,
-  MAX(region_name) AS region,MAX(province_region_name) AS province,MAX(cust_name) AS name,
-  MIN(header_addtime) AS created,MAX(requireddeliverytime) AS delivery,
-  CASE WHEN COUNT(header_addtime)=COUNT(*)
-    AND COUNT(orderstatus)=COUNT(*)
-    AND NULLIF(TRIM(cust_order_no),'') IS NOT NULL AND NULLIF(TRIM(cust_code),'') IS NOT NULL
-    THEN 0 ELSE 1 END AS invalid_header,
-  CASE WHEN COUNT(DISTINCT requireddeliverytime)=1 AND COUNT(requireddeliverytime)=COUNT(*)
-    THEN 0 ELSE 1 END AS invalid_lock,
-  CASE WHEN MIN(orderstatus)=90 AND MAX(orderstatus)=90 THEN 90 ELSE MAX(CASE WHEN orderstatus<>90 THEN orderstatus END) END AS status,
-  MAX(canceltime) AS cancelled,MAX(custchangetime) AS changed,
-  CASE WHEN COUNT(DISTINCT canceltime)>1 THEN 1 ELSE 0 END AS cancel_conflict
-  FROM (${eventRowsSql}) event_rows
-  WHERE (:gea_p900='' OR belong_base=:gea_p900)
-  GROUP BY cust_code,cust_order_no`;
-
-const lockHeaders = (
-  headersSql,
-) => `SELECT h.cust_code,h.cust_order_no,h.name,h.region,h.province,h.created,h.delivery,
-  h.invalid_header,h.invalid_lock,h.status,h.cancelled,h.changed,h.cancel_conflict,
-  CASE WHEN delivery<=created + INTERVAL '7' DAY THEN created + INTERVAL '12' HOUR
-    ELSE delivery - INTERVAL '7' DAY END AS locked
-  FROM (${headersSql}) h
-  WHERE h.created>=:gea_p1 AND h.created<:gea_p2`;
-
-const dailyAmendmentHeaders = lockHeaders(
-  headersFor(`SELECT cust_code,cust_order_no,belong_base,
-  region_name,province_region_name,cust_name,header_addtime,requireddeliverytime,orderstatus,
-  canceltime,custchangetime FROM agents_scm_execute_detail_d
-  WHERE (:gea_p900='' OR belong_base=:gea_p900)
-    AND header_addtime>=:gea_p1 AND header_addtime<:gea_p2`),
-);
-
 export const cancellationEvents = cancellationEventsSql({ dailySource, dailyOnly });
 
-export const amendmentEventsSql = skuAmendmentEventsSql({
-  headers: dailyAmendmentHeaders,
-});
+export const amendmentEventsSql = skuAmendmentEventsSql({});
 
 export const amendmentCohortSql = skuAmendmentEventsSql({
-  headers: dailyAmendmentHeaders,
   stage: 'cohort',
 });
 export const amendmentClassifiedSql = skuAmendmentEventsSql({
-  headers: dailyAmendmentHeaders,
   stage: 'classified',
 });
 
@@ -96,40 +59,12 @@ export const changesSql = cancellationChangesSql + ' UNION ALL ' + amendmentChan
 export const customersSql = aggregateAmendmentSql(amendmentEventsSql, true);
 
 export function periodChangesSql() {
-  const withoutPeriod = 'WHERE h.created>=:gea_p1 AND h.created<:gea_p2';
   const periodCancellations = cancellationEventsSql({ dailySource, dailyOnly, periods: true });
   const cancellation = aggregateCancellationSql('period_cancel_events', {
     periods: true,
     sourceName: true,
   });
-  const headerFields = [
-    'cust_code',
-    'cust_order_no',
-    'belong_base',
-    'region_name',
-    'province_region_name',
-    'cust_name',
-    'header_addtime',
-    'requireddeliverytime',
-    'orderstatus',
-    'canceltime',
-    'custchangetime',
-  ];
-  const rows = `SELECT rw.period_index,${headerFields.map((field) => 'd.' + field).join(',')}
-    FROM agents_scm_execute_detail_d d INNER JOIN report_windows rw
-      ON rw.enabled=TRUE AND d.header_addtime>=rw.start_date AND d.header_addtime<rw.end_date
-    WHERE (:gea_p900='' OR d.belong_base=:gea_p900)`;
-  const headers = headersFor(rows)
-    .replace('SELECT cust_code,cust_order_no,', 'SELECT period_index,cust_code,cust_order_no,')
-    .replace('GROUP BY cust_code,cust_order_no', 'GROUP BY period_index,cust_code,cust_order_no');
-  const locked = lockHeaders(headers)
-    .replace('SELECT h.cust_code,', 'SELECT h.period_index,h.cust_code,')
-    .replace(withoutPeriod, '');
-  const amendment = aggregateAmendmentSql(
-    skuAmendmentEventsSql({ headers: locked, periods: true }),
-    false,
-    true,
-  );
+  const amendment = aggregateAmendmentSql(skuAmendmentEventsSql({ periods: true }), false, true);
   return {
     ctes: `period_cancel_events AS (${periodCancellations})`,
     sql: cancellation + ' UNION ALL ' + amendment,
@@ -240,8 +175,12 @@ export const ontimeExecutionProductsSql = `SELECT cust_order_no,cust_code,materi
       'd.belong_base,d.detailstatus,d.is_stat,d.product_item FROM',
       'd.belong_base,d.detailstatus,d.is_stat,d.product_item,d.is_virtual FROM',
     )}) execution_rows
-  WHERE detailstatus=10 AND is_stat='1' AND (:gea_p900='' OR belong_base=:gea_p900)
+  WHERE (:gea_p900='' OR belong_base=:gea_p900)
   GROUP BY cust_order_no,cust_code,material_code,executeorderno,belong_base,detailstatus`;
-export const { ontimeSql, ontimeSummarySql, ontimePeriodSummarySql } = createOntimeQueries(
-  ontimeExecutionProductsSql,
-);
+export const {
+  ontimeSql,
+  ontimeSummarySql,
+  ontimePeriodSummarySql,
+  ontimeAgentSummarySql,
+  ontimeAgentDetailsSql,
+} = createOntimeQueries(ontimeExecutionProductsSql);

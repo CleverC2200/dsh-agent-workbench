@@ -1,3 +1,4 @@
+import { sourceDimensions } from './source-projections.js';
 import { call } from '../../../business/shared/channel.js';
 import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
 import { annualRows, normalizedMonth, sourceMonthValues } from './master-data.js';
@@ -80,9 +81,7 @@ export function sourceTableParameters(kind, month) {
     };
   if (kind === 'plan-rate')
     return {
-      months: [month, monthOffset(month, 1), monthOffset(month, 2)].map((value) =>
-        value.replace('-', ''),
-      ),
+      months: [month.replace('-', '')],
     };
   if (kind === 'delivery') return { months: [...months, month.replace('-', '')] };
   throw Error('未知月主计划来源');
@@ -126,30 +125,7 @@ export function forecastRows(rows, month) {
   });
 }
 export function forecastDimensions(rows, products) {
-  return rows.map((row) => {
-    const matches = products.filter(
-      (p) =>
-        p['产品编码'] &&
-        p['产品编码'] === row['产品编码'] &&
-        (!p['基地'] || p['基地'] === row['基地']),
-    );
-    if (!matches.length)
-      return {
-        ...row,
-        缺项原因: [row['缺项原因'], '物料编码未匹配当前产品明细，分类留空']
-          .filter(Boolean)
-          .join('；'),
-      };
-    const fields = {},
-      issues = [];
-    for (const name of ['大类', '系列', '物料组', '物料组名称']) {
-      const values = [...new Set(matches.map((product) => product[name]).filter(Boolean))];
-      fields[name] =
-        matches.every((product) => product[name]) && values.length === 1 ? values[0] : '';
-      if (values.length > 1) issues.push(`同物料编码的${name}存在多个当前值，未选择`);
-    }
-    return { ...row, ...fields, 缺项原因: [row['缺项原因'], ...issues].filter(Boolean).join('；') };
-  });
+  return sourceDimensions(rows, products);
 }
 export const deliveryColumns = {
   dimension_type: '维度类型',

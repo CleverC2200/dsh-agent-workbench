@@ -220,9 +220,9 @@ test('forecast classification explains missing and ambiguous SKU mappings withou
   assert.match(ambiguous['缺项原因'], /多个当前值/);
 });
 
-test('plan share parameters use natural current and next month across years', () => {
+test('plan share parameters use the evaluation month across years', () => {
   assert.deepEqual(sourceTableParameters('plan-rate', '2026-12'), {
-    months: ['202612', '202701', '202702'],
+    months: ['202612'],
   });
 });
 

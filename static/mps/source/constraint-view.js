@@ -29,8 +29,10 @@ export function createConstraintPanel(react, { Dialog }) {
     card,
     previewRules,
     children,
+    disabled,
   }) {
     const [hardOnly, setHardOnly] = react.useState(false);
+    const [advancedOpen, setAdvancedOpen] = react.useState(false);
     const [editor, setEditor] = react.useState(null);
     const [error, setError] = react.useState('');
     const [proposal, setProposal] = react.useState(null);
@@ -125,12 +127,13 @@ export function createConstraintPanel(react, { Dialog }) {
         { className: 'wf-rule-actions' },
         h(
           'button',
-          { onClick: () => edit(rule, index), 'aria-label': `编辑约束${index + 1}` },
+          { disabled, onClick: () => edit(rule, index), 'aria-label': `编辑约束${index + 1}` },
           '编辑',
         ),
         h(
           'button',
           {
+            disabled,
             onClick: () => toggle(rule, index, rule.enabled === false),
             'aria-label': `${rule.enabled === false ? '启用' : '停用'}约束${index + 1}`,
           },
@@ -139,6 +142,7 @@ export function createConstraintPanel(react, { Dialog }) {
         h(
           'button',
           {
+            disabled,
             onClick: () =>
               saveRules(
                 rules.filter((_, position) => position !== index),
@@ -177,11 +181,6 @@ export function createConstraintPanel(react, { Dialog }) {
     return h(
       react.Fragment,
       null,
-      h(
-        'p',
-        { className: 'wf-rule-notice' },
-        '约束由品类计划维护，按月份生效。硬约束不自动放宽；软约束须采用后才改变计算。变更保存在当前评估版本并留痕。',
-      ),
       card(
         '约束列表',
         h(
@@ -238,6 +237,7 @@ export function createConstraintPanel(react, { Dialog }) {
             'button',
             {
               className: 'dc-primary',
+              disabled,
               onClick: () =>
                 edit(
                   {
@@ -263,79 +263,83 @@ export function createConstraintPanel(react, { Dialog }) {
         ),
       ),
       children[0],
-      card(
-        '冲突与放宽建议',
-        evaluations.length
-          ? table(
-              '规则计算结果',
-              ['规则', '月份', '结果', '影响单品', '计算依据与缺项', '处理'],
-              evaluations.map((entry) => {
-                const rule = ruleOf(entry);
-                return [
-                  rule?.description || '待完善规则',
-                  entry.month,
-                  h(
-                    'span',
-                    { className: 'wf-rule-status', 'data-status': entry.status },
-                    statuses[entry.status],
-                  ),
-                  entry.affected,
-                  entry.reason,
-                  rule && ['conflict', 'warning'].includes(entry.status)
-                    ? h(
-                        'div',
-                        { className: 'wf-rule-actions' },
-                        h('button', { onClick: () => preview(entry) }, '预览放宽'),
-                        rule.strength === '软' &&
-                          !rule.accepted &&
-                          h(
-                            'button',
-                            {
-                              onClick: () =>
-                                saveRules(
-                                  rules.map((item) =>
-                                    item === rule ? { ...item, accepted: true } : item,
+      evaluations.length > 0 &&
+        card(
+          '冲突与放宽建议',
+          evaluations.length
+            ? table(
+                '规则计算结果',
+                ['规则', '月份', '结果', '影响单品', '计算依据与缺项', '处理'],
+                evaluations.map((entry) => {
+                  const rule = ruleOf(entry);
+                  return [
+                    rule?.description || '待完善规则',
+                    entry.month,
+                    h(
+                      'span',
+                      { className: 'wf-rule-status', 'data-status': entry.status },
+                      statuses[entry.status],
+                    ),
+                    entry.affected,
+                    entry.reason,
+                    rule && ['conflict', 'warning'].includes(entry.status)
+                      ? h(
+                          'div',
+                          { className: 'wf-rule-actions' },
+                          h('button', { onClick: () => preview(entry) }, '预览放宽'),
+                          rule.strength === '软' &&
+                            !rule.accepted &&
+                            h(
+                              'button',
+                              {
+                                onClick: () =>
+                                  saveRules(
+                                    rules.map((item) =>
+                                      item === rule ? { ...item, accepted: true } : item,
+                                    ),
+                                    rule,
+                                    '采用软约束',
                                   ),
-                                  rule,
-                                  '采用软约束',
-                                ),
-                            },
-                            '采用建议',
-                          ),
-                      )
-                    : '—',
-                ];
-              }),
-            )
-          : h(
-              'p',
-              { className: 'wf-note' },
-              '尚未添加约束。添加后按实际输入计算冲突，不使用原型演示结果。',
-            ),
+                              },
+                              '采用建议',
+                            ),
+                        )
+                      : '—',
+                  ];
+                }),
+              )
+            : h('p', { className: 'wf-note' }, '暂无冲突或建议'),
+          h(
+            'span',
+            { className: 'wf-note' },
+            conflicts.length ? `${conflicts.length}项冲突、建议或待补输入` : '无待处理项',
+          ),
+        ),
+      (draft.constraints?.rules?.history?.length ?? 0) > 0 &&
         h(
-          'span',
-          { className: 'wf-note' },
-          conflicts.length ? `${conflicts.length}项冲突、建议或待补输入` : '无待处理项',
+          'details',
+          { className: 'dc-card wf-advanced' },
+          h('summary', null, `约束变更记录（${draft.constraints?.rules?.history?.length ?? 0}条）`),
+          table(
+            '约束变更记录',
+            ['时间', '约束内容', '操作'],
+            [...(draft.constraints?.rules?.history ?? [])]
+              .reverse()
+              .slice(0, 50)
+              .map((entry) => [entry.at, entry.description, entry.action]),
+          ),
         ),
-      ),
       h(
         'details',
-        { className: 'dc-card wf-advanced' },
-        h('summary', null, `约束变更记录（${draft.constraints?.rules?.history?.length ?? 0}条）`),
-        table(
-          '约束变更记录',
-          ['时间', '约束内容', '操作'],
-          [...(draft.constraints?.rules?.history ?? [])]
-            .reverse()
-            .slice(0, 50)
-            .map((entry) => [entry.at, entry.description, entry.action]),
-        ),
-      ),
-      h(
-        'details',
-        { className: 'dc-card wf-advanced' },
+        {
+          className: 'dc-card wf-advanced',
+          onToggle: (event) => {
+            if (event.target === event.currentTarget) setAdvancedOpen(event.currentTarget.open);
+          },
+        },
         h('summary', null, '高级配置：生产日历、件吨系数与资源分配'),
-        h('div', { className: 'wf-advanced-body' }, children.slice(1)),
+        (advancedOpen || !disabled) &&
+          h('div', { className: 'wf-advanced-body' }, children.slice(1)),
       ),
       editor &&
         h(
@@ -533,6 +537,7 @@ export function createConstraintPanel(react, { Dialog }) {
               h(
                 'button',
                 {
+                  disabled,
                   onClick: () => {
                     toggle(rules[proposal.index], proposal.index, false);
                     setProposal(null);
@@ -547,7 +552,7 @@ export function createConstraintPanel(react, { Dialog }) {
             'p',
             null,
             proposal.before !== null && proposal.after !== null
-              ? `本版各月最大资源缺口：${proposal.before.toFixed(2)}吨；停用此规则后：${proposal.after.toFixed(2)}吨。`
+              ? `本版各月最大资源缺口：${Math.round(proposal.before)}吨；停用此规则后：${Math.round(proposal.after)}吨。`
               : '当前资源分配或生产输入不完整，无法量化放宽收益。停用规则也不能证明计划已可执行。',
           ),
           h(
