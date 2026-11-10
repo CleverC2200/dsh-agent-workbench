@@ -71,8 +71,6 @@ function status() {
   //update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】本机预览可查看延期页面但不写入处理决定-----------
   if (state?.previewOnly === true) {
     element('submit').disabled = true;
-    element('submit').textContent = '本地预览，不保存';
-    element('notice').textContent = '仅查看界面效果，不执行真实延期、发货或改单。';
   }
   //update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】本机预览可查看延期页面但不写入处理决定-----------
   if (state?.status !== 'pending' && mode !== 'list') {

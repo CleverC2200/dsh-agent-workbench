@@ -8,11 +8,11 @@
     "window.js": "order-confirmation/window.js"
   },
   "assets": {
-    "window.html": "6d3b2309aedeb639541c686ef0f9a82287363f7b370c85492ca197a1c2fce311",
-    "window.js": "8db7c444c935e3953e2a62caa727346bb86b1d814b3e11100778f757461de85e",
+    "window.html": "7c1139bbe829914b35ac178259af22aa40d1d88ae04280afa3e25a24cc705777",
+    "window.js": "25f7805b1f796bb6d9de8d3076b8264090e2b228da8ae82175deda4bdaffc8e6",
     "card.mjs": "31514ea8c0c7dd7e5deaacf2ababefa89fa4dd704caa48fe635ac9548992bde8",
-    "sales-card-template.mjs": "91c32d445a1ca33de16c443c62d2355c545ad8535b3289f936e39d9196743e92",
-    "card-template.json": "c074a4aaa3c75e744113d913ab2508c1ad6d036f3dedcf4b51175aea515e67f5"
+    "sales-card-template.mjs": "7f3b59c9a5191f5a54e4c0132e99ba4f23e1381f0f4c063116f96d68bb527e17",
+    "card-template.json": "c832e75e20b6fa6fa35364ca9b783da8b119be4ec27e0b3d55797c6076ee9070"
   },
   "orderEditing": "DRAFT_ONLY_UNTIL_REAL_ORDER_API_CONNECTED",
   "deployed": false

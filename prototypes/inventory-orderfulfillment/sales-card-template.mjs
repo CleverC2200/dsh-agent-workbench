@@ -150,15 +150,6 @@ export const salesCardTemplate = {
           },
         ],
       },
-      conditional('preview', secondary('本地样例预览 · 不发货、不改单；延期及提交不保存。')),
-      conditional(
-        'pilot',
-        secondary('试点验收 · OMS 尚未接入，仅保存确认／暂缓决定，不执行开单、发货或改单'),
-      ),
-      conditional(
-        'omsUnavailable',
-        secondary('OMS 尚未接入 · 仅保存确认／暂缓决定，不执行开单、发货或改单'),
-      ),
       conditional('hasMore', {
         tag: 'markdown',
         content: conditional(

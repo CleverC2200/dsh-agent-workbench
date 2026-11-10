@@ -1,5 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 30;
+export const metricCalculationVersion = 40;
 export function retainableWorkbenchFacts(facts) {
   return (
     facts?.attributionVersion === 2 &&
@@ -146,7 +146,7 @@ export function computeWorkbenchMetrics(
         ? (numerator / denominator) * 100
         : null,
       kind === '1'
-        ? '按传到OMS的单据新增日期，客户编码＋原订单号去重：锁定期内且接单超过12小时后作废订单数 ÷ O接收订单数（剔除接单后12小时以内、含恰好12小时作废的订单）；缺作废时间不计算'
+        ? '按商品明细有效数量合计：锁定期内且接单超过12小时后作废的有效商品数量 ÷ O接收的有效商品数量；有效量依次取客户要求改单量change_order_qty、DMS最后修改量dms_last_update_qty、调整需求量备份need_qty_origin，真实0有效；小时表逐字段为空时，按客户＋原订单＋执行单＋商品行号＋SKU＋基地精确匹配日表，分别回补对应字段的完整唯一非空值，再按客户改单、DMS、备份顺序取值；小时及日表真实0均保留，已有小时字段不覆盖，必需的高优先级日表字段冲突保留未知，已有小时商品行不被日表替换；缺失的日表商品行仅detailstatus=10（用户确认有效且未删除）时补入，其他状态不补；作废订单按OMS作废时间canceltime归月，其他按header_addtime归月；郑州仅按订单执行明细pickup_point=01筛选，不使用仓库映射或belong_base判断范围；不额外限制仓类；小时表订单提货点为空时按精确日表抬头唯一值回补；仍不明保留待确认；仅纳入接口来源20；发货仓为*且有效数量已知大于0时，先按穿透表最新版本精确回补；仍无发货仓时直接取订单pickup_point，与收货仓归属工厂提货点比较，双方仓类均工厂仓/外租仓且同点才剔除；提货点或必要仓类缺失、冲突仍待确认；剔除虚拟出1/2、超时原因14/16、同一归属工厂提货点且两端均工厂仓/外租仓的短拨（使用已确认的出入库pickup_point穿透字段），以及接单后12小时以内（含恰好12小时）作废；作废时间早于OMS最晚发车时间latestsendcardate前7天的订单，分子分母均剔除；达到或晚于该前7天时点且接单超过12小时才计分子；小时字段为空时按精确日表抬头唯一值回补；回补后仍无有效最晚发车时间的订单，无论作废与否均剔除，不计分子或分母；不按订单张数或SKU种类计数'
         : '按物流追踪表lastshipmenttime装车完成时间归属实际发货周期，执行单号＋客户关联日表，按update_time及load_time最新批次取最后装车完成；缺时间不归属、不回退OMS创建或WMS关单时间；郑州筛选仅取提货点pickup_point=01，不以belong_base替代；按商品明细数量合计：仅客户要求改单量change_order_qty≥0时计入ΣABS(客户要求量－有效量)，真实0保留；分母为全部有效量之和，优先dms_last_update_qty，否则need_qty_origin，数量缺失按0；三个数量全空剔除，作废及无效明细剔除；仅接口createsource=20，剔除虚拟出1/2和超时原因14/16；按仓库维表剔除发收仓同提货点且双方均为工厂仓或工厂外租库的短拨，未分配发货仓仅按同执行单、同提货点及收货仓的有效明细唯一已知发货仓补齐，冲突不推断；不使用锁定期、交期或改单时间作为条件',
     );
   }
@@ -253,7 +253,7 @@ export function computeWorkbenchMetrics(
         sum(selected, 'sample_denominator'),
         sum(selected, 'sample_records'),
         sum(selected, 'records'),
-        name === '改单率' ? '条候选商品明细' : '张候选订单',
+        '条候选商品明细',
       );
   }
   const amendmentRows = changes.filter((row) => String(row.kind) === '2');
@@ -452,7 +452,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
     if (!selected.length)
       return name === '改单率'
         ? '当前实际发货周期没有可归属的有效商品数量记录：日表需按执行单号＋客户关联物流lastshipmenttime装车完成时间；缺时间不以OMS新增或WMS关单时间替代。'
-        : '源数据未提供：agents_scm_execute_detail_hourly_d 在当前分组没有订单计数记录。';
+        : '源数据未提供：agents_scm_execute_detail_hourly_d 在当前分组没有商品数量统计记录。';
     if (
       name === '改单率' &&
       selected.some(
@@ -465,9 +465,9 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
         (row) => Number(row.invalid) > 0 || row.numerator == null || row.denominator == null,
       )
     )
-      return `源数据未提供或归并冲突：agents_scm_execute_detail_hourly_d 的${name === '作废率' ? '作废时间 canceltime、' : '客户改单时间 custchangetime、'}OMS新增日期、确认交期或原订单标识不完整，无法判断锁定期并按订单去重；未用数量比率替代。`;
+      return '作废商品数量或统计范围依据不足：需dms_last_update_qty、change_order_qty或need_qty_origin，以及OMS新增时间header_addtime、作废时间canceltime、OMS最晚发车时间latestsendcardate和执行商品行标识；收发仓的工厂仓属性及仓库主数据“归属工厂提货点”关系也须可核实；归属关系取已确认的agents_scm_material_in_out_summary_d.pickup_point穿透数据，按仓库编码唯一映射，不用自身提货点；缺失或冲突仍保留未知。发货仓为*且有效数量已知大于0时，只有穿透表最新版本的客户、原订单、执行单及收货仓匹配，且发货仓完整唯一，才回补deliver_wh；不使用较旧版本覆盖最新空值。仍缺发货仓（空或*）时，取订单pickup_point，与收货仓归属工厂提货点比较；仓类取订单warehouse_classify，兼容编码及日表中文名称；两点不同即可排除短拨，同点仍须核实双方工厂仓/外租仓属性。真实0保留，缺失数量、冲突商品行或未判定短拨不当作0。';
     if (selected.reduce((sum, row) => sum + Number(row.denominator ?? 0), 0) === 0)
-      return `系统未能计算：当前分组${name === '改单率' ? '有效商品数量' : '有效订单数'}分母为0，不能计算${name}。`;
+      return `系统未能计算：当前分组有效商品数量分母为0，不能计算${name}。`;
   }
   if (name === '订单满足率' && total('demand') === 0)
     return '系统未能计算：agents_order_execute_isontime_mi 当前分组需求量合计为0，订单满足率没有有效分母。';

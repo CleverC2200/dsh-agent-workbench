@@ -2,7 +2,7 @@
 
 ## 可判定样本展示 / Assessed samples
 
-全量计算条件不齐时，不再清空全部已知结果。作废按逐单汇总独立样本；改单按商品明细数量保留完整有效数量分母和已判定/未知数量分子，完整率不可判定时卡片显示可判定商品明细的数量样本率，原有页脚及悬浮说明保留样本覆盖，不能将其当作完整率；满足率只纳入需求、发货量及实际发货周期均可核验的原单产品组；准交率按执行单独立判定；缺交期或短拨映射的执行单保留未知，可判定样本与完整指标分开标注。卡片标注样本覆盖，六张表及样本环同比以“*”标识并提供悬浮覆盖说明。覆盖分母为当前查询候选记录，不声明已覆盖全部真实发货或到货订单。未知记录不补0，拒权或查询失败不发布样本。样本差不冒充全量同比环比；库存、货龄按下述最新覆盖范围计算。 / Publish independently assessed samples with explicit candidate coverage, never imputed full-population rates.
+全量计算条件不齐时，不再清空全部已知结果。作废按可判定执行商品明细的有效数量计算独立样本；改单按商品明细数量保留完整有效数量分母和已判定/未知数量分子，完整率不可判定时卡片显示可判定商品明细的数量样本率，原有页脚及悬浮说明保留样本覆盖，不能将其当作完整率；满足率只纳入需求、发货量及实际发货周期均可核验的原单产品组；准交率按执行单独立判定；缺交期或短拨映射的执行单保留未知，可判定样本与完整指标分开标注。卡片标注样本覆盖，六张表及样本环同比以“*”标识并提供悬浮覆盖说明。覆盖分母为当前查询候选记录，不声明已覆盖全部真实发货或到货订单。未知记录不补0，拒权或查询失败不发布样本。样本差不冒充全量同比环比；库存、货龄按下述最新覆盖范围计算。 / Publish independently assessed samples with explicit candidate coverage, never imputed full-population rates.
 
 本页面采用[订单工作台及订单履约语义](https://klvcodtump.feishu.cn/docx/S7zwdltIaoKfZ0x8oqHcStqQnGg)及其引用的[术语库](https://klvcodtump.feishu.cn/wiki/DfoBw71VNivaOLkHU2mc2OB2nyd)。本次核对主文档 revision 3131、术语库 revision 1603（2026-10-30）；不修改订单履约模块、公共 APS 计算或 GEA 权限。 / This page follows the linked business definitions; fulfillment, shared APS calculations and GEA authorization remain unchanged.
 
@@ -10,7 +10,7 @@
 
 | 指标 / Metric                    | 计算及来源 / Calculation and source                                                                                                                                                                                                                                                                                                                                                                                                       |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 作废率 / Cancellation            | 按客户＋原订单号去重；接单超过12小时且进入锁定期的整单作废数，除以O接收订单数（剔除接单后12小时以内、含恰好12小时作废的订单）。按传到OMS的单据新增日期选择订单，缺失或冲突的作废时间保持未知。不能以作废数量÷下单数量替代。 / Distinct source-order counts; strictly more than 12 hours, with cancellation at exactly 12 hours excluded from both counts. Select by OMS creation date. |
+| 作废率 / Cancellation | 逐执行商品行累加有效数量，依次取 `change_order_qty`、`dms_last_update_qty`、`need_qty_origin`，仅为空时向下一优先级取值；真实0有效；小时表逐字段为空时，按客户＋原订单＋执行单＋商品行号＋SKU＋基地精确匹配日表，分别回补对应字段的完整唯一非空值，再按客户改单、DMS、备份顺序取值；小时及日表真实0均保留，已有小时字段不覆盖，必需的高优先级日表字段冲突保留未知，已有小时商品行不被日表替换；缺失的日表商品行仅detailstatus=10（用户确认有效且未删除）时补入，其他状态不补。作废时间早于OMS最晚发车时间 `latestsendcardate` 前7天的订单，分子、分母均剔除；分子为作废时间达到或晚于该前7天时点且接单超过12小时的商品有效数量；作废锁单使用该系统时间减7天，不由确认交期推算；小时值为空时按精确日表抬头的唯一非空值回补；回补后仍无有效最晚发车时间的订单，无论是否作废均不参与计算，不计分子或分母，分母为同范围O接收商品有效数量；接单12小时内及恰好12小时作废的明细剔除。作废订单按 `canceltime` 归属周期，其他按 `header_addtime`。郑州范围只按订单执行明细pickup_point=01识别，不按仓库映射提货点或源belong_base过滤，也不额外限制仓类；小时表订单pickup_point为空时按精确日表抬头唯一值回补，仍缺失或冲突保留待确认；仓库映射提货点及缺仓回补仅用于短拨判断。相同实际执行商品行跨源基地出现时保留冲突，不重复累计。同时仅纳入接口来源20；剔除虚拟出1/2、超时原因14/16，以及同一归属工厂提货点且两端均工厂仓/工厂外租仓的短拨。不按订单或SKU种类计数。 / Sum effective execution-line quantities; cancellations use OMS event time, other orders use creation time. |
 | 改单率 / Amendment | 数量来自agents_scm_execute_detail_d；时间来自agents_scm_order_trace_final_di.lastshipmenttime装车完成。执行单号＋客户关联；先取update_time、load_time最新批次并列记录中的最后装车完成，再按实际发货周期筛选，关联物流多行不复制日表数量。缺发货时间不以OMS新增、WMS关单或计划到货替代。分子仅change_order_qty≥0时合计ABS(change_order_qty－COALESCE(dms_last_update_qty,need_qty_origin,0))；分母合计全部有效明细有效量。沿当前有效/作废、接口来源、虚拟出1/2、超时14/16、短驳和郑州提货点01筛选，不加锁定期或改单时间条件。按商品数量合计，不按张数或SKU种类计数。 |
 | 订单满足率 / Shipped fulfillment | 使用履约源表 `fromorderno_month` 的统一原订单发货业务归属周期；按来源单＋客户＋商品去重，发货量按需求封顶。源表已统一订单周期，不再按商品经物流表二次推算日期。缺需求、发货量或归并冲突仍不可计算。 / Use the upstream original-order business period, distinct demand and capped shipped quantities. |
 | 准交率 / On-time delivery | 按执行单号去重，客户编码仅用于关联校验；按TMS实际到货时间选周期。目的地围栏时间优先，否则到货确认时间；到货≤MAX(客户期望交期、开单确认到货、系统计算到货)+12h即准交，含边界。分母为同到货周期内剔除后的已发货执行单；全部剔除项、物理字段及缺失策略见下文2026-11-05准交口径。 |
@@ -19,11 +19,17 @@
 
 ## 缺值与完整性 / Missing inputs and completeness
 
-缺作废时间、锁定依据、最后发货日期或完整到货/承诺交期时显示横线及具体原因。查询拒绝、字段未发布、关联冲突、零分母、源字段为空分别保留，不回退数量比率、旧 `is_ontime` 行级平均、滚动计划日均或开发数据库账号。 / Missing inputs and failed queries stay unknown; no quantity-rate, row-average or direct-database fallback.
+2026-11-09用户授权将已核实的穿透发货仓回补接入作废率：执行明细warehouseid为*、有效数量已知且大于0、商品行观察无冲突时，按客户编码＋执行单匹配agents_scm_order_trace_final_di的实际最新update_time，原订单fromorderno与收货仓receive_wh必须一致；最新版本内的原订单、收货仓、deliver_wh均完整且唯一，deliver_wh还须为真实仓号。先聚合最新抬头再关联，不放大商品行；保留原非*仓库，不用历史非空记录覆盖最新空值。回补后仍按归属工厂提货点和双方仓类判断短拨：同提货点且双方01/02才剔除；无穿透记录、最新缺失、身份不匹配、同版本冲突或仓库映射不足继续待确认。本次仅回补仓库，未将其他汇总表的数量填入缺数量明细。
+
+2026-11-09用户追加：发货仓仍缺失（空值、空字符串或*）时，直接取执行商品明细的pickup_point，比较收货仓映射的归属工厂提货点。优先保留已有真实仓库及已核实穿透回补仓库的映射；不能用订单提货点覆盖真实仓库。无仓号时发货方仓类取同一明细warehouse_classify，兼容01/工厂成品仓、02/工厂外租库/工厂外租仓及已知非工厂仓名称。两端提货点不同即可排除短拨；同点仍须双方工厂仓/外租仓才剔除，必要提货点或仓类缺失继续待确认，不改动有效数量优先级。
+
+作废率依本次用户确认的商品数量口径更新，优先级与周期以上表为准。商品数量保留同单的不同执行单、行号及SKU，仅折叠同一真实执行行的完全一致观察；同一执行行的数量或状态冲突保留未知。2026-11-09用户确认agents_scm_material_in_out_summary_d.pickup_point就是仓库主数据“归属工厂提货点（识别短拨、调拨、分拨）”的穿透字段，不是“自身提货点”。作废率按warehouseid唯一映射该归属提货点，结合出入库事实及dim_bas_warehouse的仓类，双方均01/02且归属提货点相同才剔除短拨；不同归属提货点或一端已知非01/02不按短拨剔除。先聚合仓库事实再关联，缺失或冲突不任取MAX，保留待确认。此用户确认取代此前“映射未确认”的暂缓判断。无法判定短拨且有效量非0时，保留未知；有效量已知为0的明细不影响分子分母。DMS最后修改量、客户要求改单量和调整需求量备份均空不补0，不回退预期数量或原始下单量。2026-11-10用户授权精确日表逐字段数量回补：小时表逐字段为空时，按客户＋原订单＋执行单＋商品行号＋SKU＋基地精确匹配日表，分别回补对应字段的完整唯一非空值，再按客户改单、DMS、备份顺序取值；小时及日表真实0均保留，已有小时字段不覆盖，必需的高优先级日表字段冲突保留未知，已有小时商品行不被日表替换；缺失的日表商品行仅detailstatus=10（用户确认有效且未删除）时补入，其他状态不补。
+
+缺作废时间、锁定依据、最后发货日期或完整到货/承诺交期时显示横线及具体原因。查询拒绝、字段未发布、关联冲突、零分母、源字段为空分别保留，不回退旧订单张数口径、旧 `is_ontime` 行级平均、滚动计划日均或开发数据库账号。 / Missing inputs and failed queries stay unknown; no legacy order-count, row-average or direct-database fallback.
 
 同一来源单/产品上游多行不能证明为同一份重复数据时，保持不可计算；不得任取最大需求或重复累加已合并发货。现有快照不代表历史每日固定快照。 / Conflicting merged rows remain unavailable; current observations do not establish immutable historical snapshots.
 
-作废指标的原订单接单周期以全部子执行记录中最早OMS新增时间归属，先归并后筛选；改单指标逐明细先按OMS新增时间筛选，不同子执行单创建时间不构成冲突。确认交期仅在确需判定锁定事件时参与完整性检查。 / Select cohorts after merging split orders by the earliest observed OMS creation time; differing child creation times are not conflicts.
+作废指标逐执行商品行按状态选取业务周期：作废按OMS作废时间，其他按该行OMS新增时间；不按原订单最早新增时间合并周期。改单指标逐明细先按OMS新增时间筛选，不同子执行单创建时间不构成冲突。确认交期仅在确需判定锁定事件时参与完整性检查。 / Cancellation cohorts use OMS cancellation time or creation time according to status; amendment cohorts use OMS creation time.
 
 小时表的OMS作废时间为空时，按客户＋原订单＋执行单＋基地从日表回补；SKU改单时间必须再精确匹配material_code。仅接受对应键下唯一非空时间，小时表已有值优先。不得用 DMS 作废时间、当前状态或加载时间替代 OMS 事件时间。 / Recover missing hourly OMS event times from unique exact daily headers without multiplying rows or overriding known hourly values.
 

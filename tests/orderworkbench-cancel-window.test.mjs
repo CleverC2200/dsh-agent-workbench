@@ -1,38 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
+import {
+  cancellationDb,
+  cancellationLine,
+  sqliteCancellationSql,
+} from './helpers/cancellation-fixture.mjs';
 import { cancellationChangesSql as changesSql } from '../business/inventory-orderworkbench/document-queries.mjs';
 import { computeWorkbenchMetrics } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 
 function calculate(rows) {
-  const db = new DatabaseSync(':memory:');
+  const db = cancellationDb({
+    hourly: rows.map(([id, cancelled, delivery = '2026-11-05 00:00:00', status = 90]) =>
+      cancellationLine(id, {
+        header_addtime: '2026-11-01 00:00:00',
+        requireddeliverytime: delivery,
+        latestsendcardate: '2026-11-01 12:00:00',
+        orderstatus: status,
+        canceltime: cancelled,
+        need_qty_origin: 1,
+      }),
+    ),
+  });
   try {
-    const columns =
-      'cust_code,cust_order_no,executeorderno,belong_base,region_name,province_region_name,cust_name,header_addtime,requireddeliverytime,orderstatus,canceltime,custchangetime';
-    for (const table of ['agents_scm_execute_detail_hourly_d', 'agents_scm_execute_detail_d'])
-      db.exec(`CREATE TABLE ${table} (${columns})`);
-    const insert = db.prepare(
-      'INSERT INTO agents_scm_execute_detail_hourly_d VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-    );
-    for (const [id, cancelled, delivery = '2026-11-05 00:00:00', status = 90] of rows)
-      insert.run(
-        'C',
-        id,
-        'E-' + id,
-        '郑州',
-        '华中',
-        '河南',
-        '客户',
-        '2026-11-01 00:00:00',
-        delivery,
-        status,
-        cancelled,
-        null,
-      );
-    const sql = changesSql
-      .replaceAll("created + INTERVAL '12' HOUR", "datetime(created, '+12 hours')")
-      .replaceAll("created + INTERVAL '7' DAY", "datetime(created, '+7 days')")
-      .replaceAll("delivery - INTERVAL '7' DAY", "datetime(delivery, '-7 days')");
+    const sql = sqliteCancellationSql(changesSql);
     return db
       .prepare(sql)
       .all({ gea_p900: '', gea_p1: '2026-11-01', gea_p2: '2026-11-04' })
@@ -71,11 +61,11 @@ test('unresolved cancellation timestamp remains unknown rather than zero', () =>
   assert.equal(row.sample_numerator, 1);
 });
 
-test('historical end cutoff and OMS-created cohort selection remain in force', () => {
+test('cancellation outside the historical event cutoff leaves the selected period', () => {
   const row = calculate([
     ['later-period', '2026-11-04 01:00:00'],
     ['active', null, null, 10],
   ]);
   assert.equal(row.numerator, 0);
-  assert.equal(row.denominator, 2);
+  assert.equal(row.denominator, 1);
 });
