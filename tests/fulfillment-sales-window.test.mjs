@@ -42,6 +42,61 @@ function component(state = fixture()) {
   return { dom, document: dom.window.document, view };
 }
 
+test('preview uses normal confirmation labels but never invokes the business callback', async () => {
+  const state = fixture();
+  state.snapshot.lines = [{ sku: 'A', name: '商品', quantity: 100 }];
+  let calls = 0;
+  state.onConfirm = async () => {
+    calls++;
+  };
+  const { dom, document } = component(state);
+  try {
+    [...document.querySelectorAll('button')]
+      .find((button) => button.textContent === '提交')
+      .click();
+    const confirm = document.querySelector('.editor-confirm-dialog button');
+    assert.equal(confirm.textContent, '确认');
+    assert.equal(confirm.disabled, false);
+    confirm.click();
+    await Promise.resolve();
+    assert.equal(calls, 0);
+    assert.doesNotMatch(
+      document.getElementById('orderEditor').textContent,
+      /本地模拟预览|本地预览，不保存/,
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('order pages omit implementation and preview notices while retaining submission guards', () => {
+  for (const view of ['details', 'process', 'credit']) {
+    const state = fixture();
+    state.view = view;
+    state.snapshot.lines = [{ sku: 'A', name: '商品', quantity: 100 }];
+    if (view === 'credit') state.snapshot.credit = { status: 'insufficient', shortfall: 200 };
+    const { dom, document } = component(state);
+    try {
+      const root = document.getElementById('orderEditor');
+      assert.doesNotMatch(root.textContent, /模拟|预览|OMS|未接入|待接入|窗口草稿|处理说明/);
+      if (view === 'credit') {
+        const confirm = [...root.querySelectorAll('button')].find(
+          (item) => item.textContent === '确认',
+        );
+        assert.equal(confirm.disabled, true);
+      }
+    } finally {
+      dom.window.close();
+    }
+  }
+  const dom = new JSDOM(html);
+  assert.doesNotMatch(
+    dom.window.document.getElementById('confirmationMain').textContent,
+    /OMS|接口|预览|模拟/,
+  );
+  dom.window.close();
+});
+
 test('card preserves pending-confirmation style and supplies only the two approved shortage actions', () => {
   const card = salesConfirmationCard({ orderNo: 'A', rate: 95, lines: [{ rawShortage: 3 }] });
   assert.equal(card.header.template, 'blue');
@@ -61,7 +116,7 @@ test('card preserves pending-confirmation style and supplies only the two approv
     assert.equal(confirmationDraft({ rate }).rate, null);
 });
 
-test('ready and shortage cards share grey metadata and notes while preserving order hyperlinks', () => {
+test('ready and shortage cards share grey metadata without preview notices and preserve order hyperlinks', () => {
   for (const rate of [70, 100]) {
     const card = salesConfirmationCard(
       { orderNo: 'MOCK-COLOR', customer: '样例客户', rate, quantity: '30 箱' },
@@ -77,7 +132,8 @@ test('ready and shortage cards share grey metadata and notes while preserving or
       assert.match(field.content, /^<font color='grey'>.*<\/font>$/);
     }
     assert.match(fields[1].content, /\[MOCK-COLOR\]\(https:\/\/applink\.feishu\.cn\//);
-    assert.match(card.body.elements.at(-1).content, /^<font color='grey'>本地样例预览/);
+    assert.doesNotMatch(JSON.stringify(card), /本地样例预览|模拟|演示|不保存|不发货|不改单|OMS/);
+    assert.doesNotMatch(JSON.stringify(salesConfirmationCard({ rate })), /OMS|尚未接入|仅保存/);
   }
 });
 
