@@ -1,5 +1,5 @@
 import { metricTarget, workbenchMetricState } from './performance-rules.mjs';
-import { stockComponents } from './metric-model.mjs';
+import { stockComponents, workbenchMetricMissingReason } from './metric-model.mjs';
 import { metricSpecs } from './metric-definitions.mjs';
 
 export function metricDisplayState(metric, key, base = '') {
@@ -15,7 +15,10 @@ export function metricSnapshot(
   key,
   { base = '', turnoverScope = base ? 'base' : 'national' } = {},
 ) {
-  const metric = period.metrics[key];
+  const saved = period.metrics[key];
+  const metric = saved.emptyPeriod
+    ? { ...saved, note: workbenchMetricMissingReason(period, key) }
+    : saved;
   const available = !metric.emptyPeriod && period.sections.some(part => part.id === metricSpecs[key].section && part.status === 'ready');
   const rows = (id) =>
     period.sections.find((part) => part.id === id && part.status === 'ready')?.rows ?? [];
