@@ -112,8 +112,7 @@
     <label id="defer" hidden
       >预计交货日期
       <input id="days" type="date" aria-label="预计交货日期" />
-      <small>选择未来1—7天，与现有暂缓决定接口保持一致。</small></label
-    >
+    </label>
     <p id="quantity"></p>
     <p id="notice" role="alert"></p>
     <p id="result" role="status" hidden></p>
@@ -121,7 +120,6 @@
       <button id="previous">上一页</button> <span id="pageLabel"></span>
       <button id="next">下一页</button>
     </nav>
-    <small>OMS 尚未接入：本次仅保存确认／暂缓决定，不执行开单、发货或改单。</small>
     <div class="actions">
       <button id="cancel">返回</button><a id="process" hidden>订单处理</a
       ><button class="primary" id="submit" disabled>确认</button>
@@ -408,6 +406,18 @@
     }
     #orderEditor .editor-disclosure summary {
       cursor: pointer;
+    }
+    #orderEditor .editor-disclosure[open] {
+      max-height: min(280px, 40dvh);
+    }
+    #orderEditor .editor-disclosure .editor-basic-info {
+      padding: 10px 0 6px;
+    }
+    #orderEditor header .editor-header-add {
+      justify-self: end;
+      margin: 0;
+      white-space: nowrap;
+      background: transparent;
     }
     #orderEditor .editor-disclosure p {
       margin: 5px 0;

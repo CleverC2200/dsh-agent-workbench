@@ -282,27 +282,6 @@
         ]
       },
       {
-        "$if": "preview",
-        "yes": {
-          "tag": "markdown",
-          "content": "<font color='grey'>本地样例预览 · 不发货、不改单；延期及提交不保存。</font>"
-        }
-      },
-      {
-        "$if": "pilot",
-        "yes": {
-          "tag": "markdown",
-          "content": "<font color='grey'>试点验收 · OMS 尚未接入，仅保存确认／暂缓决定，不执行开单、发货或改单</font>"
-        }
-      },
-      {
-        "$if": "omsUnavailable",
-        "yes": {
-          "tag": "markdown",
-          "content": "<font color='grey'>OMS 尚未接入 · 仅保存确认／暂缓决定，不执行开单、发货或改单</font>"
-        }
-      },
-      {
         "$if": "hasMore",
         "yes": {
           "tag": "markdown",
