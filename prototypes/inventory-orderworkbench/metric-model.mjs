@@ -1,5 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 29;
+export const metricCalculationVersion = 30;
 export function retainableWorkbenchFacts(facts) {
   return (
     facts?.attributionVersion === 2 &&
@@ -51,6 +51,18 @@ const sum = (rows, key) =>
 const invalid = (rows, key = 'invalid') =>
   rows.some((row) => !finite(row[key]) || Number(row[key]) !== 0);
 export const metricValue = (metrics, name) => metrics?.[name]?.value ?? null;
+export function stockDemandDays(row) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(row.stock_date)) return null;
+  const offset = 'plan_month_offset' in row ? row.plan_month_offset : 0;
+  if (!finite(offset) || ![0, 1].includes(Number(offset))) return null;
+  return new Date(
+    Date.UTC(
+      Number(row.stock_date.slice(0, 4)),
+      Number(row.stock_date.slice(5, 7)) + Number(offset),
+      0,
+    ),
+  ).getUTCDate();
+}
 export function stockDaily(row, scope = 'national') {
   const sales =
     scope !== 'base' && 'national_plan_records' in row ? row.national_sales_plan : row.sales_plan;
@@ -62,9 +74,8 @@ export function stockDaily(row, scope = 'national') {
     (scope === 'base' && (!finite(row.transfer_plan) || Number(row.transfer_plan) < 0))
   )
     return null;
-  const days = new Date(
-    Date.UTC(Number(row.stock_date.slice(0, 4)), Number(row.stock_date.slice(5, 7)), 0),
-  ).getUTCDate();
+  const days = stockDemandDays(row);
+  if (days === null) return null;
   return (Number(sales) + (scope === 'base' ? 0.5 * Number(row.transfer_plan) : 0)) / days;
 }
 // Each dimension sums stock and plans independently, not an intersection of SKUs.
@@ -194,10 +205,10 @@ export function computeWorkbenchMetrics(
         ? sum(stock, 'inventory') /
           stock.reduce((total, row) => total + stockDaily(row, turnoverScope), 0)
         : null,
-    '产销存日表现库存 current_stock ÷ 同范围计划日均需求；按数据库发布的初版、纠偏、滚动截止日选择计划，超过滚动截止日取下月初版；配置缺失或无效时不回退固定日期；分母始终为库存业务日所在月天数；' +
+    '产销存日表现库存 current_stock ÷ 同范围计划日均需求；按数据库发布的初版、纠偏、滚动截止日选择计划，超过滚动截止日取下月初版；配置缺失或无效时不回退固定日期；初版、纠偏除以库存当月天数，滚动、下月初版除以次月天数；' +
       (turnoverScope === 'base'
-        ? '基地日均=(月度需求计划+调拨出库计划×0.5)÷当月天数'
-        : '全国及品项日均=月度需求计划÷当月天数；取库存计划表对应初版、纠偏、滚动或下月字段，不以客户需求表allnum替代') +
+        ? '基地日均=(月度需求计划+调拨出库计划×0.5)÷对应月份天数'
+        : '全国及品项日均=月度需求计划÷对应月份天数；取库存计划表对应初版、纠偏、滚动或下月字段，不以客户需求表allnum替代') +
       '；各维度库存与计划在同范围内独立汇总，不要求商品逐条匹配；负库存按来源原值汇总；源内缺值、负计划、负库存合计或重复计划粒度不计算',
     '天',
   );

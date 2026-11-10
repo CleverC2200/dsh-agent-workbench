@@ -7,6 +7,7 @@ import { missingPlanPolicySql } from '../business/inventory-orderworkbench/plan-
 import {
   computeWorkbenchMetrics,
   stockDaily,
+  stockDemandDays,
   metricCalculationVersion,
   compatibleWorkbenchFacts,
 } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
@@ -123,14 +124,16 @@ for (const [day, sales, transfer] of [
       row = rows[0];
     assert.equal(row.sales_plan, sales);
     assert.equal(row.transfer_plan, transfer);
+    const days = day <= 20 ? 31 : 30;
+    assert.equal(row.plan_month_offset, day <= 20 ? 0 : 1);
     const nationalSales = sales;
-    assert.equal(stockDaily(row), nationalSales / 31);
-    assert.equal(stockDaily(row, 'base'), (sales + 0.5 * transfer) / 31);
+    assert.equal(stockDaily(row), nationalSales / days);
+    assert.equal(stockDaily(row, 'base'), (sales + 0.5 * transfer) / days);
     const period = { sections: [{ id: 'stock', status: 'ready', rows }] };
-    assert.equal(computeWorkbenchMetrics(period)['周转天数'].value, 100 / (nationalSales / 31));
+    assert.equal(computeWorkbenchMetrics(period)['周转天数'].value, 100 / (nationalSales / days));
     assert.equal(
       computeWorkbenchMetrics(period, () => true, { turnoverScope: 'base' })['周转天数'].value,
-      100 / ((sales + 0.5 * transfer) / 31),
+      100 / ((sales + 0.5 * transfer) / days),
     );
   });
 }
@@ -155,23 +158,45 @@ test('selected zero does not fall back to positive initial plans; selected missi
 test('missing transfer only blocks base days; nationwide/item demand excludes transfers', () => {
   const rows = snapshot('2026-10-21', { transfer_out_plan_roll: null });
   const period = { sections: [{ id: 'stock', status: 'ready', rows }] };
-  assert.equal(computeWorkbenchMetrics(period)['周转天数'].value, 100 / 30);
+  assert.equal(computeWorkbenchMetrics(period)['周转天数'].value, 100 / 31);
   assert.equal(
     computeWorkbenchMetrics(period, () => true, { turnoverScope: 'base' })['周转天数'].value,
     null,
   );
 });
 
-test('next-month plans retain snapshot month divisor across leap February and year end', () => {
+test('rolling and next-month plans use the next calendar month across leap February and year end', () => {
   for (const [date, days] of [
-    ['2028-02-27', 29],
-    ['2026-02-27', 28],
+    ['2028-01-27', 29],
+    ['2026-01-27', 28],
+    ['2028-02-27', 31],
+    ['2026-02-27', 31],
     ['2026-12-31', 31],
   ]) {
     const [row] = snapshot(date);
     assert.equal(row.sales_plan, 1240);
     assert.equal(stockDaily(row), 1240 / days);
   }
+  for (const [date, days] of [
+    ['2028-01-21', 29],
+    ['2026-01-21', 28],
+    ['2026-04-21', 31],
+  ]) {
+    const [row] = snapshot(date);
+    assert.equal(row.sales_plan, 930);
+    assert.equal(stockDemandDays(row), days);
+  }
+});
+
+test('divisor follows the selected version from configured nodes even when plan amounts are identical', () => {
+  const plans = { main_sales_plan_adj: 930, roll_sales_plan: 930 };
+  const [corrected] = snapshot('2026-10-19', plans, { cutoffs: [14, 20, 28] });
+  const [rolling] = snapshot('2026-10-19', plans, { cutoffs: [14, 18, 28] });
+  assert.equal(corrected.sales_plan, rolling.sales_plan);
+  assert.equal(stockDemandDays(corrected), 31);
+  assert.equal(stockDemandDays(rolling), 30);
+  for (const plan_month_offset of [null, 2, -1, 0.5])
+    assert.equal(stockDaily({ ...rolling, plan_month_offset }), null);
 });
 
 test('old cached facts are invalidated for the changed plan selection', () => {
@@ -189,14 +214,29 @@ test('old cached facts are invalidated for the changed plan selection', () => {
     compatibleWorkbenchFacts({
       complete: true,
       attributionVersion: 2,
-      metricCalculationVersion: 12,
+      metricCalculationVersion: metricCalculationVersion - 1,
       periods: { month: {} },
     }),
     false,
   );
 });
 
-test('strict October 19–25 rolling plan produces 15.6 independently of the BI comparison value', () => {
+test('October 31 example uses the November divisor and produces 91.3353 days', () => {
+  const rows = snapshot(
+    '2026-10-31',
+    { next_month_sales_plan: 500, next_month_out_plan: 11 },
+    { inventory: 1539, cutoffs: [14, 20, 28] },
+  );
+  const days = computeWorkbenchMetrics(
+    { sections: [{ id: 'stock', status: 'ready', rows }] },
+    () => true,
+    { turnoverScope: 'base' },
+  )['周转天数'].value;
+  assert.equal(stockDemandDays(rows[0]), 30);
+  assert(Math.abs(days - 91.33531157270029) < 1e-10);
+});
+
+test('October rolling plan uses November days in nationwide and item presentation', () => {
   const rows = snapshot(
     '2026-10-25',
     { roll_sales_plan: 9435719.78 },
@@ -216,12 +256,12 @@ test('strict October 19–25 rolling plan produces 15.6 independently of the BI 
   );
   const detail = view.dimensions['category-days'].rows[0];
   assert.equal(detail[2], Math.round(9435719.78) + '件');
-  assert.equal(detail[3], (9435719.78 / 31).toFixed(2) + '件/天');
-  assert.equal(detail[4], '15.59天');
+  assert.equal(detail[3], (9435719.78 / 30).toFixed(2) + '件/天');
+  assert.equal(detail[4], (4745203 / (9435719.78 / 30)).toFixed(2) + '天');
   for (const turnoverScope of ['national', 'item']) {
     const value = computeWorkbenchMetrics(period, () => true, { turnoverScope })['周转天数'].value;
-    assert.equal(value, 4745203 / (9435719.78 / 31));
-    assert.equal(value.toFixed(1), '15.6');
+    assert.equal(value, 4745203 / (9435719.78 / 30));
+    assert.equal(value.toFixed(1), '15.1');
   }
 });
 
@@ -245,7 +285,7 @@ test('customer demand rows and channels cannot override a base-imported rolling 
     const rows = snapshot('2026-10-25', {}, options);
     assert.equal(rows.length, 1);
     const period = { sections: [{ id: 'stock', status: 'ready', rows }] };
-    assert.equal(computeWorkbenchMetrics(period)['周转天数'].value, 100 / 30);
+    assert.equal(computeWorkbenchMetrics(period)['周转天数'].value, 100 / 31);
   }
 });
 

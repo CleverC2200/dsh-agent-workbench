@@ -161,6 +161,8 @@ export function addWorkbenchSummaryQueries(config) {
 
       if (['name', 'stock_date', 'snapshot_date'].includes(field))
         return 'MAX(q.' + field + ') AS ' + field;
+      if (field === 'plan_month_offset')
+        return 'CASE WHEN COUNT(q.plan_month_offset)=COUNT(*) AND MIN(q.plan_month_offset)=MAX(q.plan_month_offset) THEN MAX(q.plan_month_offset) END AS plan_month_offset';
       if (field === 'source_rows')
         return 'CASE WHEN MIN(q.source_rows)=1 AND MAX(q.source_rows)=1 THEN 1 ELSE 0 END AS source_rows';
       return 'SUM(COALESCE(q.' + field + ',0)) AS ' + field;

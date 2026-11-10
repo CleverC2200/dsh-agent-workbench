@@ -118,6 +118,7 @@ test('SQL summary keeps independent nationwide and base contributions from unmat
       category: '食品',
       item: '水饺',
       stock_date: '2026-10-25',
+      plan_month_offset: 0,
       national_stock_invalid: 0,
       national_plan_invalid: 0,
       base_transfer_plan: 0,
@@ -155,6 +156,18 @@ test('SQL summary keeps independent nationwide and base contributions from unmat
       .all({ gea_p1001: 200, gea_p1002: 0 });
     assert.equal(baseDays(missing), null);
     assert.equal(model.nationalStockDays(missing), 7.5);
+    db.exec('UPDATE independent_stock SET plan_month_offset=1');
+    const nextMonth = db
+      .prepare(config.queries['workbench.stock.summary'].request.sql)
+      .all({ gea_p1001: 200, gea_p1002: 0 });
+    assert.equal(nextMonth[0].plan_month_offset, 1, 'month offset must not be summed across SKUs');
+    assert.equal(model.nationalStockDays(nextMonth), 150 / (620 / 30));
+    db.exec("UPDATE independent_stock SET plan_month_offset=0 WHERE sku='both'");
+    const mixed = db
+      .prepare(config.queries['workbench.stock.summary'].request.sql)
+      .all({ gea_p1001: 200, gea_p1002: 0 });
+    assert.equal(mixed[0].plan_month_offset, null);
+    assert.equal(model.nationalStockDays(mixed), null);
   } finally {
     db.close();
   }
@@ -305,6 +318,7 @@ test('SQL summaries preserve NULL, zero, duplicate-stock guards and every visibl
     };
     for (const row of source.stock)
       Object.assign(row, {
+        plan_month_offset: 0,
         national_inventory: row.inventory,
         national_sales_plan: row.sales_plan,
         national_stock_records: 1,
