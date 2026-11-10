@@ -989,7 +989,7 @@ test('configured sources keep formal field rules and safe pagination', () => {
   assert.match(config.queries['workbench.orders'].request.sql, /exp_flag='否'/);
   assert.match(
     config.queries['workbench.stock'].request.sql,
-    /WHEN .*<=20 THEN main_sales_plan_adj/,
+    /WHEN .*<=plan_policy.corrected_day THEN main_sales_plan_adj/,
   );
   assert.doesNotMatch(config.queries['workbench.stock'].request.sql, /avg_daily_planned_demand/);
   assert.match(config.queries['workbench.orders'].request.sql, /LEAST\(m.sent,m.demand\)/);
@@ -999,7 +999,7 @@ test('configured sources keep formal field rules and safe pagination', () => {
   );
   assert.match(
     config.queries['workbench.ages'].request.sql,
-    /b.inv_qty<>0 AND \(b.age_days IS NULL OR b.age_days<0/,
+    /COUNT\(current_stock_60\)<>COUNT\(\*\)/,
   );
   for (const name of ['orders', 'ontime', 'stock', 'changes', 'ages', 'customers', 'directors']) {
     assert.ok(config.queries[config.queries['workbench.' + name].pagination.countQuery]);

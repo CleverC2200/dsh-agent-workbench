@@ -29,6 +29,9 @@ test('gateway-compatible stock join preserves the full-join result including unm
       ALTER TABLE agents_scm_stock_detail_d ADD COLUMN transfer_out_plan_roll;
       ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_sales_plan;
       ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_out_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN current_stock DEFAULT 100;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN current_stock_60 DEFAULT 10;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN available_stock DEFAULT 80;
       UPDATE agents_scm_stock_detail_d SET roll_sales_plan=main_sales_plan_v1,
         transfer_out_plan_roll=transfer_out_plan_v1;`);
     db.exec(`CREATE TABLE agents_sales_plan_demand_m(stat_month,belong_base,material_code,plannum,allnum);
@@ -52,7 +55,7 @@ test('gateway-compatible stock join preserves the full-join result including unm
         .map((row) => JSON.stringify(row))
         .sort();
     assert.deepEqual(read(sql), read(original));
-    assert.equal(read(sql).length, 6);
+    assert.equal(read(sql).length, 3);
   } finally {
     db.close();
   }

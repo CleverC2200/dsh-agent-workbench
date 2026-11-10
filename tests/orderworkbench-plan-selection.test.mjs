@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { workbenchPresentation } from '../prototypes/inventory-orderworkbench/live-presentation.mjs';
 import { workbenchQueries } from '../business/inventory-orderworkbench/queries.mjs';
+import { missingPlanPolicySql } from '../business/inventory-orderworkbench/plan-policy.mjs';
 import {
   computeWorkbenchMetrics,
   stockDaily,
@@ -68,13 +69,44 @@ function snapshot(date, values = {}, options = {}) {
       '01',
       '工厂成品仓',
     );
+    db.exec(`ALTER TABLE agents_scm_stock_detail_d ADD COLUMN current_stock;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN current_stock_60 DEFAULT 0;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN available_stock DEFAULT 1;`);
+    db.prepare('UPDATE agents_scm_stock_detail_d SET current_stock=?').run(
+      options.inventory ?? 100,
+    );
+    db.exec('CREATE TABLE test_plan_policy(initial_day,corrected_day,rolling_day)');
+    db.prepare('INSERT INTO test_plan_policy VALUES (?,?,?)').run(
+      ...(options.cutoffs ?? [16, 20, 26]),
+    );
     return db
-      .prepare(workbenchQueries.stock.sql)
+      .prepare(
+        workbenchQueries.stock.sql.replaceAll(
+          missingPlanPolicySql,
+          'SELECT initial_day,corrected_day,rolling_day FROM test_plan_policy',
+        ),
+      )
       .all({ gea_p1: date.slice(0, 7) + '-01', gea_p2: date.slice(0, 7) + '-32' });
   } finally {
     db.close();
   }
 }
+
+test('published node changes select different versions without changing the query code', () => {
+  assert.equal(snapshot('2026-10-15', {}, { cutoffs: [14, 20, 28] })[0].sales_plan, 620);
+  assert.equal(snapshot('2026-10-15', {}, { cutoffs: [16, 20, 26] })[0].sales_plan, 310);
+  assert.equal(snapshot('2026-10-27', {}, { cutoffs: [14, 20, 28] })[0].sales_plan, 930);
+  for (const cutoffs of [
+    [null, 20, 28],
+    [20, 14, 28],
+    [14, 20, 32],
+    [14.5, 20, 28],
+  ]) {
+    const [row] = snapshot('2026-10-31', {}, { cutoffs });
+    assert.equal(row.sales_plan, null);
+    assert.equal(row.transfer_plan, null);
+  }
+});
 
 for (const [day, sales, transfer] of [
   [1, 310, 62],

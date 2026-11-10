@@ -4,7 +4,13 @@ import { addPeriodSummaryQuery } from './period-summary-queries.mjs';
 /** Derive summaries and bounded SKU pages from the same scoped, validated SKU queries. */
 export function addWorkbenchSummaryQueries(config) {
   const names = ['orders', 'stock', 'ages'];
-  const raw = (name) => config.queries['workbench.' + name].request.sql.split(' ORDER BY ')[0];
+  const raw = (name) => {
+    const sql = config.queries['workbench.' + name].request.sql;
+    // Only remove the final page ordering; shipment attribution has a window ORDER BY.
+    return sql.endsWith(' LIMIT :gea_p1001 OFFSET :gea_p1002')
+      ? sql.slice(0, sql.lastIndexOf(' ORDER BY '))
+      : sql;
+  };
   const owner = raw('directors')
     .replace(/:gea_p1\b/g, ':gea_p703')
     .replace(/:gea_p2\b/g, ':gea_p704');
