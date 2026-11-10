@@ -50,6 +50,7 @@ function facts(enabled = true) {
   const month = period(),
     week = { ...period(), start: '2026-10-19' };
   return {
+    metricCalculationVersion,
     source: 'gea-governed-sql',
     metricCalculationVersion,
     displayMode: enabled ? 'historical-reconciliation' : 'governed-live',

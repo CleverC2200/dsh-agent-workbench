@@ -57,3 +57,12 @@ test('APS独立保存智能工作台的月度日期，兼容已有看板状态',
   ])
     assert.equal(validHtmlViewState('inventory-apsplan', { version: 1, ...invalid }), false);
 });
+
+test('APS区分最新日期默认值与用户手选日期', () => {
+  for (const boardDateMode of ['latest', 'manual'])
+    assert.equal(validHtmlViewState('inventory-apsplan', { version: 1, boardDateMode }), true);
+  assert.equal(
+    validHtmlViewState('inventory-apsplan', { version: 1, boardDateMode: 'fallback' }),
+    false,
+  );
+});
