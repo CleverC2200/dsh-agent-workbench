@@ -198,21 +198,23 @@ test('base and item formulas retain documented weights instead of fitting the sc
     10,
   );
 });
-test('split child creation times do not invalidate the original order and grouping precedes period selection', () => {
-  assert.match(changesSql, /MIN\(header_addtime\) AS created/);
-  assert.doesNotMatch(changesSql, /COUNT\(DISTINCT header_addtime\)=1/);
-  assert.ok(
-    changesSql.indexOf('GROUP BY cust_code,cust_order_no') <
-      changesSql.indexOf('WHERE h.created>=:gea_p1'),
+test('cancellations retain execution business time while amendments select actual shipment time', () => {
+  assert.match(
+    changesSql,
+    /CASE WHEN s.orderstatus=90 THEN s.cancelled ELSE s.header_addtime END AS business_time/,
   );
+  assert.doesNotMatch(changesSql, /COUNT\(DISTINCT header_addtime\)=1/);
   assert.match(amendmentChangesSql, /AND shipment\.shipped_at>=:gea_p1/);
   assert.doesNotMatch(amendmentChangesSql, /d\.header_addtime>=/);
 });
-test('amendments use the actual shipment cohort while cancellation retains its existing cutoff', () => {
+test('amendments use the actual shipment cohort while cancellations use quantities and their event cohort', () => {
   assert.match(amendmentChangesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
   assert.doesNotMatch(amendmentChangesSql, /custchangetime|requireddeliverytime|\blocked\b/);
   assert.match(changesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
-  assert.match(changesSql, /cancelled IS NULL OR cancel_conflict>0/);
+  assert.match(
+    changesSql,
+    /COALESCE\(s.change_order_qty,s.dms_last_update_qty,s.need_qty_origin\)/,
+  );
   assert.doesNotMatch(changesSql, /COALESCE\(cancelled/);
 });
 

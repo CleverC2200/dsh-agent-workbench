@@ -1,6 +1,7 @@
 import { createOntimeQueries } from './ontime-queries.mjs';
 export { ontimeTraceHeadersSql } from './ontime-queries.mjs';
 import { skuAmendmentEventsSql, aggregateAmendmentSql } from './sku-amendments.mjs';
+import { cancellationEventsSql, aggregateCancellationSql } from './sku-cancellations.mjs';
 // A refresh can empty the hourly table, and its retention does not cover history.
 // Prefer a whole hourly execution header, including cancelled/excluded rows, so
 // the daily snapshot cannot resurrect obsolete SKU membership or order status.
@@ -16,7 +17,7 @@ const dailySource = `agents_scm_execute_detail_d d LEFT JOIN
    FROM agents_scm_execute_detail_hourly_d) seen ON ${sameExecution}`;
 const dailyOnly = 'seen.header_present IS NULL';
 
-// Source order counts must not be inferred from cancel_qty/order_qty.
+// Header event observations remain available independently of quantity aggregation.
 // Daily and hourly snapshots publish the same OMS event fields. Keep the newer
 // hourly value; recover a missing value only from an unambiguous exact header.
 export const orderEventRowsSql = `SELECT h.cust_code,h.cust_order_no,h.belong_base,
@@ -41,39 +42,7 @@ export const orderEventRowsSql = `SELECT h.cust_code,h.cust_order_no,h.belong_ba
   FROM ${dailySource}
   WHERE (:gea_p900='' OR d.belong_base=:gea_p900) AND ${dailyOnly}`;
 
-const headersFor = (eventRowsSql) => `SELECT cust_code,cust_order_no,
-  MAX(region_name) AS region,MAX(province_region_name) AS province,MAX(cust_name) AS name,
-  MIN(header_addtime) AS created,MAX(requireddeliverytime) AS delivery,
-  CASE WHEN COUNT(header_addtime)=COUNT(*)
-    AND COUNT(orderstatus)=COUNT(*)
-    AND NULLIF(TRIM(cust_order_no),'') IS NOT NULL AND NULLIF(TRIM(cust_code),'') IS NOT NULL
-    THEN 0 ELSE 1 END AS invalid_header,
-  CASE WHEN COUNT(DISTINCT requireddeliverytime)=1 AND COUNT(requireddeliverytime)=COUNT(*)
-    THEN 0 ELSE 1 END AS invalid_lock,
-  CASE WHEN MIN(orderstatus)=90 AND MAX(orderstatus)=90 THEN 90 ELSE MAX(CASE WHEN orderstatus<>90 THEN orderstatus END) END AS status,
-  MAX(canceltime) AS cancelled,MAX(custchangetime) AS changed,
-  CASE WHEN COUNT(DISTINCT canceltime)>1 THEN 1 ELSE 0 END AS cancel_conflict
-  FROM (${eventRowsSql}) event_rows
-  WHERE (:gea_p900='' OR belong_base=:gea_p900)
-  GROUP BY cust_code,cust_order_no`;
-
-const orderHeaders = headersFor(orderEventRowsSql);
-const lockHeaders = (
-  headersSql,
-) => `SELECT h.cust_code,h.cust_order_no,h.name,h.region,h.province,h.created,h.delivery,
-  h.invalid_header,h.invalid_lock,h.status,h.cancelled,h.changed,h.cancel_conflict,
-  CASE WHEN delivery<=created + INTERVAL '7' DAY THEN created + INTERVAL '12' HOUR
-    ELSE delivery - INTERVAL '7' DAY END AS locked
-  FROM (${headersSql}) h
-  WHERE h.created>=:gea_p1 AND h.created<:gea_p2`;
-
-const lockedHeaders = lockHeaders(orderHeaders);
-const events = `SELECT cust_code,cust_order_no,name,region,province,
-  CASE WHEN status=90 AND cancelled<:gea_p2 AND cancelled<=created + INTERVAL '12' HOUR THEN 0 ELSE 1 END AS cancel_denominator,
-  CASE WHEN status=90 AND cancelled<:gea_p2 AND cancelled>=locked AND cancelled>created + INTERVAL '12' HOUR THEN 1 ELSE 0 END AS cancel_numerator,
-  CASE WHEN invalid_header>0 OR (status=90 AND (cancelled IS NULL OR cancel_conflict>0 OR cancelled<created
-    OR (cancelled<:gea_p2 AND invalid_lock>0))) THEN 1 ELSE 0 END AS invalid_cancel
-  FROM (${lockedHeaders}) locked_orders`;
+export const cancellationEvents = cancellationEventsSql({ dailySource, dailyOnly });
 
 export const amendmentEventsSql = skuAmendmentEventsSql({});
 
@@ -84,38 +53,20 @@ export const amendmentClassifiedSql = skuAmendmentEventsSql({
   stage: 'classified',
 });
 
-export const cancellationChangesSql = `SELECT '1' AS kind,region,province,
-  CASE WHEN SUM(invalid_cancel)=0 THEN SUM(cancel_numerator) END AS numerator,
-  CASE WHEN SUM(invalid_cancel)=0 THEN SUM(cancel_denominator) END AS denominator,
-  SUM(CASE WHEN invalid_cancel=0 THEN cancel_numerator ELSE 0 END) AS sample_numerator,
-  SUM(CASE WHEN invalid_cancel=0 THEN cancel_denominator ELSE 0 END) AS sample_denominator,
-  SUM(CASE WHEN invalid_cancel=0 THEN 1 ELSE 0 END) AS sample_records,
-  0 AS unknown_quantity,
-  COUNT(*) AS records,SUM(invalid_cancel) AS invalid
-  FROM (${events}) order_events GROUP BY region,province`;
+export const cancellationChangesSql = aggregateCancellationSql(cancellationEvents);
 export const amendmentChangesSql = aggregateAmendmentSql(amendmentEventsSql);
 export const changesSql = cancellationChangesSql + ' UNION ALL ' + amendmentChangesSql;
 export const customersSql = aggregateAmendmentSql(amendmentEventsSql, true);
 
 export function periodChangesSql() {
-  const withoutPeriod = 'WHERE h.created>=:gea_p1 AND h.created<:gea_p2';
-  const cancellationHeaders = lockedHeaders.replace(withoutPeriod, '');
-  const cancellationEvents = events
-    .replace(
-      `FROM (${lockedHeaders}) locked_orders`,
-      'FROM period_cancel_headers locked_orders INNER JOIN report_windows rw ON rw.enabled=TRUE AND created>=rw.start_date AND created<rw.end_date',
-    )
-    .replace('SELECT cust_code,cust_order_no,', 'SELECT rw.period_index,cust_code,cust_order_no,')
-    .replaceAll(':gea_p2', 'rw.end_date');
-  const cancellation = cancellationChangesSql
-    .replace("SELECT '1' AS kind", "SELECT period_index,'1' AS kind")
-    .replace(
-      `FROM (${events}) order_events GROUP BY region,province`,
-      'FROM period_cancel_events order_events GROUP BY period_index,region,province',
-    );
+  const periodCancellations = cancellationEventsSql({ dailySource, dailyOnly, periods: true });
+  const cancellation = aggregateCancellationSql('period_cancel_events', {
+    periods: true,
+    sourceName: true,
+  });
   const amendment = aggregateAmendmentSql(skuAmendmentEventsSql({ periods: true }), false, true);
   return {
-    ctes: `period_cancel_headers AS (${cancellationHeaders}),period_cancel_events AS (${cancellationEvents})`,
+    ctes: `period_cancel_events AS (${periodCancellations})`,
     sql: cancellation + ' UNION ALL ' + amendment,
   };
 }
