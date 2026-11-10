@@ -33,7 +33,7 @@ const bundle = await build({
           namespace: 'workspace',
         }));
         api.onLoad({ filter: /.*/, namespace: 'workspace' }, () => ({
-          contents: `export function useWorkspace(enabled,date){window.periodReads.push({enabled,date});return {data:{start:date,end:date,granularity:'day',sections:[],readAt:date,limitations:[]},previous:null,annual:null,busy:false,comparisonBusy:false,error:''};}`,
+          contents: `export function useWorkspace(enabled,date,granularity,summary,detailMode,productScope,{paused=false}={}){window.periodReads.push({enabled,date,paused});return {data:{start:date,end:date,granularity:'day',sections:[],readAt:date,limitations:[]},previous:null,annual:null,busy:false,comparisonBusy:false,error:''};}`,
         }));
         api.onResolve({ filter: /\/agent-query$/ }, ({ path }) => ({
           path,
@@ -107,7 +107,7 @@ test('default uses latest day; manual day stays exact and wins a late calendar r
   }
   const page = await pageFor();
   await expect(page.locator('.date-picker-button')).toHaveText('2026年11月8日');
-  const reads = await page.evaluate(() => window.periodReads.filter((x) => x.enabled));
+  const reads = await page.evaluate(() => window.periodReads.filter((x) => x.enabled && !x.paused));
   assert.ok(reads.length > 0);
   assert.ok(
     reads.every((x) => x.date === '2026-11-08'),
@@ -120,12 +120,12 @@ test('default uses latest day; manual day stays exact and wins a late calendar r
     .click();
   await expect(page.locator('.date-picker-button')).toHaveText('2026年11月9日');
   await expect
-    .poll(() => page.evaluate(() => window.periodReads.filter((x) => x.enabled).at(-1)?.date))
+    .poll(() => page.evaluate(() => window.periodReads.filter((x) => x.enabled && !x.paused).at(-1)?.date))
     .toBe('2026-11-09');
   const restored = await pageFor(false, true);
   await expect(restored.locator('.date-picker-button')).toHaveText('2026年11月9日');
   await expect
-    .poll(() => restored.evaluate(() => window.periodReads.filter((x) => x.enabled).at(-1)?.date))
+    .poll(() => restored.evaluate(() => window.periodReads.filter((x) => x.enabled && !x.paused).at(-1)?.date))
     .toBe('2026-11-09');
   const racing = await pageFor(true);
   await racing.locator('.date-picker-button').click();
@@ -136,6 +136,6 @@ test('default uses latest day; manual day stays exact and wins a late calendar r
   await racing.evaluate(() => window.resolveCalendar());
   await expect(racing.locator('.date-picker-button')).toHaveText('2026年11月9日');
   await expect
-    .poll(() => racing.evaluate(() => window.periodReads.filter((x) => x.enabled).at(-1)?.date))
+    .poll(() => racing.evaluate(() => window.periodReads.filter((x) => x.enabled && !x.paused).at(-1)?.date))
     .toBe('2026-11-09');
 });
