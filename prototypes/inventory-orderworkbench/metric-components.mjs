@@ -2,12 +2,21 @@ import { metricTarget, workbenchMetricState } from './performance-rules.mjs';
 import { stockComponents } from './metric-model.mjs';
 import { metricSpecs } from './metric-definitions.mjs';
 
+export function metricDisplayState(metric, key, base = '') {
+  if (metric?.emptyPeriod) return '暂无已结束日期';
+  if (metric?.loading) return '加载中';
+  if (metric?.value == null && metric?.missingReason?.startsWith('系统读取未成功')) return '查询失败';
+  if (metric?.noRows) return '暂无数据';
+  return workbenchMetricState(key, metric?.value ?? null, base);
+}
+
 export function metricSnapshot(
   period,
   key,
   { base = '', turnoverScope = base ? 'base' : 'national' } = {},
 ) {
   const metric = period.metrics[key];
+  const available = !metric.emptyPeriod && period.sections.some(part => part.id === metricSpecs[key].section && part.status === 'ready');
   const rows = (id) =>
     period.sections.find((part) => part.id === id && part.status === 'ready')?.rows ?? [];
   const sum = (data, field) =>
@@ -43,9 +52,9 @@ export function metricSnapshot(
     numerator = denominator !== null && shortage !== null ? denominator - shortage : null;
     pending = sum(data, 'invalid');
   } else if (key === '准交率') {
-    numerator = metric.counts?.onTime ?? null;
-    denominator = metric.counts?.total ?? null;
-    pending = metric.counts?.pending ?? null;
+    numerator = available ? metric.counts?.onTime ?? null : null;
+    denominator = available ? metric.counts?.total ?? null : null;
+    pending = available ? metric.counts?.pending ?? null : null;
     quantityUnit = '张执行单';
   } else if (key === '货龄（>60天库存占比）') {
     numerator = sum(rows('ages'), 'aged_qty');
@@ -60,7 +69,7 @@ export function metricSnapshot(
   return {
     value: metric.value,
     target: metricTarget(key, base),
-    status: workbenchMetricState(key, metric.value, base),
+    status: metricDisplayState(metric, key, base),
     unit: metric.unit,
     periodBasis: metricSpecs[key].dateBasis,
     ...(metricSpecs[key].cancellationBoundary
@@ -73,8 +82,8 @@ export function metricSnapshot(
     pending,
     ...(key === '准交率'
       ? {
-          known: metric.counts?.known ?? null,
-          late: metric.counts ? metric.counts.known - metric.counts.onTime : null,
+          known: available ? metric.counts?.known ?? null : null,
+          late: available && metric.counts ? metric.counts.known - metric.counts.onTime : null,
         }
       : {}),
     pendingUnit:

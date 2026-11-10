@@ -64,9 +64,11 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     : reportPeriods(start, end, options.now);
   const primaryNames = ['month', 'week'].filter(name => specs[name]);
   const sectionIds = options.sections ?? ['orders', 'ontime', 'changes', 'stock', 'ages', 'directors'];
-  const calculate = period => computeWorkbenchMetrics(period, undefined, { turnoverScope: options.turnoverScope ?? 'national' });
+  const base = options.base ?? '';
+  const turnoverScope = options.turnoverScope ?? (base ? 'base' : 'national');
+  const calculate = period => computeWorkbenchMetrics(period, undefined, { turnoverScope });
   const restoredPeriod = spec => options.summary && (options.seedFacts ?? []).flatMap(facts =>
-    facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true && facts.attributionVersion === 2
+    facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true && facts.attributionVersion === 2 && (facts.base ?? '') === base
       ? Object.values(facts.periods ?? {}) : [],
   ).find(period => period.start === spec.start && period.end === spec.end &&
     period.kind === spec.kind && (period.inventoryEnd ?? period.end) === (spec.inventoryEnd ?? spec.end));
@@ -352,8 +354,10 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   );
   const restoredMetadata = options.summary && (options.seedFacts ?? []).find(facts =>
     facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true &&
-    facts.attributionVersion === 2 && facts.start === start && facts.end === end);
+    facts.attributionVersion === 2 && (facts.base ?? '') === base && facts.start === start && facts.end === end);
   const snapshot = (complete = false) => ({
+    base,
+    turnoverScope,
     metricCalculationVersion,
     displayMode: 'governed-live',
     start,

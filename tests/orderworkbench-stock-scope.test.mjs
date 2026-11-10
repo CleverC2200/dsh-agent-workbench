@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { build } from 'esbuild';
 import { orderWorkbenchSourceConfig } from '../business/inventory-orderworkbench/source-config.mjs';
 import {
   readOrderMetric,
@@ -58,6 +59,71 @@ function fixture() {
     );
   return db;
 }
+
+test('page report defaults to its base formula and does not reuse another base seed', async () => {
+  const bundle = await build({
+    entryPoints: ['prototypes/inventory-orderworkbench/report-source.js'],
+    bundle: true,
+    write: false,
+    format: 'esm',
+    platform: 'node',
+    packages: 'external',
+  });
+  const { loadWorkbenchReport } = await import(
+    'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
+  );
+  const db = fixture();
+  try {
+    const config = orderWorkbenchSourceConfig(
+      JSON.parse(
+        readFileSync(
+          new URL('../business/inventory-apsplan/sql.config.json', import.meta.url),
+          'utf8',
+        ),
+      ),
+    );
+    const execute = async (request) => ({
+      configVersion: 'page-scope-fixture',
+      rows: db
+        .prepare(request.sql)
+        .all(
+          Object.fromEntries(
+            Object.entries(request.parameters).filter(([key]) =>
+              new RegExp(':' + key + '\\b').test(request.sql),
+            ),
+          ),
+        ),
+    });
+    const common = {
+      config,
+      execute,
+      summary: true,
+      metadata: false,
+      sections: ['stock'],
+      singlePeriod: {
+        start: '2026-10-31',
+        end: '2026-11-01',
+        inventoryEnd: '2026-11-01',
+        kind: 'range',
+      },
+    };
+    const zhengzhou = await loadWorkbenchReport('2026-10-31', '2026-11-01', undefined, {
+      ...common,
+      base: '郑州',
+    });
+    assert.equal(zhengzhou.base, '郑州');
+    assert.equal(zhengzhou.turnoverScope, 'base');
+    assert(Math.abs(zhengzhou.periods.month.metrics['周转天数'].value - 12.301804627842852) < 1e-9);
+    const east = await loadWorkbenchReport('2026-10-31', '2026-11-01', undefined, {
+      ...common,
+      base: '华东',
+      seedFacts: [zhengzhou],
+    });
+    assert.equal(east.periods.month.metrics['周转天数'].value, 5);
+  } finally {
+    db.close();
+  }
+});
 
 test('the unified turnover entry applies base scope to real stock SQL before publishing quantities and target', async () => {
   const db = fixture();

@@ -1,6 +1,7 @@
-import { metricSnapshot } from './metric-components.mjs';
+import { metricSnapshot, metricDisplayState } from './metric-components.mjs';
 import { shippableReferenceVersion } from './historical-shippable-reference.mjs';
 import { metricContract } from './metric-definitions.mjs';
+import { metricTarget } from './performance-rules.mjs';
 import {
   computeWorkbenchMetrics,
   metricDelta,
@@ -47,7 +48,6 @@ const onTimeDisplayNote = (metric) => {
     .filter(Boolean)
     .join('；');
 };
-const onTimeStatus = (metric) => metricState('准交率', metric?.value ?? null);
 const rows = (period, id) =>
   period?.sections.find((section) => section.id === id && section.status === 'ready')?.rows ?? [];
 const distinct = (values) =>
@@ -313,6 +313,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
   return tables;
 }
 export function workbenchPresentation(facts, options = {}) {
+  const base = facts.base ?? '';
   const { periods, selected } = facts,
     current = periods[selected];
   const previous = periods[selected === 'month' ? 'previousMonth' : 'previousWeek'],
@@ -355,6 +356,7 @@ export function workbenchPresentation(facts, options = {}) {
   };
   const cards = metricNames.map((name) => ({
     key: name,
+    target: metricTarget(name, base),
     value:
       metricValue(metrics, name) === null
         ? '—'
@@ -364,17 +366,7 @@ export function workbenchPresentation(facts, options = {}) {
       name === '准交率' && metrics[name]?.counts?.total > 0
         ? `已确认准交${metrics[name].counts.onTime}张／已发货候选${metrics[name].counts.total}张；待判定${metrics[name].counts.pending}张`
         : '',
-    status: metrics[name]?.emptyPeriod
-      ? '暂无已结束日期'
-      : metrics[name]?.loading
-        ? '加载中'
-        : metrics[name]?.value == null && metrics[name]?.missingReason?.startsWith('系统读取未成功')
-          ? '查询失败'
-          : metrics[name]?.noRows
-            ? '暂无数据'
-            : name === '准交率' && metrics[name]?.counts?.pending > 0
-              ? onTimeStatus(metrics[name])
-              : metricState(name, metricValue(metrics, name)),
+    status: metricDisplayState(metrics[name], name, base),
     coverageNote:
       name === '准交率' ? onTimeDisplayNote(metrics[name]) : (metrics[name]?.coverageNote ?? ''),
     comparisonNotes: [
@@ -625,7 +617,8 @@ export function workbenchEvidence(facts) {
   return {
     source: facts.source,
     metricCalculationVersion: facts.metricCalculationVersion,
-    metricContracts: Object.fromEntries(metricNames.map(name => [name, { ...metricContract(name, typeof ORDER_WORKBENCH_APS_CONFIG === 'undefined' ? undefined : ORDER_WORKBENCH_APS_CONFIG), version:metricCalculationVersion }])),
+    base: facts.base ?? '',
+    metricContracts: Object.fromEntries(metricNames.map(name => [name, { ...metricContract(name, typeof ORDER_WORKBENCH_APS_CONFIG === 'undefined' ? undefined : ORDER_WORKBENCH_APS_CONFIG, facts.base ? 'base' : 'national'), version:metricCalculationVersion }])),
     complete: facts.complete !== false,
     pendingPeriods: facts.pendingPeriods ?? [],
     pendingSources: facts.pendingSources ?? [],
@@ -645,7 +638,7 @@ export function workbenchEvidence(facts) {
           },
           metrics: Object.fromEntries(Object.entries(period.metrics).map(([key, metric]) => [key,
             facts.metricCalculationVersion === metricCalculationVersion
-              ? {...metricSnapshot(period,key), ...(metric.counts ? {counts:{...metric.counts}} : {})}
+              ? {...metricSnapshot(period,key,{base:facts.base ?? '',turnoverScope:facts.turnoverScope ?? (facts.base ? 'base' : 'national')}), ...(metric.counts && !metric.emptyPeriod && period.sections.some(part => part.id === 'ontime' && part.status === 'ready') ? {counts:{...metric.counts}} : {})}
               : { value:null, unit:metric.unit, note:'指标快照版本已过期，请刷新看板后按当前代码口径读取。' }
           ])),
           sourceDates: Object.fromEntries(

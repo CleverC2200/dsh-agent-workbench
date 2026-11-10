@@ -20,21 +20,23 @@ export function metricDetailsRequest(facts, key, selection, card = {}) {
     !period || period.start >= period.end
       ? '尚无已结束日期'
       : `${period.start} 至 ${dayOffset(period.end, -1)}`;
-  const current = metricSnapshot(facts.periods.month, key);
+  const base = facts.base ?? '';
+  const scope = base ? 'base' : 'national';
+  const current = metricSnapshot(facts.periods.month, key, {base,turnoverScope:facts.turnoverScope ?? scope});
   const config =
     typeof ORDER_WORKBENCH_APS_CONFIG === 'undefined' ? undefined : ORDER_WORKBENCH_APS_CONFIG;
-  const contract = { ...metricContract(key, config), version: metricCalculationVersion };
+  const contract = { ...metricContract(key, config, scope), version: metricCalculationVersion };
   const parameters = {
     metric: key,
     start: facts.periods.month.start,
     endExclusive: facts.periods.month.end,
-    base: '',
+    base,
     expectedVersion: metricCalculationVersion,
   };
   return {
     text:
       `请使用 operations-order-kpi-details skill，在右侧生成“${label}指标明细”表格。\n当前报告：${selection.label}；本期月累计：${window(facts.periods.month)}；本周：${window(facts.periods.week)}。\n` +
-      '点击的是全国汇总卡的本期值，主周期为本期月累计，本周另列。按本次current、contract和queries回答，数值、单位、样本及待判定状态保持原意；旧会话、Skill和知识库不覆盖当前代码口径。明细未发布不等于底表无数据；剔除数未发布不写0。不从汇总编造明细，单页不推断全国分布或原因。独立询问这六项指标时使用gea_order_kpi，其他问题继续使用已授权Cube和知识库。',
+      `点击的是${base ? base+'基地汇总卡' : '全国汇总卡'}的本期值，主周期为本期月累计，本周另列。按本次current、contract和queries回答，数值、单位、样本及待判定状态保持原意；旧会话、Skill和知识库不覆盖当前代码口径。明细未发布不等于底表无数据；剔除数未发布不写0。不从汇总编造明细，单页不推断全国分布或原因。独立询问这六项指标时使用gea_order_kpi，其他问题继续使用已授权Cube和知识库。`,
     context: {
       pageId: 'inventory-orderworkbench',
       instance: 'default',
@@ -42,7 +44,7 @@ export function metricDetailsRequest(facts, key, selection, card = {}) {
       source: facts.source ?? 'gea-governed-sql',
       mock: false,
       period: { ...selection },
-      filters: { dimension: 'national', base: '' },
+      filters: { dimension: scope, base },
       metricDetails: {
         skill: 'operations-order-kpi-details',
         metric: key,
