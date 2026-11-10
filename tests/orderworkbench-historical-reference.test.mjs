@@ -52,7 +52,6 @@ function facts(enabled = true) {
   return {
     metricCalculationVersion,
     source: 'gea-governed-sql',
-    metricCalculationVersion,
     displayMode: enabled ? 'historical-reconciliation' : 'governed-live',
     complete: true,
     selected: 'week',
