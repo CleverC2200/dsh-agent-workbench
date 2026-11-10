@@ -381,7 +381,9 @@ test('field recovery retains daily and hourly zero before lower priorities for a
   assert.equal(read().denominator, 57);
   assert.equal(read().records, 5);
   const rows = db.prepare(sql(cancellationEvents)).all(params);
-  for (const row of rows.filter((r) => !['known-client-first', 'known-dms-zero'].includes(r.cust_order_no)))
+  for (const row of rows.filter(
+    (r) => !['known-client-first', 'known-dms-zero'].includes(r.cust_order_no),
+  ))
     assert.equal(row.cancel_denominator, 0);
   assert.equal(rows.find((r) => r.cust_order_no === 'known-dms-zero').cancel_denominator, 50);
   assert.equal(rows.find((r) => r.cust_order_no === 'known-client-first').cancel_denominator, 7);
@@ -755,7 +757,10 @@ test('reported E2600228660 is excluded from both quantities before departure min
     ],
   });
   const events = db.prepare(sql(cancellationEvents)).all(params);
-  assert.equal(events.some((row) => row.executeorderno === 'E2600228660'), false);
+  assert.equal(
+    events.some((row) => row.executeorderno === 'E2600228660'),
+    false,
+  );
   assert.equal(read().numerator, 0);
   assert.equal(read().denominator, 1);
 });
