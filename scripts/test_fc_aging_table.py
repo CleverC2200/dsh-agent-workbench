@@ -71,6 +71,20 @@ class AgingTableScope(unittest.TestCase):
         self.assertEqual(middle[0]['scope_average_age'], 60)
         self.assertEqual(full[0]['scope_total_qty'], 132)
 
+    def test_selected_age_band_never_uses_unfiltered_warehouse_totals(self):
+        self.f.batch(20, 120, sku='MIXED', kind='20')
+        self.f.batch(90, 5, sku='MIXED', kind='20')
+        self.f.db.execute('DROP VIEW agents_scm_warehouse_total_data_d')
+        self.f.db.execute("CREATE TABLE agents_scm_warehouse_total_data_d AS SELECT 'W' AS warehouseid,'MIXED' AS material_code,'分仓' AS warehouse_name,'商品' AS material_name,999 AS live_qty,888 AS available_qty,100 AS pack_unit_qty,11 AS freeze_qty,0 AS warehouse_transfer_qty,0 AS transfer_onway_qty,0 AS transfer_prepare_qty")
+        self.assertEqual(self.read()[0]['scope_total_qty'], 999)
+        for family in ['atomic','groups']:
+            row=self.read(query_id='batch-age.'+family,age_filter='90+')[0]
+            self.assertEqual(row['total_qty'],5)
+            self.assertEqual(row['available_qty'],5)
+            self.assertEqual(row['pack_unit_qty'],0)
+            self.assertEqual(row['freeze_qty'],0)
+            if family=='atomic':self.assertEqual(row['scope_total_qty'],5)
+
     def test_footer_uses_all_filtered_rows_on_every_page(self):
         for i in range(13):
             self.f.batch(10, i + 1, sku=f'S{i:02}', kind='20')

@@ -11,6 +11,7 @@ class BranchAgingSource(unittest.TestCase):
   c.create_function('FLOOR',1,math.floor)
   c.execute('CREATE TABLE agents_scm_inventory_sku_data_d (warehouseid TEXT,material_code TEXT,month_date TEXT,warehouse_name TEXT,belong_base TEXT,material_name TEXT,live_qty NUMERIC,available_qty NUMERIC,pack_unit_qty NUMERIC,freeze_qty NUMERIC,prod_date TEXT,warehouse_classify TEXT)')
   c.execute('CREATE TABLE agents_scm_material_in_out_summary_d (warehouseid TEXT,material_code TEXT,product_categ_name TEXT,material_group_name TEXT)')
+  c.execute('CREATE VIEW agents_scm_warehouse_total_data_d AS SELECT warehouseid,material_code,MAX(warehouse_name) AS warehouse_name,MAX(material_name) AS material_name,SUM(live_qty) AS live_qty,SUM(available_qty) AS available_qty,SUM(pack_unit_qty) AS pack_unit_qty,SUM(freeze_qty) AS freeze_qty,NULL AS warehouse_transfer_qty,NULL AS transfer_onway_qty,NULL AS transfer_prepare_qty FROM agents_scm_inventory_sku_data_d GROUP BY warehouseid,material_code')
   day=datetime.date(2026,10,22)
   for age,qty in [(59,10),(60,20),(89,30),(90,40),(150,-5),(None,7),(-1,4)]:
    production=(day-datetime.timedelta(days=age)).isoformat() if age is not None else None
