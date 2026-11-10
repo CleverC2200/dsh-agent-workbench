@@ -193,7 +193,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       if (index < 0) throw Error('INVALID_SNAPSHOT_PERIOD');
       return [{ day: (await readSnapshots(priority))['age_' + index] }];
     }
-    const definition = workbenchQueries[name],
+    const definition = workbenchQueries[name] ?? (['cancellations','amendments'].includes(name) ? workbenchQueries.changes : undefined),
       logicalId = 'workbench.' + name.toLowerCase()+(options.summary && ['orders','stock','ages','ontime'].includes(name)?'.summary':'');
     const summarized=logicalId.endsWith('.summary');
     const packeted = (summarized && name === 'stock') || (options.summary && ['directors', 'customers', 'customerManagers'].includes(name));
@@ -274,7 +274,8 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   };
   const section = async (id, action) => {
     try {
-      return { id, status: 'ready', rows: await action() };
+      const result = await action();
+      return { id, status: 'ready', ...(Array.isArray(result) ? {rows:result} : result) };
     } catch (error) {
       signal?.throwIfAborted();
       return { id, status: 'error', rows: [], code: error.code ?? 'QUERY_FAILED',
@@ -306,7 +307,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       return { ...spec, sections: [], metrics: calculate({ ...spec, sections: [] }) };
     const restored = restoredPeriod(spec);
     const pending = sectionIds.map((id) =>
-      restored?.sections?.find(part => part.id === id && part.status === 'ready') ?? { id, status: 'loading', rows: [] });
+      restored?.sections?.find(part => part.id === id && part.status === 'ready' && !Object.keys(part.metricFailures ?? {}).length) ?? { id, status: 'loading', rows: [] });
     const update = () => {
       periods[name] = {
         ...spec,
@@ -320,7 +321,24 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       sectionIds.map((id) =>
         section(id, async () => {
           const cached = pending.find(part => part.id === id && part.status === 'ready');
-          if (cached) return cached.rows;
+          if (cached) return {rows:cached.rows,...(cached.metricFailures ? {metricFailures:cached.metricFailures} : {})};
+          if (id === 'changes') {
+            if (!options.changeKind) {
+              try { return await read(id, values, priority); }
+              catch (error) {
+                signal?.throwIfAborted();
+                if (error.code !== 'GEA_SQL_UNAVAILABLE') throw error;
+              }
+            }
+            const kinds = options.changeKind ? [options.changeKind] : ['1','2'];
+            const parts = await Promise.all(kinds.map(async kind => [kind, await section(
+              kind === '1' ? 'cancellations' : 'amendments',
+              () => read(kind === '1' ? 'cancellations' : 'amendments', values, priority),
+            )]));
+            return {rows:parts.flatMap(([,part]) => part.rows),metricFailures:Object.fromEntries(
+              parts.filter(([,part]) => part.status === 'error').map(([kind,part]) => [kind,{code:part.code,detail:part.detail}]),
+            )};
+          }
           if (id === 'directors')
             return read(id, {
               start: dayOffset(spec.end, -1).slice(0, 7) + '-01',

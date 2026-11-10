@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { metricDetailsRequest } from '../prototypes/inventory-orderworkbench/metric-details.mjs';
 import { workbenchPresentation } from '../prototypes/inventory-orderworkbench/live-presentation.mjs';
 import { metricTarget } from '../prototypes/inventory-orderworkbench/performance-rules.mjs';
+import { workbenchCellMissingReason } from '../prototypes/inventory-orderworkbench/missing-reasons.mjs';
 import {
   computeWorkbenchMetrics,
   metricNames,
@@ -27,6 +28,54 @@ const selection = {
   week: '2026-10-19',
   label: '2026年10月 · 第四周',
 };
+
+test('base cross tables and SKU rows use the same base formula while item views retain their own scope', () => {
+  const stock = {
+    base: '郑州',
+    category: '水饺',
+    item: '水饺',
+    sku: '10004580',
+    name: '产品',
+    stock_date: '2026-10-31',
+    plan_month_offset: 1,
+    inventory: 1539,
+    sales_plan: 500,
+    transfer_plan: 11,
+    source_rows: 1,
+    invalid: 0,
+  };
+  const month = {
+    start: '2026-10-01',
+    end: '2026-11-01',
+    sections: [{ id: 'stock', status: 'ready', rows: [stock] }],
+  };
+  month.metrics = computeWorkbenchMetrics(month);
+  const f = { ...facts, selected: 'month', periods: { month, week: month } };
+  const view = workbenchPresentation(f);
+  assert.equal(view.dimensions['base-category-days'].rows[0][1], '91.34');
+  assert.equal(view.skus['水饺'][0].shipDays, '91.34天');
+  assert.equal(view.dimensions['category-days'].rows[0][4], '92.34天');
+  assert.equal(view.dimensions['category-days'].columns[1], '现库存');
+  month.sections[0].rows[0].transfer_plan = null;
+  assert.match(
+    workbenchCellMissingReason(f, {
+      dimension: 'base-category-days',
+      header: '水饺',
+      row: ['郑州'],
+      period: 'month',
+    }),
+    /未能计算/,
+  );
+  assert.doesNotMatch(
+    workbenchCellMissingReason(f, {
+      dimension: 'category-days',
+      header: '可发货天数',
+      row: ['水饺'],
+      period: 'month',
+    }),
+    /未能计算/,
+  );
+});
 
 test('all six base card handoffs retain scope, current components and the current code targets', () => {
   for (const base of ['郑州', '华东', '']) {

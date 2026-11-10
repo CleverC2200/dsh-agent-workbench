@@ -1,5 +1,7 @@
 import {
   changesSql,
+  cancellationChangesSql,
+  amendmentChangesSql,
   customersSql,
   ordersSql,
   ontimeSql,
@@ -361,7 +363,11 @@ export const workbenchQueries = {
 };
 
 export function addWorkbenchQueries(config) {
-  for (const [name, original] of Object.entries(workbenchQueries)) {
+  for (const [name, original] of Object.entries({
+    ...workbenchQueries,
+    cancellations: { ...workbenchQueries.changes, sql: cancellationChangesSql },
+    amendments: { ...workbenchQueries.changes, sql: amendmentChangesSql },
+  })) {
     const definition = { ...original };
     const alias =
       name === 'stock'

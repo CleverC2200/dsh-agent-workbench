@@ -76,6 +76,9 @@ export function metricSnapshot(
       ? { cancellationBoundary: metricSpecs[key].cancellationBoundary }
       : {}),
     formula: metric.note,
+    note: metric.note,
+    coverageNote: metric.coverageNote ?? null,
+    population: metric.population ?? null,
     numerator,
     denominator,
     quantityUnit,

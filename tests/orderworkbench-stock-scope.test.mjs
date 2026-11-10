@@ -165,3 +165,66 @@ test('the unified turnover entry applies base scope to real stock SQL before pub
     db.close();
   }
 });
+
+test('a failed cancellation query does not hide the independently readable amendment metric', async () => {
+  const bundle = await build({
+    entryPoints: ['prototypes/inventory-orderworkbench/report-source.js'],
+    bundle: true,
+    write: false,
+    format: 'esm',
+    platform: 'node',
+    packages: 'external',
+  });
+  const { loadWorkbenchReport } = await import(
+    'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
+  );
+  const config = orderWorkbenchSourceConfig(
+    JSON.parse(
+      readFileSync(
+        new URL('../business/inventory-apsplan/sql.config.json', import.meta.url),
+        'utf8',
+      ),
+    ),
+  );
+  const calls = [];
+  const facts = await loadWorkbenchReport('2026-10-01', '2026-11-01', undefined, {
+    config,
+    metadata: false,
+    summary: true,
+    sections: ['changes'],
+    base: '郑州',
+    singlePeriod: { start: '2026-10-01', end: '2026-11-01', kind: 'range' },
+    execute: async (_request, { queryId, values }) => {
+      calls.push(queryId);
+      assert.equal(values.report_base, '郑州');
+      if (queryId !== 'workbench.amendments')
+        throw Object.assign(Error('unavailable'), { code: 'GEA_SQL_UNAVAILABLE' });
+      return {
+        configVersion: 'partial-source',
+        rows: [
+          {
+            kind: '2',
+            region: '一区',
+            province: '一省',
+            numerator: 10,
+            denominator: 100,
+            records: 1,
+            invalid: 0,
+            sample_numerator: 10,
+            sample_denominator: 100,
+            sample_records: 1,
+            unknown_quantity: 0,
+          },
+        ],
+      };
+    },
+  });
+  assert(calls.includes('workbench.changes'));
+  assert(calls.includes('workbench.cancellations'));
+  assert(calls.includes('workbench.amendments'));
+  const metrics = facts.periods.month.metrics;
+  assert.equal(metrics['改单率'].value, 10);
+  assert.equal(metrics['作废率'].value, null);
+  assert.match(metrics['作废率'].missingReason, /GEA_SQL_UNAVAILABLE/);
+  assert.equal(facts.periods.month.sections[0].rows.length, 1);
+});

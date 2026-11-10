@@ -21,7 +21,8 @@ import {
   performanceStyleVersion,
 } from './performance-rules.mjs';
 const text = (value, unit = '%', digits = 2) =>
-  value === null || value === undefined ? '—' : Number(value).toFixed(digits) + unit;
+  value === null || value === undefined || value === '' || !Number.isFinite(Number(value))
+    ? '—' : Number(value).toFixed(digits) + unit;
 const value = (metrics, name) =>
   text(metricValue(metrics, name), name === '周转天数' ? '' : '%') +
   (name !== '准交率' && (metrics?.[name]?.sample || metrics?.[name]?.provisional) ? '*' : '');
@@ -258,7 +259,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
             text: '—',
             title: m[name]?.missingReason ?? '当前分组尚无有效计算依据。',
           };
-        if (m[name]?.sample && currentCell && typeof currentCell === 'object')
+        if ((m[name]?.sample || m[name]?.provisional) && currentCell && typeof currentCell === 'object')
           currentCell.title = metricCoverageSummary(m[name]) + '；不是全量指标。';
         if (name === '准交率' && currentCell && typeof currentCell === 'object')
           currentCell.title = onTimeDisplayNote(m[name]);
@@ -273,7 +274,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
                   ? (m[name]?.missingReason ?? '当前分组尚无有效计算依据。')
                   : '比较期：' + (other[name]?.missingReason ?? '当前分组尚无有效计算依据。'),
             };
-          return text !== '—' && (m[name]?.sample || other[name]?.sample)
+          return text !== '—' && (m[name]?.sample || other[name]?.sample || m[name]?.provisional || other[name]?.provisional)
             ? { text, title: metricComparisonNote(m, other, name) }
             : text;
         };
@@ -429,7 +430,8 @@ export function workbenchPresentation(facts, options = {}) {
     bases = distinct(
       all.filter((row) => workbenchBaseIncluded(row.base)).map((row) => dimensionValue(row.base)),
     );
-  const metric = (period, filter) => (period ? computeWorkbenchMetrics(period, filter) : {});
+  const metric = (period, filter, turnoverScope = 'national') =>
+    period ? computeWorkbenchMetrics(period, filter, {turnoverScope}) : {};
   const fill = (options.dimension && options.dimension !== 'category-fill' ? [] : categories).map(
     (category) => {
       const filter = (row) => dimensionValue(row.category) === category,
@@ -532,6 +534,7 @@ export function workbenchPresentation(facts, options = {}) {
           metric(
             current,
             (row) => dimensionValue(row.base) === base && dimensionValue(row.category) === category,
+            'base',
           ),
           name,
         ),
@@ -553,7 +556,7 @@ export function workbenchPresentation(facts, options = {}) {
     skus[category] = keys.map((key) => {
       const [base, sku] = JSON.parse(key),
         stock = rows(current, 'stock').find((row) => row.base === base && row.sku === sku);
-      const m = metric(current, (row) => row.base === base && row.sku === sku);
+      const m = metric(current, (row) => row.base === base && row.sku === sku, 'base');
       return {
         name: (stock?.name || filtered.find((row) => row.sku === sku)?.name || sku) + ' · ' + base,
         code: sku,
@@ -569,7 +572,7 @@ export function workbenchPresentation(facts, options = {}) {
             ? '源数据未提供：当前基地SKU的全部库存 current_stock 为空。'
             : '系统未匹配：当前基地SKU在所选库存快照中没有对应记录。',
           salesPlan: stock
-            ? '源数据未提供：当前基地SKU的月度需求计划（纠偏优先、月初备用）为空。'
+            ? '源数据未提供：当前基地SKU按数据库动态节点选定版本的月度需求计划为空。'
             : '系统未匹配：当前基地SKU没有对应计划记录。',
           shipDays: m['周转天数']?.missingReason ?? '',
         },
@@ -590,7 +593,7 @@ export function workbenchPresentation(facts, options = {}) {
         rows: days,
         columns: [
           '品类',
-          '可用库存',
+          '现库存',
           '月度需求计划',
           '计划日均',
           '可发货天数',
@@ -653,6 +656,7 @@ export function workbenchEvidence(facts) {
             id: section.id,
             status: section.status,
             code: section.code,
+            ...(section.metricFailures ? {metricFailures:section.metricFailures} : {}),
             total: section.rows.length,
             dates: distinct(
               section.rows.map((row) => row.stock_date || row.snapshot_date).filter(Boolean),

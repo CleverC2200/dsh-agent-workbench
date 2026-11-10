@@ -71,6 +71,7 @@ export async function readOrderMetric(config, input, execute, signal, { now = ne
     now,
     singlePeriod: period,
     sections: [spec.section],
+    changeKind: metric === '作废率' ? '1' : metric === '改单率' ? '2' : undefined,
     metadata: false,
     summary: true,
     periodQueries: false,
@@ -81,9 +82,9 @@ export async function readOrderMetric(config, input, execute, signal, { now = ne
   const current = metricSnapshot(currentPeriod, metric, { base, turnoverScope: scope });
   const sources = currentPeriod.sections.map((part) => ({
     id: part.id,
-    status: part.status,
-    code: part.code,
-    detail: part.detail,
+    status: part.metricFailures?.[metric === '作废率' ? '1' : '2'] ? 'error' : part.status,
+    code: part.metricFailures?.[metric === '作废率' ? '1' : '2']?.code ?? part.code,
+    detail: part.metricFailures?.[metric === '作废率' ? '1' : '2']?.detail ?? part.detail,
     rows: part.rows.length,
     dates: [
       ...new Set(part.rows.map((row) => row.stock_date ?? row.snapshot_date).filter(Boolean)),

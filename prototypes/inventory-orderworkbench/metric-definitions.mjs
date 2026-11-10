@@ -82,7 +82,7 @@ export function metricContract(name, config, scope = 'national') {
   const spec = metricSpecs[name],
     queryId =
       spec.section === 'changes'
-        ? 'workbench.changes'
+        ? name === '作废率' ? 'workbench.cancellations' : 'workbench.amendments'
         : spec.section === 'stock'
           ? 'workbench.stock.summary.packets'
           : 'workbench.' + spec.section + '.summary';
