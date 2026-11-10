@@ -42,7 +42,10 @@ export const orderEventRowsSql = `SELECT h.cust_code,h.cust_order_no,h.belong_ba
   FROM ${dailySource}
   WHERE (:gea_p900='' OR d.belong_base=:gea_p900) AND ${dailyOnly}`;
 
-export const cancellationEvents = cancellationEventsSql({ dailySource, dailyOnly });
+export const cancellationEvents = cancellationEventsSql({
+  dailySource,
+  dailyOnly,
+});
 
 export const amendmentEventsSql = skuAmendmentEventsSql({});
 
@@ -58,16 +61,25 @@ export const amendmentChangesSql = aggregateAmendmentSql(amendmentEventsSql);
 export const changesSql = cancellationChangesSql + ' UNION ALL ' + amendmentChangesSql;
 export const customersSql = aggregateAmendmentSql(amendmentEventsSql, true);
 
-export function periodChangesSql() {
-  const periodCancellations = cancellationEventsSql({ dailySource, dailyOnly, periods: true });
+export function periodChangesSql(kind) {
+  const periodCancellations = cancellationEventsSql({
+    dailySource,
+    dailyOnly,
+    periods: true,
+  });
   const cancellation = aggregateCancellationSql('period_cancel_events', {
     periods: true,
     sourceName: true,
   });
   const amendment = aggregateAmendmentSql(skuAmendmentEventsSql({ periods: true }), false, true);
   return {
-    ctes: `period_cancel_events AS (${periodCancellations})`,
-    sql: cancellation + ' UNION ALL ' + amendment,
+    ctes: kind === '2' ? '' : `period_cancel_events AS (${periodCancellations})`,
+    sql:
+      kind === '1'
+        ? cancellation
+        : kind === '2'
+          ? amendment
+          : cancellation + ' UNION ALL ' + amendment,
   };
 }
 

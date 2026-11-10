@@ -1,3 +1,4 @@
+import { metricSection, readySectionRows } from './metric-sections.mjs';
 import { metricDefinition } from './metric-definitions.mjs';
 import { workbenchMetricState } from './performance-rules.mjs';
 export const metricCalculationVersion =
@@ -118,7 +119,11 @@ export function stockComponents(rows, scope = 'national') {
   if (!stock.length || !plans.length || inventory === null || inventory < 0) return null;
   const daily = plans.map((row) =>
     stockDaily(
-      { ...row, sales_plan: row.national_sales_plan, transfer_plan: row.base_transfer_plan },
+      {
+        ...row,
+        sales_plan: row.national_sales_plan,
+        transfer_plan: row.base_transfer_plan,
+      },
       scope,
     ),
   );
@@ -138,11 +143,8 @@ export function computeWorkbenchMetrics(
   filter = () => true,
   { turnoverScope = 'national', ontimeFilter = filter } = {},
 ) {
-  const section = (name) => period.sections.find((section) => section.id === name);
   const rows = (name) =>
-    section(name)?.status === 'ready'
-      ? section(name).rows.filter(name === 'ontime' ? ontimeFilter : filter)
-      : [];
+    readySectionRows(period, name).filter(name === 'ontime' ? ontimeFilter : filter);
   const orders = rows('orders'),
     stock = rows('stock'),
     ages = rows('ages'),
@@ -342,24 +344,34 @@ export function computeWorkbenchMetrics(
     ['stock', ['周转天数']],
     ['ages', ['货龄（>60天库存占比）']],
   ]) {
-    const part = section(id);
-    if (part?.status === 'loading')
-      for (const name of names)
-        Object.assign(result[name], { value: null, note: '正在读取所选周期数据', loading: true });
-    else if (part?.status === 'error')
-      for (const name of names)
-        Object.assign(result[name], { value: null, note: '查询未完成：' + part.code });
-    else if (!rows(id).length)
-      for (const name of names)
+    for (const name of names) {
+      const part = metricSection(period, id, name);
+      if (part?.status === 'loading')
+        Object.assign(result[name], {
+          value: null,
+          note: '正在读取所选周期数据',
+          loading: true,
+        });
+      else if (part?.status === 'error')
+        Object.assign(result[name], {
+          value: null,
+          note: '查询未完成：' + part.code,
+        });
+      else if (!(part?.rows ?? []).filter(id === 'ontime' ? ontimeFilter : filter).length)
         Object.assign(result[name], {
           value: null,
           noRows: true,
           note: '所选周期及授权范围内无来源数据',
         });
+    }
   }
   if (period.start && period.end && period.start >= period.end)
     for (const name of metricNames)
-      Object.assign(result[name], { value: null, loading: false, emptyPeriod: true });
+      Object.assign(result[name], {
+        value: null,
+        loading: false,
+        emptyPeriod: true,
+      });
   for (const name of metricNames)
     if (result[name]?.value == null) {
       result[name].missingReason = workbenchMetricMissingReason(
@@ -385,7 +397,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
         : name === '准交率'
           ? 'ontime'
           : 'orders';
-  const part = period?.sections?.find((section) => section.id === id);
+  const part = metricSection(period, id, name);
   if (
     period &&
     period.start >= period.end &&
@@ -542,7 +554,15 @@ export function reportPeriods(start, end, now = new Date()) {
     previousMonth: monthBack(month, 1),
     yearMonth: monthBack(month, 12),
     week,
-    previousWeek: { start: dayOffset(week.start, -7), end: dayOffset(week.end, -7), kind: 'week' },
-    yearWeek: { start: dayOffset(week.start, -364), end: dayOffset(week.end, -364), kind: 'week' },
+    previousWeek: {
+      start: dayOffset(week.start, -7),
+      end: dayOffset(week.end, -7),
+      kind: 'week',
+    },
+    yearWeek: {
+      start: dayOffset(week.start, -364),
+      end: dayOffset(week.end, -364),
+      kind: 'week',
+    },
   };
 }

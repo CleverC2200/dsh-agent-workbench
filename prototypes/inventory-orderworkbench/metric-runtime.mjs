@@ -71,6 +71,7 @@ export async function readOrderMetric(config, input, execute, signal, { now = ne
     now,
     singlePeriod: period,
     sections: [spec.section],
+    changeKinds: spec.kind ? [spec.kind] : undefined,
     metadata: false,
     summary: true,
     periodQueries: false,
@@ -78,7 +79,10 @@ export async function readOrderMetric(config, input, execute, signal, { now = ne
     turnoverScope: scope,
   });
   const currentPeriod = facts.periods.month;
-  const current = metricSnapshot(currentPeriod, metric, { base, turnoverScope: scope });
+  const current = metricSnapshot(currentPeriod, metric, {
+    base,
+    turnoverScope: scope,
+  });
   const sources = currentPeriod.sections.map((part) => ({
     id: part.id,
     status: part.status,
