@@ -1,6 +1,7 @@
 import { applyPeriodAttributions, collectDirectorMembers } from './period-attributions.mjs';
 import { createAgentQueries } from '../../business/shared/agent-query.ts';
 import { workbenchQueries } from '../../business/inventory-orderworkbench/queries.mjs';
+import {normalizeWorkbenchBase} from '../../business/inventory-orderworkbench/base-scope.mjs';
 import { decodeScalarArray, unpackRowPackets } from '../../business/shared/row-packets.mjs';
 import { workbenchPeriodPacketSize, workbenchDirectorPeriodColumns } from '../../business/inventory-orderworkbench/period-summary-contract.mjs';
 import {
@@ -64,9 +65,11 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     : reportPeriods(start, end, options.now);
   const primaryNames = ['month', 'week'].filter(name => specs[name]);
   const sectionIds = options.sections ?? ['orders', 'ontime', 'changes', 'stock', 'ages', 'directors'];
-  const calculate = period => computeWorkbenchMetrics(period, undefined, { turnoverScope: options.turnoverScope ?? 'national' });
+  const base = normalizeWorkbenchBase(options.base ?? '');
+  const turnoverScope = options.turnoverScope ?? (base ? 'base' : 'national');
+  const calculate = period => computeWorkbenchMetrics(period, undefined, { turnoverScope });
   const restoredPeriod = spec => options.summary && (options.seedFacts ?? []).flatMap(facts =>
-    facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true && facts.attributionVersion === 2
+    facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true && facts.attributionVersion === 2 && (facts.base ?? '') === base
       ? Object.values(facts.periods ?? {}) : [],
   ).find(period => period.start === spec.start && period.end === spec.end &&
     period.kind === spec.kind && (period.inventoryEnd ?? period.end) === (spec.inventoryEnd ?? spec.end));
@@ -75,12 +78,13 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   }));
   let ontimePeriods;
   const periodWindows = Object.entries(specs).filter(([name]) => name !== 'selected').map(([, spec]) => spec);
-  const needs = (spec, id) => spec.start < spec.end && !restoredPeriod(spec)?.sections?.some(part => part.id === id && part.status === 'ready');
+  const needs = (spec, id) => spec.start < spec.end && !restoredPeriod(spec)?.sections?.some(part =>
+    part.id === id && part.status === 'ready' && !Object.keys(part.metricFailures ?? {}).length);
   const periodParameters = id => {
     const first = periodWindows.find(spec => needs(spec, id)) ?? specs.month;
     const values = { start: first.start, end_exclusive: first.end,
       period_start: first.start, period_end: first.end, owner_start: first.start, owner_end: first.end,
-      report_base: options.base ?? '', page_size: 200, offset: 0 };
+      report_base: base, page_size: 200, offset: 0 };
     for (const [index, spec] of periodWindows.entries()) {
       values[`period_${index}_start`] = spec.start;
       values[`period_${index}_end`] = spec.end;
@@ -141,7 +145,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   };
   const readOntimePeriods = async (values, priority) => {
     if (!ontimePeriods) {
-      const parameters = { ...values, report_base: options.base ?? '', page_size: 200, offset: 0 };
+      const parameters = { ...values, report_base: base, page_size: 200, offset: 0 };
       for (const [index, window] of ontimeWindows.entries()) {
         parameters[`period_${index}_start`] = window.start;
         parameters[`period_${index}_end`] = window.end;
@@ -191,7 +195,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       if (index < 0) throw Error('INVALID_SNAPSHOT_PERIOD');
       return [{ day: (await readSnapshots(priority))['age_' + index] }];
     }
-    const definition = workbenchQueries[name],
+    const definition = workbenchQueries[name] ?? (['cancellations','amendments'].includes(name) ? workbenchQueries.changes : undefined),
       logicalId = 'workbench.' + name.toLowerCase()+(options.summary && ['orders','stock','ages','ontime'].includes(name)?'.summary':'');
     const summarized=logicalId.endsWith('.summary');
     const packeted = (summarized && name === 'stock') || (options.summary && ['directors', 'customers', 'customerManagers'].includes(name));
@@ -204,7 +208,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       : definition.keys
       ? await client.readAll(
           id,
-          { ...values, report_base: options.base ?? '', page_size: 200, offset: 0 },
+          { ...values, report_base: base, page_size: 200, offset: 0 },
           {
             signal,
             priority,
@@ -215,7 +219,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
         )
       : await client.read(
           id,
-          { ...values, report_base: options.base ?? '' },
+          { ...values, report_base: base },
           { signal, priority, requiredColumns: definition.columns },
         );
     const sourceRows = packeted && !periodSummary ? unpackRowPackets(result.rows,
@@ -272,7 +276,8 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   };
   const section = async (id, action) => {
     try {
-      return { id, status: 'ready', rows: await action() };
+      const result = await action();
+      return { id, status: 'ready', ...(Array.isArray(result) ? {rows:result} : result) };
     } catch (error) {
       signal?.throwIfAborted();
       return { id, status: 'error', rows: [], code: error.code ?? 'QUERY_FAILED',
@@ -304,7 +309,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       return { ...spec, sections: [], metrics: calculate({ ...spec, sections: [] }) };
     const restored = restoredPeriod(spec);
     const pending = sectionIds.map((id) =>
-      restored?.sections?.find(part => part.id === id && part.status === 'ready') ?? { id, status: 'loading', rows: [] });
+      restored?.sections?.find(part => part.id === id && part.status === 'ready' && !Object.keys(part.metricFailures ?? {}).length) ?? { id, status: 'loading', rows: [] });
     const update = () => {
       periods[name] = {
         ...spec,
@@ -318,7 +323,24 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       sectionIds.map((id) =>
         section(id, async () => {
           const cached = pending.find(part => part.id === id && part.status === 'ready');
-          if (cached) return cached.rows;
+          if (cached) return {rows:cached.rows,...(cached.metricFailures ? {metricFailures:cached.metricFailures} : {})};
+          if (id === 'changes') {
+            if (!options.changeKind) {
+              try { return await read(id, values, priority); }
+              catch (error) {
+                signal?.throwIfAborted();
+                if (error.code !== 'GEA_SQL_UNAVAILABLE') throw error;
+              }
+            }
+            const kinds = options.changeKind ? [options.changeKind] : ['1','2'];
+            const parts = await Promise.all(kinds.map(async kind => [kind, await section(
+              kind === '1' ? 'cancellations' : 'amendments',
+              () => read(kind === '1' ? 'cancellations' : 'amendments', values, priority),
+            )]));
+            return {rows:parts.flatMap(([,part]) => part.rows),metricFailures:Object.fromEntries(
+              parts.filter(([,part]) => part.status === 'error').map(([kind,part]) => [kind,{code:part.code,detail:part.detail}]),
+            )};
+          }
           if (id === 'directors')
             return read(id, {
               start: dayOffset(spec.end, -1).slice(0, 7) + '-01',
@@ -352,8 +374,10 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   );
   const restoredMetadata = options.summary && (options.seedFacts ?? []).find(facts =>
     facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true &&
-    facts.attributionVersion === 2 && facts.start === start && facts.end === end);
+    facts.attributionVersion === 2 && (facts.base ?? '') === base && facts.start === start && facts.end === end);
   const snapshot = (complete = false) => ({
+    base,
+    turnoverScope,
     metricCalculationVersion,
     displayMode: 'governed-live',
     start,
@@ -417,6 +441,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   return snapshot(true);
 }
 export async function loadWorkbenchSkuPage(start,end,category,page,signal,base='',options={}) {
+ base=normalizeWorkbenchBase(base);
  const config = options.config ?? defaultConfig;
  if (!config) throw Error('ORDER_METRIC_CONFIG_REQUIRED');
  const client=createAgentQueries(config,options.execute);

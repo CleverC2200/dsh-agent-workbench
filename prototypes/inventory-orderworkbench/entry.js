@@ -5,6 +5,7 @@ import { createReportPersistence } from './report-persistence.mjs';
 import { createPageViewState } from '../../business/shared/view-state.js';
 import { ask, draft, ready, call, currentSessionId } from '../../business/shared/channel.js';
 import { metricDetailsRequest } from './metric-details.mjs';
+import { metricDefinition } from './metric-definitions.mjs';
 import { loadWorkbenchFacts, loadWorkbenchSkuPage } from './live-source.js';
 import { createFrameProgress } from '../../business/shared/frame-progress.js';
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
@@ -310,7 +311,7 @@ const metricDefinitions = [
     trend: '较上期 -1.3 天',
     status: '达标',
     tone: '',
-    formula: '按业务定义，周转天数即可发货天数，按可用库存与日均需求测算。',
+    formula: '按业务定义，周转天数即可发货天数，按现库存与日均需求测算。',
     note: '报告本期整体可发货/周转天数 11.7 天，上期 13.0 天；本指标沿用“可发货天数”口径。',
   },
   {
@@ -2400,7 +2401,7 @@ async function readCurrentPeriod() {
     if (!dimensionOnly) for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
     if (!dimensionOnly) for(const metric of metricDefinitions) {
       const card=topMetricCards.find(item=>item.key===metric.key);
-      if(card) Object.assign(metric,{value:card.value+card.unit,display:card.value,status:card.status,note:card.formula,
+      if(card) Object.assign(metric,{value:card.value === "—" ? "—" : card.value+card.unit,display:card.value,status:card.status,note:card.formula,
         formula:card.formula,change:card.comparison[0],sameChange:card.comparison[1]});
     }
     for(const [name,tables] of Object.entries(presentation.performance)) {
@@ -2551,7 +2552,7 @@ function renderWorkbench() {
   document.getElementById('wbKpis').innerHTML = topMetricCards
     .map((metric) => {
       const statusClass = ['未达', '严重'].includes(metric.status) ? 'bad' : metric.status === '预警' ? 'warn' : metric.status === '健康' ? '' : 'unknown';
-      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="生成${escapeHtml(metric.label)}明细表" title="发送到右侧 Agent 生成明细表"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span>${metric.countsNote?`<span class="wb-kpi-counts">${escapeHtml(metric.countsNote)}</span>`:""}<span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
+      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="生成${escapeHtml(metric.label)}明细表" title="发送到右侧 Agent 生成明细表"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.value === "—" ? "" : metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span>${metric.countsNote?`<span class="wb-kpi-counts">${escapeHtml(metric.countsNote)}</span>`:""}<span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
     })
     .join('');
   document.querySelectorAll('#wbKpis .wb-kpi').forEach((card,index)=>{
@@ -2664,7 +2665,7 @@ function renderWorkbenchSkuDetail(category) {
     .join('');
   const paging=liveSkuPagination[category];
   const nav=paging?`<nav class="wb-sku-pagination" aria-label="SKU明细分页"><span>共 ${paging.total} 条 · 第 ${paging.page+1} / ${Math.max(1,Math.ceil(paging.total/20))} 页</span><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page-1}" ${paging.page===0?'disabled':''}>上一页</button><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page+1}" ${(paging.page+1)*20>=paging.total?'disabled':''}>下一页</button></nav>`:'';
-  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为基地覆盖工厂仓及工厂外租仓现存量；需求与调拨计划按库存业务日取版本：1—16日初版、17—20日纠偏、21—26日滚动、27日起下月初版，日均需求除以库存日期所在月天数。全国及品项不计调拨，基地计入50%调拨。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
+  return `<div class="wb-sku-detail"><p>${escapeHtml(metricDefinition('周转天数','base'))}</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
 }
 function renderWorkbenchRegionCustomerDetail(regionIndex) {
   const customers=workbenchDimensions['region-change'].customerDetails?.[regionIndex]??[];
@@ -4032,13 +4033,13 @@ const updateReport = publishReport(
         event: eventFilter,
         task: taskFilter,
         dimension: dimensionTab,
-        base: '',
+        base: liveFacts?.base ?? '',
       },
       consumerCode: 'order',
       metrics: report
         ? topMetricCards.map((metric) => ({
             ...metric,
-            value: metric.value + metric.unit,
+            value: metric.value === '—' ? '—' : metric.value + metric.unit,
             note: metric.formula,
             mock: false,
             comparison: {

@@ -30,7 +30,7 @@ export function reusableWorkbenchFacts(facts) {
     Object.values(facts.periods).every(
       (period) =>
         Array.isArray(period.sections) &&
-        period.sections.every((section) => section.status === 'ready'),
+        period.sections.every((section) => section.status === 'ready' && !Object.keys(section.metricFailures ?? {}).length),
     )
   );
 }
@@ -360,6 +360,12 @@ export function computeWorkbenchMetrics(
   if (period.start && period.end && period.start >= period.end)
     for (const name of metricNames)
       Object.assign(result[name], { value: null, loading: false, emptyPeriod: true });
+  for (const [name, kind] of [['作废率', '1'], ['改单率', '2']]) {
+    const failure = section('changes')?.metricFailures?.[kind];
+    if (failure) Object.assign(result[name], {value:null,noRows:false,note:'查询未完成：' + failure.code});
+    else if (section('changes')?.status === 'ready' && !rows('changes').some(row => String(row.kind) === kind))
+      Object.assign(result[name], {value:null,noRows:true,note:'所选周期及授权范围内无来源数据'});
+  }
   for (const name of metricNames)
     if (result[name]?.value == null) {
       result[name].missingReason = workbenchMetricMissingReason(
@@ -385,7 +391,9 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
         : name === '准交率'
           ? 'ontime'
           : 'orders';
-  const part = period?.sections?.find((section) => section.id === id);
+  const sourcePart = period?.sections?.find((section) => section.id === id);
+  const failure = sourcePart?.metricFailures?.[name === '作废率' ? '1' : name === '改单率' ? '2' : ''];
+  const part = failure ? {...sourcePart,...failure,status:'error'} : sourcePart;
   if (
     period &&
     period.start >= period.end &&
@@ -397,7 +405,8 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
     return '系统尚未完成读取：所选周期数据未加载完成，暂不能判定源表缺数据。';
   if (part.status !== 'ready')
     return `系统读取未成功：${part.code ?? part.status}；${part.detail ? part.detail + '；' : ''}需核对查询或字段发布，不是0。`;
-  const source = part.rows.filter(filter);
+  const source = part.rows.filter(filter).filter(row =>
+    id !== 'changes' || String(row.kind) === (name === '作废率' ? '1' : '2'));
   if (!source.length)
     return `源数据未提供：所选周期及当前授权、分组范围的 ${id} 查询结果无记录；不代表整张表为空。`;
   if (name === '周转天数' && source.some((row) => 'national_stock_records' in row)) {
@@ -482,7 +491,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
   )
     return '系统未能计算：同范围月度计划日均需求合计不大于0，可发货天数没有有效分母。';
   if (name === '货龄（>60天库存占比）' && total('stock_qty') <= 0)
-    return '系统未能计算：hive.dw.dwd_scm_material_age_his 当前分组 inv_qty 合计不大于0，货龄占比没有有效分母。';
+    return '系统未能计算：agents_scm_stock_detail_d 当前分组 current_stock 合计不大于0，货龄占比没有有效分母。';
   return `系统未能计算：${name}的有效分母、数量范围或判定条件不满足；${note || '缺失不补0，零分母不计算比率。'}`;
 }
 export function metricState(name, value, { base = '' } = {}) {

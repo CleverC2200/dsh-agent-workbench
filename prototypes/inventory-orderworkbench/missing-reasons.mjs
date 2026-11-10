@@ -78,7 +78,10 @@ export function workbenchCellMissingReason(
     return filter;
   };
   const filter = makeFilter(period);
-  const formulaOptions = { turnoverScope: dimension.startsWith('item') ? 'item' : 'base' };
+  const formulaOptions = { turnoverScope:
+    dimension.startsWith('item') || dimension.startsWith('category') ? 'item'
+      : dimension.startsWith('base') || dimension.startsWith('director') || facts.base ? 'base'
+        : 'national' };
   const selected = facts.periods[period];
   if (!name) {
     const stock = selected?.sections.find((section) => section.id === 'stock');
@@ -98,6 +101,6 @@ export function workbenchCellMissingReason(
       return metricComparisonNote(current, compared, name);
     return `比较期缺少可计算指标：${compared?.[name]?.missingReason ?? workbenchMetricMissingReason(other, name, filter)} 本期有值不代表环比、同比可计算。`;
   }
-  if (current?.[name]?.sample) return current[name].coverageNote;
+  if (current?.[name]?.sample || current?.[name]?.provisional) return current[name].coverageNote;
   return `系统未能生成当前单元格：${name}已有可计算来源，请核对展示映射；未用0掩盖。`;
 }

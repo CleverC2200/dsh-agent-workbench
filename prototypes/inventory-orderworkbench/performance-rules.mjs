@@ -1,3 +1,5 @@
+import {normalizeWorkbenchBase} from '../../business/inventory-orderworkbench/base-scope.mjs';
+
 export const metricLimits = {
   作废率: { healthy: 6, warning: 10, direction: 'lower' },
   改单率: { healthy: 2, warning: 5, direction: 'lower' },
@@ -9,6 +11,7 @@ export const shippableDaysTarget = `全国<${stockLimits.national}天（郑州�
 export const performanceStyleVersion = 7;
 
 export function shippableDaysState(value, base = '') {
+  base = normalizeWorkbenchBase(base);
   if (value === null || value === undefined || !Number.isFinite(value)) return '数据不足';
   if (base === '未映射' || base === '归属待补全') return '数据不足';
   const met =
@@ -19,6 +22,7 @@ export function shippableDaysState(value, base = '') {
 }
 
 export function metricTarget(name, base = '') {
+  base = normalizeWorkbenchBase(base);
   const limit = metricLimits[name];
   if (limit) return `${limit.direction === 'lower' ? '<' : '>'}${limit.healthy}%`;
   if (name === '周转天数')
