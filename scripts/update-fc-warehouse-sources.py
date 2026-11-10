@@ -88,6 +88,18 @@ def replace_health_stock(tree):
         c.set('this',parse('SELECT '+projection+' FROM ('+original.sql()+') AS a LEFT JOIN ('+unique_total()+') AS t ON t.warehouseid=a.warehouseid AND t.material_code=a.material_code'))
     return tree
 
+def preserve_selected_age_quantities(tree, age_filter):
+    # Warehouse totals have no batch age. An explicit age band must retain only
+    # the selected lot quantities, not the SKU's inventory across every age.
+    if not age_filter:return tree
+    for c in tree.find_all(exp.CTE):
+        if c.alias!='batch_skus':continue
+        for a in c.this.expressions:
+            if a.alias not in {'total_qty','available_qty','pack_unit_qty','freeze_qty'}:continue
+            if isinstance(a.this,exp.Column) and a.this.table=='t':
+                a.set('this',expr("CASE WHEN :"+age_filter+"='' THEN "+a.this.sql()+" ELSE a."+a.alias+" END"))
+    return tree
+
 def preserve_parameters(q,tree):
     # Changing a source may make a calendar binding redundant; keep the public query contract.
     used=set(re.findall(r':(gea_p\d+)',tree.sql()))
@@ -132,9 +144,14 @@ def main():
     for key,q in cfg['queries'].items():
         if key.startswith(('snapshot','summary.','transfer_plan.')):continue
         before=q['request']['sql']
-        if 'fc-warehouse-sources:20261110' in before:continue
+        age_filter=next((p for p,spec in q.get('parameterSpec',{}).items() if spec['name']=='age_filter'),None)
+        if 'fc-warehouse-sources:20261110' in before:
+            tree=preserve_selected_age_quantities(parse(before),age_filter)
+            if tree.sql()!=parse(before).sql():
+                q['request']['sql']=render(tree);changed.append(key)
+            continue
         tree=replace_current(parse(before))
-        if key.startswith(('health.','batch-age.')):tree=replace_health_stock(tree)
+        if key.startswith(('health.','batch-age.')):tree=preserve_selected_age_quantities(replace_health_stock(tree),age_filter)
         if tree.sql()!=parse(before).sql():
             q['request']['sql']='/* fc-warehouse-sources:20261110 */ '+render(preserve_parameters(q,tree));changed.append(key)
     old_transfer='当前调拨在途与备单按本月分仓计划登记值统计，分别采用transfer_onway_qty和transfer_prepare_qty，单位件；不从历史执行单累计反推。同仓SKU重复一致值取一次，冲突、缺失和负值逐字段保持未知，正常记录继续统计。'
