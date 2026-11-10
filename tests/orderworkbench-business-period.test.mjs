@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { ordersSql } from '../business/inventory-orderworkbench/document-queries.mjs';
 import { workbenchQueries } from '../business/inventory-orderworkbench/queries.mjs';
 import { nationalStockDays } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
+import { missingPlanPolicySql } from '../business/inventory-orderworkbench/plan-policy.mjs';
 
 test('upstream business period includes all original-order SKUs without any logistics table and caps overfulfillment', () => {
   const db = new DatabaseSync(':memory:');
@@ -62,7 +63,7 @@ test('upstream business period includes all original-order SKUs without any logi
   }
 });
 
-test('covered stock retains factory and rented warehouses and exposes unmatched plan or inventory instead of zero', () => {
+test('published stock excludes legacy warehouse-only SKUs and retains missing quantities instead of zero', () => {
   const db = new DatabaseSync(':memory:');
   try {
     db.exec(`CREATE TABLE agents_scm_stock_detail_d(
@@ -90,6 +91,10 @@ test('covered stock retains factory and rented warehouses and exposes unmatched 
       ALTER TABLE agents_scm_stock_detail_d ADD COLUMN transfer_out_plan_roll;
       ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_sales_plan;
       ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_out_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN current_stock;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN current_stock_60 DEFAULT 0;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN available_stock DEFAULT 0;
+      UPDATE agents_scm_stock_detail_d SET current_stock=150 WHERE material_code='matched';
       UPDATE agents_scm_stock_detail_d SET roll_sales_plan=main_sales_plan_adj,
         transfer_out_plan_roll=transfer_out_plan_adj;`);
     db.exec(`CREATE TABLE agents_sales_plan_demand_m(stat_month,belong_base,material_code,plannum,allnum);
@@ -98,21 +103,29 @@ test('covered stock retains factory and rented warehouses and exposes unmatched 
         FROM agents_scm_stock_detail_d WHERE belong_base IS NOT NULL;
       INSERT INTO agents_dim_material_prod_sales_info_d SELECT DISTINCT material_code,'思念' FROM agents_scm_stock_detail_d;`);
     const rows = db
-      .prepare(workbenchQueries.stock.sql)
+      .prepare(
+        workbenchQueries.stock.sql.replaceAll(
+          missingPlanPolicySql,
+          'SELECT 14 AS initial_day,20 AS corrected_day,28 AS rolling_day',
+        ),
+      )
       .all({ gea_p1: '2026-10-19', gea_p2: '2026-10-26' });
-    assert.equal(rows.length, 3);
+    assert.equal(rows.length, 2);
     const matched = rows.find((row) => row.sku === 'matched');
     assert.equal(matched.inventory, 150);
     assert.equal(matched.sales_plan, 310, 'batch joins must not multiply the plan');
     assert.equal(matched.stock_date, '2026-10-25');
     assert.equal(matched.invalid, 0);
     assert.equal(rows.find((row) => row.sku === 'plan-only').inventory, null);
-    assert.equal(rows.find((row) => row.sku === 'inventory-only').sales_plan, null);
-    assert.equal(rows.filter((row) => row.invalid === 1).length, 2);
+    assert.equal(
+      rows.find((row) => row.sku === 'inventory-only'),
+      undefined,
+    );
+    assert.equal(rows.filter((row) => row.invalid === 1).length, 1);
     assert.equal(
       nationalStockDays(rows),
-      170 / (410 / 31),
-      'nationwide sets need not have matching SKU membership',
+      null,
+      'a missing published inventory quantity prevents a complete result',
     );
     const summary = {
       stock_date: '2026-10-25',

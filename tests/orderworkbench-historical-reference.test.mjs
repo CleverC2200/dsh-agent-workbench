@@ -23,6 +23,7 @@ function period() {
             item: '水饺',
             category: '食品',
             stock_date: '2026-10-25',
+            plan_month_offset: 1,
             source_rows: 1,
             inventory: 4745203,
             sales_plan: 9435719.78,
@@ -60,8 +61,8 @@ test('stale historical flags cannot override governed stock calculation or detai
   const f = facts(),
     before = structuredClone(f);
   let card = workbenchPresentation(f).cards.find((card) => card.key === '周转天数');
-  assert.equal(card.value, '15.6');
-  assert.equal(card.footer, '本周可发货天数 15.6天');
+  assert.equal(card.value, '15.1');
+  assert.equal(card.footer, '本周可发货天数 15.1天');
   assert.equal(card.historicalReference, undefined);
   assert.deepEqual(f, before);
   assert.equal(workbenchEvidence(f).displayReferences, undefined);
@@ -73,7 +74,7 @@ test('stale historical flags cannot override governed stock calculation or detai
     period.metrics = computeWorkbenchMetrics(period);
   }
   card = workbenchPresentation(f).cards.find((card) => card.key === '周转天数');
-  assert.equal(card.value, (5000000 / (9435719.78 / 31)).toFixed(1));
+  assert.equal(card.value, (5000000 / (9435719.78 / 30)).toFixed(1));
 });
 
 test('report loading uses governed live facts for national and base scopes', async () => {
@@ -101,9 +102,9 @@ test('report loading uses governed live facts for national and base scopes', asy
     }),
   });
   assert.equal(loaded.displayMode, 'governed-live');
-  assert.equal(loaded.periods.month.metrics['周转天数'].value, 4745203 / (9435719.78 / 31));
+  assert.equal(loaded.periods.month.metrics['周转天数'].value, 4745203 / (9435719.78 / 30));
   const card = model.workbenchPresentation(loaded).cards.find((card) => card.key === '周转天数');
-  assert.equal(card.value, '15.6');
+  assert.equal(card.value, '15.1');
   assert.equal(card.status, '严重');
   const scoped = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
     base: '郑州',

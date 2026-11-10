@@ -13,6 +13,7 @@ import {
   amendmentShipmentSql,
   skuAmendmentEventsSql,
 } from './sku-amendments.mjs';
+import { missingPlanPolicySql, selectedPlanSql } from './plan-policy.mjs';
 // Filter native date columns before UNION coerces the mixed date types to text.
 // Keep native datetime predicates available to Doris during the owner joins.
 const attributionSources = `SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_d
@@ -38,7 +39,7 @@ const dictionary = `SELECT material_code AS sku,
 // The second arm retains inventory-only keys; it never drops unmatched national contributions.
 const stockProjection = `SELECT COALESCE(s.belong_base,b.belong_base) AS base,COALESCE(s.material_code,b.material_code) AS sku,
       d.category,COALESCE(s.item,b.item) AS item,COALESCE(s.name,b.name) AS name,
-      COALESCE(b.stock_date,s.stock_date) AS stock_date,s.source_rows,b.available,b.inventory,b.aged,s.sales_plan,s.transfer_plan,
+      COALESCE(b.stock_date,s.stock_date) AS stock_date,s.plan_month_offset,s.source_rows,b.available,b.inventory,b.aged,s.sales_plan,s.transfer_plan,
       NULL AS daily_demand,
       b.inventory AS national_inventory,s.sales_plan AS national_sales_plan,
       CASE WHEN b.stock_date IS NOT NULL THEN 1 ELSE 0 END AS national_stock_records,
@@ -51,17 +52,13 @@ const stockProjection = `SELECT COALESCE(s.belong_base,b.belong_base) AS base,CO
 `;
 // Both plans use the inventory business day, including historical reports.
 // Zero is valid; never fall back when the selected version is missing.
-const planDay = 'CAST(SUBSTRING(CAST(the_date AS CHAR),9,2) AS INTEGER)';
-const selectedPlan = (initial, corrected, rolling, next) =>
-  `CASE WHEN ${planDay}<=16 THEN ${initial} WHEN ${planDay}<=20 THEN ${corrected}
-    WHEN ${planDay}<=26 THEN ${rolling} ELSE ${next} END`;
-const salesPlan = selectedPlan(
+const salesPlan = selectedPlanSql(
   'main_sales_plan_v1',
   'main_sales_plan_adj',
   'roll_sales_plan',
   'next_month_sales_plan',
 );
-const transferPlan = selectedPlan(
+const transferPlan = selectedPlanSql(
   'transfer_out_plan_v1',
   'transfer_out_plan_adj',
   'transfer_out_plan_roll',
@@ -69,48 +66,38 @@ const transferPlan = selectedPlan(
 );
 const stockPlans = `SELECT belong_base,material_code,MAX(product_item) AS item,MAX(material_name) AS name,
         COUNT(*) AS source_rows,CAST(MAX(the_date) AS CHAR) AS stock_date,
+        MAX(${selectedPlanSql('0', '0', '1', '1')}) AS plan_month_offset,
         SUM(CASE WHEN (${salesPlan}) IS NULL OR (${salesPlan})<0 THEN 1 ELSE 0 END) AS sales_invalid,
         SUM(CASE WHEN (${transferPlan}) IS NULL OR (${transferPlan})<0 THEN 1 ELSE 0 END) AS transfer_invalid,
         SUM(${salesPlan}) AS sales_plan,
         SUM(${transferPlan}) AS transfer_plan
-        FROM agents_scm_stock_detail_d
+        FROM agents_scm_stock_detail_d CROSS JOIN (${missingPlanPolicySql}) plan_policy
         WHERE the_date=(SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2)
         GROUP BY belong_base,material_code`;
+// Keep the published production/sales SKU population for both stock quantities.
+// The existing period assembler reuses this snapshot projection, not a batch join.
 const stockBatches = `SELECT belong_base,material_code,MAX(material_name) AS name,NULL AS item,
         CONCAT(SUBSTRING(MAX(month_date),1,4),'-',SUBSTRING(MAX(month_date),5,2),'-',SUBSTRING(MAX(month_date),7,2)) AS stock_date,
-        SUM(available_qty) AS available,SUM(live_qty) AS inventory,
-        NULL AS aged,SUM(CASE WHEN live_qty IS NULL THEN 1 ELSE 0 END) AS invalid
-        FROM agents_scm_inventory_sku_data_d
-        WHERE warehouse_classify IN ('01','02') AND warehouse_classify_name IN ('工厂成品仓','工厂外租库')
-          AND month_date=REPLACE(CAST((SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2) AS CHAR),'-','')
+        CASE WHEN COUNT(*)=1 THEN MAX(available_qty) END AS available,
+        CASE WHEN COUNT(*)=1 THEN MAX(live_qty) END AS inventory,
+        CASE WHEN COUNT(*)=1 THEN MAX(aged_qty) END AS aged,
+        CASE WHEN COUNT(*)<>1 OR COUNT(live_qty)<>COUNT(*) THEN 1 ELSE 0 END AS invalid
+        FROM (SELECT belong_base,material_code,material_name,
+          REPLACE(CAST(the_date AS CHAR),'-','') AS month_date,
+          available_stock AS available_qty,current_stock AS live_qty,current_stock_60 AS aged_qty
+          FROM agents_scm_stock_detail_d) production_sales
+        WHERE month_date=REPLACE(CAST((SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2) AS CHAR),'-','')
         GROUP BY belong_base,material_code`;
 const stockJoin = (inventoryOnly = false) =>
   stockProjection +
   (inventoryOnly
     ? ` FROM stock_batches b LEFT JOIN stock_plans s`
     : ` FROM stock_plans s LEFT JOIN stock_batches b`) +
-  ` ON b.belong_base=s.belong_base AND b.material_code=s.material_code
+  ` ON (b.belong_base=s.belong_base OR (b.belong_base IS NULL AND s.belong_base IS NULL)) AND b.material_code=s.material_code
       LEFT JOIN stock_dictionary d ON d.sku=COALESCE(s.material_code,b.material_code)` +
   (inventoryOnly ? ' WHERE s.source_rows IS NULL' : '');
 
-// Gateway logical resources must map to hive.dw.dwd_scm_material_age_his and
-// hive.dw.dim_bas_warehouse; qualified physical names are rejected by the gateway.
-// The age read view deduplicates complete source records before projecting its
-// six fields; DISTINCT here would incorrectly merge different stock batches.
-const ageWarehouses = `SELECT DISTINCT warehouse_id FROM dim_bas_warehouse
-  WHERE warehouse_classify IN ('01','02')
-    AND warehouse_classify_name IN ('工厂成品仓','工厂外租库')`;
-
-// Historical batch scope must not override an explicit same-day non-factory class.
-const ageWarehouseSnapshots = (filter) => `SELECT warehouseid,month_date,
-  MAX(CASE WHEN warehouse_classify NOT IN ('01','02')
-    OR warehouse_classify_name NOT IN ('工厂成品仓','工厂外租库') THEN 1 ELSE 0 END) AS excluded,
-  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(belong_base),''))=1
-    AND COUNT(NULLIF(TRIM(belong_base),''))=COUNT(*) THEN MAX(NULLIF(TRIM(belong_base),'')) END AS base
-  FROM agents_scm_inventory_sku_data_d WHERE ${filter} GROUP BY warehouseid,month_date`;
-const ageBase = workbenchBaseSql(
-  "COALESCE(NULLIF(TRIM(b.belong_base),''),snapshot_warehouse.base)",
-);
+const ageBase = workbenchBaseSql('b.belong_base');
 
 export const workbenchQueries = {
   'ontime.agent.summary': {
@@ -230,6 +217,7 @@ export const workbenchQueries = {
       'item',
       'name',
       'stock_date',
+      'plan_month_offset',
       'source_rows',
       'available',
       'inventory',
@@ -257,11 +245,10 @@ export const workbenchQueries = {
   ageDate: {
     scoped: true,
     columns: ['day'],
-    sql: `SELECT MAX(b.dt) AS day FROM dwd_scm_material_age_his b
-      INNER JOIN (${ageWarehouses}) w ON w.warehouse_id=b.warehouseid
-      LEFT JOIN (${ageWarehouseSnapshots('month_date>=:gea_p1 AND month_date<:gea_p2')}) snapshot_warehouse
-        ON snapshot_warehouse.warehouseid=b.warehouseid AND snapshot_warehouse.month_date=b.dt
-      WHERE (:gea_p900='' OR ${ageBase}=:gea_p900) AND b.dt>=:gea_p1 AND b.dt<:gea_p2 AND COALESCE(snapshot_warehouse.excluded,0)=0`,
+    sql: `SELECT REPLACE(CAST(MAX(b.the_date) AS CHAR),'-','') AS day FROM agents_scm_stock_detail_d b
+      WHERE (:gea_p900='' OR ${ageBase}=:gea_p900)
+        AND REPLACE(CAST(b.the_date AS CHAR),'-','')>=:gea_p1
+        AND REPLACE(CAST(b.the_date AS CHAR),'-','')<:gea_p2`,
   },
   ages: {
     scoped: true,
@@ -282,13 +269,14 @@ export const workbenchQueries = {
         CASE WHEN MAX(s.names)>1 THEN NULL ELSE COALESCE(MAX(s.item),MAX(m.item)) END AS item,
       MAX(b.dt) AS snapshot_date,
       SUM(b.inv_qty) AS stock_qty,
-      SUM(CASE WHEN b.age_days>=60 THEN b.inv_qty ELSE 0 END) AS aged_qty,
+      SUM(b.current_stock_60) AS aged_qty,
       COUNT(*) AS records,SUM(CASE WHEN b.inv_qty=0 THEN 1 ELSE 0 END) AS excluded,
-      SUM(CASE WHEN b.inv_qty IS NULL OR (b.inv_qty<>0 AND (b.age_days IS NULL OR b.age_days<0)) THEN 1 ELSE 0 END) AS invalid
-      FROM dwd_scm_material_age_his b
-      INNER JOIN (${ageWarehouses}) w ON w.warehouse_id=b.warehouseid
-      LEFT JOIN (${ageWarehouseSnapshots('month_date=:gea_p1')}) snapshot_warehouse
-        ON snapshot_warehouse.warehouseid=b.warehouseid AND snapshot_warehouse.month_date=b.dt
+      SUM(b.source_invalid) AS invalid
+      FROM (SELECT belong_base,material_code,REPLACE(CAST(the_date AS CHAR),'-','') AS dt,
+        CASE WHEN COUNT(*)=1 THEN MAX(current_stock) END AS inv_qty,
+        CASE WHEN COUNT(*)=1 THEN MAX(current_stock_60) END AS current_stock_60,
+        CASE WHEN COUNT(*)<>1 OR COUNT(current_stock)<>COUNT(*) OR COUNT(current_stock_60)<>COUNT(*) THEN 1 ELSE 0 END AS source_invalid
+        FROM agents_scm_stock_detail_d GROUP BY belong_base,material_code,the_date) b
       LEFT JOIN (${dictionary}) d ON d.sku=b.material_code
       LEFT JOIN (SELECT material_code AS sku,
         COUNT(DISTINCT NULLIF(TRIM(product_item),'')) AS names,
@@ -298,7 +286,7 @@ export const workbenchQueries = {
         CASE WHEN COUNT(DISTINCT NULLIF(TRIM(pinxiang),''))=1 THEN MAX(NULLIF(TRIM(pinxiang),'')) END AS item
         FROM agents_order_execute_isontime_mi WHERE fromorderno_month>=:gea_p5 AND fromorderno_month<:gea_p6
         GROUP BY new_material_code) m ON m.sku=b.material_code
-      WHERE (:gea_p900='' OR ${ageBase}=:gea_p900) AND b.dt=:gea_p1 AND COALESCE(snapshot_warehouse.excluded,0)=0
+      WHERE (:gea_p900='' OR ${ageBase}=:gea_p900) AND b.dt=:gea_p1
       GROUP BY ${ageBase},b.material_code`,
     omitEnd: true,
     extra: {
@@ -450,7 +438,5 @@ export const workbenchQueryParts = {
   stockPlans,
   stockBatches,
   stockJoin,
-  ageWarehouses,
-  ageWarehouseSnapshots,
   ageBase,
 };

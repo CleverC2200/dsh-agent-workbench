@@ -58,7 +58,12 @@ test('the actual age query rolls both named branches into southwest before scope
       CREATE TABLE dwd_scm_material_age_his(dt,warehouseid,belong_base,material_code,inv_qty,age_days);
       CREATE TABLE dim_bas_warehouse(warehouse_id,warehouse_classify,warehouse_classify_name);
       CREATE TABLE agents_scm_material_in_out_summary_d(material_code,product_categ_name,material_group_name);
-      CREATE TABLE agents_scm_stock_detail_d(material_code,product_item,the_date);
+      CREATE TABLE agents_scm_stock_detail_d(material_code,product_item,the_date,belong_base,current_stock,current_stock_60);
+      INSERT INTO agents_scm_stock_detail_d VALUES
+      ('S','水饺','2026-10-31','西南',100,20),
+      ('S','水饺','2026-10-31','成都分仓',50,5),
+      ('S','水饺','2026-10-31','上海分仓',50,0),
+      ('S','水饺','2026-10-31',NULL,100,0);
       CREATE TABLE agents_order_execute_isontime_mi(new_material_code,pinxiang,fromorderno_month);
       INSERT INTO dim_bas_warehouse VALUES('W','02','工厂外租库');
       INSERT INTO dwd_scm_material_age_his VALUES
@@ -93,7 +98,8 @@ test('the actual age query rolls both named branches into southwest before scope
     );
     db.exec(`INSERT INTO dim_bas_warehouse VALUES('known','02','工厂外租库'),('conflict','02','工厂外租库');
       INSERT INTO dwd_scm_material_age_his VALUES('20261031','known',NULL,'K',10,60),('20261031','conflict',NULL,'C',10,0);
-      INSERT INTO agents_scm_inventory_sku_data_d VALUES('known','20261031','02','工厂外租库','郑州'),('known','20261031','02','工厂外租库','郑州'),('conflict','20261031','02','工厂外租库','郑州'),('conflict','20261031','02','工厂外租库','华东');`);
+      INSERT INTO agents_scm_inventory_sku_data_d VALUES('known','20261031','02','工厂外租库','郑州'),('known','20261031','02','工厂外租库','郑州'),('conflict','20261031','02','工厂外租库','郑州'),('conflict','20261031','02','工厂外租库','华东');
+      INSERT INTO agents_scm_stock_detail_d VALUES('K','水饺','2026-10-31','郑州',10,10),('C','水饺','2026-10-31',NULL,10,0);`);
     const mapped = db.prepare(workbenchQueries.ages.sql).all({
       gea_p900: '',
       gea_p1: '20261031',
@@ -105,12 +111,12 @@ test('the actual age query rolls both named branches into southwest before scope
     assert.equal(
       mapped.find((r) => r.sku === 'K').stock_qty,
       10,
-      'repeated warehouse observations must not multiply batches',
+      'legacy warehouse observations must not multiply published quantities',
     );
     assert.equal(
       mapped.find((r) => r.sku === 'C').base,
       null,
-      'conflicting snapshot bases remain unknown',
+      'missing published base remains unknown',
     );
   } finally {
     db.close();
