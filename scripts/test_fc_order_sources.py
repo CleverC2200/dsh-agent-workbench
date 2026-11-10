@@ -57,7 +57,7 @@ class BranchOrderSources(unittest.TestCase):
             sql = self.config['queries'][name]['request']['sql']
             tables = {t.name for t in sqlglot.parse_one(sql, read='postgres').find_all(exp.Table)}
             self.assertNotIn('agents_scm_asn_detail_d', tables, name)
-            self.assertIn('agents_scm_execute_detail_d', tables, name)
+            self.assertIn('agents_dwd_scm_execute_detail_mi', tables, name)
             if name=='orders.detail':self.assertIn('agents_order_execute_isontime_mi',tables)
             else:self.assertNotIn('agents_order_execute_isontime_mi',tables)
 

@@ -444,7 +444,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
           SUM(i.freeze_qty) AS freeze_qty,MAX(p.transfer_prepare_qty+p.transfer_onway_qty) AS warehouse_transfer_qty,
           MAX(p.transfer_onway_qty) AS transfer_onway_qty,MAX(p.transfer_prepare_qty) AS transfer_prepare_qty
           FROM agents_scm_inventory_sku_data_d i
-          LEFT JOIN (SELECT warehouseid,material_code,MAX(transfer_prepare_qty) AS transfer_prepare_qty,MAX(transfer_onway_qty) AS transfer_onway_qty FROM agents_scm_warehouse_transfer_plan_data_d WHERE stat_month='202610' GROUP BY warehouseid,material_code) p
+          LEFT JOIN (SELECT warehouseid,material_code,CASE WHEN COUNT(transfer_prepare_qty)=COUNT(*) AND COUNT(DISTINCT transfer_prepare_qty)=1 THEN MAX(transfer_prepare_qty) END AS transfer_prepare_qty,CASE WHEN COUNT(transfer_onway_qty)=COUNT(*) AND COUNT(DISTINCT transfer_onway_qty)=1 THEN MAX(transfer_onway_qty) END AS transfer_onway_qty FROM agents_scm_warehouse_transfer_plan_data_d WHERE stat_month='202610' GROUP BY warehouseid,material_code) p
           ON p.warehouseid=i.warehouseid AND p.material_code=i.material_code
           WHERE i.month_date='20261019' AND i.warehouse_classify='20'
           GROUP BY i.warehouseid,i.material_code""")
