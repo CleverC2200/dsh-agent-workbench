@@ -96,11 +96,13 @@ test('confirmation keeps the replenishment list order and quantities for the sam
   await page.getByRole('checkbox', { name: '需补货', exact: true }).check();
   const list = page.locator('table.replenishment-table');
   await expect(list.getByRole('spinbutton').first()).toHaveValue('80');
-  assert.deepEqual(
-    await list
-      .locator('thead th')
-      .evaluateAll((headers) => headers.slice(0, 7).map((header) => header.dataset.field)),
-    [
+  await expect
+    .poll(() =>
+      list
+        .locator('thead th')
+        .evaluateAll((headers) => headers.slice(0, 7).map((header) => header.dataset.field)),
+    )
+    .toEqual([
       'sku',
       'material_name',
       'inventory_qty',
@@ -108,8 +110,9 @@ test('confirmation keeps the replenishment list order and quantities for the sam
       'occupied_qty',
       'missing_preparingQty',
       'open_transfer_reported_qty',
-    ],
-  );
+    ]);
+  await expect(list.getByRole('spinbutton')).toHaveCount(source.length);
+  await expect(list.getByRole('spinbutton').first()).toHaveValue('80');
   const listQuantities = () =>
     list
       .getByRole('spinbutton')

@@ -1,3 +1,4 @@
+import { metricSection, readySectionRows } from './metric-sections.mjs';
 import { metricSnapshot, metricDisplayState } from './metric-components.mjs';
 import { shippableReferenceVersion } from './historical-shippable-reference.mjs';
 import { metricContract } from './metric-definitions.mjs';
@@ -49,8 +50,7 @@ const onTimeDisplayNote = (metric) => {
     .filter(Boolean)
     .join('；');
 };
-const rows = (period, id) =>
-  period?.sections.find((section) => section.id === id && section.status === 'ready')?.rows ?? [];
+const rows = (period, id) => readySectionRows(period, id);
 const distinct = (values) =>
   [...new Set(values)].sort((a, b) => String(a).localeCompare(String(b), 'zh'));
 const dimensionValue = (value) => value || '未映射';
@@ -697,7 +697,7 @@ export function workbenchMetricDetail(facts, name) {
       continue;
     }
     const metric = period.metrics[name],
-      part = period.sections.find((section) => section.id === source);
+      part = metricSection(period, source, name);
     let reason = '';
     if (metric?.value === null || metric?.value === undefined) {
       if (part?.status === 'error') reason = '查询未完成：' + part.code;

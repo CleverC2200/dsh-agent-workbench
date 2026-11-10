@@ -213,7 +213,7 @@ test('a failed cancellation query does not hide the independently readable amend
     execute: async (_request, { queryId, values }) => {
       calls.push(queryId);
       assert.equal(values.report_base, '郑州');
-      if (queryId !== 'workbench.amendments')
+      if (queryId !== 'workbench.changes.amendment')
         throw Object.assign(Error('unavailable'), { code: 'GEA_SQL_UNAVAILABLE' });
       return {
         configVersion: 'partial-source',
@@ -235,9 +235,8 @@ test('a failed cancellation query does not hide the independently readable amend
       };
     },
   });
-  assert(calls.includes('workbench.changes'));
-  assert(calls.includes('workbench.cancellations'));
-  assert(calls.includes('workbench.amendments'));
+  assert(calls.some((id) => id.startsWith('workbench.changes.cancellation')));
+  assert(calls.includes('workbench.changes.amendment'));
   const metrics = facts.periods.month.metrics;
   assert.equal(metrics['改单率'].value, 10);
   assert.equal(metrics['作废率'].value, null);
@@ -265,17 +264,31 @@ test('a failed cancellation query does not hide the independently readable amend
     seedFacts: [seed],
     now,
     execute: async (_request, { queryId, values }) => {
-      if (queryId === 'workbench.changes.periods.summary') {
-        retried = values.period_0_enabled;
-        assert.equal(retried, true);
-        throw Object.assign(Error('combined unavailable'), { code: 'GEA_SQL_UNAVAILABLE' });
-      }
+      retried ||= values.period_0_enabled;
+      assert.equal(values.period_0_enabled, true);
+      const columns = ['period_index', ...config.queries['workbench.changes'].resultColumns];
+      const data = Object.keys(specs)
+        .filter((key) => key !== 'selected')
+        .map((_, index) => ({
+          ...facts.periods.month.sections[0].rows[0],
+          period_index: index,
+          kind: queryId.includes('.cancellation') ? '1' : '2',
+        }));
+      const tuples = data.map((row, index) =>
+        [index + 1, ...columns.map((key) => row[key])]
+          .map((value) =>
+            value == null ? 'N' : 'V' + Buffer.byteLength(String(value)) + ':' + value,
+          )
+          .join(''),
+      );
       return {
         configVersion: 'recovered',
         rows: [
           {
-            ...facts.periods.month.sections[0].rows[0],
-            kind: queryId === 'workbench.cancellations' ? '1' : '2',
+            packet_index: 0,
+            packet_count: tuples.length,
+            packet_scope_total: tuples.length,
+            packet_rows: tuples,
           },
         ],
       };

@@ -1,3 +1,4 @@
+import { metricSection } from './metric-sections.mjs';
 import { loadWorkbenchReport } from './report-source.js';
 import {normalizeWorkbenchBase} from '../../business/inventory-orderworkbench/base-scope.mjs';
 import { metricCalculationVersion, computeWorkbenchMetrics, dayOffset } from './metric-model.mjs';
@@ -72,7 +73,7 @@ export async function readOrderMetric(config, input, execute, signal, { now = ne
     now,
     singlePeriod: period,
     sections: [spec.section],
-    changeKind: metric === '作废率' ? '1' : metric === '改单率' ? '2' : undefined,
+    changeKinds: spec.kind ? [spec.kind] : undefined,
     metadata: false,
     summary: true,
     periodQueries: false,
@@ -80,12 +81,15 @@ export async function readOrderMetric(config, input, execute, signal, { now = ne
     turnoverScope: scope,
   });
   const currentPeriod = facts.periods.month;
-  const current = metricSnapshot(currentPeriod, metric, { base, turnoverScope: scope });
+  const current = metricSnapshot(currentPeriod, metric, {
+    base,
+    turnoverScope: scope,
+  });
   const sources = currentPeriod.sections.map((part) => ({
     id: part.id,
-    status: part.metricFailures?.[metric === '作废率' ? '1' : '2'] ? 'error' : part.status,
-    code: part.metricFailures?.[metric === '作废率' ? '1' : '2']?.code ?? part.code,
-    detail: part.metricFailures?.[metric === '作废率' ? '1' : '2']?.detail ?? part.detail,
+    status: metricSection(currentPeriod, part.id, metric)?.status ?? part.status,
+    code: metricSection(currentPeriod, part.id, metric)?.code ?? part.code,
+    detail: metricSection(currentPeriod, part.id, metric)?.detail ?? part.detail,
     rows: part.rows.length,
     dates: [
       ...new Set(part.rows.map((row) => row.stock_date ?? row.snapshot_date).filter(Boolean)),

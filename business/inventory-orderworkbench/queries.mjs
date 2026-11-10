@@ -10,6 +10,7 @@ import {
 } from './document-queries.mjs';
 import { ontimeMetricContract } from './ontime-queries.mjs';
 import { workbenchBaseSql } from './base-scope.mjs';
+import { cancellationPartitionSql } from './cancellation-partitions.mjs';
 import {
   amendmentMetricContract,
   amendmentShipmentSql,
@@ -297,9 +298,24 @@ export const workbenchQueries = {
       GROUP BY ${ageBase},b.material_code`,
     omitEnd: true,
     extra: {
-      gea_p4: { name: 'snapshot', type: 'string', required: true, format: 'YYYY-MM-DD' },
-      gea_p5: { name: 'mapping_start', type: 'string', required: true, format: 'YYYY-MM-DD' },
-      gea_p6: { name: 'mapping_end', type: 'string', required: true, format: 'YYYY-MM-DD' },
+      gea_p4: {
+        name: 'snapshot',
+        type: 'string',
+        required: true,
+        format: 'YYYY-MM-DD',
+      },
+      gea_p5: {
+        name: 'mapping_start',
+        type: 'string',
+        required: true,
+        format: 'YYYY-MM-DD',
+      },
+      gea_p6: {
+        name: 'mapping_end',
+        type: 'string',
+        required: true,
+        format: 'YYYY-MM-DD',
+      },
     },
   },
   directors: {
@@ -363,11 +379,27 @@ export const workbenchQueries = {
 };
 
 export function addWorkbenchQueries(config) {
-  for (const [name, original] of Object.entries({
+  const definitions = {
     ...workbenchQueries,
-    cancellations: { ...workbenchQueries.changes, sql: cancellationChangesSql },
-    amendments: { ...workbenchQueries.changes, sql: amendmentChangesSql },
-  })) {
+    'changes.cancellation': {
+      ...workbenchQueries.changes,
+      sql: cancellationChangesSql,
+    },
+    'changes.amendment': {
+      ...workbenchQueries.changes,
+      sql: amendmentChangesSql,
+    },
+    ...Object.fromEntries(
+      [0, 1].map((partition) => [
+        'changes.cancellation.partition' + partition,
+        {
+          ...workbenchQueries.changes,
+          sql: cancellationPartitionSql(cancellationChangesSql, partition),
+        },
+      ]),
+    ),
+  };
+  for (const [name, original] of Object.entries(definitions)) {
     const definition = { ...original };
     const alias =
       name === 'stock'
@@ -403,7 +435,9 @@ export function addWorkbenchQueries(config) {
       gea_p1: { name: 'start', type: 'string', required: true },
       ...(definition.omitEnd
         ? {}
-        : { gea_p2: { name: 'end_exclusive', type: 'string', required: true } }),
+        : {
+            gea_p2: { name: 'end_exclusive', type: 'string', required: true },
+          }),
       ...definition.extra,
     };
     const make = (sql, spec, columns) => ({
@@ -429,8 +463,19 @@ export function addWorkbenchQueries(config) {
     );
     const pageSpec = {
       ...parameterSpec,
-      gea_p1001: { name: 'page_size', type: 'integer', required: true, minimum: 1, maximum: 200 },
-      gea_p1002: { name: 'offset', type: 'integer', required: true, minimum: 0 },
+      gea_p1001: {
+        name: 'page_size',
+        type: 'integer',
+        required: true,
+        minimum: 1,
+        maximum: 200,
+      },
+      gea_p1002: {
+        name: 'offset',
+        type: 'integer',
+        required: true,
+        minimum: 0,
+      },
     };
     config.queries[id] = {
       ...make(
@@ -443,6 +488,11 @@ export function addWorkbenchQueries(config) {
       ),
       pagination: { countQuery: countId },
     };
+    if (/^changes\.cancellation\.partition[01]$/.test(name)) {
+      const initialId = id + '.initial';
+      config.queries[initialId] = make(definition.sql, pageSpec, definition.columns);
+      config.queries[id].pagination.initialQuery = initialId;
+    }
   }
   return config;
 }

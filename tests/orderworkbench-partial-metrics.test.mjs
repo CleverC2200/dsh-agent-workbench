@@ -239,8 +239,8 @@ test('amendment card uses the full denominator for the audited creation week', (
   assert.match(card.coverageNote, /4187.*3059039.*49269/);
   const evidence = workbenchEvidence(facts).periods.week.metrics['改单率'];
   assert.equal(evidence.provisional, true);
-  assert.equal(evidence.population.denominator, 3059039);
-  assert.match(evidence.note, /不代表完整改单率/);
+  assert.equal(evidence.denominator, 3059039);
+  assert.match(evidence.formula, /不代表完整改单率/);
 });
 
 test('old amendment evidence cannot publish its order-count rate under the quantity contract', () => {

@@ -53,6 +53,7 @@ const fields = [
   'warehouse_classify',
 ];
 const project = (alias) => fields.map((field) => `${alias}.${field}`).join(',');
+export const cancellationSnapshotColumns = [...fields, 'canceltime', 'detailstatus'];
 const quantityFields = ['change_order_qty', 'dms_last_update_qty', 'need_qty_origin'];
 const lineKeys = [
   'cust_code',
