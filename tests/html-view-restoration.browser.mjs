@@ -1333,6 +1333,8 @@ test('MPS S2 publishes actual local inputs and carry output within the Host cont
   const frame = page.frameLocator('iframe');
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await expect.poll(async () => (await readHost())?.parts?.ship?.rowCount).toBe(0);
+  await frame.getByLabel('数据截止日', { exact: true }).fill('2026-09-22');
+  await expect(frame.getByLabel('数据截止日', { exact: true })).toHaveValue('2026-09-22');
   const demo = await readHost();
   assert.ok(JSON.stringify(demo).length < 100000);
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({

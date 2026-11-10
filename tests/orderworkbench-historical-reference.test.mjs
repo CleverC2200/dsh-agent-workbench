@@ -1,7 +1,10 @@
 import { model, config } from './orderworkbench-data.test.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeWorkbenchMetrics } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
+import {
+  computeWorkbenchMetrics,
+  metricCalculationVersion,
+} from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 import {
   workbenchPresentation,
   workbenchEvidence,
@@ -47,6 +50,7 @@ function facts(enabled = true) {
   const month = period(),
     week = { ...period(), start: '2026-10-19' };
   return {
+    metricCalculationVersion,
     source: 'gea-governed-sql',
     displayMode: enabled ? 'historical-reconciliation' : 'governed-live',
     complete: true,

@@ -5,6 +5,32 @@
   "source": "ai_db",
   "dialect": "GEA PostgreSQL subset",
   "queries": {
+    "source.production-date": {
+      "title": "默认进入：最新可用生产日期",
+      "grain": ["day"],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "as_of",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYYMMDD"
+        },
+        "gea_p2": {
+          "name": "base",
+          "type": "string",
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "SELECT MAX(t.zdate) AS day FROM agents_mes_prod_oee_line_result_d AS t WHERE t.zdate <= :gea_p1 AND t.plan_qty > 0 AND t.actual_qty >= 0 AND (:gea_p2 = '' OR CASE t.factory_code WHEN '3001' THEN '郑州' WHEN '5001' THEN '遂平' WHEN '9001' THEN '遂平' WHEN '6001' THEN '华东' WHEN '7001' THEN '华南' WHEN '8001' THEN '西南' ELSE NULL END = :gea_p2)",
+        "parameters": {
+          "gea_p1": "20261110",
+          "gea_p2": ""
+        },
+        "includeTotal": false
+      },
+      "resultColumns": ["day"]
+    },
     "inventory.detail": {
       "title": "库存与目标明细分页",
       "plugins": ["aqkc", "fc", "qll", "aps"],
