@@ -1,3 +1,4 @@
+import { metricSection } from './metric-sections.mjs';
 import { metricTarget, workbenchMetricState } from './performance-rules.mjs';
 import { stockComponents } from './metric-model.mjs';
 import { metricSpecs } from './metric-definitions.mjs';
@@ -9,7 +10,7 @@ export function metricSnapshot(
 ) {
   const metric = period.metrics[key];
   const rows = (id) =>
-    period.sections.find((part) => part.id === id && part.status === 'ready')?.rows ?? [];
+    metricSection(period, id, key)?.status === 'ready' ? metricSection(period, id, key).rows : [];
   const sum = (data, field) =>
     data.length &&
     data.every(

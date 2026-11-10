@@ -75,7 +75,7 @@ test('single-period independent query preserves the explicit dates, quantity gra
   assert.equal(result.current.value, 10);
   assert.equal(result.current.quantityUnit, '商品数量');
   assert.equal(result.contract.lockPeriod, false);
-  assert.deepEqual([...new Set(calls.map((c) => c.queryId))], ['workbench.changes']);
+  assert.deepEqual([...new Set(calls.map((c) => c.queryId))], ['workbench.changes.amendment']);
   assert.ok(
     calls.every((c) => c.values.start === '2026-10-19' && c.values.end_exclusive === '2026-10-26'),
   );

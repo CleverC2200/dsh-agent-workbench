@@ -1,3 +1,4 @@
+import { metricSection, readySectionRows } from './metric-sections.mjs';
 import { metricSnapshot } from './metric-components.mjs';
 import { shippableReferenceVersion } from './historical-shippable-reference.mjs';
 import { metricContract } from './metric-definitions.mjs';
@@ -48,8 +49,7 @@ const onTimeDisplayNote = (metric) => {
     .join('；');
 };
 const onTimeStatus = (metric) => metricState('准交率', metric?.value ?? null);
-const rows = (period, id) =>
-  period?.sections.find((section) => section.id === id && section.status === 'ready')?.rows ?? [];
+const rows = (period, id) => readySectionRows(period, id);
 const distinct = (values) =>
   [...new Set(values)].sort((a, b) => String(a).localeCompare(String(b), 'zh'));
 const dimensionValue = (value) => value || '未映射';
@@ -625,7 +625,20 @@ export function workbenchEvidence(facts) {
   return {
     source: facts.source,
     metricCalculationVersion: facts.metricCalculationVersion,
-    metricContracts: Object.fromEntries(metricNames.map(name => [name, { ...metricContract(name, typeof ORDER_WORKBENCH_APS_CONFIG === 'undefined' ? undefined : ORDER_WORKBENCH_APS_CONFIG), version:metricCalculationVersion }])),
+    metricContracts: Object.fromEntries(
+      metricNames.map((name) => [
+        name,
+        {
+          ...metricContract(
+            name,
+            typeof ORDER_WORKBENCH_APS_CONFIG === 'undefined'
+              ? undefined
+              : ORDER_WORKBENCH_APS_CONFIG,
+          ),
+          version: metricCalculationVersion,
+        },
+      ]),
+    ),
     complete: facts.complete !== false,
     pendingPeriods: facts.pendingPeriods ?? [],
     pendingSources: facts.pendingSources ?? [],
@@ -643,11 +656,21 @@ export function workbenchEvidence(facts) {
             basis: 'T-1累计；结束边界不含当日，比较期保留相同已结束时长，不延长到未来周期末',
             state: period.start >= period.end ? 'no-completed-days' : 'elapsed-days',
           },
-          metrics: Object.fromEntries(Object.entries(period.metrics).map(([key, metric]) => [key,
-            facts.metricCalculationVersion === metricCalculationVersion
-              ? {...metricSnapshot(period,key), ...(metric.counts ? {counts:{...metric.counts}} : {})}
-              : { value:null, unit:metric.unit, note:'指标快照版本已过期，请刷新看板后按当前代码口径读取。' }
-          ])),
+          metrics: Object.fromEntries(
+            Object.entries(period.metrics).map(([key, metric]) => [
+              key,
+              facts.metricCalculationVersion === metricCalculationVersion
+                ? {
+                    ...metricSnapshot(period, key),
+                    ...(metric.counts ? { counts: { ...metric.counts } } : {}),
+                  }
+                : {
+                    value: null,
+                    unit: metric.unit,
+                    note: '指标快照版本已过期，请刷新看板后按当前代码口径读取。',
+                  },
+            ]),
+          ),
           sourceDates: Object.fromEntries(
             period.sections.map((section) => [
               section.id,
@@ -700,7 +723,7 @@ export function workbenchMetricDetail(facts, name) {
       continue;
     }
     const metric = period.metrics[name],
-      part = period.sections.find((section) => section.id === source);
+      part = metricSection(period, source, name);
     let reason = '';
     if (metric?.value === null || metric?.value === undefined) {
       if (part?.status === 'error') reason = '查询未完成：' + part.code;

@@ -1,6 +1,7 @@
 import { workbenchQueryParts as parts, workbenchQueries } from './queries.mjs';
 import { ordersSql, periodChangesSql } from './document-queries.mjs';
 import { rowPacketSql } from '../shared/row-packets.mjs';
+import { cancellationPartitionSql } from './cancellation-partitions.mjs';
 import {
   workbenchPeriodPacketSize,
   workbenchDirectorPeriodColumns,
@@ -240,6 +241,15 @@ export function addPeriodSummaryQuery(config, name, fields, group, columns) {
       resultColumns,
       pagination: { countQuery: id + '.count' },
     };
+    if (/^workbench\.changes\.cancellation\.partition[01]\.periods\.summary$/.test(id)) {
+      const initialId = id + '.initial';
+      config.queries[initialId] = {
+        ...config.queries[id],
+        request: { ...config.queries[id].request, sql },
+      };
+      delete config.queries[initialId].pagination;
+      config.queries[id].pagination.initialQuery = initialId;
+    }
   };
   if (name === 'orders') {
     const stock = `SELECT ${windows.map((window) => `MAX(CASE WHEN ${window.enabled}=TRUE AND s.the_date>=${window.start} AND s.the_date<${window.end} THEN s.the_date END) AS stock_${window.index}`).join(',')}
@@ -256,20 +266,28 @@ export function addPeriodSummaryQuery(config, name, fields, group, columns) {
     );
   }
   if (name === 'changes') {
-    const change = periodChangesSql();
-    const sql = `WITH ${windowCte},${change.ctes} ${change.sql}`;
     const columns = ['period_index', ...config.queries['workbench.changes'].resultColumns];
-    register(
-      'workbench.changes.periods.summary',
-      rowPacketSql(
-        sql,
-        columns,
-        ['period_index', 'kind', 'region', 'province'],
-        workbenchPeriodPacketSize,
-      ),
-      ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],
-      ['packet_index'],
-    );
+    for (const [suffix, kind, partition] of [
+      ['', undefined],
+      ['.cancellation', '1'],
+      ['.amendment', '2'],
+      ['.cancellation.partition0', '1', 0],
+      ['.cancellation.partition1', '1', 1],
+    ]) {
+      const change = periodChangesSql(kind);
+      const sql = `WITH ${windowCte}${change.ctes ? ',' + change.ctes : ''} ${change.sql}`;
+      register(
+        'workbench.changes' + suffix + '.periods.summary',
+        rowPacketSql(
+          partition === undefined ? sql : cancellationPartitionSql(sql, partition),
+          columns,
+          ['period_index', 'kind', 'region', 'province'],
+          workbenchPeriodPacketSize,
+        ),
+        ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],
+        ['packet_index'],
+      );
+    }
     return;
   }
   const source =
