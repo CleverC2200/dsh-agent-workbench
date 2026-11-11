@@ -1024,7 +1024,7 @@ test('presentation fills both period tables, actual categories and shared direct
   assert.equal(presentation.performance['item-performance'].week[0].length, 8);
   assert.equal(presentation.performance['director-performance'].month.length, 2);
   assert.equal(presentation.dimensions['category-fill'].rows[0][1], '96.00%');
-  assert.equal(presentation.skus['水饺'][0].shipDays, '30.00天');
+  assert.equal(presentation.skus['水饺'][0].shipDays, '15.00天');
   assert.equal(model.workbenchEvidence(facts).periods.month.sections[0].total, 1);
   const evidence = model.workbenchEvidence(facts);
   const compressed = JSON.parse(

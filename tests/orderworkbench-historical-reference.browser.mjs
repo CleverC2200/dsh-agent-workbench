@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { chromium, expect } from '@playwright/test';
-import {
-  computeWorkbenchMetrics,
-  metricCalculationVersion,
-} from '../prototypes/inventory-orderworkbench/metric-model.mjs';
+import { computeWorkbenchMetrics } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 import { performanceStyleVersion } from '../prototypes/inventory-orderworkbench/performance-rules.mjs';
 
 test('built page rejects saved historical presentation, shows real stock calculation and clears on identity change', async (t) => {
+  const {
+    metricRuntime: { version: metricCalculationVersion },
+  } = JSON.parse(await readFile('lib/business/inventory-orderworkbench/sql.config.json', 'utf8'));
   const browser = await chromium.launch({
     headless: true,
     channel: process.env.ORDER_BROWSER_CHANNEL || undefined,

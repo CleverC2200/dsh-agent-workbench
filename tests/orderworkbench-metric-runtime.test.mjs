@@ -102,5 +102,49 @@ test('single-period independent query preserves the explicit dates, quantity gra
     },
   );
   assert.equal(failed.current.value, null);
+  assert.equal(failed.current.status, '查询失败');
+  assert.equal(failed.current.numerator, null);
+  assert.equal(failed.current.denominator, null);
+  assert.equal(failed.current.pending, null);
   assert.equal(failed.sources[0].code, 'RESOURCE_NOT_IN_DATASET');
+});
+
+test('independent questions preserve base and exact month or day parameters for every card metric', async () => {
+  for (const base of ['郑州', '华东', ''])
+    for (const start of ['2026-10-01', '2026-10-31'])
+      for (const metric of ['作废率', '改单率', '订单满足率', '准交率', '货龄占比', '周转天数']) {
+        const calls = [];
+        const result = await readOrderMetric(
+          config,
+          { metric, start, endExclusive: '2026-11-01', base },
+          async (_request, options) => {
+            calls.push(options);
+            return {
+              configVersion: 'exact-scope',
+              rows: options.queryId.endsWith('.count')
+                ? [{ total: 0 }]
+                : options.queryId === 'workbench.agedate'
+                  ? [{ day: null }]
+                  : [],
+            };
+          },
+          undefined,
+          { now: new Date('2026-11-10T00:00:00Z') },
+        );
+        assert.equal(result.base, base);
+        assert.equal(result.period.start, start);
+        assert.equal(result.period.endExclusive, '2026-11-01');
+        assert(calls.length > 0);
+        for (const call of calls) {
+          assert.equal(call.values.report_base, base);
+          assert.equal(
+            call.values.start,
+            call.queryId === 'workbench.agedate' ? start.replaceAll('-', '') : start,
+          );
+          assert.equal(
+            call.values.end_exclusive,
+            call.queryId === 'workbench.agedate' ? '20261101' : '2026-11-01',
+          );
+        }
+      }
 });

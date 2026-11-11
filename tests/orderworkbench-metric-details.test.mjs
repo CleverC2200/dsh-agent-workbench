@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { metricDetailsRequest } from '../prototypes/inventory-orderworkbench/metric-details.mjs';
+import { workbenchPresentation } from '../prototypes/inventory-orderworkbench/live-presentation.mjs';
+import { metricTarget } from '../prototypes/inventory-orderworkbench/performance-rules.mjs';
+import { workbenchCellMissingReason } from '../prototypes/inventory-orderworkbench/missing-reasons.mjs';
 import {
   computeWorkbenchMetrics,
   metricNames,
@@ -25,6 +28,209 @@ const selection = {
   week: '2026-10-19',
   label: '2026年10月 · 第四周',
 };
+
+test('an absent amendment cohort keeps the same unavailable state even when cancellations exist', () => {
+  const row = { kind: '1', numerator: 1, denominator: 100, records: 1, invalid: 0 };
+  const combined = {
+    start: '2025-10-27',
+    end: '2025-11-02',
+    sections: [{ id: 'changes', status: 'ready', rows: [row] }],
+  };
+  const independent = { ...combined, sections: [{ id: 'changes', status: 'ready', rows: [] }] };
+  for (const p of [combined, independent]) p.metrics = computeWorkbenchMetrics(p);
+  const combinedCard = workbenchPresentation({ ...facts, periods: { month: combined } }).cards.find(
+    (c) => c.key === '改单率',
+  );
+  const independentCard = workbenchPresentation({
+    ...facts,
+    periods: { month: independent },
+  }).cards.find((c) => c.key === '改单率');
+  assert.equal(combinedCard.value, '—');
+  assert.equal(combinedCard.status, '暂无数据');
+  assert.equal(combinedCard.status, independentCard.status);
+  assert.equal(combinedCard.missingReason, independentCard.missingReason);
+});
+
+test('base cross tables and SKU rows use the same base formula while item views retain their own scope', () => {
+  const stock = {
+    base: '郑州',
+    category: '水饺',
+    item: '水饺',
+    sku: '10004580',
+    name: '产品',
+    stock_date: '2026-10-31',
+    plan_month_offset: 1,
+    inventory: 1539,
+    sales_plan: 500,
+    transfer_plan: 11,
+    source_rows: 1,
+    invalid: 0,
+  };
+  const month = {
+    start: '2026-10-01',
+    end: '2026-11-01',
+    sections: [{ id: 'stock', status: 'ready', rows: [stock] }],
+  };
+  month.metrics = computeWorkbenchMetrics(month);
+  const f = { ...facts, selected: 'month', periods: { month, week: month } };
+  const view = workbenchPresentation(f);
+  assert.equal(view.dimensions['base-category-days'].rows[0][1], '91.34');
+  assert.equal(view.skus['水饺'][0].shipDays, '91.34天');
+  assert.equal(view.dimensions['category-days'].rows[0][4], '92.34天');
+  assert.equal(view.dimensions['category-days'].columns[1], '现库存');
+  month.sections[0].rows[0].transfer_plan = null;
+  assert.match(
+    workbenchCellMissingReason(f, {
+      dimension: 'base-category-days',
+      header: '水饺',
+      row: ['郑州'],
+      period: 'month',
+    }),
+    /未能计算/,
+  );
+  assert.doesNotMatch(
+    workbenchCellMissingReason(f, {
+      dimension: 'category-days',
+      header: '可发货天数',
+      row: ['水饺'],
+      period: 'month',
+    }),
+    /未能计算/,
+  );
+});
+
+test('all six base card handoffs retain scope, current components and the current code targets', () => {
+  for (const base of ['郑州', '华东', '']) {
+    const month = {
+      start: '2026-10-01',
+      end: '2026-11-01',
+      sections: [
+        {
+          id: 'changes',
+          status: 'ready',
+          rows: [
+            { kind: '1', numerator: 20, denominator: 1000, invalid: 0 },
+            { kind: '2', numerator: 30, denominator: 1000, invalid: 0 },
+          ],
+        },
+        { id: 'orders', status: 'ready', rows: [{ demand: 100, shortage: 10, invalid: 0 }] },
+        {
+          id: 'ontime',
+          status: 'ready',
+          rows: [{ order_no: 'E', customer: 'C', ontime: 1, invalid: 0 }],
+        },
+        { id: 'ages', status: 'ready', rows: [{ stock_qty: 100, aged_qty: 5, invalid: 0 }] },
+        {
+          id: 'stock',
+          status: 'ready',
+          rows: [
+            {
+              stock_date: '2026-10-31',
+              plan_month_offset: 1,
+              inventory: 1000,
+              sales_plan: 3000,
+              transfer_plan: 1000,
+              source_rows: 1,
+              invalid: 0,
+            },
+          ],
+        },
+      ],
+    };
+    month.metrics = computeWorkbenchMetrics(month, undefined, {
+      turnoverScope: base ? 'base' : 'national',
+    });
+    const scoped = {
+      ...facts,
+      base,
+      turnoverScope: base ? 'base' : 'national',
+      periods: { month, week: month },
+    };
+    const cards = workbenchPresentation(scoped).cards;
+    for (const card of cards) {
+      assert.equal(card.target, metricTarget(card.key, base));
+      const handoff = metricDetailsRequest(scoped, card.key, selection, card).context;
+      assert.equal(handoff.filters.base, base);
+      assert.equal(handoff.filters.dimension, base ? 'base' : 'national');
+      assert.equal(handoff.metricDetails.contract.scope, base ? 'base' : 'national');
+      for (const query of Object.values(handoff.metricDetails.queries))
+        assert.equal(query.parameters.base, base);
+      assert.equal(handoff.metricDetails.current.value, month.metrics[card.key].value);
+      assert.equal(handoff.evidence.periods.month.metrics[card.key].target, card.target);
+    }
+    assert.equal(cards.find((c) => c.key === '改单率').target, '<2%');
+    assert.equal(cards.find((c) => c.key === '准交率').target, '>98.5%');
+    assert.equal(cards.find((c) => c.key === '周转天数').value, base ? '8.6' : '10.0');
+  }
+});
+
+test('Zhengzhou inclusive turnover target is also used by the rendered card', () => {
+  const month = {
+    start: '2026-10-01',
+    end: '2026-11-01',
+    sections: [
+      {
+        id: 'stock',
+        status: 'ready',
+        rows: [
+          {
+            stock_date: '2026-10-31',
+            plan_month_offset: 1,
+            inventory: 1250,
+            sales_plan: 3000,
+            transfer_plan: 0,
+            source_rows: 1,
+            invalid: 0,
+          },
+        ],
+      },
+    ],
+  };
+  month.metrics = computeWorkbenchMetrics(month, undefined, { turnoverScope: 'base' });
+  for (const [base, status] of [
+    ['郑州', '健康'],
+    ['华东', '严重'],
+    ['', '严重'],
+  ]) {
+    const card = workbenchPresentation({
+      ...facts,
+      base,
+      periods: { month, week: month },
+    }).cards.find((c) => c.key === '周转天数');
+    assert.equal(card.value, '12.5');
+    assert.equal(card.status, status);
+  }
+});
+
+test('failed reads are reported consistently and never invent zero on-time counts', () => {
+  const month = {
+    start: '2026-10-01',
+    end: '2026-11-01',
+    sections: ['orders', 'changes', 'ontime', 'ages', 'stock'].map((id) => ({
+      id,
+      status: 'error',
+      code: 'RESOURCE_NOT_IN_DATASET',
+      rows: [],
+    })),
+  };
+  month.metrics = computeWorkbenchMetrics(month);
+  const failed = { ...facts, base: '郑州', periods: { month, week: month } };
+  for (const card of workbenchPresentation(failed).cards) {
+    const current = metricDetailsRequest(failed, card.key, selection, card).context.metricDetails
+      .current;
+    assert.equal(current.status, '查询失败');
+    assert.equal(current.value, null);
+    assert.equal(current.numerator, null);
+    assert.equal(current.denominator, null);
+    assert.equal(current.pending, null);
+    if (card.key === '准交率')
+      assert.equal(
+        metricDetailsRequest(failed, card.key, selection, card).context.evidence.periods.month
+          .metrics[card.key].counts,
+        undefined,
+      );
+  }
+});
 
 test('all six cards request the matching detail table with the card month and separate selected week', () => {
   for (const key of metricNames) {

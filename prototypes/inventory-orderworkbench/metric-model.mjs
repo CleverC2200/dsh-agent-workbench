@@ -31,7 +31,7 @@ export function reusableWorkbenchFacts(facts) {
     Object.values(facts.periods).every(
       (period) =>
         Array.isArray(period.sections) &&
-        period.sections.every((section) => section.status === 'ready'),
+        period.sections.every((section) => section.status === 'ready' && !Object.keys(section.metricFailures ?? {}).length),
     )
   );
 }
@@ -357,7 +357,7 @@ export function computeWorkbenchMetrics(
           value: null,
           note: '查询未完成：' + part.code,
         });
-      else if (!(part?.rows ?? []).filter(id === 'ontime' ? ontimeFilter : filter).length)
+      else if (!(part?.rows ?? []).filter(id === 'ontime' ? ontimeFilter : filter).filter(row => id !== 'changes' || String(row.kind) === (name === '作废率' ? '1' : '2')).length)
         Object.assign(result[name], {
           value: null,
           noRows: true,
@@ -409,7 +409,8 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
     return '系统尚未完成读取：所选周期数据未加载完成，暂不能判定源表缺数据。';
   if (part.status !== 'ready')
     return `系统读取未成功：${part.code ?? part.status}；${part.detail ? part.detail + '；' : ''}需核对查询或字段发布，不是0。`;
-  const source = part.rows.filter(filter);
+  const source = part.rows.filter(filter).filter(row =>
+    id !== 'changes' || String(row.kind) === (name === '作废率' ? '1' : '2'));
   if (!source.length)
     return `源数据未提供：所选周期及当前授权、分组范围的 ${id} 查询结果无记录；不代表整张表为空。`;
   if (name === '周转天数' && source.some((row) => 'national_stock_records' in row)) {
@@ -494,7 +495,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
   )
     return '系统未能计算：同范围月度计划日均需求合计不大于0，可发货天数没有有效分母。';
   if (name === '货龄（>60天库存占比）' && total('stock_qty') <= 0)
-    return '系统未能计算：hive.dw.dwd_scm_material_age_his 当前分组 inv_qty 合计不大于0，货龄占比没有有效分母。';
+    return '系统未能计算：agents_scm_stock_detail_d 当前分组 current_stock 合计不大于0，货龄占比没有有效分母。';
   return `系统未能计算：${name}的有效分母、数量范围或判定条件不满足；${note || '缺失不补0，零分母不计算比率。'}`;
 }
 export function metricState(name, value, { base = '' } = {}) {

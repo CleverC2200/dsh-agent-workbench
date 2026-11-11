@@ -4,6 +4,7 @@ import { readWithTransientRetry } from './query-retry.mjs';
 import { applyPeriodAttributions, collectDirectorMembers } from './period-attributions.mjs';
 import { createAgentQueries } from '../../business/shared/agent-query.ts';
 import { workbenchQueries } from '../../business/inventory-orderworkbench/queries.mjs';
+import {normalizeWorkbenchBase} from '../../business/inventory-orderworkbench/base-scope.mjs';
 import { decodeScalarArray, unpackRowPackets } from '../../business/shared/row-packets.mjs';
 import {
   workbenchPeriodPacketSize,
@@ -75,66 +76,28 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   const specs = options.singlePeriod
     ? { selected: 'month', month: options.singlePeriod }
     : reportPeriods(start, end, options.now);
-  const primaryNames = ['month', 'week'].filter((name) => specs[name]);
-  const sectionIds = options.sections ?? [
-    'orders',
-    'ontime',
-    'changes',
-    'stock',
-    'ages',
-    'directors',
-  ];
-  const calculate = (period) =>
-    computeWorkbenchMetrics(period, undefined, {
-      turnoverScope: options.turnoverScope ?? 'national',
-    });
-  const restoredPeriod = (spec) =>
-    options.summary &&
-    (options.seedFacts ?? [])
-      .flatMap((facts) =>
-        facts.metricCalculationVersion === metricCalculationVersion &&
-        facts.sqlSummary === true &&
-        facts.attributionVersion === 2
-          ? Object.values(facts.periods ?? {})
-          : [],
-      )
-      .find(
-        (period) =>
-          period.start === spec.start &&
-          period.end === spec.end &&
-          period.kind === spec.kind &&
-          (period.inventoryEnd ?? period.end) === (spec.inventoryEnd ?? spec.end),
-      );
-  const ontimeWindows = Object.entries(specs)
-    .filter(([name]) => name !== 'selected')
-    .map(([, spec]) => ({
-      ...spec,
-      enabled:
-        spec.start < spec.end &&
-        !restoredPeriod(spec)?.sections?.some(
-          (part) => part.id === 'ontime' && part.status === 'ready',
-        ),
-    }));
+  const primaryNames = ['month', 'week'].filter(name => specs[name]);
+  const sectionIds = options.sections ?? ['orders', 'ontime', 'changes', 'stock', 'ages', 'directors'];
+  const base = normalizeWorkbenchBase(options.base ?? '');
+  const turnoverScope = options.turnoverScope ?? (base ? 'base' : 'national');
+  const calculate = period => computeWorkbenchMetrics(period, undefined, { turnoverScope });
+  const restoredPeriod = spec => options.summary && (options.seedFacts ?? []).flatMap(facts =>
+    facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true && facts.attributionVersion === 2 && (facts.base ?? '') === base
+      ? Object.values(facts.periods ?? {}) : [],
+  ).find(period => period.start === spec.start && period.end === spec.end &&
+    period.kind === spec.kind && (period.inventoryEnd ?? period.end) === (spec.inventoryEnd ?? spec.end));
+  const ontimeWindows = Object.entries(specs).filter(([name]) => name !== 'selected').map(([, spec]) => ({
+    ...spec, enabled: spec.start < spec.end && !restoredPeriod(spec)?.sections?.some(part => part.id === 'ontime' && part.status === 'ready'),
+  }));
   let ontimePeriods;
-  const periodWindows = Object.entries(specs)
-    .filter(([name]) => name !== 'selected')
-    .map(([, spec]) => spec);
-  const needs = (spec, id) =>
-    spec.start < spec.end &&
-    !restoredPeriod(spec)?.sections?.some((part) => part.id === id && part.status === 'ready');
-  const periodParameters = (id) => {
-    const first = periodWindows.find((spec) => needs(spec, id)) ?? specs.month;
-    const values = {
-      start: first.start,
-      end_exclusive: first.end,
-      period_start: first.start,
-      period_end: first.end,
-      owner_start: first.start,
-      owner_end: first.end,
-      report_base: options.base ?? '',
-      page_size: 200,
-      offset: 0,
-    };
+  const periodWindows = Object.entries(specs).filter(([name]) => name !== 'selected').map(([, spec]) => spec);
+  const needs = (spec, id) => spec.start < spec.end && !restoredPeriod(spec)?.sections?.some(part =>
+    part.id === id && part.status === 'ready' && !Object.keys(part.metricFailures ?? {}).length);
+  const periodParameters = id => {
+    const first = periodWindows.find(spec => needs(spec, id)) ?? specs.month;
+    const values = { start: first.start, end_exclusive: first.end,
+      period_start: first.start, period_end: first.end, owner_start: first.start, owner_end: first.end,
+      report_base: base, page_size: 200, offset: 0 };
     for (const [index, spec] of periodWindows.entries()) {
       values[`period_${index}_start`] = spec.start;
       values[`period_${index}_end`] = spec.end;
@@ -318,12 +281,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   };
   const readOntimePeriods = async (values, priority) => {
     if (!ontimePeriods) {
-      const parameters = {
-        ...values,
-        report_base: options.base ?? '',
-        page_size: 200,
-        offset: 0,
-      };
+      const parameters = { ...values, report_base: base, page_size: 200, offset: 0 };
       for (const [index, window] of ontimeWindows.entries()) {
         parameters[`period_${index}_start`] = window.start;
         parameters[`period_${index}_end`] = window.end;
@@ -455,7 +413,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
               id,
               {
                 ...values,
-                report_base: options.base ?? '',
+                report_base: base,
                 page_size: 200,
                 offset: 0,
               },
@@ -476,7 +434,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
             )
           : await client.read(
               id,
-              { ...values, report_base: options.base ?? '' },
+              { ...values, report_base: base },
               { signal, priority, requiredColumns: definition.columns },
             );
     const sourceRows =
@@ -576,7 +534,8 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   };
   const section = async (id, action) => {
     try {
-      return { id, status: 'ready', rows: await action() };
+      const result = await action();
+      return { id, status: 'ready', ...(Array.isArray(result) ? {rows:result} : result) };
     } catch (error) {
       signal?.throwIfAborted();
       return {
@@ -616,14 +575,8 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
         metrics: calculate({ ...spec, sections: [] }),
       };
     const restored = restoredPeriod(spec);
-    const pending = sectionIds.map(
-      (id) =>
-        restored?.sections?.find((part) => part.id === id && part.status === 'ready') ?? {
-          id,
-          status: 'loading',
-          rows: [],
-        },
-    );
+    const pending = sectionIds.map((id) =>
+      restored?.sections?.find(part => part.id === id && part.status === 'ready' && !Object.keys(part.metricFailures ?? {}).length) ?? { id, status: 'loading', rows: [] });
     const update = () => {
       periods[name] = {
         ...spec,
@@ -722,17 +675,12 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       { id, status: 'loading', rows: [] },
     ]),
   );
-  const restoredMetadata =
-    options.summary &&
-    (options.seedFacts ?? []).find(
-      (facts) =>
-        facts.metricCalculationVersion === metricCalculationVersion &&
-        facts.sqlSummary === true &&
-        facts.attributionVersion === 2 &&
-        facts.start === start &&
-        facts.end === end,
-    );
+  const restoredMetadata = options.summary && (options.seedFacts ?? []).find(facts =>
+    facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true &&
+    facts.attributionVersion === 2 && (facts.base ?? '') === base && facts.start === start && facts.end === end);
   const snapshot = (complete = false) => ({
+    base,
+    turnoverScope,
     metricCalculationVersion,
     displayMode: 'governed-live',
     start,
@@ -822,6 +770,7 @@ export async function loadWorkbenchSkuPage(
   base = '',
   options = {},
 ) {
+  base = normalizeWorkbenchBase(base);
   const config = options.config ?? defaultConfig;
   if (!config) throw Error('ORDER_METRIC_CONFIG_REQUIRED');
   const client = createAgentQueries(config, options.execute);

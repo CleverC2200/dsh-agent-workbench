@@ -7,6 +7,7 @@ import {
 import { createReportPersistence } from '../prototypes/inventory-orderworkbench/report-persistence.mjs';
 import { createFrameProgress } from '../business/shared/frame-progress.js';
 import { metricDetailsRequest } from '../prototypes/inventory-orderworkbench/metric-details.mjs';
+import { metricDefinition } from '../prototypes/inventory-orderworkbench/metric-definitions.mjs';
 import { startDashboardTiming } from '../business/shared/dashboard-timing.js';
 import {
   createWorkbenchPresentationCache,
@@ -94,6 +95,7 @@ test('order workbench reference interactions', async () => {
   period.sections[0].rows = [];
   period.metrics = model.computeWorkbenchMetrics(period);
   window.liveFixture = {
+    base: '郑州',
     complete: true,
     attributionVersion: 2,
     metricCalculationVersion,
@@ -114,6 +116,7 @@ test('order workbench reference interactions', async () => {
   window.workbenchMetricDetail = model.workbenchMetricDetail;
   window.workbenchCellMissingReason = model.workbenchCellMissingReason;
   window.metricDetailsRequest = metricDetailsRequest;
+  window.metricDefinition = metricDefinition;
   window.detailRequests = [];
   window.ask = async (text, context) => {
     window.detailRequests.push({ text, context });
@@ -162,7 +165,7 @@ test('order workbench reference interactions', async () => {
     assert.equal(window.pageSnapshot.consumerCode, 'order');
     assert.equal(window.pageSnapshot.mock, false);
     assert.equal(window.pageSnapshot.metrics.length, 6);
-    assert.equal(window.pageSnapshot.metrics[2].value, '—%');
+    assert.equal(window.pageSnapshot.metrics[2].value, '—');
     assert.equal(window.pageSnapshot.dimension.key, 'base-performance');
     assert.equal(window.pageSnapshot.dimension.unmet.length, 0);
     assert.equal(window.savedView.mode, 'week');
@@ -195,6 +198,7 @@ test('order workbench reference interactions', async () => {
     assert.equal(window.requestedPeriod.start, '2026-09-01');
     assert.equal(window.requestedPeriod.end, '2026-09-07');
     assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'loaded');
+    assert.equal(window.pageSnapshot.filters.base, '郑州');
     assert.equal(
       window.savedReports.size,
       0,

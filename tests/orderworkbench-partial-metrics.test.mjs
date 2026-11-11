@@ -103,6 +103,9 @@ test('historical cache retries failed sources and invalidates earlier query vers
   facts.periods.week.sections[0].status = 'loading';
   assert.equal(reusableWorkbenchFacts(facts), false);
   facts.periods.week.sections[0].status = 'ready';
+  facts.periods.week.sections[0].metricFailures = { 1: { code: 'GEA_SQL_UNAVAILABLE' } };
+  assert.equal(reusableWorkbenchFacts(facts), false);
+  delete facts.periods.week.sections[0].metricFailures;
   facts.metricCalculationVersion--;
   assert.equal(compatibleWorkbenchFacts(facts), false);
   assert.equal(reusableWorkbenchFacts(facts), false);

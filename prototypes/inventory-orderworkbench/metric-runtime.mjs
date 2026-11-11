@@ -1,4 +1,6 @@
+import { metricSection } from './metric-sections.mjs';
 import { loadWorkbenchReport } from './report-source.js';
+import {normalizeWorkbenchBase} from '../../business/inventory-orderworkbench/base-scope.mjs';
 import { metricCalculationVersion, computeWorkbenchMetrics, dayOffset } from './metric-model.mjs';
 import { metricSnapshot } from './metric-components.mjs';
 import { metricSpecs, metricContract, resolveMetricName } from './metric-definitions.mjs';
@@ -42,7 +44,7 @@ export async function readOrderMetric(config, input, execute, signal, { now = ne
     (input.expectedVersion !== undefined && input.expectedVersion !== metricCalculationVersion)
   )
     throw Error('ORDER_METRIC_VERSION_STALE');
-  const base = input.base ?? '',
+  const base = normalizeWorkbenchBase(input.base ?? ''),
     scope = base ? 'base' : 'national',
     contract = metricContract(metric, config, scope);
   const today = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
@@ -85,9 +87,9 @@ export async function readOrderMetric(config, input, execute, signal, { now = ne
   });
   const sources = currentPeriod.sections.map((part) => ({
     id: part.id,
-    status: part.status,
-    code: part.code,
-    detail: part.detail,
+    status: metricSection(currentPeriod, part.id, metric)?.status ?? part.status,
+    code: metricSection(currentPeriod, part.id, metric)?.code ?? part.code,
+    detail: metricSection(currentPeriod, part.id, metric)?.detail ?? part.detail,
     rows: part.rows.length,
     dates: [
       ...new Set(part.rows.map((row) => row.stock_date ?? row.snapshot_date).filter(Boolean)),
