@@ -705,13 +705,15 @@ export function mountCompanyUI(
         ),
       ...documentState.pages.map((page) => [page.id, workbench.label(page.id)] as const),
     ]);
-    const menu = resolveBusinessMenu(catalog, available, t);
-    if (
-      identity.state === 'confirmed' &&
-      !identity.error &&
-      identity.status?.environment === 'test'
-    )
-      menu.push(localPrototypeMenu(available, t));
+    const testEnvironment =
+      identity.state === 'confirmed' && !identity.error && identity.status?.environment === 'test';
+    const menu = resolveBusinessMenu(
+      catalog,
+      available,
+      t,
+      testEnvironment ? 'test' : 'production',
+    );
+    if (testEnvironment) menu.push(localPrototypeMenu(available, t));
     const menuPresetIds = new Set<string>();
     for (const group of menu)
       for (const entry of group.entries) {
