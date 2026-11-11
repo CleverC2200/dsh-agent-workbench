@@ -2439,7 +2439,7 @@ test('only declared mock prototypes remain local while unreturned business pages
   assert.ok(document.querySelector('[data-slot="sidebar.settings"]'));
 });
 
-test('local prototypes appear only in a confirmed test environment; production keeps unmapped business entries disabled', async (t) => {
+test('local prototypes appear only in a confirmed test environment; production hides unmapped business entries', async (t) => {
   const cases = [
     ['test', navigationIdentity, true],
     [
@@ -2502,7 +2502,7 @@ test('local prototypes appear only in a confirmed test environment; production k
           visible,
         );
       if (name === 'production') {
-        assert.equal(document.querySelector('[data-gea-business-entry="category"]').disabled, true);
+        assert.equal(document.querySelector('[data-gea-business-entry="category"]'), null);
         assert.equal(document.querySelector('[data-gea-business-entry="regional"]'), null);
         const order = document.querySelector(
           '[data-gea-business-entry="inventory-orderworkbench"]',

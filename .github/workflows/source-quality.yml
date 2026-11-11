@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: source-quality-${{ github.event.pull_request.number || github.ref }}
+  group: source-quality-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'edited' && github.event.pull_request.base.ref == 'main' && (github.event.changes.title || github.event.changes.body) && !github.event.changes.base && !github.event.changes.head && github.run_id || 'source' }}
   cancel-in-progress: true
 
 jobs:
@@ -193,6 +193,13 @@ jobs:
         if: steps.affected.outputs.pythonSql == 'true' && steps.reuse.outputs.hit != 'true'
         with:
           enable-cache: false
+      - name: Prepare signed Ubuntu indexes from HTTPS archive mirrors
+        if: needs.source-plan.outputs.engineering == 'true' && steps.reuse.outputs.hit != 'true'
+        timeout-minutes: 5
+        run: |
+          getent ahostsv4 mirrors.edge.kernel.org
+          printf 'https://mirrors.edge.kernel.org/ubuntu/\tpriority:1\nhttps://mirrors.mit.edu/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo apt-get update --error-on=any
       - name: Run affected behavior and real TypeScript checks
         if: needs.source-plan.outputs.engineering == 'true' && steps.reuse.outputs.hit != 'true'
         run: node scripts/source-quality.mjs --phase affected-check

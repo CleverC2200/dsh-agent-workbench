@@ -88,7 +88,11 @@ const bundle = await build({
  ctx.slots.inject('sidebar.workspaces',()=>ctx.slots.register({name:'sidebar.workspaces',children:{'sidebar.workspaces.session.menu.item':{kind:'list',scope:'root'},'sidebar.workspaces.session.row.action':{kind:'list',scope:'root'},'sidebar.session.row.leading':{kind:'single',scope:'root'},'sidebar.session.row.hover':{kind:'list',scope:'root'},'sidebar.workspaces.directoryFlow':{kind:'single',scope:'root'}}},props=><WorkspaceBrowser {...props} {...workspaceProps} t={key=>workspaceCopy[key]??commonCopy[key]??key}/>));
 
  ctx.provide('inputTriggers',{registerSource:()=>()=>{}});ctx.provide('conversation',{input:{for:()=>({})}});
- ctx.provide('remote',{session:{}});ctx.provide('businessAccount',{...source(window.fixtureIdentity??{state:'confirmed',scope:null,status:{authenticated:false}})});
+ ctx.provide('remote',{session:{}});
+ const identityListeners=new Set();let identity=window.fixtureIdentity??{state:'confirmed',scope:null,status:{authenticated:false}};
+ ctx.provide('businessAccount',{getSnapshot:()=>identity,subscribe:fn=>{identityListeners.add(fn);return()=>identityListeners.delete(fn)}});
+ window.changeIdentity=value=>{identity=value;identityListeners.forEach(fn=>fn())};
+ if(window.fixtureCatalog)ctx.provide('businessNavigation',{read:async()=>window.fixtureCatalog});
  mountFramePresentation(ctx,()=>undefined,key=>key,workbench);
  const page={id:'inventory-fc',kind:'local',label:'分仓库存',body:()=> <input aria-label="业务筛选" defaultValue="保留业务筛选"/>};
  workbench.registerFrame(page);
@@ -203,7 +207,14 @@ const bundle = await build({
   ],
 });
 
-async function fixture(t, platform = 'darwin', conversation = false, identity, updates = false) {
+async function fixture(
+  t,
+  platform = 'darwin',
+  conversation = false,
+  identity,
+  updates = false,
+  catalog,
+) {
   const browser = await chromium.launch({
     headless: true,
     channel: process.env.DSH_TEST_BROWSER_CHANNEL,
@@ -320,6 +331,10 @@ async function fixture(t, platform = 'darwin', conversation = false, identity, u
     await page.evaluate((value) => {
       window.fixtureIdentity = value;
     }, identity);
+  if (catalog)
+    await page.evaluate((value) => {
+      window.fixtureCatalog = value;
+    }, catalog);
   if (updates)
     await page.evaluate((mode) => {
       window.fixtureUpdates = true;
@@ -1022,4 +1037,55 @@ test('plugin welcome and workspace heading compose with the native browser', asy
   await expect(page.getByRole('heading', { name: 'AI不止于对话，更融入工作' })).toBeVisible();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   if (proof) await page.screenshot({ path: resolve(proof, 'welcome-workspace-narrow.png') });
+});
+
+test('business menu follows the GEA environment while real unavailable pages remain visible', async (t) => {
+  const identity = {
+    state: 'confirmed',
+    scope: 'menu-test',
+    subject: 'fixture-user',
+    status: { environment: 'test', authenticated: true, user: null },
+  };
+  const catalog = {
+    domains: {
+      kind: 'available',
+      items: [{ value: 'future', text: '未来业务', description: null }],
+    },
+    agents: [
+      {
+        id: 'dealer',
+        agentCode: 'dealer-workbench',
+        agentName: '经销商助手',
+        businessDomain: null,
+      },
+      { id: 'unknown', agentCode: 'future', agentName: '未来功能', businessDomain: 'future' },
+      { id: 'mps', agentCode: 'mps', agentName: 'MPS', businessDomain: null },
+      { id: 'branch', agentCode: 'branch-inventory', agentName: '分仓库存', businessDomain: null },
+    ],
+  };
+  const page = await fixture(t, 'darwin', false, identity, false, catalog);
+  const menu = page.locator('nav.gea-shell-navigation');
+  const dealer = menu.getByRole('button', { name: '经销商经营助手(开发中)', exact: true });
+  const mps = menu.getByRole('button', { name: '主生产计划(MPS)(开发中)', exact: true });
+  await expect(dealer).toBeDisabled();
+  await expect(mps).toBeDisabled();
+  await expect(mps).toHaveAttribute('title', '页面尚未安装或启用');
+  const proof = process.env.SIDEBAR_VERIFY_EVIDENCE;
+  if (proof) await page.screenshot({ path: resolve(proof, 'menu-test.png') });
+  await page.evaluate((value) => window.changeIdentity(value), {
+    ...identity,
+    scope: 'menu-production',
+    status: { ...identity.status, environment: 'production' },
+  });
+  await expect(dealer).toHaveCount(0);
+  await expect(menu.locator('[data-gea-menu-group="customer"]')).toHaveCount(0);
+  await expect(menu.locator('[data-gea-menu-group="domain:future"]')).toHaveCount(0);
+  await expect(menu.locator('[data-gea-menu-group="local-prototypes"]')).toHaveCount(0);
+  await expect(mps).toBeDisabled();
+  await expect(menu.getByRole('button', { name: '分仓库存', exact: true })).toBeEnabled();
+  if (proof) await page.screenshot({ path: resolve(proof, 'menu-production.png') });
+  await page.evaluate((value) => window.changeIdentity(value), identity);
+  await expect(dealer).toBeDisabled();
+  await expect(menu.locator('[data-gea-menu-group="domain:future"]')).toHaveCount(1);
+  await expect(menu.locator('[data-gea-menu-group="local-prototypes"]')).toHaveCount(1);
 });
