@@ -490,7 +490,11 @@ export function addWorkbenchQueries(config) {
     };
     if (/^changes\.cancellation\.partition[01]$/.test(name)) {
       const initialId = id + '.initial';
-      config.queries[initialId] = make(definition.sql, pageSpec, definition.columns);
+      config.queries[initialId] = make(
+        config.queries[id].request.sql,
+        pageSpec,
+        definition.columns,
+      );
       config.queries[id].pagination.initialQuery = initialId;
     }
   }
