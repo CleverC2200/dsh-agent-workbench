@@ -583,3 +583,26 @@ test('a new branch read obtains a fresh batch at five minutes while an active re
   assert.equal((await active.read('fact', {})).rows[0].value, row.batch_id);
   assert.equal(reads, 2);
 });
+
+test('branch summary and rows select the same default cycle and retain custom cycles', async () => {
+  for (const agent of ['fc', 'qll']) {
+    const cfg = JSON.parse(await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'));
+    const query = cfg.queries['replenishment.summary'];
+    const values = { month: '2026-11-01', as_of: '2026-11-02', cycle_days: 7, preparation_days: 3 };
+    assert.equal(
+      dailySummaryQuery(query, snapshot, values).queryId,
+      'snapshot-default.replenishment.summary',
+    );
+    for (const change of [
+      { cycle_days: 5 },
+      { preparation_days: 1 },
+      { fc_cycle_0_level: 'warehouse', fc_cycle_0_object: 'A110' },
+    ]) {
+      assert.equal(
+        dailySummaryQuery(query, snapshot, { ...values, ...change }).queryId,
+        'snapshot.replenishment.summary',
+      );
+    }
+    assert.equal(dailySummaryQuery(query, snapshot, { ...values, as_of: '2026-11-01' }), null);
+  }
+});

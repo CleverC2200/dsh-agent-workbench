@@ -71,14 +71,32 @@ def patch(sql):
         where = select.args.get('where')
         if (where and 'daily_movement' in fields and
                 any(l.is_string and l.this == 'BRANCH_TREE' for l in where.find_all(exp.Literal))):
-            # The same daily batch has exactly one DEFAULT row per warehouse/SKU.
-            # LEFT JOIN retains stock/age rows even when movement is unknown.
-            if not any(t.alias_or_name == 'movement' for t in select.find_all(exp.Table)):
-                select.join("agents_inv_branch_sku_day AS movement", join_type='LEFT',
-                            on="movement.inv_batch_id = m.inv_batch_id AND movement.inv_variant_id = 'BRANCH_DEFAULT' AND movement.warehouseid = m.warehouseid AND movement.sku = m.sku", copy=False)
-                fields['daily_movement'].replace(expression('CAST(movement.rolling_ship_daily AS DECIMAL(38, 7)) AS daily_movement'))
-                changed = True
+            align_branch_snapshot(select)
+            changed = True
     return tree.sql() if changed else sql
+
+def align_branch_snapshot(select):
+    """Drive current stock/movement from the same published grain as branch cards.
+
+    Lot ages remain a separate left join; missing lot rows cannot hide current SKUs.
+    """
+    select.set('joins', [])
+    select.join('agents_inv_branch_sku_day AS age', join_type='LEFT',
+                on="age.inv_batch_id = m.inv_batch_id AND age.inv_variant_id = 'BRANCH_TREE' AND age.warehouseid = m.warehouseid AND age.sku = m.sku", copy=False)
+    for literal in select.args['where'].find_all(exp.Literal):
+        if literal.is_string and literal.this == 'BRANCH_TREE':
+            literal.set('this', 'BRANCH_DEFAULT')
+    current = {'warehouseid', 'belong_base', 'warehouse_name', 'material_code',
+               'material_name', 'product_categ_name', 'material_group_name',
+               'available_qty', 'pack_unit_qty', 'freeze_qty', 'total_qty'}
+    for field in list(select.expressions):
+        if field.alias_or_name == 'daily_movement':
+            field.replace(expression('CAST(m.rolling_ship_daily AS DECIMAL(38, 7)) AS daily_movement'))
+        elif field.alias_or_name not in current:
+            for column in field.find_all(exp.Column):
+                if column.table == 'm':
+                    column.set('table', exp.to_identifier('age'))
+    select.where("m.warehouseid NOT IN ('Y204', 'N436')", append=True, copy=False)
 
 def update(config):
     for query in config['queries'].values():
@@ -118,11 +136,7 @@ def branch_organization(config):
             facts = next(c for c in tree.ctes if c.alias == 'batch_facts')
             facts.set('this', facts.this.expression.copy())
             select = facts.this
-            select.join('agents_inv_branch_sku_day AS movement', join_type='LEFT',
-                        on="movement.inv_batch_id = m.inv_batch_id AND movement.inv_variant_id = 'BRANCH_DEFAULT' AND movement.warehouseid = m.warehouseid AND movement.sku = m.sku", copy=False)
-            for field in select.expressions:
-                if field.alias_or_name == 'daily_movement':
-                    field.replace(expression('CAST(movement.rolling_ship_daily AS DECIMAL(38, 7)) AS daily_movement'))
+            align_branch_snapshot(select)
         else:
             for node in list(tree.find_all(exp.In)):
                 if (node.find_ancestor(exp.Where) and isinstance(node.this, exp.Column)
