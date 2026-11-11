@@ -435,6 +435,21 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         numeric = set('qtysigned adjust_order_qty qtyordered qtyallocated qtyshipped bizunitconvertrate delivery_qty detailstatus live_qty unrestricted_qty is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan last_month_actual_qty current_day_avg_qty act_dl_qty'.split())
         for name, columns in tables.items():
             self.db.execute('CREATE TABLE '+name+' ('+', '.join(field+(' REAL' if field in numeric else ' TEXT') for field in columns.split())+')')
+        # Existing behavioral fixtures describe lot/plan grains. Project a separately
+        # published latest-total view; independent new-source tests cover divergent totals.
+        self.db.execute("""CREATE VIEW agents_scm_warehouse_total_data_d AS
+          SELECT i.warehouseid, i.material_code, MAX(i.warehouse_name) AS warehouse_name,
+          MAX(i.material_name) AS material_name,SUM(i.live_qty) AS live_qty,
+          SUM(i.available_qty) AS available_qty,SUM(i.pack_unit_qty) AS pack_unit_qty,
+          SUM(i.freeze_qty) AS freeze_qty,MAX(p.transfer_prepare_qty+p.transfer_onway_qty) AS warehouse_transfer_qty,
+          MAX(p.transfer_onway_qty) AS transfer_onway_qty,MAX(p.transfer_prepare_qty) AS transfer_prepare_qty
+          FROM agents_scm_inventory_sku_data_d i
+          LEFT JOIN (SELECT warehouseid,material_code,CASE WHEN COUNT(transfer_prepare_qty)=COUNT(*) AND COUNT(DISTINCT transfer_prepare_qty)=1 THEN MAX(transfer_prepare_qty) END AS transfer_prepare_qty,CASE WHEN COUNT(transfer_onway_qty)=COUNT(*) AND COUNT(DISTINCT transfer_onway_qty)=1 THEN MAX(transfer_onway_qty) END AS transfer_onway_qty FROM agents_scm_warehouse_transfer_plan_data_d WHERE stat_month='202610' GROUP BY warehouseid,material_code) p
+          ON p.warehouseid=i.warehouseid AND p.material_code=i.material_code
+          WHERE i.month_date='20261019' AND i.warehouse_classify='20'
+          GROUP BY i.warehouseid,i.material_code""")
+        execution_columns=[r[1] for r in self.db.execute('PRAGMA table_info(agents_scm_execute_detail_d)') if r[1] not in ['adjust_order_qty','delivery_qty']]
+        self.db.execute("CREATE VIEW agents_dwd_scm_execute_detail_mi AS SELECT "+','.join('e.'+c+' AS '+c for c in execution_columns)+",          'ORG' AS organizationid,'OWNER' AS ownerid,          CASE WHEN NULLIF(e.bdwctime,'') IS NOT NULL OR e.prapare_order_status IN ('备单完成','备单完毕') THEN e.qtyallocated/e.bizunitconvertrate ELSE e.qtyordered/e.bizunitconvertrate END AS adjust_order_qty,          e.qtyallocated/e.bizunitconvertrate AS pack_unitqty,e.qtyshipped/e.bizunitconvertrate AS delivery_qty FROM agents_scm_execute_detail_d e")
         self.db.execute('CREATE TABLE agents_scm_asn_detail_d(warehouseid TEXT,warehouse_name TEXT,warehouse_classify TEXT,source_warehouseid TEXT,asnreference1 TEXT,asnno TEXT,asnlineno TEXT,material_code TEXT,header_addtime TEXT,actualarrivetime TEXT,order_close_time TEXT,asnstatus TEXT,lastreceivingtime TEXT,load_time TEXT,expectedqty REAL,receivedqty REAL,asntype TEXT)')
         self.db.execute('CREATE TABLE agents_scm_execute_detail_hourly_d(qtysigned REAL,header_addtime TEXT,order_close_time TEXT,order_type TEXT,material_name TEXT,wms_close_time TEXT,dmscanceltime TEXT,receive_wh TEXT,warehouseid TEXT,material_code TEXT,executeorderno TEXT,executeorderlineno TEXT,fromorderno TEXT,load_time TEXT,qtyordered REAL,qtyallocated REAL,qtyshipped REAL,bizunitconvertrate REAL,packingunitmain TEXT,packingunitconvertrate REAL,detailstatus INTEGER,orderstatus INTEGER,canceltime TEXT,bizflowstatus TEXT,prapare_order_status TEXT)')
         # Establish an independently loaded ASN source without adding demand to WH1.
@@ -467,7 +482,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         values.update(overrides)
         values = {s['name']:values[s['name']] for s in query['parameterSpec'].values()}
         params = validate_parameters(query,values,name)
-        schema={r[0]: {c[1] for c in self.db.execute('PRAGMA table_info('+r[0]+')')} for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        schema={r[0]: {c[1] for c in self.db.execute('PRAGMA table_info('+r[0]+')')} for r in self.db.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
         inspect(query['request']['sql'],params,schema)
         tree = sqlglot.parse_one(query['request']['sql'],read='postgres')
         for cast in list(tree.find_all(sqlglot.exp.Cast)):
