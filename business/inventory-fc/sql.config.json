@@ -5,6 +5,754 @@
   "source": "ai_db",
   "dialect": "GEA PostgreSQL subset",
   "queries": {
+    "snapshot-default.replenishment.summary": {
+      "title": "分仓补货完整范围汇总 日汇总读取",
+      "plugins": ["fc"],
+      "grain": ["warehouse_code", "sku"],
+      "notes": "分仓向基地下单以ASN调拨入库为主体，warehouseid为收货分仓，source_warehouseid关联基地；状态00为未收货、90排除、99完成。按CRM源单号、来源仓、收货分仓和SKU关联基地出库单，出库占用按业务单位转换率换为件；ASN预期及实收原值为件。当前订单为ASN未收货量，基地占用扣除已收货并受当前需求上限约束。缺货按订单剩余需求、基地与SKU共享可用库存计算，按订单创建时间/执行单号/分仓编码稳定先后分配；分仓、SKU、搜索及分页在分配后筛选。缺失或冲突保持未知。 D97：有业务包含当前及次月已发布调拨计划的正值活动；仅判定是否发生业务，不借此换算或填充计划数量；同仓SKU同月重复保持未知。 D120：同仓库/SKU/生产日期/快照先按有符号数量汇总，再对净正批次计算货龄、分段及风险；不跨SKU、仓库或生产日期冲抵。",
+      "activation": "source_candidate_pending_published_fields_and_agent_gea_replay",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "warehouse_code_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p2": {
+          "name": "warehouse_code",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p3": {
+          "name": "sku_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p4": {
+          "name": "sku",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p5": {
+          "name": "category_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p6": {
+          "name": "category",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p7": {
+          "name": "search_pattern",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true,
+          "format": "LIKE pattern; host escapes literal %/_/backslash and surrounds with % for literal contains"
+        },
+        "gea_p2200": {
+          "name": "stat_date",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD",
+          "example": "2026-10-15"
+        },
+        "gea_p2300": {
+          "name": "month",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "required": true,
+          "nullable": false,
+          "example": "2026-10-01"
+        },
+        "gea_p2301": {
+          "name": "days_in_month",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 28,
+          "maximum": 31,
+          "example": 31
+        },
+        "gea_p2000": {
+          "name": "shipment_start",
+          "type": "string",
+          "example": "20260917",
+          "required": true,
+          "nullable": false,
+          "format": "YYYYMMDD"
+        },
+        "gea_p2002": {
+          "name": "shipment_month_start",
+          "type": "string",
+          "example": "20261001",
+          "required": true,
+          "nullable": false,
+          "format": "YYYYMMDD"
+        },
+        "gea_p2001": {
+          "name": "shipment_end_exclusive",
+          "type": "string",
+          "example": "20261017",
+          "required": true,
+          "nullable": false,
+          "format": "YYYYMMDD"
+        },
+        "gea_p2003": {
+          "name": "rolling_start",
+          "type": "string",
+          "example": "20260917",
+          "required": true,
+          "nullable": false,
+          "format": "YYYYMMDD"
+        },
+        "gea_p2303": {
+          "name": "cycle_days",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 365,
+          "example": 7
+        },
+        "gea_p2304": {
+          "name": "preparation_days",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 365,
+          "example": 3
+        },
+        "gea_p2702": {
+          "name": "next_days_in_month",
+          "type": "integer",
+          "minimum": 28,
+          "maximum": 31,
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2800": {
+          "name": "days_remaining_in_month",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30,
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2801": {
+          "name": "as_of",
+          "type": "string",
+          "format": "YYYY-MM-DD",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2900": {
+          "name": "fc_cycle_0_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2901": {
+          "name": "fc_cycle_0_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2902": {
+          "name": "fc_cycle_0_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2903": {
+          "name": "fc_cycle_0_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2904": {
+          "name": "fc_cycle_0_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2905": {
+          "name": "fc_cycle_1_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2906": {
+          "name": "fc_cycle_1_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2907": {
+          "name": "fc_cycle_1_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2908": {
+          "name": "fc_cycle_1_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2909": {
+          "name": "fc_cycle_1_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2910": {
+          "name": "fc_cycle_2_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2911": {
+          "name": "fc_cycle_2_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2912": {
+          "name": "fc_cycle_2_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2913": {
+          "name": "fc_cycle_2_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2914": {
+          "name": "fc_cycle_2_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2915": {
+          "name": "fc_cycle_3_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2916": {
+          "name": "fc_cycle_3_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2917": {
+          "name": "fc_cycle_3_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2918": {
+          "name": "fc_cycle_3_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2919": {
+          "name": "fc_cycle_3_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2920": {
+          "name": "fc_cycle_4_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2921": {
+          "name": "fc_cycle_4_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2922": {
+          "name": "fc_cycle_4_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2923": {
+          "name": "fc_cycle_4_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2924": {
+          "name": "fc_cycle_4_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2925": {
+          "name": "fc_cycle_5_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2926": {
+          "name": "fc_cycle_5_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2927": {
+          "name": "fc_cycle_5_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2928": {
+          "name": "fc_cycle_5_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2929": {
+          "name": "fc_cycle_5_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2930": {
+          "name": "fc_cycle_6_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2931": {
+          "name": "fc_cycle_6_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2932": {
+          "name": "fc_cycle_6_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2933": {
+          "name": "fc_cycle_6_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2934": {
+          "name": "fc_cycle_6_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2935": {
+          "name": "fc_cycle_7_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2936": {
+          "name": "fc_cycle_7_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2937": {
+          "name": "fc_cycle_7_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2938": {
+          "name": "fc_cycle_7_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2939": {
+          "name": "fc_cycle_7_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2940": {
+          "name": "fc_cycle_8_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2941": {
+          "name": "fc_cycle_8_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2942": {
+          "name": "fc_cycle_8_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2943": {
+          "name": "fc_cycle_8_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2944": {
+          "name": "fc_cycle_8_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2945": {
+          "name": "fc_cycle_9_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2946": {
+          "name": "fc_cycle_9_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2947": {
+          "name": "fc_cycle_9_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2948": {
+          "name": "fc_cycle_9_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2949": {
+          "name": "fc_cycle_9_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2950": {
+          "name": "fc_cycle_10_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2951": {
+          "name": "fc_cycle_10_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2952": {
+          "name": "fc_cycle_10_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2953": {
+          "name": "fc_cycle_10_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2954": {
+          "name": "fc_cycle_10_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2955": {
+          "name": "fc_cycle_11_level",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2956": {
+          "name": "fc_cycle_11_object",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2957": {
+          "name": "fc_cycle_11_days",
+          "type": "integer",
+          "nullable": false,
+          "required": true,
+          "minimum": 1,
+          "maximum": 365
+        },
+        "gea_p2958": {
+          "name": "fc_cycle_11_from",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2959": {
+          "name": "fc_cycle_11_to",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p2802": {
+          "name": "fc_cycle_warehouse",
+          "type": "string",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p4200": {
+          "name": "warehouse_search_pattern",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "format": "LIKE pattern; host escapes literal %/_/backslash and surrounds with % for literal contains"
+        },
+        "gea_p3900": {
+          "name": "needed_only",
+          "type": "boolean",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p3901": {
+          "name": "business_only",
+          "type": "boolean",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p3902": {
+          "name": "positive_actual_keys",
+          "type": "array",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p3903": {
+          "name": "positive_plan_keys",
+          "type": "array",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p3904": {
+          "name": "zero_plan_keys",
+          "type": "array",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p3905": {
+          "name": "business_plan_keys",
+          "type": "array",
+          "nullable": false,
+          "required": true
+        },
+        "gea_p3952": {
+          "name": "business_plan_months",
+          "type": "array",
+          "items": "string",
+          "minItems": 1,
+          "maxItems": 2,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p90001": {
+          "name": "summary_batch_id",
+          "type": "string",
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "WITH quick_transfer_activity AS (SELECT m.warehouseid AS warehouse_code, m.sku AS sku, CASE WHEN m.period_current_transfer > 0 OR m.period_next_transfer > 0 THEN 1 ELSE 0 END AS has_business FROM agents_inv_branch_sku_day AS m WHERE (m.inv_batch_id = :gea_p90001 AND m.inv_variant_id = 'BRANCH_DEFAULT') AND (m.warehouseid IS NULL OR NOT m.warehouseid IN ('N436', 'Y204'))), fc_current_orders AS (SELECT c.location_type AS location_type, c.warehouse_code AS warehouseid, c.sku AS material_code, c.demand AS demand_qty, c.allocated AS allocated_qty, c.remaining AS remaining_qty, c.shortage AS shortage_qty, c.invalid AS invalid_sku FROM (SELECT m.snapshot_date AS snapshot_date, m.location_type AS location_type, m.location_code AS location_code, m.location_name AS location_name, m.belong_base AS base, m.warehouseid AS warehouse_code, m.sku AS sku, m.material_name AS material_name, m.category AS category, m.material_group AS material_group, m.shortage_demand AS demand, m.current_allocated AS allocated, m.current_remaining AS remaining, m.current_pool_allocated_qty AS available, m.current_shortage AS shortage, m.current_invalid AS invalid FROM agents_inv_order_summary_day AS m WHERE (m.inv_batch_id = :gea_p90001 AND m.inv_variant_id = 'BRANCH_CUSTOMER_CURRENT') AND (m.warehouseid IS NULL OR NOT m.warehouseid IN ('N436', 'Y204'))) AS c), measured AS (SELECT r.warehouse_code AS warehouse_code, r.sku AS sku, r.warehouse_name AS warehouse_name, r.material_name AS material_name, r.category AS category, r.material_group AS material_group, r.inventory_qty AS inventory_qty, r.available_qty AS available_qty, r.occupied_qty AS occupied_qty, r.frozen_qty AS frozen_qty, r.max_age AS max_age, r.stock_date AS stock_date, r.stock_present AS stock_present, r.plan_present AS plan_present, r.source_rows AS source_rows, r.preparing_present AS preparing_present, r.in_transit_present AS in_transit_present, r.daily_plan AS daily_plan, r.last_month_actual_qty AS last_month_actual_qty, r.current_day_avg_qty AS current_day_avg_qty, r.month_out_plan AS month_out_plan, r.future30_qty AS future30_qty, r.open_transfer_reported_qty AS open_transfer_reported_qty, r.in_transit AS in_transit, r.preparing AS preparing, r.stat_month AS stat_month, r.plan_source AS plan_source, r.warehouse_month_transfer_plan AS warehouse_month_transfer_plan, r.month_ship_positive AS month_ship_positive, r.month_ship_net AS month_ship_net, r.rolling_ship_positive AS rolling_ship_positive, r.rolling_ship_daily AS rolling_ship_daily, r.last_ship_date AS last_ship_date, r.ship_source_rows AS ship_source_rows, r.plan_calculable AS plan_calculable, r.cycle_days AS cycle_days, r.calculation_status AS calculation_status, r.target_inventory_qty AS target_inventory_qty, r.recommended_qty AS recommended_qty, r.urgent AS urgent, r.historical_turnover_days AS historical_turnover_days, r.planned_daily_shipment AS planned_daily_shipment, r.remaining_outbound_qty AS remaining_outbound_qty, r.calculation_daily AS calculation_daily, r.forecast_turnover_days AS forecast_turnover_days, r.target_gap_qty AS target_gap_qty, r.safety_days AS safety_days, r.period_current_out AS period_current_out, r.period_current_transfer AS period_current_transfer, r.period_next_out AS period_next_out, r.period_next_transfer AS period_next_transfer, r.period_current_source AS period_current_source, r.period_next_source AS period_next_source, r.period_plan_status AS period_plan_status, r.current_order_demand AS current_order_demand, r.current_order_allocated AS current_order_allocated, r.current_order_remaining AS current_order_remaining, r.current_order_shortage AS current_order_shortage, r.expected_month_end_qty AS expected_month_end_qty, r.period_remaining_out AS period_remaining_out, r.period_current_daily AS period_current_daily, r.period_next_daily AS period_next_daily, r.calculation_order_remaining AS calculation_order_remaining, CASE WHEN r.available_qty < 0 THEN NULL ELSE r.available_qty - r.calculation_order_remaining END AS order_adjusted_available_qty, r.current_order_shortage AS upstream_shortage_qty FROM (SELECT m.warehouseid AS warehouse_code, m.sku AS sku, m.warehouse_name AS warehouse_name, m.material_name AS material_name, m.category AS category, m.material_group AS material_group, CAST(m.inventory_qty AS DECIMAL(38, 1)) AS inventory_qty, CAST(m.available_qty AS DECIMAL(38, 1)) AS available_qty, CAST(m.occupied_qty AS DECIMAL(38, 1)) AS occupied_qty, CAST(m.frozen_qty AS DECIMAL(38, 1)) AS frozen_qty, CAST(m.max_age AS DECIMAL(31, 0)) AS max_age, CAST(m.stock_date AS DATE) AS stock_date, m.stock_present AS stock_present, m.plan_present AS plan_present, m.source_rows AS source_rows, m.preparing_present AS preparing_present, m.in_transit_present AS in_transit_present, CAST(m.daily_plan AS DECIMAL(38, 0)) AS daily_plan, CAST(m.last_month_actual_qty AS DECIMAL(18, 2)) AS last_month_actual_qty, CAST(m.current_day_avg_qty AS DECIMAL(18, 2)) AS current_day_avg_qty, CAST(m.month_out_plan AS DECIMAL(18, 2)) AS month_out_plan, CAST(m.future30_qty AS DECIMAL(18, 2)) AS future30_qty, CAST(m.open_transfer_reported_qty AS DECIMAL(19, 2)) AS open_transfer_reported_qty, CAST(m.in_transit AS DECIMAL(18, 2)) AS in_transit, CAST(m.preparing AS DECIMAL(18, 2)) AS preparing, m.stat_month AS stat_month, m.plan_source AS plan_source, CAST(m.warehouse_month_transfer_plan AS DECIMAL(20, 6)) AS warehouse_month_transfer_plan, CAST(m.month_ship_positive AS DECIMAL(38, 3)) AS month_ship_positive, CAST(m.month_ship_net AS DECIMAL(38, 3)) AS month_ship_net, CAST(m.rolling_ship_positive AS DECIMAL(38, 3)) AS rolling_ship_positive, CAST(m.rolling_ship_daily AS DECIMAL(38, 7)) AS rolling_ship_daily, m.last_ship_date AS last_ship_date, m.ship_source_rows AS ship_source_rows, m.plan_calculable AS plan_calculable, m.cycle_days AS cycle_days, m.calculation_status AS calculation_status, CAST(m.target_inventory_qty AS DECIMAL(38, 0)) AS target_inventory_qty, CAST(m.recommended_qty AS DECIMAL(38, 0)) AS recommended_qty, m.urgent AS urgent, CAST(m.historical_turnover_days AS DECIMAL(38, 5)) AS historical_turnover_days, CAST(m.planned_daily_shipment AS DECIMAL(28, 0)) AS planned_daily_shipment, CAST(m.remaining_outbound_qty AS DECIMAL(38, 3)) AS remaining_outbound_qty, CAST(m.calculation_daily AS DECIMAL(28, 0)) AS calculation_daily, CAST(m.forecast_turnover_days AS DECIMAL(38, 5)) AS forecast_turnover_days, CAST(m.target_gap_qty AS DECIMAL(38, 0)) AS target_gap_qty, m.safety_days AS safety_days, CAST(m.period_current_out AS DECIMAL(18, 2)) AS period_current_out, CAST(m.period_current_transfer AS DECIMAL(20, 6)) AS period_current_transfer, CAST(m.period_next_out AS DECIMAL(18, 2)) AS period_next_out, CAST(m.period_next_transfer AS DECIMAL(20, 6)) AS period_next_transfer, m.period_current_source AS period_current_source, m.period_next_source AS period_next_source, m.period_plan_status AS period_plan_status, CAST(m.current_order_demand AS DECIMAL(38, 8)) AS current_order_demand, CAST(m.current_order_allocated AS DOUBLE) AS current_order_allocated, CAST(m.current_order_remaining AS DOUBLE) AS current_order_remaining, CAST(m.current_order_shortage AS DOUBLE) AS current_order_shortage, CAST(m.expected_month_end_qty AS DECIMAL(38, 1)) AS expected_month_end_qty, CAST(m.period_remaining_out AS DECIMAL(38, 3)) AS period_remaining_out, CAST(m.period_current_daily AS DECIMAL(28, 0)) AS period_current_daily, CAST(m.period_next_daily AS DECIMAL(28, 0)) AS period_next_daily, m.calculation_order_remaining AS calculation_order_remaining FROM agents_inv_branch_sku_day AS m WHERE ((m.inv_batch_id = :gea_p90001) AND (m.inv_variant_id = 'BRANCH_DEFAULT')) AND (m.warehouseid IS NULL OR NOT m.warehouseid IN ('N436', 'Y204'))) AS r), filtered AS (SELECT r.upstream_shortage_qty AS upstream_shortage_qty, r.warehouse_code AS warehouse_code, r.inventory_qty AS inventory_qty, r.available_qty AS available_qty, r.occupied_qty AS occupied_qty, r.frozen_qty AS frozen_qty, r.stock_present AS stock_present, r.plan_present AS plan_present, r.preparing_present AS preparing_present, r.in_transit_present AS in_transit_present, r.daily_plan AS daily_plan, r.open_transfer_reported_qty AS open_transfer_reported_qty, r.in_transit AS in_transit, r.preparing AS preparing, r.month_ship_positive AS month_ship_positive, r.rolling_ship_positive AS rolling_ship_positive, r.rolling_ship_daily AS rolling_ship_daily, r.plan_calculable AS plan_calculable, r.target_inventory_qty AS target_inventory_qty, r.recommended_qty AS recommended_qty, r.urgent AS urgent, r.remaining_outbound_qty AS remaining_outbound_qty, r.calculation_daily AS calculation_daily, r.target_gap_qty AS target_gap_qty, r.order_adjusted_available_qty AS order_adjusted_available_qty, r.sku AS sku, r.warehouse_name AS warehouse_name, r.material_name AS material_name, r.category AS category, r.material_group AS material_group, r.max_age AS max_age, r.stock_date AS stock_date, r.source_rows AS source_rows, r.last_month_actual_qty AS last_month_actual_qty, r.current_day_avg_qty AS current_day_avg_qty, r.month_out_plan AS month_out_plan, r.future30_qty AS future30_qty, r.stat_month AS stat_month, r.plan_source AS plan_source, r.warehouse_month_transfer_plan AS warehouse_month_transfer_plan, r.month_ship_net AS month_ship_net, r.last_ship_date AS last_ship_date, r.ship_source_rows AS ship_source_rows, r.cycle_days AS cycle_days, r.calculation_status AS calculation_status, r.historical_turnover_days AS historical_turnover_days, r.planned_daily_shipment AS planned_daily_shipment, r.forecast_turnover_days AS forecast_turnover_days, r.safety_days AS safety_days, r.calculation_order_remaining AS calculation_order_remaining FROM measured AS r LEFT JOIN quick_transfer_activity AS quick_transfers ON quick_transfers.warehouse_code = r.warehouse_code AND quick_transfers.sku = r.sku LEFT JOIN fc_current_orders AS quick_orders ON quick_orders.location_type = '分仓' AND quick_orders.warehouseid = r.warehouse_code AND quick_orders.material_code = r.sku WHERE (:gea_p3900 = FALSE OR (r.recommended_qty > 0 AND NOT CONCAT(COALESCE(COALESCE(COALESCE(CAST(LENGTH(r.warehouse_code) AS VARCHAR), ''), ''), ''), ':', COALESCE(COALESCE(COALESCE(r.warehouse_code, ''), ''), ''), COALESCE(COALESCE(COALESCE(r.sku, ''), ''), '')) IN (:gea_p3904)) OR CONCAT(COALESCE(COALESCE(COALESCE(CAST(LENGTH(r.warehouse_code) AS VARCHAR), ''), ''), ''), ':', COALESCE(COALESCE(COALESCE(r.warehouse_code, ''), ''), ''), COALESCE(COALESCE(COALESCE(r.sku, ''), ''), '')) IN (:gea_p3902) OR CONCAT(COALESCE(COALESCE(COALESCE(CAST(LENGTH(r.warehouse_code) AS VARCHAR), ''), ''), ''), ':', COALESCE(COALESCE(COALESCE(r.warehouse_code, ''), ''), ''), COALESCE(COALESCE(COALESCE(r.sku, ''), ''), '')) IN (:gea_p3903)) AND (:gea_p3901 = FALSE OR r.inventory_qty > 0 OR quick_orders.demand_qty > 0 OR quick_orders.shortage_qty > 0 OR r.month_out_plan > 0 OR r.future30_qty > 0 OR r.warehouse_month_transfer_plan > 0 OR quick_transfers.has_business > 0 OR r.rolling_ship_daily > 0 OR CONCAT(COALESCE(COALESCE(COALESCE(CAST(LENGTH(r.warehouse_code) AS VARCHAR), ''), ''), ''), ':', COALESCE(COALESCE(COALESCE(r.warehouse_code, ''), ''), ''), COALESCE(COALESCE(COALESCE(r.sku, ''), ''), '')) IN (:gea_p3905)) AND (:gea_p1 = 'all' OR (:gea_p1 = 'equal' AND r.warehouse_code = :gea_p2) OR (:gea_p1 = 'missing' AND r.warehouse_code IS NULL)) AND (:gea_p4200 IS NULL OR LOWER(r.warehouse_code) LIKE LOWER(:gea_p4200) OR r.warehouse_code IN (SELECT matched.warehouse_code AS warehouse_code FROM measured AS matched WHERE LOWER(matched.warehouse_name) LIKE LOWER(:gea_p4200))) AND (:gea_p3 = 'all' OR (:gea_p3 = 'equal' AND r.sku = :gea_p4) OR (:gea_p3 = 'missing' AND r.sku IS NULL)) AND (:gea_p5 = 'all' OR (:gea_p5 = 'equal' AND r.category = :gea_p6) OR (:gea_p5 = 'missing' AND r.category IS NULL)) AND (:gea_p7 IS NULL OR LOWER(r.sku) LIKE LOWER(:gea_p7) OR LOWER(r.material_name) LIKE LOWER(:gea_p7) OR LOWER(r.warehouse_name) LIKE LOWER(:gea_p7))), parameter_contract AS (SELECT :gea_p2200 AS bind_gea_p2200, :gea_p2300 AS bind_gea_p2300, :gea_p2301 AS bind_gea_p2301, :gea_p2000 AS bind_gea_p2000, :gea_p2002 AS bind_gea_p2002, :gea_p2001 AS bind_gea_p2001, :gea_p2003 AS bind_gea_p2003, :gea_p2303 AS bind_gea_p2303, :gea_p2304 AS bind_gea_p2304, :gea_p2702 AS bind_gea_p2702, :gea_p2800 AS bind_gea_p2800, :gea_p2801 AS bind_gea_p2801, :gea_p2900 AS bind_gea_p2900, :gea_p2901 AS bind_gea_p2901, :gea_p2902 AS bind_gea_p2902, :gea_p2903 AS bind_gea_p2903, :gea_p2904 AS bind_gea_p2904, :gea_p2905 AS bind_gea_p2905, :gea_p2906 AS bind_gea_p2906, :gea_p2907 AS bind_gea_p2907, :gea_p2908 AS bind_gea_p2908, :gea_p2909 AS bind_gea_p2909, :gea_p2910 AS bind_gea_p2910, :gea_p2911 AS bind_gea_p2911, :gea_p2912 AS bind_gea_p2912, :gea_p2913 AS bind_gea_p2913, :gea_p2914 AS bind_gea_p2914, :gea_p2915 AS bind_gea_p2915, :gea_p2916 AS bind_gea_p2916, :gea_p2917 AS bind_gea_p2917, :gea_p2918 AS bind_gea_p2918, :gea_p2919 AS bind_gea_p2919, :gea_p2920 AS bind_gea_p2920, :gea_p2921 AS bind_gea_p2921, :gea_p2922 AS bind_gea_p2922, :gea_p2923 AS bind_gea_p2923, :gea_p2924 AS bind_gea_p2924, :gea_p2925 AS bind_gea_p2925, :gea_p2926 AS bind_gea_p2926, :gea_p2927 AS bind_gea_p2927, :gea_p2928 AS bind_gea_p2928, :gea_p2929 AS bind_gea_p2929, :gea_p2930 AS bind_gea_p2930, :gea_p2931 AS bind_gea_p2931, :gea_p2932 AS bind_gea_p2932, :gea_p2933 AS bind_gea_p2933, :gea_p2934 AS bind_gea_p2934, :gea_p2935 AS bind_gea_p2935, :gea_p2936 AS bind_gea_p2936, :gea_p2937 AS bind_gea_p2937, :gea_p2938 AS bind_gea_p2938, :gea_p2939 AS bind_gea_p2939, :gea_p2940 AS bind_gea_p2940, :gea_p2941 AS bind_gea_p2941, :gea_p2942 AS bind_gea_p2942, :gea_p2943 AS bind_gea_p2943, :gea_p2944 AS bind_gea_p2944, :gea_p2945 AS bind_gea_p2945, :gea_p2946 AS bind_gea_p2946, :gea_p2947 AS bind_gea_p2947, :gea_p2948 AS bind_gea_p2948, :gea_p2949 AS bind_gea_p2949, :gea_p2950 AS bind_gea_p2950, :gea_p2951 AS bind_gea_p2951, :gea_p2952 AS bind_gea_p2952, :gea_p2953 AS bind_gea_p2953, :gea_p2954 AS bind_gea_p2954, :gea_p2955 AS bind_gea_p2955, :gea_p2956 AS bind_gea_p2956, :gea_p2957 AS bind_gea_p2957, :gea_p2958 AS bind_gea_p2958, :gea_p2959 AS bind_gea_p2959, :gea_p2802 AS bind_gea_p2802, CASE WHEN '' IN (:gea_p3952) THEN 1 ELSE 0 END AS bind_gea_p3952) SELECT COUNT(1) AS row_count, COUNT(DISTINCT r.warehouse_code) AS warehouse_count, SUM(r.stock_present) AS stock_count, SUM(r.plan_present) AS plan_count, SUM(CASE WHEN r.stock_present = 1 AND r.plan_present = 0 THEN 1 ELSE 0 END) AS stock_only_count, SUM(r.inventory_qty) AS inventory_qty, SUM(CASE WHEN r.available_qty >= 0 THEN r.available_qty END) AS available_qty, SUM(r.occupied_qty) AS occupied_qty, SUM(r.frozen_qty) AS frozen_qty, SUM(r.preparing) AS known_preparing, SUM(r.preparing_present) AS known_preparing_count, SUM(r.in_transit) AS known_in_transit, SUM(r.in_transit_present) AS known_in_transit_count, SUM(CASE WHEN r.recommended_qty >= 0 THEN r.recommended_qty END) AS recommended_qty, SUM(CASE WHEN r.recommended_qty > 0 THEN 1 ELSE 0 END) AS replenishment_sku_count, SUM(COALESCE(r.urgent, 0)) AS urgent_sku_count, SUM(r.preparing) AS preparing, SUM(r.in_transit) AS in_transit, SUM(r.open_transfer_reported_qty) AS open_transfer_reported_qty, SUM(r.rolling_ship_positive) AS rolling_ship_positive, SUM(r.month_ship_positive) AS month_ship_positive, SUM(r.rolling_ship_daily) AS rolling_ship_daily, SUM(r.plan_calculable) AS plan_calculable_count, SUM(CASE WHEN r.remaining_outbound_qty >= 0 THEN r.remaining_outbound_qty END) AS remaining_outbound_qty, SUM(CASE WHEN r.rolling_ship_daily > 0 AND r.available_qty >= 0 THEN r.available_qty END) / NULLIF(SUM(CASE WHEN r.rolling_ship_daily > 0 AND r.available_qty >= 0 THEN r.rolling_ship_daily END), 0) AS historical_turnover_days, SUM(CASE WHEN r.rolling_ship_daily > 0 THEN 1 ELSE 0 END) AS turnover_count, SUM(CASE WHEN r.plan_calculable = 0 AND r.rolling_ship_daily > 0 THEN 1 ELSE 0 END) AS historical_basis_count, SUM(CASE WHEN r.plan_calculable = 0 AND r.rolling_ship_daily = 0 THEN 1 ELSE 0 END) AS no_demand_count, SUM(CASE WHEN r.target_inventory_qty >= 0 THEN r.target_inventory_qty END) AS target_inventory_qty, SUM(CASE WHEN r.calculation_daily >= 0 THEN r.calculation_daily END) AS calculation_daily, SUM(CASE WHEN r.target_gap_qty >= 0 THEN r.target_gap_qty END) AS target_gap_qty, COUNT(1) - COUNT(CASE WHEN r.recommended_qty >= 0 THEN 1 END) AS missing_calculation_count, SUM(CASE WHEN r.daily_plan >= 0 AND r.inventory_qty >= 0 THEN r.inventory_qty END) / NULLIF(SUM(CASE WHEN r.daily_plan >= 0 AND r.inventory_qty >= 0 THEN r.daily_plan END), 0) AS forecast_turnover_days, SUM(r.recommended_qty) AS known_recommended_qty, COUNT(CASE WHEN r.recommended_qty >= 0 THEN 1 END) AS calculated_sku_count, SUM(CASE WHEN NOT r.order_adjusted_available_qty IS NULL THEN r.order_adjusted_available_qty END) AS order_adjusted_available_qty, SUM(r.order_adjusted_available_qty) AS known_order_adjusted_available_qty, COUNT(1) - COUNT(r.order_adjusted_available_qty) AS missing_order_adjusted_count, SUM(r.target_inventory_qty) AS known_target_inventory_qty, COUNT(1) - COUNT(r.target_inventory_qty) AS missing_target_count, SUM(CASE WHEN NOT r.order_adjusted_available_qty IS NULL AND NOT r.target_inventory_qty IS NULL THEN CAST(r.order_adjusted_available_qty AS DOUBLE) - r.target_inventory_qty ELSE NULL END) AS known_inventory_deviation_qty, SUM(CASE WHEN NOT r.order_adjusted_available_qty IS NULL THEN r.target_inventory_qty ELSE NULL END) AS comparable_target_inventory_qty, SUM(CASE WHEN NOT r.order_adjusted_available_qty IS NULL AND NOT r.target_inventory_qty IS NULL THEN 1 ELSE 0 END) AS comparable_sku_count, SUM(CASE WHEN r.upstream_shortage_qty > 0 THEN 1 ELSE 0 END) AS known_shortage_sku_count FROM filtered AS r",
+        "parameters": {
+          "gea_p1": "all",
+          "gea_p2": null,
+          "gea_p3": "all",
+          "gea_p4": null,
+          "gea_p5": "all",
+          "gea_p6": null,
+          "gea_p7": null,
+          "gea_p2200": "2026-10-15",
+          "gea_p2300": "2026-10-01",
+          "gea_p2301": 31,
+          "gea_p2000": "20260917",
+          "gea_p2002": "20261001",
+          "gea_p2001": "20261017",
+          "gea_p2003": "20260917",
+          "gea_p2303": 7,
+          "gea_p2304": 3,
+          "gea_p2702": 30,
+          "gea_p2800": 5,
+          "gea_p2801": "2026-10-26",
+          "gea_p2900": "",
+          "gea_p2901": "",
+          "gea_p2902": 7,
+          "gea_p2903": "",
+          "gea_p2904": "",
+          "gea_p2905": "",
+          "gea_p2906": "",
+          "gea_p2907": 7,
+          "gea_p2908": "",
+          "gea_p2909": "",
+          "gea_p2910": "",
+          "gea_p2911": "",
+          "gea_p2912": 7,
+          "gea_p2913": "",
+          "gea_p2914": "",
+          "gea_p2915": "",
+          "gea_p2916": "",
+          "gea_p2917": 7,
+          "gea_p2918": "",
+          "gea_p2919": "",
+          "gea_p2920": "",
+          "gea_p2921": "",
+          "gea_p2922": 7,
+          "gea_p2923": "",
+          "gea_p2924": "",
+          "gea_p2925": "",
+          "gea_p2926": "",
+          "gea_p2927": 7,
+          "gea_p2928": "",
+          "gea_p2929": "",
+          "gea_p2930": "",
+          "gea_p2931": "",
+          "gea_p2932": 7,
+          "gea_p2933": "",
+          "gea_p2934": "",
+          "gea_p2935": "",
+          "gea_p2936": "",
+          "gea_p2937": 7,
+          "gea_p2938": "",
+          "gea_p2939": "",
+          "gea_p2940": "",
+          "gea_p2941": "",
+          "gea_p2942": 7,
+          "gea_p2943": "",
+          "gea_p2944": "",
+          "gea_p2945": "",
+          "gea_p2946": "",
+          "gea_p2947": 7,
+          "gea_p2948": "",
+          "gea_p2949": "",
+          "gea_p2950": "",
+          "gea_p2951": "",
+          "gea_p2952": 7,
+          "gea_p2953": "",
+          "gea_p2954": "",
+          "gea_p2955": "",
+          "gea_p2956": "",
+          "gea_p2957": 7,
+          "gea_p2958": "",
+          "gea_p2959": "",
+          "gea_p2802": "",
+          "gea_p4200": null,
+          "gea_p3900": false,
+          "gea_p3901": false,
+          "gea_p3902": [""],
+          "gea_p3903": [""],
+          "gea_p3904": [""],
+          "gea_p3905": [""],
+          "gea_p3952": ["202610", "202611"],
+          "gea_p90001": "UNPUBLISHED_BATCH"
+        },
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "row_count",
+        "warehouse_count",
+        "stock_count",
+        "plan_count",
+        "stock_only_count",
+        "inventory_qty",
+        "available_qty",
+        "occupied_qty",
+        "frozen_qty",
+        "known_preparing",
+        "known_preparing_count",
+        "known_in_transit",
+        "known_in_transit_count",
+        "recommended_qty",
+        "replenishment_sku_count",
+        "urgent_sku_count",
+        "preparing",
+        "in_transit",
+        "open_transfer_reported_qty",
+        "rolling_ship_positive",
+        "month_ship_positive",
+        "rolling_ship_daily",
+        "plan_calculable_count",
+        "remaining_outbound_qty",
+        "historical_turnover_days",
+        "turnover_count",
+        "historical_basis_count",
+        "no_demand_count",
+        "target_inventory_qty",
+        "calculation_daily",
+        "target_gap_qty",
+        "missing_calculation_count",
+        "forecast_turnover_days",
+        "known_recommended_qty",
+        "calculated_sku_count",
+        "order_adjusted_available_qty",
+        "known_order_adjusted_available_qty",
+        "missing_order_adjusted_count",
+        "known_target_inventory_qty",
+        "missing_target_count",
+        "known_inventory_deviation_qty",
+        "comparable_target_inventory_qty",
+        "comparable_sku_count",
+        "known_shortage_sku_count"
+      ]
+    },
     "inventory.detail": {
       "title": "库存与目标明细分页",
       "plugins": ["aqkc", "fc", "qll", "aps"],
@@ -15604,6 +16352,7 @@
       "summaryRoute": {
         "queryId": "snapshot.replenishment.summary",
         "kind": "branch-period",
+        "defaultQueryId": "snapshot-default.replenishment.summary",
         "required": true
       }
     },

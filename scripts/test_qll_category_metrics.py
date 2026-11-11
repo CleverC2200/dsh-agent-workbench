@@ -29,15 +29,15 @@ class QllCategoryMetrics(unittest.TestCase):
         db = sqlite3.connect(':memory:')
         self.addCleanup(db.close)
         db.row_factory = sqlite3.Row
-        columns = sorted({c.name for c in tree.find_all(exp.Column) if c.table in ['m', 'movement']})
+        columns = sorted({c.name for c in tree.find_all(exp.Column) if c.table in ['m', 'age']})
         db.execute('CREATE TABLE agents_inv_branch_sku_day (' + ','.join('"'+c+'"' for c in columns) + ')')
         rows = []
         for sku, inventory, available, daily in [('a',100,60,10), ('b',40,40,0), ('c',20,-1,20)]:
             common = dict(inv_batch_id='batch', stock_date='2026-11-06', warehouseid='A110',
                           belong_base='郑州', sku=sku, material_name=sku, warehouse_name='沈阳分仓')
-            rows += [{**common, 'inv_variant_id':'BRANCH_TREE', 'inventory_qty':inventory,
-                      'available_qty':available, 'daily_movement':999},
-                     {**common, 'inv_variant_id':'BRANCH_DEFAULT', 'rolling_ship_daily':daily}]
+            rows += [{**common, 'inv_variant_id':'BRANCH_TREE', 'inventory_qty':inventory+1000,
+                      'available_qty':available+1000, 'daily_movement':999},
+                     {**common, 'inv_variant_id':'BRANCH_DEFAULT', 'rolling_ship_daily':daily, 'inventory_qty':inventory, 'available_qty':available}]
         db.executemany('INSERT INTO agents_inv_branch_sku_day VALUES (' + ','.join('?' for _ in columns) + ')',
                        [[r.get(c) for c in columns] for r in rows])
         params = dict(query['request']['parameters'])
@@ -107,7 +107,7 @@ class QllCategoryMetrics(unittest.TestCase):
         query = config['queries']['snapshot.category-tree.branch']
         tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
         facts = next(c.this for c in tree.find_all(exp.CTE) if c.alias == 'batch_facts')
-        columns = sorted({c.name for c in facts.find_all(exp.Column) if c.table in ('m','movement')})
+        columns = sorted({c.name for c in facts.find_all(exp.Column) if c.table in ('m','age')})
         db = sqlite3.connect(':memory:')
         self.addCleanup(db.close)
         db.row_factory = sqlite3.Row
@@ -116,10 +116,11 @@ class QllCategoryMetrics(unittest.TestCase):
             dict(inv_batch_id='batch',inv_variant_id='BRANCH_TREE',warehouseid='A',sku='S',inventory_qty=10,daily_movement=999),
             dict(inv_batch_id='batch',inv_variant_id='BRANCH_TREE',warehouseid='B',sku='S',inventory_qty=20,daily_movement=999),
             dict(inv_batch_id='batch',inv_variant_id='BRANCH_TREE',warehouseid='A',sku='unknown',inventory_qty=5,daily_movement=999),
-            dict(inv_batch_id='batch',inv_variant_id='BRANCH_DEFAULT',warehouseid='A',sku='S',rolling_ship_daily=2),
-            dict(inv_batch_id='batch',inv_variant_id='BRANCH_DEFAULT',warehouseid='B',sku='S',rolling_ship_daily=3),
+            dict(inv_batch_id='batch',inv_variant_id='BRANCH_DEFAULT',warehouseid='A',sku='S',inventory_qty=7,rolling_ship_daily=2),
+            dict(inv_batch_id='batch',inv_variant_id='BRANCH_DEFAULT',warehouseid='B',sku='S',inventory_qty=12,rolling_ship_daily=3),
             dict(inv_batch_id='other',inv_variant_id='BRANCH_DEFAULT',warehouseid='A',sku='S',rolling_ship_daily=100),
-            dict(inv_batch_id='batch',inv_variant_id='BRANCH_DEFAULT',warehouseid='C',sku='S',rolling_ship_daily=100),
+            dict(inv_batch_id='batch',inv_variant_id='BRANCH_DEFAULT',warehouseid='C',sku='S',inventory_qty=4,rolling_ship_daily=100),
+            dict(inv_batch_id='batch',inv_variant_id='BRANCH_DEFAULT',warehouseid='A',sku='unknown',inventory_qty=5),
         ]
         db.executemany('INSERT INTO agents_inv_branch_sku_day VALUES ('+','.join('?' for _ in columns)+')',
                        [[('2026-11-04' if c=='stock_date' else row.get(c)) for c in columns] for row in rows])
@@ -127,12 +128,13 @@ class QllCategoryMetrics(unittest.TestCase):
         params[next(k for k,v in query['parameterSpec'].items() if v['name']=='stat_date')]='2026-11-04'
         params={k:(v[0] if isinstance(v,list) and v else v) for k,v in params.items()}
         result=[dict(r) for r in db.execute(facts.sql(dialect='sqlite'),params)]
-        self.assertEqual(len(result),3)
+        self.assertEqual(len(result),4)
         indexed={(r['warehouseid'],r['material_code']):r for r in result}
         self.assertEqual(indexed['A','S']['daily_movement'],2)
         self.assertEqual(indexed['B','S']['daily_movement'],3)
         self.assertIsNone(indexed['A','unknown']['daily_movement'])
-        self.assertEqual(sum(r['total_qty'] for r in result),35)
+        self.assertEqual(sum(r['total_qty'] for r in result),28)
+        self.assertIsNone(indexed['C','S']['weighted_age'])
 
 if __name__ == '__main__':
     unittest.main()
