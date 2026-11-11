@@ -80,3 +80,7 @@ Workbench 持有 Native 审批文档、Inbox、ApiLog、桌面导航、HTML 页�
 ### 看板模型洞察
 
 已授权页面可通过 `insight` 操作调用可选 `PageBusinessGrant.insight`。Workbench 核页面 owner 与 view 权限并传递页面、请求和身份的取消信号；GEA grant 决定可用页面、固定提示词、实际 Consumer 和模型路由。页面只提供当前证据与刷新时间，不指定模型、提示词、凭据或 Consumer。结果是只读展示文本，不发送对话消息，不创建任务，也不修改业务状态。
+
+## 页面请求归属
+
+Native 销售页面的业务请求携带既有页面 owner。GEA Host 通过 `workbenchPages.requestContext(owner)` 取得真实 Session 与页面/身份失效信号，再归集请求材料；客户端自报 Session 不授予归属或权限。页面关闭或身份失效后，该 owner 失效。HTML 页面的业务回调沿其已授权 Session 采集，不使用激活窗口推测归属。

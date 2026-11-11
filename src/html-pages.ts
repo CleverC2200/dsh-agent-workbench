@@ -26,6 +26,7 @@ export interface WorkbenchPages {
   /** Register explicit installed package roots. No capability body or business credentials are read. */
   registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]>;
   packages(): readonly HtmlPackage[];
+  requestContext(owner: string): { sessionId: string; signal: AbortSignal };
   registerBusinessPage(page: BusinessPage, authorize: AuthorizeBusinessPage): () => void;
 }
 
