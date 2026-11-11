@@ -193,6 +193,11 @@ jobs:
         if: steps.affected.outputs.pythonSql == 'true' && steps.reuse.outputs.hit != 'true'
         with:
           enable-cache: false
+      - name: Use Ubuntu HTTPS archives before browser dependency installation
+        if: needs.source-plan.outputs.engineering == 'true' && steps.reuse.outputs.hit != 'true'
+        run: |
+          printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo apt-get update
       - name: Run affected behavior and real TypeScript checks
         if: needs.source-plan.outputs.engineering == 'true' && steps.reuse.outputs.hit != 'true'
         run: node scripts/source-quality.mjs --phase affected-check
