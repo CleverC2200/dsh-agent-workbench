@@ -351,6 +351,13 @@ export class PageRuntime {
         if (owner.page.id === page.id) this.close(owner.token);
     };
   }
+  requestContext(token: string): { sessionId: string; signal: AbortSignal } {
+    const owner = this.assert(token);
+    return {
+      sessionId: owner.session,
+      signal: AbortSignal.any([owner.controller.signal, owner.grant.signal]),
+    };
+  }
   private ownerFor(session: string) {
     return Array.from(this.owners.values()).find((owner) => owner.session === session);
   }
