@@ -1,4 +1,4 @@
-export function openWarningDetail(item, context, onAnalyze) {
+export function openWarningDetail(item, context, onAnalyze, onCloseEvent) {
  const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const read=k=>{try{return JSON.parse(localStorage.getItem(k)||'[]')}catch{return []}};
  const task=item.task;
@@ -16,11 +16,24 @@ export function openWarningDetail(item, context, onAnalyze) {
  ${section('变化趋势',history.length?`<div class="wd-trend">${history.map((h,i)=>`<div><span>${esc(h.at)} · 截止 ${esc(h.cutoff||'—')}</span><strong>${esc(h.value)}</strong><small>${esc(h.status)}</small></div>`).join('')}</div>`:'<p class="wd-empty">暂无历史检测点，接入执行记录后展示指标趋势与风险等级变化。</p>')}
  ${section('分析说明',`<div class="wd-analysis"><b>分析线索 · 待核实</b><p>${esc(item.diagnosis)}</p></div>`)}
  ${section('检测历史',history.length?`<div class="wd-table"><table><thead><tr><th>执行时间 / 数据截止</th><th>指标值</th><th>状态</th><th>执行结果</th></tr></thead><tbody>${history.map(h=>`<tr><td>${esc(h.at)}<small>${esc(h.cutoff||h.at)}</small></td><td>${esc(h.value)}</td><td>${esc(h.status)}</td><td>${esc(h.result)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="wd-empty">暂无可追溯的检测历史。现有汇总风险不补造历史记录。</p>')}
- ${section('恢复条件',grid([['恢复规则',item.rule ? `指标恢复至健康线${({gt:'>',gte:'≥',lt:'<',lte:'≤'})[item.rule.healthyOperator]||'待确认'}${item.rule.healthy}${item.unit}` : '沿用指标库恢复条件，待接入'],['当前恢复结果',item.eventStatus==='已恢复'?'已恢复':'尚无恢复判定记录'],['恢复时间',item.recoveredAt||'—']]))}
+ ${section('恢复条件',grid([['恢复规则',item.rule ? `指标恢复至健康线${({gt:'>',gte:'≥',lt:'<',lte:'≤'})[item.rule.healthyOperator]||'待确认'}${item.rule.healthy}${item.unit}` : '沿用指标库恢复条件，待接入'],['当前恢复结果',item.eventStatus==='已恢复'||item.closedRisk==='已恢复'?'已恢复':item.recoveredAt?'曾恢复':'尚无恢复判定记录'],['恢复时间',item.recoveredAt||'—']]))}
  ${section('飞书通知',(item.notifications||[]).length?`<div class="wd-table"><table><thead><tr><th>接收人 / 时间</th><th>发送状态</th><th>消息回执 / 失败原因</th></tr></thead><tbody>${item.notifications.map(n=>`<tr><td>${esc(n.recipientName)}<small>${esc(n.sentAt||n.at)}</small></td><td>${esc(n.status)}</td><td>${esc(n.messageId||n.error||'等待发送')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="wd-empty">暂无飞书发送记录；仅在配置接收账号并启用后发送。</p>')}
  ${section('来源检测任务',task?grid([['任务名称',task.name],['执行频次',task.frequency],['任务状态',task.enabled?'已启用':'已停用'],['任务说明',task.description]]):'<p class="wd-empty">来自产销协同看板风险汇总，尚未关联自定义检测任务。</p>')}
- </main><footer><button data-close>关闭</button><button class="wd-primary" data-analyze>AI分析</button></footer></aside>`;
+ </main><footer>${onCloseEvent?'<span role="status" data-event-status></span><button data-close-event>关闭预警</button>':''}<button data-close>关闭</button><button class="wd-primary" data-analyze>AI分析</button></footer></aside>`;
  const close=()=>{mask.remove();document.removeEventListener('keydown',key);previous?.focus()};
- const key=e=>{if(e.key==='Escape'){e.preventDefault();close()}if(e.key==='Tab'){const n=[...mask.querySelectorAll('button')];const first=n[0],last=n.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}};
+ const key=e=>{if(e.key==='Escape'){e.preventDefault();close()}if(e.key==='Tab'){const n=[...mask.querySelectorAll('button:not(:disabled)')];const first=n[0],last=n.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}};
+ const closeEvent = mask.querySelector('[data-close-event]');
+ if (closeEvent) closeEvent.onclick = async () => {
+   const status = mask.querySelector('[data-event-status]');
+   closeEvent.disabled = true;
+   status.textContent = '';
+   try {
+     await onCloseEvent();
+     if (mask.isConnected) close();
+   } catch {
+     status.textContent = '关闭失败，请稍后重试';
+     closeEvent.disabled = false;
+   }
+ };
  mask.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);mask.querySelector('[data-analyze]').onclick=()=>{close();onAnalyze()};mask.onclick=e=>{if(e.target===mask)close()};document.body.append(mask);document.addEventListener('keydown',key);mask.querySelector('[data-close]').focus();
 }

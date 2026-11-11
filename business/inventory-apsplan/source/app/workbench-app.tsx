@@ -1,5 +1,6 @@
-import {FocusDeck} from './focus-deck';
-import {combineWarnings,openWarningList} from './detection-record-view.js';
+import { WarningViews, type WarningEvent } from './warning-views';
+import { ActionSuggestionViews } from './action-suggestion-views';
+import {combineWarnings} from './detection-record-view.js';
 import { openWarningDetail } from './warning-detail.js';
 import { openAlertManagement } from './monitor-management.js';
 import './monitor-management.css';
@@ -3038,11 +3039,16 @@ function IntelligentWorkbenchPage({
   const [monitorAlerts, setMonitorAlerts] = useState<any[]>([]);
   useEffect(() => {
     let disposed = false;
-    const refresh = async () => {try { const state=await call('detection',{op:'list'});if(!disposed)setMonitorAlerts(state.events.filter((e:any)=>e.eventStatus!=='已合并').map((e:any)=>({...e,first:new Date(e.first).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}),range:e.rule?`健康 ${({gt:'>',gte:'≥',lt:'<',lte:'≤'} as Record<string,string>)[e.rule.healthyOperator]||'待确认'} ${e.rule.healthy}${e.unit}；严重${e.rule.direction==='higher'?'<':'>'}${e.rule.severe}${e.unit}`:e.range}))); } catch {} };
+    const refresh = async () => {try { const state=await call('detection',{op:'list'});if(!disposed)setMonitorAlerts(state.events.filter((e:any)=>e.eventStatus!=='已合并').map((e:any)=>({...e,first:new Date(e.first).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}),range:e.rule?`健康 ${({gt:'>',gte:'≥',lt:'<',lte:'≤'} as Record<string,string>)[e.rule.healthyOperator]||'待确认'} ${e.rule.healthy}${e.unit}；严重${e.rule.direction==='higher'?'<':'>'}${e.rule.severe}${e.unit}`:e.range}))); } catch {if(!disposed)setMonitorAlerts([])} };
     void refresh(); const timer=setInterval(refresh,5000);window.addEventListener('gea-detection-updated',refresh);
     return ()=>{disposed=true;clearInterval(timer);window.removeEventListener('gea-detection-updated',refresh)};
   }, []);
   const warningEvents = combineWarnings([], monitorAlerts, periodRange);
+  const closedWarningEvents = monitorAlerts
+    .filter((event) => event.eventStatus === '已关闭' || (event.eventStatus === '已恢复' && !event.pendingClose))
+    .sort((a, b) => String(b.closedAt || b.recoveredAt || b.lastChecked || '').localeCompare(
+      String(a.closedAt || a.recoveredAt || a.lastChecked || ''),
+    ));
   const [operationsTab,setOperationsTab]=useState<'warning'|'action'>('warning');
   const [operationsLayout,setOperationsLayout]=useState<'tabs'|'side'>('tabs');
   const showOperations=(tab:'warning'|'action')=>{setOperationsTab(tab);requestAnimationFrame(()=>document.getElementById('intelligent-alerts')?.scrollIntoView({behavior:'smooth',block:'start'}));};
@@ -3414,67 +3420,27 @@ function IntelligentWorkbenchPage({
                 <button aria-haspopup="dialog" onClick={() => manageAlerts()}>预警管理</button>
                 <button aria-haspopup="dialog" onClick={() => manageAlerts(true)}>＋ 新增检测</button>
                 <b>{warningCount}</b>
-                <button aria-haspopup="dialog" onClick={() => {void openWarningList([], {period:periodRange.slice(0,7).replace(/\./g,'-'),cutoff:periodRange.split('—').at(-1)||'—'});}}>
-                  {'查看更多'}
-                  <ArrowRight />
-                </button>
               </div>
             </div>
             <div className="intelligent-alert-panel panel">
               <p className="workflow-section-note">
-                {'展示未关闭预警；已恢复事件等待关闭，历史记录可在预警列表查看。'}
+                {'未关闭预警优先展示，已关闭记录也可查看详情。'}
               </p>
-              <FocusDeck items={warningEvents} listItems={monitorAlerts} onHistory={(item) => openWarningDetail(item, {period:periodLabel,cutoff:periodRange?.split('—').at(-1)||'—'}, () => { void ask(`请分析历史预警：${item.scope}，${item.metric}。请区分事实和待核查原因。`, {scope:item.scope,metric:item.metric,period:periodLabel}).catch(() => setNotice('AI分析暂不可用，请稍后重试')); })} kind="warning" renderCard={(item) => (
-                  <article
-                    key={item.id}
-                    data-context-id={`intelligent-warning-${item.id}`}
-                    data-risk-level={item.level || '预警'} data-context-scope="事件预警"
-                    data-context-label={`${item.scope} · ${item.metric}`}
-                    data-context-summary={`${item.metric}，${item.gap}。AI分析：${item.diagnosis}`}
-                  >
-                    <header>
-                      <span>
-                        <Bell />
-                      </span>
-                      <div>
-                        <small>
-                          {'阈值预警 · '}
-                          {item.range}{item.period ? ` · ${item.period}` : ''}
-                        </small>
-                        <strong>{item.scope}</strong>
-
-                      </div>
-                      <b>{item.eventStatus === '已恢复' ? '已恢复 · 待关闭' : item.level || '预警'}</b>
-                    </header>
-                    <div className="warning-metric-summary">
-                      <div><small>当前指标</small><strong>{item.metric}</strong></div>
-                      <div><small>目标偏差</small><strong>{item.gap}</strong></div>
-                    </div>
-                    <div className="warning-event-meta">
-                      <span>首次触发：{monitorAlerts.find(row => row.id === item.id)?.first || '待接入事件记录'}</span>
-                      <span>数据截止：{monitorAlerts.find(row => row.id === item.id)?.cutoff || periodRange?.split('—').at(-1) || '—'}</span>
-                      <span>预警状态：{monitorAlerts.find(row => row.id === item.id)?.eventStatus || '当前异常'}</span>
-                      <span>关联任务：未关联</span>
-                    </div>
-
-                    <div className="ai-analysis-block warning-analysis-clue">
-                      <p><span>分析线索 · 待核实</span></p>
-                      <p>{item.diagnosis || '本次未返回原因分析，可点击 AI 分析进一步核查。'}</p>
-                    </div>
-                    <div className="warning-rule-summary"><strong>检测规则</strong><span>{item.range} · {item.trend || '首次检测，暂无对比'}</span></div>
-                    <div className="action-buttons">
-                      <button onClick={async (event) => { const button = event.currentTarget; button.disabled = true; try { await call('detection', {op:'close-event',id:item.id}); window.dispatchEvent(new Event('gea-detection-updated')); } catch { setNotice('关闭失败，请稍后重试'); button.disabled = false; } }}>关闭预警</button>
-                      <button onClick={() => openWarningDetail({...item, ...monitorAlerts.find(row => row.id === item.id)}, {period: periodLabel, cutoff: periodRange?.split('—').at(-1) || '—'}, () => { void ask(`请分析预警：${item.scope}，${item.metric}，${item.gap}。统计期间：${periodLabel}；数据范围：${periodRange}；规则：${item.range}；依据：${item.evidence}。${monitorAlerts.some(row => row.id === item.id) ? '本卡片来自定时指标检测。' : ''}请区分事实和待核查原因。`, {scope:item.scope, metric:item.metric, period:periodLabel}).catch(() => setNotice('AI分析暂不可用，请稍后重试')); })}>查看预警详情</button>
-                      <button
-                        className="primary warning-action"
-                        onClick={() => { void ask(`请分析预警：${item.scope}，${item.metric}，${item.gap}。依据：${item.range}；数据证据：${item.evidence}。请核对数据，区分事实与待核查原因。${monitorAlerts.some(row => row.id === item.id) ? '本卡片来自定时指标检测，请核对取数时点。' : ''}`, {scope: item.scope, metric: item.metric, period: periodLabel}).catch(() => setNotice('AI分析暂不可用，请稍后重试')); }}
-                      >
-                        {'AI分析'}
-                        <ArrowRight />
-                      </button>
-                    </div>
-                  </article>
-                )} />
+              <WarningViews items={[...warningEvents, ...closedWarningEvents]} openCount={warningEvents.length} onDetail={(item: WarningEvent) => {
+                openWarningDetail(
+                  item,
+                  { period: periodLabel, cutoff: periodRange.split('—').at(-1) || '—' },
+                  () => {
+                    const prompt = `请分析预警：${item.scope}，${item.metric}，${item.gap || ''}。统计期间：${item.period || periodLabel}；数据截止：${item.cutoff || '—'}；规则：${item.range || '—'}；依据：${item.evidence || '—'}。请区分事实和待核查原因。`;
+                    void ask(prompt, { scope: item.scope, metric: item.metric, period: item.period || periodLabel })
+                      .catch(() => setNotice('AI分析暂不可用，请稍后重试'));
+                  },
+                  warningEvents.some((event) => event.id === item.id) ? async () => {
+                    await call('detection', { op: 'close-event', id: item.id });
+                    window.dispatchEvent(new Event('gea-detection-updated'));
+                  } : undefined,
+                );
+              }} />
             </div>
           </section>
           <section className="intelligent-work-column" id="intelligent-action-panel" role={operationsLayout === 'tabs' ? 'tabpanel' : 'region'} aria-labelledby={operationsLayout === 'tabs' ? 'operations-tab-action' : undefined} aria-label={operationsLayout === 'side' ? '行动建议' : undefined} hidden={operationsLayout === 'tabs' && operationsTab!=='action'} tabIndex={0}>
@@ -3495,7 +3461,7 @@ function IntelligentWorkbenchPage({
               <p className="workflow-section-note">
                 {'严重指标、业务事件和日历任务由AI完成分析并生成可执行方案；模拟示例仅供查看。'}
               </p>
-              <FocusDeck items={actionSuggestions} kind="action" status={(item) => item.id.startsWith('preview-action-') ? '模拟示例' : ({tasked:'已建任务',adopted:'已采纳',dismissed:'不采纳',editing:'调整中'}[decisionStates[item.id]] || '待决策')} renderCard={(item) => {
+              <ActionSuggestionViews items={actionSuggestions} status={(item) => item.id.startsWith('preview-action-') ? '模拟示例' : ({tasked:'已建任务',adopted:'已采纳',dismissed:'不采纳',editing:'调整中'}[decisionStates[item.id]] || '待决策')} renderCard={(item) => {
                   const state = decisionStates[item.id];
                   const isPreview = item.id.startsWith('preview-action-');
                   const calendarDriven = item.trigger === '日历驱动';
