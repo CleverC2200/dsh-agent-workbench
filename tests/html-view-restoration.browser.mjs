@@ -1315,9 +1315,7 @@ for (const boundary of ['Session', 'identity']) {
     await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
     await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
     await expect(frame.locator('.sp-count')).toHaveText(Array(6).fill('0 个单品'));
-    await expect(frame.getByRole('region', { name: '发货本地核对' })).not.toContainText(
-      'old-identity.csv',
-    );
+    await expect(frame.locator('body')).not.toContainText('old-identity.csv');
   });
 }
 

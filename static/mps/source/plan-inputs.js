@@ -91,7 +91,7 @@ export function buildPlanSources(draft, relations, weightRead, productPairs = []
   );
   const issues = [];
   const manual = (draft.resources ?? [])
-    .filter((row) => row.kind === 'tunnel' && row.base !== 'ODM')
+    .filter((row) => row.base !== 'ODM')
     .map((row) => ({ ...row, dailyTons: number(row.dailyTons) }));
   const facts = [
     ...(draft.products ?? []),
@@ -100,7 +100,7 @@ export function buildPlanSources(draft, relations, weightRead, productPairs = []
     ...(draft.planRates ?? []),
     ...(draft.historyAnnual?.periods ?? []).flatMap((period) => period.rows ?? []),
   ];
-  const manualBases = new Set(manual.map((row) => row.base));
+  const manualBases = new Set(manual.filter((row) => row.kind === 'tunnel').map((row) => row.base));
   const groups = new Map();
   for (const row of sources?.tunnels ?? []) {
     if (odmCapacity(row)) continue;
@@ -160,7 +160,12 @@ export function buildPlanSources(draft, relations, weightRead, productPairs = []
       (row) =>
         manualBases.has(row.base) &&
         row.share > 0 &&
-        manual.some((resource) => resource.id === row.resourceId && resource.base === row.base),
+        manual.some(
+          (resource) =>
+            resource.kind === 'tunnel' &&
+            resource.id === row.resourceId &&
+            resource.base === row.base,
+        ),
     )
     .map(({ base, code, resourceId, month }) => ({ base, code, resourceId, month }));
   for (const row of sources?.sku_capacity ?? []) {

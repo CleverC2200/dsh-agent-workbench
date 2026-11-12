@@ -184,6 +184,12 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
       ),
       (row) => row.month,
     );
+    const formingSchedules = plan.resourceSchedules.filter(
+      (row) =>
+        row.kind === 'forming' &&
+        (!filters.month || row.month === filters.month) &&
+        (!filters.base || row.base === filters.base),
+    );
     const lineDetails = new Map(
       (plan.capacityLineDetails ?? []).map((row) => [row.resourceId, row]),
     );
@@ -196,7 +202,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         h(
           'span',
           null,
-          `发货基准月 ${report.referenceMonth}，当前展示 ${month} · 单位：吨。基准月取年度SKU需求，M+1至M+3取本轮拆分，M+4为年度参考。`,
+          `发货基准月 ${report.referenceMonth}，当前展示 ${month} · 单位：吨。基准月取年度SKU需求，M+1至M+3取本轮拆分，M+4为年度参考。RCCP比较内部需求与隧道能力；成型机实际占用单列，完整设备可行性以联合求解及缺项为准。`,
         ),
         h('button', { onClick: () => setRulesOpen(true) }, '口径与规则'),
         h(
@@ -721,7 +727,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
           h(
             'p',
             { className: 'wf-note' },
-            '按物理产线去重。隧道吨位为设备规格，不作为日产能；成型机产能尚未接入。',
+            '按物理隧道去重。隧道吨位为设备规格，不作为日产能。成型机单列实际占用，不与隧道产能相加；缺配置的SKU保留异常。',
           ),
           report.bases
             .filter((base) => !filters.base || filters.base === base)
@@ -765,6 +771,78 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                   : null,
               );
             }),
+        ),
+      ),
+      card(
+        '成型机实际占用',
+        h(
+          react.Fragment,
+          null,
+          h(
+            'p',
+            { className: 'wf-note' },
+            '按基地、SKU、月份的批准分配比例占用成型机。相同产量同时占用隧道和成型机；缺台账或有效分配的记录见分类问题清单。',
+          ),
+          h(
+            'button',
+            {
+              disabled: !active,
+              onClick: () => {
+                const rows = plan.resourceSchedules
+                  .filter((row) => row.kind === 'forming')
+                  .map((row) => ({
+                    月份: row.month,
+                    基地: row.base,
+                    资源编号: row.resourceId,
+                    成型机: row.name,
+                    日产吨数: row.dailyTons,
+                    生产天数: row.days,
+                    月产能吨数: row.capacity,
+                    实际占用吨数: row.scheduledTons,
+                    负荷率: row.load,
+                    缺项: row.missing.join('；'),
+                  }));
+                downloadCsv(
+                  `${draft.month}-成型机实际占用.csv`,
+                  [
+                    '月份',
+                    '基地',
+                    '资源编号',
+                    '成型机',
+                    '日产吨数',
+                    '生产天数',
+                    '月产能吨数',
+                    '实际占用吨数',
+                    '负荷率',
+                    '缺项',
+                  ],
+                  rows,
+                );
+              },
+            },
+            '导出成型机实际占用',
+          ),
+          formingSchedules.length
+            ? table(
+                '成型机实际占用',
+                ['月份', '基地', '成型机', '月产能（吨）', '实际占用（吨）', '负荷率', '缺项'],
+                formingSchedules.map((row) => [
+                  row.month,
+                  row.base,
+                  row.name,
+                  numberText(row.capacity),
+                  numberText(row.scheduledTons),
+                  row.load === null ? '待补' : `${(row.load * 100).toFixed(2)}%`,
+                  row.missing.join('；') || '配置有效',
+                ]),
+              )
+            : h(
+                'p',
+                { role: 'status' },
+                plan.resourceSchedules.some((row) => row.kind === 'forming')
+                  ? '当前筛选范围没有成型机记录，本轮占用结果见其他月份或基地。'
+                  : '已完成其他有效范围求解；当前评估未取得真实成型机台账，涉及正补产的内部SKU保留待补。',
+              ),
         ),
       ),
       card(

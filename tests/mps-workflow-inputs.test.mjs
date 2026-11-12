@@ -4,6 +4,7 @@ import {
   workflowPerformanceInput,
 } from './helpers/mps-workflow-fixture.mjs';
 import assert from 'node:assert/strict';
+import { buildPlanSources } from '../static/mps/source/plan-inputs.js';
 import { build } from 'esbuild';
 import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
 import {
@@ -1102,7 +1103,7 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
     plan.reportIssues
       .filter((row) => row.month === source.month && row.code === code)
       .map((row) => row.kind);
-  assert.deepEqual(categories('A'), ['缺件吨系数']);
+  assert.deepEqual(categories('A'), ['缺件吨系数', '缺成型机配置']);
   assert.deepEqual(categories('B'), ['缺调拨关系']);
   assert.deepEqual(categories('C'), ['缺产线产能']);
   assert.deepEqual(categories('D'), ['下市品产生需求']);
@@ -1123,6 +1124,14 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
   );
   source.resources.push({ id: 'R2', base: '乙', kind: 'tunnel', name: '供方产线', dailyTons: 100 });
   source.resourceAssignments.push({ base: '乙', code: 'B', resourceId: 'R2', share: 1 });
+  source.resources.push(
+    { id: 'FA', base: '甲', kind: 'forming', name: '甲成型机', dailyTons: 100 },
+    { id: 'FB', base: '乙', kind: 'forming', name: '乙成型机', dailyTons: 100 },
+  );
+  source.resourceAssignments.push(
+    { month: source.month, base: '甲', code: 'A', resourceId: 'FA', share: 1 },
+    { month: source.month, base: '乙', code: 'B', resourceId: 'FB', share: 1 },
+  );
   source.unitWeights.push({ base: '乙', code: 'B', tonsPerPiece: 1 });
   relations.sources.transfers[0].transfer_direction = '从乙调拨';
   assert.ok(run().reportIssues.every((row) => row.month !== source.month || row.code !== 'B'));
@@ -1146,6 +1155,12 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
 
 test('组合系列为空但物理隧道有效时保留产能，不进入缺产能报告', () => {
   const source = draft();
+  source.resources = [
+    { id: 'F', base: '甲', kind: 'forming', name: '已批准成型机', dailyTons: 100 },
+  ];
+  source.resourceAssignments = [
+    { month: source.month, base: '甲', code: 'A', resourceId: 'F', share: 1 },
+  ];
   source.constraints.rules = {};
   source.products = [source.products[0]];
   source.report = [source.report[0]];
@@ -1440,4 +1455,45 @@ test('缺基地的真实零事实不污染部分范围基数，原异常仍由�
   assert.equal(result.shipmentScope.issues.length, 0);
   assert.equal(result.shipmentScope.excluded.length, 1);
   assert.ok(result.rows[0].quantity !== null);
+});
+
+test('只配置成型机时保留真实隧道，成型机不会成为替代隧道候选', () => {
+  const source = draft();
+  source.resources = [{ id: 'F', base: '甲', kind: 'forming', name: '成型机', dailyTons: 1 }];
+  source.resourceAssignments = [
+    { month: '2026-12', base: '甲', code: 'A', resourceId: 'F', share: 1 },
+  ];
+  const relations = {
+    sources: {
+      tunnels: [
+        {
+          belong_base: '甲',
+          production_unit: '车间',
+          tunnel_no: '1',
+          standard_daily_output_ton: 5,
+          standard_daily_output_pc: 50,
+        },
+      ],
+      sku_capacity: [
+        {
+          belong_base: '甲',
+          workshop: '车间',
+          tunnel_no: '1',
+          material_code: 'A',
+          standard_daily_output_ton: 5,
+          standard_daily_output_pc: 50,
+        },
+      ],
+      transfers: [],
+    },
+  };
+  const result = buildPlanSources(source, relations, null);
+  assert.ok(result.resources.some((row) => row.id === 'F' && row.kind === 'forming'));
+  assert.ok(result.resources.some((row) => row.kind === 'tunnel'));
+  assert.ok(
+    result.planCandidates.length > 0 &&
+      result.planCandidates.every((row) => row.resourceId !== 'F'),
+  );
+  const input = buildMpsWorkflow(source, relations, null, {});
+  assert.ok(input.resourceLoads.some((row) => row.resourceId === 'F'));
 });
