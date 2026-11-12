@@ -188,6 +188,10 @@
 .intelligent-lifecycle .warning-summary-table thead th:nth-child(6){width:150px;}
 .intelligent-lifecycle .warning-summary-table thead th:nth-child(7){width:275px;}
 .intelligent-lifecycle .warning-summary-table tbody td,.intelligent-lifecycle .warning-summary-table tbody th{padding:12px;line-height:1.7;vertical-align:top;border-bottom:1px solid #edf0f3;overflow-wrap:anywhere;font-weight:400;background:#fff;}
+.am-panel .am-task-table td.am-actions{display:table-cell;vertical-align:middle}
+.am-panel .am-task-table td.am-actions button{vertical-align:middle}
+.am-panel .am-task-table td.am-actions button+button{margin-inline-start:8px}
+@media(max-width:650px){.am-panel .am-task-table td.am-actions button+button{margin-inline-start:5px}}
 .intelligent-lifecycle .warning-summary-table tbody tr{cursor:pointer;}
 .intelligent-lifecycle .warning-summary-table tbody tr.selected>*,.intelligent-lifecycle .warning-summary-table tbody tr:hover>*{background:#f5f7f9;}
 .intelligent-lifecycle .warning-summary-table tbody th{position:sticky;left:0;z-index:1;border-right:1px solid #edf0f3;}
