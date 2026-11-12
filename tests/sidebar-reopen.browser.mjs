@@ -71,7 +71,7 @@ const bundle = await build({
  const noPendingInteraction=new Map();
  if(window.fixtureUpdates){
  const shell=createSettingsShellStore().create();
- ctx.provide('settingsNavigation',{open:id=>shell.actions.openSection(id)});
+ ctx.provide('settingsNavigation',{open:id=>shell.actions.openSection(id)});window.openUpdateSettings=()=>ctx.settingsNavigation.open('company-updates');
  const settings={useStore:useSnapshot(shell),actions:shell.actions,useShortcuts:select=>select([]),useSessions:select=>select(sessionSnapshot),useSessionStatus:()=>noPendingInteraction,
  useOnboardingSteps:select=>select([]),useSections:select=>{React.useSyncExternalStore(fn=>ctx.slots.subscribe('settings.section',fn),()=>ctx.slots.getVersion('settings.section'));return select(ctx.slots.entries('settings.section').map(e=>({id:e.options.id,order:e.options.order??0,label:typeof e.options.label==='function'?e.options.label():e.options.label})))},useConnectionState:select=>select('connected'),
  useDesktopUpdate:select=>select({presentation:{phase:'available',version:'fixture-next-client'},failed:false,opening:false}),openDesktopUpdate:()=>{window.desktopUpdateClicks=(window.desktopUpdateClicks??0)+1},reconnect:()=>{},
@@ -341,6 +341,7 @@ async function fixture(
       const listeners = new Set();
       window.nativeListeners = listeners;
       window.nativeStatus = { phase: 'available', version: '0.1.60' };
+      window.nativeUpdateRequests = [];
       window.dshDesktop = {
         protocolVersion: 1,
         appVersion: async () => '0.1.59',
@@ -350,6 +351,10 @@ async function fixture(
         },
         updates: {
           status: async () => window.nativeStatus,
+          restartUpdate: async (request) => {
+            window.nativeUpdateRequests.push(request);
+            if (window.failNativeUpdate) throw Error('native update unavailable');
+          },
           subscribe: (fn) => {
             listeners.add(fn);
             return () => listeners.delete(fn);
@@ -385,7 +390,7 @@ async function fixture(
   return page;
 }
 
-test('Windows legacy host uses one update entry and reopens status without starting updates', async (t) => {
+test('Windows keeps one native restart-update entry and a reusable status panel', async (t) => {
   const page = await fixture(
     t,
     'win32',
@@ -398,104 +403,81 @@ test('Windows legacy host uses one update entry and reopens status without start
     },
     true,
   );
-  const entry = page.locator('button.gea-update-entry');
+  const entry = page.locator('.gea-update-entry');
   await expect(entry).toHaveCount(1);
+  await expect(entry).toHaveAccessibleName('重启更新');
   await expect(page.locator('.gea-sidebar-update')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '新版本', exact: true })).toHaveCount(0);
   await entry.focus();
   await page.keyboard.press('Enter');
+  await expect
+    .poll(() => page.evaluate(() => window.nativeUpdateRequests))
+    .toEqual([{ kind: 'desktop', version: '0.1.60' }]);
+  assert.equal(await page.evaluate(() => window.companyPrepareClicks ?? 0), 0);
+  assert.equal(await page.evaluate(() => window.pluginUpdateClicks ?? 0), 0);
+  await page.evaluate(() => window.openUpdateSettings());
   const panel = page.getByRole('dialog');
   await expect(panel.getByRole('heading', { name: '客户端', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: '公司插件', exact: true })).toBeVisible();
   await expect(panel).toContainText('0.1.59');
   await expect(panel).toContainText('0.1.60');
-  await expect(panel).toContainText('请先升级客户端，以使用重启更新');
-  for (const button of await panel.getByRole('button', { name: '重启更新', exact: true }).all())
-    await expect(button).toBeDisabled();
-  assert.equal(await page.evaluate(() => window.companyPrepareClicks ?? 0), 0);
-  assert.equal(await page.evaluate(() => window.desktopUpdateClicks ?? 0), 0);
-  assert.equal(await page.evaluate(() => window.pluginUpdateClicks ?? 0), 0);
-  assert.equal(await page.evaluate(() => window.pluginRestartClicks ?? 0), 0);
-  if (process.env.UPDATE_INDICATOR_EVIDENCE)
-    await page.screenshot({
-      path: resolve(process.env.UPDATE_INDICATOR_EVIDENCE, 'unified-panel.png'),
-    });
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
-  await entry.click();
+  await page.evaluate(() => window.openUpdateSettings());
   await expect(panel).toBeVisible();
   assert.equal(await page.evaluate(() => window.nativeListeners.size), 1);
-  assert.equal(await page.evaluate(() => window.desktopUpdateClicks ?? 0), 0);
+  assert.equal(await page.evaluate(() => window.nativeUpdateRequests.length), 1);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '收起侧边栏', exact: true }).click();
   await page.setViewportSize({ width: 960, height: 720 });
   await page.getByRole('button', { name: '展开业务菜单', exact: true }).click();
   await expect(entry).toHaveCount(1);
-  await entry.click();
+  await page.evaluate(() => window.openUpdateSettings());
   await expect(panel).toBeVisible();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 });
 
-test('update panel keeps independent progress and failures and releases observation on unload', async (t) => {
+test('update panel keeps native progress, retries failed takeover and releases observation on unload', async (t) => {
   const page = await fixture(t, 'win32', true, undefined, 'late');
-  const entry = page.locator('button.gea-update-entry');
-  await entry.click();
+  await page.evaluate(() => window.openUpdateSettings());
   const panel = page.getByRole('dialog');
+  const desktop = panel.getByRole('region', { name: '客户端', exact: true });
+  const plugins = panel.getByRole('region', { name: '公司插件', exact: true });
   await page.evaluate(() => {
     window.emitNative({ phase: 'downloading', version: '0.1.60', percent: 47 });
     window.resolveNativeStatus({ phase: 'idle' });
   });
-  await expect(panel.getByRole('progressbar', { name: '客户端', exact: true })).toHaveAttribute(
-    'value',
-    '47',
-  );
-  const download = panel.getByRole('button', { name: '检查客户端更新', exact: true });
-  await expect(download).toBeDisabled();
-  await expect(
-    panel
-      .getByRole('region', { name: '公司插件', exact: true })
-      .getByRole('button', { name: '重启更新', exact: true }),
-  ).toBeDisabled();
+  await expect(desktop.getByRole('progressbar')).toHaveAttribute('value', '47');
+  await expect(desktop.getByRole('button', { name: '检查客户端更新', exact: true })).toBeDisabled();
+  await expect(plugins.getByRole('button', { name: '重启更新', exact: true })).toBeDisabled();
   await page.keyboard.press('Escape');
-  await entry.click();
-  await expect(panel.getByRole('progressbar', { name: '客户端', exact: true })).toHaveAttribute(
-    'value',
-    '47',
-  );
-  assert.equal(await page.evaluate(() => window.desktopUpdateClicks ?? 0), 0);
+  await page.evaluate(() => window.openUpdateSettings());
+  await expect(desktop.getByRole('progressbar')).toHaveAttribute('value', '47');
+  assert.equal(await page.evaluate(() => window.nativeUpdateRequests.length), 0);
   await page.evaluate(() =>
     window.emitNative({ phase: 'error', version: '0.1.60', failure: 'download-network' }),
   );
   await expect(panel.getByRole('alert').filter({ hasText: '下载客户端更新失败' })).toBeVisible();
-  await expect(
-    panel
-      .getByRole('region', { name: '公司插件', exact: true })
-      .getByRole('button', { name: '重启更新', exact: true }),
-  ).toBeDisabled();
-  await page.evaluate(() => window.emitNative({ phase: 'downloading', version: '0.1.60' }));
-  await expect(panel.getByRole('progressbar', { name: '客户端', exact: true })).not.toHaveAttribute(
-    'value',
-  );
+  const retry = desktop.getByRole('button', { name: '重启更新', exact: true });
+  await expect(retry).toBeEnabled();
   await page.evaluate(() => {
-    window.emitNative({ phase: 'ready', version: '0.1.60' });
-    window.pluginFixtureError = true;
+    window.failNativeUpdate = true;
   });
-  await expect(
-    panel.getByRole('alert').filter({ hasText: '暂时无法读取更新状态' }).first(),
-  ).toBeVisible({ timeout: 8000 });
-  await expect(panel).toContainText('请先升级客户端，以使用重启更新');
-  assert.equal(await page.evaluate(() => window.desktopUpdateClicks ?? 0), 0);
+  await retry.click();
+  await expect(panel.getByRole('alert').filter({ hasText: '重启失败，请重试。' })).toBeVisible();
   await page.evaluate(() => {
-    window.pluginFixtureError = false;
+    window.failNativeUpdate = false;
+  });
+  await retry.click();
+  assert.equal(await page.evaluate(() => window.nativeUpdateRequests.length), 2);
+  await page.evaluate(() => {
+    window.emitNative({ phase: 'downloading', version: '0.1.60' });
     window.pluginFixturePhase = 'downloading';
   });
-  await expect(panel.getByText('正在下载', { exact: true }).first()).toBeVisible({ timeout: 8000 });
-  const pluginProgress = panel.getByRole('progressbar').filter({ hasNot: page.locator('[value]') });
-  assert.ok((await pluginProgress.count()) > 0);
-  if (process.env.UPDATE_INDICATOR_EVIDENCE)
-    await page.screenshot({
-      path: resolve(process.env.UPDATE_INDICATOR_EVIDENCE, 'independent-progress.png'),
-    });
+  await expect(desktop.getByRole('progressbar')).not.toHaveAttribute('value');
+  await expect(plugins.getByText('正在下载', { exact: true }).first()).toBeVisible({
+    timeout: 8000,
+  });
+  await expect(plugins.getByRole('progressbar').first()).not.toHaveAttribute('value');
   await page.keyboard.press('Escape');
   await page.evaluate(() => window.disposeUpdates());
   assert.equal(await page.evaluate(() => window.nativeListeners.size), 0);
@@ -505,59 +487,73 @@ test('update panel keeps independent progress and failures and releases observat
   );
 });
 
-test('plugin update observation continues while its panel is closed without inventing progress', async (t) => {
+test('plugin update takeover continues while its panel is closed and exposes no invented percent', async (t) => {
   const page = await fixture(t, 'win32', true, undefined, true);
-  await page.evaluate(() => window.emitNative({ phase: 'idle' }));
-  await page.locator('button.gea-update-entry').click();
+  await page.evaluate(() => {
+    window.emitNative({ phase: 'idle' });
+    window.pluginFixturePhase = 'available';
+    window.openUpdateSettings();
+  });
   const panel = page.getByRole('dialog');
+  const plugins = panel.getByRole('region', { name: '公司插件', exact: true });
+  const update = plugins.getByRole('button', { name: '重启更新', exact: true });
+  await expect(plugins.getByText('有可用更新', { exact: true }).first()).toBeVisible({
+    timeout: 8000,
+  });
+  await expect(update).toBeEnabled({ timeout: 8000 });
+  await update.click();
+  await expect
+    .poll(() => page.evaluate(() => window.nativeUpdateRequests))
+    .toEqual([
+      {
+        kind: 'plugins',
+        plans: [
+          '@cleverc2200/dsh-agent-workbench',
+          'dsh-agent-manage',
+          '@cleverc2200/gea-dsh-prototype',
+        ].map((packageName) => ({ packageName, planId: 'fixture-plan' })),
+      },
+    ]);
+  assert.equal(await page.evaluate(() => window.pluginUpdateClicks ?? 0), 0);
   await page.evaluate(() => {
     window.pluginFixturePhase = 'installing';
   });
-  await expect(panel.getByText('正在安装', { exact: true }).first()).toBeVisible({ timeout: 8000 });
-  await expect(panel.getByRole('progressbar').last()).not.toHaveAttribute('value');
+  await expect(plugins.getByText('正在安装', { exact: true }).first()).toBeVisible({
+    timeout: 8000,
+  });
+  await expect(plugins.getByRole('progressbar').first()).not.toHaveAttribute('value');
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
-  await expect(page.locator('button.gea-update-entry')).toBeFocused();
-  await page.locator('button.gea-update-entry').click();
-  await expect(panel.getByText('正在安装', { exact: true }).first()).toBeVisible();
-  assert.equal(await page.evaluate(() => window.pluginUpdateClicks ?? 0), 0);
+  await page.evaluate(() => window.openUpdateSettings());
+  await expect(plugins.getByText('正在安装', { exact: true }).first()).toBeVisible();
+  assert.equal(await page.evaluate(() => window.nativeUpdateRequests.length), 1);
   await page.evaluate(() => {
     window.pluginFixturePhase = 'pending-restart';
   });
-  await expect(panel.getByRole('button', { name: '重启更新', exact: true })).toBeDisabled({
+  await expect(plugins.getByRole('button', { name: '重启更新', exact: true })).toBeEnabled({
     timeout: 8000,
   });
   await page.setViewportSize({ width: 520, height: 720 });
-  await expect(
-    panel
-      .getByRole('region', { name: '公司插件', exact: true })
-      .getByRole('button', { name: '重启更新', exact: true }),
-  ).toBeVisible();
+  await expect(plugins.getByRole('button', { name: '重启更新', exact: true })).toBeVisible();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-  if (process.env.UPDATE_INDICATOR_EVIDENCE)
-    await page.screenshot({
-      path: resolve(process.env.UPDATE_INDICATOR_EVIDENCE, 'unified-narrow.png'),
-    });
-  await page.keyboard.press('Escape');
-  await expect(panel).toHaveCount(0);
-  const updateEntry = page.locator('button.gea-update-entry');
-  if (!(await updateEntry.isVisible()))
-    await page.getByRole('button', { name: '展开业务菜单', exact: true }).click();
-  await expect(updateEntry).toBeVisible();
 });
 
 for (const mode of ['web', 'version-failed'])
   test('update panel preserves unknown installed client version in ' + mode, async (t) => {
     const page = await fixture(t, 'win32', false, undefined, mode);
-    await page.locator('button.gea-update-entry').click();
+    await page.evaluate(() => window.openUpdateSettings());
     const panel = page.getByRole('dialog');
     const desktop = panel.getByRole('region', { name: '客户端', exact: true });
+    const plugins = panel.getByRole('region', { name: '公司插件', exact: true });
     await expect(desktop).toContainText('未确认');
     await expect(desktop).not.toContainText('0.1.59');
-    if (mode === 'web') await expect(desktop).toContainText('当前浏览器不支持客户端更新');
-    await expect(panel).toContainText('请先升级客户端，以使用重启更新');
-    for (const button of await panel.getByRole('button', { name: '重启更新', exact: true }).all())
-      await expect(button).toBeDisabled();
+    if (mode === 'web') {
+      await expect(desktop).toContainText('当前浏览器不支持客户端更新');
+      await expect(panel).toContainText('插件更新已安装，需要重启应用后生效');
+      await expect(plugins.getByRole('button', { name: '重启更新', exact: true })).toBeDisabled();
+    } else {
+      await expect(plugins.getByRole('button', { name: '重启更新', exact: true })).toBeEnabled();
+    }
   });
 
 test('Test environment badge stays beside the brand subtitle without covering the inbox in either theme', async (t) => {

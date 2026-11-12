@@ -196,7 +196,7 @@ export const salesPlanRejectionMessage = (cause: {
     details.upstreamCode === 'SALES_PLAN_DMS_WRITEBACK_FAILED';
   if (cause.status >= 500 && !dms) return undefined;
   const message = cause.backendMessage.replace(/^GEA_HTTP_\d{3}[：:]\s*/u, '');
-  return businessSafeErrorMessage(dms ? message.replace(/Integer范围/g, '系统允许范围') : message);
+  return dms ? message.trim() || undefined : businessSafeErrorMessage(message);
 };
 
 export const salesPlanConflictErrorKind = (details: unknown): 'conflict' | 'configuration' => {

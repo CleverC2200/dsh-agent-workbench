@@ -29,6 +29,7 @@ const sku=(v)=>({id:'s'+v.id,versionId:v.id,skuCode:'789',productCategName:'Cate
 const access=(v)=>({versionId:v.id,status:v.status,policy:'role-visible-v1',allowedActions:['APPROVE','REJECT'],roleActions:[{role:'region',allowedActions:['APPROVE','REJECT']}],snapshotHash:'a'.repeat(64),approvalRole:'region',roleContractSupported:true});
 const item=(id,kind)=>({kind,planId:planId(id),versionId:'v'+id,label:'组织'+id,period,row:{...versions[planId(id)],versionId:'v'+id,dealerName:'客户'+id},approvalRole:'region',...(kind==='approve'?{row:{...versions[planId(id)],versionId:'v'+id},access:access(versions[planId(id)])}:{})});
 const scenario=new URL(location.href).searchParams.get('scenario');
+const dmsRejection='DMS回写失败: SKU 10003581 确认数量必须为整数，且数量及合计不能超出Integer范围。请核对 payload.confirmQty、当前销售计划的各 SKU 确认数量，以及汇总数量后重新提交。';
 const items=['approve','dms','unknown'].includes(scenario)?[item('1','approve'),item('3','approve')]:['resubmit','channel','signed-out-source'].includes(scenario)?[item('2','resubmit')]:[item('1','approve'),item('2','resubmit')];
 if(['confirmation','stored','correction'].includes(scenario)) { const v=versions[planId('2')]; if(scenario==='correction') v.orderType='Z'; const current=item('2','resubmit'); if(scenario!=='stored') current.pendingValues={'789':scenario==='correction'?'5.000':'3.000'}; items.splice(0,items.length,current); }
 window.actions=[];window.submissions=[];window.outcomes=[];
@@ -38,7 +39,7 @@ const client={
  detail:{invoke:async({planId})=>({currentVersion:versions[planId],skus:skusFor(versions[planId]),versions:[],logs:[],actionContext:access(versions[planId])})},
  versionSkus:{invoke:async({versionId})=>{const v=Object.values(versions).find(v=>v.id===versionId);return skusFor(v)}},
  draft:{invoke:async({planId})=>{const v=versions[planId];return {draft:scenario==='stored'?{planId,versionId:v.id,status:v.status,role:'region',sourceSnapshot:salesPlanDraftSnapshot({...v,versionId:v.id},{currentVersion:v,skus:skusFor(v)}),adjustments:[{skuCode:'789',adjustQty:'1.750'}],remark:''}:null}}},
- action:{invoke:async(request)=>{window.actions.push(request);if(['dms','unknown'].includes(scenario))throw new BackendHttpError({method:'POST',path:'/actions',status:502,body:scenario==='dms'?{error:'GEA_HTTP_502：DMS回写失败: SKU 10003581 确认数量必须为整数，且数量及合计不能超出Integer范围',details:{upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED',retryable:false,requestId:'dms-rejected'}}:{error:'GEA_HTTP_502',details:{}}});if(scenario==='permission')throw new BackendHttpError({method:'POST',path:'/actions',status:403,body:{error:'denied'}});throw Error('fixture-refusal');}},
+ action:{invoke:async(request)=>{window.actions.push(request);if(['dms','unknown'].includes(scenario))throw new BackendHttpError({method:'POST',path:'/actions',status:502,body:scenario==='dms'?{error:'GEA_HTTP_502：'+dmsRejection,details:{upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED',retryable:false,requestId:'dms-rejected'}}:{error:'GEA_HTTP_502',details:{}}});if(scenario==='permission')throw new BackendHttpError({method:'POST',path:'/actions',status:403,body:{error:'denied'}});throw Error('fixture-refusal');}},
  submit:{invoke:async(request)=>{window.submissions.push(request);throw Error('fixture-refusal');}},
 };
 createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDialog items={items} client={client} connected={!['channel','signed-out-source'].includes(scenario)} unavailableReason={query.get('reason')??undefined} t={i18n.t.bind(i18n)} onClose={(pending)=>window.closedPending=pending} onPendingChange={(pending)=>{window.pending=pending}} onSucceeded={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} />);
@@ -286,6 +287,8 @@ for (const scenario of ['dms', 'unknown'])
     await expect.poll(() => page.evaluate(() => window.outcomes.length)).toBe(1);
     if (scenario === 'dms') {
       await expect(dialog.getByText(/DMS回写失败.*10003581.*整数/)).toHaveCount(2);
+      await expect(dialog.getByText(/payload\.confirmQty.*各 SKU 确认数量/)).toHaveCount(2);
+      await expect(dialog.getByText(/错误编号|dms-rejected/)).toHaveCount(0);
       await expect(dialog.getByText(/结果暂时未知/)).toHaveCount(0);
       assert.equal(await page.evaluate(() => window.pending), false);
       if (process.env.GEA_SUBMISSION_EVIDENCE) {

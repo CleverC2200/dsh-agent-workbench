@@ -394,10 +394,8 @@ export function RegionalApprovalResubmitDialog({
               : classifySalesPlanActionError(cause);
           let rejection: string | undefined;
           if (isBackendHttpError(failure.cause)) {
-            const id = reportSalesPlanError('sales-plan-submit', failure.cause);
-            rejection = [salesPlanRejectionMessage(failure.cause), tr('requestReference', { id })]
-              .filter(Boolean)
-              .join(' ');
+            reportSalesPlanError('sales-plan-submit', failure.cause);
+            rejection = salesPlanRejectionMessage(failure.cause);
           }
           next[index] = {
             ...row,
