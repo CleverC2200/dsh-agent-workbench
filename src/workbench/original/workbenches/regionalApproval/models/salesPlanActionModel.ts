@@ -188,11 +188,11 @@ export const salesPlanRejectionMessage = (cause: {
   details?: unknown;
 }): string | undefined => {
   const details = cause.details;
-  const dms =
-    details &&
-    typeof details === 'object' &&
-    'upstreamCode' in details &&
-    details.upstreamCode === 'SALES_PLAN_DMS_WRITEBACK_FAILED';
+  const upstreamCode =
+    details && typeof details === 'object' && 'upstreamCode' in details
+      ? details.upstreamCode
+      : undefined;
+  const dms = upstreamCode === 'SALES_PLAN_DMS_WRITEBACK_FAILED';
   const rejected =
     dms ||
     (details &&
@@ -215,7 +215,9 @@ export const salesPlanRejectionMessage = (cause: {
     .replace(/https?:\/\/[^\s，。；;]+/giu, '')
     .trim();
   if (!message || /^[{[]/u.test(message) || /^GEA_[A-Z0-9_]+$/u.test(message)) return undefined;
-  return dms ? message : businessSafeErrorMessage(message);
+  return rejected && upstreamCode !== 'NOTIFICATION_PAYLOAD_INVALID'
+    ? message
+    : businessSafeErrorMessage(message);
 };
 
 export const salesPlanConflictErrorKind = (details: unknown): 'conflict' | 'configuration' => {

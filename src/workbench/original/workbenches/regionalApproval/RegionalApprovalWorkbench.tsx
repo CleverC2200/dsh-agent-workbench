@@ -2745,7 +2745,7 @@ const RegionalApprovalWorkbench: React.FC<{
         <Button
           type="primary"
           size="small"
-          loading={liveActionKind === 'APPROVE' && liveActionBusy}
+          loading={liveAction !== undefined && liveActionKind === 'APPROVE' && liveActionBusy}
           disabled={
             selectedLiveRows.length === 0 ||
             liveActionPlanId !== undefined ||
