@@ -271,14 +271,19 @@ test('Zhengzhou period comparisons use the same pickup scope as current totals',
 });
 
 test('BI non-short flag preserves all quantities of E2600249820 despite warehouse allocation', () => {
-  const source = [504,608,10,560].map((qty, index) => row('E2600249820', {
-    receive_wh: 'SAME', warehouseid: index === 1 ? '*' : 'FROM',
-    change_order_qty: index === 2 ? 0 : null, dms_last_update_qty: null, need_qty_origin: qty,
-  }));
+  const source = [504, 608, 10, 560].map((qty, index) =>
+    row('E2600249820', {
+      receive_wh: 'SAME',
+      warehouseid: index === 1 ? '*' : 'FROM',
+      change_order_qty: index === 2 ? 0 : null,
+      dms_last_update_qty: null,
+      need_qty_origin: qty,
+    }),
+  );
   const result = read(source, { base: '郑州' });
   assert.equal(result.summary[0].numerator, 10);
   assert.equal(result.summary[0].denominator, 1682);
-  assert.equal(read(source.map(r => ({ ...r, is_short_transfer: '短拨' }))).events.length, 0);
+  assert.equal(read(source.map((r) => ({ ...r, is_short_transfer: '短拨' }))).events.length, 0);
 });
 
 test('BI status scope excludes cancelled details without adding header status or is_stat predicates', () => {
@@ -297,16 +302,22 @@ test('amendment SQL uses BI daily date and short-transfer flag without trace or 
     assert.match(sql, /d.order_close_time>=:gea_p1/);
     assert.match(sql, /requested_qty>=0/);
     assert.match(sql, /COALESCE\(s.dms_last_update_qty,s.need_qty_origin,0\)/);
-    assert.doesNotMatch(sql, /custchangetime|requireddeliverytime|INTERVAL|agents_dim_bas_warehouse_d|agents_scm_order_trace_final_di|order_qty_origin/);
+    assert.doesNotMatch(
+      sql,
+      /custchangetime|requireddeliverytime|INTERVAL|agents_dim_bas_warehouse_d|agents_scm_order_trace_final_di|order_qty_origin/,
+    );
   }
 });
 
 test('order close month includes earlier creations and missing traces without falling back to shipment', () => {
-  const r = read([
-    row('earlier', { header_addtime: '2026-09-20', order_close_time: '2026-10-03' }),
-    row('next', { order_close_time: '2026-11-01' }),
-    row('unclosed', { order_close_time: null, lastshipmenttime: '2026-10-15' }),
-  ], { shipments: [] });
+  const r = read(
+    [
+      row('earlier', { header_addtime: '2026-09-20', order_close_time: '2026-10-03' }),
+      row('next', { order_close_time: '2026-11-01' }),
+      row('unclosed', { order_close_time: null, lastshipmenttime: '2026-10-15' }),
+    ],
+    { shipments: [] },
+  );
   assert.equal(r.events.length, 1);
   assert.equal(r.summary[0].numerator, 2);
   assert.equal(r.summary[0].denominator, 8);
@@ -315,7 +326,10 @@ test('order close month includes earlier creations and missing traces without fa
 
 test('duplicate and outdated transport records cannot multiply or change the BI daily cohort', () => {
   const rows = [row('same'), row('same', { material_code: 'T' })];
-  const shipments = [row('same', { lastshipmenttime: '2026-11-01' }),row('same', { lastshipmenttime: null })];
+  const shipments = [
+    row('same', { lastshipmenttime: '2026-11-01' }),
+    row('same', { lastshipmenttime: null }),
+  ];
   const r = read(rows, { shipments });
   assert.equal(r.lines.length, 2);
   assert.equal(r.summary[0].numerator, 4);
@@ -323,7 +337,11 @@ test('duplicate and outdated transport records cannot multiply or change the BI 
 });
 
 test('unclosed partial shipment stays outside the BI period even if a transport has shipped', () => {
-  assert.equal(read([row('partial', { order_close_time: null, lastshipmenttime: '2026-10-15' })]).events.length, 0);
+  assert.equal(
+    read([row('partial', { order_close_time: null, lastshipmenttime: '2026-10-15' })]).events
+      .length,
+    0,
+  );
 });
 
 test('only reductions reach shared totals, customer drilldown, details and comparison periods', () => {

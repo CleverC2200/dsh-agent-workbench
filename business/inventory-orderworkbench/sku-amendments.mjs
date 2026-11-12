@@ -8,18 +8,15 @@ export const amendmentMetricContract = {
   source: 'agents_scm_execute_detail_d',
   dateField: 'order_close_time',
   dateSource: 'agents_scm_execute_detail_d',
-  dateBasis:
-    'BI统计周期：执行明细日表order_close_time订单关单时间，不关联物流轨迹表',
-  missingDate:
-    '缺order_close_time不能归属统计周期，不用OMS新增、WMS关单或轨迹装车时间替代',
+  dateBasis: 'BI统计周期：执行明细日表order_close_time订单关单时间，不关联物流轨迹表',
+  missingDate: '缺order_close_time不能归属统计周期，不用OMS新增、WMS关单或轨迹装车时间替代',
   countFields: {
     records: '通过时间及业务筛选的明细条数，不是订单张数',
     invalid: '保留集合内关键字段不足的待判定明细条数，不是被剔除的明细条数；本查询未返回剔除数量',
   },
   aggregation: '商品明细数量合计，不按订单张数、SKU种类数或明细条数计率',
   effectiveQuantity: 'COALESCE(dms_last_update_qty,need_qty_origin,0)',
-  numerator:
-    `SUM(${amendmentReductionSql('change_order_qty', 'COALESCE(dms_last_update_qty,need_qty_origin,0)')})`,
+  numerator: `SUM(${amendmentReductionSql('change_order_qty', 'COALESCE(dms_last_update_qty,need_qty_origin,0)')})`,
   denominator: 'SUM(COALESCE(dms_last_update_qty,need_qty_origin,0))',
   denominatorScope: '全部有效明细；客户要求改单量为空或负值的有效量仍保留在分母，三个数量全空剔除',
   lockPeriod: false,
