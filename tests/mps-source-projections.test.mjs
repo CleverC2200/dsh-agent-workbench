@@ -5,7 +5,45 @@ import {
   productProjections,
   sourceCheckRows,
   sourceDimensions,
+  createSourceProductMatcher,
+  sourceProductMappings,
+  productRows,
 } from '../static/mps/source/source-projections.js';
+
+test('同一老品按实际基地唯一匹配，缺基地或同基地多义继续未知', () => {
+  const products = [
+    {
+      material_code: 'N1',
+      target_base: '甲',
+      replacement_material_code: 'OLD',
+      sub_category: '汤圆',
+    },
+    {
+      material_code: 'N2',
+      target_base: '乙',
+      replacement_material_code: 'OLD',
+      sub_category: '面点',
+    },
+  ];
+  const match = createSourceProductMatcher(products);
+  assert.equal(match('OLD', '甲').currentCode, 'N1');
+  assert.equal(match('OLD', '乙').currentCode, 'N2');
+  assert.equal(match('OLD', '').currentCode, '');
+  const conflict = createSourceProductMatcher([
+    ...products,
+    { ...products[0], material_code: 'N3' },
+  ]);
+  assert.equal(conflict('OLD', '甲').currentCode, '');
+  assert.equal(conflict('N1', '甲').currentCode, 'N1');
+  const projection = productRows(products);
+  projection[0]['大类'] = '人工分类';
+  const mapped = sourceProductMappings(projection, products);
+  const businessMatch = createSourceProductMatcher(mapped);
+  assert.equal(businessMatch('OLD', '甲').currentCode, 'N1');
+  assert.equal(businessMatch('OLD', '甲').category, '人工分类');
+  assert.equal(businessMatch('OLD', '乙').currentCode, 'N2');
+  assert.equal(projection[0]['基地'], '');
+});
 
 const row = (code, group = 'G') => ({
   基地: '',
@@ -340,3 +378,44 @@ test(
     assert.equal(JSON.stringify(draft.sourceChecks), before);
   },
 );
+
+test('multi-base source rows keep national groups unique and expose new-product and decimal metadata without conversion', () => {
+  const records = [
+    raw('A', {
+      stat_period: '2026-11',
+      target_base: '郑州',
+      transfer_tag: '新品',
+      net_weight: '8.08000001',
+      weight_unit: 'KG',
+      measure_unit: '件',
+      replace_num: '0.00000000',
+    }),
+    raw('A', {
+      stat_period: '2026-11',
+      target_base: '华东',
+      transfer_tag: '自产',
+      net_weight: '8.08000001',
+      weight_unit: 'KG',
+      measure_unit: '件',
+      replace_num: '0.00000000',
+    }),
+    raw('B', {
+      stat_period: '2026-11',
+      target_base: '华东',
+      transfer_tag: '非新品',
+      net_weight: null,
+      replace_num: null,
+    }),
+  ];
+  const products = [row(''), row('A'), row('B')];
+  const projected = productProjections(products, records);
+  assert.equal(projected[0].display['大类'], '细类');
+  assert.equal(projected[1].display['新品标记'], '部分基地新品');
+  assert.equal(projected[2].display['新品标记'], '非新品');
+  assert.deepEqual(projected[1].targetBases, ['郑州', '华东']);
+  assert.equal(projected[1].sourceDetails.length, 2);
+  assert.equal(projected[1].sourceDetails[0]['净重'], '8.08000001');
+  assert.equal(projected[1].sourceDetails[0]['替换系数'], '0.00000000');
+  assert.equal(projected[2].sourceDetails[0]['净重'], '');
+  assert.equal(projected[2].sourceDetails[0]['替换系数'], '');
+});

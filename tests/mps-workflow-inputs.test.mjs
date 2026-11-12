@@ -6,7 +6,11 @@ import {
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
-import { summarizeEvaluation, planContext } from '../static/mps/source/evaluation-view.js';
+import {
+  summarizeEvaluation,
+  planContext,
+  workflowContextPreview,
+} from '../static/mps/source/evaluation-view.js';
 
 test('产销存汇总保留已知小计、真实零值与缺项，并隔离基地和月份', () => {
   const groups = summarizeEvaluation([
@@ -34,6 +38,166 @@ const compiled = await build({
 const { buildMpsWorkflow } = await import(
   'data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].text).toString('base64')
 );
+
+function partialDemandFixture() {
+  const source = draft();
+  source.month = '2026-11';
+  source.shipment = { cutoff: '2026-10-31' };
+  delete source.categoryDemand;
+  source.report = source.report.map((row) => ({ ...row, 月份: source.month, 月初数量: 150 }));
+  source.sourceChecksRead = { status: 'ready', month: source.month };
+  source.sourceChecks = {
+    periods: ['2026-07', '2026-08', '2026-09'].map((month) => ({
+      month,
+      history: {
+        rows: [
+          { 基地: '甲', 产品编码: 'A', 数量: 100 },
+          { 基地: '乙', 产品编码: 'B', 数量: 1000 },
+        ],
+      },
+      report: {
+        rows: [
+          { 基地: '甲', 产品编码: 'A', 计划数量: 125 },
+          { 基地: '乙', 产品编码: 'B', 计划数量: 1000 },
+        ],
+      },
+    })),
+  };
+  source.historicalIndicatorsRead = { status: 'ready', month: source.month };
+  source.historicalIndicators = {
+    periods: [2023, 2024, 2025].map((year) => ({
+      rows: [7, 8, 9, 10, 11, 12, 13, 14].map((month) => ({
+        维度类型: '基地+大类',
+        基地: '甲',
+        大类: '点心',
+        维度值: '点心',
+        月份: `${year + Math.floor((month - 1) / 12)}-${String(((month - 1) % 12) + 1).padStart(2, '0')}`,
+        月发货数量: 100,
+        上年同期发货数量: 100,
+        上月发货数量: 100,
+        全国维度财年发货数量: 1200,
+        财年: String(year),
+      })),
+    })),
+    annual: {
+      rows: ['2026-11', '2026-12', '2027-01', '2027-02'].map((month) => ({
+        月份: month,
+        大类: '点心',
+        基地: '全国',
+        数量: 100,
+      })),
+    },
+  };
+  const snapshot = {
+    draftId: source.id,
+    month: source.month,
+    shipmentMonth: '2026-10',
+    cutoff: '2026-10-31',
+    status: 'partial',
+    sourceKind: 'business',
+    source: '真实来源测试替身',
+    rows: [
+      { base: '甲', code: 'A', category: '点心', fin: 100, end: 0 },
+      { base: '乙', code: 'B', category: '点心', fin: null, end: null, missingFields: ['prepped'] },
+    ],
+  };
+  return { source, snapshot };
+}
+
+test('待定发货单品隔离后，同范围的基数、提报和历史继续计算并传入后续需求', () => {
+  const { source, snapshot } = partialDemandFixture();
+  const untouched = structuredClone(source);
+  const result = buildMpsWorkflow(source, null, snapshot);
+  assert.deepEqual(
+    result.categoryComputation.rows.map((row) => row.quantity),
+    [110, 100, 100, 100],
+  );
+  assert.equal(result.categoryComputation.shipmentScope.excluded.length, 1);
+  assert.equal(result.categoryComputation.rows[0].coverage, 'partial');
+  assert.equal(result.categoryComputation.bases[0].actual, 300);
+  assert.equal(
+    result.rows.find((row) => row.month === source.month && row.code === 'A').demand,
+    110,
+  );
+  assert.ok(result.rows.every((row) => row.code !== 'B'));
+  assert.equal(result.excludedShipments[0].code, 'B');
+  assert.deepEqual(source, untouched);
+  snapshot.rows[0].fin = 0;
+  assert.equal(buildMpsWorkflow(source, null, snapshot).categoryComputation.rows[0].shipment, 0);
+  snapshot.draftId = 'other-version';
+  assert.equal(buildMpsWorkflow(source, null, snapshot).categoryComputation.rows[0].shipment, null);
+});
+
+test('partial 全国SKU无法裁剪时隔离该SKU全部基地，全待定不生成零需求', () => {
+  const { source, snapshot } = partialDemandFixture();
+  snapshot.rows.push({ base: '甲', code: 'B', category: '点心', fin: 10, end: 0 });
+  for (const period of source.sourceChecks.periods)
+    for (const part of ['history', 'report'])
+      period[part].rows.forEach((row) => {
+        row['基地'] = '';
+      });
+  const result = buildMpsWorkflow(source, null, snapshot).categoryComputation;
+  assert.equal(result.bases[0].actual, 300);
+  assert.equal(result.bases[0].plan, 375);
+  assert.equal(result.shipmentScope.excluded.filter((row) => row.code === 'B').length, 2);
+  assert.ok(result.shipmentScope.excluded.some((issue) => issue.missing.join().includes('缺基地')));
+  assert.equal(source.sourceChecks.periods[0].history.rows[1]['数量'], 1000);
+  snapshot.rows.forEach((row) => {
+    row.fin = null;
+  });
+  assert.ok(
+    buildMpsWorkflow(source, null, snapshot).categoryComputation.rows.every(
+      (row) => row.quantity === null,
+    ),
+  );
+});
+
+test('新版源老品与保留人工关系不一致时，历史参考系数未知而非一', () => {
+  const source = draft();
+  source.products[0]['老品编码'] = 'EDITED-OLD';
+  source.productRaw = [
+    {
+      material_code: 'A',
+      target_base: '甲',
+      replacement_material_code: 'SOURCE-OLD',
+      replace_num: null,
+    },
+  ];
+  source.historyAnnual.periods[0].rows.push({ 基地: '甲', 产品编码: 'EDITED-OLD', 数量: 100 });
+  const row = buildMpsWorkflow(source).rows.find(
+    (row) => row.month === source.month && row.code === 'A',
+  );
+  assert.equal(row.historyReferenceQuantity, 100);
+  assert.equal(row.historyQuantity, null);
+  assert.equal(source.products[0]['老品编码'], 'EDITED-OLD');
+});
+
+test('部分范围求解和对照显式保留范围，完整总量未知而已知小计不丢失', () => {
+  const sample = workflowPerformanceInput(2);
+  sample.draft.shipment = { cutoff: '2026-11-30' };
+  Object.assign(sample.shipment, {
+    cutoff: '2026-11-30',
+    sourceKind: 'business',
+    status: 'partial',
+  });
+  sample.shipment.rows.forEach((row, index) =>
+    Object.assign(row, { fin: index ? null : 10, category: '点心' }),
+  );
+  const result = buildMpsWorkflow(
+    sample.draft,
+    sample.relations,
+    sample.shipment,
+    sample.evaluation,
+  );
+  const context = planContext(result.plan, result.plan.rows, { base: '', month: '' });
+  assert.equal(context.scopeStatus, 'partial');
+  assert.equal(context.excludedShipmentCount, 1);
+  assert.equal(result.summary.requiredProductionTons, null);
+  assert.notEqual(result.summary.knownRequiredProductionTons, null);
+  assert.equal(result.categoryComparisons[0].shipment.count, 1);
+  assert.equal(result.categoryComparisons[0].shipment.excluded, 1);
+  assert.equal(result.plan.capacityReport.scopeStatus, 'partial');
+});
 
 test('ODM占位产能不进入内部资源，明确收货标签形成外部计划，普通SKU继续排产', async () => {
   const sample = workflowPerformanceInput(2);
@@ -1049,4 +1213,231 @@ test('安全天数采用实际读取来源起月与版本，评估月保持独�
     rows.map((row) => row.month),
     ['2026-12', '2027-01', '2027-02'],
   );
+});
+
+test('最新产品源按基地应用替换系数，重复标签不倍增，零与未知分开', () => {
+  const source = draft();
+  source.products[0]['老品编码'] = 'OLD';
+  source.productRaw = [
+    {
+      material_code: 'A',
+      target_base: '甲',
+      replacement_material_code: 'OLD',
+      transfer_tag: '新品',
+      replace_num: '2.00000000',
+    },
+    {
+      material_code: 'A',
+      target_base: '甲',
+      replacement_material_code: 'OLD',
+      transfer_tag: '自产',
+      replace_num: '2.00000000',
+    },
+    {
+      material_code: 'A',
+      target_base: '丙',
+      replacement_material_code: 'OLD',
+      replace_num: '0.00000000',
+    },
+  ];
+  source.historyAnnual.periods[0].rows.push(
+    { 基地: '甲', 产品编码: 'OLD', 数量: 100 },
+    { 基地: '丙', 产品编码: 'OLD', 数量: 20 },
+    { 基地: '丁', 产品编码: 'OLD', 数量: 999 },
+  );
+  const raw = structuredClone(source.historyAnnual);
+  const rows = buildMpsWorkflow(source).rows.filter(
+    (row) => row.month === source.month && row.code === 'A',
+  );
+  assert.equal(rows.length, 3);
+  assert.equal(rows.find((row) => row.base === '甲').historyReferenceQuantity, 100);
+  assert.equal(rows.find((row) => row.base === '甲').historyQuantity, 200);
+  assert.equal(rows.find((row) => row.base === '丙').historyQuantity, 0);
+  assert.equal(rows.find((row) => row.base === '丁').historyQuantity, null);
+  assert.deepEqual(source.historyAnnual, raw);
+  source.productRaw[1].replace_num = '3';
+  const conflict = buildMpsWorkflow(source).rows.find(
+    (row) => row.base === '甲' && row.code === 'A',
+  );
+  assert.equal(conflict.historyQuantity, null);
+  assert.match(conflict.missing.historyQuantity.join(), /系数/);
+});
+
+test('产品净重按基地及计量单位换算吨数，冲突不退回旧系数，人工值优先', async () => {
+  const { productWeightCandidate } = await import('../static/mps/source/unit-weights.js');
+  const { resolveWeightPairs } = await import('../static/mps/source/plan-inputs.js');
+  const raw = (extra = {}) => ({
+    material_code: 'A',
+    target_base: '四川',
+    net_weight: '8.08000001',
+    weight_unit: 'KG',
+    measure_unit: '件',
+    ...extra,
+  });
+  assert.equal(productWeightCandidate([raw()], '西南', 'A').tonsPerPiece, 0.00808000001);
+  assert.equal(
+    productWeightCandidate([raw({ net_weight: '8080', weight_unit: 'g' })], '西南', 'A')
+      .tonsPerPiece,
+    0.00808,
+  );
+  assert.equal(
+    productWeightCandidate([raw({ net_weight: '1', weight_unit: '吨' })], '西南', 'A').tonsPerPiece,
+    1,
+  );
+  for (const extra of [
+    { net_weight: '0' },
+    { net_weight: null },
+    { weight_unit: 'LB' },
+    { measure_unit: null },
+  ])
+    assert.equal(productWeightCandidate([raw(extra)], '西南', 'A').tonsPerPiece, null);
+  assert.equal(
+    productWeightCandidate([raw(), raw({ net_weight: '9' })], '西南', 'A').tonsPerPiece,
+    null,
+  );
+  assert.equal(
+    productWeightCandidate([raw(), raw({ measure_unit: '袋' })], '西南', 'A').tonsPerPiece,
+    null,
+  );
+  assert.equal(productWeightCandidate([raw()], '郑州', 'A'), null);
+  const pairs = [
+    { base: '西南', code: 'A' },
+    { base: '郑州', code: 'A' },
+  ];
+  const old = { rows: [{ material_code: 'A', channel_name: '经销商', ton_per_piece: 0.1 }] };
+  const resolved = resolveWeightPairs([], pairs, old, [raw(), raw()]);
+  assert.deepEqual(
+    resolved.weights.map((row) => row.tonsPerPiece),
+    [0.00808000001, 0.1],
+  );
+  const unknown = resolveWeightPairs([], [pairs[0]], old, [raw({ net_weight: null })]);
+  assert.equal(unknown.weights.length, 0);
+  assert.equal(unknown.issues[0].sourceTable, 'ai_db.agents_dim_product_list_mi');
+  const manual = resolveWeightPairs([{ ...pairs[0], tonsPerPiece: 0.2 }], pairs, old, [
+    raw({ net_weight: null }),
+  ]);
+  assert.deepEqual(
+    manual.weights.map((row) => row.tonsPerPiece),
+    [0.2, 0.1],
+  );
+});
+
+test('产品净重同时进入实际排产和年度吨数报告，不依赖旧渠道取数成功', () => {
+  const sample = workflowPerformanceInput(2);
+  sample.draft.unitWeights = [];
+  sample.draft.productRaw = ['0', '1'].map((code) => ({
+    material_code: code,
+    target_base: '甲',
+    net_weight: code === '0' ? '10' : '20',
+    weight_unit: 'KG',
+    measure_unit: '件',
+  }));
+  const result = buildMpsWorkflow(sample.draft, null, sample.shipment, {
+    weights: null,
+    annual: { rows: [{ month: sample.draft.month, base: '甲', code: '0', quantity: 100 }] },
+  });
+  const row = result.plan.rows.find((row) => row.code === '0' && row.month === sample.draft.month);
+  assert.equal(row.demand, 50);
+  assert.equal(row.demandTons, 0.5);
+  assert.ok(Math.abs(row.mainPlan - 50) < 1e-8);
+  assert.equal(
+    result.plan.capacityReport.annualTotals.find(
+      (row) => row.base === '全国' && row.month === sample.draft.month,
+    ).demand.value,
+    1,
+  );
+});
+
+test('新版产品源缺目标基地或只有另一基地系数时，不能落回旧版默认系数一', () => {
+  for (const base of ['', '甲']) {
+    const source = draft();
+    source.products[0]['基地'] = base;
+    source.products[0]['老品编码'] = 'OLD';
+    source.historyAnnual.periods[0].rows.push({ 基地: '甲', 产品编码: 'OLD', 数量: 100 });
+    for (const target_base of ['', '乙']) {
+      source.productRaw = [
+        { material_code: 'A', replacement_material_code: 'OLD', target_base, replace_num: '2' },
+      ];
+      const row = buildMpsWorkflow(source).rows.find(
+        (row) => row.base === '甲' && row.code === 'A',
+      );
+      assert.equal(row.historyReferenceQuantity, 100);
+      assert.equal(row.historyQuantity, null);
+      assert.match(row.missing.historyQuantity.join(), /系数/);
+    }
+  }
+});
+
+test('缺基地历史SKU单列后其它SKU继续，合法全国基数和源记录保留', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.historyAnnualRead = { status: 'ready' };
+  source.historyAnnual.periods[0].rows.push({ 基地: '', 产品编码: 'B', 数量: 50 });
+  for (const period of source.sourceChecks.periods) period.history.rows[0]['基地'] = '';
+  const before = structuredClone(source);
+  const result = buildMpsWorkflow(source, null, snapshot);
+  assert.deepEqual(source, before);
+  assert.equal(result.categoryComputation.bases[0].actual, 300);
+  assert.ok(
+    result.rows
+      .filter((row) => row.month === source.month)
+      .every((row) => row.code === 'A' && row.demand !== null),
+  );
+  assert.ok(
+    result.excludedShipments
+      .find((row) => row.code === 'B')
+      .missing.some((reason) => reason.includes('上一财年发货')),
+  );
+  assert.equal(result.excludedSources.filter((row) => row.code === 'B').length, 0);
+});
+
+test('大型加工结果只投影有条数的上下文预览，计算结果和导出输入不变', () => {
+  const context = {
+    missing: Array.from({ length: 12000 }, (_, id) => ({ id, reason: '缺项'.repeat(500) })),
+    constraints: {
+      weights: Array.from({ length: 6000 }, () => ({ base: '甲', code: 'A', value: 1 })),
+    },
+  };
+  const before = structuredClone(context);
+  const preview = workflowContextPreview(context);
+  assert.equal(preview.missingTotal, 12000);
+  assert.equal(preview.constraints.weightsTotal, 6000);
+  assert.equal(preview.missing.length, 10);
+  assert.ok(JSON.stringify(preview).length < 100000);
+  assert.deepEqual(context, before);
+});
+
+test('无关缓存财年与提报月份不改变当前参与范围', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.historyAnnualRead = { status: 'ready' };
+  source.historyAnnual.periods.push({
+    start: '2023-07-01',
+    end: '2024-06-30',
+    rows: [{ 基地: '', 产品编码: 'A', 数量: 50 }],
+  });
+  source.planRatesRead = { status: 'ready', month: source.month };
+  source.planRates = [
+    { 月份: '2026-10', 维度类型: '基地+产品', 基地: '', 产品编码: 'A', 当前维度计划量: 50 },
+  ];
+  const result = buildMpsWorkflow(source, null, snapshot);
+  assert.ok(!result.excludedShipments.some((row) => row.code === 'A'));
+  assert.ok(
+    result.rows.some(
+      (row) => row.code === 'A' && row.month === source.month && row.demand !== null,
+    ),
+  );
+});
+
+test('缺基地的真实零事实不污染部分范围基数，原异常仍由来源校验', () => {
+  const { source, snapshot } = partialDemandFixture();
+  snapshot.rows.push({ base: '甲', code: 'B', category: '点心', fin: 10, end: 0 });
+  for (const period of source.sourceChecks.periods) {
+    Object.assign(period.history.rows[1], { 基地: '', 数量: 0 });
+    Object.assign(period.report.rows[1], { 基地: '', 计划数量: 0 });
+  }
+  const result = buildMpsWorkflow(source, null, snapshot).categoryComputation;
+  assert.equal(result.bases[0].actual, 300);
+  assert.equal(result.bases[0].plan, 375);
+  assert.equal(result.shipmentScope.issues.length, 0);
+  assert.equal(result.shipmentScope.excluded.length, 1);
+  assert.ok(result.rows[0].quantity !== null);
 });

@@ -1,7 +1,15 @@
 import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
 
 export function latestTransferSnapshot(rows) {
-  if (rows.some((row) => !/^\d{4}-(0[1-9]|1[0-2])$/.test(row.stat_period)))
+  const periods = [...new Set(rows.map((row) => row.stat_period))];
+  if (
+    periods.some((period) => {
+      if (/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return false;
+      if (typeof period !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(period)) return true;
+      const date = new Date(period + 'T00:00:00Z');
+      return !Number.isFinite(date.valueOf()) || date.toISOString().slice(0, 10) !== period;
+    })
+  )
     throw Error('调拨关系来源日期无效');
   const period = rows.reduce(
     (latest, row) => (row.stat_period > latest ? row.stat_period : latest),

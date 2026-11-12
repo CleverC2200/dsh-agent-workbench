@@ -265,3 +265,16 @@ test('预测按产品物料编码对应当前产品明细，大类系列和物�
   assert.equal(row['物料组'], '102007');
   assert.equal(row['数量'], 0);
 });
+
+test('category history covers the recent window and all four demand months across the year boundary', () => {
+  assert.deepEqual(sourceTableParameters('category-history', '2025-11').months, [
+    '202507',
+    '202508',
+    '202509',
+    '202510',
+    '202511',
+    '202512',
+    '202601',
+    '202602',
+  ]);
+});

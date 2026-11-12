@@ -1,4 +1,5 @@
 import { createBatchEdit } from './batch-edit.js';
+import { createShipmentScopeNotice } from './category-demand-view.js';
 import { createProcessedDemand } from './processed-demand-view.js';
 import {
   createInventoryTargetPanel,
@@ -9,8 +10,12 @@ import { createConstraintPanel } from './constraint-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
 import { call } from '../../../business/shared/channel.js';
-import { readUnitWeights, unitWeightCandidate } from './unit-weights.js';
-import { createEvaluationOverview, planContext } from './evaluation-view.js';
+import { readUnitWeights, unitWeightCandidate, productWeightCandidate } from './unit-weights.js';
+import {
+  createEvaluationOverview,
+  planContext,
+  workflowContextPreview,
+} from './evaluation-view.js';
 import { readPlanRelations } from './relations.js';
 import { computeWorkflow } from './workflow-worker-client.js';
 import { readCapacityAnnual } from './master-data.js';
@@ -97,6 +102,7 @@ const sourceText = '①大类需求；②月末结存；③两路占比；④源
 
 export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts, Dialog }) {
   const h = react.createElement;
+  const ShipmentScopeNotice = createShipmentScopeNotice(react, { downloadCsv });
   const { useBatchEdit, Actions, Field } = createBatchEdit(react);
   const NumberInput = ({ batch, label, value, commit, max }) =>
     h(Field, {
@@ -426,7 +432,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
     useMpsPart(
       react,
       step,
-      {
+      workflowContextPreview({
+        preview: '上下文最多展示每组10条及完整条数，完整数据见页面和下载',
         evaluation: result.context,
         months: result.months,
         shipmentMonth: result.shipmentMonth,
@@ -447,6 +454,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         adjustments: draft.adjustments,
         adjustmentIssues: result.adjustmentIssues ?? [],
         excludedCategoryDemand: result.excludedCategoryDemand ?? [],
+        excludedShipments: result.excludedShipments ?? [],
+        partial: result.partial,
         missing: planning ? undefined : result.missing,
         businessSave: 'not-connected',
         plan: currentEvaluation
@@ -456,7 +465,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
               ...planContext(currentEvaluation.result.plan, visible, { base, month }),
             }
           : null,
-      },
+      }),
       titles[step],
     );
     const table = (name, columns, rows, renderDetail) =>
@@ -675,6 +684,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         ...new Set([
           '评估版本',
           '评估月份',
+          '计算范围',
           '粒度',
           '相对月份',
           ...identityColumns.map(([, label]) => label),
@@ -683,6 +693,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           ...layerQuantityColumns,
           '分层缺项',
           '历史参考物料编码',
+          '历史源数量',
+          '替换系数',
           '历史参考口径',
           '公式说明',
           ...inventoryDependencyColumns,
@@ -736,6 +748,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         return {
           评估版本: draft.name,
           评估月份: draft.month,
+          计算范围: result.partial ? '部分可计算，待定单品已单列异常' : '当前参与范围',
           相对月份: `M+${result.months.indexOf(row.month) + 1}`,
           粒度: includeCategory ? '基地×物料组×SKU' : '需求推导产销存参考',
           ...Object.fromEntries(identityColumns.map(([key, label]) => [label, row[key]])),
@@ -746,7 +759,13 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           ),
           分层缺项: row.layerMissing?.join('；'),
           历史参考物料编码: row.historyCode || row.code,
-          历史参考口径: row.historyCode ? '沿用老品历史' : '自身历史',
+          历史源数量: row.historyReferenceQuantity,
+          替换系数: row.historyCode
+            ? row.historyFactor === undefined
+              ? 1
+              : row.historyFactor
+            : '',
+          历史参考口径: row.historyCode ? '同基地老品历史量×替换系数' : '自身历史',
           公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
           ...inventoryDependencyFields(row),
           系统SKU需求: row.systemDemand,
@@ -796,6 +815,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           return {
             评估版本: draft.name,
             评估月份: draft.month,
+            计算范围: result.partial ? '部分可计算，待定单品已排除' : '当前参与范围',
             相对月份: `M+${result.months.indexOf(row.month) + 1}`,
             粒度: row.month === result.months[3] ? 'M+4大类，仅供库存参考' : '大类',
             月份: row.month,
@@ -805,8 +825,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
             大类调整状态: row.adjusted ? '人工调整' : '系统值',
             本月预估发货: compare?.shipment.quantity,
             本月预估发货已知小计: compare?.shipment.knownQuantity,
-            本月预估发货完整性:
-              compare?.shipment.quantity != null
+            本月预估发货完整性: compare?.shipment.excluded
+              ? '当前参与范围，另有单品已排除'
+              : compare?.shipment.quantity != null
                 ? '完整'
                 : compare?.shipment.knownQuantity != null
                   ? '已知小计'
@@ -851,6 +872,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
             评估版本: draft.name,
             评估月份: draft.month,
             粒度: '全版本汇总，需求推导参考',
+            计算范围: result.partial ? '部分可计算，完整范围总量未知' : '当前参与范围',
             已知生产吨数小计: result.summary.knownRequiredProductionTons,
             完整生产吨数: result.summary.requiredProductionTons,
             已评估行数: result.summary.evaluatedRows,
@@ -1073,8 +1095,19 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           .map((row) => [JSON.stringify([row.base, row.code]), row]),
       ).values(),
     ];
+    const weightProductRows = new Map();
+    for (const row of draft.productRaw ?? []) {
+      const rows = weightProductRows.get(row.material_code) ?? [];
+      rows.push(row);
+      weightProductRows.set(row.material_code, rows);
+    }
     const weightRows = skuPairs.map((row) => {
       const current = weights.find((item) => item.base === row.base && item.code === row.code);
+      const productWeight = productWeightCandidate(
+        weightProductRows.get(row.code) ?? [],
+        row.base,
+        row.code,
+      );
       const candidate = unitWeightCandidate(
         weightRead?.rows ?? [],
         row.code,
@@ -1116,11 +1149,15 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         h(
           'span',
           null,
-          weightRead
-            ? candidate.rows
-                .map((item) => `${display(item.channel_name)}：${display(item.ton_per_piece)}吨/件`)
-                .join('；') || '无来源记录'
-            : '尚未完整读取',
+          productWeight
+            ? `产品清单：${productWeight.rows.map((item) => `${display(item.net_weight)}${display(item.weight_unit)}/${display(item.measure_unit)}`).join('；')}；${productWeight.tonsPerPiece === null ? productWeight.missing.join('；') : `${productWeight.tonsPerPiece}吨/计量单位，未设人工值时自动使用`}`
+            : weightRead
+              ? candidate.rows
+                  .map(
+                    (item) => `${display(item.channel_name)}：${display(item.ton_per_piece)}吨/件`,
+                  )
+                  .join('；') || '无来源记录'
+              : '尚未完整读取',
         ),
         h(
           'button',
@@ -1397,6 +1434,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           },
           '产品池全国覆盖尚未取得实际证明，仅报告范围内结果',
         ),
+      h(ShipmentScopeNotice, {
+        scope: result.categoryComputation.shipmentScope,
+        month: draft.month,
+      }),
       step === 'process'
         ? h(
             react.Fragment,
@@ -1532,7 +1573,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
                   h(
                     'p',
                     { className: 'wf-note' },
-                    '来源值为候选。填写本基地SKU实际适用的全部渠道；相关渠道均有正数且相同系数才可采用。读取成功不证明全渠道适用，不从产能比推算。',
+                    '人工值优先；未设人工值时，按最新产品清单的同基地SKU净重、重量单位与计量单位自动换算吨数。产品源有缺值或冲突时待补，不改用旧值。无该基地SKU记录时使用旧渠道系数；相关渠道均有正数且相同系数才可采用，不从产能比推算。',
                   ),
                   h(
                     'button',
