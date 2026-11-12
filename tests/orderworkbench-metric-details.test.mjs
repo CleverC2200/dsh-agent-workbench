@@ -304,9 +304,9 @@ test('amendment handoff rejects old snapshots and carries the same quantity quer
   );
   const request = metricDetailsRequest(facts, '改单率', selection);
   const detail = request.context.metricDetails;
-  assert.equal(detail.contract.dateField, 'lastshipmenttime');
-  assert.equal(detail.contract.dateSource, 'agents_scm_order_trace_final_di');
-  assert.match(detail.contract.formula, /装车完成/);
+  assert.equal(detail.contract.dateField, 'order_close_time');
+  assert.equal(detail.contract.dateSource, 'agents_scm_execute_detail_d');
+  assert.match(detail.contract.formula, /order_close_time/);
   assert.equal(detail.contract.lockPeriod, false);
   assert.equal(detail.contract.changeTimeRequired, false);
   for (const query of Object.values(detail.queries)) {
@@ -401,4 +401,32 @@ test('six card handoffs carry code formulas and measured components without inve
       /口径已更新/,
     );
   }
+});
+
+test('year comparison handoff retains complete independent month and week ranges', () => {
+  const periods = {
+    month: period('2026-11-01', '2026-11-12'),
+    previousMonth: period('2026-10-01', '2026-10-12'),
+    yearMonth: period('2025-11-01', '2025-11-12'),
+    week: period('2026-11-09', '2026-11-12'),
+    previousWeek: period('2026-11-02', '2026-11-05'),
+    yearWeek: period('2025-11-10', '2025-11-13'),
+  };
+  const request = metricDetailsRequest({ ...facts, periods }, '作废率', selection);
+  for (const [kind, keys] of Object.entries({
+    month: ['month', 'previousMonth', 'yearMonth'],
+    week: ['week', 'previousWeek', 'yearWeek'],
+  })) {
+    for (const [index, name] of ['current', 'previous', 'year'].entries()) {
+      const p = periods[keys[index]];
+      assert.deepEqual(request.context.metricDetails.comparisonPeriods[kind][name], {
+        start: p.start,
+        endExclusive: p.end,
+      });
+    }
+  }
+  assert.match(request.text, /先按维度值过滤/);
+  assert.match(request.text, /不得阻断其他分组/);
+  const absent = metricDetailsRequest(facts, '作废率', selection);
+  assert.equal(absent.context.metricDetails.comparisonPeriods.month.year, null);
 });

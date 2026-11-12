@@ -875,6 +875,12 @@ export function InventoryOperationsWorkbench() {
       currentOrders: state === 'ready' ? overviewWorkspace?.workbench?.currentOrders : undefined,
       orderMetricScopes: state === 'ready' ? currentOrderMetricScopes : undefined,
       version: state === 'ready' ? overviewWorkspace?.versionSummary : undefined,
+      sources:
+        state === 'ready' ? overviewWorkspace?.workbench?.inventoryInsight?.sources : undefined,
+      comparisonBasis:
+        state === 'ready'
+          ? '卡片、基地行与问数沿用上述目标月份、版本、库存快照及基地范围。库存差额仅汇总库存与目标均有效的基地SKU；目标缺失不作零，真实零目标保留。全范围库存减已知目标是另一口径，不能替代卡片差额。'
+          : undefined,
     });
     updateContext('inventoryInsight', {
       scope: overviewKey,
@@ -1082,6 +1088,9 @@ export function InventoryOperationsWorkbench() {
                       value={card.value}
                       tone={card.tone}
                       helpers={card.helpers}
+                      coverage={
+                        card.title === '当前库存' && 'coverage' in card ? card.coverage : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -1293,11 +1302,13 @@ function Kpi({
   tone,
   value,
   helpers,
+  coverage,
 }: {
   title: string;
   tone: 'neutral' | 'red';
   value: string;
   helpers: { label: string; value: string }[];
+  coverage?: string;
 }) {
   const formatted = formatInventoryMetricTextParts(title, value);
   const formattedHelpers = helpers.map((item) => {
@@ -1308,9 +1319,16 @@ function Kpi({
     <article className={styles.kpiCard}>
       <div>
         <span>{title}</span>
-        <b className={`${styles.statusPill} ${tone === 'red' ? styles.red : styles.green}`}>
-          {tone === 'red' ? '需关注' : '当前值'}
-        </b>
+        {coverage ? (
+          <details className={styles.kpiCoverage}>
+            <summary className={`${styles.statusPill} ${styles.green}`}>口径说明</summary>
+            <p>{coverage}</p>
+          </details>
+        ) : (
+          <b className={`${styles.statusPill} ${tone === 'red' ? styles.red : styles.green}`}>
+            {tone === 'red' ? '需关注' : '当前值'}
+          </b>
+        )}
       </div>
       <strong
         title={

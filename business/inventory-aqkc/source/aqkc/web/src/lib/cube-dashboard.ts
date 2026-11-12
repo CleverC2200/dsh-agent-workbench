@@ -2695,7 +2695,7 @@ function configuredSummaryWorkspace(
     {
       title: '当前库存',
       value: show(all, 'inventory'),
-      coverage: `库存 ${all.sum('inventory_count')}/${all.n} · 目标 ${all.sum('target_count')}/${all.n} · 差额 ${all.gapCount}/${all.n} 个基地SKU`,
+      coverage: `${scope.targetMonthLabel} · ${scope.versionLabel}；目标覆盖 ${all.sum('target_count')}/${all.n} 个基地SKU；差额仅含库存与目标均有效的 ${all.gapCount}/${all.n} 个基地SKU`,
       helpers: [
         { label: '目标库存', value: show(all, 'target') },
         { label: '库存差额', value: all.gap === null ? '-' : displayNumber(all.gap) },

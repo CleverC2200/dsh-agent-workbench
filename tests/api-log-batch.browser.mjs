@@ -147,6 +147,7 @@ async function open(t, options = {}) {
   const origin = 'https://127.0.0.1:' + server.address().port;
   business = new mod.exports.Business({
     geaBaseUrl: origin,
+    runtimeDir: certdir + '/runtime',
     environment: 'test',
     analysisAgentCode: 'fixture',
     requestTimeoutMs: 1000,

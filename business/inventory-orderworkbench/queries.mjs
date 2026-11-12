@@ -13,7 +13,7 @@ import { workbenchBaseSql } from './base-scope.mjs';
 import { cancellationPartitionSql } from './cancellation-partitions.mjs';
 import {
   amendmentMetricContract,
-  amendmentShipmentSql,
+  amendmentReductionSql,
   skuAmendmentEventsSql,
 } from './sku-amendments.mjs';
 import { missingPlanPolicySql, selectedPlanSql } from './plan-policy.mjs';
@@ -21,10 +21,9 @@ import { missingPlanPolicySql, selectedPlanSql } from './plan-policy.mjs';
 // Keep native datetime predicates available to Doris during the owner joins.
 const attributionSources = `SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_d
           WHERE header_addtime>=:gea_p1 AND header_addtime<:gea_p2
-        UNION ALL SELECT d.belong_base,d.material_code,d.director,d.product_item,shipment.shipped_at AS attribution_date
-          FROM agents_scm_execute_detail_d d INNER JOIN (${amendmentShipmentSql}) shipment
-            ON shipment.executeorderno=d.executeorderno AND shipment.cust_code=d.cust_code
-          WHERE shipment.shipped_at>=:gea_p1 AND shipment.shipped_at<:gea_p2
+        UNION ALL SELECT d.belong_base,d.material_code,d.director,d.product_item,d.order_close_time AS attribution_date
+          FROM agents_scm_execute_detail_d d
+          WHERE d.order_close_time>=:gea_p1 AND d.order_close_time<:gea_p2
         UNION ALL SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_hourly_d
           WHERE header_addtime>=:gea_p1 AND header_addtime<:gea_p2
         UNION ALL SELECT belong_base,material_code,NULL AS director,product_item,the_date AS attribution_date FROM agents_scm_stock_detail_d
@@ -150,7 +149,7 @@ export const workbenchQueries = {
       'changed_quantity',
     ],
     sql: `SELECT executeorderno,cust_order_no,cust_code,cust_name,material_code,header_addtime,shipped_at,pickup_point,change_order_qty,dms_last_update_qty,need_qty_origin,effective_qty,
-      CASE WHEN requested_qty>=0 THEN ABS(requested_qty-effective_qty) ELSE 0 END AS changed_quantity
+      ${amendmentReductionSql()} AS changed_quantity
       FROM (${skuAmendmentEventsSql({ stage: 'lines' })}) approved_lines`,
   },
   orders: {
