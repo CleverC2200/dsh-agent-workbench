@@ -7,7 +7,7 @@ import { chromium, expect } from '@playwright/test';
 const ui = resolve('business/inventory-apsplan/source');
 const bundle = await build({
   stdin: {
-    contents: `import React from 'react';import{createRoot}from'react-dom/client';import {WarningViews} from './business/inventory-apsplan/source/app/warning-views';import {openAlertManagement} from './business/inventory-apsplan/source/app/monitor-management.js';import './business/inventory-apsplan/source/app/monitor-management.css';window.openManagement=()=>openAlertManagement(window.fixture.events,()=>{});createRoot(document.getElementById('root')).render(<WarningViews items={window.fixture.events} openCount={1} onDetail={()=>{}}/>);`,
+    contents: `import React from 'react';import{createRoot}from'react-dom/client';import {WarningViews} from './business/inventory-apsplan/source/app/warning-views';import {openAlertManagement} from './business/inventory-apsplan/source/app/monitor-management.js';import './business/inventory-apsplan/source/app/monitor-management.css';import Home from './business/inventory-apsplan/source/app/workbench-app';window.openManagement=()=>openAlertManagement(window.fixture.events,()=>{});createRoot(document.getElementById('root')).render(window.testHome?<Home initialWorkspace="intelligent" embedMode liveData/>:<WarningViews items={window.fixture.events} openCount={1} onDetail={()=>{}}/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',
   },
@@ -15,6 +15,8 @@ const bundle = await build({
   write: false,
   outfile: 'page.js',
   jsx: 'automatic',
+  define: { APS_MOCK: 'false' },
+  tsconfig: resolve(ui, 'tsconfig.json'),
   alias: {
     react: resolve(ui, 'node_modules/react'),
     'react-dom': resolve(ui, 'node_modules/react-dom'),
@@ -23,12 +25,30 @@ const bundle = await build({
     {
       name: 'isolated-detection-api',
       setup(api) {
+        api.onResolve({ filter: /^dsh-agent-manage\/aps-compute\/[a-z-]+$/ }, ({ path }) => ({
+          path: resolve('../dsh-agent-manage/src/aps-compute', path.split('/').at(-1) + '.ts'),
+        }));
+        api.onResolve({ filter: /\/data\/use-workspace$/ }, ({ path }) => ({
+          path,
+          namespace: 'workspace-fixture',
+        }));
+        api.onLoad({ filter: /.*/, namespace: 'workspace-fixture' }, () => ({
+          contents: `export function useWorkspace(){return {data:{start:'2026-11-01',end:'2026-11-11',granularity:'month',sections:[],readAt:'2026-11-11',limitations:[]},previous:null,annual:null,busy:false,comparisonBusy:false,error:''};}`,
+        }));
+        api.onResolve({ filter: /\/agent-query$/ }, ({ path }) => ({
+          path,
+          namespace: 'calendar-fixture',
+        }));
+        api.onLoad({ filter: /.*/, namespace: 'calendar-fixture' }, () => ({
+          contents: `export function createAgentQueries(){return{read:async()=>({rows:[{day:'20261111'}]})}};`,
+        }));
+
         api.onResolve({ filter: /\/shared\/channel\.js$/ }, ({ path }) => ({
           path,
           namespace: 'detection-fixture',
         }));
         api.onLoad({ filter: /.*/, namespace: 'detection-fixture' }, () => ({
-          contents: `export const call=async(method,input)=>{window.calls.push({method,input});if(window.backendUnavailable)throw Error('预警后台尚未配置');return window.fixture};export const ask=async()=>{};`,
+          contents: `export const call=async(method,input)=>{window.calls.push({method,input});if(window.backendUnavailable)throw Error('预警后台尚未配置');return window.fixture};export const ask=async()=>{};export const draft=async()=>{};export const publish=async()=>{};export const action=()=>()=>{};export const reportElements=()=>()=>{};export const ready=Promise.resolve();`,
         }));
       },
     },
@@ -143,4 +163,32 @@ test('预警筛选、检测任务操作列及执行记录在桌面和窄屏可�
   });
   assert.equal(dialogs, 1);
   await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('后台不可用时正式智能工作台保留原入口且不显示模拟建议', async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.route('http://alert.test/**', (r) =>
+    r.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }),
+  );
+  await page.goto('http://alert.test/');
+  await page.evaluate(() => {
+    window.testHome = true;
+    window.calls = [];
+    window.backendUnavailable = true;
+    window.fixture = { events: [] };
+  });
+  await page.addStyleTag({ content: bundle.outputFiles.find((f) => f.path.endsWith('.css')).text });
+  await page.addScriptTag({ content: bundle.outputFiles.find((f) => f.path.endsWith('.js')).text });
+  await expect(page.getByRole('button', { name: '预警管理', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: '动作完成不等于问题解决', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: '进入管理后台', exact: false })).toBeVisible();
+  await expect(page.getByText('模拟示例', { exact: false })).toHaveCount(0);
+  assert.equal(
+    await page.evaluate(() => window.calls.filter((c) => c.method === 'detection').length),
+    1,
+  );
 });
