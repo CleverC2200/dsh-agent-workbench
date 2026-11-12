@@ -668,6 +668,57 @@ test('active HTML page requests renew its idle lease while an idle page expires'
   assert.equal((await h.call('events', { owner })).value.error, 'PAGE_LEASE_EXPIRED');
 });
 
+for (const scenario of ['page left untouched', 'user answering a pending question']) {
+  test(`${scenario} keeps page observations readable after fifteen minutes of polling`, async (t) => {
+    const h = await mount(t);
+    const originalNow = Date.now;
+    let now = originalNow(),
+      lastActivity = now;
+    Date.now = () => now;
+    t.after(() => {
+      Date.now = originalNow;
+    });
+    h.grant.heartbeat = () => {
+      lastActivity = Date.now();
+    };
+    const owner = (await h.open()).value.owner;
+    await h.call('context', {
+      owner,
+      parameters: { page: 'MPS', parts: { check: { productCount: 1286 } } },
+    });
+    const initial = await h.execute('gea_page', { action: 'context' });
+    assert.equal(JSON.parse(initial.value).context.parts.check.productCount, 1286);
+    const answer = Promise.withResolvers();
+    const afterAnswer =
+      scenario === 'user answering a pending question'
+        ? answer.promise.then(() => h.execute('gea_page', { action: 'context' }))
+        : undefined;
+    for (let minute = 0; minute < 15; minute++) {
+      now += 60000;
+      assert.equal((await h.call('events', { owner })).status, 200);
+      assert.equal(lastActivity, now, 'the live owner must renew its business page identity');
+    }
+    if (scenario === 'user answering a pending question') {
+      answer.resolve('continue reading this page');
+    }
+    const result = afterAnswer
+      ? await afterAnswer
+      : await h.execute('gea_page', { action: 'context' });
+    assert.equal(JSON.parse(result.value).unchanged, true);
+    assert.equal(h.observations.length, 1, 'polling must not republish old business observations');
+    await h.call('context', {
+      owner,
+      parameters: { page: 'MPS', parts: { check: { productCount: 1287 } } },
+    });
+    const updated = await h.execute('gea_page', { action: 'context' });
+    assert.equal(JSON.parse(updated.value).context.parts.check.productCount, 1287);
+    await h.call('close', { owner });
+    now += 60000;
+    assert.equal((await h.call('events', { owner })).value.error, 'PAGE_OWNER_RELEASED');
+    assert.equal(lastActivity, now - 60000, 'a released owner cannot renew its identity');
+  });
+}
+
 test('a missing page is reported and a different resource or Session cannot acquire its owner', async (t) => {
   const h = await mount(t);
   assert.match((await h.execute('gea_page', { action: 'context' })).value, /不在业务工作台/);
