@@ -1044,6 +1044,17 @@ test('同比缺一年时预览按两年计算并列出有效年份', async (t) =
       ),
     )
     .toBe(true);
+  await expect
+    .poll(() =>
+      contexts.some((entry) => {
+        const historical = entry.parts?.['category-demand']?.historical;
+        return (
+          historical?.some((factor) => factor.month === '2026-11') &&
+          historical.every((factor) => !('years' in factor) && !('yoyYears' in factor))
+        );
+      }),
+    )
+    .toBe(true);
 });
 
 test('basic source anomalies keep known BI quantities and export every row while the plan dataset is denied', async (t) => {

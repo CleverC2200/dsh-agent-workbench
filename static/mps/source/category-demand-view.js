@@ -211,7 +211,21 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
     useMpsPart(
       react,
       'category-demand',
-      { ...result, adjustments: draft.adjustments ?? null },
+      {
+        ...result,
+        historical: result.historical.map(
+          ({ category, month, yoy, mom, share, yoyValidCount, yoyComplete }) => ({
+            category,
+            month,
+            yoy,
+            mom,
+            share,
+            yoyValidCount,
+            yoyComplete,
+          }),
+        ),
+        adjustments: draft.adjustments ?? null,
+      },
       '大类逐月需求计算',
       active,
     );
