@@ -255,6 +255,7 @@ test('fast CLI keeps development tests and performs only checks when CI owns the
     );
     const commands = [
       'check:knowledge',
+      'check:comments',
       'lint',
       'format:check',
       'typecheck:official',
@@ -292,7 +293,7 @@ test('fast CLI keeps development tests and performs only checks when CI owns the
     assert.deepEqual(call(), commands);
     assert.deepEqual(call('--checks-only'), commands.slice(0, -1));
     assert.deepEqual(call('--checks-only', '--declarations-in-build'), [
-      ...commands.slice(0, 3),
+      ...commands.slice(0, -2),
       'check:official-input',
     ]);
   } finally {
@@ -319,6 +320,7 @@ test('candidate fast checks reject stale identity before a declaration build can
         version: '1.2.3',
         scripts: {
           'check:knowledge': 'node -e "" --',
+          'check:comments': 'node -e ""',
           lint: 'node -e ""',
           'format:check': 'node -e ""',
           'check:official-input': manifest.scripts['check:official-input'],

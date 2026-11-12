@@ -98,6 +98,11 @@ test('only proven isolated tools can omit Core and business preparation', (t) =>
     'oxlint',
     'typescript',
   ]);
+  assert.deepEqual(sourceTools(root, 'dsh-agent-workbench', { files: ['cold.test.mjs'] }, args), [
+    'oxfmt',
+    'oxlint',
+    'typescript',
+  ]);
   assert.equal(
     sourceTools(root, 'dsh-agent-workbench', { files: ['unknown.test.mjs'] }, args),
     null,

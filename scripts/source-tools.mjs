@@ -15,9 +15,9 @@ import { execFileSync } from 'node:child_process';
 const json = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const staticTools = {
-  'dsh-agent-workbench': ['oxlint', 'oxfmt'],
+  'dsh-agent-workbench': ['oxlint', 'oxfmt', 'typescript'],
   'dsh-agent-manage': ['@eslint/js', 'eslint', 'typescript-eslint', 'typescript', 'prettier'],
-  'dsh-gea-plugin': ['oxlint', 'oxfmt'],
+  'dsh-gea-plugin': ['oxlint', 'oxfmt', 'typescript'],
 };
 export function sourceTools(root, repo, selected, { typecheck, joint, desktopTools }) {
   if (typecheck || joint || desktopTools || selected.sdk || selected.browser) return null;
