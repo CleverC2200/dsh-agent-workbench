@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { PlanPagination } from '../../../shared/plan-pagination';
 
-/** Render only the visible leaf rows; aggregate cards still use the complete snapshot. */
 export function DrillPage({
   rows,
   children,
@@ -20,7 +19,7 @@ export function DrillPage({
     const element = footer.current;
     const table = element?.closest<HTMLElement>('.category-drill-table');
     if (!element || !table) return;
-    // Nested row groups constrain CSS sticky; keep the branch footer in the visible scrollport.
+
     const align = () => {
       element.style.width = `${table.clientWidth}px`;
       element.style.transform = `translateX(${table.scrollLeft}px)`;

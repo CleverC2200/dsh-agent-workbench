@@ -10,7 +10,6 @@ type InsightPart = {
   error?: string;
 };
 
-/** Sum quantities and movement before dividing; channel coverage uses matched stock/sales rows. */
 export function chainStockMetrics(
   parts: Record<string, InsightPart | undefined>,
   channel: boolean,
@@ -83,7 +82,6 @@ export function chainStockMetrics(
   };
 }
 
-/** Combine fulfillment quantities from the same shipped-order pools, never their percentages. */
 export function chainFulfillmentMetrics(parts: Record<string, InsightPart | undefined>) {
   const pools = ['factory-overview', 'branch-overview'].map((id) => parts[id]?.summary);
   const quantities = pools.map((summary) => ({
@@ -97,7 +95,6 @@ export function chainFulfillmentMetrics(parts: Record<string, InsightPart | unde
   return { rate: ordered > 0 ? (shipped / ordered) * 100 : null, shipped, ordered };
 }
 
-/** Full-scope independent summaries. Unavailable signals remain explicit gaps. */
 export function chainDashboardEvidence(
   parts: Record<string, InsightPart | undefined>,
   date: string,

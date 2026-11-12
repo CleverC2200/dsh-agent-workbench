@@ -62,7 +62,7 @@ async function fixture(
               const scopedCustomers = Object.entries(data.parameters.parameters)
                 .filter(([key]) => key.startsWith('list_1_'))
                 .map(([, value]) => value);
-              // An unscoped stock subquery can return other regions even when its companion is scoped.
+
               const customers = sql.includes('WHERE t.stat_date')
                 ? rows.map((row) => row.cust_code)
                 : scopedCustomers;
@@ -539,7 +539,6 @@ test('region, province and city choices rebuild after rows arrive, including a r
 });
 
 test('script failure retains a static seven-card and table fallback', async (t) => {
-  // This separate fixture deliberately disables scripts before the React shell starts.
   const server = createServer((_request, response) =>
     response.end(html.replace(/<script>[\s\S]*?<\/script>/g, '')),
   );

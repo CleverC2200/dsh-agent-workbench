@@ -11,7 +11,6 @@ const integer = (value) => {
 };
 export const rowPacketSize = 64;
 
-/** Preserve every scalar, including null and decimal text, while reducing gateway pages. */
 export function rowPacketSql(sql, columns, order, packetSize = rowPacketSize) {
   if (
     !Number.isSafeInteger(packetSize) ||
@@ -24,8 +23,7 @@ export function rowPacketSql(sql, columns, order, packetSize = rowPacketSize) {
     order.some((name) => !/^[a-z][a-z0-9_]*(?: DESC| ASC)?$/.test(name))
   )
     throw Error('INVALID_ROW_PACKET_CONTRACT');
-  // Use approved scalar expressions so the gateway can still trace every
-  // source field. JSON functions are not supported by its field analyser.
+
   const fields = ['packet_position', ...columns].map(
     (name) =>
       `CASE WHEN ${name} IS NULL THEN 'N' ELSE CONCAT('V',CAST(LENGTH(CAST(${name} AS VARCHAR)) AS VARCHAR),':',CAST(${name} AS VARCHAR)) END`,
@@ -83,9 +81,6 @@ function packetRows(value, columns) {
     if (!Array.isArray(members)) return fail();
     return members.map((member) => decodeRowTuple(member, columns));
   } catch {
-    // Doris may serialize ARRAY<STRING> as quoted elements without JSON
-    // escaping inner quotes. Byte lengths, not quote/comma splitting, delimit
-    // the original values. Never eval or repair business strings heuristically.
     const bytes = new TextEncoder().encode(value.trim()),
       rows = [];
     let cursor = 0;
@@ -114,7 +109,6 @@ export function decodeScalarArray(value) {
   return packetRows(value, []).map((row) => row.packet_position);
 }
 
-/** ARRAY_AGG has no guaranteed order. Positions prove coverage and restore the source order. */
 export function unpackRowPackets(
   packets,
   columns,

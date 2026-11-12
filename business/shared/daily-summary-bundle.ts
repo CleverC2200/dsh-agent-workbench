@@ -75,7 +75,6 @@ export function dailyBundleValues(
   );
 }
 
-/** One authorized response supplies the initial page. Fields remain separate SQL columns. */
 export async function executeDailyBundle(
   config: AgentSqlConfig,
   snapshot: DailySummarySnapshot | undefined,
@@ -114,7 +113,7 @@ export async function executeDailyBundle(
   };
   const expected = memberValues(member.values);
   const definition = config.queries[options.queryId];
-  // Only an exact covered input uses this response. Filters and later pages retain their own queries.
+
   if (
     Object.entries(definition.parameterSpec).some(
       ([key, spec]: [string, any]) =>
@@ -141,7 +140,7 @@ export async function executeDailyBundle(
   ]);
   let entry = cache.get(key);
   const ttl = inventoryCacheTtl(config.agentId);
-  // These complete responses stay in memory only, under the same identity and exact inputs.
+
   if (!entry || Date.now() - entry.started >= (entry.failed ? Math.min(ttl, 45000) : ttl)) {
     const values: Record<string, any> = {};
     for (const part of bundle.members) {
@@ -244,7 +243,7 @@ export async function executeDailyBundle(
       });
     entry = fresh;
     cache.set(key, entry);
-    // Rejections remain in this load, so another card cannot retry a denied bundle.
+
     if (cache.size > 8) cache.delete(cache.keys().next().value ?? '');
   }
   entry.users++;

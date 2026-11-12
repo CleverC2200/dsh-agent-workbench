@@ -20,7 +20,6 @@ export const fulfillmentPacketOrders = {
   'shortage.detail': ['order_no', 'customer_code', 'base', 'execution_order', 'sku'],
 };
 
-/** Transport the same complete source rows; never aggregate quantities or discard duplicates. */
 export function addFulfillmentPacketQueries(config) {
   const result = structuredClone(config);
   for (const [id, order] of Object.entries(fulfillmentPacketOrders)) {

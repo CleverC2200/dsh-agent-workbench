@@ -22,7 +22,6 @@ export function loadInitialDashboardPayload(signal?: AbortSignal) {
   });
 }
 
-/** Recompute every overview metric in the same server pipeline as the initial view. */
 export async function loadSelectedDashboardPayload(
   paths: string[],
   signal: AbortSignal,

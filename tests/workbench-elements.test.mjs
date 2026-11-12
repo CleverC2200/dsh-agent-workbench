@@ -1,11 +1,3 @@
-/**
- * 页面自述必须能被宿主校验通过，否则整份目录判非法、工具注册不上，
- * 这一屏对对话来说就等于"没有能力"。真实数据里踩到过的坑：
- *   - 客户筛选有 28 项，超过选项上限 24；
- *   - 个别 SKU 的确认量是空串，空串不是合法 value；
- *   - 展开行特别多时元素总数会超过 300。
- * 这里用最坏输入验证页面侧已经收口，而不是让宿主放宽规则。
- */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -25,7 +17,6 @@ const m = await import(
   'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
 );
 
-/** 宿主校验只回一句 INVALID_PAGE_CATALOG；这里包一层，失败信息短且可读。 */
 const validate = (elements, label) => {
   try {
     return m.validatePageCatalog({

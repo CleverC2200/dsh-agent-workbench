@@ -1,17 +1,12 @@
 import { LAYER_POLICY } from './layers.ts';
 
-/**
- * 页面草稿动作共用限流、超时、确认和回执。
- * 页面声明元素，执行由调用者提供；本模块不写业务数据。
- */
-
 export type DraftEffect = 'view' | 'draft' | 'submit' | 'approve';
 
 export type DraftRequest = {
   sessionId: string;
-  /** 页面标识（能力契约里的 surface）。 */
+
   surface: string;
-  /** 通用动词：setValue / invoke / select / clear。 */
+
   kind: string;
   targets: readonly string[];
   effect: DraftEffect;
@@ -39,11 +34,10 @@ export type DraftBeginResult =
   | { ok: false; code: string; reason: string };
 
 export type DraftLayerOptions = {
-  /** 统计窗口，默认 1 分钟。 */
   windowMs?: number;
-  /** 单个会话在窗口内最多改多少次，默认 30。 */
+
   maxPerWindow?: number;
-  /** 保留多少条回执供追溯，默认 200。 */
+
   maxReceipts?: number;
   now?: () => number;
   id?: () => string;
@@ -55,9 +49,9 @@ export type DraftLayer = {
     receiptId: string,
     outcome: { applied: boolean; error?: string; timedOut?: boolean },
   ): DraftReceipt | undefined;
-  /** 最近的回执（新到旧），用来回答"刚才那次改动到底怎么了"。 */
+
   receipts(): readonly DraftReceipt[];
-  /** 某会话最近一条回执。 */
+
   lastFor(sessionId: string): DraftReceipt | undefined;
 };
 
@@ -66,12 +60,12 @@ let receiptSeq = 0;
 export function createDraftLayer(options: DraftLayerOptions = {}): DraftLayer {
   const now = options.now ?? (() => Date.now());
   const nextId = options.id ?? (() => 'draft-' + ++receiptSeq);
-  // 数值统一来自能力层策略表（见 layers.ts），不在这一层另写一套。
+
   const windowMs = options.windowMs ?? 60_000;
   const maxPerWindow = options.maxPerWindow ?? LAYER_POLICY.draft.maxPerMinute;
   const maxReceipts = options.maxReceipts ?? 200;
   const receipts: DraftReceipt[] = [];
-  /** 每个会话的改动时间戳，用来限流。 */
+
   const stamps = new Map<string, number[]>();
 
   return {

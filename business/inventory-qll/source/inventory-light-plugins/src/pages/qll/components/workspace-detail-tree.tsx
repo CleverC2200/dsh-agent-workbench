@@ -195,7 +195,7 @@ export function WorkspaceDetailTree({
             snapshotDate: row.snapshotDate,
             value: row.shortageQty,
           }));
-  // No nationwide age series is inferred by averaging independent layer means.
+
   const _displayTrend = kind === 'aging' && !selected ? [] : trend;
   return (
     <div data-detail-kind={kind}>

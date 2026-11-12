@@ -312,7 +312,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     });
     assert.equal(layout.contained, true, `toolbar controls fit at ${width}px`);
     assert.equal(layout.usableFields, true, `filter inputs remain usable at ${width}px`);
-    // The shared toolbar wraps at compact desktop widths while retaining usable controls.
+
     if (width >= 1200)
       assert.equal(layout.sameLine, true, `toolbar stays on one line at ${width}px`);
   }
@@ -482,7 +482,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await page.keyboard.press('Escape');
   await confirmation.getByRole('button', { name: '取消', exact: true }).click();
   await expect(confirmation).toHaveCount(0);
-  // A page left open overnight follows the current business day without a date picker.
+
   await page.clock.setFixedTime(new Date('2026-11-03T01:00:00Z'));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect
@@ -1162,7 +1162,7 @@ test('replenishment quick filters use server scope, product links expand inline 
           configVersion: 'fixture',
         },
       });
-    // Keep the loading panel visible before the resource request reaches the fixture log.
+
     if (id === 'base_resources.detail.atomic')
       await new Promise((resolve) => {
         setTimeout(resolve, 200);

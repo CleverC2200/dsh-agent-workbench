@@ -1,4 +1,3 @@
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import {
   SALES_PLAN_ROLES,
   salesPlanWorkflow,
@@ -38,7 +37,6 @@ export type SalesPlanActionErrorKind =
   | 'unavailable'
   | 'failed';
 
-/** 动作模型同时负责输入白名单、状态转换、回执一致性和“是否可重试”分类。 */
 export class SalesPlanActionError extends Error {
   constructor(
     readonly kind: SalesPlanActionErrorKind,
@@ -55,7 +53,6 @@ const DECIMAL_PATTERN = /^[+-]?(\d+)(?:\.(\d{1,3}))?$/;
 const POSITIVE_LONG_PATTERN = /^[1-9]\d*$/;
 const MAX_SIGNED_LONG = BigInt('9223372036854775807');
 
-/** 节点顺序表示角色身份（customer=1、region=2……），绝不是计划状态。 */
 export const salesPlanApprovalNodeForStatus = (
   status: number,
   typeCode = 'Y',
@@ -152,10 +149,6 @@ const retryAfterMsFromDetails = (details: unknown): number | undefined => {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 };
 
-/**
- * V1.8 #12 对客红线：给业务的文案里不出现接口、字段名、参数名和错误码。
- * 后端原文只有在“看起来就是业务话术”时才透出；出现 payload./错误码/报文痕迹就退回通用文案。
- */
 const TECHNICAL_ERROR_PATTERN =
   /payload\.|GEA_HTTP|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+|为必填字段|\bnull\b|\bundefined\b|https?:\/\/|[{}<>[\]"]/;
 
@@ -166,7 +159,6 @@ export const businessSafeErrorMessage = (message: unknown): string | undefined =
   return text;
 };
 
-/** 技术细节只进日志，并返回一个可口头转述的错误编号，供用户报给管理员核对。 */
 export const reportSalesPlanError = (scope: string, detail: unknown): string => {
   const details =
     detail && typeof detail === 'object' && 'details' in detail ? detail.details : undefined;
@@ -178,7 +170,7 @@ export const reportSalesPlanError = (scope: string, detail: unknown): string => 
     typeof reference === 'string' && /^[A-Za-z0-9:._-]{1,128}$/.test(reference)
       ? reference
       : Math.random().toString(36).slice(2, 8).toUpperCase();
-  // eslint-disable-next-line no-console
+
   console.warn(`[gea-error] ${scope} 错误编号=${id}`, detail);
   return id;
 };
@@ -329,7 +321,6 @@ const normalizedInput = (input: SalesPlanActionInput): SalesPlanActionInput => {
 };
 
 export class SalesPlanActionAttempt {
-  // command 一旦生成便不可替换，保证重试携带同一 requestId 和 idempotencyKey。
   private command?: GeaSalesPlanActionParams;
   private input?: SalesPlanActionInput;
   private inFlight?: Promise<GeaSalesPlanActionReceipt>;

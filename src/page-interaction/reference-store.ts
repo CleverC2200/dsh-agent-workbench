@@ -3,7 +3,6 @@ import { pageReference, type BoundReference, type ReferenceReceipt } from './ref
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain';
 import { storedReferenceSchema, type StoredReference } from './reference-domain.ts';
 
-/** Core owns durability; the conversation only carries a small receipt. */
 export function createReferenceStore(table: Pick<KvTable<string, StoredReference>, 'get' | 'put'>) {
   let closed = false;
   return {

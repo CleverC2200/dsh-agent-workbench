@@ -1,6 +1,5 @@
 import { installDetection } from './detection-backend.mjs';
-/** Authenticated deployment settings for the browser workbench. */
-/** Host owns safe package HTML presentation and deployment metadata over official authenticated Fetch. */
+
 import { isAbsolute } from 'node:path';
 import type { Context } from '@deepseek-ai/cordis';
 import type {} from '@deepseek-ai/dsh-client-connection';
@@ -10,15 +9,13 @@ import { fileURLToPath } from 'node:url';
 import { HtmlPages, type WorkbenchPages } from './html-pages.ts';
 export { pluginPackageVersion } from './plugin-package-version.ts';
 export const inject = ['connection', 'agents', 'tools', 'sessionController', 'storageDomain'];
-/** The workspace directory used for new business Sessions. */
-/** 新业务 Session 使用的工作区目录；必须是绝对路径，避免部署环境中的相对路径歧义。 */
+
 export interface Config {
   cwd?: string;
-  /** All installed HTML package roots except the built-in table sample. Omit to use bundled roots. */
+
   htmlRoots?: readonly string[];
 }
-/** Publish configuration through the normal authenticated DSH connection. */
-/** 通过 DSH 的标准认证连接发布配置；请求只返回配置，不写入业务数据，响应禁止缓存以避免跨用户复用。 */
+
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   try {
     await installDetection(ctx);
@@ -40,7 +37,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       }),
     );
   }
-  // Fail before publishing configuration if the explicit workspace path is invalid.
+
   if (config.cwd !== undefined && (typeof config.cwd !== 'string' || !isAbsolute(config.cwd)))
     throw new Error('agent-workbench: cwd must be absolute');
   const htmlStyles = (
@@ -138,7 +135,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       path: '/api/agent-workbench/config',
       methods: ['GET'],
       requestBody: 'buffered',
-      // Read-only deployment metadata; static presentation does not use it to create Sessions.
+
       fetch: async () =>
         Response.json({ cwd: config.cwd }, { headers: { 'Cache-Control': 'no-store' } }),
     }),

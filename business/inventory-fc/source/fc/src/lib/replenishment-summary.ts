@@ -1,6 +1,5 @@
 import type { WarehouseSnapshot } from './domain.ts';
 
-/** Display-only partial totals: never replace the complete-total submission guard. */
 export function summarizeCalculatedReplenishment(
   snapshot: WarehouseSnapshot,
 ): import('./workbench-page.ts').CalculatedSummary {

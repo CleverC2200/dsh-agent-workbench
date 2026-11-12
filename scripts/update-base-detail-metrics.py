@@ -12,10 +12,8 @@ FROM_KEY = 'from_' if 'from_' in exp.Select.arg_types else 'from'
 ROOT = Path(__file__).resolve().parents[1]
 PATH = ROOT / 'business/inventory-aqkc/sql.config.json'
 
-
 def parse(sql):
     return sqlglot.parse_one(sql, read='postgres')
-
 
 def render(tree):
     for substring in list(tree.find_all(exp.Substring)):
@@ -23,12 +21,10 @@ def render(tree):
             substring.this.copy(), substring.args['start'].copy(), substring.args['length'].copy()]))
     return re.sub(r'%\((gea_p\d+)\)s', r':\1', tree.sql(dialect='postgres'))
 
-
 def add(select, expression):
     value = parse(expression)
     if value.alias not in select.named_selects:
         select.select(value, append=True, copy=False)
-
 
 def age_statistics(tree):
     for cte in tree.find_all(exp.CTE):
@@ -47,7 +43,7 @@ def age_statistics(tree):
         if not source or not isinstance(source.this, exp.Table):
             continue
         table = source.this.name
-        # aligned starts with inventory_keys and joins stock_source.
+
         if table == 'inventory_keys':
             alias = 's'
         elif table in sources:
@@ -58,7 +54,6 @@ def age_statistics(tree):
             continue
         for field in ['age_weighted_sum', 'age_qty']:
             add(select, f'{alias}.{field} AS {field}')
-
 
 def share_page_stock(tree):
     """Let count and displayed rows reuse the identical classified SKU source."""
@@ -82,7 +77,6 @@ def share_page_stock(tree):
         page.set(WITH_KEY, None)
     tree.set(WITH_KEY, exp.With(expressions=[*(root_with.expressions if root_with else []), shared.copy()]))
 
-
 def update(config):
     source = (ROOT / 'business/inventory-aqkc/current-orders-source.sql').read_text().strip().rstrip(';')
     pending = parse(f"""WITH detail_shortage_source AS ({source}),
@@ -101,13 +95,12 @@ def update(config):
         WHEN s.inventory > s.target THEN '库存偏高'
         WHEN s.target IS NULL THEN '无目标'
         WHEN s.inventory IS NULL THEN '-' ELSE '正常' END"""
-    # Add the current-order join inside stock_rows so detail, count and atomic
-    # pagination all filter the same classified SKU set.
+
     for name in ['page.sku-detail', 'page.sku-detail.count', 'page.sku-detail.atomic']:
         query = config['queries'][name]
         tree = parse(query['request']['sql'])
         age_statistics(tree)
-        # Existing queries already have the join; refresh their source as well.
+
         for cte in tree.find_all(exp.CTE):
             if cte.alias == 'detail_shortage_source':
                 cte.set('this', parse(source))
@@ -130,8 +123,7 @@ def update(config):
                     if expression.alias in ['current_demand', 'current_allocated']:
                         field = expression.alias.removeprefix('current_')
                         expression.replace(parse(f'CASE WHEN p.source_order_count > 0 THEN CASE WHEN o.sku IS NULL THEN 0 ELSE o.{field} END END AS current_{field}'))
-        # An open-order SKU can have neither stock nor a target. Keep it visible
-        # so parent order totals still reconcile with the SKU drill-down.
+
         for cte in list(tree.find_all(exp.CTE)):
             if cte.alias == 'inventory_keys' and 'detail_pending' not in render(cte.this):
                 original = cte.this.copy()
@@ -142,8 +134,7 @@ def update(config):
                 continue
             table = source_from.this.name
             if table == 'stock_rows':
-                # Replace the old inventory-only CASE in the filter, not the
-                # unrelated legacy risk_mode predicate inside stock sources.
+
                 where = select.args.get('where')
                 if where:
                     for case in list(where.find_all(exp.Case)):
@@ -160,15 +151,14 @@ def update(config):
         query['request']['sql'] = render(tree)
         query['resultColumns'] = tree.named_selects
         spec = query['parameterSpec']['gea_p3001']
-        # Older cached callers may still send the former label.
+
         query['request']['sql'] = query['request']['sql'].replace("'缺失目标'", "'无目标'")
         if 'enum' in spec:
             spec['enum'] = list(dict.fromkeys(['无目标' if v == '缺失目标' else v for v in spec['enum']]))
     for name in ['page.dashboard-groups', 'page.structure-groups']:
         query = config['queries'][name]
         tree = parse(query['request']['sql'])
-        # The base total includes all categories; the drill must not silently
-        # remove a category with open orders from that same base.
+
         where = tree.args.get('where')
         if name == 'page.structure-groups' and where:
             for comparison in list(where.find_all(exp.NEQ)):
@@ -184,7 +174,6 @@ def update(config):
         query['request']['sql'] = render(tree)
         query['resultColumns'] = tree.named_selects
     return config
-
 
 if __name__ == '__main__':
     PATH.write_text(json.dumps(update(json.loads(PATH.read_text())), ensure_ascii=False, indent=2)+'\n')

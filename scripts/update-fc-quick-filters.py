@@ -17,8 +17,7 @@ for query_id, query in config['queries'].items():
     if ' AS quick_orders ON ' in sql:
         continue
     tree = sqlglot.parse_one(sql, read='postgres')
-    # Count/summary optimizers prune unused intermediate columns. Restore the
-    # existing detail projections needed by the new full-scope business filter.
+
     by_name = {cte.alias_or_name: cte for cte in tree.find_all(sqlglot.exp.CTE)}
     for name, cte in by_name.items():
         source = canonical_ctes.get(name)

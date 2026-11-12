@@ -186,7 +186,7 @@ test('Host initializes package resources in a Chinese path and serves the regist
         2,
       ) + '\n',
     );
-  // The same official configuration withdraws one original source without changing the other roots.
+
   const retainedRoots = context.workbenchPages
     .packages()
     .map((item) => item.directory)

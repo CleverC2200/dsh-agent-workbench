@@ -1,6 +1,3 @@
-/** Current page's UI projection. Workbench owns storage; the author owns every named field.
- * Subscribers receive the snapshot and its lifecycle event, 'restore' or 'released'.
- */
 const PROTOCOL = 'dsh-workbench-view-v1';
 export function createPageViewState(page) {
   const sessionPage = [
@@ -18,7 +15,7 @@ export function createPageViewState(page) {
     'inventory-apsplan',
     'inventory-dms',
   ].includes(page);
-  /** @type {Record<string,unknown>} */
+
   let state = { version: 1 };
   let binding,
     dirty = false;
@@ -102,16 +99,7 @@ export function createPageViewState(page) {
     },
   };
 }
-/** Bind an explicit authored React field; restores update the existing setter without replaying user actions.
- * @template T
- * @param {typeof import('react')} react
- * @param {ReturnType<typeof createPageViewState>} view
- * @param {string} key
- * @param {T | (() => T)} initial
- * @param {(value: T) => unknown} [encode]
- * @param {(value: unknown) => T} [decode]
- * @returns {[T, import('react').Dispatch<import('react').SetStateAction<T>>]}
- */
+
 export function usePageViewField(
   react,
   view,

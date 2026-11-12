@@ -811,7 +811,7 @@ export function InventoryOperationsWorkbench() {
   const modelInsight = useDashboardInsight(
     {
       scope: overviewKey,
-      // Pass facts, not the former deterministic narrative, to the model.
+
       evidence: overviewWorkspace?.workbench?.inventoryInsight
         ? { ...overviewWorkspace.workbench.inventoryInsight, text: undefined }
         : null,
@@ -1608,7 +1608,7 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
     setRemoteLoading(true);
     setRemoteError(null);
     setRemotePage(null);
-    // Coalesce typing; a changed filter cancels both timer and in-flight request.
+
     const timer = setTimeout(
       () => {
         void fetch(withAppBasePath('/api/inventory/sku-page'), {

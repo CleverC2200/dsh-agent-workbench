@@ -37,9 +37,7 @@ function cellValue(row: any, field: string, format?: string) {
         addresses.every((a) => typeof a?.address === 'string')
       )
         return addresses.map((a) => a.address).join('；');
-    } catch {
-      /* Plain text addresses remain plain text. */
-    }
+    } catch {}
   }
   return formatFactValue(row[field], format);
 }
@@ -53,7 +51,6 @@ export type ConfiguredListState = {
   replenishment?: FactInput['replenishment'];
 };
 
-/** Partial source contracts for the existing plugin entry. Missing domains never block another tab. */
 export function ConfiguredFactsPage({
   config: fallback,
   onRead,
@@ -178,8 +175,7 @@ export function ConfiguredFactsPage({
     [error, setError] = useState<any>(null),
     [loading, setLoading] = useState(false);
   const sourceView = definition.views.find((v: any) => v.id === viewId);
-  // Presentation is independent of the query contract: no field, parameter or
-  // permission is changed when rendering the original business table.
+
   const view = presentation
     ? {
         ...sourceView,
@@ -251,7 +247,7 @@ export function ConfiguredFactsPage({
           replenishment: readReplenishment,
           readContext: freshAfter ? undefined : readContext,
         },
-        // Business lists display rows; their independent overview owns card totals.
+
         { signal: controller.signal, detailsOnly: Boolean(presentation), freshAfter },
       );
     void (async () => {

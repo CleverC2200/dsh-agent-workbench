@@ -119,8 +119,7 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
       page_size: 11,
       offset: ((input.page ?? 1) - 1) * 10,
     });
-    // Push exact parent restrictions into existing sources before their heavy joins.
-    // Unknown buckets retain the outer NULL/blank normalization.
+
     if (input.category && input.category !== '未分类') {
       if (layer === 'branch') values.category = input.category;
       else if (layer === 'base') {
@@ -144,7 +143,6 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
   };
 }
 
-/** Sum company layers only; channel quantities retain their own date and scope. */
 export function categorySummary(category: string, layers: Partial<Record<ChainLayer, TreeRow[]>>) {
   const row = (layer: ChainLayer) => layers[layer]?.find((r) => r.node_key === category);
   const value = (layer: ChainLayer, field: string) =>

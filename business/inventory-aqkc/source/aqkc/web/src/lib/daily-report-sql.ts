@@ -4,8 +4,6 @@ import { BRANCH_WAREHOUSES, workbenchSql } from './workbench-sql';
 import { currentOrderSkuQuery } from './workbench-current-order-sql';
 import type { WorkbenchSqlQuery } from './workbench-sql-types';
 
-// All queries are server-owned. GEA applies the session's row permissions to
-// each source before aggregation. No browser-provided scope or SQL is accepted.
 export const dailyReportSql = {
   stock: workbenchSql.safetyStockRows,
   age: {

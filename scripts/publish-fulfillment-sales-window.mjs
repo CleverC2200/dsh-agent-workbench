@@ -12,7 +12,6 @@ const names = [
 ];
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
-/** Publish only the order-fulfillment presentation to an explicit server resource directory. */
 export async function publishFulfillmentSalesWindow({ bundle, directory }) {
   if (!bundle || !directory) throw Error('Explicit bundle and presentation directory required');
   const source = await realpath(resolve(bundle));

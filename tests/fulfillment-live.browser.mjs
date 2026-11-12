@@ -149,8 +149,7 @@ test('live fulfillment keeps granted rows and clears denied, filtered and previo
     }),
   );
   await original.goto('https://reference.test/');
-  // Compare author styles using the same fixture row and the scroll wrapper
-  // installed by orderPage; the retained presentation has no sample rows.
+
   await original.evaluate(
     (markup) => {
       const table = document.querySelector('.delivery-order-table');

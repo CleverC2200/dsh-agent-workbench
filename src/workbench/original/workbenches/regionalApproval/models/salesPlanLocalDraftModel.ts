@@ -1,4 +1,3 @@
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import type {
   GeaSalesPlanDetail,
   GeaSalesPlanListItem,
@@ -21,7 +20,7 @@ export type SalesPlanLocalDraft = {
   sourceSnapshot: string;
   adjustments: GeaSalesPlanSkuAdjustment[];
   remark: string;
-  /** 草稿里的调整量是相对哪个节点口径算出来的；缺省表示按状态口径。 */
+
   role?: ApprovalStageId;
 };
 
@@ -74,7 +73,6 @@ export const salesPlanApprovalDraftValues = (
   return values;
 };
 
-/** 只表示本地草稿的新鲜度；绝不作为服务端签发的权威或快照令牌发送。 */
 export const salesPlanDraftSnapshot = (
   row: Pick<GeaSalesPlanListItem, 'planId' | 'versionId' | 'status'>,
   detail: GeaSalesPlanDetail,
@@ -140,7 +138,7 @@ export const salesPlanDraftMatches = (
       return false;
     codes.add(adjustment.skuCode);
     const sku = detail.skus.find((item) => String(item.skuCode) === adjustment.skuCode);
-    // 基线必须和写草稿的界面用同一套口径：优先用本次请求角色，其次用草稿自己记录的角色，最后按状态取值。
+
     const baseline =
       sku && salesPlanEditableQuantity(sku, row.status, row.planTypeCode ?? 'Y', baselineRole);
     const qty = baseline === undefined ? '—' : addExactDecimals([baseline, adjustment.adjustQty]);
@@ -153,7 +151,6 @@ export const salesPlanDraftMatches = (
   });
 };
 
-/** 本地草稿保存只校验数据形状，不回查 GEA，也不代表服务端审批权限。 */
 export const salesPlanLocalDraftValid = (
   draft: unknown,
   planId: string,
@@ -201,7 +198,6 @@ export const readSalesPlanLocalDrafts = (scope: string | undefined): SalesPlanLo
   }
 };
 
-/** 本地写入失败必须报告，不能显示虚假的已保存状态。 */
 export const writeSalesPlanLocalDrafts = (
   scope: string,
   drafts: SalesPlanLocalDraftStore,

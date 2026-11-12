@@ -1,5 +1,5 @@
 import { syncAgentResources } from './build-output.mjs';
-/** Assemble the retained offline prototype and current page-owned bridge. */
+
 import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -11,7 +11,7 @@ const root = resolve(import.meta.dirname, '..'),
 const theme = (await readFile(resolve(root, 'theme/tokens.css'), 'utf8')).replace(/\r\n/g, '\n');
 if (
   createHash('sha256').update(theme).digest('hex') !==
-  '281fe7eebe0775b6bedabad6806753db6afe5eded52e6d9ade54067d23e20ef8'
+  '51d07dd91c4e2851301c046556a9c34aded00c5fa94525420b949badce9a5497'
 )
   throw Error('PROTOTYPE_THEME_RESOURCE_MISMATCH');
 const result = await build({

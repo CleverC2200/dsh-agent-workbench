@@ -22,7 +22,6 @@ const m = await import(
   'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
 );
 
-/** V1.8 #12：给业务的文案里不能出现接口、字段名、参数名、错误码。 */
 test('technical backend text never reaches business copy', () => {
   const technical = [
     'GEA_HTTP_409：payload.plan_month 为必填字段',
@@ -47,7 +46,6 @@ test('technical backend text never reaches business copy', () => {
   for (const text of business) assert.equal(m.businessSafeErrorMessage(text), text);
 });
 
-/** 技术细节只进日志，并给出可口头转述的错误编号。 */
 test('reported error id is human-transferable and detail stays in the log', () => {
   const logged = [];
   const original = console.warn;

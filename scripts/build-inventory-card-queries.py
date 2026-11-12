@@ -26,7 +26,7 @@ for agent in ['aqkc','fc','qll','apsplan']:
    prefix='branch-health' if view['summaryId'].startswith('branch-health.') else 'health'
    view['overviewSummaryId']=prefix+'.cards'
    view['inventorySummaryId']=prefix+'.inventory'
- # Base landing rows use only observed ages, not movement/FIFO/risk projection.
+
  if agent=='aqkc':
   source=c['queries']['batch-age.groups'];sql=source['request']['sql'].split('), batch_names AS (')[0]+')'
   fields={'level':'b.belong_base','average_age':'CASE WHEN SUM(b.age_weight_qty)>0 THEN SUM(b.weighted_age)/SUM(b.age_weight_qty) ELSE NULL END','max_age':'MAX(b.max_age)','row_count':'COUNT(*)','age_valid_count':'SUM(CASE WHEN b.age_weight_qty>0 THEN 1 ELSE 0 END)'}

@@ -17,8 +17,7 @@ import {
   skuAmendmentEventsSql,
 } from './sku-amendments.mjs';
 import { missingPlanPolicySql, selectedPlanSql } from './plan-policy.mjs';
-// Filter native date columns before UNION coerces the mixed date types to text.
-// Keep native datetime predicates available to Doris during the owner joins.
+
 const attributionSources = `SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_d
           WHERE header_addtime>=:gea_p1 AND header_addtime<:gea_p2
         UNION ALL SELECT d.belong_base,d.material_code,d.director,d.product_item,d.order_close_time AS attribution_date
@@ -31,14 +30,11 @@ const attributionSources = `SELECT belong_base,material_code,director,product_it
         UNION ALL SELECT belong_base,new_material_code AS material_code,NULL AS director,pinxiang AS product_item,fromorderno_month AS attribution_date FROM agents_order_execute_isontime_mi
           WHERE fromorderno_month>=:gea_p1 AND fromorderno_month<:gea_p2`;
 
-// Field formulas confirmed in the shared metric register, 2026-10-23.
 const dictionary = `SELECT material_code AS sku,
   CASE WHEN COUNT(DISTINCT product_categ_name)=1 THEN MAX(product_categ_name) END AS category,
   CASE WHEN COUNT(DISTINCT material_group_name)=1 THEN MAX(material_group_name) END AS item
   FROM agents_scm_material_in_out_summary_d GROUP BY material_code`;
 
-// Equivalent full join expressed with supported LEFT JOIN + UNION ALL.
-// The second arm retains inventory-only keys; it never drops unmatched national contributions.
 const stockProjection = `SELECT COALESCE(s.belong_base,b.belong_base) AS base,COALESCE(s.material_code,b.material_code) AS sku,
       d.category,COALESCE(s.item,b.item) AS item,COALESCE(s.name,b.name) AS name,
       COALESCE(b.stock_date,s.stock_date) AS stock_date,s.plan_month_offset,s.source_rows,b.available,b.inventory,b.aged,s.sales_plan,s.transfer_plan,
@@ -52,8 +48,7 @@ const stockProjection = `SELECT COALESCE(s.belong_base,b.belong_base) AS base,CO
       CASE WHEN s.source_rows>1 THEN 1 ELSE COALESCE(s.sales_invalid,0)+COALESCE(s.transfer_invalid,0) END AS base_plan_invalid,
       CASE WHEN b.inventory IS NULL OR b.invalid>0 OR s.source_rows IS NULL OR s.sales_invalid>0 OR s.transfer_invalid>0 THEN 1 ELSE 0 END AS invalid
 `;
-// Both plans use the inventory business day, including historical reports.
-// Zero is valid; never fall back when the selected version is missing.
+
 const salesPlan = selectedPlanSql(
   'main_sales_plan_v1',
   'main_sales_plan_adj',
@@ -76,8 +71,7 @@ const stockPlans = `SELECT belong_base,material_code,MAX(product_item) AS item,M
         FROM agents_scm_stock_detail_d CROSS JOIN (${missingPlanPolicySql}) plan_policy
         WHERE the_date=(SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2)
         GROUP BY belong_base,material_code`;
-// Keep the published production/sales SKU population for both stock quantities.
-// The existing period assembler reuses this snapshot projection, not a batch join.
+
 const stockBatches = `SELECT belong_base,material_code,MAX(material_name) AS name,NULL AS item,
         CONCAT(SUBSTRING(MAX(month_date),1,4),'-',SUBSTRING(MAX(month_date),5,2),'-',SUBSTRING(MAX(month_date),7,2)) AS stock_date,
         CASE WHEN COUNT(*)=1 THEN MAX(available_qty) END AS available,

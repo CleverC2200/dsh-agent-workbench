@@ -1,7 +1,6 @@
 import { createAgentQueries, type ConfiguredExecution } from './agent-query';
 import type { AgentSqlConfig } from './sql-config';
 
-/** Company cards and drilldowns share the latest authorized publication, with its actual cutoff. */
 export async function qllPublishedDate(
   config: AgentSqlConfig,
   requested: string,

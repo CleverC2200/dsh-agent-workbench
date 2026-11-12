@@ -31,7 +31,7 @@ def build(config):
     snapshot['parameterSpec']['gea_p2'] = copy.deepcopy(inventory['parameterSpec']['gea_p2'])
     snapshot['request']['parameters']['gea_p2'] = None
     snapshot['resultColumns'] = ['day', *inventory['resultColumns']]
-    # Date consumers must remain usable when quantity RETURN permission is absent.
+
     snapshot['snapshotRequiredColumns'] = ['day']
     snapshot['title'] = '最新库存快照日期与当前范围库存汇总'
     snapshot['notes'] = '日期保持全范围最新快照；库存按所选分仓过滤。日期读取仅要求 day 返回权限，库存卡片独立校验数量返回权限。'
@@ -72,8 +72,7 @@ def build(config):
     order['title'] = '当前分仓订单卡片汇总'
     order['notes'] = '仅用于全部或指定分仓卡片；沿用 ASN、占用、FIFO 及未知值规则，不关联卡片未使用的商品属性。明细筛选仍使用原查询。'
     config['queries']['current-shortage.overview'] = order
-    # The order card owns this same-snapshot count; other replenishment metrics
-    # do not need the expensive FIFO allocation at all.
+
     compact.FIXED = {}
     candidate = copy.deepcopy(config['queries']['replenishment.overview'])
     tree = sqlglot.parse_one(candidate['request']['sql'], read='postgres')
@@ -87,8 +86,7 @@ def build(config):
     config['queries']['replenishment.overview'] = fake['queries']['replenishment.overview']
     config['queries']['replenishment.overview']['orderCountFromOverview'] = True
     config['queries']['branch-supply.summary']['priority'] = 35
-    # Limit only these competing first-screen reads. Submission/export and
-    # other FC collections keep their existing concurrency and paging contract.
+
     for name in ['source.branch-stock-date', 'branch-supply.summary',
                  'current-shortage.overview', 'replenishment.detail.atomic',
                  'replenishment.overview', 'health.cards']:

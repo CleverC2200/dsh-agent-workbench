@@ -9,8 +9,7 @@
   container-type: inline-size;
   background: var(--bg-2);
   color: var(--text-primary);
-  /* 超宽屏（2K/带鱼屏）下内容不再无限拉伸：整页内容居中并留出上限，
-     1600 以下窗口不受影响。 */
+
   --gea-workbench-content-max: 1600px;
 }
 
@@ -24,7 +23,7 @@
 
 .header {
   display: flex;
-  /* 窄宽度下让右侧范围/版本组换行，而不是压到标题和页签上面。 */
+
   flex-wrap: wrap;
   min-height: 53px;
   flex: 0 0 auto;
@@ -38,7 +37,6 @@
   background: var(--bg-1);
 }
 
-/* 区域计划评估已摘成独立菜单页面，这里只保留当前页标题。 */
 .workspaceTitle {
   display: inline-flex;
   align-items: center;
@@ -96,7 +94,6 @@
   font-size: 11px;
 }
 
-/* 顶部标签（计划月份 / 版本 / 对比）加粗；右侧下拉里的取值保持常规字重，读起来才不糊。 */
 .scope small {
   font-weight: 600;
 }
@@ -109,7 +106,6 @@
   font-size: 12px;
 }
 
-/* V1.8 #14：差额正数红、负数绿，颜色只作用于差额数值本身。 */
 .queueMetrics .variancePositive {
   color: rgb(var(--danger-7));
 }
@@ -161,7 +157,6 @@
   background: var(--bg-1);
 }
 
-/* 流程图默认收起：收起时不占高度，只留标题行右侧的「当前节点」入口。 */
 .stageViewport[data-collapsed='true'] {
   display: none;
 }
@@ -364,7 +359,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--bg-3);
-  /* 右侧正好贴住右侧会话区的边界：这条 1px 会被看成"分隔条切进对话框"，去掉右边框。 */
+
   border-right: 0;
   border-radius: 8px 0 8px 8px;
   background: var(--bg-1);
@@ -483,7 +478,6 @@
 }
 
 .categoryProgressCell :global(.arco-progress-line) {
-  /* V1.8 #09：进度条宽度自适应列宽，不截断。 */
   width: 100%;
   margin: 0;
 }
@@ -528,7 +522,6 @@
   gap: 7px;
 }
 
-/* 删掉「组织范围」标题行后，状态标签（样例候选 / 草稿待应用）与查询按钮同格显示。 */
 .filterActions {
   justify-content: flex-end;
   flex-wrap: wrap;
@@ -845,7 +838,7 @@
   min-height: 32px;
   justify-content: flex-start;
   padding: 0;
-  /* V1.8 #10：组织名称是展开入口，保持蓝色 + 手型，并前置展开态小三角。 */
+
   color: rgb(var(--primary-6));
   font-weight: 600;
   cursor: pointer;
@@ -1000,7 +993,6 @@
   }
 }
 
-/* Two actual rows: summary/actions, then dimensions and applied filters. */
 .queueHeader {
   box-sizing: border-box;
   flex-wrap: wrap;
@@ -1145,7 +1137,6 @@
   }
 }
 
-/* Shared right-hand columns keep metrics aligned across every organization depth. */
 .progressTreeSection {
   --progress-completion-width: 220px;
   --progress-pending-width: 72px;
@@ -1298,7 +1289,6 @@
   }
 }
 
-/* Keep tree controls on the title baseline, with one indentation per level. */
 .organizationTable :global(.arco-table-cell) {
   display: flex;
   align-items: flex-start;
@@ -1307,7 +1297,7 @@
   min-width: 0;
   flex: 1;
 }
-/* V1.8 #10：展开入口已移到组织名称，这一列只留 1px 占位，图标整体隐藏。 */
+
 .organizationTable :global(.arco-table-cell-expand-icon) {
   display: none;
 }
@@ -1325,8 +1315,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 窄宽度下组织名/路径改成换行：原来 1280 那种列宽会把「浙沪经销业务(不用)」截成省略号，
-   用户看不到完整组织名。宽屏保持单行省略，行高不变。 */
+
 @container (max-width: 900px) {
   .organizationTable .detailTrigger,
   .organizationTable .organizationPath {
@@ -1346,7 +1335,7 @@
   scrollbar-width: thin;
   scrollbar-color: var(--bg-4) var(--bg-1);
 }
-/* 表格正文独立滚动时，列标题始终留在可视区域顶部。 */
+
 .organizationTable :global(.arco-table-content-inner > table > thead > tr > th.arco-table-th) {
   position: sticky;
   top: 0;
@@ -1359,7 +1348,7 @@
   :global(.arco-table-content-inner > table > thead > tr > th.arco-table-col-fixed-right) {
   z-index: 4;
 }
-/* Sticky identity and status columns must leave room for values in small panels. */
+
 @container (max-width: 620px) {
   .organizationTable :global(.arco-table-col-fixed-left),
   .organizationTable :global(.arco-table-col-fixed-right) {
@@ -1379,7 +1368,6 @@
   flex-shrink: 0;
 }
 
-/* Keep dense values inside their allocated column when the workbench is resized. */
 .organizationTable .stackCell,
 .organizationTable .categoryProgressCell {
   font-variant-numeric: tabular-nums;
@@ -1402,7 +1390,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Compact, single-line controls; very narrow panels scroll as one header. */
 .header {
   flex-wrap: nowrap;
   min-height: 48px;
@@ -1427,7 +1414,7 @@
   gap: 2px;
   margin-right: 4px;
 }
-/* 「月初 / 纠偏」切换项加粗，取值仍是常规字重。 */
+
 .orderTabs :global(.arco-btn) {
   font-weight: 600;
 }
@@ -1460,7 +1447,6 @@
   }
 }
 
-/* Approval overview: one compact task bar followed by four decision metrics. */
 .header {
   min-height: 62px;
   margin: 0;
@@ -1766,7 +1752,6 @@
   }
 }
 
-/* Align the business header border with the shared conversation toolbar. */
 .header {
   box-sizing: border-box;
   height: 58px;
@@ -1822,7 +1807,6 @@
   }
 }
 
-/* Sales plan shares the production-sales dashboard's white, connected KPI surface. */
 .dashboardHeader {
   padding: 10px 20px 12px;
   background: var(--bg-2);
@@ -1942,7 +1926,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Sales-plan controls use the workbench brand and neutral status palette. */
 .root .controlToolbar {
   min-height: 72px;
   align-items: stretch;
@@ -2089,7 +2072,6 @@
   color: var(--workbench-muted);
 }
 
-/* The month trigger and its floating menu follow the shared date-control states. */
 .scope .monthField {
   gap: 8px;
 }
@@ -2182,7 +2164,6 @@
   font-size: 13px;
 }
 
-/* Match the production-sales page's white canvas and quiet list states. */
 .root {
   --bg-1: var(--workbench-surface);
   background: var(--bg-1);
@@ -2302,7 +2283,6 @@
   background: var(--workbench-hover);
 }
 
-/* Keep the dimension toolbar and its expanded filters usable at the pane width. */
 .root .queueHeader {
   min-height: 44px;
   padding: 0 12px;

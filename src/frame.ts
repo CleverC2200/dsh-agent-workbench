@@ -1,9 +1,9 @@
 import type { WorkbenchPage } from './workbench.ts';
-/** A real Document contribution; Workbench owns its UI and borrows the Core main Conversation. */
+
 export type WorkbenchFramePage = WorkbenchPage & {
   readonly pluginId?: string;
   readonly resourceId?: string;
-  /** Page contributor owns pending navigation identity; Workbench observes only the current receipt. */
+
   readonly visibleRequest?: import('@deepseek-ai/dsh-client-store').ObservableSnapshot<
     string | undefined
   >;
@@ -31,7 +31,7 @@ export interface PageExecutionConnection {
   readonly owner: string;
   readonly binding: { surface: string; tool: string };
 }
-/** Private Workbench document implementation. Business grants stay on the Host. */
+
 export interface WorkbenchPageExecution {
   readonly identity: {
     getSnapshot(): PageIdentitySnapshot;

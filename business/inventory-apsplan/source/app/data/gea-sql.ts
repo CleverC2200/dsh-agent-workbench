@@ -1,4 +1,3 @@
-/** The host owns identity, Agent delegation and resource/row/column permissions. */
 export type SqlTransport = (
   method: string,
   parameters: unknown,
@@ -69,8 +68,6 @@ export async function readGovernedSql(
   if (total === undefined || rows.length === total) return rows;
   const count = Math.ceil(total / 200);
   for (let first = 2; first <= count; first += 3) {
-    // Settle this bounded batch before publishing or launching another one.
-    // Results remain ordered by page even if responses arrive out of order.
     const batch = await Promise.allSettled(
       Array.from({ length: Math.min(3, count - first + 1) }, (_, i) => page(first + i)),
     );

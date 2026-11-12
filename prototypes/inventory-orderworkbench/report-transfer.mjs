@@ -1,4 +1,3 @@
-/** Compress before crossing the page bridge; no report fields are removed. */
 export function packWorkbenchReport(report) {
   if (!report?.facts?.periods) return report;
   const periods = Object.fromEntries(

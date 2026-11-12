@@ -13,7 +13,7 @@ const out = await build({
   external: ['react'],
   jsx: 'transform',
 });
-// Resolve React from this repository rather than the data URL.
+
 const source = out.outputFiles[0].text
   .replaceAll('from "react/jsx-runtime"', `from "${import.meta.resolve('react/jsx-runtime')}"`)
   .replaceAll('from "react"', `from "${import.meta.resolve('react')}"`);
@@ -41,7 +41,7 @@ test('query clicks and Enter work when native submission is blocked; validation 
     for (const [k, v] of originals)
       v ? Object.defineProperty(globalThis, k, v) : delete globalThis[k];
   });
-  // Model the host refusing native form submission before React receives it.
+
   document.addEventListener(
     'submit',
     (e) => {

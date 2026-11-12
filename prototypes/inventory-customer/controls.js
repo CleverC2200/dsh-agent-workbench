@@ -38,7 +38,6 @@ export function customerControls(state, setters, regions) {
   };
 }
 
-/** Explicit authored controls use the existing page channel, not DOM scraping or business writes. */
 export function useCustomerControls(react, state, setters, regions) {
   react.useEffect(() => {
     const controls = customerControls(state, setters, regions);

@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 
-// Exercise the actual shared bridge, including the public refresh apply wrapper.
 test('delivered invocation and page apply carry cancellation into pending transitions', async (t) => {
   const listeners = new Map(),
     sent = [],

@@ -1,4 +1,3 @@
-/* Current ThemeSnapshot tokens feed the retained page's semantic paint names. */
 html body {
   --ui-font: var(--dsw-font-family);
   --ui-ink: var(--dsw-alias-label-primary);

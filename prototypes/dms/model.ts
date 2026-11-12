@@ -1,4 +1,3 @@
-/** 内存 DMS 验收模型；生产 Host 永远不会导入。 */
 import {
   buildDmsMockPackets,
   type DmsMockPlan,
@@ -32,7 +31,6 @@ type Log = {
   detail: string;
 };
 
-/** Public mock command validates the existing workflow projection before packet calculation. */
 export function mockDmsPackets(plan: DmsMockPlan): DmsMockPacket[] {
   if (plan.status !== 5) throw new Error('MOCK_DMS_REQUIRES_STATUS_5');
   if (!salesPlanWorkflow(plan.typeCode, SALES_PLAN_WORKFLOW_ROWS).rolesKnown)
@@ -40,7 +38,6 @@ export function mockDmsPackets(plan: DmsMockPlan): DmsMockPacket[] {
   return buildDmsMockPackets(plan);
 }
 
-/** 确定性的 mock 接收方和本地回读；远端效果只保存在当前实例内存中。 */
 export class MockDmsWriteback {
   private plan: DmsMockPlan;
   private syncStatus: SyncStatus = 'NOT_STARTED';
@@ -62,7 +59,6 @@ export class MockDmsWriteback {
     }
   }
 
-  /** 使用与工作台相同的工作流投影模拟品类审批。 */
   approve(rows: readonly SalesPlanWorkflowRow[] = SALES_PLAN_WORKFLOW_ROWS): void {
     const flow = salesPlanWorkflow(this.plan.typeCode, rows);
     if (
@@ -78,7 +74,6 @@ export class MockDmsWriteback {
     this.log('CATEGORY_APPROVE', '4 → 5');
   }
 
-  /** 使用原报文键重试已确认失败；未知结果必须先回读对账。 */
   deliver(outcome: DmsMockOutcome): void {
     if (this.syncStatus === 'SYNCED') {
       this.log('REPLAY', '已完成，不重复投递');
@@ -115,7 +110,6 @@ export class MockDmsWriteback {
     this.acceptReceipts([...this.remote.values()]);
   }
 
-  /** 查询 mock 接收方而不重发；只有回读后才能把缺失环节标记为可重试。 */
   reconcile(): void {
     if (this.plan.status !== 5 && this.plan.status !== 10) throw new Error('MOCK_DMS_NOT_STARTED');
     this.log('RECONCILE', '只读查询模拟接收方');
@@ -126,7 +120,6 @@ export class MockDmsWriteback {
     }
   }
 
-  /** 应用前先校验完整回执批次；重复回执不能改变完成时间。 */
   acceptReceipts(receipts: readonly DmsMockReceipt[]): void {
     if (this.plan.status !== 5 && this.plan.status !== 10) throw new Error('MOCK_DMS_NOT_STARTED');
     const candidate = new Map(this.accepted);
@@ -160,7 +153,6 @@ export class MockDmsWriteback {
     }
   }
 
-  /** 返回供演示和断言使用的脱离视图；外部修改不会触及模拟器。 */
   read() {
     return structuredClone({
       plan: this.plan,

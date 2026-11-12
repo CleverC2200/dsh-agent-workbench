@@ -10,7 +10,7 @@ import {
   parseDailySummarySnapshot,
   type DailySummarySnapshot,
 } from './daily-summary';
-// Native pages install a business-fetch shim after module initialization.
+
 const sourceFetch = globalThis.fetch?.bind(globalThis);
 
 export type ConfiguredExecution = (
@@ -31,7 +31,6 @@ type SummaryReads = Map<string, { expiresAt: number; result: Promise<SummaryRead
 const pageSummaries: SummaryReads = new Map();
 const suppliedSummaries = new WeakMap<ConfiguredExecution, SummaryReads>();
 
-/** Pages select a configured query; credentials and the physical database stay in the host. */
 export function createAgentQueries(
   fallback: AgentSqlConfig,
   execute?: ConfiguredExecution,
@@ -59,7 +58,7 @@ export function createAgentQueries(
         if (!response.ok) throw Object.assign(Error(body.message || 'DIRECT_SQL_FAILED'), body);
         return body;
       }
-      // Use the existing owned page channel: no SQL, identity or credentials cross from the page.
+
       if (typeof window === 'undefined')
         throw Object.assign(Error('请在已连接的工作台页面内查询'), {
           code: 'PAGE_CHANNEL_UNAVAILABLE',
@@ -157,7 +156,7 @@ export function createAgentQueries(
       businessDay(),
       freshAfter,
     ]);
-    // Active reads pin their batch; a new branch read can advance after five minutes.
+
     let snapshot = summaryReads.get(key);
     if (snapshot && Date.now() >= snapshot.expiresAt) {
       summaryReads.delete(key);
@@ -210,14 +209,14 @@ export function createAgentQueries(
       summaryReads.set(key, snapshot);
       result.catch((error) => {
         const code = error?.failure?.reasonCode ?? error?.code ?? '';
-        // A later card must not automatically retry a denied metadata request.
+
         if (
           /PERMISSION|NOT_PUBLISHED|NO_RETURN_COLUMN_ALLOWED|REQUIRED_COLUMN_UNAVAILABLE/.test(code)
         )
           return;
         if (summaryReads.get(key)?.result === result) summaryReads.delete(key);
       });
-      // Prefetched rows expire after the initial-load window; metadata can outlive them.
+
       if (summaryReads.size > 32) summaryReads.delete(summaryReads.keys().next().value ?? '');
     }
     const selectedRead = await snapshot.result;
@@ -225,7 +224,7 @@ export function createAgentQueries(
       throw Object.assign(Error('身份已变化，请重新读取当前账号的数据'), {
         code: 'IDENTITY_CHANGED',
       });
-    // Coalesce one initial load, without retaining a temporary empty publication indefinitely.
+
     if (selectedRead.snapshot.kind === 'unavailable')
       snapshot.expiresAt = Math.min(snapshot.expiresAt, Date.now() + 45000);
     selectedSnapshot = selectedRead.snapshot;
@@ -284,7 +283,6 @@ export function createAgentQueries(
       });
     },
     async readAll(id: string, values: Record<string, unknown>, options: any) {
-      // Each count/page call retains its own query ID and business parameters.
       const generation = identityGeneration;
       const selected = await selectRead(id, values);
       options?.signal?.throwIfAborted();

@@ -1,6 +1,3 @@
-/* Formal GEA0.0.135 508feea3b0c285a61e4c06179a705866b1429b8e company-owned rules.
- * Private host selectors are removed; public ownership translations preserve declaration bytes. */
-
 .gea-workbench-shell {
   position: relative;
   width: 100%;
@@ -28,7 +25,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
-  /* 两个抽屉（业务工作台菜单 / 历史会话列表）统一正文色，改这一处即可。 */
+
   --gea-sidebar-ink: var(--workbench-text);
   --gea-menu-left: 10px;
 }
@@ -85,7 +82,6 @@
 }
 
 .gea-sidebar-tab[aria-expanded='true'] {
-  /* 展开态用浅红底，不再铺白卡片：白卡片会和右侧原生图标压出边缘，看着像被切掉。 */
   background: var(--workbench-brand-soft) !important;
   color: var(--workbench-selected-text);
   font-weight: 600;
@@ -147,7 +143,7 @@
 .gea-sidebar-panel .gea-shell-navigation-content {
   height: auto;
   min-height: 0;
-  /* 两个抽屉共用一块底色：菜单不再自己铺灰底，跟原生会话列表保持一致。 */
+
   background: transparent;
 }
 
@@ -203,9 +199,9 @@
   align-items: center;
   gap: 4px;
   padding: 6px 0;
-  /* 固定成收起态的列宽并贴左，宽度动画过程中图标不再横向漂移。 */
+
   align-self: flex-start;
-  /* 图标列与品牌同宽，保持收起侧栏的同一条中线。 */
+
   width: 56px;
   max-width: 100%;
 }
@@ -398,7 +394,7 @@
 
 [data-gea-narrow] .gea-sidebar-brand {
   justify-content: center !important;
-  /* 和图标列同宽（56px）并贴同一条左边缘，圆标才会落在图标列的中线上。 */
+
   width: 56px;
   min-width: 56px;
   max-width: 56px;
@@ -736,8 +732,6 @@
 }
 
 .gea-agent-welcome {
-  /* 首页原来用绝对定位、底边只留 104px：输入区比这高时会盖住输入框、点不进去。
-     改成和业务页一样的"上欢迎区、下输入区"弹性排布。 */
   position: relative;
   inset: auto;
   order: -1;
@@ -916,7 +910,7 @@
 .gea-home-hero {
   order: -1;
   width: 100%;
-  /* 主视觉保持居中（登记 30 的"文字左对齐"经验收改回）。这两处只防窄列溢出，不改变居中形态。 */
+
   max-width: min(900px, 100%);
   min-width: 0;
   margin: 0 auto 24px;
@@ -1845,7 +1839,6 @@
   font-size: 12px;
 }
 
-/* Unsent Session navigation reads Core metadata; it owns no Conversation draft. */
 .gea-unsent-history {
   padding: 8px 10px;
   color: var(--workbench-body);

@@ -1,5 +1,5 @@
 import { passwordLoginCopy } from '../company/locales.ts';
-/** 独立销售计划页面使用的本地化文案。 */
+
 const copy = {
   ...passwordLoginCopy,
   aiWorkbench: ['AI工作台', 'AI workspace'],

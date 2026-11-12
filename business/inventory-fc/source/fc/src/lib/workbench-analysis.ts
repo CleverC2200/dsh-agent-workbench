@@ -32,7 +32,7 @@ export type WorkbenchAnalysis = {
   boundary: string;
   summary: string;
 };
-/** Evaluate whole-warehouse evidence before list pagination. No causal inference from missing SKU detail. */
+
 export function buildWorkbenchAnalysis(snapshot: WarehouseSnapshot): WorkbenchAnalysis {
   if (snapshot.page?.overview.insight) return snapshot.page.overview.insight;
   const m = snapshot.metrics,

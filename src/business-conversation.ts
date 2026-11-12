@@ -4,7 +4,6 @@ import type { WorkbenchController, DocumentSession } from './workbench.ts';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
 
-/** Explicit inventory entry borrows Core selection and the existing page association owner. */
 export async function startInventoryConversation({
   host,
   account,
@@ -54,7 +53,7 @@ export async function startInventoryConversation({
     },
     question,
   );
-  // Commit page presentation immediately after Core navigation, without another asynchronous read.
+
   await workbench.open(page.id);
   return selected;
 }

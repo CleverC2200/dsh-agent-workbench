@@ -11,7 +11,6 @@ FROM_KEY = 'from_' if 'from_' in exp.Select.arg_types else 'from'
 QUANTITIES = {'live_qty', 'available_qty', 'pack_unit_qty', 'freeze_qty'}
 KEYS = {'warehouse_classify', 'warehouseid', 'material_code', 'month_date', 'prod_date', 'belong_base'}
 
-
 def net_batches(sql):
     tree = sqlglot.parse_one(sql, read='postgres')
     changed = False
@@ -28,8 +27,7 @@ def net_batches(sql):
         if 'live_qty' not in columns:
             continue
         keys = columns.intersection(KEYS)
-        # Required by the date derivation and physical inventory grain, even for
-        # a query whose display projection omits a dimension.
+
         keys.update({'warehouseid', 'material_code', 'month_date', 'prod_date'})
         columns.update(keys)
         projections = []
@@ -52,7 +50,6 @@ def net_batches(sql):
     for substring in list(tree.find_all(exp.Substring)):
         substring.replace(exp.Anonymous(this='SUBSTRING', expressions=[substring.this.copy(), substring.args['start'].copy(), substring.args['length'].copy()]))
     return re.sub(r'%\((gea_p\d+)\)s', r':\1', tree.sql(dialect='postgres'))
-
 
 if __name__ == '__main__':
     for agent in ['aqkc', 'fc', 'qll']:

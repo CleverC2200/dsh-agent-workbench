@@ -1,4 +1,3 @@
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import { useWorkbenchHost } from '../../../bridge.ts';
 import { BackendHttpError } from '../../../http-error.ts';
 import { useEffect, useRef, useState } from 'react';
@@ -32,7 +31,6 @@ const empty = (key: string, status: AdviceStatus): SalesPlanAdviceState => ({
   total: 0,
 });
 
-/** 无状态推理：每批五行、同时运行两批，不创建聊天 Session。 */
 export const useSalesPlanAdvice = (scope: string | undefined, prompt: string) => {
   const { modelInference } = useWorkbenchHost();
   const key = JSON.stringify([scope, prompt]);
@@ -54,9 +52,7 @@ export const useSalesPlanAdvice = (scope: string | undefined, prompt: string) =>
     try {
       const value = JSON.parse(scope);
       if (value && Array.isArray(value.rows)) payload = value;
-    } catch {
-      /* 继续支持不透明的 scope。 */
-    }
+    } catch {}
     const rows = (payload?.rows ?? []) as Array<{ id: string; [key: string]: unknown }>;
     const aliases = new Map(rows.map((row, index) => ['r' + index, row.id]));
     const pendingRows = rows

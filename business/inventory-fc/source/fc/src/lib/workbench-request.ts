@@ -1,6 +1,5 @@
 import { requireLiveWarehouseSnapshot, type WarehouseId } from './domain.ts';
 
-/** Bound both response headers and body reads; cancellation never becomes a stale result. */
 export async function fetchWorkbenchSnapshot(
   url: string,
   warehouseId: WarehouseId,

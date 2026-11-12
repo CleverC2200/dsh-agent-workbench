@@ -1,7 +1,7 @@
 import type { CorrectionFields } from './workbenches/regionalApproval/models/salesPlanCorrectionModel.ts';
-/** 从 AionUi 复制的销售计划 API 字段；标识和精确小数保持字符串，避免 Renderer 丢失精度。 */
+
 export type GeaSalesPlanId = string;
-/** 精确小数跨越 JavaScript/Core/GEA 边界时始终保持字符串。 */
+
 export type GeaSalesPlanDecimal = string;
 
 export type GeaSalesPlanGroupMetrics = {
@@ -38,7 +38,7 @@ export type GeaSalesPlanPeriod = {
   periodMonth: string;
   planType: string;
   planTypeCode: string;
-  /** 旧周期状态已移除；从可见计划重建周期时为 UNKNOWN。 */
+
   status?: string;
   submitDeadline?: string | null;
   createdAt?: string | null;
@@ -82,7 +82,7 @@ export type GeaSalesPlanListItem = {
   provinceName?: string | null;
   areaCode?: string | null;
   areaName?: string | null;
-  /** 兼容旧版 GEA 部署接受的历史别名。 */
+
   regionName?: string | null;
   provinceRegionName?: string | null;
   salesGroupName?: string | null;
@@ -157,7 +157,7 @@ export type GeaSalesPlanSku = CorrectionFields & {
   id: GeaSalesPlanId;
   versionId: string;
   skuCode: GeaSalesPlanId;
-  /** todo/material 端点可选提供的描述。 */
+
   materialDescription?: string | null;
   skuName?: string | null;
   productCategName: string;
@@ -208,7 +208,6 @@ export type GeaSalesPlanApprovalLog = {
 export type GeaSalesPlanApprovalRole = 'region' | 'province' | 'area' | 'category';
 
 export type GeaSalesPlanActionContext = {
-  /** 显式支持按角色限定写入、结果失效和仅通知路由。 */
   policy?: 'role-visible-v1';
   roleActions?: Array<{ role: GeaSalesPlanApprovalRole; allowedActions: GeaSalesPlanAction[] }>;
   versionId: string;
@@ -233,9 +232,7 @@ export type GeaSalesPlanDetail = {
     receipts: Array<{ key: string; dmsId: string }>;
   };
 
-  /** 当前用户任务分配；由已认证 Host 匹配并刷新。 */
   actionContext?: GeaSalesPlanActionContext;
-  /** 服务端把该版本的可处理审批任务派给当前用户时由 Host 匹配；代表"这一笔现在归你办"。 */
 
   currentVersion: GeaSalesPlanVersion;
   skus: GeaSalesPlanSku[];
@@ -325,7 +322,7 @@ export type GeaSalesPlanAction = 'APPROVE' | 'REJECT' | 'SAVE';
 
 export type GeaSalesPlanSkuAdjustment = {
   skuCode: GeaSalesPlanId;
-  /** 带符号的数量增量，而不是绝对数量。 */
+
   adjustQty: GeaSalesPlanDecimal;
 };
 
@@ -343,7 +340,7 @@ export type GeaSalesPlanActionRequest = {
 
 export type GeaSalesPlanActionReceipt = {
   approvalRole?: GeaSalesPlanApprovalRole;
-  /** 对结果数据快照仍然有效的角色决策。 */
+
   approvedRoles?: GeaSalesPlanApprovalRole[];
   planId: GeaSalesPlanId;
   versionId: GeaSalesPlanId;
@@ -356,7 +353,6 @@ export type GeaSalesPlanActionReceipt = {
 };
 
 export type GeaSalesPlanActionParams = {
-  /** Host 重新验证 SAVE 能力时必需的字段。 */
   planId?: GeaSalesPlanId;
   versionId: GeaSalesPlanId;
   request: GeaSalesPlanActionRequest;

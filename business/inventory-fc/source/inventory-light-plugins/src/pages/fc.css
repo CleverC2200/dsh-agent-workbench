@@ -1389,7 +1389,6 @@ button {
   }
 }
 
-/* Demo V1.13 visual contract: center workbench + AI analysis panel. */
 :root {
   --bg: #eef1f7;
   --bg-2: #e8ecf4;
@@ -2130,7 +2129,6 @@ textarea:focus-visible {
   background: var(--ui-accent-ink);
 }
 
-/* Sales-forecast DataPagination parity. */
 .data-pagination {
   display: flex;
   width: 100%;
@@ -2329,7 +2327,6 @@ textarea:focus-visible {
   }
 }
 
-/* Dealer-inventory shell parity: shared top controls, compact composer and draggable split. */
 :root {
   --ai-pane-width: 25%;
 }
@@ -2555,7 +2552,6 @@ body.is-layout-resizing {
   }
 }
 
-/* Safety-stock visual tokens + demand-forecast workflow nodes. */
 :root {
   --bg: #fff;
   --surface: #ffffff;
@@ -2839,9 +2835,7 @@ body {
   justify-self: end;
 }
 
-/* Match safety-stock inventory-operations-workbench Kpi; preserve branch drill-downs. */
 .safety-stock-kpis {
-  /* Keep five compact metrics together whenever their container permits it. */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 112px), 1fr));
   gap: 6px;
   margin-bottom: 10px;
@@ -2977,7 +2971,6 @@ body {
   border-radius: 6px;
 }
 
-/* Keep all five metrics in one row when the conversation pane narrows the workspace. */
 @container (max-width: 1000px) {
   .safety-stock-kpis .kpi-card {
     padding: 6px 7px;
@@ -3329,7 +3322,6 @@ body {
   background: var(--text);
 }
 
-/* Dealer-inventory base surfaces: retain safety-stock controls and cards above. */
 :root {
   --dealer-page-bg: #fff;
   --dealer-workspace-bg: #fff;
@@ -3388,7 +3380,7 @@ body,
   outline: 2px solid var(--blue);
   outline-offset: -2px;
 }
-/* Keep both grid items inside the single viewport row, including long replies. */
+
 .agent-layout {
   grid-template-rows: minmax(0, 1fr);
 }
@@ -3546,7 +3538,6 @@ body,
   background: var(--dealer-divider);
 }
 
-/* Dealer-inventory conversation panel parity. */
 .ai-header {
   height: 48px;
   padding: 0 16px;
@@ -3585,7 +3576,6 @@ body,
   color: #b71922;
 }
 
-/* Demand-forecast top controls: same 32 px toolbar, spacing and position. */
 .agent-topbar-actions {
   gap: 8px;
 }
@@ -3626,7 +3616,6 @@ body,
   outline-offset: 1px;
 }
 
-/* Keep the warehouse switch as one pill; the native select must not draw a second surface. */
 .warehouse-switch select {
   height: 28px;
   border: 0;
@@ -3638,7 +3627,6 @@ body,
   box-shadow: none;
 }
 
-/* Keep the whole-warehouse overview visible while the requested detail page loads. */
 .business-panel[aria-busy='true'] .table-scroll,
 .business-panel[aria-busy='true'] .resource-grid,
 .business-panel[aria-busy='true'] .observation-list {
@@ -3646,7 +3634,6 @@ body,
   pointer-events: none;
 }
 
-/* One-line business toolbar; scroll the context only when a small viewport cannot fit it. */
 .agent-topbar.compact-topbar {
   min-height: 48px;
   gap: 12px;
@@ -3744,7 +3731,6 @@ body,
   }
 }
 
-/* Only the page perimeter is borderless; preserve all inner region and card styles. */
 .agent-root,
 .agent-shell {
   border: 0;
@@ -3767,7 +3753,6 @@ body,
   font-variant-numeric: tabular-nums;
 }
 
-/* Two-line replenishment headings keep long business labels compact. */
 .replenishment-table th {
   height: 48px;
   min-width: 84px;
@@ -3846,7 +3831,6 @@ body,
   line-height: 1.6;
 }
 
-/* DSH 业务页复用原布局，聊天由宿主提供。 */
 .dsh-local-notice {
   font: 12px/28px system-ui;
   text-align: center;
@@ -3861,7 +3845,6 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
   display: none !important;
 }
 
-/* DSH shared visual language. Business geometry and status colors stay local. */
 .agent-root {
   background: var(--ui-canvas);
 }
@@ -3886,7 +3869,6 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
   background: var(--ui-accent-soft);
 }
 
-/* Latest original replenishment table and confirmation details. */
 .replenishment-table {
   table-layout: auto;
   width: 100%;
@@ -4023,7 +4005,6 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
   color: var(--ui-secondary);
 }
 
-/* workbench-ui-style — final scoped visual layer; table columns and workflows unchanged. */
 .agent-root {
   --red: var(--ui-accent);
   --red-dark: var(--ui-accent-hover);
@@ -4182,7 +4163,6 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
   outline-color: var(--ui-accent);
 }
 
-/* Feedback: consistent interaction states, one focus ring, clear scroll edge. */
 .agent-root .compact-topbar {
   height: auto;
 }
@@ -4344,7 +4324,6 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
   color: #d61a35;
 }
 
-/* Client feedback: bounded shell, persistent title and one content scroller. */
 html,
 body,
 #app {
@@ -4428,13 +4407,11 @@ body,
   background: var(--ui-soft);
 }
 
-/* Lower toolbar contents toward the separator without adding height. */
 .agent-topbar.compact-topbar {
   padding-top: 14px;
   padding-bottom: 2px;
 }
 
-/* Remove the decorative stripe that extends along the workspace. */
 .priority-analysis::before {
   display: none;
 }
@@ -4446,7 +4423,6 @@ body,
   box-shadow: none;
 }
 
-/* Use the APS workbench canvas beneath page content. */
 :root {
   --dealer-page-bg: #fff;
   --dealer-workspace-bg: #fff;
@@ -4455,7 +4431,6 @@ body,
   background: #fff;
 }
 
-/* Match the APS Sparkles mark in the AI insight heading. */
 .priority-analysis h3 > svg {
   display: none;
 }
@@ -4470,7 +4445,6 @@ body,
     center/18px 18px no-repeat;
 }
 
-/* APS red title tag for the AI insight heading. */
 .priority-analysis h3::before {
   display: none;
 }
@@ -4497,7 +4471,6 @@ body,
     center/contain no-repeat;
 }
 
-/* Match the APS briefing card's stroke, spacing, and type scale. */
 .priority-analysis {
   padding: 22px 24px;
   border: 1px solid #f2dadd;
@@ -4537,7 +4510,7 @@ body,
   font-size: 11px;
   line-height: 1.75;
 }
-/* 2026-09-23: stable two-line headers and identifier-driven drilldowns. */
+
 .replenishment-table th .replenishment-column-label {
   display: flex;
   align-items: center;
@@ -4614,7 +4587,6 @@ body,
   background: var(--ui-soft);
 }
 
-/* Feedback 55–59: headers and batch drilldowns retain their own compact layout. */
 .replenishment-column-heading {
   display: flex;
   align-items: center;
@@ -4681,7 +4653,6 @@ body,
   margin: 8px 0 0;
 }
 
-/* Retain the original KPI hierarchy while allowing long business labels to wrap. */
 .agent-root .safety-stock-kpis .kpi-card dl > div {
   align-items: baseline;
   flex-wrap: wrap;
@@ -4853,7 +4824,6 @@ body,
   }
 }
 
-/* Text fields use the shared focus border and shadow without a second outline. */
 input:focus-visible,
 .dsh-modal-content div input:focus-visible {
   outline: none;
@@ -4875,14 +4845,13 @@ input:focus-visible,
   overflow-wrap: anywhere;
 }
 
-/* Replenishment preview uses the same controls and spacing inside the native dialog. */
 .fc-workflow-dialog > label {
   display: flex;
   align-items: center;
   gap: 8px;
   font-weight: 600;
 }
-/* Keep the warehouse field independent from the compact pagination selector. */
+
 .fc-workflow-dialog > label > select {
   box-sizing: border-box;
   width: 240px;
@@ -5015,7 +4984,6 @@ input:focus-visible,
   font: 600 11px var(--ui-font);
 }
 
-/* Keep the workflow actions reachable when the preview is taller than the dialog. */
 .dsh-modal:has(.fc-workflow-dialog) .dsh-modal-content {
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -5046,7 +5014,6 @@ input:focus-visible,
   margin: 4px 0 0;
 }
 
-/* Confirmation identifiers and quantity remain visible while browsing the wide list. */
 .replenishment-table > thead > tr > [data-column='sku'],
 .replenishment-table > tbody > tr > [data-column='sku'] {
   position: sticky;

@@ -12,7 +12,6 @@ from test_qll_structure import QllStructureAgeTests
 from unittest.mock import patch
 from agent_sql import ContractError, bind, inspect, validate_parameters, Executor, direct_preview_document, config_for
 
-
 class StockObservationRollupTests(unittest.TestCase):
     """An empty matched cohort must not erase sibling cohorts; missing matched values still fail closed."""
 
@@ -45,7 +44,6 @@ class StockObservationRollupTests(unittest.TestCase):
                             self.assertEqual(db.execute(sql).fetchone(), expected)
         self.assertEqual(len(checked), 13)
 
-
 class AccuracyBaseSqlTests(unittest.TestCase):
     """Execute configured aggregates on isolated fixtures; never contact a database."""
 
@@ -72,8 +70,7 @@ class AccuracyBaseSqlTests(unittest.TestCase):
         inputs.update(values)
         params = validate_parameters(query, inputs, query_id)
         tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
-        # Fixture dates are canonical ISO strings. SQLite's DATE cast returns a
-        # year integer, unlike the production PostgreSQL/Doris DATE contract.
+
         for cast in list(tree.find_all(sqlglot.exp.Cast)):
             if cast.args['to'].this == sqlglot.exp.DataType.Type.DATE:
                 cast.replace(cast.this.copy())
@@ -133,7 +130,6 @@ class AccuracyBaseSqlTests(unittest.TestCase):
         self.assertEqual(len(second), 5)
         self.assertTrue({row['base'] for row in first}.isdisjoint(row['base'] for row in second))
 
-
 class BudgetPerformanceSqlTests(unittest.TestCase):
     read = AccuracyBaseSqlTests.read
 
@@ -185,7 +181,6 @@ class BudgetPerformanceSqlTests(unittest.TestCase):
         self.assertEqual((len(first), len(second)), (10,2))
         self.assertTrue({r['month'] for r in first}.isdisjoint(r['month'] for r in second))
 
-
 class BranchOrderCountTests(unittest.TestCase):
     def setUp(self):
         self.db = sqlite3.connect(':memory:'); self.db.row_factory = sqlite3.Row
@@ -215,7 +210,6 @@ class BranchOrderCountTests(unittest.TestCase):
         self.assertEqual(self.result()['shortage_sku_count'], 0)
         self.insert('A', 'S1', 0)
         self.assertEqual(self.result()['shortage_sku_count'], 0)
-
 
 class DatedFactoryShipmentTests(unittest.TestCase):
     read = AccuracyBaseSqlTests.read
@@ -254,7 +248,6 @@ class DatedFactoryShipmentTests(unittest.TestCase):
         first=self.read('base_shipments.detail');second=self.read('base_shipments.detail',offset=10)
         self.assertEqual((len(first),len(second)),(10,5));self.assertTrue({(x['base'],x['sku']) for x in first}.isdisjoint({(x['base'],x['sku']) for x in second}))
 
-
 class PartialWarehouseHealthTests(unittest.TestCase):
     def test_known_quantities_do_not_replace_incomplete_totals(self):
         for agent in ['aqkc','fc','qll','apsplan']:
@@ -271,7 +264,6 @@ class PartialWarehouseHealthTests(unittest.TestCase):
                 self.assertIsNone(row['available_qty']);self.assertEqual(row['known_available_qty'],20);self.assertEqual(row['known_available_qty_count'],1)
                 self.assertEqual(row['known_pack_unit_qty'],0);self.assertEqual(row['known_pack_unit_qty_count'],2)
             finally:db.close()
-
 
 class ReadOnlySqlTests(unittest.TestCase):
     def test_direct_catalog_is_shared_by_pages_and_expires_without_caching_results(self):
@@ -362,7 +354,6 @@ class ReadOnlySqlTests(unittest.TestCase):
             executor.execute('dealer', '__unknown__', {})
         self.assertEqual(error.exception.code, 'QUERY_NOT_REGISTERED')
 
-
 class FcReplenishmentCoverageTests(unittest.TestCase):
     """Execute the shipped config against independent inventory/plan/shipment grains."""
     def test_confirmation_pages_survive_gateway_default_limit_without_missing_rows(self):
@@ -372,7 +363,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         for query_id in ['replenishment.detail.atomic', 'replenishment-suggestions.detail.atomic']:
             query = self.config['queries'][query_id]
             tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
-            # The governed gateway applies its default 50-row limit when only an inner CTE is paged.
+
             def gateway_page(offset):
                 limit = tree.args.get('limit')
                 bound = query['parameterSpec'][limit.expression.this]['name'] if limit else None
@@ -435,8 +426,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         numeric = set('qtysigned adjust_order_qty qtyordered qtyallocated qtyshipped bizunitconvertrate delivery_qty detailstatus live_qty unrestricted_qty is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan last_month_actual_qty current_day_avg_qty act_dl_qty'.split())
         for name, columns in tables.items():
             self.db.execute('CREATE TABLE '+name+' ('+', '.join(field+(' REAL' if field in numeric else ' TEXT') for field in columns.split())+')')
-        # Existing behavioral fixtures describe lot/plan grains. Project a separately
-        # published latest-total view; independent new-source tests cover divergent totals.
+
         self.db.execute("""CREATE VIEW agents_scm_warehouse_total_data_d AS
           SELECT i.warehouseid, i.material_code, MAX(i.warehouse_name) AS warehouse_name,
           MAX(i.material_name) AS material_name,SUM(i.live_qty) AS live_qty,
@@ -452,7 +442,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.db.execute("CREATE VIEW agents_dwd_scm_execute_detail_mi AS SELECT "+','.join('e.'+c+' AS '+c for c in execution_columns)+",          'ORG' AS organizationid,'OWNER' AS ownerid,          CASE WHEN NULLIF(e.bdwctime,'') IS NOT NULL OR e.prapare_order_status IN ('备单完成','备单完毕') THEN e.qtyallocated/e.bizunitconvertrate ELSE e.qtyordered/e.bizunitconvertrate END AS adjust_order_qty,          e.qtyallocated/e.bizunitconvertrate AS pack_unitqty,e.qtyshipped/e.bizunitconvertrate AS delivery_qty FROM agents_scm_execute_detail_d e")
         self.db.execute('CREATE TABLE agents_scm_asn_detail_d(warehouseid TEXT,warehouse_name TEXT,warehouse_classify TEXT,source_warehouseid TEXT,asnreference1 TEXT,asnno TEXT,asnlineno TEXT,material_code TEXT,header_addtime TEXT,actualarrivetime TEXT,order_close_time TEXT,asnstatus TEXT,lastreceivingtime TEXT,load_time TEXT,expectedqty REAL,receivedqty REAL,asntype TEXT)')
         self.db.execute('CREATE TABLE agents_scm_execute_detail_hourly_d(qtysigned REAL,header_addtime TEXT,order_close_time TEXT,order_type TEXT,material_name TEXT,wms_close_time TEXT,dmscanceltime TEXT,receive_wh TEXT,warehouseid TEXT,material_code TEXT,executeorderno TEXT,executeorderlineno TEXT,fromorderno TEXT,load_time TEXT,qtyordered REAL,qtyallocated REAL,qtyshipped REAL,bizunitconvertrate REAL,packingunitmain TEXT,packingunitconvertrate REAL,detailstatus INTEGER,orderstatus INTEGER,canceltime TEXT,bizflowstatus TEXT,prapare_order_status TEXT)')
-        # Establish an independently loaded ASN source without adding demand to WH1.
+
         self.db.execute("INSERT INTO agents_scm_asn_detail_d (warehouseid,warehouse_name,warehouse_classify,source_warehouseid,asnreference1,asnno,asnlineno,material_code,header_addtime,asnstatus,load_time,expectedqty,receivedqty,asntype) VALUES ('WH1','分仓1','20','BASE','OTHER-ORDER','ASN-OTHER','1','S2','2026-10-01','00','2026-10-19',0,0,'TT')")
         self.addCleanup(self.db.close)
         self.insert('agents_scm_warehouse_transfer_plan_data_d', warehouseid='WH1', material_code='S1', warehouse_name='分仓1', material_name='商品1', future30_avg_plan=10, warehouse_month_out_plan=310, warehouse_future30_qty=300, warehouse_transfer_qty=40, transfer_onway_qty=0, transfer_prepare_qty=0, stat_month='202610')
@@ -521,7 +511,6 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertIn('S3',[r['sku'] for r in rows])
         self.assertEqual(row['in_transit'],0)
         self.assertEqual(self.read('replenishment.count')[0]['total'],3)
-
 
     def test_period_plans_use_stat_month_and_published_next_month_quantity(self):
         self.insert('agents_scm_warehouse_transfer_plan_data_d',warehouseid='WH1',material_code='S1',stat_month='202611',warehouse_month_out_plan=600,warehouse_future30_qty=620)
@@ -599,7 +588,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertEqual(base['total_qty'],11)
         self.assertEqual(base['max_age'],(datetime.date(2026,10,19)-datetime.date(2024,2,29)).days)
         self.assertEqual(branch['total_qty'],130)
-        # Fixed branch thresholds classify positive batches, not whole-SKU maximum age.
+
         self.assertEqual(base['overaged_qty'],10)
         self.assertEqual(base['stagnant_qty'],10)
 
@@ -772,7 +761,6 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertIsNone(row['material_group'])
         self.assertEqual(self.read('replenishment.summary')[0]['inventory_qty'],130)
 
-
 class CustomerAnalysisListTests(unittest.TestCase):
     def setUp(self):
         self.db=sqlite3.connect(':memory:');self.db.row_factory=sqlite3.Row;self.addCleanup(self.db.close)
@@ -803,7 +791,6 @@ class CustomerAnalysisListTests(unittest.TestCase):
         for a in ['dealer','qll','apsplan']:
             first=self.read(a,'customer_analysis.detail.atomic',customer='C1',page_size=1,offset=0);second=self.read(a,'customer_analysis.detail.atomic',customer='C1',page_size=1,offset=1);empty=self.read(a,'customer_analysis.detail.atomic',customer='C1',page_size=1,offset=2)
             self.assertEqual((first[0]['material_code'],second[0]['material_code']),('S1','S2'));self.assertEqual(empty[0]['page_scope_total'],2);self.assertEqual(empty[0]['page_row_present'],0)
-
 
 class DealerMatchedAnalysisTests(unittest.TestCase):
     def setUp(self):
@@ -864,7 +851,6 @@ class DealerMatchedAnalysisTests(unittest.TestCase):
         self.assertEqual((filtered[0]['category'],filtered[0]['inventory'],filtered[0]['page_scope_total']),('汤圆',5,1))
         self.assertEqual(self.read('dealer','dealer.stock.count',category_mode='equal',category='汤圆')[0]['total'],1)
         self.assertEqual(self.read('dealer','dealer.stock.category.count')[0]['total'],3)
-
 
 if __name__ == '__main__':
     unittest.main()

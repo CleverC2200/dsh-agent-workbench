@@ -91,7 +91,7 @@ test('a notification is only a reminder: it never grants approval identity', () 
     ...detail(),
     workflowApproval: { versionId: 'v', notificationId: 'n', instanceId: 'i', actionable: true },
   };
-  // 有没有待办任务都不影响身份：身份只看账号角色。
+
   assert.equal(m.salesPlanAccessForRow(row(), d), undefined);
   assert.equal(m.salesPlanAccessForRow(row(), d, ['province']).approvalRole, 'province');
   assert.equal(

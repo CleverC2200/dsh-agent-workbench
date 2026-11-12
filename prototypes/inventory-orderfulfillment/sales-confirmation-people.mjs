@@ -1,4 +1,3 @@
-/** Only selects people returned by the authenticated GEA directory; grants remain server-owned. */
 export function mountSalesConfirmationPeople(document, formal, alive, changed) {
   const node = (tag, text) => {
     const value = document.createElement(tag);

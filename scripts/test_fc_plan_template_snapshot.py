@@ -51,7 +51,7 @@ class TemplateSnapshot(unittest.TestCase):
                     self.assertEqual(self.read(id,**values),self.read(id,summary=True,**values))
 
     def test_gateway_default_limit_cannot_truncate_snapshot_export(self):
-        # Use more than the gateway default 50 and one complete requested page.
+
         self.db.executemany('INSERT INTO agents_scm_warehouse_transfer_plan_data_d VALUES(?,?,?,?,?,?,?,?,?)',
             [('A110',f'EXTRA{i:03}','沈阳',f'产品{i}','汤圆',i,0,None,'202611') for i in range(221)])
         source=self.read('transfer_plan.template',page_size=2000)

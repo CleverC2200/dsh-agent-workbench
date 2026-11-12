@@ -1,6 +1,5 @@
 import { Decimal } from 'decimal.js';
 
-/** Dashboard amounts are yuan; keep the unrounded value available in the title. */
 export function readableMoney(input: string | number): { display: string; exact: string } {
   if (input === '' || input === null || input === undefined) return { display: '—', exact: '—' };
   let value: Decimal;

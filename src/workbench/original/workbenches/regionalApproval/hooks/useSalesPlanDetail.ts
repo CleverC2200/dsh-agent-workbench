@@ -1,4 +1,3 @@
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import { isBackendHttpError } from '../../../http-error.ts';
 import {
   useWorkbenchHost,
@@ -20,7 +19,6 @@ import {
 
 const DETAIL_TIMEOUT_MS = 15_000;
 
-/** 详情、SKU 和版本比较是三个独立状态机；每次选择变化都校验归属并取消上一轮请求。 */
 export type SalesPlanDetailError =
   | 'permission'
   | 'expired'

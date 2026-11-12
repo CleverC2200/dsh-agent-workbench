@@ -355,7 +355,7 @@ const server = createServer(async (req, res) => {
     return;
   }
   const origin = req.headers.origin;
-  // Workbench HTML runs in an opaque-origin sandbox; the per-run token still gates reads.
+
   if (
     ![config.origin, 'null'].includes(origin) ||
     req.headers.host !== `127.0.0.1:${config.port}`

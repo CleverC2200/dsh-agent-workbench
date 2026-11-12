@@ -14,16 +14,15 @@ export interface HtmlPage {
   url: string;
   resourceId?: string;
 }
-/** Private package location plus the original declaration, for capability owners. */
+
 export interface HtmlPackage {
   directory: string;
   htmlPath: string;
   manifest: Record<string, any>;
-  /** Only controls menu discovery; installed resources and static delivery remain owned. */
+
   visible?: boolean;
 }
 export interface WorkbenchPages {
-  /** Register explicit installed package roots. No capability body or business credentials are read. */
   registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]>;
   packages(): readonly HtmlPackage[];
   requestContext(owner: string): { sessionId: string; signal: AbortSignal };
@@ -37,7 +36,6 @@ const legacyApsIds = new Set([
   'inventory-apsdelivery',
 ]);
 
-/** Owns discovery, safe package paths and HTML delivery. Business calls belong to GEA. */
 export class HtmlPages extends PageRuntime implements WorkbenchPages {
   private readonly packageDeclarations = new Map<string, HtmlPackage>();
   constructor(

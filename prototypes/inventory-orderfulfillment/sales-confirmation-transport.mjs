@@ -1,4 +1,3 @@
-/** 正式确认只沿已有 Host workspace 端口；页面不持有凭据、销售映射或机器人配置。 */
 export function mountSalesConfirmationTransport(document, request) {
   let generation = 0,
     availability,

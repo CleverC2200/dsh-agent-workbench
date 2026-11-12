@@ -379,7 +379,7 @@
     },
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^scripts/(?:source-comments|check-source-comments)\\.mjs$",
+      "pattern": "^scripts/(?:source-comments|format-comments|check-source-comments)\\.mjs$",
       "tests": ["tests/source-comments.test.mjs", "tests/agent-knowledge.test.mjs"],
       "sourceTests": ["tests/source-comments.test.mjs", "tests/agent-knowledge.test.mjs"]
     }
@@ -387,7 +387,7 @@
   "sourceTools": {
     "tests/source-typecheck.test.mjs": ["typescript"],
     "tests/source-tools.test.mjs": [],
-    "tests/source-comments.test.mjs": ["typescript"],
+    "tests/source-comments.test.mjs": ["typescript", "parse5", "postcss", "yaml", "highlight.js"],
     "tests/agent-knowledge.test.mjs": ["typescript"]
   }
 }

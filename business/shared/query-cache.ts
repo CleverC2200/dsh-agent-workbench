@@ -1,5 +1,3 @@
-// A page can bypass its Host snapshot on an explicit refresh without owning
-// credentials or placing business rows in browser storage.
 let freshAfter = 0;
 let identityGeneration = 0;
 const identityListeners = new Set<() => void>();

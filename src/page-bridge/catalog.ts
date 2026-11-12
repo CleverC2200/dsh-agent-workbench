@@ -1,14 +1,3 @@
-/**
- * 页面能力目录：页面自己声明"这一屏能做什么"，桥据此生成给模型看的工具。
- *
- * 这是通用层：不出现任何具体页面/业务的名字。业务只提供一句句动作说明和参数形状，
- * 工具名、`kind` 枚举、参数表、说明文字全部由这里生成，避免每加一个页面动作
- * 就要去改工具定义和手写说明。
- *
- * 约束（同样与业务无关）：动作数量、命名、说明与参数长度都有上限；
- * 参数允许标量、标量数组和一层标量字段对象，不接受任意嵌套结构。
- */
-
 import {
   focusTokens,
   truncateText,
@@ -39,71 +28,53 @@ export type PageActionParam =
     };
 
 export type PageAction = {
-  /** 动作名，会作为工具 `kind` 的枚举值。 */
   name: string;
-  /** 一句话说明这个动作做什么，会拼进工具说明。 */
+
   description: string;
-  /**
-   * 动作影响面：view 只改"这一屏怎么看"（默认）；data 会改业务数据。
-   * 只有宿主明确放开时，data 动作才会被暴露给模型。
-   */
+
   scope?: 'view' | 'data';
-  /** 这个动作接受的参数。 */
+
   params?: Record<string, PageActionParam>;
 };
 
 export type PageCatalog = {
-  /** 页面标识，宿主用白名单判断"这个页面允不允许被对话改"。 */
   surface: string;
-  /** 工具名，例如 `gea_workbench_apply`。 */
+
   tool: string;
-  /** 工具说明的总述，业务自己写"这个工具能改这一屏的什么"。 */
+
   description: string;
-  /** 可解释意图的自由文本字段名（可选），例如 `reason`。 */
+
   reasonField?: string;
-  /**
-   * 页面自述的元素（通用写法）：模型只按元素和通用动词操作，
-   * 只读元素照样列出来（能读），但不允许被改。
-   */
+
   elements?: PageElement[];
-  /** 页面自定义动作目录；不能与 elements 同时声明。 */
+
   actions?: PageAction[];
 };
 
-/** 通用动词：与页面无关，模型只会这四种操作。 */
 export const PAGE_ACTION_VERBS = ['invoke', 'setValue', 'select', 'clear'] as const;
 export type PageActionVerb = (typeof PAGE_ACTION_VERBS)[number];
 
 export type PageElementRole = 'row' | 'field' | 'control' | 'collection';
 
-/**
- * 元素的影响等级：view 只改UI视图；draft 修改页面草稿（默认）；submit / approve 会提交或审批，
- * 必须由用户明确要求、且页面当前可点时才允许。
- */
 export const PAGE_ELEMENT_EFFECTS = ['view', 'draft', 'submit', 'approve'] as const;
 export type PageElementEffect = (typeof PAGE_ELEMENT_EFFECTS)[number];
 
-/**
- * 页面上的一个元素。页面只声明"渲染出来、人能看见/能操作"的东西；
- * 后台状态、内部缓存、接口凭据不属于元素，不在这里出现。
- */
 export type PageElement = {
-  /** 稳定 id，模型下指令时引用它。 */
   id: string;
   role: PageElementRole;
-  /** 人能看到的文案，模型靠它对齐用户的话。 */
+
   label: string;
-  /** 当前值（只读元素也带，供模型读）。 */
+
   value?: string;
-  /** 可选值（下拉/切换类控件）。 */
+
   options?: readonly string[];
-  /** 该元素支持的操作名，invoke 只能从这里选。 */
+
   actions?: readonly string[];
-  /** 只有 field 且 editable=true 才允许 setValue。 */
+
   editable?: boolean;
-  /** collection 的成员元素 id（用于"这一列的字段一起改"）。 */
+
   members?: readonly string[];
-  /** 这个元素操作下去的后果等级，缺省按草稿处理。 */
+
   effect?: PageElementEffect;
 };
 
@@ -113,25 +84,17 @@ export const PAGE_CATALOG_LIMITS = {
   maxParamsPerAction: 12,
   maxNameLength: 48,
   maxDescriptionLength: 200,
-  /**
-   * 说明长度上限。真实页面会有几十个元素（20 行 + 筛选 + 展开行的字段），
-   * 上限太小会让工具直接注册不上（页面就"不可用"）。这里给足余量，
-   * 超长时由 compileElementCatalog 截断说明，绝不因为长度把工具弄没。
-   */
+
   maxToolDescriptionLength: 20_000,
-  /** 说明里最多逐条列出多少个"实例元素"（行/字段/集合）。 */
+
   maxListedElements: 120,
   maxEnumValues: 24,
 } as const;
 
 const NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
-/** 页面标识允许连字符/点（例如 `gea-workbench`、`inventory.dealer`）。 */
+
 const SURFACE_PATTERN = /^[a-z][a-z0-9._-]*$/;
-/**
- * 元素 id：允许冒号分层（例如 `field:p-1:sku:1001:qty`）。
- * 迁移过来的业务页面由宿主按"行 + 表头"生成 id，表头是中文，所以这里允许中日韩文，
- * 但仍然禁止空白、引号与换行，避免 id 把工具说明的结构撑破。
- */
+
 const ELEMENT_PATTERN = /^[A-Za-z][A-Za-z0-9:._\-\u4e00-\u9fa5]*$/;
 const ELEMENT_ROLES = ['row', 'field', 'control', 'collection'] as const;
 
@@ -180,7 +143,7 @@ function catalogElements(value: unknown): PageElement[] {
       !(PAGE_ELEMENT_EFFECTS as readonly unknown[]).includes(element.effect)
     )
       throw new Error('INVALID_PAGE_CATALOG');
-    // 可编辑 = 用户能改：输入框（field）和可选项控件（control，如下拉/分段/页码）都算。
+
     if (element.editable === true && role !== 'field' && role !== 'control')
       throw new Error('INVALID_PAGE_CATALOG');
     return {
@@ -305,7 +268,6 @@ function catalogParams(value: unknown): Record<string, PageActionParam> {
   return result;
 }
 
-/** 校验页面自述的能力目录；页面上报的内容一律按不可信数据处理。 */
 export function validatePageCatalog(value: unknown): PageCatalog {
   const catalog = catalogObject(value);
   if (
@@ -371,7 +333,6 @@ export function validatePageCatalog(value: unknown): PageCatalog {
   };
 }
 
-/** 同一个参数被多个动作共用时，说明里要写清哪些动作用它。 */
 function paramDescription(catalog: PageCatalog, name: string): string | undefined {
   const declared = catalog.actions ?? [];
   const owners = declared.filter((action) => action.params?.[name]).map((action) => action.name);
@@ -382,10 +343,6 @@ function paramDescription(catalog: PageCatalog, name: string): string | undefine
   return `${owners.join(' / ')} 使用：${own ?? ''}`.trim();
 }
 
-/**
- * 把目录编译成"给模型看的工具说明 + 参数表"。
- * `kind` 是动作名；其余参数按目录并集生成，出现在多个动作里就注明归属。
- */
 export function compilePageCatalog(catalog: PageCatalog): {
   description: string;
   parameters: Array<{ name: string } & PageActionParam>;
@@ -407,8 +364,7 @@ export function compilePageCatalog(catalog: PageCatalog): {
       if (seen.has(name)) continue;
       seen.add(name);
       const description = paramDescription(catalog, name);
-      // 合并成"一个工具 + 动作枚举"时，只有 kind 是全局必填；
-      // 各动作自己的必填关系写进说明，运行期由业务校验兜底。
+
       const requiredIn = declared
         .filter((action) => action.params?.[name]?.required === true)
         .map((action) => action.name);
@@ -445,7 +401,6 @@ export function compilePageCatalog(catalog: PageCatalog): {
   return { description, parameters };
 }
 
-/** 元素目录的说明：把"能读什么、能操作什么"直接写给模型。 */
 function compileElementCatalog(catalog: PageCatalog): {
   description: string;
   parameters: Array<{ name: string } & PageActionParam>;
@@ -463,7 +418,7 @@ function compileElementCatalog(catalog: PageCatalog): {
   const description = [
     catalog.description,
     '',
-    // 元素目录**不写进工具说明**：它每次请求都要付一次 token。改成先要目录、按需取。
+
     `可操作元素 ${interactive.length} 个（可编辑 ${
       elements.filter((element) => element.editable === true).length
     }、可点 ${
@@ -474,7 +429,7 @@ function compileElementCatalog(catalog: PageCatalog): {
     '规则：invoke 只能执行元素列出的可执行动作；setValue 只能写「可编辑」的 field，或用 collection 一次写它的成员字段；select 只能选可操作元素；后台状态、内部缓存、接口都不在清单里，禁止臆造 id。' +
       '标了「提交类」「审批类」的元素默认不要动：只有用户这一轮明确要求提交/审批时才调用，并且必须带 confirm=true；页面没标这类元素就说明它不提供该动作，不要找别的办法绕过。',
   ].join('\n');
-  // 长度兜底：宁可截断说明，也不能因为说明太长让工具注册不上。
+
   const bounded =
     description.length > PAGE_CATALOG_LIMITS.maxToolDescriptionLength
       ? `${description.slice(0, PAGE_CATALOG_LIMITS.maxToolDescriptionLength)}\n…（说明超长已截断；规则同上）`
@@ -485,7 +440,7 @@ function compileElementCatalog(catalog: PageCatalog): {
       {
         name: 'kind',
         type: 'string',
-        // kind=directory 与 directory=true 都只请求元素目录，不下发页面动作。
+
         enum: [...PAGE_ACTION_VERBS, 'directory'],
         description:
           'invoke 执行元素动作；setValue 写可编辑字段；select 选中元素；clear 关浮层/清当前筛选；directory 只取元素目录（等价于传 directory=true）。只要目录时也可以不传 kind。',
@@ -544,12 +499,6 @@ function compileElementCatalog(catalog: PageCatalog): {
   };
 }
 
-/**
- * 元素目录：只读、按需、可收窄。
- *
- * 目录只在 `directory=true` 时返回，可按 focus 收窄并受预算上限约束，
- * 避免每次模型请求都重复携带整页元素。
- */
 export function elementDirectory(
   catalog: PageCatalog,
   options: { focus?: string; limit?: number; values?: boolean } = {},
@@ -590,14 +539,13 @@ export function elementDirectory(
           .some((value) => value.toLowerCase().includes(token)),
       ),
   );
-  // 可操作的排前面：模型先要的是"能改什么"。
+
   const ordered = [
     ...matched.filter(interactive),
     ...matched.filter((element) => !interactive(element)),
   ];
   const kept = ordered.slice(0, limit);
-  // 渐进式暴露：默认只回"字段索引"（id、名称、能不能改）。当前值和可选项要显式
-  // 带 values=true，免得把一整屏的值塞进上下文。
+
   const withValues = options.values === true;
   return {
     counts: {
@@ -630,7 +578,6 @@ export function elementDirectory(
   };
 }
 
-/** 取一次调用涉及到的最高影响等级（没有元素信息时按 draft）。 */
 export function pageActionEffect(
   catalog: PageCatalog,
   args: Record<string, unknown>,
@@ -659,15 +606,11 @@ export function pageActionEffect(
   return effect;
 }
 
-/**
- * 宿主侧硬校验：只读元素不能被改，后台元素根本不存在。
- * 返回 null 表示允许，否则返回拒绝原因码。
- */
 export function resolvePageAction(
   catalog: PageCatalog,
   args: Record<string, unknown>,
 ): string | null {
-  if (!catalog.elements) return null; // 旧形状由业务自己校验
+  if (!catalog.elements) return null;
   const byId = new Map(catalog.elements.map((element) => [element.id, element]));
   const kind = typeof args.kind === 'string' ? args.kind : '';
   if (!(PAGE_ACTION_VERBS as readonly string[]).includes(kind)) return 'INVALID_PAGE_ACTION';
@@ -690,7 +633,7 @@ export function resolvePageAction(
     if (kind === 'invoke') {
       const action = typeof args.action === 'string' ? args.action : '';
       if (!element.actions?.includes(action)) return 'ACTION_NOT_ALLOWED';
-      // 提交/审批类动作必须由用户明确要求：缺 confirm 一律不下发。
+
       if ((element.effect === 'submit' || element.effect === 'approve') && args.confirm !== true)
         return 'CONFIRMATION_REQUIRED';
       continue;

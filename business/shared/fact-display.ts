@@ -1,4 +1,3 @@
-/** Display only declared numeric fields. Do not coerce identifiers or lose DECIMAL precision. */
 export function formatFactValue(value: unknown, format?: string): string {
   if (value == null || value === '') return '-';
   if (format === 'percent') {

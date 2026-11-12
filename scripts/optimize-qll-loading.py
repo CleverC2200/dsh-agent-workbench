@@ -11,7 +11,6 @@ from sqlglot.optimizer.pushdown_projections import pushdown_projections
 ROOT = Path(__file__).resolve().parents[1]
 PATH = ROOT / 'business/inventory-qll/sql.config.json'
 
-
 def optimize(config):
     config = copy.deepcopy(config)
     queries = config['queries']
@@ -40,7 +39,7 @@ FROM {prefix}_quantities AS q CROSS JOIN {prefix}_latest AS l WHERE l.day_key IS
     for query_id in ['overview.quick-stock', 'health.cards', 'branch-health.cards',
                      'branch-turnover.cards', 'base_shipments.summary', 'overview.orders-by-pickup']:
         queries[query_id]['priority'] = 30
-    # Full-chain branch cards reuse the independent workbench turnover pair.
+
     turnover = queries['branch-turnover.cards']
     tree = sqlglot.parse_one(turnover['request']['sql'], read='postgres')
     columns = ['row_count', 'rolling_ship_daily', 'historical_turnover_days', 'turnover_count', 'matched_turnover_inventory', 'matched_turnover_daily']
@@ -54,10 +53,9 @@ FROM {prefix}_quantities AS q CROSS JOIN {prefix}_latest AS l WHERE l.day_key IS
     turnover['parameterSpec'] = {k: v for k, v in turnover['parameterSpec'].items() if k in names}
     turnover['request']['parameters'] = {k: v for k, v in turnover['request']['parameters'].items() if k in names}
     turnover['resultColumns'] = tree.named_selects
-    # Base turnover shares the plan-matched stock summary with the base workbench.
+
     config['overviewViewIds'] = list(dict.fromkeys([*config['overviewViewIds'], 'base']))
     return config
-
 
 if __name__ == '__main__':
     PATH.write_text(json.dumps(optimize(json.loads(PATH.read_text())), ensure_ascii=False, indent=2) + '\n')

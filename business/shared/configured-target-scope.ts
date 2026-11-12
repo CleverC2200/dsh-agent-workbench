@@ -1,7 +1,6 @@
 import type { createAgentQueries } from './agent-query';
 import { selectDefaultPublishedTargetInventory } from './target-inventory-policy.js';
 
-/** Use the authorized published calendar, not a bundled month/version example. */
 export async function readConfiguredTargetScope(
   client: ReturnType<typeof createAgentQueries>,
   asOf: string,

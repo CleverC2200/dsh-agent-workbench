@@ -61,8 +61,7 @@ for query_id, fields in groups.items():
         'replenishment.detail.atomic', 'snapshot.replenishment.detail.atomic',
         'snapshot-default.replenishment.detail.atomic',
     ]:
-        # The governed gateway rejects wildcard counts when rewriting this
-        # nested aggregate. COUNT(1) counts the same rows, including null SKUs.
+
         sql = re.sub(r'\bCOUNT\s*\(\s*\*\s*\)', 'COUNT(1)', sql, flags=re.I)
     query['request']['sql'] = sql
 for query_id in ['summary.first-screen', 'summary.bootstrap']:

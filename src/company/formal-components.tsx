@@ -1,5 +1,3 @@
-/** Formal selected GEA0.0.135 UI, verified against shipped artifacts.
- * Source Git 508feea3b0c285a61e4c06179a705866b1429b8e; only exported for Workbench ownership. */
 import React from 'react';
 import { AgentAvatar } from './agent-avatar.tsx';
 import { BUSINESS_GROUP_ICON_PATHS, type BusinessGroupIcon } from './business-icons.ts';
@@ -268,7 +266,6 @@ export function ConversationToolbar({
 }
 
 export function NavIcon({ kind }: { kind: NavIconKind }) {
-  // 原型分组图标是填充路径（1024 viewBox），用 currentColor 跟随菜单文字色。
   if (kind === 'synergy' || kind === 'orders') {
     return (
       <svg
@@ -279,7 +276,7 @@ export function NavIcon({ kind }: { kind: NavIconKind }) {
         viewBox="0 0 1024 1024"
         fill="currentColor"
       >
-        {/* 填充图标是满幅的，缩到线框图标同一墨迹尺寸（约 13px），避免看着比其它分组图标大一圈。 */}
+        {}
         <g transform="translate(512 512) scale(0.75) translate(-512 -512)">
           {BUSINESS_GROUP_ICON_PATHS[kind].map((d, index) => (
             <path key={index} d={d} />

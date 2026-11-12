@@ -1,5 +1,3 @@
-// Configuration-driven caller. The trusted host supplies execute and owns all
-// identity, data-source and authorization context. This module contains no SQL.
 import { scheduledQuery } from './query-scheduler.js';
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const immutableRegistries = new WeakSet();
@@ -173,7 +171,6 @@ export function requireColumns(result, columns) {
 }
 
 export function createQueryClient(config, execute) {
-  // Capture one immutable registry for a request chain, including paired counts.
   config = immutableRegistries.has(config) ? config : structuredClone(config);
   const concurrency = [
     'inventory-apsplan',
@@ -188,14 +185,13 @@ export function createQueryClient(config, execute) {
   async function read(id, values, { signal, requiredColumns = [], priority } = {}) {
     signal?.throwIfAborted();
     const request = makeRequest(config, id, values);
-    // No retry or alternate-source fallback, including authorization failures.
+
     const result = await scheduledQuery(
       () => execute(request, { signal, queryId: id, values: structuredClone(values) }),
       signal,
       priority ?? query(config, id).priority ?? 0,
       query(config, id).maxConcurrency === 1 ? 1 : concurrency,
-      // Collect the inventory first-screen reads before selecting priority. Otherwise
-      // synchronous component order starts a heavy query ahead of ready cards.
+
       ['inventory-fc', 'inventory-qll', 'inventory-aqkc'].includes(config.agentId) ||
         (config.agentId === 'inventory-orderworkbench' &&
           (id.includes('.periods.') || id === 'workbench.period-snapshots')),
@@ -240,7 +236,7 @@ export function createQueryClient(config, execute) {
       maxRows < 1
     )
       fail('INVALID_COLLECTION_CONTRACT', '完整读取必须有配对计数、稳定键及有效上限');
-    // Validate the caller's full contract before deriving count parameters.
+
     makeRequest(config, id, values);
     const pageSize = values.page_size;
     if (!Number.isSafeInteger(pageSize) || pageSize < 1)
@@ -254,8 +250,7 @@ export function createQueryClient(config, execute) {
         ...(atomicId ? ['page_scope_total', 'page_row_present'] : []),
       ]),
     ];
-    // A short first page proves a bounded aggregate is complete in one statement.
-    // A full page may be truncated: discard it and use the counted multi-page path.
+
     if (singlePageFirst && !atomicId) {
       const result = await read(
         q.pagination?.initialQuery ?? id,
@@ -354,9 +349,7 @@ export function createQueryClient(config, execute) {
         rejectedColumns: result.rejectedColumns,
       });
     };
-    // Confirm the first page before scheduling more. Then overlap at most three
-    // independent pages; consume them in offset order and never return a prefix
-    // as a complete collection. Counts, permissions and stable keys still gate it.
+
     const stop = new AbortController();
     const pageSignal = signal ? AbortSignal.any([signal, stop.signal]) : stop.signal;
     if (firstAtomic) accept({ ...firstAtomic, rows: firstPage.rows }, 0);
@@ -476,7 +469,7 @@ export function inventoryOverview(result) {
     missingInventoryCount: missingInventory,
     dailySales: n('negative_stock_avg_30d_sale') > 0 ? null : n('known_stock_avg_30d_sale'),
     dailySalesPartial: n('missing_stock_avg_30d_sale') > 0 || n('negative_stock_avg_30d_sale') > 0,
-    // The source is a daily average, not the legacy report's period total.
+
     shipment30: null,
     shipment30UnavailableReason: 'PERIOD_MOVEMENT_SOURCE_NOT_CONFIRMED',
     aggregateRisk:
@@ -490,7 +483,6 @@ export function inventoryOverview(result) {
   };
 }
 
-/** An empty OFFSET still returns its scope count through the LEFT JOIN sentinel. */
 export function unpackAtomicPage(result, page, size) {
   const fail = (code, message) => {
     throw Object.assign(Error(message), { code });

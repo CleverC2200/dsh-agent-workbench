@@ -3,8 +3,6 @@ import { scopedData, type Scope } from 'dsh-agent-manage/aps-compute/adapter';
 
 type Snapshot = MetricData & { readAt?: string };
 
-// Keep the period and source failures beside the numbers passed to page Q&A.
-// A null comparison alone cannot distinguish no history from a rejected query.
 export function comparisonEvidence(
   current: Snapshot | null,
   previous: Snapshot | null,

@@ -31,7 +31,6 @@ const rowSchema = z.object({
 });
 export type BatchAgeRow = z.infer<typeof rowSchema>;
 
-/** One snapshot lookup and one atomic aggregate/page; never download all batches. */
 export async function readBatchAge(
   fallback: AgentSqlConfig,
   input: {
@@ -101,7 +100,6 @@ export async function readBatchAge(
   };
 }
 
-/** Ratios use the positive quantity with known batch ages, not the SKU's maximum age. */
 export function batchAgeShare(value: unknown, denominator: unknown): string {
   const qty = quantity.nullable().safeParse(value);
   const total = quantity.nullable().safeParse(denominator);

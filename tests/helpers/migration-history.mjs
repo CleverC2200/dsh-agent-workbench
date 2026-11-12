@@ -18,7 +18,7 @@ for (const group of Object.values(history)) {
   Object.freeze(group.files);
   Object.freeze(group);
 }
-/** Fixed test inputs preserve original Git blobs; optional declared Git roots are read-only. */
+
 export function migrationHistory(name, root) {
   const group = history[name];
   if (!group) throw Error(`HISTORY_INPUT_REQUIRED: ${name}`);

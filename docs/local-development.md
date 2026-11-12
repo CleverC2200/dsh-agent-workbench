@@ -41,7 +41,7 @@ node --test tests/official-entry.test.mjs tests/workbench-recovery.test.mjs test
 
 资源目录的原 `description` 由 Manage 唯一维护。Workbench 在提示词与 Skill 列表显示它；Skill 入口使用 Manage 当前官方标准组合。选择资源沿官方 Session、工作区与 InputHub 插入 Skill 草稿，已有草稿拒绝覆盖。
 
-注释检查使用 `check:comments`，默认核工作区改动及未跟踪的 JS/TS 文件；`QUALITY_BASE_SHA` 或 `--base <完整提交>` 纳入已提交改动，CI 优先使用事件基线，手动执行沿现有 `scripts/quality-peer-baseline.json` 的本仓登记，不得回退到 HEAD。`--all` 审计全仓 JS/TS 存量。脚本用 TypeScript 语法识别注释，URL、字符串和 Prompt 样例不算代码注释；解析失败会拒绝。当前尚未覆盖 HTML/CSS/Shell 等格式，不能据此声称所有格式已清零。存量不设永久白名单，触及文件即完成该文件清理，后续分批迁移。工具指令先消除依赖，许可证与来源按原分发要求保全。
+`check:comments` 默认检查全仓自有 JS/TS、HTML/SVG 及内嵌脚本和样式、CSS、JSONC、YAML、Python、Shell、PowerShell、NSIS、SQL、Java、TOML、CMD 与行式配置；工作流的 Shell/PowerShell `run` 脚本一并检查。字符串、Prompt、Python docstring 和 heredoc 数据保留。解析失败拒绝通过；Shell 等格式使用固定版本词法器，不代表执行验收。`--base <完整提交>` 或显式文件只用于局部反馈，CI 和静态门禁默认执行全仓检查。`source-comments.json` 登记第三方、生成物、fixture 与历史证据来源；收到的业务原件复用现有 `SOURCE.json` 文件清单与摘要核对，已改写的资源继续按自有源码检查；`--report <路径>` 输出完整排除与违规清单。工具指令先消除依赖，许可证按分发要求保全。
 
 ## rc.2 定向检查输入
 

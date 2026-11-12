@@ -1,7 +1,3 @@
-// SPDX-License-Identifier: MIT
-// Source: @deepseek-ai/dsh-client-ui-primitives, active formal channel52a8570d (see external migration evidence).
-// Pure SVG assets from the verified active formal UI. No former host logic is imported.
-
 import React from 'react';
 
 export const IconNewChatOutline16 = ({

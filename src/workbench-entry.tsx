@@ -1,4 +1,3 @@
-/** 独立的同源业务文档；会话仍由 DSH 拥有和管理。 */
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { WorkbenchHostProvider } from './workbench/original/bridge.ts';

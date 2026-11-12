@@ -21,7 +21,6 @@ export type GroupSkuSummaryRow = {
 
 const decimal = (value: string) => /^\d+(?:\.\d+)?$/.test(value);
 
-/** 只有每个版本的 SKU 都完整时才汇总，金额按各计划自己的价格逐行计算后相加。 */
 export const summarizeGroupSkus = (
   sources: readonly GroupSkuSource[],
   approvalRole?: ApprovalStageId,

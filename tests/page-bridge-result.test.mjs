@@ -10,7 +10,7 @@ const { outputFiles } = await build({
     contents: "export * from './src/page-bridge/registry.ts';",
     resolveDir: process.cwd(),
   },
-  // Use the built current public SDK instead of bundling workspace SDK sources.
+
   packages: 'external',
   bundle: true,
   write: false,
@@ -62,11 +62,10 @@ test('元素目录改成按需取：说明里只有数量，directory=true 才�
       { id: 'readout:c1:gap', role: 'field', label: '缺口' },
     ],
   });
-  // 工具说明只写数量：目录不再跟着每次请求一起付 token。
+
   assert.match(registered.description, /可操作元素 2 个/);
   assert.equal(registered.description.includes('field:c1:qty'), false);
 
-  // 要目录时才回，且默认有上限、可 focus 收窄。
   const all = JSON.parse(
     await registered.execute(
       { kind: 'invoke', directory: true },
@@ -77,7 +76,7 @@ test('元素目录改成按需取：说明里只有数量，directory=true 才�
   assert.equal(all.directory.counts.interactive, 2);
   assert.equal(all.directory.entries.length, 3);
   assert.equal(all.directory.entries[0].id, 'field:c1:qty');
-  // 渐进式暴露：默认只给字段索引，不给当前值。
+
   assert.equal(all.directory.entries[0].value, undefined);
   assert.match(all.directory.note, /values=true/);
 
@@ -94,7 +93,6 @@ test('元素目录改成按需取：说明里只有数量，directory=true 才�
   assert.equal(focused.directory.entries[0].value, '10');
   assert.match(focused.directory.note, /focus/);
 
-  // 线上实测：模型会把"要目录"写成 kind=directory（不在动词枚举里）→ 这里也认。
   const alias = JSON.parse(
     await registered.execute(
       { kind: 'directory' },
@@ -103,7 +101,6 @@ test('元素目录改成按需取：说明里只有数量，directory=true 才�
   );
   assert.ok(alias.directory, 'kind=directory 当作要目录');
 
-  // 既没给动词也不要目录：给一句能照着改的说明，而不是看不懂的元素错误。
   const missing = JSON.parse(
     await registered.execute({}, { agent, signal: new AbortController().signal }),
   );

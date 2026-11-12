@@ -1,4 +1,3 @@
-/** Keep session failures and query failures distinct from explicit permission denial. */
 export const DATA_PERMISSION_MESSAGE = '当前账号暂无数据权限';
 export function sqlQueryError(cause) {
   if (cause?.name === 'AbortError') return cause;
@@ -30,7 +29,7 @@ export function queryErrorText(value) {
     ? DATA_PERMISSION_MESSAGE
     : text;
 }
-/** Only used for SQL-backed report diagnostics, after the calculations finish. */
+
 export function sqlReportCopy(value) {
   if (typeof value === 'string') return queryErrorText(value);
   if (Array.isArray(value)) return value.map(sqlReportCopy);

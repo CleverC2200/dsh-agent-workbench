@@ -21,7 +21,7 @@ import type { ApprovalStageId } from './salesPlanDomain.ts';
 
 const DECIMAL = /^[+-]?\d{1,15}(?:\.\d{1,3})?$/;
 const quantityText = (value: string) => formatExactDecimal(value).replace(/\.0+$/, '');
-/** 输入框不能出现千分位：`type=number` 会把 “1,111” 当非法值并清空整格。 */
+
 const editableQuantityText = (value: string) => quantityText(value).replace(/,/g, '');
 const draftLog = (stage: string, detail: unknown) => console.warn(`[gea-draft] ${stage}`, detail);
 
@@ -58,17 +58,14 @@ export function InlineSkuDetails({
   approvalRole?: ApprovalStageId;
   categoryName?: string;
   onMetricsChange?: (metrics?: { quantity: string; amount: string }) => void;
-  /**
-   * 把「界面上现在的本节点确认量」直接交给上层：通过时不必等 500ms 防抖落盘，
-   * 也不会因为草稿里的旧值把用户刚改的数字冲掉。
-   */
+
   onPendingValuesChange?: (values: Record<string, string>) => void;
   initialInputValues?: Record<string, string>;
-  /** Only explicit UI edits are persisted by the page owner, never loaded service results. */
+
   onInputChange?: (changes: Record<string, string>) => void;
-  /** 外部（对话）下发的草稿改写：把指定 SKU 的确认计划量改成同一个值。 */
+
   draftPatch?: { at: number; quantity: string; skuCodes?: string[] };
-  /** Report displayed fields; only quantity fields can belong to the editable collection. */
+
   onElementsChange?: (
     fields: Array<{ id: string; label: string; value: string; editable: boolean }>,
     collection?: { id: string; label: string; members: string[] },
@@ -112,10 +109,10 @@ export function InlineSkuDetails({
     'idle',
   );
   const [saveRetry, setSaveRetry] = useState(0);
-  // 已保存在 Host 上的草稿内容；失败时不写入，用来判断哪些行还没暂存成功。
+
   const [savedDraft, setSavedDraft] = useState('');
   const appliedPatch = useRef<number>();
-  // 对话下发的草稿改写：只改“确认计划量”输入，等价于人工在格子里填数；保存仍要人工点。
+
   useEffect(() => {
     if (!draftPatch || !canEdit || !skus || skus.length === 0) return;
     if (appliedPatch.current === draftPatch.at) return;
@@ -193,13 +190,12 @@ export function InlineSkuDetails({
             return [item.skuCode, integerQuantity ? roundPlanQuantity(value) : value];
           }),
         );
-        setSavedDraft(JSON.stringify(next)); // 已落盘基线，用来判断哪几行还没存成功
-        // 草稿读取可能晚于用户输入：只补齐用户还没动过的行，别把刚敲进去的数字冲掉。
+        setSavedDraft(JSON.stringify(next));
+
         setConfirmedValues((current) => ({ ...next, ...current }));
         setDraftState('saved');
       })
       .catch((error: unknown) => {
-        // 读取失败时按“服务端尚无草稿”处理：用户下一次编辑仍会尝试暂存，但不会凭空写入空草稿覆盖旧稿。
         if (controller.signal.aborted) return;
         draftLog('读取草稿失败，按无草稿继续', error);
         setSavedDraft('{}');
@@ -256,7 +252,7 @@ export function InlineSkuDetails({
   useEffect(() => {
     onPendingValuesChange?.(effectiveValues);
   }, [effectiveValues, onPendingValuesChange]);
-  // Report the same loaded values shown by the table, including read-only evidence.
+
   useEffect(() => {
     if (!onElementsChange) return;
     if (!displayedSkus || displayedSkus.length === 0) {
@@ -413,7 +409,7 @@ export function InlineSkuDetails({
     skus,
   ]);
   const tr = (key: string) => t(`common.assistantSurface.regionalApproval.liveAdjustment.${key}`);
-  // 已暂存草稿里的值；用于判断某一行是不是“改过但还没暂存成功”。
+
   const savedValues = useMemo(() => {
     try {
       const parsed: unknown = JSON.parse(savedDraft || '{}');
@@ -437,7 +433,7 @@ export function InlineSkuDetails({
     const category = sku.productCategName.trim() || '其他';
     groups.set(category, [...(groups.get(category) ?? []), sku]);
   }
-  // 暂存状态就近展示在改过的数字旁；失败给就地重试，不再用表格顶部通栏。
+
   return (
     <section className={styles.root} aria-label={tr('columns.sku')}>
       {loading ? (

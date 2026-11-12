@@ -37,7 +37,7 @@ class BaseCurrentOrders(unittest.TestCase):
   self.add('PART',material_code='S3',qtyordered=40,qtyallocated=20,delivery_qty=10)
   for order,values in [('VOID',dict(detailstatus=20)),('CANCEL',dict(canceltime='2026-10-28')),('CLOSED',dict(order_close_time='2026-10-28')),('WMS',dict(wms_close_time='2026-10-28')),('DONE',dict(delivery_qty=100)),('BRANCH',dict(pickup_point='PF'))]:self.add(order,**values)
   row=self.base();self.assertEqual((row['demand'],row['allocated'],row['remaining'],row['shortage']),(270,170,100,100))
-  # All base/category/SKU query shapes must use the same order source and units.
+
   for key in ['current-shortage.summary','current-shortage.categories','current-shortage.skus']:
    rows=self.read(key,**({'skus':['SKU1']} if key.endswith('skus') else {}))
    self.assertEqual(sum(r['demand'] for r in rows),200 if key.endswith('skus') else 270,key)
@@ -63,7 +63,7 @@ class BaseCurrentOrders(unittest.TestCase):
    tree=sqlglot.parse_one(self.config['queries'][key]['request']['sql'],read='postgres')
    for cte in tree.find_all(exp.CTE):
     if cte.alias=='inventory_keys':
-     # Execute the exact key union with independent stock/target/order inputs.
+
      self.db.executescript('DROP TABLE IF EXISTS targets;DROP TABLE IF EXISTS stock_source;DROP TABLE IF EXISTS detail_pending;CREATE TABLE targets(base TEXT,sku TEXT);CREATE TABLE stock_source(belong_base TEXT,material_code TEXT);CREATE TABLE detail_pending(base TEXT,sku TEXT);INSERT INTO detail_pending VALUES("郑州","ABSENT");')
      keys=list(self.db.execute(cte.this.sql(dialect='sqlite')));self.assertEqual([tuple(x) for x in keys],[('郑州','ABSENT')])
  def test_unknown_quantity_is_local_and_not_coerced_to_zero(self):

@@ -14,8 +14,6 @@ import {
   type GeaSqlRow,
 } from '@/lib/gea-sql-client';
 
-// GEA 的 SQL 重写器只接受已发布资源名。生产数据源需将 currentSchema
-// 配为 data_service，因此目录内不携带 PostgreSQL schema 前缀。
 function configuredResourceName(name: string) {
   const value = String(agentSqlConfig(sqlConfiguration).resourceNames?.[name] ?? '').trim();
   if (!/^[A-Za-z_][A-Za-z0-9_$]*$/.test(value)) {
@@ -32,7 +30,6 @@ function promotionScopeView() {
   return configuredResourceName('promotionScope');
 }
 
-/** 展示仅约束客户、政策状态和周期，提货点在使用优惠时独立核验。 */
 function promotionScopeConditions(dateParameter: 'businessDate' | 'catalogToday') {
   return configuredSql(sqlConfiguration, 'dealer.web.src.lib.dealer-workbench-sql.1', [
     dateParameter,
@@ -40,7 +37,6 @@ function promotionScopeConditions(dateParameter: 'businessDate' | 'catalogToday'
   ]);
 }
 
-// 兼容源资源名也集中在 Agent SQL 配置中，不另设页面环境变量权威。
 const MAIN_TABLE = configuredResourceName('main');
 const WL_AGE_TABLE = configuredResourceName('wlAge');
 const SIMULATED_AGE_TABLE = configuredResourceName('simulatedAge');
@@ -204,7 +200,7 @@ function scopedWhere(
   const parameters: GeaSqlParameters = {
     snapshotDate: assertDate(snapshotDate, '快照日期', /^20\d{2}-\d{2}-\d{2}$/),
   };
-  // GEA/JDBC binds JSON dates as VARCHAR; cast parameters, keeping date columns indexable.
+
   let where = configuredSql(
     sqlConfiguration,
     'fragments.source.dealer.web.src.lib.dealer-workbench-sql.ts.2',
@@ -312,7 +308,7 @@ export const dealerWorkbenchSql = {
 
   snapshotMonths(customerCodes: string[]): SqlQuery {
     const parameters: GeaSqlParameters = {};
-    // Only months belonging to the latest authorized snapshot are used by the page.
+
     const scope = customerPredicate(customerCodes, parameters);
     return {
       sql: configuredSql(sqlConfiguration, 'dealer.web.src.lib.dealer-workbench-sql.11', [
@@ -412,7 +408,7 @@ export const dealerWorkbenchSql = {
       configuredSql(sqlConfiguration, 'inline.source.dealer.web.src.lib.dealer-workbench-sql.ts.6'),
       "TRIM(catalog.material_code) <> ''",
     ];
-    // Business-confirmed delisting; historical customer stock remains visible.
+
     conditions.push(
       configuredSql(sqlConfiguration, 'inline.source.dealer.web.src.lib.dealer-workbench-sql.ts.7'),
     );
@@ -526,7 +522,7 @@ export const dealerWorkbenchSql = {
         'inline.source.dealer.web.src.lib.dealer-workbench-sql.ts.16',
       ),
     };
-    // Aggregate duplicate cooperation/policy rows without multiplying stock or quantities.
+
     const columns = MAIN_SELECT.split(',')
       .slice(1)
       .map((column) => {
@@ -963,7 +959,6 @@ export async function queryAllWorkbenchSqlRows(
   return toCubeRows(await executeAllGeaSqlPages(query.sql, queryOptions(options, query)));
 }
 
-// 客户编码必须来自已经完成权限校验的工作台范围。
 export async function queryWorkbenchCustomerCars(
   customerCode: string,
   options: GeaSqlRequestOptions = {},
@@ -976,7 +971,6 @@ export async function queryWorkbenchCustomerCars(
   );
 }
 
-/** 读取已授权客户的收货地；不读取联系人及电话，不将其当作提货点。 */
 export async function queryWorkbenchCustomerReceives(
   customerCode: string,
   options: GeaSqlRequestOptions = {},
@@ -989,7 +983,6 @@ export async function queryWorkbenchCustomerReceives(
   );
 }
 
-/** Exact SKU authorization before a DMS read; use the same GEA row-level scope as the catalog. */
 export async function queryWorkbenchFulfillmentMaterials(
   customerCode: string,
   materialCodes: string[],
@@ -1026,7 +1019,6 @@ export type CustomerPickupPoint = {
   baseName: string;
 };
 
-/** Read only within the already authorized customer. Preserve unavailable records for UI explanations. */
 export async function queryWorkbenchCustomerPickupPoints(
   customerCode: string,
   options: GeaSqlRequestOptions = {},
@@ -1076,7 +1068,6 @@ export async function queryWorkbenchCustomerPickupPoints(
   });
 }
 
-/** Compatibility entry point: defaults now come from customer master data, never order history. */
 export async function queryWorkbenchDefaultPickup(
   customerCode: string,
   options: GeaSqlRequestOptions = {},
@@ -1090,7 +1081,6 @@ export async function queryWorkbenchDefaultPickup(
     }));
 }
 
-/** Customer company code supplies SAP VKORG; pickup/factory stay paired with that source row. */
 export async function queryWorkbenchSapSalesArea(
   customerCode: string,
   docType: string,
@@ -1111,7 +1101,6 @@ export async function queryWorkbenchSapSalesArea(
     }));
 }
 
-/** customerCode 必须来自已授权的单客户工作台；不能查询全库政策。 */
 export async function queryWorkbenchPromotionPolicies(
   customerCode: string,
   businessDate: string,
@@ -1134,7 +1123,6 @@ export async function queryWorkbenchPromotionPolicies(
   );
 }
 
-/** Resolve the chat allowlist using the same GEA row permissions. */
 export async function queryAuthorizedDealerChatCustomers(
   exactCode = '',
   options: GeaSqlRequestOptions = {},
@@ -1148,8 +1136,7 @@ export async function queryAuthorizedDealerChatCustomers(
     ]),
     { ...options, parameters, pageConcurrency: 3 },
   );
-  // GEA owns the business identifiers, including virtual dealers. Validate the
-  // response shape only; never infer account permissions from an identifier's format.
+
   const codes = rows.map((row) => {
     if (typeof row.cust_code !== 'string' || !row.cust_code.trim()) {
       throw new Error('GEA 返回的客户编码字段缺失或为空，无法确认对话权限范围');
@@ -1183,7 +1170,6 @@ export async function queryWorkbenchCompanyProductFacets(
   };
 }
 
-/** Count the same customer-saleable set used by catalog queries, without reading inventory as a catalog. */
 export async function queryWorkbenchCompanyProductTotal(
   customerCode: string,
   options: GeaSqlRequestOptions = {},

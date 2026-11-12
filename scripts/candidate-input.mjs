@@ -36,7 +36,6 @@ export function verifyCandidatePackageIdentity({ repo, path }) {
     );
 }
 
-/** Admit an explicitly frozen group as source only; it grants no compatibility or runtime authority. */
 export async function readFinalGroup({
   input,
   sha256,
@@ -108,7 +107,7 @@ export async function readFinalGroup({
       refuse('CANDIDATE_DIRTY', entry.repo);
     return { ...entry, tree: git('rev-parse', 'HEAD^{tree}'), lockSha256: digest(committed) };
   });
-  // The validated frozen GEA owns the registry, regardless of the source/prepared layout.
+
   verifyRegisteredCore(
     manifest.core,
     repositories.find((entry) => entry.repo === 'dsh-gea-plugin').path,
@@ -120,8 +119,7 @@ export async function readFinalGroup({
   const configuration = JSON.parse(readFileSync(resolve(workbench.path, 'tsconfig.official.json')));
   const cordis = configuration.compilerOptions.paths['@deepseek-ai/cordis'][0];
   const mappedCore = resolve(dirname(resolve(workbench.path, cordis)), '../../../..');
-  // Cold preparation can read a local fixed Git source even before the owned SDK checkout exists.
-  // A URL alone is not evidence of an observed Core Git/source/lock.
+
   const core = existsSync(resolve(mappedCore, '.git')) ? mappedCore : coreSource;
   if (!core || !existsSync(resolve(core, '.git')))
     refuse(

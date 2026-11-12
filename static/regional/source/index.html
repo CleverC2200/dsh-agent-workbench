@@ -5,13 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>区域计划工作台 V9.2 · 事件线版</title>
     <style>
-      /* =========================================================================
-     workbench-ui-style 规范实现层
-     字体 / 字号 / 颜色 / 间距 / 圆角 / 阴影 / Tab / 卡片 / 表格 / 状态 / 动效 / 响应式
-     一律使用规范定义的 token，不再引入未定义的近似色
-     ========================================================================= */
       :root {
-        /* 中性 */
         --bg: #f7f8fa;
         --card: #ffffff;
         --sunken: #fafafa;
@@ -23,7 +17,7 @@
         --line: #e3e6ea;
         --line-2: #eceef1;
         --line-strong: #d9dde3;
-        /* 品牌 */
+
         --brand: #df1732;
         --brand-hover: #c91029;
         --brand-soft: #fff0f2;
@@ -31,7 +25,7 @@
         --hover-bd: #efabb4;
         --help-bd: #efcdd2;
         --focus: #df173226;
-        /* 语义（通用 Hover 不得覆盖） */
+
         --ok: #168e58;
         --ok-bg: #eaf7ef;
         --warn: #956900;
@@ -40,7 +34,7 @@
         --risk-bg: #ffe9ec;
         --neutral: #667085;
         --neutral-bg: #eef1f5;
-        /* 热力（保留备用） */
+
         --h-crit-bg: #ed999e;
         --h-crit-tx: #72121e;
         --h-high-bg: #f4cdcf;
@@ -51,7 +45,7 @@
         --h-good-tx: #234a35;
         --h-great-bg: #82c49c;
         --h-great-tx: #153e27;
-        /* 尺寸 */
+
         --radius: 10px;
         --radius-sm: 8px;
         --radius-xs: 6px;
@@ -60,7 +54,7 @@
         --shadow-hover: 0 8px 20px #20273312;
         --shadow-float: 0 12px 32px #1d20281a;
         --t: 180ms ease;
-        /* 兼容别名：旧类名继续可用，值全部指向规范 token */
+
         --blue: var(--brand);
         --blue-bg: var(--brand-soft);
         --blue-line: #f6c9d0;
@@ -144,7 +138,6 @@
         gap: 12px;
       }
 
-      /* ===== 顶栏 ===== */
       .topbar {
         display: flex;
         align-items: center;
@@ -321,7 +314,6 @@
         display: inline-block;
       }
 
-      /* ===== 按钮（工具条控件 36px） ===== */
       .btn {
         height: 36px;
         padding: 0 14px;
@@ -401,7 +393,6 @@
         background: var(--brand-soft);
       }
 
-      /* ===== 卡片 ===== */
       .card {
         background: var(--card);
         border: 1px solid var(--line);
@@ -443,7 +434,6 @@
         gap: 12px;
       }
 
-      /* ===== 计划事件线（横向时间轴，替代月历） ===== */
       .tl-axis {
         display: grid;
         grid-template-columns: repeat(30, minmax(0, 1fr));
@@ -556,7 +546,7 @@
       .tl-bar.past {
         opacity: 0.62;
       }
-      /* 时点事件（1–2 天）：圆点定位 + 文字标签外溢，避免窄条只剩省略号 */
+
       .tl-bar.is-point {
         background: transparent;
         border-color: transparent;
@@ -639,7 +629,6 @@
         padding: 6px 0;
       }
 
-      /* 选中事件详情（原当日面板，压缩为一行条） */
       .tl-detail {
         margin-top: 10px;
         border-top: 1px solid var(--line-2);
@@ -732,7 +721,7 @@
         border-radius: 2px;
         flex: none;
       }
-      /* 常驻周期（每周 / 日常类节奏） */
+
       .cad-row {
         display: flex;
         gap: 8px;
@@ -799,7 +788,6 @@
         font-weight: 700;
       }
 
-      /* 事件类型标签（事件线与详情条共用） */
       .ev {
         display: block;
         font-size: 10px;
@@ -842,7 +830,6 @@
         margin-top: 2px;
       }
 
-      /* 窄屏时事件线横向滚动，保持每天可读宽度 */
       .tl-scroll {
         overflow-x: auto;
         padding-bottom: 2px;
@@ -857,7 +844,7 @@
       .tl-inner {
         min-width: 880px;
       }
-      /* ===== 状态徽标 ===== */
+
       .badge {
         display: inline-block;
         font-size: 8px;
@@ -892,7 +879,6 @@
         color: var(--neutral);
       }
 
-      /* ===== 指标卡 ===== */
       .kpis {
         display: grid;
         grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -968,7 +954,6 @@
         color: var(--txt);
       }
 
-      /* ===== 全链路进度 ===== */
       .flow {
         display: flex;
         align-items: flex-start;
@@ -981,8 +966,7 @@
         position: relative;
         padding-top: 34px;
       }
-      /* 连接线连「前一节点 → 本节点」：left 从 -50% 起算（即前一节点圆心），两端各伸入圆圈 5px 由圆圈盖住，
-     整体向左回退一个节点宽度——否则线会右移一格，导致 1→2 之间无线、末节点右侧多出一段线 */
+
       .fstep::before {
         content: '';
         position: absolute;
@@ -1066,7 +1050,6 @@
         text-overflow: ellipsis;
       }
 
-      /* ===== 文字化分析 ===== */
       .np {
         font-size: 12px;
         line-height: 1.75;
@@ -1139,7 +1122,6 @@
         color: var(--warn);
       }
 
-      /* ===== 事件列表 ===== */
       .ev-list {
         display: flex;
         flex-direction: column;
@@ -1214,7 +1196,6 @@
         align-items: center;
       }
 
-      /* ===== 一级页签：品牌色文字 + 2px 底部指示条（不使用填充式选中） ===== */
       .modtabs {
         display: flex;
         gap: 0;
@@ -1296,7 +1277,6 @@
         color: var(--muted);
       }
 
-      /* ===== 行政区/维度切换：紧凑页签（31px） ===== */
       .seg {
         display: inline-flex;
         align-items: stretch;
@@ -1337,7 +1317,6 @@
         border-bottom-color: var(--brand);
       }
 
-      /* ===== 表格 ===== */
       table {
         width: 100%;
         border-collapse: collapse;
@@ -1461,7 +1440,6 @@
         margin-left: auto;
       }
 
-      /* ===== 节点流转 ===== */
       .node-chain {
         display: inline-flex;
         align-items: center;
@@ -1496,7 +1474,6 @@
         font-size: 9px;
       }
 
-      /* ===== 品类矩阵 ===== */
       .matrix td.low {
         color: var(--warn);
         font-weight: 700;
@@ -1506,7 +1483,6 @@
         font-weight: 700;
       }
 
-      /* ===== 复盘：趋势 / 象限 ===== */
       .trend {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1670,7 +1646,6 @@
         color: var(--muted);
       }
 
-      /* ===== 模块入口 ===== */
       .mod-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
@@ -1757,7 +1732,6 @@
         color: var(--ok);
       }
 
-      /* ===== 节奏维护 ===== */
       .re-wrap {
         max-width: 1120px;
       }
@@ -1874,7 +1848,6 @@
         transform: translate(-50%, 0);
       }
 
-      /* ===== 响应式（1200 / 900 / 720 / 520） ===== */
       @media (max-width: 1200px) {
         .kpis {
           grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2217,16 +2190,12 @@
       (function () {
         'use strict';
 
-        /* ================= 1. 期间与节奏配置 ================= */
-
-        // 提报窗口配置（口径：月初 16–20 日 / 纠偏 10–13 日；审批不设窗口）
         var WINDOW_CFG = {
           M: { label: '月计划', gen: 14, open: 16, deadline: 20 },
           Z: { label: '纠偏计划', gen: 8, open: 10, deadline: 13 },
         };
         var WEEK_CN = ['日', '一', '二', '三', '四', '五', '六'];
 
-        // 计划节奏（按日期周期性维护）：monthly = 每月日期区间；weekly / daily = 常驻周期
         var RHYTHM_DEFAULT = [
           {
             id: 'r1',
@@ -2387,7 +2356,6 @@
             .replace(/"/g, '&quot;');
         }
 
-        /* 按提报窗口自动判定期间与阶段（工作台不提供手动切换） */
         function resolveContext(d) {
           var day = d.getDate(),
             order,
@@ -2436,8 +2404,6 @@
             };
           return { cls: 'idle', text: c.label + '提报窗口 ' + win + ' · 已截止' };
         }
-
-        /* ================= 2. 组织与模拟数据 ================= */
 
         var NODES = ['城市经理审批', '省区经理审批', '大区总监', '品类计划审批'];
         var CATS = ['水饺', '汤圆', '面点', '粽子', '馄饨'];
@@ -2607,8 +2573,6 @@
           });
         });
 
-        /* ================= 3. 工具 ================= */
-
         var $ = function (id) {
           return document.getElementById(id);
         };
@@ -2710,8 +2674,6 @@
           }, 2400);
         }
 
-        /* ================= 4. 当前状态 ================= */
-
         var T0 = new Date(2026, 8, 18);
         var state = {
           ctx: resolveContext(T0),
@@ -2740,8 +2702,6 @@
           },
           { m: '2026-09', label: '2026 年 9 月', target: 0, report: 0, actual: 0, closed: false },
         ];
-
-        /* ================= 5. 事件线与节奏 ================= */
 
         function rhythmStateOn(it, day) {
           if (it.type !== 'monthly') return null;
@@ -2776,7 +2736,6 @@
           });
         }
 
-        /* ---- 事件线：轨道分配（贪心，避免区间重叠） ---- */
         function assignLanes(items) {
           var laneEnd = [];
           items.forEach(function (it) {
@@ -2801,7 +2760,7 @@
           var ctx = state.ctx;
           var y = ctx.date.getFullYear(),
             mo = ctx.date.getMonth();
-          var dim = new Date(y, mo + 1, 0).getDate(); // 当月实际天数
+          var dim = new Date(y, mo + 1, 0).getDate();
           var dayW = 100 / dim;
           $('calSub').textContent = y + ' 年 ' + (mo + 1) + ' 月 · ' + phaseNote(ctx);
 
@@ -2834,7 +2793,7 @@
             $('tlDetail').innerHTML = '';
             return;
           }
-          // 跨月规则（如 21–31 日）按当月天数裁切，避免条形超出轨道
+
           items.forEach(function (it) {
             it.visTo = Math.min(it.to, dim);
           });
@@ -2858,9 +2817,9 @@
                     var span = it.visTo - it.from + 1;
                     var on = state.selEv === it.id ? ' on' : '';
                     var past = st === 'done' || st === 'closed' ? ' past' : '';
-                    // 1–2 天按「时点」呈现：圆点定位 + 文字外溢，条内不再挤省略号
+
                     var isPoint = span <= 2;
-                    // 4 天以上的条才有余量显示状态；不足的交给 title 与详情条
+
                     var showState = span >= 4;
                     var cls = 'tl-bar k-' + it.kind + on + past + (isPoint ? ' is-point' : '');
                     var style = isPoint
@@ -3015,7 +2974,6 @@
           $('tlDetail').innerHTML = parts + tip;
         }
 
-        /* 常驻周期（每周 / 日常类）：不落事件线，单独一行展示 */
         function renderCadence() {
           var items = cadenceItems();
           $('cadRow').innerHTML =
@@ -3049,8 +3007,6 @@
             return '月计划分析评估：结合上月达成与本月目标，明确重点产品的需求目标缺口。';
           return '提报跟进与审批跟催并行：优先处理滞留超 24 小时的节点，避免窗口末段集中爆发。';
         }
-
-        /* ================= 6. 关键指标 ================= */
 
         function renderKpi() {
           var ctx = state.ctx;
@@ -3152,8 +3108,6 @@
             .join('');
         }
 
-        /* ================= 7. 全链路进度 ================= */
-
         function renderFlow() {
           var ctx = state.ctx;
           var total = customers.length,
@@ -3228,8 +3182,6 @@
             })
             .join('');
         }
-
-        /* ================= 8. 研判与建议 ================= */
 
         function unsubCount() {
           return customers.filter(function (c) {
@@ -3384,7 +3336,6 @@
               '</p>',
           );
 
-          // 行动建议
           var acts = [];
           if (miss)
             acts.push({
@@ -3447,8 +3398,6 @@
 
           $('advice').innerHTML = h.join('');
         }
-
-        /* ================= 9. 待跟进事件（聚合）与异常明细 ================= */
 
         function followEvents() {
           var list = [];
@@ -3521,7 +3470,6 @@
           return list;
         }
 
-        /* 待跟进事件（聚合视角：按类型归并，动作是批量跟催） */
         function followGroups() {
           var list = [];
           var miss = customers.filter(function (c) {
@@ -3654,8 +3602,6 @@
               .join('') +
             '<div class="muted" style="font-size:10px;line-height:1.5;padding-top:2px">以上为聚合待办；逐条的异常明细见「分析与异常」中的跨模块异常清单。</div>';
         }
-
-        /* ================= 10. 提报 / 审批进度（按维度） ================= */
 
         function renderReport(dim) {
           var g = groupBy(dim);
@@ -3931,8 +3877,6 @@
           $('approvalBody').innerHTML = html;
         }
 
-        /* ================= 11. 品类 ================= */
-
         function renderCat() {
           var rows = CATS.map(function (cat) {
             var rs = catRows.filter(function (r) {
@@ -4052,8 +3996,6 @@
             '品类明细按「客户 × 品类」拆分，审批节点随客户单据流转；橙色为达成低于 70% 的组合，需与品类计划联动纠偏。</div>';
           $('catMatrix').innerHTML = html;
         }
-
-        /* ================= 12. 复盘 ================= */
 
         function initHist() {
           HIST = HIST_SEED.map(function (x) {
@@ -4297,8 +4239,6 @@
             '</div>';
         }
 
-        /* ================= 13. 异常通晒 ================= */
-
         function renderAlert() {
           var list = followEvents().concat(
             CATS.map(function (cat) {
@@ -4347,8 +4287,6 @@
             })
             .join('');
         }
-
-        /* ================= 14. 入口与助手 ================= */
 
         function renderEntrance() {
           var total = customers.length,
@@ -4508,8 +4446,6 @@
             '</tbody></table>';
         }
 
-        /* ================= 15. 节奏维护 ================= */
-
         function openEditor() {
           rhythmEditing = true;
           if (!RHYTHM_BACKUP) RHYTHM_BACKUP = clone(RHYTHM);
@@ -4652,8 +4588,6 @@
           saveView();
           toast('节奏配置已保存 · 日历按日期规则重新推导');
         }
-
-        /* ================= 16. 页签 ================= */
 
         var MODS = ['overview', 'follow', 'category', 'review', 'analysis'];
         var connected = false,
@@ -4842,8 +4776,6 @@
           reportRegional();
         }
 
-        /* ================= 17. 渲染总控 ================= */
-
         function renderAll() {
           var ctx = state.ctx;
           $('periodMain').textContent =
@@ -4939,7 +4871,6 @@
           }
           saveView();
         });
-        /* ================= 18. 事件 ================= */
 
         $('tlAxis').addEventListener('click', function (e) {
           var b = e.target.closest('[data-day]');
@@ -5116,7 +5047,6 @@
           }
         });
 
-        // 原型演示：模拟日期，验证「按提报窗口自动判定期间」，非手动切换期间
         $('simBtn').addEventListener('click', function () {
           $('simBox').classList.toggle('open');
           if ($('simBox').classList.contains('open')) $('simDate').focus();
@@ -5140,7 +5070,6 @@
           );
         });
 
-        /* ================= 19. 初始化 ================= */
         initHist();
         $('simDate').value =
           state.ctx.date.getFullYear() +

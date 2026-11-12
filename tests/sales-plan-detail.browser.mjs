@@ -4,7 +4,6 @@ import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 
-// Actual React hook, fixed local responses. Hidden business version controls stay unchanged.
 const bundle = await build({
   stdin: {
     resolveDir: process.cwd(),

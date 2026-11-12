@@ -82,8 +82,7 @@ for (const page of ['fc', 'aqkc'])
     await until(() => /登录|连接/.test(root.textContent));
     const requests = [];
     let closed = false;
-    // A recording protocol peer supplies no inventory rows or business facts.
-    // It records the real page pipeline and deliberately rejects each SQL read.
+
     const port = {
       onmessage: null,
       start() {},

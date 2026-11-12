@@ -31,7 +31,7 @@ export type LayoutPreferences = {
   frozenColumns: string[];
   columnOrder: string[];
 };
-/** Unsent controls and locally composed changes; these are never server cycle-setting results. */
+
 export type CycleEdit = {
   level: 'warehouse' | 'category' | 'material-group' | 'sku';
   object: string;

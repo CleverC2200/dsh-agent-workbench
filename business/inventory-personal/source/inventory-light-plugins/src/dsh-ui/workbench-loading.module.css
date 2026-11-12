@@ -210,7 +210,6 @@
   }
 }
 
-/* Embedded panels already provide the same padding as their loaded cards. */
 .embedded .content {
   padding: 0;
 }

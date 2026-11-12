@@ -58,7 +58,6 @@ if (typeof window !== 'undefined') {
   window.addEventListener('gea-session-changed', refreshContext);
 }
 
-/** Release only the exact fact published by this view, preserving a later owner. */
 export function ownContextPart(key: string, value: unknown) {
   const snapshot = bounded(value);
   parts.set(key, snapshot);

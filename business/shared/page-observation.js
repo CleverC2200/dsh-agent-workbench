@@ -1,4 +1,3 @@
-/** Keep only the mounted page's current data alive; never retain it across identity/session changes. */
 export function keepPageObservation(read, send, { interval = 30000 } = {}) {
   let pending = false;
   const tick = async () => {
@@ -8,7 +7,6 @@ export function keepPageObservation(read, send, { interval = 30000 } = {}) {
     try {
       await send(value);
     } catch {
-      /* The page's publisher owns visible errors. */
     } finally {
       pending = false;
     }

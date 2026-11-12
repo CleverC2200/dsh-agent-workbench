@@ -1,4 +1,3 @@
-/** 原始 GEA 工作台界面及其显式 DSH Host 适配器。 */
 export { default as RegionalApprovalWorkbench } from './workbenches/regionalApproval/RegionalApprovalWorkbench.tsx';
 export type { RegionalApprovalWorkbenchContext } from './workbenches/regionalApproval/RegionalApprovalWorkbench.tsx';
 

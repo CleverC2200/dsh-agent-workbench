@@ -87,7 +87,7 @@
 ::selection {
   background: #ffe7e7;
 }
-/* 首次状态返回前的中性加载态：只显示骨架点，不渲染登录卡片。 */
+
 .gea-workbench-boot {
   box-sizing: border-box;
   display: flex;
@@ -342,7 +342,6 @@
   }
 }
 
-/* GEA shell: navigation and assistant frame the HTML plugin surface. */
 .gea-shell {
   height: 100%;
   min-width: 1060px;
@@ -1502,7 +1501,6 @@
   }
 }
 
-/* Editable inputs share the search field's white surface and single brand focus ring. */
 .gea-original-workbench .arco-input:not([disabled]),
 .gea-original-workbench .arco-textarea:not([disabled]) {
   background-color: var(--workbench-surface, #fff);
@@ -1526,10 +1524,6 @@
   box-shadow: 0 0 0 3px var(--workbench-control-focus-ring, #df173226);
 }
 
-/*
- * V1.8 #04：表格表头统一加粗。队列表、品类子表、纠偏表、弹窗内表格都靠字重区分表头，
- * 底色和分隔线保持原样，不额外加深。宿主壳里没有表格，所以这里不限定作用域也能覆盖弹窗 portal。
- */
 th,
 .arco-table-th {
   font-weight: 600;

@@ -17,7 +17,7 @@ const { outputFiles } = await build({
 const { readCurrentShortage: readSourceShortage, currentShortageSum } = await import(
   'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
 );
-// Model the snapshot discovery request separately from the source shortage fixtures.
+
 function readCurrentShortage(config, queryId, filters, options) {
   const execute = async (request, call) => {
     if (['summary.snapshot', 'summary.bootstrap'].includes(call.queryId)) return { rows: [] };

@@ -39,7 +39,6 @@ const errorCode = (error: unknown) =>
     ? error.code
     : 'METRIC_READ_FAILED';
 
-/** Both dialogue entry points read the installed page SQL; comparisons require returned facts. */
 export async function readBaseInventoryMetrics(
   fallback: AgentSqlConfig,
   input: { asOf: string; base?: string; category?: string; compare: boolean },
@@ -98,7 +97,7 @@ export async function readBaseInventoryMetrics(
         const snapshotDate = snapshot.rows[0]?.day;
         if (typeof snapshotDate !== 'string' || !snapshotDate.startsWith(asOf.slice(0, 7)))
           return { status: 'unavailable', reason: 'NO_SNAPSHOT_IN_PERIOD', rows: [] };
-        // Physical stock and historical movement do not depend on published targets.
+
         const result = await read('page.dashboard-groups', {
           stock_date: snapshotDate,
         });

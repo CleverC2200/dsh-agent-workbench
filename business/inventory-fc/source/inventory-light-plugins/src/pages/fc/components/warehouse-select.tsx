@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-/** Single selection; portal keeps the list outside the scrolling workbench. */
 export function WarehouseSelect({
   value,
   options,

@@ -1,7 +1,6 @@
 import { amendmentMetricContract } from '../../business/inventory-orderworkbench/sku-amendments.mjs';
 import { ontimeMetricContract } from '../../business/inventory-orderworkbench/ontime-queries.mjs';
 
-/** The current calculation's explanations are code-owned, never copied into Skills. */
 export function metricDefinition(name, turnoverScope = 'national') {
   return {
     作废率:

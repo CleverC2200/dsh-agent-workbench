@@ -1,4 +1,3 @@
-/** Budget rates are fractions, including values greater than 1 (= 100%). */
 export function budgetPercent(value: number | null) {
   return value === null
     ? '待核实'

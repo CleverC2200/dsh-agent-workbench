@@ -27,12 +27,9 @@ type Input = {
 const { labels, notes } = registry;
 const paths = registry.paths as (string | null)[][];
 const queries = registry.queries as Record<string, { sql: string; parameters: string[] }>;
-// Core card sources enter the queue first. Direct preview also prioritizes MES
-// production; the governed path retains its published-source set. Unused product forecast details are fetched only by an explicit details request.
+
 const primarySources = ['stock', 'orders', 'finance', 'sales-budget'];
-// KPI comparison does not need detail tables, product drill-downs or daily
-// shipment exports. Keeping this list small avoids re-reading six large sources
-// for both the previous period and the same period last year.
+
 const comparisonKeys = [
   'demand-accuracy',
   'sales-accuracy',
@@ -141,10 +138,8 @@ const monthly = (start: string, end: string, kind: string) =>
   ['month', 'year'].includes(kind) &&
   start.endsWith('-01') &&
   (end === today() || date(shiftDays(end, 1)).getUTCDate() === 1);
-// One adapter owns a bounded queue shared by main and comparison requests.
+
 export function createGeaWorkspace(transport: SqlTransport) {
-  // This reader belongs to one period/identity/refresh cycle. Only completed
-  // reads are reused; a cancelled request must never poison another branch.
   const configuredReads = new Map<string, Row[]>();
   const unavailable = new Map<string, unknown>();
   const sharedReads = new Map<string, Promise<Row[]>>();
@@ -169,9 +164,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
   ) {
     const [start, end] = bounds,
       kind = input.granularity;
-    // A single period load may expose the same configured snapshot in two
-    // sections. Share only that load's raw read; refreshes and comparisons own
-    // separate maps, and each consumer receives its own converted row objects.
+
     const directReads = new Map<string, Promise<Row[]>>();
     const primary = usesConfiguredSql()
       ? [
@@ -342,7 +335,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
         });
         sharedReads.set(cacheKey, job);
       }
-      // Consumers annotate rows by scope; never mutate the shared raw response.
+
       const rows = await job;
       input.signal?.throwIfAborted();
       if (rows.length > 12000)
@@ -456,8 +449,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
         return {
           ...result,
           ...(known?.partial ? known : {}),
-          // Missing source mappings or snapshots are data limitations, not failed
-          // gateway requests. Keep their structured reason in page/Agent context.
+
           status: known?.partial
             ? 'ready'
             : error.code === 'SOURCE_NOT_AVAILABLE'
@@ -475,8 +467,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
         };
       }
     }
-    // These product forecast rows do not feed any initial card or current drill metric.
-    // They remain queryable explicitly without delaying the initial workspace.
+
     const deferred = usesConfiguredSql()
       ? ['forecast-products', ...(input.summary ? ['branch', 'operations'] : [])]
       : [];
@@ -588,8 +579,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
           : shiftDays(s, input.granularity === 'week' ? -7 : -1),
     ) as [string, string];
     const annual = bounds.map((s) => shiftMonths(s, -12)) as [string, string];
-    // Shippable reuses stock. Do not let that waiting consumer occupy the
-    // second annual worker ahead of independent production.
+
     const keys = usesConfiguredSql()
       ? [...comparisonKeys.filter((key) => key !== 'shippable'), 'plans', 'production', 'shippable']
       : comparisonKeys;
@@ -607,9 +597,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
     });
     const annualRead =
       JSON.stringify(previous) === JSON.stringify(annual)
-        ? // Let annual orders/production progress while stock pages are in flight.
-          // Both periods still share the adapter's three-source limit.
-          previousRead
+        ? previousRead
         : run(
             {
               ...input,

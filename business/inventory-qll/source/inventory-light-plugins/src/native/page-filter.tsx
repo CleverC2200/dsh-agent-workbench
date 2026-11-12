@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import { action, publish } from '../channel.js';
 import { updateContext, removeContextPart, pageContext } from './context';
 
-/** Qll's current view fields; GEA validates the resulting query's authorization. */
 export function usePageFilter(current: any, apply: (args: any) => void) {
   const ref = useRef({ current, apply });
   ref.current = { current, apply };

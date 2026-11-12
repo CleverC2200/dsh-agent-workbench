@@ -1,4 +1,4 @@
-WITH /* inventory-branch-exclusions:N436,Y204 */
+WITH
 latest_inventory AS (
   SELECT
     MAX(agents_scm_inventory_sku_data_d.month_date) AS month_date

@@ -1,5 +1,3 @@
-# User-provided evidence is hash-checked against its original bytes.
 docs/agent-inputs/apsplan-20261020/** -text whitespace=cr-at-eol,-blank-at-eof,-blank-at-eol
 
-# Order presentation hashes must survive checkout on Windows and Linux.
 lib/business/inventory-orderfulfillment/sales-window/* text eol=lf

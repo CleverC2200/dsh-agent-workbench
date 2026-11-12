@@ -23,7 +23,7 @@ const compiled = await build({
         api.onResolve({ filter: /^dsh-agent-manage\/inventory-compute\/[a-z-]+$/ }, ({ path }) => ({
           path: resolve('../dsh-agent-manage/src/' + path.split('/').slice(1).join('/') + '.ts'),
         }));
-        // Only the external Host RPC is replaced. Calculation and formatting modules are real.
+
         api.onResolve({ filter: /channel\.js$/ }, () => ({
           path: 'gea-host',
           namespace: 'host',

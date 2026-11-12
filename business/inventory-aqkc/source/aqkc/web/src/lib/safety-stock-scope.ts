@@ -60,10 +60,6 @@ export function resolveInitialSafetyStockScope(
   };
 }
 
-/**
- * 兼容旧工作台调用。新工作台统一使用 resolveInitialSafetyStockScope，
- * 避免脱离业务日期规则而直接选择未来月份。
- */
 export function resolveLatestPublishedSafetyStockScope(
   rows: PublishedScopeRow[],
 ): SafetyStockScope {

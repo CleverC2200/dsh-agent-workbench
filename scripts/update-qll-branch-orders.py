@@ -14,10 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FIELDS = ('snapshot_date location_type location_code location_name base warehouse_code '
           'sku material_name category material_group demand allocated remaining available shortage invalid').split()
 
-
 def parse(sql):
     return sqlglot.parse_one(sql, read='postgres')
-
 
 def render(tree, pretty=False):
     tree = tree.copy()
@@ -25,7 +23,6 @@ def render(tree, pretty=False):
         sub.replace(exp.Anonymous(this='SUBSTRING', expressions=[
             sub.this.copy(), sub.args['start'].copy(), sub.args['length'].copy()]))
     return re.sub(r'%\((gea_p\d+)\)s', r':\1', tree.sql(dialect='postgres', pretty=pretty))
-
 
 def cohort(query, prefix, end='filtered'):
     tree = parse(query['request']['sql'])
@@ -44,7 +41,6 @@ def cohort(query, prefix, end='filtered'):
                 table.set('this', exp.to_identifier(names[table.name]))
         cte.set('alias', exp.TableAlias(this=exp.to_identifier(names[cte.alias])))
     return ctes
-
 
 def build_source(config, base, branch):
     for kind in ['summary', 'locations', 'categories', 'detail', 'skus']:
@@ -75,7 +71,7 @@ def build_source(config, base, branch):
         if key.startswith(('replenishment.', 'replenishment-suggestions.', 'branch-supply.')):
             config['queries'][key] = copy.deepcopy(source)
             config['queries'][key]['plugins'] = ['qll']
-    # Branch stock metadata must not require dealer-order access either.
+
     for key in list(config['queries']):
         if key.startswith('branch-health.'):
             source_key = key.replace('branch-health.', 'health.', 1)
@@ -86,7 +82,7 @@ def build_source(config, base, branch):
                     if isinstance(value, str) and value.startswith('health.'):
                         query['pagination'][name] = value.replace('health.', 'branch-health.', 1)
                 config['queries'][key] = query
-    # The overview needs only daily movement, not another full FIFO shortage calculation.
+
     config['queries']['branch-turnover.cards'] = copy.deepcopy(branch['queries']['replenishment.overview'])
     config['queries']['branch-turnover.cards']['plugins'] = ['qll']
     config['queries']['branch-turnover.cards'].pop('orderCountFromOverview', None)
@@ -104,7 +100,7 @@ def build_source(config, base, branch):
         metric['label'] = metric['label'].replace('箱', '件')
     config['overviewOrderGroups']['views']['branch-overview'] = '分仓'
     grouped = config['queries']['overview.orders-by-pickup']
-    # The shared dealer execution query remains for the base fulfillment metric only.
+
     grouped['request']['parameters']['gea_p8'] = 'all'
     grouped['request']['parameters']['gea_p9'] = None
     spec = importlib.util.spec_from_file_location('qll_loading', ROOT / 'scripts/optimize-qll-loading.py')
@@ -113,7 +109,6 @@ def build_source(config, base, branch):
     optimized = loading.optimize(config)
     config.clear()
     config.update(optimized)
-
 
 def build(config, base, branch):
     """Regenerate source formulas while retaining installed summary routes and collection envelopes."""
@@ -142,7 +137,6 @@ def build(config, base, branch):
         restored = copy.deepcopy(previous)
         restored['request']['sql'] = render(template)
         config['queries'][key] = restored
-
 
 if __name__ == '__main__':
     path = ROOT / 'business/inventory-qll/sql.config.json'

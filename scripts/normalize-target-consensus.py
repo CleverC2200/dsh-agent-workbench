@@ -8,7 +8,6 @@ from sqlglot import exp
 
 ROOT = Path(__file__).resolve().parents[1]
 
-
 def factor_aggregates(select):
     """Evaluate each aggregate once; outer agreement checks reference its alias."""
     group = select.args.get('group')
@@ -34,7 +33,6 @@ def factor_aggregates(select):
 
     return exp.select(*[projection.transform(reference)
         for projection in select.expressions]).from_(inner.subquery('target_values'))
-
 
 def normalize(sql):
     tree = sqlglot.parse_one(sql, read='postgres')
@@ -69,8 +67,7 @@ def normalize(sql):
                 f'AND COUNT(DISTINCT {value}) = 1 THEN MAX({value}) ELSE NULL END AS agreed',
                 read='postgres').expressions[0].this
             maximum.replace(agreement)
-        # A conflicting published daily value must not masquerade as a missing
-        # value and select a plan-based fallback.
+
         for fallback in daily_fallbacks:
             permitted = sqlglot.parse_one('SELECT COUNT(t.avg_daily_planned_demand) = 0 '
                 'OR (COUNT(t.avg_daily_planned_demand) = COUNT(*) '
@@ -78,8 +75,7 @@ def normalize(sql):
                 read='postgres').expressions[0]
             fallback.replace(exp.Case(ifs=[exp.If(this=permitted,
                 true=fallback.copy())], default=exp.Null()))
-        # The three target priorities form one decision: conflicts cannot fall
-        # through to a different priority after aggregation turns them NULL.
+
         if target_fields:
             valid = ' AND '.join(f'(COUNT(t.{name}) = 0 OR '
                 f'(COUNT(t.{name}) = COUNT(*) AND COUNT(DISTINCT t.{name}) = 1))'
@@ -97,7 +93,6 @@ def normalize(sql):
         substring.replace(exp.Anonymous(this='SUBSTRING', expressions=[substring.this.copy(),
             substring.args['start'].copy(), substring.args['length'].copy()]))
     return re.sub(r'%\((gea_p\d+)\)s', r':\1', tree.sql(dialect='postgres'))
-
 
 if __name__ == '__main__':
     for agent in ['aqkc', 'fc', 'qll']:

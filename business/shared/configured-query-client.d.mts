@@ -1,4 +1,3 @@
-/** Clone and freeze the query configuration while preserving its data shape. */
 export function immutableQueryConfig<T extends object>(config: T): T;
 export class QueryContractError extends Error {
   code: string;

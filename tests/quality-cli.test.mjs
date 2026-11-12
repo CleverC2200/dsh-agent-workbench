@@ -38,7 +38,7 @@ test('public quality CLI enforces fixed debt and refuses new violations and weak
     mkdirSync(join(fixture, '.github'), { recursive: true });
     for (const file of ['scripts/quality.mjs', '.oxlintrc.json', '.oxfmtrc.json'])
       cpSync(join(root, file), join(fixture, file));
-    // A fixture owns its installation. Reuse only exact registry lock metadata, never node_modules.
+
     const original = JSON.parse(readFileSync(join(root, 'package-lock.json')));
     const packages = Object.fromEntries(
       Object.entries(original.packages).filter(([path]) =>

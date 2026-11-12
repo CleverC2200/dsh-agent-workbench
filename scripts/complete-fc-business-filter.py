@@ -18,7 +18,7 @@ for query_id,query in config['queries'].items():
  query['request']['parameters']['gea_p3952']=['202610','202611']
  query['notes']=str(query.get('notes',''))+' D97：有业务包含当前及次月已发布调拨计划的正值活动；仅判定是否发生业务，不借此换算或填充计划数量；同仓SKU同月重复保持未知。'
 path.write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n')
-# Activity-only next-month SKUs must enter the scope before filtering and paging.
+
 for query_id,query in config['queries'].items():
  if not query_id.startswith(('replenishment.','replenishment-suggestions.')):continue
  sql=query['request']['sql']

@@ -1,6 +1,6 @@
 import type { MetricData } from 'dsh-agent-manage/aps-compute/metrics';
 import { period } from './gea-workspace';
-/** Fixed mock facts from the original literal adapter regression. No business transport. */
+
 export async function readMockWorkspace(input: {
   date: string;
   granularity: string;

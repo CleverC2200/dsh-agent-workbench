@@ -46,8 +46,7 @@ test('upstream business period includes all original-order SKUs without any logi
     );
     assert.equal(rows.find((row) => row.sku === 'S5').invalid, 1);
     assert.equal(rows.find((row) => row.sku === 'S5').sample_records, 0);
-    // Native-date preselection must retain *all* observations of a spanning
-    // original order; filtering its lines before grouping hides this conflict.
+
     db.exec(`INSERT INTO agents_order_execute_isontime_mi (fromorderno,cust_code,new_material_code,belong_base,product_categ_name,pinxiang,new_material_name,need_qty_origin,qtyshipped,executeorderno,fromorderno_month,exp_flag,order_qty_origin) VALUES
       ('spanning','C','S6','华南','食品','水饺','六',100,80,'E6','2026-10-18','否',100),
       ('spanning','C','S6','华南','食品','水饺','六',100,80,'E6','2026-10-25','否',100);`);

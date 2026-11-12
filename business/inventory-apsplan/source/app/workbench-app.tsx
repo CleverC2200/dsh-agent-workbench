@@ -5096,7 +5096,7 @@ export default function Home({
         ? (value as TimeGranularity)
         : 'month',
   );
-  // The intelligent workspace owns a monthly period; board date controls retain their own state.
+
   const [intelligentYearKey, setIntelligentYearKey] = usePageViewField(
     React,
     apsView,
@@ -5657,8 +5657,7 @@ export default function Home({
     activeAnalysisPeriod,
     matrixRiskRows.map((row) => ({ scope: row.scope, value: row.value })),
   );
-  // Keep the returned dimension universe stable across metric tabs, including
-  // combinations whose current ratio is unavailable. Never derive axes from risk ranking.
+
   const matrixDimensions =
     live.data?.sections
       .filter(
@@ -5975,7 +5974,6 @@ export default function Home({
     return comparison ? '暂无同期数据' : '无数据';
   };
   const renderPeriodKpiCard = (kpi: (typeof periodKpis)[number]) => {
-    // A usable subset is display-only; keep complete metrics, alerts and comparisons unchanged.
     const observation =
       live.data?.missingValuePolicy !== 'zero' && !Number.isFinite(kpi.value)
         ? kpi.name === '生产计划达成率'

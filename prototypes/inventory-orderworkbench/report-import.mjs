@@ -1,7 +1,6 @@
 const labels = { positive: "正向结论", risk: "风险结论", rhythm: "节奏分析" };
 const dimensions = { base: "基地", item: "品项", director: "应责总监" };
 
-/** The Agent uses visible controls; structured content is rendered as text, never as uploaded HTML. */
 export function mountReportImport({
   document,
   state,
@@ -140,7 +139,7 @@ export function mountReportImport({
       onAbort = () => reject(controller.signal.reason);
       controller.signal.addEventListener("abort", onAbort, { once: true });
     });
-    // The action acknowledges the visible loading dialog; the page owns this read-only job.
+
     void (async () => {
       try {
         const result = await Promise.race([preview(batch, controller.signal), aborted]);

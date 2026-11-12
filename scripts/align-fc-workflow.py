@@ -8,7 +8,7 @@ path = ROOT / 'business/inventory-fc/sql.config.json'
 config = json.loads(path.read_text())
 
 def render(tree):
-    # GEA accepts positional SUBSTRING arguments, not SQLGlot's FROM/FOR attributes.
+
     for node in list(tree.find_all(exp.Substring)):
         args = [node.this.copy()]
         for name in ('start', 'length'):
@@ -57,7 +57,7 @@ for key, query in config['queries'].items():
         'inventory_qty': 'h.total_qty', 'available_qty': 'h.available_qty',
         'open_transfer_reported_qty': 'CASE WHEN s.warehouse_transfer_qty >= 0 THEN s.warehouse_transfer_qty WHEN s.warehouse_transfer_qty IS NULL AND s.transfer_onway_qty >= 0 AND s.transfer_prepare_qty >= 0 THEN s.transfer_onway_qty + s.transfer_prepare_qty ELSE NULL END',
     })
-    # Source batch sums must not conceal missing quantity within an otherwise populated SKU.
+
     for select in tree.find_all(exp.Select):
         for e in list(select.expressions):
             if e.alias in ('available_qty', 'total_qty') and isinstance(e.this, exp.Sum):
@@ -116,7 +116,7 @@ for key, query in config['queries'].items():
         query['resultColumns'] += ['missing_calculation_count','forecast_turnover_days']
     query['request']['sql'] = render(tree)
     query['notes'] = '原版order-net-gap-v3：自然月计划日均向上取整；有效订单需求减订单自身占用后的剩余量扣减一次可用库存；目标缺口减当前调拨中量后向上取整。无计划/未知输入不生成建议；未来30日从明日开始跨自然月，展望周转=现库存/展望日均。保留当前11状态及仓库映射；当前订单与历史库存快照不混算。'
-# Keep newly published source metrics across the added net-demand CTE.
+
 for key, query in config['queries'].items():
     if not key.startswith(('replenishment', 'transfer_plan')) or 'last_month_actual_qty' not in query['resultColumns']:
         continue
@@ -135,7 +135,7 @@ for key, query in config['queries'].items():
                      if cte.alias == 'source_records' else f'{aliases[cte.alias]}.{field}')
             select.select(expression(f'{value} AS {field}'), append=True, copy=False)
     query['request']['sql'] = render(tree)
-# Also repair already-aligned queries skipped by the net-demand migration above.
+
 for key, query in config['queries'].items():
     if key.startswith(('replenishment', 'transfer_plan')) and ' FOR ' in query['request']['sql']:
         query['request']['sql'] = render(sqlglot.parse_one(query['request']['sql'], read='postgres'))
@@ -150,6 +150,6 @@ for view in config['sourceViews']['views']:
             if c['field']=='safety_days':c['label']='目标覆盖天数'
 path.write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n')
 print('FC net calculation aligned; no other agent configuration changed')
-# Saved cycle configurations are warehouse-scoped even on all-warehouse lists.
+
 import runpy
 runpy.run_path(str(Path(__file__).with_name('scope-fc-cycle-rules.py')))

@@ -1,4 +1,3 @@
-/** @type {{ timeZone: string; nextMonthSwitchDay: number; versionPriority: string[] }} */
 const DEFAULT_POLICY = Object.freeze({
   timeZone: 'Asia/Shanghai',
   nextMonthSwitchDay: 21,
@@ -43,15 +42,6 @@ export function normalizeTargetInventoryVersion(value) {
   return normalized;
 }
 
-/**
- * 从已发布/已锁定的版本清单中选择工作台默认口径。
- * 数据查询只返回已发布/已锁定记录，因此“是否可用”以返回行是否存在为准。
- */
-/**
- * @param {Array<Record<string, string | number | null | undefined>>} rows
- * @param {Date} now
- * @param {{ timeZone: string; nextMonthSwitchDay: number; versionPriority: string[] }} policy
- */
 export function selectDefaultPublishedTargetInventory(
   rows,
   now = new Date(),
@@ -100,7 +90,6 @@ export function selectDefaultPublishedTargetInventory(
   };
 }
 
-/** @param {string[]} versions */
 export function targetVersionCandidates(versions) {
   const candidates = new Set(versions);
   if (versions.some((version) => normalizeTargetInventoryVersion(version) === '纠偏'))
@@ -110,21 +99,17 @@ export function targetVersionCandidates(versions) {
   return [...candidates];
 }
 
-/**
- * @template {Record<string, unknown>} T
- * @param {T[]} rows All candidate SKUs, before category/SKU filters or paging.
- */
 export function selectWholeBaseTargetVersion(rows) {
   const priority = ['纠偏', '月初', '滚动'];
-  /** @type {Map<string, number>} */
+
   const selected = new Map();
-  /** @param {T} row */
+
   const key = (row) =>
     JSON.stringify([row['safety_stock.base_name'], row['safety_stock.target_month']]);
-  /** @param {T} row */
+
   const rank = (row) =>
     priority.indexOf(normalizeTargetInventoryVersion(row['safety_stock.inventory_version']));
-  /** @param {T} row */
+
   const stockOnly = (row) =>
     ['ai-db-stock-only', 'age-only'].includes(String(row['safety_stock.source'] ?? ''));
   for (const row of rows) {

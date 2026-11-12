@@ -1,6 +1,6 @@
 import { validateFcCycleRules, type FcCycleRule } from '../../../../../shared/fc-cycle-rules';
 import { createPageViewState } from '../../../../../shared/view-state.js';
-// The current BrowserRepository remains the typed owner; Workbench retains only its declared UI records.
+
 const values = new Map<string, string>();
 const view = createPageViewState('inventory-fc');
 const kinds = {
@@ -64,7 +64,6 @@ export const memoryStorage = {
 };
 window.addEventListener('gea-identity-changed', () => values.clear());
 
-/** Workbench persists only the current page's calculation setting, within its identity/session scope. */
 export const configuredCycleState = {
   warehouse(): string {
     return String(view.get().fcCycleWarehouse ?? '');
@@ -98,7 +97,6 @@ export const configuredCycleState = {
   },
 };
 
-/** Only the selected warehouse is UI intent; formal values must be reloaded from the service. */
 export const fcStorageSelection = {
   read: () => String(view.get().fcStorageWarehouse ?? ''),
   save: (warehouse: string) => view.update({ fcStorageWarehouse: warehouse }),

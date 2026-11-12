@@ -33,7 +33,6 @@ type LoginCopyKey =
       | 'loginFooter'
     >;
 
-/** Presentation only; the GEA Host owns the QR challenge and authenticated identity. */
 export function LoginDialog({
   account,
   t,
@@ -68,7 +67,7 @@ export function LoginSurface({
   const [presentation, setPresentation] = useState<LoginPresentation>({ state: 'preparing' });
   const [revision, setRevision] = useState(0);
   const [method, setMethod] = useState<'qr' | 'password'>('qr');
-  // This is the user's requested QR environment, not a client-owned authentication state.
+
   const [requestedEnvironment, setRequestedEnvironment] = useState<BusinessEnvironment>();
   const environment = requestedEnvironment ?? identity.status?.environment;
   const environments =
@@ -100,7 +99,6 @@ export function LoginSurface({
             const authenticated = await account.pollLogin(challenge.loginId, controller.signal);
             if (controller.signal.aborted) return;
             if (authenticated) {
-              // Only the subscribed Host identity can close the dialog as authenticated.
               timer = setTimeout(
                 () => {
                   if (!controller.signal.aborted)

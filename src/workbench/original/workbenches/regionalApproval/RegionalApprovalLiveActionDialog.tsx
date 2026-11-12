@@ -1,4 +1,3 @@
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import {
   useWorkbenchHost,
   type GeaSalesPlanActionReceipt,
@@ -82,9 +81,7 @@ export const actionErrorText = (t: TFunction, error: SalesPlanActionError): stri
     if (!reason) return fallback;
     return reason;
   }
-  // 服务端业务拒绝的原文通常是「GEA_HTTP_409：…」，会被判成技术文案而统一换成
-  // "版本状态已变化或存在并发操作、请刷新"——把"该重提"和"该找后端"这两种完全不同的
-  // 结论都盖掉了。这里按上游原因码给出能落地的说法（不暴露原因码本身）。
+
   const businessReason = upstreamRejectionText(t, cause);
   if (businessReason) {
     return businessReason;
@@ -94,7 +91,6 @@ export const actionErrorText = (t: TFunction, error: SalesPlanActionError): stri
   return fallback;
 };
 
-/** 只认识已在生产验证过的原因码；其它原因保持通用文案，不把技术码抛给业务。 */
 const UPSTREAM_REJECTION_CODES = [
   'SALES_PLAN_APPROVAL_STATE_INVALID',
   'NOTIFICATION_PAYLOAD_INVALID',
@@ -140,7 +136,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   client?: SalesPlanActionClient;
   evidence?: GeaSalesPlanDetail;
   approvalStages?: readonly ApprovalStageId[];
-  /** 内联明细当前显示的本节点确认量（用户改过、可能还没落盘）；比本地草稿更新，优先采用。 */
+
   pendingValues?: Record<string, string>;
   onPermissionDenied: (versionId: string) => void;
   onSucceeded: (
@@ -148,12 +144,12 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     request: GeaSalesPlanActionRequest,
   ) => void | Promise<void>;
   onRefresh: () => void;
-  /** 动作请求失败（含并发冲突、权限被拒）都会回调，用来收掉调用方的选中态。 */
+
   onAttemptFailed?: () => void;
   onClose: () => void;
-  /** 对话下发的“退回理由”草稿（等价于人工在理由框里输入）。 */
+
   remarkPatch?: { at: number; remark: string };
-  /** 对话下发的“确认提交”（等价于人工点确认按钮）。 */
+
   submitRequest?: { at: number };
 }> = ({
   visible,
@@ -476,9 +472,6 @@ const RegionalApprovalLiveActionDialog: React.FC<{
         setRefreshFailed(true);
       }
     } catch (error) {
-      // 权限被拒时保留勾选：这一行会被标记成本轮不可操作，留着勾选才能让灰按钮上的
-      // 「服务端已拒绝当前用户权限」有对象可解释。其它失败（并发冲突等）这一批根本没被
-      // 受理，勾选要收掉，免得用户看着"还选着"又点一次同一个失败请求。
       if (error && typeof error === 'object' && 'kind' in error && error.kind === 'permission') {
         onPermissionDenied(row.versionId);
       } else {
@@ -516,7 +509,6 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     );
   };
 
-  // 对话下发的草稿改写与确认：走的还是同一个人工路径（写理由 → 点确认）。
   const appliedRemarkPatch = useRef<number>();
   useEffect(() => {
     if (!remarkPatch || appliedRemarkPatch.current === remarkPatch.at) return;
@@ -565,10 +557,6 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   if (directApproval && action.state.status !== 'error' && !draftError && !refreshFailed)
     return null;
 
-  /*
-   * 退回与通过/保存共用 requestClose。两条渲染分支都必须包含未保存调整确认框，
-   * 否则关闭请求会进入确认状态却没有可见的确认操作。
-   */
   const discardConfirmModal = (
     <Modal
       visible={discardConfirmVisible}

@@ -5,7 +5,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
-// This fixture measures paged collection; bootstrap bundling has its own contract tests.
+
 delete config.dailySummary.bundle;
 const calls = [];
 let mode = 'stable',

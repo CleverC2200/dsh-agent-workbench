@@ -7,7 +7,6 @@ import { conversationWorkspace } from '../workspace-selection.ts';
 
 type CreationState = { kind: 'idle' } | { kind: 'creating' } | { kind: 'failed'; message: string };
 
-/** Create a fresh Core Session; never adopt a blank Session with an old preset or draft. */
 export function createConversationStarter(
   ctx: Pick<Context, 'sessions' | 'workspaces' | 'uiWorkspace' | 'layout' | 'effect'>,
   beforeOpen: () => void,
@@ -25,7 +24,7 @@ export function createConversationStarter(
       if (target === undefined) target = await ctx.workspaces.initializeDefault(navigation);
       navigation.throwIfAborted();
       if (target === undefined) throw Error('WORKBENCH_WORKSPACE_REQUIRED');
-      // Omitting sessionId forces fresh creation. Core resolves the user's current default.
+
       const sessionId = await ctx.sessions.create({ workspaceId: target.workspaceId });
       navigation.throwIfAborted();
       beforeOpen();

@@ -8,24 +8,21 @@ from sqlglot import exp
 
 ROOT = Path(__file__).resolve().parents[1]
 
-
 def project(select, expressions):
     names = {sqlglot.parse_one(item, read='postgres').alias for item in expressions}
     select.set('expressions', [e for e in select.expressions if e.alias not in names]
                + [sqlglot.parse_one(item, read='postgres') for item in expressions])
 
-
 def render(tree):
-    # Keep gateway-compatible named parameters and SUBSTRING call syntax.
+
     for node in list(tree.find_all(exp.Substring)):
         node.replace(exp.Anonymous(this='SUBSTRING', expressions=[
             node.this.copy(), node.args['start'].copy(), node.args['length'].copy()]))
     return re.sub(r'%\((gea_p\d+)\)s', r':\1', tree.sql(dialect='postgres'))
 
-
 def update(config):
     if config['agentId'] == 'inventory-aqkc':
-        # Base age cards and drilldowns must describe the same base pool as QLL.
+
         for key in ['source.health-date', 'health.cards', 'page.health-groups', 'batch-age.groups', 'batch-age.atomic']:
             query = config['queries'][key]
             tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
@@ -80,7 +77,6 @@ def update(config):
         for field, label in [('average_age', '平均货龄（天）'), ('max_age', '最大货龄（天）')]:
             if not any(c['field'] == field for c in view['columns']):
                 view['columns'].append({'field': field, 'valueField': field, 'label': label, 'format': 'decimal2'})
-
 
 if __name__ == '__main__':
     for agent in ['aqkc', 'fc', 'qll']:

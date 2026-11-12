@@ -677,7 +677,6 @@
   flex-wrap: wrap;
 }
 
-/* Warning cards: align with the approved prototype, scoped to alerts only. */
 .intelligent-lifecycle .warning-insight-list > article {
   display: flex;
   flex-direction: column;
@@ -995,7 +994,7 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* Detection management: shared workbench controls and audit views. */
+
 .am-panel .am-time-row {
   grid-column: 1/-1;
   min-width: 0;
@@ -1369,7 +1368,6 @@
   z-index: 240;
 }
 
-/* Warning cards: severity remains visible without relying on badge color alone. */
 .intelligent-lifecycle .warning-insight-list > article {
   --risk-color: #b76a08;
   --risk-line: #ead3ac;
@@ -1495,7 +1493,7 @@
     font-size: 16px;
   }
 }
-/* Focus card above a synchronized compact list, shared by warning and action. */
+
 .intelligent-lifecycle .focus-deck {
   display: flex;
   flex-direction: column;
@@ -1766,7 +1764,7 @@
   color: #707987;
   margin-top: 4px;
 }
-/* Compact focus area: reserve space for the list and center vector arrows. */
+
 .intelligent-lifecycle .focus-deck {
   gap: 12px;
 }
@@ -1877,7 +1875,7 @@
     grid-template-columns: 1fr;
   }
 }
-/* Quiet cards: severity belongs to a badge and the metric, not decorative borders. */
+
 .am-panel .am-table small.am-task-state {
   display: inline-flex;
   align-items: center;
@@ -2129,7 +2127,7 @@
   margin: 6px 0 0;
   color: #667085;
 }
-/* Warning list uses the same fields as the focused card. */
+
 .intelligent-lifecycle .warning-table-scroll {
   overflow: auto;
   max-height: 440px;
@@ -2254,7 +2252,6 @@
   color: #9299a3;
 }
 
-/* Keep technical evidence in audit payloads; detail stays below shared host toolbar. */
 .intelligent-lifecycle .focus-deck .warning-insight-list .suggested-plan {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
@@ -2329,7 +2326,6 @@
   }
 }
 
-/* One full-width operations panel per tab; compact list rows. */
 .intelligent-lifecycle.operations-tabbed {
   scroll-margin-top: 76px;
 }
@@ -2444,7 +2440,6 @@
   }
 }
 
-/* Compact cards and optional two-column review. */
 .operations-layout-switch {
   display: flex;
   justify-content: flex-end;
@@ -2521,7 +2516,6 @@
   }
 }
 
-/* Warning card visual treatment, keeping the actual alert fields and actions. */
 .intelligent-lifecycle .warning-section-title {
   display: flex;
   align-items: center;
@@ -2661,7 +2655,6 @@
   width: 275px;
 }
 
-/* 预警区：工具栏同排，空状态紧凑，保留历史列表可读性。 */
 .intelligent-lifecycle .operations-toolbar {
   display: flex;
   align-items: flex-end;
@@ -2799,7 +2792,6 @@
   }
 }
 
-/* 卡片切换箭头与卡片垂直居中，计数保留在上方。 */
 .intelligent-lifecycle .focus-stage:not(.is-empty) {
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) 32px;
@@ -2842,7 +2834,6 @@
   }
 }
 
-/* 执行记录保持相同行高，长结果可单独查看。 */
 .am-panel .am-run-table tbody tr {
   height: 68px;
 }
@@ -3037,7 +3028,6 @@
   border-color: #f5d6dc;
 }
 
-/* Keep form fields aligned in both desktop and split-pane layouts. */
 .am-panel .am-form {
   gap: 16px 20px;
   align-items: start;
@@ -3147,7 +3137,6 @@
   border-color: #efcdd2;
 }
 
-/* Execution columns retain usable widths in split panes. */
 .am-panel .am-run-table table {
   min-width: 1380px;
 }

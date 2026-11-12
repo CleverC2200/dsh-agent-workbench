@@ -3,7 +3,6 @@ import { readConfiguredFacts } from '../../business/shared/configured-facts.ts';
 import { originalDealerView } from '../../business/shared/original-business-views.ts';
 import { bindGovernedSql } from '../../business/shared/governed-parameters.ts';
 
-// Both pages consume the dealer contract so fields, units and missing-data reasons stay aligned.
 export const customerSkuView = dealerConfig.sourceViews.views.find(
   (view) => view.id === 'sku-stock',
 );
@@ -56,9 +55,9 @@ export async function readCustomerSkus(inventory, codes, input, { signal, execut
     {
       signal,
       detailsOnly: true,
-      // Execute in this page's existing Consumer and lifetime; no dealer identity or grant is borrowed.
+
       execute(request, options) {
-        // Atomic pages repeat the stock query for count and detail; scope every copy before paging.
+
         if (!request.sql.includes('WHERE t.stat_date'))
           throw Error('CUSTOMER_SKU_SCOPE_QUERY_CHANGED');
         return run(

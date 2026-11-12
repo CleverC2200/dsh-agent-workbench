@@ -1,4 +1,3 @@
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import { Alert, Button, Input, Modal, Spin } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import React, { useEffect, useRef, useState } from 'react';
@@ -25,26 +24,25 @@ import styles from './RegionalApprovalActionDialog.module.css';
 
 export type BatchActionKind = 'APPROVE' | 'REJECT';
 
-/** 全部成功后自动收起弹窗，避免每次提交都要再点一次「关闭」。 */
 const AUTO_CLOSE_SECONDS = 5;
 
 export type BatchActionItem = {
   row: RegionalApprovalLiveRow;
   detail?: GeaSalesPlanDetail;
   pendingValues?: Record<string, string>;
-  /** 与单笔按钮同源的能力证据；缺失时该笔不提交，只在结果里说明原因。 */
+
   access?: SalesPlanAccess;
-  /** 与单笔按钮同源的置灰原因键，用于把「为什么这一笔没提交」说清楚。 */
+
   skipReason?: string;
 };
 
 export type BatchActionOutcome = {
   planId: string;
   label: string;
-  /** 组织路径，便于在结果里认人是哪一笔。 */
+
   context?: string;
   status: 'success' | 'failed' | 'skipped';
-  /** 失败或跳过时的业务语言说明。 */
+
   detail?: string;
 };
 
@@ -57,10 +55,6 @@ const planContext = (row: RegionalApprovalLiveRow) =>
     .filter((value): value is string => Boolean(value))
     .join(' / ');
 
-/**
- * 批量审批：按用户勾选逐笔提交，逐笔校验并逐笔回报结果。
- * 一笔失败不回滚已成功的，也不阻止后续提交；返回时会汇总成功、失败与跳过。
- */
 const RegionalApprovalBatchActionDialog: React.FC<{
   visible: boolean;
   kind: BatchActionKind;
@@ -80,7 +74,6 @@ const RegionalApprovalBatchActionDialog: React.FC<{
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
-  // 只在全部成功时倒计时；有失败或跳过时保持打开，别把原因一闪而过。
   useEffect(() => {
     if (!outcomes) return;
     if (outcomes.some((outcome) => outcome.status !== 'success')) {
@@ -193,8 +186,7 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           }
         }
         actionSubmitted = true;
-        // 逐笔串行提交：每笔都有自己的幂等键，失败不会影响已提交的其它计划。
-        // eslint-disable-next-line no-await-in-loop
+
         await attempt.submit({
           planId: item.row.planId,
           versionId: item.row.versionId,

@@ -67,7 +67,6 @@ export const REPLENISHMENT_COLUMN_HINTS: Record<string, string> = {
   recommendedQty: 'max(0, max(缺货量, 目标库存量 - 订单扣减后可供库存量) - 调拨中量)，向上取整为件',
 };
 
-/** Preserve ordering but append new fields for users with old saved preferences. */
 export function mergeReplenishmentColumns(saved: string[]): string[] {
   const aliases: Record<string, string> = {
     availableQty: 'currentAvailableQty',
@@ -143,7 +142,7 @@ const DECIMAL_COLUMNS = new Set([
   'forecastTurnoverDays',
   'safetyStockGapQty',
 ]);
-/** Presentation only: keep the unrounded source values for calculations and ordering. */
+
 export function formatReplenishmentCell(row: ReplenishmentRow, key: string): string {
   const value = replenishmentCellValue(row, key);
   return formatReplenishmentValue(value, key);

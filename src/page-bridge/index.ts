@@ -1,4 +1,3 @@
-/** Shared page action runtime. Business hosts supply their own page adapters and policies. */
 export {
   AGUI_EVENT_TOOL_CALL_ARGS,
   AGUI_EVENT_TOOL_CALL_END,

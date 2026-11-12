@@ -21,8 +21,6 @@ const sourcePaths = sourceMode
   : {};
 const sourceLoads = new Set();
 
-// Real Cordis registration, official Renderer/AppFrame/store/controller and
-// company UI. Only Session/workspace data and composer are recording fixtures.
 const bundle = await build({
   stdin: {
     contents: `
@@ -937,8 +935,7 @@ test('static Documents preserve their own body and mode while the actual Core ma
   await expect(page.getByRole('textbox', { name: '首页草稿' })).toBeVisible();
   await expect(first).toBeHidden();
   await page.evaluate(() => window.selectSecond());
-  // Returning to the official main seat releases the company presentation tree.
-  // Author-owned filter persistence across that release is a separate contract.
+
   await expect(second).toBeVisible();
   assert.equal(
     await page.evaluate(() => window.sidebarProbe().main),

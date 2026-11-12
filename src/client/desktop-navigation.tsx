@@ -1,4 +1,3 @@
-/** 桌面消息消费界面；只接收安全投影，不接触原始链接或凭证。 */
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { BusinessAccount } from '../company/account.ts';
 import { z } from 'zod';
@@ -33,7 +32,6 @@ export type PageNavigation = ReadyNavigation & {
   failed(error: Error): void;
 };
 
-/** 业务页面订阅当前导航；以实际渲染回执完成等待。 */
 export function createNavigationSelection() {
   let value: PageNavigation | null = null;
   const listeners = new Set<() => void>();
@@ -141,7 +139,6 @@ async function readNavigationResponse(
   return next.data;
 }
 
-/** 独立提示条不阻断正常业务；轮询持续观察身份变化，已处理 receipt 不重复打开。 */
 export function DesktopNavigation({
   t,
   open,

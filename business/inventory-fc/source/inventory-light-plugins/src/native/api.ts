@@ -226,7 +226,6 @@ export async function mountBusinessFetch() {
       const result = await dispatch(url, method, body, init.signal);
       init.signal?.throwIfAborted();
       if (PLUGIN_ID === 'fc') {
-        // The current ready page owns FC facts; exports and detail reads may finish after it changes.
         refreshContext();
         return Response.json(result);
       }

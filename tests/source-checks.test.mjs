@@ -125,7 +125,19 @@ function fixture(
     JSON.stringify({
       type: 'module',
       packageManager: owner === 'dsh-agent-workbench' ? 'npm@11.11.0' : 'pnpm@11.7.0',
-      ...(tooling ? { devDependencies: { oxlint: '1', oxfmt: '1', typescript: '5' } } : {}),
+      ...(tooling
+        ? {
+            devDependencies: {
+              oxlint: '1',
+              oxfmt: '1',
+              typescript: '5',
+              parse5: '7',
+              postcss: '8',
+              yaml: '2',
+              'highlight.js': '11',
+            },
+          }
+        : {}),
       scripts: {
         'check:knowledge': knowledge
           ? 'node scripts/check-agent-knowledge.mjs --root . --config agent-knowledge.json'
@@ -167,6 +179,12 @@ function fixture(
           'node_modules/oxlint': { version: '1', integrity: 'sha512-fixture' },
           'node_modules/oxfmt': { version: '1', integrity: 'sha512-fixture' },
           'node_modules/typescript': { version: '5', integrity: 'sha512-fixture' },
+          ...Object.fromEntries(
+            ['parse5', 'postcss', 'yaml', 'highlight.js'].map((name) => [
+              'node_modules/' + name,
+              { version: '1', integrity: 'sha512-fixture' },
+            ]),
+          ),
         },
       }),
     );
@@ -538,7 +556,15 @@ test('tool-only execution preserves the owner static commands and rejects their 
       const planned = f.run('affected-plan');
       assert.equal(planned.status, 0, planned.stdout + planned.stderr);
       const plan = JSON.parse(planned.stdout);
-      assert.deepEqual(plan.tools, ['oxfmt', 'oxlint', 'typescript']);
+      assert.deepEqual(plan.tools, [
+        'highlight.js',
+        'oxfmt',
+        'oxlint',
+        'parse5',
+        'postcss',
+        'typescript',
+        'yaml',
+      ]);
       assert.equal(plan.core, false);
       assert.equal(plan.sdk, false);
       const checked = f.run('affected-check');

@@ -90,7 +90,7 @@
   padding-right: 0;
   text-align: right;
 }
-/* 暂存状态贴在改过的数字下方，只撑高自己这一行，不挤占或遮挡其他列。 */
+
 .quantityCell {
   display: flex;
   flex-direction: column;

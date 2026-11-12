@@ -1,7 +1,5 @@
 import { knownNumber } from '../../../../../shared/configured-overview';
 
-/** Each displayed subtotal carries its own valid customer-SKU count. Never add
- * stock and transit subtotals drawn from different rows to form the headline. */
 export function dealerStockOverview(
   summary: any,
   snapshotDate?: string | null,

@@ -1,6 +1,5 @@
 import type { ImportedPlan } from '../inventory-fc/source/fc/src/lib/planning';
 
-/** Like LocalPlanning: each imported warehouse/month replaces the entire previous package. */
 export function mergeFcPlans(
   previous: readonly ImportedPlan[],
   incoming: readonly ImportedPlan[],

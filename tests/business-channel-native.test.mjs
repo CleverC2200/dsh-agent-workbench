@@ -93,8 +93,6 @@ test('returning to the same Session replaces a revoked port even when its final 
     postMessage: (value) => messages.push(value),
   };
   try {
-    // Host disposed its old MessagePort before the queued context:null reached
-    // the cached iframe. Its next valid lease still belongs to this Session.
     f.connect('dsh-app://app', undefined, replacement);
     assert.ok(
       messages.some((message) => message.type === 'theme:subscribe'),

@@ -1,6 +1,5 @@
 import { canonicalFc } from './fc-provenance';
 
-/** Web Crypto random bytes also work in embedded pages without randomUUID support. */
 export function createFcConfirmationId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -25,7 +24,6 @@ const digest = async (value: string) => {
   );
 };
 
-/** A confirmation round has its own identity; retries retain that round and its confirmed inputs. */
 export async function fcSubmissionIdentity(input: {
   confirmationId?: string;
   warehouseCode: string;

@@ -6,7 +6,7 @@ Workbench 管页面目录、Native/HTML 呈现、公共布局、页面动作及�
 
 按功能读[页面合同](docs/workbench-contracts.md)、[恢复合同](docs/presentation-recovery.md)和现有源码/测试。代码用命名、类型和结构表达规则，自有源码、脚本与测试不写注释；业务 Prompt/Skill 与运行时文案保持原含义。工具指令先消除依赖，许可证来源按原分发要求保全。
 
-普通检查和注释清理范围见[本地开发](docs/local-development.md)。`check:comments` 阻断改动文件中的 JS/TS 注释，`--all` 审计完整 JS/TS 存量；分批迁移期间不得把增量通过说成全仓清零。`candidate:verify` 只核已冻结的干净三仓，不能代替开发期检查。
+普通检查和注释清理范围见[本地开发](docs/local-development.md)。`check:comments` 默认阻断全仓自有代码注释，支持范围和资产来源见 `source-comments.json` 与[本地开发](docs/local-development.md)。第三方、生成物、业务资源、fixture 与历史证据按真实来源保留。
 
 在插件拆分项目中构建或调试前，读取项目根 `docs/agents/dependency-preparation.md` 的源码反馈入口，复用已准备环境，只隔离本次可写源码。三包交付由 GEA 的 `docs/package-delivery.md` 维护；页面检查、实际安装和业务验收分别留证。
 

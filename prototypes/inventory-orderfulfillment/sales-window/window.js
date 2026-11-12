@@ -2,19 +2,19 @@
 const element = (id) => document.getElementById(id);
 const navigation = new URLSearchParams(location.search);
 const requestedMode = navigation.get('view') ?? navigation.get('mode');
-//update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】订单处理与商品增减共享原订单验证窗口-----------
+
 const mode = ['confirm', 'defer', 'details', 'list', 'edit', 'process', 'credit'].includes(
   requestedMode,
 )
   ? requestedMode
   : 'details';
-//update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】订单处理与商品增减共享原订单验证窗口-----------
+
 const nonce = crypto.randomUUID();
 let state,
   inflight = false,
   submitted,
   pageNo = 1;
-//update-begin---author:Codex ---date:2026-10-30 for：【订单履约正式确认链路本地联调】缺失数量及满足率不转换成零-----------
+
 const knownNumber = (value) =>
   (typeof value === 'number' || typeof value === 'string') &&
   String(value).trim() !== '' &&
@@ -48,7 +48,7 @@ const deferDays = () => {
     (Date.parse(date + 'T00:00:00Z') - Date.parse(calendarDate() + 'T00:00:00Z')) / 86400000;
   return Number.isInteger(delta) && delta >= 1 && delta <= 7 ? delta : null;
 };
-//update-end---author:Codex ---date:2026-10-30 for：【订单履约正式确认链路本地联调】缺失数量及满足率不转换成零-----------
+
 async function request(path, options = {}) {
   const response = await fetch(location.pathname + path, {
     cache: 'no-store',
@@ -68,11 +68,11 @@ function status() {
     !pending ||
     (mode === 'defer' && deferDays() === null) ||
     (mode === 'confirm' && !rateReady(state?.snapshot.satisfactionRate));
-  //update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】本机预览可查看延期页面但不写入处理决定-----------
+
   if (state?.previewOnly === true) {
     element('submit').disabled = true;
   }
-  //update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】本机预览可查看延期页面但不写入处理决定-----------
+
   if (state?.status !== 'pending' && mode !== 'list') {
     const d = state?.decisions?.[0];
     element('result').hidden = false;
@@ -88,7 +88,7 @@ function status() {
 }
 async function load() {
   state = await request('/data?includeRelated=' + (mode === 'list') + '&pageNo=' + pageNo);
-  //update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅在认证读取成功后渲染草稿，关闭原确认按钮-----------
+
   if (mode !== 'list' && (mode !== 'defer' || state.permissions?.canAct !== true)) {
     window.OrderShortageEditor.mount(document, {
       ...state,
@@ -138,7 +138,7 @@ async function load() {
     element('submit').hidden = true;
     return;
   }
-  //update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅在认证读取成功后渲染草稿，关闭原确认按钮-----------
+
   if (mode === 'list') {
     element('title').textContent = '最近 8 天的订单确认记录';
     element('summary').textContent = '仅展示分派给你的订单';
@@ -166,8 +166,7 @@ async function load() {
           button.style.marginRight = '16px';
           item.append(button);
         }
-      //update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】列表缺货订单提供相同处理入口-----------
-      //update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】列表缺货订单提供相同处理入口-----------
+
       element('items').append(item);
     }
     element('pages').hidden = false;

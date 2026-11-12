@@ -148,7 +148,6 @@ const exportHeaders = [
   '缺货量（件）',
 ];
 
-/** Export through the same governed order/line queries, never through the visible ten-row page. */
 export async function readOrderExport(
   config: AgentSqlConfig,
   filters: OrderFilters,
@@ -172,7 +171,7 @@ export async function readOrderExport(
     throw Error('所选订单已变化或不在当前权限范围，请刷新后重新选择');
   if (!orders.length) throw Error('没有可导出的订单');
   const exported: unknown[][] = [];
-  // Bound concurrent detail reads; a failure cancels the complete export, never downloads a partial file.
+
   for (let at = 0; at < orders.length; at += 4) {
     const groups = await Promise.all(
       orders.slice(at, at + 4).map(async (order) => {

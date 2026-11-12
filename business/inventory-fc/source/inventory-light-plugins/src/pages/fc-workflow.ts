@@ -65,14 +65,12 @@ async function readFcPlanRows(scope: FcReadScope, signal: AbortSignal): Promise<
     return z.array(rowSchema).parse((await read()).rows);
   } catch (error) {
     signal.throwIfAborted();
-    // A cached prefix from an older source count cannot be mixed into an export.
-    // Restart once with a fresh cohort; permissions/config/columns/cancellation still fail closed.
+
     if ((error as { code?: string }).code !== 'SOURCE_CHANGED') throw error;
     return z.array(rowSchema).parse((await read(Date.now())).rows);
   }
 }
 
-/** Only explicit download/import/submit actions enumerate their authorized filter scope. */
 export async function readFcActionRows(
   scope: FcReadScope,
   signal: AbortSignal,
@@ -83,7 +81,6 @@ export async function readFcActionRows(
   return (await readFcActionFacts(scope, signal, onProgress, freshAfter)).rows;
 }
 
-/** Retain the verified snapshot/config identity when projecting manual plans across pages. */
 export async function readFcActionFacts(
   scope: FcReadScope,
   signal: AbortSignal,
@@ -207,7 +204,6 @@ export function validateFcImport(rows: Record<string, string | number>[], source
   return { plans, errors };
 }
 
-/** gea-agent-fc order-net-gap-v3; imported months replace a warehouse's whole package. */
 export function applyFcPlan(row: FcRow, plans: ImportedPlan[], asOf: string, cycleDays: number) {
   const month = asOf.slice(0, 7);
   const [year, monthNumber] = month.split('-').map(Number);
@@ -250,7 +246,7 @@ export function applyFcPlan(row: FcRow, plans: ImportedPlan[], asOf: string, cyc
       : Math.ceil(((daily ?? 0) * remainingDays + (nextDaily ?? 0) * forecastDays) / 30);
   const available = knownNumber(row.available_qty),
     transfer = known(row.open_transfer_reported_qty);
-  // Incoming base orders are supply, never branch outbound commitments.
+
   const remainingOrders = known(row.calculation_order_remaining);
   const net = available === null || remainingOrders === null ? null : available - remainingOrders;
   const cycle = known(row.cycle_days) ?? cycleDays;
@@ -361,7 +357,6 @@ export function summarizeFcRows(rows: FcRow[]) {
   };
 }
 
-/** Validate the complete confirmation batch, including explicit zero reductions. */
 export function validateFcSubmission(
   rows: FcRow[],
   quantities: Record<string, number>,
