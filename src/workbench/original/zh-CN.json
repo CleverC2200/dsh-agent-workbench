@@ -444,20 +444,6 @@
       "customerCount": "{{count}} 家客户",
       "quantityProgress": "数量 {{progress}}%",
       "amountProgress": "{{progress}}%",
-      "versions": {
-        "group": "计划版本对比",
-        "primary": "当前查看版本",
-        "primaryCompact": "版本",
-        "compare": "对比版本",
-        "compareCompact": "对比",
-        "current": "最新版",
-        "previous": "上一版",
-        "initial": "初始版",
-        "offset": "-{{offset}} 版",
-        "unavailable": "暂无版本",
-        "info": "版本选择说明",
-        "description": "版本①为主显示，版本②为对比基准；版本①不能早于版本②，两版相同时不展示差异。"
-      },
       "dimensions": {
         "ariaLabel": "审批计划维度",
         "area": "按大区",
@@ -498,8 +484,7 @@
         "progress": "查看提报进度",
         "refreshData": "刷新数据",
         "export": "导出当前范围",
-        "exportPage": "导出当前页",
-        "compareVersions": "版本对比"
+        "exportPage": "导出当前页"
       },
       "exportFeedback": {
         "detailsFailed": "版本明细读取失败或数据不完整，请刷新后重试；未产生文件。",
@@ -590,7 +575,7 @@
       "liveDetail": {
         "title": "销售计划详情与版本证据",
         "openFor": "查看 {{plan}} 真实计划详情",
-        "boundary": "计划详情、版本、SKU、审批日志和版本比较均来自 GEA 用户会话只读接口；不会写入或提交真实数据。",
+        "boundary": "计划详情、SKU 和审批日志来自 GEA 用户会话只读接口。",
         "aiFixture": "AI 建议暂无真实接口，当前显示样例建议，不连接生产；本详情不会把建议或客户端临时调整写入服务端 SKU。",
         "loading": "正在读取销售计划证据…",
         "notReady": "选择一条真实销售计划后读取详情。",
@@ -599,21 +584,13 @@
         "receipt": "GEA 只读证据范围",
         "currentVersion": "服务端当前版本",
         "planId": "计划 ID",
-        "versionCount": "历史版本",
         "logCount": "审批日志",
-        "versionOption": "第 {{seq}} 版 · {{id}}",
-        "compareFrom": "基准版本",
-        "compareTo": "目标版本",
         "returnReasonEvidence": "版本退回原因",
         "emptySkus": "该版本没有 SKU 明细。",
         "emptyLogs": "该计划没有审批日志。",
-        "emptyCompare": "两个版本没有 SKU 差异。",
-        "sameVersion": "基准版本与目标版本相同，不产生差异或退回原因。",
         "tabs": {
           "skus": "版本 SKU",
-          "versions": "历史版本",
-          "logs": "审批日志",
-          "compare": "版本比较"
+          "logs": "审批日志"
         },
         "columns": {
           "sku": "SKU",
@@ -633,16 +610,7 @@
           "transition": "状态变化",
           "operator": "操作人",
           "time": "操作时间",
-          "remark": "备注",
-          "change": "变化类型",
-          "qtyComparison": "数量对比 / 差异",
-          "priceComparison": "价格对比",
-          "amountDelta": "金额差异"
-        },
-        "change": {
-          "ADDED": "新增",
-          "DELETED": "删除",
-          "UPDATED": "更新"
+          "remark": "备注"
         },
         "errors": {
           "permission": "当前账号没有读取该销售计划详情的权限。",
@@ -1099,7 +1067,6 @@
         "progress": "计划金额 / 目标金额",
         "categoryProgress": "计划金额 / 目标金额",
         "adjustment": "调整",
-        "comparison": "版本对比",
         "returnReason": "退回原因",
         "noReturnReason": "—",
         "status": "审批状态"
@@ -1195,8 +1162,6 @@
         "henan": "河南省区",
         "sichuan": "四川省区"
       },
-      "versionCompare": "版本对比",
-      "versionCompareUnavailable": "当前没有可读取的销售计划",
       "organizationGroupCount": "{{count}} 份计划",
       "mixedApprovalStatus": "多个审批节点",
       "expandOrganization": "展开 {{plan}} 下级组织",
@@ -1220,33 +1185,6 @@
       },
       "inlineAdjustments": "查看调整明细",
       "versionTargetMissing": "该版本不含月度目标",
-      "comparePlan": "版本②：{{amount}} / {{qty}}",
-      "compareProgress": "版本②金额进度：{{value}}",
-      "inlineComparison": {
-        "title": "列表版本对比",
-        "primary": "版本①",
-        "compared": "版本②",
-        "current": "当前版本",
-        "previous": "上一版本",
-        "earlier": "前 {{count}} 版",
-        "monthlyPrimary": "月计划①",
-        "monthlyCompared": "月计划②",
-        "difference": "差异（① − ②）",
-        "returnReason": "退回原因",
-        "hint": "按各计划距当前版本的顺序对比；缺失版本显示 —",
-        "plan": "月计划",
-        "confirmed": "确认计划量",
-        "confirmedPrimary": "确认计划量①",
-        "confirmedCompared": "确认计划量②",
-        "missing": "当前计划没有所选版本",
-        "allocation": "按各计划原确认数量占比分摊，每份四舍五入取整，合计可能有取整差额；原数量合计为 0 时平均分摊。",
-        "allocationFailed": "分摊草稿未全部暂存成功，请重试",
-        "allocationSaving": "正在暂存分摊草稿",
-        "allocationRetry": "重试暂存",
-        "allocationReadOnly": "组内计划须全部可编辑，历史版本只读",
-        "invalidQuantity": "请输入非负数量，最多三位小数",
-        "groupScope": "{{plans}} 份计划 · {{skus}} 种 SKU，按版本①汇总"
-      },
       "skuReview": {
         "title": "按大类 / SKU",
         "category": "大类",
@@ -1272,7 +1210,19 @@
         "empty": "当前筛选范围没有 SKU",
         "shipmentUnavailable": "部分历史发货量未能取得，相关发货量及合计显示为 —。"
       },
-      "returnDestinationUnavailable": "未能核对实际退回节点或修改后的数量，请刷新后重试。"
+      "returnDestinationUnavailable": "未能核对实际退回节点或修改后的数量，请刷新后重试。",
+      "returnReason": "退回原因",
+      "skuDetails": {
+        "plan": "月计划",
+        "confirmed": "确认计划量",
+        "allocation": "按各计划原确认数量占比分摊，每份四舍五入取整，合计可能有取整差额；原数量合计为 0 时平均分摊。",
+        "allocationFailed": "分摊草稿未全部暂存成功，请重试",
+        "allocationSaving": "正在暂存分摊草稿",
+        "allocationRetry": "重试暂存",
+        "allocationReadOnly": "组内计划须全部可编辑",
+        "invalidQuantity": "请输入非负数量，最多三位小数",
+        "missing": "当前计划明细未能取得，请刷新后重试。"
+      }
     },
     "contract": {
       "name": "合同审查 Agent",

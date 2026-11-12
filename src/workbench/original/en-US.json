@@ -444,20 +444,6 @@
       "customerCount": "{{count}} customers",
       "quantityProgress": "Qty {{progress}}%",
       "amountProgress": "{{progress}}%",
-      "versions": {
-        "group": "Plan version comparison",
-        "primary": "Viewing version",
-        "primaryCompact": "Version",
-        "compare": "Compare version",
-        "compareCompact": "Compare",
-        "current": "Latest",
-        "previous": "Previous",
-        "initial": "Initial",
-        "offset": "-{{offset}} version",
-        "unavailable": "No versions",
-        "info": "Version selection help",
-        "description": "Version ① is the primary view and Version ② is the comparison baseline. Version ① cannot be older than Version ②; no differences are shown when both versions match."
-      },
       "dimensions": {
         "ariaLabel": "Approval plan dimensions",
         "area": "By area",
@@ -498,8 +484,7 @@
         "progress": "View submission progress",
         "refreshData": "Refresh data",
         "export": "Export current scope",
-        "exportPage": "Export current page",
-        "compareVersions": "Compare versions"
+        "exportPage": "Export current page"
       },
       "exportFeedback": {
         "detailsFailed": "Version details could not be read or are incomplete. Refresh and retry; no file was created.",
@@ -590,7 +575,7 @@
       "liveDetail": {
         "title": "Sales plan details and version evidence",
         "openFor": "View real plan details for {{plan}}",
-        "boundary": "Plan details, versions, SKUs, approval logs, and comparisons come from read-only GEA user-session endpoints. Nothing writes or submits real data.",
+        "boundary": "Plan details, SKUs, and approval logs are read through the GEA user session.",
         "aiFixture": "AI guidance has no real endpoint. The current guidance is sample data and is not connected to production. This detail view never writes guidance or temporary client adjustments into server SKUs.",
         "loading": "Loading sales plan evidence…",
         "notReady": "Select a real sales plan to load its details.",
@@ -599,21 +584,13 @@
         "receipt": "GEA read-only evidence scope",
         "currentVersion": "Server current version",
         "planId": "Plan ID",
-        "versionCount": "Historical versions",
         "logCount": "Approval logs",
-        "versionOption": "Version {{seq}} · {{id}}",
-        "compareFrom": "Base version",
-        "compareTo": "Target version",
         "returnReasonEvidence": "Version return reasons",
         "emptySkus": "This version has no SKU details.",
         "emptyLogs": "This plan has no approval logs.",
-        "emptyCompare": "The selected versions have no SKU differences.",
-        "sameVersion": "The baseline and target are the same version, so there is no difference or return reason.",
         "tabs": {
           "skus": "Version SKUs",
-          "versions": "Version history",
-          "logs": "Approval logs",
-          "compare": "Version comparison"
+          "logs": "Approval logs"
         },
         "columns": {
           "sku": "SKU",
@@ -633,16 +610,7 @@
           "transition": "Status transition",
           "operator": "Operator",
           "time": "Action time",
-          "remark": "Remark",
-          "change": "Change type",
-          "qtyComparison": "Quantity comparison / delta",
-          "priceComparison": "Price comparison",
-          "amountDelta": "Amount delta"
-        },
-        "change": {
-          "ADDED": "Added",
-          "DELETED": "Deleted",
-          "UPDATED": "Updated"
+          "remark": "Remark"
         },
         "errors": {
           "permission": "This account cannot read the requested sales plan details.",
@@ -1096,7 +1064,6 @@
         "progress": "Plan amount / Target amount",
         "categoryProgress": "Plan amount / Target amount",
         "adjustment": "Adjustment",
-        "comparison": "Version comparison",
         "returnReason": "Return reason",
         "noReturnReason": "—",
         "status": "Approval status"
@@ -1191,8 +1158,6 @@
         "henan": "Henan Province",
         "sichuan": "Sichuan Province"
       },
-      "versionCompare": "Compare versions",
-      "versionCompareUnavailable": "No sales plans are available to compare",
       "organizationGroupCount": "{{count}} plans",
       "mixedApprovalStatus": "Multiple approval stages",
       "expandOrganization": "Expand organizations under {{plan}}",
@@ -1216,33 +1181,6 @@
       },
       "inlineAdjustments": "View adjustment details",
       "versionTargetMissing": "This version has no monthly target",
-      "comparePlan": "Version 2: {{amount}} / {{qty}}",
-      "compareProgress": "Version 2 amount progress: {{value}}",
-      "inlineComparison": {
-        "title": "Compare versions in list",
-        "primary": "Version ①",
-        "compared": "Version ②",
-        "current": "Current version",
-        "previous": "Previous version",
-        "earlier": "{{count}} versions earlier",
-        "monthlyPrimary": "Monthly plan ①",
-        "monthlyCompared": "Monthly plan ②",
-        "difference": "Difference (① − ②)",
-        "returnReason": "Return reason",
-        "hint": "Compare each plan relative to its current version. Missing versions display —.",
-        "plan": "Monthly plan",
-        "confirmed": "Confirmed quantity",
-        "confirmedPrimary": "Confirmed quantity ①",
-        "confirmedCompared": "Confirmed quantity ②",
-        "missing": "The selected version is unavailable for this plan",
-        "allocation": "Allocate in proportion to original confirmed quantities and round each share to the nearest whole unit, with halves rounded up. The rounded total may differ. Split equally when the original total is zero.",
-        "allocationFailed": "Some allocated drafts could not be saved. Retry.",
-        "allocationSaving": "Saving allocated drafts",
-        "allocationRetry": "Retry saving",
-        "allocationReadOnly": "All plans in this group must be editable. Historical versions are read-only.",
-        "invalidQuantity": "Enter a nonnegative quantity with up to three decimals",
-        "groupScope": "{{plans}} plans · {{skus}} SKUs, summarized by version ①"
-      },
       "skuReview": {
         "title": "By category / SKU",
         "category": "Category",
@@ -1268,7 +1206,19 @@
         "empty": "No SKUs match these filters",
         "shipmentUnavailable": "Some historical shipments are unavailable. Affected quantities and totals show —."
       },
-      "returnDestinationUnavailable": "Could not verify the return destination or edited quantities. Refresh and try again."
+      "returnDestinationUnavailable": "Could not verify the return destination or edited quantities. Refresh and try again.",
+      "returnReason": "Return reason",
+      "skuDetails": {
+        "plan": "Monthly plan",
+        "confirmed": "Confirmed quantity",
+        "allocation": "Allocate in proportion to original confirmed quantities and round each share to the nearest whole unit, with halves rounded up. The rounded total may differ. Split equally when the original total is zero.",
+        "allocationFailed": "Some allocated drafts could not be saved. Retry.",
+        "allocationSaving": "Saving allocated drafts",
+        "allocationRetry": "Retry saving",
+        "allocationReadOnly": "All plans in the group must be editable",
+        "invalidQuantity": "Enter a nonnegative quantity with up to three decimals",
+        "missing": "Current plan details could not be loaded. Refresh and try again."
+      }
     },
     "contract": {
       "name": "Contract Review Agent",

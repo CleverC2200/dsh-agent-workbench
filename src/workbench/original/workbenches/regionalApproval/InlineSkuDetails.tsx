@@ -39,14 +39,10 @@ export function InlineSkuDetails({
   onElementsChange,
   initialInputValues,
   onInputChange,
-  comparison = false,
-  comparedSkus,
   selectedSkus,
   unavailable = false,
   loading = false,
 }: {
-  comparison?: boolean;
-  comparedSkus?: readonly GeaSalesPlanSku[];
   selectedSkus?: GeaSalesPlanSku[];
   unavailable?: boolean;
   loading?: boolean;
@@ -79,26 +75,11 @@ export function InlineSkuDetails({
   const [skus, setSkus] = useState<GeaSalesPlanSku[]>();
   const [failed, setFailed] = useState(false);
   const displayedSkus = useMemo(() => {
-    const rows = skus ? [...skus] : undefined;
-    for (const previous of comparedSkus ?? [])
-      if (rows && !rows.some((sku) => String(sku.skuCode) === String(previous.skuCode)))
-        rows.push({
-          ...previous,
-          versionId: row.versionId,
-          baseQty: '0',
-          qty: '0',
-          amt: '0',
-          amtBase: '0',
-          regionConfirmedQty: null,
-          provinceConfirmedQty: null,
-          areaConfirmedQty: null,
-          categoryConfirmedQty: null,
-        });
-    return rows?.filter(
+    return skus?.filter(
       (sku) =>
         categoryName === undefined || (sku.productCategName.trim() || '其他') === categoryName,
     );
-  }, [skus, comparedSkus, categoryName, row.versionId]);
+  }, [skus, categoryName]);
   const [confirmedValues, setConfirmedValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       Object.entries(initialInputValues ?? {}).map(([code, value]) => [
@@ -424,14 +405,8 @@ export function InlineSkuDetails({
       return {};
     }
   }, [savedDraft]);
-  const comparisonText = (key: string) =>
-    t(`common.assistantSurface.regionalApproval.inlineComparison.${key}`);
-  const columns = [
-    'plan',
-    comparison ? 'confirmedPrimary' : 'confirmed',
-    ...(comparison ? ['confirmedCompared', 'difference'] : []),
-  ];
-  const comparedByCode = new Map(comparedSkus?.map((sku) => [String(sku.skuCode), sku]));
+  const text = (key: string) => t(`common.assistantSurface.regionalApproval.skuDetails.${key}`);
+  const columns = ['plan', 'confirmed'];
   const groups = new Map<string, GeaSalesPlanSku[]>();
   for (const sku of displayedSkus ?? []) {
     const category = sku.productCategName.trim() || '其他';
@@ -443,7 +418,7 @@ export function InlineSkuDetails({
       {loading ? (
         <Spin />
       ) : unavailable ? (
-        <Alert type="info" content={comparisonText('missing')} />
+        <Alert type="info" content={text('missing')} />
       ) : failed ? (
         <Alert type="error" content={tr('loadError')} />
       ) : !skus ? (
@@ -463,7 +438,7 @@ export function InlineSkuDetails({
                 <th scope="col">{tr('columns.sku')}</th>
                 {columns.map((key) => (
                   <th scope="col" key={key}>
-                    {comparisonText(key)}
+                    {text(key)}
                   </th>
                 ))}
                 <th aria-hidden="true" />
@@ -491,18 +466,6 @@ export function InlineSkuDetails({
                     orderType === 'Z' ? adjustment : confirmed,
                     String(sku.price),
                   );
-                  const previous = comparedByCode.get(code);
-                  const previousQuantity = !comparedSkus
-                    ? undefined
-                    : previous
-                      ? baselineFor(previous)
-                      : '0';
-                  const previousAmount =
-                    previousQuantity === undefined
-                      ? undefined
-                      : previous
-                        ? multiplyExactDecimals(previousQuantity, String(previous.price))
-                        : '0';
                   return (
                     <tr key={code + ':' + index} className={changed ? styles.changed : undefined}>
                       <td>
@@ -524,7 +487,7 @@ export function InlineSkuDetails({
                           quantity={orderType === 'Z' ? adjustment : confirmed}
                           amount={confirmedAmount}
                         >
-                          {canEdit && skus.some((current) => String(current.skuCode) === code) ? (
+                          {canEdit ? (
                             <div className={styles.quantityCell}>
                               <Input
                                 className={styles.quantityInput}
@@ -587,30 +550,6 @@ export function InlineSkuDetails({
                           ) : undefined}
                         </SkuQuantityAmount>
                       </td>
-                      {comparison && (
-                        <>
-                          <td>
-                            <SkuQuantityAmount
-                              quantity={previousQuantity}
-                              amount={previousAmount}
-                            />
-                          </td>
-                          <td>
-                            <SkuQuantityAmount
-                              quantity={
-                                previousQuantity === undefined
-                                  ? undefined
-                                  : subtractExactDecimals(confirmed, previousQuantity)
-                              }
-                              amount={
-                                previousAmount === undefined || confirmedAmount === undefined
-                                  ? undefined
-                                  : subtractExactDecimals(confirmedAmount, previousAmount)
-                              }
-                            />
-                          </td>
-                        </>
-                      )}
                       <td aria-hidden="true" />
                     </tr>
                   );
