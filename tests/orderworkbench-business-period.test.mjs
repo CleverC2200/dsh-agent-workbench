@@ -13,14 +13,14 @@ test('upstream business period includes all original-order SKUs without any logi
       fromorderno,cust_code,new_material_code,belong_base,product_categ_name,pinxiang,new_material_name,
       need_qty_origin,qtyshipped,executeorderno,fromorderno_month,exp_flag,order_qty_origin
     );
-    INSERT INTO agents_order_execute_isontime_mi VALUES
+    INSERT INTO agents_order_execute_isontime_mi (fromorderno,cust_code,new_material_code,belong_base,product_categ_name,pinxiang,new_material_name,need_qty_origin,qtyshipped,executeorderno,fromorderno_month,exp_flag,order_qty_origin) VALUES
       ('O','C','S1','郑州','食品','水饺','一',100,80,'E1','2026-10-25','否',100),
       ('O','C','S1','郑州','食品','水饺','一',100,80,'E1','2026-10-25','否',100),
       ('O','C','S2','郑州','食品','水饺','二',100,120,'E2','2026-10-25','否',100),
       ('outside','C','S3','郑州','食品','水饺','三',200,0,'E3','2026-10-18','否',200),
       ('excluded','C','S4','郑州','食品','水饺','四',200,0,'E4','2026-10-25','是',200),
       ('conflict','C','S5','郑州','食品','水饺','五',100,80,'E5','2026-10-25','否',100),
-      ('conflict','C','S5','郑州','食品','水饺','五',200,80,'E5','2026-10-25','否',200);`);
+      ('conflict','C','S5','郑州','食品','水饺','五',NULL,80,'E5','2026-10-25','否',200);`);
     db.function('GREATEST', { varargs: true }, (...values) => Math.max(...values));
     db.function('LEAST', { varargs: true }, (...values) => Math.min(...values));
     const rows = db
@@ -48,7 +48,7 @@ test('upstream business period includes all original-order SKUs without any logi
     assert.equal(rows.find((row) => row.sku === 'S5').sample_records, 0);
     // Native-date preselection must retain *all* observations of a spanning
     // original order; filtering its lines before grouping hides this conflict.
-    db.exec(`INSERT INTO agents_order_execute_isontime_mi VALUES
+    db.exec(`INSERT INTO agents_order_execute_isontime_mi (fromorderno,cust_code,new_material_code,belong_base,product_categ_name,pinxiang,new_material_name,need_qty_origin,qtyshipped,executeorderno,fromorderno_month,exp_flag,order_qty_origin) VALUES
       ('spanning','C','S6','华南','食品','水饺','六',100,80,'E6','2026-10-18','否',100),
       ('spanning','C','S6','华南','食品','水饺','六',100,80,'E6','2026-10-25','否',100);`);
     db.function('CONCAT', { varargs: true }, (...values) => values.join(''));
@@ -56,8 +56,8 @@ test('upstream business period includes all original-order SKUs without any logi
       .prepare(ordersSql)
       .all({ gea_p1: '2026-10-19', gea_p2: '2026-10-26', gea_p900: '' })
       .find((row) => row.sku === 'S6');
-    assert.equal(spanning.invalid, 1);
-    assert.equal(spanning.sample_records, 0);
+    assert.equal(spanning.invalid, 0);
+    assert.equal(spanning.sample_records, 1);
   } finally {
     db.close();
   }
@@ -165,4 +165,39 @@ test('published stock excludes legacy warehouse-only SKUs and retains missing qu
   } finally {
     db.close();
   }
+});test('normal splits sum quantities and use the final original-order shipment period', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec(`CREATE TABLE agents_order_execute_isontime_mi(
+      fromorderno,cust_code,new_material_code,belong_base,product_categ_name,pinxiang,new_material_name,
+      need_qty_origin,qtyshipped,executeorderno,fromorderno_month,exp_flag,order_qty_origin,pickup_point_kpi
+    );
+    INSERT INTO agents_order_execute_isontime_mi VALUES
+      ('split','C','S1','郑州','食品','水饺','一',60,50,'E1','2026-11-03','否',100,'郑州'),
+      ('split','C','S1','郑州','食品','水饺','一',60,50,'E1','2026-11-03','否',100,'郑州'),
+      ('split','C','S1','华东','食品','水饺','一',40,40,'E2','2026-11-03','否',0,'华东'),
+      ('split','C','S1','郑州','食品','水饺','一',100,50,'E1','2026-10-30','否',100,'郑州'),
+      ('split','C','S2','郑州','食品','水饺','二',20,30,'E3','2026-10-30','否',20,'郑州'),
+      ('split','C','S1','郑州','食品','水饺','一',999,0,'excluded','2026-11-15','是',999,'郑州'),
+      ('outside','C','S3','郑州','食品','水饺','三',80,0,'E4','2026-11-12','否',80,'郑州'),
+      ('branch','C','S4','郑州','食品','水饺','四',900,0,'E5','2026-11-03','否',900,'上海');`);
+    db.function('GREATEST', { varargs: true }, (...values) => Math.max(...values));
+    db.function('LEAST', { varargs: true }, (...values) => Math.min(...values));
+    const run = (start, end, base = '') => db.prepare(ordersSql).all({
+      gea_p1: start, gea_p2: end, gea_p900: base,
+    });
+    const rows = run('2026-11-01', '2026-11-12');
+    assert.equal(rows.length, 2);
+    assert.equal(rows.reduce((sum, row) => sum + row.sample_demand, 0), 120);
+    assert.equal(rows.reduce((sum, row) => sum + row.sample_shortage, 0), 10);
+    assert.equal(rows.reduce((sum, row) => sum + row.invalid, 0), 0);
+    assert.equal(run('2026-10-01', '2026-11-01').length, 0);
+    assert.equal(run('2026-11-01', '2026-11-03').length, 0);
+    const scoped = run('2026-11-01', '2026-11-12', '郑州');
+    assert.equal(scoped.reduce((sum, row) => sum + row.sample_demand, 0), 80);
+  } finally {
+    db.close();
+  }
 });
+
+

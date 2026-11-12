@@ -57,6 +57,18 @@ export function metricDetailsRequest(facts, key, selection, card = {}) {
           status: card.status ?? current.status,
         },
         definition: workbenchMetricDetail({ ...facts, selected: 'month' }, key),
+        comparisonPeriods: {
+          month: {
+            current: facts.periods.month?.start && facts.periods.month?.end,
+            previous: facts.periods.previousMonth?.start && facts.periods.previousMonth?.end,
+            year: facts.periods.yearMonth?.start && facts.periods.yearMonth?.end,
+          },
+          week: {
+            current: facts.periods.week?.start && facts.periods.week?.end,
+            previous: facts.periods.previousWeek?.start && facts.periods.previousWeek?.end,
+            year: facts.periods.yearWeek?.start && facts.periods.yearWeek?.end,
+          },
+        },
         contract,
         queries: {
           summary: { tool: 'gea_order_kpi', parameters: { ...parameters, view: 'summary' } },

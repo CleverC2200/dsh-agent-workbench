@@ -627,6 +627,10 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
                   },
                   priority,
                 );
+              if (id === 'stock') return read(id, {
+                ...values, end_exclusive: spec.inventoryEnd ?? spec.end,
+                ...(options.summary ? { period_start: spec.start, period_end: spec.end } : {}),
+              }, priority);
               if (id !== 'ages') return read(id, values, priority);
               const dates = await read(
                 'ageDate',
