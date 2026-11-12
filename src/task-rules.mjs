@@ -1,6 +1,10 @@
 // Task rules are auditable execution inputs, not registrations in the metric library.
 export function permitsNullHealthy(description='') {
-  return String(description).split(/[，,。；;\n]/).some(clause =>
+  const normalized = String(description).replace(
+    /((?:空值|NULL|null)(?:时|的情况下))[，,]\s*(?:该对象|该指标|该项)?(?=\s*(?:算|视为|按|判为|作为))/g,
+    '$1',
+  );
+  return normalized.split(/[，,。；;\n]/).some(clause =>
     /(?:空值|NULL|null).{0,12}(?:算|视为|按|判为|作为).{0,4}(?:正常|健康)/.test(clause) &&
     !/(?:不|不能|不得|不要|不可).{0,4}(?:算|视为|按|判为|作为)/.test(clause));
 }
