@@ -45,3 +45,35 @@ test('warning Host starts without local PG credentials and reports unavailable w
     for (const f of cleanups.reverse()) f();
   }
 });
+
+test('an idle detection worker does not keep an otherwise finished Host process alive', async () => {
+  const { spawn } = await import('node:child_process');
+  const module = new URL('../src/detection-backend.mjs', import.meta.url).href;
+  const child = spawn(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `
+    import {installDetection} from ${JSON.stringify(module)};
+    await installDetection({effect:fn=>fn(),connection:{fetch:{register:()=>()=>{}},createSharedFetchHandler:()=>({fetch:async()=>Response.json({ok:false,error:{message:'offline'}},{status:503})})}});
+  `,
+    ],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  let output = '';
+  child.stderr.on('data', (b) => {
+    output += b;
+  });
+  const timeout = setTimeout(() => child.kill(), 3000);
+  try {
+    const result = await new Promise((resolve, reject) => {
+      child.on('error', reject);
+      child.on('close', (code, signal) => resolve({ code, signal }));
+    });
+    assert.deepEqual(result, { code: 0, signal: null }, output);
+  } finally {
+    clearTimeout(timeout);
+    child.kill();
+  }
+});

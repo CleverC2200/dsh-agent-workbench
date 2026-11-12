@@ -407,7 +407,10 @@ export async function installDetection(ctx) {
     if (!response.ok || body.ok !== true) throw Error(body.error?.message || '预警调度服务不可用');
     return body.value;
   }
-  const xxl = (path, data) => scheduler({ operation: 'xxl', path, data });
+  const xxl = async (path, data) => {
+    if (path === '/jobinfo/trigger') await scheduler({ operation: 'poll', busy: true });
+    return scheduler({ operation: 'xxl', path, data });
+  };
   async function configure(t, edit = false) {
     const body = {
       jobGroup: '1',
@@ -585,6 +588,10 @@ export async function installDetection(ctx) {
             if (text) texts.push(text);
           }
           if (e.type === 'turn/end') {
+            if (e.data?.reason?.kind === 'error')
+              throw Error(e.data.reason.error?.message || 'Agent 检测执行失败');
+            if (e.data?.reason?.kind !== 'completed')
+              throw Error('Agent 检测未正常完成，请检查执行记录');
             for (const text of texts.reverse()) {
               const raw = text
                 .replace(/^```(?:json)?\s*/, '')
@@ -896,6 +903,7 @@ export async function installDetection(ctx) {
   const deliveryTimer = setInterval(() => {
     void deliver().catch(() => {});
   }, 15000);
+  deliveryTimer.unref();
   ctx.effect(() => () => clearInterval(deliveryTimer));
   let pollTimer;
   let disposed = false;
@@ -932,10 +940,14 @@ export async function installDetection(ctx) {
       delay = 15000;
     } finally {
       polling = false;
-      if (!disposed) pollTimer = setTimeout(() => void pollExecutor(), delay);
+      if (!disposed) {
+        pollTimer = setTimeout(() => void pollExecutor(), delay);
+        pollTimer.unref();
+      }
     }
   }
   pollTimer = setTimeout(() => void pollExecutor(), 1000);
+  pollTimer.unref();
   ctx.effect(() => () => {
     disposed = true;
     clearTimeout(pollTimer);
