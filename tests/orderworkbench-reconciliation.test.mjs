@@ -226,8 +226,11 @@ test('amendments use the BI order-close cohort while cancellations use quantitie
 
 test('fulfillment uses the upstream original-order business period without a downstream SKU date join', () => {
   const sql = workbenchQueries.orders.sql;
-  assert.match(sql, /MIN\(fromorderno_month\) AS period_start/);
-  assert.match(sql, /m.period_end>=:gea_p1 AND m.period_start<:gea_p2/);
+  assert.match(
+    sql,
+    /MAX\(fromorderno_month\) OVER \(PARTITION BY fromorderno,cust_code\) AS final_period/,
+  );
+  assert.match(sql, /m.period_end>=:gea_p1 AND m.period_end<:gea_p2/);
   assert.doesNotMatch(
     sql,
     /agents_scm_order_trace_final_di|agents_scm_execute_detail_hourly_d|complete_time/,
