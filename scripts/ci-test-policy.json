@@ -48,6 +48,28 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^(?:src/(?:detection-(?:backend|postgres)|task-rules|warning-ownership|feishu-warning-transport|task-management)\\.|docs/alert-module-local/)",
+      "tests": [
+        "tests/alert-lifecycle.test.mjs",
+        "tests/cross-period-lifecycle.test.mjs",
+        "tests/notification-modes.test.mjs",
+        "tests/task-management.test.mjs",
+        "tests/task-rules.test.mjs",
+        "tests/warning-ownership.test.mjs",
+        "tests/alert-unconfigured.test.mjs"
+      ],
+      "sourceTests": [
+        "tests/alert-lifecycle.test.mjs",
+        "tests/cross-period-lifecycle.test.mjs",
+        "tests/notification-modes.test.mjs",
+        "tests/task-management.test.mjs",
+        "tests/task-rules.test.mjs",
+        "tests/warning-ownership.test.mjs",
+        "tests/alert-unconfigured.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^scripts/sync-fulfillment-plugin-resources\\.mjs$",
       "tests": ["tests/fulfillment-plugin-resource-sync.test.mjs"]
     },

@@ -1,10 +1,17 @@
+import { WarningViews, type WarningEvent } from './warning-views';
+import { parseWarningState } from './warning-state';
+import { ActionSuggestionViews } from './action-suggestion-views';
+import { combineWarnings } from './detection-record-view.js';
+import { openWarningDetail } from './warning-detail.js';
+import { openAlertManagement } from './monitor-management.js';
+import './monitor-management.css';
 import { DrillPage } from './drill-page';
 import { DrillBranchLoading } from './drill-branch-loading';
 import { QueryErrors } from '../../../shared/query-errors';
 import { BusinessToolbar } from '../../../shared/business-toolbar';
 import { budgetPerformanceObservation } from 'dsh-agent-manage/aps-compute/budget-performance';
 import { productionOutputObservation } from 'dsh-agent-manage/aps-compute/production-output';
-import { action, reportElements } from '../../../shared/channel.js';
+import { action, reportElements, ask, call } from '../../../shared/channel.js';
 import * as React from 'react';
 import { createPageViewState, usePageViewField } from '../../../shared/view-state.js';
 const apsView = createPageViewState('inventory-apsplan');
@@ -3039,7 +3046,90 @@ function IntelligentWorkbenchPage({
       dimension: 'base' as ProductionDimension,
     },
   ];
-  const warningEvents = live ? liveInsights.warnings : demoWarningEvents;
+  const [monitorAlerts, setMonitorAlerts] = useState<WarningEvent[]>([]);
+  const [monitorAvailable, setMonitorAvailable] = useState(false);
+  useEffect(() => {
+    let disposed = false;
+    let pending = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = async () => {
+      if (disposed || pending) return;
+      clearTimeout(timer);
+      pending = true;
+      let failed = false;
+      try {
+        const state = parseWarningState(await call('detection', { op: 'list' }));
+        if (!disposed) {
+          setMonitorAlerts(state.events.filter((event) => event.eventStatus !== '已合并'));
+          setMonitorAvailable(true);
+        }
+      } catch {
+        failed = true;
+        if (!disposed) setMonitorAvailable(false);
+      } finally {
+        pending = false;
+        if (!disposed) timer = setTimeout(refresh, failed ? 60000 : 5000);
+      }
+    };
+    void refresh();
+    window.addEventListener('gea-detection-updated', refresh);
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      window.removeEventListener('gea-detection-updated', refresh);
+    };
+  }, []);
+  const warningEvents = monitorAvailable
+    ? combineWarnings([], monitorAlerts, periodRange)
+    : live
+      ? liveInsights.warnings
+      : demoWarningEvents;
+  const closedWarningEvents = monitorAlerts
+    .filter(
+      (event) =>
+        event.eventStatus === '已关闭' || (event.eventStatus === '已恢复' && !event.pendingClose),
+    )
+    .sort((a, b) =>
+      String(b.closedAt || b.recoveredAt || b.lastChecked || '').localeCompare(
+        String(a.closedAt || a.recoveredAt || a.lastChecked || ''),
+      ),
+    );
+  const [operationsTab, setOperationsTab] = useState<'warning' | 'action'>('warning');
+  const [operationsLayout, setOperationsLayout] = useState<'tabs' | 'side'>('tabs');
+  const showOperations = (tab: 'warning' | 'action') => {
+    setOperationsTab(tab);
+    requestAnimationFrame(() =>
+      document
+        .getElementById('intelligent-alerts')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  };
+  const operationsTabKey = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    tab: 'warning' | 'action',
+  ) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const next =
+      event.key === 'Home'
+        ? 'warning'
+        : event.key === 'End'
+          ? 'action'
+          : tab === 'warning'
+            ? 'action'
+            : 'warning';
+    setOperationsTab(next);
+    document.getElementById(`operations-tab-${next}`)?.focus();
+  };
+
+  const manageAlerts = (startNew = false) => {
+    void openAlertManagement(
+      monitorAlerts,
+      () => window.dispatchEvent(new Event('gea-detection-updated')),
+      startNew,
+    );
+  };
+
   const demoActionSuggestions = [
     {
       id: 'hotpot-stock',
@@ -3127,7 +3217,11 @@ function IntelligentWorkbenchPage({
   const taskCount = live ? tasks.length : Math.max(tasks.length, 39);
   const warningCount = live && !live.data ? '—' : warningEvents.length;
   const pendingActionCount =
-    live && !live.data ? '—' : actionSuggestions.filter((item) => !decisionStates[item.id]).length;
+    live && !live.data
+      ? '—'
+      : actionSuggestions.filter(
+          (item) => !item.id.startsWith('preview-action-') && !decisionStates[item.id],
+        ).length;
   const activeTaskCount =
     live && !live.data
       ? '—'
@@ -3319,11 +3413,7 @@ function IntelligentWorkbenchPage({
               data-context-scope="工作状态"
               data-context-label="预警观察"
               data-context-summary={`${warningCount}项指标进入预警区间`}
-              onClick={() =>
-                document
-                  .getElementById('intelligent-warning-panel')
-                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }
+              onClick={() => showOperations('warning')}
             >
               <div>
                 <small>{'预警观察'}</small>
@@ -3337,11 +3427,7 @@ function IntelligentWorkbenchPage({
               data-context-scope="工作状态"
               data-context-label="待决策建议"
               data-context-summary={`${pendingActionCount}项AI方案已就绪`}
-              onClick={() =>
-                document
-                  .getElementById('intelligent-action-panel')
-                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }
+              onClick={() => showOperations('action')}
             >
               <div>
                 <small>{'待决策建议'}</small>
@@ -3396,94 +3482,128 @@ function IntelligentWorkbenchPage({
         </div>
       </section>
 
-      <section className="intelligent-lifecycle" id="intelligent-alerts">
+      <section
+        className={`intelligent-lifecycle operations-tabbed ${operationsLayout === 'side' ? 'operations-side' : ''}`}
+        id="intelligent-alerts"
+      >
+        <div className="operations-toolbar">
+          <div className="operations-layout-switch" role="group" aria-label="查看方式">
+            <button
+              type="button"
+              aria-pressed={operationsLayout === 'tabs'}
+              onClick={() => setOperationsLayout('tabs')}
+            >
+              分Tab查看
+            </button>
+            <button
+              type="button"
+              aria-pressed={operationsLayout === 'side'}
+              onClick={() => setOperationsLayout('side')}
+            >
+              并列查看
+            </button>
+          </div>
+          <div
+            className="operations-tabs"
+            hidden={operationsLayout === 'side'}
+            role="tablist"
+            aria-label="预警与行动建议"
+          >
+            <button
+              id="operations-tab-warning"
+              type="button"
+              role="tab"
+              aria-selected={operationsTab === 'warning'}
+              aria-controls="intelligent-warning-panel"
+              tabIndex={operationsTab === 'warning' ? 0 : -1}
+              onClick={() => setOperationsTab('warning')}
+              onKeyDown={(event) => operationsTabKey(event, 'warning')}
+            >
+              预警 <span>{warningCount}</span>
+            </button>
+            <button
+              id="operations-tab-action"
+              type="button"
+              role="tab"
+              aria-selected={operationsTab === 'action'}
+              aria-controls="intelligent-action-panel"
+              tabIndex={operationsTab === 'action' ? 0 : -1}
+              onClick={() => setOperationsTab('action')}
+              onKeyDown={(event) => operationsTabKey(event, 'action')}
+            >
+              行动建议 <span>{actionSuggestions.length}</span>
+            </button>
+          </div>
+        </div>
         <div className="intelligent-work-grid">
-          <section className="intelligent-work-column" id="intelligent-warning-panel">
+          <section
+            className="intelligent-work-column"
+            id="intelligent-warning-panel"
+            role={operationsLayout === 'tabs' ? 'tabpanel' : 'region'}
+            aria-labelledby={operationsLayout === 'tabs' ? 'operations-tab-warning' : undefined}
+            aria-label={operationsLayout === 'side' ? '预警' : undefined}
+            hidden={operationsLayout === 'tabs' && operationsTab !== 'warning'}
+            tabIndex={0}
+          >
             <div className="intelligent-section-heading">
-              <div>
-                <span>{'事件预警'}</span>
-                <h2>{'进入预警区间的指标'}</h2>
+              <div className="warning-section-title">
+                <span className="warning-section-icon">
+                  <Bell />
+                </span>
+                <div>
+                  <h2>预警</h2>
+                  <p>识别业务风险与异常，需及时关注与处理</p>
+                </div>
               </div>
               <div className="section-heading-actions">
-                <b>{warningCount}</b>
-                <button aria-haspopup="dialog" onClick={() => setHistoryDialog('warning')}>
-                  {'查看更多'}
-                  <ArrowRight />
+                <button aria-haspopup="dialog" onClick={() => manageAlerts()}>
+                  预警管理
                 </button>
+                <button aria-haspopup="dialog" onClick={() => manageAlerts(true)}>
+                  ＋ 新增检测
+                </button>
+                <b>{warningCount}</b>
               </div>
             </div>
             <div className="intelligent-alert-panel panel">
               <p className="workflow-section-note">
-                {'尚未达到严重状态，先提示关注并支持进入看板核查，不自动生成处置任务。'}
+                {'未关闭预警优先展示，已关闭记录也可查看详情。'}
               </p>
-              <div className="intelligent-action-list warning-insight-list">
-                {warningEvents.map((item) => (
-                  <article
-                    key={item.id}
-                    data-context-id={`intelligent-warning-${item.id}`}
-                    data-context-scope="事件预警"
-                    data-context-label={`${item.scope} · ${item.metric}`}
-                    data-context-summary={`${item.metric}，${item.gap}。AI分析：${item.diagnosis}`}
-                  >
-                    <header>
-                      <span>
-                        <Bell />
-                      </span>
-                      <div>
-                        <small>
-                          {'阈值预警 · '}
-                          {item.range}
-                        </small>
-                        <strong>{item.scope}</strong>
-                        <em>
-                          {item.metric}
-                          {' · '}
-                          {item.gap}
-                        </em>
-                      </div>
-                      <b>{'预警'}</b>
-                    </header>
-                    <div className="ai-analysis-block">
-                      <p>
-                        <span>{'AI分析'}</span>
-                        {item.diagnosis}
-                      </p>
-                      <small>
-                        {'依据：'}
-                        {item.evidence}
-                        {' · 可信度 '}
-                        {Number.isFinite(item.confidence) ? `${item.confidence}%` : '—'}
-                      </small>
-                    </div>
-                    <div className="suggested-plan">
-                      <span>
-                        <small>{'区间判断'}</small>
-                        <strong>{item.range}</strong>
-                      </span>
-                      <span>
-                        <small>{'变化趋势'}</small>
-                        <b>{item.trend}</b>
-                      </span>
-                      <span>
-                        <small>{'数据证据'}</small>
-                        <b>{item.evidence}</b>
-                      </span>
-                    </div>
-                    <div className="action-buttons">
-                      <button
-                        className="primary warning-action"
-                        onClick={() => onOpenV02('production', item.dimension)}
-                      >
-                        {'进入V0.2核查明细'}
-                        <ArrowRight />
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
+              <WarningViews
+                items={[...warningEvents, ...closedWarningEvents]}
+                openCount={warningEvents.length}
+                onDetail={(item: WarningEvent) => {
+                  openWarningDetail(
+                    item,
+                    { period: periodLabel, cutoff: periodRange.split('—').at(-1) || '—' },
+                    () => {
+                      const prompt = `请分析预警：${item.scope}，${item.metric}，${item.gap || ''}。统计期间：${item.period || periodLabel}；数据截止：${item.cutoff || '—'}；规则：${item.range || '—'}；依据：${item.evidence || '—'}。请区分事实和待核查原因。`;
+                      void ask(prompt, {
+                        scope: item.scope,
+                        metric: item.metric,
+                        period: item.period || periodLabel,
+                      }).catch(() => setNotice('AI分析暂不可用，请稍后重试'));
+                    },
+                    monitorAvailable && monitorAlerts.some((event) => event.id === item.id)
+                      ? async () => {
+                          await call('detection', { op: 'close-event', id: item.id });
+                          window.dispatchEvent(new Event('gea-detection-updated'));
+                        }
+                      : undefined,
+                  );
+                }}
+              />
             </div>
           </section>
-          <section className="intelligent-work-column" id="intelligent-action-panel">
+          <section
+            className="intelligent-work-column"
+            id="intelligent-action-panel"
+            role={operationsLayout === 'tabs' ? 'tabpanel' : 'region'}
+            aria-labelledby={operationsLayout === 'tabs' ? 'operations-tab-action' : undefined}
+            aria-label={operationsLayout === 'side' ? '行动建议' : undefined}
+            hidden={operationsLayout === 'tabs' && operationsTab !== 'action'}
+            tabIndex={0}
+          >
             <div className="intelligent-section-heading">
               <div>
                 <span>{'行动建议'}</span>
@@ -3501,9 +3621,21 @@ function IntelligentWorkbenchPage({
               <p className="workflow-section-note">
                 {'严重指标、业务事件和日历任务由AI完成分析并生成可执行方案。'}
               </p>
-              <div className="intelligent-action-list">
-                {actionSuggestions.map((item) => {
+              <ActionSuggestionViews
+                items={actionSuggestions}
+                status={(item) =>
+                  item.id.startsWith('preview-action-')
+                    ? '模拟示例'
+                    : {
+                        tasked: '已建任务',
+                        adopted: '已采纳',
+                        dismissed: '不采纳',
+                        editing: '调整中',
+                      }[decisionStates[item.id]] || '待决策'
+                }
+                renderCard={(item) => {
                   const state = decisionStates[item.id];
+                  const isPreview = item.id.startsWith('preview-action-');
                   const calendarDriven = item.trigger === '日历驱动';
                   const statusLabel =
                     state === 'tasked'
@@ -3541,7 +3673,7 @@ function IntelligentWorkbenchPage({
                             {item.gap}
                           </em>
                         </div>
-                        <b>{statusLabel}</b>
+                        <b>{isPreview ? '模拟示例' : statusLabel}</b>
                       </header>
                       <div className="ai-analysis-block">
                         <p>
@@ -3577,36 +3709,42 @@ function IntelligentWorkbenchPage({
                         </span>
                       </div>
                       <div className="action-buttons">
-                        <button onClick={() => updateDecision(item.id, 'dismissed')}>
-                          {'不采纳'}
-                        </button>
-                        <button onClick={() => updateDecision(item.id, 'adopted')}>
-                          {'仅采纳'}
-                        </button>
-                        <button onClick={() => updateDecision(item.id, 'editing')}>
-                          {state === 'editing' ? '方案调整中' : '修改方案'}
-                        </button>
-                        <button
-                          className="primary"
-                          disabled={state === 'tasked'}
-                          onClick={() => updateDecision(item.id, 'tasked')}
-                        >
-                          {state === 'tasked' ? (
-                            <>
-                              <Check />
-                              {'已创建任务'}
-                            </>
-                          ) : state === 'editing' ? (
-                            '调整后建任务'
-                          ) : (
-                            '采纳并建任务'
-                          )}
-                        </button>
+                        {isPreview ? (
+                          <small>模拟数据，仅用于查看效果</small>
+                        ) : (
+                          <>
+                            <button onClick={() => updateDecision(item.id, 'dismissed')}>
+                              {'不采纳'}
+                            </button>
+                            <button onClick={() => updateDecision(item.id, 'adopted')}>
+                              {'仅采纳'}
+                            </button>
+                            <button onClick={() => updateDecision(item.id, 'editing')}>
+                              {state === 'editing' ? '方案调整中' : '修改方案'}
+                            </button>
+                            <button
+                              className="primary"
+                              disabled={state === 'tasked'}
+                              onClick={() => updateDecision(item.id, 'tasked')}
+                            >
+                              {state === 'tasked' ? (
+                                <>
+                                  <Check />
+                                  {'已创建任务'}
+                                </>
+                              ) : state === 'editing' ? (
+                                '调整后建任务'
+                              ) : (
+                                '采纳并建任务'
+                              )}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </article>
                   );
-                })}
-              </div>
+                }}
+              />
             </div>
           </section>
         </div>

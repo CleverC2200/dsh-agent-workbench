@@ -1,3 +1,4 @@
+import { installDetection } from './detection-backend.mjs';
 /** Authenticated deployment settings for the browser workbench. */
 /** Host owns safe package HTML presentation and deployment metadata over official authenticated Fetch. */
 import { isAbsolute } from 'node:path';
@@ -19,6 +20,26 @@ export interface Config {
 /** Publish configuration through the normal authenticated DSH connection. */
 /** 通过 DSH 的标准认证连接发布配置；请求只返回配置，不写入业务数据，响应禁止缓存以避免跨用户复用。 */
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
+  try {
+    await installDetection(ctx);
+  } catch (error) {
+    console.error(
+      'DETECTION_SERVICE_INIT_FAILED',
+      (error as { code?: string }).code || 'INIT_ERROR',
+    );
+    ctx.effect(() =>
+      ctx.connection.fetch.register({
+        path: '/api/agent-workbench/detection',
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async () =>
+          Response.json(
+            { error: '预警服务暂不可用，请检查后台数据库及XXL-JOB连接。' },
+            { status: 503 },
+          ),
+      }),
+    );
+  }
   // Fail before publishing configuration if the explicit workspace path is invalid.
   if (config.cwd !== undefined && (typeof config.cwd !== 'string' || !isAbsolute(config.cwd)))
     throw new Error('agent-workbench: cwd must be absolute');
