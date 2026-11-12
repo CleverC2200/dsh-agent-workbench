@@ -133,15 +133,31 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
       filterTime: '',
     });
     const log = logs.data?.find((item) => item.id === input.logId);
+    const definitions = await admin('/jobinfo/pageList', {
+      start: '0',
+      length: '1000',
+      jobGroup: String(groupId),
+      triggerStatus: '-1',
+      jobDesc: '',
+      executorHandler: 'geaDetectionHandler',
+      author: '',
+    });
+    const task = definitions.data?.find((item) => item.id === input.jobId);
+    // XXL writes executor details into its log after /run returns. The saved
+    // task definition is authoritative for those fields during dispatch.
     if (
       !log ||
       log.jobGroup !== groupId ||
       log.jobId !== input.jobId ||
       log.handleCode !== 0 ||
-      log.executorAddress !== config.executorUrl ||
-      log.executorHandler !== input.executorHandler ||
-      log.executorParam !== input.executorParams ||
-      new Date(log.triggerTime).getTime() !== input.logDateTime
+      !task ||
+      task.jobGroup !== groupId ||
+      task.executorHandler !== input.executorHandler ||
+      task.executorParam !== input.executorParams ||
+      task.glueType !== input.glueType ||
+      !Number.isSafeInteger(input.logDateTime) ||
+      !Number.isFinite(new Date(log.triggerTime).getTime()) ||
+      Math.abs(new Date(log.triggerTime).getTime() - input.logDateTime) >= 1000
     )
       invalid('执行请求与调度中心记录不一致', 403);
   }

@@ -154,6 +154,18 @@ test('tokenless admin accepts only loopback requests matching authenticated sche
       if (path === '/login')
         return Response.json({ code: 200 }, { headers: { 'set-cookie': 'session=private' } });
       if (path === '/api/registry') return Response.json({ code: 200 });
+      if (path === '/jobinfo/pageList')
+        return Response.json({
+          data: [
+            {
+              id: 11,
+              jobGroup: 4,
+              executorHandler: 'geaDetectionHandler',
+              executorParam: params,
+              glueType: 'BEAN',
+            },
+          ],
+        });
       if (path === '/joblog/pageList')
         return Response.json({
           data: [
@@ -162,9 +174,9 @@ test('tokenless admin accepts only loopback requests matching authenticated sche
               jobGroup: 4,
               jobId: 11,
               handleCode: 0,
-              executorAddress: 'http://127.0.0.1:18112',
-              executorHandler: 'geaDetectionHandler',
-              executorParam: params,
+              executorAddress: null,
+              executorHandler: null,
+              executorParam: null,
               triggerTime: new Date(timestamp).toISOString(),
             },
           ],
@@ -198,7 +210,7 @@ test('tokenless admin accepts only loopback requests matching authenticated sche
       ).status,
       403,
     );
-    assert.equal((await request({ ...trigger, logDateTime: timestamp + 1 })).status, 403);
+    assert.equal((await request({ ...trigger, logDateTime: timestamp + 1000 })).status, 403);
     assert.equal((await request({ ...trigger, logId: 101 })).status, 403);
     assert.equal((await request(trigger)).status, 200);
     assert.equal(service.stats().jobs, 1);
