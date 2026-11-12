@@ -1083,7 +1083,7 @@ test('approval retirement and retained domain-type migration select current beha
     readFileSync(new URL('../scripts/ci-test-policy.json', import.meta.url)),
   );
   const consumers = [
-    'tests/sales-plan-detail.browser.mjs',
+    'tests/sales-plan-presentation.browser.mjs',
     'tests/role-approval.test.mjs',
     'tests/approval-visibility.test.mjs',
     'tests/regional-state-restore.test.mjs',
