@@ -593,6 +593,7 @@ test('identity and page lifecycle resets pause sources until the owned view rest
   const { page, frame, calls } = await mpsPage(t, config, fixture);
   const productsSection = frame.getByRole('region', { name: '产品明细', exact: true });
   await expect(productsSection).toContainText('3 个产品');
+  const checks = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
   const sources = [
     'products.detail',
     'annual.summary.count',
@@ -605,6 +606,8 @@ test('identity and page lifecycle resets pause sources until the owned view rest
     await expect
       .poll(() => sources.filter((queryId) => !calls.some((call) => call.queryId === queryId)))
       .toEqual([]);
+    await expect(checks).toContainText('100.00%');
+    await expect(checks.getByRole('button', { name: '读取三月源值', exact: true })).toBeEnabled();
     const before = new Map(
       sources.map((queryId) => [queryId, calls.filter((call) => call.queryId === queryId).length]),
     );
