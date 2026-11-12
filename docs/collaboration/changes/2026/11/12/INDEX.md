@@ -10,3 +10,5 @@
 - [基地库存问数与卡片一致性](base-card-parity.md)
 
 - [MPS月生产入库累计修复](mps-inbound-release.md)
+
+- [销售预测提交退回清理](sales-plan-submit-return-cleanup.md)
