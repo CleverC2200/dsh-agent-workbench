@@ -339,6 +339,13 @@ export const classifySalesPlanSubmitError = (error: unknown): SalesPlanSubmitErr
       error.details.retrySameIntent === false
     )
       return new SalesPlanSubmitError('failed', false, undefined, { cause: error });
+    if (
+      error.details &&
+      typeof error.details === 'object' &&
+      'retrySameIntent' in error.details &&
+      error.details.retrySameIntent === true
+    )
+      return new SalesPlanSubmitError('unavailable', true, undefined, { cause: error });
     if (error.status === 429) {
       return new SalesPlanSubmitError(
         'rateLimited',
@@ -347,14 +354,6 @@ export const classifySalesPlanSubmitError = (error: unknown): SalesPlanSubmitErr
         { cause: error },
       );
     }
-    if (
-      error.status >= 500 &&
-      error.details &&
-      typeof error.details === 'object' &&
-      'retrySameIntent' in error.details &&
-      error.details.retrySameIntent === true
-    )
-      return new SalesPlanSubmitError('unavailable', true, undefined, { cause: error });
     if (error.status >= 500) {
       const rejected =
         error.details &&

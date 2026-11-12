@@ -333,3 +333,33 @@ test('business rejection retains SKU and field guidance while removing response 
     'DMS回写失败：SKU TEST-ITEM 的 payload.confirmQty 必须为整数。',
   );
 });
+
+test('Host retry intent survives HTTP 408 while validation and definitive failures keep their classification', () => {
+  for (const classify of [m.classifySalesPlanActionError, m.classifySalesPlanSubmitError]) {
+    for (const [status, retrySameIntent, kind, expectedRetry] of [
+      [408, true, 'unavailable', true],
+      [408, false, 'failed', false],
+      [400, true, 'validation', false],
+      [401, true, 'authentication', false],
+      [403, true, 'permission', false],
+      [409, true, 'conflict', false],
+    ]) {
+      const result = classify({
+        name: 'BackendHttpError',
+        status,
+        code: `GEA_HTTP_${status}`,
+        details: { retrySameIntent, retryable: true },
+      });
+      assert.equal(result.kind, kind);
+      assert.equal(result.retrySameIntent, expectedRetry);
+    }
+    const rejected = classify({
+      name: 'BackendHttpError',
+      status: 408,
+      code: 'GEA_HTTP_408',
+      details: { retryable: false },
+    });
+    assert.equal(rejected.kind, 'failed');
+    assert.equal(rejected.retrySameIntent, false);
+  }
+});

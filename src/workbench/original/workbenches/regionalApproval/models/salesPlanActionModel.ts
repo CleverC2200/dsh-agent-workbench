@@ -251,6 +251,13 @@ export const classifySalesPlanActionError = (error: unknown): SalesPlanActionErr
       error.details.retrySameIntent === false
     )
       return new SalesPlanActionError('failed', false, undefined, { cause: error });
+    if (
+      error.details &&
+      typeof error.details === 'object' &&
+      'retrySameIntent' in error.details &&
+      error.details.retrySameIntent === true
+    )
+      return new SalesPlanActionError('unavailable', true, undefined, { cause: error });
     if (error.status === 429) {
       return new SalesPlanActionError('rateLimited', true, retryAfterMsFromDetails(error.details), {
         cause: error,
