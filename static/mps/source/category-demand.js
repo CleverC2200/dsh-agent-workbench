@@ -184,6 +184,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
       const matched = matchProduct(row['产品编码'], row['基地']);
       const code = matched.currentCode || row['产品编码'];
       if (row['基地']) return included(row['基地'], code) ? [row] : [];
+      if (number(row[field]) === 0) return [row];
       const products = productMappings;
       const possible = matched.currentCode
         ? [matched.currentCode]

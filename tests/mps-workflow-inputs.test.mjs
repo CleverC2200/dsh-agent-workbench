@@ -1426,3 +1426,18 @@ test('无关缓存财年与提报月份不改变当前参与范围', () => {
     ),
   );
 });
+
+test('缺基地的真实零事实不污染部分范围基数，原异常仍由来源校验', () => {
+  const { source, snapshot } = partialDemandFixture();
+  snapshot.rows.push({ base: '甲', code: 'B', category: '点心', fin: 10, end: 0 });
+  for (const period of source.sourceChecks.periods) {
+    Object.assign(period.history.rows[1], { 基地: '', 数量: 0 });
+    Object.assign(period.report.rows[1], { 基地: '', 计划数量: 0 });
+  }
+  const result = buildMpsWorkflow(source, null, snapshot).categoryComputation;
+  assert.equal(result.bases[0].actual, 300);
+  assert.equal(result.bases[0].plan, 375);
+  assert.equal(result.shipmentScope.issues.length, 0);
+  assert.equal(result.shipmentScope.excluded.length, 1);
+  assert.ok(result.rows[0].quantity !== null);
+});

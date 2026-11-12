@@ -323,6 +323,14 @@ export function createCategoryDemand(
       'category-demand',
       {
         ...result,
+        shipmentScope: {
+          ...result.shipmentScope,
+          excluded: result.shipmentScope.excluded.slice(0, 10),
+          excludedTotal: result.shipmentScope.excluded.length,
+          issues: (result.shipmentScope.issues ?? []).slice(0, 10),
+          issueTotal: result.shipmentScope.issues?.length ?? 0,
+          preview: '异常最多预览10条，完整明细在页面和CSV',
+        },
         historical: result.historical.map(
           ({ category, month, yoy, mom, share, yoyValidCount, yoyComplete }) => ({
             category,
