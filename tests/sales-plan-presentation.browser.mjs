@@ -579,8 +579,8 @@ test('table headers are bold without a darker background', { timeout: 30000 }, a
   assert.ok(detail, '找不到 SKU 明细表头');
   const queueColumnNames = queue.head.map((cell) => cell.text);
   assert.ok(
-    queueColumnNames.includes('月达成进度'),
-    `队列表头缺少月达成进度列名，实际 ${JSON.stringify(queueColumnNames)}`,
+    queueColumnNames.includes('月提报达成'),
+    `队列表头缺少月提报达成列名，实际 ${JSON.stringify(queueColumnNames)}`,
   );
   assert.ok(!queueColumnNames.includes('计划/目标'), '不要再用「计划/目标」这种含糊列名');
   for (const table of [queue, detail]) {
@@ -1044,6 +1044,8 @@ test('展开 SKU 表在宽屏保持紧凑，长描述换行且窄屏可用键盘
 
 test('发货实绩缺失时显示状态并保留期间原因', { timeout: 30000 }, async (t) => {
   const { page } = await openWorkbench(t, false, 'shipment-missing');
+  await expect(page.getByText('发货实绩未取得', { exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: '纠偏', exact: true }).click();
   const status = page.getByText('发货实绩未取得', { exact: true });
   await expect(status).toBeVisible();
   await expect(status).toHaveAttribute('title', '未取得该客户 2026-10 的发货数据');

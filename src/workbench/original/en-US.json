@@ -779,6 +779,7 @@
           "channelMissing": "The plan ID does not match the p-{channel}-{YYYY-MM}-{5-digit sequence} business format, so the resubmit channel cannot be verified safely.",
           "multiple": "Review and resubmit one returned plan at a time. Multiple or mixed selections cannot be submitted.",
           "sourceAuthority": "The current identity, source version or complete details have not been confirmed for resubmission.",
+          "entryUnavailable": "Resubmission is not connected on this page. Update the client and try again.",
           "unconfirmedSubmitter": "The responsible submitter cannot be confirmed. Check the current user and original submitter before proceeding.",
           "serviceBoundary": "The service submission channel is unavailable. Try again later or contact an administrator.",
           "readOnly": "This version is read-only. The server has not granted an available action.",
@@ -807,7 +808,6 @@
         "inheritance": "Changing submitted quantities does not recalculate inherited confirmations. Review all retained quantities and amounts before submitting.",
         "unitPrice": "Unit price",
         "lineAmount": "Submitted amount",
-        "requestReference": "Error reference {{id}}",
         "inheritedValues": "Inherited quantity / amount: region {{region}}; province {{province}}; area {{area}}",
         "quantity": "Submitted quantity",
         "nextStatus": "Resubmission target status"
@@ -923,7 +923,6 @@
           "rateLimited": "Too many requests. Retry later with the same idempotency key; no second action will be created.",
           "unavailable": "The result is unknown. Close and refresh authoritative state, or retry here with the same idempotency key. Do not start a new action intent.",
           "failed": "The request failed and local state was not changed. Refresh the authoritative queue before deciding.",
-          "reference": " (Error reference: {{id}}, quote it to your administrator)",
           "upstream": {
             "SALES_PLAN_APPROVAL_STATE_INVALID": "This version cannot perform the requested approval action. Ask an administrator to check its approval instance.",
             "NOTIFICATION_PAYLOAD_INVALID": "The server rejected the approval notification payload. This is a server-side problem that refreshing cannot fix - send the error reference to the backend team.",
@@ -1323,6 +1322,7 @@
     "target": "Monthly target",
     "plan": "Monthly plan",
     "progress": "Shipment progress",
+    "submissionProgress": "Monthly submission progress",
     "shipmentUnavailable": "Shipment facts unavailable",
     "correctedProgress": "Corrected target coverage",
     "status": "Approval status",

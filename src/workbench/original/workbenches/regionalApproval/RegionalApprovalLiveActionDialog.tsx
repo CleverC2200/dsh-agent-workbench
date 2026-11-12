@@ -68,34 +68,30 @@ const signedDecimal = (value: string, currency = false) => {
 const errorKey = (kind: SalesPlanActionErrorKind) =>
   `common.assistantSurface.regionalApproval.liveAction.errors.${kind}` as const;
 
-/**
- * V1.8 #12：失败提示只给业务语言。后端原文只有在像业务话术时才透出；
- * 一旦判定为技术文案（字段名 / 错误码 / 报文），就换成按 HTTP 语义的业务文案，
- * 另附一个可口头转述的「错误编号」，技术细节只进控制台。
- */
 export const actionErrorText = (t: TFunction, error: SalesPlanActionError): string => {
   const fallback = t(errorKey(error.kind));
   const cause = error.cause;
   if (!isBackendHttpError(cause)) return fallback;
+  reportSalesPlanError('sales-plan-action', cause);
+  const backendReason = cause.backendMessage.replace(/^GEA_HTTP_\d{3}[：:]\s*/u, '').trim();
+  if (backendReason) {
+    return backendReason;
+  }
   if (cause.status >= 500) {
     const reason = salesPlanRejectionMessage(cause);
     if (!reason) return fallback;
-    const id = reportSalesPlanError('sales-plan-action', cause);
-    return `${reason}${t('common.assistantSurface.regionalApproval.liveAction.errors.reference', { id })}`;
+    return reason;
   }
   // 服务端业务拒绝的原文通常是「GEA_HTTP_409：…」，会被判成技术文案而统一换成
   // "版本状态已变化或存在并发操作、请刷新"——把"该重提"和"该找后端"这两种完全不同的
   // 结论都盖掉了。这里按上游原因码给出能落地的说法（不暴露原因码本身）。
   const businessReason = upstreamRejectionText(t, cause);
   if (businessReason) {
-    const id = reportSalesPlanError('sales-plan-action', cause);
-    return `${businessReason}${t('common.assistantSurface.regionalApproval.liveAction.errors.reference', { id })}`;
+    return businessReason;
   }
   const safe = businessSafeErrorMessage(cause.backendMessage);
   if (safe) return safe;
-  if (typeof cause.backendMessage !== 'string' || !cause.backendMessage.trim()) return fallback;
-  const id = reportSalesPlanError('sales-plan-action', cause);
-  return `${fallback}${t('common.assistantSurface.regionalApproval.liveAction.errors.reference', { id })}`;
+  return fallback;
 };
 
 /** 只认识已在生产验证过的原因码；其它原因保持通用文案，不把技术码抛给业务。 */
