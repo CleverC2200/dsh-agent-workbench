@@ -150,7 +150,11 @@ test('真实退回失败直接展示服务端原因，不因字段名或未知�
     status: 409,
     body: {
       error: `GEA_HTTP_409：${message}`,
-      details: { upstreamCode: 'RETURN_FAILURE_DETAIL', requestId: 'return-live-failure' },
+      details: {
+        upstreamCode: 'RETURN_FAILURE_DETAIL',
+        requestId: 'return-live-failure',
+        retrySameIntent: false,
+      },
     },
   });
   const original = console.warn;

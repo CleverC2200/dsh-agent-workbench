@@ -10,8 +10,9 @@ import {
   subtractExactDecimals,
 } from '../regionalApprovalQueryModel.ts';
 import { salesPlanEditableQuantity } from './salesPlanAccessModel.ts';
-import { roundPlanQuantity } from './salesPlanQuantityModel.ts';
+import { roundPlanQuantity, salesPlanDecimalValue } from './salesPlanQuantityModel.ts';
 import { salesPlanSkusMatchVersion } from './salesPlanDetailModel.ts';
+import { SubmissionSourceError } from './salesPlanPreflightModel.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 
 export type SalesPlanLocalDraft = {
@@ -47,17 +48,12 @@ export const salesPlanApprovalDraftValues = (
       !DECIMAL.test(value.trim()) ||
       (value.trim().startsWith('-') && !/^-0+(?:\.0+)?$/.test(value.trim()))
     )
-      throw new Error('确认计划数量不合法，请核对本节点调整');
+      throw new SubmissionSourceError('quantityInvalid');
     const adjustQty = subtractExactDecimals(value.trim(), baseline);
-    if (!DECIMAL.test(adjustQty)) throw new Error('确认计划数量不合法，请核对本节点调整');
+    if (!DECIMAL.test(adjustQty)) throw new SubmissionSourceError('quantityInvalid');
     values[skuCode] = adjustQty;
   }
-  if (
-    roundMonthly &&
-    (row.orderType ?? detail?.currentVersion.orderType) === 'M' &&
-    role &&
-    role !== 'category'
-  ) {
+  if (roundMonthly && (row.orderType ?? detail?.currentVersion.orderType) === 'M' && role) {
     for (const sku of detail?.skus ?? []) {
       const code = String(sku.skuCode);
       const baseline = salesPlanEditableQuantity(sku, row.status, row.planTypeCode, role);
@@ -65,7 +61,7 @@ export const salesPlanApprovalDraftValues = (
       const confirmed = addExactDecimals([baseline, values[code] ?? '0']);
       const rounded = roundPlanQuantity(confirmed);
       if (!DECIMAL.test(rounded) || rounded.startsWith('-'))
-        throw new Error('确认计划数量不合法，请核对本节点调整');
+        throw new SubmissionSourceError('quantityInvalid');
       const adjustment = subtractExactDecimals(rounded, baseline);
       if (values[code] !== undefined || !/^[+-]?0+(?:\.0+)?$/.test(adjustment))
         values[code] = adjustment;
@@ -107,6 +103,23 @@ export const salesPlanDraftSnapshot = (
   ]);
 };
 
+const normalizeDraftSnapshot = (snapshot: string | undefined): string | undefined => {
+  if (!snapshot) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(snapshot);
+    if (!Array.isArray(parsed) || parsed.length !== 4 || !Array.isArray(parsed[3]))
+      return undefined;
+    const normalized = parsed[3].map((sku: unknown) => {
+      if (!Array.isArray(sku) || sku.length !== 8 || typeof sku[0] !== 'string')
+        throw new Error('Invalid draft snapshot');
+      return [sku[0], ...sku.slice(1).map(salesPlanDecimalValue)];
+    });
+    return JSON.stringify([parsed[0], parsed[1], parsed[2], normalized]);
+  } catch {
+    return undefined;
+  }
+};
+
 export const salesPlanDraftMatches = (
   draft: SalesPlanLocalDraft | undefined,
   row: Pick<GeaSalesPlanListItem, 'planId' | 'versionId' | 'status'> &
@@ -116,10 +129,12 @@ export const salesPlanDraftMatches = (
 ): draft is SalesPlanLocalDraft => {
   if (
     !draft ||
+    !normalizeDraftSnapshot(draft.sourceSnapshot) ||
     draft.planId !== row.planId ||
     draft.versionId !== row.versionId ||
     draft.status !== row.status ||
-    draft.sourceSnapshot !== salesPlanDraftSnapshot(row, detail) ||
+    normalizeDraftSnapshot(draft.sourceSnapshot) !==
+      normalizeDraftSnapshot(salesPlanDraftSnapshot(row, detail)) ||
     !Array.isArray(draft.adjustments) ||
     typeof draft.remark !== 'string' ||
     Array.from(draft.remark).length > 1000

@@ -3,7 +3,6 @@ export type ApprovalStageId = 'customer' | 'region' | 'province' | 'area' | 'cat
 
 export type ApprovalHealth = 'healthy' | 'attention' | 'warning';
 export type ApprovalState = 'pending' | 'approved' | 'future';
-export type ApprovalVersion = 'current' | 'previous' | 'initial';
 export type ApprovalDimension = 'area' | 'province' | 'region' | 'base' | 'customer';
 /** 区域计划评估是展示节点，沿用计划的未提交、待回写和已回写状态。 */
 export const REGIONAL_PLAN_EVALUATION_STATUSES = [0, 5, 10] as const;

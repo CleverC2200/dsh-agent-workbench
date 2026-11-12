@@ -166,7 +166,6 @@ export const businessSafeErrorMessage = (message: unknown): string | undefined =
   return text;
 };
 
-/** 技术细节只进日志，并返回一个可口头转述的错误编号，供用户报给管理员核对。 */
 export const reportSalesPlanError = (scope: string, detail: unknown): string => {
   const details =
     detail && typeof detail === 'object' && 'details' in detail ? detail.details : undefined;
@@ -189,14 +188,36 @@ export const salesPlanRejectionMessage = (cause: {
   details?: unknown;
 }): string | undefined => {
   const details = cause.details;
-  const dms =
-    details &&
-    typeof details === 'object' &&
-    'upstreamCode' in details &&
-    details.upstreamCode === 'SALES_PLAN_DMS_WRITEBACK_FAILED';
-  if (cause.status >= 500 && !dms) return undefined;
-  const message = cause.backendMessage.replace(/^GEA_HTTP_\d{3}[：:]\s*/u, '');
-  return dms ? message.trim() || undefined : businessSafeErrorMessage(message);
+  const upstreamCode =
+    details && typeof details === 'object' && 'upstreamCode' in details
+      ? details.upstreamCode
+      : undefined;
+  const dms = upstreamCode === 'SALES_PLAN_DMS_WRITEBACK_FAILED';
+  const rejected =
+    dms ||
+    (details &&
+      typeof details === 'object' &&
+      (('retrySameIntent' in details && details.retrySameIntent === false) ||
+        ('retryable' in details && details.retryable === false)));
+  if (cause.status >= 500 && !rejected) return undefined;
+  const message = cause.backendMessage
+    .replace(/^GEA_HTTP_\d{3}[：:]?\s*/u, '')
+    .replace(/\[[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\]/gu, '')
+    .replace(
+      /(?:request[_ -]?id|trace[_ -]?id|audit[_ -]?id|错误编号|请求编号|追踪编号)\s*[：:=]\s*[A-Za-z0-9:._-]+/giu,
+      '',
+    )
+    .replace(
+      /(?:authorization|access[_-]?token|refresh[_-]?token|password|secret)\s*[：:=]\s*(?:Bearer\s+)?[^\s，。；;]+/giu,
+      '',
+    )
+    .replace(/\{[\s\S]*\}/gu, '')
+    .replace(/https?:\/\/[^\s，。；;]+/giu, '')
+    .trim();
+  if (!message || /^[{[]/u.test(message) || /^GEA_[A-Z0-9_]+$/u.test(message)) return undefined;
+  return rejected && upstreamCode !== 'NOTIFICATION_PAYLOAD_INVALID'
+    ? message
+    : businessSafeErrorMessage(message);
 };
 
 export const salesPlanConflictErrorKind = (details: unknown): 'conflict' | 'configuration' => {
@@ -225,6 +246,20 @@ export const classifySalesPlanActionError = (error: unknown): SalesPlanActionErr
       return new SalesPlanActionError(salesPlanConflictErrorKind(error.details), false, undefined, {
         cause: error,
       });
+    if (
+      error.details &&
+      typeof error.details === 'object' &&
+      'retrySameIntent' in error.details &&
+      error.details.retrySameIntent === false
+    )
+      return new SalesPlanActionError('failed', false, undefined, { cause: error });
+    if (
+      error.details &&
+      typeof error.details === 'object' &&
+      'retrySameIntent' in error.details &&
+      error.details.retrySameIntent === true
+    )
+      return new SalesPlanActionError('unavailable', true, undefined, { cause: error });
     if (error.status === 429) {
       return new SalesPlanActionError('rateLimited', true, retryAfterMsFromDetails(error.details), {
         cause: error,

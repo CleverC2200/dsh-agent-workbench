@@ -39,7 +39,15 @@ import {
   type SalesPlanReturnDestination,
   salesPlanReturnAdjustments,
 } from './models/salesPlanReturnModel.ts';
-import { salesPlanApprovalDraftValues } from './models/salesPlanLocalDraftModel.ts';
+import {
+  checkSubmissionSource,
+  checkSubmissionSkus,
+  SubmissionSourceError,
+} from './models/salesPlanPreflightModel.ts';
+import {
+  salesPlanApprovalDraftValues,
+  salesPlanDraftMatches,
+} from './models/salesPlanLocalDraftModel.ts';
 import styles from './RegionalApprovalActionDialog.module.css';
 
 export type LiveActionKind = 'APPROVE' | 'REJECT' | 'SAVE';
@@ -73,18 +81,8 @@ export const actionErrorText = (t: TFunction, error: SalesPlanActionError): stri
   const cause = error.cause;
   if (!isBackendHttpError(cause)) return fallback;
   reportSalesPlanError('sales-plan-action', cause);
-  const backendReason = cause.backendMessage.replace(/^GEA_HTTP_\d{3}[：:]\s*/u, '').trim();
-  if (backendReason && !/^GEA_HTTP_\d{3}$/u.test(backendReason)) {
-    return backendReason;
-  }
-  if (cause.status >= 500) {
-    const reason = salesPlanRejectionMessage(cause);
-    if (!reason) return fallback;
-    return reason;
-  }
-  // 服务端业务拒绝的原文通常是「GEA_HTTP_409：…」，会被判成技术文案而统一换成
-  // "版本状态已变化或存在并发操作、请刷新"——把"该重提"和"该找后端"这两种完全不同的
-  // 结论都盖掉了。这里按上游原因码给出能落地的说法（不暴露原因码本身）。
+  const rejection = salesPlanRejectionMessage(cause);
+  if (rejection) return rejection;
   const businessReason = upstreamRejectionText(t, cause);
   if (businessReason) {
     return businessReason;
@@ -150,7 +148,9 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   onRefresh: () => void;
   /** 动作请求失败（含并发冲突、权限被拒）都会回调，用来收掉调用方的选中态。 */
   onAttemptFailed?: () => void;
-  onClose: () => void;
+  onClose: (pending?: boolean) => void;
+  onBusyChange?: (busy: boolean) => void;
+  onPendingChange?: (pending: boolean) => void;
   /** 对话下发的“退回理由”草稿（等价于人工在理由框里输入）。 */
   remarkPatch?: { at: number; remark: string };
   /** 对话下发的“确认提交”（等价于人工点确认按钮）。 */
@@ -172,6 +172,8 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   onRefresh,
   onAttemptFailed,
   onClose,
+  onBusyChange,
+  onPendingChange,
   remarkPatch,
   submitRequest,
 }) => {
@@ -205,6 +207,9 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   const [confirmed, setConfirmed] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);
+  const [preflightError, setPreflightError] = useState<string>();
+  const [checking, setChecking] = useState(false);
+  const submitting = useRef(false);
   const [discardConfirmVisible, setDiscardConfirmVisible] = useState(false);
   const [adjustmentValues, setAdjustmentValues] = useState<Record<string, string>>({});
   const [draftReady, setDraftReady] = useState(initialAction === 'SAVE');
@@ -268,18 +273,31 @@ const RegionalApprovalLiveActionDialog: React.FC<{
         );
         setDraftReady(true);
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setDraftError('loadFailed');
+      .catch((cause) => {
+        if (controller.signal.aborted) return;
+        if (cause instanceof SubmissionSourceError) {
+          setPreflightError(
+            t(`common.assistantSurface.regionalApproval.liveSubmit.errors.${cause.key}`),
+          );
+          setDraftReady(true);
+        } else setDraftError('loadFailed');
       });
     return () => controller.abort();
-  }, [row.planId, row.versionId, initialAction, directApproval, selectedRole]);
+  }, [row.planId, row.versionId, initialAction, directApproval, selectedRole, t]);
   const [confirmedInputs, setConfirmedInputs] = useState<Record<string, string>>({});
   const [adjustmentSkus, setAdjustmentSkus] = useState<AdjustmentSkuState>({ status: 'idle' });
   const action = useSalesPlanAction({ client });
-  const loading = action.state.status === 'loading';
-  const canClose =
-    !loading &&
-    !(directApproval && action.state.status === 'error' && action.state.error.retrySameIntent);
+  const loading = checking || action.state.status === 'loading';
+  const canClose = !loading;
+  const pending = action.state.status === 'error' && action.state.error.retrySameIntent;
+  useEffect(
+    () => onPendingChange?.(pending || refreshFailed),
+    [pending, refreshFailed, onPendingChange],
+  );
+  useEffect(
+    () => onBusyChange?.(loading || (directApproval && !draftReady && !draftError)),
+    [loading, directApproval, draftReady, draftError, onBusyChange],
+  );
   const intentLocked =
     directApproval ||
     loading ||
@@ -406,6 +424,38 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           adjustmentsInvalid ||
           (adjustments.length > 0 && adjustmentSkus.status !== 'success') ||
           nodeComparisons.some((item) => !item.confirmedQty || item.confirmedQty.startsWith('-')));
+  let directBlock: string | undefined;
+  if (directApproval && draftReady && invalid) {
+    directBlock = t(
+      `common.assistantSurface.regionalApproval.liveAction.${unsupportedRole ? 'roleContractUnavailable' : !selectedRole ? 'roleMissing' : !access?.allowedActions.includes(kind) ? 'accessBlocked' : targetStatus === undefined ? 'finalNode' : 'quantityBlocked'}`,
+    );
+    if (snapshot) {
+      try {
+        checkSubmissionSource(
+          {
+            planId: row.planId,
+            versionId: row.versionId,
+            row,
+            period: { periodId: row.periodId, planTypeCode: row.planTypeCode },
+          },
+          snapshot,
+        );
+      } catch (cause) {
+        if (cause instanceof SubmissionSourceError)
+          directBlock = t(
+            `common.assistantSurface.regionalApproval.liveSubmit.errors.${cause.key}`,
+            cause.key === 'skuValueChanged'
+              ? {
+                  ...cause.values,
+                  field: t(
+                    `common.assistantSurface.regionalApproval.liveSubmit.fields.${cause.values.field}`,
+                  ),
+                }
+              : cause.values,
+          );
+      }
+    }
+  }
   const unknown = t('common.assistantSurface.regionalApproval.liveAction.checksum.unknown');
   const hasAdjustmentDraft =
     initialAction === 'REJECT'
@@ -487,33 +537,124 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     }
   };
 
-  const submit = () => {
+  const submit = async () => {
     setAttempted(true);
-    if (invalid || loading || action.state.status === 'success') return;
-    const request: GeaSalesPlanActionRequest = {
-      approvalRole: access?.approvalRole,
-      ...(access?.roleContractSupported ? { approvalPolicy: 'role-visible-v1' as const } : {}),
-      action: kind,
-      expectedStatus: row.status,
-      ...(access?.snapshotHash ? { expectedSnapshot: access.snapshotHash } : {}),
-      ...(remark.trim() ? { remark: remark.trim() } : {}),
-      ...(kind === 'REJECT'
-        ? { adjustments, expectedReturnTargetStage: returnDestination?.targetStage }
-        : adjustments.length > 0
-          ? { adjustments }
-          : {}),
-    };
-    submittedRequest.current = request;
-    void complete(
-      action.execute({
+    if (
+      invalid ||
+      loading ||
+      submitting.current ||
+      action.state.status === 'success' ||
+      (action.state.status === 'error' && action.state.error.retrySameIntent)
+    )
+      return;
+    submitting.current = true;
+    setChecking(true);
+    setPreflightError(undefined);
+    try {
+      const fresh = await salesPlan.detail.invoke({ planId: row.planId });
+      checkSubmissionSource(
+        {
+          planId: row.planId,
+          versionId: row.versionId,
+          row,
+          period: { periodId: row.periodId, planTypeCode: row.planTypeCode },
+        },
+        fresh,
+      );
+      if (snapshot) checkSubmissionSkus(row.versionId, snapshot.skus, fresh.skus);
+      const stored = await salesPlan.draft!.invoke({
         planId: row.planId,
-        planTypeCode: row.planTypeCode,
         versionId: row.versionId,
-        request,
-        serverWorkflowResult: !access?.snapshotHash,
-        serverRoleResult: access?.roleContractSupported,
-      }),
-    );
+        approvalRole: selectedRole,
+      });
+      if (
+        stored.stale ||
+        (stored.draft && !salesPlanDraftMatches(stored.draft, row, fresh, selectedRole))
+      ) {
+        setDraftError('stale');
+        return;
+      }
+      const freshAccess =
+        selectedRole && salesPlanAccessForRow(row, fresh, approvalStages ?? [], selectedRole);
+      if (!selectedRole || !freshAccess?.allowedActions.includes(kind))
+        throw new SubmissionSourceError('accessChanged');
+      const freshAdjustments =
+        kind === 'REJECT'
+          ? salesPlanReturnAdjustments(
+              fresh,
+              row,
+              selectedRole,
+              salesPlanReturnDestination(fresh, selectedRole!),
+              stored.draft?.role && stored.draft.role !== selectedRole
+                ? []
+                : (stored.draft?.adjustments ?? []),
+              selectedRole === approvalStage ? pendingValues : undefined,
+            )
+          : kind === 'SAVE'
+            ? adjustments
+            : Object.entries(
+                salesPlanApprovalDraftValues(
+                  fresh,
+                  row,
+                  selectedRole,
+                  stored.draft?.role && stored.draft.role !== selectedRole
+                    ? []
+                    : (stored.draft?.adjustments ?? []),
+                  selectedRole === approvalStage ? pendingValues : undefined,
+                ),
+              )
+                .filter(([, value]) => !ZERO_DECIMAL_PATTERN.test(value))
+                .map(([skuCode, adjustQty]) => ({ skuCode, adjustQty }));
+      const request: GeaSalesPlanActionRequest = {
+        approvalRole: freshAccess.approvalRole,
+        ...(freshAccess.roleContractSupported
+          ? { approvalPolicy: 'role-visible-v1' as const }
+          : {}),
+        action: kind,
+        expectedStatus: row.status,
+        ...(freshAccess.snapshotHash ? { expectedSnapshot: freshAccess.snapshotHash } : {}),
+        ...(remark.trim() ? { remark: remark.trim() } : {}),
+        ...(kind === 'REJECT'
+          ? {
+              adjustments: freshAdjustments,
+              expectedReturnTargetStage: salesPlanReturnDestination(fresh, selectedRole!)
+                .targetStage,
+            }
+          : freshAdjustments.length > 0
+            ? { adjustments: freshAdjustments }
+            : {}),
+      };
+      submittedRequest.current = request;
+      await complete(
+        action.execute({
+          planId: row.planId,
+          planTypeCode: row.planTypeCode,
+          versionId: row.versionId,
+          request,
+          serverWorkflowResult: !freshAccess.snapshotHash,
+          serverRoleResult: freshAccess.roleContractSupported,
+        }),
+      );
+    } catch (cause) {
+      if (cause instanceof SubmissionSourceError)
+        setPreflightError(
+          t(
+            `common.assistantSurface.regionalApproval.liveSubmit.errors.${cause.key}`,
+            cause.key === 'skuValueChanged'
+              ? {
+                  ...cause.values,
+                  field: t(
+                    `common.assistantSurface.regionalApproval.liveSubmit.fields.${cause.values.field}`,
+                  ),
+                }
+              : cause.values,
+          ),
+        );
+      else setDraftError('loadFailed');
+    } finally {
+      submitting.current = false;
+      setChecking(false);
+    }
   };
 
   // 对话下发的草稿改写与确认：走的还是同一个人工路径（写理由 → 点确认）。
@@ -539,14 +680,23 @@ const RegionalApprovalLiveActionDialog: React.FC<{
       action.state.status !== 'idle'
     )
       return;
-    if (draftError) {
+    if (draftError || preflightError) {
       directSubmissionStarted.current = true;
       return;
     }
     if (invalid) return;
     directSubmissionStarted.current = true;
     submit();
-  }, [action.state.status, directApproval, draftError, invalid, loading, submit, visible]);
+  }, [
+    action.state.status,
+    directApproval,
+    draftError,
+    invalid,
+    loading,
+    preflightError,
+    submit,
+    visible,
+  ]);
 
   const retry = () => {
     if (loading || action.state.status !== 'error' || !action.state.error.retrySameIntent) return;
@@ -562,7 +712,14 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     onClose();
   };
 
-  if (directApproval && action.state.status !== 'error' && !draftError && !refreshFailed)
+  if (
+    directApproval &&
+    action.state.status !== 'error' &&
+    !draftError &&
+    !directBlock &&
+    !preflightError &&
+    !refreshFailed
+  )
     return null;
 
   /*
@@ -587,6 +744,93 @@ const RegionalApprovalLiveActionDialog: React.FC<{
       {t('common.assistantSurface.regionalApproval.liveAction.adjustments.discardDescription')}
     </Modal>
   );
+
+  if (
+    (directApproval || kind === 'REJECT') &&
+    (action.state.status === 'error' ||
+      (directApproval && (draftError || directBlock)) ||
+      preflightError ||
+      refreshFailed)
+  ) {
+    return (
+      <Modal
+        visible={visible}
+        className={styles.resultModal}
+        style={{ width: 'min(560px, calc(100vw - 24px))', maxWidth: 'calc(100vw - 24px)' }}
+        title={t('common.assistantSurface.regionalApproval.liveAction.resultTitle')}
+        maskClosable={false}
+        closable={canClose}
+        onCancel={() => onClose(pending || refreshFailed)}
+        footer={
+          <div className={styles.submissionFooter}>
+            <Button disabled={!canClose} onClick={() => onClose(pending || refreshFailed)}>
+              {t('common.assistantSurface.regionalApproval.liveAction.close')}
+            </Button>
+            {refreshFailed && action.state.status === 'success' ? (
+              <Button
+                type="primary"
+                onClick={() =>
+                  action.state.status === 'success' &&
+                  void complete(Promise.resolve(action.state.receipt))
+                }
+              >
+                {t('common.assistantSurface.regionalApproval.liveAction.verifySave')}
+              </Button>
+            ) : action.state.status === 'error' && action.state.error.retrySameIntent ? (
+              <Button type="primary" onClick={retry}>
+                {t('common.assistantSurface.regionalApproval.liveAction.retry')}
+              </Button>
+            ) : draftError ||
+              directBlock ||
+              preflightError ||
+              (action.state.status === 'error' && action.state.error.kind === 'conflict') ? (
+              <Button
+                type="primary"
+                onClick={() => {
+                  onRefresh();
+                  onClose();
+                }}
+              >
+                {t('common.assistantSurface.regionalApproval.liveAction.refresh')}
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                disabled={
+                  loading ||
+                  invalid ||
+                  (action.state.status === 'error' &&
+                    ['permission', 'authentication'].includes(action.state.error.kind))
+                }
+                onClick={submit}
+              >
+                {t('common.assistantSurface.regionalApproval.liveAction.submitAgain')}
+              </Button>
+            )}
+          </div>
+        }
+      >
+        <div className={styles.compactRejectBody}>
+          <strong>{row.dealerName || row.orgName || row.planId}</strong>
+          <span>{row.planId}</span>
+          <Alert
+            type={pending || refreshFailed ? 'warning' : 'error'}
+            content={
+              preflightError ||
+              directBlock ||
+              (draftError
+                ? t(`common.assistantSurface.regionalApproval.draft.${draftError}`)
+                : refreshFailed
+                  ? t('common.assistantSurface.regionalApproval.liveAction.refreshFailed')
+                  : action.state.status === 'error'
+                    ? actionErrorText(t, action.state.error)
+                    : '')
+            }
+          />
+        </div>
+      </Modal>
+    );
+  }
 
   if (kind === 'REJECT') {
     return (
