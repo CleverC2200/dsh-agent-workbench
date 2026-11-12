@@ -1,5 +1,5 @@
 <!-- collaboration-record
-{"kind":"change","id":"CHANGE-20261112-sales-plan-stale-recovery","date":"2026-11-12","title":"销售计划旧版本与过期草稿恢复 0.1.98","module":"销售计划","status":"已验证待发布"}
+{"kind":"change","id":"CHANGE-20261112-sales-plan-stale-recovery","date":"2026-11-12","title":"销售计划旧版本与过期草稿恢复 0.1.98","module":"销售计划","status":"已发布待验收"}
 -->
 
 # 销售计划旧版本与过期草稿恢复
@@ -14,3 +14,12 @@
 - 本次没有再次审批或提交 DMS，没有修改 DMS 主数据，没有更新用户正式客户端。
 
 发布前 CI 发现 API 日志批量测试未向真实 GEA Host 提供必需的隔离运行目录，八项用例在初始化时失败。已补齐 fixture 的 runtimeDir，保留全部原断言和失败日志，不改变产品逻辑。
+
+## 发行回填
+
+- 固定来源 `9c2f56b9aeb93128bc97f36bf810d23569647fac`；[PR #306](https://github.com/CleverC2200/dsh-agent-workbench/pull/306) 和[合并后主线检查](https://github.com/CleverC2200/dsh-agent-workbench/actions/runs/43173713415)通过。
+- [Workbench 0.1.98 Release](https://github.com/CleverC2200/dsh-agent-workbench/releases/tag/v0.1.98)已发布。TGZ SHA-256 为 `4b16e3b131c6ed8b3a5a81cad42b8c65d28fd995b3af1236be1cd2bedd285937`。
+- 最终组合为 Workbench 0.1.98、GEA 0.0.275、Manage 0.6.3-company.66 原归档。测试频道 revision 112、正式频道 revision 104，均通过生产 reader 匿名 check/download。
+- 62项页面、退回恢复和API日志回归、43项发行合同检查通过。三笔真实详情和独立SKU接口共178条明细只读回放通过。
+- 发布预检及 required Core `0accab310546c1bc8d3ad46b8803dcbcfaa02477` 的官方隔离安装、Host/client 模块接收通过；归档集合绑定为 `0fbaa4e085fe2521943d7994b9ef53025ae1d4f258513d39788f0b25135398a0`。
+- 本轮没有再次提交审批或DMS，没有更改DMS主数据，没有构建桌面安装器或升级员工设备。首次CI的API日志夹具初始化失败已修正，原失败证据保留。
