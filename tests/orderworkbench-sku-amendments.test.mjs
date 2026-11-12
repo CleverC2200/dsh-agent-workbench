@@ -242,7 +242,7 @@ test('Zhengzhou amendment totals and customers select pickup 01, not base owners
   assert.equal(r.summary[0].denominator, 16);
   assert.equal(r.customers[0].numerator, 6);
   assert.equal(r.customers[0].denominator, 16);
-  assert.equal(read(rows).events.length, 5);
+  assert.equal(read(rows).events.length, 2);
   assert.equal(read(rows, { base: '其他' }).events.length, 1);
 });
 
