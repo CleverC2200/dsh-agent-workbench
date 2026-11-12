@@ -1,5 +1,5 @@
 <!-- collaboration-record
-{"kind":"bug","id":"BUG-20261112-single-approval-failure","date":"2026-11-12","title":"单笔审批隐藏失败原因及复用失败请求","module":"销售计划","category":"功能逻辑","cause":"原始遗漏","severity":"P2","status":"已验证待发布"}
+{"kind":"bug","id":"BUG-20261112-single-approval-failure","date":"2026-11-12","title":"单笔审批隐藏失败原因及复用失败请求","module":"销售计划","category":"功能逻辑","cause":"原始遗漏","severity":"P2","status":"已发布待验收"}
 -->
 
 # 单笔审批失败与再次提交
@@ -13,5 +13,13 @@
 - 89 项回归通过；补充第二次响应断言后，8 项提交场景复验通过。类型、lint 和格式检查通过。
 - 用户反馈重新勾选后点顶部通过仍显示旧报错且无新日志。该入口在本地旧版也可调用两次，现场具体拦截点尚未完全确认，不能将缓存缺陷等同于现场唯一原因。
 - 历史覆盖偏重批量与详情弹窗，没有覆盖单笔直接提交及同一弹窗的再次提交。已有回归保留。
-- 计划修复版本 0.1.100，发布后由用户重新勾选验收。没有再次执行真实审批、DMS 写入或修改产品主数据。
+- 已发布修复版本 0.1.100，发布后由用户重新勾选验收。没有再次执行真实审批、DMS 写入或修改产品主数据。
 - 未删除文件或业务能力。权限、当前版本核验、成功回执和未知结果的原意图核对保留。
+
+## 发行回填
+
+- [0.1.100 Release](https://github.com/CleverC2200/dsh-agent-workbench/releases/tag/v0.1.100) 已发布，固定源码 71dcb04cb65082657c1a57c1bfe7c97d72541da2；[合并后主线 CI](https://github.com/CleverC2200/dsh-agent-workbench/actions/runs/43186735347) 通过。
+- TGZ SHA-256：a983bbd0cbf1644df6ed544eb4cd18d63b7a577738aac7afe67483272906a605。完整组合为 Workbench 0.1.100、GEA 0.0.277、Manage 0.6.3-company.67 原归档。
+- 测试频道 revision 114、正式频道 revision 106 已通过生产 reader 匿名 check/download。发布预检及官方隔离安装、Host/client 模块接收通过。
+- 本轮明确冻结已验收的 100/277 组合，后续主线变更另行发行；归档和标签保持原字节与来源。
+- 本轮未操作用户正式客户端或再次提交真实审批/DMS。现场重新勾选后点顶部通过，仍由用户更新后验收。
