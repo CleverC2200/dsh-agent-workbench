@@ -3191,3 +3191,26 @@
   color: #858c96;
   overflow-wrap: anywhere;
 }
+
+.am-panel nav[hidden] {
+  display: none;
+}
+.am-connection-error {
+  color: #c8112a;
+  background: #ffe9ec;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  overflow-wrap: anywhere;
+}
+.am-connection-error p {
+  margin: 0;
+  line-height: 1.7;
+}
+.am-connection-error p + p {
+  margin-top: 8px;
+}
+.am-panel button:focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: 2px;
+}

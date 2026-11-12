@@ -7,7 +7,7 @@ import { chromium, expect } from '@playwright/test';
 const ui = resolve('business/inventory-apsplan/source');
 const bundle = await build({
   stdin: {
-    contents: `import React from 'react';import{createRoot}from'react-dom/client';import {WarningViews} from './business/inventory-apsplan/source/app/warning-views';import {openAlertManagement} from './business/inventory-apsplan/source/app/monitor-management.js';import './business/inventory-apsplan/source/app/monitor-management.css';import Home from './business/inventory-apsplan/source/app/workbench-app';window.openManagement=()=>openAlertManagement(window.fixture.events,()=>{});createRoot(document.getElementById('root')).render(window.testHome?<Home initialWorkspace="intelligent" embedMode liveData/>:<WarningViews items={window.fixture.events} openCount={1} onDetail={()=>{}}/>);`,
+    contents: `import React from 'react';import{createRoot}from'react-dom/client';import {WarningViews} from './business/inventory-apsplan/source/app/warning-views';import {openAlertManagement} from './business/inventory-apsplan/source/app/monitor-management.js';import './business/inventory-apsplan/source/app/monitor-management.css';import Home from './business/inventory-apsplan/source/app/workbench-app';window.openManagement=(startNew=false)=>openAlertManagement(window.fixture.events,()=>{},startNew);createRoot(document.getElementById('root')).render(window.testHome?<Home initialWorkspace="intelligent" embedMode liveData/>:<WarningViews items={window.fixture.events} openCount={1} onDetail={()=>{}}/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',
   },
@@ -48,7 +48,7 @@ const bundle = await build({
           namespace: 'detection-fixture',
         }));
         api.onLoad({ filter: /.*/, namespace: 'detection-fixture' }, () => ({
-          contents: `export const call=async(method,input)=>{window.calls.push({method,input});if(window.backendUnavailable)throw Error('预警后台尚未配置');return window.fixture};export const ask=async()=>{};export const draft=async()=>{};export const publish=async()=>{};export const action=()=>()=>{};export const reportElements=()=>()=>{};export const ready=Promise.resolve();`,
+          contents: `export const call=async(method,input)=>{window.calls.push({method,input});if(window.pendingDetection)return new Promise(resolve=>window.pendingReads.push(resolve));if(window.backendUnavailable)throw Error('预警后台尚未配置');return window.fixture};export const ask=async()=>{};export const draft=async()=>{};export const publish=async()=>{};export const action=()=>()=>{};export const reportElements=()=>()=>{};export const ready=Promise.resolve();`,
         }));
       },
     },
@@ -151,18 +151,16 @@ test('预警筛选、检测任务操作列及执行记录在桌面和窄屏可�
   });
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
-  let dialogs = 0;
-  page.on('dialog', async (d) => {
-    dialogs++;
-    assert.match(d.message(), /后台尚未配置/);
-    await d.accept();
-  });
   await page.evaluate(() => {
     window.backendUnavailable = true;
+    window.alert = () => {};
     return window.openManagement();
   });
-  assert.equal(dialogs, 1);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('alert')).toContainText('预警后台尚未配置');
+  await expect(dialog.getByRole('button', { name: '重新连接', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
 });
 
 test('后台不可用时正式智能工作台保留原入口且不显示模拟建议', async (t) => {
@@ -191,4 +189,80 @@ test('后台不可用时正式智能工作台保留原入口且不显示模拟�
     await page.evaluate(() => window.calls.filter((c) => c.method === 'detection').length),
     1,
   );
+});
+
+test('两个正式入口在后台未配置时立即显示可重试窗口，不依赖浏览器提示框', async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await page.route('http://alert.test/**', (r) =>
+    r.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }),
+  );
+  await page.goto('http://alert.test/');
+  await page.evaluate(() => {
+    window.testHome = true;
+    window.calls = [];
+    window.backendUnavailable = true;
+    window.fixture = { events: [], tasks: [], runs: [] };
+    window.alert = () => {};
+  });
+  await page.addStyleTag({ content: bundle.outputFiles.find((f) => f.path.endsWith('.css')).text });
+  await page.addScriptTag({ content: bundle.outputFiles.find((f) => f.path.endsWith('.js')).text });
+  for (const name of ['预警管理', '＋ 新增检测']) {
+    await page.getByRole('button', { name, exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '预警管理', exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('alert')).toContainText('预警后台尚未配置');
+    await expect(dialog.getByRole('button', { name: '重新连接', exact: true })).toBeVisible();
+    await expect(dialog.locator('[data-new]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+  }
+});
+
+test('后台等待时可关闭，重复点击不叠窗，重新连接后进入原新增流程', async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.route('http://alert.test/**', (r) =>
+    r.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }),
+  );
+  await page.goto('http://alert.test/');
+  await page.evaluate(() => {
+    window.calls = [];
+    window.pendingReads = [];
+    window.pendingDetection = true;
+    window.fixture = { events: [], tasks: [], runs: [] };
+    window.alert = () => {};
+  });
+  await page.addStyleTag({ content: bundle.outputFiles.find((f) => f.path.endsWith('.css')).text });
+  await page.addScriptTag({ content: bundle.outputFiles.find((f) => f.path.endsWith('.js')).text });
+  await page.evaluate(() => {
+    void window.openManagement();
+    void window.openManagement();
+  });
+  const dialog = page.getByRole('dialog', { name: '预警管理', exact: true });
+  await expect(dialog).toHaveCount(1);
+  await expect(dialog.getByRole('status')).toContainText('正在连接预警后台');
+  assert.equal(await page.evaluate(() => window.pendingReads.length), 1);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await page.evaluate(() => {
+    window.pendingDetection = false;
+    window.pendingReads[0](window.fixture);
+  });
+  await expect(dialog).toHaveCount(0);
+  await page.evaluate(() => {
+    window.backendUnavailable = true;
+    return window.openManagement(true);
+  });
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  await page.evaluate(() => {
+    window.backendUnavailable = false;
+  });
+  await dialog.getByRole('button', { name: '重新连接', exact: true }).click();
+  await expect(dialog.locator('.am-form')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '选择指标', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
 });

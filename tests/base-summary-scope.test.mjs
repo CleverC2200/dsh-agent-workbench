@@ -71,6 +71,10 @@ globalThis.baseSummaryHost = async (_, call) => {
         inventory: values[base].stock,
         inventory_count: 1,
         inventory_complete: values[base].stock,
+        target: values[base].target ?? null,
+        target_count: values[base].target == null ? 0 : 1,
+        gap_count: values[base].target == null ? 0 : 1,
+        gap: values[base].target == null ? null : values[base].stock - values[base].target,
         age_weighted_sum: values[base].weight * values[base].age,
         age_qty: values[base].weight,
       }),
@@ -181,6 +185,20 @@ test('all and selected-base cards reconcile additive stock/orders and weight age
   assert.equal(second.total, 25);
   assert.equal(first.table.rows[0].current, '0');
   assert.notEqual(first.table.rows[0].level, second.table.rows[0].level);
+  values.郑州.target = 0;
+  const withZeroTarget = await loadInitialDashboard();
+  const stockCard = withZeroTarget.workbench.cards.find((card) => card.title === '当前库存');
+  assert.deepEqual(stockCard.helpers, [
+    { label: '目标库存', value: '0' },
+    { label: '库存差额', value: '900' },
+  ]);
+  assert.equal(stockCard.value, '1,000');
+  assert.ok(stockCard.coverage.includes(withZeroTarget.versionSummary.currentVersion));
+  assert.ok(stockCard.coverage.includes(withZeroTarget.versionSummary.targetMonth));
+  assert.match(stockCard.coverage, /目标覆盖 1\/2/);
+  assert.match(stockCard.coverage, /差额仅含库存与目标均有效的 1\/2/);
+  assert.equal(withZeroTarget.table.rows.find((row) => row.level === '华东').gap, '-');
+  assert.equal(withZeroTarget.table.rows.find((row) => row.level === '郑州').gap, '900');
   failStock = true;
   const partial = await loadInitialDashboard(undefined, undefined, undefined, ['郑州']);
   assert.deepEqual(
