@@ -111,6 +111,7 @@ const continued = {
   'return-continued-skipped': [9, 'area', 2],
 }[comparison];
 const approvalRole = comparison?.startsWith('single-') ? 'category' : continued?.[1] ?? (comparison === 'return-unavailable' ? 'province' : 'region');
+if(comparison==='history-correction')for(const plan of sourcePlans)plan.orderType='Z';
 if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50';
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 if(comparison?.startsWith('sku-review')) for(const plan of sourcePlans) plan.skuCount=2;
@@ -132,10 +133,10 @@ const skuFor=(versionId)=>{
 const skusFor=versionId=>comparison?.startsWith('sku-review')?[skuFor(versionId),{...skuFor(versionId),skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
 window.sentReturns=[];
 window.savedDrafts=[];
-if (['history','forbidden','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
+if (['history','history-correction','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
 const readCalls=window.readCalls=[];
 const writes=window.writes=[];
-const versionsFor=(plan)=>['history','forbidden','inline','missing'].includes(comparison) && !(comparison==='missing'&&plan.planId==='p2')
+const versionsFor=(plan)=>['history','history-correction','inline','missing'].includes(comparison) && !(comparison==='missing'&&plan.planId==='p2')
   ? [{...plan,id:plan.versionId,seq:3,effective:true},{...plan,id:plan.versionId+'-previous',seq:2,effective:false},{...plan,id:plan.versionId+'-older',seq:1,effective:false}]
   : [{...plan,id:plan.versionId,effective:true}];
 const forbidden=async()=>{writes.push('write');throw Error('LOCAL_RENDER_ACTION_FORBIDDEN')};
@@ -144,7 +145,7 @@ const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
   list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
   detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
-  versions:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
+  versions:{invoke:async({planId})=>{readCalls.push({history:planId});const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
     readCalls.push({review:planId});
     if(comparison==='sku-review-failure') throw Error('fixture failure');
@@ -298,15 +299,6 @@ test(
           height: style.height,
         };
       });
-    const version = page.getByTestId('regional-approval-version-compare');
-    await expect.poll(async () => (await state(version)).background).toBe('rgb(255, 255, 255)');
-    assert.deepEqual(await state(version), {
-      background: 'rgb(255, 255, 255)',
-      color: 'rgb(85, 93, 104)',
-      border: 'rgb(217, 221, 227)',
-      radius: '6px',
-      height: '36px',
-    });
     const toolbar = page.getByTestId('regional-approval-toolbar-actions');
     const filter = toolbar.getByRole('button', { name: '筛选条件' });
     assert.deepEqual(await state(filter), {
@@ -669,98 +661,53 @@ test('collapsing the flow lane keeps filters and inline edits', { timeout: 30000
   await expect(area).toContainText('华南大区');
 });
 
-test('版本选择并入顶栏同一行，窄窗口横向滚动且不出现原明细弹窗', { timeout: 30000 }, async (t) => {
-  const { page } = await openWorkbench(t, false, 'history');
-  const button = page.getByRole('button', { name: '版本对比', exact: true });
-  await button.click();
-  const header = page.locator('main > header');
-  await expect(header.getByRole('combobox', { name: '版本①', exact: true })).toBeVisible();
-  await expect(header.getByRole('combobox', { name: '版本②', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '版本明细', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  for (const width of [1000, 694]) {
-    await page.setViewportSize({ width, height: 820 });
-    const layout = await header.evaluate((el) => {
-      const controls = [
-        el.querySelector('[data-testid="regional-approval-version-compare"]'),
-        ...el.querySelectorAll('[role="combobox"]'),
-      ];
-      return {
-        height: el.getBoundingClientRect().height,
-        centers: controls.map((node) => {
-          const r = node.getBoundingClientRect();
-          return r.y + r.height / 2;
-        }),
-        mainFits: el.parentElement.scrollWidth === el.parentElement.clientWidth,
-      };
-    });
-    assert.ok(
-      Math.max(...layout.centers) - Math.min(...layout.centers) < 2,
-      JSON.stringify(layout),
+for (const orderType of ['M', 'Z']) {
+  for (const grouped of [false, true]) {
+    test(
+      `销售预测仅展示当前版本且不读取历史对比: ${orderType} ${grouped ? '组织汇总' : '单计划'}`,
+      { timeout: 30000 },
+      async (t) => {
+        const { page, groupBox } = await openWorkbench(
+          t,
+          grouped,
+          orderType === 'Z' ? 'history-correction' : 'history',
+        );
+        if (orderType === 'Z') await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+        await expect(page.getByRole('button', { name: '版本对比', exact: true })).toHaveCount(0);
+        await expect(page.getByRole('combobox', { name: /版本[①②]/ })).toHaveCount(0);
+        const queue = grouped
+          ? groupBox.locator('xpath=ancestor::tr')
+          : page.locator('tbody tr').filter({ hasText: '宝阳销售组' }).first();
+        await queue.getByRole('button').first().click();
+        const region = grouped
+          ? page.getByTestId('regional-approval-group-sku-summary').first().getByRole('region')
+          : page.getByRole('region', { name: 'SKU 编码 / 物料描述', exact: true }).last();
+        await expect(region.getByRole('row').filter({ hasText: '1001' })).toContainText(
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+        );
+        await expect(region.getByRole('columnheader')).toHaveText([
+          'SKU 编码 / 物料描述',
+          '月计划',
+          '确认计划量',
+        ]);
+        assert.ok(
+          (await page.evaluate(() => window.readCalls)).every(
+            (call) =>
+              !call.fromVersionId &&
+              !call.history &&
+              (!call.versionId || ['v1', 'v2', 'v3'].includes(call.versionId)),
+          ),
+        );
+      },
     );
-    assert.ok(layout.height <= 64, JSON.stringify(layout));
-    assert.equal(layout.mainFits, true);
-    if (process.env.GEA_COMPARE_EVIDENCE)
-      await page.screenshot({
-        path: process.env.GEA_COMPARE_EVIDENCE + '/compact-' + width + '.png',
-      });
   }
-  await button.click();
-  await expect(page.getByRole('combobox', { name: '版本①', exact: true })).toHaveCount(0);
-  assert.deepEqual(await page.evaluate(() => window.writes), []);
-});
+}
 
-test('多计划各自读取对应版本，切换更早版本没有串用其他计划', { timeout: 30000 }, async (t) => {
-  const { page, groupBox } = await openWorkbench(t, true, 'history');
-  await groupBox.click();
-  await page.getByRole('button', { name: '版本对比', exact: true }).click();
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        window.readCalls
-          .filter((row) => row.versionId?.includes('previous'))
-          .map((row) => row.versionId)
-          .sort(),
-      ),
-    )
-    .toEqual(['v1-previous', 'v2-previous', 'v3-previous']);
-  await page.getByRole('combobox', { name: '版本②', exact: true }).click();
-  await page.getByRole('option', { name: '前 2 版', exact: true }).click();
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        window.readCalls
-          .filter((row) => row.versionId?.includes('older'))
-          .map((row) => row.versionId)
-          .sort(),
-      ),
-    )
-    .toEqual(['v1-older', 'v2-older', 'v3-older']);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  assert.deepEqual(await page.evaluate(() => window.writes), []);
-});
-
-test('只有一版时显示缺失，历史读取被拒仍显示错误，不打开弹窗', { timeout: 30000 }, async (t) => {
-  for (const mode of ['single', 'forbidden']) {
-    const { page } = await openWorkbench(t, false, mode);
-    await page.getByRole('button', { name: '版本对比', exact: true }).click();
-    if (mode === 'forbidden') await expect(page.getByRole('alert')).toBeVisible();
-    else
-      await expect(
-        page.locator('tbody tr').filter({ hasText: '宝阳销售组' }).first().getByRole('cell').nth(5),
-      ).toHaveText('——');
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    assert.deepEqual(await page.evaluate(() => window.writes), []);
-  }
-});
-
-test('无可读计划禁用版本对比，只读来源仍能在列表查看版本', { timeout: 30000 }, async (t) => {
+test('无可读计划不显示版本对比，只读来源仍能查看当前明细', { timeout: 30000 }, async (t) => {
   const empty = await openWorkbench(t, false, 'empty');
-  await expect(empty.page.getByRole('button', { name: '版本对比', exact: true })).toBeDisabled();
+  await expect(empty.page.getByRole('button', { name: '版本对比', exact: true })).toHaveCount(0);
   const { page } = await openWorkbench(t, false, 'readonly');
   await expect(page.locator('tbody input[type="checkbox"]').first()).toBeDisabled();
-  await page.getByRole('button', { name: '版本对比', exact: true }).click();
-  await expect(page.getByRole('combobox', { name: '版本①', exact: true })).toBeVisible();
   await page
     .getByRole('button', { name: /宝阳销售组/ })
     .first()
@@ -777,49 +724,6 @@ test('无可读计划禁用版本对比，只读来源仍能在列表查看版�
   await expect(page.getByRole('dialog')).toHaveCount(0);
   assert.deepEqual(await page.evaluate(() => window.writes), []);
 });
-
-test(
-  '列表和单计划SKU直接展示两版数量金额与①减②差异，历史版本不写入',
-  { timeout: 30000 },
-  async (t) => {
-    const { page } = await openWorkbench(t, false, 'inline');
-    await page.getByRole('button', { name: '版本对比', exact: true }).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page.getByRole('columnheader', { name: '月计划①', exact: true })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: '月计划②', exact: true })).toBeVisible();
-    const queue = page.locator('tbody tr').filter({ hasText: '宝阳销售组' }).first();
-    await expect(queue).toContainText('¥200');
-    await expect(queue).toContainText('¥80');
-    await expect(queue).toContainText('¥120');
-    await queue.getByRole('button').first().click();
-    const region = page.getByRole('region', { name: 'SKU 编码 / 物料描述', exact: true }).last();
-    await expect(region.getByRole('columnheader')).toHaveText([
-      'SKU 编码 / 物料描述',
-      '月计划',
-      '确认计划量①',
-      '确认计划量②',
-      '差异（① − ②）',
-    ]);
-    const row = region.getByRole('row').filter({ hasText: '1001' });
-    await assertExpandedSkuLayout(region);
-    assert.equal(
-      await row
-        .getByRole('cell')
-        .first()
-        .evaluate((node) => node.scrollWidth <= node.clientWidth),
-      true,
-    );
-    await expect(row.getByRole('cell').nth(3)).toHaveText('10¥80.00');
-    await expect(row.getByRole('cell').nth(4)).toHaveText('10¥120.00');
-    await page.getByRole('combobox', { name: '版本①', exact: true }).click();
-    await page.getByRole('option', { name: '上一版本', exact: true }).click();
-    await expect(region.getByRole('spinbutton')).toHaveCount(0);
-    await expect(row.getByRole('cell').nth(4)).toHaveText('0¥0.00');
-    assert.deepEqual(await page.evaluate(() => window.writes), []);
-    if (process.env.GEA_COMPARE_EVIDENCE)
-      await page.screenshot({ path: process.env.GEA_COMPARE_EVIDENCE + '/inline-single.png' });
-  },
-);
 
 test(
   '组织汇总按原确认数量比例分摊，合计、逐计划草稿和收起重开保持一致',
@@ -852,49 +756,9 @@ test(
       p1: { 1001: '40' },
       p2: { 1001: '60' },
     });
-    await page.getByRole('button', { name: '版本对比', exact: true }).click();
-    await expect(
-      summary.getByRole('spinbutton', { name: '确认计划量① 1001', exact: true }),
-    ).toHaveValue('100');
-    const skuRow = summary.getByRole('row').filter({ hasText: '1001' });
-    await assertExpandedSkuLayout(summary.getByRole('region'));
-    assert.equal(
-      await skuRow
-        .getByRole('cell')
-        .first()
-        .evaluate((node) => node.scrollWidth <= node.clientWidth),
-      true,
-    );
-    await expect(skuRow.getByRole('cell').nth(3)).toHaveText('20¥160.00');
-    await expect(skuRow.getByRole('cell').nth(4)).toHaveText('80¥960.00');
     assert.ok((await page.evaluate(() => window.writes)).every((kind) => kind === 'draft'));
-    if (process.env.GEA_COMPARE_EVIDENCE) {
-      await page.screenshot({ path: process.env.GEA_COMPARE_EVIDENCE + '/inline-group.png' });
-      await page.setViewportSize({ width: 694, height: 820 });
-      assert.equal(
-        await page.locator('main').evaluate((el) => el.scrollWidth === el.clientWidth),
-        true,
-      );
-      await expect(page.getByRole('combobox', { name: '版本②', exact: true })).toBeVisible();
-      await page.screenshot({
-        path: process.env.GEA_COMPARE_EVIDENCE + '/inline-group-narrow.png',
-      });
-    }
   },
 );
-
-test('组内缺少历史版本时不显示部分合计，不把缺失数量金额补零', { timeout: 30000 }, async (t) => {
-  const { page, groupBox } = await openWorkbench(t, true, 'missing');
-  const row = groupBox.locator('xpath=ancestor::tr');
-  await page.getByRole('button', { name: '版本对比', exact: true }).click();
-  await expect(row.getByRole('cell').nth(5)).toHaveText('——');
-  await row.getByRole('button').first().click();
-  const summary = page.getByTestId('regional-approval-group-sku-summary').first();
-  const skuRow = summary.getByRole('row').filter({ hasText: '1001' });
-  await expect(skuRow.getByRole('cell').nth(3)).toHaveText('——');
-  await expect(skuRow.getByRole('cell').nth(4)).toHaveText('——');
-  assert.deepEqual(await page.evaluate(() => window.writes), []);
-});
 
 test('汇总数量为空或超过精度时阻止通过，修正后可继续', { timeout: 30000 }, async (t) => {
   const { page, groupBox } = await openWorkbench(t, true, 'inline');

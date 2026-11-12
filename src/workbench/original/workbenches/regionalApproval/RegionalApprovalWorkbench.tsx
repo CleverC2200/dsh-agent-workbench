@@ -67,7 +67,6 @@ import {
   type ApprovalDimension,
   type ApprovalStageId,
   type ApprovalState,
-  type ApprovalVersion,
 } from './salesPlanDomain.ts';
 const ALL_ORGANIZATIONS = 'all';
 const formatPlanMonthLabel = (value: string): string =>
@@ -163,16 +162,12 @@ export type RegionalApprovalWorkbenchContext = {
   scope: {
     dimension?: ApprovalDimension;
     categoryComparison?: boolean;
-    primaryVersionId?: string;
     versionReferencePlanId?: string;
     currentVersionId?: string;
-    compareVersionId?: string;
     planType: string;
     month: string;
     approvalStage: SalesPlanContextApprovalStage;
     authority: 'organization';
-    primaryVersion: ApprovalVersion;
-    compareVersion: ApprovalVersion;
     appliedFilters: ApprovalContextFilters;
   };
   skuReview?: SkuReviewSnapshot | null;
@@ -473,25 +468,10 @@ const RegionalApprovalWorkbench: React.FC<{
         baseAmount: string;
         targetQty: string;
         targetAmount: string;
-        compareVersionId?: string;
-        compareQty?: string;
-        compareAmount?: string;
-        compareTargetQty?: string;
-        compareTargetAmount?: string;
       }
     >
   >({});
-  const [inlineComparison, setInlineComparison] = useState<{
-    primaryOffset: number;
-    compareOffset: number;
-  }>();
-  const [primarySkusByPlan, setPrimarySkusByPlan] = useState<Record<string, GeaSalesPlanSku[]>>({});
-  const [comparedSkusByPlan, setComparedSkusByPlan] = useState<Record<string, GeaSalesPlanSku[]>>(
-    {},
-  );
-  const [comparedCategories, setComparedCategories] = useState<
-    Record<string, RegionalApprovalLiveCategorySummary[]>
-  >({});
+  const [currentSkusByPlan, setCurrentSkusByPlan] = useState<Record<string, GeaSalesPlanSku[]>>({});
   const [inlinePlanId, setInlinePlanId] = useState<string>();
   const [draftLiveFilters, setDraftLiveFilters] = useState<LiveApprovalFilters>(
     initialState.draftLiveFilters,
@@ -664,25 +644,19 @@ const RegionalApprovalWorkbench: React.FC<{
     () =>
       allLiveRows.map((row) => {
         const metrics = versionMetrics[row.planId];
-        const adjusted = inlineComparison?.primaryOffset
-          ? undefined
-          : liveAdjustmentMetrics[row.planId];
+        const adjusted = liveAdjustmentMetrics[row.planId];
         const next = metrics
           ? {
               ...row,
               ...metrics.correction,
               mPlanQty:
-                !inlineComparison && row.orderType !== 'Z' && metrics.versionId === row.versionId
+                row.orderType !== 'Z' && metrics.versionId === row.versionId
                   ? (row.mPlanQty ?? metrics.baseQty)
-                  : inlineComparison
-                    ? metrics.qty
-                    : metrics.baseQty,
+                  : metrics.baseQty,
               mPlanAmount:
-                !inlineComparison && row.orderType !== 'Z' && metrics.versionId === row.versionId
+                row.orderType !== 'Z' && metrics.versionId === row.versionId
                   ? (row.mPlanAmount ?? metrics.baseAmount)
-                  : inlineComparison
-                    ? metrics.amount
-                    : metrics.baseAmount,
+                  : metrics.baseAmount,
               currentQty: metrics.qty,
               currentAmount: metrics.amount,
               targetQty: metrics.targetQty,
@@ -712,7 +686,7 @@ const RegionalApprovalWorkbench: React.FC<{
             }
           : next;
       }),
-    [liveAdjustmentMetrics, allLiveRows, versionMetrics, orderType, inlineComparison],
+    [liveAdjustmentMetrics, allLiveRows, versionMetrics, orderType],
   );
   const dimensionStage = liveStageFilter ?? 'category';
   const availableDimensions = APPROVAL_DIMENSIONS_BY_STAGE[dimensionStage];
@@ -978,7 +952,6 @@ const RegionalApprovalWorkbench: React.FC<{
   );
 
   const focusedLiveRow = liveRows.find((row) => row.planId === focusedLivePlanId) ?? liveRows[0];
-  const comparisonLiveRow = selectedLiveRows.length === 1 ? selectedLiveRows[0] : focusedLiveRow;
   useEffect(() => {
     const requestId = ++liveCategoriesRequest.current;
     setLiveCategoriesError(false);
@@ -989,52 +962,16 @@ const RegionalApprovalWorkbench: React.FC<{
       return;
     }
     const controller = new AbortController();
-    const primaryOffset = inlineComparison?.primaryOffset ?? 0;
-    const compareOffset = inlineComparison?.compareOffset ?? 0;
     setLiveCategoriesLoading(true);
     setVersionMetrics({});
-    setPrimarySkusByPlan({});
-    setComparedSkusByPlan({});
-    setComparedCategories({});
+    setCurrentSkusByPlan({});
     void (async () => {
       const metrics: typeof versionMetrics = {};
       const categories: typeof liveCategorySummaries = {};
-      const primarySkus: typeof primarySkusByPlan = {};
-      const comparedSkus: typeof comparedSkusByPlan = {};
-      const comparisonCategories: typeof comparedCategories = {};
-      const nodeSkus = (skus: GeaSalesPlanSku[], row: RegionalApprovalLiveRow) =>
-        skus.map((sku) => {
-          const qty =
-            salesPlanEditableQuantity(sku, row.status, row.planTypeCode, liveStageFilter) ??
-            String(sku.qty);
-          return {
-            ...sku,
-            qty,
-            amt: multiplyExactDecimals(qty, String(sku.price)) ?? String(sku.amt),
-          };
-        });
+      const currentSkus: typeof currentSkusByPlan = {};
       for (const row of liveRows) {
         controller.signal.throwIfAborted();
-        const versions =
-          primaryOffset || compareOffset
-            ? await detailClient.versions.invoke({ planId: row.planId, signal: controller.signal })
-            : [];
-        const current = versions.find((v) => v.id === row.versionId);
-        const chosen = primaryOffset
-          ? versions.find((v) => current && v.seq === current.seq - primaryOffset)
-          : undefined;
-        const versionId = primaryOffset ? chosen?.id : row.versionId;
-        if (!versionId) {
-          metrics[row.planId] = {
-            qty: '—',
-            amount: '—',
-            baseQty: '—',
-            baseAmount: '—',
-            targetQty: '',
-            targetAmount: '',
-          };
-          continue;
-        }
+        const versionId = row.versionId;
         const skus = await detailClient.versionSkus.invoke({
           versionId,
           signal: controller.signal,
@@ -1044,27 +981,23 @@ const RegionalApprovalWorkbench: React.FC<{
           new Set(skus.map((sku) => sku.skuCode)).size !== skus.length
         )
           throw new Error('INVALID_VERSION_SKUS');
-        primarySkus[row.planId] = skus;
+        currentSkus[row.planId] = skus;
         const displaySkus =
           row.orderType === 'Z'
             ? skus.map((sku) => ({ ...sku, baseQty: sku.corrBaseQty ?? sku.qty, amtBase: sku.amt }))
             : skus;
-        const aggregate = aggregateRegionalApprovalLiveCategories(
-          inlineComparison
-            ? nodeSkus(displaySkus, { ...row, status: chosen?.status ?? row.status })
-            : displaySkus,
-        );
+        const aggregate = aggregateRegionalApprovalLiveCategories(displaySkus);
         categories[row.planId] = aggregate;
         metrics[row.planId] = {
           versionId,
-          status: chosen?.status ?? row.status,
-          returnReason: chosen ? chosen.returnReason : row.returnReason,
+          status: row.status,
+          returnReason: row.returnReason,
           qty: addExactDecimals(aggregate.map((c) => c.quantity)),
           amount: addExactDecimals(aggregate.map((c) => c.amount)),
           baseQty: addExactDecimals(aggregate.map((c) => c.baseQuantity)),
           baseAmount: addExactDecimals(aggregate.map((c) => c.baseAmount)),
-          targetQty: String(primaryOffset ? (chosen?.targetQty ?? '') : row.targetQty),
-          targetAmount: String(primaryOffset ? (chosen?.targetAmount ?? '') : row.targetAmount),
+          targetQty: String(row.targetQty),
+          targetAmount: String(row.targetAmount),
         };
         if (orderType === 'Z' && row.orderType === 'Z') {
           const lines = skus.map((sku) => {
@@ -1102,45 +1035,11 @@ const RegionalApprovalWorkbench: React.FC<{
                 : null,
           };
         }
-        if (inlineComparison) {
-          const other = compareOffset
-            ? versions.find((v) => current && v.seq === current.seq - compareOffset)
-            : versions.find((v) => v.id === row.versionId);
-          const otherId = compareOffset ? other?.id : row.versionId;
-          if (otherId) {
-            const otherSkus =
-              otherId === versionId
-                ? skus
-                : await detailClient.versionSkus.invoke({
-                    versionId: otherId,
-                    signal: controller.signal,
-                  });
-            if (
-              otherSkus.some((sku) => sku.versionId !== otherId) ||
-              new Set(otherSkus.map((sku) => sku.skuCode)).size !== otherSkus.length
-            )
-              throw new Error('INVALID_VERSION_SKUS');
-            metrics[row.planId].compareVersionId = otherId;
-            comparedSkus[row.planId] = otherSkus;
-            const compared = aggregateRegionalApprovalLiveCategories(
-              nodeSkus(otherSkus, { ...row, status: other?.status ?? row.status }),
-            );
-            comparisonCategories[row.planId] = compared;
-            metrics[row.planId].compareTargetQty = String(other?.targetQty ?? row.targetQty);
-            metrics[row.planId].compareTargetAmount = String(
-              other?.targetAmount ?? row.targetAmount,
-            );
-            metrics[row.planId].compareQty = addExactDecimals(compared.map((c) => c.quantity));
-            metrics[row.planId].compareAmount = addExactDecimals(compared.map((c) => c.amount));
-          }
-        }
       }
       if (!controller.signal.aborted) {
         setVersionMetrics(metrics);
         setLiveCategorySummaries(categories);
-        setPrimarySkusByPlan(primarySkus);
-        setComparedSkusByPlan(comparedSkus);
-        setComparedCategories(comparisonCategories);
+        setCurrentSkusByPlan(currentSkus);
       }
     })()
       .catch(() => {
@@ -1151,17 +1050,8 @@ const RegionalApprovalWorkbench: React.FC<{
         if (liveCategoriesRequest.current === requestId) setLiveCategoriesLoading(false);
       });
     return () => controller.abort();
-  }, [detailClient, liveRows, inlineComparison, orderType, liveStageFilter]);
-  const historicalSummaryUnavailable = Boolean(
-    inlineComparison && inlineComparison.primaryOffset > 0,
-  );
-  const scopeSummary = useMemo<typeof liveQuery.analysisSummary>(
-    () =>
-      historicalSummaryUnavailable
-        ? { status: 'error', error: 'unavailable' }
-        : liveQuery.analysisSummary,
-    [historicalSummaryUnavailable, liveQuery.analysisSummary],
-  );
+  }, [detailClient, liveRows, orderType, liveStageFilter]);
+  const scopeSummary = liveQuery.analysisSummary;
   const liveAccess = useSalesPlanAccess(
     liveRows,
     detailClient,
@@ -1169,8 +1059,7 @@ const RegionalApprovalWorkbench: React.FC<{
   );
 
   const sourceTypeReadOnly = (row: RegionalApprovalLiveRow) =>
-    Boolean(inlineComparison?.primaryOffset) ||
-    (row.orderType != null && row.orderType !== orderType);
+    row.orderType != null && row.orderType !== orderType;
 
   // 能审批的节点只来自账号角色：通知、任务、服务端对象能力都不参与身份判定。
   const authorizedStages = roleStages;
@@ -1270,7 +1159,6 @@ const RegionalApprovalWorkbench: React.FC<{
       Object.values(invalidGroupInputs).some((plans) => plans.includes(row.planId))
     )
       return 'invalidQuantity';
-    if (historicalSummaryUnavailable) return 'queueNotFresh';
     if (!liveActionsEnabled) return 'missingAuthority';
 
     if (permissionDeniedVersions.has(row.versionId)) return 'permission';
@@ -1370,9 +1258,7 @@ const RegionalApprovalWorkbench: React.FC<{
           /^-?\d+(?:\.\d+)?$/.test(detail.baseQty) &&
           /^-?\d+(?:\.\d+)?$/.test(detail.baseAmount),
       );
-    const serverSummary = historicalSummaryUnavailable
-      ? undefined
-      : liveQuery.queueState.data?.summary;
+    const serverSummary = liveQuery.queueState.data?.summary;
     return {
       visibleCount: liveRows.length,
       pendingCount: liveRows.filter((row) => row.approvalState === 'pending').length,
@@ -1410,7 +1296,6 @@ const RegionalApprovalWorkbench: React.FC<{
     draftedLiveRows,
     liveRows,
     versionMetrics,
-    historicalSummaryUnavailable,
     liveQuery.queueState.data?.summary,
   ]);
   const dashboardReady =
@@ -1694,12 +1579,6 @@ const RegionalApprovalWorkbench: React.FC<{
         scope: {
           dimension,
           categoryComparison,
-          primaryVersionId: inlineComparison
-            ? versionMetrics[focusedLiveRow?.planId ?? '']?.versionId
-            : focusedLiveRow?.versionId,
-          compareVersionId: inlineComparison
-            ? versionMetrics[focusedLiveRow?.planId ?? '']?.compareVersionId
-            : undefined,
           versionReferencePlanId: focusedLiveRow?.planId,
           currentVersionId: focusedLiveRow?.versionId,
           planType:
@@ -1708,8 +1587,6 @@ const RegionalApprovalWorkbench: React.FC<{
           month: liveQuery.selectedPeriodMonth ?? '',
           approvalStage: effectiveStage,
           authority: 'organization',
-          primaryVersion: inlineComparison?.primaryOffset ? 'previous' : 'current',
-          compareVersion: inlineComparison?.compareOffset === 0 ? 'current' : 'previous',
           appliedFilters: contextAppliedFilters,
         },
         visibleEntities: skuReviewOpen
@@ -1744,7 +1621,6 @@ const RegionalApprovalWorkbench: React.FC<{
     scopeSummary,
     dimension,
     categoryComparison,
-    inlineComparison,
     focusedLiveRow?.planId,
     focusedLiveRow?.versionId,
     contextAppliedFilters,
@@ -2254,10 +2130,7 @@ const RegionalApprovalWorkbench: React.FC<{
   const liveMinimumWidths =
     orderType === 'Z' ? [220, 112, 136, 136, 120, 136] : [220, 112, 136, 136];
   // 选择框与展开按钮各占 40px，必须一起计入列宽预算。
-  const liveMinimumWidth = liveMinimumWidths.reduce(
-    (total, width) => total + width,
-    inlineComparison ? 396 : 260,
-  );
+  const liveMinimumWidth = liveMinimumWidths.reduce((total, width) => total + width, 260);
   const liveTableWidth = Math.max(
     liveMinimumWidth,
     Math.min(tableViewportWidth || liveMinimumWidth, 960),
@@ -2489,9 +2362,7 @@ const RegionalApprovalWorkbench: React.FC<{
       },
     },
     {
-      title: inlineComparison
-        ? t('common.assistantSurface.regionalApproval.inlineComparison.monthlyPrimary')
-        : t('common.correction.plan'),
+      title: t('common.correction.plan'),
       width: liveColumnWidths[2],
       render: (_, tableRow) =>
         tableRow.kind === 'category' ? (
@@ -2697,65 +2568,8 @@ const RegionalApprovalWorkbench: React.FC<{
       },
     );
 
-  const comparisonText = (key: string) =>
-    t(`common.assistantSurface.regionalApproval.inlineComparison.${key}`);
-  const comparisonMetric = (tableRow: RegionalApprovalLiveTableRow) => {
-    if (tableRow.kind === 'category') {
-      const categories = comparedCategories[tableRow.plan.planId];
-      if (!categories) return undefined;
-      const category = categories.find(
-        (item) => item.categoryName === tableRow.category.categoryName,
-      );
-      return { quantity: category?.quantity ?? '0', amount: category?.amount ?? '0' };
-    }
-    const members = tableRow.members ?? [tableRow.plan];
-    const values = members.map((row) => versionMetrics[row.planId]);
-    if (
-      values.some((value) => value?.compareQty === undefined || value.compareAmount === undefined)
-    )
-      return undefined;
-    return {
-      quantity: addExactDecimals(values.map((value) => value.compareQty!)),
-      amount: addExactDecimals(values.map((value) => value.compareAmount!)),
-    };
-  };
-  const metricCell = (quantity?: string, amount?: string) => (
-    <div className={styles.stackCell}>
-      <span>{amount === undefined ? '—' : exactMoney(amount)}</span>
-      <small>
-        {quantity === undefined
-          ? '—'
-          : `${quantityText(quantity)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`}
-      </small>
-    </div>
-  );
-  if (inlineComparison) {
-    liveColumns[3] = {
-      title: comparisonText('monthlyCompared'),
-      width: 136,
-      render: (_, row) => {
-        const value = comparisonMetric(row);
-        return metricCell(value?.quantity, value?.amount);
-      },
-    };
-    liveColumns.push({
-      title: comparisonText('difference'),
-      width: 136,
-      render: (_, row) => {
-        const value = comparisonMetric(row);
-        const quantity = row.kind === 'category' ? row.category.quantity : row.plan.currentQty;
-        const amount = row.kind === 'category' ? row.category.amount : row.plan.currentAmount;
-        return value && quantity !== '—' && amount !== '—'
-          ? metricCell(
-              subtractExactDecimals(quantity, value.quantity),
-              subtractExactDecimals(amount, value.amount),
-            )
-          : metricCell();
-      },
-    });
-  }
   liveColumns.push({
-    title: comparisonText('returnReason'),
+    title: t('common.assistantSurface.regionalApproval.returnReason'),
     width: 180,
     render: (_, row) => {
       const members = row.kind === 'plan' ? (row.members ?? [row.plan]) : [row.plan];
@@ -3066,7 +2880,7 @@ const RegionalApprovalWorkbench: React.FC<{
     for (const [planId, values] of Object.entries(changes)) {
       const row = liveRows.find((plan) => plan.planId === planId);
       if (!row) continue;
-      const skus = primarySkusByPlan[planId];
+      const skus = currentSkusByPlan[planId];
       if (!skus) continue;
       const pending = { ...livePendingValues[planId], ...values };
       const quantities = skus.map(
@@ -3146,74 +2960,6 @@ const RegionalApprovalWorkbench: React.FC<{
             </span>
             {stageLaneOpen ? <Up size={12} /> : <Down size={12} />}
           </Button>
-          <Button
-            type="outline"
-            size="small"
-            data-testid="regional-approval-version-compare"
-            disabled={liveQuery.queueState.status !== 'success' || !comparisonLiveRow}
-            title={t(
-              comparisonLiveRow
-                ? 'common.assistantSurface.regionalApproval.versionCompare'
-                : 'common.assistantSurface.regionalApproval.versionCompareUnavailable',
-            )}
-            onClick={() => {
-              const row = comparisonLiveRow;
-              if (!row || liveQuery.queueState.status !== 'success') return;
-              selectLivePlanContext(row);
-              setFocusedLivePlanId(row.planId);
-              setInlineComparison((current) =>
-                current ? undefined : { primaryOffset: 0, compareOffset: 1 },
-              );
-            }}
-            aria-pressed={Boolean(inlineComparison)}
-          >
-            {t('common.assistantSurface.regionalApproval.versionCompare')}
-          </Button>
-          {inlineComparison && (
-            <div
-              className={styles.versionComparisonBar}
-              role="group"
-              aria-label={comparisonText('title')}
-              title={comparisonText('hint')}
-            >
-              {(['primaryOffset', 'compareOffset'] as const).map((field, index) => (
-                <div key={field} className={styles.versionComparisonField}>
-                  <span>{comparisonText(index === 0 ? 'primary' : 'compared')}</span>
-                  <Select
-                    size="small"
-                    dropdownMenuClassName={styles.brandSelectMenu}
-                    aria-label={comparisonText(index === 0 ? 'primary' : 'compared')}
-                    value={inlineComparison[field]}
-                    onChange={(value: number) =>
-                      setInlineComparison((current) =>
-                        current ? { ...current, [field]: value } : current,
-                      )
-                    }
-                  >
-                    {Array.from(
-                      {
-                        length: Math.max(2, ...liveRows.map((row) => row.seq)),
-                      },
-                      (_, offset) => (
-                        <Select.Option key={offset} value={offset}>
-                          {offset === 0
-                            ? comparisonText('current')
-                            : offset === 1
-                              ? comparisonText('previous')
-                              : t(
-                                  'common.assistantSurface.regionalApproval.inlineComparison.earlier',
-                                  {
-                                    count: offset,
-                                  },
-                                )}
-                        </Select.Option>
-                      ),
-                    )}
-                  </Select>
-                </div>
-              ))}
-            </div>
-          )}
           <div
             className={styles.scope}
             aria-label={t('common.assistantSurface.regionalApproval.scopeAria')}
@@ -3784,25 +3530,21 @@ const RegionalApprovalWorkbench: React.FC<{
                           if (record.kind === 'plan' && record.members)
                             return (
                               <GroupSkuSummary
-                                key={`${record.tableRowId}:${inlineComparison?.primaryOffset ?? 0}:${liveStageFilter ?? 'all'}`}
+                                key={`${record.tableRowId}:${liveStageFilter ?? 'all'}`}
                                 members={record.members.map((member) => ({
                                   ...member,
                                   versionId:
                                     versionMetrics[member.planId]?.versionId ?? member.versionId,
                                   status: versionMetrics[member.planId]?.status ?? member.status,
                                   skuCount:
-                                    primarySkusByPlan[member.planId]?.length ?? member.skuCount,
+                                    currentSkusByPlan[member.planId]?.length ?? member.skuCount,
                                 }))}
-                                skusByPlan={primarySkusByPlan}
-                                comparedSkusByPlan={comparedSkusByPlan}
-                                comparison={Boolean(inlineComparison)}
+                                skusByPlan={currentSkusByPlan}
                                 loading={liveCategoriesLoading}
                                 failed={liveCategoriesError}
                                 onRetry={refreshLiveAuthority}
                                 approvalRole={liveStageFilter}
-                                pendingValues={
-                                  inlineComparison?.primaryOffset ? undefined : livePendingValues
-                                }
+                                pendingValues={livePendingValues}
                                 editablePlans={
                                   new Set(
                                     record.members
@@ -3839,13 +3581,11 @@ const RegionalApprovalWorkbench: React.FC<{
                           return (
                             <InlineSkuDetails
                               orderType={orderType}
-                              comparison={Boolean(inlineComparison)}
                               loading={liveCategoriesLoading}
-                              comparedSkus={comparedSkusByPlan[record.plan.planId]}
                               unavailable={
-                                !liveCategoriesLoading && !primarySkusByPlan[record.plan.planId]
+                                !liveCategoriesLoading && !currentSkusByPlan[record.plan.planId]
                               }
-                              selectedSkus={primarySkusByPlan[record.plan.planId]}
+                              selectedSkus={currentSkusByPlan[record.plan.planId]}
                               key={
                                 conversationId
                                   ? liveInputKey(

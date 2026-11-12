@@ -14,7 +14,6 @@ import {
 import type { TableColumnProps } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import React, { useEffect, useMemo, useState } from 'react';
-import type { SalesPlanDetailClient } from './hooks/useSalesPlanDetail.ts';
 import {
   adjustmentDimensionName,
   adjustmentDimensionsFrom,
@@ -30,7 +29,10 @@ import {
   type SalesPlanAdjustmentGroup,
   type SalesPlanAdjustmentRecord,
 } from './models/salesPlanAdjustmentModel.ts';
-import { salesPlanSkusMatchVersion } from './models/salesPlanDetailModel.ts';
+import {
+  salesPlanSkusMatchVersion,
+  type SalesPlanDetailClient,
+} from './models/salesPlanDetailModel.ts';
 import { salesPlanVarianceClass } from './models/salesPlanVarianceModel.ts';
 import {
   addExactDecimals,
