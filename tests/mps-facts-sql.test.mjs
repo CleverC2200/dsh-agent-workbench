@@ -108,7 +108,7 @@ test('计划量按实证月份和六维来源键读取 allnum，缺量和重复�
   );
 });
 
-test('shipment SQL reads cutoff average and cumulative inbound snapshots while preserving recent three-day flows', (t) => {
+test('shipment SQL sums daily inbound including reversals, preserves missing flows and reads cutoff snapshots', (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   db.exec(`CREATE TABLE agents_scm_stock_detail_d (
@@ -134,7 +134,7 @@ test('shipment SQL reads cutoff average and cumulative inbound snapshots while p
       day === 22 ? 10 : 999,
       day === 22 ? 30 : 999,
       100,
-      day === 22 ? 210 : 2,
+      day === 22 ? 210 : day === 3 ? -5 : 2,
       day === 22 ? 7.25 : 999,
       888,
     );
@@ -227,14 +227,18 @@ test('shipment SQL reads cutoff average and cumulative inbound snapshots while p
       ],
     ),
     [
-      ['A', 230, 10, 30, 40 / 3, 7.25, 100, 210, 0],
-      ['B', 0, 0, null, 0, 0, 0, 0, 0],
+      ['A', 230, 10, 30, 40 / 3, 7.25, 100, 245, 0],
+      ['B', 0, 0, null, 0, 0, 0, null, 0],
       ['C', null, null, null, null, null, null, null, 1],
     ],
   );
   assert.equal(rows[2].material_name, null);
   const early = query.all({ ...parameters, cutoff: '2026-09-02', recent_start: '2026-09-01' });
   assert.equal(early[0].daily3, null);
+  assert.equal(early[0].inbound, 4);
+  assert.equal(early[1].inbound, null);
+  db.exec("UPDATE agents_scm_stock_detail_d SET produce_in_qty = 0 WHERE material_code = 'B'");
+  assert.equal(query.all(parameters)[1].inbound, 0);
   db.exec(
     "UPDATE agents_scm_stock_detail_d SET total_sales_qty = NULL WHERE material_code = 'A' AND the_date = '2026-09-20'",
   );
