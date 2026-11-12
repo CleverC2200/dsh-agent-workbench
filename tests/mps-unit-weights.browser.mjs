@@ -251,7 +251,7 @@ test('MPS coefficient batches cover the whole product pool and discard cross-bat
     buffer: Buffer.from(
       '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n' +
         Array.from(
-          { length: 101 },
+          { length: 201 },
           (_, index) => `郑州,A${index},产品${index},汤圆,系列,组,,`,
         ).join('\n'),
     ),
@@ -260,10 +260,10 @@ test('MPS coefficient batches cover the whole product pool and discard cross-bat
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
   await showAdvanced(view);
   await view.getByRole('button', { name: '读取件吨系数', exact: true }).click();
-  await expect(view).toContainText('已完整读取101个产品编码、101条渠道系数来源');
+  await expect(view).toContainText('已完整读取201个产品编码、201条渠道系数来源');
   assert.deepEqual(
     batches.map((batch) => batch.length),
-    [100, 1],
+    [200, 1],
   );
   await expect(view.getByLabel('郑州 A0 件吨系数', { exact: true })).toHaveValue('');
   changed = true;

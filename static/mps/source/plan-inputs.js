@@ -5,9 +5,15 @@ import {
   matchTunnelCapacity,
   physicalTunnelKey,
   tunnelCapacityConflicts,
+  latestTransferSnapshot,
 } from './relations.js';
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
+const odmCapacity = (row) =>
+  text(row.belong_base) === 'ODM' ||
+  text(row.workshop ?? row.production_unit) === 'ODM代工' ||
+  text(row.tunnel_no) === 'ODM' ||
+  text(row.production_category) === 'ODM';
 const number = (value) => {
   if (
     typeof value !== 'number' &&
@@ -64,9 +70,18 @@ export function resolveWeightPairs(manual, pairs, weightRead) {
 
 export function buildPlanSources(draft, relations, weightRead, productPairs = []) {
   const sources = relations?.sources;
+  const transferSnapshot = latestTransferSnapshot(sources?.transfers ?? []);
+  const odmCodes = new Set(
+    [
+      ...(sources?.sku_capacity ?? []).filter(odmCapacity).map((row) => text(row.material_code)),
+      ...transferSnapshot.rows
+        .filter((row) => text(row.transfer_tag) === 'ODM代工品')
+        .map((row) => text(row.material_code)),
+    ].filter(Boolean),
+  );
   const issues = [];
   const manual = (draft.resources ?? [])
-    .filter((row) => row.kind === 'tunnel')
+    .filter((row) => row.kind === 'tunnel' && row.base !== 'ODM')
     .map((row) => ({ ...row, dailyTons: number(row.dailyTons) }));
   const facts = [
     ...(draft.products ?? []),
@@ -78,6 +93,7 @@ export function buildPlanSources(draft, relations, weightRead, productPairs = []
   const manualBases = new Set(manual.map((row) => row.base));
   const groups = new Map();
   for (const row of sources?.tunnels ?? []) {
+    if (odmCapacity(row)) continue;
     const base = text(row.belong_base),
       workshop = text(row.production_unit),
       tunnel = text(row.tunnel_no);
@@ -138,6 +154,7 @@ export function buildPlanSources(draft, relations, weightRead, productPairs = []
     )
     .map(({ base, code, resourceId, month }) => ({ base, code, resourceId, month }));
   for (const row of sources?.sku_capacity ?? []) {
+    if (odmCapacity(row)) continue;
     const base = text(row.belong_base),
       code = text(row.material_code),
       tunnel = text(row.tunnel_no),
@@ -153,13 +170,70 @@ export function buildPlanSources(draft, relations, weightRead, productPairs = []
     );
     if (resource) candidates.push({ base, code, resourceId: resource.id });
   }
-  const uniqueCandidates = [
-    ...new Map(candidates.map((row) => [JSON.stringify(row), row])).values(),
+  const allCandidates = [...new Map(candidates.map((row) => [JSON.stringify(row), row])).values()];
+  const uniqueCandidates = allCandidates.filter((row) => !odmCodes.has(row.code));
+  const odmSupplies = [
+    ...new Map(
+      transferSnapshot.rows
+        .filter(
+          (row) =>
+            text(row.transfer_tag) === 'ODM代工品' &&
+            text(row.material_code) &&
+            canonicalBaseName(row.target_base),
+        )
+        .map((row) => {
+          const supply = {
+            supplierId: 'odm:default',
+            base: canonicalBaseName(row.target_base),
+            code: text(row.material_code),
+          };
+          return [JSON.stringify([supply.base, supply.code]), supply];
+        }),
+    ).values(),
   ];
+  const odmConflicts = [];
+  for (const code of odmCodes) {
+    const self = transferSnapshot.rows.filter(
+      (row) => text(row.material_code) === code && text(row.transfer_tag) === '自产品',
+    );
+    const internal = allCandidates.filter((row) => row.code === code);
+    if (self.length || internal.length)
+      odmConflicts.push({
+        code,
+        reason: `SKU ${code}已有ODM来源，同时${[
+          ...(self.length
+            ? [
+                `${[...new Set(self.map((row) => canonicalBaseName(row.target_base)))].join('、')}标注自产品`,
+              ]
+            : []),
+          ...(internal.length
+            ? [`${[...new Set(internal.map((row) => row.base))].join('、')}存在内部产线承接`]
+            : []),
+        ].join('；')}；需确认来源和收货关系`,
+      });
+    const mixed = odmSupplies.filter(
+      (row) =>
+        row.code === code &&
+        transferSnapshot.rows.some(
+          (label) =>
+            text(label.material_code) === code &&
+            canonicalBaseName(label.target_base) === row.base &&
+            text(label.transfer_tag) &&
+            text(label.transfer_tag) !== 'ODM代工品',
+        ),
+    );
+    if (mixed.length)
+      odmConflicts.push({
+        code,
+        reason: `${mixed.map((row) => row.base).join('、')}同一SKU同时存在ODM与其他供给标签，需确认收货关系`,
+      });
+  }
   const bases = [
     ...new Set([
       ...resources.map((row) => row.base),
+      ...odmSupplies.map((row) => row.base),
       ...facts.map((row) => text(row['基地'])).filter(Boolean),
+      ...transferSnapshot.rows.map((row) => canonicalBaseName(row.target_base)).filter(Boolean),
     ]),
   ];
   const fiscalStart = `${Number(draft.month.slice(0, 4)) - (Number(draft.month.slice(5)) <= 7 ? 1 : 0)}-07`;
@@ -196,13 +270,12 @@ export function buildPlanSources(draft, relations, weightRead, productPairs = []
         .map((row) => [JSON.stringify([row.base, row.code]), row]),
     ).values(),
   ];
-  const { weights: unitWeights } = resolveWeightPairs(draft.unitWeights ?? [], pairs, weightRead);
   const transferRoutes = [];
   let pendingRoutes = 0;
   const canonical = (name) => {
     return bases.find((base) => base === name || base === canonicalBaseName(name));
   };
-  for (const row of sources?.transfers ?? []) {
+  for (const row of transferSnapshot.rows) {
     const direction = text(row.transfer_direction);
     const incoming = /^从\s*(.+?)\s*调拨$/.exec(direction);
     const parts = incoming
@@ -221,22 +294,38 @@ export function buildPlanSources(draft, relations, weightRead, productPairs = []
         from,
         to,
         code: text(row.material_code),
-        month: text(row.stat_period) || draft.month,
+        sourceMonth: transferSnapshot.period,
       });
     else pendingRoutes++;
   }
+  const routePairs = transferRoutes.flatMap((row) => [
+    { base: row.from, code: row.code },
+    { base: row.to, code: row.code },
+  ]);
+  const { weights: unitWeights } = resolveWeightPairs(
+    draft.unitWeights ?? [],
+    [...pairs, ...routePairs],
+    weightRead,
+  );
   return {
     resources,
     planCandidates: uniqueCandidates,
+    odmProductCodes: [...odmCodes],
+    odmSupplies,
+    odmConflicts,
     productionDays,
     unitWeights,
     transferRoutes: [...new Map(transferRoutes.map((row) => [JSON.stringify(row), row])).values()],
     planSourceIssues: [...new Set(issues)],
     metadata: {
       resources: resources.length,
+      odmProducts: odmCodes.size,
+      odmReceivingPairs: odmSupplies.length,
+      odmConflicts: odmConflicts.length,
       candidates: uniqueCandidates.length,
       coefficients: unitWeights.length,
       transferRoutes: transferRoutes.length,
+      transferSourcePeriod: transferSnapshot.period,
       pendingRoutes,
       calendar: productionCalendarRule,
       notes: !sources ? ['主数据尚未读取，源产能未装配'] : [],

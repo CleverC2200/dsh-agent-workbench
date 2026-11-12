@@ -250,7 +250,7 @@ test('full fact paging keeps zero and missing base distinct, without a failed sh
       .filter((call) => call.queryId === 'facts.report' && call.parameters.month === currentMonth)
 
       .map((call) => call.parameters.offset),
-    [0, 200],
+    [0],
   );
   await report.getByRole('button', { name: '预览当前明细' }).click();
   await expect(frame.getByRole('dialog').locator('tbody tr').first()).toContainText('0');
@@ -266,11 +266,13 @@ test('refreshing facts keeps an uploaded annual plan marked as a local file', as
     buffer: Buffer.from('月份,大类,数量\n2026-10,汤圆,123'),
   });
   await expect(annual.getByText('本地文件', { exact: true })).toBeVisible();
-  const before = calls.filter((call) => call.queryId === 'facts.report').length;
+  const currentReads = () =>
+    calls.filter(
+      (call) => call.queryId === 'facts.report' && call.parameters.month === currentMonth,
+    ).length;
+  const before = currentReads();
   await report.getByRole('button', { name: '同步', exact: true }).click();
-  await expect
-    .poll(() => calls.filter((call) => call.queryId === 'facts.report').length)
-    .toBe(before + 1);
+  await expect.poll(currentReads).toBe(before + 1);
   await expect(report.getByRole('button', { name: '同步', exact: true })).toBeEnabled();
   await expect(annual.getByText('本地文件', { exact: true })).toBeVisible();
   await expect(annual.getByText('业务数据 · 源数量', { exact: true })).toHaveCount(0);
@@ -423,8 +425,10 @@ test('processing uses fully paged sales-plan rates and one complete fiscal year 
   for (const queryId of ['plan-rate.detail', 'facts.history-annual']) {
     const reads = calls.filter((call) => call.queryId === queryId);
     assert(reads.some((call) => call.parameters.offset === 0));
-    assert(reads.some((call) => call.parameters.offset === 200));
-    assert(reads.every((call) => call.parameters.page_size === 200));
+    if (queryId === 'facts.history-annual') {
+      assert(reads.some((call) => call.parameters.offset === 200));
+      assert(reads.every((call) => call.parameters.page_size === 200));
+    } else assert(reads.every((call) => call.parameters.page_size === 5000));
   }
   const pending = page.waitForEvent('download');
   await frame.getByRole('button', { name: '下载需求拆分', exact: true }).click();

@@ -1,5 +1,6 @@
 import { call } from '../../../business/shared/channel.js';
 import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
+import { sourceDecimal } from './source-money.js';
 
 export const sourceNames = {
   products: '产品清单',
@@ -98,12 +99,7 @@ export function annualRows(rows) {
 export async function readMasterPage(kind, month, page, signal) {
   const { config, query } = client();
   const id = kind + '.detail';
-  const scope =
-    kind === 'annual'
-      ? { months: sourceMonthValues(month) }
-      : kind === 'transfers'
-        ? { period: month }
-        : {};
+  const scope = kind === 'annual' ? { months: sourceMonthValues(month) } : {};
   const count = await query.read(kind + '.count', scope, { signal, requiredColumns: ['total'] });
   const total = number(count.rows[0]?.total);
   if (!Number.isSafeInteger(total) || total < 0) throw Error('数据源返回了无效行数');
@@ -127,7 +123,7 @@ export async function readProducts(signal) {
   const definition = config.queries['products.detail'];
   const result = await query.readAll(
     'products.detail',
-    { page_size: 200, offset: 0 },
+    { page_size: 5000, offset: 0 },
     {
       signal,
       keyFields: definition.grain,
@@ -135,14 +131,45 @@ export async function readProducts(signal) {
       maxRows: 10000,
     },
   );
-  return { rows: productRows(result.rows), raw: result.rows };
+  let prices;
+  try {
+    const definition = config.queries['products.prices'];
+    const source = await query.readAll(
+      'products.prices',
+      { page_size: 5000, offset: 0 },
+      {
+        signal,
+        keyFields: definition.grain,
+        requiredColumns: definition.columns,
+        maxRows: 100000,
+      },
+    );
+    prices = {
+      status: 'ready',
+      sourceTable: 'agents_scm_cust_jxc_ai_daliy_d',
+      configVersion: source.configVersion,
+      rows: source.rows.map((row) => ({
+        产品编码: text(row.material_code),
+        未税到岸单价: sourceDecimal(row.cif_price),
+      })),
+    };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    prices = {
+      status: 'failed',
+      sourceTable: 'agents_scm_cust_jxc_ai_daliy_d',
+      rows: [],
+      error: error.message,
+    };
+  }
+  return { rows: productRows(result.rows), raw: result.rows, prices };
 }
 export async function readAnnual(signal) {
   const { config, query } = client();
   const definition = config.queries['annual.summary'];
   const result = await query.readAll(
     'annual.summary',
-    { page_size: 200, offset: 0 },
+    { page_size: 5000, offset: 0 },
     {
       signal,
       keyFields: definition.grain,
@@ -154,13 +181,34 @@ export async function readAnnual(signal) {
 }
 export async function readCapacityAnnual(months, signal) {
   const { config, query } = client();
-  const definition = config.queries['annual.detail'];
+  const definition = config.queries['annual.capacity.detail'];
+  const scope = { months: [...new Set(months.flatMap(sourceMonthValues))] };
+  const count = async () => {
+    const result = await query.read('annual.count', scope, { signal, requiredColumns: ['total'] });
+    const raw = result.rows[0]?.total;
+    if (
+      result.rows.length !== 1 ||
+      !/^(0|[1-9]\d*)$/.test(String(raw)) ||
+      !Number.isSafeInteger(Number(raw))
+    )
+      throw Error('年度全源计数必须是唯一非负整数');
+    if (Number(raw) > 100000) throw Error('完整计算范围超过上限，请缩小业务范围');
+    return { total: Number(raw), configVersion: result.configVersion };
+  };
+  const before = await count();
   const result = await query.readAll(
-    'annual.detail',
-    { months: [...new Set(months.flatMap(sourceMonthValues))], page_size: 200, offset: 0 },
+    'annual.capacity.detail',
+    { ...scope, page_size: 5000, offset: 0 },
     { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
   );
-  return capacityAnnualRows(result.rows, months);
+  const after = await count();
+  if (before.configVersion !== result.configVersion || before.configVersion !== after.configVersion)
+    throw Error('年度查询配置在读取期间发生变化，请重新读取');
+  if (before.total !== after.total || result.rows.length > before.total)
+    throw Error('读取期间年度源计数变化，请重新查询');
+  const projected = capacityAnnualRows(result.rows, months);
+  projected.excludedRows += before.total - result.rows.length;
+  return projected;
 }
 export function capacityAnnualRows(source, months) {
   const groups = new Map();
@@ -221,7 +269,7 @@ export async function readAnnualDetails(months, base, signal) {
   const definition = config.queries['annual.export'];
   const result = await query.readAll(
     'annual.export',
-    { months: [...new Set(months.flatMap(sourceMonthValues))], base, page_size: 200, offset: 0 },
+    { months: [...new Set(months.flatMap(sourceMonthValues))], base, page_size: 5000, offset: 0 },
     { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
   );
   return result.rows;

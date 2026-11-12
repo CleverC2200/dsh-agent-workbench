@@ -103,8 +103,24 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
       })),
       adjustForecast() {},
     };
+    draft.resourceAssignments = draft.resourceAssignments.filter((row) => row.code !== '0');
+    const relations = {
+      sources: {
+        tunnels: [],
+        sku_capacity: [],
+        transfers: [
+          {
+            stat_period: '2026-11',
+            target_base: '甲',
+            material_code: '0',
+            transfer_tag: 'ODM代工品',
+            transfer_direction: '',
+          },
+        ],
+      },
+    };
     const evaluation = { weights: null, sourceIssues: [] };
-    const expected = window.buildMpsWorkflow(draft, null, shipment, evaluation);
+    const expected = window.buildMpsWorkflow(draft, relations, shipment, evaluation);
     let created = 0;
     let terminated = 0;
     const NativeWorker = window.Worker;
@@ -123,13 +139,13 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
     try {
       const actual = await window.computeWorkflow(
         draft,
-        null,
+        relations,
         shipment,
         evaluation,
         new AbortController().signal,
       );
       const active = new AbortController();
-      const pending = window.computeWorkflow(draft, null, shipment, evaluation, active.signal);
+      const pending = window.computeWorkflow(draft, relations, shipment, evaluation, active.signal);
       active.abort();
       let aborted;
       try {
@@ -139,7 +155,7 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
       }
       const completed = await window.computeWorkflow(
         draft,
-        null,
+        relations,
         shipment,
         evaluation,
         new AbortController().signal,
@@ -154,6 +170,11 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
   assert.equal(
     new Set(result.actual.plan.rows.filter((row) => row.mainPlan > 0).map((row) => row.month)).size,
     3,
+  );
+  assert.ok(
+    result.actual.plan.rows.some(
+      (row) => row.supplyMode === 'odm' && row.odmArrival > 0 && row.mainPlan === 0,
+    ),
   );
   assert.deepEqual(result.actual, result.expected);
   assert.deepEqual(result.completed, result.expected);

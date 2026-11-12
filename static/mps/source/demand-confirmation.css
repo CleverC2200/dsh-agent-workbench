@@ -295,6 +295,14 @@
   overflow-x: auto;
   scrollbar-color: #b6bdc8 transparent;
 }
+.dc-category-demand-main table {
+  width: max-content;
+  min-width: 100%;
+}
+.dc-category-demand-main th,
+.dc-category-demand-main td {
+  white-space: nowrap;
+}
 .dc-category-demand-main th small {
   display: block;
   color: var(--dc-muted);
@@ -763,11 +771,17 @@
   border: 0;
   background: transparent;
 }
+.sp-level-1 th {
+  padding-left: 20px !important;
+}
+.sp-level-2 th {
+  padding-left: 38px !important;
+}
 .sp-sku {
   background: #fafbfc;
 }
 .sp-sku th {
-  padding-left: 20px !important;
+  padding-left: 56px !important;
   font-weight: 400;
 }
 .dc-page .sp-table tbody th {

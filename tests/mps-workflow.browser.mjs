@@ -1,3 +1,4 @@
+import { expandShipmentBase } from './helpers/mps-shipment.mjs';
 import {
   commitNumber as saveNumber,
   adjustCategory,
@@ -9,7 +10,7 @@ import {
 import { expectWorkflowExportValue, workflowExportRows } from './helpers/mps-workflow-export.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
 import { mpsPage } from './helpers/mps-page.mjs';
@@ -153,7 +154,7 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
   await expect(
     detail.getByRole('columnheader', { name: '基地 / 大类 / 物料组 / SKU', exact: true }),
   ).toBeVisible();
-  await expect(detail.locator('tbody tr')).toHaveCount(2);
+  await expect(detail.locator('tbody tr')).toHaveCount(3);
   const zhengzhou = detail
     .getByRole('row')
     .filter({ has: frame.getByRole('button', { name: '基地 · 郑州', exact: true }) });
@@ -217,8 +218,11 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
 async function download(page, view, name) {
   const waiting = page.waitForEvent('download');
   await view.getByRole('button', { name, exact: true }).click();
+  const file = await waiting;
+  if (process.env.MPS_DOWNLOAD_EVIDENCE_DIR)
+    await file.saveAs(`${process.env.MPS_DOWNLOAD_EVIDENCE_DIR}/${name}.csv`);
   const chunks = [];
-  for await (const chunk of await (await waiting).createReadStream()) chunks.push(chunk);
+  for await (const chunk of await file.createReadStream()) chunks.push(chunk);
   return Buffer.concat(chunks).toString('utf8');
 }
 
@@ -604,7 +608,7 @@ test('MPS configuration keeps accepted production days, explicit weight and assi
   await beginAdjustment(frame);
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
   await view.locator('summary').filter({ hasText: '高级配置：' }).click();
-  await expect(view).toContainText('源缺项保留');
+  await expect(view).toContainText('缺源且无人工补充时原临时0路径保留');
   await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('25');
   await commitNumber(view.getByLabel('郑州 2026-12 生产天数', { exact: true }), '15');
   await view.getByRole('button', { name: '郑州 2026-12 恢复默认生产天数', exact: true }).click();
@@ -787,7 +791,7 @@ async function preparedPlan(t, partialHistory = false) {
     '选择发货输入CSV',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-11,郑州,A,产品甲,汤圆,系列,组,0,0,0,0,0,0,0\n2026-11,郑州,B,产品乙,汤圆,系列,组,0,0,0,0,0,0,0',
   );
-  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
+  await expandShipmentBase(frame, '郑州');
   const shipmentEstimate = frame.getByLabel('郑州 A 整月预估发货', { exact: true });
   await beginAdjustment(frame);
   await shipmentEstimate.fill('5');
@@ -837,6 +841,56 @@ async function preparedPlan(t, partialHistory = false) {
   return { page, frame, capacity, constraints };
 }
 
+test('零需求跳过缺失拆分依据，库存缺项逐行导出人工补数，其他SKU继续排产', async (t) => {
+  const { page, frame, capacity, constraints } = await preparedPlan(t, true);
+  await workflowStep(frame, '需求确认');
+  for (const month of ['2026-12', '2027-01', '2027-02', '2027-03'])
+    await adjustCategory(frame, '汤圆', month, '0', '夹具中已确认的真实零需求');
+  await workflowStep(frame, '本月预估发货');
+  await upload(
+    frame,
+    '选择发货输入CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-11,郑州,A,产品甲,汤圆,系列,组,0,0,0,0,0,0,0',
+  );
+  await expandShipmentBase(frame, '郑州');
+  await beginAdjustment(frame);
+  await frame.getByLabel('郑州 A 整月预估发货', { exact: true }).fill('5');
+  await saveAdjustment(frame);
+  await workflowStep(frame, '约束与配置');
+  await beginAdjustment(frame);
+  await commitNumber(constraints.getByLabel('郑州 安全天数', { exact: true }), '0');
+  await workflowStep(frame, '产能评估与缺口');
+  await capacity.getByRole('button', { name: '执行评估', exact: true }).click();
+  await expect(capacity).toContainText('部分可评估，缺项已单列');
+  const csv = await download(page, capacity, '导出求解结果');
+  const book = XLSX.read(csv, { type: 'string', raw: true });
+  const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
+  assert.equal(rows.length, 6);
+  assert.ok(rows.every((row) => row['需求数量'] === '0'));
+  const ready = rows.filter((row) => row['产品编码'] === 'A');
+  assert.ok(Number(ready[0]['内部实际排产量']) > 0);
+  assert.ok(
+    ready.every((row) => row['状态'].startsWith('已评估')),
+    JSON.stringify(ready),
+  );
+  const pending = rows.filter((row) => row['产品编码'] === 'B');
+  assert.ok(
+    pending.every(
+      (row) =>
+        row['内部实际排产量'] === '' &&
+        row['问题分类'].includes('缺期初库存') &&
+        row['需人工补齐'].includes('补齐'),
+    ),
+  );
+  const issuesCsv = await download(page, capacity, '导出分类问题清单');
+  assert.match(issuesCsv, /不阻断当前零需求/);
+  assert.match(issuesCsv, /begin_stock/);
+  await workflowStep(frame, '产销存报告');
+  const report = frame.getByRole('region', { name: '产销存报告', exact: true });
+  assert.equal(await download(page, report, '导出产销存结果'), csv);
+  assert.equal(await download(page, report, '导出分类问题清单'), issuesCsv);
+});
+
 test('MPS effective category and share edits drive the same unconstrained inventory and shared-resource report export', async (t) => {
   const { page, frame, capacity, constraints } = await preparedPlan(t);
   for (const [field, value] of [
@@ -868,6 +922,26 @@ test('MPS effective category and share edits drive the same unconstrained invent
       row['粒度'] === '需求推导产销存参考' && row['月份'] === '2026-12' && row['产品编码'] === 'A',
   );
   assert.equal(Number(a['所需生产量']), 200);
+  const dependencies = rows.filter((row) => row['粒度'] === '需求推导产销存参考');
+  assert.equal(dependencies.length, 6);
+  for (const row of dependencies) {
+    const [nextMonth, aDemand, bDemand] = {
+      '2026-12': ['2027-01', 120, 80],
+      '2027-01': ['2027-02', 180, 120],
+      '2027-02': ['2027-03', 240, 160],
+    }[row['月份']];
+    assert.equal(row['评估月'], row['月份']);
+    assert.equal(row['安全天数来源月'], '2026-12');
+    assert.equal(row['依赖需求月'], nextMonth);
+    assert.equal(Number(row['下月有效需求']), row['产品编码'] === 'A' ? aDemand : bDemand);
+    assert.equal(row['推导状态'], '可计算');
+    assert.equal(row['需求依赖说明'], `${nextMonth}有效需求`);
+  }
+  if (process.env.MPS_REFERENCE_EVIDENCE_DIR)
+    await writeFile(
+      `${process.env.MPS_REFERENCE_EVIDENCE_DIR}/workflow-reference-complete.csv`,
+      reportCsv,
+    );
   const tunnel = rows.find(
     (row) =>
       row['粒度'] === '资源负荷与缺口' && row['月份'] === '2026-12' && row['资源编号'] === 'T',
@@ -894,7 +968,10 @@ test('MPS effective category and share edits drive the same unconstrained invent
   await expect(capacity.getByRole('region', { name: '全年月度负荷率', exact: true })).toBeVisible();
   await expect(capacity.getByRole('region', { name: '缺口明细', exact: true })).toBeVisible();
   const rccpReport = capacity.getByRole('table', { name: '基地大类RCCP', exact: true });
-  await expect(rccpReport.getByRole('columnheader')).toHaveCount(9);
+  await expect(rccpReport.getByRole('columnheader')).toHaveCount(10);
+  await expect(
+    rccpReport.getByRole('columnheader', { name: 'ODM需求（吨，不占产能）', exact: true }),
+  ).toBeVisible();
   await rccpReport.getByRole('button', { name: '郑州 汤圆 系列明细', exact: true }).click();
   await expect(rccpReport.getByRole('table', { name: 'RCCP系列明细', exact: true })).toContainText(
     '产能配额',
@@ -931,9 +1008,9 @@ test('MPS effective category and share edits drive the same unconstrained invent
   const [planA, planB] = ['A', 'B'].map((code) =>
     firstMonth.find((row) => row['产品编码'] === code),
   );
-  assert.ok(Math.abs(Number(planA['生产满足率']) - Number(planB['生产满足率'])) < 1e-8);
-  assert.ok(Number(planA['实际主计划量']) * 0.01 + Number(planB['实际主计划量']) * 0.02 <= 2.5);
-  assert.ok(Number(planA['实际主计划量']) < Number(a['所需生产量']));
+  assert.ok(Math.abs(Number(planA['供应满足率']) - Number(planB['供应满足率'])) < 1e-8);
+  assert.ok(Number(planA['内部实际排产量']) * 0.01 + Number(planB['内部实际排产量']) * 0.02 <= 2.5);
+  assert.ok(Number(planA['内部实际排产量']) < Number(a['所需生产量']));
   const secondA = solved.find((row) => row['月份'] === '2027-01' && row['产品编码'] === 'A');
   assert.equal(Number(secondA['期初库存']), Number(planA['实际期末库存']));
   await workflowStep(frame, '产销存报告');
@@ -997,7 +1074,7 @@ test('MPS effective category and share edits drive the same unconstrained invent
     document.getElementById('root').style.width = '1720px';
   });
   await report
-    .getByRole('button', { name: '郑州 A 2026-12 实际主计划量 求解过程', exact: true })
+    .getByRole('button', { name: '郑州 A 2026-12 内部实际排产量 求解过程', exact: true })
     .click();
   await expect(frame.getByRole('dialog')).toContainText('共同满足率');
   await frame.getByRole('dialog').getByRole('button', { name: '关闭弹窗', exact: true }).click();
@@ -1119,7 +1196,7 @@ test('MPS accepted share undo audits its recomputed effective value separately f
   assert.equal(entry.value, 0.4);
 });
 
-test('MPS category undo audits the current inherited quantity after an upstream adjustment changes', async (t) => {
+test('MPS category undo keeps the independent baseline missing after an earlier effective adjustment changes', async (t) => {
   const { page, frame } = await mpsPage(t, config, (query) => {
     if (!query.queryId.startsWith('annual-pool.')) return emptySource(query);
     return {
@@ -1177,12 +1254,12 @@ test('MPS category undo audits the current inherited quantity after an upstream 
     .getByRole('region', { name: '大类预估需求数量', exact: true })
     .getByRole('row')
     .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
-  await expect(row.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('600');
+  await expect(row.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('待补');
   const audit = frame
     .getByRole('region', { name: '大类调整记录', exact: true })
     .locator('tbody tr')
     .last();
-  await expect(audit.locator('td').nth(3)).toHaveText('600');
+  await expect(audit.locator('td').nth(3)).toHaveText('-');
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -1191,13 +1268,13 @@ test('MPS category undo audits the current inherited quantity after an upstream 
           .value;
       }),
     )
-    .toBe(600);
+    .toBe(null);
   const entry = await page.evaluate(() => {
     const state = window.readView().localDrafts;
     return state.drafts.find((draft) => draft.id === state.selected).adjustments.history.at(-1);
   });
   assert.equal(entry.systemValue, null);
-  assert.equal(entry.value, 600);
+  assert.equal(entry.value, null);
 });
 
 test('MPS business-rule evidence produces a real conflict, keeps preview reversible and saves structured fields', async (t) => {
@@ -1405,6 +1482,9 @@ test('MPS Tab5 reuses a base policy across three months while SKU inventory vers
   for (const row of exported) {
     const index = ['2026-12', '2027-01', '2027-02'].indexOf(row['月份']);
     assert.equal(Number(row['有效安全天数']), 10);
+    assert.equal(row['依赖需求月'], ['2027-01', '2027-02', '2027-03'][index]);
+    assert.equal(Number(row['下月有效需求']), [100, 150, 200][index]);
+    assert.equal(row['推导状态'], '可计算');
     assert.equal(Number(row['下月自然天数']), [31, 28, 31][index]);
     assert.ok(
       Math.abs(Number(row['推导目标库存']) - [1000 / 31, 1500 / 28, 2000 / 31][index]) < 1e-8,
@@ -1629,10 +1709,10 @@ test('MPS processing compares both forecast months and persists fixed quantities
 
 test('Tab5 uses one source final turnover day per base-SKU and persists manual supplements only for missing sources', async (t) => {
   const source = {
-    target_month: '2027-01',
+    target_month: '2026-12',
     belong_base: '郑州',
     material_code: 'A',
-    inventory_version: '滚动',
+    inventory_version: '月初',
     final_target_inventory: 120,
     avg_daily_planned_demand: 10,
     final_target_turnover_days: 27,
@@ -1647,7 +1727,13 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
   const { page, frame } = await mpsPage(t, config, ({ queryId }) =>
     queryId.startsWith('inventory-targets.')
       ? {
-          rows: queryId.endsWith('.count') ? [{ total: 1 }] : [source],
+          rows: queryId.endsWith('.count')
+            ? [{ total: 3 }]
+            : [
+                source,
+                { ...source, target_month: '2027-01', final_target_turnover_days: 30 },
+                { ...source, target_month: '2027-02', final_target_turnover_days: 40 },
+              ],
           returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,
           configVersion: 'turnover-days-source',
         }
@@ -1670,6 +1756,59 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
   const pending = view.getByRole('table', { name: '目标周转天数待补', exact: true });
   await expect(pending.locator('tbody tr')).toHaveCount(1);
   await expect(pending).toContainText('产品乙');
+  await expect(view).toContainText('安全天数来源：2026-12 月初版，供本次三个评估月共用');
+  if (process.env.MPS_TURNOVER_SCREENSHOT)
+    await page.screenshot({ path: process.env.MPS_TURNOVER_SCREENSHOT, fullPage: true });
+  const referenceRows = async (label) => {
+    await workflowStep(frame, '产能评估与缺口');
+    const capacity = frame.getByRole('region', { name: '产能评估与缺口', exact: true });
+    const csv = await download(page, capacity, '下载需求推导参考');
+    const sheet = XLSX.read(csv, { type: 'string', raw: true }).Sheets.Sheet1;
+    const headers = XLSX.utils.sheet_to_json(sheet, { header: 1 })[0];
+    for (const column of [
+      '评估月',
+      '安全天数来源月',
+      '安全天数来源版本',
+      '依赖需求月',
+      '下月有效需求',
+      '推导状态',
+      '需求依赖说明',
+    ])
+      assert.ok(headers.includes(column), `workflow reference header missing ${column}`);
+    const rows = XLSX.utils
+      .sheet_to_json(sheet, { defval: '' })
+      .filter((row) => row['粒度'] === '需求推导产销存参考');
+    assert.equal(rows.length, 6);
+    for (const row of rows) {
+      assert.equal(row['评估月'], row['月份']);
+      assert.equal(row['安全天数来源月'], '2026-12');
+      assert.equal(row['安全天数来源版本'], '月初');
+      assert.equal(
+        row['依赖需求月'],
+        {
+          '2026-12': '2027-01',
+          '2027-01': '2027-02',
+          '2027-02': '2027-03',
+        }[row['月份']],
+      );
+      assert.equal(row['下月有效需求'], '');
+      const zero = label === 'zero' && row['产品编码'] === 'B';
+      assert.equal(row['推导状态'], zero ? '可计算' : '缺推导依赖');
+      assert.equal(
+        row['需求依赖说明'],
+        zero ? '有效安全天数为0，无需下月需求' : `${row['依赖需求月']}有效需求`,
+      );
+      if (zero) assert.equal(row['目标库存'], '0');
+    }
+    if (process.env.MPS_REFERENCE_EVIDENCE_DIR)
+      await writeFile(
+        `${process.env.MPS_REFERENCE_EVIDENCE_DIR}/workflow-reference-${label}.csv`,
+        csv,
+      );
+    await workflowStep(frame, '约束与配置');
+    await beginAdjustment(frame);
+  };
+  await referenceRows('missing');
   const field = view.getByLabel('郑州 B 补充目标周转天数', { exact: true });
   await expect(field).toHaveValue('');
   let book = XLSX.read(await download(page, view, '下载三个月完整目标库存'), {
@@ -1677,6 +1816,26 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
     raw: true,
   });
   let rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  assert.deepEqual(
+    [...new Set(rows.map((row) => row['评估月']))],
+    ['2026-12', '2027-01', '2027-02'],
+  );
+  assert.ok(
+    rows.every((row) => row['安全天数来源月'] === '2026-12' && row['安全天数来源版本'] === '月初'),
+  );
+  assert.deepEqual(
+    [...new Set(rows.map((row) => row['依赖需求月']))],
+    ['2027-01', '2027-02', '2027-03'],
+  );
+  assert.ok(
+    rows
+      .filter((row) => row['产品编码'] === 'A')
+      .every(
+        (row) =>
+          row['推导状态'] === '缺推导依赖' && row['推导依赖缺项'].includes(row['依赖需求月']),
+      ),
+  );
+
   assert.ok(
     rows
       .filter((row) => row['产品编码'] === 'A')
@@ -1686,6 +1845,21 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
   );
   assert.ok(
     rows.filter((row) => row['产品编码'] === 'B').every((row) => row['有效安全天数'] === undefined),
+  );
+  const sourceBook = XLSX.read(await download(page, view, '下载完整目标源记录'), {
+    type: 'string',
+    raw: true,
+  });
+  const sourceRows = XLSX.utils.sheet_to_json(sourceBook.Sheets[sourceBook.SheetNames[0]]);
+  assert.equal(sourceRows.length, 3);
+  assert.deepEqual(
+    sourceRows.map((row) => Number(row['源最终目标周转天数'])),
+    [27, 30, 40],
+  );
+  assert.equal(
+    sourceRows.filter((row) => row['安全天数使用状态'] === '选定来源月及版本，按基地SKU匹配')
+      .length,
+    1,
   );
   await field.fill('25');
   await field.press('Tab');
@@ -1730,6 +1904,7 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
   assert.ok(
     rows.filter((row) => row['产品编码'] === 'B').every((row) => row['推导目标库存'] === '0'),
   );
+  await referenceRows('zero');
   await commitNumber(field, '');
   await expect(pending).toContainText('缺输入');
 });
@@ -1770,4 +1945,109 @@ test('evaluation explains cancellation when a saved input changes during a held 
   release();
   await expect(capacity.getByRole('alert')).toContainText('本轮评估已取消');
   await expect(capacity.getByRole('button', { name: '导出求解结果', exact: true })).toBeDisabled();
+});
+
+test('processed demand totals retain known 15 and one pending item, follow filters and download the same scope', async (t) => {
+  const { page, frame } = await workflowPage(t);
+  await version(frame, '2026-12');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,甲类,系列,组,,\n郑州,B,产品乙,乙类,系列,组,,\n华东,C,产品丙,丙类,系列,组,,',
+  );
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,产品甲,甲类,系列,组,10,10\n2026-12,郑州,B,产品乙,乙类,系列,组,,\n2026-12,华东,C,产品丙,丙类,系列,组,5,5',
+  );
+  await upload(
+    frame,
+    '设置上一财年发货夹具',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,甲类,系列,组,10\n2025-12,华东,C,产品丙,丙类,系列,组,5',
+  );
+  await upload(
+    frame,
+    '选择模型预测CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2026-12,郑州,A,产品甲,甲类,系列,组,10\n2026-12,华东,C,产品丙,丙类,系列,组,5',
+  );
+  await workflowStep(frame, '需求加工与收敛');
+  const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
+  await beginAdjustment(view);
+  await view.getByLabel('甲类 2026-12 需求数量', { exact: true }).fill('10');
+  await view.getByLabel('丙类 2026-12 需求数量', { exact: true }).fill('5');
+  await view.getByLabel('批量调整原因').fill('已知小计核对');
+  await saveAdjustment(view);
+  const detail = view.getByRole('table', { name: '加工后的需求明细', exact: true });
+  const total = detail.locator('tbody tr').first();
+  await expect(total.getByRole('rowheader')).toHaveText('全国合计');
+  for (const index of [0, 4, 5]) {
+    await expect(total.getByRole('cell').nth(index)).toContainText('15');
+    await expect(total.getByRole('cell').nth(index)).toContainText('已知小计 · 1项待补');
+  }
+  await expect(total.getByRole('cell').nth(8)).toContainText('待补');
+  if (process.env.MPS07_EVIDENCE_DIR) {
+    await total.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/known-total.png` });
+    await page.evaluate(() => {
+      document.getElementById('root').style.width = '1120px';
+    });
+    await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/known-total-narrow.png` });
+    await page.evaluate(() => {
+      document.getElementById('root').style.width = '1720px';
+    });
+  }
+  const missing = view.getByRole('table', { name: '加工需求缺项报告', exact: true });
+  await expect(
+    missing.getByRole('row').filter({ hasText: '本期销售提报数量' }).first(),
+  ).toContainText('郑州');
+  await expect(
+    missing.getByRole('row').filter({ hasText: '本期销售提报数量' }).first(),
+  ).toContainText('B');
+  await expect(missing).toContainText('2026-12');
+  await view.getByLabel('基地筛选').selectOption('华东');
+  await expect(total.getByRole('rowheader')).toHaveText('当前范围合计');
+  await expect(total.getByRole('cell').nth(0)).toHaveText('5');
+  await expect(total.getByRole('cell').nth(5)).toHaveText('5');
+  const csv = await download(page, view, '下载当前范围需求');
+  const exported = XLSX.utils.sheet_to_json(
+    XLSX.read(csv, { type: 'string', raw: true }).Sheets.Sheet1,
+  );
+  const summary = exported.find(
+    (row) => row['粒度'] === '当前范围合计' && row['月份'] === '2026-12',
+  );
+  assert.equal(summary['有效需求已知小计'], '5');
+  assert.equal(summary['有效需求待补数'], '0');
+  assert.ok(exported.filter((row) => row['产品编码']).every((row) => row['产品编码'] === 'C'));
+  if (process.env.MPS07_EVIDENCE_DIR)
+    await writeFile(`${process.env.MPS07_EVIDENCE_DIR}/current-scope.csv`, csv);
+  await beginAdjustment(view);
+  await view.getByLabel('丙类 2026-12 需求数量', { exact: true }).fill('7');
+  await view.getByLabel('批量调整原因').fill('当前筛选内复核调整');
+  await saveAdjustment(view);
+  await expect(total.getByRole('cell').nth(5)).toHaveText('7');
+  await view.getByLabel('基地筛选').selectOption('');
+  await view.getByLabel('搜索当前步骤').fill('B');
+  await expect(total.getByRole('cell').nth(0)).toHaveText('待补');
+  await expect(total.getByRole('cell').nth(5)).toHaveText('待补');
+  await expect(total.getByRole('cell').nth(5)).not.toContainText('0');
+  if (process.env.MPS07_EVIDENCE_DIR) {
+    await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/all-missing.png` });
+  }
+});
+
+test('new inventory source defaults switch on December 20/21 while explicit historical evaluations stay selected', async (t) => {
+  const { page, frame } = await mpsPage(t, config, emptySource);
+  await page.clock.install({ time: new Date(2026, 11, 20, 12) });
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
+  await expect(dialog.getByLabel('评估月份', { exact: true })).toHaveValue('2026-12');
+  await dialog.getByLabel('评估月份', { exact: true }).fill('2026-04');
+  await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await expect(frame.getByLabel('评估版本选择')).toContainText('2026-04');
+  const selected = await frame.getByLabel('评估版本选择').inputValue();
+  await page.clock.setFixedTime(new Date(2026, 11, 21, 12));
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  await expect(dialog.getByLabel('评估月份', { exact: true })).toHaveValue('2027-01');
+  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(frame.getByLabel('评估版本选择')).toHaveValue(selected);
 });
