@@ -1287,7 +1287,7 @@ for (const boundary of ['Session', 'identity']) {
     await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
     const frame = page.frameLocator('iframe');
     await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-    await expect(frame.locator('.sp-count')).toHaveText(Array(5).fill('0 个单品'));
+    await expect(frame.locator('.sp-count')).toHaveText(Array(6).fill('0 个单品'));
     await frame.locator('body').evaluate(() => {
       const original = File.prototype.text;
       File.prototype.text = function () {
@@ -1318,7 +1318,7 @@ for (const boundary of ['Session', 'identity']) {
     await frame.locator('body').evaluate(() => window.releaseShipmentFile());
     await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
     await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-    await expect(frame.locator('.sp-count')).toHaveText(Array(5).fill('0 个单品'));
+    await expect(frame.locator('.sp-count')).toHaveText(Array(6).fill('0 个单品'));
     await expect(frame.getByRole('region', { name: '发货本地核对' })).not.toContainText(
       'old-identity.csv',
     );

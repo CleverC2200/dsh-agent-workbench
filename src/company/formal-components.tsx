@@ -83,6 +83,7 @@ export function GeaHomeHero({
 export function ConversationToolbar({
   view,
   onViewChange,
+  viewDisabled = false,
   onHistory,
   onNewConversation,
   error,
@@ -96,6 +97,7 @@ export function ConversationToolbar({
 }: {
   view: ConversationView;
   onViewChange: (view: ConversationView) => void;
+  viewDisabled?: boolean;
   onHistory: () => void;
   onNewConversation: () => void;
   error: string;
@@ -147,7 +149,13 @@ export function ConversationToolbar({
   ];
   return (
     <div className="gea-conversation-toolbar" role="toolbar" aria-label="对话区视图与会话操作">
-      <div className="gea-conversation-view-switch" role="group" aria-label="区域显示方式">
+      <div
+        className="gea-conversation-view-switch"
+        role="group"
+        aria-label="区域显示方式"
+        aria-hidden={(viewDisabled && view === 'center') || undefined}
+        style={viewDisabled && view === 'center' ? { visibility: 'hidden' } : undefined}
+      >
         {choices.map((choice) => (
           <button
             key={choice.view}
@@ -155,6 +163,7 @@ export function ConversationToolbar({
             aria-label={choice.label}
             title={choice.label}
             aria-pressed={view === choice.view}
+            disabled={viewDisabled}
             onClick={() => onViewChange(choice.view)}
           >
             <svg
