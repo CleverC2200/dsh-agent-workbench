@@ -17,7 +17,7 @@ const dailyOnly = 'seen.header_present IS NULL';
 // Daily and hourly snapshots publish the same OMS event fields. Keep the newer
 // hourly value; recover a missing value only from an unambiguous exact header.
 export const orderEventRowsSql = `SELECT h.cust_code,h.cust_order_no,h.belong_base,
-  h.region_name,h.province_region_name,h.cust_name,h.header_addtime,
+  h.pickup_point,h.region_name,h.province_region_name,h.cust_name,h.header_addtime,
   h.requireddeliverytime,h.orderstatus,
   COALESCE(h.canceltime,d.canceltime) AS canceltime,
   COALESCE(h.custchangetime,d.custchangetime) AS custchangetime
@@ -33,12 +33,12 @@ export const orderEventRowsSql = `SELECT h.cust_code,h.cust_order_no,h.belong_ba
   WHERE (:gea_p900='' OR h.belong_base=:gea_p900)
   UNION ALL
   SELECT d.cust_code,d.cust_order_no,d.belong_base,
-    d.region_name,d.province_region_name,d.cust_name,d.header_addtime,
+    d.pickup_point,d.region_name,d.province_region_name,d.cust_name,d.header_addtime,
     d.requireddeliverytime,d.orderstatus,d.canceltime,d.custchangetime
   FROM ${dailySource}
   WHERE (:gea_p900='' OR d.belong_base=:gea_p900) AND ${dailyOnly}`;
 
-const orderHeaders = `SELECT cust_code,cust_order_no,
+const orderHeaders = `SELECT cust_code,cust_order_no,MAX(pickup_point) AS pickup_point,
   MAX(region_name) AS region,MAX(province_region_name) AS province,MAX(cust_name) AS name,
   MIN(header_addtime) AS created,MAX(requireddeliverytime) AS delivery,
   CASE WHEN COUNT(header_addtime)=COUNT(*)
@@ -54,14 +54,14 @@ const orderHeaders = `SELECT cust_code,cust_order_no,
   WHERE (:gea_p900='' OR belong_base=:gea_p900)
   GROUP BY cust_code,cust_order_no`;
 
-const lockedHeaders = `SELECT h.cust_code,h.cust_order_no,h.name,h.region,h.province,h.created,h.delivery,
+const lockedHeaders = `SELECT h.cust_code,h.cust_order_no,h.pickup_point,h.name,h.region,h.province,h.created,h.delivery,
   h.invalid_header,h.invalid_lock,h.status,h.cancelled,h.changed,h.cancel_conflict,
   CASE WHEN delivery<=created + INTERVAL '7' DAY THEN created + INTERVAL '12' HOUR
     ELSE delivery - INTERVAL '7' DAY END AS locked
   FROM (${orderHeaders}) h
   WHERE h.created>=:gea_p1 AND h.created<:gea_p2`;
 
-const events = `SELECT cust_code,cust_order_no,name,region,province,
+const events = `SELECT cust_code,cust_order_no,pickup_point,name,region,province,
   CASE WHEN status=90 AND cancelled<:gea_p2 AND cancelled<created + INTERVAL '12' HOUR THEN 0 ELSE 1 END AS cancel_denominator,
   CASE WHEN status=90 AND cancelled<:gea_p2 AND cancelled>=locked AND cancelled>=created + INTERVAL '12' HOUR THEN 1 ELSE 0 END AS cancel_numerator,
   CASE WHEN status<>90 OR cancelled>=:gea_p2 THEN 1 ELSE 0 END AS change_denominator,
@@ -88,7 +88,7 @@ export const changesSql =
   SUM(CASE WHEN invalid_${field}=0 THEN ${field}_denominator ELSE 0 END) AS sample_denominator,
   SUM(CASE WHEN invalid_${field}=0 THEN 1 ELSE 0 END) AS sample_records,
   COUNT(*) AS records,SUM(invalid_${field}) AS invalid
-  FROM change_events order_events GROUP BY region,province`,
+  FROM change_events order_events ${field === 'change' ? "WHERE pickup_point IN ('01','02','03','04','37')" : ''} GROUP BY region,province`,
     )
     .join(' UNION ALL ');
 
@@ -96,7 +96,7 @@ export const customersSql = `SELECT region,province,cust_code AS customer,MAX(na
   CASE WHEN SUM(invalid_change)=0 THEN SUM(change_numerator) END AS numerator,
   CASE WHEN SUM(invalid_change)=0 THEN SUM(change_denominator) END AS denominator,
   COUNT(*) AS records,SUM(invalid_change) AS invalid
-  FROM (${events}) order_events GROUP BY region,province,cust_code`;
+  FROM (${events}) order_events WHERE pickup_point IN ('01','02','03','04','37') GROUP BY region,province,cust_code`;
 
 // Collapse the latest header observation before joining any product quantities.
 export const traceHeadersSql = `SELECT t.executeorderno,t.cust_code,
