@@ -235,6 +235,7 @@ test('求解只读取最新调拨快照，三个需求月共用并拒绝混合�
   const periods = [];
   let mixedPeriods = false;
   let changed = false;
+  let latestPeriod = '2026-11';
   const execute = async (_request, { queryId, values }) => {
     const transfer = queryId.startsWith('transfers.');
     if (transfer) periods.push(values.period);
@@ -244,7 +245,7 @@ test('求解只读取最新调拨快照，三个需求月共用并拒绝混合�
             ...Object.fromEntries(
               config.queries['transfers.detail'].columns.map((column) => [column, null]),
             ),
-            stat_period: '2026-11',
+            stat_period: latestPeriod,
             material_code: 'A',
             transfer_direction: '甲→乙',
           },
@@ -267,6 +268,18 @@ test('求解只读取最新调拨快照，三个需求月共用并拒绝混合�
   assert.ok(periods.every((period) => period === undefined));
   assert.match(config.queries['transfers.detail'].request.sql, /MAX\(stat_period\)/);
   assert.match(config.queries['transfers.count'].request.sql, /MAX\(stat_period\)/);
+  latestPeriod = '2026-11-26';
+  const daily = await readPlanRelations(config, execute, months);
+  assert.equal(daily.transferSourcePeriod, latestPeriod);
+  assert.equal(daily.sources.transfers[0].stat_period, latestPeriod);
+  latestPeriod = '2026-02-30';
+  await assert.rejects(readPlanRelations(config, execute, months), /调拨.*来源日期/);
+  latestPeriod = '2024-02-29';
+  assert.equal(
+    (await readPlanRelations(config, execute, months)).transferSourcePeriod,
+    latestPeriod,
+  );
+  latestPeriod = '2026-11-26';
   mixedPeriods = true;
   await assert.rejects(readPlanRelations(config, execute, months), /调拨.*来源日期/);
   mixedPeriods = false;

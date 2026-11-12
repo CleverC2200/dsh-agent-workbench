@@ -111,9 +111,11 @@ const continued = {
   'return-continued-skipped': [9, 'area', 2],
 }[comparison];
 const approvalRole = comparison?.startsWith('single-') ? 'category' : continued?.[1] ?? (comparison === 'return-unavailable' ? 'province' : 'region');
+if(comparison==='history-correction')for(const plan of sourcePlans)plan.orderType='Z';
 if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50';
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 if(comparison?.startsWith('sku-review')) for(const plan of sourcePlans) plan.skuCount=2;
+if(comparison==='mixed-terminal')sourcePlans[1].status=5;
 const plans=continued?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1).map(plan=>({...plan,status:continued[0]})):['returned','return-unavailable'].includes(comparison)?(comparison==='return-unavailable'?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1):sourcePlans).map(plan=>({...plan,status:comparison==='return-unavailable'?8:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 if(comparison?.startsWith('single-'))for(const plan of plans)plan.status=4;
 window.sentDirect=[];
@@ -121,6 +123,7 @@ const skuFor=(versionId)=>{
   const base=baseSkuFor(versionId);
   if(continued) return {...base,regionConfirmedQty:'10',regionConfirmedAmount:'100',provinceConfirmedQty:'15',provinceConfirmedAmount:'150',areaConfirmedQty:'25',areaConfirmedAmount:'250'};
   if(comparison==='integer')return {...base,qty:'501.600',amt:'5016.00'};
+  if(comparison==='single-integer-category')return {...base,baseQty:'2480.000',amtBase:'24800.00',qty:'7000.000',amt:'70000.00'};
   if(!['inline','missing'].includes(comparison)) return base;
   const old=versionId.includes('previous'),older=versionId.includes('older');
   const prefix=versionId.slice(0,2);
@@ -131,19 +134,19 @@ const skuFor=(versionId)=>{
 const skusFor=versionId=>comparison?.startsWith('sku-review')?[skuFor(versionId),{...skuFor(versionId),skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
 window.sentReturns=[];
 window.savedDrafts=[];
-if (['history','forbidden','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
+if (['history','history-correction','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
 const readCalls=window.readCalls=[];
 const writes=window.writes=[];
-const versionsFor=(plan)=>['history','forbidden','inline','missing'].includes(comparison) && !(comparison==='missing'&&plan.planId==='p2')
+const versionsFor=(plan)=>['history','history-correction','inline','missing'].includes(comparison) && !(comparison==='missing'&&plan.planId==='p2')
   ? [{...plan,id:plan.versionId,seq:3,effective:true},{...plan,id:plan.versionId+'-previous',seq:2,effective:false},{...plan,id:plan.versionId+'-older',seq:1,effective:false}]
   : [{...plan,id:plan.versionId,effective:true}];
 const forbidden=async()=>{writes.push('write');throw Error('LOCAL_RENDER_ACTION_FORBIDDEN')};
 const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
-  list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
-  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:skusFor(plan.versionId),versions:versionsFor(plan),logs:continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
-  versions:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
+  list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1}}},
+  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
+  versions:{invoke:async({planId})=>{readCalls.push({history:planId});const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
     readCalls.push({review:planId});
     if(comparison==='sku-review-failure') throw Error('fixture failure');
@@ -152,18 +155,18 @@ const host={salesPlan:{
       rows:[{skuCode:'1001',shipments:['1.5','10','20']},{skuCode:'2002',shipments:['2','3','4']}]};
   }},
   versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId)}},
-  draft:{invoke:async(q)=>{if(window.sentDirect.length){if(comparison==='single-dms-stale-second')return {draft:null,stale:true};if(comparison==='single-dms-unreadable-second')throw Error('fixture draft read failed');}const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
+  draft:{invoke:async(q)=>{if(window.autoBlock==='draft')return {draft:null,stale:true};if(window.sentDirect.length){if(comparison==='single-dms-stale-second')return {draft:null,stale:true};if(comparison==='single-dms-unreadable-second')throw Error('fixture draft read failed');}const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
   logs:{invoke:async()=>[]},compare:{invoke:async({planId,fromVersionId,toVersionId})=>{
     readCalls.push({planId,fromVersionId,toVersionId});
     if(comparison==='forbidden')throw Object.assign(Error('forbidden'),{status:403});
     return [{skuCode:'1001',changeType:'UPDATED',before:{...skuFor(fromVersionId),qty:'10',amt:'100'},after:skuFor(toVersionId),qtyDelta:'10',amountDelta:'100'}];
-  }},action:{invoke:async(command)=>{if(comparison?.startsWith('single-')){window.sentDirect.push(command);const status=comparison==='single-permission'?403:comparison==='single-conflict'?409:502;const error=comparison.startsWith('single-dms')?'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报':comparison==='single-permission'?'当前用户没有品类审批权限':comparison==='single-conflict'?'计划版本已变化，请刷新后重试':'GEA_HTTP_502';throw new BackendHttpError({method:'POST',path:'/sales-plan/plans/versions/'+command.versionId+'/actions',status,body:{error:window.directRejection??error,details:{...(comparison.startsWith('single-dms')?{retryable:false,upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED'}:{}),requestId:'hidden-error-reference',traceId:'hidden-trace-reference'}}});}if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
+  }},action:{invoke:async(command)=>{if(comparison?.startsWith('single-')){window.sentDirect.push(command);const status=comparison==='single-permission'?403:comparison==='single-conflict'?409:502;const error=comparison.startsWith('single-dms')?'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报':comparison==='single-permission'?'当前用户没有品类审批权限':comparison==='single-conflict'?'计划版本已变化，请刷新后重试':'GEA_HTTP_502';throw new BackendHttpError({method:'POST',path:'/sales-plan/plans/versions/'+command.versionId+'/actions',status,body:{error:window.directRejection??error,details:{...(comparison.startsWith('single-dms')?{retryable:false,upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED'}:{}),requestId:'hidden-error-reference',traceId:'hidden-trace-reference'}}});}if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);if(window.returnUnknown && command.planId==='p1')throw new TypeError('offline');return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
 },modelInference:{invoke:forbidden}};
 const root=createRoot(document.getElementById('root'));
-window.restoreIntegerInput=async(mode)=>{
- const row=plans[0],detail=await host.salesPlan.detail.invoke({planId:row.planId});
- if(mode==='draft')drafts.set(row.planId+':'+row.versionId,{role:'region',adjustments:[{skuCode:'1001',adjustQty:'481.600'}]});
- root.render(<WorkbenchHostProvider value={host}><InlineSkuDetails row={row} detail={detail} canEdit approvalRole="region" t={i18n.t.bind(i18n)} initialInputValues={mode==='input'?{'1001':'501.600'}:undefined}/></WorkbenchHostProvider>);
+window.restoreIntegerInput=async(mode,role='region')=>{
+ const row={...plans[0],status:role==='category'?4:plans[0].status},loaded=await host.salesPlan.detail.invoke({planId:row.planId}),detail={...loaded,currentVersion:{...loaded.currentVersion,status:row.status}};
+ if(mode==='draft')drafts.set(row.planId+':'+row.versionId,{role,adjustments:[{skuCode:'1001',adjustQty:'481.600'}]});
+ root.render(<WorkbenchHostProvider value={host}><InlineSkuDetails row={row} detail={detail} canEdit approvalRole={role} t={i18n.t.bind(i18n)} initialInputValues={mode==='input'?{'1001':'501.600'}:undefined} draftPatch={mode==='patch'?{at:1,quantity:'501.600'}:undefined}/></WorkbenchHostProvider>);
 };
 root.render(<WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={i18n.t.bind(i18n)} onContextChange={()=>{}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
 `,
@@ -297,15 +300,6 @@ test(
           height: style.height,
         };
       });
-    const version = page.getByTestId('regional-approval-version-compare');
-    await expect.poll(async () => (await state(version)).background).toBe('rgb(255, 255, 255)');
-    assert.deepEqual(await state(version), {
-      background: 'rgb(255, 255, 255)',
-      color: 'rgb(85, 93, 104)',
-      border: 'rgb(217, 221, 227)',
-      radius: '6px',
-      height: '36px',
-    });
     const toolbar = page.getByTestId('regional-approval-toolbar-actions');
     const filter = toolbar.getByRole('button', { name: '筛选条件' });
     assert.deepEqual(await state(filter), {
@@ -668,98 +662,53 @@ test('collapsing the flow lane keeps filters and inline edits', { timeout: 30000
   await expect(area).toContainText('华南大区');
 });
 
-test('版本选择并入顶栏同一行，窄窗口横向滚动且不出现原明细弹窗', { timeout: 30000 }, async (t) => {
-  const { page } = await openWorkbench(t, false, 'history');
-  const button = page.getByRole('button', { name: '版本对比', exact: true });
-  await button.click();
-  const header = page.locator('main > header');
-  await expect(header.getByRole('combobox', { name: '版本①', exact: true })).toBeVisible();
-  await expect(header.getByRole('combobox', { name: '版本②', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '版本明细', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  for (const width of [1000, 694]) {
-    await page.setViewportSize({ width, height: 820 });
-    const layout = await header.evaluate((el) => {
-      const controls = [
-        el.querySelector('[data-testid="regional-approval-version-compare"]'),
-        ...el.querySelectorAll('[role="combobox"]'),
-      ];
-      return {
-        height: el.getBoundingClientRect().height,
-        centers: controls.map((node) => {
-          const r = node.getBoundingClientRect();
-          return r.y + r.height / 2;
-        }),
-        mainFits: el.parentElement.scrollWidth === el.parentElement.clientWidth,
-      };
-    });
-    assert.ok(
-      Math.max(...layout.centers) - Math.min(...layout.centers) < 2,
-      JSON.stringify(layout),
+for (const orderType of ['M', 'Z']) {
+  for (const grouped of [false, true]) {
+    test(
+      `销售预测仅展示当前版本且不读取历史对比: ${orderType} ${grouped ? '组织汇总' : '单计划'}`,
+      { timeout: 30000 },
+      async (t) => {
+        const { page, groupBox } = await openWorkbench(
+          t,
+          grouped,
+          orderType === 'Z' ? 'history-correction' : 'history',
+        );
+        if (orderType === 'Z') await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+        await expect(page.getByRole('button', { name: '版本对比', exact: true })).toHaveCount(0);
+        await expect(page.getByRole('combobox', { name: /版本[①②]/ })).toHaveCount(0);
+        const queue = grouped
+          ? groupBox.locator('xpath=ancestor::tr')
+          : page.locator('tbody tr').filter({ hasText: '宝阳销售组' }).first();
+        await queue.getByRole('button').first().click();
+        const region = grouped
+          ? page.getByTestId('regional-approval-group-sku-summary').first().getByRole('region')
+          : page.getByRole('region', { name: 'SKU 编码 / 物料描述', exact: true }).last();
+        await expect(region.getByRole('row').filter({ hasText: '1001' })).toContainText(
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+        );
+        await expect(region.getByRole('columnheader')).toHaveText([
+          'SKU 编码 / 物料描述',
+          '月计划',
+          '确认计划量',
+        ]);
+        assert.ok(
+          (await page.evaluate(() => window.readCalls)).every(
+            (call) =>
+              !call.fromVersionId &&
+              !call.history &&
+              (!call.versionId || ['v1', 'v2', 'v3'].includes(call.versionId)),
+          ),
+        );
+      },
     );
-    assert.ok(layout.height <= 64, JSON.stringify(layout));
-    assert.equal(layout.mainFits, true);
-    if (process.env.GEA_COMPARE_EVIDENCE)
-      await page.screenshot({
-        path: process.env.GEA_COMPARE_EVIDENCE + '/compact-' + width + '.png',
-      });
   }
-  await button.click();
-  await expect(page.getByRole('combobox', { name: '版本①', exact: true })).toHaveCount(0);
-  assert.deepEqual(await page.evaluate(() => window.writes), []);
-});
+}
 
-test('多计划各自读取对应版本，切换更早版本没有串用其他计划', { timeout: 30000 }, async (t) => {
-  const { page, groupBox } = await openWorkbench(t, true, 'history');
-  await groupBox.click();
-  await page.getByRole('button', { name: '版本对比', exact: true }).click();
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        window.readCalls
-          .filter((row) => row.versionId?.includes('previous'))
-          .map((row) => row.versionId)
-          .sort(),
-      ),
-    )
-    .toEqual(['v1-previous', 'v2-previous', 'v3-previous']);
-  await page.getByRole('combobox', { name: '版本②', exact: true }).click();
-  await page.getByRole('option', { name: '前 2 版', exact: true }).click();
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        window.readCalls
-          .filter((row) => row.versionId?.includes('older'))
-          .map((row) => row.versionId)
-          .sort(),
-      ),
-    )
-    .toEqual(['v1-older', 'v2-older', 'v3-older']);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  assert.deepEqual(await page.evaluate(() => window.writes), []);
-});
-
-test('只有一版时显示缺失，历史读取被拒仍显示错误，不打开弹窗', { timeout: 30000 }, async (t) => {
-  for (const mode of ['single', 'forbidden']) {
-    const { page } = await openWorkbench(t, false, mode);
-    await page.getByRole('button', { name: '版本对比', exact: true }).click();
-    if (mode === 'forbidden') await expect(page.getByRole('alert')).toBeVisible();
-    else
-      await expect(
-        page.locator('tbody tr').filter({ hasText: '宝阳销售组' }).first().getByRole('cell').nth(5),
-      ).toHaveText('——');
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    assert.deepEqual(await page.evaluate(() => window.writes), []);
-  }
-});
-
-test('无可读计划禁用版本对比，只读来源仍能在列表查看版本', { timeout: 30000 }, async (t) => {
+test('无可读计划不显示版本对比，只读来源仍能查看当前明细', { timeout: 30000 }, async (t) => {
   const empty = await openWorkbench(t, false, 'empty');
-  await expect(empty.page.getByRole('button', { name: '版本对比', exact: true })).toBeDisabled();
+  await expect(empty.page.getByRole('button', { name: '版本对比', exact: true })).toHaveCount(0);
   const { page } = await openWorkbench(t, false, 'readonly');
   await expect(page.locator('tbody input[type="checkbox"]').first()).toBeDisabled();
-  await page.getByRole('button', { name: '版本对比', exact: true }).click();
-  await expect(page.getByRole('combobox', { name: '版本①', exact: true })).toBeVisible();
   await page
     .getByRole('button', { name: /宝阳销售组/ })
     .first()
@@ -776,49 +725,6 @@ test('无可读计划禁用版本对比，只读来源仍能在列表查看版�
   await expect(page.getByRole('dialog')).toHaveCount(0);
   assert.deepEqual(await page.evaluate(() => window.writes), []);
 });
-
-test(
-  '列表和单计划SKU直接展示两版数量金额与①减②差异，历史版本不写入',
-  { timeout: 30000 },
-  async (t) => {
-    const { page } = await openWorkbench(t, false, 'inline');
-    await page.getByRole('button', { name: '版本对比', exact: true }).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page.getByRole('columnheader', { name: '月计划①', exact: true })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: '月计划②', exact: true })).toBeVisible();
-    const queue = page.locator('tbody tr').filter({ hasText: '宝阳销售组' }).first();
-    await expect(queue).toContainText('¥200');
-    await expect(queue).toContainText('¥80');
-    await expect(queue).toContainText('¥120');
-    await queue.getByRole('button').first().click();
-    const region = page.getByRole('region', { name: 'SKU 编码 / 物料描述', exact: true }).last();
-    await expect(region.getByRole('columnheader')).toHaveText([
-      'SKU 编码 / 物料描述',
-      '月计划',
-      '确认计划量①',
-      '确认计划量②',
-      '差异（① − ②）',
-    ]);
-    const row = region.getByRole('row').filter({ hasText: '1001' });
-    await assertExpandedSkuLayout(region);
-    assert.equal(
-      await row
-        .getByRole('cell')
-        .first()
-        .evaluate((node) => node.scrollWidth <= node.clientWidth),
-      true,
-    );
-    await expect(row.getByRole('cell').nth(3)).toHaveText('10¥80.00');
-    await expect(row.getByRole('cell').nth(4)).toHaveText('10¥120.00');
-    await page.getByRole('combobox', { name: '版本①', exact: true }).click();
-    await page.getByRole('option', { name: '上一版本', exact: true }).click();
-    await expect(region.getByRole('spinbutton')).toHaveCount(0);
-    await expect(row.getByRole('cell').nth(4)).toHaveText('0¥0.00');
-    assert.deepEqual(await page.evaluate(() => window.writes), []);
-    if (process.env.GEA_COMPARE_EVIDENCE)
-      await page.screenshot({ path: process.env.GEA_COMPARE_EVIDENCE + '/inline-single.png' });
-  },
-);
 
 test(
   '组织汇总按原确认数量比例分摊，合计、逐计划草稿和收起重开保持一致',
@@ -851,49 +757,9 @@ test(
       p1: { 1001: '40' },
       p2: { 1001: '60' },
     });
-    await page.getByRole('button', { name: '版本对比', exact: true }).click();
-    await expect(
-      summary.getByRole('spinbutton', { name: '确认计划量① 1001', exact: true }),
-    ).toHaveValue('100');
-    const skuRow = summary.getByRole('row').filter({ hasText: '1001' });
-    await assertExpandedSkuLayout(summary.getByRole('region'));
-    assert.equal(
-      await skuRow
-        .getByRole('cell')
-        .first()
-        .evaluate((node) => node.scrollWidth <= node.clientWidth),
-      true,
-    );
-    await expect(skuRow.getByRole('cell').nth(3)).toHaveText('20¥160.00');
-    await expect(skuRow.getByRole('cell').nth(4)).toHaveText('80¥960.00');
     assert.ok((await page.evaluate(() => window.writes)).every((kind) => kind === 'draft'));
-    if (process.env.GEA_COMPARE_EVIDENCE) {
-      await page.screenshot({ path: process.env.GEA_COMPARE_EVIDENCE + '/inline-group.png' });
-      await page.setViewportSize({ width: 694, height: 820 });
-      assert.equal(
-        await page.locator('main').evaluate((el) => el.scrollWidth === el.clientWidth),
-        true,
-      );
-      await expect(page.getByRole('combobox', { name: '版本②', exact: true })).toBeVisible();
-      await page.screenshot({
-        path: process.env.GEA_COMPARE_EVIDENCE + '/inline-group-narrow.png',
-      });
-    }
   },
 );
-
-test('组内缺少历史版本时不显示部分合计，不把缺失数量金额补零', { timeout: 30000 }, async (t) => {
-  const { page, groupBox } = await openWorkbench(t, true, 'missing');
-  const row = groupBox.locator('xpath=ancestor::tr');
-  await page.getByRole('button', { name: '版本对比', exact: true }).click();
-  await expect(row.getByRole('cell').nth(5)).toHaveText('——');
-  await row.getByRole('button').first().click();
-  const summary = page.getByTestId('regional-approval-group-sku-summary').first();
-  const skuRow = summary.getByRole('row').filter({ hasText: '1001' });
-  await expect(skuRow.getByRole('cell').nth(3)).toHaveText('——');
-  await expect(skuRow.getByRole('cell').nth(4)).toHaveText('——');
-  assert.deepEqual(await page.evaluate(() => window.writes), []);
-});
 
 test('汇总数量为空或超过精度时阻止通过，修正后可继续', { timeout: 30000 }, async (t) => {
   const { page, groupBox } = await openWorkbench(t, true, 'inline');
@@ -1256,20 +1122,56 @@ test(
   },
 );
 
-for (const mode of ['input', 'draft'])
-  test(
-    'restored monthly quantities remain integers without writing: ' + mode,
-    { timeout: 30000 },
-    async (t) => {
-      const { page } = await openWorkbench(t);
-      await page.evaluate((value) => window.restoreIntegerInput(value), mode);
-      await expect(
-        page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }),
-      ).toHaveValue('502');
-      assert.deepEqual(await page.evaluate(() => window.savedDrafts), []);
-      assert.deepEqual(await page.evaluate(() => window.writes), []);
-    },
-  );
+test('monthly category quantities show integers in the input and plan column', async (t) => {
+  const { page } = await openWorkbench(t, false, 'single-integer-category');
+  await page.locator('tbody button').first().click();
+  const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await expect(input).toHaveValue('7000');
+  const row = input.locator('xpath=ancestor::tr[1]');
+  await expect(row.getByText('2,480', { exact: true })).toBeVisible();
+  await expect(row.getByText('¥24,800.00', { exact: true })).toBeVisible();
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+  if (process.env.DSH_REVIEW_EVIDENCE)
+    await row.screenshot({
+      path: process.env.DSH_REVIEW_EVIDENCE + '/monthly-category-integer.png',
+    });
+  await input.fill('7000.600');
+  await input.blur();
+  await expect(input).toHaveValue('7001');
+  await expect.poll(() => page.evaluate(() => window.savedDrafts.length)).toBeGreaterThan(0);
+  const draft = await page.evaluate(() => window.savedDrafts.at(-1));
+  assert.equal(Number(draft.adjustments[0].adjustQty), 1);
+  await expect(input.locator('xpath=ancestor::td[1]')).toContainText('¥70,010.00');
+});
+
+test('monthly category external edits round before rendering and persisting', async (t) => {
+  const { page } = await openWorkbench(t);
+  await page.evaluate(() => window.restoreIntegerInput('patch', 'category'));
+  const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await expect(input).toHaveValue('502');
+  await expect.poll(() => page.evaluate(() => window.savedDrafts.length)).toBeGreaterThan(0);
+  const draft = await page.evaluate(() => window.savedDrafts.at(-1));
+  assert.equal(Number(draft.adjustments[0].adjustQty), 482);
+});
+
+for (const role of ['region', 'category'])
+  for (const mode of ['input', 'draft'])
+    test(
+      'restored monthly quantities remain integers without writing: ' + role + ' ' + mode,
+      { timeout: 30000 },
+      async (t) => {
+        const { page } = await openWorkbench(t);
+        await page.evaluate(({ mode, role }) => window.restoreIntegerInput(mode, role), {
+          mode,
+          role,
+        });
+        await expect(
+          page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }),
+        ).toHaveValue('502');
+        assert.deepEqual(await page.evaluate(() => window.savedDrafts), []);
+        assert.deepEqual(await page.evaluate(() => window.writes), []);
+      },
+    );
 
 for (const scenario of ['return-edits', 'return-continued-province'])
   test(
@@ -1388,7 +1290,9 @@ test(
     await modal.getByRole('textbox').fill('开发验收');
     await modal.getByRole('button', { name: '确认批量退回', exact: true }).click();
     await expect(
-      modal.getByText('本次提交完成：成功 0 笔，失败 2 笔，跳过 0 笔。', { exact: true }),
+      modal.getByText('本次提交完成：成功 0 笔，失败 2 笔，待核对 0 笔，跳过 0 笔。', {
+        exact: true,
+      }),
     ).toBeVisible();
     await expect(modal.getByText(/未能核对实际退回节点或修改后的数量，请刷新后重试。/)).toHaveCount(
       2,
@@ -1399,7 +1303,7 @@ test(
 );
 
 for (const [scenario, reason] of [
-  ['single-dms', 'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报'],
+  ['single-dms', 'DMS回写失败：产品编码TEST-ITEM已停用,不能填报'],
   ['single-permission', '当前用户没有品类审批权限'],
   ['single-conflict', '计划版本已变化，请刷新后重试'],
 ])
@@ -1411,7 +1315,32 @@ for (const [scenario, reason] of [
       await page.getByRole('button', { name: '通过', exact: true }).click();
       const dialog = page.getByRole('dialog');
       await expect(dialog.getByText(reason, { exact: true })).toBeInViewport();
+      await expect(
+        dialog.locator('textarea,input,[role=combobox],label.arco-checkbox'),
+      ).toHaveCount(0);
+      await expect(dialog).toContainText('p1');
+      await expect(dialog.locator('.arco-alert-error')).toHaveCount(1);
       assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
+      if (scenario === 'single-dms' && process.env.GEA_RESULT_EVIDENCE) {
+        await expect
+          .poll(() => dialog.evaluate((el) => getComputedStyle(el).transform))
+          .toBe('none');
+        await page.screenshot({
+          path: process.env.GEA_RESULT_EVIDENCE + '/single-result-wide.png',
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect
+          .poll(async () => {
+            const bounds = await dialog.boundingBox();
+            return Boolean(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390);
+          })
+          .toBe(true);
+        const bounds = await dialog.boundingBox();
+        assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390);
+        await page.screenshot({
+          path: process.env.GEA_RESULT_EVIDENCE + '/single-result-narrow.png',
+        });
+      }
       await expect(page.getByText(/hidden-error-reference|hidden-trace-reference/)).toHaveCount(0);
       await expect(page.getByRole('button', { name: '重试并核对结果', exact: true })).toHaveCount(
         0,
@@ -1427,7 +1356,11 @@ test('single uncertain approval keeps its original intent and does not create an
   await page.getByRole('button', { name: '通过', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText(/结果暂时未知/)).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '关闭', exact: true })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: '关闭', exact: true })).toBeEnabled();
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('button', { name: '恢复待核对操作', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '通过', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
   assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
   await dialog.getByRole('button', { name: '重试并核对结果', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
@@ -1508,3 +1441,109 @@ for (const [scenario, reason] of [
     assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
     await expect(dialog.getByRole('button', { name: '刷新权威状态', exact: true })).toBeEnabled();
   });
+
+test('manual approval retry rechecks a stale draft before issuing a new command', async (t) => {
+  const { page } = await openWorkbench(t, false, 'single-dms-stale-second');
+  await page.locator('tbody label.arco-checkbox:visible').first().click();
+  await page.getByRole('button', { name: '通过', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: '重新提交', exact: true }).click();
+  await expect(dialog.getByText('原计划已变化，旧草稿未套用', { exact: true })).toBeVisible();
+  assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
+});
+
+test('batch return retains an unknown attempt while successful plans are not sent again', async (t) => {
+  const { page, groupBox } = await openWorkbench(t, true, 'return-edits');
+  await page.evaluate(() => {
+    window.returnUnknown = true;
+  });
+  await groupBox.check();
+  await page.getByRole('button', { name: '退回', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('批量审批备注').fill('请核对');
+  await dialog.getByRole('button', { name: '确认批量退回', exact: true }).click();
+  await expect(dialog).toContainText('待核对 1 笔');
+  await expect(dialog.locator('textarea,input,[role=combobox]')).toHaveCount(0);
+  if (process.env.GEA_RESULT_EVIDENCE) {
+    await expect.poll(() => dialog.evaluate((el) => getComputedStyle(el).transform)).toBe('none');
+    await page.screenshot({ path: process.env.GEA_RESULT_EVIDENCE + '/batch-pending-wide.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect
+      .poll(async () => {
+        const b = await dialog.boundingBox();
+        return Boolean(b && b.x >= 0 && b.x + b.width <= 390);
+      })
+      .toBe(true);
+    await page.screenshot({ path: process.env.GEA_RESULT_EVIDENCE + '/batch-pending-narrow.png' });
+  }
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: '重试并核对结果', exact: true })
+    .click();
+  await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(3);
+  const calls = await page.evaluate(() => window.sentReturns);
+  assert.deepEqual(
+    calls[2],
+    calls.find((call) => call.planId === 'p1'),
+  );
+});
+
+for (const [block, reason] of [
+  ['version', '计划版本已变化'],
+  ['status', '审批状态已变化'],
+  ['period', '计划周期不一致'],
+  ['sku', 'SKU 1001 的'],
+  ['role', '当前审批节点已不能通过这笔计划'],
+  ['draft', '原计划已变化，旧草稿未套用'],
+])
+  test(
+    'automatic approval explains ' + block + ' blocking and stops loading before any write',
+    async (t) => {
+      const { page } = await openWorkbench(t, false, 'single-dms');
+      await page.locator('tbody label.arco-checkbox:visible').first().click();
+      const approve = page.getByRole('button', { name: '通过', exact: true });
+      await expect(approve).toBeEnabled();
+      await page.evaluate((block) => {
+        window.autoBlock = block;
+      }, block);
+      await approve.click();
+      await expect(page.getByRole('dialog')).toContainText(reason);
+      await expect(approve).not.toHaveClass(/arco-btn-loading/);
+      assert.equal(await page.evaluate(() => window.sentDirect.length), 0);
+    },
+  );
+
+test('actual toolbar retains terminal members as skipped in a mixed organization selection', async (t) => {
+  const { page, groupBox } = await openWorkbench(t, true, 'mixed-terminal');
+  await groupBox.check();
+  await page.getByRole('button', { name: '通过', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.approvalItems?.length)).toBe(2);
+  const items = await page.evaluate(() => window.approvalItems);
+  assert.deepEqual(items.map((item) => [item.planId, item.kind]).sort(), [
+    ['p1', 'approve'],
+    ['p2', 'skip'],
+  ]);
+  assert.equal(await page.evaluate(() => window.writes.length), 0);
+});
+
+test('unknown approval survives a refreshed empty queue and resumes the frozen command', async (t) => {
+  const { page } = await openWorkbench(t, false, 'single-unknown');
+  await page.locator('tbody label.arco-checkbox:visible').first().click();
+  await page.getByRole('button', { name: '通过', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('结果暂时未知');
+  await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click();
+  await page.evaluate(() => {
+    window.queueGone = true;
+  });
+  await page.getByRole('button', { name: '刷新数据', exact: true }).click();
+  await expect(page.locator('tbody label.arco-checkbox:visible')).toHaveCount(0);
+  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('结果暂时未知');
+  await dialog.getByRole('button', { name: '重试并核对结果', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
+  const calls = await page.evaluate(() => window.sentDirect);
+  assert.deepEqual(calls[1], calls[0]);
+});

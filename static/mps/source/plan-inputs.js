@@ -1,4 +1,4 @@
-import { unitWeightCandidate } from './unit-weights.js';
+import { productWeightCandidate, unitWeightCandidate } from './unit-weights.js';
 import { productionCalendarDays, productionCalendarRule } from './production-calendar.js';
 import {
   canonicalBaseName,
@@ -26,11 +26,16 @@ const number = (value) => {
     : null;
 };
 
-export function resolveWeightPairs(manual, pairs, weightRead) {
+export function resolveWeightPairs(manual, pairs, weightRead, productRaw = []) {
   const weights = manual.map((row) => ({ ...row, tonsPerPiece: number(row.tonsPerPiece) }));
   const manualIndex = new Set(weights.map((row) => JSON.stringify([row.base, row.code])));
   const source = new Map();
   const issues = [];
+  const products = new Map();
+  for (const row of productRaw) {
+    const key = JSON.stringify([canonicalBaseName(row.target_base), text(row.material_code)]);
+    products.set(key, [...(products.get(key) ?? []), row]);
+  }
   for (const row of weightRead?.rows ?? []) {
     const code = text(row.material_code);
     source.set(code, [...(source.get(code) ?? []), row]);
@@ -54,7 +59,12 @@ export function resolveWeightPairs(manual, pairs, weightRead) {
     const channels = [...new Set(rows.map((row) => text(row.channel_name)).filter(Boolean))].join(
       '、',
     );
-    const candidate = unitWeightCandidate(rows, pair.code, channels);
+    const candidate =
+      productWeightCandidate(
+        products.get(JSON.stringify([canonicalBaseName(pair.base), pair.code])) ?? [],
+        pair.base,
+        pair.code,
+      ) ?? unitWeightCandidate(rows, pair.code, channels);
     if (candidate.tonsPerPiece !== null)
       weights.push({ base: pair.base, code: pair.code, tonsPerPiece: candidate.tonsPerPiece });
     else
@@ -62,7 +72,7 @@ export function resolveWeightPairs(manual, pairs, weightRead) {
         base: pair.base,
         code: pair.code,
         reason: candidate.missing.join('；'),
-        sourceTable: 'ai_db.agents_dim_material_prod_sales_info_d',
+        sourceTable: candidate.sourceTable ?? 'ai_db.agents_dim_material_prod_sales_info_d',
       });
   }
   return { weights, issues };
@@ -302,10 +312,11 @@ export function buildPlanSources(draft, relations, weightRead, productPairs = []
     { base: row.from, code: row.code },
     { base: row.to, code: row.code },
   ]);
-  const { weights: unitWeights } = resolveWeightPairs(
+  const { weights: unitWeights, issues: unitWeightIssues } = resolveWeightPairs(
     draft.unitWeights ?? [],
     [...pairs, ...routePairs],
     weightRead,
+    draft.productRaw,
   );
   return {
     resources,
@@ -315,6 +326,7 @@ export function buildPlanSources(draft, relations, weightRead, productPairs = []
     odmConflicts,
     productionDays,
     unitWeights,
+    unitWeightIssues,
     transferRoutes: [...new Map(transferRoutes.map((row) => [JSON.stringify(row), row])).values()],
     planSourceIssues: [...new Set(issues)],
     metadata: {

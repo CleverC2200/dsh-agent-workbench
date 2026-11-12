@@ -1885,42 +1885,6 @@
     border-top: 1px solid var(--bg-3);
   }
 }
-.versionComparisonBar {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 12px;
-  white-space: nowrap;
-}
-.versionComparisonField {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-}
-.versionComparisonField > span {
-  color: var(--workbench-muted);
-  font:
-    600 12px/18px 'Microsoft YaHei UI',
-    'PingFang SC',
-    'Noto Sans CJK SC',
-    Arial,
-    sans-serif;
-}
-.versionComparisonBar :global(.arco-select) {
-  width: 100px;
-  height: 36px;
-  font-weight: 400;
-}
-.versionComparisonBar :global(.arco-select-view) {
-  box-sizing: border-box;
-  display: flex;
-  height: 36px !important;
-  align-items: center;
-  padding: 0 10px;
-  border: 1px solid var(--workbench-control-border);
-}
 .returnReasons {
   white-space: normal;
   overflow-wrap: anywhere;
@@ -2084,14 +2048,14 @@
 .monthCalendarIcon {
   color: var(--workbench-muted);
 }
-:is(.monthSelect, .versionComparisonBar) :global(.arco-select-view) {
+.monthSelect :global(.arco-select-view) {
   border-color: var(--workbench-control-border);
   border-radius: 8px;
   background: var(--workbench-surface);
   box-shadow: 0 1px 2px #1822300a;
 }
-:is(.monthSelect, .versionComparisonBar) :global(.arco-select-view-value),
-:is(.monthSelect, .versionComparisonBar) :global(.arco-select-view-input) {
+.monthSelect :global(.arco-select-view-value),
+.monthSelect :global(.arco-select-view-input) {
   color: var(--workbench-text);
   font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
   font-size: 12px;
@@ -2099,30 +2063,28 @@
   line-height: 18px;
   letter-spacing: normal;
 }
-:is(.monthSelect, .versionComparisonBar) :global(.arco-select-view-value) {
+.monthSelect :global(.arco-select-view-value) {
   display: flex;
   align-items: center;
 }
-:is(.monthSelect, .versionComparisonBar) :global(.arco-select-suffix) {
+.monthSelect :global(.arco-select-suffix) {
   color: var(--workbench-muted);
 }
-:is(.monthSelect, .versionComparisonBar) :global(.arco-select:hover .arco-select-view) {
+.monthSelect :global(.arco-select:hover .arco-select-view) {
   border-color: var(--workbench-brand);
   background: var(--workbench-hover);
   box-shadow: 0 2px 8px #df173214;
 }
-:is(.monthSelect, .versionComparisonBar)
-  :global(.arco-select[aria-expanded='true'] .arco-select-view) {
+.monthSelect :global(.arco-select[aria-expanded='true'] .arco-select-view) {
   border-color: var(--workbench-brand);
   background: var(--workbench-surface);
   box-shadow: 0 0 0 3px #df173212;
 }
-:is(.monthSelect, .versionComparisonBar) :global(.arco-select:focus-visible .arco-select-view) {
+.monthSelect :global(.arco-select:focus-visible .arco-select-view) {
   border-color: var(--workbench-brand);
   box-shadow: 0 0 0 3px #df17321a;
 }
-:is(.monthSelect, .versionComparisonBar)
-  :global(.arco-select[aria-expanded='true'] .arco-select-suffix) {
+.monthSelect :global(.arco-select[aria-expanded='true'] .arco-select-suffix) {
   color: var(--workbench-brand-hover);
   transform: rotate(180deg);
 }

@@ -1,11 +1,6 @@
 {
   "assets": [
     {
-      "path": "tests/fixtures",
-      "kind": "fixture",
-      "source": "tests/"
-    },
-    {
       "path": "docs/history",
       "kind": "historical-evidence",
       "source": "Git history"
@@ -99,6 +94,21 @@
       "path": "business/inventory-apsplan/source/reference/provided-board.css",
       "kind": "received-generated-reference",
       "source": "business/inventory-apsplan/SOURCE.md"
+    },
+    {
+      "path": "tests/fixtures/sql-template-baseline.json",
+      "kind": "fixture-data",
+      "source": "tests/"
+    },
+    {
+      "path": "tests/fixtures/aps-light-theme.json",
+      "kind": "fixture-data",
+      "source": "tests/"
+    },
+    {
+      "path": "tests/fixtures/original-fc-columns.json",
+      "kind": "fixture-data",
+      "source": "tests/"
     }
   ]
 }

@@ -1039,7 +1039,7 @@
                     <th
                       class="page-field"
                       data-col="10"
-                      data-search="源字段弹窗：替换关系 replacement_material_code / replacement_product 按当前产品编码＋物料组定位源记录，列出非空去重值。子sku表逐行保留其关系。 仅展示替换关系，不推断方向、生效期或继承量。 p.replacement_material_code p.replacement_product agents_dim_product_list_mi agents_dim_product_list_mi"
+                      data-search="源字段弹窗：替换关系 replacement_material_code / replacement_product 按当前产品编码＋物料组定位源记录，列出非空去重值。子sku表逐行保留其关系。 按已确认口径，同基地新SKU历史参考量＝老品历史量×替换系数；缺值或同键冲突保留待补。 p.replacement_material_code p.replacement_product agents_dim_product_list_mi agents_dim_product_list_mi"
                     >
                       <span>源字段弹窗：替换关系</span><small class="state raw">源值</small>
                     </th>
@@ -1372,7 +1372,11 @@
                   <tr class="formula-row">
                     <th colspan="2" scope="row" class="footer-axis">取值／计算公式</th>
                     <td data-col="0"><p>产品数量＝draft.products.length</p></td>
-                    <td data-col="1"><p>产品明细不显示基地列；源字段弹窗保留事实候选基地。</p></td>
+                    <td data-col="1">
+                      <p>
+                        产品明细不显示基地列；源字段弹窗逐条保留最新统计月份、目标基地及调拨标签，另列事实候选基地。
+                      </p>
+                    </td>
                     <td data-col="2"><p>有编码显示编码，无编码的父组可展开子SKU。</p></td>
                     <td data-col="3"><p>直接显示源名称。</p></td>
                     <td data-col="4"><p>SKU显示源分类，父组仅补唯一子SKU分类。</p></td>
@@ -1383,7 +1387,11 @@
                     <td data-col="9"><p>取源标签非空去重值。</p></td>
                     <td data-col="10"><p>分别显示源替换编码和源替换品名称。</p></td>
                     <td data-col="11"><p>列出源值集合及子SKU明细。</p></td>
-                    <td data-col="12"><p>编辑只影响本地版本，下载仍导出原始八列。</p></td>
+                    <td data-col="12">
+                      <p>
+                        编辑只影响本地版本。产品关系下载保留原关系列；产品源字段另行下载，保留基地、标签、净重、单位和替换系数原值。
+                      </p>
+                    </td>
                   </tr>
                   <tr class="boundary-row">
                     <th colspan="2" scope="row" class="footer-axis">缺值与使用边界</th>
@@ -1397,7 +1405,11 @@
                     <td data-col="7"><p>按已确认字段对应展示，不任取同组其他SKU关系。</p></td>
                     <td data-col="8"><p>不执行老品历史继承，也不改历史发货数量。</p></td>
                     <td data-col="9"><p>标签与sub_category是两个字段，不互换。</p></td>
-                    <td data-col="10"><p>仅展示替换关系，不推断方向、生效期或继承量。</p></td>
+                    <td data-col="10">
+                      <p>
+                        按已确认口径，同基地新SKU历史参考量＝老品历史量×替换系数；缺值或同键冲突保留待补。
+                      </p>
+                    </td>
                     <td data-col="11"><p>候选关系一对多保留；不覆盖本地产品原始八列。</p></td>
                     <td data-col="12">
                       <p>展示补出的父组分类或候选基地不会自动写进原始产品关系CSV。</p>

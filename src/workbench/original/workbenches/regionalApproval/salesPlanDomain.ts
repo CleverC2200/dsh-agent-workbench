@@ -2,7 +2,6 @@ export type ApprovalStageId = 'customer' | 'region' | 'province' | 'area' | 'cat
 
 export type ApprovalHealth = 'healthy' | 'attention' | 'warning';
 export type ApprovalState = 'pending' | 'approved' | 'future';
-export type ApprovalVersion = 'current' | 'previous' | 'initial';
 export type ApprovalDimension = 'area' | 'province' | 'region' | 'base' | 'customer';
 
 export const REGIONAL_PLAN_EVALUATION_STATUSES = [0, 5, 10] as const;

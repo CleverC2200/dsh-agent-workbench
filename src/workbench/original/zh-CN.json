@@ -444,20 +444,6 @@
       "customerCount": "{{count}} 家客户",
       "quantityProgress": "数量 {{progress}}%",
       "amountProgress": "{{progress}}%",
-      "versions": {
-        "group": "计划版本对比",
-        "primary": "当前查看版本",
-        "primaryCompact": "版本",
-        "compare": "对比版本",
-        "compareCompact": "对比",
-        "current": "最新版",
-        "previous": "上一版",
-        "initial": "初始版",
-        "offset": "-{{offset}} 版",
-        "unavailable": "暂无版本",
-        "info": "版本选择说明",
-        "description": "版本①为主显示，版本②为对比基准；版本①不能早于版本②，两版相同时不展示差异。"
-      },
       "dimensions": {
         "ariaLabel": "审批计划维度",
         "area": "按大区",
@@ -498,8 +484,7 @@
         "progress": "查看提报进度",
         "refreshData": "刷新数据",
         "export": "导出当前范围",
-        "exportPage": "导出当前页",
-        "compareVersions": "版本对比"
+        "exportPage": "导出当前页"
       },
       "exportFeedback": {
         "detailsFailed": "版本明细读取失败或数据不完整，请刷新后重试；未产生文件。",
@@ -590,7 +575,7 @@
       "liveDetail": {
         "title": "销售计划详情与版本证据",
         "openFor": "查看 {{plan}} 真实计划详情",
-        "boundary": "计划详情、版本、SKU、审批日志和版本比较均来自 GEA 用户会话只读接口；不会写入或提交真实数据。",
+        "boundary": "计划详情、SKU 和审批日志来自 GEA 用户会话只读接口。",
         "aiFixture": "AI 建议暂无真实接口，当前显示样例建议，不连接生产；本详情不会把建议或客户端临时调整写入服务端 SKU。",
         "loading": "正在读取销售计划证据…",
         "notReady": "选择一条真实销售计划后读取详情。",
@@ -599,21 +584,13 @@
         "receipt": "GEA 只读证据范围",
         "currentVersion": "服务端当前版本",
         "planId": "计划 ID",
-        "versionCount": "历史版本",
         "logCount": "审批日志",
-        "versionOption": "第 {{seq}} 版 · {{id}}",
-        "compareFrom": "基准版本",
-        "compareTo": "目标版本",
         "returnReasonEvidence": "版本退回原因",
         "emptySkus": "该版本没有 SKU 明细。",
         "emptyLogs": "该计划没有审批日志。",
-        "emptyCompare": "两个版本没有 SKU 差异。",
-        "sameVersion": "基准版本与目标版本相同，不产生差异或退回原因。",
         "tabs": {
           "skus": "版本 SKU",
-          "versions": "历史版本",
-          "logs": "审批日志",
-          "compare": "版本比较"
+          "logs": "审批日志"
         },
         "columns": {
           "sku": "SKU",
@@ -633,16 +610,7 @@
           "transition": "状态变化",
           "operator": "操作人",
           "time": "操作时间",
-          "remark": "备注",
-          "change": "变化类型",
-          "qtyComparison": "数量对比 / 差异",
-          "priceComparison": "价格对比",
-          "amountDelta": "金额差异"
-        },
-        "change": {
-          "ADDED": "新增",
-          "DELETED": "删除",
-          "UPDATED": "更新"
+          "remark": "备注"
         },
         "errors": {
           "permission": "当前账号没有读取该销售计划详情的权限。",
@@ -724,7 +692,7 @@
       },
       "liveSubmit": {
         "inherited": "继承确认量 / 金额",
-        "batchResult": "成功 {{success}} 笔 · 失败 {{failed}} 笔 · 待核实 {{pending}} 笔",
+        "batchResult": "成功 {{success}} 笔 · 失败 {{failed}} 笔 · 待核对 {{pending}} 笔 · 跳过 {{skipped}} 笔",
         "comparisonDetails": "查看明细（{{count}}）",
         "batchTitle": "提交所选计划（{{count}}）",
         "openBatch": "提交所选",
@@ -774,11 +742,11 @@
         "confirm": "确认重提",
         "completed": "已回执",
         "enabledHint": "状态 6–9、当前责任人及完整来源核对通过后，可修改重提。",
-        "success": "服务端已确认计划 {{planId}} 新版本 {{versionId}}；请求 {{requestId}}{{auditReference}}（{{replayed}}）。",
+        "success": "服务端已确认计划 {{planId}} 新版本 {{versionId}}。",
         "auditReference": "，审计 {{id}}",
         "created": "新建回执",
         "replayed": "幂等回放",
-        "receiptBanner": "重提回执：计划 {{planId}} · 版本 {{versionId}} · 请求 {{requestId}} · 审计 {{auditId}}",
+        "receiptBanner": "重提回执：计划 {{planId}} · 版本 {{versionId}}",
         "refreshFailed": "重提已成功，但新版本明细或继承值尚未核验通过；请刷新权威状态，仅重试回读。",
         "disabled": {
           "completed": "该退回版本已收到服务端重提回执，已阻止重复操作。",
@@ -809,7 +777,7 @@
           "serviceTenant": "当前租户与服务提报配置不匹配，请切换到正确租户或联系管理员。",
           "serviceCredential": "服务提报凭据未配置，请联系管理员完成当前环境的服务接入。",
           "serviceAuthentication": "服务提报授权失效，请联系管理员核对服务配置；当前员工登录未失效。",
-          "configuration": "流程、候选或通知配置未满足要求；本次已停止，请联系管理员并提供错误编号。",
+          "configuration": "重提所需的流程、候选或通知配置不完整，请联系管理员核对。",
           "planChanged": "计划身份不一致：选中计划 {{expected}}，当前返回 {{actual}}。请刷新列表后重新选择。",
           "versionChanged": "计划版本已变化：选中版本 {{expected}}，当前版本 {{actual}}。请刷新列表后重新选择，旧版本的调整不会套用到新版本。",
           "statusChanged": "审批状态已变化：选中状态 {{expected}}，当前状态 {{actual}}。请刷新列表后重新选择。",
@@ -821,6 +789,7 @@
           "skuDuplicate": "当前明细中的 SKU {{code}} 重复，无法计算提交数量和金额。请刷新后重试；仍重复时请联系管理员。",
           "skuEmpty": "当前版本未返回 SKU 明细，无法提交。请刷新后重试。",
           "draftStale": "本地草稿已过期，与当前计划明细不一致，不能继续套用。原草稿保留；可选择不使用过期草稿，按当前计划数据重新核对。",
+          "quantityInvalid": "确认计划数量不合法，请核对本节点调整，确认数量不能为负。",
           "accessChanged": "当前审批节点已不能通过这笔计划，请刷新列表并核对审批节点和权限。",
           "skuAdded": "当前明细新增了 SKU {{code}}，请刷新列表后重新核对。",
           "skuRemoved": "当前明细已移除 SKU {{code}}，请刷新列表后重新核对。",
@@ -829,11 +798,11 @@
           "validation": "真实明细不满足提交合同；未发送请求，请刷新后核对字段、SKU 和汇总。",
           "sourceMismatch": "计划来源数据不一致，请刷新列表后重新核对。",
           "authentication": "当前用户会话已过期；重新登录并刷新真实来源后再操作。",
-          "permission": "AionCore 或 GEA 拒绝当前提交权限；客户端不会伪造租户或角色。",
-          "conflict": "版本已变化或存在并发提交；未提前更新本地状态，请刷新权威队列。",
-          "rateLimited": "请求过于频繁；AionCore 已完成本轮限流处理，客户端不会再开启一轮调用，请刷新权威状态。",
+          "permission": "当前账号没有提交此计划的权限，请联系管理员核对角色和权限。",
+          "conflict": "计划版本已变化或已有其他提交，请刷新列表后重新核对。",
+          "rateLimited": "请求过于频繁，请稍后刷新计划状态，再核对是否需要重提。",
           "serviceUnavailable": "重提服务暂时不可用；请刷新计划状态后核对，不要重复发起新的重提。",
-          "retryExhausted": "三次总调用预算已用尽；客户端不会继续调用，请刷新权威状态核对是否已生成新版本。",
+          "retryExhausted": "重提结果仍未确认，请刷新计划状态，核对是否已生成新版本后再继续。",
           "unavailable": "结果暂时未知。请点击“重试并核对结果”继续核对，避免重新发起提交。",
           "failed": "提交失败，请根据失败原因处理后重试。"
         },
@@ -842,7 +811,19 @@
         "lineAmount": "提报金额",
         "inheritedValues": "预计继承：区域 {{region}}；省区 {{province}}；大区 {{area}}",
         "quantity": "提报数量",
-        "nextStatus": "重提目标状态"
+        "nextStatus": "重提目标状态",
+        "submitAgain": "重新提交",
+        "itemStatus": {
+          "ready": "待提交",
+          "success": "成功",
+          "failed": "提交失败",
+          "unknown": "待核对",
+          "readback": "待核对",
+          "unresolved": "待核对",
+          "skipped": "跳过"
+        },
+        "skippedTag": "跳过",
+        "terminalSkipped": "计划已完成审批或回写，本次跳过。"
       },
       "liveAction": {
         "saveChecksumTitle": "保存核对摘要",
@@ -928,7 +909,7 @@
         "confirmReject": "确认退回",
         "completed": "已回执",
         "enabledHint": "当前 OPEN 周期和审批节点可发起操作；真实权限由服务端校验。",
-        "success": "服务端已确认 {{from}} → {{to}}{{auditReference}}。正在刷新权威队列。",
+        "success": "服务端已确认审批状态 {{from}} → {{to}}。正在刷新列表。",
         "refreshFailed": "审批已成功，但队列刷新失败；请关闭后手动刷新，勿重复审批。",
         "disabled": {
           "completed": "该版本已收到服务端回执，已阻止重复操作。",
@@ -952,19 +933,24 @@
           "configuration": "流程、候选或通知配置未满足要求；本次已停止，请联系管理员核对。",
           "authentication": "GEA 用户会话已过期；重新登录后刷新队列再操作。",
           "permission": "服务端确认当前用户无权操作该版本；本轮已禁用此操作。",
-          "conflict": "版本状态已变化或存在并发操作；未修改本地状态，请刷新权威队列。",
-          "rateLimited": "请求过于频繁；可稍后使用原幂等键重试，不会创建第二个动作。",
+          "conflict": "计划版本或审批状态已变化，请刷新列表后重新核对。",
+          "rateLimited": "请求过于频繁，请稍后在此处重试并核对结果。",
           "unavailable": "结果暂时未知，请在此处使用原请求“重试并核对结果”。请勿重新发起审批。",
-          "failed": "操作请求失败且未更新本地状态；请刷新权威队列后再决定。",
+          "failed": "操作未完成，请根据具体原因处理后重新提交。",
           "upstream": {
             "SALES_PLAN_APPROVAL_STATE_INVALID": "该版本当前无法执行此审批动作；请联系管理员核对审批实例状态。",
-            "NOTIFICATION_PAYLOAD_INVALID": "服务端在生成审批通知时被拒绝，属于服务端问题，刷新无法解决；请把错误编号发给后端核对。",
+            "NOTIFICATION_PAYLOAD_INVALID": "审批通知未能发送，请联系管理员核对通知配置。",
             "APPROVAL_OPERATOR_NOT_ALLOWED": "服务端认为当前账号已不具备该节点的角色或组织权限；请刷新后重试，并联系管理员核对角色。"
           }
         },
         "approvalRole": "本次审批角色",
         "selectRole": "请选择本次审批角色",
-        "roleContractUnavailable": "你有此角色的审批权限，但当前 GEA 服务尚未支持按所选角色写入。暂不能提交，请先升级服务端。"
+        "roleContractUnavailable": "你有此角色的审批权限，但当前 GEA 服务尚未支持按所选角色写入。暂不能提交，请先升级服务端。",
+        "resultTitle": "处理结果",
+        "resume": "恢复待核对操作",
+        "roleMissing": "未取得可用的审批角色，请刷新列表并重新选择。",
+        "accessBlocked": "当前审批节点已不能通过这笔计划，请刷新列表并重新选择。",
+        "quantityBlocked": "本节点确认数量无效，请重新核对 SKU 数量后提交。"
       },
       "liveBatch": {
         "approveTitle": "批量通过（{{count}} 笔）",
@@ -980,7 +966,7 @@
         "mixedConfirmation": "我已核对 {{approve}} 笔通过和 {{resubmit}} 笔退回重提，确认逐笔提交。",
         "required": "请填写退回原因。",
         "loading": "正在逐笔提交 {{count}} 笔计划，请勿关闭…",
-        "result": "本次提交完成：成功 {{success}} 笔，失败 {{failed}} 笔，跳过 {{skipped}} 笔。",
+        "result": "本次提交完成：成功 {{success}} 笔，失败 {{failed}} 笔，待核对 {{pending}} 笔，跳过 {{skipped}} 笔。",
         "resubmitTag": "退回重提（生成新版本）",
         "approveTag": "审批通过（当前版本）",
         "repeatRejectTag": "退回版本继续逐级退回",
@@ -991,7 +977,13 @@
         "confirmApprove": "确认批量通过",
         "confirmResubmit": "确认批量重提",
         "confirmMixed": "确认批量提交",
-        "confirmReject": "确认批量退回"
+        "confirmReject": "确认批量退回",
+        "status": {
+          "success": "成功",
+          "failed": "失败",
+          "pending": "待核对",
+          "skipped": "跳过"
+        }
       },
       "action": {
         "title": "区域计划审批操作",
@@ -1099,7 +1091,6 @@
         "progress": "计划金额 / 目标金额",
         "categoryProgress": "计划金额 / 目标金额",
         "adjustment": "调整",
-        "comparison": "版本对比",
         "returnReason": "退回原因",
         "noReturnReason": "—",
         "status": "审批状态"
@@ -1195,8 +1186,6 @@
         "henan": "河南省区",
         "sichuan": "四川省区"
       },
-      "versionCompare": "版本对比",
-      "versionCompareUnavailable": "当前没有可读取的销售计划",
       "organizationGroupCount": "{{count}} 份计划",
       "mixedApprovalStatus": "多个审批节点",
       "expandOrganization": "展开 {{plan}} 下级组织",
@@ -1220,33 +1209,6 @@
       },
       "inlineAdjustments": "查看调整明细",
       "versionTargetMissing": "该版本不含月度目标",
-      "comparePlan": "版本②：{{amount}} / {{qty}}",
-      "compareProgress": "版本②金额进度：{{value}}",
-      "inlineComparison": {
-        "title": "列表版本对比",
-        "primary": "版本①",
-        "compared": "版本②",
-        "current": "当前版本",
-        "previous": "上一版本",
-        "earlier": "前 {{count}} 版",
-        "monthlyPrimary": "月计划①",
-        "monthlyCompared": "月计划②",
-        "difference": "差异（① − ②）",
-        "returnReason": "退回原因",
-        "hint": "按各计划距当前版本的顺序对比；缺失版本显示 —",
-        "plan": "月计划",
-        "confirmed": "确认计划量",
-        "confirmedPrimary": "确认计划量①",
-        "confirmedCompared": "确认计划量②",
-        "missing": "当前计划没有所选版本",
-        "allocation": "按各计划原确认数量占比分摊，每份四舍五入取整，合计可能有取整差额；原数量合计为 0 时平均分摊。",
-        "allocationFailed": "分摊草稿未全部暂存成功，请重试",
-        "allocationSaving": "正在暂存分摊草稿",
-        "allocationRetry": "重试暂存",
-        "allocationReadOnly": "组内计划须全部可编辑，历史版本只读",
-        "invalidQuantity": "请输入非负数量，最多三位小数",
-        "groupScope": "{{plans}} 份计划 · {{skus}} 种 SKU，按版本①汇总"
-      },
       "skuReview": {
         "title": "按大类 / SKU",
         "category": "大类",
@@ -1272,7 +1234,19 @@
         "empty": "当前筛选范围没有 SKU",
         "shipmentUnavailable": "部分历史发货量未能取得，相关发货量及合计显示为 —。"
       },
-      "returnDestinationUnavailable": "未能核对实际退回节点或修改后的数量，请刷新后重试。"
+      "returnDestinationUnavailable": "未能核对实际退回节点或修改后的数量，请刷新后重试。",
+      "returnReason": "退回原因",
+      "skuDetails": {
+        "plan": "月计划",
+        "confirmed": "确认计划量",
+        "allocation": "按各计划原确认数量占比分摊，每份四舍五入取整，合计可能有取整差额；原数量合计为 0 时平均分摊。",
+        "allocationFailed": "分摊草稿未全部暂存成功，请重试",
+        "allocationSaving": "正在暂存分摊草稿",
+        "allocationRetry": "重试暂存",
+        "allocationReadOnly": "组内计划须全部可编辑",
+        "invalidQuantity": "请输入非负数量，最多三位小数",
+        "missing": "当前计划明细未能取得，请刷新后重试。"
+      }
     },
     "contract": {
       "name": "合同审查 Agent",

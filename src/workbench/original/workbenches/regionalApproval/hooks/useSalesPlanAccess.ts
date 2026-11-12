@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { GeaSalesPlanDetail } from '../../../bridge.ts';
 import type { RegionalApprovalLiveRow } from '../regionalApprovalQueryModel.ts';
-import type { SalesPlanDetailClient } from './useSalesPlanDetail.ts';
+import type { SalesPlanDetailClient } from '../models/salesPlanDetailModel.ts';
 
 export const useSalesPlanAccess = (
   rows: readonly RegionalApprovalLiveRow[],

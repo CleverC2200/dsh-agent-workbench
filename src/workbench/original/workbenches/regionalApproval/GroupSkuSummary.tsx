@@ -23,8 +23,6 @@ export function GroupSkuSummary(props: {
   approvalRole?: ApprovalStageId;
   pendingValues?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   skusByPlan: Readonly<Record<string, GeaSalesPlanSku[]>>;
-  comparedSkusByPlan: Readonly<Record<string, GeaSalesPlanSku[]>>;
-  comparison: boolean;
   loading: boolean;
   failed: boolean;
   onRetry: () => void;
@@ -34,8 +32,7 @@ export function GroupSkuSummary(props: {
   onValidityChange: (invalid: boolean) => void;
   t: TFunction;
 }) {
-  const { members, approvalRole, pendingValues, skusByPlan, comparedSkusByPlan, comparison, t } =
-    props;
+  const { members, approvalRole, pendingValues, skusByPlan, t } = props;
   const { salesPlan } = useWorkbenchHost();
   const latest = useRef(props);
   latest.current = props;
@@ -58,8 +55,7 @@ export function GroupSkuSummary(props: {
         `${plan.planId}:${plan.versionId}:${plan.status}:${props.editablePlans.has(plan.planId)}`,
     )
     .join('|');
-  const text = (key: string) =>
-    t(`common.assistantSurface.regionalApproval.inlineComparison.${key}`);
+  const text = (key: string) => t(`common.assistantSurface.regionalApproval.skuDetails.${key}`);
   const groupText = (key: string, values?: Record<string, unknown>) =>
     t(`common.assistantSurface.regionalApproval.groupSku.${key}`, values);
 
@@ -194,32 +190,7 @@ export function GroupSkuSummary(props: {
       return null;
     }
   }, [sources, approvalRole, pendingValues]);
-  const compared = useMemo(() => {
-    if (!comparison || !members.every((plan) => comparedSkusByPlan[plan.planId])) return undefined;
-    try {
-      return summarizeGroupSkus(
-        members.map((plan) => {
-          const skus = comparedSkusByPlan[plan.planId];
-          return {
-            plan: {
-              ...plan,
-              versionId: skus[0]?.versionId ?? plan.versionId,
-              skuCount: skus.length,
-            },
-            skus,
-          };
-        }),
-        approvalRole,
-      );
-    } catch {
-      return undefined;
-    }
-  }, [comparison, members, comparedSkusByPlan, approvalRole]);
-  const comparedByCode = new Map(compared?.map((row) => [row.skuCode, row]));
-  const rows = [...(summary ?? [])];
-  for (const row of compared ?? [])
-    if (!rows.some((item) => item.skuCode === row.skuCode))
-      rows.push({ ...row, baseQty: '0', baseAmount: '0', qty: '0', amount: '0' });
+  const rows = summary ?? [];
   const categories = new Map<string, GroupSkuSummaryRow[]>();
   for (const row of rows)
     categories.set(row.categoryName, [...(categories.get(row.categoryName) ?? []), row]);
@@ -227,11 +198,7 @@ export function GroupSkuSummary(props: {
     members.every((plan) => props.editablePlans.has(plan.planId)) &&
     draftsReady &&
     Boolean(sources);
-  const columns = [
-    'plan',
-    comparison ? 'confirmedPrimary' : 'confirmed',
-    ...(comparison ? ['confirmedCompared', 'difference'] : []),
-  ];
+  const columns = ['plan', 'confirmed'];
   return (
     <section
       className={styles.root}
@@ -239,12 +206,7 @@ export function GroupSkuSummary(props: {
       aria-label={groupText('title')}
     >
       <div className={styles.groupScope}>
-        {comparison
-          ? t('common.assistantSurface.regionalApproval.inlineComparison.groupScope', {
-              plans: members.length,
-              skus: summary?.length ?? '—',
-            })
-          : groupText('scope', { plans: members.length, skus: summary?.length ?? '—' })}
+        {groupText('scope', { plans: members.length, skus: summary?.length ?? '—' })}
       </div>
       {editable && <div className={styles.groupScope}>{text('allocation')}</div>}
       {draftReadFailed && (
@@ -322,10 +284,6 @@ export function GroupSkuSummary(props: {
                   </th>
                 </tr>
                 {items.map((row) => {
-                  const previous = compared
-                    ? (comparedByCode.get(row.skuCode) ?? { qty: '0', amount: '0' })
-                    : undefined;
-                  const isCurrentSku = summary.some((item) => item.skuCode === row.skuCode);
                   return (
                     <tr key={row.skuCode}>
                       <td>
@@ -339,18 +297,13 @@ export function GroupSkuSummary(props: {
                       </td>
                       <td>
                         <SkuQuantityAmount quantity={row.qty} amount={row.amount}>
-                          {editable && isCurrentSku ? (
+                          {editable ? (
                             <Input
                               type="number"
-                              step={
-                                members.every((plan) => plan.orderType === 'M') &&
-                                approvalRole !== 'category'
-                                  ? 1
-                                  : 0.001
-                              }
+                              step={members.every((plan) => plan.orderType === 'M') ? 1 : 0.001}
                               size="small"
                               className={styles.quantityInput}
-                              aria-label={`${text(comparison ? 'confirmedPrimary' : 'confirmed')} ${row.skuCode}`}
+                              aria-label={`${text('confirmed')} ${row.skuCode}`}
                               value={edits[row.skuCode] ?? row.qty}
                               error={
                                 edits[row.skuCode] !== undefined &&
@@ -387,25 +340,6 @@ export function GroupSkuSummary(props: {
                           ) : undefined}
                         </SkuQuantityAmount>
                       </td>
-                      {comparison && (
-                        <>
-                          <td>
-                            <SkuQuantityAmount quantity={previous?.qty} amount={previous?.amount} />
-                          </td>
-                          <td>
-                            <SkuQuantityAmount
-                              quantity={
-                                previous ? subtractExactDecimals(row.qty, previous.qty) : undefined
-                              }
-                              amount={
-                                previous
-                                  ? subtractExactDecimals(row.amount, previous.amount)
-                                  : undefined
-                              }
-                            />
-                          </td>
-                        </>
-                      )}
                       <td aria-hidden="true" />
                     </tr>
                   );

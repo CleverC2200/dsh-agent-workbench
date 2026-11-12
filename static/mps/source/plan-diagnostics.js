@@ -31,6 +31,7 @@ export function attachPlanReport(
     pair(canonicalBaseName(row.target_base), row.material_code),
   );
   const weights = groupBy(sources.unitWeights, (row) => pair(row.base, row.code));
+  const weightIssues = groupBy(sources.unitWeightIssues ?? [], (row) => pair(row.base, row.code));
   const schedules = new Map(
     plan.resourceSchedules.map((row) => [JSON.stringify([row.month, row.resourceId]), row]),
   );
@@ -71,6 +72,12 @@ export function attachPlanReport(
     );
     const usable = (resources) => resources.filter((item) => item.capacity !== null);
     const issues = [];
+    const weightIssue = weightIssues.get(pair(row.base, row.code))?.[0];
+    const weightSource =
+      weightIssue?.sourceTable ??
+      'ai_db.agents_dim_product_list_mi / ai_db.agents_dim_material_prod_sales_info_d';
+    const weightFields =
+      'target_base / material_code / net_weight / weight_unit / measure_unit；旧来源：material_code / channel_name / ton_per_piece';
     const add = (kind, reason, sourceTable, sourceFields, action, blocking = true) => {
       issues.push({
         month: row.month,
@@ -91,6 +98,15 @@ export function attachPlanReport(
         ownResourceCount: own.length,
       });
     };
+    if (row.missing?.historyQuantity?.includes('替换系数缺失、冲突或无效'))
+      add(
+        '缺替换系数',
+        '同基地老品历史参考量无法换算，替换系数缺失、冲突或无效',
+        'ai_db.agents_dim_product_list_mi',
+        'stat_period / target_base / material_code / replacement_material_code / replace_num',
+        `核对最新月份${row.base}基地${row.code}对应老品${row.historyCode}的替换系数；同基地同SKU各标签应一致，零系数有效，缺值不能按1计算`,
+        row.demand !== 0,
+      );
     if (row.planMissing.includes('缺有效需求'))
       add(
         '缺有效需求',
@@ -179,10 +195,10 @@ export function attachPlanReport(
     if (row.planMissing.includes('缺唯一有效件吨系数'))
       add(
         '缺件吨系数',
-        `缺唯一有效吨/件${own.length ? `；本基地已有${own.length}个已匹配物理资源，产线能力已取得` : ''}`,
-        'ai_db.agents_dim_material_prod_sales_info_d',
-        'material_code / channel_name / ton_per_piece',
-        '补充适用渠道与吨/件；标准日产件数不能替代吨/件',
+        `缺唯一有效吨/件${weightIssue ? `；${weightIssue.reason}` : ''}${own.length ? `；本基地已有${own.length}个已匹配物理资源，产线能力已取得` : ''}`,
+        weightSource,
+        weightFields,
+        '优先补齐最新产品清单的同基地SKU净重、重量单位和计量单位；无该基地SKU记录时核对旧来源渠道系数，也可人工维护经确认的吨/件；标准日产件数不能替代吨/件',
       );
     if (row.supplyMode === 'odm') {
       row.odmBasis =
@@ -230,8 +246,8 @@ export function attachPlanReport(
         add(
           '缺件吨系数',
           'ODM件数计划可计算，需求或默认计划到货的吨数报告缺唯一一致的吨/件，吨数保持待补',
-          'ai_db.agents_dim_material_prod_sales_info_d',
-          'material_code / channel_name / ton_per_piece',
+          weightSource,
+          weightFields,
           '核对收货基地及沿途基地适用渠道与唯一一致的吨/件后重新评估吨数报告；当前件数计划继续计算',
           false,
         );
@@ -310,8 +326,8 @@ export function attachPlanReport(
           add(
             '缺件吨系数',
             `调拨关系及发出基地产能已存在，供需基地的吨/件缺失或不一致；接收方=${weight(row.base, row.code)}，发出方=${donorBases.map((base) => `${base}:${weight(base, row.code)}`).join('、')}`,
-            'ai_db.agents_dim_material_prod_sales_info_d',
-            'material_code / channel_name / ton_per_piece',
+            'ai_db.agents_dim_product_list_mi / ai_db.agents_dim_material_prod_sales_info_d',
+            weightFields,
             '核对发出与接收基地适用渠道及吨/件',
           );
       } else if (tags.length === 1 && tags[0] === '调拨品') {

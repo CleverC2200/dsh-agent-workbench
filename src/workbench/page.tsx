@@ -574,6 +574,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
               )}
               <RegionalApprovalWorkbench
                 submissionOutcomes={submissionOutcomes}
+                submissionPending={Boolean(resubmit?.pending)}
                 submissionRefreshRequest={submissionRefreshRequest}
                 stateScope={`gea-dsh:${status.environment}:${status.user?.tenantId}:${status.user?.id}`}
                 t={locale.t.bind(locale)}

@@ -1,4 +1,3 @@
-/** Synthetic external GEA service responses. This file is never part of a page build. */
 const snapshot = '2026-09-30';
 export const companyGrant = {
   trusted: true,
@@ -83,7 +82,6 @@ const aging = [
   },
 ];
 
-/** Former reception literals retained at the public calculator, including customer units. */
 export function syntheticDomainData() {
   return {
     baseInventory: base.map((x) => ({
