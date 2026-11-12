@@ -1,10 +1,5 @@
 import { validateTaskRule, displayRule, displayValue } from './task-rules.mjs';
-import {
-  warningOwner,
-  ownsWarningTask,
-  createOwnerScopedApi,
-  migrateWarningOwners,
-} from './warning-ownership.mjs';
+import { warningOwner, ownsWarningTask, createOwnerScopedApi } from './warning-ownership.mjs';
 import { deleteDetectionTask } from './task-management.mjs';
 import {
   notificationConfig,
@@ -132,12 +127,13 @@ export function canonicalize(state) {
   }
   return state;
 }
-import { createPostgresStore } from './detection-postgres.mjs';
+import { createWhitelistStore } from './detection-whitelist.mjs';
 import { randomUUID } from 'node:crypto';
-import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
-import { createServer } from 'node:http';
-const ROOT = process.env.GEA_WARNING_HOME || '';
-const FILE = ROOT + '/runtime/detection-state.json';
+import { readFile, mkdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+const ROOT = process.env.GEA_WARNING_HOME || join(homedir(), '.dsh', 'warning');
+
 const scopes = ['品类', '基地', '品类*基地', '大区', '省区'];
 export function cron(s) {
   const [h, m] = (s.time || '09:00').split(':').map(Number);
@@ -185,6 +181,7 @@ export function validate(result, task) {
     )
       throw Error('检测颗粒度或对象编码无效');
     seen.add(normalizedObjectKey(task.scope, x.objectKey, x.objectName));
+    if (x.rule?.sourceType == null && x.rule?.source === 'task') x.rule.sourceType = 'task';
     if (x.rule?.sourceType === 'task') {
       if (!x.unit || !x.objectName || !x.period || !x.cutoff || !x.evidence)
         throw Error('任务检测缺少对象、期间、截止时间或取数证据');
@@ -366,19 +363,9 @@ export function merge(state, task, results, run) {
   }
 }
 export async function installDetection(ctx) {
-  if (!ROOT)
-    throw Object.assign(new Error('预警后台尚未配置'), { code: 'DETECTION_NOT_CONFIGURED' });
-  await mkdir(ROOT + '/runtime', { recursive: true });
-  let state;
-  try {
-    state = JSON.parse(await readFile(FILE, 'utf8'));
-  } catch (e) {
-    if (e.code !== 'ENOENT') throw e;
-    state = { tasks: [], runs: [], events: [] };
-  }
-  const store = await createPostgresStore();
-  const databaseState = await store.load();
-  if (databaseState.tasks.length) state = databaseState;
+  await mkdir(ROOT, { recursive: true });
+  const state = { tasks: [], runs: [], events: [] };
+  const store = createWhitelistStore(ctx);
   ctx.effect(() => () => {
     void store.close();
   });
@@ -387,8 +374,6 @@ export async function installDetection(ctx) {
     const snapshot = JSON.stringify(state, null, 2);
     const next = writes.then(async () => {
       await store.save(JSON.parse(snapshot));
-      await writeFile(FILE + '.tmp', snapshot);
-      await rename(FILE + '.tmp', FILE);
     });
     writes = next.catch(() => {});
     return next;
@@ -411,33 +396,22 @@ export async function installDetection(ctx) {
     if (!response.ok || !result.ok) throw Error('无法读取 GEA 登录身份');
     return warningOwner(result.value);
   }
-  let cookie = '';
-  async function xxl(path, data) {
-    async function login() {
-      const userName = process.env.GEA_XXL_JOB_USERNAME,
-        password = process.env.GEA_XXL_JOB_PASSWORD;
-      if (!userName || !password) throw Error('XXL-JOB账号尚未配置');
-      const r = await fetch('http://127.0.0.1:18080/xxl-job-admin/login', {
+  async function scheduler(input) {
+    const response = await ctx.connection.createSharedFetchHandler('/api').fetch(
+      new Request('http://host/api/gea-proof/warning/scheduler', {
         method: 'POST',
-        body: new URLSearchParams({ userName, password }),
-      });
-      cookie = (r.headers.get('set-cookie') || '').split(';')[0];
-      if ((await r.json()).code !== 200) throw Error('XXL-JOB登录失败');
-    }
-    if (!cookie) await login();
-    const r = await fetch('http://127.0.0.1:18080/xxl-job-admin' + path, {
-      method: 'POST',
-      headers: { cookie },
-      body: new URLSearchParams(data),
-    });
-    if (!r.headers.get('content-type')?.includes('json')) {
-      cookie = '';
-      throw Error('XXL-JOB登录已失效，请重试');
-    }
-    const v = await r.json();
-    if (v.code !== 200) throw Error(v.msg || 'XXL-JOB操作失败');
-    return v.content;
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    );
+    const body = await response.json();
+    if (!response.ok || body.ok !== true) throw Error(body.error?.message || '预警调度服务不可用');
+    return body.value;
   }
+  const xxl = async (path, data) => {
+    if (path === '/jobinfo/trigger') await scheduler({ operation: 'poll', busy: true });
+    return scheduler({ operation: 'xxl', path, data });
+  };
   async function configure(t, edit = false) {
     const body = {
       jobGroup: '1',
@@ -462,7 +436,6 @@ export async function installDetection(ctx) {
     if (edit) body.id = String(t.jobId);
     const id = await xxl(edit ? '/jobinfo/update' : '/jobinfo/add', body);
     if (!edit) t.jobId = Number(id);
-    await xxl(t.enabled ? '/jobinfo/start' : '/jobinfo/stop', { id: String(t.jobId) });
   }
   const DEFAULT_AGENT = 'gea-html-inventory-apsplan';
   async function availableAgents() {
@@ -473,7 +446,12 @@ export async function installDetection(ctx) {
       .map((x) => ({ id: x.id, name: x.name || x.id, broken: x.broken || null }));
   }
   async function metricInfo(name) {
-    const catalog = JSON.parse(await readFile(ROOT + '/config/metric-catalog.json', 'utf8'));
+    let catalog = {};
+    try {
+      catalog = JSON.parse(await readFile(ROOT + '/config/metric-catalog.json', 'utf8'));
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
     return (
       catalog[name] || {
         name,
@@ -509,12 +487,20 @@ export async function installDetection(ctx) {
       };
     await save();
     const metric = await metricInfo(t.metric);
-    if (metric.status !== 'available') throw Error(metric.message || '指标库口径不可用');
+    // A task may define its rule; the Agent must verify every unspecified metric rule from its authorized knowledge tools.
+    if (metric.status !== 'available')
+      run.metricLibraryIssue = metric.message || '指标库口径需通过授权工具核对';
     const metricContext = Object.fromEntries(
-      ['name', 'unit', 'direction', 'measureRules', 'dimensions', 'cubeNotes'].map((key) => [
-        key,
-        metric[key] ?? '',
-      ]),
+      [
+        'name',
+        'status',
+        'message',
+        'unit',
+        'direction',
+        'measureRules',
+        'dimensions',
+        'cubeNotes',
+      ].map((key) => [key, metric[key] ?? '']),
     );
     run.context = { metricContext, scope: t.scope, description: t.description };
     const prompt = `指标：${t.metric}
@@ -603,6 +589,10 @@ export async function installDetection(ctx) {
             if (text) texts.push(text);
           }
           if (e.type === 'turn/end') {
+            if (e.data?.reason?.kind === 'error')
+              throw Error(e.data.reason.error?.message || 'Agent 检测执行失败');
+            if (e.data?.reason?.kind !== 'completed')
+              throw Error('Agent 检测未正常完成，请检查执行记录');
             for (const text of texts.reverse()) {
               const raw = text
                 .replace(/^```(?:json)?\s*/, '')
@@ -639,7 +629,10 @@ export async function installDetection(ctx) {
     if (!ownsWarningTask(t, await currentOwner())) throw Error('请使用预警设置人的账号执行检测');
     if (!t.enabled || t.deletedAt) throw Error('检测任务已停用或删除');
     const previous = state.runs.find((r) => r.runKey === runKey);
-    if (previous) return previous;
+    if (previous) {
+      if (previous.status === '执行中') throw Error('上次执行状态仍待核实，请勿重复执行');
+      return previous;
+    }
     if (running.has(id)) throw Error('上一次检测仍在执行');
     running.add(id);
     const run = {
@@ -654,10 +647,10 @@ export async function installDetection(ctx) {
       recovered: 0,
     };
     state.runs.unshift(run);
-    await locked(save);
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 540000);
     try {
+      await locked(save);
       const result = await ai(t, run, ac.signal);
       run.response = result;
       await locked(save);
@@ -761,7 +754,12 @@ export async function installDetection(ctx) {
           if (!eligibleAgents.some((x) => x.id === selectedAgent && !x.broken))
             throw Error('所选Agent不可用，请重新选择');
           v.agentPreset = selectedAgent;
-          const old = state.tasks.find((task) => task.id === v.id);
+          const createdId =
+            typeof v.requestKey === 'string' && /^[a-f0-9]{32}$/.test(v.requestKey)
+              ? 'monitor-' + v.requestKey
+              : undefined;
+          const old = state.tasks.find((task) => task.id === (v.id || createdId));
+          if (old && running.has(old.id)) throw Error('检测正在执行，请结束后再修改任务');
           if (v.id && (!old || old.deletedAt)) throw Error('任务不存在或已删除');
           const recipients =
             v.notifyRecipients ??
@@ -789,7 +787,7 @@ export async function installDetection(ctx) {
             throw Error('无法记录预警设置人，请重新登录后保存');
           const t = {
             ...old,
-            id: old?.id || 'monitor-' + randomUUID(),
+            id: old?.id || createdId || 'monitor-' + randomUUID(),
             name: v.metric + '检测',
             metric: v.metric.trim(),
             scope: v.scope,
@@ -819,6 +817,7 @@ export async function installDetection(ctx) {
           if (old) Object.assign(old, t);
           else state.tasks.unshift(t);
           await save();
+          await xxl(t.enabled ? '/jobinfo/start' : '/jobinfo/stop', { id: String(t.jobId) });
           if (!old && v.runImmediately === true)
             await xxl('/jobinfo/trigger', {
               id: String(t.jobId),
@@ -860,7 +859,16 @@ export async function installDetection(ctx) {
         throw Error('未知检测操作');
     }
   }
-  const scopedApi = createOwnerScopedApi({ state, currentOwner, api });
+  const ownedApi = createOwnerScopedApi({ state, currentOwner, api });
+  let requests = Promise.resolve();
+  const scopedApi = (input) => {
+    const pending = requests.then(async () => {
+      if (!running.size) Object.assign(state, await store.load());
+      return ownedApi(input);
+    });
+    requests = pending.catch(() => {});
+    return pending;
+  };
   ctx.effect(() =>
     ctx.connection.fetch.register({
       path: '/api/agent-workbench/detection',
@@ -896,57 +904,54 @@ export async function installDetection(ctx) {
   const deliveryTimer = setInterval(() => {
     void deliver().catch(() => {});
   }, 15000);
+  deliveryTimer.unref();
   ctx.effect(() => () => clearInterval(deliveryTimer));
-  const token = (await readFile(ROOT + '/config/detection-token.txt', 'utf8')).trim();
-  const server = createServer(async (req, res) => {
-    if (
-      req.method !== 'POST' ||
-      !['/execute', '/notify-test'].includes(req.url) ||
-      req.headers.authorization !== 'Bearer ' + token
-    ) {
-      res.writeHead(403).end();
-      return;
-    }
-    let body = '';
-    for await (const chunk of req) {
-      body += chunk;
-      if (body.length > 8192) {
-        res.writeHead(413).end();
-        return;
+  let pollTimer;
+  let disposed = false;
+  let polling = false;
+  async function pollExecutor() {
+    if (disposed || polling) return;
+    polling = true;
+    let delay = 3000;
+    try {
+      const { job } = await scheduler({ operation: 'poll', busy: running.size > 0 });
+      if (job && !disposed) {
+        await requests;
+        if (!running.size) Object.assign(state, await store.load());
+        void runTask(job.taskId, job.runKey)
+          .then(
+            (result) =>
+              scheduler({
+                operation: 'complete',
+                logId: job.logId,
+                code: result.status === '成功' ? 200 : 500,
+                message: result.result || '检测状态待核实',
+              }),
+            (error) =>
+              scheduler({
+                operation: 'complete',
+                logId: job.logId,
+                code: 500,
+                message: error.message,
+              }),
+          )
+          .catch(() => {});
+      }
+    } catch {
+      delay = 15000;
+    } finally {
+      polling = false;
+      if (!disposed) {
+        pollTimer = setTimeout(() => void pollExecutor(), delay);
+        pollTimer.unref();
       }
     }
-    try {
-      const x = JSON.parse(body);
-      const out =
-        req.url === '/notify-test'
-          ? await scopedApi({ op: 'notify-test', eventId: x.eventId })
-          : await runTask(x.taskId, String(x.runKey));
-      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(out));
-    } catch (e) {
-      res
-        .writeHead(500, { 'content-type': 'application/json' })
-        .end(JSON.stringify({ error: e.message }));
-    }
-  });
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(18111, '127.0.0.1', resolve);
-  });
-  ctx.effect(() => () => server.close());
-  try {
-    migrateWarningOwners(
-      state,
-      JSON.parse(await readFile(ROOT + '/config/warning-owner-migrations.json', 'utf8')),
-    );
-  } catch (e) {
-    if (e.code !== 'ENOENT') throw e;
   }
-  canonicalize(state);
-  for (const r of state.runs)
-    if (r.status === '执行中') {
-      r.status = '失败';
-      r.result = '宿主重启，执行中断';
-    }
-  await save();
+  pollTimer = setTimeout(() => void pollExecutor(), 1000);
+  pollTimer.unref();
+  ctx.effect(() => () => {
+    disposed = true;
+    clearTimeout(pollTimer);
+  });
   return { api: scopedApi, runTask };
 }
