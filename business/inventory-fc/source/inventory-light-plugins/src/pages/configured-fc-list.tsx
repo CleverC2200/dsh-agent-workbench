@@ -1,6 +1,6 @@
 import type { FcWarehouse } from './fc-warehouse-directory';
 import { PlanningTable } from './fc/components/planning-settings';
-import { projectFcPlannedRows } from './fc-planned-page';
+import { projectFcPlannedRows, sortFcReplenishmentRows } from './fc-planned-page';
 import {
   fcReplenishmentDisplay,
   fcAgingDisplay,
@@ -11,11 +11,15 @@ import { FcBatchDetails } from './fc-batch-details';
 import { FcTransferDetails } from './fc-transfer-details';
 import { originalFcView } from '../../../../../shared/original-business-views';
 import { mergeFcPlans } from '../../../../../shared/fc-plan-merge';
-import { fcSubmissionIdentity } from '../../../../../shared/fc-submission-identity';
+import {
+  createFcConfirmationId,
+  fcSubmissionIdentity,
+} from '../../../../../shared/fc-submission-identity';
 import { fcSubmissionProvenance, type FcStoredVersions } from '../../../../../shared/fc-provenance';
 import { persistAndSubmitFc, verifyFcReceiptArchive } from './fc-submission-persistence';
 import { fcPersistence } from './fc-storage-client';
 import type { FcStoreScope } from '../../../../../shared/fc-persistence';
+import type { FactInput } from '../../../../../shared/configured-facts';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { knownNumber } from '../../../../../shared/configured-overview';
 import { call } from '../channel.js';
@@ -209,14 +213,16 @@ export function FcConfiguredList(
   const scopeId = JSON.stringify([scope.viewId, { ...scope.input, replenishment: undefined }]);
   const [targetMessage, setTargetMessage] = useState('');
   const [targetLoading, setTargetLoading] = useState(false);
-  const [automaticTargetFields, setAutomaticTargetFields] = useState<string[]>([]);
+  const [targetAddresses, setTargetAddresses] = useState<{ code: string; name: string }[]>([]);
   const targetRequest = useRef<AbortController | null>(null);
+  const loadedTargetScope = useRef<string | null>(null);
   const readDmsTarget = async (warehouse: string, addressCode = '') => {
     targetRequest.current?.abort();
     const task = new AbortController();
     targetRequest.current = task;
     setTargetLoading(true);
-    setTargetMessage('正在读取主数据…');
+    setTargetMessage('正在读取收货信息…');
+    setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
     try {
       const target = z
         .object({
@@ -226,6 +232,7 @@ export function FcConfiguredList(
             addressCode: z.string(),
             pupCode: z.string(),
           }),
+          addresses: z.array(z.object({ code: z.string(), name: z.string() })).default([]),
           message: z.string(),
         })
         .parse(
@@ -237,27 +244,45 @@ export function FcConfiguredList(
         );
       if (task.signal.aborted) return;
       if (target.warehouseCode !== warehouse) throw Error('主数据分仓范围不一致');
-      const matched = Object.entries(target.fields).filter(([, value]) => value.trim());
-      setDmsFields((current) => ({ ...current, ...Object.fromEntries(matched) }));
-      setAutomaticTargetFields(matched.map(([field]) => field));
+      setDmsFields(target.fields);
+      setTargetAddresses(target.addresses);
       setTargetMessage(target.message);
       setConsumptionReviewed(false);
     } catch (error) {
       if (!task.signal.aborted) {
         setTargetMessage(
-          `自动读取不可用，请核对后补填编码。${error instanceof Error ? error.message : ''}`,
+          `收货信息读取失败，请稍后重新读取。${error instanceof Error ? error.message : ''}`,
         );
-        setAutomaticTargetFields([]);
+        setTargetAddresses([]);
       }
     } finally {
       if (!task.signal.aborted) setTargetLoading(false);
     }
   };
+  const hasDmsItems =
+    previewState === 'ready' &&
+    exportRows.some(
+      (row) =>
+        String(row.warehouse_code) === exportWarehouse &&
+        (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0,
+    );
   useEffect(() => {
-    if (dialog !== 'export' || !exportWarehouse) return;
-    void readDmsTarget(exportWarehouse);
-    return () => targetRequest.current?.abort();
-  }, [dialog, exportWarehouse, scopeId]);
+    if (dialog !== 'export') loadedTargetScope.current = null;
+    if (dialog !== 'export' || !exportWarehouse || !hasDmsItems) {
+      targetRequest.current?.abort();
+      setTargetLoading(false);
+      setTargetMessage('');
+      return;
+    }
+    const targetScope = JSON.stringify([exportWarehouse, scopeId]);
+    if (loadedTargetScope.current === targetScope) return;
+    const read = readDmsTarget(exportWarehouse);
+    const request = targetRequest.current;
+    void read.then(() => {
+      if (!request?.signal.aborted) loadedTargetScope.current = targetScope;
+    });
+    return () => request?.abort();
+  }, [dialog, exportWarehouse, scopeId, hasDmsItems]);
   const [dmsReceipt, setDmsReceipt] = useState<{
     orderCode: string;
     aiPreOrderCode: string;
@@ -270,14 +295,16 @@ export function FcConfiguredList(
   const [consumptionReviewed, setConsumptionReviewed] = useState(false);
   useEffect(() => setConsumptionReviewed(false), [exportRows, draft, exportWarehouse]);
   useEffect(() => {
+    loadedTargetScope.current = null;
     setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
-    setAutomaticTargetFields([]);
+    setTargetAddresses([]);
     setDmsReceipt(null);
   }, [exportWarehouse]);
   const [dialogPage, setDialogPage] = useState(1);
   const [busy, setBusy] = useState(false),
     [notice, setNotice] = useState('');
   const active = useRef<AbortController | null>(null);
+  const dmsConfirmation = useRef({ id: '', submitting: false, completed: false });
   useEffect(() => {
     active.current?.abort();
     setBusy(false);
@@ -292,7 +319,7 @@ export function FcConfiguredList(
       active.current?.abort();
       targetRequest.current?.abort();
       setTargetLoading(false);
-      setAutomaticTargetFields([]);
+      setTargetAddresses([]);
       setDmsReceipt(null);
       setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
       setBusy(false);
@@ -540,10 +567,48 @@ export function FcConfiguredList(
       setPlanDraft(next);
       if (!parsed.errors.length) memoryStorage.setItem(planDraftKey, JSON.stringify(next));
     });
+  // Filter before pagination; explicitly edited quantities and local plans still need
+  // their source row for recalculation and submission provenance (including zero edits).
+  const confirmationInput = (filters: FactInput['filters']): FactInput => ({
+    ...scope.input,
+    filters: Object.fromEntries(
+      Object.entries(filters ?? {}).filter(
+        ([name]) => !['list_mode', 'sort_field', 'sort_direction'].includes(name),
+      ),
+    ),
+    replenishment: {
+      neededOnly: true,
+      businessOnly: false,
+      positiveActualKeys: Object.keys(draft.quantities).flatMap((key) => {
+        try {
+          const [warehouse, sku] = z.tuple([z.string(), z.string()]).parse(JSON.parse(key));
+          return [filterKey(warehouse, sku)];
+        } catch {
+          return [];
+        }
+      }),
+      positivePlanKeys: [
+        ...new Set([
+          ...(planSelection.positivePlanKeys ?? []),
+          ...plans
+            .filter((plan) => [month, nextMonth(month)].includes(plan.month))
+            .map((plan) => filterKey(plan.warehouseCode, plan.sku)),
+        ]),
+      ],
+      zeroPlanKeys: planSelection.zeroPlanKeys,
+    },
+  });
   const previewDraft = (
     mode: 'draft' | 'export',
     warehouse = scopedWarehouse || exportWarehouse,
   ) => {
+    if (dmsConfirmation.current.submitting) return;
+    if (mode === 'export')
+      dmsConfirmation.current = {
+        id: createFcConfirmationId(),
+        submitting: false,
+        completed: false,
+      };
     setDialog(mode);
     active.current?.abort();
     setBusy(false);
@@ -563,10 +628,10 @@ export function FcConfiguredList(
     );
     const readScope = {
       ...scope,
-      viewId: 'replenishment',
+      viewId: mode === 'export' ? 'replenishment-confirmation' : 'replenishment',
       input:
         mode === 'export'
-          ? { ...scope.input, filters: { ...confirmationFilters, warehouse_code: warehouse } }
+          ? confirmationInput({ ...confirmationFilters, warehouse_code: warehouse })
           : { ...scope.input, filters: confirmationFilters },
     };
     return run(async (signal) => {
@@ -591,7 +656,7 @@ export function FcConfiguredList(
         setIncompletePreviewCount(candidates.length - selected.length);
         if (mode === 'export' && selected.some((row) => String(row.warehouse_code) !== warehouse))
           throw Error('返回数据不属于所选分仓，请重新读取');
-        setExportRows(selected);
+        setExportRows(sortFcReplenishmentRows(selected, scope.input));
         setPreviewState('ready');
       } catch (error) {
         if (!signal.aborted) setPreviewState('failed');
@@ -804,8 +869,12 @@ export function FcConfiguredList(
     setDialog(null);
     setNotice('补货清单已导出');
   };
-  const submitDms = () =>
-    run(async (signal) => {
+  const submitDms = () => {
+    const confirmation = dmsConfirmation.current;
+    if (confirmation.submitting || confirmation.completed || !confirmation.id) return;
+    confirmation.submitting = true;
+    return run(async (signal) => {
+      setNotice('正在核对补货清单，请稍候…');
       if (!exportWarehouse) throw Error('请选择分仓');
       if (targetLoading) throw Error('主数据正在读取，请稍候复核编码');
       if (warehouseReceiptPending) throw Error('该分仓有待核对的回执归档，请先核对再开始下一批');
@@ -825,7 +894,7 @@ export function FcConfiguredList(
         Object.entries(dmsFields).map(([key, value]) => [key, value.trim()]),
       );
       if (Object.values(fields).some((value) => !value))
-        throw Error('请填写客户、收货地址和提货点编码');
+        throw Error('请先选择有效收货地址，等待收货信息自动带入');
       const order = {
         ...fields,
         ...(remarks ? { orderRemarks: remarks } : {}),
@@ -857,11 +926,8 @@ export function FcConfiguredList(
         await readFcActionRows(
           {
             ...scope,
-            viewId: 'replenishment',
-            input: {
-              ...scope.input,
-              filters: { ...scope.input.filters, warehouse_code: exportWarehouse },
-            },
+            viewId: 'replenishment-confirmation',
+            input: confirmationInput({ ...scope.input.filters, warehouse_code: exportWarehouse }),
           },
           signal,
         )
@@ -898,6 +964,7 @@ export function FcConfiguredList(
         }))
         .sort((a, b) => a.sku.localeCompare(b.sku));
       const { aiPreOrderCode, legacyAiPreOrderCode } = await fcSubmissionIdentity({
+        confirmationId: confirmation.id,
         warehouseCode: exportWarehouse,
         month,
         snapshotVersion: provenance.snapshotVersion,
@@ -908,48 +975,70 @@ export function FcConfiguredList(
         order,
       });
       signal.throwIfAborted();
-      const readiness = (await call(
-        'branch-dms',
-        {
-          operation: 'preflight',
-          warehouseCode: exportWarehouse,
-          order: { aiPreOrderCode, ...order },
-        },
-        { signal },
-      )) as { ready?: boolean; scope?: string };
-      signal.throwIfAborted();
-      if (readiness?.ready !== true || readiness.scope !== 'local-configuration')
-        throw Error('提交前配置检查未通过，请刷新页面并检查Host版本');
-      const receipt = await persistAndSubmitFc(
-        exportWarehouse,
-        {
-          stage: 'confirmed',
-          ...provenance,
-          month,
-          consumptionReviewed,
-          aiPreOrderCode,
-          rows: confirmationRows,
-        },
-        signal,
-        async () =>
-          call(
+      const readiness = z
+        .discriminatedUnion('scope', [
+          z.object({ ready: z.literal(true), scope: z.literal('dms-direct') }),
+          z.object({ ready: z.literal(true), scope: z.literal('local-configuration') }),
+        ])
+        .safeParse(
+          await call(
             'branch-dms',
             {
-              operation: 'submit',
+              operation: 'preflight',
               warehouseCode: exportWarehouse,
               order: { aiPreOrderCode, ...order },
             },
             { signal },
           ),
-        (received) => {
-          signal.throwIfAborted();
-          setReceiptArchived(false);
-          setDmsReceipt(received);
-          setNotice(`DMS已返回订单号：${received.orderCode}；正在保存回执，请勿重复下单。`);
-        },
-        legacyAiPreOrderCode,
-      );
+        );
       signal.throwIfAborted();
+      if (!readiness.success) throw Error('提交前配置检查未通过，请刷新页面并检查Host版本');
+      setNotice('正在暂存到DMS，请勿重复点击…');
+      const sendDms = async () =>
+        call(
+          'branch-dms',
+          {
+            operation: 'submit',
+            warehouseCode: exportWarehouse,
+            order: { aiPreOrderCode, ...order },
+          },
+          { signal },
+        );
+      const result =
+        readiness.data.scope === 'dms-direct'
+          ? await sendDms()
+          : await persistAndSubmitFc(
+              exportWarehouse,
+              {
+                stage: 'confirmed',
+                ...provenance,
+                month,
+                consumptionReviewed,
+                aiPreOrderCode,
+                rows: confirmationRows,
+              },
+              signal,
+              sendDms,
+              (received) => {
+                signal.throwIfAborted();
+                setReceiptArchived(false);
+                setDmsReceipt(received);
+                setNotice(`DMS已返回订单号：${received.orderCode}；正在保存回执，请勿重复下单。`);
+              },
+              legacyAiPreOrderCode,
+            );
+      signal.throwIfAborted();
+      const receipt = z
+        .object({
+          orderCode: z.string().min(1),
+          aiPreOrderCode: z.string().min(1),
+          requestAiPreOrderCode: z.string().optional(),
+        })
+        .parse(result);
+      if ((receipt.requestAiPreOrderCode ?? receipt.aiPreOrderCode) !== aiPreOrderCode)
+        throw Error('DMS回执与本次补货不一致，请核对原订单；禁止重复提交');
+      signal.throwIfAborted();
+      confirmation.completed = true;
       setDmsReceipt(receipt);
       setReceiptArchived(true);
       setNotice(`已暂存至DMS，订单号：${receipt.orderCode}。尚未审核或推单。`);
@@ -965,7 +1054,10 @@ export function FcConfiguredList(
             `已暂存至DMS，订单号：${receipt.orderCode}；跳转未完成，请点击“进入DMS订单管理”重试，无需重新提交。`,
           );
       }
+    }).finally(() => {
+      confirmation.submitting = false;
     });
+  };
   const verifyReceiptArchive = (pending: FcStoreScope) =>
     run(async (signal) => {
       const receipt = await verifyFcReceiptArchive(pending, signal);
@@ -1198,13 +1290,27 @@ export function FcConfiguredList(
             </section>
           );
         }}
-        getRowKey={rowKey}
+        getRowKey={
+          scope.viewId === 'inventory'
+            ? (row: FcRow) => JSON.stringify([row.warehouseid, row.material_code, row.level])
+            : rowKey
+        }
         emptyMessage={
-          scope.viewId === 'replenishment' && selection.neededOnly
-            ? '当前筛选没有匹配的需补货明细；可取消“需补货”查看全部明细及缺失要素。'
-            : '暂无数据。'
+          scope.viewId === 'base-resources' && props.result?.supplementaryError
+            ? '-'
+            : scope.viewId === 'replenishment' && selection.neededOnly
+              ? '当前筛选没有匹配的需补货明细；可取消“需补货”查看全部明细及缺失要素。'
+              : '暂无数据。'
         }
         renderCell={renderCell}
+        renderSummaryCell={(row: FcRow, column: { field: string; valueField?: string }) => {
+          const field = column.valueField ?? column.field;
+          if (scope.viewId === 'replenishment')
+            return fcReplenishmentDisplay(row, field) ?? props.renderCell(row, column);
+          if (scope.viewId === 'plan')
+            return fcPlanDisplay(row, field) ?? props.renderCell(row, column);
+          return renderCell(row, column);
+        }}
         result={
           props.result
             ? {
@@ -1227,7 +1333,7 @@ export function FcConfiguredList(
           />
         </details>
       )}
-      {notice && (
+      {notice && !dialog && (
         <p role="status" className="fc-workflow-notice">
           {notice}
         </p>
@@ -1397,9 +1503,30 @@ export function FcConfiguredList(
                   条记录缺少分仓或商品编码，已排除出本次提交和导出，请核对源数据。
                 </p>
               )}
-              {dialog === 'export' && (
+              {dialog === 'export' && hasDmsItems && (
                 <fieldset className="fc-dms-fields" disabled={busy || Boolean(dmsReceipt)}>
                   <legend>DMS 暂存信息</legend>
+                  {targetAddresses.length > 1 && (
+                    <label className="fc-dms-address-choice">
+                      收货地址
+                      <select
+                        aria-label="收货地址"
+                        value={dmsFields.addressCode}
+                        disabled={targetLoading}
+                        onChange={(event) => {
+                          setConsumptionReviewed(false);
+                          void readDmsTarget(exportWarehouse, event.target.value);
+                        }}
+                      >
+                        <option value="">请选择收货地址</option>
+                        {targetAddresses.map((address) => (
+                          <option key={address.code} value={address.code}>
+                            {address.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   {(
                     [
                       ['addressCode', '收货地址编码'],
@@ -1408,55 +1535,18 @@ export function FcConfiguredList(
                     ] as const
                   ).map(([field, label]) => (
                     <label key={field}>
-                      {label}{' '}
-                      <input
-                        aria-label={label}
-                        value={dmsFields[field]}
-                        maxLength={500}
-                        readOnly={field !== 'addressCode' && automaticTargetFields.includes(field)}
-                        onBlur={() => {
-                          if (
-                            field === 'addressCode' &&
-                            dmsFields.addressCode.trim() &&
-                            !automaticTargetFields.includes('addressCode')
-                          )
-                            void readDmsTarget(exportWarehouse, dmsFields.addressCode.trim());
-                        }}
-                        onChange={(event) => {
-                          targetRequest.current?.abort();
-                          setTargetLoading(false);
-                          setAutomaticTargetFields([]);
-                          setConsumptionReviewed(false);
-                          const value = event.target.value;
-                          setDmsFields((current) =>
-                            field === 'addressCode'
-                              ? {
-                                  addressCode: value,
-                                  customerCode: automaticTargetFields.includes('customerCode')
-                                    ? ''
-                                    : current.customerCode,
-                                  pupCode: automaticTargetFields.includes('pupCode')
-                                    ? ''
-                                    : current.pupCode,
-                                }
-                              : { ...current, [field]: value },
-                          );
-                        }}
-                      />
+                      {label}
+                      <input aria-label={label} value={dmsFields[field]} readOnly />
                     </label>
                   ))}
                   <p role="status">{targetMessage}</p>
-                  {automaticTargetFields.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAutomaticTargetFields([]);
-                        setConsumptionReviewed(false);
-                      }}
-                    >
-                      手动调整编码
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    disabled={targetLoading}
+                    onClick={() => void readDmsTarget(exportWarehouse, dmsFields.addressCode)}
+                  >
+                    重新读取收货信息
+                  </button>
                   <p>
                     数量单位：件；默认速冻、配送、不拼车、同意缺货分批到货。请核对提货点与所选分仓。
                   </p>
@@ -1487,14 +1577,28 @@ export function FcConfiguredList(
               <p>
                 {displayedPreviewRows.length}个SKU
                 {dialog === 'export'
-                  ? '，可暂存至DMS，或仅导出Excel。暂存成功前请保留草稿；结果未知时请先在DMS核查。'
+                  ? hasDmsItems
+                    ? '，可暂存至DMS，或仅导出Excel。暂存成功前请保留草稿；结果未知时请先在DMS核查。'
+                    : '，当前分仓无需补货。'
                   : ''}
               </p>
               <div className="table-scroll">
-                <table className="data-table">
+                <table
+                  className={`data-table${dialog === 'export' ? ' fc-confirmation-table' : ''}`}
+                >
+                  {dialog === 'export' && (
+                    <colgroup>
+                      <col className="fc-confirmation-sku" />
+                      <col />
+                      <col className="fc-confirmation-suggestion" />
+                      <col className="fc-confirmation-quantity" />
+                      <col className="fc-confirmation-reason" />
+                    </colgroup>
+                  )}
                   <thead>
                     <tr>
-                      <th>分仓/SKU</th>
+                      <th>{dialog === 'export' ? 'SKU 编码' : '分仓/SKU'}</th>
+                      <th>SKU 名称</th>
                       <th>建议</th>
                       <th>实际补货量</th>
                       <th>调整原因</th>
@@ -1507,7 +1611,11 @@ export function FcConfiguredList(
                       .map((row) => (
                         <tr key={rowKey(row)}>
                           <td>
-                            {text(row.warehouse_name)} / {text(row.sku)}
+                            {dialog !== 'export' && `${text(row.warehouse_name)} / `}
+                            {text(row.sku)}
+                          </td>
+                          <td className="fc-confirmation-name" title={text(row.material_name)}>
+                            {text(row.material_name)}
                           </td>
                           <td>{numeric(row.recommended_qty)}</td>
                           <td>{renderCell(row, { field: 'missing_actualQty' })}</td>
@@ -1551,78 +1659,89 @@ export function FcConfiguredList(
               onPageChange={setDialogPage}
             />
           )}
-          {notice && <p role="alert">{notice}</p>}
-          <div className="fc-workflow-actions">
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => {
-                active.current?.abort();
-                setBusy(false);
-                setDialog(null);
-              }}
-            >
-              取消
-            </button>
-            {dialog === 'template' && (
+          <div className="fc-workflow-footer">
+            {notice && (
+              <p className="fc-workflow-notice" role="alert">
+                {notice}
+              </p>
+            )}
+            <div className="fc-workflow-actions">
               <button
                 type="button"
-                className="primary-button"
-                disabled={busy || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(templateMonth)}
-                onClick={() => void downloadTemplate()}
+                className="secondary-button"
+                onClick={() => {
+                  active.current?.abort();
+                  setBusy(false);
+                  setDialog(null);
+                }}
               >
-                下载模板
+                取消
               </button>
-            )}
-            {dialog === 'import' && (
-              <button
-                type="button"
-                className="primary-button"
-                disabled={busy || importErrors.length > 0 || !planDraft?.rows.length}
-                onClick={() => void applyImport()}
-              >
-                确认导入并重算
-              </button>
-            )}
-            {dialog === 'export' && previewState === 'ready' && (
-              <>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={consumptionReviewed}
-                    disabled={busy || Boolean(dmsReceipt)}
-                    onChange={(e) => setConsumptionReviewed(e.target.checked)}
-                  />
-                  <span>已复核库存消化与本次补货数量</span>
-                </label>
+              {dialog === 'template' && (
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={
-                    busy || !submissionRows.length || Boolean(dmsReceipt) || warehouseReceiptPending
-                  }
-                  onClick={() => void submitDms()}
+                  disabled={busy || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(templateMonth)}
+                  onClick={() => void downloadTemplate()}
                 >
-                  确认暂存至DMS
+                  下载模板
                 </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={busy}
-                  onClick={() => void loginDms()}
-                >
-                  进入DMS订单管理
-                </button>
+              )}
+              {dialog === 'import' && (
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={busy || !submissionRows.length}
-                  onClick={confirmExport}
+                  disabled={busy || importErrors.length > 0 || !planDraft?.rows.length}
+                  onClick={() => void applyImport()}
                 >
-                  仅导出Excel
+                  确认导入并重算
                 </button>
-              </>
-            )}
+              )}
+              {dialog === 'export' && previewState === 'ready' && (
+                <>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={consumptionReviewed}
+                      disabled={busy || Boolean(dmsReceipt)}
+                      onChange={(e) => setConsumptionReviewed(e.target.checked)}
+                    />
+                    <span>已复核库存消化与本次补货数量</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={
+                      busy ||
+                      targetLoading ||
+                      Object.values(dmsFields).some((value) => !value.trim()) ||
+                      !submissionRows.length ||
+                      Boolean(dmsReceipt) ||
+                      warehouseReceiptPending
+                    }
+                    onClick={() => void submitDms()}
+                  >
+                    {busy ? '处理中…' : '确认暂存至DMS'}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busy}
+                    onClick={() => void loginDms()}
+                  >
+                    进入DMS订单管理
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={busy || !submissionRows.length}
+                    onClick={confirmExport}
+                  >
+                    仅导出Excel
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </Modal>

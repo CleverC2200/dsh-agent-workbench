@@ -9,21 +9,21 @@ export function createPlanRates(react, { Dialog, table, downloadCsv }) {
     '维度类型',
     '基地',
     '大类',
-    '物料组名称',
+    '物料组编码',
     '产品编码',
     '产品名称',
     '当前维度计划量',
     '父级计划量',
     '计划占比',
   ];
-  return function PlanRates({ draft, update, active }) {
+  return function PlanRates({ draft, update, active, workflow }) {
     const [preview, setPreview] = react.useState(false);
     const [dimension, setDimension] = react.useState('大类+物料组');
     const [page, setPage] = react.useState(0);
     const controller = react.useRef(null);
     const state = draft.planRatesRead;
     const current = state?.status === 'ready' && state.month === draft.month;
-    const rows = current ? (draft.planRates ?? []) : [];
+    const rows = current ? planRatePreviewRows(workflow) : [];
     const selected = rows.filter((row) => row['维度类型'] === dimension);
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(selected.length / 25) - 1));
     const busy = state?.status === 'loading';
@@ -75,7 +75,11 @@ export function createPlanRates(react, { Dialog, table, downloadCsv }) {
         h(
           'span',
           { className: 'dc-status' },
-          busy ? '读取中…' : current ? `${rows.length} 条源记录` : '待同步原值',
+          busy
+            ? '读取中…'
+            : current
+              ? `${draft.planRates?.length ?? 0} 条源记录 · ${rows.length} 条对应结果`
+              : '待同步原值',
         ),
       ),
       h(
@@ -84,7 +88,7 @@ export function createPlanRates(react, { Dialog, table, downloadCsv }) {
         h(
           'p',
           {},
-          '自然月当月及下月，计划量allnum。物料组占大类、产品占物料组、基地产品占该产品全国；全国口径不填基地。',
+          '提报期间为评估月份，同一套提报与历史拆分系数用于M+1至M+3。按当前产品明细重新汇总；Top1在物料组和SKU层承接可确认的剩余占比，基地份额缺失时保留缺项。池外记录不混入分母。',
         ),
         state?.error && h('p', { role: 'alert' }, state.error),
       ),
@@ -112,7 +116,7 @@ export function createPlanRates(react, { Dialog, table, downloadCsv }) {
         h(
           Dialog,
           {
-            title: '销售提报占比 · 计划源值',
+            title: '销售提报占比 · 当前物料组核对',
             className: 'dc-source-detail',
             close: () => setPreview(false),
             footer: h(
@@ -162,4 +166,45 @@ export function createPlanRates(react, { Dialog, table, downloadCsv }) {
         ),
     );
   };
+}
+
+export function planRatePreviewRows(workflow) {
+  const rows = new Map();
+  for (const row of workflow?.rows ?? []) {
+    if (row.month !== workflow.months[0]) continue;
+    const layers = row.reportLayers;
+    for (const dimension of ['大类+物料组', '物料组+产品', '基地+产品']) {
+      const base = dimension === '基地+产品' ? row.base : '';
+      const code = dimension === '大类+物料组' ? '' : row.code;
+      const key = JSON.stringify([row.month, dimension, row.category, row.group, code, base]);
+      rows.set(key, {
+        月份: row.month,
+        维度类型: dimension,
+        基地: base,
+        大类: row.category,
+        物料组编码: row.group,
+        产品编码: code,
+        产品名称: code ? row.name : '',
+        当前维度计划量:
+          dimension === '大类+物料组'
+            ? layers.groupQuantity
+            : dimension === '物料组+产品'
+              ? layers.skuQuantity
+              : layers.baseQuantity,
+        父级计划量:
+          dimension === '大类+物料组'
+            ? layers.categoryQuantity
+            : dimension === '物料组+产品'
+              ? layers.groupQuantity
+              : layers.skuQuantity,
+        计划占比:
+          (dimension === '大类+物料组'
+            ? layers.groupShare
+            : dimension === '物料组+产品'
+              ? layers.skuShare
+              : layers.baseShare) ?? '',
+      });
+    }
+  }
+  return [...rows.values()];
 }

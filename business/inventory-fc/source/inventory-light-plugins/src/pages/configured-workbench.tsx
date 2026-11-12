@@ -1,3 +1,8 @@
+import { inventoryCacheTtl } from '../../../../../shared/inventory-cache-policy';
+import { resolveFcDataDay } from '../../../../../shared/fc-data-day';
+import { useQueryIdentity } from '../../../../../shared/use-query-identity';
+import { DashboardTableSkeleton } from '../dsh-ui/workbench-loading';
+import { agentSqlConfig } from '../../../../../shared/sql-config';
 import { useDashboardInsight } from '../../../../../shared/use-dashboard-insight';
 import { branchDashboardEvidence } from '../../../../../shared/fc-dashboard-insight';
 import {
@@ -40,7 +45,6 @@ import { useConfiguredOverview } from '../../../../../shared/use-configured-over
 import {
   businessDay,
   fulfillmentPercent,
-  completeValue,
   knownNumber,
 } from '../../../../../shared/configured-overview';
 import { updateContext } from '../native/context';
@@ -65,11 +69,67 @@ const views: Record<string, string[]> = {
 export default function ConfiguredWorkbench() {
   return (
     <FcWorkflowProvider>
-      <WorkbenchBody />
+      <DailyWorkbench />
     </FcWorkflowProvider>
   );
 }
-function WorkbenchBody() {
+function DailyWorkbench() {
+  const identity = useQueryIdentity();
+  const [calendarDay, setCalendarDay] = useState(businessDay);
+  const [reload, setReload] = useState(0);
+  const [state, setState] = useState<
+    | { kind: 'loading'; identity: number }
+    | { kind: 'ready'; identity: number; date: string }
+    | { kind: 'failed'; identity: number; message: string }
+  >({ kind: 'loading', identity });
+  const activeConfig = agentSqlConfig(config);
+  useEffect(() => {
+    const syncDay = () => setCalendarDay(businessDay());
+    window.addEventListener('focus', syncDay);
+    document.addEventListener('visibilitychange', syncDay);
+    return () => {
+      window.removeEventListener('focus', syncDay);
+      document.removeEventListener('visibilitychange', syncDay);
+    };
+  }, []);
+  useEffect(() => {
+    if (!activeConfig.dailySummary) return;
+    const controller = new AbortController();
+    void resolveFcDataDay(activeConfig, calendarDay, { signal: controller.signal }).then(
+      (date) => {
+        if (!controller.signal.aborted) setState({ kind: 'ready', identity, date });
+      },
+      (error: unknown) => {
+        if (!controller.signal.aborted)
+          setState({
+            kind: 'failed',
+            identity,
+            message: error instanceof Error ? error.message : '汇总日期读取失败',
+          });
+      },
+    );
+    return () => controller.abort();
+  }, [identity, calendarDay, reload, activeConfig]);
+  const retry = () => {
+    refreshConfiguredQueries();
+    setReload((n) => n + 1);
+  };
+  if (!activeConfig.dailySummary)
+    return <WorkbenchBody dataDay={calendarDay} onDataRefresh={() => setReload((n) => n + 1)} />;
+  if (state.identity !== identity || state.kind === 'loading')
+    return <DashboardTableSkeleton label="分仓汇总数据加载中" />;
+  if (state.kind === 'failed')
+    return (
+      <div role="alert">
+        <p>{state.message}</p>
+        <button type="button" onClick={retry}>
+          重新读取数据
+        </button>
+      </div>
+    );
+  return <WorkbenchBody dataDay={state.date} onDataRefresh={() => setReload((n) => n + 1)} />;
+}
+function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefresh: () => void }) {
   const {
     trial,
     setTrial,
@@ -95,7 +155,7 @@ function WorkbenchBody() {
   const [warehouseRevision, reloadWarehouses] = useState(0);
   const [warehouseError, setWarehouseError] = useState('');
   const [tab, setTab] = useState('replenishment'),
-    [date, setDate] = useState(businessDay),
+    [date, setDate] = useState(dataDay),
     [revision, refresh] = useState(0),
     [cycleDays, setCycleDays] = useState(
       () => configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays,
@@ -107,15 +167,7 @@ function WorkbenchBody() {
     [ruleDraft, setRuleDraft] = useState<FcCycleRule[]>([]),
     [cycleError, setCycleError] = useState(''),
     [planningError, setPlanningError] = useState('');
-  useEffect(() => {
-    const syncDay = () => setDate(businessDay());
-    window.addEventListener('focus', syncDay);
-    document.addEventListener('visibilitychange', syncDay);
-    return () => {
-      window.removeEventListener('focus', syncDay);
-      document.removeEventListener('visibilitychange', syncDay);
-    };
-  }, []);
+  useEffect(() => setDate(dataDay), [dataDay]);
   useEffect(() => {
     const plans = planningPlans;
     setTrial(null);
@@ -177,7 +229,7 @@ function WorkbenchBody() {
   useEffect(() => {
     const key = JSON.stringify([date, warehouseRevision]);
     const cached = directoryCache.current;
-    if (cached?.key === key && Date.now() - cached.at < 20 * 60 * 1000) {
+    if (cached?.key === key && Date.now() - cached.at < inventoryCacheTtl(config.agentId)) {
       setWarehouses(cached.rows);
       setWarehouseLoading(false);
       setWarehouseError('');
@@ -227,13 +279,13 @@ function WorkbenchBody() {
     (value) => updateContext('overview', value),
     cycleDays,
     config.overviewViewIds.filter(
-      (id) => !['shipments', 'orders', 'branch-supply-current'].includes(id),
+      (id) => !['shipments', 'branch-supply', 'branch-supply-current'].includes(id),
     ),
     cycleRules,
     warehouse,
     cycleWarehouse,
   );
-  const order = parts['branch-supply']?.summary,
+  const order = parts.orders?.summary,
     plan = parts.replenishment?.summary;
   const trialActive = trial?.scope === fcTrialScope(date, cycleDays, warehouse);
   const recommended = trialActive
@@ -271,6 +323,7 @@ function WorkbenchBody() {
   const cards = [
     {
       title: '当前库存',
+      description: '周转按同一批有效库存与动销或计划计算。',
       value: knownNumber(branchStock?.total_qty),
       unit: '件',
       color: 'blue',
@@ -297,13 +350,13 @@ function WorkbenchBody() {
     },
     {
       title: '订单满足率',
-      description: '当月基地已向分仓发货的调拨订单履约，按收货分仓归属，数量单位为件。',
+      description: '当月已发货客户订单。',
       value: fulfillmentPercent(order),
       unit: '%',
       color: 'green',
       details: [
-        ['补货订货量', completeValue(order, 'demand'), '件'],
-        ['实际发货量', completeValue(order, 'shipped'), '件'],
+        ['已发订单量', knownNumber(order?.fulfillment_order_quantity), '件'],
+        ['限额发货量', knownNumber(order?.fulfillment_shipped_quantity), '件'],
       ],
     },
     {
@@ -322,11 +375,10 @@ function WorkbenchBody() {
       partial: currentDemand.partial,
       unit: '件',
       color: 'amber',
-      description:
-        '分仓向基地下单的有效未收货ASN，按预期数量扣已收数量统计当前需求。缺货先减基地已占用，再按基地与SKU扣共享可用库存，依订单创建时间分配。',
+      description: '当前未完成客户订单。',
       details: [
         ['缺货量', currentGap.value, '件'],
-        ['基地已占用', currentAllocated.value, '件'],
+        ['分仓已占用', currentAllocated.value, '件'],
       ],
     },
   ];
@@ -381,10 +433,13 @@ function WorkbenchBody() {
               className={common.controls}
               onSubmit={(e) => {
                 e.preventDefault();
-                setDate(businessDay());
+                onDataRefresh();
                 refresh((n) => n + 1);
               }}
             >
+              {date !== businessDay() && (
+                <span title="按最新完整汇总批次计算">汇总日期：{date}</span>
+              )}
               <button className="secondary-button">刷新</button>
             </LocalQueryForm>
           }
@@ -443,11 +498,19 @@ function WorkbenchBody() {
                 <article
                   key={c.title}
                   className={`kpi-card ${c.color}`}
-                  title={
+                  title={[
                     c.title === '平均货龄'
                       ? '按有效批次库存数量加权；批次货龄为库存快照日减生产日。最大货龄见货龄结构明细。'
-                      : c.description
-                  }
+                      : c.description,
+                    c.title === '待补货量' && missingRecommendations > 0
+                      ? `已忽略 ${missingRecommendations} 项异常或缺失记录。`
+                      : null,
+                    c.title === '当前订单' && c.partial
+                      ? '按有效记录计算，明细中缺失项显示 -。'
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                 >
                   <div className="kpi-title">
                     <span>{c.title}</span>
@@ -458,18 +521,6 @@ function WorkbenchBody() {
                       <small>{formatChainValueParts(c.value, c.unit).unit}</small>
                     )}
                   </div>
-                  {c.title === '待补货量' && missingRecommendations > 0 && (
-                    <small>
-                      {c.value !== null ? '已测算部分；' : ''}
-                      {missingRecommendations} 项待核实
-                    </small>
-                  )}
-                  {c.title === '当前订单' &&
-                    Number(parts['current-shortage']?.rows?.[0]?.invalid) > 0 && (
-                      <small>
-                        {c.partial ? '已核实部分；' : ''}部分占用或缺货待核实，请查看订单明细。
-                      </small>
-                    )}
                   <dl>
                     {c.details.map(([label, value, unit]) => (
                       <div key={String(label)}>
@@ -493,7 +544,7 @@ function WorkbenchBody() {
                 {modelInsight.status === 'ready'
                   ? modelInsight.answer?.replace(/\s*\n+\s*/g, ' ')
                   : modelInsight.status === 'error'
-                    ? 'AI 洞察暂时生成失败，可刷新后重试。'
+                    ? '-'
                     : 'AI 洞察生成中…'}
               </p>
             </section>
@@ -543,9 +594,9 @@ function WorkbenchBody() {
                           (currentShortageSum(parts['current-shortage']?.rows, 'shortage') ?? 0) > 0
                             ? '高'
                             : '低',
-                        title: '待处理调拨订单缺口',
-                        detail: `分仓向基地的当前调拨缺货 ${show(currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '件')}；优先核对基地占用及共享可用库存。`,
-                        suggestedAction: '按订单创建先后核查基地配单及补货。',
+                        title: '客户订单缺货',
+                        detail: `当前客户订单缺货 ${show(currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '件')}。`,
+                        suggestedAction: '核对分仓配货及补货。',
                       },
                     ]}
                   />

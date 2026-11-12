@@ -1,5 +1,9 @@
 import { useDashboardInsight } from '../../../../../shared/use-dashboard-insight';
-import { chainDashboardEvidence } from '../../../../../shared/qll-dashboard-insight';
+import {
+  chainDashboardEvidence,
+  chainStockMetrics,
+  chainFulfillmentMetrics,
+} from '../../../../../shared/qll-dashboard-insight';
 import { inventoryAverageAge, companyAverageAge } from '../../../../../shared/inventory-age';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
@@ -62,30 +66,12 @@ export default function ConfiguredWorkbench() {
     undefined,
     overviewViews,
   );
-  const orders = parts['factory-overview']?.summary;
   const branch = parts['branch-stock']?.summary;
   const customer = parts['channel-overview']?.summary;
   const baseQty = knownNumber(parts.health?.summary?.total_qty),
     branchAvailable = knownNumber(branch?.available_qty);
-  const branchCurrent = knownNumber(branch?.total_qty);
-  const sameInventoryDate =
-    !!parts.health?.snapshotDate &&
-    parts.health.snapshotDate === parts['branch-stock']?.snapshotDate;
-  const companyQty =
-    !sameInventoryDate || baseQty === null || branchCurrent === null
-      ? null
-      : baseQty + branchCurrent;
-  const shipments = parts['base-shipments']?.summary;
-  const baseShipment30 = knownNumber(shipments?.rolling_ship_positive);
-  const baseDaily =
-    knownNumber(shipments?.rolling_missing_qty) === 0 && baseShipment30 !== null
-      ? baseShipment30 / 30
-      : null;
-  const branchDaily = knownNumber(parts['branch-replenishment']?.summary?.rolling_ship_daily);
-  const turnover = (inventory: number | null, daily: number | null) =>
-    inventory !== null && inventory >= 0 && daily !== null && daily > 0 ? inventory / daily : null;
-  const baseTurnover = turnover(baseQty, baseDaily);
-  const branchTurnover = turnover(branchCurrent, branchDaily);
+  const stockMetrics = chainStockMetrics(parts, channel);
+  const { company: companyQty, baseTurnover, branchTurnover } = stockMetrics;
   const workspace: any = {
     scope: channel ? 'all-channel' : 'company',
     customerObservationRisks: [],
@@ -114,11 +100,19 @@ export default function ConfiguredWorkbench() {
       },
     },
     fulfillment: {
-      factory: { rate: fulfillmentPercent(parts['factory-overview']?.summary) },
-      branch: { rate: fulfillmentPercent(parts['branch-overview']?.summary) },
+      factory: {
+        rate: fulfillmentPercent(parts['factory-overview']?.summary),
+        shippedQty: knownNumber(parts['factory-overview']?.summary?.fulfillment_shipped_quantity),
+      },
+      branch: {
+        rate: fulfillmentPercent(parts['branch-overview']?.summary),
+        shippedQty: knownNumber(parts['branch-overview']?.summary?.fulfillment_shipped_quantity),
+      },
     },
     orderExecution: {
       currentOrderQty: currentShortageSum(parts['current-shortage']?.rows, 'demand'),
+      currentBaseOrderQty: currentShortageSum(parts['current-shortage']?.rows, 'demand', '基地'),
+      currentBranchOrderQty: currentShortageSum(parts['current-shortage']?.rows, 'demand', '分仓'),
       currentBaseShortageQty: currentShortageSum(
         parts['current-shortage']?.rows,
         'shortage',
@@ -132,25 +126,29 @@ export default function ConfiguredWorkbench() {
     },
     kpis: {
       inventoryLevel: {
-        current: companyQty,
+        current: stockMetrics.inventory,
         companyCurrent: companyQty,
-        planCustomerTotal: channel ? knownNumber(customer?.total_inventory) : null,
+        planCustomerTotal: channel ? knownNumber(customer?.inventory) : null,
         planCustomerDate: parts['channel-overview']?.snapshotDate,
         unit: '件',
       },
-      turnover: { current: baseTurnover, unit: '天' },
+      turnover: {
+        current: stockMetrics.turnover,
+        unit: '天',
+        explanation:
+          '按基地计划周转、分仓回顾周转的同范围库存和日均量合并计算；含渠道时纳入匹配的客户在仓和动销。',
+      },
       aging: {
         current: companyAverageAge(parts.health, parts['branch-stock']),
         unit: '天',
         explanation:
           '同一快照日的基地、分仓批次按库存数量加权；批次货龄为快照日减生产日。最大货龄见库存库龄明细。',
       },
-      fulfillment: { current: fulfillmentPercent(orders), unit: '%' },
+      fulfillment: { current: chainFulfillmentMetrics(parts).rate, unit: '%' },
       orderGap: {
         current: currentShortageSum(parts['current-shortage']?.rows, 'demand'),
         unit: '件',
-        explanation:
-          '基地为有效未发货完成订单（未备单需求＋已备单未发货占用）；分仓为向基地下单的有效未收货完成ASN需求，扣除已收货数量。两类订单分别汇总。',
+        explanation: '基地与分仓当前未完成客户订单。',
       },
     },
   };
@@ -178,7 +176,7 @@ export default function ConfiguredWorkbench() {
                   onChange={(e) => {
                     setChannel(e.target.checked);
                   }}
-                  title="1件=1箱；不同日期及范围的客户库存单独查看"
+                  title="含渠道时库存纳入客户在仓；客户使用所选日期之前最近快照，快照日期单独列示"
                 />
                 <span aria-hidden="true" />
                 含渠道
@@ -221,7 +219,7 @@ export default function ConfiguredWorkbench() {
                     channelSnapshot={{
                       inventory: knownNumber(customer?.inventory),
                       inTransit: knownNumber(customer?.in_transit),
-                      stockDays: knownNumber(customer?.cover_days),
+                      stockDays: knownNumber(customer?.onhand_days),
                       date: parts['channel-overview']?.snapshotDate,
                     }}
                     onOpen={() => setTab('structure')}
@@ -242,7 +240,7 @@ export default function ConfiguredWorkbench() {
                 {modelInsight.status === 'ready'
                   ? modelInsight.answer
                   : modelInsight.status === 'error'
-                    ? '洞察暂生成失败，可刷新后重试。'
+                    ? '-'
                     : '正在分析当前库存…'}
               </p>
             </section>

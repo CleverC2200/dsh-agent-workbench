@@ -1,3 +1,6 @@
+import { expandShipmentBase } from './helpers/mps-shipment.mjs';
+import { beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
+import { adjustCategory } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
@@ -46,11 +49,8 @@ test('MPS category override records a reason and time, survives reload and undo 
   });
   const month = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
   const period = month.match(/\d{4}-\d{2}/)[0];
-  await frame.getByRole('button', { name: `调整 汤圆 ${period}`, exact: true }).click();
-  const form = frame.getByRole('group', { name: '大类需求调整' });
-  await form.getByLabel('调整需求数量').fill('120');
-  await form.getByLabel('调整原因').fill('客户已确认增量');
-  await form.getByRole('button', { name: '应用大类调整' }).click();
+  await adjustCategory(frame, '汤圆', period, '120.375', '客户已确认增量');
+  const matrix = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
   await expect
     .poll(async () =>
       page.evaluate(
@@ -58,11 +58,11 @@ test('MPS category override records a reason and time, survives reload and undo 
           window.readView()?.localDrafts?.drafts?.[0]?.adjustments?.categoryDemand?.[0]?.quantity,
       ),
     )
-    .toBe(120);
+    .toBe(120.375);
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await expect(
     frame
-      .getByRole('region', { name: '逐月测算', exact: true })
+      .getByRole('region', { name: '大类调整记录', exact: true })
       .getByRole('row')
       .filter({ hasText: '客户已确认增量' }),
   ).toContainText('120');
@@ -71,7 +71,16 @@ test('MPS category override records a reason and time, survives reload and undo 
   );
   assert.equal(edit.reason, '客户已确认增量');
   assert.match(edit.at, /^\d{4}-\d{2}-\d{2}T/);
-  await frame.getByRole('button', { name: `撤销 汤圆 ${period}`, exact: true }).click();
+  await matrix.getByRole('button', { name: '调整', exact: true }).click();
+  await expect(matrix.getByLabel(`汤圆 ${period} 需求数量`, { exact: true })).toHaveValue('120');
+  await matrix.getByRole('button', { name: '保存调整', exact: true }).click();
+  assert.equal(
+    await page.evaluate(
+      () => window.readView().localDrafts.drafts[0].adjustments.categoryDemand[0].quantity,
+    ),
+    120.375,
+  );
+  await adjustCategory(frame, '汤圆', period, '', '恢复系统值');
   await expect
     .poll(async () =>
       page.evaluate(
@@ -87,7 +96,8 @@ test('MPS category override records a reason and time, survives reload and undo 
     ['set', 'undo'],
   );
   assert.equal(history[1].value, null);
-  await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toBeDisabled();
+  await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
+  await expect(frame.getByRole('status').filter({ hasText: /^本地草稿$/ })).toBeVisible();
 });
 
 test('MPS shipment local overrides and remaining intake survive a business-source switch and Document replacement', async (t) => {
@@ -107,13 +117,14 @@ test('MPS shipment local overrides and remaining intake survive a business-sourc
     ),
   });
   const table = frame.getByRole('table', { name: '本月预估发货明细' });
-  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
+  await expandShipmentBase(frame, '郑州');
   const forecast = table.getByLabel('郑州 A 整月预估发货', { exact: true });
+  await beginAdjustment(frame);
   await forecast.fill('301');
-  await forecast.press('Enter');
+
   const remaining = table.getByLabel('郑州 剩余天数入库', { exact: true });
   await remaining.fill('11');
-  await remaining.press('Enter');
+  await saveAdjustment(frame);
   await frame.getByLabel('发货数据来源', { exact: true }).selectOption('business');
   await expect
     .poll(() =>
@@ -129,9 +140,13 @@ test('MPS shipment local overrides and remaining intake survive a business-sourc
     .toBe('business');
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await frame.getByLabel('发货数据来源', { exact: true }).selectOption('local-file');
-  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
-  await expect(forecast).toHaveValue('301');
-  await expect(remaining).toHaveValue('11');
+  await expandShipmentBase(frame, '郑州');
+  await expect(
+    table.getByRole('button', { name: '郑州 A 整月预估发货 计算过程', exact: true }),
+  ).toHaveText('301');
+  await expect(
+    table.getByRole('button', { name: '郑州 剩余天数入库 计算过程', exact: true }),
+  ).toHaveText('11');
   await expect(
     table.getByRole('button', { name: '郑州 A 剩余天数入库 计算过程', exact: true }),
   ).toHaveText('11');

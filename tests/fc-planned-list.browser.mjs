@@ -1,3 +1,4 @@
+import { directSourceFixture } from './fixtures/configured-page.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
@@ -7,6 +8,17 @@ import { chromium, expect } from '@playwright/test';
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
 const pages = './business/inventory-fc/source/inventory-light-plugins/src/pages';
 const bundle = await build({
+  plugins: [
+    {
+      name: 'direct-source-interaction-fixture',
+      setup(builder) {
+        builder.onLoad({ filter: /inventory-fc\/sql\.config\.json$/ }, () => ({
+          contents: JSON.stringify(directSourceFixture(config)),
+          loader: 'json',
+        }));
+      },
+    },
+  ],
   stdin: {
     contents: `import React,{useMemo}from'react';import{createRoot}from'react-dom/client';import './business/inventory-fc/source/inventory-light-plugins/src/dsh-ui/base.css';import '${pages}/fc.css';import{FcWorkflowProvider,useFcWorkflow,FcConfiguredList}from'${pages}/configured-fc-list';import{fcPlannedReader}from'${pages}/fc-planned-page';import{ConfiguredFactsPage}from'./business/shared/configured-facts-page';import{originalFcView}from'./business/shared/original-business-views';import config from'./business/inventory-fc/sql.config.json';function Page(){const{planningPlans,setPlanningPlans}=useFcWorkflow();window.applyPlans=setPlanningPlans;const reader=useMemo(()=>fcPlannedReader(planningPlans),[planningPlans]);return <ConfiguredFactsPage embedded config={config} viewIds={['replenishment']} date="2026-10-30" presentation={originalFcView(config,'replenishment')} businessList={FcConfiguredList} readFacts={reader}/>;}createRoot(document.getElementById('app')).render(<FcWorkflowProvider><Page/></FcWorkflowProvider>);`,
     resolveDir: process.cwd(),
@@ -64,7 +76,7 @@ test('manual plan results, ten-row pagination and CSV all use the same recalcula
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture"}</script><script>${js}</script>`,
       });
     const { queryId, parameters } = route.request().postDataJSON();
-    if (queryId === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(queryId))
       return route.fulfill({
         json: {
           rows: [],
@@ -118,6 +130,7 @@ test('manual plan results, ten-row pagination and CSV all use the same recalcula
   await expect(list.getByRole('button', { name: 'S25', exact: true })).toBeVisible();
   await expect(list.locator('tbody > tr')).toHaveCount(10);
   await expect(list.getByRole('spinbutton', { name: 'S25实际补货量' })).toHaveValue('225');
+  await expect(list.locator('tfoot [data-column="recommended_qty"]')).toHaveText('2,645');
   await list
     .getByRole('group', { name: '补货筛选' })
     .getByRole('button', { name: '低于建议', exact: true })
@@ -126,6 +139,7 @@ test('manual plan results, ten-row pagination and CSV all use the same recalcula
   await list.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(list.getByRole('button', { name: 'S15', exact: true })).toBeVisible();
   await expect(list.getByRole('button', { name: 'S25', exact: true })).toHaveCount(0);
+  await expect(list.locator('tfoot [data-column="recommended_qty"]')).toHaveText('2,645');
   const downloadPromise = page.waitForEvent('download');
   await list.getByRole('button', { name: 'CSV', exact: true }).click();
   const download = await downloadPromise;

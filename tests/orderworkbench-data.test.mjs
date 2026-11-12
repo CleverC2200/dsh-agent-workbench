@@ -111,9 +111,27 @@ test('stock packets preserve nonempty summary rows and metrics; a truncated pack
 test('scalar director packets reconstruct complete shared ownership and keep no-owner rows explicit', async () => {
   const columns = config.queries['workbench.directormembers'].resultColumns;
   const rows = [
-    { base: '郑州', sku: 'A', director: '乙', director_value: '乙', item_value: '水饺' },
-    { base: '郑州', sku: 'A', director: '乙', director_value: '甲', item_value: '水饺' },
-    { base: '郑州', sku: 'B', director: null, director_value: null, item_value: '汤圆' },
+    {
+      base: '郑州',
+      sku: 'A',
+      director: '乙',
+      director_value: '乙',
+      item_value: '水饺',
+    },
+    {
+      base: '郑州',
+      sku: 'A',
+      director: '乙',
+      director_value: '甲',
+      item_value: '水饺',
+    },
+    {
+      base: '郑州',
+      sku: 'B',
+      director: null,
+      director_value: null,
+      item_value: '汤圆',
+    },
   ];
   const packet = {
     packet_index: 0,
@@ -151,7 +169,15 @@ test('scalar director packets reconstruct complete shared ownership and keep no-
       item: '水饺',
       items: 1,
     },
-    { base: '郑州', sku: 'B', director: null, names: 0, directors: [], item: '汤圆', items: 1 },
+    {
+      base: '郑州',
+      sku: 'B',
+      director: null,
+      names: 0,
+      directors: [],
+      item: '汤圆',
+      items: 1,
+    },
   ]);
   for (const period of Object.values(facts.periods)) {
     const part = period.sections.find((section) => section.id === 'directors');
@@ -222,7 +248,10 @@ test('director resolution is reused per period and key without carrying ownershi
   });
   assert.ok(first.performance['director-performance'].month.some((row) => row[0] === '负责人'));
   assert.ok(lookups < 50, 'each filtered metric must not rescan all owner mappings');
-  const changed = structuredClone({ ...facts, directors: { status: 'ready', rows: [] } });
+  const changed = structuredClone({
+    ...facts,
+    directors: { status: 'ready', rows: [] },
+  });
   for (const part of Object.values(changed.periods))
     part.sections.find((section) => section.id === 'directors').rows = [];
   const next = model.workbenchPresentation(changed, {
@@ -286,7 +315,7 @@ test('arrival packets preserve whole-order counts, unknown verdicts and UTF-8 di
       members,
     },
     {
-      order_no: 'order:1',
+      order_no: 'execution:2',
       customer: '另一客户',
       ontime: 1,
       arrival_date: '2026-10-23',
@@ -349,7 +378,8 @@ test('arrival packets preserve whole-order counts, unknown verdicts and UTF-8 di
   const raw = await run(false),
     packed = await run(true);
   const metric = (facts) => facts.periods.week.metrics['准交率'];
-  assert.ok(Math.abs(metric(packed).value - 200 / 3) < 1e-10);
+  assert.equal(metric(packed).value, 50);
+  assert.ok(Math.abs(metric(packed).sample.value - 200 / 3) < 1e-10);
   assert.deepEqual(metric(packed).sample, metric(raw).sample);
   assert.equal(metric(packed).value, metric(raw).value);
   const section = packed.periods.week.sections.find((part) => part.id === 'ontime');
@@ -371,7 +401,11 @@ test('missing metric reasons distinguish empty sources, rejected reads and zero 
     start: '2026-10-01',
     end: '2026-10-29',
     sections: [
-      { id: 'changes', status: 'ready', rows: [{ kind: '1', numerator: 0, denominator: 0 }] },
+      {
+        id: 'changes',
+        status: 'ready',
+        rows: [{ kind: '1', numerator: 0, denominator: 0 }],
+      },
     ],
   };
   const zero = model.computeWorkbenchMetrics(period)['作废率'];
@@ -388,7 +422,14 @@ test('missing metric reasons distinguish empty sources, rejected reads and zero 
     model.workbenchMetricMissingReason(
       {
         ...period,
-        sections: [{ id: 'changes', status: 'error', code: 'FIELD_NOT_PUBLISHED', rows: [] }],
+        sections: [
+          {
+            id: 'changes',
+            status: 'error',
+            code: 'FIELD_NOT_PUBLISHED',
+            rows: [],
+          },
+        ],
       },
       '作废率',
     ),
@@ -502,6 +543,7 @@ function progressiveSource({ brokenCount = false } = {}) {
     calls.push({ queryId, values });
     const name = queryId.slice('workbench.'.length);
     let rows = [];
+    if (name.includes('.partition1')) return { rows: [] };
     if (name === 'agedate')
       rows = [
         {
@@ -516,10 +558,15 @@ function progressiveSource({ brokenCount = false } = {}) {
         snapshot_date: '20261023',
         records: 1,
       })).slice(values.offset, values.offset + values.page_size);
-    else if (['orders', 'stock', 'changes'].includes(name))
+    else if (['orders', 'stock', 'changes'].includes(name) || name.startsWith('changes.'))
       rows = fixture.sections
-        .find((s) => s.id === name)
-        .rows.map((row) => ({
+        .find((s) => s.id === (name.startsWith('changes.') ? 'changes' : name))
+        .rows.filter(
+          (row) =>
+            !name.startsWith('changes.') ||
+            String(row.kind) === (name.endsWith('amendment') ? '2' : '1'),
+        )
+        .map((row) => ({
           ...Object.fromEntries(config.queries[queryId].resultColumns.map((key) => [key, null])),
           ...row,
           item: values.start === '2026-10-19' ? '周品项' : '月品项',
@@ -541,7 +588,11 @@ test('progress publishes validated cards before slower sections and reuses compl
   const result = await run();
   assert.equal(progress[0].complete, false);
   assert.deepEqual(Object.keys(progress[0].periods), ['month']);
-  assert.ok(progress[0].periods.month.sections.some((s) => s.status === 'ready'));
+  assert.ok(
+    progress[0].periods.month.sections.some(
+      (s) => s.status === 'ready' || s.parts?.some((part) => part.status === 'ready'),
+    ),
+  );
   assert.ok(progress[0].periods.month.sections.some((s) => s.status === 'loading'));
   const monthReady = progress.find((facts) =>
     facts.periods.month.sections.every((s) => s.status === 'ready'),
@@ -607,6 +658,204 @@ test('metadata loads while comparisons are pending and final facts remain identi
   assert.deepEqual(withoutReadAt(actual), withoutReadAt(expected));
 });
 
+test('month and week finish before auxiliary and historical reads compete for the queue', async () => {
+  let release, started;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const primaryStarted = new Promise((resolve) => {
+    started = resolve;
+  });
+  const calls = [],
+    progress = [];
+  const running = model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    summary: true,
+    now: new Date('2026-10-30T00:00:00Z'),
+    execute: async (_request, context) => {
+      calls.push(context);
+      if (context.queryId === 'workbench.orders.summary') {
+        started();
+        await held;
+      }
+      return { rows: [] };
+    },
+    onProgress: (facts) => progress.push(facts),
+  });
+  await primaryStarted;
+  await new Promise((resolve) => setImmediate(resolve));
+  try {
+    assert.ok(
+      progress.some((facts) => facts.periods.month),
+      'month can paint before week completion',
+    );
+    assert.ok(calls.every(({ values }) => !['2026-09-01', '2025-10-01'].includes(values.start)));
+    assert.ok(!calls.some(({ queryId }) => /customers|customermanagers/.test(queryId)));
+  } finally {
+    release();
+  }
+  const facts = await running;
+  assert.equal(facts.complete, true);
+  assert.ok(calls.some(({ values }) => values.start === '2026-09-01'));
+});
+
+test('slow historical periods do not block other comparisons or exceed query concurrency', async () => {
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const calls = [];
+  let active = 0,
+    peak = 0;
+  const options = { summary: true, now: new Date('2026-10-30T00:00:00Z') };
+  const running = model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    execute: async (_request, context) => {
+      calls.push(context);
+      peak = Math.max(peak, ++active);
+      try {
+        if (
+          context.queryId === 'workbench.orders.summary' &&
+          ['2026-09-01', '2025-10-01'].includes(context.values.start)
+        )
+          await held;
+        return { rows: [] };
+      } finally {
+        active--;
+      }
+    },
+  });
+  try {
+    for (
+      let attempt = 0;
+      attempt < 200 && !calls.some(({ values }) => values.start === '2025-10-20');
+      attempt++
+    )
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.ok(
+      calls.some(({ values }) => values.start === '2026-10-12'),
+      'previous week starts before slow months finish',
+    );
+    assert.ok(
+      calls.some(({ values }) => values.start === '2025-10-20'),
+      'year week starts before slow months finish',
+    );
+    assert.ok(peak <= 6, 'the shared query concurrency limit is preserved');
+  } finally {
+    release();
+  }
+  const actual = await running;
+  const expected = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    execute: async () => ({ rows: [] }),
+  });
+  const withoutReadAt = ({ readAt: _readAt, ...facts }) => facts;
+  assert.deepEqual(withoutReadAt(actual), withoutReadAt(expected));
+});
+
+test('same-scope period seeds reuse validated sections but retry failed sections and reject old versions', async () => {
+  const calls = [];
+  const options = {
+    summary: true,
+    now: new Date('2026-10-30T00:00:00Z'),
+    execute: async (_request, context) => {
+      calls.push(context);
+      return { rows: [] };
+    },
+  };
+  const first = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, options);
+  calls.length = 0;
+  const reused = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    seedFacts: [first],
+  });
+  assert.equal(calls.length, 0, 'same-period metadata is retained with its validated sections');
+  assert.deepEqual(reused.periods, first.periods);
+  const failed = structuredClone(first);
+  failed.periods.week.sections.find((part) => part.id === 'orders').status = 'error';
+  failed.complete = false;
+  calls.length = 0;
+  await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    seedFacts: [failed],
+  });
+  assert.equal(calls.filter(({ queryId }) => queryId === 'workbench.orders.summary').length, 1);
+  assert.equal(calls.length, 1, 'only the failed section is retried after interrupted navigation');
+  calls.length = 0;
+  await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    seedFacts: [{ ...first, metricCalculationVersion: -1 }],
+  });
+  assert.ok(calls.some(({ queryId }) => queryId === 'workbench.orders.summary'));
+});
+
+test('customer packets retain complete UTF-8 and nullable metadata in one read per collection', async () => {
+  const columns = [
+    'region',
+    'province',
+    'customer',
+    'name',
+    'numerator',
+    'denominator',
+    'records',
+    'invalid',
+    'unknown_quantity',
+  ];
+  const customers = Array.from({ length: 1700 }, (_, i) => [
+    '大区',
+    '省区',
+    `00${i}`,
+    `客户😀:${i}`,
+    i % 2,
+    10,
+    1,
+    0,
+    null,
+  ]);
+  const managers = customers.map((row, i) => [row[2], i % 2 ? null : '负责人', i % 2 ? 0 : 1]);
+  const tuple = (fields) =>
+    fields
+      .map((value) => (value === null ? 'N' : `V${Buffer.byteLength(String(value))}:${value}`))
+      .join('');
+  const packets = (rows) =>
+    Array.from({ length: Math.ceil(rows.length / 64) }, (_, packet_index) => ({
+      packet_index,
+      packet_scope_total: rows.length,
+      packet_count: rows.slice(packet_index * 64, (packet_index + 1) * 64).length,
+      packet_rows: rows
+        .slice(packet_index * 64, (packet_index + 1) * 64)
+        .map((row, i) => tuple([packet_index * 64 + i + 1, ...row])),
+    }));
+  const calls = [];
+  const facts = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    summary: true,
+    now: new Date('2026-10-30T00:00:00Z'),
+    execute: async (_request, { queryId }) => {
+      calls.push(queryId);
+      return {
+        rows:
+          queryId === 'workbench.customers.packets'
+            ? packets(customers)
+            : queryId === 'workbench.customermanagers.packets'
+              ? packets(managers)
+              : [],
+      };
+    },
+  });
+  assert.equal(facts.customers.status, 'ready');
+  assert.deepEqual(
+    facts.customers.rows,
+    customers.map((row) => Object.fromEntries(columns.map((key, i) => [key, row[i]]))),
+  );
+  assert.equal(facts.customerManagers.rows.length, 1700);
+  assert.deepEqual(facts.customerManagers.rows[1], {
+    customer: '001',
+    manager: null,
+    names: 0,
+  });
+  assert.equal(calls.filter((id) => id.startsWith('workbench.customers')).length, 1);
+  assert.equal(calls.filter((id) => id.startsWith('workbench.customermanagers')).length, 1);
+});
+
 test('lazy table presentation preserves card and selected-dimension results without building hidden SKU details', () => {
   const period = fixturePeriod();
   period.metrics = model.computeWorkbenchMetrics(period);
@@ -616,7 +865,9 @@ test('lazy table presentation preserves card and selected-dimension results with
     directors: { status: 'ready', rows: [] },
   };
   const full = model.workbenchPresentation(facts);
-  const light = model.workbenchPresentation(facts, { dimension: 'base-performance' });
+  const light = model.workbenchPresentation(facts, {
+    dimension: 'base-performance',
+  });
   assert.deepEqual(light.cards, full.cards);
   assert.deepEqual(light.performance['base-performance'], full.performance['base-performance']);
   assert.deepEqual(light.skus, {});
@@ -680,7 +931,7 @@ test('document metrics use order counts, distinct arrival orders and calendar-da
     Object.values(metrics).map((metric) => metric.value),
     [10, 5, 96, 90, 10, 30],
   );
-  assert.match(metrics['准交率'].note, /客户编码＋原订单号去重/);
+  assert.match(metrics['准交率'].note, /执行单号去重/);
   const period = fixturePeriod();
   period.sections[0].rows.push({
     ...period.sections[0].rows[0],
@@ -707,7 +958,7 @@ test('denied, duplicated, zero denominator and invalid age data remain unknown',
         row[field] = value;
       });
     else source[0][field] = value;
-    assert.equal(model.computeWorkbenchMetrics(period)[name].value, null);
+    assert.equal(model.computeWorkbenchMetrics(period)[name].value, id === 'ontime' ? 0 : null);
   }
   const period = fixturePeriod();
   period.sections.find((section) => section.id === 'changes').status = 'error';
@@ -735,6 +986,7 @@ test('presentation fills both period tables, actual categories and shared direct
   const period = fixturePeriod();
   period.metrics = model.computeWorkbenchMetrics(period);
   const facts = {
+    metricCalculationVersion: model.metricCalculationVersion,
     selected: 'month',
     periods: Object.fromEntries(
       ['month', 'week', 'previousMonth', 'yearMonth', 'previousWeek', 'yearWeek'].map((key) => [
@@ -742,7 +994,9 @@ test('presentation fills both period tables, actual categories and shared direct
         period,
       ]),
     ),
-    directors: { rows: [{ base: '郑州', sku: 'sku-1', director: '甲,乙', names: 1 }] },
+    directors: {
+      rows: [{ base: '郑州', sku: 'sku-1', director: '甲,乙', names: 1 }],
+    },
     customers: { rows: [] },
   };
   const presentation = model.workbenchPresentation(facts);
@@ -750,10 +1004,13 @@ test('presentation fills both period tables, actual categories and shared direct
   assert.equal(presentation.cards[0].footer, '本周作废率 10.00%');
   assert.equal(presentation.cards[4].footer, '本周货龄占比 10.00%');
   assert.equal(presentation.cards[5].footer, '本周可发货天数 30.0天');
-  assert.match(presentation.cards[0].formula, /订单数/);
+  assert.match(presentation.cards[0].formula, /有效商品数量/);
   const differentWeek = {
     ...period,
-    metrics: { ...period.metrics, 作废率: { ...period.metrics['作废率'], value: 3 } },
+    metrics: {
+      ...period.metrics,
+      作废率: { ...period.metrics['作废率'], value: 3 },
+    },
   };
   const different = model.workbenchPresentation({
     ...facts,
@@ -767,13 +1024,15 @@ test('presentation fills both period tables, actual categories and shared direct
   assert.equal(presentation.performance['item-performance'].week[0].length, 8);
   assert.equal(presentation.performance['director-performance'].month.length, 2);
   assert.equal(presentation.dimensions['category-fill'].rows[0][1], '96.00%');
-  assert.equal(presentation.skus['水饺'][0].shipDays, '30.00天');
+  assert.equal(presentation.skus['水饺'][0].shipDays, '15.00天');
   assert.equal(model.workbenchEvidence(facts).periods.month.sections[0].total, 1);
   const evidence = model.workbenchEvidence(facts);
   const compressed = JSON.parse(
     compressForModel({
       evidence,
-      detail: Array.from({ length: 1000 }, () => ({ description: '明细记录'.repeat(100) })),
+      detail: Array.from({ length: 1000 }, () => ({
+        description: '明细记录'.repeat(100),
+      })),
     }).json,
   );
   for (const [name, metric] of Object.entries(period.metrics))
@@ -791,7 +1050,10 @@ test('configured sources keep formal field rules and safe pagination', () => {
   assert.match(config.queries['workbench.changes'].request.sql, /GROUP BY cust_code,cust_order_no/);
   assert.match(config.queries['workbench.changes'].request.sql, /INTERVAL '12' HOUR/);
   assert.match(config.queries['workbench.orders'].request.sql, /exp_flag='否'/);
-  assert.match(config.queries['workbench.stock'].request.sql, /main_sales_plan_adj>0/);
+  assert.match(
+    config.queries['workbench.stock'].request.sql,
+    /WHEN .*<=plan_policy.corrected_day THEN main_sales_plan_adj/,
+  );
   assert.doesNotMatch(config.queries['workbench.stock'].request.sql, /avg_daily_planned_demand/);
   assert.match(config.queries['workbench.orders'].request.sql, /LEAST\(m.sent,m.demand\)/);
   assert.match(
@@ -800,7 +1062,7 @@ test('configured sources keep formal field rules and safe pagination', () => {
   );
   assert.match(
     config.queries['workbench.ages'].request.sql,
-    /b.inv_qty<>0 AND \(b.age_days IS NULL OR b.age_days<0/,
+    /COUNT\(current_stock_60\)<>COUNT\(\*\)/,
   );
   for (const name of ['orders', 'ontime', 'stock', 'changes', 'ages', 'customers', 'directors']) {
     assert.ok(config.queries[config.queries['workbench.' + name].pagination.countQuery]);
@@ -830,7 +1092,9 @@ test('reader preserves denial and abort instead of falling back', async () => {
   const stop = new AbortController();
   stop.abort();
   await assert.rejects(
-    model.loadWorkbenchReport('2026-10-01', '2026-11-01', stop.signal, { execute }),
+    model.loadWorkbenchReport('2026-10-01', '2026-11-01', stop.signal, {
+      execute,
+    }),
     { name: 'AbortError' },
   );
 });
@@ -900,7 +1164,8 @@ test('one arrival order with many SKUs counts once; incomplete orders leave an e
   part.rows[0].ontime = null;
   part.rows[0].invalid = 1;
   const missing = model.computeWorkbenchMetrics(p)['准交率'];
-  assert.equal(missing.value, (8 / 9) * 100);
+  assert.equal(missing.value, 80);
+  assert.equal(missing.sample.value, (8 / 9) * 100);
   assert.deepEqual([missing.sample.known, missing.sample.total], [9, 10]);
   assert.match(missing.coverageNote, /不是全量指标/);
 });
@@ -945,4 +1210,158 @@ test('missing cancellation timestamp and shipment-date association explain unava
   assert.match(m['作废率'].missingReason, /canceltime/);
   assert.equal(m['订单满足率'].value, null);
   assert.match(m['订单满足率'].missingReason, /发货日期/);
+});
+
+test('shared period reads preserve typed rows, exact windows and scoped retry without rescanning successful sections', async () => {
+  const calls = [];
+  let wrongPeriod = false;
+  const packet = (columns, rows, section_id) =>
+    rows.length
+      ? [
+          {
+            ...(section_id === undefined ? {} : { section_id }),
+            packet_index: 0,
+            packet_count: rows.length,
+            packet_scope_total: rows.length,
+            packet_rows: rows.map((row, index) =>
+              [
+                String(index + 1),
+                ...columns.map((key) => (row[key] === null ? null : String(row[key]))),
+              ]
+                .map((value) =>
+                  value === null ? 'N' : 'V' + Buffer.byteLength(value) + ':' + value,
+                )
+                .join(''),
+            ),
+          },
+        ]
+      : [];
+  const execute = async (_request, { queryId, values }) => {
+    calls.push({ queryId, values });
+    const enabled = Array.from({ length: 6 }, (_, index) => index).filter(
+      (index) => values[`period_${index}_enabled`],
+    );
+    let rows = [];
+    if (queryId === 'workbench.period-snapshots')
+      rows = [
+        Object.fromEntries(
+          Array.from({ length: 6 }, (_, index) => [
+            ['stock_' + index, null],
+            ['age_' + index, null],
+          ]).flat(),
+        ),
+      ];
+    if (queryId === 'workbench.orders.periods.summary') {
+      const columns = ['period_index', ...config.queries['workbench.orders.summary'].resultColumns];
+      rows = packet(
+        columns,
+        enabled.map((index) => ({
+          ...Object.fromEntries(columns.map((key) => [key, 0])),
+          period_index: wrongPeriod ? 6 : index,
+          base: '华南',
+          category: '水饺',
+          item: '小水饺',
+          sku: null,
+          name: null,
+          director: '责任人',
+          names: 1,
+          summary: 1,
+          demand: 100 + index,
+          shortage: index,
+          sample_demand: 100 + index,
+          sample_shortage: index,
+          sample_records: 1,
+          records: 1,
+        })),
+        0,
+      );
+    }
+    if (queryId.includes('.partition1.')) return { configVersion: 'period-fixture', rows: [] };
+    if (
+      /^workbench\.changes(?:\.(?:cancellation|amendment)(?:\.partition[01])?)?\.periods\.summary(?:\.initial)?$/.test(
+        queryId,
+      )
+    ) {
+      const columns = ['period_index', ...config.queries['workbench.changes'].resultColumns];
+      rows = packet(
+        columns,
+        enabled.map((index) => ({
+          ...Object.fromEntries(columns.map((key) => [key, 0])),
+          period_index: index,
+          kind: queryId.includes('.amendment.') ? '2' : '1',
+          region: 'R',
+          province: 'P',
+          numerator: index,
+          denominator: 100 + index,
+          records: 1,
+          unknown_quantity: 0,
+        })),
+      );
+    }
+    return { configVersion: 'period-fixture', rows };
+  };
+  const options = {
+    summary: true,
+    periodQueries: true,
+    base: '华南',
+    execute,
+    now: new Date('2026-11-01T00:00:00Z'),
+  };
+  const facts = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, options);
+  assert.equal(calls.length, 9);
+  assert.ok(
+    Object.values(facts.periods).every((p) => p.sections.every((s) => s.status === 'ready')),
+  );
+  for (const [index, key] of [
+    'month',
+    'previousMonth',
+    'yearMonth',
+    'week',
+    'previousWeek',
+    'yearWeek',
+  ].entries()) {
+    const period = facts.periods[key];
+    const order = period.sections.find((s) => s.id === 'orders').rows[0];
+    assert.equal(order.demand, 100 + index);
+    assert.equal(order.summary, 1);
+    assert.equal(order.sku, null);
+    assert.equal(period.sections.find((s) => s.id === 'changes').rows[0].unknown_quantity, 0);
+  }
+  const orderCall = calls.find((c) => c.queryId === 'workbench.orders.periods.summary');
+  assert.equal(orderCall.values.report_base, '华南');
+  assert.equal(orderCall.values.period_0_start, '2026-10-01');
+  assert.equal(orderCall.values.period_0_end, '2026-10-26');
+  assert.equal(orderCall.values.period_3_start, '2026-10-19');
+  assert.equal(orderCall.values.period_3_end, '2026-10-26');
+  const retry = structuredClone(facts);
+  Object.assign(
+    retry.periods.week.sections.find((s) => s.id === 'orders'),
+    { status: 'error', rows: [], code: 'QUERY_FAILED' },
+  );
+  calls.length = 0;
+  await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+    ...options,
+    seedFacts: [retry],
+  });
+  assert.deepEqual(
+    calls.map((c) => c.queryId),
+    ['workbench.orders.periods.summary'],
+  );
+  assert.deepEqual(
+    Array.from({ length: 6 }, (_, i) => calls[0].values[`period_${i}_enabled`]),
+    [false, false, false, true, false, false],
+  );
+  calls.length = 0;
+  wrongPeriod = true;
+  const rejected = await model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, options);
+  assert.ok(
+    Object.values(rejected.periods).every(
+      (p) => p.sections.find((s) => s.id === 'orders').status === 'error',
+    ),
+  );
+  assert.ok(
+    Object.values(rejected.periods).every(
+      (p) => p.sections.find((s) => s.id === 'changes').status === 'ready',
+    ),
+  );
 });

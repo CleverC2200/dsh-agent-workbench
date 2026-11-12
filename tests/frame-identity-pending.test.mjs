@@ -14,7 +14,7 @@ const { outputFiles } = await build({
   write: false,
   format: 'cjs',
   platform: 'node',
-  alias: { react: resolve('node_modules/react') },
+  alias: { react: resolve(process.env.DSH_TEST_TOOLS ?? '.', 'node_modules/react') },
   loader: { '.png': 'dataurl', '.css': 'text' },
 });
 const module = { exports: {} };
@@ -51,6 +51,7 @@ async function fixture(
     restoredPage = false,
     nativeResourceSdk = false,
     declareSecondInterpreter = true,
+    pagesReady = true,
   } = {},
 ) {
   const dom = new JSDOM('<main id="root"></main>', {
@@ -83,6 +84,7 @@ async function fixture(
     listeners = new Set();
   let snapshot = {
     state: 'confirmed',
+    pagesReady,
     scope: authenticated ? 'principal-a' : null,
     subject: authenticated ? 'fixture-user-a' : null,
     status: { authenticated },
@@ -490,6 +492,11 @@ async function fixture(
     changeIdentity: async () =>
       act(async () => {
         snapshot = { ...snapshot, scope: 'principal-b', subject: 'fixture-user-b' };
+        for (const listener of listeners) listener();
+      }),
+    pagesReady: async () =>
+      act(async () => {
+        snapshot = { ...snapshot, pagesReady: true };
         for (const listener of listeners) listener();
       }),
     identityFailure: async () =>
@@ -1552,4 +1559,17 @@ test('creating a plain page conversation inherits the real current Core workspac
   assert.equal(f.counts().sessions, 1);
   assert.equal(f.calls.filter(([kind]) => kind === 'directory-picker').length, 0);
   assert.equal(f.selection().cwd, '/owned/workspace');
+});
+
+test('cold page startup waits for Host page capabilities then restores without a manual reload', async (t) => {
+  const f = await fixture(t, { pagesReady: false });
+  assert.equal(Boolean(f.dom.window.document.querySelector('iframe')), false);
+  assert.equal(f.counts().selectionRequests, 0);
+  assert.equal(f.counts().sessions, 0);
+  await f.pagesReady();
+  assert.ok(f.dom.window.document.querySelector('iframe'));
+  await f.load();
+  assert.equal(f.counts().selectionRequests, 1);
+  assert.equal(f.counts().sessions, 1);
+  assert.equal(f.dom.window.document.querySelector('[title="PAGE_RESOURCE_NOT_ALLOWED"]'), null);
 });

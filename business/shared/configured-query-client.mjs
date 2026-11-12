@@ -196,7 +196,9 @@ export function createQueryClient(config, execute) {
       query(config, id).maxConcurrency === 1 ? 1 : concurrency,
       // Collect the inventory first-screen reads before selecting priority. Otherwise
       // synchronous component order starts a heavy query ahead of ready cards.
-      ['inventory-fc', 'inventory-qll', 'inventory-aqkc'].includes(config.agentId),
+      ['inventory-fc', 'inventory-qll', 'inventory-aqkc'].includes(config.agentId) ||
+        (config.agentId === 'inventory-orderworkbench' &&
+          (id.includes('.periods.') || id === 'workbench.period-snapshots')),
     );
     signal?.throwIfAborted();
     const failure = result?.failure ?? result?.error;
@@ -256,7 +258,7 @@ export function createQueryClient(config, execute) {
     // A full page may be truncated: discard it and use the counted multi-page path.
     if (singlePageFirst && !atomicId) {
       const result = await read(
-        id,
+        q.pagination?.initialQuery ?? id,
         { ...values, offset: 0 },
         {
           signal,

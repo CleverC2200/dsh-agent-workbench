@@ -1,9 +1,26 @@
+import { createBatchEdit } from './batch-edit.js';
+import { createProcessedDemand } from './processed-demand-view.js';
+import {
+  createInventoryTargetPanel,
+  inventoryDependencyColumns,
+  inventoryDependencyFields,
+} from './inventory-target-view.js';
+import { createConstraintPanel } from './constraint-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
 import { call } from '../../../business/shared/channel.js';
 import { readUnitWeights, unitWeightCandidate } from './unit-weights.js';
+import { createEvaluationOverview, planContext } from './evaluation-view.js';
+import { readPlanRelations } from './relations.js';
+import { computeWorkflow } from './workflow-worker-client.js';
+import { readCapacityAnnual } from './master-data.js';
+import { capacityFiscalMonths } from 'dsh-agent-manage/mps-compute/capacity-report';
+import {
+  defaultProductionCalendar,
+  productionCalendarDays,
+  productionCalendarRule,
+} from './production-calendar.js';
 
-const excludedProcessCategories = new Set(['饺子', '调理肉制品', '饼类']);
 const titles = {
   process: '需求加工与收敛',
   constraints: '约束与配置',
@@ -12,14 +29,14 @@ const titles = {
 };
 const labels = {
   reportQuantity: '提报数量',
-  historyQuantity: '历史发货数量',
+  historyQuantity: '上一财年发货参考量',
   reportShare: '提报占比',
   historyShare: '历史占比',
   systemShare: '系统占比',
   share: '有效占比',
   nextMonthDemand: '下一月需求参考',
   requiredProduction: '所需生产量',
-  projectedClosing: '无约束期末库存',
+  projectedClosing: '参考期末库存',
   requiredProductionTons: '所需生产吨数',
   productionDays: '生产天数',
   demand: '需求数量',
@@ -49,6 +66,7 @@ const processFields = [
   'systemShare',
   'share',
   'demand',
+  'openingInventory',
 ];
 const planFields = [
   'demand',
@@ -75,35 +93,100 @@ const reasons = (row, fields) => [
   ...new Set(fields.flatMap((field) => row.missing?.[field] ?? [])),
 ];
 const status = (row, fields) => reasons(row, fields).join('、') || '已计算';
-const sourceText = '①大类需求；②月末结存；③两路占比；④源产能；⑤本地配置';
+const sourceText = '①大类需求；②月末结存；③两路占比；④源产能；⑤源最终目标周转天数与人工补充';
 
-export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
+export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts, Dialog }) {
   const h = react.createElement;
+  const { useBatchEdit, Actions, Field } = createBatchEdit(react);
+  const NumberInput = ({ batch, label, value, commit, max }) =>
+    h(Field, {
+      batch,
+      id: label,
+      label,
+      value,
+      max,
+      placeholder: '未填写',
+      onStage: commit,
+    });
+  const ProcessedDemand = createProcessedDemand(react, { downloadCsv, downloadAmounts });
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
+  const InventoryTargetPanel = createInventoryTargetPanel(react, { downloadCsv, NumberInput });
+  const ConstraintPanel = createConstraintPanel(react, { Dialog });
+  const EvaluationOverview = createEvaluationOverview(react, { downloadCsv, Dialog });
   return function Workflow({
+    evaluation,
+    setEvaluation,
     step,
-    draft,
+    draft: savedDraft,
     scopeGeneration,
-    update,
+    syncInventoryTargets,
+    inventoryTargetsBusy,
+    update: persistUpdate,
     relations,
     shipmentSnapshot,
-    onNext,
-    onShareAdjustment,
     onUndoShareAdjustment,
+    onEditingChange,
   }) {
     const [search, setSearch] = react.useState('');
+    const [configuration, setConfiguration] = react.useState({});
+    const batch = useBatchEdit({
+      scope: `${savedDraft.id}:${savedDraft.month}:${step}:${scopeGeneration}`,
+      onEditingChange,
+      requireReason: step === 'process',
+      onStart: () => setConfiguration({}),
+      onCancel: () => setConfiguration({}),
+    });
+    const draft =
+      step === 'constraints' && batch.active ? { ...savedDraft, ...configuration } : savedDraft;
+    const update = (changes) => {
+      if (step === 'constraints' && batch.active)
+        setConfiguration((current) => ({ ...current, ...changes }));
+      else persistUpdate(changes);
+    };
     const [base, setBase] = react.useState('');
     const [category, setCategory] = react.useState('');
     const [month, setMonth] = react.useState('');
     const [onlyMissing, setOnlyMissing] = react.useState(false);
     const [page, setPage] = react.useState(0);
     const [formula, setFormula] = react.useState(null);
-    const [editingShare, setEditingShare] = react.useState(null);
     const [shareError, setShareError] = react.useState('');
+    const [executing, setExecuting] = react.useState(false);
+    const [evaluationError, setEvaluationError] = react.useState('');
+    const executionGeneration = react.useRef(0);
+    const executionController = react.useRef(null);
+    const executingRef = react.useRef(false);
+    react.useEffect(() => {
+      executionGeneration.current++;
+      setExecuting(false);
+      if (executingRef.current)
+        setEvaluationError('输入或数据来源已更新，本轮评估已取消。请重新评估。');
+      executingRef.current = false;
+      return () => {
+        executionGeneration.current++;
+        executionController.current?.abort();
+      };
+    }, [savedDraft, relations, shipmentSnapshot, scopeGeneration]);
     const result = react.useMemo(
-      () => buildMpsWorkflow(draft, relations, shipmentSnapshot),
-      [draft, relations, shipmentSnapshot],
+      () => buildMpsWorkflow(savedDraft, relations, shipmentSnapshot),
+      [savedDraft, relations, shipmentSnapshot],
     );
+    const preparingInputs =
+      (savedDraft.productSource === 'business' &&
+        (!shipmentSnapshot || ['unread', 'loading'].includes(shipmentSnapshot.status))) ||
+      [
+        savedDraft.productsRead,
+        savedDraft.historyAnnualRead,
+        savedDraft.sourceChecksRead,
+        savedDraft.historicalIndicatorsRead,
+        savedDraft.planRatesRead,
+        savedDraft.inventoryTargetsRead,
+        savedDraft.annualRead,
+        savedDraft.forecastRead,
+        savedDraft.reportRead,
+        ...Object.values(savedDraft.reportRead?.periods ?? {}),
+        ...Object.values(savedDraft.historyRead?.periods ?? {}),
+        ...Object.values(savedDraft.deliveryRead?.periods ?? {}),
+      ].some((state) => state?.status === 'loading');
     const coverage = result.scopeCoverage === 'national' ? '全国' : '范围内';
     const [weightRead, setWeightRead] = react.useState(null);
     const [weightError, setWeightError] = react.useState('');
@@ -136,11 +219,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         weightController.current?.abort();
       };
     }, [weightScope]);
-    const syncWeights = async () => {
+    const syncWeights = async (parentSignal) => {
       const generation = ++weightGeneration.current;
       weightController.current?.abort();
       const controller = new AbortController();
       weightController.current = controller;
+      const signal = parentSignal
+        ? AbortSignal.any([parentSignal, controller.signal])
+        : controller.signal;
       setWeightBusy(true);
       setWeightRead(null);
       setWeightError('');
@@ -155,19 +241,139 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               { signal: options.signal },
             ),
           weightCodes,
-          controller.signal,
+          signal,
         );
-        if (generation === weightGeneration.current) setWeightRead(read);
+        if (generation === weightGeneration.current && !signal.aborted) {
+          setWeightRead(read);
+          return read;
+        }
       } catch (error) {
         if (generation === weightGeneration.current) setWeightError(error.message);
       } finally {
         if (generation === weightGeneration.current) setWeightBusy(false);
       }
     };
+    const currentEvaluation =
+      evaluation?.draft.id === draft.id && evaluation.scopeGeneration === scopeGeneration
+        ? evaluation
+        : null;
+    const evaluationStale = Boolean(
+      currentEvaluation &&
+      (currentEvaluation.draft !== savedDraft ||
+        currentEvaluation.relations !== relations ||
+        currentEvaluation.shipmentSnapshot !== shipmentSnapshot ||
+        (weightRead && weightRead !== currentEvaluation.weights)),
+    );
+    const executeEvaluation = async () => {
+      const ticket = ++executionGeneration.current;
+      executionController.current?.abort();
+      const controller = new AbortController();
+      executionController.current = controller;
+      setExecuting(true);
+      executingRef.current = true;
+      setEvaluationError('');
+      try {
+        const config = JSON.parse(document.getElementById('agent-sql-config').textContent);
+        const [weights, sourceRead, annual] = await Promise.all([
+          weightRead ? Promise.resolve(weightRead) : syncWeights(controller.signal),
+          (relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration]) &&
+          !relations.busy &&
+          !relations.error &&
+          relations.configSignature === JSON.stringify(config) &&
+          typeof relations.configVersion === 'string' &&
+          relations.configVersion &&
+          ['products', 'sku_capacity', 'tunnels', 'transfers'].every((kind) =>
+            Array.isArray(relations.sources?.[kind]),
+          )
+            ? Promise.resolve(relations)
+            : readPlanRelations(
+                config,
+                (_request, options) =>
+                  call(
+                    'sql',
+                    { queryId: options.queryId, parameters: options.values },
+                    { signal: options.signal },
+                  ),
+                result.months.slice(0, 3),
+                controller.signal,
+              )
+          ).then(
+            (value) => ({ value }),
+            (error) => ({ error: error.message }),
+          ),
+          draft.productSource === 'business'
+            ? readCapacityAnnual(
+                [...new Set([...capacityFiscalMonths(result.shipmentMonth), ...result.months])],
+                controller.signal,
+              ).catch((error) => ({ rows: [], error: error.message }))
+            : Promise.resolve({ rows: [], error: '人工模拟未读取全年年度SKU来源' }),
+        ]);
+        if (ticket !== executionGeneration.current) return;
+        if (
+          sourceRead.value &&
+          weights?.configVersion &&
+          sourceRead.value.configVersion !== weights.configVersion
+        )
+          throw Error('关系来源与件吨系数配置版本不一致，请重新读取');
+        if (draft.productSource === 'business') {
+          annual.referenceMonth = result.shipmentMonth;
+          const knownCodes = new Set(weights?.codes ?? weightCodes);
+          const additional = [
+            ...new Set(annual.rows.map((row) => row.code).filter((code) => !knownCodes.has(code))),
+          ];
+          if (additional.length) {
+            try {
+              const extra = await readUnitWeights(
+                config,
+                (_request, options) =>
+                  call(
+                    'sql',
+                    { queryId: options.queryId, parameters: options.values },
+                    { signal: options.signal },
+                  ),
+                additional,
+                controller.signal,
+              );
+              if (weights?.configVersion && extra.configVersion !== weights.configVersion)
+                throw Error('年度件吨系数与本轮读取配置版本不一致，请重新评估');
+              annual.extraWeights = extra;
+            } catch (error) {
+              annual.weightError = error.message;
+            }
+          }
+        }
+        if (ticket !== executionGeneration.current) return;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        if (ticket !== executionGeneration.current) return;
+        const computed = await computeWorkflow(
+          draft,
+          sourceRead.value ?? null,
+          shipmentSnapshot,
+          { weights, annual, sourceIssues: sourceRead.error ? [sourceRead.error] : [] },
+          controller.signal,
+        );
+        if (ticket !== executionGeneration.current) return;
+        setEvaluation({
+          draft,
+          relations,
+          shipmentSnapshot,
+          scopeGeneration,
+          weights,
+          result: computed,
+          at: new Date().toLocaleString('zh-CN'),
+        });
+      } catch (error) {
+        if (ticket === executionGeneration.current) setEvaluationError(error.message);
+      } finally {
+        if (ticket === executionGeneration.current) {
+          setExecuting(false);
+          executingRef.current = false;
+        }
+      }
+    };
     const fields = step === 'process' ? processFields : planFields;
-    const inScope = (row) => step !== 'process' || !excludedProcessCategories.has(row.category);
-    const scopedRows = result.rows.filter(inScope);
-    const scopedCategories = result.categoryRows.filter(inScope);
+    const scopedRows = result.rows;
+    const scopedCategories = result.categoryRows;
     const configurationPairs = [
       ...new Map(
         [
@@ -214,9 +420,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       setOnlyMissing(false);
       setPage(0);
       setFormula(null);
-      setEditingShare(null);
       setShareError('');
     }
+    const planning = ['capacity', 'report'].includes(step);
     useMpsPart(
       react,
       step,
@@ -226,25 +432,34 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         shipmentMonth: result.shipmentMonth,
         filter: { search, base, category, month, onlyMissing },
         categoryRows,
-        rows: visible,
+        categoryComparisons: result.categoryComparisons,
+        rows: planning ? [] : visible,
         total: scopedRows.length,
         filteredTotal: filtered.length,
         page: pageIndex + 1,
         constraints: result.constraints,
         productionDays: draft.productionDays ?? [],
-        unitWeights: draft.unitWeights ?? [],
+        unitWeights: planning ? undefined : (draft.unitWeights ?? []),
         resources: draft.resources ?? [],
-        resourceAssignments: draft.resourceAssignments ?? [],
-        resourceLoads: result.resourceLoads ?? [],
-        summary: result.summary,
+        resourceAssignments: planning ? undefined : (draft.resourceAssignments ?? []),
+        resourceLoads: planning ? undefined : (result.resourceLoads ?? []),
+        summary: planning ? undefined : result.summary,
         adjustments: draft.adjustments,
         adjustmentIssues: result.adjustmentIssues ?? [],
-        missing: result.missing,
+        excludedCategoryDemand: result.excludedCategoryDemand ?? [],
+        missing: planning ? undefined : result.missing,
         businessSave: 'not-connected',
+        plan: currentEvaluation
+          ? {
+              at: currentEvaluation.at,
+              stale: evaluationStale,
+              ...planContext(currentEvaluation.result.plan, visible, { base, month }),
+            }
+          : null,
       },
       titles[step],
     );
-    const table = (name, columns, rows) =>
+    const table = (name, columns, rows, renderDetail) =>
       h(
         'div',
         { className: 'dc-table-scroll wf-table-scroll' },
@@ -257,7 +472,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             h(
               'tr',
               null,
-              columns.map((column) => h('th', { key: column }, column)),
+              columns.map((column, index) => h('th', { key: index }, column)),
             ),
           ),
           h(
@@ -266,9 +481,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             rows.length
               ? rows.map((cells, index) =>
                   h(
-                    'tr',
+                    react.Fragment,
                     { key: index },
-                    cells.map((cell, position) => h('td', { key: position }, cell)),
+                    h(
+                      'tr',
+                      {},
+                      cells.map((cell, position) => h('td', { key: position }, cell)),
+                    ),
+                    renderDetail?.(cells, index),
                   ),
                 )
               : h(
@@ -286,12 +506,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         h('div', { className: 'dc-card-head' }, h('h3', null, name), actions),
         body,
       );
-    const next =
-      step === 'process'
-        ? '主数据对应关系'
-        : step === 'constraints'
-          ? '产能评估与缺口'
-          : '产销存报告';
     const select = (label, value, values, setter) =>
       h(
         'label',
@@ -319,67 +533,77 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         const layer = row[field === 'reportShare' ? 'reportLayers' : 'historyLayers'];
         if (layer)
           expression = `物料组 / 大类：${value(layer.groupQuantity)} ÷ ${value(layer.categoryQuantity)} = ${value(layer.groupShare)}；${coverage}SKU / 物料组：${value(layer.skuQuantity)} ÷ ${value(layer.groupQuantity)} = ${value(layer.skuShare)}；基地SKU / ${coverage}SKU：${value(layer.baseQuantity)} ÷ ${value(layer.skuQuantity)} = ${value(layer.baseShare)}；三层连乘：${value(layer.groupShare)} × ${value(layer.skuShare)} × ${value(layer.baseShare)} = ${value(layer.product)}`;
+        if (
+          field === 'reportShare' &&
+          layer &&
+          row.reportShare !== null &&
+          [layer.groupQuantity, layer.categoryQuantity, layer.skuQuantity, layer.baseQuantity].some(
+            (quantity) => quantity === null,
+          )
+        )
+          expression = `部分原始数量缺项，保留原值。按源计划占比与Top1剩余占比拆分：物料组占比 ${value(layer.groupShare)}；SKU占比 ${value(layer.skuShare)}；基地占比 ${value(layer.baseShare)}；有效提报系数 ${value(row.reportShare)}`;
       }
       if ((field === 'reportShare' || field === 'historyShare') && row.layerMissing?.length)
         expression += `；${row.layerMissing.join('、')}`;
       if (field === 'systemShare')
-        expression = row.fallback
-          ? `去年同月${coverage}物料组销量Top1托底SKU。物料组平均占比 ${value(row.groupShare)} 减去其余SKU有效占比，再按本SKU未调整基地的系统占比分配。系统值 ${value(row.systemShare)}`
-          : `(${value(row.reportShare)} + ${value(row.historyShare)}) ÷ 2 = ${value(row.systemShare)}`;
+        expression =
+          row.splitBasis === 'history-only-zero-report'
+            ? `整类提报合计为0，按历史占比100%拆分：${value(row.historyShare)} × 100% = ${value(row.systemShare)}`
+            : `(${value(row.reportShare)} + ${value(row.historyShare)}) ÷ 2 = ${value(row.systemShare)}`;
       if (field === 'share')
-        expression = `系统占比 ${value(row.systemShare)}；有效占比 ${value(row.share)}。${row.fallback ? '本SKU承接物料组剩余占比。' : ''}`;
+        expression = `系统占比 ${value(row.systemShare)}；有效占比 ${value(row.share)}。${row.fallback ? 'Top1承接剩余占比，人工调整与系统基线分别保留。' : ''}`;
       if (field === 'demand') {
         const total = result.categoryRows.find(
           (item) => item.month === row.month && item.category === row.category,
         )?.quantity;
         expression = `${value(total)} × ${value(row.share)} = ${value(row.demand)}`;
+        for (const [name, layer] of [
+          ['提报', row.reportLayers],
+          ['历史', row.historyLayers],
+        ]) {
+          if (layer)
+            expression += `；${name}三层占比：${value(layer.groupShare)} × ${value(layer.skuShare)} × ${value(layer.baseShare)} = ${value(layer.product)}`;
+        }
+        expression += `；系统占比 ${value(row.systemShare)}，有效占比 ${value(row.share)}`;
+        if (row.splitBasis === 'history-only-zero-report')
+          expression += '；整类提报合计为0，本类按历史占比100%拆分';
       }
+      if (row.coefficientFallback?.length) expression += `；${row.coefficientFallback.join('；')}`;
       if (field === 'openingInventory')
         expression =
           row.month === result.months[0]
             ? `${result.shipmentMonth}月末结存 = ${value(row.openingInventory)}`
-            : `承接上一月无约束期末库存 = ${value(row.openingInventory)}，不代表超载后的实际库存`;
+            : `承接上一月参考期末库存 = ${value(row.openingInventory)}，不代表超载后的实际库存`;
       if (field === 'nextMonthDemand')
         expression =
           row.month === result.months[2]
             ? `M+4大类有效需求 × M+3有效拆分系数 = ${value(row.nextMonthDemand)}，仅供目标库存参考，不生成M+4 SKU需求`
             : `下一月有效SKU需求 = ${value(row.nextMonthDemand)}`;
       if (field === 'targetInventory') {
-        const nextDate = new Date(`${row.month}-01T00:00:00Z`);
-        nextDate.setUTCMonth(nextDate.getUTCMonth() + 2);
-        nextDate.setUTCDate(0);
-        expression = `${value(row.safetyDays)} × ${value(row.nextMonthDemand)} ÷ ${nextDate.getUTCDate()} = ${value(row.targetInventory)}`;
+        expression = `${value(row.safetyDays)} × ${value(row.nextMonthDemand)} ÷ ${row.nextMonthDays} = ${value(row.targetInventory)}；源最终目标周转天数 ${value(row.turnoverPolicy.sourceDays)}天，人工补充及已采用规则生效后使用有效天数`;
       }
       if (field === 'targetInventory' && row.safetyDays === 0)
-        expression = '安全天数明确为0，目标库存为0，无需下一月需求';
+        expression =
+          row.safetyDaysSource === 'missing-turnover-days-zero'
+            ? '源目标周转天数待补，本轮临时按0天计算，目标库存为0；源缺项保留，补齐后重新评估'
+            : '安全天数明确为0，目标库存为0，无需下一月需求';
       if (field === 'requiredProduction')
-        expression = `max(0, ${value(row.demand)} + ${value(row.targetInventory)} − ${value(row.openingInventory)}) = ${value(row.requiredProduction)}，无约束参考`;
+        expression = `max(0, ${value(row.demand)} + ${value(row.targetInventory)} − ${value(row.openingInventory)}) = ${value(row.requiredProduction)}，需求推导参考`;
       if (field === 'projectedClosing')
-        expression = `${value(row.openingInventory)} + ${value(row.requiredProduction)} − ${value(row.demand)} = ${value(row.projectedClosing)}，无约束参考`;
+        expression = `${value(row.openingInventory)} + ${value(row.requiredProduction)} − ${value(row.demand)} = ${value(row.projectedClosing)}，需求推导参考`;
       if (field === 'requiredProductionTons')
         expression = `${value(row.requiredProduction)} × 明确维护的件吨系数 = ${value(row.requiredProductionTons)}`;
+      if (['reportShare', 'historyShare', 'systemShare', 'share', 'demand'].includes(field))
+        expression += `；拆分系数来源为评估月份${draft.month}，同一套系数用于M+1至M+3`;
       if (missing.length) expression += `${expression ? '；' : ''}缺项：${missing.join('、')}`;
       setFormula({
         title: `${row.base} ${row.code} ${row.month} ${labels[field]} 计算过程`,
         expression,
         value: row[field],
+        percent: ['reportShare', 'historyShare', 'systemShare', 'share', 'load'].includes(field),
         missing,
       });
     };
-    const numericCell = (row, field) =>
-      h(
-        'button',
-        {
-          className: `dc-link wf-value${row[field] == null ? ' wf-unavailable' : ''}`,
-          'aria-label': `${row.base} ${row.code} ${row.month} ${labels[field]} 计算过程`,
-          onClick: () => explain(row, field),
-        },
-        numberText(
-          row[field],
-          field.endsWith('Share') || field === 'share' || field === 'systemShare',
-          field === 'requiredProductionTons' ? 6 : 0,
-        ),
-      );
     const layerColumns = [
       '提报物料组/大类',
       '提报SKU/物料组',
@@ -436,21 +660,53 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       resourceStatus[row.status] ?? '未评估',
     ];
     const exportRows = (name, exportFields, includeCategory = false) => {
+      const shipmentByProduct = new Map(
+        (result.comparisonSources?.shipment ?? []).map((row) => [
+          JSON.stringify([row['基地'], row['产品编码']]),
+          row,
+        ]),
+      );
+      const forecastByMonth = new Map();
+      for (const row of result.comparisonSources?.forecast ?? []) {
+        const key = JSON.stringify([row['月份'], row['基地'], row['产品编码']]);
+        forecastByMonth.set(key, forecastByMonth.has(key) ? null : row['数量']);
+      }
       const columns = [
         ...new Set([
           '评估版本',
           '评估月份',
           '粒度',
+          '相对月份',
           ...identityColumns.map(([, label]) => label),
           ...exportFields.map((key) => labels[key]),
           ...layerColumns,
           ...layerQuantityColumns,
           '分层缺项',
+          '历史参考物料编码',
+          '历史参考口径',
           '公式说明',
+          ...inventoryDependencyColumns,
           'Top1托底',
+          '提报数量口径',
+          '需求拆分口径',
+          '拆分系数所属月',
+          '系数托底说明',
           '调整原因',
           '调整时间',
           '系统大类需求',
+          '系统SKU需求',
+          '数量调整状态',
+          '固定数量调整',
+          '本月预估发货',
+          '本月预估所属月',
+          '本月系统预估发货',
+          '本月预估发货已知小计',
+          '本月预估发货完整性',
+          '本月预估发货缺项数',
+          '本月预估发货缺项原因',
+          '模型预测数量',
+          '模型已知小计',
+          '全部调整记录',
           '大类调整状态',
           ...resourceColumns,
           '已知生产吨数小计',
@@ -465,7 +721,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           '未评估原因',
         ]),
       ];
-      const rows = filtered.map((row) => {
+      const rows = (includeCategory ? scopedRows : filtered).map((row) => {
+        const shipment = shipmentByProduct.get(JSON.stringify([row.base, row.code]));
+        const forecast = forecastByMonth.get(JSON.stringify([row.month, row.base, row.code]));
         const adjustment = draft.adjustments?.shares?.find((item) => item.rowId === row.id);
         const layerValues = ['reportLayers', 'historyLayers'].flatMap((key) =>
           ['groupShare', 'skuShare', 'baseShare', 'product'].map((field) => row[key]?.[field]),
@@ -478,7 +736,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         return {
           评估版本: draft.name,
           评估月份: draft.month,
-          粒度: includeCategory ? '基地×物料组×SKU' : '无约束产销存参考',
+          相对月份: `M+${result.months.indexOf(row.month) + 1}`,
+          粒度: includeCategory ? '基地×物料组×SKU' : '需求推导产销存参考',
           ...Object.fromEntries(identityColumns.map(([key, label]) => [label, row[key]])),
           ...Object.fromEntries(exportFields.map((key) => [labels[key], row[key]])),
           ...Object.fromEntries(layerColumns.map((key, index) => [key, layerValues[index]])),
@@ -486,14 +745,34 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             layerQuantityColumns.map((key, index) => [key, layerQuantities[index]]),
           ),
           分层缺项: row.layerMissing?.join('；'),
-          公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；无约束期末=期初+所需生产-需求`,
+          历史参考物料编码: row.historyCode || row.code,
+          历史参考口径: row.historyCode ? '沿用老品历史' : '自身历史',
+          公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
+          ...inventoryDependencyFields(row),
+          系统SKU需求: row.systemDemand,
+          本月预估所属月: result.shipmentMonth,
+          本月系统预估发货: shipment?.prediction,
+          本月预估发货: shipment?.fin,
+          本月预估发货已知小计: shipment?.fin,
+          本月预估发货完整性: shipment?.fin != null ? '完整' : '缺项',
+          本月预估发货缺项数: shipment?.fin != null ? 0 : 1,
+          模型预测数量: forecast,
+          模型已知小计: forecast,
+          数量调整状态: row.quantityAdjusted ? '数量固定及下级联动' : '系统拆分或占比调整',
           Top1托底: row.fallback ? '是' : '否',
+          提报数量口径: row.reportMissingAsZero ? '完整读取后未提报按0' : '源记录数量',
+          需求拆分口径:
+            row.splitBasis === 'history-only-zero-report'
+              ? '整类提报为0，历史占比100%'
+              : '提报占比50%＋历史占比50%',
+          拆分系数所属月: draft.month,
+          系数托底说明: row.coefficientFallback?.join('；'),
           调整原因: adjustment?.reason,
           调整时间: adjustment?.at,
           源产能候选: row.capacities
             .map(
               (item) =>
-                `${display(item.line)}：${display(item.dailyPieces)}件/日，${display(item.dailyTons)}吨/日`,
+                `${display(item.line)}：${numberText(item.dailyPieces)}件/日，${numberText(item.dailyTons)}吨/日`,
             )
             .join('；'),
           来源: sourceText,
@@ -510,19 +789,48 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         };
       });
       rows.unshift(
-        ...categoryRows.map((row) => ({
+        ...(includeCategory ? scopedCategories : categoryRows).map((row) => {
+          const compare = result.categoryComparisons?.find(
+            (item) => item.category === row.category,
+          );
+          return {
+            评估版本: draft.name,
+            评估月份: draft.month,
+            相对月份: `M+${result.months.indexOf(row.month) + 1}`,
+            粒度: row.month === result.months[3] ? 'M+4大类，仅供库存参考' : '大类',
+            月份: row.month,
+            大类: row.category,
+            需求数量: row.quantity,
+            系统大类需求: row.systemQuantity,
+            大类调整状态: row.adjusted ? '人工调整' : '系统值',
+            本月预估发货: compare?.shipment.quantity,
+            本月预估发货已知小计: compare?.shipment.knownQuantity,
+            本月预估发货完整性:
+              compare?.shipment.quantity != null
+                ? '完整'
+                : compare?.shipment.knownQuantity != null
+                  ? '已知小计'
+                  : '缺项',
+            本月预估发货缺项数: compare?.shipment.missingCount,
+            本月预估发货缺项原因: compare?.shipment.issues.join('；'),
+            模型预测数量: compare?.forecast[row.month]?.quantity,
+            模型已知小计: compare?.forecast[row.month]?.knownQuantity,
+            来源: '①大类需求',
+            未评估原因: row.missing.join('、') || '已计算',
+          };
+        }),
+      );
+      if (
+        includeCategory &&
+        (draft.adjustments?.history?.length || draft.adjustments?.quantities?.length)
+      )
+        rows.push({
           评估版本: draft.name,
           评估月份: draft.month,
-          粒度: row.month === result.months[3] ? 'M+4大类，仅供库存参考' : '大类',
-          月份: row.month,
-          大类: row.category,
-          需求数量: row.quantity,
-          系统大类需求: row.systemQuantity,
-          大类调整状态: row.adjusted ? '人工调整' : '系统值',
-          来源: '①大类需求',
-          未评估原因: row.missing.join('、') || '已计算',
-        })),
-      );
+          粒度: '全部调整记录',
+          全部调整记录: JSON.stringify(draft.adjustments?.history ?? []),
+          固定数量调整: JSON.stringify(draft.adjustments?.quantities ?? []),
+        });
       if (!includeCategory) {
         rows.push(
           ...resourceLoads.map((row) => ({
@@ -542,7 +850,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           rows.push({
             评估版本: draft.name,
             评估月份: draft.month,
-            粒度: '全版本汇总，无约束参考',
+            粒度: '全版本汇总，需求推导参考',
             已知生产吨数小计: result.summary.knownRequiredProductionTons,
             完整生产吨数: result.summary.requiredProductionTons,
             已评估行数: result.summary.evaluatedRows,
@@ -550,6 +858,19 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             未评估原因: result.summary.missing.join('、') || '完整',
           });
       }
+      if (includeCategory)
+        rows.push(
+          ...(result.excludedCategoryDemand ?? []).map((row) => ({
+            评估版本: draft.name,
+            评估月份: draft.month,
+            粒度: '池外大类需求，未参与计算',
+            月份: row.month,
+            大类: row.category,
+            需求数量: row.quantity,
+            系统大类需求: row.systemQuantity,
+            未评估原因: row.reason,
+          })),
+        );
       if (!rows.length)
         rows.push({
           评估版本: draft.name,
@@ -605,20 +926,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         }),
         '仅未评估',
       ),
-    );
-    const footer = h(
-      'div',
-      { className: 'dc-card-foot' },
-      h('span', null, `共${filtered.length}条 · 第${pageIndex + 1}页`),
-      h('button', { disabled: pageIndex === 0, onClick: () => setPage(pageIndex - 1) }, '上一页'),
-      h(
-        'button',
-        {
-          disabled: (pageIndex + 1) * 25 >= filtered.length,
-          onClick: () => setPage(pageIndex + 1),
-        },
-        '下一页',
-      ),
+      h('span', { className: 'dc-card-note' }, `发货所属月 ${result.shipmentMonth}`),
     );
     const undoShare = (rowId) => {
       const shares = (draft.adjustments?.shares ?? []).filter((item) => item.rowId !== rowId);
@@ -652,213 +960,50 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         return rowId;
       }
     };
-    const shareControls = (row) => {
-      const saved = draft.adjustments?.shares?.find((item) => item.rowId === row.id);
-      const editing = editingShare?.rowId === row.id;
-      return h(
-        'div',
-        { className: 'wf-share-controls' },
-        h('span', null, row.fallback ? `去年同月${coverage}组内Top1托底` : '按两路有效占比分配'),
-        saved ? h('span', null, `已调整：${saved.reason} · ${saved.at}`) : null,
-        editing
-          ? h(
-              'div',
-              { className: 'wf-share-editor' },
-              h(
-                'label',
-                null,
-                '最终占比',
-                h('input', {
-                  type: 'number',
-                  min: 0,
-                  max: 1,
-                  step: 'any',
-                  'aria-label': `${row.base} ${row.code} ${row.month} 最终占比`,
-                  value: editingShare.share,
-                  onChange: (event) =>
-                    setEditingShare({ ...editingShare, share: event.target.value }),
-                }),
-              ),
-              h(
-                'label',
-                null,
-                '调整原因',
-                h('input', {
-                  'aria-label': `${row.base} ${row.code} ${row.month} 调整原因`,
-                  value: editingShare.reason,
-                  onChange: (event) =>
-                    setEditingShare({ ...editingShare, reason: event.target.value }),
-                }),
-              ),
-              h(
-                'button',
-                {
-                  onClick: () => {
-                    const share = Number(editingShare.share);
-                    if (
-                      editingShare.share.trim() === '' ||
-                      !Number.isFinite(share) ||
-                      share < 0 ||
-                      share > 1 ||
-                      !editingShare.reason.trim()
-                    ) {
-                      setShareError('请填写0至1的占比和调整原因');
-                      return;
-                    }
-                    const shares = [
-                      ...(draft.adjustments?.shares ?? []).filter((item) => item.rowId !== row.id),
-                      { rowId: row.id, share },
-                    ];
-                    const candidate = buildMpsWorkflow(
-                      { ...draft, adjustments: { ...draft.adjustments, shares } },
-                      relations,
-                      shipmentSnapshot,
-                    );
-                    if (candidate.adjustmentIssues?.length) {
-                      setShareError(candidate.adjustmentIssues.join('；'));
-                      return;
-                    }
-                    const error = onShareAdjustment?.({
-                      rowId: row.id,
-                      share,
-                      reason: editingShare.reason.trim(),
-                      systemValue: row.systemShare,
-                    });
-                    if (typeof error === 'string' && error) {
-                      setShareError(error);
-                      return;
-                    }
-                    setEditingShare(null);
-                    setShareError('');
-                  },
-                },
-                '应用占比',
-              ),
-              h(
-                'button',
-                {
-                  onClick: () => {
-                    setEditingShare(null);
-                    setShareError('');
-                  },
-                },
-                '取消',
-              ),
-              shareError
-                ? h('span', { role: 'alert', className: 'wf-unavailable' }, shareError)
-                : null,
-            )
-          : h(
-              'div',
-              null,
-              h(
-                'button',
-                {
-                  disabled: !onShareAdjustment || row.systemShare == null,
-                  'aria-label': `${row.base} ${row.code} ${row.month} 调整占比`,
-                  onClick: () => {
-                    setEditingShare({
-                      rowId: row.id,
-                      share: String(row.share ?? ''),
-                      reason: saved?.reason ?? '',
-                    });
-                    setShareError('');
-                  },
-                },
-                '调整占比',
-              ),
-              saved
-                ? h(
-                    'button',
-                    {
-                      disabled: !onUndoShareAdjustment,
-                      'aria-label': `${row.base} ${row.code} ${row.month} 撤销占比调整`,
-                      onClick: () => undoShare(row.id),
-                    },
-                    '撤销调整',
-                  )
-                : null,
-            ),
-      );
-    };
-    const rowsTable = (name, selectedFields) =>
-      table(
-        name,
-        [
-          ...identityColumns.map(([, label]) => label),
-          ...selectedFields.map((field) => labels[field]),
-          ...(step === 'process' ? ['托底与人工调整'] : []),
-          '未评估原因',
-        ],
-        visible.map((row) => [
-          ...identityColumns.map(([key]) => display(row[key])),
-          ...selectedFields.map((field) => numericCell(row, field)),
-          ...(step === 'process' ? [shareControls(row)] : []),
-          h(
-            'span',
-            {
-              className: `wf-reasons${reasons(row, selectedFields).length ? ' wf-unavailable' : ''}`,
-              title: status(row, selectedFields),
-            },
-            status(row, selectedFields),
-          ),
-        ]),
-      );
     const constraintRows = bases
-      .filter(
-        (sourceBase) => (!base || sourceBase === base) && (!search || sourceBase.includes(search)),
-      )
+      .filter((sourceBase) => !base || sourceBase === base)
       .map((sourceBase) => {
-        const current = result.constraints.safetyDays.find((item) => item.base === sourceBase);
+        const matches = (draft.constraints?.safetyDays ?? result.constraints.safetyDays).filter(
+          (item) => item.base === sourceBase,
+        );
+        const current = matches.length === 1 ? matches[0] : null;
         return [
           sourceBase,
-          h('input', {
-            type: 'number',
-            min: 0,
-            step: 'any',
-            value: current?.days ?? '',
-            'aria-label': `${sourceBase} 安全天数`,
-            onChange: (event) => {
-              const text = event.target.value;
-              if (
-                text !== '' &&
-                (!Number.isFinite(Number(text)) ||
-                  Number(text) < 0 ||
-                  Number(text) > Number.MAX_SAFE_INTEGER)
-              )
-                return;
+          h(NumberInput, {
+            batch,
+            key: `${draft.id}-${sourceBase}-days`,
+            label: `${sourceBase} 安全天数`,
+            value: current?.days,
+            commit: (text) =>
               update({
                 constraints: {
-                  ...result.constraints,
+                  ...draft.constraints,
+                  rules: draft.constraints?.rules ?? { local: [] },
                   safetyDays: [
-                    ...result.constraints.safetyDays.filter((item) => item.base !== sourceBase),
-                    { base: sourceBase, days: text === '' ? null : Number(text) },
+                    ...(draft.constraints?.safetyDays ?? result.constraints.safetyDays).filter(
+                      (item) => item.base !== sourceBase,
+                    ),
+                    { base: sourceBase, days: text === '' ? null : text },
                   ],
                 },
-              });
-            },
+              }),
           }),
-          '本地隔离草稿',
-          '安全天数 × 下一月需求 ÷ 下一月自然日天数',
+          matches.length > 1
+            ? '重复策略，请维护唯一值'
+            : current?.days == null
+              ? '未维护'
+              : '当前评估版本',
+          `${draft.month}评估 · M+1至M+3共用；修改后需重新评估`,
         ];
       });
     const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER) =>
-      h('input', {
-        type: 'number',
-        min: 0,
+      h(NumberInput, {
+        batch,
+        key: `${draft.id}-${label}`,
+        label,
+        value,
         max,
-        step: 'any',
-        value: value ?? '',
-        'aria-label': label,
-        onChange: (event) => {
-          const value = event.target.value;
-          if (
-            value !== '' &&
-            (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > max)
-          )
-            return;
-          change(value === '' ? null : Number(value));
-        },
+        commit: (text) => change(text === '' ? null : text),
       });
     const productionDays = draft.productionDays ?? [];
     const weights = draft.unitWeights ?? [];
@@ -888,20 +1033,33 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             sourceMonth,
             numberInput(
               `${sourceBase} ${sourceMonth} 生产天数`,
-              productionDays.find((item) => item.base === sourceBase && item.month === sourceMonth)
-                ?.days,
+              productionDays.filter(
+                (item) => item.base === sourceBase && item.month === sourceMonth,
+              ).length === 1
+                ? productionDays.find(
+                    (item) => item.base === sourceBase && item.month === sourceMonth,
+                  ).days
+                : productionCalendarDays(sourceBase, sourceMonth, productionDays),
               (days) => setDays(sourceBase, sourceMonth, days),
               31,
             ),
             h(
               'button',
               {
-                'aria-label': `${sourceBase} ${sourceMonth} 采用25天`,
-                onClick: () => setDays(sourceBase, sourceMonth, 25),
+                'aria-label': `${sourceBase} ${sourceMonth} 恢复默认生产天数`,
+                disabled: !batch.active,
+                onClick: () =>
+                  update({
+                    productionDays: productionDays.filter(
+                      (item) => item.base !== sourceBase || item.month !== sourceMonth,
+                    ),
+                  }),
               },
-              '采用25天候选',
+              '恢复默认',
             ),
-            '请按实际维护。春节月可参考15天，月份须人工确认',
+            productionDays.some((item) => item.base === sourceBase && item.month === sourceMonth)
+              ? '人工覆盖，按填写的最终生产天数计算，不重复扣春节天数'
+              : `默认25天，春节扣减${defaultProductionCalendar(sourceMonth).holidayDates.length}天；${defaultProductionCalendar(sourceMonth).holidayDates.join('、') || '本月无春节扣减'}`,
           ]),
       );
     const skuPairs = [
@@ -946,6 +1104,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         ),
         h('input', {
           'aria-label': `${row.base} ${row.code} 适用渠道`,
+          disabled: !batch.active,
           placeholder: '填写本基地SKU实际适用渠道，多个用逗号分隔',
           value: current?.channels ?? '',
           onChange: (event) =>
@@ -967,7 +1126,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           'button',
           {
             'aria-label': `${row.base} ${row.code} 使用来源系数`,
-            disabled: !weightRead || candidate.tonsPerPiece === null,
+            disabled: !batch.active || !weightRead || candidate.tonsPerPiece === null,
             onClick: () =>
               setWeight({
                 tonsPerPiece: candidate.tonsPerPiece,
@@ -999,7 +1158,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       ],
       [
         'B6 维护来源',
-        '正式安全天数和生产日历来源、负责人及生效版本尚未提供；本地值按当前评估版本保留',
+        `目标周转天数取已配置来源；生产日历按确认规则：${productionCalendarRule}人工覆盖按当前评估版本保留。`,
       ],
       ...(!resources.some((row) => row.kind === 'tunnel')
         ? [['B5 隧道台账', '缺正式物理ID与基地车间映射，不把SKU兼容行作为设备']]
@@ -1011,23 +1170,15 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         ? [['B5 月度分配', '缺基地SKU月份对隧道和成型机各自合计1的批准分配']]
         : []),
       ...bases
-        .filter(
-          (item) =>
-            !result.constraints.safetyDays.some((row) => row.base === item && row.days !== null),
-        )
+        .filter((item) => result.rows.some((row) => row.base === item && row.safetyDays === null))
         .map((item) => [`B6 ${item}安全天数`, '缺真实值；0为有效值，空白不补0']),
       ...bases.flatMap((item) =>
         result.months
           .slice(0, 3)
-          .filter(
-            (period) =>
-              !productionDays.some(
-                (row) => row.base === item && row.month === period && row.days !== null,
-              ),
-          )
+          .filter((period) => productionCalendarDays(item, period, productionDays) === null)
           .map((period) => [
             `B6 ${item} ${period}生产日历`,
-            '缺实际可用生产天数；25天候选未自动采用',
+            '人工天数为空、重复、无效，或月份超出已核验春节日历范围，请维护生产天数',
             period,
           ]),
       ),
@@ -1035,6 +1186,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const textEntry = (label, value, change) =>
       h('input', {
         'aria-label': label,
+        disabled: !batch.active,
         value: value ?? '',
         onChange: (event) => change(event.target.value),
       });
@@ -1049,6 +1201,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         'select',
         {
           'aria-label': `资源${index + 1} 类型`,
+          disabled: !batch.active,
           value: resource.kind,
           onChange: (event) =>
             editEntry('resources', resources, index, { kind: event.target.value }),
@@ -1066,6 +1219,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         'button',
         {
           'aria-label': `删除资源${index + 1}`,
+          disabled: !batch.active,
           onClick: () =>
             update({ resources: resources.filter((_, position) => position !== index) }),
         },
@@ -1077,6 +1231,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         'select',
         {
           'aria-label': `分配${index + 1} 月份`,
+          disabled: !batch.active,
           value: assignment.month,
           onChange: (event) =>
             editEntry('resourceAssignments', assignments, index, { month: event.target.value }),
@@ -1093,6 +1248,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         'select',
         {
           'aria-label': `分配${index + 1} 资源`,
+          disabled: !batch.active,
           value: assignment.resourceId,
           onChange: (event) =>
             editEntry('resourceAssignments', assignments, index, {
@@ -1120,6 +1276,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         'button',
         {
           'aria-label': `删除分配${index + 1}`,
+          disabled: !batch.active,
           onClick: () =>
             update({
               resourceAssignments: assignments.filter((_, position) => position !== index),
@@ -1128,117 +1285,136 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         '删除',
       ),
     ]);
-    const localRules = result.constraints.rules.local ?? [];
-    const updateRules = (entries) =>
-      update({
-        constraints: {
-          ...result.constraints,
-          rules: { ...result.constraints.rules, local: entries },
-        },
-      });
-    const ruleRows = localRules.flatMap((rule, index) => {
-      if (
-        search &&
-        ![rule.description, rule.target, rule.strength, rule.until].some((value) =>
-          String(value ?? '').includes(search),
-        )
-      )
-        return [];
-      const input = (key, label, type = 'text') =>
-        h('input', {
-          type,
-          'aria-label': `约束${index + 1} ${label}`,
-          value: rule[key] ?? '',
-          onChange: (event) =>
-            updateRules(
-              localRules.map((item, position) =>
-                position === index ? { ...item, [key]: event.target.value } : item,
-              ),
-            ),
-        });
-      return [
-        [
-          input('description', '内容'),
-          input('target', '作用对象'),
-          h(
-            'select',
-            {
-              'aria-label': `约束${index + 1} 强度`,
-              value: rule.strength,
-              onChange: (event) =>
-                updateRules(
-                  localRules.map((item, position) =>
-                    position === index ? { ...item, strength: event.target.value } : item,
-                  ),
-                ),
-            },
-            h('option', { value: '硬' }, '硬'),
-            h('option', { value: '软' }, '软'),
-          ),
-          input('until', '生效至', 'date'),
-          '本地草稿 · 未参与计算',
-          h(
-            'button',
-            {
-              'aria-label': `删除约束${index + 1}`,
-              onClick: () => updateRules(localRules.filter((_, position) => position !== index)),
-            },
-            '删除',
-          ),
-        ],
-      ];
-    });
+    const applyConfiguration = () => {
+      const number = (value, label, max = Number.MAX_SAFE_INTEGER) => {
+        if (typeof value !== 'string') return value;
+        if (!value.trim()) return null;
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed) || parsed < 0 || parsed > max) {
+          const field = batch.fields.current.get(label);
+          let fold = field?.closest('details');
+          while (fold) {
+            fold.open = true;
+            fold = fold.parentElement?.closest('details');
+          }
+          field?.focus();
+          throw Error(`${label}：请输入0至${max}之间的数值。`);
+        }
+        return parsed;
+      };
+      const changes = { ...configuration };
+      if (changes.constraints)
+        changes.constraints = {
+          ...changes.constraints,
+          ...(changes.constraints.safetyDays
+            ? {
+                safetyDays: changes.constraints.safetyDays.map((row) => ({
+                  ...row,
+                  days: number(row.days, `${row.base} 安全天数`),
+                })),
+              }
+            : {}),
+          ...(changes.constraints.turnoverDays
+            ? {
+                turnoverDays: changes.constraints.turnoverDays.map((row) => ({
+                  ...row,
+                  days: number(row.days, `${row.base} ${row.code} 补充目标周转天数`),
+                })),
+              }
+            : {}),
+        };
+      if (changes.productionDays)
+        changes.productionDays = changes.productionDays.map((row) => ({
+          ...row,
+          days: number(row.days, `${row.base} ${row.month} 生产天数`, 31),
+        }));
+      if (changes.unitWeights)
+        changes.unitWeights = changes.unitWeights.map((row) => ({
+          ...row,
+          tonsPerPiece: number(row.tonsPerPiece, `${row.base} ${row.code} 件吨系数`),
+        }));
+      if (changes.resources)
+        changes.resources = changes.resources.map((row, index) => ({
+          ...row,
+          dailyTons: number(row.dailyTons, `资源${index + 1} 日产吨数`),
+        }));
+      if (changes.resourceAssignments)
+        changes.resourceAssignments = changes.resourceAssignments.map((row, index) => ({
+          ...row,
+          share: number(row.share, `分配${index + 1} 分配比例`, 1),
+        }));
+      if (Object.keys(changes).length) persistUpdate(changes);
+      setConfiguration({});
+    };
+    react.useLayoutEffect(() => {
+      if (step !== 'constraints') return;
+      batch.commit.current = applyConfiguration;
+      return () => {
+        if (batch.commit.current === applyConfiguration) batch.commit.current = null;
+      };
+    }, [step, batch.commit, applyConfiguration]);
+    const localRules = draft.constraints?.rules?.local ?? result.constraints.rules.local ?? [];
     return h(
       'section',
-      { className: 'wf-page', 'aria-label': titles[step] },
+      {
+        className: 'wf-page',
+        'data-planning': planning,
+        'aria-label': titles[step],
+        onKeyDown: batch.keyDown,
+      },
       h(
         'div',
-        { className: 'wf-scope' },
-        h('strong', null, `${draft.name} · ${draft.month}`),
-        h('span', null, `发货所属月 ${result.shipmentMonth}`),
-      ),
-      filterBar,
-      result.scopeCoverage !== 'national' &&
-        h('p', { className: 'wf-note' }, '产品池全国覆盖尚未取得实际证明，仅报告范围内结果'),
-      step !== 'process' &&
-        card(
-          '实际输入缺项',
-          h(
-            'details',
-            null,
-            h('summary', null, `待补实际数据或合同：${inputGaps.length}项`),
-            table(
-              '实际输入缺项',
-              ['项目', '尚缺实际数据或合同'],
-              inputGaps.map((row) => row.slice(0, 2)),
+        { className: 'wf-toolbar' },
+        step !== 'constraints' && filterBar,
+        h(
+          'div',
+          { className: 'wf-toolbar-actions' },
+          step === 'process' &&
+            h(
+              react.Fragment,
+              null,
+              h('span', { className: 'dc-card-note' }, '全版本下载，不随下方筛选变化'),
+              h(
+                'button',
+                { onClick: () => exportRows('需求拆分', processFields, true) },
+                '下载需求拆分',
+              ),
             ),
-          ),
+          ['process', 'constraints'].includes(step) &&
+            h(Actions, {
+              batch,
+              requireReason: step === 'process',
+              hint: step === 'constraints' ? '' : '留空恢复系统值',
+            }),
         ),
-      step === 'process' && h(SourceDiagnostics, { draft, result, table }),
+      ),
+      step !== 'constraints' &&
+        result.scopeCoverage !== 'national' &&
+        h(
+          'p',
+          {
+            className: 'wf-pool-note',
+          },
+          '产品池全国覆盖尚未取得实际证明，仅报告范围内结果',
+        ),
       step === 'process'
         ? h(
             react.Fragment,
             null,
-            card(
-              '大类需求',
-              table(
-                '大类需求',
-                ['月份', '大类', '系统需求', '有效需求', '未评估原因'],
-                categoryRows.map((row) => [
-                  row.month,
-                  row.category,
-                  numberText(row.systemQuantity),
-                  numberText(row.quantity),
-                  row.missing.join('、') || '已计算',
-                ]),
-              ),
-            ),
-            h(
-              'p',
-              { className: 'wf-note' },
-              `M+4只展示大类需求，供M+3目标库存参考，不生成第四个月SKU需求。Top1托底SKU按去年同月${coverage}组内销量选择；其未调整基地承接组内剩余占比。`,
-            ),
-            shareError && !editingShare
+            h(ProcessedDemand, {
+              draft,
+              result,
+              rows: filtered,
+              filters: { base, month, category, search, onlyMissing },
+              update,
+              relations,
+              shipmentSnapshot,
+              table,
+              card,
+              onExplain: explain,
+              batch,
+            }),
+            shareError
               ? h('p', { role: 'alert', className: 'wf-note wf-unavailable' }, shareError)
               : null,
             result.adjustmentIssues?.length
@@ -1248,119 +1424,103 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                   `以下调整未生效：${result.adjustmentIssues.join('；')}。可从当前占比调整中撤销失效记录。`,
                 )
               : null,
-            card(
-              '当前占比调整',
-              table(
+            (draft.adjustments?.shares?.length ?? 0) > 0 &&
+              card(
                 '当前占比调整',
-                ['对象', '系统值', '输入占比', '有效占比', '原因', '时间', '状态', '操作'],
-                (draft.adjustments?.shares ?? []).map((item) => {
-                  const row = result.rows.find((row) => row.id === item.rowId);
-                  return [
-                    shareIdentity(item.rowId),
-                    numberText(row?.systemShare, true),
-                    numberText(item.share, true),
-                    numberText(row?.share, true),
-                    item.reason,
-                    item.at,
-                    row ? '当前范围，核对有效值与未生效原因' : '不在当前产品范围，未生效',
-                    h(
-                      'button',
-                      {
-                        disabled: !onUndoShareAdjustment,
-                        'aria-label': `撤销当前占比调整 ${shareIdentity(item.rowId)}`,
-                        onClick: () => undoShare(item.rowId),
-                      },
-                      '撤销',
-                    ),
-                  ];
-                }),
-              ),
-            ),
-            card(
-              '两路三层占比',
-              table(
-                '两路三层占比',
-                [
-                  '月份',
-                  '基地',
-                  '物料组',
-                  '产品编码',
-                  '来源',
-                  '物料组/大类',
-                  `${coverage}SKU/物料组`,
-                  `基地SKU/${coverage}SKU`,
-                  '三层连乘',
-                  '说明',
-                ],
-                visible.flatMap((row) =>
-                  ['report', 'history'].map((source) => {
-                    const layer = row[source + 'Layers'];
+                table(
+                  '当前占比调整',
+                  ['对象', '系统值', '输入占比', '有效占比', '原因', '时间', '状态', '操作'],
+                  (draft.adjustments?.shares ?? []).map((item) => {
+                    const row = result.rows.find((row) => row.id === item.rowId);
                     return [
-                      row.month,
-                      row.base,
-                      row.group,
-                      row.code,
-                      source === 'report' ? '计划提报' : '去年同月发货',
-                      ...['groupShare', 'skuShare', 'baseShare', 'product'].map((field) =>
-                        numberText(layer?.[field], true),
-                      ),
+                      shareIdentity(item.rowId),
+                      numberText(row?.systemShare, true),
+                      numberText(item.share, true),
+                      numberText(row?.share, true),
+                      item.reason,
+                      item.at,
+                      row ? '当前范围，核对有效值与未生效原因' : '不在当前产品范围，未生效',
                       h(
                         'button',
                         {
-                          className: 'dc-link',
-                          'aria-label': `${row.base} ${row.code} ${row.month} ${source === 'report' ? '提报' : '历史'}三层占比明细`,
-                          onClick: () => explain(row, source + 'Share'),
+                          disabled: !onUndoShareAdjustment,
+                          'aria-label': `撤销当前占比调整 ${shareIdentity(item.rowId)}`,
+                          onClick: () => undoShare(item.rowId),
                         },
-                        row.layerMissing?.join('、') ||
-                          (layer?.product == null
-                            ? '分母为0或来源缺失，连乘未定义；已知直接零占比单独保留'
-                            : '查看数量与连乘过程'),
+                        '撤销',
                       ),
                     ];
                   }),
                 ),
               ),
-            ),
-            card(
-              '基地单品需求拆分',
-              h(react.Fragment, null, rowsTable('基地单品需求拆分', processFields), footer),
+            h(
+              'details',
+              { className: 'wf-disclosure' },
+              h('summary', null, '来源诊断与缺项清单'),
               h(
-                'button',
-                { onClick: () => exportRows('需求拆分', processFields, true) },
-                '下载需求拆分',
-              ),
-            ),
-            card(
-              '占比调整记录',
-              table(
-                '占比调整记录',
-                ['对象', '操作', '系统值', '有效值', '原因', '时间'],
-                (draft.adjustments?.history ?? [])
-                  .filter((item) => item.kind === 'shares')
-                  .map((item) => [
-                    item.key,
-                    item.action === 'undo' ? '撤销' : '调整',
-                    display(item.systemValue),
-                    display(item.value),
-                    item.reason,
-                    item.at,
-                  ]),
+                react.Fragment,
+                null,
+                (result.excludedCategoryDemand?.length ?? 0) > 0 &&
+                  card(
+                    '产品池外大类需求',
+                    table(
+                      '产品池外大类需求',
+                      ['月份', '大类', '原始数量', '系统数量', '排除原因'],
+                      result.excludedCategoryDemand.map((row) => [
+                        row.month,
+                        row.category,
+                        numberText(row.quantity),
+                        numberText(row.systemQuantity),
+                        row.reason,
+                      ]),
+                    ),
+                  ),
+                h(SourceDiagnostics, { draft, result, table }),
               ),
             ),
           )
         : step === 'constraints'
           ? h(
-              react.Fragment,
-              null,
-              card(
-                '安全天数',
-                table('本地安全天数', ['基地', '安全天数', '来源', '未评估原因'], constraintRows),
-              ),
+              ConstraintPanel,
+              {
+                key: JSON.stringify([draft.id, draft.month, scopeGeneration]),
+                draft,
+                result,
+                update,
+                disabled: !batch.active,
+                bases,
+                table,
+                card,
+                previewRules: (local) =>
+                  buildMpsWorkflow(
+                    {
+                      ...draft,
+                      constraints: {
+                        ...draft.constraints,
+                        rules: { ...draft.constraints?.rules, local },
+                      },
+                    },
+                    relations,
+                    shipmentSnapshot,
+                  ),
+              },
+              h(InventoryTargetPanel, {
+                batch,
+                key: JSON.stringify([draft.id, draft.month, scopeGeneration]),
+                draft,
+                result,
+                update,
+                sync: syncInventoryTargets,
+                busy: inventoryTargetsBusy,
+                table,
+                card,
+                policyRows: constraintRows,
+              }),
               card(
                 '可用生产天数',
                 table(
                   '可用生产天数',
-                  ['基地', '月份', '生产天数', '候选值', '维护说明'],
+                  ['基地', '月份', '生产天数', '默认设置', '维护说明'],
                   productionRows,
                 ),
               ),
@@ -1377,7 +1537,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                   h(
                     'button',
                     {
-                      onClick: syncWeights,
+                      onClick: () => syncWeights(),
                       disabled:
                         weightBusy ||
                         !weightCodes.length ||
@@ -1456,6 +1616,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 h(
                   'button',
                   {
+                    disabled: !batch.active,
                     onClick: () =>
                       update({
                         resources: [
@@ -1486,6 +1647,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 h(
                   'button',
                   {
+                    disabled: !batch.active,
                     onClick: () =>
                       update({
                         resourceAssignments: [
@@ -1504,31 +1666,21 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 ),
               ),
               card(
-                '本地约束',
-                table(
-                  '本地约束',
-                  ['约束内容', '作用对象', '强度', '生效至', '状态', '操作'],
-                  ruleRows,
-                ),
-                h(
-                  'button',
-                  {
-                    onClick: () =>
-                      updateRules([
-                        ...localRules,
-                        { description: '', target: '', strength: '硬', until: '' },
-                      ]),
-                  },
-                  '新增本地约束',
-                ),
-              ),
-              card(
                 '正式约束来源',
                 table(
                   '正式约束来源',
                   ['项目', '正式来源', '状态'],
                   [
-                    ['安全天数', '—', '正式来源未就绪'],
+                    [
+                      '基地安全天数策略',
+                      '正式策略来源待确认',
+                      '按基地维护，保存在当前评估版本，三个月共用',
+                    ],
+                    [
+                      'SKU源库存与周转天数对照',
+                      'ai_db.agents_scm_goods_inventory_turnover_data_m',
+                      '最终目标周转天数用于计算，库存与日均数量仅作对照',
+                    ],
                     ['约束规则', '—', '正式来源未就绪'],
                   ],
                 ),
@@ -1627,7 +1779,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                           强度: rule.strength,
                           生效至: rule.until,
                           来源: '本地隔离草稿',
-                          状态: '未参与计算',
+                          状态:
+                            (result.ruleEvaluations ?? [])
+                              .filter((entry) => entry.ruleId === rule.id)
+                              .map((entry) => `${entry.month} ${entry.status}: ${entry.reason}`)
+                              .join('；') || '待完善规则参数',
                         })),
                       ],
                     ),
@@ -1638,175 +1794,44 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           : h(
               react.Fragment,
               null,
+              h(EvaluationOverview, {
+                step,
+                draft,
+                currentEvaluation,
+                stale: evaluationStale,
+                executing,
+                preparingInputs,
+                error: evaluationError,
+                onExecute: executeEvaluation,
+                filters: { base, month, category, search, onlyMissing },
+                table,
+                card,
+                numberText,
+              }),
               h(
-                'p',
-                { className: 'wf-note', role: 'status' },
-                '以下是无约束参考，所需生产量不代表实际可执行。前月超载时，后月仍按无约束期末库存承接。未自动生成可执行主计划，未自动处置调拨或外协。',
-              ),
-              result.summary
-                ? card(
-                    '评估范围与汇总',
-                    table(
-                      '评估范围与汇总',
-                      [
-                        '范围',
-                        '已知生产吨数小计',
-                        '完整生产吨数',
-                        '已评估行数',
-                        '总行数',
-                        '未评估范围',
-                      ],
-                      [
-                        [
-                          '当前完整版本，汇总不受明细筛选影响',
-                          numberText(result.summary.knownRequiredProductionTons, false, 6),
-                          numberText(result.summary.requiredProductionTons, false, 6),
-                          result.summary.evaluatedRows,
-                          result.summary.totalRows,
-                          result.summary.missing.join('、') || '完整',
-                        ],
-                      ],
-                    ),
-                  )
-                : null,
-              card(
-                '资源负荷与缺口',
-                h(
-                  react.Fragment,
-                  null,
-                  h(
-                    'p',
-                    { className: 'wf-note' },
-                    '共享资源按完整负荷评估，不随大类或SKU搜索拆开。负荷 = 分配所需吨数 ÷ 日产吨数 ÷ 可用生产天数。缺隧道或成型机均不能判定全约束通过。',
-                  ),
-                  table(
-                    '资源负荷',
-                    ['月份', '基地', ...resourceColumns, '未评估原因'],
-                    resourceLoads.map((row) => [
-                      row.month,
-                      row.base,
-                      ...resourceValues(row).map((value, index) =>
-                        index === 7
-                          ? numberText(value, true)
-                          : index >= 3 && index <= 9
-                            ? numberText(value, false, 6)
-                            : display(value),
-                      ),
-                      row.missing.join('、') || '已评估',
-                    ]),
-                  ),
-                ),
+                'div',
+                { className: 'wf-actions' },
                 h(
                   'button',
-                  {
-                    onClick: () =>
-                      exportRows(step === 'report' ? '产销存报告' : '产能评估', planFields),
-                  },
-                  '下载资源负荷与缺口',
+                  { onClick: () => exportRows('需求推导参考', planFields) },
+                  '下载需求推导参考',
                 ),
               ),
-              card(
-                '未评估清单',
-                table(
-                  '未评估清单',
-                  ['月份', '基地', '产品编码', '缺项'],
-                  filtered
-                    .filter(
-                      (row) =>
-                        reasons(row, [
-                          'requiredProduction',
-                          'requiredProductionTons',
-                          'productionDays',
-                          'resourceAssignments',
-                        ]).length,
-                    )
-                    .map((row) => [
-                      row.month,
-                      row.base,
-                      row.code,
-                      status(row, [
-                        'requiredProduction',
-                        'requiredProductionTons',
-                        'productionDays',
-                        'resourceAssignments',
-                      ]),
-                    ]),
-                ),
-              ),
-              card(
-                step === 'report' ? '产销存明细' : '无约束生产评估明细',
-                h(
-                  react.Fragment,
-                  null,
-                  rowsTable(step === 'report' ? '产销存报告' : '产能评估明细', planFields),
-                  footer,
-                ),
-                h(
-                  'button',
-                  {
-                    onClick: () =>
-                      exportRows(step === 'report' ? '产销存报告' : '产能评估', planFields),
-                  },
-                  step === 'report' ? '下载产销存报告' : '下载产能评估',
-                ),
-              ),
-              step === 'capacity'
-                ? card(
-                    '源产能候选',
-                    table(
-                      '源产能候选',
-                      [
-                        '月份',
-                        '基地',
-                        '产品编码',
-                        '产线',
-                        '标准日产/件',
-                        '标准日产/吨',
-                        '未评估原因',
-                      ],
-                      visible.flatMap((row) =>
-                        row.capacities.map((item) => [
-                          row.month,
-                          row.base,
-                          row.code,
-                          display(item.line),
-                          numberText(item.dailyPieces),
-                          numberText(item.dailyTons),
-                          item.missing.join('、') ||
-                            '源值，仅供核对；请在约束与配置中明确维护资源与分配',
-                        ]),
-                      ),
-                    ),
-                  )
-                : card(
-                    '报告来源',
-                    table(
-                      '报告来源',
-                      ['来源', '状态'],
-                      [
-                        ['①需求确认', '大类需求与缺项随当前版本重算'],
-                        ['②本月预估发货', `${result.shipmentMonth}月末结存，缺数留空`],
-                        ['③需求加工与收敛', '两路三层占比、物料组Top1托底与有效调整'],
-                        [
-                          '④主数据对应关系',
-                          relations?.sources ? '已接当前关系结果' : '关系尚未读取',
-                        ],
-                        ['⑤约束与配置', '本地隔离草稿；正式保存未就绪'],
-                        ['⑥产能评估与缺口', '无约束所需生产与共享资源负荷；未生成可执行主计划'],
-                      ],
-                    ),
-                  ),
             ),
-      result.missing.length
-        ? h('div', { className: 'wf-limitations', role: 'status' }, result.missing.join('；'))
+      ['process', 'constraints'].includes(step) && result.missing.length
+        ? h(
+            'details',
+            { className: 'wf-limitations', role: 'status' },
+            h('summary', null, `计算说明与缺项 · ${result.missing.length}条`),
+            h(
+              'ul',
+              null,
+              result.missing.map((reason) => h('li', { key: reason }, reason)),
+            ),
+          )
         : null,
-      h(
-        'div',
-        { className: 'wf-actions' },
-        step !== 'report'
-          ? h('button', { className: 'dc-primary', onClick: onNext }, `下一步：${next}`)
-          : h('button', { disabled: true }, '保存正式报告'),
-      ),
+      step === 'report' &&
+        h('div', { className: 'wf-actions' }, h('button', { disabled: true }, '保存正式报告')),
       formula
         ? h(
             Dialog,
@@ -1815,7 +1840,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             h(
               'p',
               { className: formula.missing.length ? 'wf-unavailable' : undefined },
-              `${formula.value == null ? '未评估' : `结果：${formula.value}`}`,
+              `${formula.value == null ? '未评估' : `结果：${numberText(formula.value, formula.percent)}`}`,
             ),
           )
         : null,

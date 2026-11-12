@@ -33,3 +33,36 @@ test('APS仅保存当前Session页面筛选，业务结果和消息不可恢复'
     false,
   );
 });
+
+test('APS独立保存智能工作台的月度日期，兼容已有看板状态', () => {
+  assert.equal(
+    validHtmlViewState('inventory-apsplan', {
+      version: 1,
+      selectedYearKey: '2026',
+      selectedMonthKey: '10',
+      selectedDay: 19,
+      timeGranularity: 'day',
+      activeWorkspace: 'intelligent',
+      intelligentYearKey: '2026',
+      intelligentMonthKey: '09',
+      intelligentDay: 20,
+    }),
+    true,
+  );
+  for (const invalid of [
+    { intelligentYearKey: '202' },
+    { intelligentMonthKey: '13' },
+    { intelligentDay: 0 },
+    { intelligentDay: 32 },
+  ])
+    assert.equal(validHtmlViewState('inventory-apsplan', { version: 1, ...invalid }), false);
+});
+
+test('APS区分最新日期默认值与用户手选日期', () => {
+  for (const boardDateMode of ['latest', 'manual'])
+    assert.equal(validHtmlViewState('inventory-apsplan', { version: 1, boardDateMode }), true);
+  assert.equal(
+    validHtmlViewState('inventory-apsplan', { version: 1, boardDateMode: 'fallback' }),
+    false,
+  );
+});

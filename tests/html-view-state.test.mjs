@@ -501,3 +501,135 @@ test('MPS local and business shipment edits recover through the codec and Host w
     /INVALID_HTML_VIEW_STATE/,
   );
 });
+
+test('structured MPS rules, monthly evidence and change history round-trip through codec and client validation', () => {
+  const draft = {
+    id: 'rules-v1',
+    name: '规则版本',
+    month: '2026-11',
+    pull: 'monthly',
+    files: {},
+    constraints: {
+      targetVersion: '滚动',
+      safetyDays: [],
+      rules: {
+        local: [
+          {
+            id: 'R',
+            description: '调拨上限',
+            target: '郑州',
+            strength: '硬',
+            until: '',
+            category: '调拨',
+            source: '计划维护',
+            base: '郑州',
+            code: '',
+            productCategory: '',
+            from: '2026-11',
+            enabled: true,
+            accepted: false,
+            effect: { kind: 'transfer-limit', value: 400 },
+            observations: [{ month: '2026-11', value: 380, source: '当月方案' }],
+          },
+        ],
+        history: [
+          { at: '2026-11-04T00:00:00.000Z', ruleId: 'R', description: '调拨上限', action: '新增' },
+        ],
+      },
+    },
+  };
+  draft.inventoryTargets = [{ finalTarget: 999 }];
+  const encoded = encodeLocalDrafts([draft], draft.id);
+  assert.equal(encoded.drafts[0].inventoryTargets, undefined);
+  const owner = new WorkbenchController({ panel() {}, document() {} });
+  owner.registerFrame({ id: 'plan-category-production', kind: 'html', src: '/mps' });
+  owner.saveHtmlViewState('plan-category-production', 'tenant/user/session', {
+    version: 1,
+    localDrafts: encoded,
+  });
+  const recovered = decodeLocalDrafts(
+    owner.readHtmlViewState('plan-category-production', 'tenant/user/session').localDrafts,
+    (id, month) => ({ id, month, files: {} }),
+    () => {
+      throw Error('Unexpected fallback');
+    },
+  );
+  assert.deepEqual(recovered.drafts[0].constraints, draft.constraints);
+  const invalid = structuredClone(encoded);
+  invalid.drafts[0].constraints.rules.local[0].credentials = 'forbidden';
+  assert.throws(
+    () =>
+      owner.saveHtmlViewState('plan-category-production', 'tenant/user/session', {
+        version: 1,
+        localDrafts: invalid,
+      }),
+    /INVALID_HTML_VIEW_STATE/,
+  );
+});
+
+test('MPS quantity adjustments persist their level and audit while old drafts default to no fixed quantities', () => {
+  const adjustment = {
+    kind: 'sku',
+    month: '2026-10',
+    category: '汤圆',
+    group: 'G',
+    code: 'A',
+    quantity: 0,
+    systemValue: 30,
+    reason: '取消需求',
+    at: '2026-11-05T00:00:00.000Z',
+  };
+  const draft = {
+    id: 'v1',
+    name: '数量调整',
+    month: '2026-10',
+    pull: 'monthly',
+    files: {},
+    adjustments: {
+      categoryDemand: [],
+      shares: [],
+      quantities: [adjustment],
+      history: [
+        {
+          kind: 'quantities',
+          key: '["2026-10","汤圆","G","sku","A",""]',
+          action: 'set',
+          value: 0,
+          systemValue: 30,
+          reason: '取消需求',
+          at: adjustment.at,
+        },
+      ],
+    },
+  };
+  const saved = encodeLocalDrafts([draft], 'v1');
+  const recovered = decodeLocalDrafts(
+    saved,
+    (id, month) => ({ id, month, files: {} }),
+    () => {
+      throw Error('Unexpected fallback');
+    },
+  );
+  assert.deepEqual(recovered.drafts[0].adjustments.quantities, [adjustment]);
+  delete saved.drafts[0].adjustments.quantities;
+  assert.deepEqual(
+    decodeLocalDrafts(
+      saved,
+      (id, month) => ({ id, month, files: {} }),
+      () => {
+        throw Error('Unexpected fallback');
+      },
+    ).drafts[0].adjustments.quantities,
+    [],
+  );
+  const invalid = structuredClone(saved);
+  invalid.drafts[0].adjustments.quantities = [{ ...adjustment, quantity: -1 }];
+  assert.deepEqual(
+    decodeLocalDrafts(
+      invalid,
+      () => ({}),
+      () => ({ invalid: true }),
+    ),
+    { invalid: true },
+  );
+});

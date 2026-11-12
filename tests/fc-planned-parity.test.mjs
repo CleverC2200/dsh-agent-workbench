@@ -14,6 +14,7 @@ const built = await build({
 const {
   currentOrderStatus,
   projectFcPlannedRows,
+  sortFcReplenishmentRows,
   applyFcPlan,
   applyBusinessPlanning,
   fcAgingDisplay,
@@ -53,6 +54,26 @@ const input = {
   cycleDays: 7,
   filters: { list_mode: 'all', sort_field: 'recommended_qty', sort_direction: 'desc' },
 };
+test('confirmation order respects explicit header sorting after an urgent quick filter', () => {
+  const rows = [
+    { warehouse_code: 'A110', sku: 'B', current_order_shortage: 20, inventory_qty: 4 },
+    { warehouse_code: 'A110', sku: 'A', current_order_shortage: 10, inventory_qty: 2 },
+  ];
+  assert.deepEqual(
+    sortFcReplenishmentRows(rows, {
+      ...input,
+      filters: { list_mode: 'urgent', sort_field: 'inventory_qty', sort_direction: 'asc' },
+    }).map((row) => row.sku),
+    ['A', 'B'],
+  );
+  assert.deepEqual(
+    sortFcReplenishmentRows(rows, { ...input, filters: { list_mode: 'urgent' } }).map(
+      (row) => row.sku,
+    ),
+    ['B', 'A'],
+  );
+  assert.equal(rows[0].sku, 'B', 'sorting a preview must not mutate the read cohort');
+});
 test('forecast and month plans retain original calendar rules while incoming orders remain supply', () => {
   for (const date of ['2026-10-01', '2026-10-26', '2026-10-31', '2024-02-28', '2026-12-31']) {
     const month = date.slice(0, 7);
@@ -202,9 +223,9 @@ test('aging suggestions reproduce original rules for 90+, 60+, unknown age, no s
   assert.equal(fcAgingDisplay({ age90_plus: null }, 'missing_age_13'), '-');
 });
 
-test('current-order labels use the original 20 percent bands and preserve unknowns', () => {
+test('current-order labels include every positive shortage and preserve unknowns', () => {
   assert.equal(currentOrderStatus(0, 100), '正常');
-  assert.equal(currentOrderStatus(19.99, 100), '临期');
+  assert.equal(currentOrderStatus(19.99, 100), '缺口');
   assert.equal(currentOrderStatus(20, 100), '缺口');
   assert.equal(currentOrderStatus(100, 100), '缺口');
   assert.equal(currentOrderStatus(null, 100), '-');

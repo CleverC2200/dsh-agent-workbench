@@ -8,7 +8,8 @@ const numeric = (value) =>
     ? Number(value)
     : null;
 
-export function productProjections(products, raw = [], facts = []) {
+export function productProjections(products, raw = [], facts = [], prices = []) {
+  const priceByCode = new Map(prices.map((price) => [price['产品编码'], price['未税到岸单价']]));
   const source = new Map(),
     groups = new Map(),
     bases = new Map();
@@ -37,7 +38,7 @@ export function productProjections(products, raw = [], facts = []) {
     const category = values(childSources, 'sub_category');
     const series = values(childSources, 'series');
     const labels = values(children.length ? childSources : records, 'responsible_item');
-    const display = { ...row };
+    const display = { ...row, 未税到岸单价: priceByCode.get(row['产品编码']) ?? '' };
     const inherited = [];
     for (const [field, candidates] of [
       ['大类', category],
@@ -74,55 +75,152 @@ export function productProjections(products, raw = [], facts = []) {
   });
 }
 
-function aggregate(rows, column) {
-  const known = rows.map((row) => numeric(row[column])).filter((value) => value !== null);
+export function sourceDimensions(rows, products) {
+  const normalized = (products ?? []).map((product) => ({
+    基地: text(product['基地'] ?? product.belong_base),
+    产品编码: text(product['产品编码'] ?? product.material_code),
+    大类: text(product['大类'] ?? product.sub_category),
+    系列: text(product['系列'] ?? product.series),
+    物料组: text(product['物料组'] ?? product.product_item),
+    物料组名称: text(product['物料组名称'] ?? product.product_item_name),
+  }));
+  const byCode = new Map();
+  for (const product of normalized) {
+    const group = byCode.get(product['产品编码']) ?? [];
+    group.push(product);
+    byCode.set(product['产品编码'], group);
+  }
+  return rows.map((row) => {
+    const matches = (byCode.get(text(row['产品编码'])) ?? []).filter(
+      (product) =>
+        product['产品编码'] &&
+        product['产品编码'] === text(row['产品编码']) &&
+        (!product['基地'] || product['基地'] === text(row['基地'])),
+    );
+    const fields = {},
+      issues = [];
+    if (!matches.length) issues.push('物料编码未匹配当前产品明细，分类留空');
+    for (const field of ['大类', '系列', '物料组', '物料组名称']) {
+      const candidates = [...new Set(matches.map((product) => product[field]).filter(Boolean))];
+      fields[field] =
+        matches.length && matches.every((product) => product[field]) && candidates.length === 1
+          ? candidates[0]
+          : '';
+      if (matches.length && !fields[field])
+        issues.push(
+          candidates.length > 1
+            ? `同物料编码的${field}存在多个当前值，未选择`
+            : `当前产品明细的${field}映射为空`,
+        );
+    }
+    return {
+      ...row,
+      源大类: row['源大类'] ?? row['大类'] ?? '',
+      源系列: row['源系列'] ?? row['系列'] ?? '',
+      源物料组: row['源物料组'] ?? row['物料组'] ?? '',
+      ...fields,
+      缺项原因: [row['缺项原因'], ...issues].filter(Boolean).join('；'),
+    };
+  });
+}
+
+function aggregate(rows, column, knownColumn) {
+  const quantities = rows.map((row) => numeric(row[column]));
+  const known = rows
+    .map((row, index) => quantities[index] ?? (knownColumn ? numeric(row[knownColumn]) : null))
+    .filter((value) => value !== null);
   const sum = known.reduce((total, value) => total + value, 0);
   const knownQuantity =
     known.length && Number.isFinite(sum) && Math.abs(sum) <= Number.MAX_SAFE_INTEGER ? sum : null;
   return {
     knownQuantity,
-    quantity: rows.length && known.length === rows.length ? knownQuantity : null,
-    missing: rows.length - known.length,
+    quantity: rows.length && quantities.every((value) => value !== null) ? knownQuantity : null,
+    missing: quantities.filter((value) => value === null).length,
     count: rows.length,
   };
 }
 
-export function sourceCheckRows(checks, rawProducts, pull) {
-  const labels = new Map();
-  for (const row of rawProducts ?? []) {
-    const code = text(row.material_code) || text(row['产品编码']),
-      label = text(row.sub_category) || text(row['大类']) || text(row.responsible_item);
+export function createSourceProductMatcher(rawProducts) {
+  const categoriesByCode = new Map();
+  const codesByOldCode = new Map();
+  for (const product of rawProducts ?? []) {
+    const code = text(product.material_code) || text(product['产品编码']);
     if (!code) continue;
-    const current = labels.get(code) ?? new Set();
-    current.add(label);
-    labels.set(code, current);
+    const categories = categoriesByCode.get(code) ?? new Set();
+    categories.add(text(product.sub_category) || text(product['大类']));
+    categoriesByCode.set(code, categories);
+    const oldCode = text(product.replacement_material_code) || text(product['老品编码']);
+    if (oldCode) {
+      const codes = codesByOldCode.get(oldCode) ?? new Set();
+      codes.add(code);
+      codesByOldCode.set(oldCode, codes);
+    }
   }
+  return (sourceCode) => {
+    sourceCode = text(sourceCode);
+    const oldCodes = codesByOldCode.get(sourceCode);
+    const currentCode = categoriesByCode.has(sourceCode)
+      ? sourceCode
+      : oldCodes?.size === 1
+        ? [...oldCodes][0]
+        : '';
+    const categories = categoriesByCode.get(currentCode);
+    return {
+      currentCode,
+      category: categories?.size === 1 ? [...categories][0] : '',
+      unknown: !categories && !oldCodes,
+      poolPresent: categoriesByCode.size > 0,
+      reason: categories
+        ? '当前产品池大类不唯一'
+        : oldCodes
+          ? '老品编码对应多个当前产品，未选择'
+          : '不在当前产品池',
+    };
+  };
+}
+
+export function sourceCheckRows(checks, rawProducts) {
   const excluded = [];
-  const classify = (rows, month, source) =>
+  const matchProduct = createSourceProductMatcher(rawProducts);
+  const classify = (rows, month, source, error) =>
     rows.flatMap((row) => {
-      const code = text(row['产品编码']);
-      const candidates = labels.get(code);
-      if (!candidates || candidates.size !== 1 || candidates.has('')) {
+      const sourceCode = text(row['产品编码']);
+      const match = matchProduct(sourceCode);
+      const { currentCode, category } = match;
+      const mapped = {
+        ...row,
+        当前产品编码: currentCode,
+        源大类: row['源大类'] ?? row['大类'] ?? '',
+        大类: category,
+      };
+      if (!category) {
+        const quantity = source === 'BI' ? row['数量'] : (row['源计划数量'] ?? row['计划数量']);
+        if (
+          match.poolPresent &&
+          match.unknown &&
+          sourceCode &&
+          !error &&
+          (!row['缺项原因'] ||
+            (source === '计划量' &&
+              numeric(row['源记录数']) > 0 &&
+              numeric(row['缺数量条数']) > 0 &&
+              numeric(row['重复键条数']) === 0)) &&
+          (quantity == null || quantity === '' || numeric(quantity) === 0)
+        )
+          return [];
         excluded.push({
-          ...row,
+          ...mapped,
           月份: month,
           来源: source,
-          原因: candidates ? '当前产品池大类不唯一' : '不在当前产品池',
+          原因: match.reason,
         });
         return [];
       }
-      const category = [...candidates][0];
       return [
         {
-          ...row,
-          大类: category,
+          ...mapped,
           源分类: category,
-          ...(source === 'DMS'
-            ? {
-                月初数量: row['源月初数量'] ?? row['月初数量'],
-                纠偏数量: row['源纠偏数量'] ?? row['纠偏数量'],
-              }
-            : {}),
+          缺项原因: row['缺项原因'] ?? '',
         },
       ];
     });
@@ -130,23 +228,21 @@ export function sourceCheckRows(checks, rawProducts, pull) {
     ...period,
     historyError: period.history.error,
     reportError: period.report.error,
-    history: classify(period.history.rows, period.month, 'BI'),
-    report: classify(period.report.rows, period.month, 'DMS'),
+    history: classify(period.history.rows, period.month, 'BI', period.history.error),
+    report: classify(period.report.rows, period.month, '计划量', period.report.error),
   }));
   const classes = [
     ...new Set(
-      [...labels.values()]
-        .filter((labels) => labels.size === 1 && !labels.has(''))
-        .flatMap((labels) => [...labels]),
+      (rawProducts ?? []).map((row) => text(row.sub_category) || text(row['大类'])).filter(Boolean),
     ),
   ];
-  const column = pull === 'monthly' ? '月初数量' : '纠偏数量';
+  const column = '计划数量';
   const rows = periods.flatMap((period) =>
     classes.map((category) => {
       const history = period.history.filter((row) => row['大类'] === category);
       const report = period.report.filter((row) => row['源分类'] === category);
       const actual = aggregate(history, '数量');
-      const plan = aggregate(report, column);
+      const plan = aggregate(report, column, '已知计划数量');
       const missingKeys = [...history, ...report].filter((row) => !row['产品编码']).length;
       const issues = [
         ...(period.historyError
@@ -155,14 +251,15 @@ export function sourceCheckRows(checks, rawProducts, pull) {
             ? ['本月BI无当前产品池分类记录']
             : []),
         ...(period.reportError
-          ? [`DMS读取失败：${period.reportError}`]
+          ? [`计划量读取失败：${period.reportError}`]
           : !report.length
-            ? ['本月DMS无当前产品池分类记录']
+            ? ['本月计划量无当前产品池分类记录']
             : []),
         ...(actual.missing ? [`BI缺数量${actual.missing}条，显示已知小计`] : []),
-        ...(plan.missing ? [`DMS缺数量${plan.missing}条，显示已知小计`] : []),
+        ...(plan.missing ? [`计划量缺数量${plan.missing}条，显示已知小计`] : []),
         ...(missingKeys ? [`缺SKU ${missingKeys}条`] : []),
-        ...(plan.quantity === 0 ? ['DMS计划为0，比值不可用'] : []),
+        ...new Set(report.map((row) => row['缺项原因']).filter(Boolean)),
+        ...(plan.quantity === 0 ? ['计划量为0，比值不可用'] : []),
       ];
       const ratio =
         !issues.length && actual.quantity !== null && plan.quantity > 0
@@ -174,6 +271,29 @@ export function sourceCheckRows(checks, rawProducts, pull) {
   return {
     rows,
     excluded,
+    details: [
+      ...periods.flatMap((period) => [
+        ...period.history.map((row) => ({
+          ...row,
+          月份: period.month,
+          来源: 'BI',
+          原因: row['缺项原因'] || (numeric(row['数量']) === null ? '缺数量' : ''),
+        })),
+        ...period.report.map((row) => ({
+          ...row,
+          月份: period.month,
+          来源: '计划量',
+          原因: row['缺项原因'] || (numeric(row[column]) === null ? '缺数量' : ''),
+        })),
+        ...(period.historyError
+          ? [{ 月份: period.month, 来源: 'BI', 原因: `读取失败：${period.historyError}` }]
+          : []),
+        ...(period.reportError
+          ? [{ 月份: period.month, 来源: '计划量', 原因: `读取失败：${period.reportError}` }]
+          : []),
+      ]),
+      ...excluded,
+    ],
     categories: classes,
     months: periods.map((period) => period.month),
     column,

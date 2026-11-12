@@ -91,6 +91,7 @@ function fixture(
       selectPanel: (id) => calls.push(['panel', id]),
       toggleSidebar: () => calls.push(['toggle']),
     },
+    sessions: { retain: (sessionId) => ({ sessionId, ready: Promise.resolve(), release() {} }) },
     uiWorkspace: { startSession: () => calls.push(['new']) },
     locale: {
       getSnapshot: () => ({ active: 'zh' }),
@@ -505,7 +506,7 @@ test('business Documents have a persistent independent Session seat and retain t
     (e) => e.options.name === 'shell.overlay' && e.options.id === 'agent-workbench.documents',
   );
   assert.deepEqual(overlay.options.children, {
-    'agent-workbench.documents': { kind: 'single', scope: 'session-maybe' },
+    'agent-workbench.documents': { kind: 'single', scope: 'root' },
   });
   assert.equal(entries.filter((e) => e.options.name === 'agent-workbench.documents').length, 1);
   assert.equal(
@@ -912,6 +913,13 @@ test('opening real history from a static Document returns to native Conversation
       root.render(
         React.createElement(entry.component, {
           sessionId,
+          SessionProvider: ({ children }) => children,
+          renderSlot: (name, props) => {
+            const observer = entries.find((row) => row.options.name === name);
+            return observer
+              ? React.createElement(observer.component, { ...props, sessionId })
+              : null;
+          },
           useSession: (selector) =>
             selector({ blank: false, running: false, promptAttempted: true, openState: 'open' }),
           useConversation: (selector) => selector({ activeTargets: new Set(['chat']) }),
@@ -982,6 +990,13 @@ async function mountedMainConversation(t, options = {}) {
         React.createElement(entry.component, {
           key: epoch,
           sessionId,
+          SessionProvider: ({ children }) => children,
+          renderSlot: (name, props) => {
+            const observer = entries.find((row) => row.options.name === name);
+            return observer
+              ? React.createElement(observer.component, { ...props, sessionId })
+              : null;
+          },
           useSession: (selector) =>
             selector(
               sessionId
@@ -2424,7 +2439,7 @@ test('only declared mock prototypes remain local while unreturned business pages
   assert.ok(document.querySelector('[data-slot="sidebar.settings"]'));
 });
 
-test('local prototypes appear only in a confirmed test environment; production keeps unmapped business entries disabled', async (t) => {
+test('local prototypes appear only in a confirmed test environment; production hides unmapped business entries', async (t) => {
   const cases = [
     ['test', navigationIdentity, true],
     [
@@ -2487,7 +2502,7 @@ test('local prototypes appear only in a confirmed test environment; production k
           visible,
         );
       if (name === 'production') {
-        assert.equal(document.querySelector('[data-gea-business-entry="category"]').disabled, true);
+        assert.equal(document.querySelector('[data-gea-business-entry="category"]'), null);
         assert.equal(document.querySelector('[data-gea-business-entry="regional"]'), null);
         const order = document.querySelector(
           '[data-gea-business-entry="inventory-orderworkbench"]',
@@ -3045,4 +3060,254 @@ test('business navigation never selects unavailable entries when no page is acti
     assert.equal(item.classList.contains('is-active'), false);
   }
   assert.equal(document.querySelectorAll('.gea-shell-nav-child[aria-current="page"]').length, 0);
+});
+
+test('account password form cancels preparation on close and rejects late images', async (t) => {
+  const { root, dom } = await mountedDom(t);
+  const late = Promise.withResolvers(),
+    preparations = [];
+  const snapshot = {
+    state: 'confirmed',
+    scope: null,
+    status: {
+      environment: 'test',
+      environments: ['production', 'test'],
+      authenticated: false,
+      user: null,
+    },
+  };
+  const authority = {
+    getSnapshot: () => snapshot,
+    subscribe: () => () => {},
+    startLogin: async () => ({
+      loginId: 'qr',
+      image: 'data:image/png;base64,AA==',
+      expiresIn: 120,
+    }),
+    pollLogin: async () => false,
+    preparePasswordLogin: (signal) => {
+      preparations.push(signal);
+      return preparations.length === 1
+        ? late.promise
+        : Promise.resolve({
+            challengeId: 'captcha',
+            image: 'data:image/jpg;base64,AA==',
+            expiresIn: 60,
+          });
+    },
+    loginWithPassword: () => {
+      throw Error('UNEXPECTED_LOGIN');
+    },
+  };
+  const { entries } = fixture(authority);
+  const account = entries.find((row) => row.options.name === 'settings.launcher');
+  await React.act(async () =>
+    root.render(
+      React.createElement(account.component, {
+        wide: true,
+        settingsOpen: false,
+        openSettings: () => {},
+      }),
+    ),
+  );
+  const open = async () => {
+    await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
+    await React.act(async () =>
+      [...document.querySelectorAll('[role="menuitem"]')]
+        .find((button) => button.textContent === '登录 GEA')
+        .click(),
+    );
+    await React.act(async () =>
+      [...document.querySelectorAll('[role="dialog"] button')]
+        .find((button) => button.textContent === '账号密码')
+        .click(),
+    );
+  };
+  await open();
+  await React.act(async () => document.querySelector('.gea-account-login-close').click());
+  assert.equal(preparations[0].aborted, true);
+  await React.act(async () =>
+    late.resolve({ challengeId: 'late', image: 'data:image/jpg;base64,AA==', expiresIn: 60 }),
+  );
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  await open();
+  assert.ok(document.querySelector('input[name="password"]'));
+  await React.act(async () => root.render(null));
+  assert.equal(preparations[1].aborted, true);
+  assert.equal(dom.window.localStorage.length, 0);
+});
+
+test('server logout uncertainty remains visible in the account menu after local sign-out', async (t) => {
+  const { root } = await mountedDom(t);
+  let snapshot = {
+    state: 'confirmed',
+    scope: 'fixture',
+    status: {
+      environment: 'test',
+      environments: ['test'],
+      authenticated: true,
+      user: { name: 'Fixture User' },
+    },
+  };
+  const listeners = new Set();
+  const authority = {
+    getSnapshot: () => snapshot,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    logout: async () => {
+      snapshot = {
+        ...snapshot,
+        scope: null,
+        status: { ...snapshot.status, authenticated: false, user: null },
+      };
+      for (const listener of listeners) listener();
+      throw Object.assign(Error('unconfirmed'), { code: 'GEA_LOGOUT_UNCONFIRMED' });
+    },
+  };
+  const { entries } = fixture(authority);
+  const account = entries.find((row) => row.options.name === 'settings.launcher');
+  await React.act(async () =>
+    root.render(
+      React.createElement(account.component, {
+        wide: false,
+        settingsOpen: false,
+        openSettings: () => {},
+      }),
+    ),
+  );
+  await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="menuitem"]')]
+      .find((button) => button.textContent === '退出登录')
+      .click(),
+  );
+  assert.equal(snapshot.status.authenticated, false);
+  assert.equal(
+    document.querySelector('[role="menu"] [role="alert"]').textContent,
+    '已退出本机，但服务端注销未确认。',
+  );
+  assert.ok(
+    [...document.querySelectorAll('[role="menuitem"]')].some(
+      (button) => button.textContent === '登录 GEA',
+    ),
+  );
+});
+
+test('business navigation retains each page DOM under its own borrowed Core Session', async (t) => {
+  const { root } = await mountedDom(t);
+  const { ctx, entries, workbench } = fixture();
+  const acquired = [],
+    released = [];
+  ctx.sessions.retain = (sessionId) => {
+    acquired.push(sessionId);
+    return { sessionId, ready: Promise.resolve(), release: () => released.push(sessionId) };
+  };
+  const entry = entries.find((row) => row.options.name === 'agent-workbench.documents');
+  const observer = entries.find(
+    (row) => row.options.name === 'agent-workbench.main-session-observer',
+  );
+  const SessionProvider = ({ session, children }) =>
+    React.createElement('section', { 'data-session': session?.sessionId }, children);
+  const render = (mainSession) =>
+    React.act(async () =>
+      root.render(
+        React.createElement(entry.component, {
+          useSessions: (select) =>
+            select({
+              phase: 'ready',
+              ids: ['session-one', 'session-two'],
+              byId: { 'session-one': { cwd: '/workspace' }, 'session-two': { cwd: '/workspace' } },
+            }),
+          SessionProvider,
+          renderSlot: (name, props) =>
+            React.createElement(observer.component, {
+              key: mainSession,
+              ...props,
+              sessionId: mainSession,
+            }),
+          renderFactorySlot: (name, props) =>
+            React.createElement('input', { 'data-page': props.page.id, defaultValue: '' }),
+        }),
+      ),
+    );
+  workbench.registerFrame({ id: 'one', kind: 'local', body: () => null });
+  workbench.registerFrame({ id: 'two', kind: 'local', body: () => null });
+  workbench.associateSession('one', { sessionId: 'session-one', preset: null, ownerScope: null });
+  workbench.associateSession('two', { sessionId: 'session-two', preset: null, ownerScope: null });
+  await workbench.open('one');
+  await render('session-one');
+  const original = document.querySelector('[data-page="one"]');
+  original.value = 'cached weeks and manual draft';
+  await React.act(async () => {
+    await workbench.open('two');
+  });
+  await render('session-two');
+  assert.equal(document.querySelector('[data-page="one"]'), original);
+  assert.equal(original.closest('[data-session]').dataset.session, 'session-one');
+  assert.equal(
+    document.querySelector('[data-page="two"]').closest('[data-session]').dataset.session,
+    'session-two',
+  );
+  await React.act(async () => {
+    await workbench.open('one');
+  });
+  await render('session-one');
+  assert.equal(document.querySelector('[data-page="one"]'), original);
+  assert.equal(original.value, 'cached weeks and manual draft');
+  assert.deepEqual(acquired, ['session-one', 'session-two']);
+  assert.deepEqual(released, []);
+  await React.act(async () => {
+    workbench.forgetSession('one');
+  });
+  assert.deepEqual(released, ['session-one']);
+  await React.act(async () => root.unmount());
+  assert.deepEqual(released, ['session-one', 'session-two']);
+});
+
+test('restored page waits for its actual Core catalogue member before borrowing a Session', async (t) => {
+  const { root } = await mountedDom(t);
+  const { ctx, entries, workbench } = fixture();
+  const acquired = [],
+    released = [];
+  let catalogue = { phase: 'loading', ids: [], byId: {} };
+  ctx.sessions.retain = (sessionId) => {
+    assert.ok(catalogue.byId[sessionId], 'a remembered address is not a Core Session');
+    acquired.push(sessionId);
+    return { sessionId, ready: Promise.resolve(), release: () => released.push(sessionId) };
+  };
+  const entry = entries.find((row) => row.options.name === 'agent-workbench.documents');
+  const SessionProvider = ({ session, children }) =>
+    React.createElement('section', { 'data-session': session?.sessionId }, children);
+  const render = () =>
+    React.act(async () =>
+      root.render(
+        React.createElement(entry.component, {
+          useSessions: (select) => select(catalogue),
+          SessionProvider,
+          renderSlot: () => null,
+          renderFactorySlot: (_name, props) =>
+            React.createElement('input', { 'data-page': props.page.id }),
+        }),
+      ),
+    );
+  workbench.registerFrame({ id: 'one', kind: 'local', body: () => null });
+  workbench.associateSession('one', { sessionId: 'session-one', preset: null, ownerScope: null });
+  await workbench.open('one');
+  await render();
+  assert.deepEqual(acquired, []);
+  assert.equal(workbench.sessionForPage('one').sessionId, 'session-one');
+  const original = document.querySelector('[data-page="one"]');
+  catalogue = {
+    phase: 'ready',
+    ids: ['session-one'],
+    byId: { 'session-one': { cwd: '/workspace' } },
+  };
+  await render();
+  assert.deepEqual(acquired, ['session-one']);
+  assert.equal(document.querySelector('[data-page="one"]'), original);
+  assert.equal(original.closest('[data-session]').dataset.session, 'session-one');
+  await React.act(async () => root.render(null));
+  assert.deepEqual(released, ['session-one']);
 });

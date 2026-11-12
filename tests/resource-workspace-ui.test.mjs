@@ -66,13 +66,13 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
   });
   const cleanups = [],
     slots = new Map(),
-    locales = new Map(),
-    workspacePaths = new Map();
+    locales = new Map();
   const selectedPresets = new Map();
   const sessionCatalogue = {
     phase: 'ready',
     byId: cwd ? { current: { cwd, retainedBy: { mainView: 1 }, draft: 'keep my draft' } } : {},
   };
+  const workspaceCatalogue = { phase: 'ready', items: [] };
   let navigation = new AbortController();
   const ctx = {
     locale: {
@@ -120,9 +120,17 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
     remote: {},
     'remote.agentPresets': {},
     workspaces: {
+      list: { getSnapshot: () => workspaceCatalogue },
       create: async ({ path }) => {
-        const workspaceId = 'workspace-' + workspacePaths.size;
-        workspacePaths.set(workspaceId, path);
+        const existing = workspaceCatalogue.items.find((row) => row.path === path);
+        if (existing) return existing;
+        const workspaceId = 'workspace-' + workspaceCatalogue.items.length;
+        workspaceCatalogue.items.push({
+          workspaceId,
+          path,
+          sessionIds: [],
+          createdAt: '2026-11-05',
+        });
         return { workspaceId, path };
       },
     },
@@ -130,9 +138,12 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
       list: { getSnapshot: () => sessionCatalogue },
       create: async ({ workspaceId }) => {
         const id = 'created-' + sessions.length;
-        const session = { cwd: workspacePaths.get(workspaceId) };
+        const session = {
+          cwd: workspaceCatalogue.items.find((row) => row.workspaceId === workspaceId).path,
+        };
         sessions.push(session);
-        sessionCatalogue.byId[id] = { ...session, retainedBy: {} };
+        sessionCatalogue.byId[id] = { ...session, id, updatedAt: sessions.length, retainedBy: {} };
+        workspaceCatalogue.items.find((row) => row.workspaceId === workspaceId).sessionIds.push(id);
         return id;
       },
       retain: (sessionId) => ({
@@ -187,6 +198,7 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
   return {
     ctx,
     sessionCatalogue,
+    workspaceCatalogue,
     selectedPresets,
     lists,
     selections,
@@ -204,6 +216,89 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
     text: () => dom.window.document.body.textContent,
   };
 }
+
+test('switching Agents reuses the last selected Core workspace after leaving the main Conversation', async (t) => {
+  const h = await fixture(t);
+  const first = h.ctx.agentWorkbench.startAgent('agent-A');
+  await h.chooseDirectory();
+  await first;
+  const original = structuredClone(h.sessionCatalogue.byId['created-0']);
+  const second = h.ctx.agentWorkbench.startAgent('agent-B');
+  void second.catch(() => {});
+  await React.act(settle);
+  assert.equal(
+    document.querySelector('[role="dialog"]'),
+    null,
+    'Agent B must reuse Agent A workspace without asking again',
+  );
+  await second;
+  assert.deepEqual(h.sessions, [{ cwd: '/workspace/B' }, { cwd: '/workspace/B' }]);
+  assert.deepEqual(
+    [...h.selectedPresets],
+    [
+      ['created-0', 'agent-A'],
+      ['created-1', 'agent-B'],
+    ],
+  );
+  assert.deepEqual(h.opened, ['created-0', 'created-1']);
+  assert.equal(h.pickerCalls(), 1);
+  assert.deepEqual(h.sessionCatalogue.byId['created-0'], original);
+});
+
+test('Agent start chooses recent session activity over workspace creation order without a main Conversation', async (t) => {
+  const h = await fixture(t);
+  h.workspaceCatalogue.items.push(
+    {
+      workspaceId: 'older',
+      path: '/active/project',
+      sessionIds: ['active'],
+      createdAt: '2026-01-01',
+    },
+    { workspaceId: 'newer', path: '/new/project', sessionIds: [], createdAt: '2026-01-02' },
+  );
+  h.sessionCatalogue.byId.active = {
+    id: 'active',
+    cwd: '/active/project',
+    updatedAt: Date.parse('2026-11-05'),
+    retainedBy: {},
+    draft: 'keep',
+  };
+  const original = structuredClone(h.sessionCatalogue.byId.active);
+  const starting = h.ctx.agentWorkbench.startAgent('agent-B');
+  void starting.catch(() => {});
+  await React.act(settle);
+  assert.equal(
+    document.querySelector('[role="dialog"]'),
+    null,
+    'recent Core workspace must suppress the directory prompt',
+  );
+  await starting;
+  assert.deepEqual(h.sessions, [{ cwd: '/active/project' }]);
+  assert.equal(h.pickerCalls(), 0);
+  assert.deepEqual(h.sessionCatalogue.byId.active, original);
+});
+
+test('switching Agents preserves the current workspace even when another workspace was used more recently', async (t) => {
+  const h = await fixture(t, { cwd: '/current/project' });
+  h.workspaceCatalogue.items.push({
+    workspaceId: 'recent',
+    path: '/recent/project',
+    sessionIds: ['recent'],
+    createdAt: '2026-11-05',
+  });
+  h.sessionCatalogue.byId.recent = {
+    id: 'recent',
+    cwd: '/recent/project',
+    updatedAt: Date.parse('2026-11-05'),
+    retainedBy: {},
+  };
+  const original = structuredClone(h.sessionCatalogue.byId.current);
+  await h.ctx.agentWorkbench.startAgent('agent-A');
+  await h.ctx.agentWorkbench.startAgent('agent-B');
+  assert.deepEqual(h.sessions, [{ cwd: '/current/project' }, { cwd: '/current/project' }]);
+  assert.equal(h.pickerCalls(), 0);
+  assert.deepEqual(h.sessionCatalogue.byId.current, original);
+});
 
 test(
   'Agent configuration starts the chosen preset in a fresh native Conversation with the current Workspace',

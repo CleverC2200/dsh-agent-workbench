@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -19,7 +20,7 @@ const { readCurrentShortage: readSourceShortage, currentShortageSum } = await im
 // Model the snapshot discovery request separately from the source shortage fixtures.
 function readCurrentShortage(config, queryId, filters, options) {
   const execute = async (request, call) => {
-    if (call.queryId === 'summary.snapshot') return { rows: [] };
+    if (['summary.snapshot', 'summary.bootstrap'].includes(call.queryId)) return { rows: [] };
     const result = await options.execute(request, call);
     if (queryId.endsWith('.locations') && result.rows) {
       if (call.queryId.endsWith('.count')) return { rows: [{ total: result.rows.length }] };
@@ -240,7 +241,9 @@ test('an invalid inventory pool does not erase another pool or known demand', as
 });
 
 test('missing order quantity marks only its own base unknown without hiding valid bases', async () => {
-  const active = JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8'));
+  const active = sourceDetailConfig(
+    JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8')),
+  );
   const result = await readCurrentShortage(
     active,
     'current-shortage.locations',

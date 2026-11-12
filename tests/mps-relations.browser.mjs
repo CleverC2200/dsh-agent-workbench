@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
+import * as XLSX from 'xlsx-republish';
 import { authorPage } from './helpers/author-page.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const rows = {
@@ -21,11 +22,14 @@ const rows = {
       belong_base: '四川',
       workshop: '车间甲',
       tunnel_no: '1#',
+      tunnel_tonnage: 12.5,
+      tunnel_type: '双螺旋',
       series: '源系列甲',
       combined_series: '组合甲乙',
       production_category: '产线生产品类',
       standard_daily_output_pc: 50,
       standard_daily_output_ton: 0,
+      source_rows: 2,
     },
     {
       material_code: 'P000',
@@ -44,6 +48,7 @@ const rows = {
     {
       belong_base: '四川',
       production_unit: '生产单位甲',
+      source_rows: 39,
       tunnel_no: '1#',
       series: '隧道源系列',
       production_category: '源品类',
@@ -51,13 +56,13 @@ const rows = {
     },
   ],
 };
-function fixture({ queryId, parameters }) {
+function fixture({ queryId, parameters, sourcePeriod = '2026-10' }) {
   const kind = queryId.split('.')[0];
   const records =
     kind === 'transfers'
       ? [
           {
-            stat_period: parameters.period,
+            stat_period: sourcePeriod,
             material_code: 'P000',
             material_name: '源产品0',
             series: '调拨源系列',
@@ -140,14 +145,30 @@ async function version(frame, month) {
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
 }
 test('fourth MPS step uses exact-code source relations, paginates the full set and keeps unconfirmed source labels', async (t) => {
-  const { view, contexts } = await relations(t);
+  const { page, view, contexts } = await relations(t);
   await expect(view).toContainText('共29条');
   await expect(view.locator('tbody tr')).toHaveCount(25);
   await expect(view.locator('tbody tr').nth(0)).toContainText('产线候选甲');
   await expect(view.locator('tbody tr').nth(1)).toContainText('产线候选乙');
   await expect(view.locator('tbody tr').nth(0)).toContainText('产品系列');
   await expect(view.locator('tbody tr').nth(0)).toContainText('源系列甲');
-  await expect(view.locator('tbody tr').nth(0).locator('td').nth(12)).toHaveText('0');
+  await expect(view.getByRole('columnheader', { name: '隧道吨位/吨', exact: true })).toBeVisible();
+  await expect(view.getByRole('columnheader', { name: '隧道类型', exact: true })).toBeVisible();
+  await expect(view.locator('tbody tr').nth(0)).toContainText('12.5');
+  await expect(view.locator('tbody tr').nth(0)).toContainText('双螺旋');
+  await expect(view.locator('tbody tr').nth(0).locator('td').nth(14)).toHaveText('0');
+  const waiting = page.waitForEvent('download', { timeout: 10000 });
+  await view.getByRole('button', { name: '下载完整关系明细', exact: true }).click();
+  const chunks = [];
+  for await (const chunk of await (await waiting).createReadStream()) chunks.push(chunk);
+  const book = XLSX.read(Buffer.concat(chunks), { type: 'buffer', raw: true });
+  const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  assert.equal(exported.length, 29);
+  const candidate = exported.find((row) => row['源物料名称'] === '产线候选甲');
+  assert.equal(candidate['隧道吨位/吨'], 12.5);
+  assert.equal(candidate['隧道类型'], '双螺旋');
+  assert.equal(candidate['组合标准日产/件'], 50);
+  assert.equal(candidate['组合标准日产/吨'], 0);
   await view.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(view.locator('tbody tr')).toHaveCount(4);
   await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('同名空码');
@@ -157,6 +178,8 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
   await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('');
   await view.getByRole('tab', { name: /产线与源系列/ }).click();
   await expect(view.locator('tbody tr')).toContainText('生产单位甲');
+  await expect(view.getByRole('columnheader', { name: '源记录数', exact: true })).toBeVisible();
+  await expect(view.locator('tbody tr').locator('td').nth(9)).toHaveText('39');
   await expect(view.locator('tbody tr')).toContainText('四川');
   await expect(view.locator('tbody tr')).not.toContainText('西南');
   await view.getByRole('tab', { name: /基地与调拨/ }).click();
@@ -178,16 +201,18 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
 test('fourth MPS step clears records on failed refresh and discards a late result after version change', async (t) => {
   let denied = false,
     hold = false,
+    sourcePeriod = '2026-10',
     release;
   const pending = new Promise((resolve) => {
     release = resolve;
   });
   const { view, frame, calls } = await relations(t, async (query) => {
+    const result = fixture({ ...query, sourcePeriod });
     if (query.queryId === 'transfers.detail') {
       if (denied) throw Error('AGENT_ACCESS_DENIED');
-      if (hold && query.parameters.period === '2026-10') await pending;
+      if (hold && sourcePeriod === '2026-10') await pending;
     }
-    return fixture(query);
+    return result;
   });
   await expect(view).toContainText('共29条');
   denied = true;
@@ -203,6 +228,7 @@ test('fourth MPS step clears records on failed refresh and discards a late resul
     .toBeGreaterThan(before);
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await version(frame, '2026-11');
+  sourcePeriod = '2026-11';
   await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
   await view.getByRole('tab', { name: /基地与调拨/ }).click();
   await expect(view.locator('tbody tr')).toContainText('2026-11');
@@ -234,12 +260,12 @@ test('source series and category gaps stay visible and filterable with a complet
   await expect(view.locator('tbody tr')).toHaveCount(2);
   await expect(view.getByRole('columnheader', { name: '源生产品类', exact: true })).toBeVisible();
   await view.getByRole('checkbox', { name: '仅缺项或待确认' }).check();
-  await expect(view.locator('tbody tr')).toHaveCount(1);
-  const candidate = view.locator('tbody tr');
+  await expect(view.locator('tbody tr')).toHaveCount(2);
+  const candidate = view.locator('tbody tr').filter({ hasText: '缺产线源系列' });
   await expect(candidate).toContainText('产品系列');
   await expect(candidate).toContainText('汤圆');
   await expect(candidate).toContainText('缺产线源系列、缺组合系列、缺产线生产品类');
-  await expect(candidate.locator('td').nth(11)).toHaveText('0');
+  await expect(candidate.locator('td').nth(13)).toHaveText('0');
   await view.getByRole('tab', { name: /基地与调拨/ }).click();
   await expect(view.locator('tbody tr')).toHaveCount(1);
   for (const name of ['源SAP品类', '源老大类', '源生产品类'])

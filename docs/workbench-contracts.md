@@ -1,5 +1,7 @@
 # Workbench 页面与桥合同
 
+飞书订单履约卡片和独立订单窗口的展示归 Workbench，后端只提供受控数据、服务端链接和业务权限。该功能的独立产物、同源托管及版本更新见[订单履约展示资源](fulfillment-presentation.md)；不扩大其他业务页或客户端发布范围。
+
 Workbench 在本仓固定的官方 DSH 输入上提供公司品牌、账户投影、业务分组导航、欢迎区与公共工具栏，并承载原生页面、HTML 与包内资源桥。官方 `ui-layout`、工作区浏览器、设置、原生 Conversation、主题和字号保留各自归属。Workbench 不替换 root 或 layout，不创建业务登录状态；打开不关联资源的纯静态页面不会创建 Session、改写 preset 或发送模型请求。资源关联业务页在真实身份已认证且原资源确实可用时，会为页面自动准备一次真实官方 Session；这一步不发送模型请求，也不代表获得业务权限。
 
 ## 页面接入
@@ -45,7 +47,7 @@ Host 公开认证 Fetch：
 
 ## 官方呈现与 Native 文档
 
-同一真实 Session 中切回首页只隐藏已访问 Document，保留其 Native DOM 与 iframe；隐藏时 `active=false`，停止当前业务能力与页面捕获。页面恢复协调位于常驻 Documents 席位，冷启动不依赖已选中的页面。真实 Session 切换继续遵守 Core `session-maybe` 的重挂语义，状态恢复沿既有持久存储与身份核对，不以 DOM 保留代替恢复。CSS anchor 只引用 Workbench 自己的占位，窗口控制区使用 Core 公开的 `--dsh-frame-leading-clearance` 保留点击空间，不读取壳层私有 DOM 或复制栏宽状态。
+Documents 容器使用 root 席位；主会话变化由独立的 `session-maybe` 观察席位交给既有恢复协调处理。每个已访问 Document 通过公开 `retain` 引用和 `SessionProvider` 绑定自身关联的真实 Core Session，普通菜单切换和返回首页只隐藏页面，不因其他页面成为主会话而重挂自身 DOM 或 iframe。隐藏时 `active=false`，停止当前业务能力与页面捕获；呈现引用不保留 GEA page grant 或在途执行。页面自身关联替换、身份撤销、页面注销或 UI 卸载会释放引用；自身 Session 切换仍遵守 Core 的重挂语义，冷恢复继续核对实际 Session 与身份，不以 DOM 保留代替恢复。CSS anchor 只引用 Workbench 自己的占位，窗口控制区使用 Core 公开的 `--dsh-frame-leading-clearance` 保留点击空间，不读取壳层私有 DOM 或复制栏宽状态。
 
 [cordis.patch.yml](../cordis.patch.yml) 插入本插件并禁用默认 `ui-sidebar`；Workbench 贡献公开侧栏席位，继续消费官方工作区浏览器与设置。官方 `ui-layout` 和 `ui-conversation` 服务与 Factory 保持启用。macOS 品牌行位于独立窗口控制行下方；两种侧栏状态使用官方公共图标，收起后整列退出布局。
 
@@ -78,3 +80,7 @@ Workbench 持有 Native 审批文档、Inbox、ApiLog、桌面导航、HTML 页�
 ### 看板模型洞察
 
 已授权页面可通过 `insight` 操作调用可选 `PageBusinessGrant.insight`。Workbench 核页面 owner 与 view 权限并传递页面、请求和身份的取消信号；GEA grant 决定可用页面、固定提示词、实际 Consumer 和模型路由。页面只提供当前证据与刷新时间，不指定模型、提示词、凭据或 Consumer。结果是只读展示文本，不发送对话消息，不创建任务，也不修改业务状态。
+
+## 页面请求归属
+
+Native 销售页面的业务请求携带既有页面 owner。GEA Host 通过 `workbenchPages.requestContext(owner)` 取得真实 Session 与页面/身份失效信号，再归集请求材料；客户端自报 Session 不授予归属或权限。页面关闭或身份失效后，该 owner 失效。HTML 页面的业务回调沿其已授权 Session 采集，不使用激活窗口推测归属。

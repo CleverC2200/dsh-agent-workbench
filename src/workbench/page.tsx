@@ -23,6 +23,7 @@ import { salesPlanStagesForRoles } from './original/workbenches/regionalApproval
 import type { NativeBusinessStatus as Status } from './business-contract.ts';
 import type { CopyKey } from '../client/locales.ts';
 import './workbench.css';
+import '../company/password-login.css';
 import { LoginSurface } from '../company/login-dialog.tsx';
 import { mountPicker } from '../page-interaction/picker.ts';
 import { ApiLogCenter } from './api-log-center.tsx';
@@ -153,11 +154,43 @@ async function pageRpc<T>(operation: string, payload: object, signal?: AbortSign
   return result;
 }
 
+let requestOwner: string | undefined;
+const requestOwnerEvents = new EventTarget();
+async function pageRequestOwner(signal?: AbortSignal): Promise<string> {
+  if (requestOwner) return requestOwner;
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      requestOwnerEvents.removeEventListener('change', changed);
+      signal?.removeEventListener('abort', aborted);
+    };
+    const changed = () => {
+      if (requestOwner) {
+        cleanup();
+        resolve(requestOwner);
+      }
+    };
+    const aborted = () => {
+      cleanup();
+      reject(signal?.reason);
+    };
+    requestOwnerEvents.addEventListener('change', changed);
+    signal?.addEventListener('abort', aborted, { once: true });
+    if (signal?.aborted) aborted();
+  });
+}
 async function rpc<T>(endpoint: string, payload: object = {}, signal?: AbortSignal): Promise<T> {
+  const owned =
+    /^(workbench\/query|workflow\/config|sales-plan\/|approval\/roles|model\/advice)/.test(
+      endpoint,
+    );
+  const owner = owned ? await pageRequestOwner(signal) : undefined;
   const response = await fetch('/api/gea-proof/' + endpoint, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(owner ? { 'X-Workbench-Page-Owner': owner } : {}),
+    },
     body: JSON.stringify(payload),
     signal,
   });
@@ -205,6 +238,7 @@ export const workbenchHost: WorkbenchHost = {
     versions: { invoke: (input) => query('versions', input) },
     logs: { invoke: (input) => query('logs', input) },
     versionSkus: { invoke: (input) => query('versionSkus', input) },
+    skuReview: { invoke: (input) => query('skuReview', input) },
     compare: { invoke: (input) => query('compare', input) },
     action: { invoke: (input) => rpc('sales-plan/action', input) },
     submit: { invoke: (input) => rpc('sales-plan/submit', input) },
@@ -231,6 +265,18 @@ const resubmitClient = {
 };
 
 const nativeLogin = {
+  preparePasswordLogin: (signal: AbortSignal, environment: Status['environment']) =>
+    rpc<import('../company/account.ts').PasswordLoginChallenge>(
+      'login/password/prepare',
+      { environment },
+      signal,
+    ),
+  loginWithPassword: async (
+    input: import('../company/account.ts').PasswordLoginInput,
+    signal: AbortSignal,
+  ) => {
+    await rpc('login/password', input, signal);
+  },
   startLogin: (signal: AbortSignal, environment: Status['environment']) =>
     rpc<{ image: string; loginId: string; expiresIn: number }>(
       'login/start',
@@ -348,17 +394,23 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       )
         return;
       const value = event.data.sessionId;
-      if (value === null) setPageConnection(null);
-      else if (
+      if (value === null) {
+        requestOwner = undefined;
+        setPageConnection(null);
+      } else if (
         typeof value === 'string' &&
         /^session-[0-9a-f-]{36}$/.test(value) &&
         typeof event.data.owner === 'string'
-      )
+      ) {
+        requestOwner = event.data.owner;
+        requestOwnerEvents.dispatchEvent(new Event('change'));
         setPageConnection({ sessionId: value, owner: event.data.owner });
+      }
     };
     window.addEventListener('message', onMessage);
     return () => {
       window.removeEventListener('message', onMessage);
+      requestOwner = undefined;
     };
   }, []);
   const contextSequence = useRef(0);

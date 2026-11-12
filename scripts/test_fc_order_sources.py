@@ -1,4 +1,4 @@
-"""Branch reads must not require dealer-order tables or inherit their values."""
+"""Branch stock and upstream supply stay independent; customer metrics use dealer orders."""
 import importlib.util
 import json
 from pathlib import Path
@@ -18,10 +18,12 @@ class BranchOrderSources(unittest.TestCase):
         self.addCleanup(self.fixture.doCleanups)
         self.config = self.fixture.config
 
-    def test_entire_delivered_config_has_no_dealer_order_dependency(self):
-        document = json.dumps(self.config)
-        for table in FORBIDDEN:
-            self.assertNotIn(table, document)
+    def test_only_customer_order_queries_depend_on_dealer_facts(self):
+        for key, query in self.config['queries'].items():
+            if key.startswith(('orders.', 'snapshot.orders.')):
+                continue
+            for table in FORBIDDEN:
+                self.assertNotIn(table,query['request']['sql'],key)
         for key, query in self.config['queries'].items():
             for field, ref in query.get('pagination', {}).items():
                 if field in {'countQuery', 'atomicQuery'}:
@@ -49,15 +51,15 @@ class BranchOrderSources(unittest.TestCase):
         self.assertEqual(row['material_name'], '商品主数据')
         self.assertEqual(row['total_qty'], 50)
 
-    def test_order_and_shortage_reads_use_asn_and_linked_base_execution(self):
+    def test_customer_orders_and_shortage_exclude_upstream_asn(self):
         for name in ['orders.detail', 'current-shortage.summary', 'current-shortage.overview',
                      'branch-current-orders.page', 'branch-current-orders.lines']:
             sql = self.config['queries'][name]['request']['sql']
             tables = {t.name for t in sqlglot.parse_one(sql, read='postgres').find_all(exp.Table)}
-            self.assertIn('agents_scm_asn_detail_d', tables, name)
-            self.assertIn('agents_scm_execute_detail_hourly_d', tables, name)
-            self.assertFalse(tables & FORBIDDEN, name)
-            self.assertIn('asn_execution_keys', sql)
+            self.assertNotIn('agents_scm_asn_detail_d', tables, name)
+            self.assertIn('agents_dwd_scm_execute_detail_mi', tables, name)
+            if name=='orders.detail':self.assertIn('agents_order_execute_isontime_mi',tables)
+            else:self.assertNotIn('agents_order_execute_isontime_mi',tables)
 
     def test_cleanup_is_idempotent_and_retains_active_view_queries(self):
         spec = importlib.util.spec_from_file_location('clean', ROOT / 'scripts/clean-fc-order-sources.py')

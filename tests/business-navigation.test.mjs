@@ -36,6 +36,7 @@ test('planning menu removes the requested entries without moving them into fallb
       },
       new Map([['plan-category-production', 'MPS']]),
       (key) => zh[key],
+      'test',
     );
     const entries = groups.flatMap((group) => group.entries);
     assert.equal(entries.find((entry) => entry.id === 'category').title, '计划管理工作台');
@@ -51,4 +52,58 @@ test('planning menu removes the requested entries without moving them into fallb
     assert.equal(entries.find((entry) => entry.id === 'mps').disabled, false);
     assert.equal(entries.find((entry) => entry.id === 'unknown').title, '未来业务');
   }
+});
+
+test('production hides unconnected entries and empty groups while retaining unavailable real pages', () => {
+  const groups = resolveBusinessMenu(
+    {
+      domains: {
+        kind: 'available',
+        items: [{ value: 'future', text: '未来业务', description: null }],
+      },
+      agents: [
+        {
+          id: 'dealer',
+          agentCode: 'dealer-workbench',
+          agentName: '经销商助手',
+          businessDomain: null,
+        },
+        { id: 'unknown', agentCode: 'future', agentName: '未来业务', businessDomain: 'future' },
+        { id: 'incomplete', agentCode: null, agentName: '未配置', businessDomain: null },
+        { id: 'mps', agentCode: 'mps', agentName: 'MPS', businessDomain: null },
+        {
+          id: 'branch',
+          agentCode: 'branch-inventory',
+          agentName: '分仓库存',
+          businessDomain: null,
+        },
+      ],
+    },
+    new Map([['inventory-fc', '分仓库存']]),
+    (key) => zh[key],
+    'production',
+  );
+  assert.deepEqual(
+    groups.map((group) => group.key),
+    ['plan', 'inventory'],
+  );
+  assert.deepEqual(
+    groups.flatMap((group) => group.entries),
+    [
+      {
+        id: 'mps',
+        pageId: 'plan-category-production',
+        title: zh.menuMpsPage,
+        disabled: true,
+        reason: zh.businessPageUnavailable,
+      },
+      {
+        id: 'branch',
+        pageId: 'inventory-fc',
+        title: zh.menuBranchInventoryPage,
+        disabled: false,
+        reason: undefined,
+      },
+    ],
+  );
 });

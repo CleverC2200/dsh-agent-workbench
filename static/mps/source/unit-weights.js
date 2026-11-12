@@ -16,19 +16,46 @@ export async function readUnitWeights(config, execute, codes, signal) {
   const rows = [];
   let configVersion;
   const definition = config.queries['unit-weights.detail'];
-  for (let index = 0; index < unique.length; index += 100) {
-    const batch = unique.slice(index, index + 100);
-    const result = await query.readAll(
-      'unit-weights.detail',
-      { codes: batch, page_size: 200, offset: 0 },
-      { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 10000 },
+  const stop = new AbortController();
+  const batchSignal = signal ? AbortSignal.any([signal, stop.signal]) : stop.signal;
+  batchSignal.throwIfAborted();
+  for (let index = 0; index < unique.length; index += 400) {
+    const batches = [
+      unique.slice(index, index + 200),
+      unique.slice(index + 200, index + 400),
+    ].filter((batch) => batch.length);
+    let failure;
+    const results = await Promise.allSettled(
+      batches.map(async (batch) => {
+        try {
+          const result = await query.readAll(
+            'unit-weights.detail',
+            { codes: batch, page_size: 5000, offset: 0 },
+            {
+              signal: batchSignal,
+              keyFields: definition.grain,
+              requiredColumns: definition.columns,
+              maxRows: 10000,
+            },
+          );
+          if (result.rows.some((row) => !batch.includes(text(row.material_code))))
+            throw Error('件吨系数返回了请求范围外的编码');
+          return result;
+        } catch (error) {
+          failure ??= { error };
+          stop.abort(error);
+          throw error;
+        }
+      }),
     );
-    if (index && result.configVersion !== configVersion)
-      throw Error('件吨系数读取期间查询配置版本变化，请重新读取');
-    if (result.rows.some((row) => !batch.includes(text(row.material_code))))
-      throw Error('件吨系数返回了请求范围外的编码');
-    configVersion = result.configVersion;
-    rows.push(...result.rows);
+    if (failure) throw failure.error;
+    for (let batchIndex = 0; batchIndex < results.length; batchIndex++) {
+      const result = results[batchIndex].value;
+      if ((index || batchIndex) && result.configVersion !== configVersion)
+        throw Error('件吨系数读取期间查询配置版本变化，请重新读取');
+      configVersion = result.configVersion;
+      rows.push(...result.rows);
+    }
   }
   return { rows, codes: unique, configVersion, readAt: new Date().toISOString() };
 }

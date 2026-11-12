@@ -2,10 +2,65 @@ export { readBaseInventoryMetrics } from './base-inventory-metrics';
 import { fcCycleParameters, type FcCycleRule } from './fc-cycle-rules';
 import { unpackAtomicPage } from './atomic-page';
 import { configuredQueryFreshAfter, configuredQueryIdentity } from './query-cache';
+import { inventoryCacheTtl } from './inventory-cache-policy';
 import { requireColumns } from './configured-query-client.mjs';
 import { createAgentQueries } from './agent-query';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readConfiguredTargetScope } from './configured-target-scope';
+import type { ConfiguredExecution } from './agent-query';
+import { qllPublishedDate } from './qll-published-date';
+
+/** Independent base shortage views share the page's authorized daily batch. */
+export async function readBaseCurrentShortage(
+  config: AgentSqlConfig,
+  id: string,
+  values: Record<string, unknown>,
+  options: { signal: AbortSignal; execute: ConfiguredExecution },
+) {
+  const allowed = ['summary', 'locations', 'detail', 'sku-ranking'].map(
+    (view) => 'current-shortage.' + view,
+  );
+  const definition = config.queries[id];
+  if (
+    config.agentId !== 'inventory-aqkc' ||
+    !allowed.includes(id) ||
+    definition?.summaryRoute?.required !== true
+  )
+    throw Object.assign(Error('GEA_WORKBENCH_UPDATE_REQUIRED'), {
+      code: 'GEA_WORKBENCH_UPDATE_REQUIRED',
+    });
+  const client = createAgentQueries(config, options.execute);
+  const readOptions = { signal: options.signal, requiredColumns: definition.resultColumns };
+  if (definition.pagination?.countQuery) {
+    const result = await client.readAll(
+      id,
+      { ...values, page_size: 50, offset: 0 },
+      {
+        ...readOptions,
+        keyFields: definition.pagination.keyFields,
+        atomicPages: true,
+        maxRows: 100000,
+      },
+    );
+    return {
+      ...result,
+      returnedColumns: result.pages[0]?.returnedColumns ?? definition.resultColumns,
+      rejectedColumns: result.pages[0]?.rejectedColumns ?? [],
+      totalRowCount: result.total,
+      hasMorePages: false,
+    };
+  }
+  return client.read(id, values, readOptions);
+}
+
+/** Kept for already installed Hosts during the coordinated plugin update. */
+export function readBaseShortageSkuRanking(
+  config: AgentSqlConfig,
+  values: Record<string, unknown>,
+  options: { signal: AbortSignal; execute: ConfiguredExecution },
+) {
+  return readBaseCurrentShortage(config, 'current-shortage.sku-ranking', values, options);
+}
 
 export type FactReadContext = {
   key: string;
@@ -158,6 +213,12 @@ export async function readConfiguredFacts(
       freshAfter: options.freshAfter,
     }),
     q = config.queries[view.queryId];
+  const requestedAsOf = input.asOf;
+  if (
+    !viewId.startsWith('channel-') &&
+    (q.summaryRoute || ['stock', 'health', 'shipment'].includes(view.timeMode))
+  )
+    input = { ...input, asOf: await qllPublishedDate(config, input.asOf, options) };
   // Display reads fetch only the requested page; full-scope totals and explicit
   // export/submission reads retain their independent contracts.
   const readSize = pageSize;
@@ -168,7 +229,9 @@ export async function readConfiguredFacts(
   // Only non-calculating labels may be absent on a display page. Quantity,
   // scope, sorting and pagination columns keep their complete read contract.
   const optionalLabels =
-    config.agentId === 'inventory-fc' && viewId === 'replenishment' && options.detailsOnly
+    config.agentId === 'inventory-fc' &&
+    ['replenishment', 'replenishment-confirmation'].includes(viewId) &&
+    options.detailsOnly
       ? new Set([
           'material_name',
           'warehouse_name',
@@ -176,7 +239,9 @@ export async function readConfiguredFacts(
           'material_group',
           'page_scope_has_material_group',
         ])
-      : new Set<string>();
+      : config.agentId === 'inventory-fc' && viewId === 'inventory'
+        ? new Set(['product_tag'])
+        : new Set<string>();
   const read = async (id: string, values: Record<string, any>, snapshot = false) => {
     // Owned by one overview load, never reused across refreshes or identities.
     // Keep rejected promises too: a denied snapshot must not trigger a retry.
@@ -205,7 +270,7 @@ export async function readConfiguredFacts(
   const targetScope = Object.values<{ name: string }>(q.parameterSpec).some(
     (spec) => spec.name === 'inventory_version',
   )
-    ? await readConfiguredTargetScope(client, input.asOf, options.signal)
+    ? await readConfiguredTargetScope(client, requestedAsOf, options.signal)
     : null;
   if (targetScope) {
     version = targetScope.configVersion;
@@ -242,7 +307,9 @@ export async function readConfiguredFacts(
       previous?.key === contextKey &&
       typeof previous.configVersion === 'string' &&
       previous.configVersion &&
-      (!fcSnapshot || (previous.readAt != null && Date.now() - previous.readAt < 20 * 60 * 1000))
+      (!fcSnapshot ||
+        (previous.readAt != null &&
+          Date.now() - previous.readAt < inventoryCacheTtl(config.agentId)))
     ) {
       snapshotDate = previous.snapshotDate;
       snapshotReadAt = previous.readAt ?? Date.now();
@@ -359,7 +426,14 @@ export async function readConfiguredFacts(
   for (const [name, raw] of Object.entries(filters)) {
     const value = raw.trim();
     if (!value) continue;
-    if (name === 'search') values.search_pattern = '%' + value.replace(/[\\%_]/g, '\\$&') + '%';
+    if (name.startsWith('column_') && name.endsWith('_contains') && name in values)
+      values[name] = '%' + value.replace(/[\\%_]/g, '\\$&') + '%';
+    else if (name.startsWith('column_') && /_(min|max)$/.test(name) && name in values) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return fail('INVALID_FILTER', '数值筛选请输入有效数字');
+      values[name] = value;
+    } else if (name === 'search')
+      values.search_pattern = '%' + value.replace(/[\\%_]/g, '\\$&') + '%';
     else if (name === 'warehouse_search' && 'warehouse_search_pattern' in values)
       values.warehouse_search_pattern = '%' + value.replace(/[\\%_]/g, '\\$&') + '%';
     else if (name === 'base') {
@@ -499,6 +573,16 @@ export async function readConfiguredFacts(
           }
         : productionRead;
     const block = unpackAtomicPage(result, readOffset / readSize + 1, readSize);
+    const summaryColumns = config.queries[id].scopeSummaryColumns;
+    const tableSummary =
+      summaryColumns && result.rows[0]
+        ? Object.fromEntries(
+            Object.entries(summaryColumns).map(([field, alias]) => [
+              field,
+              typeof alias === 'string' ? (result.rows[0][alias] ?? null) : null,
+            ]),
+          )
+        : null;
     const unavailableLabels = [...optionalLabels].filter((field) => {
       const alias = (column: any) =>
         typeof column === 'string'
@@ -531,6 +615,7 @@ export async function readConfiguredFacts(
           })
         : rows,
       supplementaryError: production.error,
+      tableSummary,
       unavailableLabels,
       partial: unavailableLabels.length > 0,
       total,

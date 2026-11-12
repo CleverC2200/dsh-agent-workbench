@@ -1,3 +1,52 @@
+export const passwordLoginCopy = {
+  loginMethod: ['登录方式', 'Sign-in method'],
+  scanLogin: ['飞书扫码', 'Lark QR'],
+  passwordLogin: ['账号密码', 'Account and password'],
+  passwordInstructions: [
+    '使用 GEA 账号、密码和图形验证码登录。',
+    'Sign in with your GEA account, password and image code.',
+  ],
+  username: ['账号', 'Account'],
+  password: ['密码', 'Password'],
+  showPassword: ['显示密码', 'Show password'],
+  hidePassword: ['隐藏密码', 'Hide password'],
+  captcha: ['图形验证码', 'Image code'],
+  captchaUnavailable: ['验证码暂不可用', 'Image code unavailable'],
+  captchaPreparing: ['正在获取验证码…', 'Loading image code…'],
+  refreshCaptcha: ['刷新验证码', 'Refresh image code'],
+  captchaExpired: ['验证码已过期，请刷新。', 'Image code expired. Refresh it.'],
+  captchaInvalid: [
+    '验证码错误或失效，请填写新验证码。',
+    'Image code is incorrect or expired. Enter a new code.',
+  ],
+  loginRejected: [
+    '账号或验证码无效，请核对输入与账号状态。',
+    'Account or image code is invalid. Check your details and account status.',
+  ],
+  loginLimited: [
+    '认证尝试过多，请稍后再试。请勿连续提交。',
+    'Too many sign-in attempts. Wait before trying again.',
+  ],
+  loginUnavailable: [
+    '认证服务暂不可用，请稍后重试。',
+    'Sign-in service is unavailable. Try again later.',
+  ],
+  loginNetworkError: [
+    '无法连接 GEA，请检查网络后重试。',
+    'Cannot connect to GEA. Check your connection.',
+  ],
+  loginTimeout: ['登录请求超时，请手动重试。', 'Sign-in request timed out. Try again manually.'],
+  signingIn: ['正在登录…', 'Signing in…'],
+  passwordTip: [
+    '密码仅用于本次登录，不会保存在客户端。验证码有效期为 60 秒。',
+    'Your password is used only for this sign-in and is not saved. Image codes expire after 60 seconds.',
+  ],
+  logoutUnconfirmed: [
+    '已退出本机，但服务端注销未确认。',
+    'Signed out locally. Server sign-out could not be confirmed.',
+  ],
+} as const;
+
 /** 独立销售计划页面使用的本地化文案。 */
 const copy = {
   workspaceDirectoryTitle: ['先选择工作文件夹', 'Choose a working folder'],
@@ -163,6 +212,7 @@ const copy = {
     '查询计划、查看版本与 SKU，确认范围后交给只读会话。',
     'Inspect plans, versions and SKUs, then confirm the input for a read-only session.',
   ],
+  ...passwordLoginCopy,
   welcomeLogin: ['欢迎使用 GEA 工作台', 'Welcome to your GEA workspace'],
   production: ['正式', 'Production'],
   test: ['测试', 'Test'],
@@ -183,7 +233,7 @@ const copy = {
   ],
   loginFooter: ['GEA 业务工作台', 'GEA business workspace'],
   changeEnvironment: ['切换环境 / 重新登录', 'Change environment / sign in again'],
-  login: ['飞书扫码登录', 'Sign in with Lark QR'],
+  login: ['登录 GEA', 'Sign in to GEA'],
   signInGea: ['登录 GEA', 'Sign in to GEA'],
   collapseSidebar: ['收起侧边栏', 'Collapse sidebar'],
   dshConversation: ['DSH 对话', 'DSH conversation'],
@@ -196,7 +246,7 @@ const copy = {
   environment: ['GEA 环境', 'GEA environment'],
   pending: ['等待飞书扫码确认', 'Waiting for Lark confirmation'],
   expired: ['二维码已过期，请重新获取', 'QR expired. Get a new code.'],
-  loginExpired: ['GEA 登录已失效，请重新扫码', 'GEA login expired. Sign in again.'],
+  loginExpired: ['GEA 登录已失效，请重新登录', 'GEA login expired. Sign in again.'],
   loginHelp: [
     '登录仅保留在当前服务进程中，重启后需重新登录。',
     'Login stays in this server process; restart requires signing in again.',

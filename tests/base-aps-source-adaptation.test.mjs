@@ -35,7 +35,7 @@ const { deriveMetrics } = await load('../dsh-agent-manage/src/aps-compute/metric
 function fixture(calendar) {
   const calls = [];
   const execute = async (_, call) => {
-    if (call.queryId === 'summary.snapshot') return { rows: [] };
+    if (['summary.snapshot', 'summary.bootstrap'].includes(call.queryId)) return { rows: [] };
     calls.push(call);
     const columns = config.queries[call.queryId].resultColumns;
     const row = Object.fromEntries(columns.map((c) => [c, null]));
@@ -117,7 +117,7 @@ test('a version calendar does not load stock details or pretend database visibil
 test('calendar and inventory from different config versions cannot be combined', async () => {
   const io = fixture([{ month: '2026-10-01', inventory_version: '月初' }]);
   const execute = async (request, call) => {
-    if (call.queryId === 'summary.snapshot') return { rows: [] };
+    if (['summary.snapshot', 'summary.bootstrap'].includes(call.queryId)) return { rows: [] };
     const result = await io.execute(request, call);
     if (call.queryId === 'source.stock-date') result.configVersion = 'changed';
     return result;
@@ -822,4 +822,31 @@ test('SKU detail keeps classified current shortage and batch weighted age from t
   assert.equal(row.risk, '缺货');
   assert.equal(row.shortageQuantity, '190');
   assert.equal(row.age, '65.0天');
+});
+
+test('current turnover and target turnover use their own valid cohorts', async (t) => {
+  install(t);
+  const read = globalThis.__stockSummary;
+  globalThis.__stockSummary = async (...args) => {
+    const result = await read(...args);
+    return {
+      ...result,
+      groups: [
+        {
+          ...result.groups[0],
+          row_count: 2,
+          turn_count: 2,
+          turn_inventory: 150,
+          turn_demand: 25,
+          turn_target: 20,
+          target_turn_demand: 5,
+          target_turn_count: 1,
+        },
+      ],
+    };
+  };
+  const w = await cube.loadInitialDashboard();
+  assert.equal(w.workbench.cards[1].value, '6.0天');
+  assert.equal(w.workbench.cards[1].helpers[0].value, '4.0天');
+  assert.equal(w.workbench.cards[1].helpers[1].value, '-');
 });

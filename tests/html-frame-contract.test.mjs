@@ -49,7 +49,7 @@ window.bind=id=>{mainSession=id;workbench.associateSession(page.id,{sessionId:id
 window.suspend=()=>workbench.forgetSession(page.id);
 window.publishTheme=next=>{snapshot=next;for(const listener of themeListeners)listener();};
 window.themeListenerCount=()=>themeListeners.size;
-mountFramePresentation(ctx,()=>undefined,key=>key,workbench);
+mountFramePresentation(ctx,()=>undefined,key=>window.testFrameTranslations?.[key]??key,workbench);
 const root=createRoot(document.getElementById('app'));
 const inputActions={captureInsertion:()=>({start:0,end:0,draftRev:0}),insertText:()=>true,persistDraft:()=>{}};
 function Main(){
@@ -85,7 +85,7 @@ addEventListener('message',event=>{
 window.request=(id,method,parameters={},session=context.session)=>port.postMessage({type:'request',id,method,parameters,session});
 </script>`;
 
-async function fixture(t, pageId = 'inventory-fixture', frameHtml) {
+async function fixture(t, pageId = 'inventory-fixture', frameHtml, translations) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
@@ -109,12 +109,43 @@ async function fixture(t, pageId = 'inventory-fixture', frameHtml) {
   await page.evaluate((id) => {
     window.testFramePageId = id;
   }, pageId);
+  await page.evaluate((value) => {
+    window.testFrameTranslations = value;
+  }, translations);
   await page.addScriptTag({ content: outputFiles[0].text });
   await expect.poll(() => page.evaluate(() => opens)).toEqual(['session-1']);
   const child = page.frames().find((frame) => frame !== page.mainFrame());
   if (!frameHtml) await child.waitForFunction(() => readyCount > 0);
   return { page, child, errors, loads: () => loads };
 }
+
+test('MPS reconnect success stays on one line outside the crowded toolbar and dismisses automatically', async (t) => {
+  const { page, errors } = await fixture(t, 'plan-category-production', undefined, {
+    pageReconnect: '重新连接页面能力',
+    pageReconnected: '页面已重新连接',
+  });
+  await page.addStyleTag({ content: await readFile('src/company/shell.css', 'utf8') });
+  await page.addStyleTag({ content: '.gea-page-toolbar-seat { width: 420px; }' });
+  await page.evaluate(() => window.finishOpen('session-1'));
+  const retry = page.getByRole('button', { name: '重新连接页面能力', exact: true });
+  await expect(retry).toBeEnabled();
+  await retry.click();
+  const notice = page.getByRole('status');
+  await expect(notice).toHaveText('页面已重新连接');
+  const geometry = await notice.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const toolbar = element.closest('.gea-conversation-toolbar').getBoundingClientRect();
+    return { height: bounds.height, top: bounds.top, bottom: toolbar.bottom };
+  });
+  assert.ok(geometry.height <= 30, `success notice wraps to ${geometry.height}px`);
+  assert.ok(geometry.top >= geometry.bottom, 'success notice must not squeeze toolbar actions');
+  await expect(notice).toBeHidden({ timeout: 5000 });
+  await expect(retry).toBeEnabled();
+  await retry.click();
+  await expect(notice).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
 
 test('MPS reconnect replaces the owned frame, releases the old connection and preserves the Conversation draft', async (t) => {
   const { page, errors, loads } = await fixture(t, 'plan-category-production');

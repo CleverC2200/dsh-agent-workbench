@@ -85,38 +85,166 @@ function fixture(t, repo = 'dsh-agent-workbench') {
 }
 
 test('version-only manifests and generated stamps select their declared contracts without Host consumers', (t) => {
-  const f = fixture(t);
-  f.policy.versionTests = ['tests/version.test.mjs'];
-  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
-  f.put(f.root, 'package.json', JSON.stringify({ name: 'fixture', version: '1.0.0' }));
-  const lock = (version) =>
-    JSON.stringify({
-      version,
-      packages: { '': { version }, 'node_modules/helper': { version: '2.0.0' } },
-    });
-  f.put(f.root, 'package-lock.json', lock('1.0.0'));
-  const stamp = (version) =>
-    `export const pluginPackageVersion = Object.freeze({\n  name: 'fixture',\n  version: '${version}',\n} as const);\n`;
-  f.put(f.root, 'src/plugin-package-version.ts', stamp('1.0.0'));
-  f.put(f.root, 'src/consumer.ts', 'import "./value.js"; import "./plugin-package-version.js";');
-  f.put(f.root, 'tests/version.test.mjs', 'readFileSync("package.json");');
-  f.put(
-    f.root,
-    'tests/profile.test.mjs',
-    'import "../src/consumer.js"; readFileSync("package.json");',
-  );
-  f.checkpoint();
-  f.put(f.root, 'package.json', JSON.stringify({ name: 'fixture', version: '1.0.1' }));
-  f.put(f.root, 'package-lock.json', lock('1.0.1'));
-  f.put(f.root, 'src/plugin-package-version.ts', stamp('1.0.1'));
-  f.repositories[0].head = f.commit(f.root);
-  const plan = f.plan(undefined, { sourceOnly: true });
-  assert.deepEqual(plan.files, ['tests/version.test.mjs']);
-  assert.equal(plan.changes.find((change) => change.file === 'package.json').versionOnly, true);
-  assert.equal(
-    plan.changes.find((change) => change.file === 'package-lock.json').versionOnly,
-    true,
-  );
+  for (const [repo, quote, ending] of [
+    ['dsh-agent-workbench', "'", ',\n} as const);\n'],
+    ['dsh-agent-manage', "'", '\n} as const)\n'],
+    ['dsh-gea-plugin', '"', ',\n} as const);\n'],
+  ]) {
+    const f = fixture(t, repo);
+    f.policy.versionTests = ['tests/version.test.mjs'];
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    f.put(f.root, 'package.json', JSON.stringify({ name: 'fixture', version: '1.0.0' }));
+    const lock = (version) =>
+      JSON.stringify({
+        version,
+        packages: { '': { version }, 'node_modules/helper': { version: '2.0.0' } },
+      });
+    f.put(f.root, 'package-lock.json', lock('1.0.0'));
+    const stamp = (version) =>
+      '/** Package identity captured at build time; immutable after module loading. */\n' +
+      `export const pluginPackageVersion = Object.freeze({\n  name: ${quote}fixture${quote},\n  version: ${quote}${version}${quote}${ending}`;
+    f.put(f.root, 'src/plugin-package-version.ts', stamp('1.0.0'));
+    f.put(f.root, 'src/consumer.ts', 'import "./value.js"; import "./plugin-package-version.js";');
+    f.put(f.root, 'tests/version.test.mjs', 'readFileSync("package.json");');
+    f.put(
+      f.root,
+      'tests/profile.test.mjs',
+      'import "../src/consumer.js"; readFileSync("package.json");',
+    );
+    f.checkpoint();
+    f.put(f.root, 'package.json', JSON.stringify({ name: 'fixture', version: '1.0.1' }));
+    f.put(f.root, 'package-lock.json', lock('1.0.1'));
+    f.put(f.root, 'src/plugin-package-version.ts', stamp('1.0.1'));
+    f.repositories.find((entry) => entry.repo === repo).head = f.commit(f.root);
+    const plan = f.plan(undefined, { sourceOnly: true });
+    assert.deepEqual(plan.files, ['tests/version.test.mjs'], repo);
+    assert.equal(plan.changes.find((change) => change.file === 'package.json').versionOnly, true);
+    assert.equal(
+      plan.changes.find((change) => change.file === 'package-lock.json').versionOnly,
+      true,
+    );
+  }
+});
+
+test('only company companion peer extensions select release and loading contracts without Profile consumers', (t) => {
+  for (const change of [
+    'extension',
+    'combined',
+    'combined-unknown',
+    'combined-stamp',
+    'combined-host',
+    'combined-no-version-contract',
+    'unregistered',
+    'unknown-peer',
+    'new-peer',
+    'removed-peer',
+    'narrowed-peer',
+    'range-syntax',
+    'dependency',
+    'metadata',
+    'export-order',
+    'lock',
+    'unknown-field',
+  ]) {
+    const f = fixture(t, 'dsh-gea-plugin');
+    const workbench = '@cleverc2200/dsh-agent-workbench';
+    const manage = 'dsh-agent-manage';
+    for (const [repo, name] of [
+      ['dsh-agent-workbench', workbench],
+      ['dsh-agent-manage', manage],
+    ]) {
+      const entry = f.repositories.find((entry) => entry.repo === repo);
+      f.put(entry.path, 'package.json', JSON.stringify({ name, version: '1.0.0' }));
+      entry.head = f.commit(entry.path);
+    }
+    f.policy.versionTests = ['tests/version.test.mjs'];
+    f.policy.companionPeerTests = ['tests/compatibility.test.mjs', 'tests/loading.test.mjs'];
+    if (change === 'combined-no-version-contract') delete f.policy.versionTests;
+    if (change === 'unregistered') delete f.policy.companionPeerTests;
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    const manifest = {
+      name: '@cleverc2200/gea-dsh-prototype',
+      version: '1.0.0',
+      peerDependencies: {
+        [workbench]: change === 'range-syntax' ? '^0.1.50' : '0.1.49 || 0.1.50',
+        [manage]: '0.6.3-company.46',
+        helper: '2.0.0',
+      },
+    };
+    manifest.exports = { '.': { node: './src/value.ts', default: './src/consumer.ts' } };
+    f.put(f.root, 'package.json', JSON.stringify(manifest));
+    const stamp = (version) =>
+      `export const pluginPackageVersion = Object.freeze({\n  name: "@cleverc2200/gea-dsh-prototype",\n  version: "${version}",\n} as const);\n`;
+    f.put(f.root, 'src/plugin-package-version.ts', stamp('1.0.0'));
+    f.put(f.root, 'tests/version.test.mjs', 'readFileSync("package.json");');
+    f.put(f.root, 'pnpm-lock.yaml', 'lockfileVersion: 9\n');
+    f.put(f.root, 'tests/compatibility.test.mjs', 'readFileSync("package.json");');
+    f.put(
+      f.root,
+      'tests/loading.test.mjs',
+      'readFileSync("package.json"); readFileSync("pnpm-lock.yaml");',
+    );
+    f.put(
+      f.root,
+      'src/consumer.ts',
+      'import "./value.js"; import "./plugin-package-version.js"; readFileSync("package.json");',
+    );
+    f.put(f.root, 'tests/profile.test.mjs', 'import "../src/consumer.js";');
+    f.checkpoint();
+    const next = {
+      ...manifest,
+      peerDependencies: {
+        ...manifest.peerDependencies,
+        [workbench]: '0.1.49 || 0.1.50 || 0.1.51',
+        [manage]: '0.6.3-company.46 || 0.6.3-company.47',
+      },
+    };
+    if (change.startsWith('combined')) {
+      next.version = '1.0.1';
+      f.put(
+        f.root,
+        'src/plugin-package-version.ts',
+        stamp('1.0.1') + (change === 'combined-stamp' ? 'run();' : ''),
+      );
+    }
+    if (change === 'combined-unknown') next.future = true;
+    if (change === 'combined-host') f.put(f.root, 'src/value.ts', 'export const value = 2;');
+    if (change === 'unknown-peer') next.peerDependencies.helper = '2.0.0 || 3.0.0';
+    if (change === 'new-peer') next.peerDependencies.added = '1.0.0';
+    if (change === 'removed-peer') delete next.peerDependencies[manage];
+    if (change === 'narrowed-peer') next.peerDependencies[workbench] = '0.1.50 || 0.1.51';
+    if (change === 'range-syntax') next.peerDependencies[workbench] = '^0.1.50 || 0.1.51';
+    if (change === 'dependency') next.dependencies = { helper: '2.0.0' };
+    if (change === 'metadata') next.peerDependenciesMeta = { [manage]: { optional: true } };
+    if (change === 'export-order')
+      next.exports = { '.': { default: './src/consumer.ts', node: './src/value.ts' } };
+    if (change === 'unknown-field') next.future = true;
+    if (change === 'lock') f.put(f.root, 'pnpm-lock.yaml', 'lockfileVersion: 9\nsettings: {}\n');
+    f.put(f.root, 'package.json', JSON.stringify(next));
+    f.repositories.find((entry) => entry.repo === 'dsh-gea-plugin').head = f.commit(f.root);
+    const plan = f.plan(undefined, { sourceOnly: true });
+    if (change === 'extension' || change === 'combined') {
+      assert.deepEqual(
+        plan.files,
+        change === 'combined'
+          ? ['tests/compatibility.test.mjs', 'tests/loading.test.mjs', 'tests/version.test.mjs']
+          : ['tests/compatibility.test.mjs', 'tests/loading.test.mjs'],
+        change,
+      );
+      assert.equal(
+        plan.changes.find((change) => change.file === 'package.json').companionPeerOnly,
+        true,
+      );
+    } else {
+      assert.ok(plan.files.includes('tests/profile.test.mjs'), change);
+      assert.ok(plan.files.includes('tests/affected.test.mjs'), change);
+      assert.equal(
+        plan.changes.find((change) => change.file === 'package.json').companionPeerOnly,
+        change === 'combined-stamp' || change === 'combined-host' ? true : undefined,
+        change,
+      );
+    }
+  }
 });
 
 test('dependency, export, stamp logic and Host changes retain their real consumers beside a version bump', (t) => {
@@ -269,6 +397,62 @@ test('ordinary documentation skips source tests without selecting the full pool'
   assert.equal(plan.fullSuite, 'not-run');
   assert.equal(plan.runtime, false);
 });
+test('selection reasons distinguish policy, direct and transitive consumers after owner deduplication', (t) => {
+  const f = fixture(t);
+  f.policy.rules.push({
+    pattern: '^src/value\\.ts$',
+    tests: ['tests/affected.test.mjs', 'tests/direct.test.mjs', 'tests/child.test.mjs'],
+  });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'tests/direct.test.mjs', 'import "../src/value.js";');
+  f.put(f.root, 'tests/child.test.mjs', 'import "../src/value.js";');
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan({ 'tests/child.test.mjs': 'tests/direct.test.mjs' });
+  assert.deepEqual(plan.reasons['dsh-agent-workbench/src/value.ts'], [
+    'tests/affected.test.mjs',
+    'tests/direct.test.mjs',
+  ]);
+  assert.deepEqual(plan.reasonDetails['dsh-agent-workbench/src/value.ts'], {
+    rules: ['^src/value\\.ts$'],
+    rule: 2,
+    direct: 1,
+    transitive: 2,
+  });
+});
+
+test('source and exclusive rule summaries record only the selection branches actually used', (t) => {
+  for (const sourceOnly of [true, false]) {
+    const f = fixture(t);
+    f.policy.rules.push(
+      {
+        pattern: '^src/value\\.ts$',
+        tests: ['tests/required.test.mjs'],
+        ...(sourceOnly ? { sourceTests: ['tests/peer.test.mjs'] } : { exclusive: true }),
+      },
+      { pattern: '^src/', tests: ['tests/unrelated.test.mjs'] },
+    );
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    f.checkpoint();
+    f.put(f.root, 'src/value.ts', 'export const value = 2;');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan(undefined, { sourceOnly });
+    assert.deepEqual(
+      plan.reasons['dsh-agent-workbench/src/value.ts'],
+      sourceOnly
+        ? ['tests/peer.test.mjs']
+        : ['tests/required.test.mjs', 'tests/unrelated.test.mjs'],
+    );
+    assert.deepEqual(plan.reasonDetails['dsh-agent-workbench/src/value.ts'], {
+      rules: sourceOnly ? ['^src/value\\.ts$'] : ['^src/value\\.ts$', '^src/'],
+      rule: sourceOnly ? 1 : 2,
+      direct: 0,
+      transitive: 0,
+    });
+  }
+});
+
 test('transitive authored imports select the affected file and exclude unrelated tests', (t) => {
   const f = fixture(t);
   f.put(f.root, 'src/value.ts', 'export const value = 2;');

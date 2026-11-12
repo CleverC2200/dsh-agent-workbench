@@ -4,6 +4,69 @@
   color: var(--ui-secondary);
   background: var(--ui-surface);
 }
+.columnHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding-right: 3px;
+}
+.columnHeader > :first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.list table[data-resizable] {
+  table-layout: fixed;
+}
+.list table[data-resizable] tr:not(.detail-row) > :is(th, td) {
+  min-width: 0;
+  box-sizing: border-box;
+}
+.list table[data-resizable] tr:not(.detail-row) > :is(th, td):nth-child(-n + 2) {
+  position: static;
+  width: auto;
+  min-width: 0;
+}
+.list table[data-resizable] thead th {
+  position: relative;
+  overflow: visible;
+}
+.list table[data-resizable] thead tr > th:nth-child(-n + 2) {
+  position: relative;
+}
+.list table[data-resizable] td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compactAging table[data-resizable] :is(th, td) {
+  padding-inline: 12px;
+}
+.compactAging table[data-resizable] th {
+  height: 38px;
+  padding-block: 0;
+  font-size: 9px;
+}
+.compactAging table[data-resizable] td {
+  height: 40px;
+  padding-block: 4px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.compactAging .fcToolbar.toolbar {
+  min-height: 52px;
+  padding-block: 8px;
+}
+.compactAging .fcToolbar .filterField {
+  flex: 0 1 220px;
+}
+.list table tfoot td {
+  background: #f5f6f8;
+  border-top: 1px solid #e3e6ea;
+  font-weight: 700;
+}
 .toolbar {
   min-width: 0;
   flex-wrap: wrap;

@@ -1103,7 +1103,7 @@ export function InventoryOperationsWorkbench() {
                     {modelInsight.status === 'loading' ? (
                       <p>正在生成 AI 洞察…</p>
                     ) : modelInsight.status === 'error' ? (
-                      <p>AI 洞察暂不可用，当前指标与明细可正常查看。</p>
+                      <p>-</p>
                     ) : (
                       modelInsight.answer
                         ?.split(/\n+/)
@@ -1321,7 +1321,7 @@ function Kpi({
               : title === '当前订单'
                 ? currentOrderMetricScopes.orderQuantity
                 : title === '订单满足率'
-                  ? '当月履约满足率；已发订单量、发货量统计当月实际发货量大于0的订单行'
+                  ? '当月已发货订单行：逐行限额发货量合计÷同池原订货量合计；每行发货量以订货量为上限'
                   : undefined
         }
         className={`${styles.kpiValue} ${tone === 'red' ? styles.toneRed : ''}`}
@@ -1344,7 +1344,9 @@ function Kpi({
                       ? '当前待发全部阶段尚缺等价来源；不能由快照未备单和占用简单相加'
                       : '日库存快照已备单占用量，仅展示非负有值范围'
                     : title === '订单满足率'
-                      ? '当月实际发货量大于0的订单行：已发订单量取原订单量，发货量取实际发货量'
+                      ? item.label === '发货量'
+                        ? '同一已发货订单池的实际发货总量；满足率分子逐行按订货量封顶后合计'
+                        : '当月实际发货量大于0的订单行对应的原订货量，为满足率分母'
                       : undefined
               }
             >

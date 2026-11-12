@@ -1,3 +1,4 @@
+import type { BusinessEnvironment } from './account.ts';
 import type { BusinessNavigationCatalog } from './business-navigation.ts';
 import type { CopyKey } from './locales.ts';
 
@@ -67,6 +68,7 @@ export function resolveBusinessMenu(
   catalog: BusinessNavigationCatalog | undefined,
   available: ReadonlyMap<string, string>,
   t: (key: CopyKey) => string,
+  environment: BusinessEnvironment,
 ): ResolvedBusinessMenuGroup[] {
   if (!catalog) return [];
   const groups: ResolvedBusinessMenuGroup[] = DESKTOP_GROUPS.map((group) => ({
@@ -107,6 +109,7 @@ export function resolveBusinessMenu(
     if (['workbench', 'area_plan', '02'].includes(agent.agentCode ?? '')) continue;
     const desktop = agent.agentCode ? DESKTOP_AGENTS.get(agent.agentCode) : undefined;
     const pageId = desktop?.pageId;
+    if (environment !== 'test' && !pageId) continue;
     let reason: string | undefined;
     if (!agent.agentCode) reason = t('businessConfigurationIncomplete');
     else if (!pageId) reason = t('businessNotConnected');

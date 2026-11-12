@@ -686,24 +686,11 @@ html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card .kpi-foot {
 }
 
 .aps-drill-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 12px 16px;
-  flex-wrap: wrap;
-}
-.aps-drill-pagination button {
-  padding: 6px 12px;
-  border: 1px solid var(--v02-border);
-  border-radius: 6px;
-  background: var(--v02-surface);
-  color: inherit;
-  cursor: pointer;
-}
-.aps-drill-pagination button:disabled {
-  opacity: 0.45;
-  cursor: default;
+  position: relative;
+  width: 100%;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 /* The workspace indicator meets the shared toolbar bottom border. */
@@ -715,4 +702,16 @@ html.aps-plugin-host .plugin-workspace-tabs.scope-tabs {
 html.aps-plugin-host .plugin-workspace-tabs.scope-tabs > button {
   height: 56px;
   min-height: 56px;
+}
+
+html.aps-plugin-host .date-picker-week {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ui-border, #e3e6ea);
+}
+html.aps-plugin-host .date-picker-menu .date-picker-week button {
+  display: flex;
+  justify-content: space-between;
+  padding-inline: 10px;
 }

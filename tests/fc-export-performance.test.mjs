@@ -5,6 +5,8 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+// This fixture measures paged collection; bootstrap bundling has its own contract tests.
+delete config.dailySummary.bundle;
 const calls = [];
 let mode = 'stable',
   attempt = 0;
@@ -26,7 +28,17 @@ globalThis.fetch = async (_url, init) => {
       status: 403,
     });
   let rows;
-  if (queryId.startsWith('source.')) rows = [{ day: '2026-10-28' }];
+  if (queryId === 'summary.snapshot')
+    rows = [
+      {
+        batch_id: '20261028080000000000',
+        business_date: '2026-10-28',
+        stock_date: '2026-10-28',
+        target_month: '2026-10-01',
+      },
+    ];
+  else if (queryId.startsWith('source.') || queryId.startsWith('snapshot.source.'))
+    rows = [{ day: '2026-10-28' }];
   else {
     const total =
       mode === 'changing' || (mode === 'recover' && attempt === 1 && values.offset > 0)
@@ -81,7 +93,10 @@ test('full plan export uses bounded lightweight reads rather than scanning aging
   );
   assert.equal(rows.length, 2471);
   assert.equal(new Set(rows.map((r) => r.sku)).size, 2471);
-  const pages = calls.filter((c) => !c.queryId.startsWith('source.'));
+  const pages = calls.filter(
+    (c) => c.queryId !== 'summary.snapshot' && !c.queryId.startsWith('source.'),
+  );
+  assert.equal(calls.filter((c) => c.queryId === 'summary.snapshot').length, 1);
   assert.ok(pages.length <= 13, `expected at most 13 bounded requests; got ${pages.length}`);
   for (const page of pages) {
     assert.ok(page.values.page_size <= 200);
@@ -104,9 +119,9 @@ test('a changed source count discards the prefix and restarts the entire collect
   assert.equal(new Set(rows.map((r) => r.sku)).size, 2472);
   assert.equal(attempt, 2);
   assert.ok(
-    calls.every(
-      (c) => c.values.warehouse_code === 'A020' && c.values.warehouse_code_mode === 'equal',
-    ),
+    calls
+      .filter((c) => c.queryId !== 'summary.snapshot')
+      .every((c) => c.values.warehouse_code === 'A020' && c.values.warehouse_code_mode === 'equal'),
   );
 });
 test('permission denial does not retry or return a partial download', async () => {
@@ -149,6 +164,12 @@ test('replenishment confirmation reads 200 rows per batch and reports complete p
   assert.equal(new Set(rows.map((r) => r.sku)).size, 2471);
   const pages = calls.filter((c) => c.queryId.includes('atomic'));
   assert.equal(pages.length, 13);
+  assert.ok(
+    pages.every(
+      (c) =>
+        c.queryId.startsWith('snapshot') && c.values.summary_batch_id === '20261028080000000000',
+    ),
+  );
   assert.ok(pages.every((c) => c.values.page_size === 200));
   assert.deepEqual(progress[0], [200, 2471]);
   assert.deepEqual(progress.at(-1), [2471, 2471]);

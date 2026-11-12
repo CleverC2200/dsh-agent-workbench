@@ -10,10 +10,17 @@ import {
 
 function fixture() {
   const db = new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE age_history(dt,warehouseid,belong_base,material_code,inv_qty,age_days);
+  db.exec(`CREATE TABLE agents_scm_inventory_sku_data_d(warehouseid,month_date,warehouse_classify,warehouse_classify_name,belong_base);
+      CREATE TABLE age_history(dt,warehouseid,belong_base,material_code,inv_qty,age_days);
     CREATE TABLE warehouse(warehouse_id,warehouse_classify,warehouse_classify_name);
     CREATE TABLE agents_scm_material_in_out_summary_d(material_code,product_categ_name,material_group_name);
-    CREATE TABLE agents_scm_stock_detail_d(material_code,product_item,the_date);
+    CREATE TABLE agents_scm_stock_detail_d(material_code,product_item,the_date,belong_base,current_stock,current_stock_60);
+    INSERT INTO agents_scm_stock_detail_d VALUES
+      ('sku','水饺','2026-10-25','郑州',200,100),
+      ('sku','水饺','2026-10-18','郑州',500,500),
+      ('sku','水饺','2026-10-26','郑州',500,500),
+      ('unknown','水饺','2026-10-25','华南',10,NULL),
+      ('missing','水饺','2026-10-25','华南',NULL,NULL);
     CREATE TABLE agents_order_execute_isontime_mi(new_material_code,pinxiang,fromorderno_month);
     INSERT INTO warehouse VALUES
       ('factory','01','工厂成品仓'),('factory','01','工厂成品仓'),
@@ -39,7 +46,7 @@ function read(db, name, params) {
   return db.prepare(sql).all(params);
 }
 
-test('Hive age uses the inclusive source age and one covered warehouse contribution per row', () => {
+test('published stock and aged fields take precedence over legacy warehouse batches', () => {
   const db = fixture();
   try {
     const rows = read(db, 'ages', {

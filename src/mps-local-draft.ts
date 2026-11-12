@@ -30,8 +30,14 @@ const audit = {
 };
 const categoryAdjustment = z.strictObject({ month, category: text, quantity, ...audit });
 const shareAdjustment = z.strictObject({ rowId: text, share: quantity.max(1), ...audit });
+const quantityIdentity = { month, category: text, group: text, quantity, ...audit };
+const quantityAdjustment = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('group'), ...quantityIdentity }),
+  z.strictObject({ kind: z.literal('sku'), ...quantityIdentity, code: text }),
+  z.strictObject({ kind: z.literal('base-sku'), ...quantityIdentity, code: text, base: text }),
+]);
 const adjustmentHistory = z.strictObject({
-  kind: z.enum(['categoryDemand', 'shares']),
+  kind: z.enum(['categoryDemand', 'shares', 'quantities']),
   key: text,
   action: z.enum(['set', 'undo']),
   value: numeric.nullable(),
@@ -99,14 +105,56 @@ export const mpsLocalDraftSchema = z.strictObject({
   adjustments: z.strictObject({
     categoryDemand: list(categoryAdjustment),
     shares: list(shareAdjustment),
+    quantities: list(quantityAdjustment).default([]),
     history: list(adjustmentHistory),
   }),
   constraints: z
     .strictObject({
+      targetVersion: z.enum(['auto', '纠偏', '月初', '滚动']).optional(),
       safetyDays: list(z.strictObject({ base: text, days: quantity.nullable() })),
+      turnoverDays: list(
+        z.strictObject({ base: text, code: text, days: quantity.nullable() }),
+      ).optional(),
       rules: z.strictObject({
+        history: list(
+          z.strictObject({ at: z.iso.datetime(), ruleId: text, description: text, action: text }),
+        ).optional(),
         local: list(
-          z.strictObject({ description: text, target: text, strength: text, until: text }),
+          z.strictObject({
+            description: text,
+            target: text,
+            strength: text,
+            until: text,
+            id: text.optional(),
+            category: text.optional(),
+            source: text.optional(),
+            base: text.optional(),
+            code: text.optional(),
+            productCategory: text.optional(),
+            observations: list(
+              z.strictObject({ month, value: numeric.nullable(), source: text }),
+            ).optional(),
+            from: text.optional(),
+            enabled: z.boolean().optional(),
+            accepted: z.boolean().optional(),
+            effect: z
+              .discriminatedUnion('kind', [
+                z.strictObject({ kind: z.literal('resource-unavailable'), resourceId: text }),
+                z.strictObject({ kind: z.literal('self-only') }),
+                ...(
+                  [
+                    'inventory-days',
+                    'production-days',
+                    'transfer-limit',
+                    'cost-limit',
+                    'lead-days',
+                  ] as const
+                ).map((kind) =>
+                  z.strictObject({ kind: z.literal(kind), value: quantity.nullable() }),
+                ),
+              ])
+              .optional(),
+          }),
         ),
       }),
     })

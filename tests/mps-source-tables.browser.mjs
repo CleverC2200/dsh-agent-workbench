@@ -98,7 +98,7 @@ test('one forecast batch drives two selectable target months and delivery source
   await expect(forecast).toContainText('数量合计13（单位待确认）');
   await forecast.getByRole('button', { name: '基地 1', exact: true }).click();
   const preview = frame.getByRole('dialog');
-  await expect(preview.locator('th')).toHaveText(['名称', '数量合计']);
+  await expect(preview.locator('th')).toHaveText(['名称', '数量合计（单位待确认）']);
   await expect(preview.locator('tbody tr').first().locator('td').nth(1)).toHaveText('13');
   await expect(preview).not.toContainText('公式');
   await preview.getByRole('button', { name: '关闭弹窗' }).click();
@@ -109,15 +109,23 @@ test('one forecast batch drives two selectable target months and delivery source
     csv,
     /预测批次,源批次月份,源当月预测数量,源下一月预测数量,源记录数,缺项原因,读取状态/,
   );
-  assert(csv.includes('2026-12,2026/12,0,12.5,1,物料组未匹配主数据，分类留空,ready'));
+  assert(csv.includes('2026-12,2026/12,0,12.5,1,物料编码未匹配当前产品明细，分类留空,ready'));
   await expect
     .poll(() => contexts.at(-1)?.parts?.check?.sourceSummaries?.forecast?.missingReasons)
-    .toContain('物料组未匹配主数据，分类留空');
-  assert(csv.includes('2027-01,基地甲,001,产品甲,,,12.5,2026-12,2026/12,0,12.5,1,'));
+    .toContain('物料编码未匹配当前产品明细，分类留空');
+  const [headers, ...records] = csv
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.split(','));
+  const next = records.find((record) => record[headers.indexOf('月份')] === '2027-01');
+  assert(next);
+  assert.equal(next[headers.indexOf('产品编码')], '001');
+  assert.equal(next[headers.indexOf('数量')], '12.5');
+  assert.equal(next[headers.indexOf('预测批次')], '2026-12');
   const allDownload = page.waitForEvent('download');
   await forecast.getByRole('button', { name: '导出全部已读明细', exact: true }).click();
   const allCsv = await mpsDownloadText(await (await allDownload).path());
-  assert(allCsv.includes('物料组未匹配主数据，分类留空'));
+  assert(allCsv.includes('物料编码未匹配当前产品明细，分类留空'));
   assert(allCsv.includes('2026-12,基地甲,001'));
   assert(allCsv.includes('2027-01,基地甲,001'));
   const delivery = frame.getByRole('region', {
@@ -190,7 +198,7 @@ test('all group forecast pages are loaded, grouped source counts retain valid qu
   await expect(forecast.getByText('业务来源', { exact: true })).toBeVisible();
   await forecast.getByText('口径与统计说明', { exact: true }).click();
   await expect(forecast).toContainText('当前期间201条，数量合计201（单位待确认），缺失数量0条');
-  assert(calls.some((c) => c.queryId === 'forecast.detail' && c.parameters.offset === 200));
+  assert(calls.some((c) => c.queryId === 'forecast.detail' && c.parameters.page_size === 5000));
   deny = true;
   await forecast.getByRole('button', { name: '同步', exact: true }).click();
   await expect(forecast.getByRole('alert')).toContainText('当前账号暂无数据权限');

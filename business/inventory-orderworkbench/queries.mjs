@@ -1,8 +1,36 @@
-import { changesSql, customersSql, ordersSql, ontimeSql } from './document-queries.mjs';
+import {
+  changesSql,
+  cancellationChangesSql,
+  amendmentChangesSql,
+  customersSql,
+  ordersSql,
+  ontimeSql,
+  ontimeAgentSummarySql,
+  ontimeAgentDetailsSql,
+} from './document-queries.mjs';
+import { ontimeMetricContract } from './ontime-queries.mjs';
+import { workbenchBaseSql } from './base-scope.mjs';
+import { cancellationPartitionSql } from './cancellation-partitions.mjs';
+import {
+  amendmentMetricContract,
+  amendmentShipmentSql,
+  skuAmendmentEventsSql,
+} from './sku-amendments.mjs';
+import { missingPlanPolicySql, selectedPlanSql } from './plan-policy.mjs';
+// Filter native date columns before UNION coerces the mixed date types to text.
+// Keep native datetime predicates available to Doris during the owner joins.
 const attributionSources = `SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_d
+          WHERE header_addtime>=:gea_p1 AND header_addtime<:gea_p2
+        UNION ALL SELECT d.belong_base,d.material_code,d.director,d.product_item,shipment.shipped_at AS attribution_date
+          FROM agents_scm_execute_detail_d d INNER JOIN (${amendmentShipmentSql}) shipment
+            ON shipment.executeorderno=d.executeorderno AND shipment.cust_code=d.cust_code
+          WHERE shipment.shipped_at>=:gea_p1 AND shipment.shipped_at<:gea_p2
         UNION ALL SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_hourly_d
+          WHERE header_addtime>=:gea_p1 AND header_addtime<:gea_p2
         UNION ALL SELECT belong_base,material_code,NULL AS director,product_item,the_date AS attribution_date FROM agents_scm_stock_detail_d
-        UNION ALL SELECT belong_base,new_material_code AS material_code,NULL AS director,pinxiang AS product_item,fromorderno_month AS attribution_date FROM agents_order_execute_isontime_mi`;
+          WHERE the_date>=:gea_p1 AND the_date<:gea_p2
+        UNION ALL SELECT belong_base,new_material_code AS material_code,NULL AS director,pinxiang AS product_item,fromorderno_month AS attribution_date FROM agents_order_execute_isontime_mi
+          WHERE fromorderno_month>=:gea_p1 AND fromorderno_month<:gea_p2`;
 
 // Field formulas confirmed in the shared metric register, 2026-10-23.
 const dictionary = `SELECT material_code AS sku,
@@ -14,50 +42,117 @@ const dictionary = `SELECT material_code AS sku,
 // The second arm retains inventory-only keys; it never drops unmatched national contributions.
 const stockProjection = `SELECT COALESCE(s.belong_base,b.belong_base) AS base,COALESCE(s.material_code,b.material_code) AS sku,
       d.category,COALESCE(s.item,b.item) AS item,COALESCE(s.name,b.name) AS name,
-      COALESCE(b.stock_date,s.stock_date) AS stock_date,s.source_rows,b.available,b.inventory,b.aged,s.sales_plan,s.transfer_plan,
+      COALESCE(b.stock_date,s.stock_date) AS stock_date,s.plan_month_offset,s.source_rows,b.available,b.inventory,b.aged,s.sales_plan,s.transfer_plan,
       NULL AS daily_demand,
       b.inventory AS national_inventory,s.sales_plan AS national_sales_plan,
       CASE WHEN b.stock_date IS NOT NULL THEN 1 ELSE 0 END AS national_stock_records,
       CASE WHEN s.source_rows IS NOT NULL THEN 1 ELSE 0 END AS national_plan_records,
       COALESCE(b.invalid,0) AS national_stock_invalid,
       CASE WHEN s.source_rows>1 THEN 1 ELSE COALESCE(s.sales_invalid,0) END AS national_plan_invalid,
-      CASE WHEN b.inventory IS NULL OR b.invalid>0 OR s.source_rows IS NULL THEN 1 ELSE 0 END AS invalid
+      s.transfer_plan AS base_transfer_plan,
+      CASE WHEN s.source_rows>1 THEN 1 ELSE COALESCE(s.sales_invalid,0)+COALESCE(s.transfer_invalid,0) END AS base_plan_invalid,
+      CASE WHEN b.inventory IS NULL OR b.invalid>0 OR s.source_rows IS NULL OR s.sales_invalid>0 OR s.transfer_invalid>0 THEN 1 ELSE 0 END AS invalid
 `;
+// Both plans use the inventory business day, including historical reports.
+// Zero is valid; never fall back when the selected version is missing.
+const salesPlan = selectedPlanSql(
+  'main_sales_plan_v1',
+  'main_sales_plan_adj',
+  'roll_sales_plan',
+  'next_month_sales_plan',
+);
+const transferPlan = selectedPlanSql(
+  'transfer_out_plan_v1',
+  'transfer_out_plan_adj',
+  'transfer_out_plan_roll',
+  'next_month_out_plan',
+);
 const stockPlans = `SELECT belong_base,material_code,MAX(product_item) AS item,MAX(material_name) AS name,
         COUNT(*) AS source_rows,CAST(MAX(the_date) AS CHAR) AS stock_date,
-        SUM(CASE WHEN (CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END) IS NULL
-          OR (CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END)<0 THEN 1 ELSE 0 END) AS sales_invalid,
-        SUM(CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END) AS sales_plan,
-        SUM(CASE WHEN transfer_out_plan_adj>0 THEN transfer_out_plan_adj ELSE transfer_out_plan_v1 END) AS transfer_plan
-        FROM agents_scm_stock_detail_d
+        MAX(${selectedPlanSql('0', '0', '1', '1')}) AS plan_month_offset,
+        SUM(CASE WHEN (${salesPlan}) IS NULL OR (${salesPlan})<0 THEN 1 ELSE 0 END) AS sales_invalid,
+        SUM(CASE WHEN (${transferPlan}) IS NULL OR (${transferPlan})<0 THEN 1 ELSE 0 END) AS transfer_invalid,
+        SUM(${salesPlan}) AS sales_plan,
+        SUM(${transferPlan}) AS transfer_plan
+        FROM agents_scm_stock_detail_d CROSS JOIN (${missingPlanPolicySql}) plan_policy
         WHERE the_date=(SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2)
         GROUP BY belong_base,material_code`;
+// Keep the published production/sales SKU population for both stock quantities.
+// The existing period assembler reuses this snapshot projection, not a batch join.
 const stockBatches = `SELECT belong_base,material_code,MAX(material_name) AS name,NULL AS item,
         CONCAT(SUBSTRING(MAX(month_date),1,4),'-',SUBSTRING(MAX(month_date),5,2),'-',SUBSTRING(MAX(month_date),7,2)) AS stock_date,
-        SUM(available_qty) AS available,SUM(live_qty) AS inventory,
-        NULL AS aged,SUM(CASE WHEN live_qty IS NULL THEN 1 ELSE 0 END) AS invalid
-        FROM agents_scm_inventory_sku_data_d
-        WHERE warehouse_classify IN ('01','02') AND warehouse_classify_name IN ('工厂成品仓','工厂外租库')
-          AND month_date=REPLACE(CAST((SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2) AS CHAR),'-','')
+        CASE WHEN COUNT(*)=1 THEN MAX(available_qty) END AS available,
+        CASE WHEN COUNT(*)=1 THEN MAX(live_qty) END AS inventory,
+        CASE WHEN COUNT(*)=1 THEN MAX(aged_qty) END AS aged,
+        CASE WHEN COUNT(*)<>1 OR COUNT(live_qty)<>COUNT(*) THEN 1 ELSE 0 END AS invalid
+        FROM (SELECT belong_base,material_code,material_name,
+          REPLACE(CAST(the_date AS CHAR),'-','') AS month_date,
+          available_stock AS available_qty,current_stock AS live_qty,current_stock_60 AS aged_qty
+          FROM agents_scm_stock_detail_d) production_sales
+        WHERE month_date=REPLACE(CAST((SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2) AS CHAR),'-','')
         GROUP BY belong_base,material_code`;
-const stockJoin = (inventoryOnly = false) =>
+const stockJoin = (inventoryOnly = false, scoped = false) =>
   stockProjection +
   (inventoryOnly
     ? ` FROM stock_batches b LEFT JOIN stock_plans s`
     : ` FROM stock_plans s LEFT JOIN stock_batches b`) +
-  ` ON b.belong_base=s.belong_base AND b.material_code=s.material_code
+  ` ON (b.belong_base=s.belong_base OR (b.belong_base IS NULL AND s.belong_base IS NULL)) AND b.material_code=s.material_code
       LEFT JOIN stock_dictionary d ON d.sku=COALESCE(s.material_code,b.material_code)` +
-  (inventoryOnly ? ' WHERE s.source_rows IS NULL' : '');
+  (scoped
+    ? ` WHERE (:gea_p900='' OR ${workbenchBaseSql('COALESCE(s.belong_base,b.belong_base)')}=:gea_p900)` +
+      (inventoryOnly ? ' AND s.source_rows IS NULL' : '')
+    : inventoryOnly
+      ? ' WHERE s.source_rows IS NULL'
+      : '');
 
-// Gateway logical resources must map to hive.dw.dwd_scm_material_age_his and
-// hive.dw.dim_bas_warehouse; qualified physical names are rejected by the gateway.
-// The age read view deduplicates complete source records before projecting its
-// six fields; DISTINCT here would incorrectly merge different stock batches.
-const ageWarehouses = `SELECT DISTINCT warehouse_id FROM dim_bas_warehouse
-  WHERE warehouse_classify IN ('01','02')
-    AND warehouse_classify_name IN ('工厂成品仓','工厂外租库')`;
+const ageBase = workbenchBaseSql('b.belong_base');
 
 export const workbenchQueries = {
+  'ontime.agent.summary': {
+    scoped: true,
+    metricContract: ontimeMetricContract,
+    columns: ['numerator', 'denominator', 'known', 'pending', 'late'],
+    sql: ontimeAgentSummarySql,
+  },
+  'ontime.agent.details': {
+    scoped: true,
+    metricContract: ontimeMetricContract,
+    keys: ['order_no'],
+    columns: ['order_no', 'customer', 'arrival_date', 'ontime', 'invalid'],
+    sql: ontimeAgentDetailsSql,
+  },
+  'amendment.summary': {
+    scoped: true,
+    metricContract: amendmentMetricContract,
+    columns: ['numerator', 'denominator', 'records', 'invalid'],
+    sql: `SELECT CASE WHEN SUM(invalid_change)=0 THEN SUM(change_numerator) END AS numerator,
+      CASE WHEN SUM(invalid_denominator)=0 THEN SUM(change_denominator) END AS denominator,
+      COUNT(*) AS records,SUM(invalid_change) AS invalid
+      FROM (${skuAmendmentEventsSql()}) approved_events`,
+  },
+  'amendment.details': {
+    scoped: true,
+    metricContract: amendmentMetricContract,
+    keys: ['executeorderno', 'cust_code', 'material_code', 'effective_qty', 'change_order_qty'],
+    columns: [
+      'executeorderno',
+      'cust_order_no',
+      'cust_code',
+      'cust_name',
+      'material_code',
+      'header_addtime',
+      'shipped_at',
+      'pickup_point',
+      'change_order_qty',
+      'dms_last_update_qty',
+      'need_qty_origin',
+      'effective_qty',
+      'changed_quantity',
+    ],
+    sql: `SELECT executeorderno,cust_order_no,cust_code,cust_name,material_code,header_addtime,shipped_at,pickup_point,change_order_qty,dms_last_update_qty,need_qty_origin,effective_qty,
+      CASE WHEN requested_qty>=0 THEN ABS(requested_qty-effective_qty) ELSE 0 END AS changed_quantity
+      FROM (${skuAmendmentEventsSql({ stage: 'lines' })}) approved_lines`,
+  },
   orders: {
     keys: ['base', 'category', 'item', 'sku'],
     columns: [
@@ -100,6 +195,7 @@ export const workbenchQueries = {
       'sample_numerator',
       'sample_denominator',
       'sample_records',
+      'unknown_quantity',
     ],
     sql: changesSql,
     scoped: true,
@@ -115,6 +211,7 @@ export const workbenchQueries = {
       'denominator',
       'records',
       'invalid',
+      'unknown_quantity',
     ],
     sql: customersSql,
     scoped: true,
@@ -128,6 +225,7 @@ export const workbenchQueries = {
       'item',
       'name',
       'stock_date',
+      'plan_month_offset',
       'source_rows',
       'available',
       'inventory',
@@ -142,6 +240,8 @@ export const workbenchQueries = {
       'national_plan_records',
       'national_stock_invalid',
       'national_plan_invalid',
+      'base_transfer_plan',
+      'base_plan_invalid',
     ],
     sql:
       `WITH stock_plans AS (${stockPlans}), stock_batches AS (${stockBatches}),
@@ -153,9 +253,10 @@ export const workbenchQueries = {
   ageDate: {
     scoped: true,
     columns: ['day'],
-    sql: `SELECT MAX(b.dt) AS day FROM dwd_scm_material_age_his b
-      INNER JOIN (${ageWarehouses}) w ON w.warehouse_id=b.warehouseid
-      WHERE (:gea_p900='' OR b.belong_base=:gea_p900) AND b.dt>=:gea_p1 AND b.dt<:gea_p2`,
+    sql: `SELECT REPLACE(CAST(MAX(b.the_date) AS CHAR),'-','') AS day FROM agents_scm_stock_detail_d b
+      WHERE (:gea_p900='' OR ${ageBase}=:gea_p900)
+        AND REPLACE(CAST(b.the_date AS CHAR),'-','')>=:gea_p1
+        AND REPLACE(CAST(b.the_date AS CHAR),'-','')<:gea_p2`,
   },
   ages: {
     scoped: true,
@@ -172,15 +273,18 @@ export const workbenchQueries = {
       'excluded',
       'invalid',
     ],
-    sql: `SELECT b.belong_base AS base,b.material_code AS sku,MAX(d.category) AS category,
+    sql: `SELECT ${ageBase} AS base,b.material_code AS sku,MAX(d.category) AS category,
         CASE WHEN MAX(s.names)>1 THEN NULL ELSE COALESCE(MAX(s.item),MAX(m.item)) END AS item,
       MAX(b.dt) AS snapshot_date,
       SUM(b.inv_qty) AS stock_qty,
-      SUM(CASE WHEN b.age_days>=60 THEN b.inv_qty ELSE 0 END) AS aged_qty,
+      SUM(b.current_stock_60) AS aged_qty,
       COUNT(*) AS records,SUM(CASE WHEN b.inv_qty=0 THEN 1 ELSE 0 END) AS excluded,
-      SUM(CASE WHEN b.inv_qty IS NULL OR (b.inv_qty<>0 AND (b.age_days IS NULL OR b.age_days<0)) THEN 1 ELSE 0 END) AS invalid
-      FROM dwd_scm_material_age_his b
-      INNER JOIN (${ageWarehouses}) w ON w.warehouse_id=b.warehouseid
+      SUM(b.source_invalid) AS invalid
+      FROM (SELECT belong_base,material_code,REPLACE(CAST(the_date AS CHAR),'-','') AS dt,
+        CASE WHEN COUNT(*)=1 THEN MAX(current_stock) END AS inv_qty,
+        CASE WHEN COUNT(*)=1 THEN MAX(current_stock_60) END AS current_stock_60,
+        CASE WHEN COUNT(*)<>1 OR COUNT(current_stock)<>COUNT(*) OR COUNT(current_stock_60)<>COUNT(*) THEN 1 ELSE 0 END AS source_invalid
+        FROM agents_scm_stock_detail_d GROUP BY belong_base,material_code,the_date) b
       LEFT JOIN (${dictionary}) d ON d.sku=b.material_code
       LEFT JOIN (SELECT material_code AS sku,
         COUNT(DISTINCT NULLIF(TRIM(product_item),'')) AS names,
@@ -190,13 +294,28 @@ export const workbenchQueries = {
         CASE WHEN COUNT(DISTINCT NULLIF(TRIM(pinxiang),''))=1 THEN MAX(NULLIF(TRIM(pinxiang),'')) END AS item
         FROM agents_order_execute_isontime_mi WHERE fromorderno_month>=:gea_p5 AND fromorderno_month<:gea_p6
         GROUP BY new_material_code) m ON m.sku=b.material_code
-      WHERE (:gea_p900='' OR b.belong_base=:gea_p900) AND b.dt=:gea_p1
-      GROUP BY b.belong_base,b.material_code`,
+      WHERE (:gea_p900='' OR ${ageBase}=:gea_p900) AND b.dt=:gea_p1
+      GROUP BY ${ageBase},b.material_code`,
     omitEnd: true,
     extra: {
-      gea_p4: { name: 'snapshot', type: 'string', required: true, format: 'YYYY-MM-DD' },
-      gea_p5: { name: 'mapping_start', type: 'string', required: true, format: 'YYYY-MM-DD' },
-      gea_p6: { name: 'mapping_end', type: 'string', required: true, format: 'YYYY-MM-DD' },
+      gea_p4: {
+        name: 'snapshot',
+        type: 'string',
+        required: true,
+        format: 'YYYY-MM-DD',
+      },
+      gea_p5: {
+        name: 'mapping_start',
+        type: 'string',
+        required: true,
+        format: 'YYYY-MM-DD',
+      },
+      gea_p6: {
+        name: 'mapping_end',
+        type: 'string',
+        required: true,
+        format: 'YYYY-MM-DD',
+      },
     },
   },
   directors: {
@@ -260,7 +379,27 @@ export const workbenchQueries = {
 };
 
 export function addWorkbenchQueries(config) {
-  for (const [name, original] of Object.entries(workbenchQueries)) {
+  const definitions = {
+    ...workbenchQueries,
+    'changes.cancellation': {
+      ...workbenchQueries.changes,
+      sql: cancellationChangesSql,
+    },
+    'changes.amendment': {
+      ...workbenchQueries.changes,
+      sql: amendmentChangesSql,
+    },
+    ...Object.fromEntries(
+      [0, 1].map((partition) => [
+        'changes.cancellation.partition' + partition,
+        {
+          ...workbenchQueries.changes,
+          sql: cancellationPartitionSql(cancellationChangesSql, partition),
+        },
+      ]),
+    ),
+  };
+  for (const [name, original] of Object.entries(definitions)) {
     const definition = { ...original };
     const alias =
       name === 'stock'
@@ -270,13 +409,25 @@ export function addWorkbenchQueries(config) {
           : ['directors', 'items'].includes(name)
             ? 'd.'
             : '';
-    if (!definition.scoped)
+    if (name === 'stock')
+      definition.sql = definition.sql
+        .replace(stockJoin(), stockJoin(false, true))
+        .replace(stockJoin(true), stockJoin(true, true));
+    else if (!definition.scoped)
       definition.sql = definition.sql.replace(
-        name === 'stock' ? 'WHERE s.the_date=' : 'WHERE ',
+        name === 'stock'
+          ? 'WHERE s.the_date='
+          : ['directors', 'items'].includes(name)
+            ? 'WHERE NULLIF(TRIM(d.'
+            : 'WHERE ',
         "WHERE (:gea_p900 = '' OR " +
           alias +
           'belong_base = :gea_p900) AND ' +
-          (name === 'stock' ? 's.the_date=' : ''),
+          (name === 'stock'
+            ? 's.the_date='
+            : ['directors', 'items'].includes(name)
+              ? 'NULLIF(TRIM(d.'
+              : ''),
       );
     const id = 'workbench.' + name.toLowerCase();
     const parameterSpec = {
@@ -284,10 +435,13 @@ export function addWorkbenchQueries(config) {
       gea_p1: { name: 'start', type: 'string', required: true },
       ...(definition.omitEnd
         ? {}
-        : { gea_p2: { name: 'end_exclusive', type: 'string', required: true } }),
+        : {
+            gea_p2: { name: 'end_exclusive', type: 'string', required: true },
+          }),
       ...definition.extra,
     };
     const make = (sql, spec, columns) => ({
+      ...(definition.metricContract ? { metricContract: definition.metricContract } : {}),
       title: '订单工作台：' + name,
       parameterSpec: spec,
       request: {
@@ -309,8 +463,19 @@ export function addWorkbenchQueries(config) {
     );
     const pageSpec = {
       ...parameterSpec,
-      gea_p1001: { name: 'page_size', type: 'integer', required: true, minimum: 1, maximum: 200 },
-      gea_p1002: { name: 'offset', type: 'integer', required: true, minimum: 0 },
+      gea_p1001: {
+        name: 'page_size',
+        type: 'integer',
+        required: true,
+        minimum: 1,
+        maximum: 200,
+      },
+      gea_p1002: {
+        name: 'offset',
+        type: 'integer',
+        required: true,
+        minimum: 0,
+      },
     };
     config.queries[id] = {
       ...make(
@@ -323,6 +488,24 @@ export function addWorkbenchQueries(config) {
       ),
       pagination: { countQuery: countId },
     };
+    if (/^changes\.cancellation\.partition[01]$/.test(name)) {
+      const initialId = id + '.initial';
+      config.queries[initialId] = make(
+        config.queries[id].request.sql,
+        pageSpec,
+        definition.columns,
+      );
+      config.queries[id].pagination.initialQuery = initialId;
+    }
   }
   return config;
 }
+
+export const workbenchQueryParts = {
+  attributionSources,
+  dictionary,
+  stockPlans,
+  stockBatches,
+  stockJoin,
+  ageBase,
+};

@@ -92,6 +92,38 @@ test('registered package HTML is discoverable and readable without business iden
   assert.equal(response.status, 200);
   assert.match(await response.text(), /<button>Original interaction<\/button>/);
   assert.match(response.headers.get('content-security-policy'), /connect-src 'none'/);
+  assert.match(response.headers.get('content-security-policy'), /worker-src 'none'/);
+});
+
+test('local computation workers require an explicit v2 declaration and retain network isolation', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'workbench-worker-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const manifest = { schemaVersion: 1, id: 'worker-test', name: 'Worker', html: 'index.html' };
+  await writeFile(join(root, 'index.html'), '<html><body>Worker</body></html>');
+  for (const gea of [
+    { localComputeWorker: true },
+    { contract: 'gea-html-v2', localComputeWorker: 'true' },
+  ]) {
+    await writeFile(join(root, 'plugin.json'), JSON.stringify({ ...manifest, gea }));
+    await assert.rejects(
+      new HtmlPages(context(t), '', async () => '').registerHtml([root]),
+      /INVALID_HTML_COMPUTE_WORKER/,
+    );
+  }
+  await writeFile(
+    join(root, 'plugin.json'),
+    JSON.stringify({ ...manifest, gea: { contract: 'gea-html-v2', localComputeWorker: true } }),
+  );
+  const pages = new HtmlPages(context(t), '', async () => '');
+  await pages.registerHtml([root]);
+  const response = await pages.fetch(
+    new Request('https://localhost/api/agent-workbench/html?id=worker-test'),
+  );
+  const policy = response.headers.get('content-security-policy');
+  assert.match(policy, /worker-src blob:/);
+  assert.match(policy, /connect-src 'none'/);
+  assert.match(policy, /default-src 'none'/);
+  assert.match(policy, /frame-src 'none'/);
 });
 
 test('package HTML symlinks escaping the registered root are rejected', async (t) => {

@@ -407,6 +407,9 @@ test(
       .poll(() => page.evaluate(() => window.identity?.getSnapshot().state))
       .toBe('unknown');
     await page.clock.runFor(5500);
+    await expect(page.locator('[data-identity-error]')).toHaveCount(0);
+    await expect(page.locator('[data-navigation-code]')).toHaveCount(0);
+    await page.clock.runFor(15000);
     await expect(page.locator('[data-identity-error]')).toHaveCount(1);
     assert.equal(polls, 0);
     identityAvailable = true;

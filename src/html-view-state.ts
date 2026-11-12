@@ -314,6 +314,10 @@ export type ApsViewState = {
   selectedBase?: string;
   baseTab?: string;
   search?: string;
+  boardDateMode?: 'latest' | 'manual';
+  intelligentYearKey?: string;
+  intelligentMonthKey?: string;
+  intelligentDay?: number;
   selectedYearKey?: string;
   selectedMonthKey?: string;
   selectedWeekKey?: string;
@@ -521,6 +525,10 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
           selectedBase: text,
           baseTab: text,
           search: text,
+          boardDateMode: (v) => v === 'latest' || v === 'manual',
+          intelligentYearKey: (v) => text(v) && /^20\d{2}$/.test(v as string),
+          intelligentMonthKey: (v) => text(v) && /^(0[1-9]|1[0-2])$/.test(v as string),
+          intelligentDay: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 31,
           selectedYearKey: (v) => text(v) && /^20\d{2}$/.test(v as string),
           selectedMonthKey: (v) => text(v) && /^(0[1-9]|1[0-2])$/.test(v as string),
           selectedWeekKey: text,

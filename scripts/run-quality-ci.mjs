@@ -293,6 +293,7 @@ try {
       'tests/agent-authored-layout.browser.mjs',
       'tests/html-view-restoration.browser.mjs',
       'tests/agent-page-return.browser.mjs',
+      'tests/fc-summary-stability.browser.mjs',
     ].some((file) => plan.files.includes(file));
     const leaf = resolve('business/inventory-fc/source/inventory-light-plugins');
     if (

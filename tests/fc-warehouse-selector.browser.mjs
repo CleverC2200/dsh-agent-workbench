@@ -1,3 +1,4 @@
+import { directSourceFixture } from './fixtures/configured-page.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
@@ -6,6 +7,17 @@ import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
 const bundle = await build({
+  plugins: [
+    {
+      name: 'direct-source-interaction-fixture',
+      setup(builder) {
+        builder.onLoad({ filter: /inventory-fc[\\/]sql\.config\.json$/ }, () => ({
+          contents: JSON.stringify(directSourceFixture(config)),
+          loader: 'json',
+        }));
+      },
+    },
+  ],
   stdin: {
     contents: `import './business/inventory-fc/source/inventory-light-plugins/src/dsh-ui/base.css';import React from 'react';import{createRoot}from'react-dom/client';import{configuredQueryFreshAfter}from'./business/shared/query-cache';window.queryFreshAfter=configuredQueryFreshAfter;import Page from './business/inventory-fc/source/inventory-light-plugins/src/pages/configured-workbench.tsx';createRoot(document.getElementById('app')).render(React.createElement(Page));`,
     resolveDir: process.cwd(),
@@ -22,6 +34,123 @@ const bundle = await build({
 });
 const js = bundle.outputFiles.find((f) => f.path.endsWith('.js')).text;
 const css = bundle.outputFiles.find((f) => f.path.endsWith('.css'))?.text ?? '';
+test('confirmation keeps the replenishment list order and quantities for the same warehouse and SKU', async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const source = [
+    { sku: '10000298', recommended_qty: 2 },
+    { sku: '10006711', recommended_qty: 70 },
+    { sku: '10006712', recommended_qty: 80 },
+  ];
+  await page.route('http://127.0.0.1:19495/**', async (route) => {
+    if (route.request().method() !== 'POST')
+      return route.fulfill({
+        contentType: 'text/html',
+        body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
+      });
+    const { queryId: id, parameters: values } = route.request().postDataJSON();
+    const q = config.queries[id];
+    assert.ok(q, id);
+    let rows = [];
+    if (id === 'branch-warehouse.directory.count') rows = [{ total: 1 }];
+    else if (id === 'branch-warehouse.directory')
+      rows = [{ warehouse_code: 'A110', warehouse_name: '沈阳分仓', base: '郑州' }];
+    else if (id.startsWith('source.')) rows = [{ day: '2026-11-04' }];
+    else if (
+      ['replenishment.detail.atomic', 'replenishment-confirmation.detail.atomic'].includes(id)
+    ) {
+      const ordered = [...source].sort((a, b) =>
+        values.sort_field === 'recommended_qty'
+          ? (values.sort_direction === 'desc' ? -1 : 1) * (a.recommended_qty - b.recommended_qty)
+          : a.sku.localeCompare(b.sku),
+      );
+      rows = ordered.map((row) => ({
+        ...Object.fromEntries(q.resultColumns.map((key) => [key, null])),
+        ...row,
+        warehouse_code: 'A110',
+        warehouse_name: '沈阳分仓',
+        material_name: `测试商品${row.sku}`,
+        page_scope_total: source.length,
+        page_row_present: 1,
+      }));
+    } else if (id.endsWith('.count') || id.endsWith('_count')) rows = [{ total: 0 }];
+    else if (!['summary.snapshot', 'summary.bootstrap'].includes(id))
+      rows = [Object.fromEntries(q.resultColumns.map((key) => [key, 0]))];
+    return route.fulfill({
+      json: {
+        rows,
+        configVersion: 'fixture',
+        returnedColumns: q.resultColumns,
+        rejectedColumns: [],
+      },
+    });
+  });
+  await page.goto('http://127.0.0.1:19495/');
+  await expect(page.getByRole('button', { name: '有业务', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: '有业务', exact: true })).toHaveCount(1);
+  await page.getByRole('button', { name: '选择分仓', exact: true }).click();
+  await page.locator('[role=option][data-value="A110"]').click();
+  await page.getByRole('checkbox', { name: '需补货', exact: true }).check();
+  const list = page.locator('table.replenishment-table');
+  await expect(list.getByRole('spinbutton').first()).toHaveValue('80');
+  await expect
+    .poll(() =>
+      list
+        .locator('thead th')
+        .evaluateAll((headers) => headers.slice(0, 7).map((header) => header.dataset.field)),
+    )
+    .toEqual([
+      'sku',
+      'material_name',
+      'inventory_qty',
+      'available_qty',
+      'occupied_qty',
+      'missing_preparingQty',
+      'open_transfer_reported_qty',
+    ]);
+  await expect(list.getByRole('spinbutton')).toHaveCount(source.length);
+  await expect(list.getByRole('spinbutton').first()).toHaveValue('80');
+  const listQuantities = () =>
+    list
+      .getByRole('spinbutton')
+      .evaluateAll((inputs) =>
+        inputs.map((input) => [input.getAttribute('aria-label'), input.value]),
+      );
+  const before = await listQuantities();
+  await page.getByRole('button', { name: '提交', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '确认补货订单', exact: true });
+  await expect(dialog.getByRole('spinbutton')).toHaveCount(3);
+  const confirmed = await dialog
+    .getByRole('spinbutton')
+    .evaluateAll((inputs) =>
+      inputs.map((input) => [input.getAttribute('aria-label'), input.value]),
+    );
+  assert.deepEqual(confirmed, before, 'opening confirmation must preserve row order and quantity');
+  await expect(dialog.getByRole('columnheader', { name: 'SKU 名称', exact: true })).toBeVisible();
+  await expect(dialog.locator('tbody > tr').first().locator('td').first()).toHaveText('10006712');
+  await expect(dialog.locator('tbody > tr').first()).toContainText('测试商品10006712');
+  for (const width of [640, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = await dialog.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
+  }
+  const reasonWidth = await dialog
+    .getByRole('textbox', { name: '10006712调整原因' })
+    .evaluate((input) => input.getBoundingClientRect().width);
+  assert.ok(reasonWidth <= 108, 'reason input stays compact');
+  await page.screenshot({ path: '/tmp/fc-confirmation-compact-desktop.png' });
+  await dialog.getByRole('textbox', { name: '10006712调整原因' }).fill('手工调整');
+  await dialog.getByRole('spinbutton', { name: '10006712实际补货量' }).fill('95');
+  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(list.getByRole('spinbutton', { name: '10006712实际补货量' })).toHaveValue('95');
+  await page.getByRole('button', { name: '提交', exact: true }).click();
+  await expect(dialog.getByRole('spinbutton', { name: '10006712实际补货量' })).toHaveValue('95');
+  await expect(dialog.getByRole('textbox', { name: '10006712调整原因' })).toHaveValue('手工调整');
+  assert.deepEqual(errors, []);
+});
 test('FC warehouse selector scopes cards, tabs and reset; returning to all does not force cache invalidation', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
@@ -38,7 +167,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -48,7 +177,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
         },
       });
     calls.push({ id, values });
-    if (id === 'replenishment.detail.atomic' && values.page_size === 200)
+    if (id === 'replenishment-confirmation.detail.atomic' && values.page_size === 200)
       await new Promise((resolve) => {
         releaseConfirmation = resolve;
       });
@@ -165,7 +294,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     .filter({ hasText: '待补货量' });
   await expect(replenishmentCard).toContainText('70');
   await expect(replenishmentCard).toContainText('110.36万件');
-  await expect(replenishmentCard).toContainText('已测算部分；2 项待核实');
+  await expect(replenishmentCard).not.toContainText('已忽略');
+  await expect(replenishmentCard).toHaveAttribute('title', /已忽略 2 项异常或缺失记录/);
   const toolbar = page.locator('form[data-business-filters="fc"]');
   for (const width of [1280, 900, 640]) {
     await page.setViewportSize({ width, height: 900 });
@@ -182,7 +312,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     });
     assert.equal(layout.contained, true, `toolbar controls fit at ${width}px`);
     assert.equal(layout.usableFields, true, `filter inputs remain usable at ${width}px`);
-    if (width >= 900)
+    // The shared toolbar wraps at compact desktop widths while retaining usable controls.
+    if (width >= 1200)
       assert.equal(layout.sameLine, true, `toolbar stays on one line at ${width}px`);
   }
   await page.setViewportSize({ width: 900, height: 900 });
@@ -219,9 +350,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   assert.ok(!calls.some((c) => c.id === 'health.summary'));
   await expect(page.locator('[data-overview-cards="fc"] article').last()).toContainText('23');
   await expect
-    .poll(() =>
-      calls.some((c) => c.id === 'branch-supply.summary' && c.values.warehouse_code === 'A170'),
-    )
+    .poll(() => calls.some((c) => c.id === 'orders.summary' && c.values.warehouse_code === 'A170'))
     .toBe(true);
   await expect
     .poll(() =>
@@ -315,8 +444,9 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toHaveCount(0);
   await expect.poll(() => typeof releaseConfirmation).toBe('function');
   assert.equal(
-    calls.findLast((c) => c.id === 'replenishment.detail.atomic' && c.values.page_size === 200)
-      .values.warehouse_code,
+    calls.findLast(
+      (c) => c.id === 'replenishment-confirmation.detail.atomic' && c.values.page_size === 200,
+    ).values.warehouse_code,
     'N417',
   );
   assert.equal(
@@ -329,6 +459,27 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(confirmation).not.toContainText('正在读取补货清单');
   await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toBeDisabled();
   await expect(confirmation).toContainText('0个SKU');
+  await confirmation.screenshot({ path: '.scratch/fc-confirmation-style.png' });
+  const pageSizeWidth = await confirmation
+    .getByLabel('每页条数')
+    .evaluate((el) => el.getBoundingClientRect().width);
+  assert.ok(pageSizeWidth <= 100, `page-size control is oversized: ${pageSizeWidth}px`);
+  assert.equal(
+    await confirmation.getByLabel('导出补货分仓').evaluate((el) => getComputedStyle(el).appearance),
+    'base-select',
+  );
+  for (const width of [520, 900, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const pagination = confirmation.getByRole('navigation', { name: '操作预览分页' });
+    const bounds = await pagination.boundingBox();
+    assert.ok(
+      bounds.x >= 0 && bounds.x + bounds.width <= width,
+      'pagination stays inside narrow viewport',
+    );
+  }
+  await confirmation.getByLabel('导出补货分仓').click();
+  await page.screenshot({ path: '.scratch/fc-confirmation-picker.png' });
+  await page.keyboard.press('Escape');
   await confirmation.getByRole('button', { name: '取消', exact: true }).click();
   await expect(confirmation).toHaveCount(0);
   // A page left open overnight follows the current business day without a date picker.
@@ -353,10 +504,10 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   const orderPanel = page.getByRole('region', { name: '当前订单', exact: true });
   await expect(
-    orderPanel.getByRole('textbox', { name: '调拨单号或供货基地', exact: true }),
+    orderPanel.getByRole('textbox', { name: '客户订单号或下游客户', exact: true }),
   ).toHaveValue('');
   await orderPanel
-    .getByRole('textbox', { name: '调拨单号或供货基地', exact: true })
+    .getByRole('textbox', { name: '客户订单号或下游客户', exact: true })
     .fill('CE-SHARED');
   await page.getByRole('button', { name: '补货确认', exact: true }).click();
   const replenishmentPanel = page.getByRole('region', { name: '补货确认', exact: true });
@@ -365,11 +516,11 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   ).toHaveValue('CE-SHARED');
   await replenishmentPanel.getByRole('button', { name: '清空筛选', exact: true }).click();
   await replenishmentPanel.getByLabel('列设置', { exact: true }).click();
-  await replenishmentPanel.getByRole('checkbox', { name: '现库存', exact: true }).uncheck();
+  await replenishmentPanel.getByRole('checkbox', { name: '现存量', exact: true }).uncheck();
   await replenishmentPanel.getByRole('checkbox', { name: '冻结产品名称', exact: true }).check();
   await page.getByRole('button', { name: '货龄结构', exact: true }).click();
   await page.getByRole('button', { name: '补货确认', exact: true }).click();
-  await expect(replenishmentPanel.getByRole('columnheader', { name: /^现库存/ })).toHaveCount(0);
+  await expect(replenishmentPanel.getByRole('columnheader', { name: /^现存量/ })).toHaveCount(0);
   await replenishmentPanel.getByLabel('列设置', { exact: true }).click();
   await expect(
     replenishmentPanel.getByRole('checkbox', { name: '冻结产品名称', exact: true }),
@@ -401,7 +552,7 @@ test('FC aging exposes immediate risk filters, leading risk column and ten-row s
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -538,7 +689,7 @@ test('FC shows system plans before import and downloads every authorized row thr
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -621,7 +772,7 @@ test('FC shows system plans before import and downloads every authorized row thr
   assert.deepEqual(errors, []);
 });
 
-test('FC upstream transfer orders show supply bases, exact SKUs and preserve receiving branch scope', async (t) => {
+test('FC downstream customer orders show dealers, exact SKUs and preserve shipping branch scope', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -635,7 +786,7 @@ test('FC upstream transfer orders show supply bases, exact SKUs and preserve rec
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -718,12 +869,14 @@ test('FC upstream transfer orders show supply bases, exact SKUs and preserve rec
   const list = page.getByRole('region', { name: '当前订单', exact: true });
   await expect(list.getByText('遂平', { exact: true })).toBeVisible();
   await expect(list.locator('thead').first().locator('th')).toHaveText([
+    '',
     '订单号',
-    '供货基地',
+    '分仓',
+    '下游客户',
     '订单日期',
     'SKU个数',
     '需求量（件）',
-    '基地已占用（件）',
+    '分仓已占用（件）',
     '剩余需求量（件）',
     '缺货量（件）',
     '状态',
@@ -759,7 +912,9 @@ test('FC upstream transfer orders show supply bases, exact SKUs and preserve rec
   assert.equal(detailCall.values.order_no, 'CE2600000190');
   assert.equal(detailCall.values.customer_code, 'C1');
   assert.ok(!calls.some((call) => call.id === 'current-shortage.detail'));
-  await list.getByRole('textbox', { name: '调拨单号或供货基地', exact: true }).fill('CE2600000190');
+  await list
+    .getByRole('textbox', { name: '客户订单号或下游客户', exact: true })
+    .fill('CE2600000190');
   await list.getByRole('button', { name: '查询', exact: true }).click();
   await expect
     .poll(
@@ -792,7 +947,7 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -813,7 +968,9 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
     else if (id === 'branch-warehouse.directory')
       rows = [{ warehouse_code: 'N436', warehouse_name: '郑州DC仓', base: '郑州' }];
     else if (id.startsWith('source.')) rows = [{ day: '2026-10-29' }];
-    else if (id === 'replenishment.detail.atomic') {
+    else if (
+      ['replenishment.detail.atomic', 'replenishment-confirmation.detail.atomic'].includes(id)
+    ) {
       if (failPersistent)
         return route.fulfill({
           status: 503,
@@ -924,7 +1081,7 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
       () => requests.filter((r) => r.id === 'replenishment.detail.atomic').at(-1)?.values.list_mode,
     )
     .toBe('recommended');
-  await page.getByRole('button', { name: /现库存 ↕/ }).click();
+  await page.getByRole('button', { name: /现存量 ↕/ }).click();
   await expect
     .poll(
       () =>
@@ -932,8 +1089,8 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
     )
     .toBe('inventory_qty');
   await page.locator('summary[aria-label="列设置"]').click();
-  await expect(page.getByRole('checkbox', { name: '冻结现库存', exact: true })).toBeVisible();
-  await page.getByRole('checkbox', { name: '冻结现库存', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: '冻结现存量', exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: '冻结现存量', exact: true }).check();
   await page.locator('summary[aria-label="列设置"]').click();
   failPersistent = true;
   await page.getByRole('button', { name: '紧急 SKU', exact: true }).click();
@@ -958,6 +1115,18 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
   await confirmationQty.fill('25');
   await confirmationQty.press('Tab');
   await expect(confirmationQty).toHaveValue('25');
+  for (const width of [520, 900, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const pagination = confirmation.getByRole('navigation', { name: '操作预览分页' });
+    const bounds = await pagination.boundingBox();
+    assert.ok(
+      bounds.x >= 0 && bounds.x + bounds.width <= width,
+      'pagination stays inside narrow viewport',
+    );
+  }
+  await confirmation.getByLabel('导出补货分仓').click();
+  await page.screenshot({ path: '.scratch/fc-confirmation-picker.png' });
+  await page.keyboard.press('Escape');
   await confirmation.getByRole('button', { name: '取消', exact: true }).click();
   await expect(
     page.getByRole('spinbutton', { name: '10000034实际补货量', exact: true }),
@@ -984,7 +1153,7 @@ test('replenishment quick filters use server scope, product links expand inline 
         body: `<style>${css}</style><div id="app"></div><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -992,6 +1161,11 @@ test('replenishment quick filters use server scope, product links expand inline 
           rejectedColumns: [],
           configVersion: 'fixture',
         },
+      });
+    // Keep the loading panel visible before the resource request reaches the fixture log.
+    if (id === 'base_resources.detail.atomic')
+      await new Promise((resolve) => {
+        setTimeout(resolve, 200);
       });
     calls.push({ id, values });
     const q = config.queries[id];
@@ -1106,7 +1280,9 @@ test('replenishment quick filters use server scope, product links expand inline 
   const resources = page.getByRole('region', { name: 'SKU1基地资源', exact: true });
   await expect(resources).toContainText('华东');
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  assert.equal(calls.find((c) => c.id === 'base_resources.detail.atomic').values.sku, 'SKU1');
+  await expect
+    .poll(() => calls.find((c) => c.id === 'base_resources.detail.atomic')?.values.sku)
+    .toBe('SKU1');
   const scroll = page
     .locator('.table-scroll')
     .filter({ has: page.locator(':scope > .replenishment-table') })
@@ -1147,7 +1323,7 @@ test('identity changes reload cards and lists even when both accounts select all
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],

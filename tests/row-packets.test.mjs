@@ -7,16 +7,16 @@ const tuple = (values) =>
   values
     .map((value) => (value === null ? 'N' : 'V' + Buffer.byteLength(value) + ':' + value))
     .join('');
-const packets = (rows) =>
-  Array.from({ length: Math.ceil(rows.length / 64) }, (_, group) => ({
+const packets = (rows, size = 64) =>
+  Array.from({ length: Math.ceil(rows.length / size) }, (_, group) => ({
     packet_index: String(group),
-    packet_count: String(Math.min(64, rows.length - group * 64)),
+    packet_count: String(Math.min(size, rows.length - group * size)),
     packet_scope_total: String(rows.length),
     packet_rows: JSON.stringify(
       rows
-        .slice(group * 64, group * 64 + 64)
+        .slice(group * size, group * size + size)
         .map((row, index) =>
-          tuple([String(group * 64 + index + 1), ...columns.map((name) => row[name])]),
+          tuple([String(group * size + index + 1), ...columns.map((name) => row[name])]),
         )
         .reverse(),
     ),
@@ -27,6 +27,31 @@ const input = Array.from({ length: 130 }, (_, index) => ({
   note: index % 2 ? null : '中文 "\n🧊',
 }));
 const decode = (rows) => unpackRowPackets(rows, columns, ['cust_code']);
+
+test('larger multi-period packets validate every global position and reject missing middle packets', () => {
+  const rows = Array.from({ length: 600 }, (_, index) => ({
+    ...input[index % input.length],
+    cust_code: String(index),
+  }));
+  const packed = packets(rows, 256);
+  assert.deepEqual(unpackRowPackets(packed, columns, ['cust_code'], 100000, 256), rows);
+  assert.throws(() =>
+    unpackRowPackets(
+      packed.filter((p) => p.packet_index !== '1'),
+      columns,
+      ['cust_code'],
+      100000,
+      256,
+    ),
+  );
+  assert.throws(() => unpackRowPackets(packed, columns, ['cust_code']));
+  for (const size of [0, 1025, 1.5]) {
+    assert.throws(() =>
+      rowPacketSql('SELECT cust_code,value,note FROM facts', columns, ['cust_code'], size),
+    );
+    assert.throws(() => unpackRowPackets(packed, columns, ['cust_code'], 100000, size));
+  }
+});
 
 test('packets restore all original rows despite unordered ARRAY_AGG and preserve decimal text/null/UTF-8', () => {
   assert.deepEqual(decode(packets(input)), input);

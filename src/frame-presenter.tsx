@@ -309,6 +309,16 @@ export function mountFramePresentation(
     const [connectionState, setConnectionState] = useState<
       'idle' | 'connecting' | 'connected' | 'failed'
     >('idle');
+    const [reconnectNotice, setReconnectNotice] = useState(false);
+    useEffect(() => {
+      if (!connectionAttempt || connectionState !== 'connected') {
+        setReconnectNotice(false);
+        return;
+      }
+      setReconnectNotice(true);
+      const timer = window.setTimeout(() => setReconnectNotice(false), 3000);
+      return () => window.clearTimeout(timer);
+    }, [connectionAttempt, connectionState]);
     const [view, setView] = useState<'center' | 'split' | 'chat'>(
       () => pageViews.get(page.id) ?? 'split',
     );
@@ -739,8 +749,10 @@ export function mountFramePresentation(
               >
                 {t(connectionState === 'connecting' ? 'pageReconnecting' : 'pageReconnect')}
               </button>
-              {connectionAttempt > 0 && connectionState === 'connected' && (
-                <span role="status">{t('pageReconnected')}</span>
+              {reconnectNotice && (
+                <span className="gea-conversation-toolbar-status" role="status">
+                  {t('pageReconnected')}
+                </span>
               )}
               {connectionState === 'failed' && error && (
                 <span className="gea-conversation-toolbar-error" role="alert">
@@ -796,6 +808,11 @@ export function mountFramePresentation(
             {Body ? (
               <div className="agent-workbench-html">
                 <Body />
+              </div>
+            ) : page.resourceId &&
+              (identity.pagesReady === false || (identity.state === 'unknown' && loaded === 0)) ? (
+              <div className="agent-workbench-page-status" role="status">
+                {t('pageWait')}
               </div>
             ) : (
               <iframe

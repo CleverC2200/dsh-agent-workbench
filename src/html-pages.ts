@@ -26,6 +26,7 @@ export interface WorkbenchPages {
   /** Register explicit installed package roots. No capability body or business credentials are read. */
   registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]>;
   packages(): readonly HtmlPackage[];
+  requestContext(owner: string): { sessionId: string; signal: AbortSignal };
   registerBusinessPage(page: BusinessPage, authorize: AuthorizeBusinessPage): () => void;
 }
 
@@ -61,6 +62,12 @@ export class HtmlPages extends PageRuntime implements WorkbenchPages {
           manifest.html !== 'index.html'
         )
           throw Error(`INVALID_HTML_PLUGIN [source: ${directory}/plugin.json]`);
+        if (
+          manifest.gea?.localComputeWorker !== undefined &&
+          (typeof manifest.gea.localComputeWorker !== 'boolean' ||
+            manifest.gea.contract !== 'gea-html-v2')
+        )
+          throw Error(`INVALID_HTML_COMPUTE_WORKER [source: ${directory}/plugin.json]`);
         const pages = manifest.pages ?? [{ id: manifest.id, name: manifest.name, view: '' }];
         if (
           !Array.isArray(pages) ||
@@ -169,7 +176,8 @@ export class HtmlPages extends PageRuntime implements WorkbenchPages {
         'Cache-Control': 'no-store',
         'X-Content-Type-Options': 'nosniff',
         'Content-Security-Policy':
-          "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
+          "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; worker-src " +
+          (item.manifest.gea?.localComputeWorker === true ? 'blob:' : "'none'"),
         'X-Workbench-Page-View': page.view,
       },
     });

@@ -14,6 +14,7 @@ import {
   type NativeResourceSelection,
 } from './resource-selection.ts';
 import { mountCompanyUI } from './company/ui.tsx';
+import { conversationWorkspace } from './workspace-selection.ts';
 import { mountWorkspaceDirectoryPrompt } from './company/workspace-directory.tsx';
 import type {} from '@deepseek-ai/dsh-api-session-controller/client';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
@@ -124,12 +125,12 @@ export function apply(ctx: Context): void {
         if (!host) throw Error('WORKBENCH_AGENT_UNAVAILABLE');
         const signal = AbortSignal.any([ctx.layout.beginNavigation(), agentLifetime.signal]);
         signal.throwIfAborted();
+        await conversationWorkspace(ctx, signal);
         const sessions = ctx.sessions.list.getSnapshot();
-        if (sessions.phase !== 'ready') throw Error('WORKBENCH_WORKSPACE_UNAVAILABLE');
         const current = Object.values(sessions.byId).find(
           (row) => (row.retainedBy.mainView ?? 0) > 0,
         );
-        const cwd = await resourceWorkspace(host.fetch, signal, current?.cwd, host.pickDirectory);
+        const cwd = await resourceWorkspace(host, signal, current?.cwd);
         signal.throwIfAborted();
         const { workspaceId, path } = await host.workspace(cwd);
         signal.throwIfAborted();

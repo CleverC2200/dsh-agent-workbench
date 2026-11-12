@@ -55,6 +55,7 @@ export function usePageSessionCoordination({
   );
   const identityReady =
     identity.state === 'confirmed' &&
+    identity.pagesReady !== false &&
     identity.error === undefined &&
     identity.status?.authenticated === true;
   const documentState = useSyncExternalStore(workbench.subscribe, workbench.getSnapshot);
@@ -189,12 +190,7 @@ export function usePageSessionCoordination({
       return;
     }
     await runSelection(ownerSignal, async (signal) => {
-      const requested = await resourceWorkspace(
-        host.fetch,
-        signal,
-        cwd ?? selection?.cwd ?? currentCwd,
-        host.pickDirectory,
-      );
+      const requested = await resourceWorkspace(host, signal, cwd ?? selection?.cwd ?? currentCwd);
       const { path: directory } = await host.workspace(requested);
       signal.throwIfAborted();
       let cached = reuse
@@ -238,12 +234,7 @@ export function usePageSessionCoordination({
     }
     await runSelection(undefined, async (signal) => {
       // Borrow the current Core Workspace before requesting another directory.
-      const cwd = await resourceWorkspace(
-        host.fetch,
-        signal,
-        selection?.cwd ?? currentCwd,
-        host.pickDirectory,
-      );
+      const cwd = await resourceWorkspace(host, signal, selection?.cwd ?? currentCwd);
       const { workspaceId } = await host.workspace(cwd);
       signal.throwIfAborted();
       const id = await host.create({ workspaceId });
@@ -299,10 +290,9 @@ export function usePageSessionCoordination({
     preparation.current = controller;
     void (async () => {
       const cwd = await resourceWorkspace(
-        host.fetch,
+        { ...host, pickDirectory: prepare ? host.pickDirectory : undefined },
         controller.signal,
         selection?.cwd ?? currentCwd,
-        prepare ? host.pickDirectory : undefined,
       );
       const response = await host.fetch(
         '/api/agent-manage/resources?' + new URLSearchParams({ cwd }),
@@ -439,7 +429,7 @@ export function createPageSessionNavigation({
       if (recovery.resourceId) {
         // Presentation memory supplies a hint; recovery waits for GEA's current identity.
         const account = identity();
-        if (account?.state !== 'confirmed' || account.error) return;
+        if (account?.state !== 'confirmed' || account.error || account.pagesReady === false) return;
         if (
           !account.status?.authenticated ||
           !recovery.subject ||

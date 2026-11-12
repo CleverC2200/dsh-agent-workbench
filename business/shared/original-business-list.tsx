@@ -16,6 +16,7 @@ import dealer from '../inventory-dealer/source/inventory-light-plugins/src/pages
 import chain from '../inventory-qll/source/inventory-light-plugins/src/pages/qll/components/full-chain-workbench.module.css';
 import base from '../inventory-aqkc/source/inventory-light-plugins/src/pages/aqkc/components/inventory-operations-workbench.module.css';
 import css from './original-business-list.module.css';
+import { ColumnFilterControl, ColumnResizeHandle } from './table-column-controls';
 
 const optionalLabelNames: Record<string, string> = {
   material_name: '产品名称',
@@ -23,6 +24,15 @@ const optionalLabelNames: Record<string, string> = {
   category: '品类',
   material_group: '物料组',
   page_scope_has_material_group: '物料组覆盖情况',
+  product_tag: '产品标签',
+};
+const agingColumnWidths: Record<string, number> = {
+  material_name: 260,
+  material_group_name: 180,
+  missing_age_13: 220,
+  missing_age_10: 96,
+  warehouse_name: 140,
+  product_tag: 128,
 };
 
 /** Only presentation: the caller owns governed reads, errors and server pagination. */
@@ -46,6 +56,7 @@ export function OriginalBusinessList({
   onPage,
   onPageSize,
   renderCell,
+  renderSummaryCell,
   toolbarActions,
   quickFilterActions,
   emptyMessage = '暂无符合条件的数据。',
@@ -55,10 +66,14 @@ export function OriginalBusinessList({
   renderRowDetails,
   frozenColumns,
   onFrozenColumns,
+  columnWidths = {},
+  onColumnWidths,
+  onColumnFilter,
 }: any) {
   const fc = agentId === 'inventory-fc',
     qll = agentId === 'inventory-qll',
     aqkc = agentId === 'inventory-aqkc';
+  const compactAging = fc && view.id === 'inventory';
   const [localFrozen, setLocalFrozen] = useState<string[]>(
     fc && view.id === 'replenishment' ? ['sku', 'material_name', 'missing_actualQty'] : [],
   );
@@ -81,6 +96,20 @@ export function OriginalBusinessList({
       ]
     : selectedColumns;
   const table = useRef<HTMLTableElement>(null);
+  const resizable = Boolean(view.resizableColumns);
+  const widthOf = (column: { field: string; format?: string }) =>
+    columnWidths[column.field] ??
+    (compactAging
+      ? (agingColumnWidths[column.field] ?? (column.format === 'quantity-share' ? 144 : 112))
+      : column.field === 'material_name'
+        ? 280
+        : column.field === 'material_group_name'
+          ? 220
+          : column.field === 'missing_age_13'
+            ? 240
+            : column.format === 'quantity-share'
+              ? 170
+              : 140);
   const [offsets, setOffsets] = useState<Record<string, number>>({});
   const columnKey = columns.map((column: any) => column.field).join(':');
   useLayoutEffect(() => {
@@ -112,7 +141,8 @@ export function OriginalBusinessList({
           background: 'var(--ui-surface)',
         }
       : undefined;
-  const displayCell = (row: any, column: any) => {
+  const displayCell = (row: any, column: any, summary = false) => {
+    if (summary && renderSummaryCell) return renderSummaryCell(row, column);
     const unit = /[（(](件|箱)(?:[）)])/.exec(column.label ?? '')?.[1];
     if (!qll || !unit || column.unavailable || column.secondary) return renderCell(row, column);
     const raw =
@@ -128,9 +158,35 @@ export function OriginalBusinessList({
       </span>
     );
   };
+  const headerLabel = (column: { field: string; label: string }) =>
+    fc && view.sortFields?.[column.field] && onSort ? (
+      <button
+        type="button"
+        className={css.sortHeader}
+        onClick={() => onSort(view.sortFields[column.field])}
+      >
+        {column.label}{' '}
+        {view.sortFields[column.field] === appliedFilters?.sort_field
+          ? appliedFilters.sort_direction === 'desc'
+            ? '↓'
+            : '↑'
+          : '↕'}
+      </button>
+    ) : (
+      column.label
+    );
   const rawTable = (
     <table
       ref={table}
+      data-resizable={resizable || undefined}
+      style={
+        resizable
+          ? {
+              width: columns.reduce((sum: number, column: any) => sum + widthOf(column), 0),
+              minWidth: 0,
+            }
+          : undefined
+      }
       title={
         fc && view.id === 'inventory'
           ? '货龄分段按[0,30)、[30,60)、[60,90)、≥90天统计正库存批次，占比以该SKU正库存为分母'
@@ -142,7 +198,13 @@ export function OriginalBusinessList({
           : undefined
       }
     >
-      {fc && view.id === 'plan' && <caption>当前使用计划 · 数量单位：件</caption>}
+      {resizable && (
+        <colgroup>
+          {columns.map((column: any) => (
+            <col key={column.field} style={{ width: widthOf(column) }} />
+          ))}
+        </colgroup>
+      )}
       {fc && view.id === 'base-resources' && (
         <caption>
           基地排产资源监控 · {filters.sku ? `SKU ${filters.sku}` : '按基地汇总'} · T～T+6
@@ -171,8 +233,9 @@ export function OriginalBusinessList({
                   : undefined
               }
               scope="col"
+              aria-label={resizable ? c.label : undefined}
               title={c.reason}
-              style={fixedStyle(c.field)}
+              style={{ ...fixedStyle(c.field), ...(resizable ? { width: widthOf(c) } : {}) }}
               aria-sort={
                 fc && view.sortFields?.[c.field] === appliedFilters?.sort_field
                   ? appliedFilters.sort_direction === 'desc'
@@ -181,21 +244,27 @@ export function OriginalBusinessList({
                   : undefined
               }
             >
-              {fc && view.sortFields?.[c.field] && onSort ? (
-                <button
-                  type="button"
-                  className={css.sortHeader}
-                  onClick={() => onSort(view.sortFields[c.field])}
-                >
-                  {c.label}{' '}
-                  {view.sortFields[c.field] === appliedFilters?.sort_field
-                    ? appliedFilters.sort_direction === 'desc'
-                      ? '↓'
-                      : '↑'
-                    : '↕'}
-                </button>
+              {resizable ? (
+                <div className={css.columnHeader}>
+                  <span>{headerLabel(c)}</span>
+                  {view.columnFilters?.[c.field] && onColumnFilter && (
+                    <ColumnFilterControl
+                      label={c.label}
+                      definition={view.columnFilters[c.field]}
+                      values={appliedFilters ?? {}}
+                      onApply={onColumnFilter}
+                    />
+                  )}
+                </div>
               ) : (
-                c.label
+                headerLabel(c)
+              )}
+              {resizable && (
+                <ColumnResizeHandle
+                  label={c.label}
+                  width={widthOf(c)}
+                  onResize={(width) => onColumnWidths?.({ ...columnWidths, [c.field]: width })}
+                />
               )}
             </th>
           ))}
@@ -206,7 +275,16 @@ export function OriginalBusinessList({
           <React.Fragment key={getRowKey?.(row) ?? i}>
             <tr>
               {columns.map((c: any) => (
-                <td key={c.field} data-column={c.field} style={fixedStyle(c.field)}>
+                <td
+                  key={c.field}
+                  data-column={c.field}
+                  style={fixedStyle(c.field)}
+                  title={
+                    compactAging && typeof row[c.valueField ?? c.field] === 'string'
+                      ? row[c.valueField ?? c.field]
+                      : undefined
+                  }
+                >
                   {displayCell(row, c)}
                 </td>
               ))}
@@ -219,6 +297,27 @@ export function OriginalBusinessList({
           </React.Fragment>
         ))}
       </tbody>
+      {result?.tableSummary && !error && !loading && (
+        <tfoot>
+          <tr>
+            {columns.map((column: any, index: number) => {
+              const field = column.valueField ?? column.field;
+              return (
+                <td key={column.field} data-column={column.field} style={fixedStyle(column.field)}>
+                  {index === 0 && (
+                    <span>合计{Object.hasOwn(result.tableSummary, field) ? ' · ' : ''}</span>
+                  )}
+                  {Object.hasOwn(result.tableSummary, field)
+                    ? displayCell(result.tableSummary, column, true)
+                    : index === 0
+                      ? null
+                      : '-'}
+                </td>
+              );
+            })}
+          </tr>
+        </tfoot>
+      )}
     </table>
   );
   const data = ['available', 'empty'].includes(result?.status) ? result.rows : [];
@@ -296,7 +395,14 @@ export function OriginalBusinessList({
       <div key={f.name} className={css.quickFilters} role="group" aria-label={f.label}>
         {f.options.map((option: any) =>
           f.multiple ? (
-            <label key={option.value}>
+            <label
+              key={option.value}
+              title={
+                fc && view.id === 'inventory' && f.name === 'age_filter'
+                  ? '仅统计所选货龄批次，库存量和合计同步筛选。'
+                  : undefined
+              }
+            >
               <input
                 type="checkbox"
                 checked={(appliedFilters?.[f.name] ?? '').split(',').includes(option.value)}
@@ -332,7 +438,11 @@ export function OriginalBusinessList({
     ));
 
   return (
-    <section className={css.list} aria-label={view.title} aria-busy={loading}>
+    <section
+      className={`${css.list}${compactAging ? ` ${css.compactAging}` : ''}`}
+      aria-label={view.title}
+      aria-busy={loading}
+    >
       {fc && (
         <div className={css.quickBar}>
           {quickFilters}
@@ -471,6 +581,9 @@ export function OriginalBusinessList({
         errors={[
           error ? `${error.message}（${error.code}）` : '',
           result?.summaryError?.message,
+          result?.supplementaryError
+            ? `${result.supplementaryError.message}（${result.supplementaryError.code}）`
+            : '',
         ].filter(Boolean)}
         scope={agentId}
       />
@@ -487,6 +600,8 @@ export function OriginalBusinessList({
         <p className={css.empty}>请选择客户。</p>
       ) : result?.status === 'select_sku' ? (
         <p className={css.empty}>请输入SKU后查询基地资源。</p>
+      ) : fc && ['SUMMARY_NOT_AVAILABLE', 'SUMMARY_SCOPE_NOT_COVERED'].includes(error?.code) ? (
+        <p className={css.empty}>-</p>
       ) : fc && error ? (
         <div role="alert" className={css.empty}>
           <p>该列表读取失败：{error.message}</p>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { BusinessAccount, BusinessEnvironment } from './account.ts';
 import type { CopyKey } from './locales.ts';
+import { PasswordLoginForm, type PasswordLoginCopyKey } from './password-login-form.tsx';
 import logo from '../workbench/gea-logo.png';
 
 type LoginPresentation =
@@ -9,26 +10,28 @@ type LoginPresentation =
   | { state: 'expired'; image: string }
   | { state: 'error'; message: string };
 
-type LoginCopyKey = Extract<
-  CopyKey,
-  | 'close'
-  | 'login'
-  | 'welcomeLogin'
-  | 'scanInstructions'
-  | 'qrUnavailable'
-  | 'qrPreparing'
-  | 'qrExpired'
-  | 'qrWaiting'
-  | 'qrExpiredHint'
-  | 'environment'
-  | 'production'
-  | 'test'
-  | 'refreshQr'
-  | 'failure'
-  | 'loginTipTitle'
-  | 'loginTip'
-  | 'loginFooter'
->;
+type LoginCopyKey =
+  | PasswordLoginCopyKey
+  | Extract<
+      CopyKey,
+      | 'close'
+      | 'login'
+      | 'welcomeLogin'
+      | 'scanInstructions'
+      | 'qrUnavailable'
+      | 'qrPreparing'
+      | 'qrExpired'
+      | 'qrWaiting'
+      | 'qrExpiredHint'
+      | 'environment'
+      | 'production'
+      | 'test'
+      | 'refreshQr'
+      | 'failure'
+      | 'loginTipTitle'
+      | 'loginTip'
+      | 'loginFooter'
+    >;
 
 /** Presentation only; the GEA Host owns the QR challenge and authenticated identity. */
 export function LoginDialog({
@@ -54,13 +57,17 @@ export function LoginSurface({
   t,
   onClose,
 }: {
-  account: Pick<BusinessAccount, 'startLogin' | 'pollLogin'>;
+  account: Pick<
+    BusinessAccount,
+    'startLogin' | 'pollLogin' | 'preparePasswordLogin' | 'loginWithPassword'
+  >;
   identity: ReturnType<BusinessAccount['getSnapshot']>;
   t: (key: LoginCopyKey) => string;
   onClose?: () => void;
 }) {
   const [presentation, setPresentation] = useState<LoginPresentation>({ state: 'preparing' });
   const [revision, setRevision] = useState(0);
+  const [method, setMethod] = useState<'qr' | 'password'>('qr');
   // This is the user's requested QR environment, not a client-owned authentication state.
   const [requestedEnvironment, setRequestedEnvironment] = useState<BusinessEnvironment>();
   const environment = requestedEnvironment ?? identity.status?.environment;
@@ -73,7 +80,7 @@ export function LoginSurface({
     if (presentation.state === 'preparing') close.current?.focus();
   }, [presentation.state]);
   useEffect(() => {
-    if (!environment) return;
+    if (!environment || method !== 'qr') return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     setPresentation({ state: 'preparing' });
@@ -126,7 +133,7 @@ export function LoginSurface({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [account, environment, revision, onClose, t]);
+  }, [account, environment, revision, method, onClose, t]);
   const image =
     presentation.state === 'waiting' || presentation.state === 'expired'
       ? presentation.image
@@ -156,8 +163,8 @@ export function LoginSurface({
               ),
             ).filter(
               (control) =>
-                !control.matches('input') ||
-                (control.matches(':checked') && !control.closest('fieldset')?.disabled),
+                !control.closest('fieldset')?.disabled &&
+                (!control.matches('input[type=radio]') || control.matches(':checked')),
             );
             const next =
               controls[
@@ -193,42 +200,64 @@ export function LoginSurface({
         )}
         <img className="gea-login-logo" src={logo} alt="GEA" width="56" height="56" />
         <h2>{t('welcomeLogin')}</h2>
-        <p>{t('scanInstructions')}</p>
-        <div
-          className={`gea-account-login-qr gea-login-qr${presentation.state === 'expired' ? ' is-expired' : ''}`}
-          aria-busy={presentation.state === 'preparing'}
-        >
-          {image ? (
-            <img src={image} alt={t('login')} width="220" height="220" />
-          ) : (
-            <div className="gea-qr-placeholder" role="status">
-              {presentation.state === 'preparing' && (
-                <span className="gea-wait-dots" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              )}
-              <span>{t(presentation.state === 'error' ? 'qrUnavailable' : 'qrPreparing')}</span>
-            </div>
-          )}
-          {presentation.state === 'expired' && (
-            <div className="gea-qr-expired">
-              <p>{t('qrExpired')}</p>
-            </div>
-          )}
+        <div className="gea-login-methods" role="group" aria-label={t('loginMethod')}>
+          <button type="button" aria-pressed={method === 'qr'} onClick={() => setMethod('qr')}>
+            {t('scanLogin')}
+          </button>
+          <button
+            type="button"
+            aria-pressed={method === 'password'}
+            onClick={() => setMethod('password')}
+          >
+            {t('passwordLogin')}
+          </button>
         </div>
-        <p className="gea-login-status" role="status" aria-live="polite">
-          {presentation.state === 'waiting' && (
-            <span className="gea-ready-dot" aria-hidden="true" />
-          )}
-          {presentation.state === 'waiting'
-            ? t('qrWaiting')
-            : presentation.state === 'expired'
-              ? t('qrExpiredHint')
-              : null}
-        </p>
-        <fieldset disabled={presentation.state === 'preparing'} className="gea-environments">
+        <p>{t(method === 'qr' ? 'scanInstructions' : 'passwordInstructions')}</p>
+        {method === 'password' && environment && (
+          <PasswordLoginForm key={environment} account={account} environment={environment} t={t} />
+        )}
+        {method === 'qr' && (
+          <>
+            <div
+              className={`gea-account-login-qr gea-login-qr${presentation.state === 'expired' ? ' is-expired' : ''}`}
+              aria-busy={presentation.state === 'preparing'}
+            >
+              {image ? (
+                <img src={image} alt={t('login')} width="220" height="220" />
+              ) : (
+                <div className="gea-qr-placeholder" role="status">
+                  {presentation.state === 'preparing' && (
+                    <span className="gea-wait-dots" aria-hidden="true">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  )}
+                  <span>{t(presentation.state === 'error' ? 'qrUnavailable' : 'qrPreparing')}</span>
+                </div>
+              )}
+              {presentation.state === 'expired' && (
+                <div className="gea-qr-expired">
+                  <p>{t('qrExpired')}</p>
+                </div>
+              )}
+            </div>
+            <p className="gea-login-status" role="status" aria-live="polite">
+              {presentation.state === 'waiting' && (
+                <span className="gea-ready-dot" aria-hidden="true" />
+              )}
+              {presentation.state === 'waiting'
+                ? t('qrWaiting')
+                : presentation.state === 'expired'
+                  ? t('qrExpiredHint')
+                  : null}
+            </p>
+          </>
+        )}
+        <fieldset
+          disabled={method === 'qr' && presentation.state === 'preparing'}
+          className="gea-environments"
+        >
           <legend>{t('environment')}</legend>
           {environments.map((value) => (
             <label key={value}>
@@ -243,18 +272,22 @@ export function LoginSurface({
             </label>
           ))}
         </fieldset>
-        <button
-          type="button"
-          className="gea-login-submit"
-          disabled={presentation.state === 'preparing'}
-          onClick={() => setRevision((value) => value + 1)}
-        >
-          {t(presentation.state === 'preparing' ? 'qrPreparing' : 'refreshQr')}
-        </button>
-        {presentation.state === 'error' && <p role="alert">{presentation.message}</p>}
+        {method === 'qr' && (
+          <>
+            <button
+              type="button"
+              className="gea-login-submit"
+              disabled={presentation.state === 'preparing'}
+              onClick={() => setRevision((value) => value + 1)}
+            >
+              {t(presentation.state === 'preparing' ? 'qrPreparing' : 'refreshQr')}
+            </button>
+            {presentation.state === 'error' && <p role="alert">{presentation.message}</p>}
+          </>
+        )}
         <aside className="gea-login-tip">
           <strong>{t('loginTipTitle')}</strong>
-          <p>{t('loginTip')}</p>
+          <p>{t(method === 'qr' ? 'loginTip' : 'passwordTip')}</p>
         </aside>
         <footer>{t('loginFooter')}</footer>
       </section>

@@ -32,11 +32,20 @@ export function createReportPersistence(execute, status) {
     } finally { current.saving = false; }
   }
   return {
-    async open(period, signal) {
+    async open(period, signal, { includeFacts = true } = {}) {
       const current = owner = { period, signal, version: 0, editVersion:0, nextEdits:null, loaded: false, next: null, request: null, saving: false, failed: false };
       notify('loading', '正在读取已保存报告…');
       try {
-        const received = await execute({ operation: 'load', period }, signal);
+        const request = { operation: 'load', period, ...(!includeFacts ? { includeFacts: false } : {}) };
+        let received;
+        try { received = await execute(request, signal); }
+        catch (error) {
+          signal.throwIfAborted();
+          // Older Hosts keep the full load contract; never lose manual content
+          // just because they do not yet support the lightweight read hint.
+          if (includeFacts || !/ORDER_REPORT_REQUEST_INVALID/.test(error.code ?? error.message)) throw error;
+          received = await execute({ operation: 'load', period }, signal);
+        }
         const result = {...received,report:unpackWorkbenchReport(received.report)};
         signal.throwIfAborted();
         if (owner !== current) throw Error('报告周期已切换');
@@ -63,6 +72,42 @@ export function createReportPersistence(execute, status) {
     saveEdits(edits) {
       if(!owner?.loaded || owner.signal.aborted)return false;
       owner.nextEdits=structuredClone(edits);void drain(owner);return true;
+    },
+    state() { return owner?.loaded ? { period: { ...owner.period }, editVersion: owner.editVersion, scope: owner.scope } : null; },
+    async previewImport(batch, signal) {
+      const current = owner;
+      if (!current?.loaded || current.signal.aborted || current.saving || current.next || current.nextEdits)
+        throw Error('请先等待当前编辑保存完成');
+      const result = await execute({ operation: 'preview-import', period: current.period, batch },
+        signal ? AbortSignal.any([signal, current.signal]) : current.signal);
+      current.signal.throwIfAborted();
+      if (owner !== current || result.editVersion !== current.editVersion || result.scope?.key !== current.scope?.key)
+        throw Error('报告版本已变化，请重新读取后预览');
+      return result;
+    },
+    async commitImport(preview, batch, signal) {
+      const current = owner;
+      if (!current?.loaded || current.signal.aborted || current.saving || current.next || current.nextEdits || preview.editVersion !== current.editVersion)
+        throw Error('报告已编辑或正在保存，请重新预览');
+      const requestId = preview.requestId ??= crypto.randomUUID();
+      current.saving = true;
+      notify('saving', '正在写入导入内容…');
+      try {
+        const result = await execute({ operation: 'commit-import', period: current.period, batch,
+          expectedVersion: preview.editVersion, previewId: preview.previewId, requestId },
+          signal ? AbortSignal.any([signal, current.signal]) : current.signal);
+        current.signal.throwIfAborted();
+        if (owner !== current) throw Error('报告周期已切换');
+        if (result.saved !== true || result.requestId !== requestId || !result.edits ||
+            ![current.editVersion, current.editVersion + 1].includes(result.version) ||
+            (!result.unchanged && result.version !== current.editVersion + 1)) throw Error('导入保存回执不完整');
+        current.editVersion = result.version;
+        notify('saved', '导入内容已保存到数据库');
+        return result;
+      } catch (error) {
+        if (owner === current && !current.signal.aborted) notify('error', '导入结果未确认：' + error.message);
+        throw error;
+      } finally { current.saving = false; if (current.next || current.nextEdits) void drain(current); }
     },
     retry() { if (owner?.loaded) { owner.failed = false; void drain(owner); } },
     scope() { return owner?.scope; },

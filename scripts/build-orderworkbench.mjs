@@ -14,6 +14,42 @@ const apsConfig = JSON.parse(
   await readFile(resolve(root, 'business/inventory-apsplan/sql.config.json'), 'utf8'),
 );
 const sqlConfig = orderWorkbenchSourceConfig(apsConfig);
+const runtimeEntry = resolve(source, 'metric-runtime.mjs');
+const scan = await build({
+  entryPoints: [runtimeEntry],
+  bundle: true,
+  write: false,
+  metafile: true,
+  format: 'esm',
+  platform: 'node',
+  packages: 'external',
+  absWorkingDir: root,
+  define: { ORDER_WORKBENCH_METRIC_VERSION: '0' },
+});
+const runtimeInputs = await Promise.all(
+  Object.keys(scan.metafile.inputs)
+    .sort()
+    .map(async (path) => [path, digest(await readFile(resolve(root, path)))]),
+);
+const revision = digest(JSON.stringify({ queries: sqlConfig, inputs: runtimeInputs }));
+const metricVersion = Number.parseInt(revision.slice(0, 12), 16);
+const runtime = await build({
+  entryPoints: [runtimeEntry],
+  bundle: true,
+  write: false,
+  format: 'esm',
+  platform: 'node',
+  packages: 'external',
+  absWorkingDir: root,
+  define: { ORDER_WORKBENCH_METRIC_VERSION: JSON.stringify(metricVersion) },
+});
+sqlConfig.metricRuntime = {
+  schemaVersion: 1,
+  version: metricVersion,
+  revision,
+  file: 'metric-runtime.mjs',
+  sha256: digest(runtime.outputFiles[0].contents),
+};
 if (digest(theme) !== '281fe7eebe0775b6bedabad6806753db6afe5eded52e6d9ade54067d23e20ef8')
   throw Error('ORDER_THEME_RESOURCE_MISMATCH');
 const bundled = await build({
@@ -23,7 +59,10 @@ const bundled = await build({
   format: 'iife',
   platform: 'browser',
   target: ['chrome110', 'safari16'],
-  define: { ORDER_WORKBENCH_APS_CONFIG: JSON.stringify(sqlConfig) },
+  define: {
+    ORDER_WORKBENCH_APS_CONFIG: JSON.stringify(sqlConfig),
+    ORDER_WORKBENCH_METRIC_VERSION: JSON.stringify(metricVersion),
+  },
   plugins: [
     {
       name: 'manage-aps-compute',
@@ -41,6 +80,7 @@ const html = (await readFile(resolve(source, 'index.html'), 'utf8'))
   .replace('/* ORDER_ENTRY */', bundled.outputFiles[0].text.replace(/<\/script/gi, '<\\/script'));
 await mkdir(out, { recursive: true });
 await writeFile(resolve(out, 'sql.config.json'), JSON.stringify(sqlConfig, null, 2) + '\n');
+await writeFile(resolve(out, 'metric-runtime.mjs'), runtime.outputFiles[0].contents);
 await writeFile(resolve(out, 'index.html'), html);
 for (const name of ['plugin.json', 'page.json', 'SOURCE.json'])
   await cp(resolve(source, name), resolve(out, name));

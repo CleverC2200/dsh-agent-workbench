@@ -53,13 +53,13 @@ export function pageContext() {
             coverage:
               '正建议SKU数 skuCount 不等于已计算SKU数 computedCount；缺失数量使用 computedOverview.calculated.missingCount，不用总数减正建议数',
             periods:
-              '当前待分配订单是近60天口径；订单满足率是本月履约口径，不可互减推算未解释的缺口',
+              '当前客户订单保留跨月有效未完成需求；满足率取当月已发货客户订单池，不可互减推算缺口',
             aging: '滞库与大日期集合可能重叠，不能将两个指标直接相加；缺少SKU交集就保留未知',
             metricLabels: {
               bigDateQty: '超龄库存量（大日期库存），不是待发订单量',
               stagnantQty: '滞库风险量，不是待发订单量',
               orderQty:
-                '本月履约口径订单量，月份和来源以 metricScopes.fulfillment 为准；不是近60天待分配订单量。缺失时保持未知，不能用超龄或滞库库存量替代',
+                '本月履约口径订单量，月份和来源以 metricScopes.fulfillment 为准；不是当前未完成客户订单量。缺失时保持未知，不能用超龄或滞库库存量替代',
               inventoryQty: '全仓库存量；页面向上取整为件，正文原值与显示值分开引用',
             },
             plan: 'BI表示同步来源，其来源细分仍以sourceTrace为准，可能是历史估算；人工计划和周期仅本页预览，查看 localPreview 标识，不是 GEA 正式配置',

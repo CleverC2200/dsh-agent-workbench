@@ -52,7 +52,7 @@ def build(config):
       SELECT b.warehouseid AS warehouse_code FROM agents_scm_inventory_sku_data_d AS b
       CROSS JOIN upstream_snapshot AS s
       WHERE b.month_date=s.month_date AND NULLIF(TRIM(b.warehouseid),'') IS NOT NULL
-      AND (b.warehouse_classify='20' OR b.warehouseid='N436') GROUP BY b.warehouseid
+      AND (b.warehouse_classify='20' AND b.warehouseid NOT IN ('N436','Y204')) GROUP BY b.warehouseid
     ), overview_shortage_count AS (
       SELECT COUNT(*) AS shortage_sku_count FROM overview_shortage_skus AS c
       INNER JOIN overview_stock_scope AS w ON c.warehouse_code=w.warehouse_code

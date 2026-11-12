@@ -43,8 +43,13 @@ def definition(dimensions,location_type,detail=False,sku_page=False,source=SOURC
 def update_agents(agents):
  for agent in agents:
   path=ROOT/f'business/inventory-{agent}/sql.config.json';text=path.read_text()
+  if agent=='fc':
+   import importlib.util
+   spec=importlib.util.spec_from_file_location('branch_customer_orders',ROOT/'scripts/update-branch-customer-orders.py')
+   module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);module.main()
+   continue
   if agent=='qll':
-   # Full-chain combines the independent base and ASN contracts, including
+   # Full-chain combines the independent base and downstream customer contracts, including
    # their own missing-source checks. The legacy shared order probe is invalid here.
    import importlib.util
    spec=importlib.util.spec_from_file_location('qll_branch_orders',ROOT/'scripts/update-qll-branch-orders.py')
@@ -75,3 +80,5 @@ def update_agents(agents):
 
 if __name__ == '__main__':
  update_agents(['aqkc','fc','qll','apsplan'])
+ import runpy
+ runpy.run_path(str(ROOT/'scripts/update-base-shortage-ranking.py'), run_name='__main__')

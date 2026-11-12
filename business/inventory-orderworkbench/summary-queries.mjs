@@ -1,9 +1,16 @@
-import { ontimeSummarySql } from './document-queries.mjs';
+import { ontimeSummarySql, ontimePeriodSummarySql } from './document-queries.mjs';
 import { rowPacketSql } from '../shared/row-packets.mjs';
+import { addPeriodSummaryQuery } from './period-summary-queries.mjs';
 /** Derive summaries and bounded SKU pages from the same scoped, validated SKU queries. */
 export function addWorkbenchSummaryQueries(config) {
   const names = ['orders', 'stock', 'ages'];
-  const raw = (name) => config.queries['workbench.' + name].request.sql.split(' ORDER BY ')[0];
+  const raw = (name) => {
+    const sql = config.queries['workbench.' + name].request.sql;
+    // Only remove the final page ordering; shipment attribution has a window ORDER BY.
+    return sql.endsWith(' LIMIT :gea_p1001 OFFSET :gea_p1002')
+      ? sql.slice(0, sql.lastIndexOf(' ORDER BY '))
+      : sql;
+  };
   const owner = raw('directors')
     .replace(/:gea_p1\b/g, ':gea_p703')
     .replace(/:gea_p2\b/g, ':gea_p704');
@@ -45,6 +52,27 @@ export function addWorkbenchSummaryQueries(config) {
     };
   }
   const directors = config.queries['workbench.directormembers'];
+  for (const [name, keys] of [
+    ['customers', ['region', 'province', 'customer']],
+    ['customermanagers', ['customer']],
+  ]) {
+    const original = config.queries['workbench.' + name];
+    if (!original?.pagination?.countQuery) continue;
+    const count = config.queries[original.pagination.countQuery];
+    const packets = rowPacketSql(raw(name), original.resultColumns, keys);
+    const id = 'workbench.' + name + '.packets';
+    config.queries[id + '.count'] = {
+      ...count,
+      request: { ...count.request, sql: 'SELECT COUNT(*) AS total FROM (' + packets + ') counted' },
+      resultColumns: ['total'],
+    };
+    config.queries[id] = {
+      ...original,
+      request: { ...original.request, sql: packets + ' LIMIT :gea_p1001 OFFSET :gea_p1002' },
+      resultColumns: ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],
+      pagination: { countQuery: id + '.count' },
+    };
+  }
   if (directors?.pagination?.countQuery) {
     const directorPackets = rowPacketSql(raw('directormembers'), directors.resultColumns, [
       'base',
@@ -80,6 +108,32 @@ export function addWorkbenchSummaryQueries(config) {
       ['base', 'invalid', 'ontime', 'packed_orders'],
       ['base', 'invalid', 'ontime'],
     );
+  if (config.queries['workbench.ontime']) {
+    const parameterSpec = { ...config.queries['workbench.ontime'].parameterSpec };
+    for (let index = 0; index < 6; index++) {
+      parameterSpec['gea_p' + (810 + index * 3)] = {
+        name: `period_${index}_start`,
+        type: 'string',
+        format: 'YYYY-MM-DD',
+      };
+      parameterSpec['gea_p' + (811 + index * 3)] = {
+        name: `period_${index}_end`,
+        type: 'string',
+        format: 'YYYY-MM-DD',
+      };
+      parameterSpec['gea_p' + (812 + index * 3)] = {
+        name: `period_${index}_enabled`,
+        type: 'boolean',
+      };
+    }
+    register(
+      'workbench.ontime.periods.summary',
+      ontimePeriodSummarySql,
+      { ...config.queries['workbench.ontime'], parameterSpec },
+      ['period_index', 'base', 'invalid', 'ontime', 'packed_orders'],
+      ['period_index', 'base', 'invalid', 'ontime'],
+    );
+  }
   for (const name of names) {
     const original = config.queries['workbench.' + name];
     const item = name === 'ages' ? mappedItem : "COALESCE(NULLIF(q.item,'')," + mappedItem + ')';
@@ -107,6 +161,8 @@ export function addWorkbenchSummaryQueries(config) {
 
       if (['name', 'stock_date', 'snapshot_date'].includes(field))
         return 'MAX(q.' + field + ') AS ' + field;
+      if (field === 'plan_month_offset')
+        return 'CASE WHEN COUNT(q.plan_month_offset)=COUNT(*) AND MIN(q.plan_month_offset)=MAX(q.plan_month_offset) THEN MAX(q.plan_month_offset) END AS plan_month_offset';
       if (field === 'source_rows')
         return 'CASE WHEN MIN(q.source_rows)=1 AND MAX(q.source_rows)=1 THEN 1 ELSE 0 END AS source_rows';
       return 'SUM(COALESCE(q.' + field + ',0)) AS ' + field;
@@ -144,6 +200,14 @@ export function addWorkbenchSummaryQueries(config) {
       [...original.resultColumns, 'director', 'names', 'summary', ...extra],
       ['base', 'category', 'item', 'director', 'names'],
     );
+    if (config.queries['workbench.ontime.periods.summary'])
+      addPeriodSummaryQuery(config, name, fields, group, [
+        ...original.resultColumns,
+        'director',
+        'names',
+        'summary',
+        ...extra,
+      ]);
     if (name === 'stock') {
       // A 200-row gateway page otherwise re-runs this stock join and its count
       // for every dimension group. Pack complete groups without changing totals.
@@ -153,7 +217,7 @@ export function addWorkbenchSummaryQueries(config) {
           sql,
           [...original.resultColumns, 'director', 'names', 'summary', ...extra],
           ['base', 'category', 'item', 'director', 'names'],
-        ),
+        ).replace(/ ORDER BY packet_index$/, ''),
         original,
         ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],
         ['packet_index'],
@@ -218,5 +282,6 @@ export function addWorkbenchSummaryQueries(config) {
       name === 'orders' ? ['base', 'category', 'item', 'sku'] : ['base', 'sku'],
     );
   }
+  if (config.queries['workbench.ontime.periods.summary']) addPeriodSummaryQuery(config, 'changes');
   return config;
 }

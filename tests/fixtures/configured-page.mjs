@@ -2,9 +2,20 @@ import assert from 'node:assert/strict';
 import { readFile } from '../helpers/prepared-assets.mjs';
 import { injectSqlConfig } from '../../src/sql-config-document.ts';
 import { makeRequest } from '../../business/shared/configured-query-client.mjs';
+// These historical layout fixtures exercise direct-source UI behavior. Daily-summary routing
+// is covered separately with the unmodified production config and real batch responses.
+export function directSourceFixture(config) {
+  const fixture = structuredClone(config);
+  delete fixture.dailySummary;
+  for (const query of Object.values(fixture.queries)) delete query.summaryRoute;
+  return fixture;
+}
 export async function configuredPageHtml(id) {
   const config = JSON.parse(await readFile(`lib/business/inventory-${id}/sql.config.json`, 'utf8'));
-  return injectSqlConfig(await readFile(`lib/business/inventory-${id}/index.html`, 'utf8'), config);
+  return injectSqlConfig(
+    await readFile(`lib/business/inventory-${id}/index.html`, 'utf8'),
+    directSourceFixture(config),
+  );
 }
 /** Synthetic external rows for the current config protocol; never shipped or used for authorization. */
 export async function configuredWire(id) {
@@ -85,6 +96,10 @@ export async function configuredWire(id) {
             matched_turnover_inventory: 5580,
             matched_turnover_demand: 210,
             fulfillment_rate: 0.88,
+            fulfillment_shipped_quantity: 88,
+            fulfillment_order_quantity: 100,
+            onhand_cover_inventory: 12060,
+            onhand_cover_sales30: 24120,
             demand: 100,
             shortage: 12,
             shipped: 88,
@@ -133,6 +148,8 @@ export async function configuredWire(id) {
                 treeRow(`sku-A-${String(offset + i).padStart(3, '0')}`, '测试商品'),
               );
     }
+    if (payload.queryId === 'overview.orders-by-pickup')
+      rows = ['工厂', '分仓'].map((pickup_type) => ({ ...makeRow(0), pickup_type }));
     if (payload.queryId === 'overview.quick-stock') {
       rows = ['基地', '分仓'].map((location_type) => ({
         ...makeRow(0),

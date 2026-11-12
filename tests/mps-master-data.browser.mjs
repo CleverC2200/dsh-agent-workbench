@@ -27,7 +27,9 @@ const annual = {
 const livePage = (t, execute) => mpsPage(t, config, execute);
 function fixture({ queryId, parameters }) {
   let rows;
-  if (queryId.endsWith('.count')) rows = [{ total: 1 }];
+  if (queryId.startsWith('products.prices'))
+    rows = queryId.endsWith('.count') ? [{ total: 0 }] : [];
+  else if (queryId.endsWith('.count')) rows = [{ total: 1 }];
   else if (queryId === 'products.detail') rows = [product];
   else if (queryId === 'annual.summary') rows = [annual];
   else
@@ -79,7 +81,7 @@ test('MPS product sync restores a locally deleted product and keeps edits when t
   ];
   let unavailable = false;
   const { frame, calls } = await livePage(t, (query) => {
-    if (query.queryId.startsWith('products.') && query.queryId.endsWith('.count'))
+    if (query.queryId === 'products.count')
       return { ...fixture(query), rows: [{ total: records.length }] };
     if (query.queryId === 'products.detail') {
       if (unavailable) throw Error('GEA SQL 查询服务暂时不可用');
@@ -96,8 +98,8 @@ test('MPS product sync restores a locally deleted product and keeps edits when t
   assert.deepEqual(
     calls.filter((call) => call.queryId === 'products.detail').map((call) => call.parameters),
     [
-      { page_size: 200, offset: 0 },
-      { page_size: 200, offset: 0 },
+      { page_size: 5000, offset: 0 },
+      { page_size: 5000, offset: 0 },
     ],
   );
   await section.getByRole('button', { name: '删除 001', exact: true }).click();

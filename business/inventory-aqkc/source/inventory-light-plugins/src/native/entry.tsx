@@ -26,7 +26,7 @@ class Boundary extends React.Component<any, { error: string }> {
     );
   }
 }
-let refreshPage = () => {};
+let refreshPage = (_refreshCache = true) => {};
 function App() {
   const [revision, bump] = useState(0),
     [warnings, setWarnings] = useState<string[]>([]);
@@ -41,11 +41,11 @@ function App() {
     window.addEventListener('gea-query-warning', warn);
     return () => window.removeEventListener('gea-query-warning', warn);
   }, []);
-  refreshPage = () => {
+  refreshPage = (refreshCache = true) => {
     clearBusinessCache();
     clearContext();
     setWarnings([]);
-    window.dispatchEvent(new Event('light-refresh'));
+    if (refreshCache) window.dispatchEvent(new Event('light-refresh'));
     bump((n) => n + 1);
   };
   return (
@@ -108,13 +108,13 @@ function mount() {
   if (!element) throw Error('PAGE_ROOT_MISSING');
   createRoot(element).render(<ConnectedApp />);
   window.addEventListener('gea-page-refresh', () => refreshPage());
-  window.addEventListener('gea-session-changed', () => refreshPage());
+  window.addEventListener('gea-session-changed', () => refreshPage(false));
   action('refresh', '清除本页快照并重新查询 GEA', () => {
     refreshConfiguredQueries();
     refreshPage();
     return { refreshing: true };
   });
-  window.addEventListener('gea-session-changing', () => refreshPage());
+  window.addEventListener('gea-session-changing', () => refreshPage(false));
   window.addEventListener('gea-identity-changed', () => {
     clearBusinessCache(true);
     clearContext();

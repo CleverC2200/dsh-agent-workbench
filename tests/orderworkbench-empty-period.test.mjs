@@ -4,6 +4,7 @@ import {
   reportPeriods,
   computeWorkbenchMetrics,
   workbenchMetricMissingReason,
+  metricCalculationVersion,
 } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 import { workbenchEvidence } from '../prototypes/inventory-orderworkbench/live-presentation.mjs';
 
@@ -19,6 +20,7 @@ test('Monday T-1 window is complete without completed dates, not loading or a cl
     assert.doesNotMatch(metric.missingReason, /尚未完成读取/);
   }
   const evidence = workbenchEvidence({
+    metricCalculationVersion,
     source: 'gea-governed-sql',
     complete: true,
     periods: { week: period },
@@ -29,7 +31,11 @@ test('Monday T-1 window is complete without completed dates, not loading or a cl
   assert.match(evidence.periods.week.orderWindow.basis, /T-1/);
   const saved = structuredClone(period);
   saved.metrics['作废率'].note = '所选周期及授权范围内无来源数据';
-  const restored = workbenchEvidence({ complete: true, periods: { week: saved } });
+  const restored = workbenchEvidence({
+    metricCalculationVersion,
+    complete: true,
+    periods: { week: saved },
+  });
   assert.match(restored.periods.week.metrics['作废率'].note, /当前周期尚无已结束日期/);
   assert.equal(saved.metrics['作废率'].note, '所选周期及授权范围内无来源数据');
   const next = reportPeriods('2026-11-02', '2026-11-09', new Date('2026-11-03T07:25:11Z'));

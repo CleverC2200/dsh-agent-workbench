@@ -1,11 +1,23 @@
+import { directSourceFixture } from './fixtures/configured-page.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
 const bundle = await build({
+  plugins: [
+    {
+      name: 'direct-source-interaction-fixture',
+      setup(builder) {
+        builder.onLoad({ filter: /inventory-fc\/sql\.config\.json$/ }, () => ({
+          contents: JSON.stringify(directSourceFixture(config)),
+          loader: 'json',
+        }));
+      },
+    },
+  ],
   stdin: {
     contents: `import './business/inventory-fc/source/inventory-light-plugins/src/dsh-ui/base.css';import React from 'react';import{createRoot}from'react-dom/client';import{configuredQueryFreshAfter}from'./business/shared/query-cache';window.queryFreshAfter=configuredQueryFreshAfter;import Page from './business/inventory-fc/source/inventory-light-plugins/src/pages/configured-workbench.tsx';createRoot(document.getElementById('app')).render(React.createElement(Page));`,
     resolveDir: process.cwd(),
@@ -23,10 +35,54 @@ const bundle = await build({
 const js = bundle.outputFiles.find((f) => f.path.endsWith('.js')).text;
 const css = bundle.outputFiles.find((f) => f.path.endsWith('.css'))?.text ?? '';
 
-async function openFixture(t, denied = false) {
+let exportSku = 0;
+const exportGroups = [3, 3, 3, 3, 2, 2].map((count, index) =>
+  Array.from({ length: count }, () => {
+    const sku = ++exportSku;
+    const demand = sku === 16 ? 181 : 50;
+    return {
+      warehouse_code: 'A230',
+      order_no: 'EXPORT-' + (index + 1),
+      customer_code: 'C1',
+      sku: 'SKU' + sku,
+      material_name: '产品' + sku,
+      ordered: demand,
+      demand,
+      allocated: 0,
+      shipped: 0,
+      remaining: demand,
+      shortage: 0,
+      order_status: '正常',
+    };
+  }),
+);
+const exportHeaders = exportGroups.map((lines) => ({
+  ...lines[0],
+  warehouse_name: '杭州分仓',
+  customer_name: '测试客户',
+  requested_at: null,
+  created_at: '2026-11-06',
+  sku_count: lines.length,
+  satisfaction: null,
+  ...Object.fromEntries(
+    ['ordered', 'demand', 'allocated', 'shipped', 'remaining', 'shortage'].map((field) => [
+      field,
+      lines.reduce((sum, row) => sum + row[field], 0),
+    ]),
+  ),
+}));
+
+async function openFixture(
+  t,
+  denied = false,
+  resourcesDenied = false,
+  totals = false,
+  exports = false,
+) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  page.setDefaultTimeout(10000);
   const calls = [];
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -38,7 +94,7 @@ async function openFixture(t, denied = false) {
         body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
       });
     const { queryId: id, parameters } = route.request().postDataJSON();
-    if (id === 'summary.snapshot')
+    if (['summary.snapshot', 'summary.bootstrap'].includes(id))
       return route.fulfill({
         json: {
           rows: [],
@@ -51,10 +107,11 @@ async function openFixture(t, denied = false) {
     const q = config.queries[id];
     assert.ok(q, id);
     if (
-      denied &&
-      (id === 'branch-supply.summary' ||
-        ['replenishment.summary', 'replenishment.overview'].includes(id) ||
-        ['current-shortage.summary', 'current-shortage.overview'].includes(id))
+      (resourcesDenied && id === 'base-production.days') ||
+      (denied &&
+        (id === 'orders.summary' ||
+          ['replenishment.summary', 'replenishment.overview'].includes(id) ||
+          ['current-shortage.summary', 'current-shortage.overview'].includes(id)))
     )
       return route.fulfill({
         status: 403,
@@ -72,7 +129,7 @@ async function openFixture(t, denied = false) {
     else if (id === 'source.branch-stock-date')
       Object.assign(row, { day: '2026-10-30', row_count: 1, total_qty: 13200 });
     else if (id.startsWith('source.')) rows = [{ day: '2026-10-30' }];
-    else if (id === 'branch-supply.summary')
+    else if (id === 'orders.summary')
       Object.assign(row, {
         row_count: parameters.period_mode === 'current' ? 43 : 163,
         demand: parameters.period_mode === 'current' ? 17068 : 32124,
@@ -80,6 +137,8 @@ async function openFixture(t, denied = false) {
         pending: parameters.period_mode === 'current' ? 5999 : 5708,
         in_transit: 1644,
         fulfillment_rate: 26416 / 32124,
+        fulfillment_shipped_quantity: 26416,
+        fulfillment_order_quantity: 32124,
       });
     else if (['current-shortage.summary', 'current-shortage.overview'].includes(id))
       Object.assign(row, {
@@ -106,10 +165,10 @@ async function openFixture(t, denied = false) {
         page_row_present: 1,
         warehouse_code: 'A230',
         warehouse_name: '杭州分仓',
-        order_no: 'BASE-SUPPLY-1',
+        order_no: 'CUSTOMER-ORDER-1',
         order_status: '00',
-        customer_code: '郑州',
-        customer_name: '郑州',
+        customer_code: 'CUSTOMER-1',
+        customer_name: '测试经销商',
         requested_at: '2026-10-30',
         created_at: '2026-10-01',
         ordered: 20,
@@ -120,7 +179,7 @@ async function openFixture(t, denied = false) {
         satisfaction: 0.5,
         line_no: 1,
         sku: 'SKU1',
-        material_name: '基地补货商品',
+        material_name: '客户订货商品',
         base_warehouse: 'N411',
         base: '郑州',
         order_type: 'ZUB',
@@ -130,6 +189,23 @@ async function openFixture(t, denied = false) {
         pending: 5,
         in_transit: 5,
       });
+    else if (id === 'branch-current-orders.lines')
+      Object.assign(row, {
+        warehouse_code: 'A230',
+        order_no: 'CUSTOMER-ORDER-1',
+        customer_code: 'CUSTOMER-1',
+        order_status: '00',
+        page_scope_total: 1,
+        page_row_present: 1,
+        sku: 'SKU1',
+        material_name: '客户订货商品',
+        demand: 20,
+        allocated: 10,
+        remaining: 10,
+        shortage: 5,
+      });
+    else if (id === 'base_resources.detail.atomic')
+      rows = [{ ...row, page_scope_total: 0, page_row_present: null }];
     else if (id.includes('atomic') || id.endsWith('.detail')) rows = [];
     else
       Object.assign(row, {
@@ -139,6 +215,55 @@ async function openFixture(t, denied = false) {
         age_weight_qty: 10,
         weighted_age_sum: 210,
       });
+    if (totals && q.scopeSummaryColumns) {
+      const all = Array.from({ length: 13 }, (_, index) => ({
+        ...row,
+        ...Object.fromEntries(
+          Object.keys(q.scopeSummaryColumns).map((field) => [field, index + 1]),
+        ),
+        warehouse_code: 'A230',
+        warehouse_name: '杭州分仓',
+        sku: `SKU${index + 1}`,
+        material_name: `商品${index + 1}`,
+        material_group: '测试物料组',
+        order_no: `CUSTOMER-ORDER-${index + 1}`,
+        sku_count: 1,
+      }));
+      const pattern = parameters.search_pattern?.replaceAll('%', '');
+      const filtered = all.filter((row) => !pattern || row.sku === pattern);
+      const summary = Object.fromEntries(
+        Object.entries(q.scopeSummaryColumns).map(([field, alias]) => [
+          alias,
+          filtered.reduce((sum, row) => sum + Number(row[field]), 0),
+        ]),
+      );
+      rows = filtered
+        .slice(parameters.offset, parameters.offset + parameters.page_size)
+        .map((row) => ({
+          ...row,
+          ...summary,
+          page_scope_total: filtered.length,
+          page_row_present: 1,
+        }));
+      if (!rows.length)
+        rows = [{ ...row, ...summary, page_scope_total: 0, page_row_present: null }];
+    }
+    if (exports && ['branch-current-orders.page', 'branch-current-orders.lines'].includes(id)) {
+      const all = id.endsWith('.page')
+        ? exportHeaders
+        : exportGroups.flat().filter((row) => row.order_no === parameters.order_no);
+      rows = all.slice(parameters.offset, parameters.offset + parameters.page_size).map((row) => ({
+        ...row,
+        page_scope_total: all.length,
+        page_row_present: 1,
+        ...Object.fromEntries(
+          Object.entries(q.scopeSummaryColumns ?? {}).map(([field, alias]) => [
+            alias,
+            all.reduce((sum, row) => sum + Number(row[field]), 0),
+          ]),
+        ),
+      }));
+    }
     return route.fulfill({
       json: {
         rows,
@@ -151,7 +276,7 @@ async function openFixture(t, denied = false) {
   await page.goto('http://127.0.0.1:19487/');
   return { page, calls };
 }
-test('FC renders base supply fulfillment and cross-month orders independently of customer outbound demand', async (t) => {
+test('FC renders downstream customer fulfillment and open orders independently of upstream transfers', async (t) => {
   const { page, calls } = await openFixture(t);
   const cards = page.locator('[data-overview-cards="fc"] article');
   await expect(cards.filter({ hasText: '订单满足率' }).locator('.kpi-value')).toHaveText('82.23%');
@@ -160,20 +285,92 @@ test('FC renders base supply fulfillment and cross-month orders independently of
   await page.getByRole('button', { name: '选择分仓' }).click();
   await page.locator('[role=option][data-value="A230"]').click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
-  await expect(page.locator('table')).toContainText('BASE-SUPPLY-1');
-  await expect(page.locator('table')).toContainText('郑州');
+  await expect(page.locator('table')).toContainText('CUSTOMER-ORDER-1');
+  await expect(page.locator('table')).toContainText('测试经销商');
+  await expect(page.getByRole('columnheader', { name: '分仓', exact: true })).toBeVisible();
+  await expect(page.locator('table')).toContainText('杭州分仓');
+  await page.getByRole('button', { name: '展开订单CUSTOMER-ORDER-1', exact: true }).click();
+  const lines = page.getByRole('region', { name: 'CUSTOMER-ORDER-1订单明细' });
+  await expect(lines).toContainText('客户订货商品');
+  await expect(lines.getByRole('cell', { name: '5', exact: true })).toBeVisible();
+  assert.ok(
+    calls.some(
+      (c) =>
+        c.id === 'branch-current-orders.lines' &&
+        c.parameters.warehouse_code === 'A230' &&
+        c.parameters.order_no === 'CUSTOMER-ORDER-1' &&
+        c.parameters.customer_code === 'CUSTOMER-1',
+    ),
+  );
+  await page.getByLabel('订单状态', { exact: true }).selectOption('缺口');
+  await expect
+    .poll(() =>
+      calls.some(
+        (c) => c.id === 'branch-current-orders.page' && c.parameters.shortage_only === true,
+      ),
+    )
+    .toBe(true);
+
   await expect(page.getByRole('button', { name: '选择分仓' })).toContainText('A230');
   assert.ok(
     calls.some(
       (c) => c.id === 'branch-current-orders.page' && c.parameters.warehouse_code === 'A230',
     ),
   );
-  assert.ok(!calls.some((c) => ['orders.summary', 'branch-supply-current.summary'].includes(c.id)));
+  assert.ok(calls.some((c) => c.id === 'orders.summary'));
+  assert.ok(
+    !calls.some((c) => ['branch-supply.summary', 'branch-supply-current.summary'].includes(c.id)),
+  );
   await expect(page.getByRole('button', { name: '客户订单', exact: true })).toHaveCount(0);
   assert.ok(
     calls.some((c) => ['current-shortage.summary', 'current-shortage.overview'].includes(c.id)),
   );
   assert.ok(!calls.some((c) => c.id === 'branch-supply.detail.atomic'));
+});
+test('three FC lists show whole-filter totals across pages and recompute after filtering', async (t) => {
+  const { page } = await openFixture(t, false, false, true);
+  await mkdir('.scratch/fc-list-totals', { recursive: true });
+  for (const [tab, field] of [
+    ['补货确认', 'inventory_qty'],
+    ['分仓计划', 'missing_current_out'],
+  ]) {
+    await page.getByRole('button', { name: tab, exact: true }).click();
+    const footer = page.locator('table tfoot');
+    await expect(footer.locator(`[data-column="${field}"]`)).toHaveText('91');
+    const resize = page.getByRole('separator', { name: /^调整.*列宽$/ }).first();
+    const width = Number(await resize.getAttribute('aria-valuenow'));
+    await resize.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(resize).toHaveAttribute('aria-valuenow', String(width + 10));
+    await expect(page.locator('table:has(tfoot) > tbody > tr')).toHaveCount(10);
+    await page.getByRole('button', { name: '下一页', exact: true }).click();
+    await expect(page.locator('table:has(tfoot) > tbody > tr')).toHaveCount(3);
+    await expect(footer.locator(`[data-column="${field}"]`)).toHaveText('91');
+    await page.getByRole('textbox', { name: 'SKU／产品名称', exact: true }).fill('SKU13');
+    await page.getByRole('button', { name: '查询', exact: true }).click();
+    await expect(page.locator('table:has(tfoot) > tbody > tr')).toHaveCount(1);
+    await expect(footer.locator(`[data-column="${field}"]`)).toHaveText('13');
+    await page.getByRole('button', { name: '清空筛选', exact: true }).click();
+    await expect(footer.locator(`[data-column="${field}"]`)).toHaveText('91');
+    await footer.scrollIntoViewIfNeeded();
+    await expect(footer).toBeInViewport();
+    await page.screenshot({ path: `.scratch/fc-list-totals/${field}.png`, fullPage: true });
+  }
+  await page.getByRole('button', { name: '当前订单', exact: true }).click();
+  const footer = page.getByLabel('当前筛选合计');
+  await expect(footer.getByRole('cell').nth(6)).toHaveText('91');
+  await page.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(page.locator('table:has(tfoot) > tbody > tr')).toHaveCount(3);
+  await expect(footer.getByRole('cell').nth(6)).toHaveText('91');
+  await page.setViewportSize({ width: 520, height: 800 });
+  await footer.scrollIntoViewIfNeeded();
+  await expect(footer).toBeVisible();
+  assert.ok(
+    await page
+      .locator('table:has(tfoot)')
+      .evaluate((table) => table.parentElement.clientWidth <= window.innerWidth),
+  );
+  await page.screenshot({ path: '.scratch/fc-list-totals/orders-narrow.png', fullPage: true });
 });
 test('FC exposes denied domains and preserves ready inventory without fabricating zero', async (t) => {
   const { page, calls } = await openFixture(t, true);
@@ -183,7 +380,7 @@ test('FC exposes denied domains and preserves ready inventory without fabricatin
   await expect(cards.filter({ hasText: '当前订单' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.filter({ hasText: '待补货量' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.first().locator('.kpi-value')).toHaveText('1.32万件');
-  await expect.poll(() => calls.filter((c) => c.id === 'branch-supply.summary').length).toBe(1);
+  await expect.poll(() => calls.filter((c) => c.id === 'orders.summary').length).toBe(1);
   await expect
     .poll(
       () =>
@@ -191,4 +388,133 @@ test('FC exposes denied domains and preserves ready inventory without fabricatin
           .length,
     )
     .toBe(1);
+});
+
+test('FC base resources keeps an authorization failure distinct from a successful empty query', async (t) => {
+  const { page, calls } = await openFixture(t, false, true);
+  await page.getByRole('button', { name: '基地资源', exact: true }).click();
+  const sku = page.getByLabel('SKU', { exact: true });
+  await sku.fill('SKU1');
+  await page.getByRole('button', { name: '查询', exact: true }).click();
+  await expect
+    .poll(() => calls.filter((call) => call.id === 'base-production.days').length)
+    .toBe(1);
+  const table = page
+    .locator('table')
+    .filter({ has: page.locator('caption', { hasText: '基地排产资源监控' }) });
+  await expect(table.locator('xpath=..').locator('p').first()).toHaveText(/^-重新加载数据$/);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('current orders supports column dragging, batch selection and complete Excel detail export', async (t) => {
+  const { page, calls } = await openFixture(t, false, false, false, true);
+  await page.getByRole('button', { name: '当前订单', exact: true }).click();
+  const selectPage = page.getByRole('checkbox', { name: '全选本页订单' });
+  await expect(page.getByRole('checkbox', { name: /^选择订单/ })).toHaveCount(6);
+  await page.getByRole('checkbox', { name: '选择订单EXPORT-1', exact: true }).check();
+  await expect(selectPage).toHaveJSProperty('indeterminate', true);
+  const partialDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出已选明细', exact: true }).click();
+  const partial = await partialDownload;
+  assert.equal(partial.suggestedFilename(), '分仓当前订单产品明细.xlsx');
+  await expect(page.getByRole('status')).toContainText('已导出1个订单、3条产品明细');
+  const partialXml = (await readFile(await partial.path())).toString();
+  assert.equal(
+    [...partialXml.matchAll(/<c r="I\d+"><v>([^<]+)<\/v>/g)].reduce(
+      (sum, match) => sum + Number(match[1]),
+      0,
+    ),
+    150,
+  );
+  await selectPage.check();
+  await expect(page.getByRole('checkbox', { name: /^选择订单/ }).first()).toBeChecked();
+  await expect(page.locator('[class*=exportToolbar]')).toContainText('已选 6 个订单');
+  const allDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出已选明细', exact: true }).click();
+  const all = await allDownload;
+  await expect(page.getByRole('status')).toContainText('已导出6个订单、16条产品明细');
+  const xml = (await readFile(await all.path())).toString();
+  const quantities = [...xml.matchAll(/<c r="I\d+"><v>([^<]+)<\/v>/g)].map((match) =>
+    Number(match[1]),
+  );
+  assert.equal(quantities.length, 16);
+  assert.equal(
+    quantities.reduce((sum, value) => sum + value, 0),
+    931,
+  );
+  assert.ok(calls.filter((call) => call.id === 'branch-current-orders.lines').length >= 6);
+  assert.equal(
+    await page.getByRole('button', { name: /^收起订单/ }).count(),
+    0,
+    'export never requires expanding a row',
+  );
+  const handle = page.getByRole('separator', { name: '调整订单号列宽', exact: true });
+  const before = Number(await handle.getAttribute('aria-valuenow'));
+  const box = await handle.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 86, box.y + box.height / 2);
+  await page.mouse.up();
+  await expect
+    .poll(async () => Number(await handle.getAttribute('aria-valuenow')))
+    .toBeGreaterThan(before + 60);
+  await page.getByRole('button', { name: '全选筛选结果', exact: true }).click();
+  await page.getByRole('checkbox', { name: '选择订单EXPORT-2', exact: true }).uncheck();
+  await expect(page.locator('[class*=exportToolbar]')).toContainText('已选 5 个订单');
+  await page.getByRole('button', { name: '清空筛选', exact: true }).click();
+  await expect(page.locator('[class*=exportToolbar]')).toContainText('已选 0 个订单');
+  await expect(page.getByRole('checkbox', { name: /^选择订单/ })).toHaveCount(6);
+  await page.locator('[class*=exportToolbar]').scrollIntoViewIfNeeded();
+  await mkdir('.scratch/fc-order-export', { recursive: true });
+  await page.screenshot({ path: '.scratch/fc-order-export/desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 520, height: 800 });
+  await page.locator('[class*=exportToolbar]').scrollIntoViewIfNeeded();
+  await expect(page.getByRole('button', { name: '导出全部明细', exact: true })).toBeVisible();
+  await mkdir('.scratch/fc-order-export', { recursive: true });
+  await page
+    .getByRole('checkbox', { name: '选择订单EXPORT-1', exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole('checkbox', { name: '选择订单EXPORT-1', exact: true }),
+  ).toBeInViewport();
+  await page.screenshot({ path: '.scratch/fc-order-export/narrow.png', fullPage: true });
+});
+
+test('order selection persists across pages, clears with filters and cannot export denied details', async (t) => {
+  const { page } = await openFixture(t, false, false, true);
+  await page.getByRole('button', { name: '当前订单', exact: true }).click();
+  await page.getByRole('checkbox', { name: '选择订单CUSTOMER-ORDER-1', exact: true }).check();
+  await page.getByRole('button', { name: '下一页', exact: true }).click();
+  await page.getByRole('checkbox', { name: '选择订单CUSTOMER-ORDER-11', exact: true }).check();
+  await expect(page.locator('[class*=exportToolbar]')).toContainText('已选 2 个订单');
+  await page.getByRole('button', { name: '全选筛选结果', exact: true }).click();
+  await expect(page.locator('[class*=exportToolbar]')).toContainText('已选 13 个订单');
+  await page.getByRole('checkbox', { name: '选择订单CUSTOMER-ORDER-13', exact: true }).uncheck();
+  await expect(page.locator('[class*=exportToolbar]')).toContainText('已选 12 个订单');
+  await page.getByRole('button', { name: '上一页', exact: true }).click();
+  await expect(
+    page.getByRole('checkbox', { name: '选择订单CUSTOMER-ORDER-1', exact: true }),
+  ).toBeChecked();
+  await page.getByLabel('订单状态', { exact: true }).selectOption('缺口');
+  await expect(page.locator('[class*=exportToolbar]')).toContainText('已选 0 个订单');
+  let downloads = 0;
+  page.on('download', () => downloads++);
+  await page.route('http://127.0.0.1:19487/**', async (route) => {
+    if (
+      route.request().method() === 'POST' &&
+      route.request().postDataJSON().queryId === 'branch-current-orders.lines'
+    )
+      return route.fulfill({
+        status: 403,
+        json: {
+          code: 'ROW_SCOPE_DENIED',
+          message: '订单明细无权读取',
+          failure: { stage: 'AUTHORIZE', reasonCode: 'ROW_SCOPE_DENIED' },
+        },
+      });
+    return route.fallback();
+  });
+  await page.getByRole('button', { name: '导出全部明细', exact: true }).click();
+  await expect(page.locator('[class*=exportToolbar]').getByRole('alert')).toBeVisible();
+  assert.equal(downloads, 0);
 });

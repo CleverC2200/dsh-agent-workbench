@@ -25,6 +25,20 @@ test('gateway-compatible stock join preserves the full-join result including unm
       ('郑州','stock-only','b','20261025',50,50,'02','工厂外租库'),
       (NULL,'null-key','c','20261025',10,10,'01','工厂成品仓'),
       ('郑州','missing-quantity','d','20261025',0,NULL,'01','工厂成品仓');`);
+    db.exec(`ALTER TABLE agents_scm_stock_detail_d ADD COLUMN roll_sales_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN transfer_out_plan_roll;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_sales_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN next_month_out_plan;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN current_stock DEFAULT 100;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN current_stock_60 DEFAULT 10;
+      ALTER TABLE agents_scm_stock_detail_d ADD COLUMN available_stock DEFAULT 80;
+      UPDATE agents_scm_stock_detail_d SET roll_sales_plan=main_sales_plan_v1,
+        transfer_out_plan_roll=transfer_out_plan_v1;`);
+    db.exec(`CREATE TABLE agents_sales_plan_demand_m(stat_month,belong_base,material_code,plannum,allnum);
+      CREATE TABLE agents_dim_material_prod_sales_info_d(material_code,channel_name);
+      INSERT INTO agents_sales_plan_demand_m SELECT '2026-10-01',belong_base,material_code,main_sales_plan_v1,main_sales_plan_v1
+        FROM agents_scm_stock_detail_d WHERE belong_base IS NOT NULL;
+      INSERT INTO agents_dim_material_prod_sales_info_d SELECT DISTINCT material_code,'思念' FROM agents_scm_stock_detail_d;`);
     const sql = workbenchQueries.stock.sql;
     assert.doesNotMatch(sql, /FULL\s+(?:OUTER\s+)?JOIN|<=>/i);
     const firstArm = sql.split(' UNION ALL ')[0];
@@ -41,13 +55,13 @@ test('gateway-compatible stock join preserves the full-join result including unm
         .map((row) => JSON.stringify(row))
         .sort();
     assert.deepEqual(read(sql), read(original));
-    assert.equal(read(sql).length, 6);
+    assert.equal(read(sql).length, 3);
   } finally {
     db.close();
   }
 });
 
-test('SQL summary keeps independent nationwide contributions from stock-only and plan-only SKUs', () => {
+test('SQL summary keeps independent nationwide and base contributions from unmatched SKUs', () => {
   const db = new DatabaseSync(':memory:');
   try {
     const config = { queries: {} };
@@ -84,6 +98,7 @@ test('SQL summary keeps independent nationwide contributions from stock-only and
         national_stock_records: 0,
         national_plan_records: 1,
         sales_plan: 310,
+        base_transfer_plan: 62,
         source_rows: 1,
         invalid: 1,
       },
@@ -103,8 +118,11 @@ test('SQL summary keeps independent nationwide contributions from stock-only and
       category: '食品',
       item: '水饺',
       stock_date: '2026-10-25',
+      plan_month_offset: 0,
       national_stock_invalid: 0,
       national_plan_invalid: 0,
+      base_transfer_plan: 0,
+      base_plan_invalid: 0,
       ...row,
     }));
     const columns = workbenchQueries.stock.columns;
@@ -120,6 +138,36 @@ test('SQL summary keeps independent nationwide contributions from stock-only and
     assert.equal(summary[0].inventory, null, 'paired detail totals remain incomplete');
     assert.equal(model.nationalStockDays(summary), 7.5);
     assert.equal(model.nationalStockDays(summary), model.nationalStockDays(rows));
+    const baseDays = (values) =>
+      model.computeWorkbenchMetrics(
+        {
+          sections: [{ id: 'stock', status: 'ready', rows: values }],
+        },
+        undefined,
+        { turnoverScope: 'base' },
+      )['周转天数'].value;
+    assert.ok(Math.abs(baseDays(summary) - (150 * 31) / (620 + 62 * 0.5)) < 1e-12);
+    assert.equal(baseDays(summary), baseDays(rows));
+    db.exec(
+      "UPDATE independent_stock SET base_transfer_plan=NULL,base_plan_invalid=1 WHERE sku='plan-only'",
+    );
+    const missing = db
+      .prepare(config.queries['workbench.stock.summary'].request.sql)
+      .all({ gea_p1001: 200, gea_p1002: 0 });
+    assert.equal(baseDays(missing), null);
+    assert.equal(model.nationalStockDays(missing), 7.5);
+    db.exec('UPDATE independent_stock SET plan_month_offset=1');
+    const nextMonth = db
+      .prepare(config.queries['workbench.stock.summary'].request.sql)
+      .all({ gea_p1001: 200, gea_p1002: 0 });
+    assert.equal(nextMonth[0].plan_month_offset, 1, 'month offset must not be summed across SKUs');
+    assert.equal(model.nationalStockDays(nextMonth), 150 / (620 / 30));
+    db.exec("UPDATE independent_stock SET plan_month_offset=0 WHERE sku='both'");
+    const mixed = db
+      .prepare(config.queries['workbench.stock.summary'].request.sql)
+      .all({ gea_p1001: 200, gea_p1002: 0 });
+    assert.equal(mixed[0].plan_month_offset, null);
+    assert.equal(model.nationalStockDays(mixed), null);
   } finally {
     db.close();
   }
@@ -270,12 +318,16 @@ test('SQL summaries preserve NULL, zero, duplicate-stock guards and every visibl
     };
     for (const row of source.stock)
       Object.assign(row, {
+        plan_month_offset: 0,
         national_inventory: row.inventory,
         national_sales_plan: row.sales_plan,
         national_stock_records: 1,
         national_plan_records: 1,
         national_stock_invalid: row.inventory === null ? 1 : 0,
         national_plan_invalid: row.sales_plan === null || row.source_rows !== 1 ? 1 : 0,
+        base_transfer_plan: row.transfer_plan,
+        base_plan_invalid:
+          row.sales_plan === null || row.transfer_plan === null || row.source_rows !== 1 ? 1 : 0,
       });
     const config = { queries: {} };
     for (const [name, rows] of Object.entries(source)) {
@@ -360,7 +412,29 @@ test('SQL summaries preserve NULL, zero, duplicate-stock guards and every visibl
         a.cards.map((c) => [c.key, c.value, ...c.comparison]),
         dimension + ' cards',
       );
-      assert.deepEqual(b.performance, a.performance, dimension);
+      const comparablePerformance = (performance) =>
+        Object.fromEntries(
+          Object.entries(performance).map(([key, tables]) => [
+            key,
+            Object.fromEntries(
+              Object.entries(tables).map(([period, rows]) => [
+                period,
+                rows.map((row) =>
+                  row.map((cell) => {
+                    if (cell?.text !== '—') return cell;
+                    assert.ok(cell.title, 'missing values retain their source-specific diagnostic');
+                    return cell.text;
+                  }),
+                ),
+              ]),
+            ),
+          ]),
+        );
+      assert.deepEqual(
+        comparablePerformance(b.performance),
+        comparablePerformance(a.performance),
+        dimension,
+      );
       assert.deepEqual(b.dimensions, a.dimensions, dimension + ' dimensions');
     }
   } finally {

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 
 const bundle = await build({
@@ -27,7 +28,7 @@ window.publishIdentity=(snapshot)=>window.dispatchEvent(new MessageEvent('messag
 async function open(
   t,
   authenticated,
-  { pollStatus = 'authenticated', clock = false, dark = false } = {},
+  { pollStatus = 'authenticated', clock = false, dark = false, passwordFailure, holdPassword } = {},
 ) {
   const assets = new Map(bundle.outputFiles.map((x) => [x.path.split('/').at(-1), x.text]));
   assets.set('theme.css', await readFile('theme/tokens.css', 'utf8'));
@@ -58,6 +59,18 @@ async function open(
   t.after(() => browser.close());
   const page = await browser.newPage();
   if (clock) await page.clock.install();
+  const captchaImage = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 120;
+    canvas.height = 40;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#edf0f5';
+    context.fillRect(0, 0, 120, 40);
+    context.font = 'bold 26px sans-serif';
+    context.fillStyle = '#303b55';
+    context.fillText('a1B2', 20, 29);
+    return canvas.toDataURL('image/jpeg');
+  });
   const calls = [];
   const errors = [];
   let external = 0;
@@ -84,6 +97,14 @@ async function open(
     let value = status;
     if (url.pathname.endsWith('login/start'))
       value = { image: 'data:image/png;base64,AA==', loginId: 'qr', expiresIn: 120 };
+    if (url.pathname.endsWith('login/password/prepare'))
+      value = { challengeId: 'captcha-' + calls.length, image: captchaImage, expiresIn: 60 };
+    if (url.pathname.endsWith('login/password')) {
+      if (holdPassword) await holdPassword;
+      if (passwordFailure)
+        return route.fulfill({ json: { ok: false, error: { code: passwordFailure } } });
+      value = { authenticated: true };
+    }
     if (url.pathname.endsWith('login/poll')) value = { ...status, status: pollStatus };
     if (url.pathname.endsWith('workflow/config')) value = [];
     if (url.pathname.endsWith('workbench/query'))
@@ -254,3 +275,119 @@ test('Native approval follows parent theme for business surfaces and Arco contro
       });
   }
 });
+
+async function passwordForm(f) {
+  await f.page.getByRole('button', { name: '账号密码', exact: true }).click();
+  await expect(f.page.locator('.gea-captcha-image')).toBeVisible();
+  await f.page.locator('input[name="username"]').fill('employee');
+  await f.page.locator('input[name="password"]').fill('  synthetic-password  ');
+  await f.page.locator('input[name="captcha"]').fill('a1B2');
+}
+
+test(
+  'Native password login renders, refreshes, preserves exact password and waits for Host identity',
+  { timeout: 30000 },
+  async (t) => {
+    const f = await open(t, false, { clock: true });
+    await passwordForm(f);
+    const count = () => f.calls.filter((c) => c.path.endsWith('login/password/prepare')).length;
+    assert.equal(count(), 1);
+    await f.page.getByRole('button', { name: '刷新验证码', exact: true }).last().click();
+    await expect.poll(count).toBe(2);
+    await expect(f.page.locator('.gea-captcha-image img')).toBeVisible();
+    await f.page.locator('input[name="captcha"]').fill('a1B2');
+    await f.page.getByRole('button', { name: '显示密码', exact: true }).click();
+    await expect(f.page.locator('input[name="password"]')).toHaveAttribute('type', 'text');
+    await f.page.getByRole('button', { name: '隐藏密码', exact: true }).click();
+    if (process.env.DSH_LOGIN_EVIDENCE_DIR) {
+      await mkdir(process.env.DSH_LOGIN_EVIDENCE_DIR, { recursive: true });
+      await f.page.screenshot({
+        path: join(process.env.DSH_LOGIN_EVIDENCE_DIR, 'password-desktop.png'),
+        fullPage: true,
+      });
+      await f.page.setViewportSize({ width: 375, height: 812 });
+      await f.page.screenshot({
+        path: join(process.env.DSH_LOGIN_EVIDENCE_DIR, 'password-narrow.png'),
+        fullPage: true,
+      });
+      assert.equal(
+        await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+        false,
+      );
+    }
+    await f.page.locator('input[name="captcha"]').fill('a1B2');
+    await expect(f.page.getByRole('button', { name: '登录 GEA', exact: true })).toBeEnabled();
+    await f.page.locator('input[name="captcha"]').press('Enter');
+    await expect
+      .poll(() => f.calls.filter((c) => c.path.endsWith('login/password')).length)
+      .toBe(1);
+    const sent = f.calls.find((c) => c.path.endsWith('login/password')).payload;
+    assert.equal(sent.password, '  synthetic-password  ');
+    assert.match(sent.challengeId, /^captcha-/);
+    await expect(f.page.locator('.gea-original-workbench')).toHaveCount(0);
+    f.status.authenticated = true;
+    f.status.user = { id: 'host-user', username: 'Host' };
+    f.status.pageScope = 'host-password';
+    await f.publish({ state: 'confirmed', scope: 'host-password', status: f.status });
+    await expect(f.page.locator('.gea-original-workbench')).toBeVisible();
+    assert.deepEqual(f.errors, []);
+    assert.equal(f.external(), 0);
+  },
+);
+
+test(
+  'Native password captcha expires without sending credentials and environment/method changes cancel pending login',
+  { timeout: 30000 },
+  async (t) => {
+    const held = Promise.withResolvers();
+    t.after(() => held.resolve());
+    const f = await open(t, false, { clock: true, holdPassword: held.promise });
+    await passwordForm(f);
+    await f.page.clock.fastForward(61000);
+    await expect(f.page.getByRole('button', { name: '登录 GEA', exact: true })).toBeDisabled();
+    assert.equal(f.calls.filter((c) => c.path.endsWith('login/password')).length, 0);
+    await f.page.getByRole('button', { name: '刷新验证码', exact: true }).click();
+    await expect(f.page.locator('.gea-captcha-image')).toBeVisible();
+    await f.page.locator('input[type="radio"][value="production"]').check();
+    await expect
+      .poll(
+        () =>
+          f.calls.filter((c) => c.path.endsWith('login/password/prepare')).at(-1)?.payload
+            .environment,
+      )
+      .toBe('production');
+    await expect(f.page.locator('.gea-captcha-image')).toBeVisible();
+    await expect(f.page.locator('input[name="password"]')).toHaveValue('');
+    await f.page.locator('input[name="username"]').fill('employee');
+    await f.page.locator('input[name="password"]').fill('synthetic-password');
+    await f.page.locator('input[name="captcha"]').fill('a1B2');
+    await f.page.getByRole('button', { name: '登录 GEA', exact: true }).click();
+    await expect
+      .poll(() => f.calls.filter((c) => c.path.endsWith('login/password')).length)
+      .toBe(1);
+    await f.page.getByRole('button', { name: '飞书扫码', exact: true }).click();
+    await expect(f.page.locator('.gea-login-qr img')).toBeVisible();
+    held.resolve();
+    await expect(f.page.locator('.gea-original-workbench')).toHaveCount(0);
+    assert.deepEqual(f.errors, []);
+  },
+);
+
+for (const [code, message] of [
+  ['GEA_LOGIN_CAPTCHA_INVALID', '验证码错误或失效'],
+  ['GEA_LOGIN_RATE_LIMITED', '认证尝试过多'],
+]) {
+  test(
+    'Native password failure ' + code + ' gives recovery without automatic login retries',
+    { timeout: 30000 },
+    async (t) => {
+      const f = await open(t, false, { passwordFailure: code });
+      await passwordForm(f);
+      await f.page.getByRole('button', { name: '登录 GEA', exact: true }).click();
+      await expect(f.page.getByRole('alert')).toContainText(message);
+      assert.equal(f.calls.filter((c) => c.path.endsWith('login/password')).length, 1);
+      await expect(f.page.locator('input[name="password"]')).toHaveValue('');
+      assert.deepEqual(f.errors, []);
+    },
+  );
+}

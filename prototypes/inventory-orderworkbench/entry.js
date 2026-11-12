@@ -1,16 +1,22 @@
+import { shippableReferenceVersion } from './historical-shippable-reference.mjs';
 import { encodeReportRequest } from './report-transfer.mjs';
 import { workbenchCellMissingReason } from './missing-reasons.mjs';
 import { createReportPersistence } from './report-persistence.mjs';
 import { createPageViewState } from '../../business/shared/view-state.js';
-import { ask, draft, ready, call } from '../../business/shared/channel.js';
+import { ask, draft, ready, call, currentSessionId } from '../../business/shared/channel.js';
 import { metricDetailsRequest } from './metric-details.mjs';
+import { metricDefinition } from './metric-definitions.mjs';
 import { loadWorkbenchFacts, loadWorkbenchSkuPage } from './live-source.js';
 import { createFrameProgress } from '../../business/shared/frame-progress.js';
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
-import { workbenchPresentation, workbenchEvidence, workbenchBaseIncluded } from './live-presentation.mjs';
-import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
-import { reusableWorkbenchFacts, compatibleWorkbenchFacts } from './metric-model.mjs';
+import { startWorkbenchStagedRead } from './staged-facts.mjs';
+import { workbenchPresentation, workbenchBaseIncluded } from './live-presentation.mjs';
+import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache, createWorkbenchPeriodCacheLifecycle, createWorkbenchScopedFactsCache } from './presentation-cache.mjs';
+import { shippableDaysTarget, performanceStyleVersion, metricTarget } from './performance-rules.mjs';
+import { reusableWorkbenchFacts, compatibleWorkbenchFacts, retainableWorkbenchFacts } from './metric-model.mjs';
 import { publishReport } from './publication.js';
+import { mountReportImport } from './report-import.mjs';
+import { projectReportImports, importedSummary, summarySupplement } from './import-content.mjs';
 const view = createPageViewState('inventory-orderworkbench');
 let restoringView = false;
 const pageTimeouts = new Set(),
@@ -27,10 +33,20 @@ let liveSkuDetails = {};
 let liveSkuPagination = {};
 const workbenchSkuPages = new Map();
 let applyLiveFacts = () => {};
+const cachedWorkbenchPresentation = createWorkbenchPresentationCache();
+const cachedWorkbenchEvidence = createWorkbenchEvidenceCache();
 let reportLoaded = false, savedPresentation = null, reportEdited = false;
 const periodCacheMaxAge = 20 * 60 * 1000;
 const periodReports = new Map();
+const scopedFactsCache = createWorkbenchScopedFactsCache({ maxAge: periodCacheMaxAge, reusable: retainableWorkbenchFacts });
+const periodCacheLifecycle = createWorkbenchPeriodCacheLifecycle(periodReports, { maxAge: periodCacheMaxAge, reusable: retainableWorkbenchFacts, now: () => Date.now() });
 let activePeriodReport;
+let reportImporter;
+let workbenchImportHistory = [];
+let workbenchImportOverrides = {};
+const importedContent = () => projectReportImports(workbenchImportHistory, workbenchImportOverrides);
+const effectiveSummary = () => importedSummary(workbenchSummaryContent, importedContent().summary, defaultWorkbenchSummary);
+const supplementalSummary = () => summarySupplement(workbenchSummaryContent, importedContent().summary, defaultWorkbenchSummary);
 let eventFilter = 'focus';
 let taskFilter = 'all';
 let dimensionTab = 'base-performance';
@@ -76,13 +92,15 @@ let persistence = createReportPersistence(
   },
 );
 function reportEdits() {
-  return { summary: workbenchSummaryContent, unmet: addedWorkbenchUnmetEntries,
+  return { imports: workbenchImportHistory, importOverrides: workbenchImportOverrides, summary: workbenchSummaryContent, unmet: addedWorkbenchUnmetEntries,
     overrides: [...workbenchUnmetOverrides], deleted: [...deletedWorkbenchUnmetKeys],
     directors: workbenchDirectorNotes, references: workbenchReferenceLinks,
-    improvements: [...workbenchView.querySelectorAll('.wb-improvement-table')].map(table => [...table.tBodies[0].rows].map(row => [...row.querySelectorAll('td:not(.actions)')].map(cell => ({text: cell.textContent, className: cell.className.replace('is-editing', '').trim()})))),
+    improvements: [...workbenchView.querySelectorAll('.wb-improvement-table')].map(table => [...table.tBodies[0].rows].filter(row => !row.dataset.importRow).map(row => [...row.querySelectorAll('td:not(.actions)')].map(cell => ({text: cell.textContent, className: cell.className.replace('is-editing', '').trim()})))),
     tasks: [...improvementTasks], issues: [...dimensionIssueEdits], createdTasks: [...createdWorkbenchTasks] };
 }
 function restoreReportEdits(edits = {}) {
+  workbenchImportHistory = edits.imports ?? [];
+  workbenchImportOverrides = edits.importOverrides ?? {};
   workbenchSummaryContent = { ...defaultWorkbenchSummary, ...edits.summary };
   addedWorkbenchUnmetEntries = edits.unmet ?? [];
   workbenchDirectorNotes = edits.directors ?? [];
@@ -99,6 +117,7 @@ function restoreReportEdits(edits = {}) {
     }
   });
   deletedWorkbenchUnmetKeys.clear(); for (const key of edits.deleted ?? []) deletedWorkbenchUnmetKeys.add(key);
+  renderImportedImprovements();
 }
 function saveEditedReport() { reportEdited = true; if(activePeriodReport){activePeriodReport.edits=structuredClone(reportEdits());activePeriodReport.dirty=true;} return persistence.saveEdits(reportEdits()); }
 function saveWorkbenchSummary() { return saveEditedReport(); }
@@ -109,6 +128,7 @@ function saveWorkbenchLocalState() { return saveEditedReport(); }
 window.addEventListener('beforeunload', event => { if (reportEdited || [...periodReports.values()].some(entry=>entry.dirty || entry.persistence.pending())) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('click', event => {
   const button = event.target.closest('button');
+  if (reportImporter?.busy && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)/.test(attribute.name))) { event.preventDefault(); event.stopImmediatePropagation(); showWorkbenchToast('正在写入导入内容，请等待保存结果'); return; }
   if (!reportLoaded && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)$/.test(attribute.name))) {
     event.preventDefault(); event.stopImmediatePropagation();
     showWorkbenchToast('报告尚未读取完整或未获授权，暂不能编辑保存。'); return;
@@ -291,7 +311,7 @@ const metricDefinitions = [
     trend: '较上期 -1.3 天',
     status: '达标',
     tone: '',
-    formula: '按业务定义，周转天数即可发货天数，按可用库存与日均需求测算。',
+    formula: '按业务定义，周转天数即可发货天数，按现库存与日均需求测算。',
     note: '报告本期整体可发货/周转天数 11.7 天，上期 13.0 天；本指标沿用“可发货天数”口径。',
   },
   {
@@ -795,7 +815,7 @@ const workbenchDimensions = {
   },
   'region-change': {
     title: '改单率—大区 / 省区聚焦',
-    note: '点击首列展开客户名称、编码、客户经理、改单订单数及订单总数（演示明细）。',
+    note: '点击首列展开客户名称、编码、客户经理、锁定期调整商品数量及有效商品数量。',
     summary:
       '10 个区域或渠道改单率异常，高势能渠道销售 27.55% 为最严重项；其余区域需按客户、品类和改单原因继续拆解。',
     columns: ['大区 / 渠道', '本期改单率', '上期', '环比', '状态'],
@@ -2164,11 +2184,41 @@ function escapeHtml(value) {
     (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char],
   );
 }
+function renderImportedImprovements() {
+  for (const [index, table] of [...workbenchView.querySelectorAll('.wb-improvement-table')].entries()) {
+    table.querySelectorAll('[data-import-row]').forEach(row => row.remove());
+    for (const entry of importedContent()[index === 0 ? 'short' : 'long']) {
+      const row = document.createElement('tr'); row.dataset.importRow = entry.id;
+      const fields = index === 0 ? [entry.direction, entry.measure, entry.issue] : [entry.mechanism, entry.content, entry.goal, entry.status];
+      for (const cellValue of entry.cells ?? fields.map(text => ({ text, className: '' }))) {
+        const cell = document.createElement('td'); cell.textContent = cellValue.text; cell.className = cellValue.className; row.append(cell);
+      }
+      appendImprovementActions(row); table.tBodies[0].append(row);
+    }
+  }
+}
 function renderWorkbenchSummary() {
   document.querySelectorAll('[data-wb-summary-content]').forEach((node) => {
     const key = node.dataset.wbSummaryContent;
-    node.textContent = workbenchSummaryContent[key] ?? '暂无人工填写的分析。';
+    node.textContent = effectiveSummary()[key] ?? '暂无人工填写的分析。';
   });
+  document.getElementById('wbImportedSummary')?.remove();
+  const additions = supplementalSummary();
+  if (!Object.keys(additions).length) return;
+  const section = document.createElement('section'); section.id = 'wbImportedSummary';
+  section.style.cssText = 'border-top:1px solid #e5e7eb;margin-top:16px;padding-top:14px';
+  const heading = document.createElement('h3'); heading.textContent = '补充结论';
+  heading.style.cssText = 'font-size:15px;margin:0 0 8px'; section.append(heading);
+  const lines = document.createElement('div'); lines.className = 'wb-summary-lines';
+  const labels = {positive:'正向：',risk:'风险：',rhythm:'旬/周节奏：'};
+  for (const [key, value] of Object.entries(additions)) {
+    const row = document.createElement('p'); const icon = document.createElement('span');
+    icon.className = 'wb-summary-icon'; icon.textContent = '✦'; icon.setAttribute('aria-hidden','true');
+    const body = document.createElement('span'), label = document.createElement('strong'), text = document.createElement('span');
+    label.textContent = labels[key]; text.textContent = value; text.style.whiteSpace = 'pre-wrap';
+    body.append(label,text); row.append(icon,body); lines.append(row);
+  }
+  section.append(lines); document.getElementById('wbMetricAnalysis').append(section);
 }
 function renderWorkbenchReferenceLinks() {
   const list = document.getElementById('wbReferenceList');
@@ -2292,10 +2342,21 @@ async function readCurrentPeriod() {
   if (!liveConnected) return;
   const key=periodMode+':'+selectedMonth+(periodMode==='week'?':'+selectedWeek:'');
   if (key===liveReadKey) return;
+  reportImporter?.invalidate();
   if(activePeriodReport && reportLoaded) activePeriodReport.edits=structuredClone(reportEdits());
+  if (activePeriodReport && !activePeriodReport.finished) {
+    activePeriodReport.readController?.abort();
+    activePeriodReport.started = false;
+    if (!activePeriodReport.loaded && !activePeriodReport.dirty && !activePeriodReport.persistence.pending()) {
+      activePeriodReport.controller.abort();
+      activePeriodReport.persistence.cancel();
+      periodReports.delete(liveReadKey);
+    }
+  }
   liveReadKey=key;
   let entry=periodReports.get(key);
-  if(entry && !entry.dirty && !entry.persistence.pending() && entry.finished && Date.now()-entry.finished>periodCacheMaxAge){entry.controller.abort();periodReports.delete(key);entry=null;}
+  if (entry?.controller.signal.aborted) { periodReports.delete(key); entry = null; }
+  if(entry && !entry.dirty && !entry.persistence.pending() && Date.now()-(entry.finished??Date.parse(entry.facts?.readAt))>=periodCacheMaxAge){entry.controller.abort();entry.persistence.cancel();periodReports.delete(key);entry=null;}
   if(!entry){
     entry={controller:new AbortController(),edits:null,dirty:false,loaded:false,facts:null,started:false};
     entry.persistence=createReportPersistence(async(request,signal)=>{const encoded=await encodeReportRequest(request);signal.throwIfAborted();return call('workspace',encoded,{signal});},(state,message)=>{
@@ -2306,6 +2367,14 @@ async function readCurrentPeriod() {
     periodReports.set(key,entry);
   }
   activePeriodReport=entry;persistence=entry.persistence;
+  for (const [cachedKey, cached] of periodReports) {
+    if (periodReports.size <= 6) break;
+    if (cached !== entry && !cached.started && !cached.dirty && !cached.persistence.pending()) {
+      cached.controller.abort();
+      cached.persistence.cancel();
+      periodReports.delete(cachedKey);
+    }
+  }
   const controller=liveController=entry.controller;
   liveFacts=null;
   reportLoaded=false; savedPresentation=null; reportEdited=false;
@@ -2321,17 +2390,18 @@ async function readCurrentPeriod() {
   const start=periodMode==='month'?monthStart:(selectedWeek<monthStart?monthStart:selectedWeek);
   const weekEnd=addDays(selectedWeek,7);
   const end=periodMode==='week'&&weekEnd<monthEnd?weekEnd:monthEnd;
-  const applyFacts = (facts, storedPresentation) => {
+  const applyFacts = (facts, storedPresentation, { dimensionOnly = false } = {}) => {
     if (controller.signal.aborted) return;
     entry.facts=facts;
+    if (entry.loaded) scopedFactsCache.set(entry.persistence.scope(), facts);
     if (liveReadKey!==key) return;
     liveFacts=facts;
-    const presentation=storedPresentation&&!storedPresentation.lazy&&storedPresentation.performanceStyleVersion===performanceStyleVersion?storedPresentation:workbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
+    const presentation=storedPresentation&&!storedPresentation.lazy&&storedPresentation.performanceStyleVersion===performanceStyleVersion&&storedPresentation.shippableReferenceVersion===shippableReferenceVersion?storedPresentation:cachedWorkbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
     savedPresentation=presentation;
-    for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
-    for(const metric of metricDefinitions) {
+    if (!dimensionOnly) for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
+    if (!dimensionOnly) for(const metric of metricDefinitions) {
       const card=topMetricCards.find(item=>item.key===metric.key);
-      if(card) Object.assign(metric,{value:card.value+card.unit,display:card.value,status:card.status,note:card.formula,
+      if(card) Object.assign(metric,{value:card.value === "—" ? "—" : card.value+card.unit,display:card.value,status:card.status,note:card.formula,
         formula:card.formula,change:card.comparison[0],sameChange:card.comparison[1]});
     }
     for(const [name,tables] of Object.entries(presentation.performance)) {
@@ -2344,6 +2414,11 @@ async function readCurrentPeriod() {
     liveSkuDetails=facts.sqlSummary?{}:presentation.skus;
     if(facts.sqlSummary)for(const expanded of expandedSkuCategories){const category=expanded.slice(expanded.indexOf(':')+1);void loadServerSku(category,workbenchSkuPages.get(category)??0);}
     liveSkuPagination=presentation.skuPagination??{};
+    if (dimensionOnly) {
+      renderWorkbenchDimensions();
+      updateReport();
+      return;
+    }
     renderSelectedPeriod();
     updateReport();
   };
@@ -2359,18 +2434,42 @@ async function readCurrentPeriod() {
     if(entry.status){persistenceStatus.dataset.state=entry.status.state;persistenceStatus.textContent=' · '+entry.status.message;}
     return;
   }
+  if (entry.facts) {
+    reportLoaded = entry.loaded;
+    applyFacts(entry.facts);
+  }
   entry.started=true;
-  const timing = startDashboardTiming('order-workbench', controller.signal);
+  const readController = entry.readController = new AbortController();
+  const readSignal = AbortSignal.any([controller.signal, readController.signal]);
+  const timing = startDashboardTiming('order-workbench', readSignal);
+  let staged;
   try {
     let saved;
     try {
-      saved = await entry.persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal);
-      entry.loaded=true;if(!entry.dirty)entry.edits=saved?.edits??{};
-      if(activePeriodReport===entry){reportLoaded=true;restoreReportEdits(entry.edits);}
-    } catch (error) { controller.signal.throwIfAborted(); }
+      const cold = !entry.facts && !scopedFactsCache.hasPeriod(start, end);
+      entry.restore ??= entry.persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal, { includeFacts: false });
+      if (cold)
+        staged = startWorkbenchStagedRead((signal, onProgress) =>
+          loadWorkbenchFacts(start,end,signal,{base:'',summary:true,periodQueries:true,onProgress}), readSignal);
+      saved = await entry.restore;
+      if(!entry.loaded && !entry.dirty)entry.edits=saved?.edits??{};
+      entry.loaded=true;
+      if(activePeriodReport===entry && !readSignal.aborted){reportLoaded=true;restoreReportEdits(entry.edits);}
+    } catch (error) { entry.restore = undefined; controller.signal.throwIfAborted(); }
 
-    controller.signal.throwIfAborted();
-    if(compatibleWorkbenchFacts(saved?.facts)) {
+    readSignal.throwIfAborted();
+    const scopedFacts = scopedFactsCache.get(entry.persistence.scope());
+    const retained = scopedFacts.find(facts => facts.start === start && facts.end === end);
+    if (!entry.facts && retained) {
+      entry.apply(retained);
+      timing.mark('retained-report-ready');
+      if (reusableWorkbenchFacts(retained)) {
+        entry.finished=Date.parse(retained.readAt);
+        timing.finish('cached-complete');
+        return;
+      }
+    }
+    if(!entry.facts && compatibleWorkbenchFacts(saved?.facts)) {
       entry.apply(saved.facts,saved.presentation);
       timing.mark('saved-report-ready');
     }
@@ -2385,25 +2484,39 @@ async function readCurrentPeriod() {
         if (Object.values(facts.periods[facts.selected]?.metrics??{}).some(metric=>typeof metric.value==='number'&&Number.isFinite(metric.value)))
           timing.mark('selected-period-ready');
       }
-    }, controller.signal);
-    let facts;
+    }, readSignal);
+    let facts, partial;
     try {
-      facts=await loadWorkbenchFacts(start,end,controller.signal,{onProgress:progress.push,base:entry.persistence.scope()?.base,summary:true});
-      const partial = Object.values(facts.periods).some(period => period.sections.some(section => section.status === 'error')) ||
+      const base = entry.persistence.scope()?.base;
+      const seedFacts = [...periodReports.values()].filter(cached => cached.loaded &&
+        cached.persistence.scope()?.base === base && retainableWorkbenchFacts(cached.facts) &&
+        Date.now() - Date.parse(cached.facts.readAt) < periodCacheMaxAge)
+        .map(cached => cached.facts).concat(scopedFacts);
+      // Publish only after the independent report scope is verified. A narrower
+      // scope discards the provisional result and performs its exact scoped read.
+      if (staged && entry.persistence.scope()?.key && base === '') facts = await staged.accept(progress.push);
+      else {
+        staged?.cancel();
+        facts=await loadWorkbenchFacts(start,end,readSignal,{onProgress:progress.push,base,summary:true,periodQueries:true,seedFacts});
+      }
+      readSignal.throwIfAborted();
+      partial = Object.values(facts.periods).some(period => period.sections.some(section => section.status === 'error')) ||
         ['directors','customers','customerManagers'].some(name => facts[name]?.status === 'error');
-      timing.finish(partial ? 'partial' : 'complete');
+      timing.mark('facts-ready');
     } catch (error) {
-      timing.finish(controller.signal.aborted ? 'cancelled' : 'failed');
+      timing.finish(readSignal.aborted ? 'cancelled' : 'failed');
       throw error;
     } finally { progress.cancel(); }
-    entry.apply(facts);entry.finished=Date.now();
+    entry.apply(facts);entry.finished??=Date.now();
+    timing.finish(partial ? 'partial' : 'complete');
     if(entry.loaded){
       if(activePeriodReport===entry)entry.edits=structuredClone(reportEdits());
-      entry.persistence.save({schemaVersion:1,facts,presentation:workbenchPresentation(facts,{dimension:dimensionTab}),edits:entry.edits});
     }
     for(const [cachedKey,cached] of periodReports)if(periodReports.size>6&&cached!==activePeriodReport&&cached.finished&&!cached.dirty&&!cached.persistence.pending()){cached.controller.abort();periodReports.delete(cachedKey);}
   } catch (error) {
-    timing.finish(controller.signal.aborted ? 'cancelled' : 'failed');
+    timing.finish(readSignal.aborted ? 'cancelled' : 'failed');
+    if (entry.readController !== readController) return;
+    if (readSignal.aborted) { entry.started = false; return; }
     entry.started=false;entry.facts=null;entry.loaded=false;
     if(!entry.dirty)periodReports.delete(key);
     if (!controller.signal.aborted && activePeriodReport===entry) {
@@ -2413,15 +2526,23 @@ async function readCurrentPeriod() {
       renderWorkbench();
       updateReport();
     }
-  }
+  } finally { staged?.cancel(); }
 }
 clearLiveMetrics();
-void ready.then(()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
-for (const name of ['gea-identity-changed','gea-session-changing','pagehide']) window.addEventListener(name,()=>{
-  for(const entry of periodReports.values()){entry.controller.abort();entry.persistence.cancel();}periodReports.clear();activePeriodReport=null;
-  liveConnected=false;liveController?.abort();persistence.cancel();reportEdited=false;reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
-});
-window.addEventListener('gea-session-changed',()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
+const resumeWorkbenchConnection = () => {
+  if (!periodCacheLifecycle.resume(currentSessionId()) || liveConnected) return;
+  liveConnected=true;liveReadKey='';renderSelectedPeriod();
+};
+const suspendWorkbenchConnection = (clear = false) => {
+  if (clear) scopedFactsCache.clear();
+  if (clear) periodCacheLifecycle.clear(); else periodCacheLifecycle.suspend();
+  activePeriodReport=null;liveController=undefined;
+  liveConnected=false;reportEdited=false;reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
+};
+void ready.then(resumeWorkbenchConnection);
+window.addEventListener('gea-session-changing',()=>suspendWorkbenchConnection());
+for (const name of ['gea-identity-changed','pagehide']) window.addEventListener(name,()=>suspendWorkbenchConnection(true));
+window.addEventListener('gea-session-changed',resumeWorkbenchConnection);
 
 function renderWorkbench() {
   renderWorkbenchSummary();
@@ -2431,7 +2552,7 @@ function renderWorkbench() {
   document.getElementById('wbKpis').innerHTML = topMetricCards
     .map((metric) => {
       const statusClass = ['未达', '严重'].includes(metric.status) ? 'bad' : metric.status === '预警' ? 'warn' : metric.status === '健康' ? '' : 'unknown';
-      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="生成${escapeHtml(metric.label)}明细表" title="发送到右侧 Agent 生成明细表"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
+      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="生成${escapeHtml(metric.label)}明细表" title="发送到右侧 Agent 生成明细表"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.value === "—" ? "" : metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span>${metric.countsNote?`<span class="wb-kpi-counts">${escapeHtml(metric.countsNote)}</span>`:""}<span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
     })
     .join('');
   document.querySelectorAll('#wbKpis .wb-kpi').forEach((card,index)=>{
@@ -2544,13 +2665,13 @@ function renderWorkbenchSkuDetail(category) {
     .join('');
   const paging=liveSkuPagination[category];
   const nav=paging?`<nav class="wb-sku-pagination" aria-label="SKU明细分页"><span>共 ${paging.total} 条 · 第 ${paging.page+1} / ${Math.max(1,Math.ceil(paging.total/20))} 页</span><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page-1}" ${paging.page===0?'disabled':''}>上一页</button><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page+1}" ${(paging.page+1)*20>=paging.total?'disabled':''}>下一页</button></nav>`:'';
-  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为全部库存，月度需求计划有纠偏取纠偏，否则取月初计划。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
+  return `<div class="wb-sku-detail"><p>${escapeHtml(metricDefinition('周转天数','base'))}</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
 }
 function renderWorkbenchRegionCustomerDetail(regionIndex) {
   const customers=workbenchDimensions['region-change'].customerDetails?.[regionIndex]??[];
-  const count=value=>value==null?'—':escapeHtml(String(value))+' 张';
+  const count=value=>value==null?'—':escapeHtml(String(value));
   const rows=customers.map(customer=>`<tr><td>${escapeHtml(customer.name)}（${escapeHtml(customer.code)}）</td><td>${escapeHtml(customer.manager)}</td><td>${count(customer.changedQuantity)}</td><td>${count(customer.orderedQuantity)}</td></tr>`).join('');
-  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>锁定期改单订单数</th><th>有效订单数</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户订单明细</td></tr>'}</tbody></table></div>`;
+  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>锁定期调整商品数量</th><th>有效商品数量</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户订单明细</td></tr>'}</tbody></table></div>`;
 }
 function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
   const groups = table.groups.map(group => baseColumnIndex === 0 && group.label.startsWith('可发货天数')
@@ -2570,11 +2691,11 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
   const rows = table.rows.filter(
     (row) => !selectedBase || baseColumnIndex == null || row[baseColumnIndex] === selectedBase,
   );
+  const headings=table.groups.flatMap(group=>group.rowspan?[{group:group.label,header:group.label}]:group.columns.map(header=>({group:group.label,header})));
   const body = rows
     .map((row) => {
       const cells = row
         .map((value,columnIndex) => {
-          const headings=table.groups.flatMap(group=>group.rowspan?[{group:group.label,header:group.label}]:group.columns.map(header=>({group:group.label,header})));
           const unmapped=['未映射','归属待补全'].includes(value);
           const missing=unmapped||(value?.text??value)==='—';
           const title=value?.title?` title="${escapeHtml(value.title)}"`:missing?` title="${escapeHtml(workbenchCellMissingReason(liveFacts,{...headings[columnIndex],row,dimension:dimensionTab,period:table.title.includes('周度')?'week':'month'}))}"`:'';
@@ -2608,10 +2729,10 @@ function renderWorkbenchUnmetCards(sectionTitle, items, emptyText) {
         )
         .join('');
       const tools = `<div class="wb-unmet-card-actions"><button type="button" aria-label="编辑${escapeHtml(item.title)}" title="编辑" data-wb-edit-unmet="${encodeURIComponent(item.key)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="delete" type="button" aria-label="删除${escapeHtml(item.title)}" title="删除" data-wb-delete-unmet="${encodeURIComponent(item.key)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div>`;
-      return `<article class="wb-unmet-card" data-wb-unmet-card="${encodeURIComponent(item.key)}">${tools}<h4><span class="wb-unmet-dot" aria-hidden="true">●</span>${escapeHtml(item.title)}</h4>${item.analysis ? `<p class="wb-unmet-analysis"><strong>未达成指标：</strong>${escapeHtml(item.analysis)}</p>` : ''}<ul>${reasons}</ul><div class="wb-unmet-measures"><strong><span aria-hidden="true">✓</span> 改善（执行情况）：</strong><div>${measures}</div></div></article>`;
+      return `<article class="wb-unmet-card" data-wb-unmet-card="${encodeURIComponent(item.key)}">${tools}<h4><span class="wb-unmet-dot" aria-hidden="true">●</span>${escapeHtml(item.title)}</h4>${item.analysis ? `<p class="wb-unmet-analysis"><strong>未达成指标：</strong>${escapeHtml(item.analysis)}</p>` : ''}<ul>${reasons}</ul><div class="wb-unmet-measures"><strong><span aria-hidden="true">✓</span> ${item.imported ? '改善措施' : '改善（执行情况）'}：</strong><div>${measures}</div></div></article>`;
     })
     .join('');
-  const kind = sectionTitle.startsWith('基地') ? 'base' : 'item';
+  const kind = sectionTitle.startsWith('基地') ? 'base' : sectionTitle.startsWith('应责总监') ? 'director' : 'item';
   return `<section class="wb-unmet-section"><div class="wb-unmet-section-head"><h3>${escapeHtml(sectionTitle)}</h3><div class="wb-unmet-section-actions"><button class="wb-unmet-ai-button" type="button" data-wb-unmet-ai="${kind}">✦ AI 分析</button><button class="wb-unmet-add-button" type="button" data-wb-add-unmet="${kind}">添加</button></div></div>${cards || `<p class="wb-unmet-empty">${escapeHtml(emptyText)}</p>`}</section>`;
 }
 function unmetTextLines(value) {
@@ -2621,7 +2742,7 @@ function unmetTextLines(value) {
     .filter(Boolean);
 }
 function getWorkbenchUnmetItems(kind, selectedBase = '') {
-  const sourceItems = kind === 'base' ? workbenchBaseUnmetItems : workbenchItemUnmetItems;
+  const sourceItems = kind === 'base' ? workbenchBaseUnmetItems : kind === 'item' ? workbenchItemUnmetItems : [];
   const staticItems = sourceItems.map((item, index) => {
     const key = `${kind}:static:${index}`;
     const separator = item.title.indexOf('｜');
@@ -2672,7 +2793,12 @@ function getWorkbenchUnmetItems(kind, selectedBase = '') {
         key,
       };
     });
-  return [...staticItems, ...addedItems].filter(
+  const imports = importedContent().unmet.filter(row => row.dimension === kind).map(row => {
+    const key = kind + ':import:' + row.id; const value = workbenchUnmetOverrides.get(key) ?? row;
+    return { key, title: value.entity, entity: value.entity, reasons: unmetTextLines(value.reason), measures: unmetTextLines(value.measure),
+      imported: true, formTitle: value.entity, formReason: value.reason, formMeasure: value.measure };
+  });
+  return [...staticItems, ...addedItems, ...imports].filter(
     (item) =>
       (!item.key.includes(':static:') || workbenchUnmetOverrides.has(item.key)) &&
       !deletedWorkbenchUnmetKeys.has(item.key) &&
@@ -2711,7 +2837,7 @@ function renderWorkbenchPerformance(dimension) {
       : dimensionTab === 'item-performance'
         ? renderWorkbenchItemUnmet()
         : dimensionTab === 'director-performance'
-          ? renderWorkbenchDirectorNotes()
+          ? renderWorkbenchUnmetCards('应责总监未达成项：原因分析与改善措施', getWorkbenchUnmetItems('director'), '当前暂无应责总监未达成事项。') + renderWorkbenchDirectorNotes()
           : '';
   panel.innerHTML = `<section class="wb-performance-period"><h3>${escapeHtml(dimension.monthly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.monthly, '', dimension.baseColumnIndex)}</section><section class="wb-performance-period"><h3>${escapeHtml(dimension.weekly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.weekly, '', dimension.baseColumnIndex)}</section>${bottomSection}<p class="wb-performance-note">当前授权范围；环比同比比较同长度已完成周期。*表示可判定样本或样本差，覆盖率见悬浮，不代表全量指标。“—”表示无有效计算依据。共同责任分别展示，不相加。</p>`;
 }
@@ -2777,8 +2903,7 @@ function renderWorkbenchDimensions() {
   panel.querySelectorAll('[data-wb-sku-page]').forEach(button=>button.addEventListener('click',()=>{
     workbenchSkuPages.set(decodeURIComponent(button.dataset.wbSkuPage),Number(button.dataset.page));
     if(liveFacts?.sqlSummary){void loadServerSku(decodeURIComponent(button.dataset.wbSkuPage),Number(button.dataset.page));return;}
-    if(liveFacts)applyLiveFacts(liveFacts);
-    renderWorkbenchDimensions();
+    refreshWorkbenchDimension();
   }));
   panel.querySelectorAll('[data-wb-sku-toggle]').forEach((button) =>
     button.addEventListener('click', () => {
@@ -2786,8 +2911,7 @@ function renderWorkbenchDimensions() {
       if (expandedSkuCategories.has(key)) expandedSkuCategories.delete(key);
       else expandedSkuCategories.add(key);
       if(liveFacts?.sqlSummary){void loadServerSku(button.dataset.wbSkuToggle,workbenchSkuPages.get(button.dataset.wbSkuToggle)??0);renderWorkbenchDimensions();return;}
-      if(liveFacts)applyLiveFacts(liveFacts);
-      renderWorkbenchDimensions();
+      refreshWorkbenchDimension();
     }),
   );
   panel.querySelectorAll('[data-wb-region-toggle]').forEach((button) =>
@@ -2800,11 +2924,15 @@ function renderWorkbenchDimensions() {
   );
 }
 const wbDimensionTabButtons = [...workbenchView.querySelectorAll('[data-wb-dimension-tab]')];
+function refreshWorkbenchDimension() {
+  if (liveFacts) applyLiveFacts(liveFacts, undefined, { dimensionOnly: true });
+  else renderWorkbenchDimensions();
+}
 wbDimensionTabButtons.forEach((button) => {
   button.addEventListener('click', () => {
+    if (dimensionTab === button.dataset.wbDimensionTab) return;
     dimensionTab = button.dataset.wbDimensionTab;
-    if(liveFacts)applyLiveFacts(liveFacts);
-    renderWorkbenchDimensions();
+    refreshWorkbenchDimension();
   });
 });
 function showWorkbenchToast(message) {
@@ -2904,9 +3032,10 @@ function saveIssueEditor(generateTask) {
 }
 function openWorkbenchUnmetAdd(kind, trigger, itemKey = '') {
   const isBase = kind === 'base';
+  const entityLabel = kind === 'director' ? '应责总监' : isBase ? '基地' : '品项';
   const entitySelect = document.getElementById('wbUnmetEntity');
   const item = itemKey ? getWorkbenchUnmetItems(kind).find((entry) => entry.key === itemKey) : null;
-  const options = isBase
+  const options = kind === 'director' ? [...new Set(getWorkbenchUnmetItems('director').map(row => row.entity))] : isBase
     ? workbenchPerformance['base-performance'].monthly.rows
         .map((row) => row[0])
         .filter((base) => base !== '合计')
@@ -2916,7 +3045,7 @@ function openWorkbenchUnmetAdd(kind, trigger, itemKey = '') {
   document.getElementById('wbUnmetAddTitle').textContent = item
     ? isBase
       ? '编辑基地未达成项'
-      : '编辑品项未达成项'
+      : '编辑' + entityLabel + '未达成项'
     : isBase
       ? '添加基地未达成项'
       : '添加品项未达成项';
@@ -2925,8 +3054,8 @@ function openWorkbenchUnmetAdd(kind, trigger, itemKey = '') {
     : isBase
       ? '补充基地未达成原因与改善措施'
       : '补充品项未达成原因与改善措施';
-  document.getElementById('wbUnmetEntityLabel').textContent = isBase ? '选择基地' : '选择品项';
-  entitySelect.innerHTML = `<option value="">${isBase ? '请选择基地' : '请选择品项'}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${item?.entity === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}`;
+  document.getElementById('wbUnmetEntityLabel').textContent = '选择' + entityLabel;
+  entitySelect.innerHTML = `<option value="">${'请选择' + entityLabel}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${item?.entity === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}`;
   document.getElementById('wbUnmetTitleInput').value = item?.formTitle || '';
   document.getElementById('wbUnmetReasonInput').value = item?.formReason || '';
   document.getElementById('wbUnmetMeasureInput').value = item?.formMeasure || '';
@@ -3080,7 +3209,7 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !directorNoteOverlay.hidden) closeWorkbenchDirectorNote();
 });
 function openWorkbenchUnmetDelete(key, trigger) {
-  const kind = key.startsWith('base:') ? 'base' : 'item';
+  const kind = key.startsWith('base:') ? 'base' : key.startsWith('director:') ? 'director' : 'item';
   const item = getWorkbenchUnmetItems(kind).find((entry) => entry.key === key);
   if (!item) return;
   document.getElementById('wbUnmetDeleteCopy').textContent =
@@ -3335,7 +3464,7 @@ const summaryInputs = {
 };
 function openWorkbenchSummaryEdit(trigger) {
   Object.entries(summaryInputs).forEach(([key, input]) => {
-    input.value = workbenchSummaryContent[key];
+    input.value = effectiveSummary()[key];
   });
   pendingWorkbenchSummaryTrigger = trigger;
   summaryEditOverlay.hidden = false;
@@ -3439,20 +3568,22 @@ workbenchView.addEventListener('click', (event) => {
     improvementEdit.setAttribute('aria-label', isEditing ? '编辑改善措施' : '保存改善措施');
     improvementEdit.title = isEditing ? '编辑' : '保存';
     if (!isEditing) row.querySelector('td:not(.actions)')?.focus();
-    else { saveEditedReport(); showWorkbenchToast('正在保存改善措施…'); }
+    else { if (row.dataset.importRow) workbenchImportOverrides[row.dataset.importRow] = [...row.querySelectorAll('td:not(.actions)')].map(cell => ({ text: cell.textContent, className: cell.className })); saveEditedReport(); showWorkbenchToast('正在保存改善措施…'); }
     return;
   }
   const improvementDelete = event.target.closest('[data-wb-improvement-delete]');
   if (improvementDelete) {
     if (!window.confirm('确认删除这条改善措施吗？删除将保存到当前周期报告。')) return;
-    improvementDelete.closest('tr')?.remove();
+    const row = improvementDelete.closest('tr');
+    if (row?.dataset.importRow) workbenchImportOverrides[row.dataset.importRow] = null;
+    row?.remove();
     saveEditedReport(); showWorkbenchToast('正在保存删除结果…');
     return;
   }
   const editUnmet = event.target.closest('[data-wb-edit-unmet]');
   if (editUnmet) {
     const key = decodeURIComponent(editUnmet.dataset.wbEditUnmet);
-    openWorkbenchUnmetAdd(key.startsWith('base:') ? 'base' : 'item', editUnmet, key);
+    openWorkbenchUnmetAdd(key.startsWith('base:') ? 'base' : key.startsWith('director:') ? 'director' : 'item', editUnmet, key);
     return;
   }
   const deleteUnmet = event.target.closest('[data-wb-delete-unmet]');
@@ -3473,7 +3604,7 @@ workbenchView.addEventListener('click', (event) => {
       showWorkbenchToast('当前没有未达成项可供分析。');
       return;
     }
-    const title = kind === 'base' ? '基地未达成项' : '品项未达成项';
+    const title = kind === 'base' ? '基地未达成项' : kind === 'director' ? '应责总监未达成项' : '品项未达成项';
     const details = items
       .map((item) =>
         [
@@ -3647,8 +3778,7 @@ workbenchView.addEventListener('keydown', (event) => {
   if (event.key === 'End') index = tabs.length - 1;
   event.preventDefault();
   dimensionTab = tabs[index].dataset.wbDimensionTab;
-  if(liveFacts)applyLiveFacts(liveFacts);
-  renderWorkbenchDimensions();
+  refreshWorkbenchDimension();
   tabs[index].focus();
 });
 function focusCreatedTask(id) {
@@ -3827,7 +3957,7 @@ async function openMetricDetail(key) {
   try {
     const request = metricDetailsRequest(liveFacts, key, {
       mode: periodMode, month: selectedMonth, week: selectedWeek, label: selectedPeriodLabel(),
-    });
+    }, topMetricCards.find(item => item.key === key));
     sendingMetricDetails = true;
     button?.setAttribute('aria-busy', 'true');
     await ask(request.text, request.context);
@@ -3859,6 +3989,19 @@ view.subscribe((state) => {
   updateReport();
 });
 
+reportImporter = mountReportImport({ document,
+  state: () => ({ ...persistence.state(), key: liveReadKey, ready: reportLoaded && !reportEdited && !persistence.pending() && !document.querySelector('.is-editing') && ![...document.querySelectorAll('.wb-adopt-overlay')].some(node => !node.hidden) }),
+  preview: (batch, signal) => persistence.previewImport(batch, signal),
+  commit: async (prepared, signal) => {
+    const entry = activePeriodReport; const result = await entry.persistence.commitImport(prepared, prepared.batch, signal);
+    entry.edits = structuredClone(result.edits);
+    if (activePeriodReport === entry && !entry.controller.signal.aborted) {
+      restoreReportEdits(result.edits); reportEdited = false; entry.dirty = false;
+      renderWorkbenchSummary(); renderWorkbenchDimensions(); renderImportedImprovements();
+    }
+    return result;
+  }, changed: () => updateReport(), ask: text => ask(text),
+});
 const updateReport = publishReport(
   () => {
     const report = activeReport();
@@ -3875,7 +4018,7 @@ const updateReport = publishReport(
     return {
       source: 'gea-governed-sql',
       mock: false,
-      evidence: workbenchEvidence(liveFacts),
+      evidence: cachedWorkbenchEvidence(liveFacts),
       pageId: 'inventory-orderworkbench',
       instance: 'default',
       period: {
@@ -3890,13 +4033,13 @@ const updateReport = publishReport(
         event: eventFilter,
         task: taskFilter,
         dimension: dimensionTab,
-        base: '',
+        base: liveFacts?.base ?? '',
       },
       consumerCode: 'order',
       metrics: report
         ? topMetricCards.map((metric) => ({
             ...metric,
-            value: metric.value + metric.unit,
+            value: metric.value === '—' ? '—' : metric.value + metric.unit,
             note: metric.formula,
             mock: false,
             comparison: {
@@ -3907,7 +4050,9 @@ const updateReport = publishReport(
             },
           }))
         : [],
-      summary: report ? { ...workbenchSummaryContent, source: '人工编辑内容，保存状态见页面提示' } : null,
+      summary: report ? { ...effectiveSummary(), source: '人工维护与受控导入内容，保存状态见页面提示' } : null,
+      supplementalSummary: report ? supplementalSummary() : null,
+      importPreview: reportImporter.context(),
       dimension: report
         ? {
             key: dimensionTab,
@@ -3917,7 +4062,7 @@ const updateReport = publishReport(
                 ? getWorkbenchUnmetItems('base')
                 : dimensionTab === 'item-performance'
                   ? getWorkbenchUnmetItems('item')
-                  : [],
+                  : dimensionTab === 'director-performance' ? getWorkbenchUnmetItems('director') : [],
             directorNotes: dimensionTab === 'director-performance' ? workbenchDirectorNotes : [],
           }
         : null,
@@ -3942,9 +4087,11 @@ const updateReport = publishReport(
     };
   },
   () => {
+    reportImporter.dispose();
     for (const handle of pageTimeouts) clearTimeout(handle);
     for (const url of downloadUrls) URL.revokeObjectURL(url);
     pageTimeouts.clear();
     downloadUrls.clear();
   },
+  reportImporter,
 );
