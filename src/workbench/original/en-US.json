@@ -918,6 +918,7 @@
         "required": "Confirm the action scope and adjustments. A reject action also requires a reason.",
         "loading": "Submitting the action. You cannot close this dialog or start another action until the result returns…",
         "close": "Close",
+        "submitAgain": "Submit again",
         "retry": "Retry and check result",
         "refresh": "Refresh authoritative state",
         "confirmApprove": "Confirm approval",

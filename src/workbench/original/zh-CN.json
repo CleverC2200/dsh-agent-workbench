@@ -921,6 +921,7 @@
         "required": "请确认操作范围和调整内容；退回时必须填写原因。",
         "loading": "正在提交操作；结果返回前不能关闭或发起第二次操作…",
         "close": "关闭",
+        "submitAgain": "重新提交",
         "retry": "重试并核对结果",
         "refresh": "刷新权威状态",
         "confirmApprove": "确认通过",

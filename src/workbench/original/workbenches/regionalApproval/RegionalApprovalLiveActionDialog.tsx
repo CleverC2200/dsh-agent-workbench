@@ -705,18 +705,22 @@ const RegionalApprovalLiveActionDialog: React.FC<{
                     invalid ||
                     loading ||
                     action.state.status === 'success' ||
-                    (directApproval && action.state.status === 'error')
+                    (directApproval &&
+                      action.state.status === 'error' &&
+                      ['permission', 'authentication'].includes(action.state.error.kind))
                   }
                   onClick={submit}
                 >
                   {t(
                     action.state.status === 'success'
                       ? 'common.assistantSurface.regionalApproval.liveAction.completed'
-                      : kind === 'SAVE'
-                        ? 'common.assistantSurface.regionalApproval.liveAction.confirmSave'
-                        : kind === 'APPROVE'
-                          ? 'common.assistantSurface.regionalApproval.liveAction.confirmApprove'
-                          : 'common.assistantSurface.regionalApproval.liveAction.confirmReject',
+                      : directApproval && action.state.status === 'error'
+                        ? 'common.assistantSurface.regionalApproval.liveAction.submitAgain'
+                        : kind === 'SAVE'
+                          ? 'common.assistantSurface.regionalApproval.liveAction.confirmSave'
+                          : kind === 'APPROVE'
+                            ? 'common.assistantSurface.regionalApproval.liveAction.confirmApprove'
+                            : 'common.assistantSurface.regionalApproval.liveAction.confirmReject',
                   )}
                 </Button>
               )}

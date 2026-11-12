@@ -152,12 +152,12 @@ const host={salesPlan:{
       rows:[{skuCode:'1001',shipments:['1.5','10','20']},{skuCode:'2002',shipments:['2','3','4']}]};
   }},
   versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId)}},
-  draft:{invoke:async(q)=>{const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
+  draft:{invoke:async(q)=>{if(window.sentDirect.length){if(comparison==='single-dms-stale-second')return {draft:null,stale:true};if(comparison==='single-dms-unreadable-second')throw Error('fixture draft read failed');}const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
   logs:{invoke:async()=>[]},compare:{invoke:async({planId,fromVersionId,toVersionId})=>{
     readCalls.push({planId,fromVersionId,toVersionId});
     if(comparison==='forbidden')throw Object.assign(Error('forbidden'),{status:403});
     return [{skuCode:'1001',changeType:'UPDATED',before:{...skuFor(fromVersionId),qty:'10',amt:'100'},after:skuFor(toVersionId),qtyDelta:'10',amountDelta:'100'}];
-  }},action:{invoke:async(command)=>{if(comparison?.startsWith('single-')){window.sentDirect.push(command);const status=comparison==='single-permission'?403:comparison==='single-conflict'?409:502;const error=comparison==='single-dms'?'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报':comparison==='single-permission'?'当前用户没有品类审批权限':comparison==='single-conflict'?'计划版本已变化，请刷新后重试':'GEA_HTTP_502';throw new BackendHttpError({method:'POST',path:'/sales-plan/plans/versions/'+command.versionId+'/actions',status,body:{error,details:{...(comparison==='single-dms'?{retryable:false,upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED'}:{}),requestId:'hidden-error-reference',traceId:'hidden-trace-reference'}}});}if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
+  }},action:{invoke:async(command)=>{if(comparison?.startsWith('single-')){window.sentDirect.push(command);const status=comparison==='single-permission'?403:comparison==='single-conflict'?409:502;const error=comparison.startsWith('single-dms')?'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报':comparison==='single-permission'?'当前用户没有品类审批权限':comparison==='single-conflict'?'计划版本已变化，请刷新后重试':'GEA_HTTP_502';throw new BackendHttpError({method:'POST',path:'/sales-plan/plans/versions/'+command.versionId+'/actions',status,body:{error:window.directRejection??error,details:{...(comparison.startsWith('single-dms')?{retryable:false,upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED'}:{}),requestId:'hidden-error-reference',traceId:'hidden-trace-reference'}}});}if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
 },modelInference:{invoke:forbidden}};
 const root=createRoot(document.getElementById('root'));
 window.restoreIntegerInput=async(mode)=>{
@@ -1416,8 +1416,8 @@ for (const [scenario, reason] of [
       await expect(page.getByRole('button', { name: '重试并核对结果', exact: true })).toHaveCount(
         0,
       );
-      if (scenario !== 'single-conflict')
-        await expect(dialog.getByRole('button', { name: '确认通过', exact: true })).toBeDisabled();
+      if (scenario === 'single-permission')
+        await expect(dialog.getByRole('button', { name: '重新提交', exact: true })).toBeDisabled();
     },
   );
 
@@ -1435,3 +1435,76 @@ test('single uncertain approval keeps its original intent and does not create an
   assert.deepEqual(calls[1], calls[0]);
   await expect(dialog.getByText(/结果暂时未知/)).toBeVisible();
 });
+
+test('explicit single DMS rejection permits another manual submission with a new request', async (t) => {
+  const { page } = await openWorkbench(t, false, 'single-dms');
+  await page.locator('tbody label.arco-checkbox:visible').first().click();
+  await page.getByRole('button', { name: '通过', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  const again = dialog.getByRole('button', { name: '重新提交', exact: true });
+  await expect(again).toBeEnabled();
+  await page.evaluate(() => {
+    window.directRejection = 'DMS回写失败：产品TEST-ITEM仍为停用状态，请先维护产品资料';
+  });
+  await again.evaluate((button) => {
+    button.click();
+    button.click();
+  });
+  await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
+  const calls = await page.evaluate(() => window.sentDirect);
+  assert.notEqual(calls[1].requestId, calls[0].requestId);
+  assert.notEqual(calls[1].idempotencyKey, calls[0].idempotencyKey);
+  assert.deepEqual(calls[1].request, calls[0].request);
+  await expect(
+    dialog.getByText('DMS回写失败：产品TEST-ITEM仍为停用状态，请先维护产品资料', {
+      exact: true,
+    }),
+  ).toBeInViewport();
+});
+
+test('closing a single DMS failure then selecting it again sends a fresh request', async (t) => {
+  const { page } = await openWorkbench(t, false, 'single-dms');
+  const select = page.locator('tbody label.arco-checkbox:visible').first();
+  await select.click();
+  await page.getByRole('button', { name: '通过', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText(/产品编码TEST-ITEM已停用/)).toBeVisible();
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(select.locator('input')).not.toBeChecked();
+  await page.evaluate(() => {
+    window.directRejection = 'DMS回写失败：产品TEST-ITEM仍为停用状态，请先维护产品资料';
+  });
+  await select.click();
+  const approve = page.getByRole('button', { name: '通过', exact: true });
+  await expect(approve).toBeEnabled();
+  await approve.click();
+  await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
+  const calls = await page.evaluate(() => window.sentDirect);
+  assert.notEqual(calls[1].requestId, calls[0].requestId);
+  assert.notEqual(calls[1].idempotencyKey, calls[0].idempotencyKey);
+  await expect(
+    dialog.getByText('DMS回写失败：产品TEST-ITEM仍为停用状态，请先维护产品资料', {
+      exact: true,
+    }),
+  ).toBeInViewport();
+});
+
+for (const [scenario, reason] of [
+  ['single-dms-stale-second', '原计划已变化，旧草稿未套用'],
+  ['single-dms-unreadable-second', '草稿读取失败，请重新打开'],
+])
+  test('a second toolbar approval explains ' + scenario + ' before any new write', async (t) => {
+    const { page } = await openWorkbench(t, false, scenario);
+    const select = page.locator('tbody label.arco-checkbox:visible').first();
+    const approve = page.getByRole('button', { name: '通过', exact: true });
+    await select.click();
+    await approve.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText(/产品编码TEST-ITEM已停用/)).toBeVisible();
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+    await select.click();
+    await approve.click();
+    await expect(dialog.getByText(reason, { exact: true })).toBeInViewport();
+    assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
+    await expect(dialog.getByRole('button', { name: '刷新权威状态', exact: true })).toBeEnabled();
+  });
