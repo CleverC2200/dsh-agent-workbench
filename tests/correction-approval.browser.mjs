@@ -372,7 +372,7 @@ test('同月Y/DC不同周期的发货按客户月份去重，金额未确认保�
 
 test('月初和纠偏单笔通过都带入即时编辑，纠偏输入不改月初基准', { timeout: 30000 }, async (t) => {
   for (const order of ['M', 'Z']) {
-    const page = await openWorkbench(t);
+    const page = await openWorkbench(t, order === 'M' ? 'm-source' : 'default');
     if (order === 'Z') await page.getByRole('tab', { name: '纠偏', exact: true }).click();
     await page.getByRole('tab', { name: '按客户', exact: true }).click();
     await page.getByRole('button', { name: '打开 华南经销客户 调整明细', exact: true }).click();
