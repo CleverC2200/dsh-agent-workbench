@@ -395,6 +395,31 @@
       "pattern": "^scripts/(?:source-comments|format-comments|check-source-comments)\\.mjs$",
       "tests": ["tests/source-comments.test.mjs", "tests/agent-knowledge.test.mjs"],
       "sourceTests": ["tests/source-comments.test.mjs", "tests/agent-knowledge.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-personal/(?:source/|theme\\.css$)",
+      "tests": ["tests/personal-reception.test.mjs", "tests/personal-age-fixes.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^prototypes/dms/",
+      "tests": ["tests/dms-model.test.mjs", "tests/dms-reception.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^src/assets\\.d\\.ts$",
+      "tests": ["tests/agent-knowledge.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^src/page-bridge/index\\.ts$",
+      "tests": ["tests/page-bridge-client.test.mjs", "tests/page-bridge-result.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^src/workbench/original/workbenches/regionalApproval/hooks/useSalesPlanAdvice\\.ts$",
+      "tests": ["tests/sales-plan-presentation.browser.mjs"]
     }
   ],
   "sourceTools": {
