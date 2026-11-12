@@ -184,6 +184,12 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
       ),
       (row) => row.month,
     );
+    const formingSchedules = plan.resourceSchedules.filter(
+      (row) =>
+        row.kind === 'forming' &&
+        (!filters.month || row.month === filters.month) &&
+        (!filters.base || row.base === filters.base),
+    );
     const lineDetails = new Map(
       (plan.capacityLineDetails ?? []).map((row) => [row.resourceId, row]),
     );
@@ -196,7 +202,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         h(
           'span',
           null,
-          `发货基准月 ${report.referenceMonth}，当前展示 ${month} · 单位：吨。基准月取年度SKU需求，M+1至M+3取本轮拆分，M+4为年度参考。`,
+          `发货基准月 ${report.referenceMonth}，当前展示 ${month} · 单位：吨。基准月取年度SKU需求，M+1至M+3取本轮拆分，M+4为年度参考。RCCP比较内部需求与隧道能力；成型机实际占用单列，完整设备可行性以联合求解及缺项为准。`,
         ),
         h('button', { onClick: () => setRulesOpen(true) }, '口径与规则'),
         h(
@@ -816,32 +822,27 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
             },
             '导出成型机实际占用',
           ),
-          table(
-            '成型机实际占用',
-            ['月份', '基地', '成型机', '月产能（吨）', '实际占用（吨）', '负荷率', '缺项'],
-            plan.resourceSchedules
-              .filter(
-                (row) =>
-                  row.kind === 'forming' &&
-                  (!filters.month || row.month === filters.month) &&
-                  (!filters.base || row.base === filters.base),
+          formingSchedules.length
+            ? table(
+                '成型机实际占用',
+                ['月份', '基地', '成型机', '月产能（吨）', '实际占用（吨）', '负荷率', '缺项'],
+                formingSchedules.map((row) => [
+                  row.month,
+                  row.base,
+                  row.name,
+                  numberText(row.capacity),
+                  numberText(row.scheduledTons),
+                  row.load === null ? '待补' : `${(row.load * 100).toFixed(2)}%`,
+                  row.missing.join('；') || '配置有效',
+                ]),
               )
-              .map((row) => [
-                row.month,
-                row.base,
-                row.name,
-                numberText(row.capacity),
-                numberText(row.scheduledTons),
-                row.load === null ? '待补' : `${(row.load * 100).toFixed(2)}%`,
-                row.missing.join('；') || '配置有效',
-              ]),
-          ),
-          !plan.resourceSchedules.some((row) => row.kind === 'forming') &&
-            h(
-              'p',
-              { role: 'status' },
-              '当前评估未取得真实成型机台账，涉及正补产的内部SKU保留待补。',
-            ),
+            : h(
+                'p',
+                { role: 'status' },
+                plan.resourceSchedules.some((row) => row.kind === 'forming')
+                  ? '当前筛选范围没有成型机记录，本轮占用结果见其他月份或基地。'
+                  : '已完成其他有效范围求解；当前评估未取得真实成型机台账，涉及正补产的内部SKU保留待补。',
+              ),
         ),
       ),
       card(
