@@ -1,3 +1,4 @@
+import { workbenchQueries } from '../business/inventory-orderworkbench/queries.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -32,6 +33,8 @@ const columns = [
   'createsource',
   'is_virtual',
   'timeout_code',
+  'order_close_time',
+  'is_short_transfer',
 ];
 const warehouses = [
   ['FROM', '01', '01'],
@@ -51,13 +54,14 @@ function row(order, overrides = {}) {
     province_region_name: '河南',
     cust_name: '客户',
     header_addtime: '2026-10-01 00:00:00',
-    lastshipmenttime: '2026-10-01 00:00:00',
+    order_close_time: '2026-10-01 00:00:00',
+    is_short_transfer: '非短拨',
     orderstatus: 10,
     detailstatus: 10,
     is_stat: '1',
     dms_last_update_qty: 8,
     need_qty_origin: 10,
-    change_order_qty: 10,
+    change_order_qty: 6,
     warehouseid: 'FROM',
     receive_wh: null,
     createsource: '20',
@@ -100,6 +104,7 @@ function read(rows, { base = '', dims = warehouses, period = false, shipments } 
           events: amendmentEventsSql,
           summary: amendmentChangesSql,
           customers: customersSql,
+          details: workbenchQueries['amendment.details'].sql,
           lines: skuAmendmentEventsSql({ stage: 'lines' }),
         };
     return Object.fromEntries(
@@ -120,12 +125,12 @@ test('sums split detail quantities and shares the customer formula without event
   const r = read([
     row('O', { change_order_qty: 12 }),
     row('O', { executeorderno: 'split', change_order_qty: 2, dms_last_update_qty: 5 }),
-    row('O2', { dms_last_update_qty: 10 }),
+    row('O2', { change_order_qty: 10, dms_last_update_qty: 10 }),
   ]);
   assert.equal(r.events.length, 3);
-  assert.equal(r.summary[0].numerator, 7);
+  assert.equal(r.summary[0].numerator, 3);
   assert.equal(r.summary[0].denominator, 23);
-  assert.equal(r.customers[0].numerator, 7);
+  assert.equal(r.customers[0].numerator, 3);
 });
 test('null requests keep the denominator, true zero counts, zero DMS precedes backup', () => {
   const r = read([
@@ -136,7 +141,7 @@ test('null requests keep the denominator, true zero counts, zero DMS precedes ba
     row('all-null', { change_order_qty: null, dms_last_update_qty: null, need_qty_origin: null }),
   ]);
   assert.equal(r.events.length, 4);
-  assert.equal(r.summary[0].numerator, 35);
+  assert.equal(r.summary[0].numerator, 30);
   assert.equal(r.summary[0].denominator, 120);
   assert.equal(r.summary[0].invalid, 0);
 });
@@ -158,7 +163,7 @@ test('interface source, virtual 1/2 and timeout 14/16 remove numerator and denom
   assert.equal(r.summary[0].denominator, 32);
 });
 
-test('only nonnegative requests contribute differences while negative and null requests retain the full denominator', () => {
+test('only nonnegative reductions contribute while additions, negative and null requests retain the denominator', () => {
   const source = [
     row('positive', { change_order_qty: 5, dms_last_update_qty: 2 }),
     row('zero', { change_order_qty: 0, dms_last_update_qty: 7 }),
@@ -172,51 +177,49 @@ test('only nonnegative requests contribute differences while negative and null r
   ];
   const result = read(source, { base: '郑州' });
   assert.equal(result.events.length, 5);
-  assert.equal(result.summary[0].numerator, 10);
+  assert.equal(result.summary[0].numerator, 7);
   assert.equal(result.summary[0].denominator, 33);
-  assert.equal(result.customers[0].numerator, 10);
+  assert.equal(result.customers[0].numerator, 7);
   assert.equal(result.customers[0].denominator, 33);
-  assert.equal(read(source, { base: '郑州', period: true }).period[0].numerator, 10);
+  assert.equal(read(source, { base: '郑州', period: true }).period[0].numerator, 7);
   assert.equal(read(source, { base: '郑州', period: true }).period[0].denominator, 33);
 });
-test('short transfers require matching pickup and factory types on both ends; duplicate dimension rows do not multiply quantities', () => {
-  const r = read(
-    [
-      row('short', { receive_wh: 'SAME' }),
-      row('cross', { receive_wh: 'OTHER' }),
-      row('branch-receiver', { receive_wh: 'BRANCH' }),
-      row('branch-shipper', { warehouseid: 'BRANCH', receive_wh: 'SAME' }),
-      row('unassigned', { warehouseid: '*', receive_wh: 'SAME' }),
-    ],
-    { dims: [...warehouses, ['SAME', '01', '02']] },
-  );
-  assert.equal(r.events.length, 4);
-  assert.equal(r.summary[0].numerator, 8);
-  assert.equal(r.summary[0].denominator, 32);
+test('BI short-transfer flag overrides warehouse remapping, including missing warehouses', () => {
+  const r = read([
+    row('flagged', { is_short_transfer: '短拨', warehouseid: '*', receive_wh: 'OTHER' }),
+    row('same-warehouse', { receive_wh: 'SAME' }),
+    row('unknown-flag', { is_short_transfer: null }),
+    row('unassigned', { warehouseid: '*', receive_wh: 'SAME' }),
+  ]);
+  assert.equal(r.events.length, 2);
+  assert.equal(r.summary[0].numerator, 4);
+  assert.equal(r.summary[0].denominator, 16);
 });
-test('shipment and pickup select the cohort; partial cancellations preserve valid detail rows', () => {
+
+test('order close and pickup select the cohort; BI excludes cancelled details without extra statistical flags', () => {
   const r = read(
     [
       row('partial', { executeorderno: 'cancelled', orderstatus: 90, detailstatus: 20 }),
       row('partial'),
       row('not-stat', { is_stat: '0' }),
-      row('outside', { header_addtime: '2026-10-20', lastshipmenttime: '2026-11-01' }),
+      row('outside', { header_addtime: '2026-10-20', order_close_time: '2026-11-01' }),
       row('other-base', { belong_base: '华南', pickup_point: '02' }),
     ],
     { base: '郑州' },
   );
-  assert.equal(r.events.length, 1);
-  assert.equal(r.summary[0].numerator, 2);
-  assert.equal(r.summary[0].denominator, 8);
+  assert.equal(r.events.length, 2);
+  assert.equal(r.summary[0].numerator, 4);
+  assert.equal(r.summary[0].denominator, 16);
 });
 test('multi-period reports use the same no-lock business scope', () => {
   const r = read(
     [
       row('oct'),
-      row('sep', { header_addtime: '2026-09-20', lastshipmenttime: '2026-09-20' }),
+      row('sep', { header_addtime: '2026-09-20', order_close_time: '2026-09-20' }),
       row('excluded', {
+        is_short_transfer: '短拨',
         header_addtime: '2026-09-20',
-        lastshipmenttime: '2026-09-20',
+        order_close_time: '2026-09-20',
         receive_wh: 'SAME',
       }),
     ],
@@ -238,9 +241,9 @@ test('Zhengzhou amendment totals and customers select pickup 01, not base owners
   ];
   const r = read(rows, { base: '郑州' });
   assert.equal(r.events.length, 2);
-  assert.equal(r.summary[0].numerator, 6);
+  assert.equal(r.summary[0].numerator, 2);
   assert.equal(r.summary[0].denominator, 16);
-  assert.equal(r.customers[0].numerator, 6);
+  assert.equal(r.customers[0].numerator, 2);
   assert.equal(r.customers[0].denominator, 16);
   assert.equal(read(rows).events.length, 2);
   assert.equal(read(rows, { base: '其他' }).events.length, 1);
@@ -250,11 +253,11 @@ test('Zhengzhou period comparisons use the same pickup scope as current totals',
   const r = read(
     [
       row('oct'),
-      row('sep', { header_addtime: '2026-09-20', lastshipmenttime: '2026-09-20' }),
+      row('sep', { header_addtime: '2026-09-20', order_close_time: '2026-09-20' }),
       row('oct-other', { pickup_point: '34', change_order_qty: 100 }),
       row('sep-other', {
         header_addtime: '2026-09-20',
-        lastshipmenttime: '2026-09-20',
+        order_close_time: '2026-09-20',
         pickup_point: 'C9',
         change_order_qty: 200,
       }),
@@ -267,145 +270,112 @@ test('Zhengzhou period comparisons use the same pickup scope as current totals',
   ]);
 });
 
-test('unallocated rows use the unique known warehouse of the same execution and receive route for short-transfer exclusion', () => {
-  const source = [
-    row('E2600249820', {
-      receive_wh: 'SAME',
-      change_order_qty: null,
-      dms_last_update_qty: null,
-      need_qty_origin: 504,
-    }),
-    row('E2600249820', {
-      receive_wh: 'SAME',
-      warehouseid: '*',
-      change_order_qty: null,
-      dms_last_update_qty: null,
-      need_qty_origin: 608,
-    }),
-    row('E2600249820', {
-      receive_wh: 'SAME',
-      change_order_qty: 0,
-      dms_last_update_qty: null,
-      need_qty_origin: 10,
-    }),
-    row('E2600249820', {
-      receive_wh: 'SAME',
-      change_order_qty: null,
-      dms_last_update_qty: null,
-      need_qty_origin: 560,
-    }),
-  ];
-  const beforeExclusion = read(
-    source.map((r) => ({ ...r, receive_wh: 'OTHER' })),
-    { base: '郑州' },
-  );
-  assert.equal(beforeExclusion.summary[0].numerator, 10);
-  assert.equal(beforeExclusion.summary[0].denominator, 1682);
-  assert.equal(read(source, { base: '郑州' }).events.length, 0);
-  assert.equal(read(source, { base: '郑州', period: true }).period.length, 0);
+test('BI non-short flag preserves all quantities of E2600249820 despite warehouse allocation', () => {
+  const source = [504,608,10,560].map((qty, index) => row('E2600249820', {
+    receive_wh: 'SAME', warehouseid: index === 1 ? '*' : 'FROM',
+    change_order_qty: index === 2 ? 0 : null, dms_last_update_qty: null, need_qty_origin: qty,
+  }));
+  const result = read(source, { base: '郑州' });
+  assert.equal(result.summary[0].numerator, 10);
+  assert.equal(result.summary[0].denominator, 1682);
+  assert.equal(read(source.map(r => ({ ...r, is_short_transfer: '短拨' }))).events.length, 0);
 });
 
-test('warehouse fallback does not cross executions, receive routes, cancelled rows or conflicting warehouses', () => {
+test('BI status scope excludes cancelled details without adding header status or is_stat predicates', () => {
   const result = read([
-    row('conflict', { receive_wh: 'SAME' }),
-    row('conflict', { receive_wh: 'SAME', warehouseid: 'OTHER' }),
-    row('conflict', { receive_wh: 'SAME', warehouseid: '*' }),
-    row('unknown', { receive_wh: 'SAME', warehouseid: '*' }),
-    row('cancelled-proof', { receive_wh: 'SAME', detailstatus: 20, orderstatus: 90 }),
-    row('cancelled-proof', { receive_wh: 'SAME', warehouseid: '*' }),
-    row('route', { receive_wh: 'OTHER' }),
-    row('route', { receive_wh: 'SAME', warehouseid: '*' }),
+    row('cancelled-detail', { detailstatus: 20 }),
+    row('not-stat', { is_stat: '0' }),
+    row('header-cancelled', { orderstatus: 90 }),
   ]);
-  assert.equal(result.events.length, 6);
-  assert.equal(result.summary[0].denominator, 48);
+  assert.equal(result.events.length, 2);
+  assert.equal(result.summary[0].denominator, 16);
 });
-test('amendment SQL requires exact warehouse mapping and no lock or event-time fields', () => {
+
+test('amendment SQL uses BI daily date and short-transfer flag without trace or warehouse joins', () => {
   for (const sql of [amendmentEventsSql, amendmentChangesSql, customersSql]) {
-    assert.match(sql, /shipping.pickup_point=receiving.pickup_point/);
+    assert.match(sql, /s.is_short_transfer='非短拨'/);
+    assert.match(sql, /d.order_close_time>=:gea_p1/);
     assert.match(sql, /requested_qty>=0/);
     assert.match(sql, /COALESCE\(s.dms_last_update_qty,s.need_qty_origin,0\)/);
-    assert.doesNotMatch(
-      sql,
-      /custchangetime|requireddeliverytime|INTERVAL|is_short_transfer|order_qty_origin|agents_scm_execute_detail_hourly_d/,
-    );
+    assert.doesNotMatch(sql, /custchangetime|requireddeliverytime|INTERVAL|agents_dim_bas_warehouse_d|agents_scm_order_trace_final_di|order_qty_origin/);
   }
 });
 
-test('shipment month includes earlier creations and never substitutes creation or WMS close for missing shipment', () => {
+test('order close month includes earlier creations and missing traces without falling back to shipment', () => {
   const r = read([
-    row('earlier', { header_addtime: '2026-09-20', lastshipmenttime: '2026-10-03' }),
-    row('next', { lastshipmenttime: '2026-11-01' }),
-    row('unknown', { lastshipmenttime: null }),
-  ]);
+    row('earlier', { header_addtime: '2026-09-20', order_close_time: '2026-10-03' }),
+    row('next', { order_close_time: '2026-11-01' }),
+    row('unclosed', { order_close_time: null, lastshipmenttime: '2026-10-15' }),
+  ], { shipments: [] });
   assert.equal(r.events.length, 1);
   assert.equal(r.summary[0].numerator, 2);
   assert.equal(r.summary[0].denominator, 8);
   assert.equal(r.lines[0].shipped_at, '2026-10-03');
 });
-test('latest shipment batch retains tied transports and uses the last load without multiplying SKU quantities', () => {
+
+test('duplicate and outdated transport records cannot multiply or change the BI daily cohort', () => {
   const rows = [row('same'), row('same', { material_code: 'T' })];
-  const shipments = [
-    {
-      executeorderno: 'E-same',
-      cust_code: 'C',
-      lastshipmenttime: '2026-10-10',
-      update_time: '2026-11-08',
-    },
-    {
-      executeorderno: 'E-same',
-      cust_code: 'C',
-      lastshipmenttime: '2026-10-11',
-      update_time: '2026-11-09',
-      load_time: '2026-11-09 10:00:00',
-    },
-    {
-      executeorderno: 'E-same',
-      cust_code: 'C',
-      lastshipmenttime: '2026-10-12',
-      update_time: '2026-11-09',
-      load_time: '2026-11-09 11:00:00',
-    },
-    {
-      executeorderno: 'E-same',
-      cust_code: 'C',
-      lastshipmenttime: '2026-10-13',
-      update_time: '2026-11-09',
-      load_time: '2026-11-09 11:00:00',
-    },
-    {
-      executeorderno: 'E-same',
-      cust_code: 'OTHER',
-      lastshipmenttime: '2026-11-01',
-      update_time: '2026-11-09',
-    },
-  ];
+  const shipments = [row('same', { lastshipmenttime: '2026-11-01' }),row('same', { lastshipmenttime: null })];
   const r = read(rows, { shipments });
   assert.equal(r.lines.length, 2);
   assert.equal(r.summary[0].numerator, 4);
   assert.equal(r.summary[0].denominator, 16);
-  assert.ok(r.lines.every((x) => x.shipped_at === '2026-10-13'));
-  shipments.push({
-    ...shipments[2],
-    lastshipmenttime: '2026-11-01',
-    load_time: '2026-11-09 11:00:00',
-  });
-  assert.equal(read(rows, { shipments }).events.length, 0);
-  assert.equal(read(rows, { shipments, period: true }).period.length, 0);
 });
-test('a current missing shipment cannot resurrect an older timestamp', () => {
-  const shipments = [
-    {
-      executeorderno: 'E-latest',
-      cust_code: 'C',
-      lastshipmenttime: '2026-10-15',
-      update_time: '2026-11-08',
-    },
-    {
-      executeorderno: 'E-latest',
-      cust_code: 'C',
-      lastshipmenttime: null,
-      update_time: '2026-11-09',
-    },
+
+test('unclosed partial shipment stays outside the BI period even if a transport has shipped', () => {
+  assert.equal(read([row('partial', { order_close_time: null, lastshipmenttime: '2026-10-15' })]).events.length, 0);
+});
+
+test('only reductions reach shared totals, customer drilldown, details and comparison periods', () => {
+  const rows = [
+    row('reduce', { change_order_qty: 60, dms_last_update_qty: 100 }),
+    row('add', { change_order_qty: 90, dms_last_update_qty: 80 }),
+    row('equal', { change_order_qty: 10, dms_last_update_qty: 10 }),
+    row('zero', { change_order_qty: 0, dms_last_update_qty: 12 }),
+    row('null', { change_order_qty: null, dms_last_update_qty: 20 }),
+    row('negative', { change_order_qty: -1, dms_last_update_qty: 5 }),
+    row('dms-zero', {
+      change_order_qty: 3,
+      dms_last_update_qty: 0,
+      need_qty_origin: 900,
+    }),
+    row('backup', {
+      change_order_qty: 20,
+      dms_last_update_qty: null,
+      need_qty_origin: 30,
+    }),
+    row('empty', {
+      change_order_qty: null,
+      dms_last_update_qty: null,
+      need_qty_origin: null,
+    }),
   ];
-  assert.equal(read([row('latest')], { shipments }).events.length, 0);
+  for (const base of ['', '郑州']) {
+    const result = read(rows, { base });
+    assert.equal(result.events.length, 8);
+    for (const values of [result.summary, result.customers]) {
+      assert.equal(values[0].numerator, 62);
+      assert.equal(values[0].denominator, 257);
+    }
+    assert.deepEqual(
+      result.details.map((r) => [r.cust_order_no, r.changed_quantity]),
+      [
+        ['reduce', 40],
+        ['add', 0],
+        ['equal', 0],
+        ['zero', 12],
+        ['null', 0],
+        ['negative', 0],
+        ['dms-zero', 0],
+        ['backup', 10],
+      ],
+    );
+    assert.equal(
+      result.details.reduce((sum, r) => sum + r.changed_quantity, 0),
+      62,
+    );
+    const period = read(rows, { base, period: true }).period[0];
+    assert.equal(period.numerator, 62);
+    assert.equal(period.denominator, 257);
+  }
 });
