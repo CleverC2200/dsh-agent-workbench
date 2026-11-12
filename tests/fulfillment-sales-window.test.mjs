@@ -652,7 +652,10 @@ test('whole-pallet labels, increments and manual input agree in order and shorta
     const { dom, document, view } = component(state);
     try {
       const input = document.querySelector('[aria-label="PALLET 数量"]');
-      assert.match(document.querySelector('.editor-order-rules').textContent, /每托42箱（整托订购）/);
+      assert.match(
+        document.querySelector('.editor-order-rules').textContent,
+        /每托42箱（整托订购）/,
+      );
       assert.doesNotMatch(document.querySelector('.editor-order-rules').textContent, /订货倍数/);
       assert.equal(input.step, '42');
       document.querySelector('[aria-label="PALLET 增加"]').click();
@@ -718,7 +721,13 @@ test('legacy partial pallets align on explicit clicks and starting quantity roun
     const state = fixture();
     state.snapshot.satisfactionRate = 70;
     state.snapshot.lines = [
-      { sku: 'PALLET', name: '整托商品', quantity, minimumOrderQuantity: minimum, orderMultiple: 42 },
+      {
+        sku: 'PALLET',
+        name: '整托商品',
+        quantity,
+        minimumOrderQuantity: minimum,
+        orderMultiple: 42,
+      },
     ];
     const { dom, document, view } = component(state);
     try {
