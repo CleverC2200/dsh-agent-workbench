@@ -398,7 +398,7 @@ test('Windows uses one update entry and reopens the shared panel without repeati
     },
     true,
   );
-  const entry = page.getByRole('button', { name: '更新', exact: true });
+  const entry = page.locator('button.gea-update-entry');
   await expect(entry).toHaveCount(1);
   await expect(page.locator('.gea-sidebar-update')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '新版本', exact: true })).toHaveCount(0);
@@ -437,7 +437,7 @@ test('Windows uses one update entry and reopens the shared panel without repeati
 
 test('update panel keeps independent progress and failures and releases observation on unload', async (t) => {
   const page = await fixture(t, 'win32', true, undefined, 'late');
-  const entry = page.getByRole('button', { name: '更新', exact: true });
+  const entry = page.locator('button.gea-update-entry');
   await entry.click();
   const panel = page.getByRole('dialog');
   await page.evaluate(() => {
@@ -512,7 +512,7 @@ test('update panel keeps independent progress and failures and releases observat
 test('plugin update continues while its panel is closed and exposes no invented percent', async (t) => {
   const page = await fixture(t, 'win32', true, undefined, true);
   await page.evaluate(() => window.emitNative({ phase: 'idle' }));
-  await page.getByRole('button', { name: '更新', exact: true }).click();
+  await page.locator('button.gea-update-entry').click();
   const panel = page.getByRole('dialog');
   await page.evaluate(() => {
     window.pluginFixturePhase = 'available';
@@ -527,8 +527,8 @@ test('plugin update continues while its panel is closed and exposes no invented 
   await expect(panel.getByRole('progressbar').last()).not.toHaveAttribute('value');
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '更新', exact: true })).toBeFocused();
-  await page.getByRole('button', { name: '更新', exact: true }).click();
+  await expect(page.locator('button.gea-update-entry')).toBeFocused();
+  await page.locator('button.gea-update-entry').click();
   await expect(panel.getByText('正在安装', { exact: true }).first()).toBeVisible();
   assert.equal(await page.evaluate(() => window.pluginUpdateClicks), 1);
   await page.evaluate(() => {
@@ -548,7 +548,7 @@ test('plugin update continues while its panel is closed and exposes no invented 
     });
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
-  const updateEntry = page.getByRole('button', { name: '更新', exact: true });
+  const updateEntry = page.locator('button.gea-update-entry');
   if (!(await updateEntry.isVisible()))
     await page.getByRole('button', { name: '展开业务菜单', exact: true }).click();
   await expect(updateEntry).toBeVisible();
@@ -557,7 +557,7 @@ test('plugin update continues while its panel is closed and exposes no invented 
 for (const mode of ['web', 'version-failed'])
   test('update panel preserves unknown installed client version in ' + mode, async (t) => {
     const page = await fixture(t, 'win32', false, undefined, mode);
-    await page.getByRole('button', { name: '更新', exact: true }).click();
+    await page.locator('button.gea-update-entry').click();
     const panel = page.getByRole('dialog');
     const desktop = panel.getByRole('region', { name: '客户端', exact: true });
     await expect(desktop).toContainText('未确认');
