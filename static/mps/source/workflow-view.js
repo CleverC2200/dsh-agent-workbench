@@ -9,7 +9,7 @@ import { createConstraintPanel } from './constraint-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
 import { call } from '../../../business/shared/channel.js';
-import { readUnitWeights, unitWeightCandidate } from './unit-weights.js';
+import { readUnitWeights, unitWeightCandidate, productWeightCandidate } from './unit-weights.js';
 import { createEvaluationOverview, planContext } from './evaluation-view.js';
 import { readPlanRelations } from './relations.js';
 import { computeWorkflow } from './workflow-worker-client.js';
@@ -683,6 +683,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           ...layerQuantityColumns,
           '分层缺项',
           '历史参考物料编码',
+          '历史源数量',
+          '替换系数',
           '历史参考口径',
           '公式说明',
           ...inventoryDependencyColumns,
@@ -746,7 +748,13 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           ),
           分层缺项: row.layerMissing?.join('；'),
           历史参考物料编码: row.historyCode || row.code,
-          历史参考口径: row.historyCode ? '沿用老品历史' : '自身历史',
+          历史源数量: row.historyReferenceQuantity,
+          替换系数: row.historyCode
+            ? row.historyFactor === undefined
+              ? 1
+              : row.historyFactor
+            : '',
+          历史参考口径: row.historyCode ? '同基地老品历史量×替换系数' : '自身历史',
           公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
           ...inventoryDependencyFields(row),
           系统SKU需求: row.systemDemand,
@@ -1073,8 +1081,19 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           .map((row) => [JSON.stringify([row.base, row.code]), row]),
       ).values(),
     ];
+    const weightProductRows = new Map();
+    for (const row of draft.productRaw ?? []) {
+      const rows = weightProductRows.get(row.material_code) ?? [];
+      rows.push(row);
+      weightProductRows.set(row.material_code, rows);
+    }
     const weightRows = skuPairs.map((row) => {
       const current = weights.find((item) => item.base === row.base && item.code === row.code);
+      const productWeight = productWeightCandidate(
+        weightProductRows.get(row.code) ?? [],
+        row.base,
+        row.code,
+      );
       const candidate = unitWeightCandidate(
         weightRead?.rows ?? [],
         row.code,
@@ -1116,11 +1135,15 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         h(
           'span',
           null,
-          weightRead
-            ? candidate.rows
-                .map((item) => `${display(item.channel_name)}：${display(item.ton_per_piece)}吨/件`)
-                .join('；') || '无来源记录'
-            : '尚未完整读取',
+          productWeight
+            ? `产品清单：${productWeight.rows.map((item) => `${display(item.net_weight)}${display(item.weight_unit)}/${display(item.measure_unit)}`).join('；')}；${productWeight.tonsPerPiece === null ? productWeight.missing.join('；') : `${productWeight.tonsPerPiece}吨/计量单位，未设人工值时自动使用`}`
+            : weightRead
+              ? candidate.rows
+                  .map(
+                    (item) => `${display(item.channel_name)}：${display(item.ton_per_piece)}吨/件`,
+                  )
+                  .join('；') || '无来源记录'
+              : '尚未完整读取',
         ),
         h(
           'button',
@@ -1532,7 +1555,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
                   h(
                     'p',
                     { className: 'wf-note' },
-                    '来源值为候选。填写本基地SKU实际适用的全部渠道；相关渠道均有正数且相同系数才可采用。读取成功不证明全渠道适用，不从产能比推算。',
+                    '人工值优先；未设人工值时，按最新产品清单的同基地SKU净重、重量单位与计量单位自动换算吨数。产品源有缺值或冲突时待补，不改用旧值。无该基地SKU记录时使用旧渠道系数；相关渠道均有正数且相同系数才可采用，不从产能比推算。',
                   ),
                   h(
                     'button',

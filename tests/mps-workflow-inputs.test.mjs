@@ -1050,3 +1050,156 @@ test('安全天数采用实际读取来源起月与版本，评估月保持独�
     ['2026-12', '2027-01', '2027-02'],
   );
 });
+
+test('最新产品源按基地应用替换系数，重复标签不倍增，零与未知分开', () => {
+  const source = draft();
+  source.products[0]['老品编码'] = 'OLD';
+  source.productRaw = [
+    {
+      material_code: 'A',
+      target_base: '甲',
+      replacement_material_code: 'OLD',
+      transfer_tag: '新品',
+      replace_num: '2.00000000',
+    },
+    {
+      material_code: 'A',
+      target_base: '甲',
+      replacement_material_code: 'OLD',
+      transfer_tag: '自产',
+      replace_num: '2.00000000',
+    },
+    {
+      material_code: 'A',
+      target_base: '丙',
+      replacement_material_code: 'OLD',
+      replace_num: '0.00000000',
+    },
+  ];
+  source.historyAnnual.periods[0].rows.push(
+    { 基地: '甲', 产品编码: 'OLD', 数量: 100 },
+    { 基地: '丙', 产品编码: 'OLD', 数量: 20 },
+    { 基地: '丁', 产品编码: 'OLD', 数量: 999 },
+  );
+  const raw = structuredClone(source.historyAnnual);
+  const rows = buildMpsWorkflow(source).rows.filter(
+    (row) => row.month === source.month && row.code === 'A',
+  );
+  assert.equal(rows.length, 3);
+  assert.equal(rows.find((row) => row.base === '甲').historyReferenceQuantity, 100);
+  assert.equal(rows.find((row) => row.base === '甲').historyQuantity, 200);
+  assert.equal(rows.find((row) => row.base === '丙').historyQuantity, 0);
+  assert.equal(rows.find((row) => row.base === '丁').historyQuantity, null);
+  assert.deepEqual(source.historyAnnual, raw);
+  source.productRaw[1].replace_num = '3';
+  const conflict = buildMpsWorkflow(source).rows.find(
+    (row) => row.base === '甲' && row.code === 'A',
+  );
+  assert.equal(conflict.historyQuantity, null);
+  assert.match(conflict.missing.historyQuantity.join(), /系数/);
+});
+
+test('产品净重按基地及计量单位换算吨数，冲突不退回旧系数，人工值优先', async () => {
+  const { productWeightCandidate } = await import('../static/mps/source/unit-weights.js');
+  const { resolveWeightPairs } = await import('../static/mps/source/plan-inputs.js');
+  const raw = (extra = {}) => ({
+    material_code: 'A',
+    target_base: '四川',
+    net_weight: '8.08000001',
+    weight_unit: 'KG',
+    measure_unit: '件',
+    ...extra,
+  });
+  assert.equal(productWeightCandidate([raw()], '西南', 'A').tonsPerPiece, 0.00808000001);
+  assert.equal(
+    productWeightCandidate([raw({ net_weight: '8080', weight_unit: 'g' })], '西南', 'A')
+      .tonsPerPiece,
+    0.00808,
+  );
+  assert.equal(
+    productWeightCandidate([raw({ net_weight: '1', weight_unit: '吨' })], '西南', 'A').tonsPerPiece,
+    1,
+  );
+  for (const extra of [
+    { net_weight: '0' },
+    { net_weight: null },
+    { weight_unit: 'LB' },
+    { measure_unit: null },
+  ])
+    assert.equal(productWeightCandidate([raw(extra)], '西南', 'A').tonsPerPiece, null);
+  assert.equal(
+    productWeightCandidate([raw(), raw({ net_weight: '9' })], '西南', 'A').tonsPerPiece,
+    null,
+  );
+  assert.equal(
+    productWeightCandidate([raw(), raw({ measure_unit: '袋' })], '西南', 'A').tonsPerPiece,
+    null,
+  );
+  assert.equal(productWeightCandidate([raw()], '郑州', 'A'), null);
+  const pairs = [
+    { base: '西南', code: 'A' },
+    { base: '郑州', code: 'A' },
+  ];
+  const old = { rows: [{ material_code: 'A', channel_name: '经销商', ton_per_piece: 0.1 }] };
+  const resolved = resolveWeightPairs([], pairs, old, [raw(), raw()]);
+  assert.deepEqual(
+    resolved.weights.map((row) => row.tonsPerPiece),
+    [0.00808000001, 0.1],
+  );
+  const unknown = resolveWeightPairs([], [pairs[0]], old, [raw({ net_weight: null })]);
+  assert.equal(unknown.weights.length, 0);
+  assert.equal(unknown.issues[0].sourceTable, 'ai_db.agents_dim_product_list_mi');
+  const manual = resolveWeightPairs([{ ...pairs[0], tonsPerPiece: 0.2 }], pairs, old, [
+    raw({ net_weight: null }),
+  ]);
+  assert.deepEqual(
+    manual.weights.map((row) => row.tonsPerPiece),
+    [0.2, 0.1],
+  );
+});
+
+test('产品净重同时进入实际排产和年度吨数报告，不依赖旧渠道取数成功', () => {
+  const sample = workflowPerformanceInput(2);
+  sample.draft.unitWeights = [];
+  sample.draft.productRaw = ['0', '1'].map((code) => ({
+    material_code: code,
+    target_base: '甲',
+    net_weight: code === '0' ? '10' : '20',
+    weight_unit: 'KG',
+    measure_unit: '件',
+  }));
+  const result = buildMpsWorkflow(sample.draft, null, sample.shipment, {
+    weights: null,
+    annual: { rows: [{ month: sample.draft.month, base: '甲', code: '0', quantity: 100 }] },
+  });
+  const row = result.plan.rows.find((row) => row.code === '0' && row.month === sample.draft.month);
+  assert.equal(row.demand, 50);
+  assert.equal(row.demandTons, 0.5);
+  assert.ok(Math.abs(row.mainPlan - 50) < 1e-8);
+  assert.equal(
+    result.plan.capacityReport.annualTotals.find(
+      (row) => row.base === '全国' && row.month === sample.draft.month,
+    ).demand.value,
+    1,
+  );
+});
+
+test('新版产品源缺目标基地或只有另一基地系数时，不能落回旧版默认系数一', () => {
+  for (const base of ['', '甲']) {
+    const source = draft();
+    source.products[0]['基地'] = base;
+    source.products[0]['老品编码'] = 'OLD';
+    source.historyAnnual.periods[0].rows.push({ 基地: '甲', 产品编码: 'OLD', 数量: 100 });
+    for (const target_base of ['', '乙']) {
+      source.productRaw = [
+        { material_code: 'A', replacement_material_code: 'OLD', target_base, replace_num: '2' },
+      ];
+      const row = buildMpsWorkflow(source).rows.find(
+        (row) => row.base === '甲' && row.code === 'A',
+      );
+      assert.equal(row.historyReferenceQuantity, 100);
+      assert.equal(row.historyQuantity, null);
+      assert.match(row.missing.historyQuantity.join(), /系数/);
+    }
+  }
+});

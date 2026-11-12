@@ -15,7 +15,12 @@ import { readSourceTable, forecastDimensions } from './source-tables.js';
 import { createDeliveryMetrics } from './delivery-metrics.js';
 import { createWorkflow } from './workflow-view.js';
 import { defaultInventoryMonth } from './inventory-selection.js';
-import { productProjections, sourceDimensions } from './source-projections.js';
+import {
+  productProjections,
+  productSourceColumns,
+  productSourceRows,
+  sourceDimensions,
+} from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
 import { productFileText, productReplacementErrors } from './product-file.js';
 import { sumSourceAmounts } from './source-money.js';
@@ -1500,10 +1505,16 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         draft.month,
       ],
     );
-    const filteredProducts = productViews.filter(({ display, labels, replacementCodes }) =>
-      [...Object.values(display), ...labels, ...replacementCodes].some((value) =>
-        value.includes(search),
-      ),
+    const filteredProducts = productViews.filter(
+      ({ display, labels, replacementCodes, targetBases, transferTags, sourcePeriods }) =>
+        [
+          ...Object.values(display),
+          ...labels,
+          ...replacementCodes,
+          ...targetBases,
+          ...transferTags,
+          ...sourcePeriods,
+        ].some((value) => value.includes(search)),
     );
     const selectedProduct = productDetails === null ? null : productViews[productDetails];
     react.useEffect(() => setProductPage(0), [draft.id, draft.products, productPageSize]);
@@ -1616,6 +1627,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               replacementCodes,
               replacementNames,
               candidateBases,
+              targetBases,
+              transferTags,
+              sourcePeriods,
             }) => ({
               ...display,
               记录层级: children.length ? '物料组' : 'SKU或本地记录',
@@ -1623,6 +1637,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               源替换物料编码: replacementCodes.join(' / '),
               源替换品名称: replacementNames.join(' / '),
               事实候选基地: candidateBases.join(' / '),
+              源目标基地: targetBases.join(' / '),
+              源调拨标签: transferTags.join(' / '),
+              源统计月份: sourcePeriods.join(' / '),
             }),
           ),
         draft: { id: draft.id, name: draft.name, month: draft.month },
@@ -2064,6 +2081,19 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               },
               '下载',
             ),
+            h(
+              'button',
+              {
+                disabled: !draft.productRaw?.length,
+                onClick: () =>
+                  downloadCsv(
+                    '产品源字段.csv',
+                    productSourceColumns,
+                    productSourceRows(draft.productRaw),
+                  ),
+              },
+              '下载产品源字段',
+            ),
             h(Upload, {
               label: '选择产品关系CSV或Excel',
               accept:
@@ -2100,7 +2130,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h(
                 'colgroup',
                 {},
-                [9, 18, 7, 9, 8, 12, 9, 11, 9, 8].map((width, index) =>
+                [9, 16, 7, 8, 8, 10, 9, 9, 9, 8, 10].map((width, index) =>
                   h('col', { key: index, style: { width: width + '%' } }),
                 ),
               ),
@@ -2120,6 +2150,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     '对应老品编码',
                     '老品名称',
                     '未税到岸单价',
+                    '新品标记',
                     '操作',
                   ].map((column) => h('th', { key: column }, column)),
                 ),
@@ -2133,30 +2164,44 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     h(
                       'tr',
                       { key: index },
-                      [...productColumns.filter((column) => column !== '基地'), '未税到岸单价'].map(
-                        (column) =>
-                          h(
-                            'td',
-                            {
-                              key: column,
-                              'aria-label':
-                                column === '产品名称' ? display[column] || '-' : undefined,
-                              title: inherited.includes(column)
-                                ? '同物料组SKU的唯一源值，仅用于展示'
-                                : row[column] || '',
-                            },
-                            column === '产品编码' && children.length
+                      [
+                        ...productColumns.filter((column) => column !== '基地'),
+                        '未税到岸单价',
+                        '新品标记',
+                      ].map((column) =>
+                        h(
+                          'td',
+                          {
+                            key: column,
+                            'aria-label': ['产品名称', '产品编码'].includes(column)
+                              ? display[column] || '-'
+                              : undefined,
+                            title: inherited.includes(column)
+                              ? '同物料组SKU的唯一源值，仅用于展示'
+                              : row[column] || '',
+                          },
+                          column === '产品编码' && children.length
+                            ? h(
+                                'button',
+                                {
+                                  className: 'dc-link',
+                                  onClick: () => setProductDetails(index),
+                                  'aria-label': `查看物料组 ${row['物料组']} 的${children.length}个SKU`,
+                                },
+                                `物料组 · ${children.length} SKU`,
+                              )
+                            : column === '产品编码' && row['产品编码']
                               ? h(
                                   'button',
                                   {
                                     className: 'dc-link',
+                                    'aria-label': `查看产品 ${row['产品编码']} 的源字段`,
                                     onClick: () => setProductDetails(index),
-                                    'aria-label': `查看物料组 ${row['物料组']} 的${children.length}个SKU`,
                                   },
-                                  `物料组 · ${children.length} SKU`,
+                                  display[column],
                                 )
                               : display[column] || '-',
-                          ),
+                        ),
                       ),
                       h(
                         'td',
@@ -2313,6 +2358,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             Dialog,
             {
               title: '产品源字段与物料组SKU',
+              className: 'dc-source-detail',
               close: () => setProductDetails(null),
               footer: h('button', { onClick: () => setProductDetails(null) }, '关闭'),
             },
@@ -2364,6 +2410,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   };
                 }),
               ),
+            h(
+              'p',
+              { className: 'dc-muted' },
+              '以下为最新统计月份的源记录。替换参考量＝同基地老品历史量×替换系数；净重为每个计量单位的重量。缺值保留为空，不按0计算。',
+            ),
+            table(productSourceColumns, selectedProduct.sourceDetails),
           ),
         h(Annual, {
           draft,

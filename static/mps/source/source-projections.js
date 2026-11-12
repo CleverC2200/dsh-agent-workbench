@@ -1,6 +1,39 @@
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const values = (rows, field) => [...new Set(rows.map((row) => text(row[field])).filter(Boolean))];
 const key = (code, group) => JSON.stringify([code, group]);
+const productSourceFields = {
+  统计月份: 'stat_period',
+  目标基地: 'target_base',
+  调拨标签: 'transfer_tag',
+  大类: 'sub_category',
+  系列: 'series',
+  物料组编码: 'product_item',
+  物料组名称: 'product_item_name',
+  物料编码: 'material_code',
+  物料名称: 'material_name',
+  产品标签: 'responsible_item',
+  替换品: 'replacement_product',
+  替换物料编码: 'replacement_material_code',
+  净重: 'net_weight',
+  重量单位: 'weight_unit',
+  计量单位: 'measure_unit',
+  替换系数: 'replace_num',
+  更新时间: 'update_time',
+  源记录数: 'source_rows',
+};
+export const productSourceColumns = [...Object.keys(productSourceFields), '新品标记'];
+export function productSourceRows(rows) {
+  return rows.map((row) => ({
+    ...Object.fromEntries(
+      Object.entries(productSourceFields).map(([field, source]) => [field, row[source] ?? '']),
+    ),
+    新品标记: !text(row.transfer_tag)
+      ? '待确认'
+      : text(row.transfer_tag) === '新品'
+        ? '新品'
+        : '非新品',
+  }));
+}
 const numeric = (value) =>
   (typeof value === 'number' || (typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value))) &&
   Number.isFinite(Number(value)) &&
@@ -38,7 +71,20 @@ export function productProjections(products, raw = [], facts = [], prices = []) 
     const category = values(childSources, 'sub_category');
     const series = values(childSources, 'series');
     const labels = values(children.length ? childSources : records, 'responsible_item');
-    const display = { ...row, 未税到岸单价: priceByCode.get(row['产品编码']) ?? '' };
+    const sourceRecords = children.length ? childSources : records;
+    const transferTags = values(sourceRecords, 'transfer_tag');
+    const newProduct = transferTags.includes('新品');
+    const display = {
+      ...row,
+      未税到岸单价: priceByCode.get(row['产品编码']) ?? '',
+      新品标记: newProduct
+        ? transferTags.length === 1 && sourceRecords.every((record) => text(record.transfer_tag))
+          ? '新品'
+          : '部分基地新品'
+        : sourceRecords.length && sourceRecords.every((record) => text(record.transfer_tag))
+          ? '非新品'
+          : '待确认',
+    };
     const inherited = [];
     for (const [field, candidates] of [
       ['大类', category],
@@ -46,8 +92,9 @@ export function productProjections(products, raw = [], facts = [], prices = []) 
     ]) {
       const sourceField = field === '大类' ? 'sub_category' : 'series';
       const complete =
-        childSources.length === children.length &&
-        childSources.every((child) => text(child[sourceField]));
+        children.every((child) =>
+          source.has(key(products[child]['产品编码'], products[child]['物料组'])),
+        ) && childSources.every((child) => text(child[sourceField]));
       if (!display[field] && children.length && complete && candidates.length === 1) {
         display[field] = candidates[0];
         inherited.push(field);
@@ -65,6 +112,10 @@ export function productProjections(products, raw = [], facts = [], prices = []) 
       children,
       inherited,
       labels,
+      transferTags,
+      targetBases: values(sourceRecords, 'target_base'),
+      sourcePeriods: values(sourceRecords, 'stat_period'),
+      sourceDetails: productSourceRows(sourceRecords),
       categoryValues: category,
       seriesValues: series,
       sourceRows: records.length,

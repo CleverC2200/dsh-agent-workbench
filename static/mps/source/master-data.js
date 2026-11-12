@@ -62,7 +62,7 @@ const text = (value) => {
   return value;
 };
 export function productRows(rows) {
-  return rows.map((row) => ({
+  const products = rows.map((row) => ({
     基地: '',
     产品编码: text(row.material_code),
     产品名称: text(row.material_name),
@@ -73,6 +73,7 @@ export function productRows(rows) {
     老品编码: text(row.replacement_material_code),
     老品名称: text(row.replacement_product),
   }));
+  return [...new Map(products.map((row) => [JSON.stringify(row), row])).values()];
 }
 export function annualRows(rows) {
   const records = rows.map((row) => {
@@ -131,6 +132,8 @@ export async function readProducts(signal) {
       maxRows: 10000,
     },
   );
+  if (new Set(result.rows.map((row) => row.stat_period).filter(Boolean)).size > 1)
+    throw Error('产品清单读取期间最新统计月份变化，请重新同步');
   let prices;
   try {
     const definition = config.queries['products.prices'];

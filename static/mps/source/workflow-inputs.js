@@ -7,6 +7,7 @@ import { attachPlanReport } from './plan-diagnostics.js';
 import { inventoryVersionOrder, selectedInventoryMonth } from './inventory-selection.js';
 import { buildCapacityReport } from 'dsh-agent-manage/mps-compute/capacity-report';
 import { productionCalendarDays } from './production-calendar.js';
+import { canonicalBaseName } from './relations.js';
 
 const number = (value) => {
   if (
@@ -22,6 +23,40 @@ const number = (value) => {
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const demo = (value) => /demo|演示|原型/i.test(String(value ?? ''));
 const rowKey = (row) => JSON.stringify([row.base, row.code]);
+function productHistoryMappings(products, raw) {
+  const sources = new Map();
+  for (const row of raw ?? []) {
+    if (!Object.hasOwn(row, 'replace_num')) continue;
+    const code = text(row.material_code);
+    sources.set(code, [...(sources.get(code) ?? []), row]);
+  }
+  return products.flatMap((product) => {
+    if (!product.historyCode) return [product];
+    const matching = (sources.get(product.code) ?? []).filter(
+      (row) => text(row.replacement_material_code) === product.historyCode,
+    );
+    if (!matching.length) return [product];
+    const byBase = new Map();
+    for (const row of matching) {
+      const base = canonicalBaseName(row.target_base);
+      if (!base || (product.base && base !== canonicalBaseName(product.base))) continue;
+      byBase.set(base, [...(byBase.get(base) ?? []), row]);
+    }
+    const specific = [...byBase].map(([base, rows]) => {
+      const factors = rows.map((row) => number(row.replace_num));
+      const unique = new Set(factors);
+      return {
+        ...product,
+        base: product.base || base,
+        historyFactor:
+          unique.size === 1 && factors[0] !== null && factors[0] >= 0 ? factors[0] : null,
+      };
+    });
+    return product.base && specific.length
+      ? specific
+      : [{ ...product, historyFactor: null }, ...specific];
+  });
+}
 const sourceIssues = (draft, source, month) => {
   const current = draft[source + 'Read'];
   const read = current?.periods?.[month] ?? current;
@@ -150,15 +185,18 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     : [];
   const products = demo(draft.productSource)
     ? []
-    : (draft.products ?? []).map((row) => ({
-        base: text(row['基地']),
-        code: text(row['产品编码']),
-        name: text(row['产品名称']),
-        category: text(row['大类']),
-        series: text(row['系列']),
-        group: text(row['物料组']),
-        ...(text(row['老品编码']) ? { historyCode: text(row['老品编码']) } : {}),
-      }));
+    : productHistoryMappings(
+        (draft.products ?? []).map((row) => ({
+          base: text(row['基地']),
+          code: text(row['产品编码']),
+          name: text(row['产品名称']),
+          category: text(row['大类']),
+          series: text(row['系列']),
+          group: text(row['物料组']),
+          ...(text(row['老品编码']) ? { historyCode: text(row['老品编码']) } : {}),
+        })),
+        draft.productRaw,
+      );
   const productMonths = new Map();
   for (const source of ['report', 'history']) {
     for (const row of source === 'report' ? report : history) {
@@ -399,6 +437,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
           ...(evaluation.annual?.extraWeights?.rows ?? []),
         ],
       },
+      draft.productRaw,
     );
     result.plan.capacityReport = buildCapacityReport(
       { ...planInput, unitWeights: annualWeights.weights },

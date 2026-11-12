@@ -340,3 +340,44 @@ test(
     assert.equal(JSON.stringify(draft.sourceChecks), before);
   },
 );
+
+test('multi-base source rows keep national groups unique and expose new-product and decimal metadata without conversion', () => {
+  const records = [
+    raw('A', {
+      stat_period: '2026-11',
+      target_base: '郑州',
+      transfer_tag: '新品',
+      net_weight: '8.08000001',
+      weight_unit: 'KG',
+      measure_unit: '件',
+      replace_num: '0.00000000',
+    }),
+    raw('A', {
+      stat_period: '2026-11',
+      target_base: '华东',
+      transfer_tag: '自产',
+      net_weight: '8.08000001',
+      weight_unit: 'KG',
+      measure_unit: '件',
+      replace_num: '0.00000000',
+    }),
+    raw('B', {
+      stat_period: '2026-11',
+      target_base: '华东',
+      transfer_tag: '非新品',
+      net_weight: null,
+      replace_num: null,
+    }),
+  ];
+  const products = [row(''), row('A'), row('B')];
+  const projected = productProjections(products, records);
+  assert.equal(projected[0].display['大类'], '细类');
+  assert.equal(projected[1].display['新品标记'], '部分基地新品');
+  assert.equal(projected[2].display['新品标记'], '非新品');
+  assert.deepEqual(projected[1].targetBases, ['郑州', '华东']);
+  assert.equal(projected[1].sourceDetails.length, 2);
+  assert.equal(projected[1].sourceDetails[0]['净重'], '8.08000001');
+  assert.equal(projected[1].sourceDetails[0]['替换系数'], '0.00000000');
+  assert.equal(projected[2].sourceDetails[0]['净重'], '');
+  assert.equal(projected[2].sourceDetails[0]['替换系数'], '');
+});

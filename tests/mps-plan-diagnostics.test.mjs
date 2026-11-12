@@ -178,3 +178,45 @@ test('库存来源未读与源行发运条件不足分别说明，不把未同�
   assert.match(pending.reportIssues[0].reason, /缺有效预估发货.*三种发运速度均为0/);
   assert.doesNotMatch(pending.reportIssues[0].reason, /缺截止日库存/);
 });
+
+test('补数问题清单列明替换系数和产品净重字段，零需求的系数缺项不阻断', () => {
+  const plan = {
+    context: { month: '2026-11' },
+    resourceSchedules: [],
+    rows: [null, 0].map((demand, index) => ({
+      month: '2026-11',
+      base: '甲',
+      code: index ? 'ZERO' : 'A',
+      historyCode: 'OLD',
+      demand,
+      missing: { historyQuantity: ['替换系数缺失、冲突或无效'] },
+      planMissing: index ? [] : ['缺唯一有效件吨系数'],
+    })),
+  };
+  attachPlanReport(
+    plan,
+    {
+      planCandidates: [],
+      unitWeights: [],
+      transferRoutes: [],
+      unitWeightIssues: [
+        {
+          base: '甲',
+          code: 'A',
+          reason: '缺计量单位',
+          sourceTable: 'ai_db.agents_dim_product_list_mi',
+        },
+      ],
+    },
+    null,
+  );
+  const ratio = plan.reportIssues.find((row) => row.kind === '缺替换系数' && row.code === 'A');
+  assert.match(ratio.sourceFields, /replace_num/);
+  assert.match(ratio.action, /甲.*A.*OLD/);
+  assert.equal(ratio.blocking, true);
+  assert.equal(plan.reportIssues.find((row) => row.code === 'ZERO').blocking, false);
+  const weight = plan.reportIssues.find((row) => row.kind === '缺件吨系数');
+  assert.equal(weight.sourceTable, 'ai_db.agents_dim_product_list_mi');
+  assert.match(weight.sourceFields, /net_weight.*weight_unit.*measure_unit/);
+  assert.match(weight.reason, /缺计量单位/);
+});

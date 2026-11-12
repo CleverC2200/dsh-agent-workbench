@@ -258,6 +258,7 @@ test('reported quantities retain partial NULL independently and preserve real ze
       cust_code TEXT, material_code TEXT, region_name TEXT
     );
     CREATE TABLE agents_dim_product_list_mi (
+      stat_period TEXT,
       material_code TEXT, material_name TEXT, sub_category TEXT, series TEXT,
       product_item TEXT, product_item_name TEXT
     );
