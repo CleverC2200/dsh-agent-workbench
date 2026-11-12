@@ -25,6 +25,11 @@ const monitorScheduleLabel = function (v) {
   }
 };
 export const openAlertManagement = async function (events, onEvent, startNew) {
+  const existing = document.querySelector('.am-mask');
+  if (existing) {
+    existing.querySelector('[data-close]')?.focus();
+    return;
+  }
   const catalog = [
       '当前库存',
       '可用库存',
@@ -194,18 +199,6 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     runPending = null,
     runNotice = '',
     runPage = 0;
-  try {
-    const state = await api({ op: 'list' });
-    monitors = state.tasks;
-    runEvents = state.events || [];
-    logs = state.runs.map((r) => ({
-      ...r,
-      value: r.response?.results?.length ? '检测 ' + r.response.results.length + ' 个对象' : '—',
-    }));
-  } catch (e) {
-    alert('检测服务连接失败：' + e.message);
-    return;
-  }
   events = [...events];
   const mask = document.createElement('div');
   mask.className = 'am-mask';
@@ -213,10 +206,57 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     '<section class="am-panel" role="dialog" aria-modal="true" aria-label="预警管理"><header><div><small>工作台运营</small><h2>预警管理</h2></div><button data-close>×</button></header><div class="am-notice">通过 XXL-JOB 定时执行 GEA 问数；风险规则沿用指标库。缺少规则或数据时记录失败。</div><nav role="tablist" aria-label="预警管理内容"><button role="tab" data-tab="monitors">检测任务</button><button role="tab" data-tab="logs">执行记录</button></nav><main role="tabpanel"></main></section>';
   document.body.append(mask);
   const main = mask.querySelector('main');
+  const nav = mask.querySelector('nav');
+  let poll;
+  let loading = false;
+  async function load() {
+    if (loading || !mask.isConnected) return;
+    loading = true;
+    nav.hidden = true;
+    main.setAttribute('aria-busy', 'true');
+    main.innerHTML = '<div class="am-empty" role="status">正在连接预警后台…</div>';
+    try {
+      const state = await api({ op: 'list' });
+      if (!mask.isConnected) return;
+      monitors = state.tasks;
+      runEvents = state.events || [];
+      logs = state.runs.map((r) => ({
+        ...r,
+        value: r.response?.results?.length ? '检测 ' + r.response.results.length + ' 个对象' : '—',
+      }));
+      nav.hidden = false;
+      if (startNew) form();
+      else render();
+      scheduleRefresh();
+    } catch (error) {
+      if (!mask.isConnected) return;
+      main.innerHTML =
+        '<div class="am-connection-error" role="alert"><p>预警后台暂不可用，无法读取或保存检测任务。</p><p>' +
+        esc(error instanceof Error ? error.message : '连接失败') +
+        '</p></div><button data-retry>重新连接</button>';
+      main.querySelector('[data-retry]').onclick = () => void load();
+    } finally {
+      loading = false;
+      main.removeAttribute('aria-busy');
+    }
+  }
+  function scheduleRefresh(delay = 5000) {
+    poll = setTimeout(async () => {
+      if (!mask.isConnected) return;
+      let nextDelay = 5000;
+      try {
+        await refresh();
+      } catch {
+        nextDelay = 60000;
+      }
+      if (mask.isConnected) scheduleRefresh(nextDelay);
+    }, delay);
+  }
   const _persist = () => {};
   async function refresh() {
     const before = JSON.stringify([monitors, logs]);
     const state = await api({ op: 'list' });
+    if (!mask.isConnected) return;
     monitors = state.tasks;
     runEvents = state.events || [];
     logs = state.runs.map((r) => ({
@@ -1054,9 +1094,8 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     });
     f.querySelector('.am-select-trigger').focus();
   }
-  const poll = setInterval(() => refresh().catch(() => {}), 5000);
   function close() {
-    clearInterval(poll);
+    clearTimeout(poll);
     mask.remove();
     document.removeEventListener('keydown', key);
   }
@@ -1106,6 +1145,6 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       mask.querySelector('[data-tab="' + tab + '"]').focus();
     }
   };
-  if (startNew) form();
-  else render();
+  mask.querySelector('[data-close]').focus();
+  await load();
 };
