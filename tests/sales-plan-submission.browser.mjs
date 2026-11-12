@@ -32,17 +32,18 @@ const scenario=new URL(location.href).searchParams.get('scenario');
 const dmsRejection='DMS回写失败: SKU 10003581 确认数量必须为整数，且数量及合计不能超出Integer范围。请核对 payload.confirmQty、当前销售计划的各 SKU 确认数量，以及汇总数量后重新提交。';
 const items=['approve','dms','unknown'].includes(scenario)?[item('1','approve'),item('3','approve')]:['resubmit','channel','signed-out-source'].includes(scenario)?[item('2','resubmit')]:[item('1','approve'),item('2','resubmit')];
 if(['confirmation','stored','correction'].includes(scenario)) { const v=versions[planId('2')]; if(scenario==='correction') v.orderType='Z'; const current=item('2','resubmit'); if(scenario!=='stored') current.pendingValues={'789':scenario==='correction'?'5.000':'3.000'}; items.splice(0,items.length,current); }
-window.actions=[];window.submissions=[];window.outcomes=[];
+window.actions=[];window.submissions=[];window.outcomes=[];window.refreshes=[];if(scenario==='stale-draft')items[0].pendingValues={'789':'9.000'};
 const skusFor=v=>[sku(v),{...sku(v),id:'unchanged',skuCode:'790'}];
+let detailReads=0;
 const client={
  currentUser:{invoke:async()=>{if(scenario==='signed-out-source')throw new BackendHttpError({method:'GET',path:'/user',status:401,body:{}});return {id:'user',username:'user',roles:[{code:'sales_plan_region_approver'}]}}},
- detail:{invoke:async({planId})=>({currentVersion:versions[planId],skus:skusFor(versions[planId]),versions:[],logs:[],actionContext:access(versions[planId])})},
- versionSkus:{invoke:async({versionId})=>{const v=Object.values(versions).find(v=>v.id===versionId);return skusFor(v)}},
- draft:{invoke:async({planId})=>{const v=versions[planId];return {draft:scenario==='stored'?{planId,versionId:v.id,status:v.status,role:'region',sourceSnapshot:salesPlanDraftSnapshot({...v,versionId:v.id},{currentVersion:v,skus:skusFor(v)}),adjustments:[{skuCode:'789',adjustQty:'1.750'}],remark:''}:null}}},
+ detail:{invoke:async({planId})=>{detailReads++;const v={...versions[planId]};if(scenario==='old-version'||(scenario==='late-version'&&detailReads>items.length))v.id+='-new';if(scenario==='status-changed')v.status=2;if(scenario==='inactive-version')v.effective=false;if(scenario==='period-changed')v.periodId='20261101';return {currentVersion:v,skus:skusFor(v),versions:[],logs:[],actionContext:scenario==='access-changed'?{...access(v),policy:undefined,nodeOrder:1,allowedActions:[]}:access(v)}}},
+ versionSkus:{invoke:async({versionId})=>{const v=Object.values(versions).find(v=>v.id===versionId);return scenario==='sku-version'?skusFor(v).map(s=>({...s,versionId:'other-version'})):scenario==='sku-price'?skusFor(v).map(s=>({...s,price:'13.00'})):skusFor(v)}},
+ draft:{invoke:async({planId})=>{const v=versions[planId];return {stale:scenario==='stale-draft',draft:scenario==='stored'?{planId,versionId:v.id,status:v.status,role:'region',sourceSnapshot:salesPlanDraftSnapshot({...v,versionId:v.id},{currentVersion:v,skus:skusFor(v)}),adjustments:[{skuCode:'789',adjustQty:'1.750'}],remark:''}:null}}},
  action:{invoke:async(request)=>{window.actions.push(request);if(['dms','unknown'].includes(scenario))throw new BackendHttpError({method:'POST',path:'/actions',status:502,body:scenario==='dms'?{error:'GEA_HTTP_502：'+dmsRejection,details:{upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED',retryable:false,requestId:'dms-rejected'}}:{error:'GEA_HTTP_502',details:{}}});if(scenario==='permission')throw new BackendHttpError({method:'POST',path:'/actions',status:403,body:{error:'denied'}});throw Error('fixture-refusal');}},
  submit:{invoke:async(request)=>{window.submissions.push(request);throw Error('fixture-refusal');}},
 };
-createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDialog items={items} client={client} connected={!['channel','signed-out-source'].includes(scenario)} unavailableReason={query.get('reason')??undefined} t={i18n.t.bind(i18n)} onClose={(pending)=>window.closedPending=pending} onPendingChange={(pending)=>{window.pending=pending}} onSucceeded={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} />);
+createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDialog items={items} client={client} connected={!['channel','signed-out-source'].includes(scenario)} unavailableReason={query.get('reason')??undefined} t={i18n.t.bind(i18n)} onRefresh={(ids)=>window.refreshes.push(ids)} onClose={(pending)=>window.closedPending=pending} onPendingChange={(pending)=>{window.pending=pending}} onSucceeded={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} />);
 `,
   },
   bundle: true,
@@ -315,3 +316,58 @@ for (const scenario of ['dms', 'unknown'])
     await dialog.getByRole('button', { name: '关闭', exact: true }).click();
     assert.equal(await page.evaluate(() => window.closedPending), scenario === 'unknown');
   });
+
+for (const [scenario, message] of [
+  ['old-version', '计划版本已变化：选中版本 v1，当前版本 v1-new'],
+  ['status-changed', '审批状态已变化：选中状态 1，当前状态 2'],
+  ['inactive-version', '选中的计划版本已失效'],
+  ['period-changed', '计划周期不一致：所选周期 20261001，当前周期 20261101'],
+  ['sku-version', 'SKU 789 的所属版本不一致：应为 v1，实际为 other-version'],
+  ['sku-price', 'SKU 789 的单价已变化：原值 12.3400，当前值 13.00'],
+  ['access-changed', '当前审批节点已不能通过这笔计划'],
+  ['stale-draft', '本地草稿已过期，与当前计划明细不一致'],
+])
+  test('submission preflight identifies ' + scenario, async (t) => {
+    const { page, dialog } = await openConfirmation(t, scenario, { blocked: true });
+    await expect(dialog.getByText(message, { exact: false }).first()).toBeVisible();
+    await expect(dialog.getByText(/样例数据/)).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: '确认提交', exact: true })).toBeDisabled();
+    assert.equal(await page.evaluate(() => window.actions.length + window.submissions.length), 0);
+  });
+
+test('old selection recovery requests a queue refresh without submitting', async (t) => {
+  const { page, dialog } = await openConfirmation(t, 'old-version', { blocked: true });
+  await dialog.getByRole('button', { name: '刷新列表并重新选择', exact: true }).click();
+  assert.deepEqual(await page.evaluate(() => window.refreshes), [
+    ['p-jxs-2026-10-00001', 'p-jxs-2026-10-00002'],
+  ]);
+  assert.equal(await page.evaluate(() => window.actions.length + window.submissions.length), 0);
+});
+
+test('expired draft recovery keeps storage and drops stale local adjustments before review', async (t) => {
+  const { page, dialog } = await openConfirmation(t, 'stale-draft', { blocked: true });
+  const first = dialog.locator('section').first();
+  await first.getByRole('button', { name: '不使用过期草稿，重新核对', exact: true }).click();
+  await dialog
+    .locator('section')
+    .nth(1)
+    .getByRole('button', { name: '不使用过期草稿，重新核对', exact: true })
+    .click();
+  await expect(dialog.getByRole('button', { name: '确认提交', exact: true })).toBeEnabled();
+  await expect(
+    first.getByText('过期草稿已保留，本次按当前计划数据重新核对。', { exact: true }),
+  ).toBeVisible();
+  assert.equal(await page.evaluate(() => window.actions.length + window.submissions.length), 0);
+  await dialog.getByRole('button', { name: '确认提交', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.actions.length)).toBe(1);
+  assert.equal(await page.evaluate(() => window.actions[0].adjustments), undefined);
+});
+
+test('version change after preview names the conflict and does not send an action', async (t) => {
+  const { page, dialog } = await openConfirmation(t, 'late-version');
+  await dialog.getByRole('button', { name: '确认提交', exact: true }).click();
+  await expect(
+    dialog.getByText('计划版本已变化：选中版本 v1，当前版本 v1-new', { exact: false }),
+  ).toBeVisible();
+  assert.equal(await page.evaluate(() => window.actions.length + window.submissions.length), 0);
+});

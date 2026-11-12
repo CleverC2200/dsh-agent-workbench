@@ -371,6 +371,7 @@ const RegionalApprovalWorkbench: React.FC<{
   currentUserId?: string;
   onSubmitBatch?: (items: readonly SalesPlanSubmissionItem[]) => void;
   submissionOutcomes?: readonly SalesPlanSubmissionOutcome[];
+  submissionRefreshRequest?: readonly string[];
   /** 当前账号可审批的节点：由账号角色映射得出（Host 经网关解析用户角色后传入）。 */
   approvalStages?: readonly ApprovalStageId[];
   /** AG-UI 前端工具调用：agent 让页面改这一屏怎么看。 */
@@ -388,6 +389,7 @@ const RegionalApprovalWorkbench: React.FC<{
   automaticAnalysisEnabled = false,
   onSubmitBatch,
   submissionOutcomes,
+  submissionRefreshRequest,
   currentUserId,
   approvalStages,
   toolCall,
@@ -1192,6 +1194,18 @@ const RegionalApprovalWorkbench: React.FC<{
     liveQuery.retryQueue();
     void refreshApprovalStages();
   };
+  useEffect(() => {
+    if (!submissionRefreshRequest) return;
+    const plans = new Set(submissionRefreshRequest);
+    setSelectedRowIds([]);
+    setLivePendingValues((current) =>
+      Object.fromEntries(Object.entries(current).filter(([id]) => !plans.has(id))),
+    );
+    setPermissionDeniedVersions(new Set());
+    liveAccess.refresh();
+    liveQuery.retryQueue();
+    void refreshApprovalStages();
+  }, [submissionRefreshRequest]);
   useEffect(() => {
     if (!submissionOutcomes?.length) return;
     const attempted = new Set(submissionOutcomes.map((outcome) => outcome.planId));
