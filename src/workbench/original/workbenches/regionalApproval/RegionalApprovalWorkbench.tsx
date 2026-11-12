@@ -2965,13 +2965,6 @@ const RegionalApprovalWorkbench: React.FC<{
         onRefresh={refreshLiveAuthority}
         // 退回/通过只要没被服务端受理，勾选立刻收掉：留着会让人以为这批还能直接再点一次。
         onAttemptFailed={() => setSelectedRowIds([])}
-        onFailed={() => {
-          setLiveActionPlanId(undefined);
-          setExportFeedback({
-            type: 'error',
-            message: t('common.assistantSurface.regionalApproval.liveAction.errors.failed'),
-          });
-        }}
         onClose={() => setLiveActionPlanId(undefined)}
       />
     ) : null;
