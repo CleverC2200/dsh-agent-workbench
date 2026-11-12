@@ -1,6 +1,8 @@
 import { call } from '../../../business/shared/channel.js';
 import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
 import { sourceDecimal } from './source-money.js';
+import { productRows } from './source-projections.js';
+export { productRows };
 
 export const sourceNames = {
   products: '产品清单',
@@ -61,19 +63,6 @@ const text = (value) => {
   if (typeof value !== 'string') throw Error('数据源返回了无效文本字段');
   return value;
 };
-export function productRows(rows) {
-  return rows.map((row) => ({
-    基地: '',
-    产品编码: text(row.material_code),
-    产品名称: text(row.material_name),
-    大类: text(row.sub_category),
-    系列: text(row.series),
-    物料组: text(row.product_item),
-    物料组名称: text(row.product_item_name),
-    老品编码: text(row.replacement_material_code),
-    老品名称: text(row.replacement_product),
-  }));
-}
 export function annualRows(rows) {
   const records = rows.map((row) => {
     const month = normalizedMonth(row.stat_month);
@@ -131,6 +120,8 @@ export async function readProducts(signal) {
       maxRows: 10000,
     },
   );
+  if (new Set(result.rows.map((row) => row.stat_period).filter(Boolean)).size > 1)
+    throw Error('产品清单读取期间最新统计月份变化，请重新同步');
   let prices;
   try {
     const definition = config.queries['products.prices'];

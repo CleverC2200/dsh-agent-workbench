@@ -39,36 +39,32 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
           ],
           ['所用环比系数', selected.chain, index < 2 ? '三年历史平均环比' : '年度环比'],
           ['独立环比测算量', selected.momMethod, '环比起点 × 所用环比系数'],
-          ['同期平均占比', selected.share, index < 2 ? '三年该月占比平均' : '本月不采用占比法'],
-          [
-            '占比测算量',
-            selected.shareMethod,
-            index < 2 ? '全年预估 × 同期平均占比' : '本月不采用占比法',
-          ],
-          [
-            '两法平均量',
-            selected.methodAverage,
-            index < 2 ? '环比测算量与占比测算量各占一半' : '本月不采用两法平均',
-          ],
+          ['同期平均占比', selected.share, '三年该月占比平均'],
+          ['占比测算量', selected.shareMethod, '全年预估 × 同期平均占比'],
+          ['两法平均量', selected.methodAverage, '环比测算量与占比测算量各占一半'],
           [
             '销售提报量',
             selected.salesSubmission,
-            index < 2
+            index === 0
               ? draft.pull === 'monthly'
                 ? '月初提报量'
                 : '纠偏提报量'
               : '本月不采用提报加权',
           ],
-          ['近三月达成率', selected.achievementRate, '近三月实际发货合计 ÷ 近三月计划数量合计'],
+          [
+            '近三月达成率',
+            index === 0 ? selected.achievementRate : null,
+            index === 0 ? '近三月实际发货合计 ÷ 近三月计划数量合计' : '本月不采用提报加权',
+          ],
           [
             '销售校正量',
             selected.salesCorrected,
-            index < 2 ? '销售提报量 × 近三月达成率' : '本月不采用提报加权',
+            index === 0 ? '销售提报量 × 近三月达成率' : '本月不采用提报加权',
           ],
           [
             '最终两次平均',
             selected.weighted,
-            index < 2 ? '两法平均量与销售校正量各占一半' : '本月使用独立环比测算量',
+            index === 0 ? '两法平均量与销售校正量各占一半' : '本月不采用提报加权',
           ],
           ['系统大类需求', selected.systemQuantity, selected.method],
           [
@@ -173,10 +169,7 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
                 ['步骤', '数值', '计算依据'],
                 steps.map(([name, value, reason]) => [
                   name,
-                  value == null &&
-                  (reason.startsWith('本月不采用') || reason === '本月使用独立环比测算量')
-                    ? '不适用'
-                    : valueText(value),
+                  value == null && reason.startsWith('本月不采用') ? '不适用' : valueText(value),
                   reason,
                 ]),
               ),

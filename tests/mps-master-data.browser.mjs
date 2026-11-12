@@ -317,3 +317,44 @@ test('annual explanations show rounded results without numeric substitution and 
   const csv = await mpsDownloadText(await (await download).path());
   assert.equal(csv.match(/12\.5/g)?.length, 3);
 });
+
+test('最新产品源按基地标签展示并导出原始小数，全国关系不重复', async (t) => {
+  const records = ['郑州', '华东'].map((base, index) => ({
+    ...product,
+    stat_period: '2026-11',
+    target_base: base,
+    transfer_tag: index ? '自产' : '新品',
+    material_code: '001',
+    material_name: '产品甲',
+    sub_category: '汤圆',
+    series: '系列甲',
+    net_weight: '8.08000001',
+    weight_unit: 'KG',
+    measure_unit: '件',
+    replace_num: '0.00000000',
+  }));
+  const { frame, page } = await livePage(t, (query) => {
+    if (query.queryId === 'products.count')
+      return { ...fixture(query), rows: [{ total: records.length }] };
+    if (query.queryId === 'products.detail') return { ...fixture(query), rows: records };
+    return fixture(query);
+  });
+  const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  await expect(section.locator('tbody tr')).toHaveCount(1);
+  await expect(section).toContainText('部分基地新品');
+  await section.getByRole('button', { name: '查看产品 001 的源字段', exact: true }).click();
+  const details = frame.getByRole('dialog', { name: '产品源字段与物料组SKU', exact: true });
+  await expect(details).toContainText('8.08000001');
+  await expect(details).toContainText('0.00000000');
+  await expect(details.locator('table').last().locator('tbody tr')).toHaveCount(2);
+  await details.getByRole('button', { name: '关闭', exact: true }).click();
+  await section.getByRole('textbox', { name: '搜索产品', exact: true }).fill('华东');
+  await expect(section.locator('tbody tr')).toHaveCount(1);
+  const download = page.waitForEvent('download');
+  await section.getByRole('button', { name: '下载产品源字段', exact: true }).click();
+  const csv = await mpsDownloadText(await (await download).path());
+  assert.match(csv, /统计月份/);
+  assert.match(csv, /8\.08000001/);
+  assert.match(csv, /0\.00000000/);
+  assert.match(csv, /华东/);
+});

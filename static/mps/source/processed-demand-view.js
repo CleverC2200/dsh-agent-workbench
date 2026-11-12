@@ -411,7 +411,11 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
                 )
               : h('span', { className: 'wf-demand-leaf' }, name),
             entry.kind === 'base-sku' && processRow?.historyCode
-              ? h('small', { className: 'wf-note' }, `历史参考 · ${processRow.historyCode}`)
+              ? h(
+                  'small',
+                  { className: 'wf-note' },
+                  `历史参考 · ${processRow.historyCode} × ${processRow.historyFactor === undefined ? 1 : (processRow.historyFactor ?? '待补系数')}`,
+                )
               : null,
             entry.kind === 'base-sku' &&
               processRow &&

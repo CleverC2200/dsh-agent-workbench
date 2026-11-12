@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFile } from './prepared-assets.mjs';
 import { execFileSync } from 'node:child_process';
-import { build } from 'esbuild';
+import { build as buildEsbuild } from 'esbuild';
+import { delimiter } from 'node:path';
 import { chromium } from '@playwright/test';
+const build = (options) =>
+  buildEsbuild({
+    ...options,
+    nodePaths: (process.env.WORKBENCH_BROWSER_NODE_PATH ?? '').split(delimiter).filter(Boolean),
+  });
 const compile = async (contents, loader = 'tsx') =>
   (
     await build({

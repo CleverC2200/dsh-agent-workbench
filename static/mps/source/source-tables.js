@@ -65,7 +65,7 @@ export function sourceTableParameters(kind, month) {
   const months = sourceMonthValues(month);
   if (kind === 'category-history')
     return {
-      months: Array.from({ length: 6 }, (_, index) =>
+      months: Array.from({ length: 8 }, (_, index) =>
         monthOffset(month, index - 4).replace('-', ''),
       ),
     };

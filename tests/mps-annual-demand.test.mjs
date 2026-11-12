@@ -110,3 +110,61 @@ test('annual SQL counts equal quantities once per full grain and retains conflic
   assert.equal(national('馄饨')['数量'], 0);
   assert.equal(national('面点')['数量'], '');
 });
+
+test('product snapshot reads the latest month with base/tag source attributes but keeps one nationwide relationship', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec(`CREATE TABLE agents_dim_product_list_mi (
+    stat_period TEXT, target_base TEXT, transfer_tag TEXT,
+    sub_category TEXT, series TEXT, product_item TEXT, product_item_name TEXT,
+    material_code TEXT, material_name TEXT, responsible_item TEXT,
+    replacement_product TEXT, replacement_material_code TEXT,
+    net_weight TEXT, weight_unit TEXT, measure_unit TEXT, replace_num TEXT, update_time TEXT
+  )`);
+  const insert = db.prepare(
+    'INSERT INTO agents_dim_product_list_mi VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+  );
+  const entry = [
+    '2026-11',
+    '郑州',
+    '新品',
+    '汤圆',
+    '系列甲',
+    'G',
+    '组甲',
+    'A',
+    '产品甲',
+    '标签甲',
+    '老品甲',
+    'R',
+    '8.08000001',
+    'KG',
+    '件',
+    '0.00000000',
+    '2026-11-12',
+  ];
+  insert.run(...entry);
+  insert.run(...entry);
+  insert.run(...entry.map((v, i) => (i === 1 ? '华东' : i === 2 ? '自产' : v)));
+  insert.run(...entry.map((v, i) => (i === 0 ? '2026-10' : i === 3 ? '旧分类' : v)));
+  const count = db.prepare(config.queries['products.count'].request.sql).get().total;
+  assert.equal(count, 2);
+  const detail = db.prepare(config.queries['products.detail'].request.sql);
+  const rows = [0, 1].flatMap((offset) => detail.all({ gea_p98: 1, gea_p99: offset }));
+  assert(rows.every((row) => row.stat_period === '2026-11'));
+  assert.deepEqual(new Set(rows.map((row) => row.target_base)), new Set(['郑州', '华东']));
+  assert.deepEqual(new Set(rows.map((row) => row.transfer_tag)), new Set(['新品', '自产']));
+  assert.equal(rows.find((row) => row.target_base === '郑州').source_rows, 2);
+  assert.equal(rows[0].net_weight, '8.08000001');
+  assert.equal(rows[0].replace_num, '0.00000000');
+  assert.equal(productRows(rows).length, 1);
+  assert.equal(productRows(rows)[0]['基地'], '');
+  for (const [id, query] of Object.entries(config.queries)) {
+    if (!query.request?.sql?.includes('agents_dim_product_list_mi')) continue;
+    assert.match(
+      query.request.sql,
+      /stat_period = \(SELECT MAX\(stat_period\) FROM agents_dim_product_list_mi\)/,
+      id,
+    );
+  }
+});
