@@ -1007,7 +1007,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     monthOffset,
   });
   return function DemandConfirmation({
-    active = true,
+    active: requestedActive = true,
     assistant,
     step = 'check',
     onScopeChange,
@@ -1015,6 +1015,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     masterData,
     onEditingChange,
   }) {
+    const canPersistLocal = react.useRef(true);
+    const active = requestedActive && canPersistLocal.current;
     const initialDrafts = () => ({
       drafts: [makeDraft('local-1', currentMonth())],
       selected: 'local-1',
@@ -1032,6 +1034,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     }, [adjusting, onEditingChange]);
     const [retentionError, setRetentionError] = react.useState('');
     const saveLocal = (next) => {
+      if (!canPersistLocal.current) return;
       localRef.current = next;
       setLocalState(next);
       try {
@@ -1096,6 +1099,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           }
         : read;
     const begin = (type, period) => {
+      if (!canPersistLocal.current) return { signal: AbortSignal.abort(), valid: () => false };
       controllers.current[type]?.abort();
       const controller = new AbortController();
       controllers.current[type] = controller;
@@ -1114,6 +1118,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       return {
         signal: controller.signal,
         valid: () =>
+          canPersistLocal.current &&
           !controller.signal.aborted &&
           epoch === generation.current &&
           requests.current[type] === request,
@@ -1358,6 +1363,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     };
     react.useEffect(() => {
       const reset = () => {
+        canPersistLocal.current = false;
         clearFiles();
         setScopeGeneration((value) => value + 1);
         const empty = initialDrafts();
@@ -1374,6 +1380,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const restore = (snapshot) => {
         clearFiles();
         const restored = decodeLocalDrafts(snapshot.localDrafts, makeDraft, initialDrafts);
+        canPersistLocal.current = true;
         localRef.current = restored;
         setLocalState(restored);
         setScopeGeneration((value) => value + 1);
@@ -1409,7 +1416,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       let current = true;
       if (active && hasMpsSource() && draft.productSource === 'business-unread') {
         ready.then(() => {
-          if (current) {
+          if (current && canPersistLocal.current) {
             void sync('products');
             if (!draft.annualSource) void sync('annual');
           }
@@ -1423,7 +1430,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       let current = true;
       if (active && hasMpsSource())
         ready.then(() => {
-          if (current && !draft.files.report) void sync('report');
+          if (current && canPersistLocal.current && !draft.files.report) void sync('report');
         });
       return () => {
         current = false;
@@ -1433,7 +1440,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       let current = true;
       if (active && hasMpsSource())
         ready.then(() => {
-          if (current && !draft.files.history) void sync('history');
+          if (current && canPersistLocal.current && !draft.files.history) void sync('history');
         });
       return () => {
         current = false;
@@ -1443,7 +1450,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       let current = true;
       if (active && hasMpsSource())
         ready.then(() => {
-          if (current && !draft.files.forecast) void sync('forecast');
+          if (current && canPersistLocal.current && !draft.files.forecast) void sync('forecast');
         });
       return () => {
         current = false;

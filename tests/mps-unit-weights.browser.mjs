@@ -92,7 +92,7 @@ for (const event of [
       release = resolve;
     });
     t.after(() => release());
-    const { frame } = await mpsPage(t, config, async ({ queryId }) => {
+    const { page, frame } = await mpsPage(t, config, async ({ queryId }) => {
       const rows = queryId.startsWith('unit-weights.') ? [records[0]] : [];
       if (queryId === 'unit-weights.detail') {
         received = true;
@@ -123,10 +123,16 @@ for (const event of [
     await view.getByRole('button', { name: '读取件吨系数', exact: true }).click();
     await expect.poll(() => received).toBe(true);
     await view.evaluate((_element, name) => window.dispatchEvent(new Event(name)), event);
-    await showAdvanced(view);
-    await expect(view.getByRole('button', { name: '读取中', exact: true })).toHaveCount(0);
+    if (event === 'gea-session-changed') await showAdvanced(view);
+    else await expect(view).toHaveCount(0);
     release();
     await expect.poll(() => returned).toBe(true);
+    if (event !== 'gea-session-changed') {
+      await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
+      await workflowStep(frame, '约束与配置');
+      await showAdvanced(view);
+    }
+    await expect(view.getByRole('button', { name: '读取中', exact: true })).toHaveCount(0);
     await expect(view).not.toContainText('late-weights-v1');
     await expect(view.getByRole('button', { name: '下载系数来源', exact: true })).toHaveCount(0);
     await expect(
