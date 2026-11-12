@@ -199,5 +199,3 @@ test('published stock excludes legacy warehouse-only SKUs and retains missing qu
     db.close();
   }
 });
-
-
