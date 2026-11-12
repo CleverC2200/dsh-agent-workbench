@@ -31,16 +31,17 @@ const item=(id,kind)=>({kind,planId:planId(id),versionId:'v'+id,label:'组织'+i
 const scenario=new URL(location.href).searchParams.get('scenario');
 const dmsRejection='DMS回写失败: SKU 10003581 确认数量必须为整数，且数量及合计不能超出Integer范围。请核对 payload.confirmQty、当前销售计划的各 SKU 确认数量，以及汇总数量后重新提交。';
 const items=['approve','dms','unknown'].includes(scenario)?[item('1','approve'),item('3','approve')]:['resubmit','channel','signed-out-source'].includes(scenario)?[item('2','resubmit')]:[item('1','approve'),item('2','resubmit')];
+if(scenario==='readback')items.splice(0,items.length,item('1','approve'));
 if(['confirmation','stored','correction'].includes(scenario)) { const v=versions[planId('2')]; if(scenario==='correction') v.orderType='Z'; const current=item('2','resubmit'); if(scenario!=='stored') current.pendingValues={'789':scenario==='correction'?'5.000':'3.000'}; items.splice(0,items.length,current); }
 window.actions=[];window.submissions=[];window.outcomes=[];window.refreshes=[];if(scenario==='stale-draft')items[0].pendingValues={'789':'9.000'};
 const skusFor=v=>[sku(v),{...sku(v),id:'unchanged',skuCode:'790'}];
 let detailReads=0;
 const client={
  currentUser:{invoke:async()=>{if(scenario==='signed-out-source')throw new BackendHttpError({method:'GET',path:'/user',status:401,body:{}});return {id:'user',username:'user',roles:[{code:'sales_plan_region_approver'}]}}},
- detail:{invoke:async({planId})=>{detailReads++;const v={...versions[planId]};if(scenario==='old-version'||(scenario==='late-version'&&detailReads>items.length))v.id+='-new';if(scenario==='status-changed')v.status=2;if(scenario==='inactive-version')v.effective=false;if(scenario==='period-changed')v.periodId='20261101';return {currentVersion:v,skus:skusFor(v),versions:[],logs:[],actionContext:scenario==='access-changed'?{...access(v),policy:undefined,nodeOrder:1,allowedActions:[]}:access(v)}}},
- versionSkus:{invoke:async({versionId})=>{const v=Object.values(versions).find(v=>v.id===versionId);return scenario==='sku-version'?skusFor(v).map(s=>({...s,versionId:'other-version'})):scenario==='sku-price'?skusFor(v).map(s=>({...s,price:'13.00'})):skusFor(v)}},
+ detail:{invoke:async({planId})=>{detailReads++;if(scenario==='readback'&&window.actions.length&&!window.readbackReady)throw new TypeError('readback offline');const v={...versions[planId]};if(scenario==='readback'&&window.actions.length)v.status=2;if(scenario==='old-version'||(scenario==='late-version'&&detailReads>items.length))v.id+='-new';if(scenario==='status-changed')v.status=2;if(scenario==='inactive-version')v.effective=false;if(scenario==='period-changed')v.periodId='20261101';return {currentVersion:v,skus:skusFor(v),versions:[],logs:[],actionContext:scenario==='access-changed'?{...access(v),policy:undefined,nodeOrder:1,allowedActions:[]}:access(v)}}},
+ versionSkus:{invoke:async({versionId})=>{const v=Object.values(versions).find(v=>v.id===versionId);return scenario==='sku-format'?skusFor(v).map(s=>({...s,price:'12.34',qty:'2.0',amt:'24.680',adjAddQty:'0.000'})):scenario==='sku-version'?skusFor(v).map(s=>({...s,versionId:'other-version'})):scenario==='sku-price'?skusFor(v).map(s=>({...s,price:'13.00'})):skusFor(v)}},
  draft:{invoke:async({planId})=>{const v=versions[planId];return {stale:scenario==='stale-draft',draft:scenario==='stored'?{planId,versionId:v.id,status:v.status,role:'region',sourceSnapshot:salesPlanDraftSnapshot({...v,versionId:v.id},{currentVersion:v,skus:skusFor(v)}),adjustments:[{skuCode:'789',adjustQty:'1.750'}],remark:''}:null}}},
- action:{invoke:async(request)=>{window.actions.push(request);if(['dms','unknown'].includes(scenario))throw new BackendHttpError({method:'POST',path:'/actions',status:502,body:scenario==='dms'?{error:'GEA_HTTP_502：'+dmsRejection,details:{upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED',retryable:false,requestId:'dms-rejected'}}:{error:'GEA_HTTP_502',details:{}}});if(scenario==='permission')throw new BackendHttpError({method:'POST',path:'/actions',status:403,body:{error:'denied'}});throw Error('fixture-refusal');}},
+ action:{invoke:async(request)=>{window.actions.push(request);if(scenario==='readback')return {planId:request.planId,versionId:request.versionId,fromStatus:1,toStatus:2,approvalRole:'region',requestId:request.requestId,traceId:'fixture',replayed:false};if(['dms','unknown'].includes(scenario))throw new BackendHttpError({method:'POST',path:'/actions',status:502,body:scenario==='dms'?{error:'GEA_HTTP_502：'+dmsRejection,details:{upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED',retryable:false,requestId:'dms-rejected'}}:{error:'GEA_HTTP_502',details:{}}});if(scenario==='permission')throw new BackendHttpError({method:'POST',path:'/actions',status:403,body:{error:'denied'}});throw Error('fixture-refusal');}},
  submit:{invoke:async(request)=>{window.submissions.push(request);throw Error('fixture-refusal');}},
 };
 createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDialog items={items} client={client} connected={!['channel','signed-out-source'].includes(scenario)} unavailableReason={query.get('reason')??undefined} t={i18n.t.bind(i18n)} onRefresh={(ids)=>window.refreshes.push(ids)} onClose={(pending)=>window.closedPending=pending} onPendingChange={(pending)=>{window.pending=pending}} onSucceeded={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} />);
@@ -293,6 +294,10 @@ for (const scenario of ['dms', 'unknown'])
       await expect(dialog.getByText(/DMS回写失败.*10003581.*整数/)).toHaveCount(2);
       await expect(dialog.getByText(/payload\.confirmQty.*各 SKU 确认数量/)).toHaveCount(2);
       await expect(dialog.getByText(/错误编号|dms-rejected/)).toHaveCount(0);
+      await expect(dialog.locator('textarea,input,[role=combobox]')).toHaveCount(0);
+      await expect(dialog.getByText('操作请求失败且未更新本地状态', { exact: false })).toHaveCount(
+        0,
+      );
       await expect(dialog.getByText(/结果暂时未知/)).toHaveCount(0);
       assert.equal(await page.evaluate(() => window.pending), false);
       if (process.env.GEA_SUBMISSION_EVIDENCE) {
@@ -373,4 +378,41 @@ test('version change after preview names the conflict and does not send an actio
     dialog.getByText('计划版本已变化：选中版本 v1，当前版本 v1-new', { exact: false }),
   ).toBeVisible();
   assert.equal(await page.evaluate(() => window.actions.length + window.submissions.length), 0);
+});
+
+test('explicit batch rejection can be submitted again with fresh commands after preflight', async (t) => {
+  const { page, dialog } = await openConfirmation(t, 'dms');
+  await dialog.getByRole('button', { name: '确认提交', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.actions.length)).toBe(2);
+  const again = dialog.getByRole('button', { name: '重新提交', exact: true });
+  await again.evaluate((button) => {
+    button.click();
+    button.click();
+  });
+  await expect.poll(() => page.evaluate(() => window.actions.length)).toBe(4);
+  const calls = await page.evaluate(() => window.actions);
+  assert.notEqual(calls[2].requestId, calls[0].requestId);
+  assert.notEqual(calls[2].idempotencyKey, calls[0].idempotencyKey);
+});
+
+test('equal decimal formats pass preflight and still submit exact quantities', async (t) => {
+  const { page, dialog } = await openConfirmation(t, 'sku-format');
+  await dialog.getByRole('button', { name: '确认提交', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.actions.length)).toBe(1);
+});
+
+test('a retained successful receipt retries only readback without another action', async (t) => {
+  const { page, dialog } = await openConfirmation(t, 'readback');
+  await dialog.getByRole('button', { name: '确认提交', exact: true }).click();
+  await expect(dialog.getByText(/仅重试回读/)).toBeVisible();
+  assert.equal(await page.evaluate(() => window.actions.length), 1);
+  await dialog.getByRole('button', { name: '刷新权威状态', exact: true }).click();
+  await expect(dialog.getByText(/仅重试回读/)).toBeVisible();
+  assert.equal(await page.evaluate(() => window.actions.length), 1);
+  await page.evaluate(() => {
+    window.readbackReady = true;
+  });
+  await dialog.getByRole('button', { name: '刷新权威状态', exact: true }).click();
+  await expect(dialog).toContainText('提交成功');
+  assert.equal(await page.evaluate(() => window.actions.length), 1);
 });

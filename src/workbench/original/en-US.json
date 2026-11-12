@@ -771,11 +771,11 @@
         "confirm": "Confirm resubmission",
         "completed": "Receipt received",
         "enabledHint": "Returned status 6–9, confirmed responsible identity and complete source details permit editing.",
-        "success": "The server confirmed plan {{planId}} version {{versionId}}; request {{requestId}}{{auditReference}} ({{replayed}}).",
+        "success": "The server confirmed version {{versionId}} of plan {{planId}}.",
         "auditReference": ", audit {{id}}",
         "created": "new receipt",
         "replayed": "idempotent replay",
-        "receiptBanner": "Resubmission receipt: plan {{planId}} · version {{versionId}} · request {{requestId}} · audit {{auditId}}",
+        "receiptBanner": "Resubmission receipt: plan {{planId}} · version {{versionId}}",
         "refreshFailed": "Resubmission succeeded but the queue refresh failed. Close and refresh manually; do not create a new submit intent.",
         "disabled": {
           "completed": "This returned version already has a server receipt, so duplicate resubmission is blocked.",
@@ -839,7 +839,8 @@
         "lineAmount": "Submitted amount",
         "inheritedValues": "Inherited quantity / amount: region {{region}}; province {{province}}; area {{area}}",
         "quantity": "Submitted quantity",
-        "nextStatus": "Resubmission target status"
+        "nextStatus": "Resubmission target status",
+        "submitAgain": "Submit again"
       },
       "liveAction": {
         "saveChecksumTitle": "Save review",
@@ -925,7 +926,7 @@
         "confirmReject": "Confirm rejection",
         "completed": "Receipt received",
         "enabledHint": "The OPEN period and current node permit an attempt; the server verifies actual permission.",
-        "success": "The server confirmed {{from}} → {{to}}{{auditReference}}. Refreshing the authoritative queue.",
+        "success": "The server confirmed approval status {{from}} → {{to}}. Refreshing the list.",
         "refreshFailed": "Approval succeeded but the queue refresh failed. Close and refresh manually; do not repeat the approval.",
         "disabled": {
           "completed": "This version already has a server receipt, so duplicate actions are blocked.",
@@ -949,19 +950,24 @@
           "configuration": "Workflow, candidate or notification configuration prevented this action. Contact an administrator.",
           "authentication": "The GEA user session expired. Sign in again and refresh the queue before acting.",
           "permission": "The server confirmed that this user cannot act on this version. It is disabled for this round.",
-          "conflict": "The version changed or another action won the race. Local state was not changed; refresh the authoritative queue.",
+          "conflict": "The plan version or approval state has changed. Refresh the list and check it again.",
           "rateLimited": "Too many requests. Retry later with the same idempotency key; no second action will be created.",
           "unavailable": "The result is unknown. Select “Retry and check result” here to reuse the original request. Do not start a new approval.",
-          "failed": "The request failed and local state was not changed. Refresh the authoritative queue before deciding.",
+          "failed": "The operation did not complete. Resolve the reported cause, then submit again.",
           "upstream": {
             "SALES_PLAN_APPROVAL_STATE_INVALID": "This version cannot perform the requested approval action. Ask an administrator to check its approval instance.",
-            "NOTIFICATION_PAYLOAD_INVALID": "The server rejected the approval notification payload. This is a server-side problem that refreshing cannot fix - send the error reference to the backend team.",
+            "NOTIFICATION_PAYLOAD_INVALID": "The approval notification could not be sent. Ask an administrator to check the notification configuration.",
             "APPROVAL_OPERATOR_NOT_ALLOWED": "The server says this account no longer holds the role or org scope for this node. Refresh and retry, and ask an administrator to check your roles."
           }
         },
         "approvalRole": "Approval role",
         "selectRole": "Choose the role for this action",
-        "roleContractUnavailable": "You have this role, but GEA does not yet support writing for the selected role. Update the service before submitting."
+        "roleContractUnavailable": "You have this role, but GEA does not yet support writing for the selected role. Update the service before submitting.",
+        "resultTitle": "Action result",
+        "resume": "Resume pending operation",
+        "roleMissing": "No available approval role was found. Refresh the list and select the plan again.",
+        "accessBlocked": "This approval node can no longer approve this plan. Refresh the list and select it again.",
+        "quantityBlocked": "The confirmed quantity is invalid. Check the SKU quantities before submitting."
       },
       "liveBatch": {
         "approveTitle": "Approve {{count}} plans",
@@ -977,7 +983,7 @@
         "mixedConfirmation": "I have reviewed {{approve}} approvals and {{resubmit}} resubmissions, and confirm submitting each plan.",
         "required": "Enter a return reason.",
         "loading": "Submitting {{count}} plans one by one. Do not close this dialog.",
-        "result": "Submission finished: {{success}} succeeded, {{failed}} failed, {{skipped}} skipped.",
+        "result": "Completed: {{success}} succeeded, {{failed}} failed, {{pending}} pending verification, {{skipped}} skipped.",
         "resubmitTag": "Resubmit returned plan (creates a new version)",
         "approveTag": "Approve current version",
         "repeatRejectTag": "Return an already returned version to the previous step",
@@ -988,7 +994,13 @@
         "confirmApprove": "Approve all",
         "confirmResubmit": "Resubmit all",
         "confirmMixed": "Submit all",
-        "confirmReject": "Return all"
+        "confirmReject": "Return all",
+        "status": {
+          "success": "Succeeded",
+          "failed": "Failed",
+          "pending": "Pending verification",
+          "skipped": "Skipped"
+        }
       },
       "action": {
         "title": "Regional plan approval action",

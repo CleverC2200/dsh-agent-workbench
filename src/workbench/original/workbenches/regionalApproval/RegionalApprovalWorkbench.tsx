@@ -371,6 +371,7 @@ const RegionalApprovalWorkbench: React.FC<{
   currentUserId?: string;
   onSubmitBatch?: (items: readonly SalesPlanSubmissionItem[]) => void;
   submissionOutcomes?: readonly SalesPlanSubmissionOutcome[];
+  submissionPending?: boolean;
   submissionRefreshRequest?: readonly string[];
   /** 当前账号可审批的节点：由账号角色映射得出（Host 经网关解析用户角色后传入）。 */
   approvalStages?: readonly ApprovalStageId[];
@@ -389,6 +390,7 @@ const RegionalApprovalWorkbench: React.FC<{
   automaticAnalysisEnabled = false,
   onSubmitBatch,
   submissionOutcomes,
+  submissionPending = false,
   submissionRefreshRequest,
   currentUserId,
   approvalStages,
@@ -557,6 +559,9 @@ const RegionalApprovalWorkbench: React.FC<{
   >({});
   const [invalidGroupInputs, setInvalidGroupInputs] = useState<Record<string, string[]>>({});
   const [liveActionPlanId, setLiveActionPlanId] = useState<string>();
+  const [liveActionVisible, setLiveActionVisible] = useState(true);
+  const [liveActionBusy, setLiveActionBusy] = useState(false);
+  const [batchActionVisible, setBatchActionVisible] = useState(true);
   const [liveActionKind, setLiveActionKind] = useState<LiveActionKind>('APPROVE');
   // 对话下发的审批确认 / 退回理由草稿；审批本身仍走页面原有的对话框逻辑。
   const [approvalSubmitRequest, setApprovalSubmitRequest] = useState<{ at: number }>();
@@ -2840,6 +2845,8 @@ const RegionalApprovalWorkbench: React.FC<{
           disabled={
             selectedLiveRows.length === 0 ||
             liveActionPlanId !== undefined ||
+            batchAction !== undefined ||
+            submissionPending ||
             batchDisabledReason('REJECT') !== undefined
           }
           title={
@@ -2868,7 +2875,12 @@ const RegionalApprovalWorkbench: React.FC<{
         <Button
           type="primary"
           size="small"
-          disabled={Boolean(resubmitDisabledReason) || liveActionPlanId !== undefined}
+          disabled={
+            Boolean(resubmitDisabledReason) ||
+            liveActionPlanId !== undefined ||
+            batchAction !== undefined ||
+            submissionPending
+          }
           title={resubmitDisabledReason}
           onClick={() => {
             if (resubmitDisabledReason) return;
@@ -2883,10 +2895,12 @@ const RegionalApprovalWorkbench: React.FC<{
         <Button
           type="primary"
           size="small"
-          loading={liveActionKind === 'APPROVE' && liveActionPlanId !== undefined}
+          loading={liveActionKind === 'APPROVE' && liveActionBusy}
           disabled={
             selectedLiveRows.length === 0 ||
             liveActionPlanId !== undefined ||
+            batchAction !== undefined ||
+            submissionPending ||
             primaryActionDisabledReason !== undefined
           }
           title={
@@ -2901,6 +2915,8 @@ const RegionalApprovalWorkbench: React.FC<{
             if (selectedLiveRows.length === 1) {
               const row = selectedLiveRows[0];
               selectLivePlanContext(row);
+              setLiveActionVisible(true);
+              setLiveActionBusy(true);
               setLiveActionKind('APPROVE');
               setLiveActionPlanId(row.planId);
               return;
@@ -2923,7 +2939,8 @@ const RegionalApprovalWorkbench: React.FC<{
     activeLiveActionRow && liveActionsEnabled ? (
       <RegionalApprovalLiveActionDialog
         key={`${activeLiveActionRow.versionId}:${liveActionKind}`}
-        visible
+        visible={liveActionVisible}
+        onBusyChange={setLiveActionBusy}
         embedded={false}
         autoSubmitApproval={liveActionKind === 'APPROVE'}
         row={activeLiveActionRow}
@@ -2965,7 +2982,13 @@ const RegionalApprovalWorkbench: React.FC<{
         onRefresh={refreshLiveAuthority}
         // 退回/通过只要没被服务端受理，勾选立刻收掉：留着会让人以为这批还能直接再点一次。
         onAttemptFailed={() => setSelectedRowIds([])}
-        onClose={() => setLiveActionPlanId(undefined)}
+        onClose={(pending) => {
+          if (pending) setLiveActionVisible(false);
+          else {
+            setLiveActionPlanId(undefined);
+            setLiveActionVisible(true);
+          }
+        }}
       />
     ) : null;
 
@@ -2973,7 +2996,7 @@ const RegionalApprovalWorkbench: React.FC<{
   const liveBatchActionDialog =
     batchAction && liveActionsEnabled ? (
       <RegionalApprovalBatchActionDialog
-        visible
+        visible={batchActionVisible}
         kind={batchAction.kind}
         items={batchAction.items}
         t={t}
@@ -2984,7 +3007,12 @@ const RegionalApprovalWorkbench: React.FC<{
         onCompleted={async (outcomes: readonly BatchActionOutcome[]) => {
           if (outcomes.some((outcome) => outcome.status === 'success')) refreshLiveAuthority();
         }}
-        onClose={() => {
+        onClose={(pending) => {
+          if (pending) {
+            setBatchActionVisible(false);
+            return;
+          }
+          setBatchActionVisible(true);
           setBatchAction(undefined);
           setSelectedRowIds([]);
         }}
@@ -4055,6 +4083,22 @@ const RegionalApprovalWorkbench: React.FC<{
       </Modal>
 
       {liveActionDialog}
+      {((liveActionPlanId && !liveActionVisible) || (batchAction && !batchActionVisible)) && (
+        <Alert
+          type="warning"
+          content={t('common.assistantSurface.regionalApproval.liveSubmit.pendingNotice')}
+          action={
+            <Button
+              onClick={() => {
+                setLiveActionVisible(true);
+                setBatchActionVisible(true);
+              }}
+            >
+              {t('common.assistantSurface.regionalApproval.liveAction.resume')}
+            </Button>
+          }
+        />
+      )}
       {liveBatchActionDialog}
     </main>
   );

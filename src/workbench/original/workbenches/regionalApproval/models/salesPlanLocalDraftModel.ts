@@ -10,7 +10,7 @@ import {
   subtractExactDecimals,
 } from '../regionalApprovalQueryModel.ts';
 import { salesPlanEditableQuantity } from './salesPlanAccessModel.ts';
-import { roundPlanQuantity } from './salesPlanQuantityModel.ts';
+import { roundPlanQuantity, salesPlanDecimalValue } from './salesPlanQuantityModel.ts';
 import { salesPlanSkusMatchVersion } from './salesPlanDetailModel.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 
@@ -102,6 +102,23 @@ export const salesPlanDraftSnapshot = (
   ]);
 };
 
+const normalizeDraftSnapshot = (snapshot: string | undefined): string | undefined => {
+  if (!snapshot) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(snapshot);
+    if (!Array.isArray(parsed) || parsed.length !== 4 || !Array.isArray(parsed[3]))
+      return undefined;
+    const normalized = parsed[3].map((sku: unknown) => {
+      if (!Array.isArray(sku) || sku.length !== 8 || typeof sku[0] !== 'string')
+        throw new Error('Invalid draft snapshot');
+      return [sku[0], ...sku.slice(1).map(salesPlanDecimalValue)];
+    });
+    return JSON.stringify([parsed[0], parsed[1], parsed[2], normalized]);
+  } catch {
+    return undefined;
+  }
+};
+
 export const salesPlanDraftMatches = (
   draft: SalesPlanLocalDraft | undefined,
   row: Pick<GeaSalesPlanListItem, 'planId' | 'versionId' | 'status'> &
@@ -111,10 +128,12 @@ export const salesPlanDraftMatches = (
 ): draft is SalesPlanLocalDraft => {
   if (
     !draft ||
+    !normalizeDraftSnapshot(draft.sourceSnapshot) ||
     draft.planId !== row.planId ||
     draft.versionId !== row.versionId ||
     draft.status !== row.status ||
-    draft.sourceSnapshot !== salesPlanDraftSnapshot(row, detail) ||
+    normalizeDraftSnapshot(draft.sourceSnapshot) !==
+      normalizeDraftSnapshot(salesPlanDraftSnapshot(row, detail)) ||
     !Array.isArray(draft.adjustments) ||
     typeof draft.remark !== 'string' ||
     Array.from(draft.remark).length > 1000

@@ -18,7 +18,12 @@ import {
   type SalesPlanActionClient,
   type SalesPlanActionError,
 } from './models/salesPlanActionModel.ts';
-import type { SalesPlanAccess } from './models/salesPlanAccessModel.ts';
+import {
+  checkSubmissionSource,
+  checkSubmissionSkus,
+  SubmissionSourceError,
+} from './models/salesPlanPreflightModel.ts';
+import { salesPlanAccessForRow, type SalesPlanAccess } from './models/salesPlanAccessModel.ts';
 import type { RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
 import { actionErrorText } from './RegionalApprovalLiveActionDialog.tsx';
 import styles from './RegionalApprovalActionDialog.module.css';
@@ -43,7 +48,7 @@ export type BatchActionOutcome = {
   label: string;
   /** 组织路径，便于在结果里认人是哪一笔。 */
   context?: string;
-  status: 'success' | 'failed' | 'skipped';
+  status: 'success' | 'failed' | 'skipped' | 'pending';
   /** 失败或跳过时的业务语言说明。 */
   detail?: string;
 };
@@ -69,9 +74,11 @@ const RegionalApprovalBatchActionDialog: React.FC<{
   client?: SalesPlanActionClient;
   onPermissionDenied: (versionId: string) => void;
   onCompleted: (outcomes: readonly BatchActionOutcome[]) => void | Promise<void>;
-  onClose: () => void;
+  onClose: (pending?: boolean) => void;
 }> = ({ visible, kind, items, t, client, onPermissionDenied, onCompleted, onClose }) => {
   const { salesPlan } = useWorkbenchHost();
+  const submitting = useRef(false);
+  const attempts = useRef(new Map<string, SalesPlanActionAttempt>());
   const [remark, setRemark] = useState('');
   const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -111,7 +118,8 @@ const RegionalApprovalBatchActionDialog: React.FC<{
   const submitted = outcomes?.filter((outcome) => outcome.status === 'success').length ?? 0;
   const failed = outcomes?.filter((outcome) => outcome.status === 'failed').length ?? 0;
   const skipped = outcomes?.filter((outcome) => outcome.status === 'skipped').length ?? 0;
-  const unsuccessful = outcomes?.filter((outcome) => outcome.status !== 'success') ?? [];
+  const resultRows = outcomes ?? [];
+  const pending = outcomes?.some((outcome) => outcome.status === 'pending') ?? false;
   const locked = busy || outcomes !== undefined;
   const invalid = !submittable.length || (kind === 'REJECT' && !remark.trim());
 
@@ -122,10 +130,16 @@ const RegionalApprovalBatchActionDialog: React.FC<{
 
   const submit = async () => {
     setAttempted(true);
-    if (invalid || locked || !client) return;
+    if (invalid || busy || submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     const collected: BatchActionOutcome[] = [];
     for (const item of items) {
+      const previous = outcomes?.find((outcome) => outcome.planId === item.row.planId);
+      if (previous && ['success', 'skipped'].includes(previous.status)) {
+        collected.push(previous);
+        continue;
+      }
       const label = planLabel(item.row);
       const context = planContext(item.row) || undefined;
       if (!item.access?.allowedActions.includes(kind)) {
@@ -148,10 +162,32 @@ const RegionalApprovalBatchActionDialog: React.FC<{
         ...(item.access.snapshotHash ? { expectedSnapshot: item.access.snapshotHash } : {}),
         ...(remark.trim() ? { remark: remark.trim() } : {}),
       };
-      const attempt = new SalesPlanActionAttempt(client);
+      const retained =
+        previous?.status === 'pending' ? attempts.current.get(item.row.planId) : undefined;
+      const attempt = retained ?? new SalesPlanActionAttempt(client ?? salesPlan);
       let actionSubmitted = false;
       try {
-        if (kind === 'APPROVE' || kind === 'REJECT') {
+        if (!retained) {
+          const fresh = await salesPlan.detail.invoke({ planId: item.row.planId });
+          checkSubmissionSource(
+            {
+              planId: item.row.planId,
+              versionId: item.row.versionId,
+              row: item.row,
+              period: { periodId: item.row.periodId, planTypeCode: item.row.planTypeCode },
+            },
+            fresh,
+          );
+          if (item.detail) checkSubmissionSkus(item.row.versionId, item.detail.skus, fresh.skus);
+          const freshAccess = salesPlanAccessForRow(
+            item.row,
+            fresh,
+            [item.access.approvalRole],
+            item.access.approvalRole,
+          );
+          if (!freshAccess?.allowedActions.includes(kind))
+            throw new SubmissionSourceError('accessChanged');
+          if (freshAccess.snapshotHash) request.expectedSnapshot = freshAccess.snapshotHash;
           const stored = await salesPlan.draft?.invoke({
             planId: item.row.planId,
             versionId: item.row.versionId,
@@ -163,9 +199,9 @@ const RegionalApprovalBatchActionDialog: React.FC<{
               throw new Error(
                 t('common.assistantSurface.regionalApproval.returnDestinationUnavailable'),
               );
-            const context = salesPlanReturnDestination(item.detail, item.access.approvalRole);
+            const context = salesPlanReturnDestination(fresh, item.access.approvalRole);
             request.adjustments = salesPlanReturnAdjustments(
-              item.detail,
+              fresh,
               item.row,
               item.access.approvalRole,
               context,
@@ -178,7 +214,7 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           } else {
             const adjustments = Object.entries(
               salesPlanApprovalDraftValues(
-                item.detail,
+                fresh,
                 item.row,
                 item.access.approvalRole,
                 stored?.draft?.role && stored.draft.role !== item.access.approvalRole
@@ -195,14 +231,17 @@ const RegionalApprovalBatchActionDialog: React.FC<{
         actionSubmitted = true;
         // 逐笔串行提交：每笔都有自己的幂等键，失败不会影响已提交的其它计划。
         // eslint-disable-next-line no-await-in-loop
-        await attempt.submit({
-          planId: item.row.planId,
-          versionId: item.row.versionId,
-          planTypeCode: item.row.planTypeCode,
-          request,
-          serverWorkflowResult: !item.access.snapshotHash,
-          serverRoleResult: item.access.roleContractSupported,
-        });
+        attempts.current.set(item.row.planId, attempt);
+        await (retained
+          ? attempt.retry()
+          : attempt.submit({
+              planId: item.row.planId,
+              versionId: item.row.versionId,
+              planTypeCode: item.row.planTypeCode,
+              request,
+              serverWorkflowResult: !item.access.snapshotHash,
+              serverRoleResult: item.access.roleContractSupported,
+            }));
         collected.push({
           planId: item.row.planId,
           label,
@@ -216,23 +255,30 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           planId: item.row.planId,
           label,
           ...(context ? { context } : {}),
-          status: 'failed',
+          status: classified.retrySameIntent ? 'pending' : 'failed',
           detail:
-            kind === 'REJECT' && !actionSubmitted
-              ? t('common.assistantSurface.regionalApproval.returnDestinationUnavailable')
-              : actionErrorText(t, classified as SalesPlanActionError),
+            error instanceof SubmissionSourceError
+              ? t(
+                  `common.assistantSurface.regionalApproval.liveSubmit.errors.${error.key}`,
+                  error.values,
+                )
+              : kind === 'REJECT' && !actionSubmitted
+                ? t('common.assistantSurface.regionalApproval.returnDestinationUnavailable')
+                : actionErrorText(t, classified as SalesPlanActionError),
         });
       }
     }
     setOutcomes(collected);
     setBusy(false);
+    submitting.current = false;
     await onCompleted(collected);
   };
 
   return (
     <Modal
       visible={visible}
-      className={styles.liveModal}
+      className={outcomes ? styles.resultModal : styles.liveModal}
+      style={{ width: 'min(760px, calc(100vw - 24px))', maxWidth: 'calc(100vw - 24px)' }}
       title={t(
         kind === 'APPROVE'
           ? 'common.assistantSurface.regionalApproval.liveBatch.approveTitle'
@@ -242,12 +288,12 @@ const RegionalApprovalBatchActionDialog: React.FC<{
       maskClosable={false}
       closable={!busy}
       onCancel={() => {
-        if (!busy) onClose();
+        if (!busy) onClose(pending);
       }}
       footer={
         <div className={`${styles.footer} ${styles.batchFooter}`}>
           <div>
-            <Button disabled={busy} onClick={onClose}>
+            <Button disabled={busy} onClick={() => onClose(pending)}>
               {t('common.assistantSurface.regionalApproval.liveBatch.close')}
             </Button>
           </div>
@@ -255,73 +301,90 @@ const RegionalApprovalBatchActionDialog: React.FC<{
             type="primary"
             status={kind === 'REJECT' ? 'danger' : undefined}
             loading={busy}
-            disabled={invalid || locked || !client}
+            disabled={
+              invalid ||
+              busy ||
+              Boolean(
+                outcomes &&
+                !outcomes.some((outcome) => ['pending', 'failed'].includes(outcome.status)),
+              )
+            }
             onClick={() => void submit()}
           >
             {t(
-              kind === 'APPROVE'
-                ? 'common.assistantSurface.regionalApproval.liveBatch.confirmApprove'
-                : 'common.assistantSurface.regionalApproval.liveBatch.confirmReject',
+              pending
+                ? 'common.assistantSurface.regionalApproval.liveAction.retry'
+                : outcomes
+                  ? 'common.assistantSurface.regionalApproval.liveAction.submitAgain'
+                  : kind === 'APPROVE'
+                    ? 'common.assistantSurface.regionalApproval.liveBatch.confirmApprove'
+                    : 'common.assistantSurface.regionalApproval.liveBatch.confirmReject',
             )}
           </Button>
         </div>
       }
     >
       <div className={styles.body} data-testid="regional-approval-batch-action-dialog">
-        <p data-testid="regional-approval-batch-summary">
-          {t('common.assistantSurface.regionalApproval.liveBatch.summary', {
-            total: items.length,
-            ready: submittable.length,
-          })}
-        </p>
-        <ul className={styles.businessChecksum} data-testid="regional-approval-batch-items">
-          {items.map((item) => (
-            <li key={item.row.planId}>
-              <strong>{planLabel(item.row)}</strong>
-              {planContext(item.row) ? <span> · {planContext(item.row)}</span> : null}
-              {item.access?.allowedActions.includes(kind) ? (
-                mixedReject ? (
-                  <span>
-                    {' '}
-                    ·{' '}
-                    {t(
-                      `common.assistantSurface.regionalApproval.liveBatch.${item.row.status >= 7 ? 'repeatRejectTag' : 'rejectTag'}`,
-                    )}
-                  </span>
-                ) : null
-              ) : (
-                <span> · {skipText(item)}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-        <label className={styles.formControl}>
-          <span>
-            {t(
-              kind === 'REJECT'
-                ? 'common.assistantSurface.regionalApproval.liveAction.rejectRemark'
-                : 'common.assistantSurface.regionalApproval.liveBatch.approveRemark',
-            )}
-          </span>
-          <Input.TextArea
-            value={remark}
-            maxLength={1000}
-            showWordLimit
-            disabled={locked}
-            status={attempted && kind === 'REJECT' && !remark.trim() ? 'error' : undefined}
-            aria-label={t('common.assistantSurface.regionalApproval.liveBatch.remarkLabel')}
-            placeholder={t('common.assistantSurface.regionalApproval.liveAction.remarkPlaceholder')}
-            autoSize={{ minRows: 3, maxRows: 5 }}
-            onChange={setRemark}
-          />
-        </label>
-        {attempted && invalid && !locked ? (
-          <Alert
-            type="error"
-            showIcon
-            content={t('common.assistantSurface.regionalApproval.liveBatch.required')}
-          />
-        ) : null}
+        {!outcomes && (
+          <>
+            <p data-testid="regional-approval-batch-summary">
+              {t('common.assistantSurface.regionalApproval.liveBatch.summary', {
+                total: items.length,
+                ready: submittable.length,
+              })}
+            </p>
+            <ul className={styles.businessChecksum} data-testid="regional-approval-batch-items">
+              {items.map((item) => (
+                <li key={item.row.planId}>
+                  <strong>{planLabel(item.row)}</strong>
+                  {planContext(item.row) ? <span> · {planContext(item.row)}</span> : null}
+                  {item.access?.allowedActions.includes(kind) ? (
+                    mixedReject ? (
+                      <span>
+                        {' '}
+                        ·{' '}
+                        {t(
+                          `common.assistantSurface.regionalApproval.liveBatch.${item.row.status >= 7 ? 'repeatRejectTag' : 'rejectTag'}`,
+                        )}
+                      </span>
+                    ) : null
+                  ) : (
+                    <span> · {skipText(item)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <label className={styles.formControl}>
+              <span>
+                {t(
+                  kind === 'REJECT'
+                    ? 'common.assistantSurface.regionalApproval.liveAction.rejectRemark'
+                    : 'common.assistantSurface.regionalApproval.liveBatch.approveRemark',
+                )}
+              </span>
+              <Input.TextArea
+                value={remark}
+                maxLength={1000}
+                showWordLimit
+                disabled={locked}
+                status={attempted && kind === 'REJECT' && !remark.trim() ? 'error' : undefined}
+                aria-label={t('common.assistantSurface.regionalApproval.liveBatch.remarkLabel')}
+                placeholder={t(
+                  'common.assistantSurface.regionalApproval.liveAction.remarkPlaceholder',
+                )}
+                autoSize={{ minRows: 3, maxRows: 5 }}
+                onChange={setRemark}
+              />
+            </label>
+            {attempted && invalid && !locked ? (
+              <Alert
+                type="error"
+                showIcon
+                content={t('common.assistantSurface.regionalApproval.liveBatch.required')}
+              />
+            ) : null}
+          </>
+        )}
         {busy ? (
           <div className={styles.loadingState}>
             <Spin size={16} />
@@ -335,12 +398,13 @@ const RegionalApprovalBatchActionDialog: React.FC<{
         {outcomes ? (
           <div data-testid="regional-approval-batch-result" aria-live="polite">
             <Alert
-              type={failed ? 'warning' : 'success'}
+              type={failed || pending ? 'warning' : 'success'}
               showIcon
               content={t('common.assistantSurface.regionalApproval.liveBatch.result', {
                 success: submitted,
                 failed,
                 skipped,
+                pending: outcomes.filter((outcome) => outcome.status === 'pending').length,
               })}
             />
             {secondsToClose === undefined ? null : (
@@ -350,18 +414,20 @@ const RegionalApprovalBatchActionDialog: React.FC<{
                 })}
               </p>
             )}
-            {unsuccessful.length > 0 ? (
+            {resultRows.length > 0 ? (
               <ul className={styles.businessChecksum}>
-                {unsuccessful.map((outcome) => (
+                {resultRows.map((outcome) => (
                   <li key={outcome.planId}>
                     <strong>{outcome.label}</strong>
-                    {outcome.context ? <span> · {outcome.context}</span> : null}
                     <span>
                       {' '}
-                      ·{' '}
-                      {outcome.detail ??
-                        t('common.assistantSurface.regionalApproval.liveBatch.skipped')}
+                      · {outcome.planId} ·{' '}
+                      {t(
+                        `common.assistantSurface.regionalApproval.liveBatch.status.${outcome.status}`,
+                      )}
                     </span>
+                    {outcome.context ? <span> · {outcome.context}</span> : null}
+                    <span> · {outcome.detail}</span>
                   </li>
                 ))}
               </ul>

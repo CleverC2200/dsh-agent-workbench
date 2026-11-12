@@ -195,8 +195,21 @@ export const salesPlanRejectionMessage = (cause: {
     'upstreamCode' in details &&
     details.upstreamCode === 'SALES_PLAN_DMS_WRITEBACK_FAILED';
   if (cause.status >= 500 && !dms) return undefined;
-  const message = cause.backendMessage.replace(/^GEA_HTTP_\d{3}[：:]\s*/u, '');
-  return dms ? message.trim() || undefined : businessSafeErrorMessage(message);
+  const message = cause.backendMessage
+    .replace(/^GEA_HTTP_\d{3}[：:]?\s*/u, '')
+    .replace(/\[[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\]/gu, '')
+    .replace(
+      /(?:requestId|traceId|auditId|错误编号|请求编号|追踪编号)\s*[：:=]\s*[A-Za-z0-9:._-]+/giu,
+      '',
+    )
+    .replace(
+      /(?:authorization|access[_-]?token|refresh[_-]?token|password|secret)\s*[：:=]\s*(?:Bearer\s+)?[^\s，。；;]+/giu,
+      '',
+    )
+    .replace(/https?:\/\/[^\s，。；;]+/giu, '')
+    .trim();
+  if (!message || /^[{[]/u.test(message) || /^GEA_[A-Z0-9_]+$/u.test(message)) return undefined;
+  return dms ? message : businessSafeErrorMessage(message);
 };
 
 export const salesPlanConflictErrorKind = (details: unknown): 'conflict' | 'configuration' => {
@@ -225,6 +238,13 @@ export const classifySalesPlanActionError = (error: unknown): SalesPlanActionErr
       return new SalesPlanActionError(salesPlanConflictErrorKind(error.details), false, undefined, {
         cause: error,
       });
+    if (
+      error.details &&
+      typeof error.details === 'object' &&
+      'retrySameIntent' in error.details &&
+      error.details.retrySameIntent === false
+    )
+      return new SalesPlanActionError('failed', false, undefined, { cause: error });
     if (error.status === 429) {
       return new SalesPlanActionError('rateLimited', true, retryAfterMsFromDetails(error.details), {
         cause: error,

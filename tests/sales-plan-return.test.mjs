@@ -277,3 +277,58 @@ test('zero adjustments and the actual return destination survive the action atte
   assert.deepEqual(calls[0], calls[1]);
   assert.equal(calls[1].request.adjustments[0].adjustQty, '0.000');
 });
+
+test('draft freshness compares exact decimal values while retaining strict version identity', () => {
+  const selected = { ...row, status: 2 };
+  const source = {
+    ...detail,
+    skus: [{ ...sku, price: '2.0000', qty: '90.000', regionConfirmedQty: '100.000' }],
+  };
+  const draft = {
+    planId: 'p',
+    versionId: 'v',
+    status: 2,
+    sourceSnapshot: m.salesPlanDraftSnapshot(selected, source),
+    role: 'province',
+    adjustments: [{ skuCode: '1001', adjustQty: '1' }],
+    remark: '',
+  };
+  assert.equal(m.salesPlanDraftMatches(draft, selected, detail, 'province'), true);
+  assert.equal(
+    m.salesPlanDraftMatches(
+      draft,
+      selected,
+      { ...detail, skus: [{ ...sku, price: '2.000000000000001' }] },
+      'province',
+    ),
+    false,
+  );
+  assert.equal(
+    m.salesPlanDraftMatches({ ...draft, versionId: 'other' }, selected, detail, 'province'),
+    false,
+  );
+});
+
+test('explicit Host business rejection is definitive even when upstream retryable is true', () => {
+  const error = {
+    name: 'BackendHttpError',
+    status: 502,
+    code: '',
+    backendMessage: 'GEA_HTTP_502：产品 TEST-ITEM 已停用，请先维护产品资料',
+    details: { retryable: true, retrySameIntent: false },
+  };
+  assert.equal(m.classifySalesPlanActionError(error).retrySameIntent, false);
+  assert.equal(m.classifySalesPlanSubmitError(error).kind, 'failed');
+});
+
+test('business rejection retains SKU and field guidance while removing response references', () => {
+  assert.equal(
+    m.salesPlanRejectionMessage({
+      status: 502,
+      backendMessage:
+        'GEA_HTTP_502：DMS回写失败[ITEM_DISABLED]：SKU TEST-ITEM 的 payload.confirmQty 必须为整数。requestId=hidden-request traceId=hidden-trace auditId=hidden-audit 错误编号=hidden-code',
+      details: { upstreamCode: 'SALES_PLAN_DMS_WRITEBACK_FAILED' },
+    }),
+    'DMS回写失败：SKU TEST-ITEM 的 payload.confirmQty 必须为整数。',
+  );
+});

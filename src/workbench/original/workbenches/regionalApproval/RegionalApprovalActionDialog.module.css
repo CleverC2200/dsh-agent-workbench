@@ -383,3 +383,8 @@
 .submissionChangeHeader > :not(:first-child) {
   text-align: right;
 }
+
+.resultModal {
+  width: min(560px, calc(100vw - 24px));
+  overflow-wrap: anywhere;
+}

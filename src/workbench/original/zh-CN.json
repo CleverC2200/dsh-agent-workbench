@@ -774,11 +774,11 @@
         "confirm": "确认重提",
         "completed": "已回执",
         "enabledHint": "状态 6–9、当前责任人及完整来源核对通过后，可修改重提。",
-        "success": "服务端已确认计划 {{planId}} 新版本 {{versionId}}；请求 {{requestId}}{{auditReference}}（{{replayed}}）。",
+        "success": "服务端已确认计划 {{planId}} 新版本 {{versionId}}。",
         "auditReference": "，审计 {{id}}",
         "created": "新建回执",
         "replayed": "幂等回放",
-        "receiptBanner": "重提回执：计划 {{planId}} · 版本 {{versionId}} · 请求 {{requestId}} · 审计 {{auditId}}",
+        "receiptBanner": "重提回执：计划 {{planId}} · 版本 {{versionId}}",
         "refreshFailed": "重提已成功，但新版本明细或继承值尚未核验通过；请刷新权威状态，仅重试回读。",
         "disabled": {
           "completed": "该退回版本已收到服务端重提回执，已阻止重复操作。",
@@ -842,7 +842,8 @@
         "lineAmount": "提报金额",
         "inheritedValues": "预计继承：区域 {{region}}；省区 {{province}}；大区 {{area}}",
         "quantity": "提报数量",
-        "nextStatus": "重提目标状态"
+        "nextStatus": "重提目标状态",
+        "submitAgain": "重新提交"
       },
       "liveAction": {
         "saveChecksumTitle": "保存核对摘要",
@@ -928,7 +929,7 @@
         "confirmReject": "确认退回",
         "completed": "已回执",
         "enabledHint": "当前 OPEN 周期和审批节点可发起操作；真实权限由服务端校验。",
-        "success": "服务端已确认 {{from}} → {{to}}{{auditReference}}。正在刷新权威队列。",
+        "success": "服务端已确认审批状态 {{from}} → {{to}}。正在刷新列表。",
         "refreshFailed": "审批已成功，但队列刷新失败；请关闭后手动刷新，勿重复审批。",
         "disabled": {
           "completed": "该版本已收到服务端回执，已阻止重复操作。",
@@ -952,19 +953,24 @@
           "configuration": "流程、候选或通知配置未满足要求；本次已停止，请联系管理员核对。",
           "authentication": "GEA 用户会话已过期；重新登录后刷新队列再操作。",
           "permission": "服务端确认当前用户无权操作该版本；本轮已禁用此操作。",
-          "conflict": "版本状态已变化或存在并发操作；未修改本地状态，请刷新权威队列。",
+          "conflict": "计划版本或审批状态已变化，请刷新列表后重新核对。",
           "rateLimited": "请求过于频繁；可稍后使用原幂等键重试，不会创建第二个动作。",
           "unavailable": "结果暂时未知，请在此处使用原请求“重试并核对结果”。请勿重新发起审批。",
-          "failed": "操作请求失败且未更新本地状态；请刷新权威队列后再决定。",
+          "failed": "操作未完成，请根据具体原因处理后重新提交。",
           "upstream": {
             "SALES_PLAN_APPROVAL_STATE_INVALID": "该版本当前无法执行此审批动作；请联系管理员核对审批实例状态。",
-            "NOTIFICATION_PAYLOAD_INVALID": "服务端在生成审批通知时被拒绝，属于服务端问题，刷新无法解决；请把错误编号发给后端核对。",
+            "NOTIFICATION_PAYLOAD_INVALID": "审批通知未能发送，请联系管理员核对通知配置。",
             "APPROVAL_OPERATOR_NOT_ALLOWED": "服务端认为当前账号已不具备该节点的角色或组织权限；请刷新后重试，并联系管理员核对角色。"
           }
         },
         "approvalRole": "本次审批角色",
         "selectRole": "请选择本次审批角色",
-        "roleContractUnavailable": "你有此角色的审批权限，但当前 GEA 服务尚未支持按所选角色写入。暂不能提交，请先升级服务端。"
+        "roleContractUnavailable": "你有此角色的审批权限，但当前 GEA 服务尚未支持按所选角色写入。暂不能提交，请先升级服务端。",
+        "resultTitle": "处理结果",
+        "resume": "恢复待核对操作",
+        "roleMissing": "未取得可用的审批角色，请刷新列表并重新选择。",
+        "accessBlocked": "当前审批节点已不能通过这笔计划，请刷新列表并重新选择。",
+        "quantityBlocked": "本节点确认数量无效，请重新核对 SKU 数量后提交。"
       },
       "liveBatch": {
         "approveTitle": "批量通过（{{count}} 笔）",
@@ -980,7 +986,7 @@
         "mixedConfirmation": "我已核对 {{approve}} 笔通过和 {{resubmit}} 笔退回重提，确认逐笔提交。",
         "required": "请填写退回原因。",
         "loading": "正在逐笔提交 {{count}} 笔计划，请勿关闭…",
-        "result": "本次提交完成：成功 {{success}} 笔，失败 {{failed}} 笔，跳过 {{skipped}} 笔。",
+        "result": "本次提交完成：成功 {{success}} 笔，失败 {{failed}} 笔，待核对 {{pending}} 笔，跳过 {{skipped}} 笔。",
         "resubmitTag": "退回重提（生成新版本）",
         "approveTag": "审批通过（当前版本）",
         "repeatRejectTag": "退回版本继续逐级退回",
@@ -991,7 +997,13 @@
         "confirmApprove": "确认批量通过",
         "confirmResubmit": "确认批量重提",
         "confirmMixed": "确认批量提交",
-        "confirmReject": "确认批量退回"
+        "confirmReject": "确认批量退回",
+        "status": {
+          "success": "成功",
+          "failed": "失败",
+          "pending": "待核对",
+          "skipped": "跳过"
+        }
       },
       "action": {
         "title": "区域计划审批操作",

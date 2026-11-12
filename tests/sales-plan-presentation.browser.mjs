@@ -143,7 +143,7 @@ const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
   list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
-  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:skusFor(plan.versionId),versions:versionsFor(plan),logs:continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
+  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
     readCalls.push({review:planId});
@@ -153,12 +153,12 @@ const host={salesPlan:{
       rows:[{skuCode:'1001',shipments:['1.5','10','20']},{skuCode:'2002',shipments:['2','3','4']}]};
   }},
   versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId)}},
-  draft:{invoke:async(q)=>{if(window.sentDirect.length){if(comparison==='single-dms-stale-second')return {draft:null,stale:true};if(comparison==='single-dms-unreadable-second')throw Error('fixture draft read failed');}const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
+  draft:{invoke:async(q)=>{if(window.autoBlock==='draft')return {draft:null,stale:true};if(window.sentDirect.length){if(comparison==='single-dms-stale-second')return {draft:null,stale:true};if(comparison==='single-dms-unreadable-second')throw Error('fixture draft read failed');}const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
   logs:{invoke:async()=>[]},compare:{invoke:async({planId,fromVersionId,toVersionId})=>{
     readCalls.push({planId,fromVersionId,toVersionId});
     if(comparison==='forbidden')throw Object.assign(Error('forbidden'),{status:403});
     return [{skuCode:'1001',changeType:'UPDATED',before:{...skuFor(fromVersionId),qty:'10',amt:'100'},after:skuFor(toVersionId),qtyDelta:'10',amountDelta:'100'}];
-  }},action:{invoke:async(command)=>{if(comparison?.startsWith('single-')){window.sentDirect.push(command);const status=comparison==='single-permission'?403:comparison==='single-conflict'?409:502;const error=comparison.startsWith('single-dms')?'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报':comparison==='single-permission'?'当前用户没有品类审批权限':comparison==='single-conflict'?'计划版本已变化，请刷新后重试':'GEA_HTTP_502';throw new BackendHttpError({method:'POST',path:'/sales-plan/plans/versions/'+command.versionId+'/actions',status,body:{error:window.directRejection??error,details:{...(comparison.startsWith('single-dms')?{retryable:false,upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED'}:{}),requestId:'hidden-error-reference',traceId:'hidden-trace-reference'}}});}if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
+  }},action:{invoke:async(command)=>{if(comparison?.startsWith('single-')){window.sentDirect.push(command);const status=comparison==='single-permission'?403:comparison==='single-conflict'?409:502;const error=comparison.startsWith('single-dms')?'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报':comparison==='single-permission'?'当前用户没有品类审批权限':comparison==='single-conflict'?'计划版本已变化，请刷新后重试':'GEA_HTTP_502';throw new BackendHttpError({method:'POST',path:'/sales-plan/plans/versions/'+command.versionId+'/actions',status,body:{error:window.directRejection??error,details:{...(comparison.startsWith('single-dms')?{retryable:false,upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED'}:{}),requestId:'hidden-error-reference',traceId:'hidden-trace-reference'}}});}if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);if(window.returnUnknown && command.planId==='p1')throw new TypeError('offline');return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
 },modelInference:{invoke:forbidden}};
 const root=createRoot(document.getElementById('root'));
 window.restoreIntegerInput=async(mode,role='region')=>{
@@ -1425,7 +1425,9 @@ test(
     await modal.getByRole('textbox').fill('开发验收');
     await modal.getByRole('button', { name: '确认批量退回', exact: true }).click();
     await expect(
-      modal.getByText('本次提交完成：成功 0 笔，失败 2 笔，跳过 0 笔。', { exact: true }),
+      modal.getByText('本次提交完成：成功 0 笔，失败 2 笔，待核对 0 笔，跳过 0 笔。', {
+        exact: true,
+      }),
     ).toBeVisible();
     await expect(modal.getByText(/未能核对实际退回节点或修改后的数量，请刷新后重试。/)).toHaveCount(
       2,
@@ -1436,7 +1438,7 @@ test(
 );
 
 for (const [scenario, reason] of [
-  ['single-dms', 'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报'],
+  ['single-dms', 'DMS回写失败：产品编码TEST-ITEM已停用,不能填报'],
   ['single-permission', '当前用户没有品类审批权限'],
   ['single-conflict', '计划版本已变化，请刷新后重试'],
 ])
@@ -1448,7 +1450,29 @@ for (const [scenario, reason] of [
       await page.getByRole('button', { name: '通过', exact: true }).click();
       const dialog = page.getByRole('dialog');
       await expect(dialog.getByText(reason, { exact: true })).toBeInViewport();
+      await expect(
+        dialog.locator('textarea,input,[role=combobox],label.arco-checkbox'),
+      ).toHaveCount(0);
+      await expect(dialog).toContainText('p1');
       assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
+      if (scenario === 'single-dms' && process.env.GEA_RESULT_EVIDENCE) {
+        await expect(dialog).toHaveClass(/zoomModal-(appear|enter)-done/);
+        await page.screenshot({
+          path: process.env.GEA_RESULT_EVIDENCE + '/single-result-wide.png',
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect
+          .poll(async () => {
+            const bounds = await dialog.boundingBox();
+            return Boolean(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390);
+          })
+          .toBe(true);
+        const bounds = await dialog.boundingBox();
+        assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390);
+        await page.screenshot({
+          path: process.env.GEA_RESULT_EVIDENCE + '/single-result-narrow.png',
+        });
+      }
       await expect(page.getByText(/hidden-error-reference|hidden-trace-reference/)).toHaveCount(0);
       await expect(page.getByRole('button', { name: '重试并核对结果', exact: true })).toHaveCount(
         0,
@@ -1464,7 +1488,11 @@ test('single uncertain approval keeps its original intent and does not create an
   await page.getByRole('button', { name: '通过', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText(/结果暂时未知/)).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '关闭', exact: true })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: '关闭', exact: true })).toBeEnabled();
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('button', { name: '恢复待核对操作', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '通过', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
   assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
   await dialog.getByRole('button', { name: '重试并核对结果', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
@@ -1545,3 +1573,64 @@ for (const [scenario, reason] of [
     assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
     await expect(dialog.getByRole('button', { name: '刷新权威状态', exact: true })).toBeEnabled();
   });
+
+test('manual approval retry rechecks a stale draft before issuing a new command', async (t) => {
+  const { page } = await openWorkbench(t, false, 'single-dms-stale-second');
+  await page.locator('tbody label.arco-checkbox:visible').first().click();
+  await page.getByRole('button', { name: '通过', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: '重新提交', exact: true }).click();
+  await expect(dialog.getByText('原计划已变化，旧草稿未套用', { exact: true })).toBeVisible();
+  assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
+});
+
+test('batch return retains an unknown attempt while successful plans are not sent again', async (t) => {
+  const { page, groupBox } = await openWorkbench(t, true, 'return-edits');
+  await page.evaluate(() => {
+    window.returnUnknown = true;
+  });
+  await groupBox.check();
+  await page.getByRole('button', { name: '退回', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('批量审批备注').fill('请核对');
+  await dialog.getByRole('button', { name: '确认批量退回', exact: true }).click();
+  await expect(dialog).toContainText('待核对 1 笔');
+  await expect(dialog.locator('textarea,input,[role=combobox]')).toHaveCount(0);
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: '重试并核对结果', exact: true })
+    .click();
+  await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(3);
+  const calls = await page.evaluate(() => window.sentReturns);
+  assert.deepEqual(
+    calls[2],
+    calls.find((call) => call.planId === 'p1'),
+  );
+});
+
+for (const [block, reason] of [
+  ['version', '计划版本已变化'],
+  ['status', '审批状态已变化'],
+  ['period', '计划周期不一致'],
+  ['sku', 'SKU 1001 的'],
+  ['role', '当前审批节点已不能通过这笔计划'],
+  ['draft', '原计划已变化，旧草稿未套用'],
+])
+  test(
+    'automatic approval explains ' + block + ' blocking and stops loading before any write',
+    async (t) => {
+      const { page } = await openWorkbench(t, false, 'single-dms');
+      await page.locator('tbody label.arco-checkbox:visible').first().click();
+      const approve = page.getByRole('button', { name: '通过', exact: true });
+      await expect(approve).toBeEnabled();
+      await page.evaluate((block) => {
+        window.autoBlock = block;
+      }, block);
+      await approve.click();
+      await expect(page.getByRole('dialog')).toContainText(reason);
+      await expect(approve).not.toHaveClass(/arco-btn-loading/);
+      assert.equal(await page.evaluate(() => window.sentDirect.length), 0);
+    },
+  );

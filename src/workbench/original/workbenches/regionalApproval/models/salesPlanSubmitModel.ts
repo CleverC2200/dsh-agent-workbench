@@ -332,6 +332,13 @@ export const classifySalesPlanSubmitError = (error: unknown): SalesPlanSubmitErr
       return new SalesPlanSubmitError(salesPlanConflictErrorKind(error.details), false, undefined, {
         cause: error,
       });
+    if (
+      error.details &&
+      typeof error.details === 'object' &&
+      'retrySameIntent' in error.details &&
+      error.details.retrySameIntent === false
+    )
+      return new SalesPlanSubmitError('failed', false, undefined, { cause: error });
     if (error.status === 429) {
       return new SalesPlanSubmitError(
         'rateLimited',
