@@ -11,7 +11,7 @@ test('upstream business period includes all original-order SKUs without any logi
   try {
     db.exec(`CREATE TABLE agents_order_execute_isontime_mi(
       fromorderno,cust_code,new_material_code,belong_base,product_categ_name,pinxiang,new_material_name,
-      need_qty_origin,qtyshipped,executeorderno,fromorderno_month,exp_flag,order_qty_origin
+      need_qty_origin,qtyshipped,executeorderno,fromorderno_month,exp_flag,order_qty_origin,pickup_point_kpi DEFAULT '郑州'
     );
     INSERT INTO agents_order_execute_isontime_mi (fromorderno,cust_code,new_material_code,belong_base,product_categ_name,pinxiang,new_material_name,need_qty_origin,qtyshipped,executeorderno,fromorderno_month,exp_flag,order_qty_origin) VALUES
       ('O','C','S1','郑州','食品','水饺','一',100,80,'E1','2026-10-25','否',100),
