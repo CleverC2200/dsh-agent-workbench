@@ -115,6 +115,7 @@ if(comparison==='history-correction')for(const plan of sourcePlans)plan.orderTyp
 if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50';
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 if(comparison?.startsWith('sku-review')) for(const plan of sourcePlans) plan.skuCount=2;
+if(comparison==='mixed-terminal')sourcePlans[1].status=5;
 const plans=continued?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1).map(plan=>({...plan,status:continued[0]})):['returned','return-unavailable'].includes(comparison)?(comparison==='return-unavailable'?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1):sourcePlans).map(plan=>({...plan,status:comparison==='return-unavailable'?8:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 if(comparison?.startsWith('single-'))for(const plan of plans)plan.status=4;
 window.sentDirect=[];
@@ -143,7 +144,7 @@ const forbidden=async()=>{writes.push('write');throw Error('LOCAL_RENDER_ACTION_
 const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
-  list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
+  list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1}}},
   detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{readCalls.push({history:planId});const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
@@ -1318,9 +1319,12 @@ for (const [scenario, reason] of [
         dialog.locator('textarea,input,[role=combobox],label.arco-checkbox'),
       ).toHaveCount(0);
       await expect(dialog).toContainText('p1');
+      await expect(dialog.locator('.arco-alert-error')).toHaveCount(1);
       assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
       if (scenario === 'single-dms' && process.env.GEA_RESULT_EVIDENCE) {
-        await expect(dialog).toHaveClass(/zoomModal-(appear|enter)-done/);
+        await expect
+          .poll(() => dialog.evaluate((el) => getComputedStyle(el).transform))
+          .toBe('none');
         await page.screenshot({
           path: process.env.GEA_RESULT_EVIDENCE + '/single-result-wide.png',
         });
@@ -1460,6 +1464,18 @@ test('batch return retains an unknown attempt while successful plans are not sen
   await dialog.getByRole('button', { name: '确认批量退回', exact: true }).click();
   await expect(dialog).toContainText('待核对 1 笔');
   await expect(dialog.locator('textarea,input,[role=combobox]')).toHaveCount(0);
+  if (process.env.GEA_RESULT_EVIDENCE) {
+    await expect.poll(() => dialog.evaluate((el) => getComputedStyle(el).transform)).toBe('none');
+    await page.screenshot({ path: process.env.GEA_RESULT_EVIDENCE + '/batch-pending-wide.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect
+      .poll(async () => {
+        const b = await dialog.boundingBox();
+        return Boolean(b && b.x >= 0 && b.x + b.width <= 390);
+      })
+      .toBe(true);
+    await page.screenshot({ path: process.env.GEA_RESULT_EVIDENCE + '/batch-pending-narrow.png' });
+  }
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
   await page
@@ -1498,3 +1514,36 @@ for (const [block, reason] of [
       assert.equal(await page.evaluate(() => window.sentDirect.length), 0);
     },
   );
+
+test('actual toolbar retains terminal members as skipped in a mixed organization selection', async (t) => {
+  const { page, groupBox } = await openWorkbench(t, true, 'mixed-terminal');
+  await groupBox.check();
+  await page.getByRole('button', { name: '通过', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.approvalItems?.length)).toBe(2);
+  const items = await page.evaluate(() => window.approvalItems);
+  assert.deepEqual(items.map((item) => [item.planId, item.kind]).sort(), [
+    ['p1', 'approve'],
+    ['p2', 'skip'],
+  ]);
+  assert.equal(await page.evaluate(() => window.writes.length), 0);
+});
+
+test('unknown approval survives a refreshed empty queue and resumes the frozen command', async (t) => {
+  const { page } = await openWorkbench(t, false, 'single-unknown');
+  await page.locator('tbody label.arco-checkbox:visible').first().click();
+  await page.getByRole('button', { name: '通过', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('结果暂时未知');
+  await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click();
+  await page.evaluate(() => {
+    window.queueGone = true;
+  });
+  await page.getByRole('button', { name: '刷新数据', exact: true }).click();
+  await expect(page.locator('tbody label.arco-checkbox:visible')).toHaveCount(0);
+  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('结果暂时未知');
+  await dialog.getByRole('button', { name: '重试并核对结果', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
+  const calls = await page.evaluate(() => window.sentDirect);
+  assert.deepEqual(calls[1], calls[0]);
+});

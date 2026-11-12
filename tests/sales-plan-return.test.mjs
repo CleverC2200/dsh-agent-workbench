@@ -319,6 +319,7 @@ test('explicit Host business rejection is definitive even when upstream retryabl
   };
   assert.equal(m.classifySalesPlanActionError(error).retrySameIntent, false);
   assert.equal(m.classifySalesPlanSubmitError(error).kind, 'failed');
+  assert.equal(m.salesPlanRejectionMessage(error), '产品 TEST-ITEM 已停用，请先维护产品资料');
 });
 
 test('business rejection retains SKU and field guidance while removing response references', () => {

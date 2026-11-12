@@ -388,3 +388,8 @@
   width: min(560px, calc(100vw - 24px));
   overflow-wrap: anywhere;
 }
+
+.resultModal :global(.arco-modal-body) {
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+}

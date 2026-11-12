@@ -692,7 +692,7 @@
       },
       "liveSubmit": {
         "inherited": "继承确认量 / 金额",
-        "batchResult": "成功 {{success}} 笔 · 失败 {{failed}} 笔 · 待核实 {{pending}} 笔",
+        "batchResult": "成功 {{success}} 笔 · 失败 {{failed}} 笔 · 待核对 {{pending}} 笔 · 跳过 {{skipped}} 笔",
         "comparisonDetails": "查看明细（{{count}}）",
         "batchTitle": "提交所选计划（{{count}}）",
         "openBatch": "提交所选",
@@ -811,7 +811,18 @@
         "inheritedValues": "预计继承：区域 {{region}}；省区 {{province}}；大区 {{area}}",
         "quantity": "提报数量",
         "nextStatus": "重提目标状态",
-        "submitAgain": "重新提交"
+        "submitAgain": "重新提交",
+        "itemStatus": {
+          "ready": "待提交",
+          "success": "成功",
+          "failed": "提交失败",
+          "unknown": "待核对",
+          "readback": "待核对",
+          "unresolved": "待核对",
+          "skipped": "跳过"
+        },
+        "skippedTag": "跳过",
+        "terminalSkipped": "计划已完成审批或回写，本次跳过。"
       },
       "liveAction": {
         "saveChecksumTitle": "保存核对摘要",

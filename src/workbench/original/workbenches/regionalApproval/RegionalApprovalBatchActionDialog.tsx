@@ -166,6 +166,7 @@ const RegionalApprovalBatchActionDialog: React.FC<{
         previous?.status === 'pending' ? attempts.current.get(item.row.planId) : undefined;
       const attempt = retained ?? new SalesPlanActionAttempt(client ?? salesPlan);
       let actionSubmitted = false;
+      let preparingReturn = false;
       try {
         if (!retained) {
           const fresh = await salesPlan.detail.invoke({ planId: item.row.planId });
@@ -193,8 +194,9 @@ const RegionalApprovalBatchActionDialog: React.FC<{
             versionId: item.row.versionId,
             approvalRole: item.access.approvalRole,
           });
-          if (stored?.stale) throw new Error('草稿版本已变化，请刷新后重试');
+          if (stored?.stale) throw new SubmissionSourceError('draftStale');
           if (kind === 'REJECT') {
+            preparingReturn = true;
             if (!item.detail)
               throw new Error(
                 t('common.assistantSurface.regionalApproval.returnDestinationUnavailable'),
@@ -255,16 +257,18 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           planId: item.row.planId,
           label,
           ...(context ? { context } : {}),
-          status: classified.retrySameIntent ? 'pending' : 'failed',
+          status: actionSubmitted && classified.retrySameIntent ? 'pending' : 'failed',
           detail:
             error instanceof SubmissionSourceError
               ? t(
                   `common.assistantSurface.regionalApproval.liveSubmit.errors.${error.key}`,
                   error.values,
                 )
-              : kind === 'REJECT' && !actionSubmitted
+              : preparingReturn && !actionSubmitted
                 ? t('common.assistantSurface.regionalApproval.returnDestinationUnavailable')
-                : actionErrorText(t, classified as SalesPlanActionError),
+                : !actionSubmitted
+                  ? t('common.assistantSurface.regionalApproval.liveSubmit.errors.sourceLoad')
+                  : actionErrorText(t, classified as SalesPlanActionError),
         });
       }
     }
@@ -427,7 +431,7 @@ const RegionalApprovalBatchActionDialog: React.FC<{
                       )}
                     </span>
                     {outcome.context ? <span> · {outcome.context}</span> : null}
-                    <span> · {outcome.detail}</span>
+                    {outcome.detail && <span> · {outcome.detail}</span>}
                   </li>
                 ))}
               </ul>

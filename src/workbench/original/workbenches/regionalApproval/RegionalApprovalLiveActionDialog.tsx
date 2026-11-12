@@ -150,6 +150,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   onAttemptFailed?: () => void;
   onClose: (pending?: boolean) => void;
   onBusyChange?: (busy: boolean) => void;
+  onPendingChange?: (pending: boolean) => void;
   /** 对话下发的“退回理由”草稿（等价于人工在理由框里输入）。 */
   remarkPatch?: { at: number; remark: string };
   /** 对话下发的“确认提交”（等价于人工点确认按钮）。 */
@@ -172,6 +173,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   onAttemptFailed,
   onClose,
   onBusyChange,
+  onPendingChange,
   remarkPatch,
   submitRequest,
 }) => {
@@ -282,6 +284,10 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   const loading = checking || action.state.status === 'loading';
   const canClose = !loading;
   const pending = action.state.status === 'error' && action.state.error.retrySameIntent;
+  useEffect(
+    () => onPendingChange?.(pending || refreshFailed),
+    [pending, refreshFailed, onPendingChange],
+  );
   useEffect(
     () => onBusyChange?.(loading || (directApproval && !draftReady && !draftError)),
     [loading, directApproval, draftReady, draftError, onBusyChange],
@@ -432,7 +438,14 @@ const RegionalApprovalLiveActionDialog: React.FC<{
         if (cause instanceof SubmissionSourceError)
           directBlock = t(
             `common.assistantSurface.regionalApproval.liveSubmit.errors.${cause.key}`,
-            cause.values,
+            cause.key === 'skuValueChanged'
+              ? {
+                  ...cause.values,
+                  field: t(
+                    `common.assistantSurface.regionalApproval.liveSubmit.fields.${cause.values.field}`,
+                  ),
+                }
+              : cause.values,
           );
       }
     }
@@ -557,14 +570,14 @@ const RegionalApprovalLiveActionDialog: React.FC<{
       }
       const freshAccess =
         selectedRole && salesPlanAccessForRow(row, fresh, approvalStages ?? [], selectedRole);
-      if (!freshAccess?.allowedActions.includes(kind))
+      if (!selectedRole || !freshAccess?.allowedActions.includes(kind))
         throw new SubmissionSourceError('accessChanged');
       const freshAdjustments =
         kind === 'REJECT'
           ? salesPlanReturnAdjustments(
               fresh,
               row,
-              selectedRole!,
+              selectedRole,
               salesPlanReturnDestination(fresh, selectedRole!),
               stored.draft?.role && stored.draft.role !== selectedRole
                 ? []
@@ -621,7 +634,14 @@ const RegionalApprovalLiveActionDialog: React.FC<{
         setPreflightError(
           t(
             `common.assistantSurface.regionalApproval.liveSubmit.errors.${cause.key}`,
-            cause.values,
+            cause.key === 'skuValueChanged'
+              ? {
+                  ...cause.values,
+                  field: t(
+                    `common.assistantSurface.regionalApproval.liveSubmit.fields.${cause.values.field}`,
+                  ),
+                }
+              : cause.values,
           ),
         );
       else setDraftError('loadFailed');
@@ -779,7 +799,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           <strong>{row.dealerName || row.orgName || row.planId}</strong>
           <span>{row.planId}</span>
           <Alert
-            type="warning"
+            type={pending || refreshFailed ? 'warning' : 'error'}
             content={
               preflightError ||
               directBlock ||

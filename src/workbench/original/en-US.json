@@ -692,7 +692,7 @@
       },
       "liveSubmit": {
         "inherited": "Inherited quantity / amount",
-        "batchResult": "Succeeded {{success}} · Failed {{failed}} · Awaiting verification {{pending}}",
+        "batchResult": "{{success}} succeeded · {{failed}} failed · {{pending}} pending verification · {{skipped}} skipped",
         "comparisonDetails": "View details ({{count}})",
         "batchTitle": "Submit selected plans ({{count}})",
         "openBatch": "Submit selected",
@@ -808,7 +808,18 @@
         "inheritedValues": "Inherited quantity / amount: region {{region}}; province {{province}}; area {{area}}",
         "quantity": "Submitted quantity",
         "nextStatus": "Resubmission target status",
-        "submitAgain": "Submit again"
+        "submitAgain": "Submit again",
+        "itemStatus": {
+          "ready": "Ready",
+          "success": "Succeeded",
+          "failed": "Submission failed",
+          "unknown": "Pending verification",
+          "readback": "Pending verification",
+          "unresolved": "Pending verification",
+          "skipped": "Skipped"
+        },
+        "skippedTag": "Skipped",
+        "terminalSkipped": "This plan has completed approval or writeback and is skipped."
       },
       "liveAction": {
         "saveChecksumTitle": "Save review",

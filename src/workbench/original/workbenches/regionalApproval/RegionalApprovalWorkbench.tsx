@@ -7,7 +7,7 @@ import { InlineSkuDetails } from './InlineSkuDetails.tsx';
 import { GroupSkuSummary } from './GroupSkuSummary.tsx';
 import { RegionalSkuReview, type SkuReviewSnapshot } from './RegionalSkuReview.tsx';
 import { DashboardTableSkeleton } from './workbench-loading.tsx';
-import type { GeaSalesPlanListItem } from '../../contracts.ts';
+import type { GeaSalesPlanListItem, GeaSalesPlanDetail } from '../../contracts.ts';
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import { salesPlanQueueStatusText, salesPlanStatusText } from './regionalApprovalQueryModel.ts';
 import { SALES_PLAN_RETURN_CODES } from '../../salesPlanWorkflow.ts';
@@ -538,11 +538,20 @@ const RegionalApprovalWorkbench: React.FC<{
     Record<string, Record<string, string>>
   >({});
   const [invalidGroupInputs, setInvalidGroupInputs] = useState<Record<string, string[]>>({});
-  const [liveActionPlanId, setLiveActionPlanId] = useState<string>();
+  const [liveAction, setLiveAction] = useState<{
+    row: RegionalApprovalLiveRow;
+    evidence?: GeaSalesPlanDetail;
+    pendingValues?: Record<string, string>;
+    approvalStage: ApprovalStageId;
+    approvalStages: readonly ApprovalStageId[];
+    kind: LiveActionKind;
+  }>();
+  const liveActionPlanId = liveAction?.row.planId;
+  const liveActionKind = liveAction?.kind ?? 'APPROVE';
+  const [liveActionPending, setLiveActionPending] = useState(false);
   const [liveActionVisible, setLiveActionVisible] = useState(true);
   const [liveActionBusy, setLiveActionBusy] = useState(false);
   const [batchActionVisible, setBatchActionVisible] = useState(true);
-  const [liveActionKind, setLiveActionKind] = useState<LiveActionKind>('APPROVE');
   // 对话下发的审批确认 / 退回理由草稿；审批本身仍走页面原有的对话框逻辑。
   const [approvalSubmitRequest, setApprovalSubmitRequest] = useState<{ at: number }>();
   const [approvalRemarkPatch, setApprovalRemarkPatch] = useState<{ at: number; remark: string }>();
@@ -1127,7 +1136,20 @@ const RegionalApprovalWorkbench: React.FC<{
       void refreshApprovalStages();
     }
   }, [submissionOutcomes]);
-  const activeLiveActionRow = liveRows.find((row) => row.planId === liveActionPlanId);
+  const activeLiveActionRow = liveAction?.row;
+  const openLiveAction = (row: RegionalApprovalLiveRow, kind: LiveActionKind) => {
+    setLiveAction({
+      row,
+      evidence: liveAccess.entries[row.versionId],
+      pendingValues: livePendingValues[row.planId],
+      approvalStage: liveStageFilter ?? (roleStages.length === 1 ? roleStages[0] : 'customer'),
+      approvalStages: roleStages,
+      kind,
+    });
+    setLiveActionVisible(true);
+    setLiveActionBusy(kind === 'APPROVE');
+    setLiveActionPending(false);
+  };
 
   const contextFilterSummary = useMemo(
     () =>
@@ -1349,7 +1371,6 @@ const RegionalApprovalWorkbench: React.FC<{
   }, [viewState, scopedState]);
 
   useEffect(() => {
-    setLiveActionPlanId(undefined);
     setLiveAuthorityContext(undefined);
     setPermissionDeniedVersions(new Set());
   }, [appliedLiveFilters, liveQuery.selectedPeriodMonth, page, pageSize]);
@@ -1746,8 +1767,8 @@ const RegionalApprovalWorkbench: React.FC<{
               if (liveActionDisabledReason(row, kind === 'REJECT' ? 'REJECT' : undefined))
                 return rejectWith('ACTION_NOT_ALLOWED');
               selectLivePlanContext(row);
-              setLiveActionKind(kind);
-              setLiveActionPlanId(row.planId);
+              if (liveAction) return rejectWith('ACTION_NOT_ALLOWED');
+              openLiveAction(row, kind);
               continue;
             }
             if (id === 'dialog:approval') {
@@ -1756,7 +1777,9 @@ const RegionalApprovalWorkbench: React.FC<{
                 continue;
               }
               if (action === 'cancel') {
-                setLiveActionPlanId(undefined);
+                if (liveActionBusy) return rejectWith('ACTION_NOT_ALLOWED');
+                if (liveActionPending) setLiveActionVisible(false);
+                else setLiveAction(undefined);
                 continue;
               }
               return rejectWith('ACTION_NOT_ALLOWED');
@@ -2598,13 +2621,25 @@ const RegionalApprovalWorkbench: React.FC<{
 
   const hasReturnedSelection = selectedLiveRows.some((row) => row.status >= 6 && row.status <= 9);
   const submissionItems = (): SalesPlanSubmissionItem[] =>
-    selectedPendingActionRows.flatMap((row): SalesPlanSubmissionItem[] => {
+    selectedLiveRows.flatMap((row): SalesPlanSubmissionItem[] => {
       const label =
         projectRegionalApprovalLiveDimension(row, dimension).name ?? row.dealerName ?? row.planId;
       const period = liveQuery.periods.find(
         (period) => period.periodId === row.periodId && period.planTypeCode === row.planTypeCode,
       );
       if (!period) return [];
+      if (row.status === 5 || row.status === 10)
+        return [
+          {
+            kind: 'skip',
+            planId: row.planId,
+            versionId: row.versionId,
+            row,
+            label,
+            period,
+            reason: t('common.assistantSurface.regionalApproval.liveSubmit.terminalSkipped'),
+          },
+        ];
       if (row.status >= 6 && row.status <= 9) {
         return resubmitAllowed(row)
           ? [
@@ -2640,14 +2675,16 @@ const RegionalApprovalWorkbench: React.FC<{
   const selectedSubmissionItems = submissionItems();
   const resubmitDisabledReason = !onSubmitBatch
     ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.entryUnavailable')
-    : selectedSubmissionItems.length !== selectedPendingActionRows.length
+    : selectedSubmissionItems.filter((item) => item.kind !== 'skip').length !==
+        selectedPendingActionRows.length
       ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.sourceAuthority')
       : undefined;
   const primaryActionDisabledReason =
     batchDisabledReason('APPROVE') ??
     (onSubmitBatch &&
     selectedLiveRows.length > 1 &&
-    selectedSubmissionItems.length !== selectedPendingActionRows.length
+    selectedSubmissionItems.filter((item) => item.kind !== 'skip').length !==
+      selectedPendingActionRows.length
       ? 'missingAuthority'
       : undefined);
   const approvalActionButtons = (
@@ -2675,8 +2712,7 @@ const RegionalApprovalWorkbench: React.FC<{
             if (selectedLiveRows.length === 1) {
               const row = selectedLiveRows[0];
               selectLivePlanContext(row);
-              setLiveActionKind('REJECT');
-              setLiveActionPlanId(row.planId);
+              openLiveAction(row, 'REJECT');
               return;
             }
             setBatchAction({ kind: 'REJECT', items: batchItemsFor(selectedLiveRows, 'REJECT') });
@@ -2729,10 +2765,7 @@ const RegionalApprovalWorkbench: React.FC<{
             if (selectedLiveRows.length === 1) {
               const row = selectedLiveRows[0];
               selectLivePlanContext(row);
-              setLiveActionVisible(true);
-              setLiveActionBusy(true);
-              setLiveActionKind('APPROVE');
-              setLiveActionPlanId(row.planId);
+              openLiveAction(row, 'APPROVE');
               return;
             }
             if (onSubmitBatch) onSubmitBatch(selectedSubmissionItems);
@@ -2750,21 +2783,22 @@ const RegionalApprovalWorkbench: React.FC<{
   );
 
   const liveActionDialog =
-    activeLiveActionRow && liveActionsEnabled ? (
+    liveAction && activeLiveActionRow && liveActionsEnabled ? (
       <RegionalApprovalLiveActionDialog
         key={`${activeLiveActionRow.versionId}:${liveActionKind}`}
         visible={liveActionVisible}
         onBusyChange={setLiveActionBusy}
+        onPendingChange={setLiveActionPending}
         embedded={false}
         autoSubmitApproval={liveActionKind === 'APPROVE'}
         row={activeLiveActionRow}
-        approvalStage={liveStageFilter ?? (roleStages.length === 1 ? roleStages[0] : 'customer')}
+        approvalStage={liveAction.approvalStage}
         initialAction={liveActionKind}
         t={t}
         client={liveActionClient}
-        approvalStages={roleStages}
-        evidence={liveAccess.entries[activeLiveActionRow.versionId]}
-        pendingValues={livePendingValues[activeLiveActionRow.planId]}
+        approvalStages={liveAction.approvalStages}
+        evidence={liveAction.evidence}
+        pendingValues={liveAction.pendingValues}
         onPermissionDenied={(versionId) =>
           setPermissionDeniedVersions((current) => new Set(current).add(versionId))
         }
@@ -2778,7 +2812,7 @@ const RegionalApprovalWorkbench: React.FC<{
             return next;
           });
           if (request.action === 'SAVE') {
-            const before = liveAccess.entries[receipt.versionId];
+            const before = liveAction?.evidence;
             if (!before || !detailClient) throw new Error('Save verification unavailable');
             const after = await detailClient.detail.invoke({ planId: receipt.planId });
             if (!verifySavedSalesPlan(before, after, request, receipt))
@@ -2790,7 +2824,7 @@ const RegionalApprovalWorkbench: React.FC<{
             projectSalesPlanActionContext(activeLiveActionRow, receipt, contextFilterSummary),
           );
           setSelectedRowIds([]);
-          setLiveActionPlanId(undefined);
+          setLiveAction(undefined);
           refreshLiveAuthority();
         }}
         onRefresh={refreshLiveAuthority}
@@ -2799,7 +2833,7 @@ const RegionalApprovalWorkbench: React.FC<{
         onClose={(pending) => {
           if (pending) setLiveActionVisible(false);
           else {
-            setLiveActionPlanId(undefined);
+            setLiveAction(undefined);
             setLiveActionVisible(true);
           }
         }}

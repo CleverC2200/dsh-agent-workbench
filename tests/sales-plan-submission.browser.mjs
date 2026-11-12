@@ -31,6 +31,7 @@ const item=(id,kind)=>({kind,planId:planId(id),versionId:'v'+id,label:'组织'+i
 const scenario=new URL(location.href).searchParams.get('scenario');
 const dmsRejection='DMS回写失败: SKU 10003581 确认数量必须为整数，且数量及合计不能超出Integer范围。请核对 payload.confirmQty、当前销售计划的各 SKU 确认数量，以及汇总数量后重新提交。';
 const items=['approve','dms','unknown'].includes(scenario)?[item('1','approve'),item('3','approve')]:['resubmit','channel','signed-out-source'].includes(scenario)?[item('2','resubmit')]:[item('1','approve'),item('2','resubmit')];
+if(scenario==='with-skip')items.splice(0,items.length,item('1','approve'),{...item('3','skip'),reason:'计划已完成审批，本次跳过。'});
 if(scenario==='readback')items.splice(0,items.length,item('1','approve'));
 if(['confirmation','stored','correction'].includes(scenario)) { const v=versions[planId('2')]; if(scenario==='correction') v.orderType='Z'; const current=item('2','resubmit'); if(scenario!=='stored') current.pendingValues={'789':scenario==='correction'?'5.000':'3.000'}; items.splice(0,items.length,current); }
 window.actions=[];window.submissions=[];window.outcomes=[];window.refreshes=[];if(scenario==='stale-draft')items[0].pendingValues={'789':'9.000'};
@@ -294,6 +295,10 @@ for (const scenario of ['dms', 'unknown'])
       await expect(dialog.getByText(/DMS回写失败.*10003581.*整数/)).toHaveCount(2);
       await expect(dialog.getByText(/payload\.confirmQty.*各 SKU 确认数量/)).toHaveCount(2);
       await expect(dialog.getByText(/错误编号|dms-rejected/)).toHaveCount(0);
+      await expect(
+        dialog.locator('section').first().getByText('提交失败', { exact: true }),
+      ).toBeVisible();
+      await expect(dialog.getByText('审批通过', { exact: true })).toHaveCount(0);
       await expect(dialog.locator('textarea,input,[role=combobox]')).toHaveCount(0);
       await expect(dialog.getByText('操作请求失败且未更新本地状态', { exact: false })).toHaveCount(
         0,
@@ -415,4 +420,20 @@ test('a retained successful receipt retries only readback without another action
   await dialog.getByRole('button', { name: '刷新权威状态', exact: true }).click();
   await expect(dialog).toContainText('提交成功');
   assert.equal(await page.evaluate(() => window.actions.length), 1);
+});
+
+test('mixed selection reports terminal plans as skipped without sending them', async (t) => {
+  const { page, dialog } = await openConfirmation(t, 'with-skip', { blocked: true });
+  const submit = dialog.getByRole('button', { name: '确认提交', exact: true });
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect.poll(() => page.evaluate(() => window.outcomes.length)).toBe(1);
+  assert.deepEqual(await page.evaluate(() => window.outcomes[0].map((o) => o.status)), [
+    'failed',
+    'skipped',
+  ]);
+  assert.equal(await page.evaluate(() => window.actions.length), 1);
+  assert.equal(await page.evaluate(() => window.submissions.length), 0);
+  await expect(dialog.getByText('跳过', { exact: true })).toBeVisible();
+  await expect(dialog).toContainText('计划已完成审批，本次跳过。');
 });
