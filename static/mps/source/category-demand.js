@@ -1,5 +1,11 @@
 import { computeMpsCategoryDemand } from 'dsh-agent-manage/mps-compute/category-demand';
-import { createSourceProductMatcher, sourceCheckRows, sourceDimensions } from './source-projections.js';
+import {
+  createSourceProductMatcher,
+  sourceCheckRows,
+  sourceDimensions,
+  sourceProductMappings,
+} from './source-projections.js';
+import { canonicalBaseName } from './relations.js';
 
 const number = (value) =>
   value === '' || value == null || !Number.isFinite(Number(value)) ? null : Number(value);
@@ -8,7 +14,9 @@ export function categoryDemandMissing(result, row) {
   if (row.systemQuantity !== null) return [];
   const basis = result.bases.find((entry) => entry.category === row.category);
   const index = result.rows.indexOf(row);
-  const missing = [];
+  const missing = (result.shipmentScope.issues ?? [])
+    .filter((issue) => issue.category === row.category)
+    .flatMap((issue) => issue.missing);
   if (row.shipment === null) missing.push(`${row.baseMonth} 本月有效预估发货缺失`);
   if (basis.actual === null)
     missing.push(`${result.recent[0]}至${basis.endMonth} BI实绩缺失或不完整`);
@@ -48,34 +56,109 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
       (draft.shipment?.cutoff ?? draft.shipment?.business?.cutoff ?? '') &&
     ['business', 'local-file'].includes(shipmentSnapshot.sourceKind) &&
     ['ok', 'partial', 'local-file'].includes(shipmentSnapshot.status);
-  const matchProduct = createSourceProductMatcher(draft.products ?? draft.productRaw);
+  const productMappings = sourceProductMappings(draft.products, draft.productRaw);
+  const matchProduct = createSourceProductMatcher(productMappings);
   const sourceRows = shipmentReady ? (shipmentSnapshot.rows ?? []) : [];
   const excluded = sourceRows.flatMap((row) => {
-    const category = row.category || matchProduct(row.code).category;
+    const category = row.category || matchProduct(row.code, row.base).category;
     const missing = [
       ...(!category ? ['缺可唯一对应的产品大类'] : []),
       ...(number(row.fin) === null ? ['本月有效预估发货待定'] : []),
       ...(row.forecastIssue ? [row.forecastIssue] : []),
     ];
-    return missing.length ? [{ base: row.base, code: row.code, name: row.name ?? '', category, month: baseMonth, missing, missingFields: row.missingFields ?? [] }] : [];
+    return missing.length
+      ? [
+          {
+            base: row.base,
+            code: row.code,
+            name: row.name ?? '',
+            category,
+            month: baseMonth,
+            missing,
+            missingFields: row.missingFields ?? [],
+          },
+        ]
+      : [];
   });
-  const excludedKeys = new Set(excluded.map((row) => JSON.stringify([row.base, row.code])));
-  const included = (base, code) => !excludedKeys.has(JSON.stringify([base, code]));
-  const includeSource = (row) => included(row['基地'], matchProduct(row['产品编码']).currentCode || row['产品编码']);
+  const excludedKeys = new Set(
+    excluded.map((row) => JSON.stringify([canonicalBaseName(row.base), row.code])),
+  );
+  const included = (base, code) =>
+    !excludedKeys.has(JSON.stringify([canonicalBaseName(base), code]));
+  const excludedCodes = new Set(excluded.map((row) => row.code));
+  const includedCodes = new Set(
+    sourceRows.filter((row) => included(row.base, row.code)).map((row) => row.code),
+  );
+  const scopeIssues = [];
+  const scopeRows = (rows, source, month, field) =>
+    rows.flatMap((row) => {
+      const matched = matchProduct(row['产品编码'], row['基地']);
+      const code = matched.currentCode || row['产品编码'];
+      if (row['基地']) return included(row['基地'], code) ? [row] : [];
+      const products = productMappings;
+      const possible = matched.currentCode
+        ? [matched.currentCode]
+        : products
+            .filter(
+              (product) =>
+                (product['老品编码'] || product.replacement_material_code) === row['产品编码'],
+            )
+            .map((product) => product['产品编码'] || product.material_code);
+      const codes = possible.length ? possible : [code];
+      if (!codes.some((code) => excludedCodes.has(code))) return [row];
+      if (!codes.some((code) => includedCodes.has(code))) return [];
+      const missing = [
+        `${source} ${month} ${row['产品编码']} 缺基地，不能按本次参与范围拆分全国SKU数量`,
+      ];
+      const categories = matched.category
+        ? [matched.category]
+        : [
+            ...new Set(
+              products
+                .filter((product) => codes.includes(product['产品编码'] || product.material_code))
+                .map((product) => product['大类'] || product.sub_category)
+                .filter(Boolean),
+            ),
+          ];
+      for (const category of categories)
+        scopeIssues.push({
+          base: '',
+          code: row['产品编码'],
+          category,
+          month,
+          name: row['产品名称'] ?? '',
+          source,
+          missing,
+          missingFields: ['base'],
+        });
+      return [
+        {
+          ...row,
+          [field]: null,
+          缺项原因: [...(row['缺项原因'] ? [row['缺项原因']] : []), ...missing].join('；'),
+        },
+      ];
+    });
   const sourceChecks = ready(draft.sourceChecksRead, draft.month) ? draft.sourceChecks : null;
-  const scopedChecks = sourceChecks ? {
-    ...sourceChecks,
-    periods: sourceChecks.periods.map((period) => ({
-      ...period,
-      history: { ...period.history, rows: period.history.rows.filter(includeSource) },
-      report: { ...period.report, rows: period.report.rows.filter(includeSource) },
-    })),
-  } : null;
+  const scopedChecks = sourceChecks
+    ? {
+        ...sourceChecks,
+        periods: sourceChecks.periods.map((period) => ({
+          ...period,
+          history: {
+            ...period.history,
+            rows: scopeRows(period.history.rows, 'BI实绩', period.month, '数量'),
+          },
+          report: {
+            ...period.report,
+            rows: scopeRows(period.report.rows, '计划量', period.month, '计划数量'),
+          },
+        })),
+      }
+    : null;
   const checks = sourceCheckRows(
     scopedChecks,
-    ['loading', 'failed'].includes(draft.productsRead?.status)
-      ? []
-      : (draft.products ?? draft.productRaw),
+    ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : productMappings,
   );
   const historical = ready(draft.historicalIndicatorsRead, draft.month)
     ? draft.historicalIndicators.periods.flatMap((period) => (period.error ? [] : period.rows))
@@ -94,7 +177,12 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
     annualGroups.set(key, rows);
   }
   const reportColumn = draft.pull === 'monthly' ? '月初数量' : '纠偏数量';
-  const report = sourceDimensions(draft.report ?? [], draft.products ?? []).filter(includeSource);
+  const report = scopeRows(
+    sourceDimensions(draft.report ?? [], draft.products ?? []),
+    '销售提报',
+    draft.month,
+    reportColumn,
+  );
   const total = (rows, value) => {
     const values = rows.map(value);
     return values.length && values.every((value) => value !== null)
@@ -119,7 +207,11 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
       category,
       quantity: shipmentReady
         ? total(
-            sourceRows.filter((row) => (row.category || matchProduct(row.code).category) === category && included(row.base, row.code)),
+            sourceRows.filter(
+              (row) =>
+                (row.category || matchProduct(row.code, row.base).category) === category &&
+                included(row.base, row.code),
+            ),
             (row) => number(row.fin),
           )
         : null,
@@ -150,9 +242,26 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
     checks: checks.rows.map((row) => ({
       month: row.month,
       category: row.category,
-      actual: row.actual.quantity,
-      plan: row.plan.quantity,
-      complete: !row.issues.length,
+      actual: scopeIssues.some(
+        (issue) =>
+          issue.category === row.category && issue.month === row.month && issue.source === 'BI实绩',
+      )
+        ? null
+        : row.actual.quantity,
+      plan: scopeIssues.some(
+        (issue) =>
+          issue.category === row.category && issue.month === row.month && issue.source === '计划量',
+      )
+        ? null
+        : row.plan.quantity,
+      complete:
+        !row.issues.length &&
+        !scopeIssues.some(
+          (issue) =>
+            issue.category === row.category &&
+            issue.month === row.month &&
+            issue.source !== '销售提报',
+        ),
     })),
     annual: [...annualGroups.values()].map((rows) => ({
       month: rows[0]['月份'],
@@ -163,16 +272,20 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
     })),
   });
   const coverage = checks.categories.map((category) => {
-    const rows = sourceRows.filter((row) => (row.category || matchProduct(row.code).category) === category);
+    const rows = sourceRows.filter(
+      (row) => (row.category || matchProduct(row.code, row.base).category) === category,
+    );
     const omitted = excluded.filter((row) => row.category === category).length;
     return { category, included: rows.length - omitted, excluded: omitted };
   });
   return {
     ...result,
-    shipmentScope: { ready: shipmentReady, excluded, coverage },
+    shipmentScope: { ready: shipmentReady, excluded, coverage, issues: scopeIssues },
     rows: result.rows.map((row) => ({
       ...row,
-      coverage: coverage.find((entry) => entry.category === row.category)?.excluded ? 'partial' : 'complete',
+      coverage: coverage.find((entry) => entry.category === row.category)?.excluded
+        ? 'partial'
+        : 'complete',
     })),
   };
 }

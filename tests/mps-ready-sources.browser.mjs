@@ -917,6 +917,63 @@ test('missing current shipment keeps demand pending and exports the missing sour
   assert.doesNotMatch(csv, /NaN|Infinity/);
 });
 
+test('待定单品异常CSV和四个月部分需求沿公开页面传到后续拆分', async (t) => {
+  const { page, frame } = await mpsPage(t, config, (query) => {
+    const result = fixture(query);
+    if (query.queryId === 'annual-pool.detail') {
+      result.rows.push(
+        record('annual-pool.detail', {
+          belong_base: '全国',
+          sub_category: '汤圆',
+          stat_month: '2027-02',
+          source_rows: 1,
+          missing_qty: 0,
+          duplicate_rows: 0,
+          demand_qty: 400,
+        }),
+      );
+      result.totalRowCount = result.rows.length;
+    }
+    if (query.queryId === 'annual-pool.count') result.rows[0].total = 4;
+    return result;
+  });
+  await version(frame, '2026-11');
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await frame.getByLabel('数据截止日').fill('2026-10-31');
+  await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
+    name: '部分待定.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-10,郑州,A,产品A,汤圆,系列甲,G,100,0,0,1,100,100,0\n2026-10,郑州,B,产品B,汤圆,系列甲,G,10,,0,1,100,100,0',
+    ),
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  const notice = frame.getByRole('region', { name: '待定单品异常', exact: true });
+  await expect(notice).toContainText('参与1条，排除1条');
+  const summary = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
+  await expect(summary).not.toContainText('待补');
+  await expect(summary).toContainText('部分可计算');
+  const waiting = page.waitForEvent('download');
+  await notice.getByRole('button', { name: '下载待定单品异常CSV', exact: true }).click();
+  const csv = await mpsDownloadText(await (await waiting).path());
+  assert.match(csv, /产品B/);
+  assert.match(csv, /已备/);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await expect(frame.getByRole('region', { name: '待定单品异常', exact: true })).toContainText(
+    '部分可计算',
+  );
+  const downstream = page.waitForEvent('download');
+  await frame.getByRole('button', { name: '下载需求拆分', exact: true }).click();
+  const workbook = XLSX.read(await readFile(await (await downstream).path()), { type: 'buffer' });
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+  const details = rows.filter((row) => row['产品编码']);
+  assert.ok(details.length > 0);
+  assert.ok(details.every((row) => row['产品编码'] === 'A'));
+  assert.ok(
+    rows.filter((row) => row['粒度'] === '大类').every((row) => /部分/.test(row['计算范围'])),
+  );
+});
+
 test('历史占比读取上一完整财年，预览列出当前物料组和全年数量并支持未对应明细', async (t) => {
   const { frame, calls } = await mpsPage(t, config, fixture);
   await version(frame, '2026-11');

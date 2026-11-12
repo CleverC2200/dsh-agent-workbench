@@ -83,6 +83,8 @@ export function planContext(plan, visible, { base, month }) {
     (row) => (!base || row.from === base || row.to === base) && (!month || row.month === month),
   );
   return {
+    scopeStatus: plan.partial ? 'partial' : 'in-scope',
+    excludedShipmentCount: plan.excludedShipments?.length ?? 0,
     summary: plan.summary,
     sources: plan.sources,
     rows: plan.rows
@@ -309,17 +311,21 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             ? '尚未评估'
             : stale
               ? '输入已变化，需重新评估'
-              : plan.status === 'complete'
-                ? '已完成求解'
-                : plan.summary.evaluatedRows
-                  ? '部分可评估，缺项已单列'
-                  : plan.summary.totalRows
-                    ? '计算已完成，排产缺项待人工补齐'
-                    : '缺需求单品范围，尚未生成排产';
+              : plan.partial && plan.status === 'complete'
+                ? '参与范围内已完成求解，待定单品仍需补齐'
+                : plan.status === 'complete'
+                  ? '已完成求解'
+                  : plan.summary.evaluatedRows
+                    ? '部分可评估，缺项已单列'
+                    : plan.summary.totalRows
+                      ? '计算已完成，排产缺项待人工补齐'
+                      : '缺需求单品范围，尚未生成排产';
     const exportPlan = () => {
       if (!active) return;
       const rows = reportRows.map((row) => ({
         评估版本: draft.name,
+        计算范围: plan.partial ? '部分可计算，待定单品已排除' : '当前参与范围',
+        排除单品记录数: plan.excludedShipments?.length ?? 0,
         结果时间: stamp,
         月份: row.month,
         基地: row.base,
@@ -360,6 +366,8 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         `${draft.month}-${step === 'report' ? '产销存结果' : '求解结果'}.csv`,
         [
           '评估版本',
+          '计算范围',
+          '排除单品记录数',
           '结果时间',
           '月份',
           '基地',
@@ -637,9 +645,11 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             'data-state':
               !plan || stale || error || !plan.summary.evaluatedRows
                 ? 'pending'
-                : plan.status === 'complete'
-                  ? 'complete'
-                  : 'partial',
+                : plan.partial
+                  ? 'partial'
+                  : plan.status === 'complete'
+                    ? 'complete'
+                    : 'partial',
           },
           h(
             'div',

@@ -810,6 +810,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           return {
             评估版本: draft.name,
             评估月份: draft.month,
+            计算范围: result.partial ? '部分可计算，待定单品已排除' : '当前参与范围',
             相对月份: `M+${result.months.indexOf(row.month) + 1}`,
             粒度: row.month === result.months[3] ? 'M+4大类，仅供库存参考' : '大类',
             月份: row.month,
@@ -819,8 +820,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
             大类调整状态: row.adjusted ? '人工调整' : '系统值',
             本月预估发货: compare?.shipment.quantity,
             本月预估发货已知小计: compare?.shipment.knownQuantity,
-            本月预估发货完整性:
-              compare?.shipment.quantity != null
+            本月预估发货完整性: compare?.shipment.excluded
+              ? '当前参与范围，另有单品已排除'
+              : compare?.shipment.quantity != null
                 ? '完整'
                 : compare?.shipment.knownQuantity != null
                   ? '已知小计'
@@ -865,6 +867,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
             评估版本: draft.name,
             评估月份: draft.month,
             粒度: '全版本汇总，需求推导参考',
+            计算范围: result.partial ? '部分可计算，完整范围总量未知' : '当前参与范围',
             已知生产吨数小计: result.summary.knownRequiredProductionTons,
             完整生产吨数: result.summary.requiredProductionTons,
             已评估行数: result.summary.evaluatedRows,
@@ -1426,7 +1429,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           },
           '产品池全国覆盖尚未取得实际证明，仅报告范围内结果',
         ),
-      h(ShipmentScopeNotice, { scope: result.categoryComputation.shipmentScope, month: draft.month }),
+      h(ShipmentScopeNotice, {
+        scope: result.categoryComputation.shipmentScope,
+        month: draft.month,
+      }),
       step === 'process'
         ? h(
             react.Fragment,

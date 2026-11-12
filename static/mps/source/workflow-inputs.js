@@ -35,7 +35,8 @@ function productHistoryMappings(products, raw) {
     const matching = (sources.get(product.code) ?? []).filter(
       (row) => text(row.replacement_material_code) === product.historyCode,
     );
-    if (!matching.length) return [product];
+    if (!matching.length)
+      return [{ ...product, ...(sources.has(product.code) ? { historyFactor: null } : {}) }];
     const byBase = new Map();
     for (const row of matching) {
       const base = canonicalBaseName(row.target_base);
@@ -123,8 +124,11 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
               ) !== 1
                 ? null
                 : number(row['当前维度计划量']),
-          })).filter(includedShipment)
-      : availableQuantity('report', reportColumn).filter((row) => row.month === draft.month && includedShipment(row));
+          }))
+          .filter(includedShipment)
+      : availableQuantity('report', reportColumn).filter(
+          (row) => row.month === draft.month && includedShipment(row),
+        );
   const annualIssues = () => {
     const period = previousFiscalYear(draft.month);
     const data = draft.historyAnnual?.periods?.find(
@@ -140,20 +144,22 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
           : []),
     ];
   };
-  const history = months.flatMap((month) => {
-    const period = previousFiscalYear(draft.month);
-    const data = draft.historyAnnual?.periods?.find(
-      (entry) => entry.start === period.start && entry.end === period.end,
-    );
-    const issues = annualIssues();
-    return (data?.rows ?? []).map((row) => ({
-      month,
-      base: text(row['基地']),
-      code: text(row['产品编码']),
-      category: text(row['大类']),
-      quantity: issues.length ? null : number(row['数量']),
-    }));
-  }).filter(includedShipment);
+  const history = months
+    .flatMap((month) => {
+      const period = previousFiscalYear(draft.month);
+      const data = draft.historyAnnual?.periods?.find(
+        (entry) => entry.start === period.start && entry.end === period.end,
+      );
+      const issues = annualIssues();
+      return (data?.rows ?? []).map((row) => ({
+        month,
+        base: text(row['基地']),
+        code: text(row['产品编码']),
+        category: text(row['大类']),
+        quantity: issues.length ? null : number(row['数量']),
+      }));
+    })
+    .filter(includedShipment);
   const relationSources =
     relations && (!relations.month || relations.month === draft.month) ? relations.sources : null;
   const capacities = (relationSources?.sku_capacity ?? []).map((row) => ({
@@ -373,6 +379,13 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   result.categoryComputation = categoryComputation;
   result.excludedShipments = excludedShipments;
   result.partial = excludedShipments.length > 0;
+  result.scopeStatus = result.partial ? 'partial' : 'in-scope';
+  result.summary.scopeStatus = result.scopeStatus;
+  result.summary.excludedShipmentCount = excludedShipments.length;
+  if (result.partial) {
+    result.summary.requiredProductionTons = null;
+    result.summary.missing.push('待定单品已排除，仅计算当前参与范围，完整范围总量未知');
+  }
   const forecast = sourceDimensions(draft.forecast ?? [], draft.products ?? []);
   const shipment = validShipment
     ? sourceDimensions(
@@ -397,25 +410,39 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   };
   result.comparisonSources = {
     historyPeriod: previousFiscalYear(draft.month),
-    shipment,
-    forecast: forecast.map((row) => ({
-      ...row,
-      数量: sourceIssues(draft, 'forecast', row['月份']).length ? null : row['数量'],
-    })),
+    shipment: shipment.filter((row) =>
+      includedShipment({ base: row['基地'], code: row['产品编码'] }),
+    ),
+    forecast: forecast
+      .filter((row) => includedShipment({ base: row['基地'], code: row['产品编码'] }))
+      .map((row) => ({
+        ...row,
+        数量: sourceIssues(draft, 'forecast', row['月份']).length ? null : row['数量'],
+      })),
   };
   result.categoryComparisons = [...new Set(result.categoryRows.map((row) => row.category))].map(
     (category) => ({
       category,
       shipment: summarize(
-        shipment.filter((row) => row['大类'] === category),
+        shipment.filter(
+          (row) =>
+            row['大类'] === category &&
+            includedShipment({ base: row['基地'], code: row['产品编码'] }),
+        ),
         'fin',
         validShipment ? [] : ['第二步同版预估发货尚未就绪'],
       ),
+      excluded: excludedShipments.filter((row) => row.category === category).length,
       forecast: Object.fromEntries(
         months.slice(0, 2).map((month) => [
           month,
           summarize(
-            forecast.filter((row) => row['月份'] === month && row['大类'] === category),
+            forecast.filter(
+              (row) =>
+                row['月份'] === month &&
+                row['大类'] === category &&
+                includedShipment({ base: row['基地'], code: row['产品编码'] }),
+            ),
             '数量',
             sourceIssues(draft, 'forecast', month),
           ),
@@ -423,6 +450,9 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       ),
     }),
   );
+  result.categoryComparisons.forEach((row) => {
+    row.shipment.excluded = row.excluded;
+  });
   if (evaluation) {
     const planSources = buildPlanSources(draft, relations, evaluation.weights, [
       ...workflowInput.productMonths,
@@ -434,7 +464,10 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     };
     result.plan = solveMpsPlan(planInput);
     result.plan.partial = result.partial;
+    result.plan.scopeStatus = result.scopeStatus;
     result.plan.excludedShipments = excludedShipments;
+    result.plan.summary.scopeStatus = result.scopeStatus;
+    result.plan.summary.excludedShipmentCount = excludedShipments.length;
     const annualWeights = resolveWeightPairs(
       draft.unitWeights ?? [],
       evaluation.annual?.rows ?? [],
@@ -453,6 +486,8 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         ? { ...evaluation.annual, unitWeightGaps: annualWeights.issues }
         : undefined,
     );
+    result.plan.capacityReport.scopeStatus = result.scopeStatus;
+    result.plan.capacityReport.excludedShipmentCount = excludedShipments.length;
     result.plan.capacityLineDetails = planSources.resources.map((resource) => {
       const source = (relations?.sources?.tunnels ?? []).find(
         (row) =>

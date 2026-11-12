@@ -35,7 +35,7 @@ const { buildMpsWorkflow } = await import(
   'data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].text).toString('base64')
 );
 
-test('待定发货单品隔离后，同范围的基数、提报和历史继续计算并传入后续需求', () => {
+function partialDemandFixture() {
   const source = draft();
   source.month = '2026-11';
   source.shipment = { cutoff: '2026-10-31' };
@@ -45,37 +45,76 @@ test('待定发货单品隔离后，同范围的基数、提报和历史继续�
   source.sourceChecks = {
     periods: ['2026-07', '2026-08', '2026-09'].map((month) => ({
       month,
-      history: { rows: [{ 基地: '甲', 产品编码: 'A', 数量: 100 }, { 基地: '乙', 产品编码: 'B', 数量: 1000 }] },
-      report: { rows: [{ 基地: '甲', 产品编码: 'A', 计划数量: 125 }, { 基地: '乙', 产品编码: 'B', 计划数量: 1000 }] },
+      history: {
+        rows: [
+          { 基地: '甲', 产品编码: 'A', 数量: 100 },
+          { 基地: '乙', 产品编码: 'B', 数量: 1000 },
+        ],
+      },
+      report: {
+        rows: [
+          { 基地: '甲', 产品编码: 'A', 计划数量: 125 },
+          { 基地: '乙', 产品编码: 'B', 计划数量: 1000 },
+        ],
+      },
     })),
   };
   source.historicalIndicatorsRead = { status: 'ready', month: source.month };
   source.historicalIndicators = {
     periods: [2023, 2024, 2025].map((year) => ({
       rows: [7, 8, 9, 10, 11, 12, 13, 14].map((month) => ({
-        维度类型: '基地+大类', 基地: '甲', 大类: '点心', 维度值: '点心',
+        维度类型: '基地+大类',
+        基地: '甲',
+        大类: '点心',
+        维度值: '点心',
         月份: `${year + Math.floor((month - 1) / 12)}-${String(((month - 1) % 12) + 1).padStart(2, '0')}`,
-        月发货数量: 100, 上年同期发货数量: 100, 上月发货数量: 100,
-        全国维度财年发货数量: 1200, 财年: String(year),
+        月发货数量: 100,
+        上年同期发货数量: 100,
+        上月发货数量: 100,
+        全国维度财年发货数量: 1200,
+        财年: String(year),
       })),
     })),
-    annual: { rows: ['2026-11', '2026-12', '2027-01', '2027-02'].map((month) => ({ 月份: month, 大类: '点心', 基地: '全国', 数量: 100 })) },
+    annual: {
+      rows: ['2026-11', '2026-12', '2027-01', '2027-02'].map((month) => ({
+        月份: month,
+        大类: '点心',
+        基地: '全国',
+        数量: 100,
+      })),
+    },
   };
   const snapshot = {
-    draftId: source.id, month: source.month, shipmentMonth: '2026-10', cutoff: '2026-10-31',
-    status: 'partial', sourceKind: 'business', source: '真实来源测试替身',
+    draftId: source.id,
+    month: source.month,
+    shipmentMonth: '2026-10',
+    cutoff: '2026-10-31',
+    status: 'partial',
+    sourceKind: 'business',
+    source: '真实来源测试替身',
     rows: [
       { base: '甲', code: 'A', category: '点心', fin: 100, end: 0 },
       { base: '乙', code: 'B', category: '点心', fin: null, end: null, missingFields: ['prepped'] },
     ],
   };
+  return { source, snapshot };
+}
+
+test('待定发货单品隔离后，同范围的基数、提报和历史继续计算并传入后续需求', () => {
+  const { source, snapshot } = partialDemandFixture();
   const untouched = structuredClone(source);
   const result = buildMpsWorkflow(source, null, snapshot);
-  assert.deepEqual(result.categoryComputation.rows.map((row) => row.quantity), [110, 100, 100, 100]);
+  assert.deepEqual(
+    result.categoryComputation.rows.map((row) => row.quantity),
+    [110, 100, 100, 100],
+  );
   assert.equal(result.categoryComputation.shipmentScope.excluded.length, 1);
   assert.equal(result.categoryComputation.rows[0].coverage, 'partial');
   assert.equal(result.categoryComputation.bases[0].actual, 300);
-  assert.equal(result.rows.find((row) => row.month === source.month && row.code === 'A').demand, 110);
+  assert.equal(
+    result.rows.find((row) => row.month === source.month && row.code === 'A').demand,
+    110,
+  );
   assert.ok(result.rows.every((row) => row.code !== 'B'));
   assert.equal(result.excludedShipments[0].code, 'B');
   assert.deepEqual(source, untouched);
@@ -83,6 +122,76 @@ test('待定发货单品隔离后，同范围的基数、提报和历史继续�
   assert.equal(buildMpsWorkflow(source, null, snapshot).categoryComputation.rows[0].shipment, 0);
   snapshot.draftId = 'other-version';
   assert.equal(buildMpsWorkflow(source, null, snapshot).categoryComputation.rows[0].shipment, null);
+});
+
+test('partial 全国SKU来源不可按基地拆分时保持相关系数未知，全待定不生成零需求', () => {
+  const { source, snapshot } = partialDemandFixture();
+  snapshot.rows.push({ base: '甲', code: 'B', category: '点心', fin: 10, end: 0 });
+  for (const period of source.sourceChecks.periods)
+    for (const part of ['history', 'report'])
+      period[part].rows.forEach((row) => {
+        row['基地'] = '';
+      });
+  const result = buildMpsWorkflow(source, null, snapshot).categoryComputation;
+  assert.equal(result.bases[0].actual, null);
+  assert.equal(result.bases[0].plan, null);
+  assert.ok(result.shipmentScope.issues.some((issue) => issue.missing.join().includes('缺基地')));
+  assert.equal(source.sourceChecks.periods[0].history.rows[1]['数量'], 1000);
+  snapshot.rows.forEach((row) => {
+    row.fin = null;
+  });
+  assert.ok(
+    buildMpsWorkflow(source, null, snapshot).categoryComputation.rows.every(
+      (row) => row.quantity === null,
+    ),
+  );
+});
+
+test('新版源老品与保留人工关系不一致时，历史参考系数未知而非一', () => {
+  const source = draft();
+  source.products[0]['老品编码'] = 'EDITED-OLD';
+  source.productRaw = [
+    {
+      material_code: 'A',
+      target_base: '甲',
+      replacement_material_code: 'SOURCE-OLD',
+      replace_num: null,
+    },
+  ];
+  source.historyAnnual.periods[0].rows.push({ 基地: '甲', 产品编码: 'EDITED-OLD', 数量: 100 });
+  const row = buildMpsWorkflow(source).rows.find(
+    (row) => row.month === source.month && row.code === 'A',
+  );
+  assert.equal(row.historyReferenceQuantity, 100);
+  assert.equal(row.historyQuantity, null);
+  assert.equal(source.products[0]['老品编码'], 'EDITED-OLD');
+});
+
+test('部分范围求解和对照显式保留范围，完整总量未知而已知小计不丢失', () => {
+  const sample = workflowPerformanceInput(2);
+  sample.draft.shipment = { cutoff: '2026-11-30' };
+  Object.assign(sample.shipment, {
+    cutoff: '2026-11-30',
+    sourceKind: 'business',
+    status: 'partial',
+  });
+  sample.shipment.rows.forEach((row, index) =>
+    Object.assign(row, { fin: index ? null : 10, category: '点心' }),
+  );
+  const result = buildMpsWorkflow(
+    sample.draft,
+    sample.relations,
+    sample.shipment,
+    sample.evaluation,
+  );
+  const context = planContext(result.plan, result.plan.rows, { base: '', month: '' });
+  assert.equal(context.scopeStatus, 'partial');
+  assert.equal(context.excludedShipmentCount, 1);
+  assert.equal(result.summary.requiredProductionTons, null);
+  assert.notEqual(result.summary.knownRequiredProductionTons, null);
+  assert.equal(result.categoryComparisons[0].shipment.count, 1);
+  assert.equal(result.categoryComparisons[0].shipment.excluded, 1);
+  assert.equal(result.plan.capacityReport.scopeStatus, 'partial');
 });
 
 test('ODM占位产能不进入内部资源，明确收货标签形成外部计划，普通SKU继续排产', async () => {

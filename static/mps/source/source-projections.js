@@ -1,3 +1,5 @@
+import { canonicalBaseName } from './relations.js';
+
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const values = (rows, field) => [...new Set(rows.map((row) => text(row[field])).filter(Boolean))];
 const key = (code, group) => JSON.stringify([code, group]);
@@ -191,7 +193,43 @@ function aggregate(rows, column, knownColumn) {
   };
 }
 
+export function productRows(rows) {
+  const products = rows.map((row) => ({
+    基地: '',
+    产品编码: text(row.material_code),
+    产品名称: text(row.material_name),
+    大类: text(row.sub_category),
+    系列: text(row.series),
+    物料组: text(row.product_item),
+    物料组名称: text(row.product_item_name),
+    老品编码: text(row.replacement_material_code),
+    老品名称: text(row.replacement_product),
+  }));
+  return [...new Map(products.map((row) => [JSON.stringify(row), row])).values()];
+}
+
+export function sourceProductMappings(products, raw = []) {
+  if (!products) return raw;
+  return products.flatMap((product) => {
+    if (text(product['基地'])) return [product];
+    const code = text(product['产品编码']);
+    const sources = raw.filter((row) => text(row.material_code) === code);
+    const matching = sources.filter(
+      (row) => text(row.replacement_material_code) === text(product['老品编码']),
+    );
+    const bases = [
+      ...new Set(
+        (matching.length ? matching : sources)
+          .map((row) => canonicalBaseName(row.target_base))
+          .filter(Boolean),
+      ),
+    ];
+    return bases.length ? bases.map((base) => ({ ...product, 基地: base })) : [product];
+  });
+}
+
 export function createSourceProductMatcher(rawProducts) {
+  const byBase = new Map();
   const categoriesByCode = new Map();
   const codesByOldCode = new Map();
   for (const product of rawProducts ?? []) {
@@ -207,7 +245,21 @@ export function createSourceProductMatcher(rawProducts) {
       codesByOldCode.set(oldCode, codes);
     }
   }
-  return (sourceCode) => {
+  return (sourceCode, sourceBase = '') => {
+    const base = canonicalBaseName(sourceBase);
+    if (base) {
+      if (!byBase.has(base))
+        byBase.set(
+          base,
+          createSourceProductMatcher(
+            (rawProducts ?? []).filter((row) => {
+              const productBase = canonicalBaseName(row.target_base ?? row['基地']);
+              return !productBase || productBase === base;
+            }),
+          ),
+        );
+      return byBase.get(base)(sourceCode);
+    }
     sourceCode = text(sourceCode);
     const oldCodes = codesByOldCode.get(sourceCode);
     const currentCode = categoriesByCode.has(sourceCode)
@@ -236,7 +288,7 @@ export function sourceCheckRows(checks, rawProducts) {
   const classify = (rows, month, source, error) =>
     rows.flatMap((row) => {
       const sourceCode = text(row['产品编码']);
-      const match = matchProduct(sourceCode);
+      const match = matchProduct(sourceCode, row['基地']);
       const { currentCode, category } = match;
       const mapped = {
         ...row,

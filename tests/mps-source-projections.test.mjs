@@ -5,7 +5,45 @@ import {
   productProjections,
   sourceCheckRows,
   sourceDimensions,
+  createSourceProductMatcher,
+  sourceProductMappings,
+  productRows,
 } from '../static/mps/source/source-projections.js';
+
+test('同一老品按实际基地唯一匹配，缺基地或同基地多义继续未知', () => {
+  const products = [
+    {
+      material_code: 'N1',
+      target_base: '甲',
+      replacement_material_code: 'OLD',
+      sub_category: '汤圆',
+    },
+    {
+      material_code: 'N2',
+      target_base: '乙',
+      replacement_material_code: 'OLD',
+      sub_category: '面点',
+    },
+  ];
+  const match = createSourceProductMatcher(products);
+  assert.equal(match('OLD', '甲').currentCode, 'N1');
+  assert.equal(match('OLD', '乙').currentCode, 'N2');
+  assert.equal(match('OLD', '').currentCode, '');
+  const conflict = createSourceProductMatcher([
+    ...products,
+    { ...products[0], material_code: 'N3' },
+  ]);
+  assert.equal(conflict('OLD', '甲').currentCode, '');
+  assert.equal(conflict('N1', '甲').currentCode, 'N1');
+  const projection = productRows(products);
+  projection[0]['大类'] = '人工分类';
+  const mapped = sourceProductMappings(projection, products);
+  const businessMatch = createSourceProductMatcher(mapped);
+  assert.equal(businessMatch('OLD', '甲').currentCode, 'N1');
+  assert.equal(businessMatch('OLD', '甲').category, '人工分类');
+  assert.equal(businessMatch('OLD', '乙').currentCode, 'N2');
+  assert.equal(projection[0]['基地'], '');
+});
 
 const row = (code, group = 'G') => ({
   基地: '',
