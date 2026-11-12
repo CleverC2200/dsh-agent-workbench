@@ -1,8 +1,40 @@
 import { buildCategoryDemand, categoryDemandMissing } from './category-demand.js';
 import { changeAdjustment } from './local-draft.js';
 
+export function createShipmentScopeNotice(react, { downloadCsv }) {
+  const h = react.createElement;
+  return function ShipmentScopeNotice({ scope, month }) {
+    if (!scope?.excluded.length) return null;
+    const fields = {
+      shipped: '本月已发货', prepped: '已备', unprepped: '未备', daily3: '近三天日均发货量',
+      average: '近30天日均发货', open: '月初库存', inbound: '本月生产入库', remaining: '剩余天数入库',
+    };
+    const rows = scope.excluded.map((row) => ({
+      评估月份: month, 统计基月: row.month, 基地: row.base, 产品编码: row.code,
+      产品名称: row.name, 大类: row.category || '待确认',
+      缺项: row.missing.join('；'),
+      需要补齐的数据: row.missingFields.length ? row.missingFields.map((field) => fields[field] ?? field).join('；') : '有效发货速度或人工整月预估；分类缺失时补齐产品关系',
+      处理说明: '核对源数据后重新同步，或在本地调整中填写已确认值。未补齐前不参与本次大类需求和后续拆分，未补零。',
+      来源: '本月预估发货的同版输入',
+    }));
+    const columns = Object.keys(rows[0]);
+    return h('section', { className: 'dc-card', 'aria-label': '待定单品异常' },
+      h('p', { role: 'status', className: 'dc-card-note' },
+        `部分可计算：${scope.excluded.length}条基地＋单品记录单列异常，其余有效记录继续计算。数量只代表参与范围，不代表完整大类。`),
+      h('p', { className: 'dc-card-note' }, scope.coverage.map((row) => `${row.category}：参与${row.included}条，排除${row.excluded}条`).join('；')),
+      h('button', { onClick: () => downloadCsv(`待定单品异常-${month}.csv`, columns, rows) }, '下载待定单品异常CSV'),
+      h('details', null, h('summary', null, `查看待定单品异常（${rows.length}条）`),
+        h('div', { className: 'dc-table-wrap' }, h('table', { className: 'dc-table' },
+          h('thead', null, h('tr', null, columns.map((column) => h('th', { key: column, scope: 'col' }, column)))),
+          h('tbody', null, rows.slice(0, 50).map((row, index) => h('tr', { key: index }, columns.map((column) => h('td', { key: column }, row[column]))))))),
+        rows.length > 50 && h('p', { className: 'dc-card-note' }, '页面预览前50条，CSV包含全部异常。')),
+    );
+  };
+}
+
 export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
+  const ShipmentScopeNotice = createShipmentScopeNotice(react, { table, downloadCsv });
   const columns = [
     '大类',
     '月份',
@@ -28,6 +60,9 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
     '提报口径',
     '统计基月',
     '本月有效预估发货',
+    '计算范围',
+    '参与单品记录数',
+    '排除单品记录数',
     '计算口径',
     '缺项说明',
   ];
@@ -150,6 +185,9 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
         提报口径: draft.pull === 'monthly' ? '月初' : '纠偏',
         统计基月: row.baseMonth,
         本月有效预估发货: row.shipment ?? '',
+        计算范围: row.coverage === 'partial' ? '部分可计算' : '当前参与范围',
+        参与单品记录数: result.shipmentScope.coverage.find((entry) => entry.category === row.category)?.included ?? 0,
+        排除单品记录数: result.shipmentScope.coverage.find((entry) => entry.category === row.category)?.excluded ?? 0,
         计算口径: row.method,
         系统需求数量: row.systemQuantity ?? '',
         大类预估需求数量: row.quantity ?? '',
@@ -194,6 +232,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
                 row.quantity == null ? '待补' : String(Math.round(row.quantity)),
               ),
           edit && h('small', { className: 'dc-adjusted-mark' }, '已调整'),
+          row.coverage === 'partial' && h('small', { className: 'dc-adjusted-mark' }, '部分可计算'),
         ),
       };
     });
@@ -232,6 +271,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
     return h(
       react.Fragment,
       {},
+      h(ShipmentScopeNotice, { scope: result.shipmentScope, month: draft.month }),
       h(
         'section',
         {

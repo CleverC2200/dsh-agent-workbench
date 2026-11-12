@@ -1,4 +1,5 @@
 import { createBatchEdit } from './batch-edit.js';
+import { createShipmentScopeNotice } from './category-demand-view.js';
 import { createProcessedDemand } from './processed-demand-view.js';
 import {
   createInventoryTargetPanel,
@@ -97,6 +98,7 @@ const sourceText = '①大类需求；②月末结存；③两路占比；④源
 
 export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts, Dialog }) {
   const h = react.createElement;
+  const ShipmentScopeNotice = createShipmentScopeNotice(react, { downloadCsv });
   const { useBatchEdit, Actions, Field } = createBatchEdit(react);
   const NumberInput = ({ batch, label, value, commit, max }) =>
     h(Field, {
@@ -447,6 +449,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         adjustments: draft.adjustments,
         adjustmentIssues: result.adjustmentIssues ?? [],
         excludedCategoryDemand: result.excludedCategoryDemand ?? [],
+        excludedShipments: result.excludedShipments ?? [],
+        partial: result.partial,
         missing: planning ? undefined : result.missing,
         businessSave: 'not-connected',
         plan: currentEvaluation
@@ -675,6 +679,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         ...new Set([
           '评估版本',
           '评估月份',
+          '计算范围',
           '粒度',
           '相对月份',
           ...identityColumns.map(([, label]) => label),
@@ -738,6 +743,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         return {
           评估版本: draft.name,
           评估月份: draft.month,
+          计算范围: result.partial ? '部分可计算，待定单品已单列异常' : '当前参与范围',
           相对月份: `M+${result.months.indexOf(row.month) + 1}`,
           粒度: includeCategory ? '基地×物料组×SKU' : '需求推导产销存参考',
           ...Object.fromEntries(identityColumns.map(([key, label]) => [label, row[key]])),
@@ -1420,6 +1426,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           },
           '产品池全国覆盖尚未取得实际证明，仅报告范围内结果',
         ),
+      h(ShipmentScopeNotice, { scope: result.categoryComputation.shipmentScope, month: draft.month }),
       step === 'process'
         ? h(
             react.Fragment,

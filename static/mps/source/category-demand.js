@@ -1,5 +1,5 @@
 import { computeMpsCategoryDemand } from 'dsh-agent-manage/mps-compute/category-demand';
-import { sourceCheckRows, sourceDimensions } from './source-projections.js';
+import { createSourceProductMatcher, sourceCheckRows, sourceDimensions } from './source-projections.js';
 
 const number = (value) =>
   value === '' || value == null || !Number.isFinite(Number(value)) ? null : Number(value);
@@ -37,8 +37,42 @@ export function categoryDemandMissing(result, row) {
   return missing;
 }
 export function buildCategoryDemand(draft, shipmentSnapshot) {
+  const baseDate = new Date(`${draft.month}-01T00:00:00Z`);
+  baseDate.setUTCMonth(baseDate.getUTCMonth() - 1);
+  const baseMonth = baseDate.toISOString().slice(0, 7);
+  const shipmentReady =
+    shipmentSnapshot?.draftId === draft.id &&
+    shipmentSnapshot.month === draft.month &&
+    shipmentSnapshot.shipmentMonth === baseMonth &&
+    shipmentSnapshot.cutoff ===
+      (draft.shipment?.cutoff ?? draft.shipment?.business?.cutoff ?? '') &&
+    ['business', 'local-file'].includes(shipmentSnapshot.sourceKind) &&
+    ['ok', 'partial', 'local-file'].includes(shipmentSnapshot.status);
+  const matchProduct = createSourceProductMatcher(draft.products ?? draft.productRaw);
+  const sourceRows = shipmentReady ? (shipmentSnapshot.rows ?? []) : [];
+  const excluded = sourceRows.flatMap((row) => {
+    const category = row.category || matchProduct(row.code).category;
+    const missing = [
+      ...(!category ? ['缺可唯一对应的产品大类'] : []),
+      ...(number(row.fin) === null ? ['本月有效预估发货待定'] : []),
+      ...(row.forecastIssue ? [row.forecastIssue] : []),
+    ];
+    return missing.length ? [{ base: row.base, code: row.code, name: row.name ?? '', category, month: baseMonth, missing, missingFields: row.missingFields ?? [] }] : [];
+  });
+  const excludedKeys = new Set(excluded.map((row) => JSON.stringify([row.base, row.code])));
+  const included = (base, code) => !excludedKeys.has(JSON.stringify([base, code]));
+  const includeSource = (row) => included(row['基地'], matchProduct(row['产品编码']).currentCode || row['产品编码']);
+  const sourceChecks = ready(draft.sourceChecksRead, draft.month) ? draft.sourceChecks : null;
+  const scopedChecks = sourceChecks ? {
+    ...sourceChecks,
+    periods: sourceChecks.periods.map((period) => ({
+      ...period,
+      history: { ...period.history, rows: period.history.rows.filter(includeSource) },
+      report: { ...period.report, rows: period.report.rows.filter(includeSource) },
+    })),
+  } : null;
   const checks = sourceCheckRows(
-    ready(draft.sourceChecksRead, draft.month) ? draft.sourceChecks : null,
+    scopedChecks,
     ['loading', 'failed'].includes(draft.productsRead?.status)
       ? []
       : (draft.products ?? draft.productRaw),
@@ -59,19 +93,8 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
     rows.push(row);
     annualGroups.set(key, rows);
   }
-  const baseDate = new Date(`${draft.month}-01T00:00:00Z`);
-  baseDate.setUTCMonth(baseDate.getUTCMonth() - 1);
-  const baseMonth = baseDate.toISOString().slice(0, 7);
-  const shipmentReady =
-    shipmentSnapshot?.draftId === draft.id &&
-    shipmentSnapshot.month === draft.month &&
-    shipmentSnapshot.shipmentMonth === baseMonth &&
-    shipmentSnapshot.cutoff ===
-      (draft.shipment?.cutoff ?? draft.shipment?.business?.cutoff ?? '') &&
-    ['business', 'local-file'].includes(shipmentSnapshot.sourceKind) &&
-    ['ok', 'partial', 'local-file'].includes(shipmentSnapshot.status);
   const reportColumn = draft.pull === 'monthly' ? '月初数量' : '纠偏数量';
-  const report = sourceDimensions(draft.report ?? [], draft.products ?? []);
+  const report = sourceDimensions(draft.report ?? [], draft.products ?? []).filter(includeSource);
   const total = (rows, value) => {
     const values = rows.map(value);
     return values.length && values.every((value) => value !== null)
@@ -86,7 +109,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
       !['loading', 'failed', 'error', 'denied'].includes(read?.status)
     );
   };
-  return computeMpsCategoryDemand({
+  const result = computeMpsCategoryDemand({
     month: draft.month,
     adjustments: draft.adjustments?.categoryDemand,
     pull: draft.pull,
@@ -96,7 +119,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
       category,
       quantity: shipmentReady
         ? total(
-            shipmentSnapshot.rows.filter((row) => row.category === category),
+            sourceRows.filter((row) => (row.category || matchProduct(row.code).category) === category && included(row.base, row.code)),
             (row) => number(row.fin),
           )
         : null,
@@ -139,4 +162,17 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
         : null,
     })),
   });
+  const coverage = checks.categories.map((category) => {
+    const rows = sourceRows.filter((row) => (row.category || matchProduct(row.code).category) === category);
+    const omitted = excluded.filter((row) => row.category === category).length;
+    return { category, included: rows.length - omitted, excluded: omitted };
+  });
+  return {
+    ...result,
+    shipmentScope: { ready: shipmentReady, excluded, coverage },
+    rows: result.rows.map((row) => ({
+      ...row,
+      coverage: coverage.find((entry) => entry.category === row.category)?.excluded ? 'partial' : 'complete',
+    })),
+  };
 }

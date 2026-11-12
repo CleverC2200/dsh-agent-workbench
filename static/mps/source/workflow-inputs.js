@@ -72,6 +72,10 @@ const sourceIssues = (draft, source, month) => {
 
 export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation) {
   const context = { id: draft.id, name: draft.name, month: draft.month };
+  const categoryComputation = buildCategoryDemand(draft, shipmentSnapshot);
+  const excludedShipments = categoryComputation.shipmentScope.excluded;
+  const excludedShipmentKeys = new Set(excludedShipments.map(rowKey));
+  const includedShipment = (row) => !excludedShipmentKeys.has(rowKey(row));
   const reportColumn = draft.pull === 'monthly' ? '月初数量' : '纠偏数量';
   const readQuantity = (rows, column) =>
     (rows ?? []).map((row) => ({
@@ -119,8 +123,8 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
               ) !== 1
                 ? null
                 : number(row['当前维度计划量']),
-          }))
-      : availableQuantity('report', reportColumn).filter((row) => row.month === draft.month);
+          })).filter(includedShipment)
+      : availableQuantity('report', reportColumn).filter((row) => row.month === draft.month && includedShipment(row));
   const annualIssues = () => {
     const period = previousFiscalYear(draft.month);
     const data = draft.historyAnnual?.periods?.find(
@@ -149,7 +153,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       category: text(row['大类']),
       quantity: issues.length ? null : number(row['数量']),
     }));
-  });
+  }).filter(includedShipment);
   const relationSources =
     relations && (!relations.month || relations.month === draft.month) ? relations.sources : null;
   const capacities = (relationSources?.sku_capacity ?? []).map((row) => ({
@@ -270,7 +274,6 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     }
   }
   const productIssues = sourceIssues(draft, 'products');
-  const categoryComputation = buildCategoryDemand(draft, shipmentSnapshot);
   const workflowInput = {
     context,
     inventoryTargets: draft.inventoryTargets ?? [],
@@ -289,7 +292,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
                 : '目标库存来源尚未读取'),
           ],
     products,
-    productMonths: [...productMonths.values()],
+    productMonths: [...productMonths.values()].filter(includedShipment),
     scopeCoverage: 'in-scope',
     categoryDemand: (draft.categoryDemand ?? categoryComputation.rows).map((row) => ({
       month: text(row.month),
@@ -300,7 +303,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         : {}),
     })),
     report,
-    reportRatios,
+    reportRatios: excludedShipments.length ? [] : reportRatios,
     history,
     sourceIssues: {
       report: productIssues,
@@ -368,6 +371,8 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   };
   const result = computeMpsWorkflow(workflowInput);
   result.categoryComputation = categoryComputation;
+  result.excludedShipments = excludedShipments;
+  result.partial = excludedShipments.length > 0;
   const forecast = sourceDimensions(draft.forecast ?? [], draft.products ?? []);
   const shipment = validShipment
     ? sourceDimensions(
@@ -420,7 +425,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   );
   if (evaluation) {
     const planSources = buildPlanSources(draft, relations, evaluation.weights, [
-      ...productMonths.values(),
+      ...workflowInput.productMonths,
     ]);
     const planInput = {
       ...workflowInput,
@@ -428,6 +433,8 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       planSourceIssues: [...planSources.planSourceIssues, ...(evaluation.sourceIssues ?? [])],
     };
     result.plan = solveMpsPlan(planInput);
+    result.plan.partial = result.partial;
+    result.plan.excludedShipments = excludedShipments;
     const annualWeights = resolveWeightPairs(
       draft.unitWeights ?? [],
       evaluation.annual?.rows ?? [],
