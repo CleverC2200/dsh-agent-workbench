@@ -75,7 +75,10 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
         category: '点心',
         quantity: 12000,
       })),
-      resources: [{ id: 'R', base: '甲', kind: 'tunnel', name: '共享产线', dailyTons: 1 }],
+      resources: [
+        { id: 'R', base: '甲', kind: 'tunnel', name: '共享产线', dailyTons: 1 },
+        { id: 'F', base: '甲', kind: 'forming', name: '批准成型机', dailyTons: 100 },
+      ],
       resourceAssignments: Array.from({ length: 200 }, (_, index) => ({
         base: '甲',
         code: String(index),
@@ -103,6 +106,17 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
       })),
       adjustForecast() {},
     };
+    draft.resourceAssignments.push(
+      ...['2026-12', '2027-01', '2027-02'].flatMap((month) =>
+        draft.products.map((row) => ({
+          month,
+          base: '甲',
+          code: row.产品编码,
+          resourceId: 'F',
+          share: 1,
+        })),
+      ),
+    );
     draft.resourceAssignments = draft.resourceAssignments.filter((row) => row.code !== '0');
     const relations = {
       sources: {

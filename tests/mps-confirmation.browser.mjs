@@ -427,3 +427,16 @@ test('MPS preview keeps its title and close button visible while long content sc
   await close.click();
   await expect(dialog).toHaveCount(0);
 });
+
+test('核对底稿按当前计算结果标识待补输入，不再固定待业务规则', async (t) => {
+  const { page, frame } = await confirmation(t);
+  await frame.getByRole('button', { name: '页面说明', exact: true }).click();
+  const downloading = page.waitForEvent('download');
+  await frame.getByRole('button', { name: '导出核对底稿', exact: true }).click();
+  const text = await mpsDownloadText(await (await downloading).path());
+  const exported = JSON.parse(text);
+  assert.equal(exported.businessSave, 'not-connected');
+  assert.equal(exported.calculation.status, 'pending-inputs');
+  assert.equal(exported.calculation.calculatedRows, 0);
+  assert.ok(exported.calculation.pendingRows >= 0);
+});

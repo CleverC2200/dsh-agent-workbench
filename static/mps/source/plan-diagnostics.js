@@ -252,6 +252,14 @@ export function attachPlanReport(
           false,
         );
     }
+    if (row.planMissing.includes('缺有效成型机台账、月度批准分配或生产日历'))
+      add(
+        '缺成型机配置',
+        '隧道承接已取得，但供给基地缺有效成型机台账、当月批准分配或生产日历，不能认定完整排产',
+        '当前评估版本约束与配置',
+        'resources.id / base / kind=forming / dailyTons；resourceAssignments.month / base / code / resourceId / share；productionDays',
+        '在实际生产基地维护真实成型机及日产吨数，为该SKU当月配置成型机分配比例并合计为1，核对生产天数后重新评估；禁止用隧道产能代替成型机',
+      );
     const supplyMissing = row.planMissing.includes(genericSupplyMissing);
     if (supplyMissing && !raw)
       add(
