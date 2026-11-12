@@ -74,7 +74,7 @@ export const actionErrorText = (t: TFunction, error: SalesPlanActionError): stri
   if (!isBackendHttpError(cause)) return fallback;
   reportSalesPlanError('sales-plan-action', cause);
   const backendReason = cause.backendMessage.replace(/^GEA_HTTP_\d{3}[：:]\s*/u, '').trim();
-  if (backendReason) {
+  if (backendReason && !/^GEA_HTTP_\d{3}$/u.test(backendReason)) {
     return backendReason;
   }
   if (cause.status >= 500) {
@@ -150,7 +150,6 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   onRefresh: () => void;
   /** 动作请求失败（含并发冲突、权限被拒）都会回调，用来收掉调用方的选中态。 */
   onAttemptFailed?: () => void;
-  onFailed?: () => void;
   onClose: () => void;
   /** 对话下发的“退回理由”草稿（等价于人工在理由框里输入）。 */
   remarkPatch?: { at: number; remark: string };
@@ -172,7 +171,6 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   onSucceeded,
   onRefresh,
   onAttemptFailed,
-  onFailed,
   onClose,
   remarkPatch,
   submitRequest,
@@ -279,8 +277,11 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   const [adjustmentSkus, setAdjustmentSkus] = useState<AdjustmentSkuState>({ status: 'idle' });
   const action = useSalesPlanAction({ client });
   const loading = action.state.status === 'loading';
-  const canClose = !loading;
+  const canClose =
+    !loading &&
+    !(directApproval && action.state.status === 'error' && action.state.error.retrySameIntent);
   const intentLocked =
+    directApproval ||
     loading ||
     action.state.status === 'success' ||
     (action.state.status === 'error' && action.state.error.retrySameIntent);
@@ -473,7 +474,6 @@ const RegionalApprovalLiveActionDialog: React.FC<{
         setRefreshFailed(false);
       } catch {
         setRefreshFailed(true);
-        if (directApproval) onFailed?.();
       }
     } catch (error) {
       // 权限被拒时保留勾选：这一行会被标记成本轮不可操作，留着勾选才能让灰按钮上的
@@ -484,7 +484,6 @@ const RegionalApprovalLiveActionDialog: React.FC<{
       } else {
         onAttemptFailed?.();
       }
-      if (directApproval) onFailed?.();
     }
   };
 
@@ -542,22 +541,12 @@ const RegionalApprovalLiveActionDialog: React.FC<{
       return;
     if (draftError) {
       directSubmissionStarted.current = true;
-      onFailed?.();
       return;
     }
     if (invalid) return;
     directSubmissionStarted.current = true;
     submit();
-  }, [
-    action.state.status,
-    directApproval,
-    draftError,
-    invalid,
-    loading,
-    onFailed,
-    submit,
-    visible,
-  ]);
+  }, [action.state.status, directApproval, draftError, invalid, loading, submit, visible]);
 
   const retry = () => {
     if (loading || action.state.status !== 'error' || !action.state.error.retrySameIntent) return;
@@ -573,7 +562,8 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     onClose();
   };
 
-  if (directApproval) return null;
+  if (directApproval && action.state.status !== 'error' && !draftError && !refreshFailed)
+    return null;
 
   /*
    * 退回与通过/保存共用 requestClose。两条渲染分支都必须包含未保存调整确认框，
@@ -711,17 +701,26 @@ const RegionalApprovalLiveActionDialog: React.FC<{
               ) : (
                 <Button
                   type="primary"
-                  disabled={invalid || loading || action.state.status === 'success'}
+                  disabled={
+                    invalid ||
+                    loading ||
+                    action.state.status === 'success' ||
+                    (directApproval &&
+                      action.state.status === 'error' &&
+                      ['permission', 'authentication'].includes(action.state.error.kind))
+                  }
                   onClick={submit}
                 >
                   {t(
                     action.state.status === 'success'
                       ? 'common.assistantSurface.regionalApproval.liveAction.completed'
-                      : kind === 'SAVE'
-                        ? 'common.assistantSurface.regionalApproval.liveAction.confirmSave'
-                        : kind === 'APPROVE'
-                          ? 'common.assistantSurface.regionalApproval.liveAction.confirmApprove'
-                          : 'common.assistantSurface.regionalApproval.liveAction.confirmReject',
+                      : directApproval && action.state.status === 'error'
+                        ? 'common.assistantSurface.regionalApproval.liveAction.submitAgain'
+                        : kind === 'SAVE'
+                          ? 'common.assistantSurface.regionalApproval.liveAction.confirmSave'
+                          : kind === 'APPROVE'
+                            ? 'common.assistantSurface.regionalApproval.liveAction.confirmApprove'
+                            : 'common.assistantSurface.regionalApproval.liveAction.confirmReject',
                   )}
                 </Button>
               )}
@@ -729,6 +728,9 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           </div>
         }
       >
+        {directApproval && action.state.status === 'error' && (
+          <Alert type="error" showIcon content={actionErrorText(t, action.state.error)} />
+        )}
         {draftError && (
           <Alert
             type="warning"
@@ -1117,7 +1119,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
               <span>{t('common.assistantSurface.regionalApproval.liveAction.loading')}</span>
             </div>
           ) : null}
-          {action.state.status === 'error' ? (
+          {!directApproval && action.state.status === 'error' ? (
             <Alert type="error" showIcon content={actionErrorText(t, action.state.error)} />
           ) : null}
           {action.state.status === 'success' ? (

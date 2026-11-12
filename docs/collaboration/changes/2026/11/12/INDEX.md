@@ -6,4 +6,5 @@
 
 - [销售计划旧版本与过期草稿恢复](sales-plan-stale-recovery.md)
 
+- [销售计划单笔失败提示与再次提交](sales-plan-single-approval.md)
 - [基地库存问数与卡片一致性](base-card-parity.md)
