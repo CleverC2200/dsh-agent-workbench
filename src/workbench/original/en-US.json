@@ -786,6 +786,7 @@
           "skuDuplicate": "SKU {{code}} appears more than once. Submission quantities and amounts cannot be calculated. Refresh and retry; contact an administrator if it persists.",
           "skuEmpty": "No SKU details were returned for the current version. Refresh and retry.",
           "draftStale": "The local draft has expired and does not match the current plan details. It is retained. Review current plan data without applying the expired draft.",
+          "quantityInvalid": "Confirmed quantity is invalid. Check this stage adjustment and keep the quantity non-negative.",
           "accessChanged": "This plan can no longer be approved at the selected node. Refresh the list and check the node and permissions.",
           "skuAdded": "SKU {{code}} was added to the current details. Refresh the list and review again.",
           "skuRemoved": "SKU {{code}} was removed from the current details. Refresh the list and review again.",

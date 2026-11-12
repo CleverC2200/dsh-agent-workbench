@@ -23,6 +23,7 @@ export class SubmissionSourceError extends Error {
       | 'skuRemoved'
       | 'skuValueChanged'
       | 'draftStale'
+      | 'quantityInvalid'
       | 'accessChanged',
     readonly values: Record<string, string> = {},
   ) {

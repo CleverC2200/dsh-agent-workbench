@@ -374,3 +374,13 @@ test('non-DMS transport rejection keeps technical notification fields out of bus
     undefined,
   );
 });
+
+test('invalid pending confirmed quantity keeps its preflight reason', () => {
+  assert.throws(
+    () =>
+      m.salesPlanApprovalDraftValues(detail, { ...row, orderType: 'Z' }, 'province', [], {
+        1001: '-1',
+      }),
+    (error) => error.key === 'quantityInvalid',
+  );
+});

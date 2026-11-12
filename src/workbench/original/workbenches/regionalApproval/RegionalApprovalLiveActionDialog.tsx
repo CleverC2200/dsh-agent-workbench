@@ -273,11 +273,17 @@ const RegionalApprovalLiveActionDialog: React.FC<{
         );
         setDraftReady(true);
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setDraftError('loadFailed');
+      .catch((cause) => {
+        if (controller.signal.aborted) return;
+        if (cause instanceof SubmissionSourceError) {
+          setPreflightError(
+            t(`common.assistantSurface.regionalApproval.liveSubmit.errors.${cause.key}`),
+          );
+          setDraftReady(true);
+        } else setDraftError('loadFailed');
       });
     return () => controller.abort();
-  }, [row.planId, row.versionId, initialAction, directApproval, selectedRole]);
+  }, [row.planId, row.versionId, initialAction, directApproval, selectedRole, t]);
   const [confirmedInputs, setConfirmedInputs] = useState<Record<string, string>>({});
   const [adjustmentSkus, setAdjustmentSkus] = useState<AdjustmentSkuState>({ status: 'idle' });
   const action = useSalesPlanAction({ client });
@@ -674,14 +680,23 @@ const RegionalApprovalLiveActionDialog: React.FC<{
       action.state.status !== 'idle'
     )
       return;
-    if (draftError) {
+    if (draftError || preflightError) {
       directSubmissionStarted.current = true;
       return;
     }
     if (invalid) return;
     directSubmissionStarted.current = true;
     submit();
-  }, [action.state.status, directApproval, draftError, invalid, loading, submit, visible]);
+  }, [
+    action.state.status,
+    directApproval,
+    draftError,
+    invalid,
+    loading,
+    preflightError,
+    submit,
+    visible,
+  ]);
 
   const retry = () => {
     if (loading || action.state.status !== 'error' || !action.state.error.retrySameIntent) return;

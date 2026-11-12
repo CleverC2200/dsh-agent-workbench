@@ -12,6 +12,7 @@ import {
 import { salesPlanEditableQuantity } from './salesPlanAccessModel.ts';
 import { roundPlanQuantity, salesPlanDecimalValue } from './salesPlanQuantityModel.ts';
 import { salesPlanSkusMatchVersion } from './salesPlanDetailModel.ts';
+import { SubmissionSourceError } from './salesPlanPreflightModel.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 
 export type SalesPlanLocalDraft = {
@@ -47,9 +48,9 @@ export const salesPlanApprovalDraftValues = (
       !DECIMAL.test(value.trim()) ||
       (value.trim().startsWith('-') && !/^-0+(?:\.0+)?$/.test(value.trim()))
     )
-      throw new Error('确认计划数量不合法，请核对本节点调整');
+      throw new SubmissionSourceError('quantityInvalid');
     const adjustQty = subtractExactDecimals(value.trim(), baseline);
-    if (!DECIMAL.test(adjustQty)) throw new Error('确认计划数量不合法，请核对本节点调整');
+    if (!DECIMAL.test(adjustQty)) throw new SubmissionSourceError('quantityInvalid');
     values[skuCode] = adjustQty;
   }
   if (roundMonthly && (row.orderType ?? detail?.currentVersion.orderType) === 'M' && role) {
@@ -60,7 +61,7 @@ export const salesPlanApprovalDraftValues = (
       const confirmed = addExactDecimals([baseline, values[code] ?? '0']);
       const rounded = roundPlanQuantity(confirmed);
       if (!DECIMAL.test(rounded) || rounded.startsWith('-'))
-        throw new Error('确认计划数量不合法，请核对本节点调整');
+        throw new SubmissionSourceError('quantityInvalid');
       const adjustment = subtractExactDecimals(rounded, baseline);
       if (values[code] !== undefined || !/^[+-]?0+(?:\.0+)?$/.test(adjustment))
         values[code] = adjustment;
