@@ -93,6 +93,7 @@ import {
   formatExactDecimal,
   multiplyExactDecimals,
   projectRegionalApprovalLiveDimension,
+  regionalApprovalLiveProgress,
   salesPlanPeriodOptionLabel,
   subtractExactDecimals,
   toRegionalApprovalLiveRow,
@@ -2506,16 +2507,21 @@ const RegionalApprovalWorkbench: React.FC<{
         ),
     },
     {
-      title: t('common.correction.progress'),
+      title: t(
+        orderType === 'M' ? 'common.correction.submissionProgress' : 'common.correction.progress',
+      ),
       width: liveColumnWidths[3],
       render: (_, tableRow) => {
         if (tableRow.kind === 'plan') {
-          const progress = {
-            amount:
-              tableRow.plan.amountProgress == null
-                ? undefined
-                : Number(tableRow.plan.amountProgress),
-          };
+          const progress =
+            orderType === 'M'
+              ? regionalApprovalLiveProgress(tableRow.plan)
+              : {
+                  amount:
+                    tableRow.plan.amountProgress == null
+                      ? undefined
+                      : Number(tableRow.plan.amountProgress),
+                };
           return (
             <div className={styles.categoryProgressCell}>
               {/* V1.8 #09：达成率用进度条 + 百分比，百分比前不再带「金额」。 */}
@@ -2545,20 +2551,30 @@ const RegionalApprovalWorkbench: React.FC<{
                 />
                 {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
               </div>
-              <small title={tableRow.plan.shipmentError ?? undefined}>
-                {tableRow.plan.shipAmount == null ? '—' : exactMoney(tableRow.plan.shipAmount)} /{' '}
-                {tableRow.plan.shipQty == null ? (
-                  '—'
-                ) : (
-                  <span title={correctionDisplay(tableRow.plan.shipQty, 'quantity').exact}>
-                    {`${quantityText(tableRow.plan.shipQty)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`}
-                  </span>
-                )}
-              </small>
-              {tableRow.plan.shipmentError && (
-                <small title={tableRow.plan.shipmentError}>
-                  {t('common.correction.shipmentUnavailable')}
+              {orderType === 'M' ? (
+                <small>
+                  {exactMoney(tableRow.plan.currentAmount)} /{' '}
+                  {exactMoney(tableRow.plan.targetAmount)}
                 </small>
+              ) : (
+                <>
+                  <small title={tableRow.plan.shipmentError ?? undefined}>
+                    {tableRow.plan.shipAmount == null ? '—' : exactMoney(tableRow.plan.shipAmount)}{' '}
+                    /{' '}
+                    {tableRow.plan.shipQty == null ? (
+                      '—'
+                    ) : (
+                      <span title={correctionDisplay(tableRow.plan.shipQty, 'quantity').exact}>
+                        {`${quantityText(tableRow.plan.shipQty)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`}
+                      </span>
+                    )}
+                  </small>
+                  {tableRow.plan.shipmentError && (
+                    <small title={tableRow.plan.shipmentError}>
+                      {t('common.correction.shipmentUnavailable')}
+                    </small>
+                  )}
+                </>
               )}
             </div>
           );
@@ -2789,8 +2805,9 @@ const RegionalApprovalWorkbench: React.FC<{
         : [];
     });
   const selectedSubmissionItems = submissionItems();
-  const resubmitDisabledReason =
-    selectedSubmissionItems.length !== selectedPendingActionRows.length
+  const resubmitDisabledReason = !onSubmitBatch
+    ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.entryUnavailable')
+    : selectedSubmissionItems.length !== selectedPendingActionRows.length
       ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.sourceAuthority')
       : undefined;
   const primaryActionDisabledReason =

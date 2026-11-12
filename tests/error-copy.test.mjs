@@ -111,7 +111,24 @@ test('DMS明确拒绝展示业务原因且不进入结果待核实恢复', () =>
   const text = m.actionErrorText((key) => key, failure);
   assert.match(text, /10003581/);
   assert.match(text, /整数/);
-  assert.doesNotMatch(text, /GEA_HTTP|Integer|payload/);
+  assert.doesNotMatch(text, /GEA_HTTP|errors.reference|错误编号|dms-rejected/);
+});
+test('DMS失败原文包含字段名或较长说明时仍完整显示，其他服务故障不透出', () => {
+  const message =
+    'DMS回写失败: SKU 10003581 确认数量必须为整数，且数量及合计不能超出Integer范围。请核对 payload.confirmQty、当前销售计划的各 SKU 确认数量，以及汇总数量后重新提交。';
+  assert.ok(message.length > 80);
+  assert.equal(
+    m.salesPlanRejectionMessage({
+      status: 502,
+      backendMessage: `GEA_HTTP_502：${message}`,
+      details: { upstreamCode: 'SALES_PLAN_DMS_WRITEBACK_FAILED' },
+    }),
+    message,
+  );
+  assert.equal(
+    m.salesPlanRejectionMessage({ status: 502, backendMessage: 'Internal server error' }),
+    undefined,
+  );
 });
 test('未收到业务结果的网关故障继续保留同一操作重试', () => {
   const failure = m.classifySalesPlanActionError(
@@ -123,4 +140,28 @@ test('未收到业务结果的网关故障继续保留同一操作重试', () =>
     }),
   );
   assert.equal(failure.retrySameIntent, true);
+});
+
+test('真实退回失败直接展示服务端原因，不因字段名或未知原因码替换为通用提示', () => {
+  const message = 'payload.plan_month 为必填字段，请核对当前审批实例中的计划月份后重试';
+  const cause = new m.BackendHttpError({
+    method: 'POST',
+    path: '/actions',
+    status: 409,
+    body: {
+      error: `GEA_HTTP_409：${message}`,
+      details: { upstreamCode: 'RETURN_FAILURE_DETAIL', requestId: 'return-live-failure' },
+    },
+  });
+  const original = console.warn;
+  console.warn = () => {};
+  try {
+    const text = m.actionErrorText(
+      (key, options) => (key.endsWith('.reference') ? ` 错误编号 ${options.id}` : '通用失败提示'),
+      m.classifySalesPlanActionError(cause),
+    );
+    assert.equal(text, message);
+  } finally {
+    console.warn = original;
+  }
 });
