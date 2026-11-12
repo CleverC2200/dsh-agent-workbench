@@ -1092,6 +1092,8 @@ test('approval retirement and retained domain-type migration select current beha
     'RegionalApprovalActionDialog.tsx',
     'RegionalApprovalLiveAdjustmentDialog.tsx',
     'models/salesPlanAdjustmentModel.ts',
+    'hooks/useSalesPlanDetail.ts',
+    'tests/sales-plan-detail.browser.mjs',
     'RegionalApprovalPlanDetail.module.css',
     'RegionalApprovalPlanDetail.tsx',
     'regionalApprovalActionModel.ts',
@@ -1102,7 +1104,9 @@ test('approval retirement and retained domain-type migration select current beha
   ])
     await t.test(name, (t) => {
       const f = fixture(t);
-      const source = 'src/workbench/original/workbenches/regionalApproval/' + name;
+      const source = name.startsWith('tests/')
+        ? name
+        : 'src/workbench/original/workbenches/regionalApproval/' + name;
       f.policy.rules = production.rules;
       f.policy.tests.push('tests/*.browser.mjs');
       f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
