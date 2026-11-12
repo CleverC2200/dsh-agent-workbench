@@ -24,7 +24,7 @@ const fixture = () => ({
     customer: '样例客户',
     satisfactionRate: 95,
     lines: [
-      { sku: 'A', name: '缺货商品', quantity: 10, shortage: 3 },
+      { sku: 'A', name: '缺货商品', quantity: 10, shortage: 3, orderMultiple: 1 },
       { sku: 'B', name: '未知数量商品' },
     ],
   },
@@ -545,6 +545,7 @@ test('unified processing prioritizes credit and routes the exact 90 percent boun
 
 test('execution and DMS identifiers remain distinct and absent source fields are never fabricated', () => {
   const state = fixture();
+  delete state.snapshot.lines[0].orderMultiple;
   Object.assign(state.snapshot, {
     executionOrderNo: 'EXEC-001',
     dmsOrderNo: 'DMS-009',
@@ -560,7 +561,7 @@ test('execution and DMS identifiers remain distinct and absent source fields are
     assert.equal(document.querySelectorAll('#orderEditor input[type="number"]').length, 0);
     assert.match(
       document.querySelector('.editor-order-rules').textContent,
-      /起订量：—.*订货倍数：—/,
+      /起订量：—.*每托箱数：—/,
     );
     assert.deepEqual(
       { ...dom.window.OrderShortageEditor.identifiers({ orderNo: 'LEGACY-DMS' }) },
@@ -568,6 +569,39 @@ test('execution and DMS identifiers remain distinct and absent source fields are
     );
   } finally {
     dom.window.close();
+  }
+});
+
+test('product specifications display bags per case across details and processing without changing source data', () => {
+  for (const [specification, expected] of [
+    ['1*455*22', '22袋/件'],
+    ['1*200G*20', '20袋/件'],
+    ['1×2000×5', '5袋/件'],
+    ['1 x 0.455kg x 22', '22袋/件'],
+    ['20袋/件', '20袋/件'],
+    ['1*455*0', '1*455*0'],
+    ['其他规格', '其他规格'],
+    [null, '规格未提供'],
+    ['', '规格未提供'],
+  ]) {
+    for (const [view, rate] of [
+      ['details', 95],
+      ['process', 95],
+      ['process', 70],
+    ]) {
+      const state = fixture();
+      state.view = view;
+      state.snapshot.satisfactionRate = rate;
+      state.snapshot.lines[0].specification = specification;
+      const before = structuredClone(state.snapshot);
+      const { dom, document } = component(state);
+      try {
+        assert.equal(document.querySelector('.editor-spec').textContent, expected);
+        assert.deepEqual(state.snapshot, before);
+      } finally {
+        dom.window.close();
+      }
+    }
   }
 });
 
@@ -605,6 +639,99 @@ test('minimum quantity and ordering multiple govern draft input, increments and 
     assert.equal(state.snapshot.lines[0].quantity, 100);
   } finally {
     dom.window.close();
+  }
+});
+
+test('whole-pallet labels, increments and manual input agree in order and shortage pages', () => {
+  for (const rate of [95, 70]) {
+    const state = fixture();
+    state.snapshot.satisfactionRate = rate;
+    state.snapshot.lines = [
+      { sku: 'PALLET', name: '整托商品', quantity: 84, minimumOrderQuantity: 5, orderMultiple: 42 },
+    ];
+    const { dom, document, view } = component(state);
+    try {
+      const input = document.querySelector('[aria-label="PALLET 数量"]');
+      assert.match(document.querySelector('.editor-order-rules').textContent, /每托42箱（整托订购）/);
+      assert.doesNotMatch(document.querySelector('.editor-order-rules').textContent, /订货倍数/);
+      assert.equal(input.step, '42');
+      document.querySelector('[aria-label="PALLET 增加"]').click();
+      assert.equal(view.getDraft()[0].quantity, 126);
+      document.querySelector('[aria-label="PALLET 减少"]').click();
+      assert.equal(view.getDraft()[0].quantity, 84);
+      input.value = '85';
+      input.dispatchEvent(new dom.window.Event('input'));
+      assert.equal(input.value, '85');
+      assert.equal(view.getDraft()[0].quantity, 84);
+      assert.equal(input.getAttribute('aria-invalid'), 'true');
+      assert.match(input.validationMessage, /请按整托订购/);
+      input.value = '85';
+      input.dispatchEvent(new dom.window.Event('change'));
+      assert.equal(view.getDraft()[0].quantity, 84);
+      assert.equal(input.getAttribute('aria-invalid'), 'true');
+      assert.match(input.validationMessage, /请按整托订购，数量须为 42 箱的整数倍/);
+      assert.match(document.querySelector('.editor-quantity-error').textContent, /整托订购/);
+      input.value = '126';
+      input.dispatchEvent(new dom.window.Event('input'));
+      assert.equal(view.getDraft()[0].quantity, 126);
+      assert.equal(input.validationMessage, '');
+      assert.equal(input.getAttribute('aria-invalid'), 'false');
+      input.value = '0';
+      input.dispatchEvent(new dom.window.Event('change'));
+      assert.equal(view.getDraft()[0].quantity, 0);
+      document.querySelector('[aria-label="PALLET 增加"]').click();
+      assert.equal(view.getDraft()[0].quantity, 42);
+      assert.equal(state.snapshot.lines[0].quantity, 84);
+    } finally {
+      dom.window.close();
+    }
+  }
+});
+
+test('missing pallet size disables quantity edits instead of assuming one box per pallet', () => {
+  const state = fixture();
+  delete state.snapshot.lines[0].orderMultiple;
+  state.snapshot.lines = [state.snapshot.lines[0]];
+  const { dom, document, view } = component(state);
+  try {
+    const input = document.querySelector('[aria-label="A 数量"]');
+    assert.equal(input.disabled, true);
+    assert.equal(document.querySelector('[aria-label="A 增加"]').disabled, true);
+    assert.equal(document.querySelector('[aria-label="A 减少"]').disabled, true);
+    assert.match(document.querySelector('.editor-quantity-error').textContent, /每托箱数未提供/);
+    input.value = '11';
+    input.dispatchEvent(new dom.window.Event('input'));
+    assert.equal(view.getDraft()[0].quantity, 10);
+    assert.equal(state.snapshot.lines[0].quantity, 10);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('legacy partial pallets align on explicit clicks and starting quantity rounds up to a full pallet', () => {
+  for (const [quantity, minimum, action, expected] of [
+    [216, 5, '增加', 252],
+    [216, 5, '减少', 210],
+    [0, 100, '增加', 126],
+    [126, 100, '减少', 0],
+  ]) {
+    const state = fixture();
+    state.snapshot.satisfactionRate = 70;
+    state.snapshot.lines = [
+      { sku: 'PALLET', name: '整托商品', quantity, minimumOrderQuantity: minimum, orderMultiple: 42 },
+    ];
+    const { dom, document, view } = component(state);
+    try {
+      assert.equal(view.getDraft()[0].quantity, quantity);
+      if (quantity === 216)
+        assert.match(document.querySelector('.editor-quantity-error').textContent, /整托订购/);
+      document.querySelector(`[aria-label="PALLET ${action}"]`).click();
+      assert.equal(view.getDraft()[0].quantity, expected);
+      assert.equal(document.querySelector('input[type="number"]').validationMessage, '');
+      assert.equal(state.snapshot.lines[0].quantity, quantity);
+    } finally {
+      dom.window.close();
+    }
   }
 });
 
