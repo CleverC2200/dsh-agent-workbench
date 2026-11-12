@@ -467,7 +467,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
     const selected = source.filter((row) => String(row.kind) === (name === '作废率' ? '1' : '2'));
     if (!selected.length)
       return name === '改单率'
-        ? '当前实际发货周期没有可归属的有效商品数量记录：日表需按执行单号＋客户关联物流lastshipmenttime装车完成时间；缺时间不以OMS新增或WMS关单时间替代。'
+        ? '当前统计周期没有可归属的有效商品数量记录：按日表order_close_time订单关单时间筛选；缺时间不以OMS新增、WMS关单或轨迹装车时间替代。'
         : '源数据未提供：agents_scm_execute_detail_hourly_d 在当前分组没有商品数量统计记录。';
     if (
       name === '改单率' &&

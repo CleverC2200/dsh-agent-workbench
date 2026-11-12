@@ -304,9 +304,9 @@ test('amendment handoff rejects old snapshots and carries the same quantity quer
   );
   const request = metricDetailsRequest(facts, '改单率', selection);
   const detail = request.context.metricDetails;
-  assert.equal(detail.contract.dateField, 'lastshipmenttime');
-  assert.equal(detail.contract.dateSource, 'agents_scm_order_trace_final_di');
-  assert.match(detail.contract.formula, /装车完成/);
+  assert.equal(detail.contract.dateField, 'order_close_time');
+  assert.equal(detail.contract.dateSource, 'agents_scm_execute_detail_d');
+  assert.match(detail.contract.formula, /order_close_time/);
   assert.equal(detail.contract.lockPeriod, false);
   assert.equal(detail.contract.changeTimeRequired, false);
   for (const query of Object.values(detail.queries)) {

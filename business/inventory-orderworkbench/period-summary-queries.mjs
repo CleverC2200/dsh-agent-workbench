@@ -51,8 +51,8 @@ const ownerWindow = (field) =>
 const attributionSource = parts.attributionSources
   .replaceAll('header_addtime>=:gea_p1 AND header_addtime<:gea_p2', ownerWindow('header_addtime'))
   .replaceAll(
-    'shipment.shipped_at>=:gea_p1 AND shipment.shipped_at<:gea_p2',
-    ownerWindow('shipment.shipped_at'),
+    'd.order_close_time>=:gea_p1 AND d.order_close_time<:gea_p2',
+    ownerWindow('d.order_close_time'),
   )
   .replaceAll('the_date>=:gea_p1 AND the_date<:gea_p2', ownerWindow('the_date'))
   .replaceAll(
