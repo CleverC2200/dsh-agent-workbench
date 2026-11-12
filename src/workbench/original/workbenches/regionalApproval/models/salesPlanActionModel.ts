@@ -215,7 +215,7 @@ export const salesPlanRejectionMessage = (cause: {
     .replace(/https?:\/\/[^\s，。；;]+/giu, '')
     .trim();
   if (!message || /^[{[]/u.test(message) || /^GEA_[A-Z0-9_]+$/u.test(message)) return undefined;
-  return rejected ? message : businessSafeErrorMessage(message);
+  return dms ? message : businessSafeErrorMessage(message);
 };
 
 export const salesPlanConflictErrorKind = (details: unknown): 'conflict' | 'configuration' => {

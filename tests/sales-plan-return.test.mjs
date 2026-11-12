@@ -363,3 +363,14 @@ test('Host retry intent survives HTTP 408 while validation and definitive failur
     assert.equal(rejected.retrySameIntent, false);
   }
 });
+
+test('non-DMS transport rejection keeps technical notification fields out of business copy', () => {
+  assert.equal(
+    m.salesPlanRejectionMessage({
+      status: 409,
+      backendMessage: 'GEA_HTTP_409：payload.plan_month 为必填字段',
+      details: { upstreamCode: 'NOTIFICATION_PAYLOAD_INVALID', retrySameIntent: false },
+    }),
+    undefined,
+  );
+});
