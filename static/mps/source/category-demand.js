@@ -80,6 +80,91 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
         ]
       : [];
   });
+  const sourceChecks = ready(draft.sourceChecksRead, draft.month) ? draft.sourceChecks : null;
+  const unassigned = [
+    ...(sourceChecks?.periods ?? []).flatMap((period) => [
+      ...period.history.rows.map((row) => ({
+        row,
+        field: '数量',
+        source: 'BI实绩',
+        month: period.month,
+      })),
+      ...period.report.rows.map((row) => ({
+        row,
+        field: '计划数量',
+        source: '计划量',
+        month: period.month,
+      })),
+    ]),
+    ...(draft.historyAnnualRead?.status === 'ready'
+      ? (draft.historyAnnual?.periods ?? []).flatMap((period) =>
+          period.rows.map((row) => ({
+            row,
+            field: '数量',
+            source: '上一财年发货',
+            month: period.start + '至' + period.end,
+          })),
+        )
+      : []),
+    ...(ready(draft.planRatesRead, draft.month)
+      ? (draft.planRates ?? [])
+          .filter((row) => row['维度类型'] === '基地+产品')
+          .map((row) => ({
+            row,
+            field: '当前维度计划量',
+            source: '销售提报占比',
+            month: draft.month,
+          }))
+      : []),
+  ].filter(({ row, field }) => !row['基地'] && number(row[field]) !== 0);
+  for (const fact of unassigned) {
+    const matched = matchProduct(fact.row['产品编码']);
+    const codes = matched.currentCode
+      ? [matched.currentCode]
+      : productMappings
+          .filter(
+            (product) =>
+              (product['老品编码'] || product.replacement_material_code) === fact.row['产品编码'],
+          )
+          .map((product) => product['产品编码'] || product.material_code);
+    if (
+      ['BI实绩', '计划量'].includes(fact.source) &&
+      !codes.some(
+        (code) =>
+          excluded.some((row) => row.code === code) &&
+          sourceRows.some(
+            (row) =>
+              row.code === code &&
+              !excluded.some((entry) => entry.base === row.base && entry.code === row.code),
+          ),
+      )
+    )
+      continue;
+    for (const row of sourceRows.filter((row) => codes.includes(row.code))) {
+      const reason =
+        fact.source +
+        ' ' +
+        fact.month +
+        ' ' +
+        fact.row['产品编码'] +
+        ' 缺基地，无法分配；该SKU各基地暂不参与计算';
+      const existing = excluded.find((entry) => entry.base === row.base && entry.code === row.code);
+      if (existing) {
+        if (!existing.missing.includes(reason)) existing.missing.push(reason);
+        if (!existing.missingFields.includes('base')) existing.missingFields.push('base');
+      } else
+        excluded.push({
+          base: row.base,
+          code: row.code,
+          name: row.name ?? '',
+          category: row.category || matchProduct(row.code, row.base).category,
+          month: baseMonth,
+          missing: [reason],
+          missingFields: ['base'],
+          source: fact.source,
+        });
+    }
+  }
   const excludedKeys = new Set(
     excluded.map((row) => JSON.stringify([canonicalBaseName(row.base), row.code])),
   );
@@ -139,7 +224,6 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
         },
       ];
     });
-  const sourceChecks = ready(draft.sourceChecksRead, draft.month) ? draft.sourceChecks : null;
   const scopedChecks = sourceChecks
     ? {
         ...sourceChecks,

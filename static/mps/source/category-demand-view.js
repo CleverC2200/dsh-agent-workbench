@@ -96,9 +96,12 @@ export function createShipmentScopeNotice(react, { downloadCsv }) {
   };
 }
 
-export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) {
+export function createCategoryDemand(
+  react,
+  { table, downloadCsv, downloadExceptions, useMpsPart },
+) {
   const h = react.createElement;
-  const ShipmentScopeNotice = createShipmentScopeNotice(react, { table, downloadCsv });
+  const ShipmentScopeNotice = createShipmentScopeNotice(react, { downloadCsv: downloadExceptions });
   const columns = [
     '大类',
     '月份',

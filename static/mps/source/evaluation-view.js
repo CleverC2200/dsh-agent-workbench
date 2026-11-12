@@ -28,6 +28,19 @@ const fields = [
   'requiredProductionTons',
 ];
 
+export function workflowContextPreview(value) {
+  if (typeof value === 'string') return value.length > 200 ? value.slice(0, 200) + '…' : value;
+  if (Array.isArray(value)) return value.slice(0, 10).map(workflowContextPreview);
+  if (value && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value).flatMap(([key, item]) => [
+        [key, workflowContextPreview(item)],
+        ...(Array.isArray(item) && item.length > 10 ? [[key + 'Total', item.length]] : []),
+      ]),
+    );
+  return value;
+}
+
 export function summarizeEvaluation(rows) {
   const groups = new Map();
   for (const row of rows) {

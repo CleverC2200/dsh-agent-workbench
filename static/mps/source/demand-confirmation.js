@@ -265,6 +265,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
   const CategoryDemand = createCategoryDemand(react, {
     table: (...args) => table(...args),
     downloadCsv,
+    downloadExceptions: downloadCsvLegacy,
     useMpsPart,
   });
   function Dialog({ title, children, footer, close, className = '' }) {

@@ -6,7 +6,11 @@ import {
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
-import { summarizeEvaluation, planContext } from '../static/mps/source/evaluation-view.js';
+import {
+  summarizeEvaluation,
+  planContext,
+  workflowContextPreview,
+} from '../static/mps/source/evaluation-view.js';
 
 test('产销存汇总保留已知小计、真实零值与缺项，并隔离基地和月份', () => {
   const groups = summarizeEvaluation([
@@ -124,7 +128,7 @@ test('待定发货单品隔离后，同范围的基数、提报和历史继续�
   assert.equal(buildMpsWorkflow(source, null, snapshot).categoryComputation.rows[0].shipment, null);
 });
 
-test('partial 全国SKU来源不可按基地拆分时保持相关系数未知，全待定不生成零需求', () => {
+test('partial 全国SKU无法裁剪时隔离该SKU全部基地，全待定不生成零需求', () => {
   const { source, snapshot } = partialDemandFixture();
   snapshot.rows.push({ base: '甲', code: 'B', category: '点心', fin: 10, end: 0 });
   for (const period of source.sourceChecks.periods)
@@ -133,9 +137,10 @@ test('partial 全国SKU来源不可按基地拆分时保持相关系数未知，
         row['基地'] = '';
       });
   const result = buildMpsWorkflow(source, null, snapshot).categoryComputation;
-  assert.equal(result.bases[0].actual, null);
-  assert.equal(result.bases[0].plan, null);
-  assert.ok(result.shipmentScope.issues.some((issue) => issue.missing.join().includes('缺基地')));
+  assert.equal(result.bases[0].actual, 300);
+  assert.equal(result.bases[0].plan, 375);
+  assert.equal(result.shipmentScope.excluded.filter((row) => row.code === 'B').length, 2);
+  assert.ok(result.shipmentScope.excluded.some((issue) => issue.missing.join().includes('缺基地')));
   assert.equal(source.sourceChecks.periods[0].history.rows[1]['数量'], 1000);
   snapshot.rows.forEach((row) => {
     row.fin = null;
@@ -1361,4 +1366,42 @@ test('新版产品源缺目标基地或只有另一基地系数时，不能落�
       assert.match(row.missing.historyQuantity.join(), /系数/);
     }
   }
+});
+
+test('缺基地历史SKU单列后其它SKU继续，合法全国基数和源记录保留', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.historyAnnualRead = { status: 'ready' };
+  source.historyAnnual.periods[0].rows.push({ 基地: '', 产品编码: 'B', 数量: 50 });
+  for (const period of source.sourceChecks.periods) period.history.rows[0]['基地'] = '';
+  const before = structuredClone(source);
+  const result = buildMpsWorkflow(source, null, snapshot);
+  assert.deepEqual(source, before);
+  assert.equal(result.categoryComputation.bases[0].actual, 300);
+  assert.ok(
+    result.rows
+      .filter((row) => row.month === source.month)
+      .every((row) => row.code === 'A' && row.demand !== null),
+  );
+  assert.ok(
+    result.excludedShipments
+      .find((row) => row.code === 'B')
+      .missing.some((reason) => reason.includes('上一财年发货')),
+  );
+  assert.equal(result.excludedSources.filter((row) => row.code === 'B').length, 0);
+});
+
+test('大型加工结果只投影有条数的上下文预览，计算结果和导出输入不变', () => {
+  const context = {
+    missing: Array.from({ length: 12000 }, (_, id) => ({ id, reason: '缺项'.repeat(500) })),
+    constraints: {
+      weights: Array.from({ length: 6000 }, () => ({ base: '甲', code: 'A', value: 1 })),
+    },
+  };
+  const before = structuredClone(context);
+  const preview = workflowContextPreview(context);
+  assert.equal(preview.missingTotal, 12000);
+  assert.equal(preview.constraints.weightsTotal, 6000);
+  assert.equal(preview.missing.length, 10);
+  assert.ok(JSON.stringify(preview).length < 100000);
+  assert.deepEqual(context, before);
 });

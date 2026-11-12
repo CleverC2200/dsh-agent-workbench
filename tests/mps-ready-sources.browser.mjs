@@ -955,7 +955,11 @@ test('待定单品异常CSV和四个月部分需求沿公开页面传到后续�
   await expect(summary).toContainText('部分可计算');
   const waiting = page.waitForEvent('download');
   await notice.getByRole('button', { name: '下载待定单品异常CSV', exact: true }).click();
-  const csv = await mpsDownloadText(await (await waiting).path());
+  const exceptionDownload = await waiting;
+  assert.match(exceptionDownload.suggestedFilename(), /\.csv$/);
+  const exceptionBytes = await readFile(await exceptionDownload.path());
+  assert.notEqual(exceptionBytes.subarray(0, 2).toString(), 'PK');
+  const csv = exceptionBytes.toString('utf8');
   assert.match(csv, /产品B/);
   assert.match(csv, /已备/);
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();

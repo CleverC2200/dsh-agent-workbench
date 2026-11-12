@@ -11,7 +11,11 @@ import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
 import { call } from '../../../business/shared/channel.js';
 import { readUnitWeights, unitWeightCandidate, productWeightCandidate } from './unit-weights.js';
-import { createEvaluationOverview, planContext } from './evaluation-view.js';
+import {
+  createEvaluationOverview,
+  planContext,
+  workflowContextPreview,
+} from './evaluation-view.js';
 import { readPlanRelations } from './relations.js';
 import { computeWorkflow } from './workflow-worker-client.js';
 import { readCapacityAnnual } from './master-data.js';
@@ -428,7 +432,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
     useMpsPart(
       react,
       step,
-      {
+      workflowContextPreview({
+        preview: '上下文最多展示每组10条及完整条数，完整数据见页面和下载',
         evaluation: result.context,
         months: result.months,
         shipmentMonth: result.shipmentMonth,
@@ -460,7 +465,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
               ...planContext(currentEvaluation.result.plan, visible, { base, month }),
             }
           : null,
-      },
+      }),
       titles[step],
     );
     const table = (name, columns, rows, renderDetail) =>

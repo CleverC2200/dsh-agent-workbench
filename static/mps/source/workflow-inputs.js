@@ -1,4 +1,8 @@
-import { sourceDimensions } from './source-projections.js';
+import {
+  sourceDimensions,
+  sourceProductMappings,
+  createSourceProductMatcher,
+} from './source-projections.js';
 import { buildCategoryDemand } from './category-demand.js';
 import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { solveMpsPlan } from 'dsh-agent-manage/mps-compute/plan';
@@ -76,7 +80,28 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   const categoryComputation = buildCategoryDemand(draft, shipmentSnapshot);
   const excludedShipments = categoryComputation.shipmentScope.excluded;
   const excludedShipmentKeys = new Set(excludedShipments.map(rowKey));
-  const includedShipment = (row) => !excludedShipmentKeys.has(rowKey(row));
+  const mappings = sourceProductMappings(draft.products, draft.productRaw);
+  const sourceMatcher = createSourceProductMatcher(mappings);
+  const excludedCodes = new Set(excludedShipments.map((row) => row.code));
+  const participatingCodes = new Set(
+    (shipmentSnapshot?.rows ?? [])
+      .filter((row) => !excludedShipmentKeys.has(rowKey(row)))
+      .map((row) => row.code),
+  );
+  const includedShipment = (row) => {
+    const matched = sourceMatcher(row.code, row.base);
+    const codes = matched.currentCode
+      ? [matched.currentCode]
+      : mappings
+          .filter(
+            (product) => (product['老品编码'] || product.replacement_material_code) === row.code,
+          )
+          .map((product) => product['产品编码'] || product.material_code);
+    if (!codes.length) return !excludedShipmentKeys.has(rowKey(row));
+    return row.base
+      ? codes.some((code) => !excludedShipmentKeys.has(rowKey({ base: row.base, code })))
+      : codes.some((code) => !excludedCodes.has(code) || participatingCodes.has(code));
+  };
   const reportColumn = draft.pull === 'monthly' ? '月初数量' : '纠偏数量';
   const readQuantity = (rows, column) =>
     (rows ?? []).map((row) => ({
