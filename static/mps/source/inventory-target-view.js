@@ -1,4 +1,4 @@
-import { inventoryVersionOrder } from './inventory-selection.js';
+import { inventoryVersionOrder, selectedInventoryMonth } from './inventory-selection.js';
 
 const number = (value, decimals = 4) =>
   value == null
@@ -12,6 +12,27 @@ export const turnoverDaysSources = {
   rule: '库存下限规则',
   missing: '缺输入',
 };
+export const inventoryDependencyColumns = [
+  '评估月',
+  '安全天数来源月',
+  '安全天数来源版本',
+  '依赖需求月',
+  '下月有效需求',
+  '推导状态',
+  '需求依赖说明',
+];
+export function inventoryDependencyFields(row) {
+  return {
+    评估月: row.month,
+    安全天数来源月: row.turnoverPolicy.sourceMonths.join('、'),
+    安全天数来源版本: row.turnoverPolicy.sourceVersion,
+    依赖需求月: row.nextMonth,
+    下月有效需求: row.nextMonthDemand,
+    推导状态: row.targetInventory === null ? '缺推导依赖' : '可计算',
+    需求依赖说明:
+      row.safetyDays === 0 ? '有效安全天数为0，无需下月需求' : `${row.nextMonth}有效需求`,
+  };
+}
 export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) {
   const h = react.createElement;
   return function InventoryTargetPanel({
@@ -30,6 +51,8 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
     const [search, setSearch] = react.useState('');
     const [supplementPage, setSupplementPage] = react.useState(0);
     const version = draft.constraints?.targetVersion ?? 'auto';
+    const sourceMonth = selectedInventoryMonth(draft);
+    const sourceVersion = result.rows[0]?.turnoverPolicy.sourceVersion ?? '';
     const bases = [...new Set(result.rows.map((row) => row.base))].sort();
     const rows = result.rows.filter(
       (row) =>
@@ -124,6 +147,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
       '周转天数来源月份',
       '周转天数来源版本',
       '本轮参与计算',
+      ...inventoryDependencyColumns,
     ];
     const values = (row) => [
       row.month,
@@ -160,6 +184,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
         : row.safetyDays === null
           ? '暂不参与，补充后重新评估'
           : '天数已齐，其他依赖另行核对',
+      ...Object.values(inventoryDependencyFields(row)),
     ];
     const sourceColumns = [
       '月份',
@@ -176,6 +201,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
       '日均空值行',
       '源冲突字段',
       '业务键核对',
+      '安全天数使用状态',
     ];
     const evaluatedKeys = new Set(
       result.rows.map((row) => JSON.stringify([row.month, row.base, row.code])),
@@ -195,6 +221,10 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
         目标空值行: row.missingTargetRows,
         日均空值行: row.missingDailyRows,
         源冲突字段: row.conflictFields?.join('；'),
+        安全天数使用状态:
+          row.month === sourceMonth && row.version === sourceVersion
+            ? '选定来源月及版本，按基地SKU匹配'
+            : '保留源记录，未用作本轮安全天数',
         业务键核对: evaluatedKeys.has(JSON.stringify([row.month, row.base, row.code]))
           ? '月份、基地、SKU匹配；版本按当前规则选择'
           : '月份、基地或SKU不在当前评估明细，未参与计算',
@@ -222,7 +252,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
         h(
           'p',
           { className: 'wf-note' },
-          '缺源天数且无人工补充时暂按0天；源缺项保留，补齐后重新评估。',
+          `安全天数来源：${sourceMonth} ${sourceVersion ? `${sourceVersion}版` : '暂无可用版本'}，供本次三个评估月共用。目标库存使用各评估月的下月有效需求；0天无需下月需求。缺源且无人工补充时原临时0路径保留。`,
         ),
         h(
           'div',
@@ -421,7 +451,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
               },
             },
             [
-              ['auto', `自动：${inventoryVersionOrder(draft.month).join(' → ')}`],
+              ['auto', `自动：${inventoryVersionOrder(sourceMonth).join(' → ')}`],
               ['纠偏', '纠偏版'],
               ['月初', '月初版'],
               ['滚动', '滚动版'],

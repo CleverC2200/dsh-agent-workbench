@@ -1,6 +1,10 @@
 import { createBatchEdit } from './batch-edit.js';
 import { createProcessedDemand } from './processed-demand-view.js';
-import { createInventoryTargetPanel } from './inventory-target-view.js';
+import {
+  createInventoryTargetPanel,
+  inventoryDependencyColumns,
+  inventoryDependencyFields,
+} from './inventory-target-view.js';
 import { createConstraintPanel } from './constraint-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
@@ -91,7 +95,7 @@ const reasons = (row, fields) => [
 const status = (row, fields) => reasons(row, fields).join('、') || '已计算';
 const sourceText = '①大类需求；②月末结存；③两路占比；④源产能；⑤源最终目标周转天数与人工补充';
 
-export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
+export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts, Dialog }) {
   const h = react.createElement;
   const { useBatchEdit, Actions, Field } = createBatchEdit(react);
   const NumberInput = ({ batch, label, value, commit, max }) =>
@@ -104,7 +108,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       placeholder: '未填写',
       onStage: commit,
     });
-  const ProcessedDemand = createProcessedDemand(react, { downloadCsv });
+  const ProcessedDemand = createProcessedDemand(react, { downloadCsv, downloadAmounts });
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
   const InventoryTargetPanel = createInventoryTargetPanel(react, { downloadCsv, NumberInput });
   const ConstraintPanel = createConstraintPanel(react, { Dialog });
@@ -166,6 +170,23 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       () => buildMpsWorkflow(savedDraft, relations, shipmentSnapshot),
       [savedDraft, relations, shipmentSnapshot],
     );
+    const preparingInputs =
+      (savedDraft.productSource === 'business' &&
+        (!shipmentSnapshot || ['unread', 'loading'].includes(shipmentSnapshot.status))) ||
+      [
+        savedDraft.productsRead,
+        savedDraft.historyAnnualRead,
+        savedDraft.sourceChecksRead,
+        savedDraft.historicalIndicatorsRead,
+        savedDraft.planRatesRead,
+        savedDraft.inventoryTargetsRead,
+        savedDraft.annualRead,
+        savedDraft.forecastRead,
+        savedDraft.reportRead,
+        ...Object.values(savedDraft.reportRead?.periods ?? {}),
+        ...Object.values(savedDraft.historyRead?.periods ?? {}),
+        ...Object.values(savedDraft.deliveryRead?.periods ?? {}),
+      ].some((state) => state?.status === 'loading');
     const coverage = result.scopeCoverage === 'national' ? '全国' : '范围内';
     const [weightRead, setWeightRead] = react.useState(null);
     const [weightError, setWeightError] = react.useState('');
@@ -198,11 +219,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         weightController.current?.abort();
       };
     }, [weightScope]);
-    const syncWeights = async () => {
+    const syncWeights = async (parentSignal) => {
       const generation = ++weightGeneration.current;
       weightController.current?.abort();
       const controller = new AbortController();
       weightController.current = controller;
+      const signal = parentSignal
+        ? AbortSignal.any([parentSignal, controller.signal])
+        : controller.signal;
       setWeightBusy(true);
       setWeightRead(null);
       setWeightError('');
@@ -217,9 +241,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               { signal: options.signal },
             ),
           weightCodes,
-          controller.signal,
+          signal,
         );
-        if (generation === weightGeneration.current) {
+        if (generation === weightGeneration.current && !signal.aborted) {
           setWeightRead(read);
           return read;
         }
@@ -251,17 +275,28 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       try {
         const config = JSON.parse(document.getElementById('agent-sql-config').textContent);
         const [weights, sourceRead, annual] = await Promise.all([
-          weightRead ? Promise.resolve(weightRead) : syncWeights(),
-          readPlanRelations(
-            config,
-            (_request, options) =>
-              call(
-                'sql',
-                { queryId: options.queryId, parameters: options.values },
-                { signal: options.signal },
-              ),
-            result.months.slice(0, 3),
-            controller.signal,
+          weightRead ? Promise.resolve(weightRead) : syncWeights(controller.signal),
+          (relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration]) &&
+          !relations.busy &&
+          !relations.error &&
+          relations.configSignature === JSON.stringify(config) &&
+          typeof relations.configVersion === 'string' &&
+          relations.configVersion &&
+          ['products', 'sku_capacity', 'tunnels', 'transfers'].every((kind) =>
+            Array.isArray(relations.sources?.[kind]),
+          )
+            ? Promise.resolve(relations)
+            : readPlanRelations(
+                config,
+                (_request, options) =>
+                  call(
+                    'sql',
+                    { queryId: options.queryId, parameters: options.values },
+                    { signal: options.signal },
+                  ),
+                result.months.slice(0, 3),
+                controller.signal,
+              )
           ).then(
             (value) => ({ value }),
             (error) => ({ error: error.message }),
@@ -274,6 +309,12 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             : Promise.resolve({ rows: [], error: '人工模拟未读取全年年度SKU来源' }),
         ]);
         if (ticket !== executionGeneration.current) return;
+        if (
+          sourceRead.value &&
+          weights?.configVersion &&
+          sourceRead.value.configVersion !== weights.configVersion
+        )
+          throw Error('关系来源与件吨系数配置版本不一致，请重新读取');
         if (draft.productSource === 'business') {
           annual.referenceMonth = result.shipmentMonth;
           const knownCodes = new Set(weights?.codes ?? weightCodes);
@@ -644,6 +685,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           '历史参考物料编码',
           '历史参考口径',
           '公式说明',
+          ...inventoryDependencyColumns,
           'Top1托底',
           '提报数量口径',
           '需求拆分口径',
@@ -706,6 +748,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           历史参考物料编码: row.historyCode || row.code,
           历史参考口径: row.historyCode ? '沿用老品历史' : '自身历史',
           公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
+          ...inventoryDependencyFields(row),
           系统SKU需求: row.systemDemand,
           本月预估所属月: result.shipmentMonth,
           本月系统预估发货: shipment?.prediction,
@@ -1328,9 +1371,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           { className: 'wf-toolbar-actions' },
           step === 'process' &&
             h(
-              'button',
-              { onClick: () => exportRows('需求拆分', processFields, true) },
-              '下载需求拆分',
+              react.Fragment,
+              null,
+              h('span', { className: 'dc-card-note' }, '全版本下载，不随下方筛选变化'),
+              h(
+                'button',
+                { onClick: () => exportRows('需求拆分', processFields, true) },
+                '下载需求拆分',
+              ),
             ),
           ['process', 'constraints'].includes(step) &&
             h(Actions, {
@@ -1357,6 +1405,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               draft,
               result,
               rows: filtered,
+              filters: { base, month, category, search, onlyMissing },
               update,
               relations,
               shipmentSnapshot,
@@ -1488,7 +1537,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                   h(
                     'button',
                     {
-                      onClick: syncWeights,
+                      onClick: () => syncWeights(),
                       disabled:
                         weightBusy ||
                         !weightCodes.length ||
@@ -1751,6 +1800,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                 currentEvaluation,
                 stale: evaluationStale,
                 executing,
+                preparingInputs,
                 error: evaluationError,
                 onExecute: executeEvaluation,
                 filters: { base, month, category, search, onlyMissing },

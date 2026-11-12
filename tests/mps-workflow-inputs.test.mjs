@@ -1,4 +1,8 @@
 import test from 'node:test';
+import {
+  workflowDraft as draft,
+  workflowPerformanceInput,
+} from './helpers/mps-workflow-fixture.mjs';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
@@ -30,59 +34,102 @@ const compiled = await build({
 const { buildMpsWorkflow } = await import(
   'data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].text).toString('base64')
 );
-const draft = () => ({
-  id: 'v1',
-  name: '本地核对',
-  month: '2026-12',
-  pull: 'monthly',
-  productSource: 'local-file',
-  products: [
-    {
-      基地: '',
-      产品编码: 'A',
-      产品名称: '产品A',
-      大类: '点心',
-      系列: '系列',
-      物料组: '包点',
+
+test('ODM占位产能不进入内部资源，明确收货标签形成外部计划，普通SKU继续排产', async () => {
+  const sample = workflowPerformanceInput(2);
+  sample.draft.resourceAssignments = sample.draft.resourceAssignments.filter(
+    (row) => row.code !== '0',
+  );
+  sample.relations = {
+    sources: {
+      tunnels: [
+        {
+          belong_base: 'ODM',
+          production_unit: 'ODM代工',
+          tunnel_no: 'ODM',
+          standard_daily_output_ton: null,
+        },
+      ],
+      sku_capacity: [
+        {
+          belong_base: 'ODM',
+          workshop: 'ODM代工',
+          tunnel_no: 'ODM',
+          material_code: '0',
+          standard_daily_output_ton: null,
+        },
+      ],
+      transfers: [
+        {
+          stat_period: '2026-11',
+          target_base: '甲',
+          material_code: '0',
+          transfer_tag: 'ODM代工品',
+          transfer_direction: '',
+        },
+      ],
     },
-    {
-      基地: '',
-      产品编码: 'B',
-      产品名称: '产品B',
-      大类: '点心',
-      系列: '系列',
-      物料组: '包点',
+  };
+  const { buildPlanSources } = await import('../static/mps/source/plan-inputs.js');
+  const sources = buildPlanSources(sample.draft, sample.relations);
+  assert.equal(sources.odmSupplies.length, 1);
+  assert.deepEqual(sources.odmConflicts, []);
+  assert.ok(sources.resources.every((row) => row.base !== 'ODM'));
+  assert.ok(sources.planSourceIssues.every((reason) => !reason.includes('ODM')));
+  const result = buildMpsWorkflow(
+    sample.draft,
+    sample.relations,
+    sample.shipment,
+    sample.evaluation,
+  ).plan;
+  const first = result.rows.filter((row) => row.month === sample.draft.month);
+  const odm = first.find((row) => row.code === '0');
+  const internal = first.find((row) => row.code === '1');
+  assert.equal(odm.odmArrival, 50);
+  assert.equal(odm.mainPlan, 0);
+  assert.ok(Math.abs(internal.mainPlan - 50) < 1e-8);
+  assert.equal(odm.closingInventory, 0);
+  assert.ok(odm.odmBasis.includes('默认估算'));
+  assert.ok(result.reportIssues.every((row) => row.code !== '0' || row.kind !== '缺产线产能'));
+  const total = result.capacityReport.totals.find(
+    (row) => row.month === sample.draft.month && row.base === '甲',
+  );
+  assert.equal(total.demand.value, 50);
+  assert.equal(total.odmDemand.value, 50);
+  assert.equal(total.load, 1);
+});
+
+test('ODM来源与自产标签冲突可导出人工修正说明，不能伪造内部排产或默认到货', () => {
+  const sample = workflowPerformanceInput(1);
+  sample.relations = {
+    sources: {
+      tunnels: [],
+      sku_capacity: [
+        { belong_base: 'ODM', workshop: 'ODM代工', tunnel_no: 'ODM', material_code: '0' },
+      ],
+      transfers: [
+        {
+          stat_period: '2026-11',
+          target_base: '甲',
+          material_code: '0',
+          transfer_tag: '自产品',
+          transfer_direction: '',
+        },
+      ],
     },
-  ],
-  report: [
-    { 月份: '2026-12', 基地: '甲', 产品编码: 'A', 月初数量: 30, 纠偏数量: 90 },
-    { 月份: '2026-12', 基地: '乙', 产品编码: 'B', 月初数量: 70, 纠偏数量: 10 },
-  ],
-  history: [
-    { 月份: '2025-12', 基地: '甲', 产品编码: 'A', 数量: 60, 不含税收入: '' },
-    { 月份: '2025-12', 基地: '乙', 产品编码: 'B', 数量: 40, 不含税收入: '' },
-  ],
-  historyMetadata: { partial: true, warnings: ['部分收入为空'] },
-  historyAnnual: {
-    periods: [
-      {
-        start: '2025-07-01',
-        end: '2026-06-30',
-        rows: [
-          { 基地: '甲', 产品编码: 'A', 数量: 60 },
-          { 基地: '乙', 产品编码: 'B', 数量: 40 },
-        ],
-      },
-    ],
-  },
-  historyAnnualRead: { status: 'ready' },
-  reportRead: { status: 'ready' },
-  historyRead: { status: 'ready' },
-  categoryDemand: [{ month: '2026-12', category: '点心', quantity: 120 }],
-  constraints: {
-    safetyDays: [{ base: '甲', days: 0 }],
-    rules: { local: [{ description: '本地', strength: '硬' }] },
-  },
+  };
+  const plan = buildMpsWorkflow(
+    sample.draft,
+    sample.relations,
+    sample.shipment,
+    sample.evaluation,
+  ).plan;
+  assert.ok(plan.rows.every((row) => row.mainPlan === 0 && row.odmArrival === null));
+  const issue = plan.reportIssues.find((row) => row.kind === 'ODM来源冲突');
+  assert.ok(issue.blocking);
+  assert.match(issue.reason, /自产品/);
+  assert.match(issue.action, /人工确认/);
+  assert.match(issue.sourceFields, /transfer_tag/);
 });
 
 test('产品老品编码接入历史参考并建立老品所在基地的新品拆分范围', () => {
@@ -485,7 +532,7 @@ test('评估月源三层系数接入Top1剩余占比，同版三个月使用同�
   assert.equal(buildMpsWorkflow(source).rows[0].demand, null);
 });
 
-test('求解装配按物理隧道去重，冲突能力与渠道系数留待补充，调拨限定来源月份', async () => {
+test('求解装配按物理隧道去重，冲突能力与渠道系数留待补充，最新调拨供三月共用', async () => {
   const { buildPlanSources } = await import('../static/mps/source/plan-inputs.js');
   const source = draft();
   source.constraints.rules.local = [];
@@ -511,7 +558,7 @@ test('求解装配按物理隧道去重，冲突能力与渠道系数留待补�
           transfer_direction: '甲→乙',
           target_base: '乙',
         },
-        { material_code: 'B', transfer_direction: '全国' },
+        { stat_period: '2026-12', material_code: 'B', transfer_direction: '全国' },
       ],
     },
   };
@@ -531,7 +578,10 @@ test('求解装配按物理隧道去重，冲突能力与渠道系数留待补�
   assert.equal(first.resources.length, 1);
   assert.equal(first.planCandidates.length, 1);
   assert.match(first.planSourceIssues.join(''), /能力冲突/);
-  assert.deepEqual(first.transferRoutes, [{ from: '甲', to: '乙', code: 'A', month: '2026-12' }]);
+  assert.deepEqual(first.transferRoutes, [
+    { from: '甲', to: '乙', code: 'A', sourceMonth: '2026-12' },
+  ]);
+  assert.equal(first.metadata.transferSourcePeriod, '2026-12');
   assert.equal(first.metadata.pendingRoutes, 1);
   assert.equal(first.productionDays.find((row) => row.month === '2027-02').days, 15);
   source.resources = [{ id: 'manual', base: '甲', kind: 'tunnel', name: '人工隧道', dailyTons: 7 }];
@@ -739,13 +789,13 @@ test('调拨装配识别源表的从某基地调拨文本，并用目标基地�
     { material_code: 'C', transfer_direction: '从未确认基地调拨', target_base: '乙' },
     { material_code: 'D', transfer_direction: '甲→乙', target_base: '甲' },
     { material_code: 'E', transfer_direction: '从甲调拨', target_base: '甲' },
-  ];
+  ].map((row) => ({ stat_period: '2026-12', ...row }));
   const result = buildPlanSources(source, {
     sources: { tunnels: [], sku_capacity: [], transfers: facts },
   });
   assert.deepEqual(result.transferRoutes, [
-    { from: '甲', to: '乙', code: 'A', month: '2026-12' },
-    { from: '甲', to: '乙', code: 'B', month: '2026-12' },
+    { from: '甲', to: '乙', code: 'A', sourceMonth: '2026-12' },
+    { from: '甲', to: '乙', code: 'B', sourceMonth: '2026-12' },
   ]);
   assert.equal(result.metadata.pendingRoutes, 3);
 });
@@ -762,16 +812,60 @@ test('调拨装配按已确认的四川广州湖州关系匹配评估基地', as
     { material_code: 'C', transfer_direction: '湖州→四川', target_base: '西南' },
     { material_code: 'D', transfer_direction: '从西南调拨', target_base: '四川' },
     { material_code: 'E', transfer_direction: '郑州→四川', target_base: '广州' },
-  ];
+  ].map((row) => ({ stat_period: source.month, ...row }));
   const result = buildPlanSources(source, {
     sources: { tunnels: [], sku_capacity: [], transfers },
   });
   assert.deepEqual(result.transferRoutes, [
-    { from: '郑州', to: '西南', code: 'A', month: source.month },
-    { from: '华南', to: '华东', code: 'B', month: source.month },
-    { from: '华东', to: '西南', code: 'C', month: source.month },
+    { from: '郑州', to: '西南', code: 'A', sourceMonth: source.month },
+    { from: '华南', to: '华东', code: 'B', sourceMonth: source.month },
+    { from: '华东', to: '西南', code: 'C', sourceMonth: source.month },
   ]);
   assert.equal(result.metadata.pendingRoutes, 2);
+});
+
+test('纯中转基地由最新关系识别并读取件吨，不要求已有本地需求或产线', async () => {
+  const { buildPlanSources } = await import('../static/mps/source/plan-inputs.js');
+  const source = {
+    month: '2026-12',
+    products: [{ 基地: '甲', 产品编码: 'A' }],
+    resources: [{ id: 'S', base: '丙', kind: 'tunnel', dailyTons: 5 }],
+  };
+  const result = buildPlanSources(
+    source,
+    {
+      sources: {
+        tunnels: [],
+        sku_capacity: [],
+        transfers: [
+          {
+            stat_period: '2026-11',
+            material_code: 'A',
+            transfer_direction: '丙→乙',
+            target_base: '乙',
+          },
+          {
+            stat_period: '2026-11',
+            material_code: 'A',
+            transfer_direction: '乙→甲',
+            target_base: '甲',
+          },
+        ],
+      },
+    },
+    { rows: [{ material_code: 'A', channel_name: '商超', ton_per_piece: 0.1 }] },
+  );
+  assert.deepEqual(
+    result.transferRoutes.map((row) => [row.from, row.to]),
+    [
+      ['丙', '乙'],
+      ['乙', '甲'],
+    ],
+  );
+  assert.equal(
+    result.unitWeights.find((row) => row.base === '乙' && row.code === 'A').tonsPerPiece,
+    0.1,
+  );
 });
 
 test('报告按确认口径区分下市需求、产线、调拨和件吨系数，有资源不误报缺产能', () => {
@@ -856,7 +950,13 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
   assert.equal(plan.rows.find((row) => row.code === 'D').demand, 25);
   source.report[3].月初数量 = 0;
   source.historyAnnual.periods[0].rows[3].数量 = 0;
-  assert.ok(run().reportIssues.every((row) => row.code !== 'D'));
+  assert.ok(
+    run().reportIssues.every(
+      (row) =>
+        row.code !== 'D' ||
+        !['下市品产生需求', '缺产线产能', '缺调拨关系', '缺件吨系数'].includes(row.kind),
+    ),
+  );
   source.resources.push({ id: 'R2', base: '乙', kind: 'tunnel', name: '供方产线', dailyTons: 100 });
   source.resourceAssignments.push({ base: '乙', code: 'B', resourceId: 'R2', share: 1 });
   source.unitWeights.push({ base: '乙', code: 'B', tonsPerPiece: 1 });
@@ -917,4 +1017,36 @@ test('组合系列为空但物理隧道有效时保留产能，不进入缺产�
   assert.ok(Math.abs(row.mainPlan - 120) < 1e-8);
   assert.equal(row.candidateResources.length, 1);
   assert.ok(plan.reportIssues.every((issue) => issue.kind !== '缺产线产能'));
+});
+
+test('安全天数采用实际读取来源起月与版本，评估月保持独立', () => {
+  const source = draft();
+  source.inventoryTargetsRead = {
+    status: 'ready',
+    metadata: { start_month: '2026-11', end_month: '2027-01' },
+  };
+  const target = {
+    month: '2026-11',
+    base: '甲',
+    code: 'A',
+    version: '纠偏',
+    finalTarget: 100,
+    dailyDemand: 10,
+    finalTurnoverDays: 10,
+    sourceRows: 1,
+  };
+  source.inventoryTargets = [
+    target,
+    { ...target, month: '2026-12', version: '月初', finalTurnoverDays: 20 },
+  ];
+  const rows = buildMpsWorkflow(source).rows.filter((row) => row.code === 'A');
+  assert.equal(rows.length, 3);
+  assert.ok(
+    rows.every((row) => row.safetyDays === 10 && row.turnoverPolicy.sourceVersion === '纠偏'),
+  );
+  assert.ok(rows.every((row) => row.turnoverPolicy.sourceMonths.join() === '2026-11'));
+  assert.deepEqual(
+    rows.map((row) => row.month),
+    ['2026-12', '2027-01', '2027-02'],
+  );
 });

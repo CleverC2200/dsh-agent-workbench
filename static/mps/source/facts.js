@@ -1,4 +1,5 @@
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
+import { sourceAmount } from './source-money.js';
 import { call } from '../../../business/shared/channel.js';
 import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
 
@@ -20,7 +21,10 @@ const text = (value) => {
 };
 export async function readFactMonth(type, month, signal) {
   if (!['report', 'history', 'plan-quantity'].includes(type)) throw Error('该事实来源尚未接入');
-  return readFacts('facts.' + type, { month: month + '-01' }, signal, type, month);
+  const result = await readFacts('facts.' + type, { month: month + '-01' }, signal, type, month);
+  return type === 'report'
+    ? { ...result, amounts: await readReportAmounts(month, signal) }
+    : result;
 }
 export async function readHistoryAnnual(month, signal) {
   const period = previousFiscalYear(month);
@@ -51,7 +55,7 @@ async function readFacts(id, parameters, signal, type, month) {
   ) {
     const result = await client.readAll(
       id,
-      { ...parameters, page_size: 200, offset: 0 },
+      { ...parameters, page_size: 5000, offset: 0 },
       { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
     );
     if (type === 'shipment' || type === 'inventoryTargets')
@@ -236,7 +240,7 @@ export async function readShipmentInputs(cutoff, signal) {
     metadata: { ...result.metadata, sourceTable: 'ai_db.agents_scm_stock_detail_d' },
     rows: result.rows.map((row) => {
       const quantities = Object.fromEntries(
-        ['shipped', 'prepped', 'unprepped', 'daily3', 'open', 'inbound'].map((field) => [
+        ['shipped', 'prepped', 'unprepped', 'daily3', 'average', 'open', 'inbound'].map((field) => [
           field,
           row[field] === null ? null : number(row[field]),
         ]),
@@ -251,9 +255,9 @@ export async function readShipmentInputs(cutoff, signal) {
         group: text(row.product_item),
         ...quantities,
         remaining:
-          quantities.inbound == null
+          quantities.inbound == null || passed <= 1
             ? null
-            : Math.round((quantities.inbound / passed) * (totalDays - passed)),
+            : Math.round((quantities.inbound / (passed - 1)) * (totalDays - passed)),
         sourceDays: number(row.source_days),
         duplicateDays: number(row.duplicate_days),
       };
@@ -298,4 +302,62 @@ export async function readInventoryTargets(month, endMonth, signal) {
       readAt: new Date().toISOString(),
     },
   };
+}
+
+export async function readReportAmounts(month, signal) {
+  const metadata = {
+    period: month,
+    sourceTable: 'ai_db.agents_scm_dws_scm_cust_plan_exe_di',
+    originalSource: 'hive.dw.dws_scm_cust_plan_exe',
+  };
+  const element = document.getElementById('agent-sql-config');
+  const config = element ? JSON.parse(element.textContent) : null;
+  const definition = config?.queries['facts.report-amounts'];
+  if (!definition)
+    return {
+      ...metadata,
+      status: 'unconfigured',
+      rows: [],
+      error: '提报金额来源尚未配置，月初和最终计划金额待补',
+    };
+  try {
+    const client = createQueryClient(config, (_request, options) =>
+      call(
+        'sql',
+        {
+          queryId: options.queryId,
+          parameters: options.values,
+        },
+        { signal: options.signal },
+      ),
+    );
+    const result = await client.readAll(
+      'facts.report-amounts',
+      { month: month + '-01', page_size: 5000, offset: 0 },
+      {
+        signal,
+        keyFields: definition.grain,
+        requiredColumns: ['belong_base', 'material_code', 'ycplanamount', 'monthamount'],
+        maxRows: 100000,
+      },
+    );
+    return {
+      ...metadata,
+      status: 'ready',
+      configVersion: result.configVersion,
+      rows: result.rows.map((row) => ({
+        月份: month,
+        基地: text(row.belong_base),
+        产品编码: text(row.material_code),
+        月初计划金额: sourceAmount(row.ycplanamount),
+        最终计划金额: sourceAmount(row.monthamount),
+        缺项原因: [!row.belong_base ? '缺基地' : '', !row.material_code ? '缺产品编码' : '']
+          .filter(Boolean)
+          .join('；'),
+      })),
+    };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { ...metadata, status: 'failed', rows: [], error: error.message };
+  }
 }

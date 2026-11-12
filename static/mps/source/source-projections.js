@@ -8,7 +8,8 @@ const numeric = (value) =>
     ? Number(value)
     : null;
 
-export function productProjections(products, raw = [], facts = []) {
+export function productProjections(products, raw = [], facts = [], prices = []) {
+  const priceByCode = new Map(prices.map((price) => [price['产品编码'], price['未税到岸单价']]));
   const source = new Map(),
     groups = new Map(),
     bases = new Map();
@@ -37,7 +38,7 @@ export function productProjections(products, raw = [], facts = []) {
     const category = values(childSources, 'sub_category');
     const series = values(childSources, 'series');
     const labels = values(children.length ? childSources : records, 'responsible_item');
-    const display = { ...row };
+    const display = { ...row, 未税到岸单价: priceByCode.get(row['产品编码']) ?? '' };
     const inherited = [];
     for (const [field, candidates] of [
       ['大类', category],
@@ -139,27 +140,79 @@ function aggregate(rows, column, knownColumn) {
   };
 }
 
-export function sourceCheckRows(checks, rawProducts) {
-  const excluded = [];
+export function createSourceProductMatcher(rawProducts) {
   const categoriesByCode = new Map();
+  const codesByOldCode = new Map();
   for (const product of rawProducts ?? []) {
     const code = text(product.material_code) || text(product['产品编码']);
     if (!code) continue;
     const categories = categoriesByCode.get(code) ?? new Set();
     categories.add(text(product.sub_category) || text(product['大类']));
     categoriesByCode.set(code, categories);
+    const oldCode = text(product.replacement_material_code) || text(product['老品编码']);
+    if (oldCode) {
+      const codes = codesByOldCode.get(oldCode) ?? new Set();
+      codes.add(code);
+      codesByOldCode.set(oldCode, codes);
+    }
   }
-  const classify = (rows, month, source) =>
+  return (sourceCode) => {
+    sourceCode = text(sourceCode);
+    const oldCodes = codesByOldCode.get(sourceCode);
+    const currentCode = categoriesByCode.has(sourceCode)
+      ? sourceCode
+      : oldCodes?.size === 1
+        ? [...oldCodes][0]
+        : '';
+    const categories = categoriesByCode.get(currentCode);
+    return {
+      currentCode,
+      category: categories?.size === 1 ? [...categories][0] : '',
+      unknown: !categories && !oldCodes,
+      poolPresent: categoriesByCode.size > 0,
+      reason: categories
+        ? '当前产品池大类不唯一'
+        : oldCodes
+          ? '老品编码对应多个当前产品，未选择'
+          : '不在当前产品池',
+    };
+  };
+}
+
+export function sourceCheckRows(checks, rawProducts) {
+  const excluded = [];
+  const matchProduct = createSourceProductMatcher(rawProducts);
+  const classify = (rows, month, source, error) =>
     rows.flatMap((row) => {
-      const categories = categoriesByCode.get(text(row['产品编码']));
-      const category = categories?.size === 1 ? [...categories][0] : '';
-      const mapped = { ...row, 源大类: row['源大类'] ?? row['大类'] ?? '', 大类: category };
+      const sourceCode = text(row['产品编码']);
+      const match = matchProduct(sourceCode);
+      const { currentCode, category } = match;
+      const mapped = {
+        ...row,
+        当前产品编码: currentCode,
+        源大类: row['源大类'] ?? row['大类'] ?? '',
+        大类: category,
+      };
       if (!category) {
+        const quantity = source === 'BI' ? row['数量'] : (row['源计划数量'] ?? row['计划数量']);
+        if (
+          match.poolPresent &&
+          match.unknown &&
+          sourceCode &&
+          !error &&
+          (!row['缺项原因'] ||
+            (source === '计划量' &&
+              numeric(row['源记录数']) > 0 &&
+              numeric(row['缺数量条数']) > 0 &&
+              numeric(row['重复键条数']) === 0)) &&
+          (quantity == null || quantity === '' || numeric(quantity) === 0)
+        )
+          return [];
         excluded.push({
           ...mapped,
           月份: month,
           来源: source,
-          原因: categories ? '当前产品池大类不唯一' : '不在当前产品池',
+          原因: match.reason,
         });
         return [];
       }
@@ -175,8 +228,8 @@ export function sourceCheckRows(checks, rawProducts) {
     ...period,
     historyError: period.history.error,
     reportError: period.report.error,
-    history: classify(period.history.rows, period.month, 'BI'),
-    report: classify(period.report.rows, period.month, '计划量'),
+    history: classify(period.history.rows, period.month, 'BI', period.history.error),
+    report: classify(period.report.rows, period.month, '计划量', period.report.error),
   }));
   const classes = [
     ...new Set(

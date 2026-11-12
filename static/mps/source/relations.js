@@ -1,7 +1,18 @@
 import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
 
+export function latestTransferSnapshot(rows) {
+  if (rows.some((row) => !/^\d{4}-(0[1-9]|1[0-2])$/.test(row.stat_period)))
+    throw Error('调拨关系来源日期无效');
+  const period = rows.reduce(
+    (latest, row) => (row.stat_period > latest ? row.stat_period : latest),
+    '',
+  );
+  return { period, rows: rows.filter((row) => row.stat_period === period) };
+}
+
 export async function readRelations(config, execute, month, signal) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw Error('评估月份无效');
+  const configSignature = JSON.stringify(config);
   const query = createQueryClient(config, execute);
   const kinds = ['products', 'sku_capacity', 'tunnels', 'transfers'];
   const results = await Promise.all(
@@ -10,8 +21,7 @@ export async function readRelations(config, execute, month, signal) {
       return query.readAll(
         kind + '.detail',
         {
-          ...(kind === 'transfers' ? { period: month } : {}),
-          page_size: 200,
+          page_size: 5000,
           offset: 0,
         },
         {
@@ -26,40 +36,20 @@ export async function readRelations(config, execute, month, signal) {
   if (results.some((result) => result.configVersion !== results[0].configVersion))
     throw Error('数据源配置版本不一致，请重新读取');
   const sources = Object.fromEntries(kinds.map((kind, index) => [kind, results[index].rows]));
+  const transferSnapshot = latestTransferSnapshot(sources.transfers);
+  if (transferSnapshot.rows.length !== sources.transfers.length)
+    throw Error('调拨关系来源日期在读取期间变化，请重新读取');
   return {
     sources,
+    configSignature,
     records: relationRecords(sources, month),
     configVersion: results[0].configVersion,
+    transferSourcePeriod: transferSnapshot.period,
   };
 }
 
 export async function readPlanRelations(config, execute, months, signal) {
-  const first = await readRelations(config, execute, months[0], signal);
-  const query = createQueryClient(config, execute);
-  const definition = config.queries['transfers.detail'];
-  const later = await Promise.all(
-    months.slice(1).map(async (month) => {
-      const result = await query.readAll(
-        'transfers.detail',
-        { period: month, page_size: 200, offset: 0 },
-        {
-          signal,
-          keyFields: definition.grain,
-          requiredColumns: definition.columns,
-          maxRows: 10000,
-        },
-      );
-      if (result.configVersion !== first.configVersion)
-        throw Error('求解来源配置版本变化，请重新评估');
-      if (result.rows.some((row) => row.stat_period !== month))
-        throw Error('调拨来源月份与求解月份不一致');
-      return result.rows;
-    }),
-  );
-  return {
-    ...first,
-    sources: { ...first.sources, transfers: [...first.sources.transfers, ...later.flat()] },
-  };
+  return readRelations(config, execute, months[0], signal);
 }
 
 const emptySourceField = (value) => value == null || (typeof value === 'string' && !value.trim());
@@ -210,8 +200,7 @@ export function relationRecords(sources, month) {
       ...repeated(source),
     ],
   }));
-  const transfers = sources.transfers.map((source) => {
-    if (source.stat_period !== month) throw Error('调拨源月份与评估月份不一致');
+  const transfers = latestTransferSnapshot(sources.transfers).rows.map((source) => {
     return {
       month,
       source,

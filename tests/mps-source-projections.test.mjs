@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   productProjections,
   sourceCheckRows,
@@ -200,3 +201,142 @@ test('产品列表的大类覆盖保留无来源及分类冲突涉及的大类�
   assert.equal(result.rows.length, 4);
   assert.equal(result.excluded.length, 1);
 });
+
+test('池外仅过滤各自真实源数量的零值和空值，池内零值及缺项继续保留', () => {
+  const actual = [0, '', null, 8, -2418].map((quantity, index) =>
+    history(quantity, { 产品编码: 'OUT' + index }),
+  );
+  const plans = [0, '', null, 25, -7].map((quantity, index) =>
+    report(quantity, quantity, { 产品编码: 'OUT' + index }),
+  );
+  const result = sourceCheckRows(
+    checks([...actual, history(0), history('')], [...plans, report(0, 0)]),
+    [raw('A', { sub_category: '汤圆' })],
+  );
+  assert.deepEqual(
+    result.excluded.map((row) => [row['来源'], row['数量'] ?? row['计划数量']]),
+    [
+      ['BI', 8],
+      ['BI', -2418],
+      ['计划量', 25],
+      ['计划量', -7],
+    ],
+  );
+  assert.equal(result.details.length, 7);
+  assert.equal(result.rows[0].actual.knownQuantity, 0);
+  assert.equal(result.rows[0].actual.quantity, null);
+  assert.equal(result.rows[0].plan.quantity, 0);
+});
+
+test('真实空计划量附带来源缺项说明时只过滤池外记录，池内缺项及源异常继续保留', () => {
+  const missing = {
+    源计划数量: '',
+    源记录数: 1,
+    缺数量条数: 1,
+    重复键条数: 0,
+    缺项原因: '计划数量缺失，保留已知小计',
+  };
+  const result = sourceCheckRows(
+    checks(
+      [],
+      [
+        report('', '', { ...missing, 产品编码: 'OUT' }),
+        report('', '', missing),
+        report('', '', {
+          ...missing,
+          产品编码: 'DUP',
+          重复键条数: 2,
+          缺项原因: '计划来源六维业务键重复，未合计有效量；计划数量缺失，保留已知小计',
+        }),
+        report('', '', {
+          ...missing,
+          产品编码: 'UNKNOWN',
+          缺数量条数: 0,
+          缺项原因: '来源字段不完整',
+        }),
+      ],
+    ),
+    [raw('A', { sub_category: '汤圆' })],
+  );
+  assert.deepEqual(
+    result.excluded.map((row) => row['产品编码']),
+    ['DUP', 'UNKNOWN'],
+  );
+  assert.equal(result.rows[0].plan.quantity, null);
+  assert.equal(result.rows[0].plan.missing, 1);
+  assert(
+    result.details.some((row) => row['产品编码'] === 'A' && row['缺项原因'] === missing.缺项原因),
+  );
+  const failed = checks([], [report('', '', { ...missing, 产品编码: 'OUT' })]);
+  failed.periods[0].report.error = '来源读取失败';
+  assert.equal(sourceCheckRows(failed, [raw('A')]).excluded.length, 1);
+});
+
+test('当前编码优先且唯一老品只归属一个当前SKU，保留来源编码与原始数量', () => {
+  const products = [
+    raw('A', { sub_category: '汤圆', replacement_material_code: 'OLD' }),
+    raw('A', { sub_category: '汤圆', replacement_material_code: 'OLD', belong_base: '乙' }),
+    { 产品编码: 'B', 大类: '水饺', 老品编码: 'A' },
+  ];
+  const input = checks(
+    [history(8, { 产品编码: 'OLD' }), history(3)],
+    [report(10, 10, { 产品编码: 'OLD' })],
+  );
+  const before = structuredClone(input);
+  const result = sourceCheckRows(input, products);
+  assert.equal(result.excluded.length, 0);
+  assert.equal(result.rows.find((row) => row.category === '汤圆').actual.quantity, 11);
+  assert.equal(result.rows.find((row) => row.category === '汤圆').plan.quantity, 10);
+  assert.equal(result.rows.find((row) => row.category === '水饺').actual.quantity, null);
+  const old = result.details.find((row) => row['产品编码'] === 'OLD');
+  assert.equal(old['当前产品编码'], 'A');
+  assert.equal(old['大类'], '汤圆');
+  assert.deepEqual(input, before);
+});
+
+test('零数量的匹配冲突、源数量不完整与读取失败继续报告，不能当作正常池外过滤', () => {
+  const input = checks(
+    [history(0, { 产品编码: 'SHARED' }), history(0, { 产品编码: '' })],
+    [
+      report('', '', {
+        产品编码: 'OUT',
+        源计划数量: 12,
+        缺项原因: '计划来源六维业务键重复，未合计有效量',
+      }),
+    ],
+  );
+  const result = sourceCheckRows(input, [
+    raw('A', { replacement_material_code: 'SHARED' }),
+    raw('B', { replacement_material_code: 'SHARED' }),
+  ]);
+  assert.equal(result.excluded.length, 3);
+  assert.match(result.excluded[0]['原因'], /老品编码对应多个当前产品/);
+  assert.equal(result.excluded[2]['源计划数量'], 12);
+  const failed = checks([history(0, { 产品编码: 'OUT' })], []);
+  failed.periods[0].history.error = '当前账号暂无数据权限';
+  const failure = sourceCheckRows(failed, [raw('A')]);
+  assert.equal(failure.excluded.length, 1);
+  assert(failure.rows[0].issues.some((issue) => issue.includes('BI读取失败')));
+  assert(failure.details.some((row) => row['原因'].includes('读取失败')));
+  assert.equal(sourceCheckRows(checks([history(0)], []), []).excluded.length, 1);
+});
+
+test(
+  '留存891条池外记录过滤675条，保留BI8条及计划208条，含负数-2418',
+  {
+    skip: !process.env.MPS_POOL_REPLAY_INPUT && '设置MPS_POOL_REPLAY_INPUT以只读回放留存底稿',
+  },
+  async () => {
+    const { draft } = JSON.parse(await readFile(process.env.MPS_POOL_REPLAY_INPUT, 'utf8'));
+    const before = JSON.stringify(draft.sourceChecks);
+    const result = sourceCheckRows(draft.sourceChecks, draft.products);
+    assert.equal(result.excluded.length, 216);
+    assert.equal(result.excluded.filter((row) => row['来源'] === 'BI').length, 8);
+    assert.equal(result.excluded.filter((row) => row['来源'] === '计划量').length, 208);
+    assert.equal(result.excluded.find((row) => row['数量'] === -2418)['来源'], 'BI');
+    assert.equal(new Set(result.excluded.map((row) => row['产品编码'])).size, 72);
+    assert.equal(result.details.length, 16488);
+    assert.equal(17163 - result.details.length, 675);
+    assert.equal(JSON.stringify(draft.sourceChecks), before);
+  },
+);

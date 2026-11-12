@@ -21,6 +21,7 @@ function fixture({ queryId, parameters }, latest = '2026-10-31') {
               prepped: 0,
               unprepped: 0,
               daily3: 10,
+              average: 10,
               open: 100,
               inbound: 200,
               source_days: Number(parameters.cutoff.slice(8)),
