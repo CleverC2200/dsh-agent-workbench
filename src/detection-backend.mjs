@@ -1,10 +1,5 @@
 import { validateTaskRule, displayRule, displayValue } from './task-rules.mjs';
-import {
-  warningOwner,
-  ownsWarningTask,
-  createOwnerScopedApi,
-  migrateWarningOwners,
-} from './warning-ownership.mjs';
+import { warningOwner, ownsWarningTask, createOwnerScopedApi } from './warning-ownership.mjs';
 import { deleteDetectionTask } from './task-management.mjs';
 import {
   notificationConfig,
@@ -401,15 +396,13 @@ export async function installDetection(ctx) {
     return warningOwner(result.value);
   }
   async function scheduler(input) {
-    const response = await ctx.connection
-      .createSharedFetchHandler('/api')
-      .fetch(
-        new Request('http://host/api/gea-proof/warning/scheduler', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input),
-        }),
-      );
+    const response = await ctx.connection.createSharedFetchHandler('/api').fetch(
+      new Request('http://host/api/gea-proof/warning/scheduler', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    );
     const body = await response.json();
     if (!response.ok || body.ok !== true) throw Error(body.error?.message || '预警调度服务不可用');
     return body.value;
