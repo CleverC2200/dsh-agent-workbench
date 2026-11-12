@@ -13,3 +13,5 @@
 
 - [销售预测提交退回清理](sales-plan-submit-return-cleanup.md)
 - [MPS四个月规则与待定单品隔离补齐](mps-four-month-partial.md)
+
+- [预警白名单存储与客户端检测调度](aps-warning-whitelist.md)
