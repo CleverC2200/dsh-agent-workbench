@@ -568,7 +568,7 @@ test('identity reset cancels pending source checks even when the replacement dra
     release = resolve;
   });
   t.after(() => release());
-  const { frame } = await mpsPage(t, config, async (query) => {
+  const { page, frame } = await mpsPage(t, config, async (query) => {
     if (!held && query.queryId === 'facts.history' && query.parameters.month === '2026-07-01') {
       held = true;
       await pending;
@@ -583,12 +583,14 @@ test('identity reset cancels pending source checks even when the replacement dra
     .evaluate(() => window.dispatchEvent(new Event('gea-identity-changed')));
   release();
   await expect.poll(() => completed).toBe(true);
+  await expect(section).toHaveCount(0);
+  await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await expect(section).toContainText('100.00%');
   await expect(section).not.toContainText('尚未读取核对窗口');
 });
 
-test('identity and page lifecycle resets reload first-page sources when the draft keeps the same id and month', async (t) => {
-  const { frame, calls } = await mpsPage(t, config, fixture);
+test('identity and page lifecycle resets pause sources until the owned view restores', async (t) => {
+  const { page, frame, calls } = await mpsPage(t, config, fixture);
   const productsSection = frame.getByRole('region', { name: '产品明细', exact: true });
   await expect(productsSection).toContainText('3 个产品');
   const sources = [
@@ -609,6 +611,17 @@ test('identity and page lifecycle resets reload first-page sources when the draf
     await frame
       .locator('body')
       .evaluate((_element, name) => window.dispatchEvent(new Event(name)), event);
+    await expect(productsSection).toHaveCount(0);
+    await frame
+      .locator('body')
+      .evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+    assert.deepEqual(
+      sources.map((queryId) => calls.filter((call) => call.queryId === queryId).length),
+      sources.map((queryId) => before.get(queryId)),
+    );
+    await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
     await expect(productsSection).toContainText('3 个产品', { timeout: 1500 });
     await expect
       .poll(() => ({
@@ -627,7 +640,7 @@ test('first-page sources resume when the business channel reconnects after an id
   const section = frame.getByRole('region', { name: '产品明细', exact: true });
   await expect(section).toContainText('3 个产品');
   await page.evaluate(() => window.mpsPort.postMessage({ type: 'identity-changed' }));
-  await expect(section).toContainText('0 个产品');
+  await expect(section).toHaveCount(0);
   await page.evaluate(() =>
     window.mpsPort.postMessage({
       type: 'context',
@@ -1198,4 +1211,39 @@ test('basic source anomalies keep known BI quantities and export every row while
     rows.filter((row) => row['产品编码'] === 'OUT-31' && row['原因'] === '不在当前产品池').length,
     3,
   );
+});
+
+test('退出或切换归属时不把默认版本写回旧评估，重新归属后保留所有人工输入', async (t) => {
+  const { page, frame } = await mpsPage(t, config, fixture);
+  await version(frame, '2026-11');
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '保留.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,原人工产品,汤圆,系列甲,G,,',
+    ),
+  });
+  const productCell = () => frame.getByRole('cell', { name: '原人工产品', exact: true });
+  await expect(productCell()).toBeVisible();
+  const saved = await page.evaluate(() => window.readView().localDrafts);
+  assert.equal(saved.drafts.length, 2);
+  for (const event of ['gea-identity-changed', 'gea-session-changing', 'pagehide']) {
+    await frame
+      .locator('body')
+      .evaluate((_el, name) => window.dispatchEvent(new Event(name)), event);
+    await expect(productCell()).toHaveCount(0);
+    await frame
+      .locator('body')
+      .evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+    assert.deepEqual(
+      await page.evaluate(() => window.readView().localDrafts),
+      saved,
+      event + ' must not overwrite old ownership',
+    );
+    await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
+    await expect(productCell()).toBeVisible();
+    assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), saved);
+  }
 });
