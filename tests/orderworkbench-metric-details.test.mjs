@@ -420,7 +420,8 @@ test('year comparison handoff retains complete independent month and week ranges
     for (const [index, name] of ['current', 'previous', 'year'].entries()) {
       const p = periods[keys[index]];
       assert.deepEqual(request.context.metricDetails.comparisonPeriods[kind][name], {
-        start: p.start, endExclusive: p.end,
+        start: p.start,
+        endExclusive: p.end,
       });
     }
   }
