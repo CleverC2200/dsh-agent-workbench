@@ -1,6 +1,6 @@
 // Quantity sums over daily execution details; no source-order/SKU deduplication.
 export const amendmentMetricContract = {
-  version: 'quantity-shipment-nonnegative-no-lock-v2',
+  version: 'quantity-shipment-nonnegative-no-lock-v3',
   source: 'agents_scm_execute_detail_d',
   warehouseSource: 'agents_dim_bas_warehouse_d',
   dateField: 'lastshipmenttime',
@@ -22,7 +22,7 @@ export const amendmentMetricContract = {
   lockPeriod: false,
   changeTimeRequired: false,
   filters:
-    'detailstatus=10、is_stat=1、剔除作废单；仅createsource=20，剔除is_virtual=1/2和timeout_code=14/16；两端仓库同提货点且均为01/02工厂仓类型才剔除短驳；郑州仅pickup_point=01',
+    'detailstatus=10、is_stat=1、剔除作废单；仅createsource=20，剔除is_virtual=1/2和timeout_code=14/16；两端仓库同提货点且均为01/02工厂仓类型才剔除短驳；仅pickup_point IN (01,02,03,04,37)；郑州仅pickup_point=01',
   answer:
     '分子、分母均为商品数量，不使用张；明细条数或订单张数只能另列，不能替代数量；旧快照或小时表结果不能冒充本口径',
 };
