@@ -94,6 +94,16 @@ test('预警筛选、检测任务操作列及执行记录在桌面和窄屏可�
   await page.addStyleTag({ content: bundle.outputFiles.find((f) => f.path.endsWith('.css')).text });
   await page.addScriptTag({ content: bundle.outputFiles.find((f) => f.path.endsWith('.js')).text });
   await expect(page.getByText('汤圆', { exact: true })).toBeVisible();
+  await page.locator('.warning-status-filter summary').click();
+  await page.getByRole('button', { name: '已关闭（含历史恢复）', exact: true }).click();
+  await expect(page.getByText('饺子', { exact: true })).toBeVisible();
+  await expect(page.getByText('汤圆', { exact: true })).toHaveCount(0);
+  await page.locator('.warning-status-filter summary').click();
+  await page.getByRole('button', { name: '全部状态', exact: true }).click();
+  await expect(page.getByText('汤圆', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '列表', exact: true }).click();
+  await expect(page.getByRole('columnheader', { name: '预警状态', exact: true })).toBeVisible();
+
   await page.evaluate(() => window.openManagement());
   const dialog = page.getByRole('dialog', { name: '预警管理' });
   await expect(dialog).toBeVisible();
