@@ -4,6 +4,26 @@ import Home from './workbench-app';
 import { ready } from '../../../shared/channel.js';
 
 document.documentElement.classList.add('aps-plugin-host');
+// Inform the owning frame when a page modal blocks the business surface.
+let lastModalState: boolean | undefined;
+const reportModalState = () => {
+  const open = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).some(
+    (el) => el.getClientRects().length > 0,
+  );
+  if (open === lastModalState) return;
+  lastModalState = open;
+  window.parent.postMessage({ protocol: 'gea-page-modal-v1', open }, '*');
+};
+new MutationObserver(reportModalState).observe(document.documentElement, {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeFilter: ['hidden', 'style', 'class', 'aria-modal'],
+});
+window.addEventListener('pagehide', () =>
+  window.parent.postMessage({ protocol: 'gea-page-modal-v1', open: false }, '*'),
+);
+reportModalState();
 const root = document.getElementById('root');
 if (!root) throw new Error('APS_PLUGIN_ROOT_MISSING');
 

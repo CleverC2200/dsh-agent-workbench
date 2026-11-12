@@ -245,7 +245,7 @@
     grid-template-columns: 1fr 1fr;
   }
 
-  .footer {
+  .footer:not(.batchFooter) {
     align-items: flex-start;
     flex-direction: column;
   }

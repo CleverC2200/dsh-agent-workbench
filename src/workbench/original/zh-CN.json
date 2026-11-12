@@ -782,6 +782,7 @@
           "channelMissing": "计划 ID 不符合 p-{渠道}-{YYYY-MM}-{5位流水号} 业务编码，无法安全确定重提渠道。",
           "multiple": "逐笔核对退回记录后修改提交；不可多选或与待审批记录混合提交。",
           "sourceAuthority": "当前身份、来源版本或完整明细尚未满足修改重提条件。",
+          "entryUnavailable": "当前页面尚未接入修改后提交入口，请更新客户端后重试。",
           "unconfirmedSubmitter": "无法确认修改责任身份；请核对当前用户与原提报方信息后再处理。",
           "serviceBoundary": "服务提报通道暂不可用，请稍后重试或联系管理员。",
           "readOnly": "当前版本仅可查看，服务端尚未授予可执行操作。",
@@ -810,7 +811,6 @@
         "inheritance": "修改数量不会重算已继承的确认数量和金额。",
         "unitPrice": "单价",
         "lineAmount": "提报金额",
-        "requestReference": "错误编号 {{id}}",
         "inheritedValues": "预计继承：区域 {{region}}；省区 {{province}}；大区 {{area}}",
         "quantity": "提报数量",
         "nextStatus": "重提目标状态"
@@ -926,7 +926,6 @@
           "rateLimited": "请求过于频繁；可稍后使用原幂等键重试，不会创建第二个动作。",
           "unavailable": "结果暂时未知；可关闭弹窗后刷新权威状态，或在此处使用原幂等键重试。请勿重新发起新的操作意图。",
           "failed": "操作请求失败且未更新本地状态；请刷新权威队列后再决定。",
-          "reference": "（错误编号：{{id}}，可将编号告知系统管理员）",
           "upstream": {
             "SALES_PLAN_APPROVAL_STATE_INVALID": "该版本当前无法执行此审批动作；请联系管理员核对审批实例状态。",
             "NOTIFICATION_PAYLOAD_INVALID": "服务端在生成审批通知时被拒绝，属于服务端问题，刷新无法解决；请把错误编号发给后端核对。",
@@ -1324,6 +1323,7 @@
     "target": "月度目标",
     "plan": "月计划",
     "progress": "月达成进度",
+    "submissionProgress": "月提报达成",
     "shipmentUnavailable": "发货实绩未取得",
     "noTarget": "未设置有效目标",
     "adjustmentAmount": "纠偏金额",

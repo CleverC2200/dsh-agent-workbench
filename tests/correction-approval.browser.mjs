@@ -30,6 +30,8 @@ const plans=scenario==='display-baseline'?[plan,{...plan,planId:'p2',versionId:'
 if(scenario==='m-source')plan.orderType='M';
 if(scenario==='zero'){plan.targetAmount='0';plan.amountProgress=null;plan.correctionProgress=null;}
 if(scenario==='shipment-unknown'){plan.shipAmount=null;plan.amountProgress=null;plan.shipmentError='发货金额来源待确认';}
+if(scenario==='returned-no-channel')plan.status=7;
+if(scenario==='actual-progress')Object.assign(plan,{currentQty:'15160',currentAmount:'1623958.90',mPlanQty:'16755',mPlanAmount:'1635925.16',targetAmount:'2008135.97',shipAmount:null,shipQty:null,amountProgress:null,shipmentError:'未取得该客户当月发货数据'});
 const details=new Map(plans.map(p=>[p.planId,{currentVersion:{...p,id:p.versionId,effective:true},skus:[{id:'s-'+p.planId,skuCode:'1001',versionId:p.versionId,productCategName:'水饺',skuName:'猪肉白菜水饺',qty:p.currentQty,baseQty:p.currentQty,price:'8',amt:p.currentAmount,amtBase:p.currentAmount,adjAddQty:p.planId==='p2'||scenario==='zero-adjustment'?'0':'2',adjCutQty:p.planId==='p2'?'3':'0'}],versions:[],logs:[]}]));
 if(scenario==='display-baseline')for(const detail of details.values())Object.assign(detail.skus[0],{baseQty:'-4',amtBase:'114800',corrBaseQty:'100',qty:'100',amt:'800'});
 const drafts=new Map();
@@ -162,6 +164,104 @@ test('纠偏六列与月初四列共用表格，保留发货和节点进度', { 
   await expect(row).toContainText('+2 / −0');
 });
 
+test('月初提报达成使用实际金额，纠偏保留发货达成口径', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t, 'actual-progress');
+  for (const mode of ['月初', '纠偏']) {
+    await page.getByRole('tab', { name: mode, exact: true }).click();
+    await page.getByRole('tab', { name: '按客户', exact: true }).click();
+    const row = page.getByRole('row').filter({ hasText: '华南经销客户' }).first();
+    const columns = await page.getByRole('columnheader').allTextContents();
+    const progressColumn = columns.findIndex(
+      (name) => name === (mode === '月初' ? '月提报达成' : '月达成进度'),
+    );
+    assert.ok(progressColumn >= 0);
+    const cell = row.getByRole('cell').nth(progressColumn);
+    await expect(cell.locator('strong')).toHaveText(mode === '月初' ? '80.9%' : '—');
+    if (mode === '月初') {
+      await expect(cell).toContainText('¥162.40万 / ¥200.81万');
+      await expect(cell).not.toContainText('发货实绩未取得');
+    } else {
+      await expect(cell).toContainText('发货实绩未取得');
+    }
+    await expect(row).not.toContainText('81.5%');
+    if (process.env.GEA_PROGRESS_EVIDENCE)
+      await page.screenshot({
+        path:
+          process.env.GEA_PROGRESS_EVIDENCE +
+          (mode === '月初' ? '/monthly.png' : '/correction.png'),
+      });
+  }
+  const zero = await openWorkbench(t, 'zero');
+  const row = zero.getByRole('row').filter({ hasText: '宝阳销售组' }).first();
+  await expect(row.locator('strong[title]')).toHaveText('—');
+});
+
+test('未接入重提入口时明确说明原因，避免误报身份或版本问题', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t, 'returned-no-channel');
+  await page
+    .getByRole('row')
+    .filter({ hasText: '宝阳销售组' })
+    .first()
+    .getByRole('checkbox')
+    .locator('..')
+    .click();
+  const submit = page.getByRole('button', { name: '修改后提交', exact: true });
+  await expect(submit).toBeDisabled();
+  await expect(submit).toHaveAttribute(
+    'title',
+    '当前页面尚未接入修改后提交入口，请更新客户端后重试。',
+  );
+});
+
+test('批量审批弹窗在窄工作区内保持关闭与确认按钮同行且可关闭', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t, 'batch');
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  for (const kind of ['退回', '通过']) {
+    await page.setViewportSize({ width: 1440, height: 960 });
+    for (const name of ['华南经销客户', '华北客户'])
+      await page
+        .getByRole('row')
+        .filter({ hasText: name })
+        .first()
+        .getByRole('checkbox')
+        .locator('..')
+        .click();
+    await page.getByRole('button', { name: kind, exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    const close = dialog.getByRole('button', { name: '关闭', exact: true });
+    const confirm = dialog.getByRole('button', { name: `确认批量${kind}`, exact: true });
+    await expect(close).toBeVisible();
+    await page.clock.runFor(500);
+    if (kind === '退回') await expect(confirm).toBeDisabled();
+    for (const width of [1440, 701, 700, 560, 375]) {
+      await page.setViewportSize({ width, height: 960 });
+      await page.clock.runFor(100);
+      const closeBox = await close.boundingBox();
+      const confirmBox = await confirm.boundingBox();
+      assert.ok(closeBox && confirmBox);
+      assert.ok(
+        Math.abs(closeBox.y - confirmBox.y) < 1,
+        `${kind} at ${width}px: buttons must share a row`,
+      );
+      assert.ok(
+        closeBox.x + closeBox.width <= confirmBox.x,
+        `${kind} at ${width}px: buttons must not overlap`,
+      );
+      assert.ok(
+        closeBox.x >= 0 && confirmBox.x + confirmBox.width <= width,
+        `${kind} at ${width}px: buttons must fit the viewport`,
+      );
+    }
+    if (kind === '退回') {
+      await dialog.getByRole('textbox').fill('核对客户数量');
+      await expect(confirm).toBeEnabled();
+    }
+    await close.click();
+    await expect(dialog).toHaveCount(0);
+    assert.deepEqual(await page.evaluate(() => window.actions), []);
+  }
+});
+
 test('纠偏暂存后批量通过携带草稿，批量退回复用原原因和动作', { timeout: 30000 }, async (t) => {
   for (const kind of ['APPROVE', 'REJECT']) {
     const page = await openWorkbench(t, 'batch');
@@ -247,9 +347,13 @@ test('纠偏复用品类维度、筛选汇总和分页控件', { timeout: 30000 
 
 test('同月Y/DC不同周期的发货按客户月份去重，金额未确认保持未知', { timeout: 30000 }, async (t) => {
   const grouped = await openWorkbench(t, 'duplicate');
+  await expect(grouped.getByRole('row').filter({ hasText: '宝阳销售组' }).first()).toContainText(
+    '80.0%',
+  );
   await grouped.getByRole('tab', { name: '纠偏', exact: true }).click();
   const row = grouped.getByRole('row').filter({ hasText: '宝阳销售组' }).first();
   await expect(row).toContainText('60 件');
+  await expect(row).toContainText('30.0%');
   await expect(row).not.toContainText('120');
   const unknown = await openWorkbench(t, 'shipment-unknown');
   await unknown.getByRole('tab', { name: '纠偏', exact: true }).click();
@@ -261,6 +365,9 @@ test('同月Y/DC不同周期的发货按客户月份去重，金额未确认保�
   await expect(shipment).toHaveAttribute('title', '发货金额来源待确认');
   await expect(shipment).toContainText('— / 60 件');
   await expect(shipment).not.toContainText('¥0');
+  await expect(
+    unknown.getByRole('row').filter({ hasText: '宝阳销售组' }).first(),
+  ).not.toContainText('80.0%');
 });
 
 test('月初和纠偏单笔通过都带入即时编辑，纠偏输入不改月初基准', { timeout: 30000 }, async (t) => {

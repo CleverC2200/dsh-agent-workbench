@@ -245,7 +245,7 @@ const RegionalApprovalBatchActionDialog: React.FC<{
         if (!busy) onClose();
       }}
       footer={
-        <div className={styles.footer}>
+        <div className={`${styles.footer} ${styles.batchFooter}`}>
           <div>
             <Button disabled={busy} onClick={onClose}>
               {t('common.assistantSurface.regionalApproval.liveBatch.close')}
