@@ -181,6 +181,7 @@ export function validate(result, task) {
     )
       throw Error('检测颗粒度或对象编码无效');
     seen.add(normalizedObjectKey(task.scope, x.objectKey, x.objectName));
+    if (x.rule?.sourceType == null && x.rule?.source === 'task') x.rule.sourceType = 'task';
     if (x.rule?.sourceType === 'task') {
       if (!x.unit || !x.objectName || !x.period || !x.cutoff || !x.evidence)
         throw Error('任务检测缺少对象、期间、截止时间或取数证据');
