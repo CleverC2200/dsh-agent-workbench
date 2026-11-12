@@ -56,13 +56,13 @@ const rows = {
     },
   ],
 };
-function fixture({ queryId, parameters }) {
+function fixture({ queryId, parameters, sourcePeriod = '2026-10' }) {
   const kind = queryId.split('.')[0];
   const records =
     kind === 'transfers'
       ? [
           {
-            stat_period: parameters.period,
+            stat_period: sourcePeriod,
             material_code: 'P000',
             material_name: '源产品0',
             series: '调拨源系列',
@@ -201,16 +201,18 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
 test('fourth MPS step clears records on failed refresh and discards a late result after version change', async (t) => {
   let denied = false,
     hold = false,
+    sourcePeriod = '2026-10',
     release;
   const pending = new Promise((resolve) => {
     release = resolve;
   });
   const { view, frame, calls } = await relations(t, async (query) => {
+    const result = fixture({ ...query, sourcePeriod });
     if (query.queryId === 'transfers.detail') {
       if (denied) throw Error('AGENT_ACCESS_DENIED');
-      if (hold && query.parameters.period === '2026-10') await pending;
+      if (hold && sourcePeriod === '2026-10') await pending;
     }
-    return fixture(query);
+    return result;
   });
   await expect(view).toContainText('共29条');
   denied = true;
@@ -226,6 +228,7 @@ test('fourth MPS step clears records on failed refresh and discards a late resul
     .toBeGreaterThan(before);
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await version(frame, '2026-11');
+  sourcePeriod = '2026-11';
   await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
   await view.getByRole('tab', { name: /基地与调拨/ }).click();
   await expect(view.locator('tbody tr')).toContainText('2026-11');

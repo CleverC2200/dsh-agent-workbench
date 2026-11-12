@@ -817,3 +817,8 @@
   flex: none;
   white-space: nowrap;
 }
+
+.wf-page .wf-processed-table .wf-demand-total > * {
+  background: var(--dc-head, #f7f8fa);
+  font-weight: 600;
+}

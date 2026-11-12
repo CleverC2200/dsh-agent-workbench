@@ -198,7 +198,7 @@ test('all group forecast pages are loaded, grouped source counts retain valid qu
   await expect(forecast.getByText('业务来源', { exact: true })).toBeVisible();
   await forecast.getByText('口径与统计说明', { exact: true }).click();
   await expect(forecast).toContainText('当前期间201条，数量合计201（单位待确认），缺失数量0条');
-  assert(calls.some((c) => c.queryId === 'forecast.detail' && c.parameters.offset === 200));
+  assert(calls.some((c) => c.queryId === 'forecast.detail' && c.parameters.page_size === 5000));
   deny = true;
   await forecast.getByRole('button', { name: '同步', exact: true }).click();
   await expect(forecast.getByRole('alert')).toContainText('当前账号暂无数据权限');

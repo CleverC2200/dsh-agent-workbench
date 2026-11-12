@@ -1,3 +1,4 @@
+import { expandShipmentBase } from './helpers/mps-shipment.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
@@ -91,7 +92,7 @@ test('shipment stages multiple hierarchy edits atomically, cancels across pages 
   const view = frame.locator('.sp-card');
   await expect.poll(async () => (await draft(page)).shipment?.rows?.length).toBe(2);
   const original = (await draft(page)).shipment;
-  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
+  await expandShipmentBase(frame, '郑州');
   await expect(view.locator('.mps-batch-input')).toHaveCount(0);
   await begin(view);
   await view.getByLabel('全国合计 整月预估发货', { exact: true }).fill('101');

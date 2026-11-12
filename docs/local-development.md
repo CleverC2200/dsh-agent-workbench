@@ -99,3 +99,15 @@ node scripts/task-status.mjs --input <本票三仓输入JSON绝对路径> --chec
 CLI 核三仓实际包名、完整 HEAD 和 tracked/untracked dirty；对每个登记 PR 仅调用 `gh api --method GET`，逐项核实时 PR 编号、open 状态、head/base SHA、分支和目标仓。它不 fetch、不更新远端、不派发或重跑 CI。缺少 `gh`、查询失败、返回缺字段或漂移都拒绝。查询结束后重新观察三仓源码；执行期间发生的 input、execution、依据或 handoff 字节变化，以及查询结束前新出现的停止标记也会拒绝。
 
 退出码 0 表示本次观察通过，非 0 表示拒绝或输入/查询未知。JSON 含观察时间、输入和执行记录摘要、逐仓结果、PR 结果及拒绝原因。PR 实时回执只保留编号、状态、head/base 的 SHA、分支和仓库名，不携带 PR 正文、用户资料或整份仓库对象。该检查不创建锁，也不会自动拦截 Codex。通过只描述本次观察；后续写入仍须遵守既有授权、交接与原写入口的 expected-head 校验，不能把旧回执当作未来写入许可。
+
+## MPS 离线测量
+
+使用 `node scripts/measure-mps.mjs --input <录制输入JSON> --manage <Manage源码目录>`，依赖沿用本仓 esbuild。输入为 `{draft, relations, shipment, evaluation}` 或同序四项数组，数据需来自同一次有效读取。工具只调用公开 `buildMpsWorkflow`，不执行 SQL、登录、React 或页面渲染。`--repetitions 3` 可重复相同输入，每次完整结果必须一致；不设置绝对毫秒门槛。
+
+JSON 输出分开记录源码准备、同步计算、JSON 序列化和 structuredClone 的毫秒数，以及输入规模、结果 bytes、有效需求/受限行数、Node、两仓 HEAD 与 dirty。准备和结果比较不计入计算。首次与后续样本分别保留，不合并成冷启动或稳定性能结论。
+
+加 `--worker` 使用已准备的 Playwright 浏览器，通过现有 `computeWorkflow` 运行真实 Web Worker，并与同步计算完整结果比较。有系统 Chrome 时可加 `--channel chrome`，工具不安装浏览器。Worker 输出包含创建至输入到达、postMessage 同步阻塞、输入到达、计算、结果到达和总时间；创建与输入到达存在重叠，不能把各项直接相加。结果到达包含 Worker 的结果克隆及主线程调度，不含 React 或页面渲染。浏览器启动、模块准备、输入准备和全结果比较均不在 Worker 总时间内。结果序列化和Node文本比较分别记录；measurementRoundtripMs另计本次Playwright往返，包含模块/输入准备、计算、JSON与CDP读回，不能当作纯传输耗时。预期结果保留在Node，实际结果文本读回后直接比较，不把预期大文本送入页面。
+
+录制对象可附 `reads: [{queryId, parameters, calls, rows, elapsedMs}]`，查询标识只接受本仓 MPS `sql.config.json` 中的 keys，另保留日期范围、分页及非负计数。`months` 只输出合法源月份别名的去重排序值与 `sourceAliasCount`；`codes` 只输出去重数量，以及排序后完整编码集合 JSON 的 SHA256 指纹。两者的 `complete` 仅表示所有输入项均通过相应校验，不证明来源覆盖完整；含非法项时为 false，非法原文不输出。它们是录制元数据，不证明本次发生查询，也不累加并发查询耗时。输入原文、草稿名称、SKU、headers 和凭据均不输出；失败只报告阶段。业务输入和原始输出放本票自有目录，不提交真实数据。
+
+`tests/mps-performance.test.mjs` 复用现有 workflow 夹具，验证 200 SKU 的正需求、共享资源竞争与公平满足率、结果不改输入、计时字段和输出脱敏。使用相邻 Manage；隔离源码组合可显式设 `DSH_MPS_MANAGE`。该低成本行为测试接入既有选测规则；真实录制输入与浏览器计时按需运行。

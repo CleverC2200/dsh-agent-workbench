@@ -1,6 +1,8 @@
+import { createProcessedDemandEvidence } from './processed-demand-evidence-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { changeAdjustment, quantityAdjustmentKey } from './local-draft.js';
 import { createBatchEdit } from './batch-edit.js';
+import { createAmountReconciliation } from './amount-reconciliation-view.js';
 
 const number = (value) =>
   value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format(value);
@@ -8,12 +10,6 @@ const sum = (rows, field) =>
   rows.length && rows.every((row) => row[field] != null)
     ? rows.reduce((total, row) => total + row[field], 0)
     : null;
-const known = (rows, field) => {
-  const available = rows.filter((row) => row[field] != null);
-  return available.length
-    ? `${number(available.reduce((total, row) => total + row[field], 0))}${available.length < rows.length ? '（已知小计）' : ''}`
-    : '—';
-};
 const comparison = (value) =>
   value?.quantity != null
     ? number(value.quantity)
@@ -38,9 +34,11 @@ const label = (entry) =>
     .filter(Boolean)
     .join(' ');
 
-export function createProcessedDemand(react, { downloadCsv }) {
+export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
   const h = react.createElement;
   const { Field } = createBatchEdit(react);
+  const AmountReconciliation = createAmountReconciliation(react, { downloadCsv: downloadAmounts });
+  const Evidence = createProcessedDemandEvidence(react, { downloadCsv });
   return function ProcessedDemand({
     draft,
     result,
@@ -52,6 +50,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
     card,
     onExplain,
     batch,
+    filters = {},
   }) {
     const [expanded, setExpanded] = react.useState(() => new Set());
     react.useEffect(() => setExpanded(new Set()), [draft.id, draft.month]);
@@ -67,7 +66,13 @@ export function createProcessedDemand(react, { downloadCsv }) {
     const months = result.months.slice(0, 3);
     const categories = [
       ...new Set(
-        rows.map((row) => row.category).concat(result.categoryRows.map((row) => row.category)),
+        rows
+          .map((row) => row.category)
+          .concat(
+            Object.values(filters).some(Boolean)
+              ? []
+              : result.categoryRows.map((row) => row.category),
+          ),
       ),
     ];
     const categoryValue = (category, month) =>
@@ -249,7 +254,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
           base: row.base,
         },
       ];
-      for (const row of result.rows) for (const entry of path(row)) add(all, entry, row);
+      for (const row of rows) for (const entry of path(row)) add(all, entry, row);
       for (const row of rows) {
         const entries = path(row);
         bases.set(nodeKey(entries[0]), entries[0]);
@@ -273,7 +278,8 @@ export function createProcessedDemand(react, { downloadCsv }) {
       }
       return { all, children, bases, groupNames, shipment, forecasts };
     }, [result, rows, draft.products]);
-    const sourceSummary = (values) => {
+    const sourceSummary = (source) => {
+      const values = source.map((value) => (value == null || value === '' ? null : Number(value)));
       const available = values.filter((value) => value != null);
       return {
         quantity:
@@ -298,14 +304,18 @@ export function createProcessedDemand(react, { downloadCsv }) {
         'div',
         { className: 'wf-source-value' },
         value.quantity == null && value.knownQuantity == null
-          ? h('span', { className: 'dc-demand-missing', title: sourceStatus(value) }, '待补')
+          ? h(
+              'span',
+              { className: 'dc-demand-missing', title: sourceStatus(value) },
+              value.missing ? '待补' : '—',
+            )
           : number(value.quantity ?? value.knownQuantity),
         (value.quantity != null || value.knownQuantity != null) &&
           sourceStatus(value) &&
           h('small', null, sourceStatus(value)),
       );
     const nodeData = (entry) => {
-      const full = indexed.all.get(nodeKey(entry)) ?? [];
+      const full = entry ? (indexed.all.get(nodeKey(entry)) ?? []) : rows;
       const identities = [
         ...new Map(full.map((row) => [productKey(row.base, row.code), row])).values(),
       ];
@@ -323,10 +333,12 @@ export function createProcessedDemand(react, { downloadCsv }) {
         shipmentEffective: sourceSummary(shipment.map((row) => row?.fin ?? null)),
         forecasts: months.slice(0, 2).map((month) =>
           sourceSummary(
-            identities.map((row) => {
-              const values = indexed.forecasts.get(JSON.stringify([month, row.base, row.code]));
-              return values?.length === 1 ? values[0]['数量'] : null;
-            }),
+            identities
+              .filter(() => full.some((row) => row.month === month))
+              .map((row) => {
+                const values = indexed.forecasts.get(JSON.stringify([month, row.base, row.code]));
+                return values?.length === 1 ? values[0]['数量'] : null;
+              }),
           ),
         ),
       };
@@ -450,17 +462,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
             { key: month },
             entry.kind === 'base-sku'
               ? controls({ ...entry, month, editorRow: key }, system, value, '', true)
-              : h(
-                  'strong',
-                  {
-                    title: `当前基地汇总；系统数量 ${number(system)}${value == null ? '；完整需求待补' : ''}`,
-                  },
-                  value == null
-                    ? known(selected, 'demand') === '—'
-                      ? '待补'
-                      : known(selected, 'demand')
-                    : number(value),
-                ),
+              : sourceCell(sourceSummary(selected.map((row) => row.demand))),
           );
           return index < 2
             ? [h('td', { key: `${month}-model` }, sourceCell(data.forecasts[index])), cell]
@@ -469,6 +471,130 @@ export function createProcessedDemand(react, { downloadCsv }) {
       );
       return rendered;
     });
+    const scopeLabel = Object.values(filters).some(Boolean) ? '当前范围合计' : '全国合计';
+    const total = nodeData();
+    detailRows.unshift(
+      h(
+        'tr',
+        { key: 'scope-total', className: 'wf-demand-row wf-demand-total' },
+        h('th', { scope: 'row' }, scopeLabel),
+        ...[
+          total.report,
+          total.history,
+          total.shipmentSystem,
+          total.shipmentEffective,
+          ...months.flatMap((month, index) => {
+            const demand = sourceSummary(
+              rows.filter((row) => row.month === month).map((row) => row.demand),
+            );
+            return index < 2 ? [total.forecasts[index], demand] : [demand];
+          }),
+        ].map((value, index) => h('td', { key: index }, sourceCell(value))),
+      ),
+    );
+    const missingRows = rows.flatMap((row) => {
+      const metrics = [
+        ['有效需求', row.demand, row.missing?.demand?.join('；') || '有效需求缺失'],
+        ...(row.month === months[0]
+          ? [
+              [
+                '计划提报',
+                row.reportQuantity,
+                row.missing?.reportQuantity?.join('；') || '本期销售提报数量缺失',
+              ],
+              [
+                '上一财年发货',
+                row.historyQuantity,
+                row.missing?.historyQuantity?.join('；') || '上一财年发货缺失',
+              ],
+            ]
+          : []),
+        ...(months.slice(0, 2).includes(row.month)
+          ? [
+              [
+                '模型预测',
+                (() => {
+                  const values = indexed.forecasts.get(
+                    JSON.stringify([row.month, row.base, row.code]),
+                  );
+                  return values?.length === 1 ? values[0]['数量'] : null;
+                })(),
+                '模型预测缺失、读取未就绪或同键重复',
+              ],
+            ]
+          : []),
+      ];
+      return metrics
+        .filter(([, value]) => value == null)
+        .map(([metric, , reason]) => ({
+          基地: row.base,
+          产品编码: row.code,
+          产品名称: row.name,
+          大类: row.category,
+          月份: row.month,
+          缺项指标: metric,
+          原因: reason,
+        }));
+    });
+    const exportScope = () => {
+      const columns = [
+        '评估版本',
+        '评估月份',
+        '粒度',
+        '月份',
+        '基地',
+        '产品编码',
+        '产品名称',
+        '大类',
+        '计划提报已知小计',
+        '计划提报待补数',
+        '模型预测已知小计',
+        '模型预测待补数',
+        '有效需求数量',
+        '有效需求已知小计',
+        '有效需求待补数',
+        '缺项指标',
+        '原因',
+      ];
+      const context = { 评估版本: draft.name, 评估月份: draft.month };
+      downloadCsv(`${draft.month}-当前范围需求.csv`, columns, [
+        ...months
+          .filter((month) => !filters.month || filters.month === month)
+          .map((month) => {
+            const selected = rows.filter((row) => row.month === month);
+            const demand = sourceSummary(selected.map((row) => row.demand));
+            const index = months.indexOf(month);
+            const model = index < 2 ? total.forecasts[index] : null;
+            return {
+              ...context,
+              粒度: scopeLabel,
+              月份: month,
+              ...(index === 0
+                ? {
+                    计划提报已知小计: total.report.knownQuantity,
+                    计划提报待补数: total.report.missing,
+                  }
+                : {}),
+              模型预测已知小计: model?.knownQuantity,
+              模型预测待补数: model?.missing,
+              有效需求数量: demand.quantity,
+              有效需求已知小计: demand.knownQuantity,
+              有效需求待补数: demand.missing,
+            };
+          }),
+        ...rows.map((row) => ({
+          ...context,
+          粒度: '基地SKU',
+          月份: row.month,
+          基地: row.base,
+          产品编码: row.code,
+          产品名称: row.name,
+          大类: row.category,
+          有效需求数量: row.demand,
+        })),
+        ...missingRows.map((row) => ({ ...context, 粒度: '缺项报告', ...row })),
+      ]);
+    };
     const detailTable = h(
       'div',
       {
@@ -546,6 +672,7 @@ export function createProcessedDemand(react, { downloadCsv }) {
           h('button', { onClick: exportSummary }, '下载大类需求总表'),
         ),
       ),
+      h(Evidence, { draft, result: result.categoryComputation, rows, filters, table }),
       card(
         '加工后的需求',
         h(
@@ -556,11 +683,31 @@ export function createProcessedDemand(react, { downloadCsv }) {
             h('p', { className: 'wf-note' }, '当前筛选暂无基地SKU输入，展开来源诊断查看缺项。'),
         ),
         h(
-          'span',
-          { className: 'dc-card-note' },
-          `${new Set(rows.map((row) => row.code)).size}个单品 · ${new Set(rows.map((row) => row.base)).size}个基地 · 单位：件`,
+          'div',
+          { className: 'wf-card-actions' },
+          h(
+            'span',
+            { className: 'dc-card-note' },
+            `${new Set(rows.map((row) => row.code)).size}个单品 · ${new Set(rows.map((row) => row.base)).size}个基地 · 单位：件`,
+          ),
+          h('button', { onClick: exportScope }, '下载当前范围需求'),
         ),
       ),
+      card(
+        '加工需求缺项报告',
+        missingRows.length
+          ? table(
+              '加工需求缺项报告',
+              ['基地', '产品编码', '产品名称', '大类', '月份', '缺项指标', '原因'],
+              missingRows.map((row) => Object.values(row)),
+            )
+          : h(
+              'p',
+              { className: 'wf-note' },
+              rows.length ? '当前范围无需求和对照数量缺项。' : '当前筛选暂无输入。',
+            ),
+      ),
+      h(AmountReconciliation, { draft, result, rows, filters, card, table }),
       h(
         'details',
         { className: 'wf-disclosure' },

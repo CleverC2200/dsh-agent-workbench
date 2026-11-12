@@ -1,3 +1,4 @@
+import { sourceDimensions } from './source-projections.js';
 import { prototypeShipments } from './prototype-shipments.js';
 import { readLatestShipmentDate, readShipmentInputs } from './facts.js';
 import { hasMpsSource } from './master-data.js';
@@ -9,8 +10,8 @@ const fields = [
   'prepped',
   'unprepped',
   'daily3',
-  'shipDays',
   'average',
+  'shipDays',
   'prediction',
   'fin',
   'open',
@@ -23,8 +24,8 @@ const names = [
   '已备',
   '未备',
   '近三天日均发货量',
+  '近30天日均发货',
   '已备未备预估发运天数',
-  '日均',
   '本月预测量',
   '整月预估发货',
   '月初库存',
@@ -44,10 +45,12 @@ const columns = [
   ...inputFields.map((field) => names[fields.indexOf(field)]),
 ];
 const keyOf = (row) => JSON.stringify([row.base, row.code]);
-const display = (value) =>
+const display = (value, field) =>
   value == null
     ? '待定'
-    : (Object.is(value, -0) ? 0 : value).toLocaleString('zh-CN', { maximumFractionDigits: 0 });
+    : (Object.is(value, -0) ? 0 : value).toLocaleString('zh-CN', {
+        maximumFractionDigits: field === 'average' ? 4 : 0,
+      });
 const knownSum = (rows, field) => {
   const known = rows.filter((row) => row[field] != null);
   return known.length ? finite(known.reduce((sum, row) => sum + row[field], 0)) : null;
@@ -57,18 +60,50 @@ const finite = (number) =>
 function derive(row, passed, total) {
   const orders =
     row.prepped == null || row.unprepped == null ? null : finite(row.prepped + row.unprepped);
-  const pace =
+  const observedPace =
     row.daily3 > 0
       ? row.daily3
       : row.daily3 === 0 && row.shipped != null
         ? row.shipped / passed
         : null;
+  const use30DayPace = observedPace === 0 && row.average > 0;
+  const pace = use30DayPace ? row.average : observedPace;
+  const paceSource =
+    orders === 0
+      ? '无待发订单，无需估算'
+      : use30DayPace
+        ? '近30天日均'
+        : row.daily3 > 0
+          ? '近三天日均'
+          : observedPace > 0
+            ? '本月已发货÷已过天数'
+            : '待定';
   const shipDays = orders === 0 ? 0 : orders != null && pace > 0 ? finite(orders / pace) : null;
   const hold = row.shipped == null || orders == null ? null : finite(row.shipped + orders);
-  const average = hold != null && shipDays != null ? finite(hold / (passed + shipDays)) : null;
+  const forecastAverage =
+    hold != null && shipDays != null ? finite(hold / (passed + shipDays)) : null;
   const rest = shipDays == null ? null : Math.max(0, total - passed - shipDays);
-  const prediction = average == null ? null : finite(Math.round(average * rest + hold));
-  return { ...row, shipDays, hold, average, rest, prediction };
+  const prediction =
+    forecastAverage == null ? null : finite(Math.round(forecastAverage * rest + hold));
+  return {
+    ...row,
+    average: row.average ?? null,
+    shipDays,
+    hold,
+    forecastAverage,
+    rest,
+    prediction,
+    pace,
+    paceSource,
+    forecastIssue:
+      prediction == null && orders > 0 && row.daily3 != null
+        ? row.daily3 < 0
+          ? '近三天日均为负，预估发运天数待确认'
+          : observedPace === 0
+            ? '近三天及本月日均为0，近30天日均无正数，无法估算发运天数'
+            : ''
+        : '',
+  };
 }
 function allocate(weights, target) {
   if (weights.some((value) => value == null)) throw Error('存在待定权重，无法重摊，请先补齐输入。');
@@ -107,6 +142,7 @@ export function createShipment(
     draft,
     update,
     active,
+    autoRead = false,
     scopeGeneration,
     onSnapshot,
     onEditingChange,
@@ -166,6 +202,18 @@ export function createShipment(
         controller.current?.abort();
       };
     }, [draft.id, draft.month, cutoff]);
+    const categories = react.useMemo(() => {
+      if (sourceKind !== 'business') return new Map();
+      const products = ['loading', 'failed'].includes(draft.productsRead?.status)
+        ? []
+        : (draft.products ?? []);
+      return new Map(
+        sourceDimensions(
+          sourceRows.map((row) => ({ 基地: row.base, 产品编码: row.code })),
+          products,
+        ).map((row) => [JSON.stringify([row['基地'], row['产品编码']]), row['大类']]),
+      );
+    }, [sourceKind, sourceRows, draft.products, draft.productsRead]);
     const deriveRows = (currentState) =>
       sourceRows
         .filter((row) => row.month === month && bases.includes(row.base))
@@ -180,18 +228,24 @@ export function createShipment(
             : null;
           return {
             ...derived,
+            ...(sourceKind === 'business' ? { category: categories.get(keyOf(row)) ?? '' } : {}),
             fin,
             remaining,
             inputRemaining: row.remaining,
             end,
             adjustment: adjustment ?? null,
             remainingSource: remainingEdit?.source ?? null,
-            missingFields: inputFields.filter((field) => row[field] == null),
+            missingFields: fields.filter(
+              (field) =>
+                (inputFields.includes(field) ||
+                  (sourceKind === 'business' && field === 'average')) &&
+                row[field] == null,
+            ),
           };
         });
     const rows = react.useMemo(
       () => deriveRows(state),
-      [sourceRows, month, passed, totalDays, state.values, state.remaining],
+      [sourceRows, sourceKind, categories, month, passed, totalDays, state.values, state.remaining],
     );
     const aggregate = (children, who) => {
       const inputs = Object.fromEntries(
@@ -199,13 +253,16 @@ export function createShipment(
       );
       const forecastRows = children.filter((row) => row.prediction != null);
       const calculation = derive(
-        Object.fromEntries(inputFields.map((field) => [field, knownSum(forecastRows, field)])),
+        Object.fromEntries(
+          [...inputFields, 'average'].map((field) => [field, knownSum(forecastRows, field)]),
+        ),
         passed,
         totalDays,
       );
       return {
         ...calculation,
         ...inputs,
+        average: knownSum(children, 'average'),
         who,
         fin: knownSum(children, 'fin'),
         end: knownSum(children, 'end'),
@@ -238,21 +295,25 @@ export function createShipment(
         const result = await readLatestShipmentDate(month, stop.signal);
         if (!valid()) return;
         if (result.date === null) {
+          setSyncStatus('failed');
           setError('该统计月份暂无可用发货日期，请补齐来源或手动选择截止日');
           return;
         }
         updateState({ cutoff: result.date, cutoffMetadata: result.metadata });
       } catch (failure) {
-        if (valid()) setError('读取最新发货日期失败：' + failure.message);
+        if (valid()) {
+          setSyncStatus('failed');
+          setError('读取最新发货日期失败：' + failure.message);
+        }
       } finally {
         if (valid()) setBusy(false);
       }
     };
     react.useEffect(() => {
-      if (!active || cutoff) return;
+      if ((!active && !autoRead) || cutoff) return;
       void readLatestDate();
       return () => controller.current?.abort();
-    }, [active, draft.id, month, cutoff]);
+    }, [active, autoRead, draft.id, month, cutoff]);
     const selectSource = (next) => {
       updateState({
         activeSource: next,
@@ -282,8 +343,16 @@ export function createShipment(
         cutoff,
         source,
         sourceKind,
-        status:
-          sourceKind === 'business' ? (business.metadata.partial ? 'partial' : 'ok') : sourceKind,
+        error: syncStatus === 'failed' ? error : null,
+        status: busy
+          ? 'loading'
+          : syncStatus === 'failed'
+            ? 'failed'
+            : sourceKind === 'business'
+              ? business.metadata.partial
+                ? 'partial'
+                : 'ok'
+              : sourceKind,
         sourceRows,
         sourceRecords: sourceKind === 'business' ? business.sourceRecords : sourceRows,
         rows,
@@ -301,6 +370,9 @@ export function createShipment(
       rows,
       business,
       batch.active,
+      busy,
+      syncStatus,
+      error,
     ]);
     const sync = async () => {
       if (!cutoff) return;
@@ -340,7 +412,10 @@ export function createShipment(
           (row) => !row.name || !row.series || !row.group,
         ).length;
         const incompleteRows = actualRows.filter(
-          (row) => inputFields.some((field) => row[field] == null) || row.sourceDays < passed,
+          (row) =>
+            inputFields.some((field) => row[field] == null) ||
+            row.average == null ||
+            row.sourceDays < passed,
         ).length;
         const duplicateRows = actualRows.filter((row) => row.duplicateDays > 0).length;
         updateState({
@@ -375,6 +450,11 @@ export function createShipment(
         if (valid()) setBusy(false);
       }
     };
+    react.useEffect(() => {
+      if (!autoRead || !cutoff || activeSource !== 'business' || business || !hasMpsSource())
+        return;
+      void sync();
+    }, [autoRead, draft.id, month, cutoff, activeSource]);
     const explain = (row, field, who) => setFormula({ row, field, who });
     const calculate = (currentState) => {
       const currentRows = deriveRows(currentState);
@@ -579,6 +659,7 @@ export function createShipment(
         '已过天数',
         '本月天数',
         ...columns,
+        '近30天日均发货',
         '本月预测量',
         '整月预估发货',
         '预计月末结存',
@@ -586,6 +667,9 @@ export function createShipment(
         '调整来源',
         '剩余入库来源',
         '缺失输入',
+        '发运速度来源',
+        '发运速度',
+        '预估待补原因',
       ];
       downloadCsv(
         `MPS-${draft.month}-${draft.id}-发货与结存.csv`,
@@ -606,6 +690,7 @@ export function createShipment(
           ...Object.fromEntries(
             inputFields.map((field) => [names[fields.indexOf(field)], row[field] ?? '']),
           ),
+          近30天日均发货: row.average ?? '',
           本月预测量: row.prediction ?? '',
           整月预估发货: row.fin ?? '',
           预计月末结存: row.end ?? '',
@@ -617,12 +702,28 @@ export function createShipment(
               ? '演示推算：生产入库÷22×8，四舍五入'
               : sourceKind === 'local-file'
                 ? '本地CSV；BI排产未核齐'
-                : `本月生产入库÷${passed}×${totalDays - passed}，逐SKU四舍五入`),
+                : passed <= 1
+                  ? '截止日日号减1为0，入库日均和剩余入库待补'
+                  : `截止日累计生产入库÷${passed - 1}×${totalDays - passed}，逐SKU四舍五入`),
           缺失输入: row.missingFields.map((field) => names[fields.indexOf(field)]).join('、'),
+          发运速度来源: row.paceSource,
+          发运速度: row.pace,
+          预估待补原因: row.forecastIssue,
         })),
       );
     };
-    const contextFields = ['base', 'code', ...inputFields, 'prediction', 'fin', 'end'];
+    const contextFields = [
+      'base',
+      'code',
+      ...inputFields,
+      'average',
+      'pace',
+      'paceSource',
+      'forecastIssue',
+      'prediction',
+      'fin',
+      'end',
+    ];
     const contextRows = [];
     let contextLength = 0;
     for (const row of rows) {
@@ -662,7 +763,8 @@ export function createShipment(
     );
     const numberCell = (row, field, who) => {
       const editable =
-        field === 'fin' || (field === 'remaining' && row.children && who !== '全国合计');
+        !row.readOnly &&
+        (field === 'fin' || (field === 'remaining' && row.children && who !== '全国合计'));
       return h(
         'td',
         {
@@ -699,14 +801,14 @@ export function createShipment(
                 'aria-label': `${who} ${names[fields.indexOf(field)]} 计算过程`,
                 onClick: () => explain(row, field, who),
               },
-              display(row[field]),
+              display(row[field], field),
             ),
       );
     };
     const renderRow = (row, who, label, className) =>
       h(
         'tr',
-        { key: who, className },
+        { key: JSON.stringify([className, who, row.category, row.group]), className },
         h(
           'th',
           { scope: 'row' },
@@ -727,31 +829,172 @@ export function createShipment(
         ),
         ...fields.map((field) => numberCell(row, field, who)),
       );
+    const toggleLabel = (id, who, label, count) =>
+      h(
+        react.Fragment,
+        {},
+        h(
+          'button',
+          {
+            className: 'sp-toggle',
+            'aria-label': `${expanded.includes(id) ? '收起' : '展开'} ${who}`,
+            'aria-expanded': expanded.includes(id),
+            onClick: () =>
+              setExpanded((current) =>
+                current.includes(id) ? current.filter((key) => key !== id) : [...current, id],
+              ),
+          },
+          h(
+            'svg',
+            {
+              width: 12,
+              height: 12,
+              viewBox: '0 0 12 12',
+              fill: 'none',
+              stroke: 'currentColor',
+              style: { transform: expanded.includes(id) ? 'rotate(90deg)' : undefined },
+              'aria-hidden': true,
+            },
+            h('path', { d: 'M4 2l4 4-4 4' }),
+          ),
+        ),
+        label,
+        h('span', { className: 'sp-count' }, `${count} 个单品`),
+      );
+    const skuLabel = (row) =>
+      h(
+        react.Fragment,
+        {},
+        h('span', { className: 'sp-code' }, row.code),
+        h(
+          'span',
+          {
+            className: 'sp-product-name',
+            title: `${row.name} · ${row.category} · ${row.series} · ${row.group}`,
+          },
+          row.name || '产品名称未提供',
+        ),
+      );
+    const renderHierarchy = (parent, scope, path = []) => {
+      const id = JSON.stringify([scope, ...path]);
+      if (!expanded.includes(id)) return [];
+      const dimension = ['category', 'group'][path.length];
+      if (dimension) {
+        const partition = new Map();
+        for (const row of parent.children) {
+          const name = row[dimension] || (dimension === 'category' ? '大类未提供' : '物料组未提供');
+          if (!partition.has(name)) partition.set(name, []);
+          partition.get(name).push(row);
+        }
+        return [...partition].flatMap(([name, children]) => {
+          const nextPath = [...path, name];
+          const who = [scope, ...nextPath].join(' ');
+          const group = {
+            ...aggregate(children, who),
+            category: nextPath[0],
+            group: nextPath[1],
+            readOnly: true,
+          };
+          return [
+            renderRow(
+              group,
+              who,
+              toggleLabel(
+                JSON.stringify([scope, ...nextPath]),
+                who,
+                name,
+                scope === '全国合计'
+                  ? new Set(children.map((row) => row.code)).size
+                  : children.length,
+              ),
+              `sp-level-${nextPath.length}`,
+            ),
+            ...renderHierarchy(group, scope, nextPath),
+          ];
+        });
+      }
+      const byCode = new Map();
+      if (scope === '全国合计')
+        for (const row of parent.children) {
+          if (!byCode.has(row.code)) byCode.set(row.code, []);
+          byCode.get(row.code).push(row);
+        }
+      const skus =
+        scope === '全国合计'
+          ? [...byCode].map(([code, children]) => ({
+              ...Object.fromEntries(
+                ['code', 'name', 'category', 'series', 'group'].map((key) => [
+                  key,
+                  children[0][key],
+                ]),
+              ),
+              ...aggregate(children, `${scope} ${code}`),
+              readOnly: true,
+            }))
+          : parent.children;
+      const children = skus.filter(
+        (row) => !skuSearch || [row.code, row.name].some((value) => value?.includes(skuSearch)),
+      );
+      const page = Math.min(skuPages[id] ?? 0, Math.max(0, Math.ceil(children.length / 25) - 1));
+      const who = [scope, ...path].join(' ');
+      return [
+        ...children
+          .slice(page * 25, (page + 1) * 25)
+          .map((row) => renderRow(row, `${scope} ${row.code}`, skuLabel(row), 'sp-sku')),
+        h(
+          'tr',
+          { key: `${id}-page` },
+          h(
+            'td',
+            { colSpan: 13 },
+            h(
+              'div',
+              { className: 'sp-sku-pages' },
+              h('span', null, `${who} · 共${children.length}个单品 · 第${page + 1}页`),
+              ...[-1, 1].map((direction) =>
+                h(
+                  'button',
+                  {
+                    key: direction,
+                    'aria-label': `${who} ${direction < 0 ? '上一页' : '下一页'}单品`,
+                    disabled: direction < 0 ? !page : (page + 1) * 25 >= children.length,
+                    onClick: () => setSkuPages({ ...skuPages, [id]: page + direction }),
+                  },
+                  direction < 0 ? '上一页' : '下一页',
+                ),
+              ),
+            ),
+          ),
+        ),
+      ];
+    };
     const formulas =
       formula &&
       (() => {
         const { row, field, who } = formula;
         const calculation =
-          row.children && ['shipDays', 'average', 'prediction'].includes(field)
-            ? row.calculation
-            : row;
+          row.children && ['shipDays', 'prediction'].includes(field) ? row.calculation : row;
         const raw = (key) => (calculation[key] == null ? '待定' : String(calculation[key]));
         const fallback =
-          calculation.daily3 === 0
-            ? `近三天为0，使用本月已发货÷已过天数：${raw('shipped')} ÷ ${passed}。`
-            : '';
+          calculation.paceSource === '近30天日均'
+            ? `近三天及本月日均为0，使用近30天日均：${raw('average')}。`
+            : calculation.daily3 === 0
+              ? `近三天为0，使用本月已发货÷已过天数：${raw('shipped')} ÷ ${passed}。${calculation.forecastIssue}`
+              : '';
         const expressions = {
           shipDays: [
-            '发运天数 = (已备 + 未备) ÷ 近三天日均；近三天为0时使用本月日均，无订单为0',
-            `${raw('prepped')} + ${raw('unprepped')}；日均${raw('daily3')}；${fallback}`,
+            '发运天数 = (已备 + 未备) ÷ 发运速度；优先近三天日均，其次本月日均，两者为0时使用近30天日均；仍无正数时待定，无订单为0',
+            `${raw('prepped')} + ${raw('unprepped')}；采用速度${raw('pace')}；${fallback}`,
           ],
           average: [
-            '日均 = (已发货 + 已备 + 未备) ÷ (已过天数 + 发运天数)',
-            `${raw('hold')} ÷ (${passed} + ${raw('shipDays')})；${fallback}`,
+            '近30天日均发货 = 截止日库存日报的 avg_30d_send 原值；汇总按单品求和',
+            sourceKind === 'business'
+              ? `${cutoff}，ai_db.agents_scm_stock_detail_d；表内取值 ${raw('average')}`
+              : '当前输入未提供近30天日均发货，保持待定。',
           ],
           prediction: [
-            '本月预测量 = 日均 × max(0,总天数 − 已过天数 − 发运天数) + 已发货 + 已备 + 未备，四舍五入为件',
-            `(${calculation.hold ?? '待定'} ÷ (${passed} + ${calculation.shipDays ?? '待定'})) × max(0, ${totalDays} − ${passed} − ${calculation.shipDays ?? '待定'}) + ${calculation.hold ?? '待定'}；日均展示${raw('average')}，中间值不舍入。`,
+            '本月预测量 = 预测日均 × max(0,总天数 − 已过天数 − 发运天数) + 已发货 + 已备 + 未备，四舍五入为件',
+            `(${calculation.hold ?? '待定'} ÷ (${passed} + ${calculation.shipDays ?? '待定'})) × max(0, ${totalDays} − ${passed} − ${calculation.shipDays ?? '待定'}) + ${calculation.hold ?? '待定'}；预测日均${raw('forecastAverage')}，中间值不舍入。${fallback}`,
           ],
           fin: [
             '整月预估发货 = 单品有效值之和；单品默认预测值，人工覆盖按当前有效权重重摊并补偿残差',
@@ -761,13 +1004,21 @@ export function createShipment(
                 ? '下级有效值求和；重摊后单品覆盖被替换，单品后改仅改变该行'
                 : '默认单品预测值',
           ],
+          inbound: [
+            sourceKind === 'business'
+              ? '本月生产入库 = 截止日库存日报的 produce_in_qty 累计原值，不跨日累加'
+              : '本月生产入库 = 当前输入原值',
+            `${cutoff}；表内取值 ${raw('inbound')}`,
+          ],
           remaining: [
             '剩余天数入库 = 单品入库日均 × 剩余天数；基地覆盖按明细原剩余入库权重重摊并补偿残差',
             row.remainingSource ??
               (sourceKind === 'demo'
                 ? '演示推算：本月生产入库 ÷ 22 × 8，逐SKU四舍五入'
                 : sourceKind === 'business'
-                  ? `${raw('inbound')} ÷ ${passed} × ${totalDays - passed}，逐SKU四舍五入`
+                  ? passed <= 1
+                    ? '截止日日号减1为0，入库日均和剩余入库待补'
+                    : `${raw('inbound')} ÷ ${passed - 1} × ${totalDays - passed}，逐SKU四舍五入`
                   : '本地CSV输入，BI排产未核齐'),
           ],
           end: [
@@ -795,7 +1046,7 @@ export function createShipment(
             h(
               'p',
               {},
-              ['shipDays', 'average', 'prediction'].includes(field)
+              ['shipDays', 'prediction'].includes(field)
                 ? `按可计算的${row.children.filter((child) => child.prediction != null).length}/${row.children.length}个单品重算，缺失输入未补零。`
                 : `已汇总${row.children.length - row.missingCounts[field]}/${row.children.length}个单品，待定单品未补零。`,
             ),
@@ -807,8 +1058,8 @@ export function createShipment(
               {},
               ...(
                 {
-                  shipDays: ['prepped', 'unprepped', 'daily3'],
-                  average: ['shipped', 'prepped', 'unprepped', 'shipDays'],
+                  shipDays: ['prepped', 'unprepped', 'daily3', 'average'],
+                  average: ['average'],
                   prediction: ['shipped', 'prepped', 'unprepped', 'shipDays'],
                   fin: ['prediction', 'fin'],
                   remaining: ['inbound', 'remaining'],
@@ -819,7 +1070,7 @@ export function createShipment(
                   'tr',
                   { key },
                   h('td', {}, names[fields.indexOf(key)]),
-                  h('td', {}, display(calculation[key])),
+                  h('td', {}, display(calculation[key], key)),
                 ),
               ),
               h('tr', {}, h('td', {}, '计算'), h('td', {}, substitution)),
@@ -832,7 +1083,7 @@ export function createShipment(
             h(
               'b',
               {},
-              `${display(row[field])}${field === 'shipDays' ? '天' : field === 'average' || field === 'daily3' ? '件/天' : '件'}`,
+              `${display(row[field], field)}${field === 'shipDays' ? '天' : field === 'average' || field === 'daily3' ? '件/天' : '件'}`,
             ),
           ),
           row[field] == null && h('p', {}, '输入缺失或分母为0且存在订单，结果待定；未补零。'),
@@ -849,7 +1100,7 @@ export function createShipment(
                 h(
                   'p',
                   { key: index },
-                  `${child.who ?? child.code}：${display(child[field])}；${field === 'remaining' ? (child.remainingSource ?? '原输入或基地重摊，完整来源见下载明细') : (child.adjustment?.source ?? (child.children ? '基地下级有效值求和' : '默认单品预测值'))}`,
+                  `${child.who ?? `${child.base} ${child.code}`}：${display(child[field])}；${field === 'remaining' ? (child.remainingSource ?? '原输入或基地重摊，完整来源见下载明细') : (child.adjustment?.source ?? (child.children ? '基地下级有效值求和' : '默认单品预测值'))}`,
                 ),
               ),
               who !== '全国合计' &&
@@ -1006,7 +1257,7 @@ export function createShipment(
           { role: 'status' },
           busy
             ? '正在读取或校验输入…'
-            : syncStatus === 'failed'
+            : syncStatus === 'failed' && activeSource === 'business'
               ? '数仓输入同步失败，未采用旧业务结果'
               : source,
         ),
@@ -1042,7 +1293,7 @@ export function createShipment(
             h(
               'colgroup',
               {},
-              ...[132, 72, 62, 62, 82, 94, 62, 88, 96, 68, 72, 98, 94].map((width, index) =>
+              ...[132, 72, 62, 62, 82, 82, 94, 88, 96, 68, 72, 98, 94].map((width, index) =>
                 h('col', { key: index, style: { width } }),
               ),
             ),
@@ -1052,10 +1303,10 @@ export function createShipment(
               h(
                 'tr',
                 {},
-                h('th', { rowSpan: 2, scope: 'col' }, '基地 / 单品'),
+                h('th', { rowSpan: 2, scope: 'col' }, '全国 / 基地 / 大类 / 物料组 / 单品'),
                 ...[
-                  ['输入（数仓）', 4],
-                  ['派生', 2],
+                  ['输入（数仓）', 5],
+                  ['派生', 1],
                   ['本月结果', 1],
                   ['人工覆盖', 1],
                   ['当月结存', 4],
@@ -1090,116 +1341,32 @@ export function createShipment(
             h(
               'tbody',
               {},
-              ...groups.flatMap((group) => {
-                const children = group.children.filter(
-                  (row) =>
-                    !skuSearch || [row.code, row.name].some((value) => value?.includes(skuSearch)),
-                );
-                const page = Math.min(
-                  skuPages[group.who] ?? 0,
-                  Math.max(0, Math.ceil(children.length / 25) - 1),
-                );
-                return [
-                  renderRow(
-                    group,
+              renderRow(
+                national,
+                '全国合计',
+                toggleLabel(
+                  JSON.stringify(['全国合计']),
+                  '全国合计',
+                  '全国合计',
+                  new Set(rows.map((row) => row.code)).size,
+                ),
+                'sp-total',
+              ),
+              ...renderHierarchy(national, '全国合计'),
+              ...groups.flatMap((group) => [
+                renderRow(
+                  group,
+                  group.who,
+                  toggleLabel(
+                    JSON.stringify([group.who]),
                     group.who,
-                    h(
-                      react.Fragment,
-                      {},
-                      h(
-                        'button',
-                        {
-                          className: 'sp-toggle',
-                          'aria-label': `${expanded.includes(group.who) ? '收起' : '展开'} ${group.who}`,
-                          'aria-expanded': expanded.includes(group.who),
-                          onClick: () =>
-                            setExpanded(
-                              expanded.includes(group.who)
-                                ? expanded.filter((base) => base !== group.who)
-                                : [...expanded, group.who],
-                            ),
-                        },
-                        h(
-                          'svg',
-                          {
-                            width: 12,
-                            height: 12,
-                            viewBox: '0 0 12 12',
-                            fill: 'none',
-                            stroke: 'currentColor',
-                            style: {
-                              transform: expanded.includes(group.who) ? 'rotate(90deg)' : undefined,
-                            },
-                            'aria-hidden': true,
-                          },
-                          h('path', { d: 'M4 2l4 4-4 4' }),
-                        ),
-                      ),
-                      group.who,
-                      h('span', { className: 'sp-count' }, `${group.children.length} 个单品`),
-                    ),
-                    'sp-base',
+                    group.who,
+                    group.children.length,
                   ),
-                  ...(expanded.includes(group.who)
-                    ? [
-                        ...children.slice(page * 25, (page + 1) * 25).map((row) =>
-                          renderRow(
-                            row,
-                            `${row.base} ${row.code}`,
-                            h(
-                              react.Fragment,
-                              {},
-                              h('span', { className: 'sp-code' }, row.code),
-                              h(
-                                'span',
-                                {
-                                  className: 'sp-product-name',
-                                  title: `${row.name} · ${row.category} · ${row.series} · ${row.group}`,
-                                },
-                                row.name || '产品名称未提供',
-                              ),
-                            ),
-                            'sp-sku',
-                          ),
-                        ),
-                        h(
-                          'tr',
-                          { key: `${group.who}-page` },
-                          h(
-                            'td',
-                            { colSpan: 13 },
-                            h(
-                              'div',
-                              { className: 'sp-sku-pages' },
-                              h('span', null, `共${children.length}个单品 · 第${page + 1}页`),
-                              h(
-                                'button',
-                                {
-                                  'aria-label': `${group.who} 上一页单品`,
-                                  disabled: !page,
-                                  onClick: () =>
-                                    setSkuPages({ ...skuPages, [group.who]: page - 1 }),
-                                },
-                                '上一页',
-                              ),
-                              h(
-                                'button',
-                                {
-                                  'aria-label': `${group.who} 下一页单品`,
-                                  disabled: (page + 1) * 25 >= children.length,
-                                  onClick: () =>
-                                    setSkuPages({ ...skuPages, [group.who]: page + 1 }),
-                                },
-                                '下一页',
-                              ),
-                            ),
-                          ),
-                        ),
-                      ]
-                    : []),
-                ];
-              }),
-              renderRow(national, '全国合计', '全国合计', 'sp-total'),
+                  'sp-base',
+                ),
+                ...renderHierarchy(group, group.who),
+              ]),
             ),
           ),
         ),
@@ -1211,7 +1378,7 @@ export function createShipment(
           h(
             'p',
             {},
-            '发运天数=(已备+未备)÷近三天日均；近三天为0时改用本月已发货÷已过天数。日均=(已发货+已备+未备)÷(已过天数+发运天数)。本月预测量=日均×max(0,总天数−已过天数−发运天数)+已发货+已备+未备，四舍五入。',
+            '发运天数=(已备+未备)÷发运速度；优先近三天日均，近三天为0时改用本月已发货÷已过天数，两者均为0时使用截止日avg_30d_send；仍无正数速度时待定。预测日均=(已发货+已备+未备)÷(已过天数+发运天数)。本月预测量=预测日均×max(0,总天数−已过天数−发运天数)+已发货+已备+未备，四舍五入。近30天日均发货直接读取截止日avg_30d_send。累计生产入库取同日produce_in_qty；入库日均=累计生产入库÷(截止日日号−1)，剩余自然天数保持原算法。',
           ),
         ),
         h(
