@@ -402,3 +402,30 @@ test('six card handoffs carry code formulas and measured components without inve
     );
   }
 });
+
+test('year comparison handoff retains complete independent month and week ranges', () => {
+  const periods = {
+    month: period('2026-11-01', '2026-11-12'),
+    previousMonth: period('2026-10-01', '2026-10-12'),
+    yearMonth: period('2025-11-01', '2025-11-12'),
+    week: period('2026-11-09', '2026-11-12'),
+    previousWeek: period('2026-11-02', '2026-11-05'),
+    yearWeek: period('2025-11-10', '2025-11-13'),
+  };
+  const request = metricDetailsRequest({ ...facts, periods }, '作废率', selection);
+  for (const [kind, keys] of Object.entries({
+    month: ['month', 'previousMonth', 'yearMonth'],
+    week: ['week', 'previousWeek', 'yearWeek'],
+  })) {
+    for (const [index, name] of ['current', 'previous', 'year'].entries()) {
+      const p = periods[keys[index]];
+      assert.deepEqual(request.context.metricDetails.comparisonPeriods[kind][name], {
+        start: p.start, endExclusive: p.end,
+      });
+    }
+  }
+  assert.match(request.text, /先按维度值过滤/);
+  assert.match(request.text, /不得阻断其他分组/);
+  const absent = metricDetailsRequest(facts, '作废率', selection);
+  assert.equal(absent.context.metricDetails.comparisonPeriods.month.year, null);
+});
