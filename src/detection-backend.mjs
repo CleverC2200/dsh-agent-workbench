@@ -1,0 +1,952 @@
+import { validateTaskRule, displayRule, displayValue } from './task-rules.mjs';
+import {
+  warningOwner,
+  ownsWarningTask,
+  createOwnerScopedApi,
+  migrateWarningOwners,
+} from './warning-ownership.mjs';
+import { deleteDetectionTask } from './task-management.mjs';
+import {
+  notificationConfig,
+  enqueueChanges,
+  enqueueNotification,
+  drainNotifications,
+} from './feishu-warning-transport.mjs';
+export const normalizeCutoff = (value) =>
+  String(value || '')
+    .trim()
+    .match(/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?/)?.[0] || String(value || '').trim();
+function compareCutoffs(left, right) {
+  const date = /^\d{4}-\d{2}-\d{2}/;
+  if (!date.test(left) || !date.test(right)) return 0;
+  return left.replace('T', ' ').localeCompare(right.replace('T', ' '));
+}
+function normalizedObjectKey(scope, objectKey, objectName) {
+  const key = String(objectKey || '')
+    .trim()
+    .normalize('NFC');
+  const name = String(objectName || '')
+    .trim()
+    .normalize('NFC');
+  const prefix = key.match(/^([^:：\-–—]+)\s*[:：\-–—]\s*(.+)$/);
+  return name && prefix?.[1].trim() === scope && prefix[2].trim() === name ? name : key;
+}
+function eventKey(metric, scope, object, rule, period, monitorId, objectName) {
+  if (rule.sourceType === 'task')
+    return [
+      monitorId || '',
+      metric,
+      scope,
+      normalizedObjectKey(scope, object, objectName),
+      'task',
+      rule.taskQuote,
+    ].join('|');
+  return [
+    monitorId || '',
+    metric,
+    scope,
+    normalizedObjectKey(scope, object, objectName),
+    'threshold-' + rule.direction,
+    rule.healthyOperator,
+    rule.healthy,
+    rule.severe,
+  ].join('|');
+}
+export function canonicalize(state) {
+  const groups = new Map();
+  for (const e of state.events) {
+    if (!e.rule) continue;
+    e.originalKey ??= e.monitorKey;
+    e.monitorKey = eventKey(
+      e.metricName,
+      e.scopeType,
+      e.objectKey,
+      e.rule,
+      e.period,
+      e.monitorId,
+      e.scope,
+    );
+    e.cutoffNote ??= e.cutoff;
+    e.cutoff = normalizeCutoff(e.cutoff);
+    e.history = (e.history || []).map((h) => ({ ...h, cutoff: normalizeCutoff(h.cutoff) }));
+    e.range = displayRule(e.rule, e.unit);
+    if (e.eventStatus === '活跃' || (e.eventStatus === '已恢复' && e.pendingClose === true)) {
+      if (!groups.has(e.monitorKey)) groups.set(e.monitorKey, []);
+      groups.get(e.monitorKey).push(e);
+    }
+  }
+  for (const [key, group] of groups) {
+    group.sort((a, b) => new Date(a.first) - new Date(b.first));
+    let first = group[0];
+    for (const duplicate of group.slice(1)) {
+      const pending = [...(first.notifications || []), ...(duplicate.notifications || [])].some(
+        (n) => ['待发送', '发送中'].includes(n.status),
+      );
+      if (pending) {
+        first.monitorKey = key + '|episode:' + first.id;
+        first = duplicate;
+        continue;
+      }
+      const lastRun =
+        new Date(duplicate.lastChecked || duplicate.first) >=
+        new Date(first.lastChecked || first.first)
+          ? duplicate
+          : first;
+      const cutoffOrder = compareCutoffs(duplicate.cutoff, first.cutoff);
+      const latest = cutoffOrder > 0 ? duplicate : cutoffOrder < 0 ? first : lastRun;
+      const lastChecked = lastRun.lastChecked || lastRun.first;
+      const history = [
+        ...new Map(
+          [...(first.history || []), ...(duplicate.history || [])].map((h, _i) => [
+            h.runId || `${h.at}|${h.cutoff}|${_i}`,
+            h,
+          ]),
+        ).values(),
+      ].sort((a, b) => new Date(a.at) - new Date(b.at));
+      const notifications = [
+        ...new Map(
+          [...(first.notifications || []), ...(duplicate.notifications || [])].map((n) => [
+            n.id || JSON.stringify(n),
+            n,
+          ]),
+        ).values(),
+      ];
+      const retained = {
+        id: first.id,
+        first: first.first,
+        originalKey: first.originalKey,
+        monitorKey: key,
+      };
+      Object.assign(first, latest, retained, {
+        history,
+        notifications,
+        lastChecked,
+        hits: new Set(history.filter((h) => h.status !== '健康').map((h) => h.cutoff)).size,
+        checkCount: history.length,
+      });
+      if (cutoffOrder === 0 && history.length > 1)
+        first.trend = `${history[history.length - 2].value} → ${history[history.length - 1].value}`;
+      duplicate.eventStatus = '已合并';
+      duplicate.mergedIntoId = first.id;
+    }
+  }
+  return state;
+}
+import { createPostgresStore } from './detection-postgres.mjs';
+import { randomUUID } from 'node:crypto';
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
+import { createServer } from 'node:http';
+const ROOT = process.env.GEA_WARNING_HOME || '';
+const FILE = ROOT + '/runtime/detection-state.json';
+const scopes = ['品类', '基地', '品类*基地', '大区', '省区'];
+export function cron(s) {
+  const [h, m] = (s.time || '09:00').split(':').map(Number);
+  if (!Number.isInteger(h) || h < 0 || h > 23 || !Number.isInteger(m) || m < 0 || m > 59)
+    throw Error('执行时间无效');
+  switch (s.frequency) {
+    case 'daily':
+      return `0 ${m} ${h} * * ?`;
+    case 'workdays':
+      return `0 ${m} ${h} ? * MON-FRI`;
+    case 'weekly': {
+      const d = (s.days || []).map(
+        (x) => ['', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][Number(x)],
+      );
+      if (!d.length || d.some((x) => !x)) throw Error('执行星期无效');
+      return `0 ${m} ${h} ? * ${d.join(',')}`;
+    }
+    case 'monthly':
+      if (!/^([1-9]|1[0-9]|2[0-8])$/.test(String(s.monthday))) throw Error('月度日期请选择1至28日');
+      return `0 ${m} ${h} ${s.monthday} * ?`;
+    case 'interval':
+      if (
+        !Number.isInteger(Number(s.interval)) ||
+        Number(s.interval) < 1 ||
+        Number(s.interval) > 23
+      )
+        throw Error('间隔需为1至23小时');
+      return `0 0 0/${s.interval} * * ?`;
+    default:
+      throw Error('执行频次无效');
+  }
+}
+export function validate(result, task) {
+  if (result.rule && Array.isArray(result.results))
+    result.results = result.results.map((x) => ({ ...x, rule: x.rule || result.rule }));
+  if (result.complete !== true || !Array.isArray(result.results) || !result.results.length)
+    throw Error(result.error || '问数结果不完整，不能判定恢复');
+  const seen = new Set();
+  for (const x of result.results) {
+    if (
+      x.scope !== task.scope ||
+      typeof x.objectKey !== 'string' ||
+      !x.objectKey ||
+      seen.has(normalizedObjectKey(task.scope, x.objectKey, x.objectName))
+    )
+      throw Error('检测颗粒度或对象编码无效');
+    seen.add(normalizedObjectKey(task.scope, x.objectKey, x.objectName));
+    if (x.rule?.sourceType === 'task') {
+      if (!x.unit || !x.objectName || !x.period || !x.cutoff || !x.evidence)
+        throw Error('任务检测缺少对象、期间、截止时间或取数证据');
+      if (validateTaskRule(x, task)) continue;
+    }
+    if (
+      !x.unit ||
+      typeof x.objectName !== 'string' ||
+      !Number.isFinite(x.value) ||
+      !x.period ||
+      !x.cutoff ||
+      !x.evidence ||
+      !x.rule?.source ||
+      !x.rule?.id ||
+      !x.rule?.version
+    )
+      throw Error('缺少指标值、期间、截止时间、取数证据或指标库规则');
+    const r = x.rule;
+    if (!['higher', 'lower'].includes(r.direction) || ![r.healthy, r.severe].every(Number.isFinite))
+      throw Error('指标规则尚不支持或缺失，需核查');
+    if (
+      (r.direction === 'higher' && r.severe > r.healthy) ||
+      (r.direction === 'lower' && r.severe < r.healthy)
+    )
+      throw Error('规则阈值顺序错误');
+    if (!r.healthyOperator) {
+      const src = r.source.replace(/\s/g, '');
+      r.healthyOperator = src.includes('健康x>' + r.healthy)
+        ? 'gt'
+        : src.includes('健康x≥' + r.healthy) || src.includes('健康x>=' + r.healthy)
+          ? 'gte'
+          : src.includes('健康x<' + r.healthy)
+            ? 'lt'
+            : src.includes('健康x≤' + r.healthy) || src.includes('健康x<=' + r.healthy)
+              ? 'lte'
+              : null;
+    }
+    if (!['gt', 'gte', 'lt', 'lte'].includes(r.healthyOperator))
+      throw Error('健康线比较符缺失，请返回指标库完整规则');
+    const v = x.value;
+    const healthy =
+      r.healthyOperator === 'gt'
+        ? v > r.healthy
+        : r.healthyOperator === 'gte'
+          ? v >= r.healthy
+          : r.healthyOperator === 'lt'
+            ? v < r.healthy
+            : v <= r.healthy;
+    const status =
+      r.direction === 'higher'
+        ? healthy
+          ? '健康'
+          : v < r.severe
+            ? '严重'
+            : '预警'
+        : healthy
+          ? '健康'
+          : v > r.severe
+            ? '严重'
+            : '预警';
+    if (x.status !== status) throw Error('AI风险状态与指标库规则不一致');
+  }
+  return result.results;
+}
+export function merge(state, task, results, run) {
+  for (const row of results) {
+    row.cutoffNote = row.cutoff;
+    row.cutoff = normalizeCutoff(row.cutoff);
+  }
+  for (const x of results) {
+    const key = eventKey(
+      task.metric,
+      task.scope,
+      x.objectKey,
+      x.rule,
+      x.period,
+      task.id,
+      x.objectName,
+    );
+    let old = state.events.find(
+      (e) =>
+        e.monitorKey === key &&
+        (e.eventStatus === '活跃' || (e.eventStatus === '已恢复' && e.pendingClose === true)),
+    );
+    if (x.status === '健康' && !old) continue;
+    const now = run.at;
+    const earlierCutoff = old && compareCutoffs(x.cutoff, old.cutoff) < 0;
+    const changed = !old || (!earlierCutoff && old.cutoff !== x.cutoff);
+    const h = {
+      at: now,
+      period: x.period,
+      cutoff: x.cutoff,
+      value: displayValue(x.value, x.unit),
+      status: x.status,
+      result: x.status === '健康' ? '指标恢复' : old ? '持续异常，更新原卡片' : '首次发现异常',
+      runId: run.id,
+    };
+    if (old && !changed) {
+      old.lastChecked = now;
+      old.checkCount = (old.checkCount || old.history.length) + 1;
+      old.history.push({
+        ...h,
+        result: earlierCutoff ? '数据截止早于当前记录，保留原预警' : '数据截止未变化，保留原预警',
+      });
+      run.unchanged = (run.unchanged || 0) + 1;
+      continue;
+    }
+    if (x.status === '健康') {
+      if (old.eventStatus !== '已恢复') {
+        old.recoveredAt = now;
+        run.recovered++;
+      }
+      old.eventStatus = '已恢复';
+      old.pendingClose = true;
+      old.lastChecked = now;
+      old.checkCount = (old.checkCount || 0) + 1;
+      old.history.push(h);
+      old.cutoff = x.cutoff;
+      old.period = x.period;
+      old.cutoffNote = x.cutoffNote;
+      old.value = x.value;
+      old.metric = task.metric + ' ' + displayValue(x.value, x.unit);
+      old.diagnosis = x.analysis || old.diagnosis;
+      old.evidence = x.evidence;
+      old.gap = x.value === null ? '空值按任务规则正常' : old.gap;
+      old.level = '健康';
+      continue;
+    }
+    const event = {
+      ...old,
+      id: old?.id || 'alert-' + randomUUID(),
+      monitorId: task.id,
+      monitorKey: key,
+      scope: x.objectName,
+      scopeType: task.scope,
+      objectKey: x.objectKey,
+      metric: `${task.metric} ${x.value}${x.unit}`,
+      metricName: task.metric,
+      value: x.value,
+      unit: x.unit,
+      period: x.period,
+      source: 'XXL-JOB · GEA问数',
+      range: displayRule(x.rule, x.unit),
+      target:
+        x.rule.kind === 'range'
+          ? `${x.rule.min}—${x.rule.max}${x.unit}`
+          : `${x.rule.healthy}${x.unit}`,
+      gap:
+        x.rule.kind === 'range'
+          ? '超出任务正常区间'
+          : `距健康线 ${(x.value - x.rule.healthy).toFixed(2)}${x.unit === '%' ? 'pp' : x.unit}`,
+      first: old?.first || now,
+      cutoff: x.cutoff,
+      lastChecked: now,
+      eventStatus: '活跃',
+      pendingClose: true,
+      level: x.status,
+      evidence: x.evidence,
+      diagnosis: x.analysis || '暂无分析说明',
+      trend: old ? `${old.value}${old.unit} → ${x.value}${x.unit}` : '首次检测',
+      hits: (old?.hits || 0) + 1,
+      checkCount: (old?.checkCount || 0) + 1,
+      cutoffNote: x.cutoffNote,
+      history: [...(old?.history || []), h],
+      rule: x.rule,
+      task: {
+        name: task.name,
+        scope: task.scope,
+        frequency: task.frequency,
+        description: task.description,
+        enabled: task.enabled,
+      },
+      confidence: null,
+      dimension: task.scope === '基地' ? 'base' : 'category',
+    };
+    if (old) Object.assign(old, event);
+    else state.events.unshift(event);
+    old ? run.updated++ : run.created++;
+  }
+}
+export async function installDetection(ctx) {
+  if (!ROOT)
+    throw Object.assign(new Error('预警后台尚未配置'), { code: 'DETECTION_NOT_CONFIGURED' });
+  await mkdir(ROOT + '/runtime', { recursive: true });
+  let state;
+  try {
+    state = JSON.parse(await readFile(FILE, 'utf8'));
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+    state = { tasks: [], runs: [], events: [] };
+  }
+  const store = await createPostgresStore();
+  const databaseState = await store.load();
+  if (databaseState.tasks.length) state = databaseState;
+  ctx.effect(() => () => {
+    void store.close();
+  });
+  let writes = Promise.resolve();
+  const save = () => {
+    const snapshot = JSON.stringify(state, null, 2);
+    const next = writes.then(async () => {
+      await store.save(JSON.parse(snapshot));
+      await writeFile(FILE + '.tmp', snapshot);
+      await rename(FILE + '.tmp', FILE);
+    });
+    writes = next.catch(() => {});
+    return next;
+  };
+  let serial = Promise.resolve();
+  const locked = (fn) => {
+    const p = serial.then(fn);
+    serial = p.catch(() => {});
+    return p;
+  };
+  async function currentOwner() {
+    const response = await ctx.connection.createSharedFetchHandler('/api').fetch(
+      new Request('http://host/api/gea-proof/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      }),
+    );
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw Error('无法读取 GEA 登录身份');
+    return warningOwner(result.value);
+  }
+  let cookie = '';
+  async function xxl(path, data) {
+    async function login() {
+      const userName = process.env.GEA_XXL_JOB_USERNAME,
+        password = process.env.GEA_XXL_JOB_PASSWORD;
+      if (!userName || !password) throw Error('XXL-JOB账号尚未配置');
+      const r = await fetch('http://127.0.0.1:18080/xxl-job-admin/login', {
+        method: 'POST',
+        body: new URLSearchParams({ userName, password }),
+      });
+      cookie = (r.headers.get('set-cookie') || '').split(';')[0];
+      if ((await r.json()).code !== 200) throw Error('XXL-JOB登录失败');
+    }
+    if (!cookie) await login();
+    const r = await fetch('http://127.0.0.1:18080/xxl-job-admin' + path, {
+      method: 'POST',
+      headers: { cookie },
+      body: new URLSearchParams(data),
+    });
+    if (!r.headers.get('content-type')?.includes('json')) {
+      cookie = '';
+      throw Error('XXL-JOB登录已失效，请重试');
+    }
+    const v = await r.json();
+    if (v.code !== 200) throw Error(v.msg || 'XXL-JOB操作失败');
+    return v.content;
+  }
+  async function configure(t, edit = false) {
+    const body = {
+      jobGroup: '1',
+      jobDesc: t.name,
+      author: 'GEA',
+      scheduleType: t.schedule.frequency === 'interval' ? 'FIX_RATE' : 'CRON',
+      scheduleConf:
+        t.schedule.frequency === 'interval'
+          ? String(Number(t.schedule.interval) * 3600)
+          : cron(t.schedule),
+      misfireStrategy: 'DO_NOTHING',
+      executorRouteStrategy: 'FIRST',
+      executorHandler: 'geaDetectionHandler',
+      executorParam: JSON.stringify({ taskId: t.id }),
+      executorBlockStrategy: 'DISCARD_LATER',
+      executorTimeout: '600',
+      executorFailRetryCount: '0',
+      glueType: 'BEAN',
+      alarmEmail: '',
+      childJobId: '',
+    };
+    if (edit) body.id = String(t.jobId);
+    const id = await xxl(edit ? '/jobinfo/update' : '/jobinfo/add', body);
+    if (!edit) t.jobId = Number(id);
+    await xxl(t.enabled ? '/jobinfo/start' : '/jobinfo/stop', { id: String(t.jobId) });
+  }
+  const DEFAULT_AGENT = 'gea-html-inventory-apsplan';
+  async function availableAgents() {
+    const registry = ctx.get('agentPresets');
+    if (!registry) throw Error('Agent列表暂不可用');
+    return (await registry.list())
+      .filter((x) => x.id.startsWith('gea-html-inventory-'))
+      .map((x) => ({ id: x.id, name: x.name || x.id, broken: x.broken || null }));
+  }
+  async function metricInfo(name) {
+    const catalog = JSON.parse(await readFile(ROOT + '/config/metric-catalog.json', 'utf8'));
+    return (
+      catalog[name] || {
+        name,
+        status: 'unavailable',
+        source: '产销协同数据指标_核心指标问数V0.5.xlsx',
+        version: 'V0.5',
+        message: '当前指标库快照未匹配到同名指标；不推断度量规则或排除逻辑。',
+      }
+    );
+  }
+  async function ai(t, run, signal) {
+    const requestedAgent = t.agentPreset || DEFAULT_AGENT;
+    const agents = await availableAgents();
+    const chosen = agents.find((x) => x.id === requestedAgent);
+    if (!chosen || chosen.broken) throw Error('所选Agent不可用，请重新选择');
+    run.requestedAgent = { id: chosen.id, name: chosen.name };
+    let sessionCwd = process.env.GEA_DETECTION_SESSION_CWD;
+    if (!sessionCwd) {
+      try {
+        sessionCwd = (await readFile(ROOT + '/config/session-workspace.txt', 'utf8')).trim();
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
+    sessionCwd = sessionCwd || ROOT;
+    const created = await ctx.sessionController.create({ cwd: sessionCwd, agentPreset: chosen.id });
+    run.sessionId = created.sessionId;
+    run.sessionCwd = sessionCwd;
+    if (created.agentPreset)
+      run.actualAgent = {
+        id: created.agentPreset,
+        name: agents.find((x) => x.id === created.agentPreset)?.name || created.agentPreset,
+      };
+    await save();
+    const metric = await metricInfo(t.metric);
+    if (metric.status !== 'available') throw Error(metric.message || '指标库口径不可用');
+    const metricContext = Object.fromEntries(
+      ['name', 'unit', 'direction', 'measureRules', 'dimensions', 'cubeNotes'].map((key) => [
+        key,
+        metric[key] ?? '',
+      ]),
+    );
+    run.context = { metricContext, scope: t.scope, description: t.description };
+    const prompt = `指标：${t.metric}
+检测范围：${t.scope}
+任务说明：${t.description}
+当前上海时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+
+请使用已授权的问数和知识库工具完成检测，按指标定义、统计期间和规则查询该范围的全部对象，包括健康对象。区分事实与待核查原因；任务说明中明确的阈值、区间和空值处理规则优先于指标库，规则来源标为任务自定义；缺少指标库编号、版本或严重阈值不能单独作为失败理由。任务未指定的规则才查指标库。成功查询且返回空值时，若任务明确指定空值算正常，则按正常返回；不得将工具报错、查询失败或遗漏对象当成空值。其余无法核实维度、规则、数据覆盖或指标值时，不要猜测，返回完整性失败，避免错误判断预警恢复。仅执行只读查询。无人值守任务不得请求权限升级或等待人工审批；所需工具不可用时立即返回完整性失败并说明具体错误。
+
+仅返回 JSON，格式如下；字段值必须依据实际查询，不得照抄示例或编造。每个对象必须具有唯一且稳定的 objectKey；优先使用来源系统稳定编码，若只能用名称，直接用 objectName，不拼接检测范围。value 为数值，百分比用 0 至 100 的数值；仅在成功查询返回空值且任务明确允许空值正常时，value 返回 null，dataStatus 返回 queried-null，status 返回健康，analysis 注明空值按任务规则视为正常，不得伪造为0。scope 必须与检测范围一致，period 为实际统计期间，cutoff 为业务数据截止时间。rule 的健康线比较符 healthyOperator 只能为 gt、gte、lt、lte，direction 只能为 higher 或 lower。status 按规则返回健康、预警或严重。规则编号或版本未登记时请明确标注，不得编造。任务自定义规则使用 sourceType:"task"、taskQuote（完整引用任务中规则和空值条款原文）、nullPolicy:"healthy"（仅明确授权空值正常时）；id和version由系统记录任务执行来源。没有严重阈值时 severe:null，异常只判预警。双侧区间使用 kind:"range"、min、max（含边界为正常）；例如偏离目标超过±20%，min=目标×0.8，max=目标×1.2，计算须有工具证据，保留原指标值和单位。不要硬套单侧阈值结构。
+{"complete":true,"results":[{"scope":"检测范围","objectKey":"稳定对象编码或名称","objectName":"对象名称","value":0,"unit":"单位","period":"统计期间","cutoff":"业务数据截止时间","status":"健康或预警或严重","evidence":"取数及规则依据","analysis":"事实及待核查原因","rule":{"id":"规则编号或未登记","version":"规则版本或未登记","source":"规则来源","direction":"higher或lower","healthy":0,"healthyOperator":"gt或gte或lt或lte","severe":0}}]}
+无法完整可靠检测时返回 {"complete":false,"error":"具体原因"}。`;
+    run.prompt = prompt;
+    await save();
+    await ctx.sessionController.prompt(
+      {
+        requestId: 'request-' + randomUUID(),
+        sessionId: created.sessionId,
+        mode: 'queue',
+        content: [{ type: 'text', text: prompt }],
+        clientTimeZone: 'Asia/Shanghai',
+      },
+      signal,
+    );
+    try {
+      const stream = ctx.sessionController.follow(
+        { address: { kind: 'session', sessionId: created.sessionId }, maxMessages: 100 },
+        signal,
+      );
+      let texts = [];
+      for await (const frame of stream) {
+        signal.throwIfAborted();
+        const events =
+          frame.type === 'snapshot'
+            ? frame.records.map((r) => r.event)
+            : frame.type === 'event'
+              ? [frame.event]
+              : [];
+        for (const e of events) {
+          if (e.type === 'approval/asked') {
+            try {
+              await ctx.sessionController.cancel({ sessionId: created.sessionId });
+            } catch {}
+            throw Error(
+              '检测需要人工权限审批，无人值守任务已停止；请检查 Agent 工具权限及检测会话工作目录配置。',
+            );
+          }
+          if (e.type === 'tool/result' && e.data?.message?.isError) {
+            const content = e.data.message.content || [];
+            const errorText = content
+              .filter((x) => x.type === 'text')
+              .map((x) => x.text || '')
+              .join(' ');
+            if (/SetNamedSecurityInfoW failed.*grantWrite/i.test(errorText)) {
+              try {
+                await ctx.sessionController.cancel({ sessionId: created.sessionId });
+              } catch {}
+              throw Error(
+                '检测会话工作目录沙箱授权失败（Win32 5）；请检查目录权限或配置 GEA_DETECTION_SESSION_CWD。',
+              );
+            }
+          }
+          if (e.type === 'request/header') {
+            const config = e.data?.header?.config;
+            if (config?.provider && config?.model) {
+              run.actualModel = {
+                provider: String(config.provider),
+                model: String(config.model),
+                ...(config.reasoningEffort
+                  ? { reasoningEffort: String(config.reasoningEffort) }
+                  : {}),
+              };
+              await save();
+            }
+          }
+          if (e.type === 'assistant/message') {
+            const m = e.data?.message;
+            const parts = m?.content || [];
+            const text =
+              typeof parts === 'string'
+                ? parts
+                : parts
+                    .filter((p) => p.type === 'text')
+                    .map((p) => p.text)
+                    .join('');
+            if (text) texts.push(text);
+          }
+          if (e.type === 'turn/end') {
+            for (const text of texts.reverse()) {
+              const raw = text
+                .replace(/^```(?:json)?\s*/, '')
+                .replace(/\s*```$/, '')
+                .trim();
+              try {
+                return JSON.parse(raw);
+              } catch {}
+            }
+            throw Error('问数未返回有效JSON');
+          }
+        }
+      }
+    } finally {
+      if (signal.aborted) {
+        try {
+          await ctx.sessionController.cancel({ sessionId: created.sessionId });
+        } catch {}
+      }
+    }
+    throw Error('问数执行未完成');
+  }
+  const running = new Set();
+  function taskRecipients(task) {
+    return (
+      task?.notifyRecipients ??
+      (task?.notifyRecipient === 'none' ? [] : [task?.notifyRecipient || 'self'])
+    );
+  }
+
+  async function runTask(id, runKey) {
+    const t = state.tasks.find((t) => t.id === id);
+    if (!t || !t.enabled || t.deletedAt) throw Error('检测任务不存在或已停用');
+    if (!ownsWarningTask(t, await currentOwner())) throw Error('请使用预警设置人的账号执行检测');
+    if (!t.enabled || t.deletedAt) throw Error('检测任务已停用或删除');
+    const previous = state.runs.find((r) => r.runKey === runKey);
+    if (previous) return previous;
+    if (running.has(id)) throw Error('上一次检测仍在执行');
+    running.add(id);
+    const run = {
+      id: 'run-' + randomUUID(),
+      runKey,
+      taskId: id,
+      name: t.name,
+      at: new Date().toISOString(),
+      status: '执行中',
+      created: 0,
+      updated: 0,
+      recovered: 0,
+    };
+    state.runs.unshift(run);
+    await locked(save);
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 540000);
+    try {
+      const result = await ai(t, run, ac.signal);
+      run.response = result;
+      await locked(save);
+      const rows = validate(result, t);
+      const recipients = taskRecipients(t);
+      const resolved = await Promise.allSettled(
+        recipients.map((recipient) => notificationConfig(recipient)),
+      );
+      const deliveryConfig = resolved.flatMap((result) =>
+        result.status === 'fulfilled' && result.value ? [result.value] : [],
+      );
+      const unavailable = recipients.length - deliveryConfig.length;
+      if (unavailable) run.notificationIssue = unavailable + ' 位飞书接收人不可用。';
+      await locked(async () => {
+        const previous = new Map(
+          state.events.map((e) => [e.id, { level: e.level, eventStatus: e.eventStatus }]),
+        );
+        merge(state, t, rows, run);
+        enqueueChanges(state, previous, run, deliveryConfig, t);
+        run.status = '成功';
+        run.completedAt = new Date().toISOString();
+        run.result = `新增${run.created}，更新${run.updated}，恢复${run.recovered}，数据未更新${run.unchanged || 0}`;
+        t.lastRun = run.at;
+        await save();
+      });
+    } catch (e) {
+      run.status = '失败';
+      run.completedAt = new Date().toISOString();
+      run.result = ac.signal.aborted ? '检测超过9分钟未完成，请检查问数及工具授权状态' : e.message;
+      await locked(save);
+      throw e;
+    } finally {
+      clearTimeout(timer);
+      running.delete(id);
+    }
+    return run;
+  }
+  async function api(input) {
+    switch (input.op) {
+      case 'agents':
+        return await availableAgents();
+      case 'recipient-check': {
+        const recipient = 'gea:' + String(input.username || '');
+        return { mapped: Boolean(await notificationConfig(recipient)) };
+      }
+      case 'notify-test': {
+        const config = await notificationConfig();
+        if (!config) throw Error('飞书推送未启用或个人接收账号未配置');
+        let job;
+        await locked(async () => {
+          const event = state.events.find((e) => e.id === input.eventId);
+          if (!event) throw Error('预警事件不存在');
+          job = enqueueNotification(event, 'test', 'manual-personal-test-v1', config);
+          await save();
+        });
+        await deliver();
+        return {
+          id: job.id,
+          status: job.status,
+          messageId: job.messageId,
+          error: job.error,
+          recipientName: job.recipientName,
+        };
+      }
+      case 'close-event':
+        return locked(async () => {
+          const e = state.events.find((x) => x.id === input.id);
+          if (
+            !e ||
+            !['活跃', '已恢复'].includes(e.eventStatus) ||
+            (e.eventStatus === '已恢复' && !e.pendingClose)
+          )
+            throw Error('预警不存在或已关闭');
+          e.closedRisk = e.eventStatus;
+          e.eventStatus = '已关闭';
+          e.pendingClose = false;
+          e.closedAt = new Date().toISOString();
+          e.closedBy = null;
+          await save();
+          return { id: e.id, status: e.eventStatus };
+        });
+      case 'metric':
+        return metricInfo(String(input.metric || ''));
+      case 'list':
+        return {
+          ...state,
+          tasks: state.tasks.filter((t) => !t.deletedAt),
+          events: state.events.map((e) => ({
+            ...e,
+            task: state.tasks.find((t) => t.id === e.monitorId) || e.task,
+          })),
+        };
+      case 'save':
+        return locked(async () => {
+          const v = input.task;
+          if (!v || !scopes.includes(v.scope) || !v.metric?.trim() || !v.description?.trim())
+            throw Error('指标、范围或任务说明无效');
+          cron(v.schedule);
+          const selectedAgent = v.agentPreset || DEFAULT_AGENT;
+          const eligibleAgents = await availableAgents();
+          if (!eligibleAgents.some((x) => x.id === selectedAgent && !x.broken))
+            throw Error('所选Agent不可用，请重新选择');
+          v.agentPreset = selectedAgent;
+          const old = state.tasks.find((task) => task.id === v.id);
+          if (v.id && (!old || old.deletedAt)) throw Error('任务不存在或已删除');
+          const recipients =
+            v.notifyRecipients ??
+            (v.notifyRecipient == null
+              ? taskRecipients(old)
+              : taskRecipients({ notifyRecipient: v.notifyRecipient }));
+          if (
+            !Array.isArray(recipients) ||
+            recipients.some(
+              (id) => typeof id !== 'string' || (id !== 'self' && !/^gea:[^\s:]{1,80}$/.test(id)),
+            )
+          )
+            throw Error('请选择有效的飞书接收人');
+          v.notifyRecipients = [...new Set(recipients)];
+          const configs = await Promise.all(
+            v.notifyRecipients.map((recipient) => notificationConfig(recipient)),
+          );
+          if (configs.some((config) => !config))
+            throw Error('部分接收人未配置飞书账号映射或推送未启用');
+          const notifyMode = v.notifyMode ?? old?.notifyMode ?? 'repeat';
+          if (!['once', 'repeat'].includes(notifyMode)) throw Error('请选择有效的通知频率');
+          const definedBy =
+            old?.definedBy || (typeof v.definedBy === 'string' ? v.definedBy.trim() : '');
+          if (!definedBy || definedBy.length > 120)
+            throw Error('无法记录预警设置人，请重新登录后保存');
+          const t = {
+            ...old,
+            id: old?.id || 'monitor-' + randomUUID(),
+            name: v.metric + '检测',
+            metric: v.metric.trim(),
+            scope: v.scope,
+            description: v.description.trim(),
+            agentPreset: v.agentPreset,
+            notifyRecipient: undefined,
+            notifyRecipients: v.notifyRecipients,
+            notifyMode,
+            definedBy,
+            owner: old?.owner || v.owner,
+            schedule: v.schedule,
+            frequency: v.frequency,
+            enabled: old?.enabled ?? true,
+          };
+          if (
+            state.tasks.some(
+              (x) =>
+                x.id !== t.id &&
+                ownsWarningTask(x, t.owner) &&
+                x.metric === t.metric &&
+                x.scope === t.scope &&
+                x.enabled,
+            )
+          )
+            throw Error('已有相同指标与检测范围的启用任务');
+          await configure(t, !!old);
+          if (old) Object.assign(old, t);
+          else state.tasks.unshift(t);
+          await save();
+          if (!old && v.runImmediately === true)
+            await xxl('/jobinfo/trigger', {
+              id: String(t.jobId),
+              executorParam: JSON.stringify({ taskId: t.id }),
+              addressList: '',
+            });
+          return t;
+        });
+      case 'delete':
+        return locked(() =>
+          deleteDetectionTask({
+            state,
+            id: input.id,
+            running,
+            stopJob: (jobId) => xxl('/jobinfo/stop', { id: String(jobId) }),
+            save,
+          }),
+        );
+      case 'toggle':
+        return locked(async () => {
+          const t = state.tasks.find((t) => t.id === input.id);
+          if (!t || t.deletedAt) throw Error('任务不存在或已删除');
+          await xxl(t.enabled ? '/jobinfo/stop' : '/jobinfo/start', { id: String(t.jobId) });
+          t.enabled = !t.enabled;
+          await save();
+          return t;
+        });
+      case 'run': {
+        const t = state.tasks.find((t) => t.id === input.id);
+        if (!t?.enabled || t.deletedAt) throw Error('任务未启用或已删除');
+        await xxl('/jobinfo/trigger', {
+          id: String(t.jobId),
+          executorParam: JSON.stringify({ taskId: t.id }),
+          addressList: '',
+        });
+        return { accepted: true };
+      }
+      default:
+        throw Error('未知检测操作');
+    }
+  }
+  const scopedApi = createOwnerScopedApi({ state, currentOwner, api });
+  ctx.effect(() =>
+    ctx.connection.fetch.register({
+      path: '/api/agent-workbench/detection',
+      methods: ['POST'],
+      requestBody: 'buffered',
+      fetch: async (req) => {
+        try {
+          return Response.json(await scopedApi(await req.json()), {
+            headers: { 'Cache-Control': 'no-store' },
+          });
+        } catch (e) {
+          return Response.json({ error: e.message }, { status: 400 });
+        }
+      },
+    }),
+  );
+  let delivering = false;
+  async function deliver() {
+    if (delivering || !(await notificationConfig())) return;
+    delivering = true;
+    try {
+      await drainNotifications({ state, save, locked });
+    } finally {
+      delivering = false;
+    }
+  }
+  for (const e of state.events)
+    for (const n of e.notifications || [])
+      if (n.status === '发送中') {
+        n.status = '待核实';
+        n.error = '宿主重启，发送结果需核实，不自动重发';
+      }
+  const deliveryTimer = setInterval(() => {
+    void deliver().catch(() => {});
+  }, 15000);
+  ctx.effect(() => () => clearInterval(deliveryTimer));
+  const token = (await readFile(ROOT + '/config/detection-token.txt', 'utf8')).trim();
+  const server = createServer(async (req, res) => {
+    if (
+      req.method !== 'POST' ||
+      !['/execute', '/notify-test'].includes(req.url) ||
+      req.headers.authorization !== 'Bearer ' + token
+    ) {
+      res.writeHead(403).end();
+      return;
+    }
+    let body = '';
+    for await (const chunk of req) {
+      body += chunk;
+      if (body.length > 8192) {
+        res.writeHead(413).end();
+        return;
+      }
+    }
+    try {
+      const x = JSON.parse(body);
+      const out =
+        req.url === '/notify-test'
+          ? await scopedApi({ op: 'notify-test', eventId: x.eventId })
+          : await runTask(x.taskId, String(x.runKey));
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(out));
+    } catch (e) {
+      res
+        .writeHead(500, { 'content-type': 'application/json' })
+        .end(JSON.stringify({ error: e.message }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(18111, '127.0.0.1', resolve);
+  });
+  ctx.effect(() => () => server.close());
+  try {
+    migrateWarningOwners(
+      state,
+      JSON.parse(await readFile(ROOT + '/config/warning-owner-migrations.json', 'utf8')),
+    );
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  canonicalize(state);
+  for (const r of state.runs)
+    if (r.status === '执行中') {
+      r.status = '失败';
+      r.result = '宿主重启，执行中断';
+    }
+  await save();
+  return { api: scopedApi, runTask };
+}
