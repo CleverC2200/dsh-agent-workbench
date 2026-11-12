@@ -143,7 +143,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
         '② 占比法': row.shareMethod ?? '',
         两法平均量: row.methodAverage ?? '',
         销售提报量: row.salesSubmission ?? '',
-        近三月达成率: index % 4 < 2 ? (row.achievementRate ?? '') : '',
+        近三月达成率: index % 4 === 0 ? (row.achievementRate ?? '') : '',
         销售校正量: row.salesCorrected ?? '',
         加权: row.weighted ?? '',
         评估版本: draft.name,
@@ -329,7 +329,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
           h(
             'p',
             { className: 'dc-card-note' },
-            `${result.rows[0]?.baseMonth ?? ''}为统计基月M。M+1、M+2使用历史环比，M+3、M+4使用年度环比；后月只承接前月环比测算量。M+4仅作库存参考。`,
+            `${result.rows[0]?.baseMonth ?? ''}为统计基月M。M+1、M+2使用历史环比，M+3、M+4使用年度环比；后月只承接前月环比测算量。四个月均计算两法平均量，仅M+1再与销售校正量各占一半，M+2至M+4直接使用两法平均量。M+4仅作库存参考。`,
           ),
           result.adjustmentIssues.length > 0 &&
             h('p', { role: 'alert' }, `以下调整未生效：${result.adjustmentIssues.join('；')}`),
@@ -345,7 +345,7 @@ export function createCategoryDemand(react, { table, downloadCsv, useMpsPart }) 
                   ['② 占比法', '全年预估 × 占比'],
                   ['两法平均量', '①②各占一半'],
                   ['销售校正量', '销售提报量×达成率'],
-                  ['加权', '两法平均量与销售校正量各占一半'],
+                  ['加权', '仅M+1：两法平均量与销售校正量各占一半'],
                 ].map(([name, formula]) => [
                   name,
                   h(react.Fragment, {}, name, h('small', {}, formula)),

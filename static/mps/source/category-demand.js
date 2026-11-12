@@ -9,27 +9,28 @@ export function categoryDemandMissing(result, row) {
   const basis = result.bases.find((entry) => entry.category === row.category);
   const index = result.rows.indexOf(row);
   const missing = [];
-  if (index % 4 < 2) {
-    if (row.shipment === null) missing.push(`${row.baseMonth} 本月有效预估发货缺失`);
+  if (row.shipment === null) missing.push(`${row.baseMonth} 本月有效预估发货缺失`);
+  if (basis.actual === null)
+    missing.push(`${result.recent[0]}至${basis.endMonth} BI实绩缺失或不完整`);
+  if (basis.recentShare === null || basis.recentShare <= 0)
+    missing.push(`${result.recent[0]}至${basis.endMonth} 历史同期占比缺失或合计为0`);
+  if (row.share === null) missing.push(`${row.month} 历史同期占比缺失`);
+  for (const period of result.rows.filter(
+    (entry, position) =>
+      position % 4 < 2 &&
+      entry.category === row.category &&
+      entry.month <= row.month &&
+      entry.chain === null,
+  ))
+    missing.push(`${period.month} 历史环比缺失`);
+  if (index % 4 === 0) {
     if (row.salesSubmission === null) missing.push(`${row.month} 销售提报量缺失`);
-    if (basis.actual === null)
-      missing.push(`${result.recent[0]}至${basis.endMonth} BI实绩缺失或不完整`);
-    if (basis.recentShare === null || basis.recentShare <= 0)
-      missing.push(`${result.recent[0]}至${basis.endMonth} 历史同期占比缺失或合计为0`);
-    if (row.share === null) missing.push(`${row.month} 历史同期占比缺失`);
-    for (const period of result.historical.filter(
-      (entry) =>
-        entry.category === row.category &&
-        entry.month > row.baseMonth &&
-        entry.month <= row.month &&
-        entry.mom === null,
-    ))
-      missing.push(`${period.month} 历史环比缺失`);
     if (basis.plan === null)
       missing.push(`${result.recent[0]}至${basis.endMonth} 计划量缺失或不完整`);
     else if (basis.achievementRate === null || basis.achievementRate < 0)
       missing.push('近三月达成率缺失');
-  } else {
+  }
+  if (index % 4 >= 2) {
     if (row.chain === null) missing.push(`${row.month} 年度分月环比缺失或分母为0`);
     if (result.rows[index - 1].momMethod === null) missing.push('上月环比测算量缺失');
   }
@@ -100,23 +101,16 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
           )
         : null,
     })),
-    submissions: checks.categories.flatMap((category) =>
-      [0, 1].map((index) => {
-        const date = new Date(`${draft.month}-01T00:00:00Z`);
-        date.setUTCMonth(date.getUTCMonth() + index);
-        const month = date.toISOString().slice(0, 7);
-        return {
-          month,
-          category,
-          quantity: reportReady(month)
-            ? total(
-                report.filter((row) => row['月份'] === month && row['大类'] === category),
-                (row) => number(row[reportColumn]),
-              )
-            : null,
-        };
-      }),
-    ),
+    submissions: checks.categories.map((category) => ({
+      month: draft.month,
+      category,
+      quantity: reportReady(draft.month)
+        ? total(
+            report.filter((row) => row['月份'] === draft.month && row['大类'] === category),
+            (row) => number(row[reportColumn]),
+          )
+        : null,
+    })),
     historical: historical
       .filter((row) => row['维度类型'] === '基地+大类')
       .map((row) => ({
