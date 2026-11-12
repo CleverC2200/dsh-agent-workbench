@@ -611,19 +611,23 @@ test('identity and page lifecycle resets pause sources until the owned view rest
     const before = new Map(
       sources.map((queryId) => [queryId, calls.filter((call) => call.queryId === queryId).length]),
     );
-    await frame
-      .locator('body')
-      .evaluate((_element, name) => window.dispatchEvent(new Event(name)), event);
+    await frame.locator('body').evaluate((_element, name) => {
+      window.lifecycleSqlStarts = [];
+      const send = MessagePort.prototype.postMessage;
+      MessagePort.prototype.postMessage = function (message, ...args) {
+        if (message?.type === 'request' && message.method === 'sql')
+          window.lifecycleSqlStarts.push(message.parameters.queryId);
+        return send.call(this, message, ...args);
+      };
+      window.dispatchEvent(new Event(name));
+    }, event);
     await expect(productsSection).toHaveCount(0);
     await frame
       .locator('body')
       .evaluate(
         () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
       );
-    assert.deepEqual(
-      sources.map((queryId) => calls.filter((call) => call.queryId === queryId).length),
-      sources.map((queryId) => before.get(queryId)),
-    );
+    assert.deepEqual(await frame.locator('body').evaluate(() => window.lifecycleSqlStarts), []);
     await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
     await expect(productsSection).toContainText('3 个产品', { timeout: 1500 });
     await expect
