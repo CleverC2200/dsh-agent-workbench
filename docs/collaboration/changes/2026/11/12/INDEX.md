@@ -8,3 +8,5 @@
 
 - [销售计划单笔失败提示与再次提交](sales-plan-single-approval.md)
 - [基地库存问数与卡片一致性](base-card-parity.md)
+
+- [MPS月生产入库累计修复](mps-inbound-release.md)

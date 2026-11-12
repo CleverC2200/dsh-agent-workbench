@@ -2,7 +2,7 @@ import { metricSection, readySectionRows } from './metric-sections.mjs';
 import { metricDefinition } from './metric-definitions.mjs';
 import { workbenchMetricState } from './performance-rules.mjs';
 export const metricCalculationVersion =
-  typeof ORDER_WORKBENCH_METRIC_VERSION === 'undefined' ? 40 : ORDER_WORKBENCH_METRIC_VERSION;
+  typeof ORDER_WORKBENCH_METRIC_VERSION === 'undefined' ? 41 : ORDER_WORKBENCH_METRIC_VERSION;
 export function retainableWorkbenchFacts(facts) {
   return (
     facts?.attributionVersion === 2 &&
@@ -527,7 +527,8 @@ export function metricCoverageSummary(metric) {
 }
 export function reportPeriods(start, end, now = new Date()) {
   const today = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
-  const limit = end < today ? end : today;
+  const tomorrow = dayOffset(today, 1);
+  const limit = end < tomorrow ? end : tomorrow;
   const monthStart = start.slice(0, 7) + '-01';
   const monthEnd = new Date(Date.UTC(Number(start.slice(0, 4)), Number(start.slice(5, 7)), 1))
     .toISOString()
