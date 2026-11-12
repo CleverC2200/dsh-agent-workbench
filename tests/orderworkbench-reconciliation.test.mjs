@@ -198,19 +198,25 @@ test('base and item formulas retain documented weights instead of fitting the sc
     10,
   );
 });
-test('cancellations retain execution business time while amendments select actual shipment time', () => {
+test('cancellations retain execution business time while amendments select BI order close time', () => {
   assert.match(
     changesSql,
     /CASE WHEN s.orderstatus=90 THEN s.cancelled ELSE s.header_addtime END AS business_time/,
   );
   assert.doesNotMatch(changesSql, /COUNT\(DISTINCT header_addtime\)=1/);
-  assert.match(amendmentChangesSql, /AND shipment\.shipped_at>=:gea_p1/);
+  assert.match(amendmentChangesSql, /AND d\.order_close_time>=:gea_p1/);
   assert.doesNotMatch(amendmentChangesSql, /d\.header_addtime>=/);
 });
-test('amendments use the actual shipment cohort while cancellations use quantities and their event cohort', () => {
-  assert.match(amendmentChangesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
+test('amendments use the BI order-close cohort while cancellations use quantities and their event cohort', () => {
+  assert.match(
+    amendmentChangesSql,
+    /requested_qty>=0 AND requested_qty<effective_qty THEN effective_qty-requested_qty/,
+  );
   assert.doesNotMatch(amendmentChangesSql, /custchangetime|requireddeliverytime|\blocked\b/);
-  assert.match(changesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
+  assert.match(
+    changesSql,
+    /requested_qty>=0 AND requested_qty<effective_qty THEN effective_qty-requested_qty/,
+  );
   assert.match(
     changesSql,
     /COALESCE\(s.change_order_qty,s.dms_last_update_qty,s.need_qty_origin\)/,

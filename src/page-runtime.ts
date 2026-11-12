@@ -165,6 +165,7 @@ export interface PageBusinessGrant {
   /** Read-only model interpretation, executed under this page's business identity. */
   insight?(input: unknown, signal: AbortSignal): Promise<unknown>;
   workspace?(input: any, signal: AbortSignal): Promise<unknown>;
+  heartbeat?(): void;
   observe?(context: Record<string, unknown>): void;
   snapshot?(): { sequence: number; state: unknown } | undefined;
   allowsEffect(effect: PageElementEffect | 'view'): boolean;
@@ -502,6 +503,7 @@ export class PageRuntime {
         case 'events':
           if (!owner.htmlLease) throw Error('HTML_PAGE_REQUIRED');
           value = this.html.consume(owner.htmlLease);
+          owner.grant.heartbeat?.();
           break;
         case 'reply':
           if (!owner.htmlLease) throw Error('HTML_PAGE_REQUIRED');

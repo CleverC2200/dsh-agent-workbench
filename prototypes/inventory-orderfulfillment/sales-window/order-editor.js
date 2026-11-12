@@ -13,6 +13,13 @@ window.OrderShortageEditor = (() => {
       ? '—'
       : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 6 }).format(Number(value));
   const quantityText = (value) => (number(value) === null ? '—' : display(value) + ' 箱');
+  const specificationText = (value) => {
+    const raw = typeof value === 'string' ? value.trim() : '';
+    if (!raw) return '规格未提供';
+    const match = /^1\s*[*×x]\s*\d+(?:\.\d+)?\s*(?:kg|g)?\s*[*×x]\s*(\d+)$/i.exec(raw);
+    const bags = match ? Number(match[1]) : null;
+    return Number.isSafeInteger(bags) && bags > 0 ? `${bags}袋/件` : raw;
+  };
   const identifiers = (snapshot) => ({
     execution: snapshot.executionOrderNo || '—',
     dms: snapshot.dmsOrderNo || snapshot.orderNo || '—',
@@ -100,25 +107,34 @@ window.OrderShortageEditor = (() => {
         : display(
             selected().reduce((sum, line) => sum + Number(line.unitPrice) * line.draftQuantity, 0),
           );
+    function quantityError(line, quantity) {
+      const minimum = number(line.minimumOrderQuantity),
+        pallet = number(line.orderMultiple);
+      if (quantity === null) return '请输入非负有效数量';
+      if (quantity > 0 && !(pallet > 0))
+        return '每托箱数未提供，暂时无法校验整托数量。';
+      if (quantity > 0 && minimum !== null && quantity < minimum)
+        return `起订量为 ${display(minimum)} 箱`;
+      if (
+        quantity > 0 &&
+        pallet > 0 &&
+        Math.abs(quantity / pallet - Math.round(quantity / pallet)) > 1e-8
+      )
+        return `请按整托订购，数量须为 ${display(pallet)} 箱的整数倍。`;
+      return '';
+    }
     function reason() {
       if (!editable) return '此任务已结束或仅有查看权限。';
       if (snapshot.credit?.status === 'insufficient') return '信用额度不足，需先补充并经后台核验。';
       if (route(snapshot) !== 'order') return '订单满足率未达到90%或未完整提供，请先处理商品。';
       if (!selected().length) return '尚未选择商品，请先核对订单商品。';
       if (selected().some((line) => line.draftQuantity === null)) return '商品数量尚未完整提供。';
-      if (
-        selected().some(
-          (line) =>
-            (number(line.minimumOrderQuantity) !== null &&
-              line.draftQuantity < number(line.minimumOrderQuantity)) ||
-            (number(line.orderMultiple) > 0 &&
-              Math.abs(
-                line.draftQuantity / number(line.orderMultiple) -
-                  Math.round(line.draftQuantity / number(line.orderMultiple)),
-              ) > 1e-8),
-        )
-      )
-        return '请核对商品起订量和订货倍数。';
+      const invalidInput = root.querySelector('input[aria-invalid="true"]');
+      if (invalidInput) return invalidInput.validationMessage;
+      const invalidQuantity = selected()
+        .map((line) => quantityError(line, line.draftQuantity))
+        .find(Boolean);
+      if (invalidQuantity) return invalidQuantity;
       if (changed()) return '订单信息已调整，请重新核对后提交。';
       if (typeof state.onConfirm !== 'function') return '暂时无法提交，请稍后重试。';
       return '';
@@ -154,13 +170,17 @@ window.OrderShortageEditor = (() => {
       name.title = line.name || '商品名称未提供';
       info.append(
         name,
-        node('p', line.specification || '规格未提供', 'editor-spec'),
+        node('p', specificationText(line.specification), 'editor-spec'),
         node('small', 'SKU：' + line.sku, 'editor-sku'),
       );
       info.append(
         node(
           'p',
-          `起订量：${quantityText(line.minimumOrderQuantity)} ｜ 订货倍数：${quantityText(line.orderMultiple)}`,
+          `起订量：${quantityText(line.minimumOrderQuantity)} ｜ ${
+            number(line.orderMultiple) > 0
+              ? `每托${display(line.orderMultiple)}箱（整托订购）`
+              : '每托箱数：—'
+          }`,
           'editor-order-rules',
         ),
       );
@@ -182,28 +202,23 @@ window.OrderShortageEditor = (() => {
         input.value = line.draftQuantity === null ? '' : String(line.draftQuantity);
         input.placeholder = '—';
         input.setAttribute('aria-label', `${line.sku} 数量`);
-        input.disabled = !editable || line.originalQuantity === null;
+        input.disabled =
+          !editable || line.originalQuantity === null || !(number(line.orderMultiple) > 0);
         const multiple = number(line.orderMultiple),
           minimum = number(line.minimumOrderQuantity),
           error = node('small', '', 'editor-quantity-error');
         error.setAttribute('role', 'status');
-        function apply(value) {
-          if (!editable || line.originalQuantity === null) return;
+        function apply(value, restoreInvalid = true) {
+          if (!editable || line.originalQuantity === null || !(multiple > 0)) return;
           const quantity = number(value);
-          const invalid =
-            quantity === null
-              ? '请输入非负有效数量'
-              : quantity > 0 && minimum !== null && quantity < minimum
-                ? `起订量为 ${display(minimum)} 箱`
-                : quantity > 0 &&
-                    multiple > 0 &&
-                    Math.abs(quantity / multiple - Math.round(quantity / multiple)) > 1e-8
-                  ? `数量须为 ${display(multiple)} 箱的整数倍`
-                  : '';
+          const invalid = quantityError(line, quantity);
           input.setCustomValidity(invalid);
+          input.setAttribute('aria-invalid', String(Boolean(invalid)));
           error.textContent = invalid;
           if (invalid) {
-            input.value = line.draftQuantity === null ? '' : String(line.draftQuantity);
+            if (restoreInvalid)
+              input.value = line.draftQuantity === null ? '' : String(line.draftQuantity);
+            updateTotals();
             return;
           }
           line.draftQuantity = quantity;
@@ -216,25 +231,32 @@ window.OrderShortageEditor = (() => {
           '−',
           () =>
             apply(
-              line.draftQuantity - step < (minimum || 0)
+              (Math.ceil(line.draftQuantity / step - 1e-8) - 1) * step < (minimum || 0)
                 ? 0
-                : Math.max(0, line.draftQuantity - step),
+                : Math.max(0, (Math.ceil(line.draftQuantity / step - 1e-8) - 1) * step),
             ),
-          !editable || line.draftQuantity === null || line.draftQuantity === 0,
+          !editable || line.draftQuantity === null || line.draftQuantity === 0 || !(multiple > 0),
         );
         minus.setAttribute('aria-label', `${line.sku} 减少`);
         const plus = button(
           '+',
           () =>
             apply(
-              line.draftQuantity === 0 && minimum > 0
-                ? Math.ceil(minimum / step) * step
-                : line.draftQuantity + step,
+              Math.max(
+                (Math.floor(line.draftQuantity / step + 1e-8) + 1) * step,
+                minimum > 0 ? Math.ceil(minimum / step) * step : step,
+              ),
             ),
-          !editable || line.draftQuantity === null,
+          !editable || line.draftQuantity === null || !(multiple > 0),
         );
         plus.setAttribute('aria-label', `${line.sku} 增加`);
+        input.addEventListener('input', () => apply(input.value, false));
         input.addEventListener('change', () => apply(input.value));
+        const initialError =
+          line.draftQuantity === null ? '' : quantityError(line, line.draftQuantity);
+        input.setCustomValidity(initialError);
+        input.setAttribute('aria-invalid', String(Boolean(initialError)));
+        error.textContent = initialError;
         controls.append(minus, input, plus, node('span', '箱'));
         trading.append(controls);
         info.append(error);
