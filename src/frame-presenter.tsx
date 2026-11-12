@@ -803,7 +803,14 @@ export function mountFramePresentation(
                 ref={frame}
                 title={title}
                 src={src}
-                {...(page.kind === 'html' ? { sandbox: 'allow-scripts allow-downloads' } : {})}
+                {...(page.kind === 'html'
+                  ? {
+                      sandbox:
+                        page.id === 'inventory-orderworkbench'
+                          ? 'allow-scripts allow-downloads allow-popups'
+                          : 'allow-scripts allow-downloads',
+                    }
+                  : {})}
                 className="agent-workbench-html"
                 onLoad={() => {
                   setLoaded((value) => value + 1);
