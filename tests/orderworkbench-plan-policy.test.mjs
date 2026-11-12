@@ -44,9 +44,12 @@ test('production assembly binds published nodes into detail, summaries, counts a
   assert(config.queries['workbench.stock'].request.sql.includes('FROM agents_dim_mark_xilie_d'));
   assert.match(
     config.queries['workbench.stock.summary'].request.sql,
-    /ORDER BY update_time DESC,load_time DESC\) AS version_rank/,
+    /d\.order_close_time>=:gea_p\d+ AND d\.order_close_time<:gea_p\d+/,
   );
-  assert.match(config.queries['workbench.stock.summary'].request.sql, /shipment\.shipped_at/);
+  assert.doesNotMatch(
+    config.queries['workbench.stock.summary'].request.sql,
+    /shipment\.shipped_at/,
+  );
   for (const name of ['stock', 'ages'])
     assert.doesNotMatch(
       config.queries[`workbench.${name}.periods.summary`].request.sql,

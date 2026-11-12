@@ -35,3 +35,14 @@ export const roundPlanQuantity = (value: string): string => {
   const rounded = BigInt(match[2]) + ((match[3]?.[0] ?? '0') >= '5' ? 1n : 0n);
   return `${match[1] === '-' && rounded !== 0n ? '-' : ''}${rounded}`;
 };
+
+export const salesPlanDecimalValue = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  const match = text.match(/^([+-]?)(\d+)(?:\.(\d+))?$/);
+  if (!match) return text;
+  const integer = match[2].replace(/^0+(?=\d)/, '');
+  const fraction = (match[3] ?? '').replace(/0+$/, '');
+  const sign = match[1] === '-' && (integer !== '0' || fraction) ? '-' : '';
+  return `${sign}${integer}${fraction ? `.${fraction}` : ''}`;
+};

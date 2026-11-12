@@ -158,7 +158,10 @@ void ready.then(() => {
   schedule();
 });
 const refreshLabel = '刷新MPS页面，保留对话界面意图和未发送文字，清除本页隔离输入';
-action('refresh', refreshLabel, () => window.location.reload());
+action('refresh', refreshLabel, () => {
+  setTimeout(() => window.location.reload(), 0);
+  return { reloadScheduled: true };
+});
 reportElements(
   'refresh',
   [

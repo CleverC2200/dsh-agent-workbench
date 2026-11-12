@@ -101,6 +101,11 @@
         "tests/mps-relations.test.mjs",
         "tests/mps-workflow-inputs.test.mjs",
         "tests/mps-source-tables.test.mjs",
+        "tests/mps-facts-sql.test.mjs",
+        "tests/mps-annual-demand.test.mjs",
+        "tests/mps-source-projections.test.mjs",
+        "tests/mps-refresh.test.mjs",
+        "tests/html-frame-contract.test.mjs",
         "tests/static-author-provenance.test.mjs",
         "tests/static-author-source.test.mjs"
       ]
@@ -236,9 +241,9 @@
     },
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^src/workbench/original/workbenches/regionalApproval/(?:RegionalApproval(?:ActionDialog|LiveAdjustmentDialog)\\.tsx|RegionalApprovalPlanDetail\\.(?:tsx|module\\.css)|regionalApproval(?:ActionModel|DetailFixture|DetailModel|Fixture|Model)\\.ts|models/salesPlanAdjustmentModel\\.ts)$",
+      "pattern": "^src/workbench/original/workbenches/regionalApproval/(?:RegionalApproval(?:ActionDialog|LiveAdjustmentDialog)\\.tsx|RegionalApprovalPlanDetail\\.(?:tsx|module\\.css)|regionalApproval(?:ActionModel|DetailFixture|DetailModel|Fixture|Model)\\.ts|models/salesPlanAdjustmentModel\\.ts|hooks/useSalesPlanDetail\\.ts)$",
       "tests": [
-        "tests/sales-plan-detail.browser.mjs",
+        "tests/sales-plan-presentation.browser.mjs",
         "tests/role-approval.test.mjs",
         "tests/approval-visibility.test.mjs",
         "tests/regional-state-restore.test.mjs"
@@ -377,6 +382,16 @@
         "tests/agent-sql-config.test.mjs",
         "tests/fc-upstream-orders.test.mjs",
         "tests/fc-upstream-supply.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^tests/sales-plan-detail\\.browser\\.mjs$",
+      "tests": [
+        "tests/sales-plan-presentation.browser.mjs",
+        "tests/role-approval.test.mjs",
+        "tests/approval-visibility.test.mjs",
+        "tests/regional-state-restore.test.mjs"
       ]
     }
   ],

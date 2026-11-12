@@ -339,6 +339,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
   const [apiLogOpen, setApiLogOpen] = useState(directApiLog);
   const [submissionOutcomes, setSubmissionOutcomes] =
     useState<readonly SalesPlanSubmissionOutcome[]>();
+  const [submissionRefreshRequest, setSubmissionRefreshRequest] = useState<readonly string[]>();
   const [resubmit, setResubmit] = useState<{
     items: readonly SalesPlanSubmissionItem[];
     visible: boolean;
@@ -352,6 +353,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
   useEffect(() => {
     setResubmit(undefined);
     setSubmissionOutcomes(undefined);
+    setSubmissionRefreshRequest(undefined);
     if (!directApiLog) setApiLogOpen(false);
   }, [
     directApiLog,
@@ -582,6 +584,8 @@ export function WorkbenchPage({ t }: { t: Translate }) {
               )}
               <RegionalApprovalWorkbench
                 submissionOutcomes={submissionOutcomes}
+                submissionPending={Boolean(resubmit?.pending)}
+                submissionRefreshRequest={submissionRefreshRequest}
                 stateScope={`gea-dsh:${status.environment}:${status.user?.tenantId}:${status.user?.id}`}
                 t={locale.t.bind(locale)}
                 onContextChange={onContextChange}
@@ -627,6 +631,10 @@ export function WorkbenchPage({ t }: { t: Translate }) {
             )
           }
           onCompleted={setSubmissionOutcomes}
+          onRefresh={(planIds) => {
+            setResubmit(undefined);
+            setSubmissionRefreshRequest(planIds);
+          }}
         />
       )}
     </div>

@@ -116,30 +116,26 @@ export const executionProductsSql = `SELECT cust_order_no,cust_code,material_cod
   WHERE detailstatus=10 AND is_stat='1' AND (:gea_p900='' OR belong_base=:gea_p900)
   GROUP BY cust_order_no,cust_code,material_code,executeorderno,belong_base,detailstatus`;
 
-const fulfillmentCohort = `SELECT fromorderno,cust_code,new_material_code
-  FROM agents_order_execute_isontime_mi
-  WHERE exp_flag='否' AND (order_qty_origin>0 OR need_qty_origin>0)
-    AND (:gea_p900='' OR belong_base=:gea_p900)
-  GROUP BY fromorderno,cust_code,new_material_code
-  HAVING MAX(fromorderno_month)>=:gea_p1 AND MIN(fromorderno_month)<:gea_p2`;
-const fulfillmentKey = (field) =>
-  `CASE WHEN ${field} IS NULL THEN 'N' ELSE CONCAT('V',${field}) END`;
-const fulfillmentCohortJoin = ['fromorderno', 'cust_code', 'new_material_code']
-  .map((field) => `${fulfillmentKey('source.' + field)}=${fulfillmentKey('cohort.' + field)}`)
-  .join(' AND ');
+// fromorderno_month is the upstream final-shipment business date. Select the
+// latest original-order period before summing splits, so older observations
+// cannot duplicate demand or invalidate a normally split product.
 const mergedProducts = `SELECT fromorderno,cust_code,new_material_code AS sku,
   MAX(belong_base) AS base,MAX(product_categ_name) AS category,MAX(pinxiang) AS item,
-  MAX(new_material_name) AS name,MAX(need_qty_origin) AS demand,MAX(qtyshipped) AS sent,
-  MIN(fromorderno_month) AS period_start,MAX(fromorderno_month) AS period_end,
-  CASE WHEN COUNT(*)=1 AND COUNT(need_qty_origin)=1 AND COUNT(qtyshipped)=1
-    AND COUNT(fromorderno_month)=1 AND MAX(need_qty_origin)>=0 AND MAX(qtyshipped)>=0
+  MAX(new_material_name) AS name,SUM(need_qty_origin) AS demand,SUM(qtyshipped) AS sent,
+  MAX(final_period) AS period_start,MAX(final_period) AS period_end,
+  CASE WHEN COUNT(need_qty_origin)=COUNT(*) AND COUNT(qtyshipped)=COUNT(*)
+    AND COUNT(fromorderno_month)=COUNT(*) AND MIN(need_qty_origin)>=0 AND MIN(qtyshipped)>=0
     AND NULLIF(TRIM(fromorderno),'') IS NOT NULL AND NULLIF(TRIM(cust_code),'') IS NOT NULL
     AND NULLIF(TRIM(new_material_code),'') IS NOT NULL THEN 0 ELSE 1 END AS invalid
-  FROM (SELECT DISTINCT source.fromorderno,source.cust_code,source.new_material_code,source.belong_base,source.product_categ_name,source.pinxiang,
-    source.new_material_name,source.need_qty_origin,source.qtyshipped,source.executeorderno,source.fromorderno_month
-    FROM agents_order_execute_isontime_mi source INNER JOIN (${fulfillmentCohort}) cohort ON ${fulfillmentCohortJoin}
-    WHERE source.exp_flag='否' AND (source.order_qty_origin>0 OR source.need_qty_origin>0)
-      AND (:gea_p900='' OR source.belong_base=:gea_p900)) cleaned
+  FROM (SELECT DISTINCT fromorderno,cust_code,new_material_code,belong_base,product_categ_name,pinxiang,
+    new_material_name,need_qty_origin,qtyshipped,executeorderno,fromorderno_month,final_period
+    FROM (SELECT m.*,MAX(fromorderno_month) OVER (PARTITION BY fromorderno,cust_code) AS final_period,
+        MAX(fromorderno_month) OVER (PARTITION BY fromorderno,cust_code,new_material_code) AS product_period
+      FROM agents_order_execute_isontime_mi m
+      WHERE exp_flag='否' AND (order_qty_origin>0 OR need_qty_origin>0)
+        AND pickup_point_kpi IN ('郑州','华东','西南','华南','遂平')) observations
+    WHERE (fromorderno_month=product_period OR fromorderno_month IS NULL)
+      AND (:gea_p900='' OR belong_base=:gea_p900)) cleaned
   GROUP BY fromorderno,cust_code,new_material_code`;
 
 // The fulfillment source also declares its exact child executions (comma list).
@@ -170,7 +166,7 @@ export const ordersSql = `SELECT m.base,m.category,m.item,m.sku,MAX(m.name) AS n
   COUNT(*) AS records,SUM(m.invalid) AS invalid,
   0 AS missing_ship_date,0 AS unmatched_order,0 AS missing_trace,0 AS missing_ship_time
   FROM (${mergedProducts}) m
-  WHERE m.period_end>=:gea_p1 AND m.period_start<:gea_p2
+  WHERE m.period_end>=:gea_p1 AND m.period_end<:gea_p2
   GROUP BY m.base,m.category,m.item,m.sku`;
 
 // Virtual codes use OMS details, not the normalized trace label.

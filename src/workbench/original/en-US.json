@@ -444,20 +444,6 @@
       "customerCount": "{{count}} customers",
       "quantityProgress": "Qty {{progress}}%",
       "amountProgress": "{{progress}}%",
-      "versions": {
-        "group": "Plan version comparison",
-        "primary": "Viewing version",
-        "primaryCompact": "Version",
-        "compare": "Compare version",
-        "compareCompact": "Compare",
-        "current": "Latest",
-        "previous": "Previous",
-        "initial": "Initial",
-        "offset": "-{{offset}} version",
-        "unavailable": "No versions",
-        "info": "Version selection help",
-        "description": "Version ① is the primary view and Version ② is the comparison baseline. Version ① cannot be older than Version ②; no differences are shown when both versions match."
-      },
       "dimensions": {
         "ariaLabel": "Approval plan dimensions",
         "area": "By area",
@@ -498,8 +484,7 @@
         "progress": "View submission progress",
         "refreshData": "Refresh data",
         "export": "Export current scope",
-        "exportPage": "Export current page",
-        "compareVersions": "Compare versions"
+        "exportPage": "Export current page"
       },
       "exportFeedback": {
         "detailsFailed": "Version details could not be read or are incomplete. Refresh and retry; no file was created.",
@@ -590,7 +575,7 @@
       "liveDetail": {
         "title": "Sales plan details and version evidence",
         "openFor": "View real plan details for {{plan}}",
-        "boundary": "Plan details, versions, SKUs, approval logs, and comparisons come from read-only GEA user-session endpoints. Nothing writes or submits real data.",
+        "boundary": "Plan details, SKUs, and approval logs are read through the GEA user session.",
         "aiFixture": "AI guidance has no real endpoint. The current guidance is sample data and is not connected to production. This detail view never writes guidance or temporary client adjustments into server SKUs.",
         "loading": "Loading sales plan evidence…",
         "notReady": "Select a real sales plan to load its details.",
@@ -599,21 +584,13 @@
         "receipt": "GEA read-only evidence scope",
         "currentVersion": "Server current version",
         "planId": "Plan ID",
-        "versionCount": "Historical versions",
         "logCount": "Approval logs",
-        "versionOption": "Version {{seq}} · {{id}}",
-        "compareFrom": "Base version",
-        "compareTo": "Target version",
         "returnReasonEvidence": "Version return reasons",
         "emptySkus": "This version has no SKU details.",
         "emptyLogs": "This plan has no approval logs.",
-        "emptyCompare": "The selected versions have no SKU differences.",
-        "sameVersion": "The baseline and target are the same version, so there is no difference or return reason.",
         "tabs": {
           "skus": "Version SKUs",
-          "versions": "Version history",
-          "logs": "Approval logs",
-          "compare": "Version comparison"
+          "logs": "Approval logs"
         },
         "columns": {
           "sku": "SKU",
@@ -633,16 +610,7 @@
           "transition": "Status transition",
           "operator": "Operator",
           "time": "Action time",
-          "remark": "Remark",
-          "change": "Change type",
-          "qtyComparison": "Quantity comparison / delta",
-          "priceComparison": "Price comparison",
-          "amountDelta": "Amount delta"
-        },
-        "change": {
-          "ADDED": "Added",
-          "DELETED": "Deleted",
-          "UPDATED": "Updated"
+          "remark": "Remark"
         },
         "errors": {
           "permission": "This account cannot read the requested sales plan details.",
@@ -724,7 +692,7 @@
       },
       "liveSubmit": {
         "inherited": "Inherited quantity / amount",
-        "batchResult": "Succeeded {{success}} · Failed {{failed}} · Awaiting verification {{pending}}",
+        "batchResult": "{{success}} succeeded · {{failed}} failed · {{pending}} pending verification · {{skipped}} skipped",
         "comparisonDetails": "View details ({{count}})",
         "batchTitle": "Submit selected plans ({{count}})",
         "openBatch": "Submit selected",
@@ -762,17 +730,20 @@
         "confirmation": "I reviewed all submitted quantities and amounts and the inherited confirmation values retained without recalculation, and confirm creating a new version.",
         "required": "Confirm the real resubmission scope first.",
         "loading": "Submitting. You cannot close this dialog or create another submit intent until the result returns…",
+        "refreshSelection": "Refresh list and reselect",
+        "ignoreStaleDraft": "Review without expired draft",
+        "draftIgnored": "The expired draft is retained. This review uses current plan data.",
         "close": "Close",
         "retry": "Retry and check result",
         "refresh": "Refresh authoritative state",
         "confirm": "Confirm resubmission",
         "completed": "Receipt received",
         "enabledHint": "Returned status 6–9, confirmed responsible identity and complete source details permit editing.",
-        "success": "The server confirmed plan {{planId}} version {{versionId}}; request {{requestId}}{{auditReference}} ({{replayed}}).",
+        "success": "The server confirmed version {{versionId}} of plan {{planId}}.",
         "auditReference": ", audit {{id}}",
         "created": "new receipt",
         "replayed": "idempotent replay",
-        "receiptBanner": "Resubmission receipt: plan {{planId}} · version {{versionId}} · request {{requestId}} · audit {{auditId}}",
+        "receiptBanner": "Resubmission receipt: plan {{planId}} · version {{versionId}}",
         "refreshFailed": "Resubmission succeeded but the queue refresh failed. Close and refresh manually; do not create a new submit intent.",
         "disabled": {
           "completed": "This returned version already has a server receipt, so duplicate resubmission is blocked.",
@@ -786,22 +757,49 @@
           "queueNotFresh": "The queue is refreshing or failed to load. A successful authoritative queue response is required.",
           "notReturned": "Only returned statuses 6–9 can be resubmitted."
         },
+        "fields": {
+          "price": "unit price",
+          "qty": "submitted quantity",
+          "amt": "submitted amount",
+          "adjAddQty": "increase quantity",
+          "adjCutQty": "decrease quantity",
+          "regionConfirmedQty": "city manager confirmed quantity",
+          "provinceConfirmedQty": "province confirmed quantity",
+          "areaConfirmedQty": "area confirmed quantity",
+          "categoryConfirmedQty": "category confirmed quantity"
+        },
         "errors": {
           "serviceSignedOut": "Sign in to GEA, then reopen the resubmission confirmation.",
           "serviceConfiguration": "The service submission channel is not configured for this environment. Contact an administrator.",
           "serviceTenant": "The current tenant does not match the service submission configuration. Switch to the correct tenant or contact an administrator.",
           "serviceCredential": "Service submission credentials are missing. Ask an administrator to set up this environment.",
           "serviceAuthentication": "Service submission authorization failed. Ask an administrator to check the service configuration; the employee login remains active.",
-          "configuration": "Workflow, candidate or notification configuration prevented this action. Contact an administrator with the error reference.",
+          "configuration": "Workflow, candidate or notification settings prevented resubmission. Ask an administrator to check the configuration.",
+          "planChanged": "Plan identity mismatch: selected {{expected}}, received {{actual}}. Refresh the list and reselect.",
+          "versionChanged": "Plan version changed: selected {{expected}}, current {{actual}}. Refresh the list and reselect. Old adjustments will not be applied to the new version.",
+          "statusChanged": "Approval status changed: selected {{expected}}, current {{actual}}. Refresh the list and reselect.",
+          "versionInactive": "The selected plan version is no longer effective. Refresh the list and select the current version.",
+          "periodChanged": "Plan period mismatch: selected {{expected}}, current {{actual}}. Refresh the list and check the plan month.",
+          "planTypeChanged": "Plan type mismatch: selected {{expected}}, current {{actual}}. Refresh the list and reselect.",
+          "orderTypeChanged": "Order type mismatch: selected {{expected}}, current {{actual}}. Refresh the list and reselect.",
+          "skuVersionChanged": "SKU {{code}} belongs to a different version: expected {{expected}}, received {{actual}}. Refresh the list and review again.",
+          "skuDuplicate": "SKU {{code}} appears more than once. Submission quantities and amounts cannot be calculated. Refresh and retry; contact an administrator if it persists.",
+          "skuEmpty": "No SKU details were returned for the current version. Refresh and retry.",
+          "draftStale": "The local draft has expired and does not match the current plan details. It is retained. Review current plan data without applying the expired draft.",
+          "quantityInvalid": "Confirmed quantity is invalid. Check this stage adjustment and keep the quantity non-negative.",
+          "accessChanged": "This plan can no longer be approved at the selected node. Refresh the list and check the node and permissions.",
+          "skuAdded": "SKU {{code}} was added to the current details. Refresh the list and review again.",
+          "skuRemoved": "SKU {{code}} was removed from the current details. Refresh the list and review again.",
+          "skuValueChanged": "SKU {{code}} {{field}} changed: previously {{expected}}, now {{actual}}. Refresh the list and review again.",
           "sourceLoad": "Source data could not be loaded. Close and reopen the editor; no submission has been sent.",
           "validation": "The real details do not satisfy the submit contract. No request was sent; refresh and verify fields, SKUs, and totals.",
-          "sourceMismatch": "The period, version, status, SKUs, or totals conflict. Sample or stale data was rejected as a real submission.",
+          "sourceMismatch": "Plan source data does not match. Refresh the list and review again.",
           "authentication": "The current user session expired. Sign in again and refresh the real sources before acting.",
-          "permission": "AionCore or GEA denied submit permission. The client will not fabricate a tenant or role.",
-          "conflict": "The version changed or a concurrent submit won. Local state was not updated; refresh the authoritative queue.",
-          "rateLimited": "Too many requests. AionCore completed this rate-limit round; the client will not open another call round. Refresh authoritative state.",
-          "serviceUnavailable": "AionCore completed its upstream retry round, but the service remains unavailable. The client will not stack another retry round. Refresh authoritative state.",
-          "retryExhausted": "The three-call total budget is exhausted. The client will not call again; refresh authoritative state to check for a new version.",
+          "permission": "You do not have permission to submit this plan. Ask an administrator to check your role and permissions.",
+          "conflict": "The plan version changed or another submission was received. Refresh the list and check the plan again.",
+          "rateLimited": "Too many requests. Refresh the plan status later and check whether resubmission is still needed.",
+          "serviceUnavailable": "The resubmission service is unavailable. Refresh the plan status and check the result before starting another resubmission.",
+          "retryExhausted": "The resubmission result is still unconfirmed. Refresh the plan status and check whether a new version was created before continuing.",
           "unavailable": "The result is not confirmed. Select “Retry and check result” to continue checking and avoid starting a new submission.",
           "failed": "Submission failed. Address the reported reason before trying again."
         },
@@ -810,7 +808,19 @@
         "lineAmount": "Submitted amount",
         "inheritedValues": "Inherited quantity / amount: region {{region}}; province {{province}}; area {{area}}",
         "quantity": "Submitted quantity",
-        "nextStatus": "Resubmission target status"
+        "nextStatus": "Resubmission target status",
+        "submitAgain": "Submit again",
+        "itemStatus": {
+          "ready": "Ready",
+          "success": "Succeeded",
+          "failed": "Submission failed",
+          "unknown": "Pending verification",
+          "readback": "Pending verification",
+          "unresolved": "Pending verification",
+          "skipped": "Skipped"
+        },
+        "skippedTag": "Skipped",
+        "terminalSkipped": "This plan has completed approval or writeback and is skipped."
       },
       "liveAction": {
         "saveChecksumTitle": "Save review",
@@ -889,13 +899,14 @@
         "required": "Confirm the action scope and adjustments. A reject action also requires a reason.",
         "loading": "Submitting the action. You cannot close this dialog or start another action until the result returns…",
         "close": "Close",
+        "submitAgain": "Submit again",
         "retry": "Retry and check result",
         "refresh": "Refresh authoritative state",
         "confirmApprove": "Confirm approval",
         "confirmReject": "Confirm rejection",
         "completed": "Receipt received",
         "enabledHint": "The OPEN period and current node permit an attempt; the server verifies actual permission.",
-        "success": "The server confirmed {{from}} → {{to}}{{auditReference}}. Refreshing the authoritative queue.",
+        "success": "The server confirmed approval status {{from}} → {{to}}. Refreshing the list.",
         "refreshFailed": "Approval succeeded but the queue refresh failed. Close and refresh manually; do not repeat the approval.",
         "disabled": {
           "completed": "This version already has a server receipt, so duplicate actions are blocked.",
@@ -919,19 +930,24 @@
           "configuration": "Workflow, candidate or notification configuration prevented this action. Contact an administrator.",
           "authentication": "The GEA user session expired. Sign in again and refresh the queue before acting.",
           "permission": "The server confirmed that this user cannot act on this version. It is disabled for this round.",
-          "conflict": "The version changed or another action won the race. Local state was not changed; refresh the authoritative queue.",
-          "rateLimited": "Too many requests. Retry later with the same idempotency key; no second action will be created.",
-          "unavailable": "The result is unknown. Close and refresh authoritative state, or retry here with the same idempotency key. Do not start a new action intent.",
-          "failed": "The request failed and local state was not changed. Refresh the authoritative queue before deciding.",
+          "conflict": "The plan version or approval state has changed. Refresh the list and check it again.",
+          "rateLimited": "Too many requests. Retry here later and check the result.",
+          "unavailable": "The result is unknown. Select “Retry and check result” here to reuse the original request. Do not start a new approval.",
+          "failed": "The operation did not complete. Resolve the reported cause, then submit again.",
           "upstream": {
             "SALES_PLAN_APPROVAL_STATE_INVALID": "This version cannot perform the requested approval action. Ask an administrator to check its approval instance.",
-            "NOTIFICATION_PAYLOAD_INVALID": "The server rejected the approval notification payload. This is a server-side problem that refreshing cannot fix - send the error reference to the backend team.",
+            "NOTIFICATION_PAYLOAD_INVALID": "The approval notification could not be sent. Ask an administrator to check the notification configuration.",
             "APPROVAL_OPERATOR_NOT_ALLOWED": "The server says this account no longer holds the role or org scope for this node. Refresh and retry, and ask an administrator to check your roles."
           }
         },
         "approvalRole": "Approval role",
         "selectRole": "Choose the role for this action",
-        "roleContractUnavailable": "You have this role, but GEA does not yet support writing for the selected role. Update the service before submitting."
+        "roleContractUnavailable": "You have this role, but GEA does not yet support writing for the selected role. Update the service before submitting.",
+        "resultTitle": "Action result",
+        "resume": "Resume pending operation",
+        "roleMissing": "No available approval role was found. Refresh the list and select the plan again.",
+        "accessBlocked": "This approval node can no longer approve this plan. Refresh the list and select it again.",
+        "quantityBlocked": "The confirmed quantity is invalid. Check the SKU quantities before submitting."
       },
       "liveBatch": {
         "approveTitle": "Approve {{count}} plans",
@@ -947,7 +963,7 @@
         "mixedConfirmation": "I have reviewed {{approve}} approvals and {{resubmit}} resubmissions, and confirm submitting each plan.",
         "required": "Enter a return reason.",
         "loading": "Submitting {{count}} plans one by one. Do not close this dialog.",
-        "result": "Submission finished: {{success}} succeeded, {{failed}} failed, {{skipped}} skipped.",
+        "result": "Completed: {{success}} succeeded, {{failed}} failed, {{pending}} pending verification, {{skipped}} skipped.",
         "resubmitTag": "Resubmit returned plan (creates a new version)",
         "approveTag": "Approve current version",
         "repeatRejectTag": "Return an already returned version to the previous step",
@@ -958,7 +974,13 @@
         "confirmApprove": "Approve all",
         "confirmResubmit": "Resubmit all",
         "confirmMixed": "Submit all",
-        "confirmReject": "Return all"
+        "confirmReject": "Return all",
+        "status": {
+          "success": "Succeeded",
+          "failed": "Failed",
+          "pending": "Pending verification",
+          "skipped": "Skipped"
+        }
       },
       "action": {
         "title": "Regional plan approval action",
@@ -1066,7 +1088,6 @@
         "progress": "Plan amount / Target amount",
         "categoryProgress": "Plan amount / Target amount",
         "adjustment": "Adjustment",
-        "comparison": "Version comparison",
         "returnReason": "Return reason",
         "noReturnReason": "—",
         "status": "Approval status"
@@ -1161,8 +1182,6 @@
         "henan": "Henan Province",
         "sichuan": "Sichuan Province"
       },
-      "versionCompare": "Compare versions",
-      "versionCompareUnavailable": "No sales plans are available to compare",
       "organizationGroupCount": "{{count}} plans",
       "mixedApprovalStatus": "Multiple approval stages",
       "expandOrganization": "Expand organizations under {{plan}}",
@@ -1186,33 +1205,6 @@
       },
       "inlineAdjustments": "View adjustment details",
       "versionTargetMissing": "This version has no monthly target",
-      "comparePlan": "Version 2: {{amount}} / {{qty}}",
-      "compareProgress": "Version 2 amount progress: {{value}}",
-      "inlineComparison": {
-        "title": "Compare versions in list",
-        "primary": "Version ①",
-        "compared": "Version ②",
-        "current": "Current version",
-        "previous": "Previous version",
-        "earlier": "{{count}} versions earlier",
-        "monthlyPrimary": "Monthly plan ①",
-        "monthlyCompared": "Monthly plan ②",
-        "difference": "Difference (① − ②)",
-        "returnReason": "Return reason",
-        "hint": "Compare each plan relative to its current version. Missing versions display —.",
-        "plan": "Monthly plan",
-        "confirmed": "Confirmed quantity",
-        "confirmedPrimary": "Confirmed quantity ①",
-        "confirmedCompared": "Confirmed quantity ②",
-        "missing": "The selected version is unavailable for this plan",
-        "allocation": "Allocate in proportion to original confirmed quantities and round each share to the nearest whole unit, with halves rounded up. The rounded total may differ. Split equally when the original total is zero.",
-        "allocationFailed": "Some allocated drafts could not be saved. Retry.",
-        "allocationSaving": "Saving allocated drafts",
-        "allocationRetry": "Retry saving",
-        "allocationReadOnly": "All plans in this group must be editable. Historical versions are read-only.",
-        "invalidQuantity": "Enter a nonnegative quantity with up to three decimals",
-        "groupScope": "{{plans}} plans · {{skus}} SKUs, summarized by version ①"
-      },
       "skuReview": {
         "title": "By category / SKU",
         "category": "Category",
@@ -1238,7 +1230,19 @@
         "empty": "No SKUs match these filters",
         "shipmentUnavailable": "Some historical shipments are unavailable. Affected quantities and totals show —."
       },
-      "returnDestinationUnavailable": "Could not verify the return destination or edited quantities. Refresh and try again."
+      "returnDestinationUnavailable": "Could not verify the return destination or edited quantities. Refresh and try again.",
+      "returnReason": "Return reason",
+      "skuDetails": {
+        "plan": "Monthly plan",
+        "confirmed": "Confirmed quantity",
+        "allocation": "Allocate in proportion to original confirmed quantities and round each share to the nearest whole unit, with halves rounded up. The rounded total may differ. Split equally when the original total is zero.",
+        "allocationFailed": "Some allocated drafts could not be saved. Retry.",
+        "allocationSaving": "Saving allocated drafts",
+        "allocationRetry": "Retry saving",
+        "allocationReadOnly": "All plans in the group must be editable",
+        "invalidQuantity": "Enter a nonnegative quantity with up to three decimals",
+        "missing": "Current plan details could not be loaded. Refresh and try again."
+      }
     },
     "contract": {
       "name": "Contract Review Agent",

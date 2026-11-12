@@ -118,7 +118,7 @@ export function salesPlanReturnAdjustments(
     let final =
       pending[sku.skuCode] ?? addExactDecimals([baseline, changes.get(sku.skuCode) ?? '0']);
     if (!quantity.test(final)) throw new Error('确认计划数量不合法，请核对后重试');
-    if (row.orderType === 'M' && role !== 'category') final = roundPlanQuantity(final);
+    if (row.orderType === 'M') final = roundPlanQuantity(final);
     const adjustQty = subtractExactDecimals(final, receiverQuantity(sku, context.targetStage));
     if (!/^[+-]?\d{1,15}(?:\.\d{1,3})?$/.test(adjustQty))
       throw new Error('确认计划数量不合法，请核对后重试');

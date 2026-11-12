@@ -506,6 +506,8 @@ test('six-window combined queries use the same cancellation event period and qua
     for (const [field, type] of [
       ['is_stat', 'TEXT'],
       ['order_qty_origin', 'REAL'],
+      ['order_close_time', 'TEXT'],
+      ['is_short_transfer', 'TEXT'],
     ])
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${field} ${type}`);
   db.exec(`ALTER TABLE agents_scm_order_trace_final_di ADD COLUMN lastshipmenttime;
@@ -524,12 +526,12 @@ test('six-window combined queries use the same cancellation event period and qua
 });
 
 test('cached metrics from the previous cancellation quantity definition are rejected', () => {
-  assert.equal(metricCalculationVersion, 40);
+  assert.equal(metricCalculationVersion, 41);
   assert.equal(
     compatibleWorkbenchFacts({
       complete: true,
       attributionVersion: 2,
-      metricCalculationVersion: 39,
+      metricCalculationVersion: 40,
       periods: { month: {} },
     }),
     false,

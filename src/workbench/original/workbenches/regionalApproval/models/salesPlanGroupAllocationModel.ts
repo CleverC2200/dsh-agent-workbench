@@ -20,8 +20,7 @@ export function allocateGroupSkuQuantity(
   total: string,
   role?: ApprovalStageId,
 ): Record<string, Record<string, string>> {
-  const integerQuantity =
-    sources.every(({ plan }) => plan.orderType === 'M') && role !== 'category';
+  const integerQuantity = sources.every(({ plan }) => plan.orderType === 'M');
   const target = integerQuantity ? units(roundPlanQuantity(total)) / 1000n : units(total);
   const members = sources
     .flatMap(({ plan, skus }) => {

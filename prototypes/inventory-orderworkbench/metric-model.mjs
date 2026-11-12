@@ -2,7 +2,7 @@ import { metricSection, readySectionRows } from './metric-sections.mjs';
 import { metricDefinition } from './metric-definitions.mjs';
 import { workbenchMetricState } from './performance-rules.mjs';
 export const metricCalculationVersion =
-  typeof ORDER_WORKBENCH_METRIC_VERSION === 'undefined' ? 40 : ORDER_WORKBENCH_METRIC_VERSION;
+  typeof ORDER_WORKBENCH_METRIC_VERSION === 'undefined' ? 41 : ORDER_WORKBENCH_METRIC_VERSION;
 export function retainableWorkbenchFacts(facts) {
   return (
     facts?.attributionVersion === 2 &&
@@ -467,7 +467,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
     const selected = source.filter((row) => String(row.kind) === (name === '作废率' ? '1' : '2'));
     if (!selected.length)
       return name === '改单率'
-        ? '当前实际发货周期没有可归属的有效商品数量记录：日表需按执行单号＋客户关联物流lastshipmenttime装车完成时间；缺时间不以OMS新增或WMS关单时间替代。'
+        ? '当前统计周期没有可归属的有效商品数量记录：按日表order_close_time订单关单时间筛选；缺时间不以OMS新增、WMS关单或轨迹装车时间替代。'
         : '源数据未提供：agents_scm_execute_detail_hourly_d 在当前分组没有商品数量统计记录。';
     if (
       name === '改单率' &&
@@ -527,7 +527,8 @@ export function metricCoverageSummary(metric) {
 }
 export function reportPeriods(start, end, now = new Date()) {
   const today = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
-  const limit = end < today ? end : today;
+  const tomorrow = dayOffset(today, 1);
+  const limit = end < tomorrow ? end : tomorrow;
   const monthStart = start.slice(0, 7) + '-01';
   const monthEnd = new Date(Date.UTC(Number(start.slice(0, 4)), Number(start.slice(5, 7)), 1))
     .toISOString()

@@ -28,6 +28,19 @@ const fields = [
   'requiredProductionTons',
 ];
 
+export function workflowContextPreview(value) {
+  if (typeof value === 'string') return value.length > 200 ? value.slice(0, 200) + '…' : value;
+  if (Array.isArray(value)) return value.slice(0, 10).map(workflowContextPreview);
+  if (value && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value).flatMap(([key, item]) => [
+        [key, workflowContextPreview(item)],
+        ...(Array.isArray(item) && item.length > 10 ? [[key + 'Total', item.length]] : []),
+      ]),
+    );
+  return value;
+}
+
 export function summarizeEvaluation(rows) {
   const groups = new Map();
   for (const row of rows) {
@@ -83,6 +96,8 @@ export function planContext(plan, visible, { base, month }) {
     (row) => (!base || row.from === base || row.to === base) && (!month || row.month === month),
   );
   return {
+    scopeStatus: plan.partial ? 'partial' : 'in-scope',
+    excludedShipmentCount: plan.excludedShipments?.length ?? 0,
     summary: plan.summary,
     sources: plan.sources,
     rows: plan.rows
@@ -309,17 +324,21 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             ? '尚未评估'
             : stale
               ? '输入已变化，需重新评估'
-              : plan.status === 'complete'
-                ? '已完成求解'
-                : plan.summary.evaluatedRows
-                  ? '部分可评估，缺项已单列'
-                  : plan.summary.totalRows
-                    ? '计算已完成，排产缺项待人工补齐'
-                    : '缺需求单品范围，尚未生成排产';
+              : plan.partial && plan.status === 'complete'
+                ? '参与范围内已完成求解，待定单品仍需补齐'
+                : plan.status === 'complete'
+                  ? '已完成求解'
+                  : plan.summary.evaluatedRows
+                    ? '部分可评估，缺项已单列'
+                    : plan.summary.totalRows
+                      ? '计算已完成，排产缺项待人工补齐'
+                      : '缺需求单品范围，尚未生成排产';
     const exportPlan = () => {
       if (!active) return;
       const rows = reportRows.map((row) => ({
         评估版本: draft.name,
+        计算范围: plan.partial ? '部分可计算，待定单品已排除' : '当前参与范围',
+        排除单品记录数: plan.excludedShipments?.length ?? 0,
         结果时间: stamp,
         月份: row.month,
         基地: row.base,
@@ -329,7 +348,9 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         产品编码: row.code,
         产品名称: row.name,
         历史参考物料编码: row.historyCode || row.code,
-        历史参考口径: row.historyCode ? '沿用老品历史' : '自身历史',
+        历史源数量: row.historyReferenceQuantity,
+        替换系数: row.historyCode ? (row.historyFactor === undefined ? 1 : row.historyFactor) : '',
+        历史参考口径: row.historyCode ? '同基地老品历史量×替换系数' : '自身历史',
         ...Object.fromEntries(plannedFields.map((field, index) => [labels[index], row[field]])),
         需求已满足量: row.fulfilledDemand,
         ODM默认计划到货吨数: row.odmArrivalTons,
@@ -358,6 +379,8 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         `${draft.month}-${step === 'report' ? '产销存结果' : '求解结果'}.csv`,
         [
           '评估版本',
+          '计算范围',
+          '排除单品记录数',
           '结果时间',
           '月份',
           '基地',
@@ -367,6 +390,8 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           '产品编码',
           '产品名称',
           '历史参考物料编码',
+          '历史源数量',
+          '替换系数',
           '历史参考口径',
           ...labels,
           '需求已满足量',
@@ -633,9 +658,11 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             'data-state':
               !plan || stale || error || !plan.summary.evaluatedRows
                 ? 'pending'
-                : plan.status === 'complete'
-                  ? 'complete'
-                  : 'partial',
+                : plan.partial
+                  ? 'partial'
+                  : plan.status === 'complete'
+                    ? 'complete'
+                    : 'partial',
           },
           h(
             'div',
@@ -841,7 +868,9 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                         h(
                           'p',
                           null,
-                          `ODM默认计划到货 ${metric(rows, 'odmArrival')} 件，按净缺口估算，供方实际到货未验证。`,
+                          'ODM默认计划到货 ',
+                          metric(rows, 'odmArrival'),
+                          ' 件，按净缺口估算，供方实际到货未验证。',
                         ),
                         h(
                           'p',

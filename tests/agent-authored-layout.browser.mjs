@@ -1453,10 +1453,52 @@ test('AQKC overview fits five compact cards in a wide row and adapts without cli
         ...result,
         rows: [{ month: '2026-10-01', inventory_version: '月初', source_rows: 1 }],
       };
+    if (['page.dashboard-groups', 'page.inventory-groups'].includes(query.queryId))
+      return {
+        ...result,
+        rows: [
+          {
+            ...result.rows[0],
+            base: '华东',
+            category: '汤圆',
+            row_count: 7101,
+            inventory: 4397000,
+            inventory_count: 7101,
+            target: 1499.36,
+            target_count: 2125,
+            gap: 4259600,
+            gap_count: 2125,
+          },
+        ],
+      };
     return result;
   });
   const grid = frame.locator('[data-overview-cards="aqkc"]');
   await expect(grid.locator('article')).toHaveCount(5);
+  const basis = grid.locator('details');
+  await expect(basis.locator('p')).not.toBeVisible();
+  await basis.locator('summary').click();
+  await expect(basis.locator('p')).toBeVisible();
+  await expect(basis).toContainText('月初');
+  await expect(basis).toContainText('目标覆盖');
+  await expect(basis).toContainText('2125/7101');
+  await expect(basis).toContainText('差额仅含库存与目标均有效');
+  await expect(grid.locator('article').first()).toContainText('1,499件');
+  await expect(grid.locator('article').first()).toContainText('425.96万件');
+  if (process.env.AGENT_COMPACT_EVIDENCE) {
+    await mkdir(process.env.AGENT_COMPACT_EVIDENCE, { recursive: true });
+    await page.screenshot({ path: `${process.env.AGENT_COMPACT_EVIDENCE}/aqkc-basis-open.png` });
+  }
+  await basis.locator('summary').click();
+  await page.mouse.move(0, 0);
+  await expect
+    .poll(() =>
+      grid
+        .locator('article')
+        .first()
+        .evaluate((el) => getComputedStyle(el).transform),
+    )
+    .toBe('none');
   for (const [width, columns] of [
     [1280, 5],
     [1000, 5],

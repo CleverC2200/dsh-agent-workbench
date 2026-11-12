@@ -316,6 +316,7 @@
 
 .submissionFooter {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
@@ -381,4 +382,14 @@
 .submissionChangeRow > :not(:first-child),
 .submissionChangeHeader > :not(:first-child) {
   text-align: right;
+}
+
+.resultModal {
+  width: min(560px, calc(100vw - 24px));
+  overflow-wrap: anywhere;
+}
+
+.resultModal :global(.arco-modal-body) {
+  max-height: calc(100vh - 180px);
+  overflow: auto;
 }

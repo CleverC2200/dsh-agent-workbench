@@ -28,6 +28,33 @@ const detail = {
   skus: [sku],
 };
 const context = { versionId: 'v', status: 2, currentStage: 3, targetStage: 2, targetStatus: 7 };
+test('monthly category approval and return use integer final quantities', () => {
+  const categoryRow = { ...row, status: 4 };
+  const categoryDetail = {
+    ...detail,
+    currentVersion: { ...detail.currentVersion, status: 4, orderType: 'M' },
+    skus: [{ ...sku, areaConfirmedQty: '110.000', categoryConfirmedQty: '120.600' }],
+  };
+  const approved = m.salesPlanApprovalDraftValues(categoryDetail, categoryRow, 'category', []);
+  assert.equal(Number(approved['1001']), 0.4);
+  const destination = m.salesPlanReturnDestination(categoryDetail, 'category');
+  const returned = m.salesPlanReturnAdjustments(
+    categoryDetail,
+    categoryRow,
+    'category',
+    destination,
+  );
+  assert.equal(Number(returned[0].adjustQty), 11);
+  assert.deepEqual(
+    m.salesPlanApprovalDraftValues(
+      categoryDetail,
+      { ...categoryRow, orderType: 'Z' },
+      'category',
+      [],
+    ),
+    {},
+  );
+});
 test('pending approval derives the receiving stage from existing detail', () => {
   for (const [status, role] of [
     [1, 'region'],
@@ -249,4 +276,111 @@ test('zero adjustments and the actual return destination survive the action atte
   await attempt.retry();
   assert.deepEqual(calls[0], calls[1]);
   assert.equal(calls[1].request.adjustments[0].adjustQty, '0.000');
+});
+
+test('draft freshness compares exact decimal values while retaining strict version identity', () => {
+  const selected = { ...row, status: 2 };
+  const source = {
+    ...detail,
+    skus: [{ ...sku, price: '2.0000', qty: '90.000', regionConfirmedQty: '100.000' }],
+  };
+  const draft = {
+    planId: 'p',
+    versionId: 'v',
+    status: 2,
+    sourceSnapshot: m.salesPlanDraftSnapshot(selected, source),
+    role: 'province',
+    adjustments: [{ skuCode: '1001', adjustQty: '1' }],
+    remark: '',
+  };
+  assert.equal(m.salesPlanDraftMatches(draft, selected, detail, 'province'), true);
+  assert.equal(
+    m.salesPlanDraftMatches(
+      draft,
+      selected,
+      { ...detail, skus: [{ ...sku, price: '2.000000000000001' }] },
+      'province',
+    ),
+    false,
+  );
+  assert.equal(
+    m.salesPlanDraftMatches({ ...draft, versionId: 'other' }, selected, detail, 'province'),
+    false,
+  );
+});
+
+test('explicit Host business rejection is definitive even when upstream retryable is true', () => {
+  const error = {
+    name: 'BackendHttpError',
+    status: 502,
+    code: '',
+    backendMessage: 'GEA_HTTP_502：产品 TEST-ITEM 已停用，请先维护产品资料',
+    details: { retryable: true, retrySameIntent: false },
+  };
+  assert.equal(m.classifySalesPlanActionError(error).retrySameIntent, false);
+  assert.equal(m.classifySalesPlanSubmitError(error).kind, 'failed');
+  assert.equal(m.salesPlanRejectionMessage(error), '产品 TEST-ITEM 已停用，请先维护产品资料');
+});
+
+test('business rejection retains SKU and field guidance while removing response references', () => {
+  assert.equal(
+    m.salesPlanRejectionMessage({
+      status: 502,
+      backendMessage:
+        'GEA_HTTP_502：DMS回写失败[ITEM_DISABLED]：SKU TEST-ITEM 的 payload.confirmQty 必须为整数。requestId=hidden-request traceId=hidden-trace auditId=hidden-audit 错误编号=hidden-code',
+      details: { upstreamCode: 'SALES_PLAN_DMS_WRITEBACK_FAILED' },
+    }),
+    'DMS回写失败：SKU TEST-ITEM 的 payload.confirmQty 必须为整数。',
+  );
+});
+
+test('Host retry intent survives HTTP 408 while validation and definitive failures keep their classification', () => {
+  for (const classify of [m.classifySalesPlanActionError, m.classifySalesPlanSubmitError]) {
+    for (const [status, retrySameIntent, kind, expectedRetry] of [
+      [408, true, 'unavailable', true],
+      [408, false, 'failed', false],
+      [400, true, 'validation', false],
+      [401, true, 'authentication', false],
+      [403, true, 'permission', false],
+      [409, true, 'conflict', false],
+    ]) {
+      const result = classify({
+        name: 'BackendHttpError',
+        status,
+        code: `GEA_HTTP_${status}`,
+        details: { retrySameIntent, retryable: true },
+      });
+      assert.equal(result.kind, kind);
+      assert.equal(result.retrySameIntent, expectedRetry);
+    }
+    const rejected = classify({
+      name: 'BackendHttpError',
+      status: 408,
+      code: 'GEA_HTTP_408',
+      details: { retryable: false },
+    });
+    assert.equal(rejected.kind, 'failed');
+    assert.equal(rejected.retrySameIntent, false);
+  }
+});
+
+test('non-DMS transport rejection keeps technical notification fields out of business copy', () => {
+  assert.equal(
+    m.salesPlanRejectionMessage({
+      status: 409,
+      backendMessage: 'GEA_HTTP_409：payload.plan_month 为必填字段',
+      details: { upstreamCode: 'NOTIFICATION_PAYLOAD_INVALID', retrySameIntent: false },
+    }),
+    undefined,
+  );
+});
+
+test('invalid pending confirmed quantity keeps its preflight reason', () => {
+  assert.throws(
+    () =>
+      m.salesPlanApprovalDraftValues(detail, { ...row, orderType: 'Z' }, 'province', [], {
+        1001: '-1',
+      }),
+    (error) => error.key === 'quantityInvalid',
+  );
 });

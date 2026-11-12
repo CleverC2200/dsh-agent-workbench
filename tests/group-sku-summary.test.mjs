@@ -84,6 +84,18 @@ test('每份拆分量独立四舍五入为整数，不强制保留汇总尾差',
   assert.deepEqual(allocateGroupSkuQuantity(sources.toReversed(), '1001', '1'), expected);
 });
 
+test('月初品类审批确认量取整，汇总分摊保留整数总量', () => {
+  const sources = ['p1', 'p2', 'p3'].map((id) => ({
+    plan: { ...plan(id, id), orderType: 'M', status: 4 },
+    skus: [{ ...sku(id, '1.000', '10'), categoryConfirmedQty: '1.400' }],
+  }));
+  assert.equal(summarizeGroupSkus(sources, 'category')[0].qty, '3');
+  assert.equal(summarizeGroupSkus(sources, 'category')[0].amount, '30.00');
+  const allocated = allocateGroupSkuQuantity(sources, '1001', '1.400', 'category');
+  assert.deepEqual(allocated, { p1: { 1001: '1' }, p2: { 1001: '0' }, p3: { 1001: '0' } });
+  assert.equal(summarizeGroupSkus(sources, 'category', allocated)[0].qty, '1');
+});
+
 test('使用本节点原确认量作为权重，只分摊包含目标 SKU 的计划', () => {
   const sources = [
     { plan: plan('p1', 'v1'), skus: [{ ...sku('v1', '10', '10'), regionConfirmedQty: '2' }] },

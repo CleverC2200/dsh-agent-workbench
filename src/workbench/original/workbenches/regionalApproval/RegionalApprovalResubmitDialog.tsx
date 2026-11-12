@@ -1,3 +1,9 @@
+import {
+  checkSubmissionSource,
+  checkSubmissionSkus,
+  SubmissionSourceError,
+} from './models/salesPlanPreflightModel.ts';
+import { salesPlanDecimalValue } from './models/salesPlanQuantityModel.ts';
 import type { NativeBusinessStatus } from '../../../business-contract.ts';
 import { isBackendHttpError } from '../../http-error.ts';
 import {
@@ -52,6 +58,7 @@ export type SalesPlanSubmissionItem = {
   period: GeaSalesPlanPeriod;
   pendingValues?: Record<string, string>;
 } & (
+  | { kind: 'skip'; row: RegionalApprovalLiveRow; reason: string; approvalRole?: undefined }
   | { kind: 'resubmit'; row: RegionalApprovalLiveRow; approvalRole?: ApprovalStageId }
   | {
       kind: 'approve';
@@ -64,7 +71,7 @@ export type SalesPlanSubmissionItem = {
 export type SalesPlanSubmissionOutcome = {
   planId: string;
   versionId: string;
-  status: 'success' | 'failed' | 'pending';
+  status: 'success' | 'failed' | 'pending' | 'skipped';
   permissionDenied: boolean;
 };
 
@@ -78,10 +85,21 @@ type SubmissionRow = {
   actionInput?: SalesPlanActionInput;
   attempt?: SalesPlanSubmitAttempt | SalesPlanActionAttempt;
   receipt?: GeaSalesPlanSubmitReceipt | GeaSalesPlanActionReceipt;
-  status: 'ready' | 'success' | 'failed' | 'unknown' | 'readback' | 'unresolved';
+  status: 'ready' | 'success' | 'failed' | 'unknown' | 'readback' | 'unresolved' | 'skipped';
   error?: string;
+  errorValues?: Record<string, string>;
+  recovery?: 'refresh' | 'draft';
+  ignoredDraft?: boolean;
   rejection?: string;
+  draftIntent?: string;
 };
+
+const draftIntent = (values: Record<string, string>) =>
+  JSON.stringify(
+    Object.entries(values)
+      .map(([code, value]) => [code, salesPlanDecimalValue(value)])
+      .toSorted(([a], [b]) => String(a).localeCompare(String(b))),
+  );
 
 const preparedSubmission = (row: SubmissionRow) => {
   if (!row.source || row.item.kind !== 'resubmit') return undefined;
@@ -99,6 +117,7 @@ export function RegionalApprovalResubmitDialog({
   onClose,
   onSucceeded,
   onCompleted,
+  onRefresh,
 }: {
   items: readonly SalesPlanSubmissionItem[];
   client: SubmissionClient;
@@ -110,6 +129,7 @@ export function RegionalApprovalResubmitDialog({
   onClose: (pending: boolean) => void;
   onSucceeded?: () => void;
   onCompleted?: (outcomes: readonly SalesPlanSubmissionOutcome[]) => void;
+  onRefresh?: (planIds: readonly string[]) => void;
 }) {
   const tr = (key: string, values?: Record<string, unknown>) =>
     t(`common.assistantSurface.regionalApproval.liveSubmit.${key}`, values);
@@ -117,6 +137,7 @@ export function RegionalApprovalResubmitDialog({
   const [busy, setBusy] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [remark, setRemark] = useState('');
+  const [ignoredDrafts, setIgnoredDrafts] = useState<ReadonlySet<string>>(() => new Set());
   const submitting = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -150,22 +171,20 @@ export function RegionalApprovalResubmitDialog({
       const currentUser = await client.currentUser.invoke();
       const loaded = await Promise.all(
         items.map(async (item): Promise<SubmissionRow> => {
+          if (item.kind === 'skip')
+            return { item, skus: [], changes: [], status: 'skipped', rejection: item.reason };
           try {
             const detail = await client.detail.invoke({
               planId: item.planId,
               signal: controller.signal,
             });
-            if (
-              detail.currentVersion.id !== item.versionId ||
-              detail.currentVersion.status !== item.row.status ||
-              !detail.currentVersion.effective
-            )
-              throw new Error('sourceMismatch');
+            checkSubmissionSource(item, detail);
             const skus = await client.versionSkus.invoke({
               versionId: item.versionId,
               signal: controller.signal,
             });
             const period = item.period;
+            checkSubmissionSkus(item.versionId, detail.skus, skus);
             const source = {
               planId: item.planId,
               versionId: item.versionId,
@@ -176,23 +195,26 @@ export function RegionalApprovalResubmitDialog({
             };
             const role = item.kind === 'approve' ? item.access.approvalRole : item.approvalRole;
             if (!client.draft) throw new Error('sourceLoad');
-            const draft = await client.draft.invoke({
-              planId: item.planId,
-              versionId: item.versionId,
-              approvalRole: role,
-              signal: controller.signal,
-            });
+            const ignoredDraft = ignoredDrafts.has(item.versionId);
+            const draft = ignoredDraft
+              ? undefined
+              : await client.draft.invoke({
+                  planId: item.planId,
+                  versionId: item.versionId,
+                  approvalRole: role,
+                  signal: controller.signal,
+                });
             if (
               draft?.stale ||
               (draft?.draft && !salesPlanDraftMatches(draft.draft, item.row, detail, role))
             )
-              throw new Error('sourceMismatch');
+              throw new SubmissionSourceError('draftStale');
             const adjustments = salesPlanApprovalDraftValues(
               { ...detail, skus },
               item.row,
               role,
               draft?.draft?.adjustments ?? [],
-              item.pendingValues,
+              ignoredDraft ? undefined : item.pendingValues,
               item.kind === 'approve',
             );
             const changes = Object.entries(adjustments).flatMap(([code, delta]) => {
@@ -203,7 +225,15 @@ export function RegionalApprovalResubmitDialog({
               if (!sku || before === undefined) throw new Error('validation');
               return [{ sku, before, after: addExactDecimals([before, delta]) }];
             });
-            const state: SubmissionRow = { item, source, skus, changes, status: 'ready' };
+            const state: SubmissionRow = {
+              item,
+              source,
+              skus,
+              changes,
+              status: 'ready',
+              ignoredDraft,
+              draftIntent: draftIntent(adjustments),
+            };
             if (item.kind === 'resubmit') {
               state.skus = skus.map((sku) => {
                 const change = changes.find((value) => value.sku.skuCode === sku.skuCode);
@@ -223,7 +253,8 @@ export function RegionalApprovalResubmitDialog({
                 [item.access.approvalRole],
                 item.access.approvalRole,
               );
-              if (!access?.allowedActions.includes('APPROVE')) throw new Error('sourceMismatch');
+              if (!access?.allowedActions.includes('APPROVE'))
+                throw new SubmissionSourceError('accessChanged');
               state.actionInput = {
                 planId: item.planId,
                 versionId: item.versionId,
@@ -254,10 +285,18 @@ export function RegionalApprovalResubmitDialog({
               skus: [],
               changes: [],
               status: 'failed',
+              ...(cause instanceof SubmissionSourceError
+                ? {
+                    errorValues: cause.values,
+                    recovery: cause.key === 'draftStale' ? 'draft' : 'refresh',
+                  }
+                : {}),
               error:
-                cause instanceof Error && ['sourceMismatch', 'validation'].includes(cause.message)
-                  ? cause.message
-                  : 'sourceLoad',
+                cause instanceof SubmissionSourceError
+                  ? cause.key
+                  : cause instanceof Error && cause.message === 'validation'
+                    ? cause.message
+                    : 'sourceLoad',
             };
           }
         }),
@@ -276,7 +315,7 @@ export function RegionalApprovalResubmitDialog({
         );
     });
     return () => controller.abort();
-  }, [items, client]);
+  }, [items, client, ignoredDrafts]);
   const inputs = useMemo(
     () =>
       rows?.map((row) => {
@@ -293,15 +332,23 @@ export function RegionalApprovalResubmitDialog({
     rows?.length &&
     rows.every(
       (row, index) =>
-        row.status !== 'failed' &&
-        (row.item.kind === 'approve' ? row.actionInput : inputs?.[index]),
+        row.status === 'skipped' ||
+        (row.status !== 'failed' &&
+          (row.item.kind === 'approve' ? row.actionInput : inputs?.[index])),
     ),
   );
   const actionable = rows?.some(
-    (row) => row.status === 'ready' || row.status === 'unknown' || row.status === 'readback',
+    (row) =>
+      row.status === 'ready' ||
+      row.status === 'unknown' ||
+      row.status === 'readback' ||
+      (row.status === 'failed' &&
+        Boolean(row.attempt) &&
+        !row.recovery &&
+        !['permission', 'authentication', 'conflict'].includes(row.error ?? '')),
   );
   const submit = async () => {
-    if (!rows || submitting.current || serviceBlocked || !actionable || (initial && !valid)) return;
+    if (!rows || submitting.current || !actionable || (initial && !valid)) return;
     submitting.current = true;
     setAttempted(true);
     setBusy(true);
@@ -314,20 +361,66 @@ export function RegionalApprovalResubmitDialog({
       for (let index = 0; index < next.length; index++) {
         if (!mounted.current) break;
         let row = next[index];
-        if (row.status === 'success' || row.status === 'failed' || row.status === 'unresolved')
+        if (row.status === 'skipped') {
+          processed.push(row);
           continue;
+        }
+        if (
+          row.status === 'success' ||
+          row.status === 'unresolved' ||
+          (row.status === 'failed' &&
+            (!row.attempt ||
+              row.recovery ||
+              ['permission', 'authentication', 'conflict'].includes(row.error ?? '')))
+        )
+          continue;
+        if (row.item.kind === 'resubmit' && !connected && !row.receipt) continue;
         try {
+          if (row.status === 'failed')
+            row = { ...row, attempt: undefined, error: undefined, rejection: undefined };
           const source = row.source;
           if (!source) throw new Error('sourceLoad');
           const input = inputs?.[index];
           if (!row.attempt) {
             const fresh = await client.detail.invoke({ planId: row.item.planId });
+            checkSubmissionSource(row.item, fresh);
+            checkSubmissionSkus(row.item.versionId, source.detail.skus, fresh.skus);
+            const freshSkus = await client.versionSkus.invoke({ versionId: row.item.versionId });
+            checkSubmissionSkus(row.item.versionId, fresh.skus, freshSkus);
+            if (!row.ignoredDraft) {
+              const role =
+                row.item.kind === 'approve' ? row.item.access.approvalRole : row.item.approvalRole;
+              const stored = await client.draft!.invoke({
+                planId: row.item.planId,
+                versionId: row.item.versionId,
+                approvalRole: role,
+              });
+              if (
+                stored.stale ||
+                (stored.draft && !salesPlanDraftMatches(stored.draft, row.item.row, fresh, role))
+              )
+                throw new SubmissionSourceError('draftStale');
+              const latest = salesPlanApprovalDraftValues(
+                fresh,
+                row.item.row,
+                role,
+                stored.draft?.adjustments ?? [],
+                row.item.pendingValues,
+                row.item.kind === 'approve',
+              );
+              if (row.draftIntent !== draftIntent(latest))
+                throw new SubmissionSourceError('draftStale');
+            }
             if (
-              fresh.currentVersion.id !== row.item.versionId ||
-              fresh.currentVersion.status !== source.detail.currentVersion.status ||
-              !fresh.currentVersion.effective
+              row.item.kind === 'approve' &&
+              !salesPlanAccessForRow(
+                row.item.row,
+                fresh,
+                [row.item.access.approvalRole],
+                row.item.access.approvalRole,
+              )?.allowedActions.includes('APPROVE')
             )
-              throw new Error('sourceMismatch');
+              throw new SubmissionSourceError('accessChanged');
           }
           if (!mounted.current) break;
           if (row.item.kind === 'resubmit') {
@@ -397,6 +490,12 @@ export function RegionalApprovalResubmitDialog({
             reportSalesPlanError('sales-plan-submit', failure.cause);
             rejection = salesPlanRejectionMessage(failure.cause);
           }
+          if (!row.attempt && !row.receipt && !(cause instanceof SubmissionSourceError)) {
+            next[index] = { ...row, status: 'failed', error: 'sourceLoad', recovery: 'refresh' };
+            processed.push(next[index]);
+            publish();
+            continue;
+          }
           next[index] = {
             ...row,
             status: row.receipt
@@ -406,7 +505,9 @@ export function RegionalApprovalResubmitDialog({
                 : failure.kind === 'retryExhausted' || failure.kind === 'unavailable'
                   ? 'unresolved'
                   : 'failed',
-            error: failure.kind,
+            error: cause instanceof SubmissionSourceError ? cause.key : failure.kind,
+            errorValues: cause instanceof SubmissionSourceError ? cause.values : undefined,
+            recovery: cause instanceof SubmissionSourceError ? 'refresh' : undefined,
             rejection,
           };
         }
@@ -416,16 +517,18 @@ export function RegionalApprovalResubmitDialog({
       if (mounted.current) {
         onCompleted?.(
           processed
-            .filter((row) => row.attempt)
+            .filter((row) => row.attempt || row.status === 'skipped')
             .map((row) => ({
               planId: row.item.planId,
               versionId: row.item.versionId,
               status:
-                row.status === 'success'
-                  ? 'success'
-                  : row.status === 'failed'
-                    ? 'failed'
-                    : 'pending',
+                row.status === 'skipped'
+                  ? 'skipped'
+                  : row.status === 'success'
+                    ? 'success'
+                    : row.status === 'failed'
+                      ? 'failed'
+                      : 'pending',
               permissionDenied: row.error === 'permission',
             })),
         );
@@ -468,7 +571,7 @@ export function RegionalApprovalResubmitDialog({
         qty = qty.plus(quantity);
         amount = amount.plus(quantity.mul(correctionDecimal(sku.price)).toDecimalPlaces(2));
       }
-      return `${qty.toFixed(3)} 件 · ¥${amount.toFixed(2)}`;
+      return `${qty.toFixed()} 件 · ¥${amount.toFixed(2)}`;
     } catch {
       return '—';
     }
@@ -487,6 +590,11 @@ export function RegionalApprovalResubmitDialog({
           <Button disabled={busy} onClick={() => onClose(pending)}>
             {tr('close')}
           </Button>
+          {onRefresh && !pending && rows?.some((row) => row.recovery === 'refresh') && (
+            <Button onClick={() => onRefresh(items.map((item) => item.planId))}>
+              {tr('refreshSelection')}
+            </Button>
+          )}
           <Button
             type="primary"
             loading={busy}
@@ -498,16 +606,18 @@ export function RegionalApprovalResubmitDialog({
                 ? 'retry'
                 : rows?.some((row) => row.status === 'readback')
                   ? 'refresh'
-                  : batch
-                    ? 'confirmBatch'
-                    : 'confirm',
+                  : attempted
+                    ? 'submitAgain'
+                    : batch
+                      ? 'confirmBatch'
+                      : 'confirm',
             )}
           </Button>
         </div>
       }
     >
       <div className={styles.submissionBody}>
-        {items.some((item) => item.kind === 'approve') && (
+        {!attempted && items.some((item) => item.kind === 'approve') && (
           <label className={styles.formControl}>
             <span>
               {t(
@@ -534,6 +644,7 @@ export function RegionalApprovalResubmitDialog({
             content={tr('batchResult', {
               success: rows.filter((row) => row.status === 'success').length,
               failed: rows.filter((row) => row.status === 'failed').length,
+              skipped: rows.filter((row) => row.status === 'skipped').length,
               pending: rows.filter((row) =>
                 ['unknown', 'readback', 'unresolved'].includes(row.status),
               ).length,
@@ -565,14 +676,25 @@ export function RegionalApprovalResubmitDialog({
           >
             <div className={styles.adjustmentHeader}>
               <strong>
-                {row.item.row.dealerName || row.item.row.dealerCode || label(row)}
+                {row.item.row.dealerName || label(row)}
                 {row.item.row.dealerName && row.item.row.dealerName !== label(row)
                   ? ` · ${label(row)}`
                   : ''}
               </strong>
-              <span>{tr(row.item.kind === 'resubmit' ? 'resubmitTag' : 'approveTag')}</span>
+              <span>
+                {tr(
+                  attempted
+                    ? `itemStatus.${row.status}`
+                    : row.item.kind === 'skip'
+                      ? 'skippedTag'
+                      : row.item.kind === 'resubmit'
+                        ? 'resubmitTag'
+                        : 'approveTag',
+                )}
+              </span>
             </div>
-            {row.source && (
+            <span>{row.item.planId}</span>
+            {row.source && !attempted && (
               <div className={styles.submissionComparison}>
                 <span>
                   {tr('before')}: {totals(row, true)}
@@ -583,6 +705,7 @@ export function RegionalApprovalResubmitDialog({
               </div>
             )}
             {row.source &&
+              !attempted &&
               (row.changes.length ? (
                 <div className={styles.submissionDetails} aria-label={tr('changedDetails')}>
                   <div className={styles.submissionChangeHeader}>
@@ -599,13 +722,13 @@ export function RegionalApprovalResubmitDialog({
                         </small>
                       </span>
                       <span>
-                        {correctionDecimal(before).toFixed(3)}
+                        {correctionDecimal(before).toFixed()}
                         <small>
                           ¥{correctionDecimal(before).mul(correctionDecimal(sku.price)).toFixed(2)}
                         </small>
                       </span>
                       <strong>
-                        {correctionDecimal(after).toFixed(3)}
+                        {correctionDecimal(after).toFixed()}
                         <small>
                           ¥{correctionDecimal(after).mul(correctionDecimal(sku.price)).toFixed(2)}
                         </small>
@@ -619,6 +742,7 @@ export function RegionalApprovalResubmitDialog({
             {row.source && row.item.kind === 'resubmit' && !inputs?.[index] && (
               <Alert type="error" content={tr('errors.validation')} />
             )}
+            {row.status === 'skipped' && <Alert type="warning" content={row.rejection} />}
             {row.error && (
               <Alert
                 type={
@@ -627,10 +751,28 @@ export function RegionalApprovalResubmitDialog({
                 content={
                   row.status === 'readback'
                     ? tr('refreshFailed')
-                    : [tr(`errors.${row.error}`), row.rejection].filter(Boolean).join(' ')
+                    : row.rejection ||
+                      tr(
+                        `errors.${row.error}`,
+                        row.error === 'skuValueChanged' && row.errorValues
+                          ? { ...row.errorValues, field: tr(`fields.${row.errorValues.field}`) }
+                          : row.errorValues,
+                      )
                 }
               />
             )}
+            {row.recovery === 'draft' && !attempted && (
+              <Button
+                disabled={busy}
+                onClick={() => {
+                  setRows(undefined);
+                  setIgnoredDrafts((current) => new Set([...current, row.item.versionId]));
+                }}
+              >
+                {tr('ignoreStaleDraft')}
+              </Button>
+            )}
+            {row.ignoredDraft && <Alert type="warning" content={tr('draftIgnored')} />}
             {row.status === 'success' && <Alert type="success" content={tr('itemSuccess')} />}
           </section>
         ))}

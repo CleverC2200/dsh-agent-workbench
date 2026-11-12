@@ -13,7 +13,15 @@ export function SkuQuantityAmount({
 }) {
   return (
     <div className={styles.quantityAmount}>
-      {children ?? <span>{quantity === undefined ? '—' : formatExactDecimal(quantity)}</span>}
+      {children ?? (
+        <span>
+          {quantity === undefined
+            ? '—'
+            : formatExactDecimal(quantity)
+                .replace(/(\.\d*?)0+$/, '$1')
+                .replace(/\.$/, '')}
+        </span>
+      )}
       <small>{amount === undefined ? '—' : `¥${formatExactDecimal(amount)}`}</small>
     </div>
   );

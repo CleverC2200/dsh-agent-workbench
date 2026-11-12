@@ -29,7 +29,7 @@ function fixture() {
     CREATE TABLE agents_scm_material_in_out_summary_d(material_code,product_categ_name,material_group_name);
     CREATE TABLE agents_dim_mark_xilie_d(product_item,series,series_sort);
     INSERT INTO agents_dim_mark_xilie_d VALUES ('节点','<=初版',14),('节点','<=纠偏',20),('节点','<=滚动',28);
-    CREATE TABLE agents_scm_execute_detail_d(belong_base,material_code,director,product_item,header_addtime,executeorderno,cust_code);
+    CREATE TABLE agents_scm_execute_detail_d(belong_base,material_code,director,product_item,header_addtime,executeorderno,cust_code,order_close_time);
     CREATE TABLE agents_scm_execute_detail_hourly_d(belong_base,material_code,director,product_item,header_addtime);
     CREATE TABLE agents_order_execute_isontime_mi(belong_base,new_material_code,pinxiang,fromorderno_month);
     CREATE TABLE agents_scm_order_trace_final_di(executeorderno,cust_code,lastshipmenttime,update_time,load_time);`);

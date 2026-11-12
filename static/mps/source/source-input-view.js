@@ -6,7 +6,7 @@ import { hasMpsSource } from './master-data.js';
 import { readFactMonth, readHistoryAnnual } from './facts.js';
 import { readSourceTable } from './source-tables.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
-import { sourceCheckRows } from './source-projections.js';
+import { sourceCheckRows, sourceProductMappings } from './source-projections.js';
 
 const monthOffset = (month, offset) => {
   const date = new Date(month + '-01T00:00:00Z');
@@ -172,9 +172,19 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       () =>
         sourceCheckRows(
           current && kind === 'basic' ? draft.sourceChecks : null,
-          ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : draft.products,
+          ['loading', 'failed'].includes(draft.productsRead?.status)
+            ? []
+            : sourceProductMappings(draft.products, draft.productRaw),
         ),
-      [current, draft.sourceChecks, draft.products, draft.productsRead, draft.pull, kind],
+      [
+        current,
+        draft.sourceChecks,
+        draft.products,
+        draft.productRaw,
+        draft.productsRead,
+        draft.pull,
+        kind,
+      ],
     );
     const basicAnomalies = checks.details.filter((row) => row['原因'] || row['缺项原因']);
     const basicDetails = [

@@ -51,8 +51,8 @@ const ownerWindow = (field) =>
 const attributionSource = parts.attributionSources
   .replaceAll('header_addtime>=:gea_p1 AND header_addtime<:gea_p2', ownerWindow('header_addtime'))
   .replaceAll(
-    'shipment.shipped_at>=:gea_p1 AND shipment.shipped_at<:gea_p2',
-    ownerWindow('shipment.shipped_at'),
+    'd.order_close_time>=:gea_p1 AND d.order_close_time<:gea_p2',
+    ownerWindow('d.order_close_time'),
   )
   .replaceAll('the_date>=:gea_p1 AND the_date<:gea_p2', ownerWindow('the_date'))
   .replaceAll(
@@ -77,18 +77,13 @@ const ownerCtes = `period_members AS (
 function periodOrders() {
   let sql = replace(
     ordersSql,
-    'HAVING MAX(fromorderno_month)>=:gea_p1 AND MIN(fromorderno_month)<:gea_p2',
-    'HAVING ' +
-      orWindows(
-        (window) =>
-          `MAX(fromorderno_month)>=${window.start} AND MIN(fromorderno_month)<${window.end}`,
-      ),
+    'SELECT m.base,m.category',
+    'SELECT rw.period_index,m.base,m.category',
   );
-  sql = replace(sql, 'SELECT m.base,m.category', 'SELECT rw.period_index,m.base,m.category');
   sql = replace(
     sql,
-    'WHERE m.period_end>=:gea_p1 AND m.period_start<:gea_p2',
-    'INNER JOIN report_windows rw ON rw.enabled=TRUE AND m.period_end>=rw.start_date AND m.period_start<rw.end_date',
+    'WHERE m.period_end>=:gea_p1 AND m.period_end<:gea_p2',
+    'INNER JOIN report_windows rw ON rw.enabled=TRUE AND m.period_end>=rw.start_date AND m.period_end<rw.end_date',
   );
   return replace(
     sql,

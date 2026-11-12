@@ -6,7 +6,7 @@ const offset = (month, count) => {
   return date.toISOString().slice(0, 7);
 };
 
-export function createCapacityReport(react, { Dialog, downloadCsv }) {
+export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCsv }) {
   const h = react.createElement;
   return function CapacityReport({ plan, draft, stamp, filters, card, table, numberText, active }) {
     const [rulesOpen, setRulesOpen] = react.useState(false);
@@ -20,6 +20,18 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
     );
     const report = plan.capacityReport;
     if (!report) return null;
+    const downloadCsv = (name, columns, rows) =>
+      downloadRawCsv(
+        name,
+        ['本轮预测计算范围', '排除单品记录数', ...columns],
+        rows.map((row) => ({
+          本轮预测计算范围: plan.partial
+            ? '部分可计算，待定单品已排除，完整范围总量未知'
+            : '当前参与范围',
+          排除单品记录数: plan.excludedShipments?.length ?? 0,
+          ...row,
+        })),
+      );
     const month = filters.month || report.referenceMonth;
     const next = offset(month, 1);
     const byBase = (row) => !filters.base || row.base === filters.base;

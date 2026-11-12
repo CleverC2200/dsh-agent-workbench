@@ -198,19 +198,25 @@ test('base and item formulas retain documented weights instead of fitting the sc
     10,
   );
 });
-test('cancellations retain execution business time while amendments select actual shipment time', () => {
+test('cancellations retain execution business time while amendments select BI order close time', () => {
   assert.match(
     changesSql,
     /CASE WHEN s.orderstatus=90 THEN s.cancelled ELSE s.header_addtime END AS business_time/,
   );
   assert.doesNotMatch(changesSql, /COUNT\(DISTINCT header_addtime\)=1/);
-  assert.match(amendmentChangesSql, /AND shipment\.shipped_at>=:gea_p1/);
+  assert.match(amendmentChangesSql, /AND d\.order_close_time>=:gea_p1/);
   assert.doesNotMatch(amendmentChangesSql, /d\.header_addtime>=/);
 });
-test('amendments use the actual shipment cohort while cancellations use quantities and their event cohort', () => {
-  assert.match(amendmentChangesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
+test('amendments use the BI order-close cohort while cancellations use quantities and their event cohort', () => {
+  assert.match(
+    amendmentChangesSql,
+    /requested_qty>=0 AND requested_qty<effective_qty THEN effective_qty-requested_qty/,
+  );
   assert.doesNotMatch(amendmentChangesSql, /custchangetime|requireddeliverytime|\blocked\b/);
-  assert.match(changesSql, /requested_qty>=0 THEN ABS\(requested_qty-effective_qty\)/);
+  assert.match(
+    changesSql,
+    /requested_qty>=0 AND requested_qty<effective_qty THEN effective_qty-requested_qty/,
+  );
   assert.match(
     changesSql,
     /COALESCE\(s.change_order_qty,s.dms_last_update_qty,s.need_qty_origin\)/,
@@ -220,8 +226,11 @@ test('amendments use the actual shipment cohort while cancellations use quantiti
 
 test('fulfillment uses the upstream original-order business period without a downstream SKU date join', () => {
   const sql = workbenchQueries.orders.sql;
-  assert.match(sql, /MIN\(fromorderno_month\) AS period_start/);
-  assert.match(sql, /m.period_end>=:gea_p1 AND m.period_start<:gea_p2/);
+  assert.match(
+    sql,
+    /MAX\(fromorderno_month\) OVER \(PARTITION BY fromorderno,cust_code\) AS final_period/,
+  );
+  assert.match(sql, /m.period_end>=:gea_p1 AND m.period_end<:gea_p2/);
   assert.doesNotMatch(
     sql,
     /agents_scm_order_trace_final_di|agents_scm_execute_detail_hourly_d|complete_time/,
