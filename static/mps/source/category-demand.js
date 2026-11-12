@@ -1,3 +1,4 @@
+import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { computeMpsCategoryDemand } from 'dsh-agent-manage/mps-compute/category-demand';
 import {
   createSourceProductMatcher,
@@ -81,6 +82,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
       : [];
   });
   const sourceChecks = ready(draft.sourceChecksRead, draft.month) ? draft.sourceChecks : null;
+  const fiscal = previousFiscalYear(draft.month);
   const unassigned = [
     ...(sourceChecks?.periods ?? []).flatMap((period) => [
       ...period.history.rows.map((row) => ({
@@ -97,18 +99,20 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
       })),
     ]),
     ...(draft.historyAnnualRead?.status === 'ready'
-      ? (draft.historyAnnual?.periods ?? []).flatMap((period) =>
-          period.rows.map((row) => ({
-            row,
-            field: '数量',
-            source: '上一财年发货',
-            month: period.start + '至' + period.end,
-          })),
-        )
+      ? (draft.historyAnnual?.periods ?? [])
+          .filter((period) => period.start === fiscal.start && period.end === fiscal.end)
+          .flatMap((period) =>
+            period.rows.map((row) => ({
+              row,
+              field: '数量',
+              source: '上一财年发货',
+              month: period.start + '至' + period.end,
+            })),
+          )
       : []),
     ...(ready(draft.planRatesRead, draft.month)
       ? (draft.planRates ?? [])
-          .filter((row) => row['维度类型'] === '基地+产品')
+          .filter((row) => row['维度类型'] === '基地+产品' && row['月份'] === draft.month)
           .map((row) => ({
             row,
             field: '当前维度计划量',

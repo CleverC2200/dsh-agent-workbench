@@ -1405,3 +1405,24 @@ test('大型加工结果只投影有条数的上下文预览，计算结果和�
   assert.ok(JSON.stringify(preview).length < 100000);
   assert.deepEqual(context, before);
 });
+
+test('无关缓存财年与提报月份不改变当前参与范围', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.historyAnnualRead = { status: 'ready' };
+  source.historyAnnual.periods.push({
+    start: '2023-07-01',
+    end: '2024-06-30',
+    rows: [{ 基地: '', 产品编码: 'A', 数量: 50 }],
+  });
+  source.planRatesRead = { status: 'ready', month: source.month };
+  source.planRates = [
+    { 月份: '2026-10', 维度类型: '基地+产品', 基地: '', 产品编码: 'A', 当前维度计划量: 50 },
+  ];
+  const result = buildMpsWorkflow(source, null, snapshot);
+  assert.ok(!result.excludedShipments.some((row) => row.code === 'A'));
+  assert.ok(
+    result.rows.some(
+      (row) => row.code === 'A' && row.month === source.month && row.demand !== null,
+    ),
+  );
+});
