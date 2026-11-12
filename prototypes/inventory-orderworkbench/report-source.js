@@ -794,6 +794,7 @@ export async function loadWorkbenchSkuPage(
   const values = {
     start,
     end_exclusive: end,
+    inventory_end_exclusive: periods[periods.selected].inventoryEnd ?? end,
     report_base: base,
     period_start: start,
     period_end: end,
