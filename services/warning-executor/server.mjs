@@ -107,6 +107,44 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
     groupId = matches[0].id;
     return groupId;
   }
+  async function verifyLocalScheduler(req, input) {
+    if (config.accessToken) {
+      if (!same(req.headers['xxl-job-access-token'] || '', config.accessToken))
+        invalid('执行器认证失败', 403);
+      return;
+    }
+    // This deployment's admin has no protocol token. Its loopback-only requests
+    // still need an independently authenticated scheduler log before execution.
+    if (
+      config.protocolAuth !== 'loopback-log' ||
+      config.host !== '127.0.0.1' ||
+      !['127.0.0.1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)
+    )
+      invalid('执行器认证失败', 403);
+    if (req.url !== '/run') return;
+    if (!Number.isSafeInteger(input.jobId) || !Number.isSafeInteger(input.logId))
+      invalid('执行请求无效', 403);
+    const logs = await admin('/joblog/pageList', {
+      start: '0',
+      length: '100',
+      jobGroup: String(await ensureGroup()),
+      jobId: String(input.jobId),
+      logStatus: '-1',
+      filterTime: '',
+    });
+    const log = logs.data?.find((item) => item.id === input.logId);
+    if (
+      !log ||
+      log.jobGroup !== groupId ||
+      log.jobId !== input.jobId ||
+      log.handleCode !== 0 ||
+      log.executorAddress !== config.executorUrl ||
+      log.executorHandler !== input.executorHandler ||
+      log.executorParam !== input.executorParams ||
+      new Date(log.triggerTime).getTime() !== input.logDateTime
+    )
+      invalid('执行请求与调度中心记录不一致', 403);
+  }
   async function identity(req) {
     const token = req.headers['x-access-token'],
       tenant = req.headers['x-tenant-id'];
@@ -269,7 +307,7 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
         return reply(res, {
           ok: true,
           service: 'gea-warning-executor',
-          version: '20261112.1',
+          version: '20261112.2',
           groupId,
         });
       if (req.method !== 'POST') invalid('请求方法不支持', 405);
@@ -281,11 +319,7 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
       const input = decode(data);
       if (!input || typeof input !== 'object') invalid('请求格式无效');
       if (req.url === '/client') return reply(res, { ok: true, value: await client(req, input) });
-      if (
-        !config.accessToken ||
-        !same(req.headers['xxl-job-access-token'] || '', config.accessToken)
-      )
-        invalid('执行器认证失败', 403);
+      await verifyLocalScheduler(req, input);
       if (req.url === '/beat') return reply(res, { code: 200 });
       if (req.url === '/idleBeat')
         return reply(res, {

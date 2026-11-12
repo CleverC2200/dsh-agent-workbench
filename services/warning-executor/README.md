@@ -6,7 +6,7 @@ XXL-JOB 负责定时调度，已登录的 GEA 客户端执行原有 Agent 检测
 
 服务配置通过 `GEA_WARNING_EXECUTOR_CONFIG` 指向服务器上的私有 JSON 文件，包含 `adminUrl`、`username`、`password`、`accessToken`、`geaBase`、`appName`、`executorUrl`、`host`、`port`、`statePath`。配置及运行队列不能进入插件包、Git 或日志。`statePath` 用于重启后恢复调度交接记录，稳定 `runKey` 防止重复检测。
 
-部署时仅监听 loopback，XXL-JOB 与执行器位于同一服务器；客户端通过现有可信 HTTPS 入口 `https://gea.synear.cn:4443/gea-warning/client` 访问。此路径代理到执行器 `/client`，不向外代理 `/run` 等 XXL-JOB 协议接口。每个客户端请求由 GEA 登录身份及 APS 授权核验，服务端绑定任务归属，不接受页面传入的所有者、执行器分组或 Handler。XXL-JOB 协议使用现有 accessToken。
+部署时仅监听 loopback，XXL-JOB 与执行器位于同一服务器；客户端通过现有可信 HTTPS 入口 `https://gea.synear.cn:4443/gea-warning/client` 访问。此路径代理到执行器 `/client`，不向外代理 `/run` 等 XXL-JOB 协议接口。每个客户端请求由 GEA 登录身份及 APS 授权核验，服务端绑定任务归属，不接受页面传入的所有者、执行器分组或 Handler。XXL-JOB 配有协议 accessToken 时按原值核验。当前调度中心的该配置为空，执行器显式使用 `protocolAuth: loopback-log`，仅接受本机请求；`/run` 还通过调度中心的已认证管理接口核对日志编号、任务、Handler、参数、地址和时间，不回退为任意请求放行。
 
 `GET /health` 为运行状态；`POST /client` 仅支持任务所属账号的调度管理、领取及回执。操作路径固定，任务编号和日志编号去重，执行结果确认后不得改写。
 

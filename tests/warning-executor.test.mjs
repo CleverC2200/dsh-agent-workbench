@@ -132,3 +132,77 @@ test('XXL-JOB registration, ownership, duplicate triggers and client receipts', 
     await service.close();
   }
 });
+
+test('tokenless admin accepts only loopback requests matching authenticated scheduler logs', async () => {
+  const timestamp = Date.now();
+  const params = JSON.stringify({ taskId: 'monitor-local', ownerKey: 'owner' });
+  const service = createWarningExecutor(
+    {
+      port: 0,
+      host: '127.0.0.1',
+      appName: 'gea-warning-executor',
+      groupId: 4,
+      adminUrl: 'http://xxl',
+      executorUrl: 'http://127.0.0.1:18112',
+      username: 'admin',
+      password: 'private',
+      accessToken: '',
+      protocolAuth: 'loopback-log',
+    },
+    async (url) => {
+      const path = new URL(url).pathname;
+      if (path === '/login')
+        return Response.json({ code: 200 }, { headers: { 'set-cookie': 'session=private' } });
+      if (path === '/api/registry') return Response.json({ code: 200 });
+      if (path === '/joblog/pageList')
+        return Response.json({
+          data: [
+            {
+              id: 100,
+              jobGroup: 4,
+              jobId: 11,
+              handleCode: 0,
+              executorAddress: 'http://127.0.0.1:18112',
+              executorHandler: 'geaDetectionHandler',
+              executorParam: params,
+              triggerTime: new Date(timestamp).toISOString(),
+            },
+          ],
+        });
+      throw Error('unexpected request ' + path);
+    },
+  );
+  try {
+    await service.start();
+    const endpoint = 'http://127.0.0.1:' + service.server.address().port + '/run';
+    const trigger = {
+      jobId: 11,
+      logId: 100,
+      logDateTime: timestamp,
+      executorHandler: 'geaDetectionHandler',
+      executorParams: params,
+      glueType: 'BEAN',
+    };
+    const request = (body) =>
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    assert.equal(
+      (
+        await request({
+          ...trigger,
+          executorParams: JSON.stringify({ taskId: 'foreign', ownerKey: 'other' }),
+        })
+      ).status,
+      403,
+    );
+    assert.equal((await request({ ...trigger, logDateTime: timestamp + 1 })).status, 403);
+    assert.equal((await request({ ...trigger, logId: 101 })).status, 403);
+    assert.equal((await request(trigger)).status, 200);
+    assert.equal(service.stats().jobs, 1);
+  } finally {
+    await service.close();
+  }
+});

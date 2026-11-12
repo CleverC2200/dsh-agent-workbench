@@ -393,6 +393,11 @@
         "tests/approval-visibility.test.mjs",
         "tests/regional-state-restore.test.mjs"
       ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/build-branch-turnover-cards\\.py$",
+      "tests": ["tests/inventory-storage-build.test.mjs"]
     }
   ],
   "sourceTools": {
