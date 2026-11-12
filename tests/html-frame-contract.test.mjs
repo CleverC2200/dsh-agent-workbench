@@ -29,7 +29,7 @@ window.fetch=async(url,options)=>{
     return Response.json({owner:'owner-'+input.sessionId,binding:{surface:'gea-html-inventory-fixture',tool:'gea_plugin_page_apply'}});
   }
   if(input.operation==='events'&&window.failEvents)return Response.json({error:'页面连接已断开'},{status:503});
-  return Response.json(input.operation==='events'?[]:input.operation==='catalog'?{events:[]}:{});
+  return Response.json(input.operation==='events'?(window.nextEvents?.splice(0)??[]):input.operation==='catalog'?{events:[]}:{});
 };
 const ctx={
   get:()=>undefined,provide(){},
@@ -162,6 +162,58 @@ test('MPS reconnect replaces the owned frame, releases the old connection and pr
     .poll(() => page.evaluate(() => calls.filter((call) => call.operation === 'close').length))
     .toBe(1);
   await expect(page.getByLabel('public draft fixture')).toHaveValue('重连保留的会话草稿');
+  assert.deepEqual(errors, []);
+});
+
+test('the MPS refresh receipt reaches the Host before reload and its new page reconnects', async (t) => {
+  const author = await build({
+    entryPoints: ['static/mps/source/context.js'],
+    bundle: true,
+    write: false,
+    format: 'iife',
+    platform: 'browser',
+  });
+  const { page, errors, loads } = await fixture(
+    t,
+    'plan-category-production',
+    `<div id="mps-context-status"></div><script>${author.outputFiles[0].text.replaceAll('</script', '<\\/script')}</script>`,
+  );
+  await page.evaluate(() => window.finishOpen('session-1'));
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        calls.some((call) => call.operation === 'register' && call.parameters?.name === 'refresh'),
+      ),
+    )
+    .toBe(true);
+  const before = loads();
+  await page.getByLabel('public draft fixture').fill('刷新时保留的会话草稿');
+  await page.evaluate(() => {
+    window.nextEvents = [
+      { type: 'invoke', session: 'session-1', id: 'mps-refresh', name: 'refresh', arguments: {} },
+    ];
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          calls.find((call) => call.operation === 'reply' && call.parameters?.id === 'mps-refresh')
+            ?.parameters.result,
+      ),
+    )
+    .toEqual({ reloadScheduled: true });
+  await expect.poll(() => loads()).toBe(before + 1);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          calls.filter(
+            (call) => call.operation === 'register' && call.parameters?.name === 'refresh',
+          ).length,
+      ),
+    )
+    .toBe(2);
+  await expect(page.getByLabel('public draft fixture')).toHaveValue('刷新时保留的会话草稿');
   assert.deepEqual(errors, []);
 });
 

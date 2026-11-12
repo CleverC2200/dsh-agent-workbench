@@ -17,6 +17,7 @@ import React,{useMemo,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import i18next from 'i18next';
 import zh from './src/workbench/original/zh-CN.json';
+import {RegionalApprovalResubmitDialog} from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
 import Workbench from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalWorkbench.tsx';
 import {WorkbenchHostProvider} from './src/workbench/original/bridge.ts';
 const i18n=i18next.createInstance();
@@ -25,6 +26,7 @@ const rowCount=Number(new URL(location.href).searchParams.get('fixtureRows')??3)
 const rows=Array.from({length:rowCount},(_,index)=>index+1).map(n=>({planId:'p'+n,versionId:'v'+n,seq:1,periodId:'period',planTypeCode:'Y',orderType:'M',dealerCode:'d'+n,orgCode:'org'+n,orgName:'销售组'+n,areaCode:'area'+n,areaName:'大区'+n,provinceCode:'province'+n,provinceName:'省区'+n,baseName:'基地'+n,status:1,updatedAt:'2026-10-'+String(31-n).padStart(2,'0'),currentQty:'20',currentAmount:'200',targetQty:'0',targetAmount:'400',skuCount:1}));
 window.coverageCalls={sku:[],detail:[],draft:0,model:0,write:0};
 window.exportBehavior='normal';
+window.localDrafts={};
 window.exportReads=[];
 window.exportReleases=[];
 const sku=(versionId)=>({id:'s'+versionId,versionId,skuCode:'sku'+versionId,productCategName:'汤圆',qty:'20',amt:'200',baseQty:'10',amtBase:'100',price:'10'});
@@ -32,11 +34,13 @@ const forbid=async()=>{window.coverageCalls.write++;throw Error('fixture write f
 const noop=()=>{};
 function App(){
  const [mode,setMode]=useState('limited');
+ const [submissionItems,setSubmissionItems]=useState();
+ const [submissionRefreshRequest,setSubmissionRefreshRequest]=useState();
  const salesPlan=useMemo(()=>({
   periods:{invoke:async()=>({records:[{periodId:'period',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
   list:{invoke:async(q)=>{const records=q?.status===undefined||q.status===1?rows:[];return {records,total:records.length,size:q?.pageSize??200,current:q?.pageNo??1,pages:records.length?1:0}}},
-  detail:{invoke:async({planId})=>{window.coverageCalls.detail.push(planId);const versionId=planId.replace('p','v');return {currentVersion:{...rows.find(x=>x.planId===planId),id:versionId,effective:true},skus:[sku(versionId)],versions:[],logs:[]}}},
-  draft:{invoke:async(query)=>{window.coverageCalls.draft++;if(query.draft)return forbid();return {draft:null}}},
+  detail:{invoke:async({planId})=>{window.coverageCalls.detail.push(planId);const versionId=rows.find(x=>x.planId===planId).versionId;return {currentVersion:{...rows.find(x=>x.planId===planId),id:versionId,effective:true},skus:[sku(versionId)],versions:[],logs:[]}}},
+  draft:{invoke:async(query)=>{window.coverageCalls.draft++;if(query.draft)window.localDrafts[query.versionId]=query.draft;return {draft:window.localDrafts[query.versionId]??null}}},
   versions:{invoke:async()=>[]},logs:{invoke:async()=>[]},compare:{invoke:async()=>[]},
   versionSkus:{invoke:async({versionId,signal})=>{
    signal?.throwIfAborted();window.coverageCalls.sku.push({versionId,mode});
@@ -57,7 +61,7 @@ function App(){
   action:{invoke:forbid},submit:{invoke:forbid}
  }),[mode]);
  const host=useMemo(()=>({salesPlan,modelInference:{invoke:async()=>{window.coverageCalls.model++;throw Error('fixture model forbidden')}}}),[salesPlan]);
- return <><button onClick={()=>setMode('complete')}>切换到完整读取的测试上下文</button><button onClick={()=>setMode('pending')}>切换到等待中的测试上下文</button><WorkbenchHostProvider value={host}><Workbench stateScope="coverage-test" t={i18n.t.bind(i18n)} onContextChange={noop} approvalStages={['region']} liveActionsEnabled={new URL(location.href).searchParams.has('fixtureAccess')}/></WorkbenchHostProvider></>;
+ return <><button onClick={()=>setMode('complete')}>切换到完整读取的测试上下文</button><button onClick={()=>setMode('pending')}>切换到等待中的测试上下文</button><button onClick={()=>{rows[0].versionId='v1-new'}}>模拟后台计划换版</button><WorkbenchHostProvider value={host}><Workbench submissionRefreshRequest={submissionRefreshRequest} onSubmitBatch={setSubmissionItems} stateScope="coverage-test" t={i18n.t.bind(i18n)} onContextChange={noop} approvalStages={['region']} liveActionsEnabled={new URL(location.href).searchParams.has('fixtureAccess')}/></WorkbenchHostProvider>{submissionItems&&<RegionalApprovalResubmitDialog items={submissionItems} client={{...salesPlan,currentUser:{invoke:async()=>({id:'test',username:'test'})}}} connected t={i18n.t.bind(i18n)} onClose={()=>setSubmissionItems(undefined)} onRefresh={ids=>{setSubmissionItems(undefined);setSubmissionRefreshRequest(ids)}}/>}</>;
 }
 createRoot(document.getElementById('root')).render(<App/>);
 `,
@@ -92,7 +96,10 @@ async function openWorkbench(t, fixtureRows = 3, fixtureAccess = false) {
     await browser?.close();
     await new Promise((resolve) => server.close(resolve));
   });
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.GEA_TEST_CHROMIUM,
+  });
   const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
   let externalRequests = 0;
   const pageErrors = [];
@@ -332,5 +339,46 @@ test(
     );
     assert.deepEqual(pageErrors, []);
     assert.equal(externalRequests(), 0);
+  },
+);
+
+test(
+  'submission recovery refreshes the real queue and clears the old selection and quantities',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, pageErrors } = await openWorkbench(t, 2, true);
+    await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
+    const open = page.getByRole('button', { name: /^打开 .* 调整明细$/ }).first();
+    await open.click();
+    const input = page
+      .locator('section[aria-label="SKU 编码 / 物料描述"] input[type="number"]')
+      .first();
+    await expect(input).toHaveValue('20');
+    await input.fill('15');
+    await input.blur();
+    await expect.poll(() => page.evaluate(() => Object.keys(window.localDrafts).length)).toBe(1);
+    const savedDraft = await page.evaluate(() => window.localDrafts.v1);
+    for (const checkbox of await page.locator('input[type="checkbox"]').all())
+      await checkbox.check();
+    await page.getByRole('button', { name: '模拟后台计划换版' }).click();
+    await page.getByRole('button', { name: '通过', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(
+      dialog.getByText('计划版本已变化：选中版本 v1，当前版本 v1-new', { exact: false }),
+    ).toBeVisible();
+    await dialog.getByRole('button', { name: '刷新列表并重新选择', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('input[type="checkbox"]:checked')).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.coverageCalls.sku.some((x) => x.versionId === 'v1-new')),
+      )
+      .toBe(true);
+    const detail = page.locator('section[aria-label="SKU 编码 / 物料描述"]');
+    if ((await detail.count()) === 0) await open.click();
+    await expect(detail.locator('input[type="number"]').first()).toHaveValue('20');
+    assert.deepEqual(await page.evaluate(() => window.localDrafts.v1), savedDraft);
+    assert.equal(await page.evaluate(() => window.coverageCalls.write), 0);
+    assert.deepEqual(pageErrors, []);
   },
 );

@@ -53,3 +53,5 @@ HTML待执行动作携带其owned lease对应的真实`session`。页面端在�
 ## 视图动作
 
 可见目录中的 UI 视图控件明确声明 `effect: "view"`，例如区域页的模块、提报维度和模拟日期。`gea_plugin_page_apply` 仍核对当前 owner、可编辑性和 grant 的实际影响范围，并沿同一取消、限流和回执流程执行。未声明影响等级的字段继续按 `draft` 判断；只读 mock 不因此获得草稿、提交、审批、SQL或工作区写权限。
+
+HTML 页面存活轮询在 owner 与 lease 校验通过后调用可选的 `PageBusinessGrant.heartbeat`，由业务 grant 核对当前身份及页面归属并续期页面身份。轮询不重新发布业务观察内容。关闭、换绑或撤销身份后的旧 owner 不能续期。
