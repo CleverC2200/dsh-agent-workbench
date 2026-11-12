@@ -165,7 +165,8 @@ test('published stock excludes legacy warehouse-only SKUs and retains missing qu
   } finally {
     db.close();
   }
-});test('normal splits sum quantities and use the final original-order shipment period', () => {
+});
+test('normal splits sum quantities and use the final original-order shipment period', () => {
   const db = new DatabaseSync(':memory:');
   try {
     db.exec(`CREATE TABLE agents_order_execute_isontime_mi(
@@ -183,18 +184,33 @@ test('published stock excludes legacy warehouse-only SKUs and retains missing qu
       ('branch','C','S4','郑州','食品','水饺','四',900,0,'E5','2026-11-03','否',900,'上海');`);
     db.function('GREATEST', { varargs: true }, (...values) => Math.max(...values));
     db.function('LEAST', { varargs: true }, (...values) => Math.min(...values));
-    const run = (start, end, base = '') => db.prepare(ordersSql).all({
-      gea_p1: start, gea_p2: end, gea_p900: base,
-    });
+    const run = (start, end, base = '') =>
+      db.prepare(ordersSql).all({
+        gea_p1: start,
+        gea_p2: end,
+        gea_p900: base,
+      });
     const rows = run('2026-11-01', '2026-11-12');
     assert.equal(rows.length, 2);
-    assert.equal(rows.reduce((sum, row) => sum + row.sample_demand, 0), 120);
-    assert.equal(rows.reduce((sum, row) => sum + row.sample_shortage, 0), 10);
-    assert.equal(rows.reduce((sum, row) => sum + row.invalid, 0), 0);
+    assert.equal(
+      rows.reduce((sum, row) => sum + row.sample_demand, 0),
+      120,
+    );
+    assert.equal(
+      rows.reduce((sum, row) => sum + row.sample_shortage, 0),
+      10,
+    );
+    assert.equal(
+      rows.reduce((sum, row) => sum + row.invalid, 0),
+      0,
+    );
     assert.equal(run('2026-10-01', '2026-11-01').length, 0);
     assert.equal(run('2026-11-01', '2026-11-03').length, 0);
     const scoped = run('2026-11-01', '2026-11-12', '郑州');
-    assert.equal(scoped.reduce((sum, row) => sum + row.sample_demand, 0), 80);
+    assert.equal(
+      scoped.reduce((sum, row) => sum + row.sample_demand, 0),
+      80,
+    );
   } finally {
     db.close();
   }

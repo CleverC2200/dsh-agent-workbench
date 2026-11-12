@@ -220,7 +220,10 @@ test('amendments use the actual shipment cohort while cancellations use quantiti
 
 test('fulfillment uses the upstream original-order business period without a downstream SKU date join', () => {
   const sql = workbenchQueries.orders.sql;
-  assert.match(sql, /MAX\(fromorderno_month\) OVER \(PARTITION BY fromorderno,cust_code\) AS final_period/);
+  assert.match(
+    sql,
+    /MAX\(fromorderno_month\) OVER \(PARTITION BY fromorderno,cust_code\) AS final_period/,
+  );
   assert.match(sql, /m.period_end>=:gea_p1 AND m.period_end<:gea_p2/);
   assert.doesNotMatch(
     sql,
