@@ -1,5 +1,6 @@
 import { encodeLocalDrafts, decodeLocalDrafts, changeAdjustment } from './local-draft.js';
 import { createCategoryDemand } from './category-demand-view.js';
+import { buildCategoryDemand } from './category-demand.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
 import {
@@ -1485,6 +1486,30 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         products,
         productSource: draft.productSource.startsWith('demo') ? 'demo-edited' : 'local-edited',
       });
+    const categoryComputation = react.useMemo(
+      () =>
+        buildCategoryDemand(
+          draft,
+          shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
+        ),
+      [draft, shipmentSnapshot, scopeGeneration],
+    );
+    const calculatedRows = categoryComputation.rows.filter((row) => row.quantity !== null).length;
+    const calculation = {
+      status: !calculatedRows
+        ? 'pending-inputs'
+        : calculatedRows < categoryComputation.rows.length ||
+            !categoryComputation.shipmentScope.ready ||
+            categoryComputation.shipmentScope.excluded.length ||
+            categoryComputation.shipmentScope.issues.length
+          ? 'partially-calculated'
+          : 'calculated',
+      totalRows: categoryComputation.rows.length,
+      calculatedRows,
+      pendingRows: categoryComputation.rows.length - calculatedRows,
+      excludedShipmentRows: categoryComputation.shipmentScope.excluded.length,
+      monthlyCalculation: 'derived-from-current-inputs',
+    };
     const productViews = react.useMemo(
       () =>
         productProjections(
@@ -1654,20 +1679,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         productCount: draft.products.length,
         productSource: draft.productSource,
         sourceSummaries,
-        calculation: {
-          status:
-            draft.forecastRead?.status === 'ready'
-              ? 'waiting-for-business-rules'
-              : 'waiting-for-forecast-and-business-rules',
-          modelInput: 'forecast',
-          sourceIndicators: 'delivery',
-          parameterInputs: [
-            draft.reportSource === 'business' ? 'planRates' : 'report',
-            'historyAnnual',
-          ],
-          basicIndicatorInputs: ['report', 'history'],
-          monthlyCalculation: 'derived-from-inputs-without-result-table',
-        },
+        calculation,
         businessSave: 'not-connected',
         retention: retentionError ? 'local-save-failed' : 'subject-session-scoped-local-draft',
       },
@@ -1966,7 +1978,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       exportedAt: new Date().toISOString(),
                       draft,
                       businessSave: 'not-connected',
-                      calculation: 'pending-business-rules',
+                      calculation,
                     },
                     null,
                     2,
@@ -2023,6 +2035,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         'div',
         { hidden: step !== 'check' },
         h(CategoryDemand, {
+          result: categoryComputation,
           shipmentSnapshot:
             shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
           key: `${draft.id}-${scopeGeneration}`,

@@ -81,6 +81,18 @@ export function workflowPerformanceInput(size = 200) {
     resourceId: 'R',
     share: 1,
   }));
+  draft.resources.push({
+    id: 'F',
+    base: '甲',
+    kind: 'forming',
+    name: '已批准成型机',
+    dailyTons: 100,
+  });
+  draft.resourceAssignments.push(
+    ...months.flatMap((month) =>
+      codes.map((code) => ({ month, base: '甲', code, resourceId: 'F', share: 1 })),
+    ),
+  );
   draft.unitWeights = codes.map((code) => ({ base: '甲', code, tonsPerPiece: 1 }));
   draft.productionDays = months.map((month) => ({ base: '甲', month, days: 25 }));
   draft.constraints = { safetyDays: [{ base: '甲', days: 0 }], rules: { local: [] } };

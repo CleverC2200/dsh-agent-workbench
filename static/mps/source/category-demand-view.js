@@ -133,11 +133,14 @@ export function createCategoryDemand(
     '计算口径',
     '缺项说明',
   ];
-  return function CategoryDemand({ draft, shipmentSnapshot, update, active, onEditingChange }) {
-    const result = react.useMemo(
-      () => buildCategoryDemand(draft, shipmentSnapshot),
-      [draft, shipmentSnapshot],
-    );
+  return function CategoryDemand({
+    draft,
+    shipmentSnapshot,
+    update,
+    active,
+    onEditingChange,
+    result,
+  }) {
     const [pending, setPending] = react.useState(null);
     const [reason, setReason] = react.useState('');
     const [error, setError] = react.useState('');

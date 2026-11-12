@@ -720,7 +720,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             'p',
             { className: 'wf-note' },
             step === 'capacity'
-              ? '执行评估后装配已读取的隧道、件吨系数、生产日历及合法调拨范围。原需求保留，资源不足时按SKU相同满足率分配。'
+              ? '执行评估使用隧道、成型机月度批准分配、件吨系数、生产日历及合法调拨路径。同一产量同时受两类设备限制；缺配置的单品列异常，其他有效范围继续按公平满足率分配。'
               : '请先在第六步执行评估。本页只展示同一份求解结果，不独立计算。',
           )
         : h(
