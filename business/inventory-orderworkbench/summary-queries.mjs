@@ -225,7 +225,8 @@ export function addWorkbenchSummaryQueries(config) {
     }
   }
   const rawAges = raw('ages').replace(/:gea_p1\b/g, ':gea_p705');
-  const keys = `SELECT DISTINCT base,sku FROM (SELECT base,sku,category FROM (${raw('orders')}) ko UNION ALL SELECT base,sku,category FROM (${raw('stock')}) ks UNION ALL SELECT base,sku,category FROM (${rawAges}) ka WHERE COALESCE(stock_qty,0)<>0 OR COALESCE(invalid,0)<>0) all_keys WHERE COALESCE(NULLIF(category,''),'未映射')=:gea_p706`;
+  const snapshotStock = raw('stock').replace(/:gea_p2\b/g, ':gea_p709');
+  const keys = `SELECT DISTINCT base,sku FROM (SELECT base,sku,category FROM (${raw('orders')}) ko UNION ALL SELECT base,sku,category FROM (${snapshotStock}) ks UNION ALL SELECT base,sku,category FROM (${rawAges}) ka WHERE COALESCE(stock_qty,0)<>0 OR COALESCE(invalid,0)<>0) all_keys WHERE COALESCE(NULLIF(category,''),'未映射')=:gea_p706`;
   const pageSpec = {
     ...config.queries['workbench.orders'],
     parameterSpec: {
@@ -234,6 +235,7 @@ export function addWorkbenchSummaryQueries(config) {
       ...extras,
       gea_p705: { name: 'batch_start', type: 'string', required: true },
       gea_p706: { name: 'category', type: 'string', required: true },
+      gea_p709: { name: 'inventory_end_exclusive', type: 'string', required: true },
     },
   };
   register('workbench.sku.keys', keys, pageSpec, ['base', 'sku'], ['base', 'sku']);
@@ -252,7 +254,7 @@ export function addWorkbenchSummaryQueries(config) {
         )
         .join(',') +
       ' FROM (' +
-      (name === 'ages' ? rawAges : raw(name)) +
+      (name === 'ages' ? rawAges : name === 'stock' ? snapshotStock : raw(name)) +
       ') q JOIN (' +
       pageKeys +
       ') selected ON selected.base=q.base AND selected.sku=q.sku LEFT JOIN (' +

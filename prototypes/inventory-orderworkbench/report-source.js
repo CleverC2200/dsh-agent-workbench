@@ -627,6 +627,10 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
                   },
                   priority,
                 );
+              if (id === 'stock') return read(id, {
+                ...values, end_exclusive: spec.inventoryEnd ?? spec.end,
+                ...(options.summary ? { period_start: spec.start, period_end: spec.end } : {}),
+              }, priority);
               if (id !== 'ages') return read(id, values, priority);
               const dates = await read(
                 'ageDate',
@@ -790,6 +794,7 @@ export async function loadWorkbenchSkuPage(
   const values = {
     start,
     end_exclusive: end,
+    inventory_end_exclusive: periods[periods.selected].inventoryEnd ?? end,
     report_base: base,
     period_start: start,
     period_end: end,

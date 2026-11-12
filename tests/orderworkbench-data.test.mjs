@@ -964,22 +964,22 @@ test('denied, duplicated, zero denominator and invalid age data remain unknown',
   period.sections.find((section) => section.id === 'changes').status = 'error';
   assert.equal(model.computeWorkbenchMetrics(period)['作废率'].value, null);
 });
-test('completed-day comparisons stay within the selected month and equal-length week', () => {
+test('current-day comparisons stay within the selected month and equal-length week', () => {
   const periods = model.reportPeriods(
     '2026-10-01',
     '2026-11-01',
     new Date('2026-10-24T12:00:00+08:00'),
   );
-  assert.equal(periods.month.end, '2026-10-24');
+  assert.equal(periods.month.end, '2026-10-25');
   assert.equal(periods.month.inventoryEnd, '2026-10-25');
   assert.deepEqual(
     [periods.previousMonth.start, periods.previousMonth.end],
-    ['2026-09-01', '2026-09-24'],
+    ['2026-09-01', '2026-09-25'],
   );
-  assert.deepEqual([periods.week.start, periods.week.end], ['2026-10-19', '2026-10-24']);
+  assert.deepEqual([periods.week.start, periods.week.end], ['2026-10-19', '2026-10-25']);
   assert.deepEqual(
     [periods.previousWeek.start, periods.previousWeek.end],
-    ['2026-10-12', '2026-10-17'],
+    ['2026-10-12', '2026-10-18'],
   );
 });
 test('presentation fills both period tables, actual categories and shared directors without adding their rows', () => {
