@@ -209,6 +209,8 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
   const nav = mask.querySelector('nav');
   let poll;
   let loading = false;
+  let canWrite = false;
+  let writeReason = '';
   async function load() {
     if (loading || !mask.isConnected) return;
     loading = true;
@@ -224,8 +226,10 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
         ...r,
         value: r.response?.results?.length ? '检测 ' + r.response.results.length + ' 个对象' : '—',
       }));
+      canWrite = state.capabilities?.write !== false;
+      writeReason = canWrite ? '' : state.capabilities.reason;
       nav.hidden = false;
-      if (startNew) form();
+      if (startNew && canWrite) form();
       else render();
       scheduleRefresh();
     } catch (error) {
@@ -316,6 +320,9 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
         ),
       );
     main.innerHTML =
+      (writeReason
+        ? '<div class="am-run-notice" role="status">' + esc(writeReason) + '</div>'
+        : '') +
       (runNotice
         ? '<div class="am-run-notice" role="status" aria-live="polite">' + esc(runNotice) + '</div>'
         : '') +
@@ -498,6 +505,13 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
             runEvents,
           )),
     );
+    if (!canWrite)
+      main
+        .querySelectorAll('[data-new],[data-edit],[data-toggle],[data-run],[data-delete]')
+        .forEach((button) => {
+          button.disabled = true;
+          button.title = writeReason;
+        });
     main.querySelector('[data-new]').onclick = () => form();
     main
       .querySelectorAll('[data-edit]')
@@ -890,6 +904,9 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
   }
 
   function form(edit = null) {
+    const requestKey = Array.from(crypto.getRandomValues(new Uint8Array(16)), (x) =>
+      x.toString(16).padStart(2, '0'),
+    ).join('');
     main.classList.add('am-editing');
     main.innerHTML =
       '<h3>' +
@@ -1065,7 +1082,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
         const button =
           f.querySelector('button[type=submit]') || f.querySelector('footer button:last-child');
         button.disabled = true;
-        await api({ op: 'save', task: { ...m, id: edit?.id } });
+        await api({ op: 'save', task: { ...m, id: edit?.id, requestKey } });
         tab = !edit && m.runImmediately ? 'logs' : 'monitors';
         runNotice = edit
           ? '检测任务已更新。'

@@ -17,26 +17,7 @@ export interface Config {
 }
 
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
-  try {
-    await installDetection(ctx);
-  } catch (error) {
-    console.error(
-      'DETECTION_SERVICE_INIT_FAILED',
-      (error as { code?: string }).code || 'INIT_ERROR',
-    );
-    ctx.effect(() =>
-      ctx.connection.fetch.register({
-        path: '/api/agent-workbench/detection',
-        methods: ['POST'],
-        requestBody: 'buffered',
-        fetch: async () =>
-          Response.json(
-            { error: '预警服务暂不可用，请检查后台数据库及XXL-JOB连接。' },
-            { status: 503 },
-          ),
-      }),
-    );
-  }
+  await installDetection(ctx);
 
   if (config.cwd !== undefined && (typeof config.cwd !== 'string' || !isAbsolute(config.cwd)))
     throw new Error('agent-workbench: cwd must be absolute');

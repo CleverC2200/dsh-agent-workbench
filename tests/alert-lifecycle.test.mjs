@@ -117,3 +117,31 @@ assert.equal(duplicateState.events.filter((e) => e.eventStatus === '活跃').len
 assert.equal(duplicateState.events[0].history.length, 2);
 assert.equal(duplicateState.events[0].hits, 1);
 console.log('PASS historical duplicate merge and cutoff annotation normalization');
+
+const quotedTask = {
+  ...t,
+  description: '订单满足率大于等于0%为健康，低于0%为预警，不设置严重线。',
+};
+const quotedResult = () => ({
+  complete: true,
+  results: [
+    {
+      ...row,
+      value: 98.99,
+      status: '健康',
+      rule: {
+        source: 'task',
+        taskQuote: quotedTask.description,
+        direction: 'higher',
+        healthy: 0,
+        healthyOperator: 'gte',
+        severe: null,
+      },
+    },
+  ],
+});
+assert.equal(validate(quotedResult(), quotedTask)[0].rule.id, 'task:' + t.id);
+const unverifiedQuote = quotedResult();
+unverifiedQuote.results[0].rule.taskQuote = '未授权的阈值';
+assert.throws(() => validate(unverifiedQuote, quotedTask), /任务规则缺少原文依据/);
+console.log('PASS task source alias retains exact quote and threshold validation');
