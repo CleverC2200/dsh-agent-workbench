@@ -235,7 +235,7 @@ export async function readSourceTable(kind, month, signal) {
     kind + '.detail',
     {
       ...parameters,
-      page_size: 200,
+      page_size: 5000,
       offset: 0,
     },
     { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },

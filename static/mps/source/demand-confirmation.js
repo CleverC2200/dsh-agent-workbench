@@ -18,6 +18,7 @@ import { defaultInventoryMonth } from './inventory-selection.js';
 import { productProjections, sourceDimensions } from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
 import { productFileText, productReplacementErrors } from './product-file.js';
+import { sumSourceAmounts } from './source-money.js';
 import { workbookBytes } from './workbook.js';
 import { annualWorkbookTables } from './annual-workbook.js';
 const productColumns = [
@@ -89,6 +90,12 @@ function parseCsv(text, columns) {
   }
   if (quoted) throw Error('CSV引号未闭合。');
   if (cell || row.length) finish();
+  if (
+    columns === productColumns &&
+    table[0]?.join('\u0000') === [...productColumns, '未税到岸单价'].join('\u0000')
+  ) {
+    for (const row of table) if (row.length === productColumns.length + 1) row.pop();
+  }
   const legacyProductColumns = productColumns.filter((column) => column !== '物料组名称');
   if (
     columns === productColumns &&
@@ -342,6 +349,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                                 '① 环比法',
                                 '② 占比法',
                                 '加权',
+                                '两法平均量',
+                                '销售提报量',
+                                '销售校正量',
                                 '系统值',
                                 '有效值',
                                 '组合标准日产/件',
@@ -351,7 +361,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                           ? integer(row[column])
                           : [
                                 '历史平均环比',
-                                '环比链',
+                                '年度环比',
+                                '近三月达成率',
                                 '同期平均占比',
                                 '三年月占比',
                                 '月发货占财年比例',
@@ -409,6 +420,92 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ]
       : [...sourceColumns, column];
     react.useEffect(() => setPage(0), [draft[type]]);
+    const amountRead =
+      type === 'report' &&
+      business &&
+      draft.reportRead?.periods?.[period]?.status === 'ready' &&
+      draft.reportAmounts?.[period]?.period === period
+        ? draft.reportAmounts[period]
+        : null;
+    const amountRows = amountRead?.status === 'ready' ? amountRead.rows : [];
+    const monthlyAmount = sumSourceAmounts(amountRows, '月初计划金额');
+    const finalAmount = sumSourceAmounts(amountRows, '最终计划金额');
+    const amountText = `月初计划总金额：${monthlyAmount.amount === null ? '待补' : monthlyAmount.amount + '元'}；最终计划总金额：${finalAmount.amount === null ? '待补' : finalAmount.amount + '元'}`;
+    const amountSummary =
+      type === 'report' &&
+      h(
+        'div',
+        { 'aria-label': '计划提报金额' },
+        h('p', {}, amountText),
+        h(
+          'p',
+          { className: 'dc-muted' },
+          `金额来源 ai_db.agents_scm_dws_scm_cust_plan_exe_di（同步自hive.dw.dws_scm_cust_plan_exe）；${amountRead?.status === 'ready' ? '已读取' + amountRows.length + '条，覆盖当前完整查询范围' : '尚未完成读取'}。`,
+        ),
+        amountRows.some((row) => row['缺项原因']) &&
+          h(
+            'p',
+            { className: 'dc-muted' },
+            `金额来源有${amountRows.filter((row) => row['缺项原因']).length}条缺基地或产品编码，保留源金额供核对。`,
+          ),
+        amountRead?.error &&
+          h('p', { role: amountRead.status === 'failed' ? 'alert' : undefined }, amountRead.error),
+        amountRead?.status === 'ready' && (monthlyAmount.missing || finalAmount.missing)
+          ? h(
+              'p',
+              {},
+              `月初金额缺${monthlyAmount.missing}条，最终金额缺${finalAmount.missing}条；已知小计分别为${monthlyAmount.knownAmount ?? '待补'}、${finalAmount.knownAmount ?? '待补'}元。`,
+            )
+          : null,
+      );
+    const downloadSource = (name, columns, records) =>
+      type !== 'report'
+        ? downloadCsv(name, columns, records)
+        : downloadWorkbook(name.replace(/\.csv$/i, '.xlsx'), [
+            { name: '数据', columns, rows: records },
+            {
+              name: '提报金额汇总',
+              columns: [
+                '评估月份',
+                '来源',
+                '读取状态',
+                '月初计划总金额',
+                '最终计划总金额',
+                '月初已知小计',
+                '最终已知小计',
+                '月初缺项数',
+                '最终缺项数',
+                '读取说明',
+              ],
+              rows: [
+                {
+                  评估月份: period,
+                  来源: amountRead?.sourceTable ?? 'ai_db.agents_scm_dws_scm_cust_plan_exe_di',
+                  读取状态: amountRead?.status ?? 'unread',
+                  月初计划总金额: monthlyAmount.amount ?? '',
+                  最终计划总金额: finalAmount.amount ?? '',
+                  月初已知小计: monthlyAmount.knownAmount ?? '',
+                  最终已知小计: finalAmount.knownAmount ?? '',
+                  月初缺项数: monthlyAmount.missing,
+                  最终缺项数: finalAmount.missing,
+                  读取说明: amountRead?.error ?? '',
+                },
+              ],
+            },
+            {
+              name: '提报金额来源',
+              columns: [
+                '月份',
+                '基地',
+                '产品编码',
+                '大类',
+                '月初计划金额',
+                '最终计划金额',
+                '缺项原因',
+              ],
+              rows: sourceDimensions(amountRows, draft.products),
+            },
+          ]);
     const missing = rows.filter((row) => row[column] === '').length;
     const forecastReady =
       type !== 'forecast' || !business || draft.forecastRead?.status === 'ready';
@@ -526,6 +623,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 ? `预测批次 ${draft.month}：当月列对应${draft.month}，下一月列对应${monthOffset(draft.month, 1)}。按基地×物料编码读取，缺数量时不以部分合计代替完整预测。大类、系列及物料组按当前产品明细的物料编码对应，单位待确认。`
                 : '按实际发货日期汇总同一期间。发货数量与含赠品数量分别展示，不相加；不含税收入不替代含税销售额。',
           ),
+        amountSummary,
         business &&
           type === 'history' &&
           h(
@@ -587,7 +685,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               className: 'dc-link',
               disabled: !draft[type].length,
               onClick: () =>
-                downloadCsv(
+                downloadSource(
                   `${definition.short}-全部已读.csv`,
                   business ? detailColumns : definition.columns,
                   type === 'forecast'
@@ -635,7 +733,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           {
             'aria-label': '导出当前明细',
             disabled: !rows.length,
-            onClick: () => downloadCsv(`${definition.short}-${period}.csv`, detailColumns, rows),
+            onClick: () => downloadSource(`${definition.short}-${period}.csv`, detailColumns, rows),
           },
           '下载',
         ),
@@ -654,7 +752,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 className: 'dc-primary',
                 onClick: () =>
                   preview === '明细'
-                    ? downloadCsv(`${definition.short}-${period}.csv`, detailColumns, rows)
+                    ? downloadSource(`${definition.short}-${period}.csv`, detailColumns, rows)
                     : downloadCsv(
                         `${definition.short}-${period}-${preview}汇总.csv`,
                         columns,
@@ -664,6 +762,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               preview === '明细' ? '下载明细' : '导出维度汇总',
             ),
           },
+          amountSummary,
           table(
             columns,
             displayed.slice(page * 25, (page + 1) * 25),
@@ -883,7 +982,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
   }
   const MasterData = createMasterData(react, { Dialog, table, downloadCsv, useMpsPart });
   const DeliveryMetrics = createDeliveryMetrics(react, { table, downloadCsv, useMpsPart });
-  const Workflow = createWorkflow(react, useMpsPart, { Dialog, downloadCsv: downloadCsvLegacy });
+  const Workflow = createWorkflow(react, useMpsPart, {
+    Dialog,
+    downloadCsv: downloadCsvLegacy,
+    downloadAmounts: downloadCsv,
+  });
   const SourceInputs = createSourceInputs(react, {
     Dialog,
     table,
@@ -1038,8 +1141,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           : fact
             ? sourceSelection(draft, type).period
             : undefined;
-      const periods = requestedPeriods ?? [period];
-      const { signal, valid } = begin(type, requestedPeriods ?? period);
+      const periods =
+        requestedPeriods ??
+        (type === 'report' ? [period, monthOffset(period, 1), monthOffset(period, 2)] : [period]);
+      const { signal, valid } = begin(
+        type,
+        requestedPeriods ?? (type === 'report' ? periods : period),
+      );
       for (const readPeriod of periods) {
         if (!valid()) return;
         try {
@@ -1079,8 +1187,20 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                             : {}),
                         }
                       : {}),
+                    ...(type === 'report'
+                      ? {
+                          reportAmounts: {
+                            ...entry.reportAmounts,
+                            [readPeriod]: result.amounts,
+                          },
+                        }
+                      : {}),
                     ...(type === 'products'
-                      ? { productSource: 'business', productRaw: result.raw }
+                      ? {
+                          productSource: 'business',
+                          productRaw: result.raw,
+                          productPrices: result.prices,
+                        }
                       : type === 'annual'
                         ? { annualSource: 'business' }
                         : {}),
@@ -1362,8 +1482,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               (row) => draft[source + 'Read']?.periods?.[row['月份']]?.status === 'ready',
             ),
           ),
+          ['loading', 'failed'].includes(draft.productsRead?.status)
+            ? []
+            : (draft.productPrices?.rows ?? []),
         ),
       [
+        draft.productPrices,
         draft.products,
         draft.productRaw,
         draft.productsRead,
@@ -1840,6 +1964,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           draft,
           update,
           active: active && step === 'ship',
+          autoRead:
+            active &&
+            draft.productSource === 'business' &&
+            ['check', 'ship', 'process', 'constraints', 'capacity', 'report'].includes(step),
           onSnapshot: receiveShipment,
           onEditingChange: setAdjusting,
         }),
@@ -1870,6 +1998,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         'div',
         { hidden: step !== 'check' },
         h(CategoryDemand, {
+          shipmentSnapshot:
+            shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
           key: `${draft.id}-${scopeGeneration}`,
           draft,
           update,
@@ -1928,8 +2058,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     draft.productSource.startsWith('demo')
                       ? '产品关系-演示数据.csv'
                       : '产品关系.csv',
-                    productColumns,
-                    draft.products,
+                    [...productColumns, '未税到岸单价'],
+                    productViews.map(({ display }) => display),
                   ),
               },
               '下载',
@@ -1953,6 +2083,14 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             ),
           ),
           errors.products && h('p', { role: 'alert' }, errors.products),
+          draft.productPrices?.status === 'ready' &&
+            h(
+              'p',
+              { className: 'dc-muted' },
+              '单价来源 agents_scm_cust_jxc_ai_daliy_d.cif_price，按SKU关联源值；缺价留空。',
+            ),
+          draft.productPrices?.error &&
+            h('p', { role: 'alert' }, `单价读取失败：${draft.productPrices.error}`),
           h(
             'div',
             { className: 'dc-table-scroll', hidden: !productsExpanded },
@@ -1962,7 +2100,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h(
                 'colgroup',
                 {},
-                [9, 20, 7, 10, 8, 15, 9, 13, 9].map((width, index) =>
+                [9, 18, 7, 9, 8, 12, 9, 11, 9, 8].map((width, index) =>
                   h('col', { key: index, style: { width: width + '%' } }),
                 ),
               ),
@@ -1981,6 +2119,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     '物料组名称',
                     '对应老品编码',
                     '老品名称',
+                    '未税到岸单价',
                     '操作',
                   ].map((column) => h('th', { key: column }, column)),
                 ),
@@ -1994,9 +2133,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     h(
                       'tr',
                       { key: index },
-                      productColumns
-                        .filter((column) => column !== '基地')
-                        .map((column) =>
+                      [...productColumns.filter((column) => column !== '基地'), '未税到岸单价'].map(
+                        (column) =>
                           h(
                             'td',
                             {
@@ -2019,7 +2157,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                                 )
                               : display[column] || '-',
                           ),
-                        ),
+                      ),
                       h(
                         'td',
                         { className: 'dc-row-actions' },

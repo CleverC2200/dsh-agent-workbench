@@ -188,44 +188,146 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
     const historicalRows = historical.filter(
       (row) => (!dimension || row['维度类型'] === dimension) && (!base || row['基地'] === base),
     );
+    const metric =
+      preview === '三年环比'
+        ? {
+            field: 'mom',
+            label: '环比系数',
+            summary: '三年环比系数',
+            denominator: 'priorMonthQuantity',
+            period: -1,
+          }
+        : preview === '三年该月占比'
+          ? {
+              field: 'share',
+              label: '月占比',
+              summary: '三年月占比',
+              denominator: 'annualQuantity',
+            }
+          : {
+              field: 'yoy',
+              label: '同比系数',
+              summary: '同比系数',
+              denominator: 'priorYearQuantity',
+              period: -12,
+            };
+    const scoped = react.useMemo(
+      () =>
+        base || dimension !== '基地+大类'
+          ? buildCategoryDemand({
+              ...draft,
+              historicalIndicators: {
+                ...draft.historicalIndicators,
+                periods: (draft.historicalIndicators?.periods ?? []).map((period) => ({
+                  ...period,
+                  rows: period.rows.filter(
+                    (row) =>
+                      (!dimension || row['维度类型'] === dimension) &&
+                      (!base || row['基地'] === base),
+                  ),
+                })),
+              },
+            })
+          : calculated,
+      [draft, calculated, dimension, base],
+    );
     const comparisonColumns = [
       '大类',
       '目标月份',
       '分子年月',
-      '分母年月',
+      metric.field === 'share' ? '分母期间' : '分母年月',
       '分子数量',
       '分母数量',
-      '同比系数',
+      metric.label,
       '参与平均',
       '排除原因',
     ];
-    const comparisonRows = calculated.historical.flatMap((row) =>
-      (row.years ?? []).map((year) => ({
+    const comparisonRows = scoped.historical.flatMap((row) =>
+      (row.years ?? []).map((year) => {
+        const denominator = year[metric.denominator];
+        const ratio =
+          metric.field === 'yoy'
+            ? year.ratio
+            : year.quantity !== null &&
+                denominator !== null &&
+                denominator > 0 &&
+                Number.isFinite(year.quantity / denominator) &&
+                Math.abs(year.quantity / denominator) <= Number.MAX_SAFE_INTEGER
+              ? year.quantity / denominator
+              : null;
+        const reasons =
+          metric.field === 'yoy'
+            ? year.excludedReasons
+            : [
+                ...(year.quantity === null ? ['分子数量缺失或无效'] : []),
+                ...(denominator === null
+                  ? ['分母数量缺失或无效']
+                  : denominator <= 0
+                    ? ['分母数量为0或负数']
+                    : []),
+                ...(ratio === null && year.quantity !== null && denominator > 0
+                  ? ['比值超出有效范围']
+                  : []),
+              ];
+        return {
+          大类: row.category,
+          目标月份: row.month,
+          分子年月: year.numeratorMonth,
+          [metric.field === 'share' ? '分母期间' : '分母年月']:
+            metric.field === 'share'
+              ? [
+                  ...new Set(
+                    historicalRows
+                      .filter(
+                        (source) =>
+                          source['月份'] === year.month && source['维度值'] === row.category,
+                      )
+                      .map((source) => source['财年'])
+                      .filter(Boolean),
+                  ),
+                ].join('、') || '财年缺失'
+              : monthOffset(year.month, metric.period),
+          分子数量: year.quantity ?? '',
+          分母数量: denominator ?? '',
+          [metric.label]: ratio ?? '',
+          参与平均: ratio !== null ? '是' : '否',
+          排除原因: reasons.join('；'),
+        };
+      }),
+    );
+    const summaryColumns = [
+      '大类',
+      '目标月份',
+      metric.summary,
+      metric.field === 'yoy' ? '同比有效年份' : '有效年份',
+      '有效组数',
+    ];
+    const summaryRows = scoped.historical.map((row) => {
+      const valid = comparisonRows.filter(
+        (year) =>
+          year.大类 === row.category && year.目标月份 === row.month && year.参与平均 === '是',
+      );
+      return {
         大类: row.category,
         目标月份: row.month,
-        分子年月: year.numeratorMonth,
-        分母年月: year.denominatorMonth,
-        分子数量: year.quantity ?? '',
-        分母数量: year.priorYearQuantity ?? '',
-        同比系数: year.ratio ?? '',
-        参与平均: year.valid ? '是' : '否',
-        排除原因: year.excludedReasons.join('；'),
-      })),
-    );
+        [metric.summary]: row[metric.field] ?? '',
+        [metric.field === 'yoy' ? '同比有效年份' : '有效年份']: valid.length
+          ? `${valid.map((year) => year.分子年月.slice(0, 4)).join('、')}（${valid.length}年）`
+          : '无有效年份',
+        有效组数: `${valid.length}/3组${valid.length === 3 ? ' · 三年齐备' : ' · 未齐备'}`,
+      };
+    });
     const historicalColumns = [
       '月份',
       '维度类型',
       '基地',
       '维度值',
       '月发货数量',
-      '上年同期月份',
-      '上年同期发货数量',
-      '同比增长率',
-      '上月月份',
-      '上月发货数量',
-      '环比增长率',
-      '全国维度财年发货数量',
-      '月发货占财年比例',
+      ...(metric.field === 'yoy'
+        ? ['上年同期月份', '上年同期发货数量', '同比增长率']
+        : metric.field === 'mom'
+          ? ['上月月份', '上月发货数量', '环比增长率']
+          : ['财年', '全国维度财年发货数量', '月发货占财年比例']),
       '粒度状态',
     ];
     const shareRows = shares.map((row) => ({
@@ -471,11 +573,14 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                       '来源',
                       '基地',
                       '产品编码',
+                      '当前产品编码',
                       '产品名称',
                       '大类',
-                      '月初数量',
-                      '纠偏数量',
                       '数量',
+                      '计划数量',
+                      '已知计划数量',
+                      '源计划数量',
+                      '缺项原因',
                       '原因',
                     ],
                     checks.excluded,
@@ -506,6 +611,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                       '来源',
                       '基地',
                       '产品编码',
+                      '当前产品编码',
                       '产品名称',
                       '大类',
                       '系列',
@@ -533,7 +639,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           h(
             'p',
             { className: 'dc-muted' },
-            'BI实绩与计划量按所示三个月核对。计划量取ai_db.agents_scm_dws_scm_cust_plan_exe_di.allnum（件），按源日期所属月核对。达成率＝三月BI实绩÷三月计划量。各来源按当前产品池SKU重新归类，池外SKU另列清单，缺值不补0。期初使用评估月前4至前2月，纠偏使用前3至前1月。基期取窗口最后一月，全年预估＝三月实绩÷三月历史平均占比之和。',
+            'BI实绩与计划量按所示三个月核对。计划量取ai_db.agents_scm_dws_scm_cust_plan_exe_di.allnum（件），按源日期所属月核对。达成率＝三月BI实绩÷三月计划量。各来源优先按当前编码、再按唯一老品编码归类，保留原始产品编码。池外仅过滤真实源数量为0或空且无源异常的记录，其余含负数另列清单供核对，不自动参与求解，池内缺值不补0。期初使用评估月前4至前2月，纠偏使用前3至前1月。基期取窗口最后一月，全年预估＝三月实绩÷三月历史平均占比之和。',
           ),
           state?.error && h('p', { role: 'alert' }, state.error),
           draft.historyAnnualRead?.error &&
@@ -572,6 +678,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                 '来源',
                 '基地',
                 '产品编码',
+                '当前产品编码',
                 '大类',
                 '数量',
                 '计划数量',
@@ -641,7 +748,9 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   index < 3
                     ? index === 0
                       ? '最近三年逐年汇总同大类数量后计算同比系数，按有效年份等权平均。缺年、零分母或无效年度跳过；全部不可用时留空，实际年份见预览。'
-                      : '环比和月占比仍对三个完整年份等权平均；环比为系数，月占比为月量÷对应财年全年。'
+                      : index === 1
+                        ? '逐年月发货数量÷上月发货数量，对三个完整年份的环比系数等权平均。'
+                        : '逐年月发货数量÷对应财年全国维度发货数量，对三个完整年份的月占比等权平均。'
                     : `${previousFiscalYear(draft.month).start}至${previousFiscalYear(draft.month).end}全年发货；按当前物料编码、物料组编码计算物料组占大类、产品占物料组、基地产品占范围内同SKU。`,
                 ),
               ),
@@ -690,7 +799,11 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             { className: 'dc-muted' },
             isShare
               ? `销售提报期间${draft.month}，取allnum；历史期间${previousFiscalYear(draft.month).start}至${previousFiscalYear(draft.month).end}。与第三步共用计算，以当前物料编码、物料组编码归类，缺行保留为空。`
-              : '同比系数按最近三年中的有效年份等权平均，实际参与年份逐项列明；环比和月占比仍需三个完整年份。源同比、环比和财年比例分别保留。',
+              : preview === '三年同比'
+                ? '同比系数按最近三年中的有效年份等权平均，实际参与年份逐项列明。'
+                : metric.field === 'mom'
+                  ? '三年环比系数为各年月发货数量÷上月发货数量，再对三个完整年份等权平均。分母无效或三年未齐备时留空。'
+                  : '三年月占比为各年月发货数量÷对应财年全国维度发货数量，再对三个完整年份等权平均。分母无效或三年未齐备时留空。',
           ),
           isShare &&
             h(
@@ -771,28 +884,15 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                 ),
               ),
             ),
+          !isShare && table(summaryColumns, summaryRows),
           !isShare &&
-            table(
-              [
-                '大类',
-                '目标月份',
-                '同比系数',
-                '同比有效年份',
-                '有效组数',
-                '三年环比系数',
-                '三年月占比',
-              ],
-              calculated.historical.map((row) => ({
-                大类: row.category,
-                目标月份: row.month,
-                同比系数: row.yoy ?? '',
-                同比有效年份: row.yoyYears.length
-                  ? `${row.yoyYears.map((month) => month.slice(0, 4)).join('、')}（${row.yoyYears.length}年）`
-                  : '无有效年份',
-                有效组数: `${row.yoyValidCount}/3组${row.yoyComplete ? ' · 三年齐备' : ' · 未齐备'}`,
-                三年环比系数: row.mom ?? '',
-                三年月占比: row.share ?? '',
-              })),
+            h(
+              'button',
+              {
+                disabled: !summaryRows.length,
+                onClick: () => downloadCsv(preview + '-指标结果.csv', summaryColumns, summaryRows),
+              },
+              '下载指标结果',
             ),
           !isShare && table(comparisonColumns, comparisonRows),
           !isShare &&
@@ -802,12 +902,12 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                 disabled: !comparisonRows.length,
                 onClick: () =>
                   downloadCsv(
-                    `${draft.month}-同比三组分子分母.csv`,
+                    `${draft.month}-${preview}分子分母.csv`,
                     comparisonColumns,
                     comparisonRows,
                   ),
               },
-              '下载同比分子分母',
+              `下载${metric.field === 'yoy' ? '同比' : metric.field === 'mom' ? '环比' : '月占比'}分子分母`,
             ),
           table(previewColumns, previewRows.slice(pageIndex * 25, (pageIndex + 1) * 25)),
           !previewRows.length &&

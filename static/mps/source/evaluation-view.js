@@ -1,18 +1,24 @@
 import { createCapacityReport } from './capacity-report-view.js';
-import { turnoverDaysSources } from './inventory-target-view.js';
+import {
+  turnoverDaysSources,
+  inventoryDependencyFields,
+  inventoryDependencyColumns,
+} from './inventory-target-view.js';
 
 const valid = (value) => typeof value === 'number' && Number.isFinite(value);
 const reportMissing = (row) => row.reportMissing ?? row.planMissing;
 const reportStatus = (row) => {
   const missing = reportMissing(row).join('；');
-  const status = missing || (row.unfulfilled > 0 ? '产能不足，未满足量已单列' : '已评估');
+  const status = missing || (row.unfulfilled > 0 ? '供应受限，未满足量已单列' : '已评估');
   const result =
     row.reportIssueKinds?.includes('下市品产生需求') && !status.includes('下市品产生需求')
       ? `${status}；下市品产生需求`
       : status;
+  const supply =
+    row.supplyMode === 'odm' ? `${result}；ODM按净缺口默认估算，供方能力及实际到货未验证` : result;
   return row.safetyDaysSource === 'missing-turnover-days-zero'
-    ? `${result}；源周转天数待补，临时按0天`
-    : result;
+    ? `${supply}；源周转天数待补，临时按0天`
+    : supply;
 };
 const fields = [
   'openingInventory',
@@ -60,6 +66,9 @@ export function planContext(plan, visible, { base, month }) {
     'targetInventory',
     'requiredProduction',
     'mainPlan',
+    'supplyMode',
+    'odmArrival',
+    'odmArrivalTons',
     'transferIn',
     'transferOut',
     'closingInventory',
@@ -92,6 +101,10 @@ export function planContext(plan, visible, { base, month }) {
     resourceTotal: resources.length,
     transfers: transfers.slice(0, 25),
     transferTotal: transfers.length,
+    odmSchedules: (plan.odmSchedules ?? [])
+      .filter((row) => !month || row.month === month)
+      .slice(0, 25),
+    odmBasis: 'ODM默认计划到货量按件/月估算，不代表已验证的供方产能或实际到货',
     preview: '单品按当前页，资源与调拨最多25条；完整数据在页面和导出中查看',
   };
 }
@@ -103,6 +116,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     'demand',
     'openingInventory',
     'mainPlan',
+    'odmArrival',
     'transferIn',
     'transferOut',
     'targetInventory',
@@ -112,12 +126,13 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
   const labels = [
     '需求数量',
     '期初库存',
-    '实际主计划量',
+    '内部实际排产量',
+    'ODM默认计划到货量',
     '调入',
     '调出',
     '目标期末库存',
     '实际期末库存',
-    '未满足生产量',
+    '未满足供应量',
   ];
   const known = (rows, field) => {
     const values = rows.map((row) => row[field]).filter(valid);
@@ -132,6 +147,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     currentEvaluation,
     stale,
     executing,
+    preparingInputs = false,
     error,
     onExecute,
     filters,
@@ -281,23 +297,25 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         expanded[name] ? body() : null,
       );
     const active = Boolean(plan?.summary.totalRows && !stale && !executing && !error);
-    const status = executing
-      ? '正在评估当前版本'
-      : error
-        ? error.includes('已取消')
-          ? '本轮评估已取消，请重新评估'
-          : '本次评估失败，上次结果仅供参考'
-        : !plan
-          ? '尚未评估'
-          : stale
-            ? '输入已变化，需重新评估'
-            : plan.status === 'complete'
-              ? '已完成求解'
-              : plan.summary.evaluatedRows
-                ? '部分可评估，缺项已单列'
-                : plan.summary.totalRows
-                  ? '当前单品输入不完整，尚不能排产'
-                  : '缺需求单品范围，尚未生成排产';
+    const status = preparingInputs
+      ? '正在准备需求、发货与库存输入'
+      : executing
+        ? '正在评估当前版本'
+        : error
+          ? error.includes('已取消')
+            ? '本轮评估已取消，请重新评估'
+            : '本次评估失败，上次结果仅供参考'
+          : !plan
+            ? '尚未评估'
+            : stale
+              ? '输入已变化，需重新评估'
+              : plan.status === 'complete'
+                ? '已完成求解'
+                : plan.summary.evaluatedRows
+                  ? '部分可评估，缺项已单列'
+                  : plan.summary.totalRows
+                    ? '计算已完成，排产缺项待人工补齐'
+                    : '缺需求单品范围，尚未生成排产';
     const exportPlan = () => {
       if (!active) return;
       const rows = reportRows.map((row) => ({
@@ -314,10 +332,13 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         历史参考口径: row.historyCode ? '沿用老品历史' : '自身历史',
         ...Object.fromEntries(plannedFields.map((field, index) => [labels[index], row[field]])),
         需求已满足量: row.fulfilledDemand,
-        生产满足率: row.fulfillment,
+        ODM默认计划到货吨数: row.odmArrivalTons,
+        ODM估算说明: row.odmBasis,
+        供应满足率: row.fulfillment,
         有效目标周转天数: row.safetyDays,
         周转天数口径: turnoverDaysSources[row.safetyDaysSource],
         源目标周转天数: row.turnoverPolicy?.sourceDays,
+        ...inventoryDependencyFields(row),
         状态: reportStatus(row),
         问题分类: row.reportIssueKinds?.join('；'),
         来源标签: row.supplyTags,
@@ -325,6 +346,13 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         异常说明: (issuesByRow.get(JSON.stringify([row.month, row.base, row.code])) ?? [])
           .map((issue) => issue.reason)
           .join('；'),
+        需人工补齐: [
+          ...new Set(
+            (issuesByRow.get(JSON.stringify([row.month, row.base, row.code])) ?? []).map(
+              (issue) => issue.action,
+            ),
+          ),
+        ].join('；'),
       }));
       downloadCsv(
         `${draft.month}-${step === 'report' ? '产销存结果' : '求解结果'}.csv`,
@@ -342,15 +370,19 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           '历史参考口径',
           ...labels,
           '需求已满足量',
-          '生产满足率',
+          'ODM默认计划到货吨数',
+          'ODM估算说明',
+          '供应满足率',
           '有效目标周转天数',
           '周转天数口径',
           '源目标周转天数',
+          ...inventoryDependencyColumns,
           '状态',
           '问题分类',
           '来源标签',
           '标签所属月',
           '异常说明',
+          '需人工补齐',
         ],
         rows,
       );
@@ -360,10 +392,14 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
       const missing = reportMissing(row).join('；');
       const explanation =
         field === 'closingInventory'
-          ? `可用量=${value(row.openingInventory)}+${value(row.mainPlan)}+${value(row.transferIn)}-${value(row.transferOut)}；扣除本期已满足需求${value(row.fulfilledDemand)}，期末=${value(row.closingInventory)}。未满足需求单列，不自动修改下月原需求。`
-          : field === 'mainPlan'
-            ? `待生产需求=${value(row.demand)}+${value(row.targetInventory)}-${value(row.openingInventory)}，非负需求=${value(row.requiredProduction)}；同资源SKU按共同满足率分配，并逐资源校验不超产能。本基地实际排产=${value(row.mainPlan)}件，调入=${value(row.transferIn)}件，未满足生产=${value(row.unfulfilled)}件。`
-            : `同一求解结果：需求${value(row.demand)}，期初${value(row.openingInventory)}，目标期末${value(row.targetInventory)}，本基地排产${value(row.mainPlan)}，调入${value(row.transferIn)}，调出${value(row.transferOut)}，已满足需求${value(row.fulfilledDemand)}，实际期末${value(row.closingInventory)}。`;
+          ? `可用量=${value(row.openingInventory)}+${value(row.mainPlan)}+${value(row.odmArrival)}+${value(row.transferIn)}-${value(row.transferOut)}；扣除本期已满足需求${value(row.fulfilledDemand)}，期末=${value(row.closingInventory)}。未满足需求单列，不自动修改下月原需求。`
+          : field === 'odmArrival'
+            ? `ODM默认计划到货量按件/月估算：单基地净缺口=max(0,有效需求+目标期末库存-可用期初库存)；多基地按同一供方SKU月汇总净缺口，在收货点记录一次到货，后续逐段调拨。当前收货点计划到货=${value(row.odmArrival)}件。内部排产为0；${row.odmBasis || '默认估算，供方真实能力、交期及实际到货尚未验证'}。`
+            : field === 'mainPlan'
+              ? row.supplyMode === 'odm'
+                ? '该SKU按ODM外部供应计算，内部排产量为0，不消耗内部产线产能；默认计划到货和后续调拨单列。'
+                : `待生产需求=${value(row.demand)}+${value(row.targetInventory)}-${value(row.openingInventory)}，非负需求=${value(row.requiredProduction)}；同资源SKU按共同满足率分配，并逐资源校验不超产能。本基地实际排产=${value(row.mainPlan)}件，调入=${value(row.transferIn)}件，未满足生产=${value(row.unfulfilled)}件。`
+              : `同一求解结果：需求${value(row.demand)}，期初${value(row.openingInventory)}，目标期末${value(row.targetInventory)}，本基地排产${value(row.mainPlan)}，ODM默认计划到货${value(row.odmArrival)}，调入${value(row.transferIn)}，调出${value(row.transferOut)}，已满足需求${value(row.fulfilledDemand)}，实际期末${value(row.closingInventory)}。`;
       setTrace({
         title: `${row.base} ${row.name || row.code} · ${labels[plannedFields.indexOf(field)] || field}`,
         text: missing || explanation,
@@ -558,7 +594,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                               { className: 'wf-plan-detail-row' },
                               h(
                                 'td',
-                                { colSpan: 11 },
+                                { colSpan: labels.length + 3 },
                                 h(
                                   'div',
                                   { className: 'wf-plan-detail-title' },
@@ -573,7 +609,11 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                   : h(
                       'tr',
                       null,
-                      h('td', { colSpan: 11, className: 'wf-empty' }, '当前筛选没有计划明细'),
+                      h(
+                        'td',
+                        { colSpan: labels.length + 3, className: 'wf-empty' },
+                        '当前筛选没有计划明细',
+                      ),
                     ),
               ),
             ),
@@ -612,8 +652,18 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           step === 'capacity'
             ? h(
                 'button',
-                { className: 'dc-primary', disabled: executing, onClick: onExecute },
-                executing ? '评估中…' : plan ? '重新评估' : '执行评估',
+                {
+                  className: 'dc-primary',
+                  disabled: executing || preparingInputs,
+                  onClick: onExecute,
+                },
+                preparingInputs
+                  ? '输入准备中…'
+                  : executing
+                    ? '评估中…'
+                    : plan
+                      ? '重新评估'
+                      : '执行评估',
               )
             : null,
           h(
@@ -624,6 +674,13 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         ),
       ),
       error ? h('p', { role: 'alert' }, error) : null,
+      plan && !stale && !executing && !error
+        ? h(
+            'p',
+            { className: 'wf-note' },
+            '输入齐备的单品继续排产并汇总已知结果；缺项保留在对应基地、SKU和月份，未取得的数据不计为0。请按问题清单补齐后重新评估。',
+          )
+        : null,
       plan?.rows.some((row) => row.safetyDaysSource === 'missing-turnover-days-zero')
         ? h(
             'p',
@@ -697,8 +754,12 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                           源值与证据: row.reason,
                           核对处理: row.action,
                           处理性质: row.blocking
-                            ? '补数据或确认承接后重算'
-                            : '下市风险提示，原需求保留',
+                            ? '仅影响对应基地SKU月份，补齐后重算'
+                            : row.kind === '拆分依据待补'
+                              ? '来源缺项提示，不阻断当前零需求'
+                              : row.kind === '缺件吨系数'
+                                ? '来源缺项提示，不阻断当前件数计划；吨数报告待补'
+                                : '下市风险提示，原需求保留',
                         })),
                       ),
                   },
@@ -770,12 +831,17 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                       return h(
                         'section',
                         { key: month, className: 'dc-card wf-plan-month' },
-                        h('h3', null, `${month} 主计划量`),
+                        h('h3', null, `${month} 内部排产量`),
                         h(
                           'div',
                           { className: 'wf-plan-month-value' },
                           metric(rows, 'mainPlan'),
                           h('span', null, '件'),
+                        ),
+                        h(
+                          'p',
+                          null,
+                          `ODM默认计划到货 ${metric(rows, 'odmArrival')} 件，按净缺口估算，供方实际到货未验证。`,
                         ),
                         h(
                           'p',

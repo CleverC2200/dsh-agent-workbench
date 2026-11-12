@@ -64,6 +64,11 @@
     },
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^(?:scripts/measure-mps\\.mjs|tests/(?:mps-performance\\.test\\.mjs|helpers/mps-workflow-fixture\\.mjs))$",
+      "tests": ["tests/mps-performance.test.mjs", "tests/mps-workflow-inputs.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^(?:static/mps/|scripts/(?:mps-compute-build|build-static-authors|static-author-provenance)\\.mjs$)",
       "tests": [
         "tests/mps-*.browser.mjs",
@@ -78,6 +83,7 @@
       "repo": "dsh-agent-manage",
       "pattern": "^src/mps-compute/",
       "tests": [
+        "tests/mps-performance.test.mjs",
         "tests/mps-workflow-inputs.test.mjs",
         "tests/mps-workflow.browser.mjs",
         "tests/mps-seven-step.browser.mjs"

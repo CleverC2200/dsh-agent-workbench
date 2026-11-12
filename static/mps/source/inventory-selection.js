@@ -9,3 +9,9 @@ export function defaultInventoryMonth(today = new Date()) {
 export function inventoryVersionOrder(month, today = new Date()) {
   return month > monthOf(today) ? ['月初', '滚动'] : ['纠偏', '月初'];
 }
+
+export function selectedInventoryMonth(draft) {
+  return draft.inventoryTargetsRead?.status === 'ready'
+    ? (draft.inventoryTargetsRead.metadata?.start_month ?? draft.month)
+    : draft.month;
+}

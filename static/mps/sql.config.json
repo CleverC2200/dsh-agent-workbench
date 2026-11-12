@@ -26,7 +26,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -89,7 +89,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -119,6 +119,76 @@
         "update_time",
         "source_rows"
       ]
+    },
+    "annual.capacity.detail": {
+      "title": "annual",
+      "grain": [
+        "belong_base",
+        "sub_category",
+        "old_category",
+        "product_item",
+        "product_item_name",
+        "material_code",
+        "material_name",
+        "stat_month",
+        "demand_qty"
+      ],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "request": {
+        "sql": "SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_demand_annual_mi WHERE stat_month IN (:gea_p1) AND material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty ORDER BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "annual.capacity.count"
+      },
+      "columns": [
+        "belong_base",
+        "sub_category",
+        "old_category",
+        "product_item",
+        "product_item_name",
+        "material_code",
+        "material_name",
+        "stat_month",
+        "demand_qty",
+        "update_time",
+        "source_rows"
+      ]
+    },
+    "annual.capacity.count": {
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_demand_annual_mi WHERE stat_month IN (:gea_p1) AND material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_rows"
+      }
     },
     "annual.count": {
       "parameterSpec": {
@@ -153,7 +223,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -213,7 +283,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -268,20 +338,13 @@
         "transfer_direction"
       ],
       "parameterSpec": {
-        "gea_p1": {
-          "name": "period",
-          "type": "string",
-          "required": true,
-          "nullable": false,
-          "format": "YYYY-MM"
-        },
         "gea_p98": {
           "name": "page_size",
           "type": "integer",
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -293,7 +356,7 @@
         }
       },
       "request": {
-        "sql": "SELECT stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_transfer_direction_mi WHERE stat_period = :gea_p1 GROUP BY stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction ORDER BY stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_transfer_direction_mi WHERE stat_period = (SELECT MAX(stat_period) FROM agents_dim_transfer_direction_mi) GROUP BY stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction ORDER BY stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "transfers.count"
@@ -314,17 +377,9 @@
       ]
     },
     "transfers.count": {
-      "parameterSpec": {
-        "gea_p1": {
-          "name": "period",
-          "type": "string",
-          "required": true,
-          "nullable": false,
-          "format": "YYYY-MM"
-        }
-      },
+      "parameterSpec": {},
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_transfer_direction_mi WHERE stat_period = :gea_p1 GROUP BY stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction) AS mps_rows"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_transfer_direction_mi WHERE stat_period = (SELECT MAX(stat_period) FROM agents_dim_transfer_direction_mi) GROUP BY stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction) AS mps_rows"
       }
     },
     "annual.summary": {
@@ -337,7 +392,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -400,7 +455,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -463,7 +518,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -595,6 +650,7 @@
         "prepped",
         "unprepped",
         "daily3",
+        "average",
         "open",
         "inbound",
         "source_days",
@@ -624,7 +680,7 @@
           "type": "integer",
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -635,7 +691,7 @@
         }
       },
       "request": {
-        "sql": "SELECT belong_base, material_code, CASE WHEN COUNT(NULLIF(TRIM(material_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(material_name), '')) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(NULLIF(TRIM(series), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(series), '')) = 1 THEN MAX(series) ELSE NULL END AS series, CASE WHEN COUNT(NULLIF(TRIM(product_item), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item), '')) = 1 THEN MAX(product_item) ELSE NULL END AS product_item, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(total_sales_qty) = COUNT(*) THEN SUM(total_sales_qty) ELSE NULL END AS shipped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN allocated_qty END) ELSE NULL END AS prepped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN ordered_qty END) ELSE NULL END AS unprepped, CASE WHEN COUNT(CASE WHEN the_date >= :recent_start THEN 1 END) = 3 AND COUNT(DISTINCT CASE WHEN the_date >= :recent_start THEN the_date END) = 3 AND COUNT(CASE WHEN the_date >= :recent_start THEN total_sales_qty END) = 3 THEN SUM(CASE WHEN the_date >= :recent_start THEN total_sales_qty ELSE 0 END) / 3.0 ELSE NULL END AS daily3, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN begin_stock END) ELSE NULL END AS open, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(produce_in_qty) = COUNT(*) THEN SUM(produce_in_qty) ELSE NULL END AS inbound, COUNT(DISTINCT the_date) AS source_days, COUNT(*) - COUNT(DISTINCT the_date) AS duplicate_days FROM agents_scm_stock_detail_d WHERE data_month = :month AND the_date >= :month AND the_date <= :cutoff GROUP BY belong_base, material_code ORDER BY belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT belong_base, material_code, CASE WHEN COUNT(NULLIF(TRIM(material_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(material_name), '')) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(NULLIF(TRIM(series), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(series), '')) = 1 THEN MAX(series) ELSE NULL END AS series, CASE WHEN COUNT(NULLIF(TRIM(product_item), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item), '')) = 1 THEN MAX(product_item) ELSE NULL END AS product_item, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(total_sales_qty) = COUNT(*) THEN SUM(total_sales_qty) ELSE NULL END AS shipped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN allocated_qty END) ELSE NULL END AS prepped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN ordered_qty END) ELSE NULL END AS unprepped, CASE WHEN COUNT(CASE WHEN the_date >= :recent_start THEN 1 END) = 3 AND COUNT(DISTINCT CASE WHEN the_date >= :recent_start THEN the_date END) = 3 AND COUNT(CASE WHEN the_date >= :recent_start THEN total_sales_qty END) = 3 THEN SUM(CASE WHEN the_date >= :recent_start THEN total_sales_qty ELSE 0 END) / 3.0 ELSE NULL END AS daily3, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN avg_30d_send END) ELSE NULL END AS average, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN begin_stock END) ELSE NULL END AS open, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN produce_in_qty END) ELSE NULL END AS inbound, COUNT(DISTINCT the_date) AS source_days, COUNT(*) - COUNT(DISTINCT the_date) AS duplicate_days FROM agents_scm_stock_detail_d WHERE data_month = :month AND the_date >= :month AND the_date <= :cutoff GROUP BY belong_base, material_code ORDER BY belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "facts.shipment.count"
@@ -657,7 +713,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -731,7 +787,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -808,7 +864,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -919,7 +975,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -967,7 +1023,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -1029,7 +1085,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -1072,7 +1128,7 @@
           "type": "array",
           "required": true,
           "nullable": false,
-          "maxItems": 100
+          "maxItems": 200
         },
         "gea_p98": {
           "name": "page_size",
@@ -1080,7 +1136,7 @@
           "required": true,
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -1106,7 +1162,7 @@
           "type": "array",
           "required": true,
           "nullable": false,
-          "maxItems": 100
+          "maxItems": 200
         }
       },
       "columns": ["total"],
@@ -1263,7 +1319,7 @@
           "type": "integer",
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 5000
         },
         "gea_p99": {
           "name": "offset",
@@ -1312,6 +1368,92 @@
           "end_month": "2027-01"
         },
         "includeTotal": false
+      }
+    },
+    "products.prices": {
+      "title": "SKU未税到岸单价",
+      "grain": ["material_code"],
+      "parameterSpec": {
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "request": {
+        "sql": "SELECT DISTINCT material_code, cif_price FROM agents_scm_cust_jxc_ai_daliy_d ORDER BY material_code, cif_price LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "products.prices.count"
+      },
+      "columns": ["material_code", "cif_price"]
+    },
+    "products.prices.count": {
+      "parameterSpec": {},
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT DISTINCT material_code, cif_price FROM agents_scm_cust_jxc_ai_daliy_d) AS price_rows"
+      }
+    },
+    "facts.report-amounts": {
+      "title": "月初及最终计划金额",
+      "grain": ["belong_base", "material_code"],
+      "parameterSpec": {
+        "month": {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "sql": "SELECT belong_base, material_code, CASE WHEN COUNT(ycplanamount) = COUNT(*) THEN CAST(SUM(ycplanamount) AS VARCHAR) ELSE NULL END AS ycplanamount, CASE WHEN COUNT(monthamount) = COUNT(*) THEN CAST(SUM(monthamount) AS VARCHAR) ELSE NULL END AS monthamount FROM agents_scm_dws_scm_cust_plan_exe_di WHERE stat_month = REPLACE(SUBSTRING(:month, 1, 7), '-', '') GROUP BY belong_base, material_code ORDER BY belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "facts.report-amounts.count"
+      },
+      "columns": ["belong_base", "material_code", "ycplanamount", "monthamount"]
+    },
+    "facts.report-amounts.count": {
+      "parameterSpec": {
+        "month": {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        }
+      },
+      "columns": ["total"],
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code FROM agents_scm_dws_scm_cust_plan_exe_di WHERE stat_month = REPLACE(SUBSTRING(:month, 1, 7), '-', '') GROUP BY belong_base, material_code) AS amount_groups"
       }
     }
   }

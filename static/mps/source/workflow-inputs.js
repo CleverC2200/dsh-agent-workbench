@@ -4,7 +4,7 @@ import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-com
 import { solveMpsPlan } from 'dsh-agent-manage/mps-compute/plan';
 import { buildPlanSources, resolveWeightPairs } from './plan-inputs.js';
 import { attachPlanReport } from './plan-diagnostics.js';
-import { inventoryVersionOrder } from './inventory-selection.js';
+import { inventoryVersionOrder, selectedInventoryMonth } from './inventory-selection.js';
 import { buildCapacityReport } from 'dsh-agent-manage/mps-compute/capacity-report';
 import { productionCalendarDays } from './production-calendar.js';
 
@@ -232,11 +232,13 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     }
   }
   const productIssues = sourceIssues(draft, 'products');
+  const categoryComputation = buildCategoryDemand(draft, shipmentSnapshot);
   const workflowInput = {
     context,
     inventoryTargets: draft.inventoryTargets ?? [],
     inventoryTargetVersion: draft.constraints?.targetVersion ?? 'auto',
-    inventoryTargetPriority: inventoryVersionOrder(draft.month),
+    inventoryTurnoverMonth: selectedInventoryMonth(draft),
+    inventoryTargetPriority: inventoryVersionOrder(selectedInventoryMonth(draft)),
     requireSourceTurnoverDays: draft.productSource === 'business',
     missingTurnoverDaysAsZero: draft.productSource === 'business',
     inventoryTargetIssues:
@@ -251,7 +253,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     products,
     productMonths: [...productMonths.values()],
     scopeCoverage: 'in-scope',
-    categoryDemand: (draft.categoryDemand ?? buildCategoryDemand(draft).rows).map((row) => ({
+    categoryDemand: (draft.categoryDemand ?? categoryComputation.rows).map((row) => ({
       month: text(row.month),
       category: text(row.category),
       quantity: number(row.quantity),
@@ -327,6 +329,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     },
   };
   const result = computeMpsWorkflow(workflowInput);
+  result.categoryComputation = categoryComputation;
   const forecast = sourceDimensions(draft.forecast ?? [], draft.products ?? []);
   const shipment = validShipment
     ? sourceDimensions(
@@ -420,7 +423,10 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       };
     });
     result.plan.sources = planSources.metadata;
-    attachPlanReport(result.plan, planSources, relations);
+    attachPlanReport(result.plan, planSources, relations, {
+      categoryComputation,
+      shipmentSnapshot,
+    });
   }
   for (const row of result.rows) {
     row.reportMissingAsZero = reportMissingAsZero.has(rowKey(row));

@@ -26,9 +26,16 @@ export function computeWorkflow(draft, relations, shipmentSnapshot, evaluation, 
       signal.addEventListener('abort', abort, { once: true });
       const shipment = shipmentSnapshot
         ? Object.fromEntries(
-            ['draftId', 'month', 'shipmentMonth', 'status', 'sourceKind', 'source', 'rows'].map(
-              (key) => [key, shipmentSnapshot[key]],
-            ),
+            [
+              'draftId',
+              'month',
+              'shipmentMonth',
+              'cutoff',
+              'status',
+              'sourceKind',
+              'source',
+              'rows',
+            ].map((key) => [key, shipmentSnapshot[key]]),
           )
         : null;
       worker.postMessage({ draft, relations, shipment, evaluation });

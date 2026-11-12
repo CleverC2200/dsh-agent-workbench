@@ -1,3 +1,4 @@
+import { expandShipmentBase } from './helpers/mps-shipment.mjs';
 import { beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
 import { adjustCategory } from './helpers/mps-edit.mjs';
 import test from 'node:test';
@@ -116,7 +117,7 @@ test('MPS shipment local overrides and remaining intake survive a business-sourc
     ),
   });
   const table = frame.getByRole('table', { name: '本月预估发货明细' });
-  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
+  await expandShipmentBase(frame, '郑州');
   const forecast = table.getByLabel('郑州 A 整月预估发货', { exact: true });
   await beginAdjustment(frame);
   await forecast.fill('301');
@@ -139,7 +140,7 @@ test('MPS shipment local overrides and remaining intake survive a business-sourc
     .toBe('business');
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await frame.getByLabel('发货数据来源', { exact: true }).selectOption('local-file');
-  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
+  await expandShipmentBase(frame, '郑州');
   await expect(
     table.getByRole('button', { name: '郑州 A 整月预估发货 计算过程', exact: true }),
   ).toHaveText('301');

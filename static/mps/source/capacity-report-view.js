@@ -115,6 +115,9 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
         大类: row.category,
         归属需求吨数: row.demand.value,
         已知归属需求吨数: row.demand.known,
+        ODM需求吨数: row.odmDemand.value,
+        已知ODM需求吨数: row.odmDemand.known,
+        ODM未计入折吨项数: row.odmDemand.missing,
         无归属需求吨数: row.unassigned.value,
         已知无归属需求吨数: row.unassigned.known,
         日产吨数: row.dailyTons,
@@ -157,7 +160,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                       : cells.map((cell, position) => h('td', { key: position }, cell)),
                   ),
                 )
-              : h('tr', null, h('td', { colSpan: 9 }, '当前范围没有需求明细')),
+              : h('tr', null, h('td', { colSpan: columns.length }, '当前范围没有需求明细')),
           ),
         ),
       );
@@ -199,13 +202,14 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
         ),
       ),
       card(
-        '总需求 vs 月总产能',
+        '内部需求与月总产能',
         table(
           '基地需求与月总产能',
           [
             '基地',
             '产线条数',
-            `${month}总需求（吨）`,
+            `${month}内部需求（吨）`,
+            `${month}ODM需求（吨，不占产能）`,
             '生产天数',
             '日标准产能（吨/日）',
             '月总产能（吨）',
@@ -221,6 +225,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
             row.base,
             row.lines,
             metric(row.demand),
+            metric(row.odmDemand),
             row.days ?? '待补',
             numberText(row.dailyTons),
             numberText(row.capacity),
@@ -254,6 +259,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
               '余量（吨）',
               `${next}负荷率`,
               '无归属需求（吨）',
+              'ODM需求（吨，不占产能）',
             ],
             groups.flatMap((row) => {
               const key = JSON.stringify([row.month, row.base, row.category]);
@@ -284,6 +290,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                   numberText(row.margin),
                   later ? load(later) : '缺需求来源',
                   metric(row.unassigned),
+                  metric(row.odmDemand),
                 ],
                 ...(openSeries === key
                   ? [
@@ -346,7 +353,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                               '产能配额按归属需求占比分摊，仅作组合参考；无归属需求不分配产能。真实系列级产能仍需产线系列与物料组映射。',
                             ),
                           ),
-                          colSpan: 9,
+                          colSpan: 10,
                         },
                       ],
                     ]
@@ -429,6 +436,75 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
                   ),
                 )
               : null,
+          ),
+        ),
+      ),
+      card(
+        'ODM默认计划到货',
+        h(
+          react.Fragment,
+          null,
+          h(
+            'p',
+            { className: 'wf-note' },
+            '单位：件/月。按有效需求、目标期末库存减可用期初库存的净缺口默认估算，不占内部产能。只在收货点记录一次外部到货，后续逐段调拨。当前来源未提供实际供方名称，按ODM默认供给口径汇总，供方真实能力、交期及实际到货尚未验证。缺需求、库存或来源冲突的单品仍待补。',
+          ),
+          h(
+            'button',
+            {
+              disabled: !active,
+              onClick: () =>
+                downloadCsv(
+                  `${draft.month}-ODM默认计划到货.csv`,
+                  [
+                    '月份',
+                    '供方口径',
+                    '产品编码',
+                    '收货基地',
+                    '需求基地',
+                    '默认计划到货量（件）',
+                    '默认计划到货吨数',
+                    '后续调拨路径',
+                    '说明',
+                  ],
+                  (plan.odmArrivals ?? [])
+                    .filter(
+                      (row) =>
+                        !filters.base ||
+                        row.base === filters.base ||
+                        row.demandBase === filters.base,
+                    )
+                    .map((row) => ({
+                      月份: row.month,
+                      供方口径: 'ODM默认供给，实际供方待确认',
+                      产品编码: row.code,
+                      收货基地: row.base,
+                      需求基地: row.demandBase,
+                      '默认计划到货量（件）': row.quantity,
+                      默认计划到货吨数: row.tons,
+                      后续调拨路径: row.path.map((leg) => `${leg.from}→${leg.to}`).join('；'),
+                      说明: '默认估算；外部到货仅在收货基地记录一次；未验证供方真实能力、交期及实际到货',
+                    })),
+                ),
+            },
+            '导出ODM默认计划到货',
+          ),
+          table(
+            'ODM供方SKU月度默认计划',
+            ['月份', '供方口径', 'SKU', '收货基地', '默认计划到货量（件/月）', '默认计划到货吨数'],
+            (plan.odmSchedules ?? [])
+              .filter(
+                (row) =>
+                  row.month === month && (!filters.base || row.receiptBases.includes(filters.base)),
+              )
+              .map((row) => [
+                row.month,
+                'ODM默认供给，实际供方待确认',
+                row.code,
+                row.receiptBases.join('、'),
+                numberText(row.quantity),
+                numberText(row.tons),
+              ]),
           ),
         ),
       ),
@@ -752,7 +828,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv }) {
             h(
               'p',
               null,
-              '现有调拨关系仅在来源月份有效。0.5调拨库存修正系数尚未确认，本轮未采用。全年未取得的需求月份及缺件吨系数保持待补。',
+              '调拨采用最新来源日期的完整关系，覆盖后续评估月，允许沿已配置路径中转并逐段记录。ODM默认计划到货单列，不占内部产能。0.5调拨库存修正系数尚未确认，本轮未采用。全年未取得的需求月份及缺件吨系数保持待补。',
             ),
           )
         : null,

@@ -1,3 +1,4 @@
+import { expandShipmentBase } from './helpers/mps-shipment.mjs';
 import { expectWorkflowExportValue } from './helpers/mps-workflow-export.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -102,7 +103,7 @@ test('MPS shipment closing inventory feeds the same-version assessment and repor
   await expectWorkflowExportValue(frame, '郑州 A 2026-10 期初库存 计算过程', '1,000');
   await expectWorkflowExportValue(frame, '郑州 A 2026-11 期初库存 计算过程', '—');
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
+  await expandShipmentBase(frame, '郑州');
   const estimate = frame.getByLabel('郑州 A 整月预估发货', { exact: true });
   await frame.getByRole('button', { name: '调整', exact: true }).click();
   await estimate.fill('500');
