@@ -5,3 +5,5 @@
 - [产销协同预警客户端合并](aps-alert-release.md)
 
 - [销售计划旧版本与过期草稿恢复](sales-plan-stale-recovery.md)
+
+- [销售计划单笔失败提示与再次提交](sales-plan-single-approval.md)
