@@ -226,7 +226,7 @@ async function download(page, view, name) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-test('MPS complete split export retains the same shipment subtotal and completeness as the category summary', async (t) => {
+test('MPS split export labels the participating shipment scope and restores full scope when missing SKU becomes zero', async (t) => {
   const { page, frame } = await workflowPage(t);
   await version(frame, '2026-10');
   await upload(
@@ -251,7 +251,10 @@ test('MPS complete split export retains the same shipment subtotal and completen
   await workflowStep(frame, '需求加工与收敛');
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   const summary = view.getByRole('table', { name: '大类需求总表', exact: true });
-  await expect(summary.locator('tbody tr td').nth(1)).toHaveText('300（已知小计）');
+  await expect(summary.locator('tbody tr td').nth(1)).toHaveText('300');
+  await expect(view.getByRole('region', { name: '待定单品异常', exact: true })).toContainText(
+    '参与1条，排除1条',
+  );
   const readExport = async () => {
     const csv = await download(page, view, '下载需求拆分');
     const book = XLSX.read(csv, { type: 'string', raw: true });
@@ -260,12 +263,14 @@ test('MPS complete split export retains the same shipment subtotal and completen
   const partial = await readExport();
   for (const month of ['2026-10', '2026-11']) {
     const category = partial.find((row) => row['粒度'] === '大类' && row['月份'] === month);
-    assert.equal(category['本月预估发货'], undefined);
+    assert.equal(category['本月预估发货'], '300');
     assert.equal(category['本月预估发货已知小计'], '300');
-    assert.equal(category['本月预估发货完整性'], '已知小计');
-    assert.equal(category['本月预估发货缺项数'], '1');
+    assert.equal(category['本月预估发货完整性'], '当前参与范围，另有单品已排除');
+    assert.match(category['计算范围'], /部分可计算/);
+    assert.equal(category['本月预估发货缺项数'], '0');
     assert.equal(category['模型预测数量'], month === '2026-10' ? '10' : '20');
   }
+  assert.ok(partial.filter((row) => row['产品编码']).every((row) => row['产品编码'] !== 'B'));
   await workflowStep(frame, '本月预估发货');
   await upload(
     frame,
