@@ -1,15 +1,47 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-test('未配置的预警后台不会初始化数据库、调度器或创建原型目录', () => {
-  const child = spawnSync(
-    process.execPath,
-    [
-      '--input-type=module',
-      '-e',
-      `import {installDetection} from './src/detection-backend.mjs';try{await installDetection({effect(){throw Error('must not start effects')}});process.exitCode=1}catch(e){if(e.code!=='DETECTION_NOT_CONFIGURED')throw e;}`,
-    ],
-    { cwd: process.cwd(), env: { ...process.env, GEA_WARNING_HOME: '' }, encoding: 'utf8' },
-  );
-  assert.equal(child.status, 0, child.stderr);
+import { installDetection } from '../src/detection-backend.mjs';
+test('warning Host starts without local PG credentials and reports unavailable whitelist requests', async () => {
+  const cleanups = [];
+  let route;
+  let requests = 0;
+  const ctx = {
+    effect(fn) {
+      const cleanup = fn();
+      if (cleanup) cleanups.push(cleanup);
+    },
+    connection: {
+      fetch: {
+        register(value) {
+          route = value;
+          return () => {};
+        },
+      },
+      createSharedFetchHandler() {
+        return {
+          fetch: async () => {
+            requests++;
+            return Response.json(
+              { ok: false, error: { message: '白名单未连接' } },
+              { status: 503 },
+            );
+          },
+        };
+      },
+    },
+  };
+  try {
+    await installDetection(ctx);
+    assert.equal(requests, 0);
+    const r = await route.fetch(
+      new Request('http://host/api/agent-workbench/detection', {
+        method: 'POST',
+        body: JSON.stringify({ op: 'list' }),
+      }),
+    );
+    assert.equal(r.status, 400);
+    assert.match((await r.json()).error, /白名单未连接/);
+  } finally {
+    for (const f of cleanups.reverse()) f();
+  }
 });

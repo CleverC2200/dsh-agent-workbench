@@ -48,7 +48,7 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^(?:src/(?:detection-(?:backend|postgres)|task-rules|warning-ownership|feishu-warning-transport|task-management)\\.|docs/alert-module-local/)",
+      "pattern": "^(?:src/(?:detection-(?:backend|postgres|whitelist)|task-rules|warning-ownership|feishu-warning-transport|task-management)\\.|services/warning-executor/|docs/alert-module-local/)",
       "tests": [
         "tests/alert-lifecycle.test.mjs",
         "tests/cross-period-lifecycle.test.mjs",
@@ -56,7 +56,9 @@
         "tests/task-management.test.mjs",
         "tests/task-rules.test.mjs",
         "tests/warning-ownership.test.mjs",
-        "tests/alert-unconfigured.test.mjs"
+        "tests/alert-unconfigured.test.mjs",
+        "tests/detection-whitelist.test.mjs",
+        "tests/warning-executor.test.mjs"
       ],
       "sourceTests": [
         "tests/alert-lifecycle.test.mjs",
@@ -65,7 +67,9 @@
         "tests/task-management.test.mjs",
         "tests/task-rules.test.mjs",
         "tests/warning-ownership.test.mjs",
-        "tests/alert-unconfigured.test.mjs"
+        "tests/alert-unconfigured.test.mjs",
+        "tests/detection-whitelist.test.mjs",
+        "tests/warning-executor.test.mjs"
       ]
     },
     {
