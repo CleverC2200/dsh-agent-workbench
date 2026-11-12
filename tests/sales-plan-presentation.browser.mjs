@@ -121,6 +121,7 @@ const skuFor=(versionId)=>{
   const base=baseSkuFor(versionId);
   if(continued) return {...base,regionConfirmedQty:'10',regionConfirmedAmount:'100',provinceConfirmedQty:'15',provinceConfirmedAmount:'150',areaConfirmedQty:'25',areaConfirmedAmount:'250'};
   if(comparison==='integer')return {...base,qty:'501.600',amt:'5016.00'};
+  if(comparison==='single-integer-category')return {...base,baseQty:'2480.000',amtBase:'24800.00',qty:'7000.000',amt:'70000.00'};
   if(!['inline','missing'].includes(comparison)) return base;
   const old=versionId.includes('previous'),older=versionId.includes('older');
   const prefix=versionId.slice(0,2);
@@ -160,10 +161,10 @@ const host={salesPlan:{
   }},action:{invoke:async(command)=>{if(comparison?.startsWith('single-')){window.sentDirect.push(command);const status=comparison==='single-permission'?403:comparison==='single-conflict'?409:502;const error=comparison.startsWith('single-dms')?'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报':comparison==='single-permission'?'当前用户没有品类审批权限':comparison==='single-conflict'?'计划版本已变化，请刷新后重试':'GEA_HTTP_502';throw new BackendHttpError({method:'POST',path:'/sales-plan/plans/versions/'+command.versionId+'/actions',status,body:{error:window.directRejection??error,details:{...(comparison.startsWith('single-dms')?{retryable:false,upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED'}:{}),requestId:'hidden-error-reference',traceId:'hidden-trace-reference'}}});}if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
 },modelInference:{invoke:forbidden}};
 const root=createRoot(document.getElementById('root'));
-window.restoreIntegerInput=async(mode)=>{
- const row=plans[0],detail=await host.salesPlan.detail.invoke({planId:row.planId});
- if(mode==='draft')drafts.set(row.planId+':'+row.versionId,{role:'region',adjustments:[{skuCode:'1001',adjustQty:'481.600'}]});
- root.render(<WorkbenchHostProvider value={host}><InlineSkuDetails row={row} detail={detail} canEdit approvalRole="region" t={i18n.t.bind(i18n)} initialInputValues={mode==='input'?{'1001':'501.600'}:undefined}/></WorkbenchHostProvider>);
+window.restoreIntegerInput=async(mode,role='region')=>{
+ const row={...plans[0],status:role==='category'?4:plans[0].status},loaded=await host.salesPlan.detail.invoke({planId:row.planId}),detail={...loaded,currentVersion:{...loaded.currentVersion,status:row.status}};
+ if(mode==='draft')drafts.set(row.planId+':'+row.versionId,{role,adjustments:[{skuCode:'1001',adjustQty:'481.600'}]});
+ root.render(<WorkbenchHostProvider value={host}><InlineSkuDetails row={row} detail={detail} canEdit approvalRole={role} t={i18n.t.bind(i18n)} initialInputValues={mode==='input'?{'1001':'501.600'}:undefined} draftPatch={mode==='patch'?{at:1,quantity:'501.600'}:undefined}/></WorkbenchHostProvider>);
 };
 root.render(<WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={i18n.t.bind(i18n)} onContextChange={()=>{}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
 `,
@@ -1256,20 +1257,56 @@ test(
   },
 );
 
-for (const mode of ['input', 'draft'])
-  test(
-    'restored monthly quantities remain integers without writing: ' + mode,
-    { timeout: 30000 },
-    async (t) => {
-      const { page } = await openWorkbench(t);
-      await page.evaluate((value) => window.restoreIntegerInput(value), mode);
-      await expect(
-        page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }),
-      ).toHaveValue('502');
-      assert.deepEqual(await page.evaluate(() => window.savedDrafts), []);
-      assert.deepEqual(await page.evaluate(() => window.writes), []);
-    },
-  );
+test('monthly category quantities show integers in the input and plan column', async (t) => {
+  const { page } = await openWorkbench(t, false, 'single-integer-category');
+  await page.locator('tbody button').first().click();
+  const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await expect(input).toHaveValue('7000');
+  const row = input.locator('xpath=ancestor::tr[1]');
+  await expect(row.getByText('2,480', { exact: true })).toBeVisible();
+  await expect(row.getByText('¥24,800.00', { exact: true })).toBeVisible();
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+  if (process.env.DSH_REVIEW_EVIDENCE)
+    await row.screenshot({
+      path: process.env.DSH_REVIEW_EVIDENCE + '/monthly-category-integer.png',
+    });
+  await input.fill('7000.600');
+  await input.blur();
+  await expect(input).toHaveValue('7001');
+  await expect.poll(() => page.evaluate(() => window.savedDrafts.length)).toBeGreaterThan(0);
+  const draft = await page.evaluate(() => window.savedDrafts.at(-1));
+  assert.equal(Number(draft.adjustments[0].adjustQty), 1);
+  await expect(input.locator('xpath=ancestor::td[1]')).toContainText('¥70,010.00');
+});
+
+test('monthly category external edits round before rendering and persisting', async (t) => {
+  const { page } = await openWorkbench(t);
+  await page.evaluate(() => window.restoreIntegerInput('patch', 'category'));
+  const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await expect(input).toHaveValue('502');
+  await expect.poll(() => page.evaluate(() => window.savedDrafts.length)).toBeGreaterThan(0);
+  const draft = await page.evaluate(() => window.savedDrafts.at(-1));
+  assert.equal(Number(draft.adjustments[0].adjustQty), 482);
+});
+
+for (const role of ['region', 'category'])
+  for (const mode of ['input', 'draft'])
+    test(
+      'restored monthly quantities remain integers without writing: ' + role + ' ' + mode,
+      { timeout: 30000 },
+      async (t) => {
+        const { page } = await openWorkbench(t);
+        await page.evaluate(({ mode, role }) => window.restoreIntegerInput(mode, role), {
+          mode,
+          role,
+        });
+        await expect(
+          page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }),
+        ).toHaveValue('502');
+        assert.deepEqual(await page.evaluate(() => window.savedDrafts), []);
+        assert.deepEqual(await page.evaluate(() => window.writes), []);
+      },
+    );
 
 for (const scenario of ['return-edits', 'return-continued-province'])
   test(

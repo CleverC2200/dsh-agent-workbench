@@ -28,6 +28,33 @@ const detail = {
   skus: [sku],
 };
 const context = { versionId: 'v', status: 2, currentStage: 3, targetStage: 2, targetStatus: 7 };
+test('monthly category approval and return use integer final quantities', () => {
+  const categoryRow = { ...row, status: 4 };
+  const categoryDetail = {
+    ...detail,
+    currentVersion: { ...detail.currentVersion, status: 4, orderType: 'M' },
+    skus: [{ ...sku, areaConfirmedQty: '110.000', categoryConfirmedQty: '120.600' }],
+  };
+  const approved = m.salesPlanApprovalDraftValues(categoryDetail, categoryRow, 'category', []);
+  assert.equal(Number(approved['1001']), 0.4);
+  const destination = m.salesPlanReturnDestination(categoryDetail, 'category');
+  const returned = m.salesPlanReturnAdjustments(
+    categoryDetail,
+    categoryRow,
+    'category',
+    destination,
+  );
+  assert.equal(Number(returned[0].adjustQty), 11);
+  assert.deepEqual(
+    m.salesPlanApprovalDraftValues(
+      categoryDetail,
+      { ...categoryRow, orderType: 'Z' },
+      'category',
+      [],
+    ),
+    {},
+  );
+});
 test('pending approval derives the receiving stage from existing detail', () => {
   for (const [status, role] of [
     [1, 'region'],

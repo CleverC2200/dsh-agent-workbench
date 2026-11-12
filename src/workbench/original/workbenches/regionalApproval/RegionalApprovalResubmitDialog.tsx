@@ -588,7 +588,7 @@ export function RegionalApprovalResubmitDialog({
         qty = qty.plus(quantity);
         amount = amount.plus(quantity.mul(correctionDecimal(sku.price)).toDecimalPlaces(2));
       }
-      return `${qty.toFixed(3)} 件 · ¥${amount.toFixed(2)}`;
+      return `${qty.toFixed()} 件 · ¥${amount.toFixed(2)}`;
     } catch {
       return '—';
     }
@@ -724,13 +724,13 @@ export function RegionalApprovalResubmitDialog({
                         </small>
                       </span>
                       <span>
-                        {correctionDecimal(before).toFixed(3)}
+                        {correctionDecimal(before).toFixed()}
                         <small>
                           ¥{correctionDecimal(before).mul(correctionDecimal(sku.price)).toFixed(2)}
                         </small>
                       </span>
                       <strong>
-                        {correctionDecimal(after).toFixed(3)}
+                        {correctionDecimal(after).toFixed()}
                         <small>
                           ¥{correctionDecimal(after).mul(correctionDecimal(sku.price)).toFixed(2)}
                         </small>

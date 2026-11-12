@@ -50,10 +50,7 @@ export const summarizeGroupSkus = (
         pendingValues[plan.planId]?.[code] ??
         salesPlanEditableQuantity(sku, plan.status, plan.planTypeCode, approvalRole) ??
         String(sku.qty);
-      const qty =
-        plan.orderType === 'M' && approvalRole !== 'category'
-          ? roundPlanQuantity(originalQty)
-          : originalQty;
+      const qty = plan.orderType === 'M' ? roundPlanQuantity(originalQty) : originalQty;
       const baseQty = String(plan.orderType === 'Z' ? (sku.corrBaseQty ?? sku.qty) : sku.baseQty);
       const baseAmount = String(plan.orderType === 'Z' ? sku.amt : sku.amtBase);
       const amount = multiplyExactDecimals(qty, String(sku.price));

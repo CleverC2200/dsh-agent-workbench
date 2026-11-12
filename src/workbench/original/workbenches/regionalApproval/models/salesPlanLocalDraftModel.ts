@@ -52,12 +52,7 @@ export const salesPlanApprovalDraftValues = (
     if (!DECIMAL.test(adjustQty)) throw new Error('确认计划数量不合法，请核对本节点调整');
     values[skuCode] = adjustQty;
   }
-  if (
-    roundMonthly &&
-    (row.orderType ?? detail?.currentVersion.orderType) === 'M' &&
-    role &&
-    role !== 'category'
-  ) {
+  if (roundMonthly && (row.orderType ?? detail?.currentVersion.orderType) === 'M' && role) {
     for (const sku of detail?.skus ?? []) {
       const code = String(sku.skuCode);
       const baseline = salesPlanEditableQuantity(sku, row.status, row.planTypeCode, role);

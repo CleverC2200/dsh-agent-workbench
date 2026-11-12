@@ -172,7 +172,10 @@ test(
     await expect(dialog).toContainText('客户2');
     await expect(dialog).toContainText('789');
     await expect(dialog).not.toContainText('790');
-    await expect(dialog).toContainText('3.000');
+    await expect(dialog.locator('strong').filter({ hasText: /¥37\.02/ })).toHaveText(
+      /^\s*3\s*¥37\.02\s*$/,
+    );
+    await expect(dialog).not.toContainText('3.000');
     await dialog.getByRole('button', { name: '确认重提', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.submissions.length)).toBe(1);
     const submitted = await page.evaluate(() => window.submissions[0]);

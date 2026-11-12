@@ -75,7 +75,7 @@ export function InlineSkuDetails({
   ) => void;
 }) {
   const { salesPlan } = useWorkbenchHost();
-  const integerQuantity = orderType === 'M' && approvalRole !== 'category';
+  const integerQuantity = orderType === 'M';
   const [skus, setSkus] = useState<GeaSalesPlanSku[]>();
   const [failed, setFailed] = useState(false);
   const displayedSkus = useMemo(() => {
@@ -130,7 +130,7 @@ export function InlineSkuDetails({
         String(sku.skuCode),
         orderType === 'Z'
           ? addExactDecimals([baselineFor(sku), draftPatch.quantity])
-          : draftPatch.quantity,
+          : roundPlanQuantity(draftPatch.quantity),
       ]),
     );
     onInputChange?.(changes);
