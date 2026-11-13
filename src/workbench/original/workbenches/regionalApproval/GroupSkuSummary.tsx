@@ -7,7 +7,7 @@ import type { RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
 import { addExactDecimals, subtractExactDecimals } from './regionalApprovalQueryModel.ts';
 import { summarizeGroupSkus, type GroupSkuSummaryRow } from './models/salesPlanGroupSkuModel.ts';
 import { allocateGroupSkuQuantity } from './models/salesPlanGroupAllocationModel.ts';
-import { salesPlanEditableQuantity } from './models/salesPlanQuantityModel.ts';
+import { salesPlanEditableQuantity, roundPlanQuantity } from './models/salesPlanQuantityModel.ts';
 import {
   salesPlanDraftSnapshot,
   salesPlanDraftMatches,
@@ -198,7 +198,8 @@ export function GroupSkuSummary(props: {
     members.every((plan) => props.editablePlans.has(plan.planId)) &&
     draftsReady &&
     Boolean(sources);
-  const columns = ['plan', 'confirmed'];
+  const correction = members.every((plan) => plan.orderType === 'Z');
+  const columns = correction ? ['plan', 'confirmed', 'adjustment'] : ['plan', 'confirmed'];
   return (
     <section
       className={styles.root}
@@ -255,7 +256,11 @@ export function GroupSkuSummary(props: {
         <p>{groupText('empty')}</p>
       ) : (
         <div className={styles.viewport} tabIndex={0} role="region" aria-label={groupText('title')}>
-          <table className={styles.table}>
+          <table
+            className={[correction ? styles.correctionTable : undefined, styles.table]
+              .filter(Boolean)
+              .join(' ')}
+          >
             <colgroup>
               <col className={styles.skuColumn} />
               {columns.map((key) => (
@@ -270,7 +275,7 @@ export function GroupSkuSummary(props: {
                 </th>
                 {columns.map((key) => (
                   <th scope="col" key={key}>
-                    {text(key)}
+                    {key === 'adjustment' ? t('common.correction.adjustment') : text(key)}
                   </th>
                 ))}
                 <th aria-hidden="true" />
@@ -300,7 +305,7 @@ export function GroupSkuSummary(props: {
                           {editable ? (
                             <Input
                               type="number"
-                              step={members.every((plan) => plan.orderType === 'M') ? 1 : 0.001}
+                              step={1}
                               size="small"
                               className={styles.quantityInput}
                               aria-label={`${text('confirmed')} ${row.skuCode}`}
@@ -321,7 +326,7 @@ export function GroupSkuSummary(props: {
                                 const changes = allocateGroupSkuQuantity(
                                   sources,
                                   row.skuCode,
-                                  value,
+                                  roundPlanQuantity(value),
                                   approvalRole,
                                 );
                                 const next = Object.fromEntries(
@@ -340,6 +345,15 @@ export function GroupSkuSummary(props: {
                           ) : undefined}
                         </SkuQuantityAmount>
                       </td>
+                      {correction && (
+                        <td>
+                          <SkuQuantityAmount
+                            quantity={row.adjustmentQty}
+                            amount={row.adjustmentAmount}
+                            signed
+                          />
+                        </td>
+                      )}
                       <td aria-hidden="true" />
                     </tr>
                   );

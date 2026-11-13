@@ -78,6 +78,27 @@ export function correctionDecision(
   );
   return correctionDecimal(value.addQty).minus(value.cutQty).toFixed();
 }
+export function correctionConfirmedQuantity(
+  sku: CorrectionSku,
+  status: number,
+  typeCode: string,
+  selectedRole?: CorrectionNode,
+): string {
+  const flow = salesPlanWorkflow(typeCode);
+  const roles = selectedRole
+    ? SALES_PLAN_ROLES.slice(0, SALES_PLAN_ROLES.indexOf(selectedRole) + 1)
+        .toReversed()
+        .filter((role) => role === selectedRole || flow.pending(role) !== undefined)
+    : flow.confirmationRoles(status);
+  for (const role of roles) {
+    if (role === 'customer') continue;
+    const confirmed = sku[`${role}ConfirmedQty`];
+    if (confirmed != null) return correctionDecimal(confirmed).toFixed();
+  }
+  return correctionDecimal(sku.qty)
+    .plus(correctionDecision(sku, status, typeCode, true, undefined, selectedRole))
+    .toFixed();
+}
 export function correctionLine(
   sku: Pick<GeaSalesPlanSku, 'qty' | 'price' | 'amt' | 'corrBaseQty'>,
   input: string,

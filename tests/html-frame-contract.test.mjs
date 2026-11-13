@@ -42,7 +42,7 @@ const ctx={
   inject:(names,fn)=>{if(names.includes('businessAccount'))fn(ctx);},
 };
 const workbench=new WorkbenchController({panel:()=>{},document:()=>{}});
-const page={id:window.testFramePageId??'inventory-fixture',kind:'html',src:'/html',label:'Fixture',pluginId:'inventory-fixture',resourceId:'original'};
+const page={id:window.testFramePageId??'inventory-fixture',kind:window.testFramePageId==='gea-proof'?'native':'html',src:'/html',label:'Fixture',pluginId:'inventory-fixture',resourceId:'original'};
 workbench.registerFrame(page);void workbench.open(page.id);
 window.bind=id=>{mainSession=id;workbench.associateSession(page.id,{sessionId:id,preset:'original',ownerScope:'principal-a',subject:'fixture-user-a'});for(const notify of sessionListeners)notify();};
 window.suspend=()=>workbench.forgetSession(page.id);
@@ -50,11 +50,11 @@ window.publishTheme=next=>{snapshot=next;for(const listener of themeListeners)li
 window.themeListenerCount=()=>themeListeners.size;
 mountFramePresentation(ctx,()=>undefined,key=>window.testFrameTranslations?.[key]??key,workbench);
 const root=createRoot(document.getElementById('app'));
-const inputActions={captureInsertion:()=>({start:0,end:0,draftRev:0}),insertText:()=>true,persistDraft:()=>{}};
+const inputActions={setDraft:text=>{document.querySelector('[aria-label="public draft fixture"]').value=text;window.calls.push({draft:text});},captureInsertion:()=>({start:0,end:0,draftRev:0}),insertText:()=>true,persistDraft:()=>{}};
 function Main(){
  const sessionId=useSyncExternalStore(listener=>{sessionListeners.add(listener);return()=>sessionListeners.delete(listener);},()=>mainSession);
  const state=useSyncExternalStore(workbench.subscribe,workbench.getSnapshot);
- return <Document page={page} active={true} useSessions={select=>select({byId:{}})} sessionId={sessionId} inputActions={inputActions} useProjection={()=>'original'} useSession={select=>select({openState:'open'})} renderSlot={()=> <textarea aria-label="public draft fixture" defaultValue=""/>}/>;
+ return <Document page={page} active={true} useSessions={select=>select({byId:{}})} sessionId={sessionId} inputActions={inputActions} useProjection={()=>'original'} useSession={select=>select({openState:'open'})} renderSlot={()=> <>{['gea-proof','reporting-fixture'].includes(page.id)&&<Conversation page={page.id} renderFactorySlot={(_name,_options,extension)=>{const Views=extension.slots.views;return <Views inputActions={inputActions} useSession={select=>select({blank:false,running:false,promptAttempted:false})} renderSlot={()=> <article>历史消息</article>}/>;}}/>}<textarea aria-label="public draft fixture" defaultValue=""/></>}/>;
 }
 window.unmount=()=>{root.unmount();effects.reverse().forEach(off=>off());};
 root.render(<Main/>);window.bind('session-1');
@@ -85,7 +85,10 @@ window.request=(id,method,parameters={},session=context.session)=>port.postMessa
 </script>`;
 
 async function fixture(t, pageId = 'inventory-fixture', frameHtml, translations) {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.GEA_TEST_CHROMIUM,
+  });
   t.after(() => browser.close());
   const page = await browser.newPage();
   page.setDefaultTimeout(5000);
@@ -455,7 +458,10 @@ test('theme subscription uses the current owned port and releases listeners with
 });
 
 test('the shipped standalone sample renders its four rows without an invented business lease or Session', async (t) => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.GEA_TEST_CHROMIUM,
+  });
   t.after(() => browser.close());
   const page = await browser.newPage();
   const errors = [];
@@ -478,5 +484,124 @@ test('the shipped standalone sample renders its four rows without an invented bu
   await expect(page.locator('body')).toHaveCSS('font-size', '17px');
   await expect(page.locator('#rows tr')).toHaveCount(4);
   assert.deepEqual(requests, ['/sample']);
+  assert.deepEqual(errors, []);
+});
+
+const quickSnapshot = {
+  agent: 'sales-approval',
+  scope: '2026年12月',
+  selection: 'selected',
+  rows: [
+    {
+      name: '华南',
+      facts: {
+        progress: { label: '月提报达成', display: '77.3%' },
+        plan: { label: '月计划', display: '−¥1,234.50' },
+        target: { label: '月度目标', display: '¥743.01万' },
+      },
+    },
+  ],
+};
+
+test('owned native snapshots update capsules with history present and reject stale or foreign messages', async (t) => {
+  const { page, child, errors } = await fixture(
+    t,
+    'gea-proof',
+    `<script>
+    addEventListener('message',event=>{if(event.source===parent&&event.data?.type==='workbench:session'){window.owner=event.data.owner;window.sessionId=event.data.sessionId;}});
+  </script>`,
+  );
+  await page.evaluate(() => window.finishOpen('session-1'));
+  await child.waitForFunction(() => window.owner);
+  const send = (snapshot, sequence, owner) =>
+    child.evaluate(
+      ({ snapshot, sequence, owner }) => {
+        parent.postMessage(
+          {
+            protocol: 'workbench-quick-questions-v1',
+            owner: owner ?? window.owner,
+            sessionId: window.sessionId,
+            sequence,
+            snapshot,
+          },
+          location.origin,
+        );
+      },
+      { snapshot, sequence, owner },
+    );
+  const capsules = page.getByRole('region', { name: '推荐问法' });
+  await send(quickSnapshot, 1);
+  await expect(capsules.getByRole('button')).toHaveCount(4);
+  await expect(page.getByText('历史消息')).toBeVisible();
+  const text = await capsules.getByRole('button').first().textContent();
+  await capsules.getByRole('button').first().click();
+  await expect(page.getByLabel('public draft fixture')).toHaveValue(text);
+  assert.deepEqual(await page.evaluate(() => window.prompts), []);
+  const foreign = {
+    ...quickSnapshot,
+    rows: quickSnapshot.rows.map((row) => ({ ...row, name: '不可显示的旧对象' })),
+  };
+  await send(foreign, 0);
+  await send(foreign, 3, 'wrong-owner');
+  await page.evaluate(
+    (snapshot) =>
+      window.postMessage(
+        {
+          protocol: 'workbench-quick-questions-v1',
+          owner: 'owner-session-1',
+          sessionId: 'session-1',
+          sequence: 4,
+          snapshot,
+        },
+        location.origin,
+      ),
+    foreign,
+  );
+  await expect(capsules.getByRole('button').first()).toHaveText(text);
+  await send(null, 2);
+  await expect(capsules).toHaveCount(0);
+  await send(quickSnapshot, 1);
+  await expect(capsules).toHaveCount(0);
+  await send(quickSnapshot, 3);
+  await expect(capsules.getByRole('button')).toHaveCount(4);
+  await page.evaluate(() => window.bind('session-2'));
+  await expect(capsules).toHaveCount(0);
+  await expect(page.getByLabel('public draft fixture')).toHaveValue(text);
+  assert.deepEqual(errors, []);
+});
+
+test('HTML page context carries reporting display facts through the common capsule and draft path', async (t) => {
+  const { page, child, errors } = await fixture(t, 'reporting-fixture');
+  await page.evaluate(() => window.finishOpen('session-1'));
+  await child.waitForFunction(() => window.port);
+  const reporting = {
+    agent: 'sales-reporting',
+    scope: '客户甲／2026年12月',
+    selection: 'list',
+    rows: [
+      {
+        name: '客户甲的汤圆',
+        facts: {
+          quantity: { label: '确认计划量', display: '1,030 件' },
+          amount: { label: '提报金额', display: '¥83,000.00' },
+          adjustment: { label: '追减', display: '−15 件／−¥1,234.50' },
+        },
+      },
+    ],
+  };
+  await child.evaluate(
+    (snapshot) => window.request('quick-1', 'context', { quickQuestions: snapshot }),
+    reporting,
+  );
+  const capsules = page.getByRole('region', { name: '推荐问法' });
+  await expect(capsules.getByRole('button')).toHaveCount(4);
+  const texts = await capsules.getByRole('button').allTextContents();
+  assert.ok(texts.some((text) => text.includes('1,030 件')));
+  assert.ok(texts.some((text) => text.includes('−15 件／−¥1,234.50')));
+  await capsules.getByRole('button').first().click();
+  await expect(page.getByLabel('public draft fixture')).toHaveValue(texts[0]);
+  assert.deepEqual(await page.evaluate(() => window.prompts), []);
+  await child.evaluate(() => window.request('quick-2', 'context', null));
+  await expect(capsules).toHaveCount(0);
   assert.deepEqual(errors, []);
 });
