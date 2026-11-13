@@ -20,26 +20,14 @@ type NavIconKind =
 export function AgentWelcome({
   agent,
   onFill,
-  orderTemplate = false,
 }: {
   agent: ConversationPromptConfig;
   onFill: (prompt: string) => void;
-  orderTemplate?: boolean;
 }) {
   return (
-    <section
-      className={`gea-agent-welcome${orderTemplate ? ' gea-order-agent-welcome' : ''}`}
-      aria-label={agent.name}
-    >
+    <section className="gea-agent-welcome" aria-label={agent.name}>
       <div className="gea-agent-identity">
-        {orderTemplate ? (
-          <div className="gea-order-agent-robot" aria-hidden="true">
-            <i />
-            <span />
-          </div>
-        ) : (
-          <AgentAvatar className="gea-agent-avatar" />
-        )}
+        <AgentAvatar className="gea-agent-avatar" />
         <h2>{agent.name}</h2>
         <p className="gea-agent-intro">
           {agent.intro}
