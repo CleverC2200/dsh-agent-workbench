@@ -1157,6 +1157,8 @@ const workbenchPerformance = {
       title: '基地月度达成（本期 / 环比 / 同比）',
       groups: [
         { label: '基地', rowspan: true },
+        { label: '改单率 <2%', columns: ['本期', '环比', '同比'] },
+        { label: '作废率 <6%', columns: ['本期', '环比', '同比'] },
         { label: '满足率 >95%', columns: ['本期', '环比', '同比'] },
         { label: '准交率 >98.5%', columns: ['本期', '环比'] },
         { label: '60天+占比', columns: ['本期', '环比'] },
@@ -1247,6 +1249,8 @@ const workbenchPerformance = {
       title: '基地周度达成（本周 / 周环比 / 周同比）',
       groups: [
         { label: '基地', rowspan: true },
+        { label: '改单率 <2%', columns: ['本周', '周环比', '周同比'] },
+        { label: '作废率 <6%', columns: ['本周', '周环比', '周同比'] },
         { label: '满足率', columns: ['本周', '周环比', '周同比'] },
         { label: '准交率', columns: ['本周', '周环比'] },
         { label: '60天+占比', columns: ['本周', '周环比'] },
@@ -1799,6 +1803,9 @@ const workbenchPerformance = {
     },
   },
 };
+for (const table of ['monthly', 'weekly'])
+  workbenchPerformance['base-performance'][table].rows =
+    workbenchPerformance['base-performance'][table].rows.map((row) => [row[0], ...Array(6).fill('—'), ...row.slice(1)]);
 const workbenchBaseUnmetItems = [
   {
     title: '西南基地｜满足率 93.62%（未达标）+ 可发货天数 16.3天（超标 5.3天）',

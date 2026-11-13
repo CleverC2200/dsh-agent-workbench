@@ -83,7 +83,7 @@ export function skuAmendmentEventsSql({ stage = 'events', periods = false } = {}
   const invalid = `NULLIF(TRIM(cust_code),'') IS NULL
       OR NULLIF(TRIM(cust_order_no),'') IS NULL OR NULLIF(TRIM(material_code),'') IS NULL
       OR orderstatus IS NULL`;
-  const classified = `SELECT ${periods ? 'period_index,' : ''}cust_code,cust_order_no,material_code,cust_name,region_name,province_region_name,
+  const classified = `SELECT ${periods ? 'period_index,' : ''}cust_code,cust_order_no,material_code,cust_name,region_name,province_region_name,belong_base,
     requested_qty,effective_qty,
     ${amendmentReductionSql()} AS difference_qty,
     ${amendmentReductionSql()} AS changed_quantity,
@@ -91,7 +91,7 @@ export function skuAmendmentEventsSql({ stage = 'events', periods = false } = {}
     CASE WHEN ${invalid} THEN 1 ELSE 0 END AS invalid_line
     FROM (${lines}) amendment_lines`;
   const events = `SELECT ${periods ? 'period_index,' : ''}cust_code,cust_order_no,material_code,cust_name AS name,
-    region_name AS region,province_region_name AS province,
+    region_name AS region,province_region_name AS province,belong_base AS base,
     CASE WHEN invalid_line=0 THEN changed_quantity ELSE 0 END AS change_numerator,
     effective_qty AS change_denominator,invalid_denominator,invalid_line AS invalid_change,
     CASE WHEN invalid_line>0 THEN difference_qty ELSE 0 END AS unknown_quantity
@@ -101,9 +101,9 @@ export function skuAmendmentEventsSql({ stage = 'events', periods = false } = {}
   return selected;
 }
 
-export function aggregateAmendmentSql(events, customer = false, periods = false) {
+export function aggregateAmendmentSql(events, customer = false, periods = false, base = false) {
   return `SELECT ${periods ? 'period_index,' : ''}${customer ? 'region,province,cust_code AS customer,MAX(name) AS name' : "'2' AS kind,region,province"},
-    CASE WHEN SUM(invalid_change)=0 THEN SUM(change_numerator) END AS numerator,
+    ${base && !customer ? 'base,' : ''}CASE WHEN SUM(invalid_change)=0 THEN SUM(change_numerator) END AS numerator,
     CASE WHEN SUM(invalid_denominator)=0 THEN SUM(change_denominator) END AS denominator,
     ${
       customer
@@ -114,5 +114,5 @@ export function aggregateAmendmentSql(events, customer = false, periods = false)
     }
     SUM(unknown_quantity) AS unknown_quantity,
     COUNT(*) AS records,SUM(invalid_change) AS invalid
-    FROM (${events}) sku_events GROUP BY ${periods ? 'period_index,' : ''}region,province${customer ? ',cust_code' : ''}`;
+    FROM (${events}) sku_events GROUP BY ${periods ? 'period_index,' : ''}region,province${customer ? ',cust_code' : base ? ',base' : ''}`;
 }

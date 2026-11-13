@@ -41,8 +41,9 @@ export function applyPeriodAttributions(sections, mappings, sharedItems = []) {
         : (candidates?.size === 1 ? [...candidates][0] : null);
       if (section.id === 'ages') row.item = item;
       else if (!row.item) row.item = item;
-      row.director = Number(mapping?.names) === 1 ? mapping.director : null;
-      row.names = Number(mapping?.names) === 1 ? 1 : 0;
+      row.director = mapping?.director ?? null;
+      row.names = Number(mapping?.names ?? 0);
+      row.directors = mapping?.directors;
       row.periodAttribution = true;
     }
   }

@@ -2,7 +2,7 @@ import { metricSection, readySectionRows } from './metric-sections.mjs';
 import { metricDefinition } from './metric-definitions.mjs';
 import { workbenchMetricState } from './performance-rules.mjs';
 export const metricCalculationVersion =
-  typeof ORDER_WORKBENCH_METRIC_VERSION === 'undefined' ? 41 : ORDER_WORKBENCH_METRIC_VERSION;
+  typeof ORDER_WORKBENCH_METRIC_VERSION === 'undefined' ? 44 : ORDER_WORKBENCH_METRIC_VERSION;
 export function retainableWorkbenchFacts(facts) {
   return (
     facts?.attributionVersion === 2 &&

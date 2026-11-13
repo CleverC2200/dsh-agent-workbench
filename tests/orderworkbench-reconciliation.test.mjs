@@ -26,7 +26,7 @@ const stock = {
   invalid: 0,
 };
 
-test('base tables and cross comparisons omit Puyang and exclude it from current and historical base totals', () => {
+test('base and director tables omit Puyang and exclude it from current and historical base totals', () => {
   const period = (shortage) => {
     const value = {
       sections: [
@@ -81,8 +81,12 @@ test('base tables and cross comparisons omit Puyang and exclude it from current 
       ['郑州', '合计'],
     );
     const total = table.find((row) => row[0] === '合计');
-    assert.equal(total[1].raw, 90);
-    assert.equal(total[2], '+10.00%');
+    assert.equal(total[7].raw, 90);
+    assert.equal(total[8], '+10.00%');
+    const directors = presentation.performance['director-performance'][key];
+    assert.deepEqual(directors.map((row) => row[1]), ['郑州']);
+    assert.equal(directors[0][2].raw, 90);
+    assert.equal(directors[0][3], '+10.00%');
   }
   for (const key of ['base-category', 'base-category-days'])
     assert.deepEqual(
@@ -164,6 +168,7 @@ test('non-Zhengzhou responsibility is base-wide while shared Zhengzhou products 
 test('director historical comparisons use the matching period owner, not the latest mapping', () => {
   const make = (director) => {
     const period = stockPeriod([{ ...stock, base: '郑州', sku: 'shared' }]);
+    period.sections.push({ id: 'orders', status: 'ready', rows: [{ base: '郑州', sku: 'shared', demand: 1, shortage: 0, invalid: 0 }] });
     period.sections.push({
       id: 'directors',
       status: 'ready',
@@ -185,6 +190,58 @@ test('director historical comparisons use the matching period owner, not the lat
   assert.equal(row[10].text, '—');
   assert.match(row[10].title, /比较期.*stock/);
 });
+
+test('summary inventory without a SKU owner uses the unique period base owner outside Zhengzhou', () => {
+  const make = (owner, inventory = 100) => {
+    const period = stockPeriod([
+      { ...stock, inventory, base: '华东', sku: null, director: null, names: 0, summary: 1 },
+      { ...stock, base: '郑州', sku: null, director: null, names: 0, summary: 1 },
+    ]);
+    period.sections.push({ id: 'orders', status: 'ready', rows: [
+      { base: '华东', sku: 'ordered', demand: 1, shortage: 0, invalid: 0 },
+      { base: '郑州', sku: 'unmapped-order', demand: 1, shortage: 0, invalid: 0 },
+    ] });
+    period.sections.push({
+      id: 'directors',
+      status: 'ready',
+      rows: [
+        { base: '华东', sku: 'ordered', director: owner, names: 1 },
+        { base: '郑州', sku: 'other', director: '郑州负责人', names: 1 },
+      ],
+    });
+    period.metrics = computeWorkbenchMetrics(period);
+    return period;
+  };
+  const current = make('本期负责人'),
+    previous = make('上期负责人', 200);
+  const facts = {
+    selected: 'month',
+    periods: { month: current, week: current, previousMonth: previous },
+    directors: { rows: [] },
+  };
+  const presentation = workbenchPresentation(facts);
+  for (const key of ['month', 'week']) {
+    const table = presentation.performance['director-performance'][key];
+    assert.deepEqual(
+      table.filter((row) => row[1] === '华东').map((row) => row[0]),
+      ['本期负责人'],
+    );
+    assert.equal(table.find((row) => row[1] === '郑州')[0], '归属待补全');
+  }
+  const east = presentation.performance['director-performance'].month.find((row) => row[1] === '华东');
+  assert.equal(east[9].text, '10.00');
+  assert.equal(east[10].text, '—', 'historical ownership must not fall back to the current owner');
+  current.sections
+    .find((section) => section.id === 'directors')
+    .rows.push({ base: '华东', sku: 'conflict', director: '另一负责人', names: 1 });
+  assert.equal(
+    workbenchPresentation(facts).performance['director-performance'].month.find(
+      (row) => row[1] === '华东',
+    )[0],
+    '归属待补全',
+  );
+});
+
 test('base and item formulas retain documented weights instead of fitting the screenshot', () => {
   const p = stockPeriod([{ ...stock, transfer_plan: 620 }]);
   assert.equal(stockDaily(p.sections[0].rows[0], 'base'), 20);

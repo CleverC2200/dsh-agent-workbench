@@ -31,6 +31,10 @@ test('red status uses unrounded current values and leaves unknown inputs unmarke
   assert.equal(performanceCurrentCell('周转天数', 12.5, '12.50', '郑州').state, 'good');
   assert.equal(performanceCurrentCell('周转天数', 11, '11.00', '华东').state, 'bad');
   assert.equal(performanceCurrentCell('周转天数', null, '—'), '—');
+  assert.equal(performanceCurrentCell('改单率', 1.999, '2.00%').state, 'good');
+  assert.equal(performanceCurrentCell('改单率', 2, '2.00%').state, 'bad');
+  assert.equal(performanceCurrentCell('作废率', 5.999, '6.00%').state, 'good');
+  assert.equal(performanceCurrentCell('作废率', 6, '6.00%').state, 'bad');
 });
 test('highest age excludes totals and unknowns, preserves ties and never colors comparisons', () => {
   const age = (v) => performanceCurrentCell('货龄（>60天库存占比）', v, `${v}%`);
@@ -107,7 +111,10 @@ test('all six live tables carry current-value states and separate monthly and we
         {
           id: 'orders',
           status: 'ready',
-          rows: [{ base: '郑州', sku: 'a', item: '甲', demand: 100, shortage: 6, invalid: 0 }],
+          rows: [
+            { base: '郑州', sku: 'a', item: '甲', demand: 100, shortage: 6, invalid: 0 },
+            { base: '华东', sku: 'b', item: '乙', demand: 100, shortage: 0, invalid: 0 },
+          ],
         },
         {
           id: 'ontime',
@@ -146,7 +153,7 @@ test('all six live tables carry current-value states and separate monthly and we
   const v = workbenchPresentation(facts);
   assert.equal(v.cards.find((c) => c.key === '周转天数').status, '健康');
   for (const [dimension, ageMonth, ageWeek] of [
-    ['base-performance', 6, 6],
+    ['base-performance', 12, 12],
     ['director-performance', 7, 7],
     ['item-performance', 7, 6],
   ]) {
@@ -171,9 +178,9 @@ test('all six live tables carry current-value states and separate monthly and we
     );
   }
   const base = v.performance['base-performance'].month;
-  assert.equal(base.find((r) => r[0] === '郑州')[1].state, 'bad');
-  assert.equal(base.find((r) => r[0] === '郑州')[4].state, 'bad');
-  assert.equal(base.find((r) => r[0] === '郑州')[8].state, 'good');
-  assert.equal(base.find((r) => r[0] === '华东')[8].state, 'bad');
+  assert.equal(base.find((r) => r[0] === '郑州')[7].state, 'bad');
+  assert.equal(base.find((r) => r[0] === '郑州')[10].state, 'bad');
+  assert.equal(base.find((r) => r[0] === '郑州')[14].state, 'good');
+  assert.equal(base.find((r) => r[0] === '华东')[14].state, 'bad');
   assert.equal(v.performance['item-performance'].month.find((r) => r[0] === '甲')[4].state, 'bad');
 });

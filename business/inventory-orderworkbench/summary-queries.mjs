@@ -138,11 +138,12 @@ export function addWorkbenchSummaryQueries(config) {
     const item = name === 'ages' ? mappedItem : "COALESCE(NULLIF(q.item,'')," + mappedItem + ')';
     const director = 'CASE WHEN own.names=1 THEN own.director ELSE NULL END';
     const known = 'CASE WHEN own.names=1 THEN 1 ELSE 0 END';
-    const group = ['q.base', 'q.category', item, director, known];
+    const sharedSku = "CASE WHEN q.base='郑州' AND own.names>1 THEN q.sku ELSE NULL END";
+    const group = ['q.base', 'q.category', item, director, known, sharedSku];
     const fields = original.resultColumns.map((field) => {
       if (field === 'base' || field === 'category') return 'q.' + field + ' AS ' + field;
       if (field === 'item') return item + ' AS item';
-      if (field === 'sku') return 'NULL AS sku';
+      if (field === 'sku') return sharedSku + ' AS sku';
       if (
         name === 'stock' &&
         ['available', 'inventory', 'sales_plan', 'transfer_plan'].includes(field)
@@ -197,7 +198,7 @@ export function addWorkbenchSummaryQueries(config) {
       sql,
       original,
       [...original.resultColumns, 'director', 'names', 'summary', ...extra],
-      ['base', 'category', 'item', 'director', 'names'],
+      ['base', 'category', 'item', 'director', 'names', 'sku'],
     );
     if (config.queries['workbench.ontime.periods.summary'])
       addPeriodSummaryQuery(config, name, fields, group, [
@@ -213,7 +214,7 @@ export function addWorkbenchSummaryQueries(config) {
         rowPacketSql(
           sql,
           [...original.resultColumns, 'director', 'names', 'summary', ...extra],
-          ['base', 'category', 'item', 'director', 'names'],
+          ['base', 'category', 'item', 'director', 'names', 'sku'],
         ).replace(/ ORDER BY packet_index$/, ''),
         original,
         ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],

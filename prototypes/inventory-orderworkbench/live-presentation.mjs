@@ -106,14 +106,15 @@ function summaryRows(periods, field, directorMap, loading = false) {
   const source = [
     ...rows(selected, 'orders'),
     ...rows(selected, 'ontime'),
-    ...rows(selected, 'stock'),
-    ...rows(selected, 'ages').filter(
+    ...(field === 'base' ? rows(selected, 'changes') : []),
+    ...(field === 'director' ? [] : rows(selected, 'stock')),
+    ...(field === 'director' ? [] : rows(selected, 'ages').filter(
       (row) =>
         Number(row.active_records ?? 0) > 0 ||
         Number(row.stock_qty) !== 0 ||
         Number(row.invalid) !== 0,
-    ),
-  ].filter((row) => field !== 'base' || workbenchBaseIncluded(row.base));
+    )),
+  ].filter((row) => !['base', 'director'].includes(field) || workbenchBaseIncluded(row.base));
   let groups;
   const ownerSources = new Map(),
     ownerNames = new Map();
@@ -147,6 +148,12 @@ function summaryRows(periods, field, directorMap, loading = false) {
       if (!ownerNames.has(id)) ownerNames.set(id, directorNames(periodOwners(key), row));
       return ownerNames.get(id);
     }
+    if (Number(mapping?.names) !== 1 && row.base !== '郑州')
+      return directorNames(periodOwners(key), row);
+    if (row.base === '郑州' && row.periodAttribution && row.directors)
+      return directorNames([row], row);
+    if (row.base === '郑州' && Number(mapping?.names) !== 1 && row.sku)
+      return directorNames(periodOwners(key), row);
     return mapping?.names === 1 && mapping.director
       ? mapping.director
           .split(/[,，、]/)
@@ -183,8 +190,9 @@ function summaryRows(periods, field, directorMap, loading = false) {
     if (!indexedPeriods.has(key)) {
       const buckets = new Map(groups.map((group) => [group.id, []]));
       for (const section of period.sections) {
+        const allRows = section.parts ? section.parts.flatMap((part) => part.rows) : section.rows;
         const sectionRows = new Map(groups.map((group) => [group.id, []]));
-        for (const row of section.rows) {
+        for (const row of allRows) {
           const ids =
             field === 'director'
               ? directors(row, key).map((name) => JSON.stringify([name, dimensionValue(row.base)]))
@@ -197,13 +205,20 @@ function summaryRows(periods, field, directorMap, loading = false) {
             section.id === 'ontime' &&
             ['郑州', '郑州基地'].includes(group.labels[1]) &&
             group.labels[0] === '庞丽娟'
-              ? section.rows.filter((row) => dimensionValue(row.base) === group.labels[1])
+              ? allRows.filter((row) => dimensionValue(row.base) === group.labels[1])
               : typeof group.id === 'symbol'
                 ? field === 'base'
-                  ? section.rows.filter((row) => workbenchBaseIncluded(row.base))
-                  : section.rows
+                  ? allRows.filter((row) => workbenchBaseIncluded(row.base))
+                  : allRows
                 : sectionRows.get(group.id);
-          buckets.get(group.id).push({ ...section, rows: groupRows });
+          const included = new Set(groupRows);
+          buckets.get(group.id).push({
+            ...section,
+            rows: groupRows,
+            ...(section.parts ? { parts: section.parts.map((part) => ({
+              ...part, rows: part.rows.filter((row) => included.has(row)),
+            })) } : {}),
+          });
         }
       }
       indexedPeriods.set(
@@ -300,6 +315,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
         ];
       return [
         ...group.labels,
+        ...(field === 'base' ? [...cells('改单率'), ...cells('作废率')] : []),
         ...cells('订单满足率'),
         ...cells('准交率').slice(0, 2),
         ...cells('货龄（>60天库存占比）').slice(0, 2),
@@ -308,7 +324,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
     });
     highlightAgePeak(
       tables[key],
-      field === 'item' ? (key === 'month' ? 7 : 6) : field === 'director' ? 7 : 6,
+      field === 'item' ? (key === 'month' ? 7 : 6) : field === 'director' ? 7 : 12,
     );
   }
   return tables;

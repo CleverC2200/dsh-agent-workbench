@@ -1,7 +1,7 @@
 import {
-  changesSql,
-  cancellationChangesSql,
-  amendmentChangesSql,
+  baseChangesSql,
+  baseCancellationChangesSql,
+  baseAmendmentChangesSql,
   customersSql,
   ordersSql,
   ontimeSql,
@@ -29,6 +29,19 @@ const attributionSources = `SELECT belong_base,material_code,director,product_it
           WHERE the_date>=:gea_p1 AND the_date<:gea_p2
         UNION ALL SELECT belong_base,new_material_code AS material_code,NULL AS director,pinxiang AS product_item,fromorderno_month AS attribution_date FROM agents_order_execute_isontime_mi
           WHERE fromorderno_month>=:gea_p1 AND fromorderno_month<:gea_p2`;
+
+const directorSku = (base, sku) => `CASE WHEN ${base}='郑州' THEN ${sku} ELSE '' END`;
+const directorSources = ['agents_scm_execute_detail_d', 'agents_scm_execute_detail_hourly_d']
+  .flatMap((table) => [
+    `SELECT DISTINCT belong_base,material_code,NULLIF(TRIM(director),'') AS director
+      FROM ${table} WHERE belong_base='郑州' AND NULLIF(TRIM(director),'') IS NOT NULL`,
+    `SELECT DISTINCT belong_base,'' AS material_code,NULLIF(TRIM(director),'') AS director
+      FROM ${table} WHERE belong_base<>'郑州' AND NULLIF(TRIM(director),'') IS NOT NULL`,
+  ]).join(' UNION ');
+const directorAttributions = `SELECT DISTINCT d.belong_base,d.material_code,g.director,d.product_item
+  FROM (${attributionSources}) d LEFT JOIN (${directorSources}) g
+    ON g.belong_base=d.belong_base AND g.material_code=${directorSku('d.belong_base', 'd.material_code')}
+  UNION SELECT belong_base,material_code,director,NULL AS product_item FROM (${directorSources}) global_directors`;
 
 const dictionary = `SELECT material_code AS sku,
   CASE WHEN COUNT(DISTINCT product_categ_name)=1 THEN MAX(product_categ_name) END AS category,
@@ -176,7 +189,7 @@ export const workbenchQueries = {
     scoped: true,
   },
   changes: {
-    keys: ['kind', 'region', 'province'],
+    keys: ['kind', 'region', 'province', 'base'],
     columns: [
       'kind',
       'region',
@@ -189,8 +202,9 @@ export const workbenchQueries = {
       'sample_denominator',
       'sample_records',
       'unknown_quantity',
+      'base',
     ],
-    sql: changesSql,
+    sql: baseChangesSql,
     scoped: true,
   },
   customers: {
@@ -332,9 +346,8 @@ export const workbenchQueries = {
       COUNT(DISTINCT NULLIF(TRIM(d.product_item),'')) AS items
       FROM (SELECT DISTINCT d.belong_base,d.material_code,
         NULLIF(TRIM(d.director),'') AS director,NULLIF(TRIM(d.product_item),'') AS product_item
-        FROM (${attributionSources}) d
+        FROM (${directorAttributions}) d
         WHERE NULLIF(TRIM(d.belong_base),'') IS NOT NULL AND NULLIF(TRIM(d.material_code),'') IS NOT NULL
-        AND d.attribution_date>=:gea_p1 AND d.attribution_date<:gea_p2
       ) d
       GROUP BY d.belong_base,d.material_code`,
   },
@@ -346,10 +359,9 @@ export const workbenchQueries = {
       director_value,item_value FROM (
         SELECT DISTINCT d.belong_base AS base,d.material_code AS sku,
           NULLIF(TRIM(d.director),'') AS director_value,NULLIF(TRIM(d.product_item),'') AS item_value
-        FROM (${attributionSources}) d
+        FROM (${directorAttributions}) d
         WHERE (:gea_p900='' OR d.belong_base=:gea_p900)
           AND NULLIF(TRIM(d.belong_base),'') IS NOT NULL AND NULLIF(TRIM(d.material_code),'') IS NOT NULL
-          AND d.attribution_date>=:gea_p1 AND d.attribution_date<:gea_p2
       ) members`,
   },
   items: {
@@ -376,18 +388,18 @@ export function addWorkbenchQueries(config) {
     ...workbenchQueries,
     'changes.cancellation': {
       ...workbenchQueries.changes,
-      sql: cancellationChangesSql,
+      sql: baseCancellationChangesSql,
     },
     'changes.amendment': {
       ...workbenchQueries.changes,
-      sql: amendmentChangesSql,
+      sql: baseAmendmentChangesSql,
     },
     ...Object.fromEntries(
       [0, 1].map((partition) => [
         'changes.cancellation.partition' + partition,
         {
           ...workbenchQueries.changes,
-          sql: cancellationPartitionSql(cancellationChangesSql, partition),
+          sql: cancellationPartitionSql(baseCancellationChangesSql, partition),
         },
       ]),
     ),
@@ -496,6 +508,8 @@ export function addWorkbenchQueries(config) {
 
 export const workbenchQueryParts = {
   attributionSources,
+  directorSources,
+  directorSku,
   dictionary,
   stockPlans,
   stockBatches,

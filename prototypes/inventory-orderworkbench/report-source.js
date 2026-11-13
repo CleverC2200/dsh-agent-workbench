@@ -187,7 +187,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
               unpackRowPackets(
                 result.rows,
                 columns,
-                ['period_index', 'kind', 'region', 'province'],
+                ['period_index', ...workbenchQueries.changes.keys],
                 100000,
                 workbenchPeriodPacketSize,
               ),
@@ -230,8 +230,8 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
                 ].resultColumns,
               ],
               name.startsWith('changes')
-                ? ['period_index', 'kind', 'region', 'province']
-                : ['period_index', 'base', 'category', 'item', 'director', 'names'],
+                ? ['period_index', ...workbenchQueries.changes.keys]
+                : ['period_index', 'base', 'category', 'item', 'director', 'names', 'sku'],
               100000,
               workbenchPeriodPacketSize,
             ),
@@ -425,7 +425,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
                   : summarized
                     ? name === 'ontime'
                       ? ['base', 'invalid', 'ontime']
-                      : ['base', 'category', 'item', 'director', 'names']
+                      : ['base', 'category', 'item', 'director', 'names', 'sku']
                     : definition.keys,
                 requiredColumns:
                   packeted || summarized ? config.queries[id].resultColumns : definition.columns,
@@ -446,7 +446,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
             name === 'directors'
               ? ['base', 'sku', 'director_value', 'item_value']
               : name === 'stock'
-                ? ['base', 'category', 'item', 'director', 'names']
+                ? ['base', 'category', 'item', 'director', 'names', 'sku']
                 : definition.keys,
           )
         : result.rows;

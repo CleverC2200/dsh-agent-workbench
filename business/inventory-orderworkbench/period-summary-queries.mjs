@@ -59,16 +59,20 @@ const attributionSource = parts.attributionSources
     'fromorderno_month>=:gea_p1 AND fromorderno_month<:gea_p2',
     ownerWindow('fromorderno_month'),
   );
-const ownerCtes = `period_members AS (
+const ownerCtes = `director_members AS (${parts.directorSources}),director_owners AS (
+  SELECT belong_base AS base,material_code AS sku,MIN(director) AS director,
+    COUNT(DISTINCT director) AS names FROM director_members GROUP BY belong_base,material_code
+),period_members AS (
   SELECT DISTINCT rw.period_index,d.belong_base AS base,d.material_code AS sku,
     NULLIF(TRIM(d.director),'') AS director,NULLIF(TRIM(d.product_item),'') AS item
   FROM (${attributionSource}) d INNER JOIN report_windows rw
     ON rw.enabled=TRUE AND d.attribution_date>=rw.start_date AND d.attribution_date<rw.end_date
   WHERE (:gea_p900='' OR d.belong_base=:gea_p900) AND NULLIF(TRIM(d.material_code),'') IS NOT NULL
 ),period_owners AS (
-  SELECT period_index,base,sku,MIN(director) AS director,COUNT(DISTINCT director) AS names,
-    CASE WHEN COUNT(DISTINCT item)=1 THEN MAX(item) END AS item,COUNT(DISTINCT item) AS items
-  FROM period_members WHERE NULLIF(TRIM(base),'') IS NOT NULL GROUP BY period_index,base,sku
+  SELECT p.period_index,p.base,p.sku,MAX(g.director) AS director,COALESCE(MAX(g.names),0) AS names,
+    CASE WHEN COUNT(DISTINCT p.item)=1 THEN MAX(p.item) END AS item,COUNT(DISTINCT p.item) AS items
+  FROM period_members p LEFT JOIN director_owners g ON g.base=p.base AND g.sku=${parts.directorSku('p.base', 'p.sku')}
+  WHERE NULLIF(TRIM(p.base),'') IS NOT NULL GROUP BY p.period_index,p.base,p.sku
 ),period_items AS (
   SELECT period_index,sku,CASE WHEN COUNT(DISTINCT item)=1 THEN MAX(item) END AS item,
     COUNT(DISTINCT item) AS names FROM period_members GROUP BY period_index,sku
@@ -267,14 +271,14 @@ export function addPeriodSummaryQuery(config, name, fields, group, columns) {
       ['.cancellation.partition0', '1', 0],
       ['.cancellation.partition1', '1', 1],
     ]) {
-      const change = periodChangesSql(kind);
+      const change = periodChangesSql(kind, { base: true });
       const sql = `WITH ${windowCte}${change.ctes ? ',' + change.ctes : ''} ${change.sql}`;
       register(
         'workbench.changes' + suffix + '.periods.summary',
         rowPacketSql(
           partition === undefined ? sql : cancellationPartitionSql(sql, partition),
           columns,
-          ['period_index', 'kind', 'region', 'province'],
+          ['period_index', ...workbenchQueries.changes.keys],
           workbenchPeriodPacketSize,
         ),
         ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],
@@ -295,15 +299,16 @@ export function addPeriodSummaryQuery(config, name, fields, group, columns) {
   const packets = rowPacketSql(
     sql,
     periodColumns,
-    ['period_index', 'base', 'category', 'item', 'director', 'names'],
+    ['period_index', 'base', 'category', 'item', 'director', 'names', 'sku'],
     workbenchPeriodPacketSize,
   );
   if (name === 'orders') {
     const metadata = `SELECT period_index,base,sku,MIN(director_value) OVER (PARTITION BY period_index,base,sku) AS director,director_value,item_value FROM (
       SELECT DISTINCT rw.period_index,d.belong_base AS base,d.material_code AS sku,
-        NULLIF(TRIM(d.director),'') AS director_value,NULLIF(TRIM(d.product_item),'') AS item_value
+        g.director AS director_value,NULLIF(TRIM(d.product_item),'') AS item_value
       FROM (${attributionSource}) d INNER JOIN report_windows rw
         ON rw.enabled=TRUE AND d.attribution_date>=rw.director_start AND d.attribution_date<rw.end_date
+      LEFT JOIN director_members g ON g.belong_base=d.belong_base AND g.material_code=${parts.directorSku('d.belong_base', 'd.material_code')}
       WHERE (:gea_p900='' OR d.belong_base=:gea_p900) AND NULLIF(TRIM(d.belong_base),'') IS NOT NULL AND NULLIF(TRIM(d.material_code),'') IS NOT NULL
     ) members`;
     const directorPackets = rowPacketSql(

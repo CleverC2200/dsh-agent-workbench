@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cancellationChangesSql } from '../business/inventory-orderworkbench/document-queries.mjs';
+import { cancellationChangesSql, baseCancellationChangesSql } from '../business/inventory-orderworkbench/document-queries.mjs';
 import { cancellationPartitionSql } from '../business/inventory-orderworkbench/cancellation-partitions.mjs';
 import { mergeCancellationPartitions } from '../prototypes/inventory-orderworkbench/change-partitions.mjs';
 import { addWorkbenchQueries } from '../business/inventory-orderworkbench/queries.mjs';
@@ -40,7 +40,7 @@ test('national cancellation first reads retain more than the gateway default 50 
       .map((row) => ({ ...row }));
   };
   try {
-    const expected = run(cancellationChangesSql, params);
+    const expected = run(baseCancellationChangesSql, params);
     for (let round = 0; round < 2; round++) {
       const client = createQueryClient(config, async (request) => {
         let rows = run(request.sql, request.parameters);

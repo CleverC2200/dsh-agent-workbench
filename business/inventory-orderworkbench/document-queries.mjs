@@ -54,9 +54,12 @@ export const amendmentClassifiedSql = skuAmendmentEventsSql({
 export const cancellationChangesSql = aggregateCancellationSql(cancellationEvents);
 export const amendmentChangesSql = aggregateAmendmentSql(amendmentEventsSql);
 export const changesSql = cancellationChangesSql + ' UNION ALL ' + amendmentChangesSql;
+export const baseCancellationChangesSql = aggregateCancellationSql(cancellationEvents, { base: true });
+export const baseAmendmentChangesSql = aggregateAmendmentSql(amendmentEventsSql, false, false, true);
+export const baseChangesSql = baseCancellationChangesSql + ' UNION ALL ' + baseAmendmentChangesSql;
 export const customersSql = aggregateAmendmentSql(amendmentEventsSql, true);
 
-export function periodChangesSql(kind) {
+export function periodChangesSql(kind, { base = false } = {}) {
   const periodCancellations = cancellationEventsSql({
     dailySource,
     dailyOnly,
@@ -65,8 +68,9 @@ export function periodChangesSql(kind) {
   const cancellation = aggregateCancellationSql('period_cancel_events', {
     periods: true,
     sourceName: true,
+    base,
   });
-  const amendment = aggregateAmendmentSql(skuAmendmentEventsSql({ periods: true }), false, true);
+  const amendment = aggregateAmendmentSql(skuAmendmentEventsSql({ periods: true }), false, true, base);
   return {
     ctes: kind === '2' ? '' : `period_cancel_events AS (${periodCancellations})`,
     sql:

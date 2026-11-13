@@ -53,6 +53,7 @@ test('single-period independent query preserves the explicit dates, quantity gra
         rows: [
           {
             kind: '2',
+            base: '郑州',
             region: '全国',
             province: '省区',
             numerator: 10,

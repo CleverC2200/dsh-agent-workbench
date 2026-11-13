@@ -24,6 +24,7 @@ const { loadWorkbenchReport } = await import(
   'data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64')
 );
 const row = (kind) => ({
+  base: '郑州',
   kind,
   region: '华中',
   province: '河南',
