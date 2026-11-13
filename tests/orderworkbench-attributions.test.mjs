@@ -63,11 +63,13 @@ test('directors ignore business dates while item attribution stays period-scoped
     assert.equal(historical.find((r) => r.sku === 'A').names, 5);
     assert.equal(current.find((r) => r.base === '华东' && r.sku === 'A').names, 5);
     assert.equal(
-      read('2026-11-01', '2026-12-01').find((r) => r.base === '郑州' && r.sku === '10007240').director,
+      read('2026-11-01', '2026-12-01').find((r) => r.base === '郑州' && r.sku === '10007240')
+        .director,
       '刘成胜',
     );
     assert.equal(
-      read('2027-01-01', '2027-02-01').find((r) => r.base === '郑州' && r.sku === '10007240').director,
+      read('2027-01-01', '2027-02-01').find((r) => r.base === '郑州' && r.sku === '10007240')
+        .director,
       '刘成胜',
     );
     assert.equal(current.find((r) => r.sku === 'B').names, 5);

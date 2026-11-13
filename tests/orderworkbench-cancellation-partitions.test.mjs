@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cancellationChangesSql, baseCancellationChangesSql } from '../business/inventory-orderworkbench/document-queries.mjs';
+import {
+  cancellationChangesSql,
+  baseCancellationChangesSql,
+} from '../business/inventory-orderworkbench/document-queries.mjs';
 import { cancellationPartitionSql } from '../business/inventory-orderworkbench/cancellation-partitions.mjs';
 import { mergeCancellationPartitions } from '../prototypes/inventory-orderworkbench/change-partitions.mjs';
 import { addWorkbenchQueries } from '../business/inventory-orderworkbench/queries.mjs';

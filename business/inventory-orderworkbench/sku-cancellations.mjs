@@ -200,7 +200,10 @@ export function cancellationEventsSql({ dailySource, dailyOnly, periods = false 
     .trim();
 }
 
-export function aggregateCancellationSql(events, { periods = false, sourceName = false, base = false } = {}) {
+export function aggregateCancellationSql(
+  events,
+  { periods = false, sourceName = false, base = false } = {},
+) {
   return `SELECT ${periods ? 'period_index,' : ''}'1' AS kind,region,province,
     ${base ? 'base,' : ''}CASE WHEN SUM(invalid_cancel)=0 THEN SUM(cancel_numerator) END AS numerator,
     CASE WHEN SUM(invalid_cancel)=0 THEN SUM(cancel_denominator) END AS denominator,

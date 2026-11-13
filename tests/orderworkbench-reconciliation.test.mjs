@@ -84,7 +84,10 @@ test('base and director tables omit Puyang and exclude it from current and histo
     assert.equal(total[7].raw, 90);
     assert.equal(total[8], '+10.00%');
     const directors = presentation.performance['director-performance'][key];
-    assert.deepEqual(directors.map((row) => row[1]), ['郑州']);
+    assert.deepEqual(
+      directors.map((row) => row[1]),
+      ['郑州'],
+    );
     assert.equal(directors[0][2].raw, 90);
     assert.equal(directors[0][3], '+10.00%');
   }
@@ -168,7 +171,11 @@ test('non-Zhengzhou responsibility is base-wide while shared Zhengzhou products 
 test('director historical comparisons use the matching period owner, not the latest mapping', () => {
   const make = (director) => {
     const period = stockPeriod([{ ...stock, base: '郑州', sku: 'shared' }]);
-    period.sections.push({ id: 'orders', status: 'ready', rows: [{ base: '郑州', sku: 'shared', demand: 1, shortage: 0, invalid: 0 }] });
+    period.sections.push({
+      id: 'orders',
+      status: 'ready',
+      rows: [{ base: '郑州', sku: 'shared', demand: 1, shortage: 0, invalid: 0 }],
+    });
     period.sections.push({
       id: 'directors',
       status: 'ready',
@@ -197,10 +204,14 @@ test('summary inventory without a SKU owner uses the unique period base owner ou
       { ...stock, inventory, base: '华东', sku: null, director: null, names: 0, summary: 1 },
       { ...stock, base: '郑州', sku: null, director: null, names: 0, summary: 1 },
     ]);
-    period.sections.push({ id: 'orders', status: 'ready', rows: [
-      { base: '华东', sku: 'ordered', demand: 1, shortage: 0, invalid: 0 },
-      { base: '郑州', sku: 'unmapped-order', demand: 1, shortage: 0, invalid: 0 },
-    ] });
+    period.sections.push({
+      id: 'orders',
+      status: 'ready',
+      rows: [
+        { base: '华东', sku: 'ordered', demand: 1, shortage: 0, invalid: 0 },
+        { base: '郑州', sku: 'unmapped-order', demand: 1, shortage: 0, invalid: 0 },
+      ],
+    });
     period.sections.push({
       id: 'directors',
       status: 'ready',
@@ -228,7 +239,9 @@ test('summary inventory without a SKU owner uses the unique period base owner ou
     );
     assert.equal(table.find((row) => row[1] === '郑州')[0], '归属待补全');
   }
-  const east = presentation.performance['director-performance'].month.find((row) => row[1] === '华东');
+  const east = presentation.performance['director-performance'].month.find(
+    (row) => row[1] === '华东',
+  );
   assert.equal(east[9].text, '10.00');
   assert.equal(east[10].text, '—', 'historical ownership must not fall back to the current owner');
   current.sections

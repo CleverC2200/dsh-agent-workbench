@@ -12,28 +12,60 @@ test('director rows require orders while inventory-only known and unknown owners
     { base: '郑州', sku: 'ordered', director: '订单负责人', names: 1 },
     { base: '郑州', sku: 'stock-only', director: '仅库存负责人', names: 1 },
   ];
-  const period = { sections: [
-    { id: 'orders', status: 'ready', rows: [
-      { base: '郑州', sku: 'ordered', demand: 10, shortage: 0, invalid: 0 },
-    ] },
-    { id: 'stock', status: 'ready', rows: [
-      { base: '郑州', sku: 'stock-only', inventory: 100, invalid: 0 },
-      { base: '郑州', sku: 'unmapped-stock-only', inventory: 200, invalid: 0 },
-    ] },
-    { id: 'ages', status: 'ready', rows: [
-      { base: '华南', sku: 'age-only', stock_qty: 10, aged_qty: 1, active_records: 1, invalid: 0 },
-    ] },
-    { id: 'directors', status: 'ready', rows: mappings },
-  ] };
+  const period = {
+    sections: [
+      {
+        id: 'orders',
+        status: 'ready',
+        rows: [{ base: '郑州', sku: 'ordered', demand: 10, shortage: 0, invalid: 0 }],
+      },
+      {
+        id: 'stock',
+        status: 'ready',
+        rows: [
+          { base: '郑州', sku: 'stock-only', inventory: 100, invalid: 0 },
+          { base: '郑州', sku: 'unmapped-stock-only', inventory: 200, invalid: 0 },
+        ],
+      },
+      {
+        id: 'ages',
+        status: 'ready',
+        rows: [
+          {
+            base: '华南',
+            sku: 'age-only',
+            stock_qty: 10,
+            aged_qty: 1,
+            active_records: 1,
+            invalid: 0,
+          },
+        ],
+      },
+      { id: 'directors', status: 'ready', rows: mappings },
+    ],
+  };
   period.metrics = computeWorkbenchMetrics(period);
   const facts = { selected: 'month', periods: { month: period, week: period } };
   const before = workbenchPresentation(facts);
   for (const key of ['month', 'week'])
-    assert.deepEqual(before.performance['director-performance'][key].map(r => r[0]), ['订单负责人']);
-  assert.ok(before.performance['base-performance'].month.some(r => r[0] === '华南'));
-  period.sections[0].rows.push({ base: '郑州', sku: 'unmapped-order', demand: 1, shortage: 0, invalid: 0 });
+    assert.deepEqual(
+      before.performance['director-performance'][key].map((r) => r[0]),
+      ['订单负责人'],
+    );
+  assert.ok(before.performance['base-performance'].month.some((r) => r[0] === '华南'));
+  period.sections[0].rows.push({
+    base: '郑州',
+    sku: 'unmapped-order',
+    demand: 1,
+    shortage: 0,
+    invalid: 0,
+  });
   period.metrics = computeWorkbenchMetrics(period);
-  assert.ok(workbenchPresentation(facts).performance['director-performance'].month.some(r => r[0] === '归属待补全'));
+  assert.ok(
+    workbenchPresentation(facts).performance['director-performance'].month.some(
+      (r) => r[0] === '归属待补全',
+    ),
+  );
 });
 
 test('raw and SQL summaries retain both Zhengzhou owners without combining different shared products or duplicating national quantities', () => {
@@ -129,9 +161,21 @@ test('raw and SQL summaries retain both Zhengzhou owners without combining diffe
     applyPeriodAttributions(raw, mappings);
     const present = (sections) => {
       const period = {
-        sections: [...sections,
-          { id: 'orders', status: 'ready', rows: stocks.map(({ base, sku }) => ({ base, sku, demand: 1, shortage: 0, invalid: 0 })) },
-          { id: 'directors', status: 'ready', rows: mappings }],
+        sections: [
+          ...sections,
+          {
+            id: 'orders',
+            status: 'ready',
+            rows: stocks.map(({ base, sku }) => ({
+              base,
+              sku,
+              demand: 1,
+              shortage: 0,
+              invalid: 0,
+            })),
+          },
+          { id: 'directors', status: 'ready', rows: mappings },
+        ],
       };
       period.metrics = computeWorkbenchMetrics(period);
       return workbenchPresentation({ selected: 'month', periods: { month: period, week: period } });

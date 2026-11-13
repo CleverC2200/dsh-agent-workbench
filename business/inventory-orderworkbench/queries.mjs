@@ -37,7 +37,8 @@ const directorSources = ['agents_scm_execute_detail_d', 'agents_scm_execute_deta
       FROM ${table} WHERE belong_base='郑州' AND NULLIF(TRIM(director),'') IS NOT NULL`,
     `SELECT DISTINCT belong_base,'' AS material_code,NULLIF(TRIM(director),'') AS director
       FROM ${table} WHERE belong_base<>'郑州' AND NULLIF(TRIM(director),'') IS NOT NULL`,
-  ]).join(' UNION ');
+  ])
+  .join(' UNION ');
 const directorAttributions = `SELECT DISTINCT d.belong_base,d.material_code,g.director,d.product_item
   FROM (${attributionSources}) d LEFT JOIN (${directorSources}) g
     ON g.belong_base=d.belong_base AND g.material_code=${directorSku('d.belong_base', 'd.material_code')}
