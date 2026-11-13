@@ -241,7 +241,7 @@ test('dimension and evidence caches reuse only the same data snapshot and view o
   const facts = factsFor([{ base: '华东', item: '水饺', demand: 100, shortage: 1, invalid: 0 }]);
   const options = { dimension: 'base-performance' };
   const first = read(facts, options);
-  const missingCell = first.performance['base-performance'].month[0][4];
+  const missingCell = first.performance['base-performance'].month[0][10];
   assert.equal(missingCell.text, '—');
   assert.match(missingCell.title, /源数据|计算|分组/);
   assert.equal(read(facts, { ...options }), first);

@@ -10,7 +10,7 @@ import {
   collectDirectorMembers,
 } from '../prototypes/inventory-orderworkbench/period-attributions.mjs';
 
-test('attributions remain scoped to the period and base/SKU, reject ambiguity and use business items', () => {
+test('directors ignore business dates while item attribution stays period-scoped and ambiguous mappings remain unknown', () => {
   const db = new DatabaseSync(':memory:');
   db.aggregate('ARRAY_AGG', {
     start: () => '[]',
@@ -27,11 +27,13 @@ test('attributions remain scoped to the period and base/SKU, reject ambiguity an
         ('华东','A','旧负责人','水饺','2026-09-10'),
         ('华东','A','新负责人','休闲','2026-10-10'),
         ('华东','B','甲','水饺','2026-10-10'),
-        ('华南','A','南方负责人','汤圆','2026-10-10');
+        ('华南','A','南方负责人','汤圆','2026-10-10'),
+        ('郑州','10007240','刘成胜','预制食材','2026-10-20');
       INSERT INTO agents_scm_execute_detail_hourly_d VALUES
         ('华东','B','乙','汤圆','2026-10-11'),
         ('华东','C','小时负责人','面点','2026-10-11');
-      INSERT INTO agents_scm_stock_detail_d VALUES ('华东','D','馄饨','2026-10-01');
+      INSERT INTO agents_scm_stock_detail_d VALUES ('华东','D','馄饨','2026-10-01'),
+        ('郑州','10007240','预制食材','2026-11-12');
       INSERT INTO agents_order_execute_isontime_mi VALUES ('华东','E','粽子','2026-10-02');
       ALTER TABLE agents_scm_execute_detail_d ADD COLUMN order_close_time;
       ALTER TABLE agents_scm_execute_detail_d ADD COLUMN executeorderno;
@@ -56,11 +58,21 @@ test('attributions remain scoped to the period and base/SKU, reject ambiguity an
     assert.deepEqual(scalars(collected), scalars(current));
     assert.deepEqual(
       collected.find((row) => row.base === '华东' && row.sku === 'B').directors.sort(),
-      ['乙', '甲'].sort(),
+      ['乙', '甲', '小时负责人', '新负责人', '旧负责人'].sort(),
     );
-    assert.equal(historical.find((r) => r.sku === 'A').director, '旧负责人');
-    assert.equal(current.find((r) => r.base === '华东' && r.sku === 'A').director, '新负责人');
-    assert.equal(current.find((r) => r.sku === 'B').names, 2);
+    assert.equal(historical.find((r) => r.sku === 'A').names, 5);
+    assert.equal(current.find((r) => r.base === '华东' && r.sku === 'A').names, 5);
+    assert.equal(
+      read('2026-11-01', '2026-12-01').find((r) => r.base === '郑州' && r.sku === '10007240')
+        .director,
+      '刘成胜',
+    );
+    assert.equal(
+      read('2027-01-01', '2027-02-01').find((r) => r.base === '郑州' && r.sku === '10007240')
+        .director,
+      '刘成胜',
+    );
+    assert.equal(current.find((r) => r.sku === 'B').names, 5);
     assert.equal(current.find((r) => r.sku === 'B').item, null);
     const sections = [
       {
@@ -82,7 +94,7 @@ test('attributions remain scoped to the period and base/SKU, reject ambiguity an
     );
     assert.deepEqual(
       sections[0].rows.map((r) => r.names),
-      [1, 0, 1, 0, 0, 0],
+      [5, 5, 5, 5, 5, 0],
     );
     assert.deepEqual(
       sections[0].rows.map((r) => [r.stock_qty, r.aged_qty]),
@@ -98,7 +110,7 @@ test('attributions remain scoped to the period and base/SKU, reject ambiguity an
       },
     ];
     applyPeriodAttributions(previous, historical);
-    assert.equal(previous[0].rows[0].director, '旧负责人');
+    assert.equal(previous[0].rows[0].names, 5);
     assert.equal(previous[0].rows[1].director, null);
     const globalItems = db
       .prepare(workbenchQueries.items.sql)

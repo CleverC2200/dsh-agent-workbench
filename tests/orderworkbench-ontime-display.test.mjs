@@ -26,7 +26,7 @@ function present(onTime, late, pending) {
     period,
     view,
     card: view.cards.find((r) => r.key === '准交率'),
-    cell: view.performance['base-performance'].week[0][4],
+    cell: view.performance['base-performance'].week[0][10],
   };
 }
 

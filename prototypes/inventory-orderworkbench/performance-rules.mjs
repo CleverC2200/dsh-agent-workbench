@@ -8,7 +8,7 @@ export const metricLimits = {
 };
 const stockLimits = { national: 12.5, 郑州: 12.5, other: 11 };
 export const shippableDaysTarget = `全国<${stockLimits.national}天（郑州≤${stockLimits.郑州}天，其他基地<${stockLimits.other}天）`;
-export const performanceStyleVersion = 7;
+export const performanceStyleVersion = 13;
 
 export function shippableDaysState(value, base = '') {
   base = normalizeWorkbenchBase(base);
@@ -66,9 +66,11 @@ export function performanceCurrentCell(name, value, text, base = '') {
       ? value <= metricLimits.订单满足率.healthy
       : name === '准交率'
         ? value <= metricLimits.准交率.healthy
-        : name === '周转天数'
-          ? shippableDaysState(value, base) === '严重'
-          : false;
+        : name === '改单率' || name === '作废率'
+          ? value >= metricLimits[name].healthy
+          : name === '周转天数'
+            ? shippableDaysState(value, base) === '严重'
+            : false;
   return { text, state: bad ? 'bad' : 'good', raw: value };
 }
 

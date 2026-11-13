@@ -87,14 +87,14 @@ export function skuAmendmentEventsSql({
   const invalid = `NULLIF(TRIM(cust_code),'') IS NULL
       OR NULLIF(TRIM(cust_order_no),'') IS NULL OR NULLIF(TRIM(material_code),'') IS NULL
       OR orderstatus IS NULL`;
-  const classified = `SELECT ${periods ? 'period_index,' : ''}${dimensions ? "CASE WHEN :gea_p900<>'' THEN :gea_p900 ELSE belong_base END AS base," : ''}cust_code,cust_order_no,material_code,cust_name,region_name,province_region_name,
+  const classified = `SELECT ${periods ? 'period_index,' : ''}${dimensions ? "CASE WHEN :gea_p900<>'' THEN :gea_p900 ELSE belong_base END AS base," : 'belong_base AS base,'}cust_code,cust_order_no,material_code,cust_name,region_name,province_region_name,
     requested_qty,effective_qty,
     ${amendmentReductionSql()} AS difference_qty,
     ${amendmentReductionSql()} AS changed_quantity,
     CASE WHEN ${invalid} THEN 1 ELSE 0 END AS invalid_denominator,
     CASE WHEN ${invalid} THEN 1 ELSE 0 END AS invalid_line
     FROM (${lines}) amendment_lines`;
-  const events = `SELECT ${periods ? 'period_index,' : ''}${dimensions ? 'base,' : ''}cust_code,cust_order_no,material_code,cust_name AS name,
+  const events = `SELECT ${periods ? 'period_index,' : ''}base,cust_code,cust_order_no,material_code,cust_name AS name,
     region_name AS region,province_region_name AS province,
     CASE WHEN invalid_line=0 THEN changed_quantity ELSE 0 END AS change_numerator,
     effective_qty AS change_denominator,invalid_denominator,invalid_line AS invalid_change,
@@ -106,6 +106,7 @@ export function skuAmendmentEventsSql({
 }
 
 export function aggregateAmendmentSql(events, customer = false, periods = false, dimensions = []) {
+  if (typeof dimensions === 'boolean') dimensions = dimensions ? ['base'] : [];
   const grouped = dimensions.length ? dimensions.join(',') + ',' : '';
   return `SELECT ${periods ? 'period_index,' : ''}${grouped}${customer ? 'region,province,cust_code AS customer,MAX(name) AS name' : "'2' AS kind,region,province"},
     CASE WHEN SUM(invalid_change)=0 THEN SUM(change_numerator) END AS numerator,

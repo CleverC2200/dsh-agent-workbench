@@ -168,7 +168,7 @@ export function cancellationEventsSql({
   const inPeriod = (start, end) => `(q.business_time>=${start} AND q.business_time<${end})
     OR (q.source_rows>1 AND q.first_business_time<${end} AND q.last_business_time>=${start})
     OR (q.business_time IS NULL AND (q.header_addtime<${end} OR q.header_addtime IS NULL))`;
-  const cohort = `SELECT ${periods ? 'rw.period_index,' : ''}${dimensions ? "CASE WHEN :gea_p900<>'' THEN :gea_p900 ELSE q.belong_base END AS base," : ''}q.cust_code,q.cust_order_no,q.executeorderno,
+  const cohort = `SELECT ${periods ? 'rw.period_index,' : ''}${dimensions ? "CASE WHEN :gea_p900<>'' THEN :gea_p900 ELSE q.belong_base END AS base," : 'q.belong_base AS base,'}q.cust_code,q.cust_order_no,q.executeorderno,
     q.executeorderlineno,q.material_code,q.cust_name AS name,q.region_name AS region,q.province_region_name AS province,
     q.header_addtime AS created,q.latestsendcardate AS latest_departure,q.orderstatus AS status,
     q.cancelled,q.business_time,q.locked,q.effective_qty,q.source_rows,q.short_transfer,q.scope_pickup_point
@@ -185,7 +185,7 @@ export function cancellationEventsSql({
       AND (q.source_rows<>1 OR q.orderstatus IS NULL OR q.orderstatus<>90 OR q.cancelled IS NULL
         OR q.header_addtime IS NULL OR q.cancelled<q.header_addtime
         OR q.cancelled>q.header_addtime + INTERVAL '12' HOUR)`;
-  const classified = `SELECT ${periods ? 'period_index,' : ''}${dimensions ? 'base,' : ''}cust_code,cust_order_no,executeorderno,executeorderlineno,
+  const classified = `SELECT ${periods ? 'period_index,' : ''}base,cust_code,cust_order_no,executeorderno,executeorderlineno,
     material_code,name,region,province,effective_qty,
     CASE WHEN status=90 AND cancelled>=locked AND cancelled>created + INTERVAL '12' HOUR
       THEN effective_qty ELSE 0 END AS cancel_numerator,
@@ -211,7 +211,7 @@ export function cancellationEventsSql({
       classified.replace('FROM (' + cohort + ') cancellation_cohort', 'FROM cancellation_cohort') +
       ') '
     : 'WITH cancellation_source AS (' + source + ') ';
-  return `${dimensionPrefix}SELECT ${periods ? 'period_index,' : ''}${dimensions ? 'base,' : ''}cust_code,cust_order_no,executeorderno,executeorderlineno,
+  return `${dimensionPrefix}SELECT ${periods ? 'period_index,' : ''}base,cust_code,cust_order_no,executeorderno,executeorderlineno,
     material_code,name,region,province,cancel_numerator,effective_qty AS cancel_denominator,invalid_cancel
     FROM ${dimensions ? 'classified_cancellations' : '(' + classified + ') classified_cancellations'}`
     .replace(/\s+/g, ' ')
@@ -220,7 +220,7 @@ export function cancellationEventsSql({
 
 export function aggregateCancellationSql(
   events,
-  { periods = false, sourceName = false, dimensions = [] } = {},
+  { periods = false, sourceName = false, base = false, dimensions = base ? ['base'] : [] } = {},
 ) {
   const grouped = dimensions.length ? dimensions.join(',') + ',' : '';
   return `SELECT ${periods ? 'period_index,' : ''}${grouped}'1' AS kind,region,province,

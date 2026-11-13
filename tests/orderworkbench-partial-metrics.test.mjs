@@ -21,6 +21,7 @@ const make = () => ({
       id: 'changes',
       status: 'ready',
       rows: ['1', '2'].map((kind) => ({
+        base: '郑州',
         kind,
         numerator: null,
         denominator: kind === '2' ? 100 : null,
@@ -195,8 +196,8 @@ test('cards show metric health while footers, tooltips, tables and comparisons r
   assert.equal(workbenchPresentation(facts).cards[0].status, '严重');
   assert.match(result.cards[2].comparison[0], /10.00%\*/);
   assert.match(result.cards[2].comparisonNotes[0], /不代表全量/);
-  assert.match(result.performance['base-performance'].month[0][1].text, /\*/);
-  assert.match(result.performance['base-performance'].month[0][1].title, /6\/10/);
+  assert.match(result.performance['base-performance'].month[0][7].text, /\*/);
+  assert.match(result.performance['base-performance'].month[0][7].title, /6\/10/);
   assert.match(JSON.stringify(workbenchEvidence(facts)), /可判定样本/);
   assert.equal(metricDelta(p.metrics, {}, '作废率'), '—');
 });

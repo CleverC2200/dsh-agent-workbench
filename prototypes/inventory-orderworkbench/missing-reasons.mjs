@@ -13,7 +13,7 @@ export function workbenchCellMissingReason(
   const label = group + ' ' + header;
   if (['未映射', '归属待补全'].includes(row[0]) && /基地|品项|总监/.test(header)) {
     if (dimension === 'director-performance' && /总监/.test(header))
-      return '源数据未提供或归属不唯一：当前周期 agents_scm_execute_detail_hourly_d.director 无完整责任名单；郑州按基地＋material_code匹配，其他基地按基地匹配，未用其他周期负责人替代。';
+      return '现有同步数据未提供或归属不唯一：agents_scm_execute_detail_d.director、agents_scm_execute_detail_hourly_d.director 未提供完整一致的责任名单；负责人映射不受业务统计日期限制。郑州按基地＋material_code匹配，其他基地按基地匹配；这不代表独立配置表也缺失。';
     if (dimension.startsWith('item'))
       return '源数据未提供或归属冲突：同快照 agents_scm_stock_detail_d.product_item、同周期 agents_order_execute_isontime_mi.pinxiang 未能唯一匹配该SKU；物料组不等于业务品项，未猜测归属。';
     return '归属待补全：当前记录的 belong_base 为空，无法确定基地归属；该组有库存等可计算数据时仍展示指标及环比，记录仍保留在合计内。';

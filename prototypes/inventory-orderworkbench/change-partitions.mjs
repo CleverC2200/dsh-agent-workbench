@@ -22,7 +22,7 @@ export function mergeCancellationPartitions(partitions) {
           (row[field] === undefined || row[field] === '' || !Number.isFinite(Number(row[field])))
         )
           throw Error('INVALID_CANCELLATION_PARTITION_QUANTITY');
-      const key = JSON.stringify([row.period_index ?? null, row.kind, row.region, row.province]);
+      const key = JSON.stringify([row.period_index ?? null, row.kind, row.region, row.province, row.base ?? null]);
       if (!groups.has(key)) {
         groups.set(key, { ...row });
         continue;

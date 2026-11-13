@@ -220,6 +220,7 @@ test('a failed cancellation query does not hide the independently readable amend
         rows: [
           {
             kind: '2',
+            base: '郑州',
             region: '一区',
             province: '一省',
             numerator: 10,
@@ -273,6 +274,7 @@ test('a failed cancellation query does not hide the independently readable amend
           ...facts.periods.month.sections[0].rows[0],
           period_index: index,
           kind: queryId.includes('.cancellation') ? '1' : '2',
+          base: '郑州',
         }));
       const tuples = data.map((row, index) =>
         [index + 1, ...columns.map((key) => row[key])]

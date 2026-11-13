@@ -51,7 +51,22 @@ const unmatched = () => [
 const period = (rows) => ({
   start: '2026-10-19',
   end: '2026-10-26',
-  sections: [{ id: 'stock', status: 'ready', rows }],
+  sections: [
+    { id: 'stock', status: 'ready', rows },
+    {
+      id: 'orders',
+      status: 'ready',
+      rows: rows.map(({ base, director, names, summary }) => ({
+        base,
+        director,
+        names,
+        summary,
+        demand: 1,
+        shortage: 0,
+        invalid: 0,
+      })),
+    },
+  ],
 });
 const days = (rows, scope = 'base') =>
   computeWorkbenchMetrics(period(rows), undefined, { turnoverScope: scope })['周转天数'];

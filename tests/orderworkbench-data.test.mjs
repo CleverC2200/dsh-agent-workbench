@@ -1018,8 +1018,8 @@ test('presentation fills both period tables, actual categories and shared direct
   });
   assert.equal(different.cards[0].value, '10.00');
   assert.equal(different.cards[0].footer, '本周作废率 3.00%');
-  assert.equal(presentation.performance['base-performance'].month[0].length, 11);
-  assert.equal(presentation.performance['base-performance'].week[0].length, 10);
+  assert.equal(presentation.performance['base-performance'].month[0].length, 17);
+  assert.equal(presentation.performance['base-performance'].week[0].length, 16);
   assert.equal(presentation.performance['item-performance'].month[0].length, 11);
   assert.equal(presentation.performance['item-performance'].week[0].length, 8);
   assert.equal(presentation.performance['director-performance'].month.length, 2);

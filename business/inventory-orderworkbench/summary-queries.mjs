@@ -110,7 +110,7 @@ export function addWorkbenchSummaryQueries(config) {
       'workbench.changes.' + name + '.groups',
       sql,
       original,
-      ['base', 'item', ...original.resultColumns],
+      ['base', 'item', ...original.resultColumns.filter((field) => field !== 'base')],
       ['base', 'item', 'kind', 'region', 'province'],
     );
     const fieldsByDimension = {
@@ -136,7 +136,11 @@ export function addWorkbenchSummaryQueries(config) {
       name === 'amendment'
         ? aggregateAmendmentSql(dimensionRows, false, false, dimensionKeys)
         : aggregateCancellationSql(dimensionRows, { dimensions: dimensionKeys });
-    const dimensionColumns = [...dimensionKeys, ...original.resultColumns, 'summary'];
+    const dimensionColumns = [
+      ...dimensionKeys,
+      ...original.resultColumns.filter((field) => !dimensionKeys.includes(field)),
+      'summary',
+    ];
     const dimensionSql = `SELECT ${dimensionColumns.filter((field) => field !== 'summary').join(',')},1 AS summary FROM (${dimensionAggregate}) mapped_dimensions`;
     const dimensionSpec = {
       ...original,
@@ -266,19 +270,21 @@ export function addWorkbenchSummaryQueries(config) {
     const item = name === 'ages' ? mappedItem : "COALESCE(NULLIF(q.item,'')," + mappedItem + ')';
     const director = 'CASE WHEN own.names=1 THEN own.director ELSE NULL END';
     const known = 'CASE WHEN own.names=1 THEN 1 ELSE 0 END';
+    const sharedSku = "CASE WHEN q.base='郑州' AND own.names>1 THEN q.sku ELSE NULL END";
     const group = [
       'q.base',
       'q.category',
       item,
       director,
       known,
+      sharedSku,
       ...(name === 'orders.customers' ? ['q.customer', 'q.region', 'q.province'] : []),
     ];
     const fields = original.resultColumns.map((field) => {
       if (field === 'base' || field === 'category') return 'q.' + field + ' AS ' + field;
       if (['customer', 'region', 'province'].includes(field)) return 'q.' + field + ' AS ' + field;
       if (field === 'item') return item + ' AS item';
-      if (field === 'sku') return 'NULL AS sku';
+      if (field === 'sku') return sharedSku + ' AS sku';
       if (
         name === 'stock' &&
         ['available', 'inventory', 'sales_plan', 'transfer_plan'].includes(field)
@@ -339,6 +345,7 @@ export function addWorkbenchSummaryQueries(config) {
         'item',
         'director',
         'names',
+        'sku',
         ...(name === 'orders.customers' ? ['customer', 'region', 'province'] : []),
       ],
     );
@@ -356,7 +363,7 @@ export function addWorkbenchSummaryQueries(config) {
         rowPacketSql(
           sql,
           [...original.resultColumns, 'director', 'names', 'summary', ...extra],
-          ['base', 'category', 'item', 'director', 'names'],
+          ['base', 'category', 'item', 'director', 'names', 'sku'],
         ).replace(/ ORDER BY packet_index$/, ''),
         original,
         ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],
