@@ -1047,8 +1047,8 @@ export function mountFramePresentation(
                       onFill={(text) => inputActions?.setDraft(text)}
                     />
                   )}
-                  {renderSlot('conversation.session', {})}
                   <QuickQuestions onFill={(text) => inputActions?.setDraft(text)} />
+                  {renderSlot('conversation.session', {})}
                 </>
               );
             },
