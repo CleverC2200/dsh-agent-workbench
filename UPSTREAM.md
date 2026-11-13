@@ -1,9 +1,10 @@
 # Source provenance
 
+Maintenance is in [CleverC2200/dsh-agent-workbench](https://github.com/CleverC2200/dsh-agent-workbench). The former [GitLab source](http://100.100.6.191:20656/chenyonghao/dsh-agent-workbench.git) remains a read-only provenance source. The origin snapshots below do not select the current SDK; use the registered task input and supported Core configuration.
+
 The former layout adapter originated from `deepseek-ai/deepseek-harness`, `packages/client/ui-layout/src/client`, local commit `7ef3457e9d` on `codex/dsh-chat-surface`. That copied shell, layout service, stores, column geometry and document-title implementation have exited this plugin's source and generated output.
 
 The current adapter targets unmodified official commit `5badb15009ae1756c3afe0ae0cef1faafc290ccc`. Official DSH owns AppFrame, sidebar, Conversation, workspace navigation and theme presentation. Workbench uses their public extension slots and provides its own page directory and package HTML presentation. The MIT license is retained in LICENSE. Business resource provenance remains in each resource directory.
-
 
 ## Formal static controls attribution
 
