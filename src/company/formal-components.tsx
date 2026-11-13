@@ -21,10 +21,12 @@ export function AgentWelcome({
   agent,
   onFill,
   orderTemplate = false,
+  children,
 }: {
   agent: ConversationPromptConfig;
   onFill: (prompt: string) => void;
   orderTemplate?: boolean;
+  children?: React.ReactNode;
 }) {
   return (
     <section
@@ -46,6 +48,7 @@ export function AgentWelcome({
           <b>{agent.boundary}</b>
         </p>
       </div>
+      {children}
       {agent.prompts.length > 0 && (
         <div className="gea-agent-block gea-agent-prompts">
           <h3>你可以这样问</h3>

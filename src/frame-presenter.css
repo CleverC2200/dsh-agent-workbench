@@ -306,6 +306,9 @@ html[data-platform='darwin'] .agent-workbench-document-chrome {
   gap: 8px;
   margin-top: 8px;
 }
+.gea-agent-welcome .gea-quick-questions {
+  padding-inline: 0;
+}
 .gea-quick-questions button {
   box-sizing: border-box;
   max-width: 100%;

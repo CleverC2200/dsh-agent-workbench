@@ -1040,14 +1040,17 @@ export function mountFramePresentation(
               );
               return (
                 <>
-                  {blank && (
+                  {blank ? (
                     <CompanyWelcome
                       page={page}
                       language={language}
                       onFill={(text) => inputActions?.setDraft(text)}
-                    />
+                    >
+                      <QuickQuestions onFill={(text) => inputActions?.setDraft(text)} />
+                    </CompanyWelcome>
+                  ) : (
+                    <QuickQuestions onFill={(text) => inputActions?.setDraft(text)} />
                   )}
-                  <QuickQuestions onFill={(text) => inputActions?.setDraft(text)} />
                   {renderSlot('conversation.session', {})}
                 </>
               );

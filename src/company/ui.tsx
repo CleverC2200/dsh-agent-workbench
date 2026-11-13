@@ -87,10 +87,12 @@ export function CompanyWelcome({
   page,
   onFill,
   language = 'zh',
+  children,
 }: {
   page?: string;
   onFill?: (text: string) => void;
   language?: string;
+  children?: React.ReactNode;
 }) {
   const agent = page ? (agents[page] ?? prompts.homeConversation) : undefined;
   const copy = language === 'en' ? en : zh;
@@ -99,7 +101,9 @@ export function CompanyWelcome({
       agent={agent}
       orderTemplate={page === 'inventory-orderworkbench' || page === 'inventory-orderfulfillment'}
       onFill={(prompt) => onFill?.(prompt)}
-    />
+    >
+      {children}
+    </AgentWelcome>
   ) : (
     <GeaHomeHero
       copy={{
