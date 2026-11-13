@@ -1962,7 +1962,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'p',
             {},
-            '业务数据由月主计划授权读取。产品关系调整保留在本地版本，历史继承、冲突口径和正式保存待接入。',
+            '业务数据由月主计划授权读取。产品关系调整保留在本地版本，自身历史与替换品历史按系数合计。冲突口径和正式保存待接入。',
           ),
           h(
             'button',
@@ -2438,7 +2438,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'p',
               { className: 'dc-muted' },
-              '以下为最新统计月份的源记录。替换参考量＝同基地老品历史量×替换系数；净重为每个计量单位的重量。缺值保留为空，不按0计算。',
+              '以下为最新统计月份的源记录。历史合计量＝同基地当前SKU自身历史量＋替换品历史量×替换系数；净重为每个计量单位的重量。缺值保留为空，不按0计算。',
             ),
             table(productSourceColumns, selectedProduct.sourceDetails),
           ),
