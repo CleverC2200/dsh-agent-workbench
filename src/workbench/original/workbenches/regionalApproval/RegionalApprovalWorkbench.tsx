@@ -157,6 +157,7 @@ export type RegionalApprovalContextEntity = {
 };
 
 export type RegionalApprovalWorkbenchContext = {
+  quickQuestions: import('../../../../company/quick-questions.ts').QuickQuestionSnapshot | null;
   analysisSummary?: ReturnType<typeof useRegionalApprovalQuery>['analysisSummary'];
   view: 'regional-approval';
   scope: {
@@ -1559,6 +1560,86 @@ const RegionalApprovalWorkbench: React.FC<{
     t,
   ]);
 
+  const quickQuestions = useMemo<RegionalApprovalWorkbenchContext['quickQuestions']>(() => {
+    if (
+      skuReviewOpen ||
+      liveEvidence.queryState !== 'success' ||
+      liveEvidence.source !== 'gea-user-session' ||
+      !liveQuery.selectedPeriodMonth
+    )
+      return null;
+    const selected = new Set(selectedLiveTableRowIds.map(String));
+    const visible: RegionalApprovalLiveTableRow[] = [];
+    const visit = (rows: RegionalApprovalLiveTableRow[]) => {
+      for (const row of rows) {
+        if (row.kind !== 'plan') continue;
+        visible.push(row);
+        if (row.children && expandedLiveGroups.includes(row.tableRowId)) visit(row.children);
+      }
+    };
+    visit(liveTableRows);
+    const selectionActive = selectedRowIds.length > 0;
+    const rows = (
+      selectionActive ? visible.filter((row) => selected.has(row.tableRowId)) : visible
+    ).flatMap((tableRow) => {
+      if (tableRow.kind !== 'plan') return [];
+      const row = tableRow.plan;
+      const name = projectRegionalApprovalLiveDimension(
+        row,
+        tableRow.displayDimension ?? (tableRow.childPlan ? 'customer' : dimension),
+      ).name;
+      if (!name) return [];
+      const progress =
+        orderType === 'M'
+          ? regionalApprovalLiveProgress(row).amount
+          : row.amountProgress == null
+            ? undefined
+            : Number(row.amountProgress);
+      return [
+        {
+          name,
+          facts: {
+            progress: {
+              label: t(
+                orderType === 'M'
+                  ? 'common.correction.submissionProgress'
+                  : 'common.correction.progress',
+              ),
+              display: formattedProgress(progress),
+            },
+            plan: {
+              label: t('common.correction.plan'),
+              display: correctionDisplay(row.mPlanAmount, 'money').display,
+            },
+            target: {
+              label: t('common.correction.target'),
+              display: correctionDisplay(row.targetAmount, 'money').display,
+            },
+          },
+        },
+      ];
+    });
+    return rows.length
+      ? {
+          agent: 'sales-approval',
+          scope: `${liveQuery.selectedPeriodMonth}/${orderType}/${dimension}`,
+          selection: selectionActive ? 'selected' : 'list',
+          rows: rows.slice(0, 200),
+        }
+      : null;
+  }, [
+    skuReviewOpen,
+    liveEvidence,
+    liveQuery.selectedPeriodMonth,
+    selectedLiveTableRowIds,
+    selectedRowIds,
+    expandedLiveGroups,
+    liveTableRows,
+    dimension,
+    orderType,
+    t,
+  ]);
+
   useEffect(() => {
     const selectedAuthority =
       selectedLiveRows.length === 1
@@ -1576,6 +1657,7 @@ const RegionalApprovalWorkbench: React.FC<{
       {
         ...(automaticAnalysisEnabled ? { analysisSummary: scopeSummary } : {}),
         view: 'regional-approval',
+        quickQuestions,
         ...(skuReviewOpen ? { skuReview: skuReviewSnapshot } : {}),
         scope: {
           dimension,
@@ -1616,6 +1698,7 @@ const RegionalApprovalWorkbench: React.FC<{
     );
   }, [
     skuReviewOpen,
+    quickQuestions,
     skuReviewSnapshot,
     automaticAnalysisEnabled,
     scopeSummary,

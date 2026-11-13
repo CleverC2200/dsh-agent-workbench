@@ -95,7 +95,7 @@ test('multiple plans for one customer sum plans but count historical facts once'
   );
 });
 
-test('whole piece group allocation preserves its rounded total without changing correction allocation', () => {
+test('whole piece group allocation preserves its rounded total for monthly and correction plans', () => {
   const sources = [
     source('a', 'v1', '1', '0', '0'),
     source('b', 'v2', '1', '0', '0'),
@@ -111,7 +111,7 @@ test('whole piece group allocation preserves its rounded total without changing 
   const correction = m.allocateGroupSkuQuantity(sources, '1001', '1', 'region');
   assert.deepEqual(
     Object.values(correction).map((value) => value['1001']),
-    ['0', '0', '0'],
+    ['1', '0', '0'],
   );
 });
 
@@ -137,6 +137,6 @@ test('approval rounds stored and untouched monthly quantities before creating ex
   assert.equal(Number(restored['1001']), 1.4);
   assert.deepEqual(
     m.salesPlanApprovalDraftValues(detail, { ...row, orderType: 'Z' }, 'region', [], {}),
-    {},
+    { 1001: '0.400', 1002: '-0.400' },
   );
 });

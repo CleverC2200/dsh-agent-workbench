@@ -39,6 +39,7 @@ type VisibleWorkbenchContext = {
   format: 'gea-workbench-visible-v1';
   sequence: number;
   view: 'regional-approval';
+  quickQuestions: RegionalApprovalWorkbenchContext['quickQuestions'];
   scope: {
     month: string;
     planType: string;
@@ -98,6 +99,7 @@ function visibleWorkbenchContext(
     format: 'gea-workbench-visible-v1',
     sequence,
     view: 'regional-approval',
+    quickQuestions: context.quickQuestions,
     scope: {
       month: context.scope.month,
       planType: context.scope.planType,
@@ -414,6 +416,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
     };
   }, []);
   const contextSequence = useRef(0);
+  const questionSequence = useRef(0);
   const contextRef = useRef('');
   const [conversationContext, setConversationContext] = useState<VisibleWorkbenchContext>();
   const [workbenchToolCall, setWorkbenchToolCall] = useState<{
@@ -452,7 +455,22 @@ export function WorkbenchPage({ t }: { t: Translate }) {
   }, []);
   useEffect(() => {
     if (!sessionId) return;
-
+    window.parent.postMessage(
+      {
+        protocol: 'workbench-quick-questions-v1',
+        owner,
+        sessionId,
+        sequence: ++questionSequence.current,
+        snapshot:
+          status?.authenticated && !apiLogOpen
+            ? (conversationContext?.quickQuestions ?? null)
+            : null,
+      },
+      window.location.origin,
+    );
+  }, [conversationContext, sessionId, owner, status?.authenticated, apiLogOpen]);
+  useEffect(() => {
+    if (!sessionId) return;
     if (!conversationContext) return;
     let controller = new AbortController();
     const sync = () => {

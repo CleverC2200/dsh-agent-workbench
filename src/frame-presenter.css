@@ -294,3 +294,36 @@ html[data-platform='darwin'] .agent-workbench-document-chrome {
 .agent-workbench-document-chrome-shared .gea-conversation-toolbar {
   background: transparent;
 }
+
+.gea-quick-questions {
+  padding: 12px 20px;
+  color: var(--workbench-muted);
+  font-size: 12px;
+}
+.gea-quick-questions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.gea-quick-questions button {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 7px 12px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 18px;
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  font: inherit;
+  line-height: 1.5;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.gea-quick-questions button:hover {
+  background: var(--workbench-hover);
+}
+.gea-quick-questions button:focus-visible {
+  outline: 2px solid var(--workbench-selected-text);
+  outline-offset: 2px;
+}

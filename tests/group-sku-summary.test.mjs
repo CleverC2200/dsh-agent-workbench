@@ -50,6 +50,8 @@ test('同一 SKU 跨计划按各自单价精确汇总，待确认数量同步计
       qty: '5',
       baseAmount: '22',
       amount: '56.00',
+      adjustmentQty: '3',
+      adjustmentAmount: '34.00',
     },
   ]);
   assert.equal(summarizeGroupSkus(sources, undefined, { p1: { 1001: '4' } })[0].amount, '76.00');
@@ -139,4 +141,25 @@ test('按截图比例拆分90件得到46和44，半件向上取整可使合计�
       p2: { 1001: '5' },
     },
   );
+});
+
+test('纠偏按月计划差额计算数量与金额，按各计划价格分别汇总', () => {
+  const sources = [
+    {
+      plan: { ...plan('p1', 'v1'), orderType: 'Z' },
+      skus: [{ ...sku('v1', '100.000', '8'), corrBaseQty: '90.000', amt: '720.00' }],
+    },
+    {
+      plan: { ...plan('p2', 'v2'), orderType: 'Z' },
+      skus: [{ ...sku('v2', '30.000', '12'), corrBaseQty: '40.000', amt: '480.00' }],
+    },
+  ];
+  const row = summarizeGroupSkus(sources, 'region')[0];
+  assert.equal(row.qty, '130');
+  assert.equal(Number(row.adjustmentQty), 0);
+  assert.equal(Number(row.adjustmentAmount), -40);
+  const edited = summarizeGroupSkus(sources, 'region', { p1: { 1001: '101.600' } })[0];
+  assert.equal(edited.qty, '132');
+  assert.equal(Number(edited.adjustmentQty), 2);
+  assert.equal(Number(edited.adjustmentAmount), -24);
 });

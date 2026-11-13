@@ -12,7 +12,7 @@ const { outputFiles } = await build({
   platform: 'node',
   format: 'esm',
 });
-const { correctionDecision, correctionLine } = await import(
+const { correctionDecision, correctionLine, correctionConfirmedQuantity } = await import(
   'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
 );
 
@@ -47,4 +47,21 @@ test('correction uses a fixed monthly baseline and absolute node decisions inclu
   assert.throws(() => correctionLine(sku, '-31'));
   assert.equal(correctionLine({ qty: '0', price: '1', amt: '0' }, '0').participates, false);
   assert.equal(correctionLine(sku, '-30').participates, true);
+});
+
+test('纠偏确认量继承上游追加追减，但本节点显式确认量和零值优先', () => {
+  const sku = { qty: '100', price: '8', adjAddQty: '2', adjCutQty: '0' };
+  assert.equal(correctionConfirmedQuantity(sku, 1, 'Y', 'region'), '102');
+  assert.equal(
+    correctionConfirmedQuantity({ ...sku, regionConfirmedQty: '0.000' }, 1, 'Y', 'region'),
+    '0',
+  );
+  assert.equal(
+    correctionConfirmedQuantity({ ...sku, regionConfirmedQty: '108.000' }, 2, 'Y', 'province'),
+    '108',
+  );
+  assert.equal(
+    correctionConfirmedQuantity({ ...sku, provinceConfirmedQty: '90.000' }, 1, 'Y', 'region'),
+    '102',
+  );
 });

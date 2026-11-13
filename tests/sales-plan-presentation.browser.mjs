@@ -16,9 +16,11 @@ import i18next from 'i18next';
 import '@arco-design/web-react/dist/css/arco.css';
 import './src/workbench/workbench.css';
 import './theme/tokens.css';
+import './src/frame-presenter.css';
 import zh from './src/workbench/original/zh-CN.json';
 import {BackendHttpError} from './src/workbench/original/http-error.ts';
 import Workbench from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalWorkbench.tsx';
+import {QuickQuestions,QuickQuestionsContext} from './src/company/quick-questions-view.tsx';
 import { InlineSkuDetails } from './src/workbench/original/workbenches/regionalApproval/InlineSkuDetails.tsx';
 import { WorkbenchHostProvider } from './src/workbench/original/bridge.ts';
 const i18n=i18next.createInstance();
@@ -144,7 +146,7 @@ const forbidden=async()=>{writes.push('write');throw Error('LOCAL_RENDER_ACTION_
 const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
-  list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1}}},
+  list:{invoke:async(q)=>{if(comparison==='loading'||comparison==='quick-loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1}}},
   detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{readCalls.push({history:planId});const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
@@ -168,7 +170,13 @@ window.restoreIntegerInput=async(mode,role='region')=>{
  if(mode==='draft')drafts.set(row.planId+':'+row.versionId,{role,adjustments:[{skuCode:'1001',adjustQty:'481.600'}]});
  root.render(<WorkbenchHostProvider value={host}><InlineSkuDetails row={row} detail={detail} canEdit approvalRole={role} t={i18n.t.bind(i18n)} initialInputValues={mode==='input'?{'1001':'501.600'}:undefined} draftPatch={mode==='patch'?{at:1,quantity:'501.600'}:undefined}/></WorkbenchHostProvider>);
 };
-root.render(<WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={i18n.t.bind(i18n)} onContextChange={()=>{}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
+const translate=i18n.t.bind(i18n);
+function QuickQuestionFixture(){
+ const [snapshot,setSnapshot]=React.useState(null),[draft,setDraft]=React.useState('');
+ const observe=React.useCallback(context=>{window.quickQuestionSnapshot=context.quickQuestions;setSnapshot(context.quickQuestions)},[]);
+ return <WorkbenchHostProvider value={host}><div style={{display:'flex',height:'100%'}}><div className="gea-original-workbench" style={{width:'75%',height:'100%'}}><Workbench stateScope="local-render" t={translate} onContextChange={observe} approvalStages={[approvalRole]} liveActionsEnabled/></div><aside style={{width:'25%',padding:12,boxSizing:'border-box'}}><QuickQuestionsContext.Provider value={snapshot}><QuickQuestions onFill={setDraft}/></QuickQuestionsContext.Provider><textarea aria-label="Agent输入框" value={draft} onChange={event=>setDraft(event.target.value)}/></aside></div></WorkbenchHostProvider>;
+}
+root.render(comparison?.startsWith('quick-') ? <QuickQuestionFixture/> : <WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={translate} onContextChange={()=>{}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
 `,
   },
   outfile: '/fixture/app.js',
@@ -222,7 +230,7 @@ async function openWorkbench(t, grouped = false, comparison) {
   await page.goto(`http://127.0.0.1:${server.address().port}?${params}`);
   await expect(page.getByTestId('regional-approval-workbench')).toBeVisible();
   const groupBox = page.locator('tbody label.arco-checkbox:has(input[value*="group:"])').first();
-  if (grouped) await expect(groupBox).toBeVisible();
+  if (grouped && comparison !== 'quick-loading') await expect(groupBox).toBeVisible();
   return { frame: page, page, groupBox };
 }
 
@@ -1546,4 +1554,74 @@ test('unknown approval survives a refreshed empty queue and resumes the frozen c
   await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
   const calls = await page.evaluate(() => window.sentDirect);
   assert.deepEqual(calls[1], calls[0]);
+});
+
+test('quick questions follow visible rows and selected objects, preserving displayed values and only filling the draft', async (t) => {
+  const { page, groupBox } = await openWorkbench(t, true, 'quick-selection');
+  const capsules = page.getByRole('region', { name: '推荐问法' });
+  await expect(capsules.getByRole('button')).toHaveCount(4);
+  const verifyDisplay = async () => {
+    const snapshot = await page.evaluate(() => window.quickQuestionSnapshot);
+    const texts = await capsules.getByRole('button').allTextContents();
+    const body = await page.getByTestId('regional-approval-workbench').innerText();
+    for (const question of texts) {
+      const row = snapshot.rows.find((row) => question.includes(row.name));
+      assert.ok(row, question);
+      assert.ok(body.includes(row.name));
+      for (const fact of Object.values(row.facts)) {
+        if (question.includes(fact.label)) {
+          assert.ok(question.includes(fact.display), question);
+          assert.ok(
+            body.includes(fact.display),
+            fact.display + ' must be visible in the workbench',
+          );
+        }
+      }
+    }
+    return texts;
+  };
+  const listQuestions = await verifyDisplay();
+  const draft = page.getByRole('textbox', { name: 'Agent输入框' });
+  await draft.fill('保留中的草稿');
+  await groupBox.click();
+  await expect(capsules.getByText('围绕所选对象')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.quickQuestionSnapshot?.rows.length)).toBe(1);
+  const selected = await verifyDisplay();
+  assert.notDeepEqual(selected, listQuestions);
+  assert.ok(selected.every((q) => q.includes('宝阳销售组')));
+  assert.ok(selected.every((q) => !q.includes('烟台经销组')));
+  await expect(draft).toHaveValue('保留中的草稿');
+  await capsules.getByRole('button').first().click();
+  await expect(draft).toHaveValue(selected[0]);
+  await groupBox.click();
+  await expect(capsules.getByText('围绕当前页面')).toBeVisible();
+  assert.deepEqual(await verifyDisplay(), listQuestions);
+  await expect(draft).toHaveValue(selected[0]);
+  await page.locator('tbody label.arco-checkbox:has(input[value="p3"])').click();
+  await expect(capsules.getByText('围绕所选对象')).toBeVisible();
+  const otherQuestions = await verifyDisplay();
+  assert.ok(otherQuestions.every((q) => q.includes('烟台经销组') && !q.includes('宝阳销售组')));
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+  assert.deepEqual(await page.evaluate(() => window.sentDirect), []);
+  if (process.env.GEA_QUICK_EVIDENCE)
+    await page.screenshot({ path: process.env.GEA_QUICK_EVIDENCE + '/approval-selected.png' });
+});
+
+test('quick questions hide while loading and refresh when changing dimensions', async (t) => {
+  const { page } = await openWorkbench(t, true, 'quick-loading');
+  await expect(page.getByRole('region', { name: '推荐问法' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '推荐问法' }).getByRole('button')).toHaveCount(4, {
+    timeout: 15000,
+  });
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.quickQuestionSnapshot?.rows.map((row) => row.name).sort()),
+    )
+    .toEqual(['客户1', '客户2', '客户3']);
+  const questions = await page
+    .getByRole('region', { name: '推荐问法' })
+    .getByRole('button')
+    .allTextContents();
+  assert.ok(questions.every((q) => /客户[123]/.test(q)));
 });

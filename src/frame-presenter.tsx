@@ -34,6 +34,12 @@ import type {
 import { connectHtmlFrame } from './html-bridge.ts';
 import { installPageInteraction } from './page-interaction/client.ts';
 import { CompanyWelcome } from './company/ui.tsx';
+import { QuickQuestions, QuickQuestionsContext } from './company/quick-questions-view.tsx';
+import {
+  quickQuestionMessageSchema,
+  quickQuestionSnapshotSchema,
+  type QuickQuestionSnapshot,
+} from './company/quick-questions.ts';
 import { ConversationToolbar } from './company/formal-components.tsx';
 import layoutCss from './frame-presenter.css';
 import { connectHtmlViewState } from './html-view-channel.ts';
@@ -266,6 +272,11 @@ export function mountFramePresentation(
       () => execution,
     );
     const frame = useRef<HTMLIFrameElement>(null);
+    const [quickQuestions, setQuickQuestions] = useState<{
+      scope: string | null;
+      sessionId: string;
+      snapshot: QuickQuestionSnapshot | null;
+    } | null>(null);
     const documentElement = useRef<HTMLElement>(null);
     const [pageModalOpen, setPageModalOpen] = useState(false);
     useEffect(() => {
@@ -574,12 +585,22 @@ export function mountFramePresentation(
       let connection: PageExecutionConnection | undefined;
       let reference: SessionReference | undefined;
       let disposeBridge = () => {},
+        disposeQuestions = () => {},
         disposeReference = () => {},
         disposeTheme = () => {};
       const target = frame.current;
+      setQuickQuestions(null);
       const alive = () =>
         !controller.signal.aborted &&
         selection.ownerScope === currentExecution.identity.getSnapshot().scope;
+      const publishQuickQuestions = (snapshot: QuickQuestionSnapshot | null) => {
+        if (alive())
+          setQuickQuestions({
+            scope: selection.ownerScope,
+            sessionId: selection.sessionId,
+            snapshot,
+          });
+      };
       setConnectionState('connecting');
       const setup = connectionTransition.current.then(async () => {
         controller.signal.throwIfAborted();
@@ -620,17 +641,44 @@ export function mountFramePresentation(
             () => {
               if (alive()) changeView('split');
             },
+            (snapshot) => {
+              if (!alive()) return;
+              const parsed = quickQuestionSnapshotSchema.safeParse(snapshot);
+              publishQuickQuestions(parsed.success ? parsed.data : null);
+            },
           );
           disposeBridge = bridge;
           const off = ctx.on('theme/change', () => bridge.sendTheme());
           disposeTheme = () => {
             off();
           };
-        } else
+        } else {
+          let sequence = -1;
+          const receiveQuestions = (event: MessageEvent<unknown>) => {
+            if (
+              !alive() ||
+              event.source !== target.contentWindow ||
+              event.origin !== window.location.origin
+            )
+              return;
+            const parsed = quickQuestionMessageSchema.safeParse(event.data);
+            if (
+              !parsed.success ||
+              parsed.data.owner !== connection?.owner ||
+              parsed.data.sessionId !== connection.sessionId ||
+              parsed.data.sequence <= sequence
+            )
+              return;
+            sequence = parsed.data.sequence;
+            publishQuickQuestions(parsed.data.snapshot);
+          };
+          window.addEventListener('message', receiveQuestions);
+          disposeQuestions = () => window.removeEventListener('message', receiveQuestions);
           target.contentWindow?.postMessage(
             { type: 'workbench:session', sessionId: selection!.sessionId, owner: connection.owner },
             window.location.origin,
           );
+        }
         disposeReference = interaction.bindFrame({
           mode: 'business',
           frame: target,
@@ -652,6 +700,8 @@ export function mountFramePresentation(
       });
       return () => {
         controller.abort();
+        setQuickQuestions(null);
+        disposeQuestions();
         disposeTheme();
         disposeReference();
         disposeBridge();
@@ -917,7 +967,20 @@ export function mountFramePresentation(
               </div>
             )}
             {associated && session?.openState === 'open' ? (
-              renderSlot('agent-workbench.conversation', { page: page.id })
+              <QuickQuestionsContext.Provider
+                value={
+                  active &&
+                  identityReady &&
+                  connectionState !== 'failed' &&
+                  quickQuestions?.scope === identity.scope &&
+                  quickQuestions?.scope === selection?.ownerScope &&
+                  quickQuestions?.sessionId === selection?.sessionId
+                    ? (quickQuestions?.snapshot ?? null)
+                    : null
+                }
+              >
+                {renderSlot('agent-workbench.conversation', { page: page.id })}
+              </QuickQuestionsContext.Provider>
             ) : (
               <p className="agent-workbench-page-status" role={error ? 'alert' : 'status'}>
                 {error ||
@@ -985,6 +1048,7 @@ export function mountFramePresentation(
                     />
                   )}
                   {renderSlot('conversation.session', {})}
+                  <QuickQuestions onFill={(text) => inputActions?.setDraft(text)} />
                 </>
               );
             },

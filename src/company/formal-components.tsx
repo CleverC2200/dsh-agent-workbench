@@ -46,14 +46,16 @@ export function AgentWelcome({
           <b>{agent.boundary}</b>
         </p>
       </div>
-      <div className="gea-agent-block gea-agent-prompts">
-        <h3>你可以这样问</h3>
-        {agent.prompts.map((prompt) => (
-          <button key={prompt} type="button" onClick={() => onFill(prompt)}>
-            {prompt}
-          </button>
-        ))}
-      </div>
+      {agent.prompts.length > 0 && (
+        <div className="gea-agent-block gea-agent-prompts">
+          <h3>你可以这样问</h3>
+          {agent.prompts.map((prompt) => (
+            <button key={prompt} type="button" onClick={() => onFill(prompt)}>
+              {prompt}
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

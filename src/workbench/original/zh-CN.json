@@ -1239,7 +1239,7 @@
       "skuDetails": {
         "plan": "月计划",
         "confirmed": "确认计划量",
-        "allocation": "按各计划原确认数量占比分摊，每份四舍五入取整，合计可能有取整差额；原数量合计为 0 时平均分摊。",
+        "allocation": "按各计划原确认数量占比分摊，数量取整并保持合计一致；原数量合计为 0 时平均分摊。",
         "allocationFailed": "分摊草稿未全部暂存成功，请重试",
         "allocationSaving": "正在暂存分摊草稿",
         "allocationRetry": "重试暂存",

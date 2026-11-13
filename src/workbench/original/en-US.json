@@ -1235,7 +1235,7 @@
       "skuDetails": {
         "plan": "Monthly plan",
         "confirmed": "Confirmed quantity",
-        "allocation": "Allocate in proportion to original confirmed quantities and round each share to the nearest whole unit, with halves rounded up. The rounded total may differ. Split equally when the original total is zero.",
+        "allocation": "Allocate in proportion to original confirmed quantities, using whole units and preserving the total. Split equally when the original total is zero.",
         "allocationFailed": "Some allocated drafts could not be saved. Retry.",
         "allocationSaving": "Saving allocated drafts",
         "allocationRetry": "Retry saving",
