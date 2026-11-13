@@ -2023,7 +2023,8 @@
   outline: 2px solid #df1732;
   outline-offset: 2px;
 }
-.root :global(.arco-checkbox-checked .arco-checkbox-mask) {
+.root :global(.arco-checkbox-checked .arco-checkbox-mask),
+.root :global(.arco-checkbox-indeterminate:not(.arco-checkbox-disabled) .arco-checkbox-mask) {
   border-color: var(--workbench-brand);
   background: #df1732;
 }

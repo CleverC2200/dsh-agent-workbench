@@ -28,7 +28,7 @@ const detail = {
   skus: [sku],
 };
 const context = { versionId: 'v', status: 2, currentStage: 3, targetStage: 2, targetStatus: 7 };
-test('monthly category approval and return use integer final quantities', () => {
+test('monthly and correction category approval and return use integer final quantities', () => {
   const categoryRow = { ...row, status: 4 };
   const categoryDetail = {
     ...detail,
@@ -45,6 +45,17 @@ test('monthly category approval and return use integer final quantities', () => 
     destination,
   );
   assert.equal(Number(returned[0].adjustQty), 11);
+  assert.equal(
+    Number(
+      m.salesPlanReturnAdjustments(
+        categoryDetail,
+        { ...categoryRow, orderType: 'Z' },
+        'category',
+        destination,
+      )[0].adjustQty,
+    ),
+    11,
+  );
   assert.deepEqual(
     m.salesPlanApprovalDraftValues(
       categoryDetail,
@@ -52,7 +63,7 @@ test('monthly category approval and return use integer final quantities', () => 
       'category',
       [],
     ),
-    {},
+    { 1001: '0.400' },
   );
 });
 test('pending approval derives the receiving stage from existing detail', () => {
@@ -151,7 +162,7 @@ test('zero is explicit and an empty receiving node falls back to the nearest ear
     '20',
   );
 });
-test('a skipped province uses the actual frozen destination and M/Z preserve their quantity policies', () => {
+test('a skipped province uses the actual frozen destination and M/Z both use whole quantities', () => {
   const r = { ...row, status: 9 };
   const d = {
     ...detail,
@@ -166,7 +177,7 @@ test('a skipped province uses the actual frozen destination and M/Z preserve the
   assert.equal(
     m.salesPlanReturnAdjustments(d, { ...r, orderType: 'Z' }, 'area', c, [], { 1001: '110.600' })[0]
       .adjustQty,
-    '10.600',
+    '11',
   );
 });
 test('stale destination, wrong role, SKU version and invalid edits fail before submission', () => {

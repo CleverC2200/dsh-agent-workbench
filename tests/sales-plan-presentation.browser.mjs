@@ -16,9 +16,11 @@ import i18next from 'i18next';
 import '@arco-design/web-react/dist/css/arco.css';
 import './src/workbench/workbench.css';
 import './theme/tokens.css';
+import './src/frame-presenter.css';
 import zh from './src/workbench/original/zh-CN.json';
 import {BackendHttpError} from './src/workbench/original/http-error.ts';
 import Workbench from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalWorkbench.tsx';
+import {QuickQuestions,QuickQuestionsContext} from './src/company/quick-questions-view.tsx';
 import { InlineSkuDetails } from './src/workbench/original/workbenches/regionalApproval/InlineSkuDetails.tsx';
 import { WorkbenchHostProvider } from './src/workbench/original/bridge.ts';
 const i18n=i18next.createInstance();
@@ -116,9 +118,11 @@ if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50'
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 if(comparison?.startsWith('sku-review')) for(const plan of sourcePlans) plan.skuCount=2;
 if(comparison==='mixed-terminal')sourcePlans[1].status=5;
+if(comparison==='header-selection')sourcePlans[2].status=5;
+if(comparison==='header-pagination')for(let n=4;n<=12;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
 const plans=continued?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1).map(plan=>({...plan,status:continued[0]})):['returned','return-unavailable'].includes(comparison)?(comparison==='return-unavailable'?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1):sourcePlans).map(plan=>({...plan,status:comparison==='return-unavailable'?8:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 if(comparison?.startsWith('single-'))for(const plan of plans)plan.status=4;
-window.sentDirect=[];
+window.sentDirect=[];window.completePlan=()=>{plans[0].status=10;};window.returnConfirmed=false;
 const skuFor=(versionId)=>{
   const base=baseSkuFor(versionId);
   if(continued) return {...base,regionConfirmedQty:'10',regionConfirmedAmount:'100',provinceConfirmedQty:'15',provinceConfirmedAmount:'150',areaConfirmedQty:'25',areaConfirmedAmount:'250'};
@@ -144,8 +148,8 @@ const forbidden=async()=>{writes.push('write');throw Error('LOCAL_RENDER_ACTION_
 const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
-  list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1}}},
-  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
+  list:{invoke:async(q)=>{if(comparison==='loading'||comparison==='quick-loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1}}},
+  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.returnConfirmed?{status:6}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:window.returnConfirmed?window.sentReturns.filter(c=>c.planId===planId).map(c=>({planId,versionId:c.versionId,actionCode:'REJECT',fromStatus:c.request.expectedStatus,toStatus:6,requestId:c.requestId})):continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{readCalls.push({history:planId});const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
     readCalls.push({review:planId});
@@ -154,7 +158,7 @@ const host={salesPlan:{
     return {versionId,skus:skusFor(versionId).map(sku=>sku.skuCode==='1001'?{...sku,amt:versionId==='v1'?'100.10':versionId==='v2'?'200.20':'0'}:sku),months:['2025-10','2026-08','2026-09'],shipmentUnavailable:false,
       rows:[{skuCode:'1001',shipments:['1.5','10','20']},{skuCode:'2002',shipments:['2','3','4']}]};
   }},
-  versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId)}},
+  versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading'||comparison==='quick-category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId)}},
   draft:{invoke:async(q)=>{if(window.autoBlock==='draft')return {draft:null,stale:true};if(window.sentDirect.length){if(comparison==='single-dms-stale-second')return {draft:null,stale:true};if(comparison==='single-dms-unreadable-second')throw Error('fixture draft read failed');}const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
   logs:{invoke:async()=>[]},compare:{invoke:async({planId,fromVersionId,toVersionId})=>{
     readCalls.push({planId,fromVersionId,toVersionId});
@@ -168,7 +172,13 @@ window.restoreIntegerInput=async(mode,role='region')=>{
  if(mode==='draft')drafts.set(row.planId+':'+row.versionId,{role,adjustments:[{skuCode:'1001',adjustQty:'481.600'}]});
  root.render(<WorkbenchHostProvider value={host}><InlineSkuDetails row={row} detail={detail} canEdit approvalRole={role} t={i18n.t.bind(i18n)} initialInputValues={mode==='input'?{'1001':'501.600'}:undefined} draftPatch={mode==='patch'?{at:1,quantity:'501.600'}:undefined}/></WorkbenchHostProvider>);
 };
-root.render(<WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={i18n.t.bind(i18n)} onContextChange={()=>{}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
+const translate=i18n.t.bind(i18n);
+function QuickQuestionFixture(){
+ const [snapshot,setSnapshot]=React.useState(null),[draft,setDraft]=React.useState('');
+ const observe=React.useCallback(context=>{window.quickQuestionSnapshot=context.quickQuestions;setSnapshot(context.quickQuestions)},[]);
+ return <WorkbenchHostProvider value={host}><div style={{display:'flex',height:'100%'}}><div className="gea-original-workbench" style={{width:'75%',height:'100%'}}><Workbench stateScope="local-render" t={translate} onContextChange={observe} approvalStages={[approvalRole]} liveActionsEnabled/></div><aside style={{width:'25%',padding:12,boxSizing:'border-box'}}><QuickQuestionsContext.Provider value={snapshot}><QuickQuestions onFill={setDraft}/></QuickQuestionsContext.Provider><textarea aria-label="Agent输入框" value={draft} onChange={event=>setDraft(event.target.value)}/></aside></div></WorkbenchHostProvider>;
+}
+root.render(comparison?.startsWith('quick-') ? <QuickQuestionFixture/> : <WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={translate} onContextChange={context=>{window.approvalContext=context}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
 `,
   },
   outfile: '/fixture/app.js',
@@ -222,7 +232,7 @@ async function openWorkbench(t, grouped = false, comparison) {
   await page.goto(`http://127.0.0.1:${server.address().port}?${params}`);
   await expect(page.getByTestId('regional-approval-workbench')).toBeVisible();
   const groupBox = page.locator('tbody label.arco-checkbox:has(input[value*="group:"])').first();
-  if (grouped) await expect(groupBox).toBeVisible();
+  if (grouped && comparison !== 'quick-loading') await expect(groupBox).toBeVisible();
   return { frame: page, page, groupBox };
 }
 
@@ -690,6 +700,7 @@ for (const orderType of ['M', 'Z']) {
           'SKU 编码 / 物料描述',
           '月计划',
           '确认计划量',
+          ...(orderType === 'Z' ? ['追加/追减'] : []),
         ]);
         assert.ok(
           (await page.evaluate(() => window.readCalls)).every(
@@ -1342,9 +1353,11 @@ for (const [scenario, reason] of [
         });
       }
       await expect(page.getByText(/hidden-error-reference|hidden-trace-reference/)).toHaveCount(0);
-      await expect(page.getByRole('button', { name: '重试并核对结果', exact: true })).toHaveCount(
-        0,
-      );
+      await expect(
+        page
+          .getByTestId('regional-approval-workbench')
+          .getByRole('button', { name: '核对提交结果', exact: true }),
+      ).toHaveCount(0);
       if (scenario === 'single-permission')
         await expect(dialog.getByRole('button', { name: '重新提交', exact: true })).toBeDisabled();
     },
@@ -1355,18 +1368,31 @@ test('single uncertain approval keeps its original intent and does not create an
   await page.locator('tbody label.arco-checkbox:visible').first().click();
   await page.getByRole('button', { name: '通过', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByText(/结果暂时未知/)).toBeVisible();
+  await expect(dialog.getByText(/尚未查到/)).toBeVisible();
   await expect(dialog.getByRole('button', { name: '关闭', exact: true })).toBeEnabled();
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await expect(page.getByRole('button', { name: '恢复待核对操作', exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByTestId('regional-approval-workbench')
+      .getByRole('button', { name: '核对提交结果', exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: '通过', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
+  await page
+    .getByTestId('regional-approval-workbench')
+    .getByRole('button', { name: '核对提交结果', exact: true })
+    .click();
   assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
-  await dialog.getByRole('button', { name: '重试并核对结果', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
-  const calls = await page.evaluate(() => window.sentDirect);
-  assert.deepEqual(calls[1], calls[0]);
-  await expect(dialog.getByText(/结果暂时未知/)).toBeVisible();
+  await dialog.getByRole('button', { name: '核对提交结果', exact: true }).click();
+  await expect(dialog.getByText(/尚未查到/)).toBeVisible();
+  assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
+  await expect(dialog).toContainText('客户1：');
+  await page.evaluate(() => window.completePlan());
+  await dialog.getByRole('button', { name: '核对提交结果', exact: true }).click();
+  await expect(dialog).toContainText('提交成功');
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByText(/客户1：.*尚未查到/)).toHaveCount(0);
+  await expect(page.getByText(/\{\{plan\}\}/)).toHaveCount(0);
+  assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
 });
 
 test('explicit single DMS rejection permits another manual submission with a new request', async (t) => {
@@ -1477,17 +1503,19 @@ test('batch return retains an unknown attempt while successful plans are not sen
     await page.screenshot({ path: process.env.GEA_RESULT_EVIDENCE + '/batch-pending-narrow.png' });
   }
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
   await page
-    .getByRole('dialog')
-    .getByRole('button', { name: '重试并核对结果', exact: true })
+    .getByTestId('regional-approval-workbench')
+    .getByRole('button', { name: '核对提交结果', exact: true })
     .click();
-  await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(3);
-  const calls = await page.evaluate(() => window.sentReturns);
-  assert.deepEqual(
-    calls[2],
-    calls.find((call) => call.planId === 'p1'),
-  );
+  await page.getByRole('dialog').getByRole('button', { name: '核对提交结果', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('待核对 1 笔');
+  assert.equal(await page.evaluate(() => window.sentReturns.length), 2);
+  await page.evaluate(() => {
+    window.returnConfirmed = true;
+  });
+  await page.getByRole('dialog').getByRole('button', { name: '核对提交结果', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('待核对 0 笔');
+  assert.equal(await page.evaluate(() => window.sentReturns.length), 2);
 });
 
 for (const [block, reason] of [
@@ -1528,22 +1556,205 @@ test('actual toolbar retains terminal members as skipped in a mixed organization
   assert.equal(await page.evaluate(() => window.writes.length), 0);
 });
 
-test('unknown approval survives a refreshed empty queue and resumes the frozen command', async (t) => {
+test('unknown approval survives an empty queue and only rechecks its result', async (t) => {
   const { page } = await openWorkbench(t, false, 'single-unknown');
   await page.locator('tbody label.arco-checkbox:visible').first().click();
   await page.getByRole('button', { name: '通过', exact: true }).click();
-  await expect(page.getByRole('dialog')).toContainText('结果暂时未知');
+  await expect(page.getByRole('dialog')).toContainText('尚未查到能确认本次提交结果的记录');
   await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click();
   await page.evaluate(() => {
     window.queueGone = true;
   });
   await page.getByRole('button', { name: '刷新数据', exact: true }).click();
   await expect(page.locator('tbody label.arco-checkbox:visible')).toHaveCount(0);
-  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
+  await page
+    .getByTestId('regional-approval-workbench')
+    .getByRole('button', { name: '核对提交结果', exact: true })
+    .click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog).toContainText('结果暂时未知');
-  await dialog.getByRole('button', { name: '重试并核对结果', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
-  const calls = await page.evaluate(() => window.sentDirect);
-  assert.deepEqual(calls[1], calls[0]);
+  await expect(dialog).toContainText('尚未查到能确认本次提交结果的记录');
+  await dialog.getByRole('button', { name: '核对提交结果', exact: true }).click();
+  await expect(dialog).toContainText('尚未查到能确认本次提交结果的记录');
+  assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
+});
+
+test('quick questions follow visible rows and selected objects, preserving displayed values and only filling the draft', async (t) => {
+  const { page, groupBox } = await openWorkbench(t, true, 'quick-selection');
+  const capsules = page.getByRole('region', { name: '推荐问法' });
+  await expect(capsules.getByRole('button')).toHaveCount(4);
+  const verifyDisplay = async () => {
+    const snapshot = await page.evaluate(() => window.quickQuestionSnapshot);
+    const texts = await capsules.getByRole('button').allTextContents();
+    const body = await page.getByTestId('regional-approval-workbench').innerText();
+    for (const question of texts) {
+      const row = snapshot.rows.find((row) => question.includes(row.name));
+      assert.ok(row, question);
+      assert.ok(body.includes(row.name));
+      for (const fact of Object.values(row.facts)) {
+        if (question.includes(fact.label)) {
+          assert.ok(question.includes(fact.display), question);
+          assert.ok(
+            body.includes(fact.display),
+            fact.display + ' must be visible in the workbench',
+          );
+        }
+      }
+    }
+    return texts;
+  };
+  const listQuestions = await verifyDisplay();
+  const draft = page.getByRole('textbox', { name: 'Agent输入框' });
+  await draft.fill('保留中的草稿');
+  await groupBox.click();
+  await expect(capsules.getByText('围绕所选对象')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.quickQuestionSnapshot?.rows.length)).toBe(1);
+  const selected = await verifyDisplay();
+  assert.notDeepEqual(selected, listQuestions);
+  assert.ok(selected.every((q) => q.includes('宝阳销售组')));
+  assert.ok(selected.every((q) => !q.includes('烟台经销组')));
+  await expect(draft).toHaveValue('保留中的草稿');
+  await capsules.getByRole('button').first().click();
+  await expect(draft).toHaveValue(selected[0]);
+  await groupBox.click();
+  await expect(capsules.getByText('围绕当前页面')).toBeVisible();
+  assert.deepEqual(await verifyDisplay(), listQuestions);
+  await expect(draft).toHaveValue(selected[0]);
+  await page.locator('tbody label.arco-checkbox:has(input[value="p3"])').click();
+  await expect(capsules.getByText('围绕所选对象')).toBeVisible();
+  const otherQuestions = await verifyDisplay();
+  assert.ok(otherQuestions.every((q) => q.includes('烟台经销组') && !q.includes('宝阳销售组')));
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+  assert.deepEqual(await page.evaluate(() => window.sentDirect), []);
+  if (process.env.GEA_QUICK_EVIDENCE)
+    await page.screenshot({ path: process.env.GEA_QUICK_EVIDENCE + '/approval-selected.png' });
+});
+
+test('quick questions hide while loading and refresh when changing dimensions', async (t) => {
+  const { page } = await openWorkbench(t, true, 'quick-loading');
+  await expect(page.getByRole('region', { name: '推荐问法' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '推荐问法' }).getByRole('button')).toHaveCount(4, {
+    timeout: 15000,
+  });
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.quickQuestionSnapshot?.rows.map((row) => row.name).sort()),
+    )
+    .toEqual(['客户1', '客户2', '客户3']);
+  const questions = await page
+    .getByRole('region', { name: '推荐问法' })
+    .getByRole('button')
+    .allTextContents();
+  assert.ok(questions.every((q) => /客户[123]/.test(q)));
+});
+
+test('quick questions wait for visible version totals to finish loading', async (t) => {
+  const { page } = await openWorkbench(t, false, 'quick-category-loading');
+  await page.waitForFunction(() => window.readCalls.some((call) => call.versionId));
+  const questions = page.getByRole('region', { name: '推荐问法' });
+  await expect(page.getByText('销售计划加载中', { exact: true })).toBeVisible();
+  await expect(questions).toHaveCount(0, { timeout: 500 });
+  await expect(questions.getByRole('button')).toHaveCount(4, { timeout: 15000 });
+  await expect(page.getByText('销售计划加载中', { exact: true })).toHaveCount(0);
+});
+
+test('header select all skips disabled rows and supports partial selection and cancellation', async (t) => {
+  const { page } = await openWorkbench(t, true, 'header-selection');
+  const header = page.locator('thead label.arco-checkbox:visible').first();
+  await expect(header).toBeVisible();
+  await header.check();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
+    )
+    .toEqual(['p1', 'p2']);
+  await expect(page.locator('tbody input[value="p3"]')).toBeDisabled();
+  await expect(page.locator('tbody input[value="p3"]')).not.toBeChecked();
+  await header.uncheck();
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
+    .toBe(0);
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  await header.check();
+  await page.locator('tbody label.arco-checkbox:has(input[value="p1"])').uncheck();
+  await expect(header).toHaveClass(/arco-checkbox-indeterminate/);
+  const checkboxColor = (checkbox) =>
+    checkbox
+      .locator('.arco-checkbox-mask')
+      .evaluate((mask) => getComputedStyle(mask).backgroundColor);
+  assert.equal(
+    await checkboxColor(header),
+    await checkboxColor(page.locator('tbody label.arco-checkbox:has(input[value="p2"])')),
+  );
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id)))
+    .toEqual(['p2']);
+  await header.click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
+    )
+    .toEqual(['p1', 'p2']);
+  await header.uncheck();
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
+    .toBe(0);
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+test('header cancellation clears terminal members inherited from a selected organization', async (t) => {
+  const { page } = await openWorkbench(t, true, 'mixed-terminal');
+  const header = page.locator('thead label.arco-checkbox:visible').first();
+  await header.check();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
+    )
+    .toEqual(['p1', 'p2', 'p3']);
+  await header.uncheck();
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
+    .toBe(0);
+  await expect(page.getByRole('button', { name: '通过', exact: true })).toBeDisabled();
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+test('header select all only selects plans on the current page', async (t) => {
+  const { page } = await openWorkbench(t, true, 'header-pagination');
+  await page.getByRole('combobox', { name: '每页条数' }).click();
+  await page.getByRole('option', { name: '10 条/页', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.pagination.pageSize))
+    .toBe(10);
+  const visibleIds = await page.evaluate(() =>
+    window.approvalContext.visibleEntities.map((row) => row.id).sort(),
+  );
+  assert.equal(visibleIds.length, 11);
+  const header = page.locator('thead label.arco-checkbox:visible').first();
+  await header.check();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
+    )
+    .toEqual(visibleIds);
+  await page.locator('.arco-pagination-item-next:visible').click();
+  await expect.poll(() => page.evaluate(() => window.approvalContext?.pagination.page)).toBe(2);
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
+    .toBe(0);
+  const nextPageIds = await page.evaluate(() =>
+    window.approvalContext.visibleEntities.map((row) => row.id).sort(),
+  );
+  assert.equal(nextPageIds.length, 1);
+  await header.check();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
+    )
+    .toEqual(nextPageIds);
+  await header.uncheck();
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
+    .toBe(0);
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
 });
