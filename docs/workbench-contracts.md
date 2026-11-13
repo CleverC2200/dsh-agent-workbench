@@ -84,3 +84,11 @@ Workbench 持有 Native 审批文档、Inbox、ApiLog、桌面导航、HTML 页�
 ## 页面请求归属
 
 Native 销售页面的业务请求携带既有页面 owner。GEA Host 通过 `workbenchPages.requestContext(owner)` 取得真实 Session 与页面/身份失效信号，再归集请求材料；客户端自报 Session 不授予归属或权限。页面关闭或身份失效后，该 owner 失效。HTML 页面的业务回调沿其已授权 Session 采集，不使用激活窗口推测归属。
+
+## 工作台推荐问法
+
+推荐问法使用页面提供的显示文本，点击只调用当前会话的草稿输入动作。页面适配器负责提供当前可见对象；审批勾选后只提供所选对象，提报按当前客户、月份和商品提供。加载、失败、空列表或身份未就绪时提供 `null`，清空推荐。名称、字段标签和 `display` 与页面复用同一格式化结果，生成器不接收原始数值，也不重新计算。
+
+新增 Agent 时，在 [quick-question-policies.json](../src/company/quick-question-policies.json) 登记规则，页面按 [QuickQuestionSnapshot](../src/company/quick-questions.ts) 提供事实。规则仅拼接对象名、字段标签和显示文本；字段缺失时跳过，最终不足三条则隐藏。HTML 页面沿既有 `context` 请求的 `quickQuestions` 字段发布；Native 页面沿同源的 `workbench-quick-questions-v1` 消息发布，带当前 owner、Session 和递增 sequence。接收端只接受当前 iframe 的有效归属，切换会话后清空。
+
+销售审批页已接入真实组件。销售提报规则与 HTML 通道已有覆盖，实际提报页入口尚待确认，当前不视为提报端运行验收通过。

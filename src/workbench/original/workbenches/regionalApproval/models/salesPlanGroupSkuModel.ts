@@ -1,7 +1,12 @@
+import { correctionConfirmedQuantity } from './salesPlanCorrectionModel.ts';
 import type { GeaSalesPlanSku } from '../../../bridge.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 import type { RegionalApprovalLiveRow } from '../regionalApprovalQueryModel.ts';
-import { addExactDecimals, multiplyExactDecimals } from '../regionalApprovalQueryModel.ts';
+import {
+  addExactDecimals,
+  multiplyExactDecimals,
+  subtractExactDecimals,
+} from '../regionalApprovalQueryModel.ts';
 import { salesPlanEditableQuantity, roundPlanQuantity } from './salesPlanQuantityModel.ts';
 
 type GroupSkuSource = {
@@ -17,6 +22,8 @@ export type GroupSkuSummaryRow = {
   qty: string;
   baseAmount: string;
   amount: string;
+  adjustmentQty: string;
+  adjustmentAmount: string;
 };
 
 const decimal = (value: string) => /^\d+(?:\.\d+)?$/.test(value);
@@ -35,6 +42,8 @@ export const summarizeGroupSkus = (
       qty: string[];
       baseAmount: string[];
       amount: string[];
+      adjustmentQty: string[];
+      adjustmentAmount: string[];
     }
   >();
   for (const { plan, skus } of sources) {
@@ -47,9 +56,16 @@ export const summarizeGroupSkus = (
       codes.add(code);
       const originalQty =
         pendingValues[plan.planId]?.[code] ??
-        salesPlanEditableQuantity(sku, plan.status, plan.planTypeCode, approvalRole) ??
+        (plan.orderType === 'Z'
+          ? correctionConfirmedQuantity(
+              sku,
+              plan.status,
+              plan.planTypeCode,
+              approvalRole === 'customer' ? undefined : approvalRole,
+            )
+          : salesPlanEditableQuantity(sku, plan.status, plan.planTypeCode, approvalRole)) ??
         String(sku.qty);
-      const qty = plan.orderType === 'M' ? roundPlanQuantity(originalQty) : originalQty;
+      const qty = roundPlanQuantity(originalQty);
       const baseQty = String(plan.orderType === 'Z' ? (sku.corrBaseQty ?? sku.qty) : sku.baseQty);
       const baseAmount = String(plan.orderType === 'Z' ? sku.amt : sku.amtBase);
       const amount = multiplyExactDecimals(qty, String(sku.price));
@@ -62,6 +78,8 @@ export const summarizeGroupSkus = (
         qty: [],
         baseAmount: [],
         amount: [],
+        adjustmentQty: [],
+        adjustmentAmount: [],
       };
       item.categories.add(sku.productCategName.trim() || '其他');
       const description = sku.materialDescription?.trim() || sku.skuName?.trim();
@@ -70,6 +88,11 @@ export const summarizeGroupSkus = (
       item.qty.push(qty);
       item.baseAmount.push(baseAmount);
       item.amount.push(amount);
+      const adjustment = subtractExactDecimals(qty, baseQty);
+      item.adjustmentQty.push(adjustment);
+      const adjustmentAmount = multiplyExactDecimals(adjustment, String(sku.price));
+      if (adjustmentAmount === undefined) throw new Error('INCOMPLETE_GROUP_SKUS');
+      item.adjustmentAmount.push(adjustmentAmount);
       grouped.set(code, item);
     }
   }
@@ -82,6 +105,8 @@ export const summarizeGroupSkus = (
       qty: addExactDecimals(item.qty),
       baseAmount: addExactDecimals(item.baseAmount),
       amount: addExactDecimals(item.amount),
+      adjustmentQty: addExactDecimals(item.adjustmentQty),
+      adjustmentAmount: addExactDecimals(item.adjustmentAmount),
     }))
     .toSorted(
       (left, right) =>

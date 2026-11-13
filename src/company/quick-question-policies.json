@@ -1,0 +1,18 @@
+{
+  "sales-approval": {
+    "rules": [
+      { "field": "progress", "text": "{name}的{label}为什么是{value}？" },
+      { "field": "plan", "text": "{name}的{label}为{value}，需要调整吗？" },
+      { "field": "target", "text": "{name}的{label}为{value}，计划能达标吗？" },
+      { "text": "{name}需要退回重提吗？" }
+    ]
+  },
+  "sales-reporting": {
+    "rules": [
+      { "field": "quantity", "text": "{name}的{label}为{value}，需要调整吗？" },
+      { "field": "amount", "text": "{name}的{label}为{value}，合理吗？" },
+      { "field": "adjustment", "text": "{name}的{label}为{value}，原因是什么？" },
+      { "text": "{name}需要重点复核吗？" }
+    ]
+  }
+}

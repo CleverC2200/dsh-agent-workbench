@@ -15,6 +15,7 @@ export function connectHtmlFrame(
   failed: (error: unknown) => void,
   onConnected?: () => void,
   onConversation?: () => void,
+  onQuickQuestions?: (snapshot: unknown) => void,
 ): { (): void; sendTheme(): void } {
   const lifetime = new AbortController();
   const channel = new MessageChannel();
@@ -243,9 +244,11 @@ export function connectHtmlFrame(
             'insight',
             'branch-storage',
           ].includes(message.method)
-        )
+        ) {
+          if (message.method === 'context')
+            onQuickQuestions?.(message.parameters?.quickQuestions ?? null);
           result = await call(message.method, message.parameters, task.signal);
-        else throw Error('HTML_METHOD_NOT_ALLOWED');
+        } else throw Error('HTML_METHOD_NOT_ALLOWED');
         if (alive() && !task.signal.aborted)
           channel.port1.postMessage({ type: 'response', id: message.id, result });
       } finally {

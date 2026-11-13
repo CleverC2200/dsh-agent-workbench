@@ -69,7 +69,18 @@ const RegionalApprovalBatchActionDialog: React.FC<{
   onPermissionDenied: (versionId: string) => void;
   onCompleted: (outcomes: readonly BatchActionOutcome[]) => void | Promise<void>;
   onClose: (pending?: boolean) => void;
-}> = ({ visible, kind, items, t, client, onPermissionDenied, onCompleted, onClose }) => {
+  onPendingChange?: (pending: boolean, message: string) => void;
+}> = ({
+  visible,
+  kind,
+  items,
+  t,
+  client,
+  onPermissionDenied,
+  onCompleted,
+  onClose,
+  onPendingChange,
+}) => {
   const { salesPlan } = useWorkbenchHost();
   const submitting = useRef(false);
   const attempts = useRef(new Map<string, SalesPlanActionAttempt>());
@@ -113,6 +124,15 @@ const RegionalApprovalBatchActionDialog: React.FC<{
   const skipped = outcomes?.filter((outcome) => outcome.status === 'skipped').length ?? 0;
   const resultRows = outcomes ?? [];
   const pending = outcomes?.some((outcome) => outcome.status === 'pending') ?? false;
+  const pendingMessage =
+    outcomes
+      ?.filter((outcome) => outcome.status === 'pending')
+      .map((outcome) => outcome.detail)
+      .join('；') ?? '';
+  useEffect(
+    () => onPendingChange?.(pending, pendingMessage),
+    [pending, pendingMessage, onPendingChange],
+  );
   const locked = busy || outcomes !== undefined;
   const invalid = !submittable.length || (kind === 'REJECT' && !remark.trim());
 
@@ -120,6 +140,37 @@ const RegionalApprovalBatchActionDialog: React.FC<{
     item.skipReason
       ? t(`common.assistantSurface.regionalApproval.liveAction.disabled.${item.skipReason}`)
       : t('common.assistantSurface.regionalApproval.liveBatch.skipped');
+
+  const checkResult = async (
+    item: BatchActionItem,
+    attempt?: SalesPlanActionAttempt,
+  ): Promise<BatchActionOutcome> => {
+    const label = planLabel(item.row);
+    let reason = 'resultUnconfirmed';
+    try {
+      const detail = await salesPlan.detail.invoke({ planId: item.row.planId });
+      if (attempt?.resultConfirmed(detail))
+        return {
+          planId: item.row.planId,
+          label,
+          context: planContext(item.row),
+          status: 'success',
+        };
+      if (detail.currentVersion.id !== item.row.versionId) reason = 'resultVersionChanged';
+    } catch {
+      reason = 'resultReadFailed';
+    }
+    return {
+      planId: item.row.planId,
+      label,
+      context: planContext(item.row),
+      status: 'pending',
+      detail: t('common.assistantSurface.regionalApproval.liveSubmit.pendingNotice', {
+        plan: label,
+        reason: t(`common.assistantSurface.regionalApproval.liveSubmit.errors.${reason}`),
+      }),
+    };
+  };
 
   const submit = async () => {
     setAttempted(true);
@@ -129,8 +180,16 @@ const RegionalApprovalBatchActionDialog: React.FC<{
     const collected: BatchActionOutcome[] = [];
     for (const item of items) {
       const previous = outcomes?.find((outcome) => outcome.planId === item.row.planId);
-      if (previous && ['success', 'skipped'].includes(previous.status)) {
+      if (
+        previous &&
+        (['success', 'skipped'].includes(previous.status) ||
+          (pending && previous.status !== 'pending'))
+      ) {
         collected.push(previous);
+        continue;
+      }
+      if (previous?.status === 'pending') {
+        collected.push(await checkResult(item, attempts.current.get(item.row.planId)));
         continue;
       }
       const label = planLabel(item.row);
@@ -155,87 +214,81 @@ const RegionalApprovalBatchActionDialog: React.FC<{
         ...(item.access.snapshotHash ? { expectedSnapshot: item.access.snapshotHash } : {}),
         ...(remark.trim() ? { remark: remark.trim() } : {}),
       };
-      const retained =
-        previous?.status === 'pending' ? attempts.current.get(item.row.planId) : undefined;
-      const attempt = retained ?? new SalesPlanActionAttempt(client ?? salesPlan);
+      const attempt = new SalesPlanActionAttempt(client ?? salesPlan);
       let actionSubmitted = false;
       let preparingReturn = false;
       try {
-        if (!retained) {
-          const fresh = await salesPlan.detail.invoke({ planId: item.row.planId });
-          checkSubmissionSource(
-            {
-              planId: item.row.planId,
-              versionId: item.row.versionId,
-              row: item.row,
-              period: { periodId: item.row.periodId, planTypeCode: item.row.planTypeCode },
-            },
-            fresh,
-          );
-          if (item.detail) checkSubmissionSkus(item.row.versionId, item.detail.skus, fresh.skus);
-          const freshAccess = salesPlanAccessForRow(
-            item.row,
-            fresh,
-            [item.access.approvalRole],
-            item.access.approvalRole,
-          );
-          if (!freshAccess?.allowedActions.includes(kind))
-            throw new SubmissionSourceError('accessChanged');
-          if (freshAccess.snapshotHash) request.expectedSnapshot = freshAccess.snapshotHash;
-          const stored = await salesPlan.draft?.invoke({
+        const fresh = await salesPlan.detail.invoke({ planId: item.row.planId });
+        checkSubmissionSource(
+          {
             planId: item.row.planId,
             versionId: item.row.versionId,
-            approvalRole: item.access.approvalRole,
-          });
-          if (stored?.stale) throw new SubmissionSourceError('draftStale');
-          if (kind === 'REJECT') {
-            preparingReturn = true;
-            if (!item.detail)
-              throw new Error(
-                t('common.assistantSurface.regionalApproval.returnDestinationUnavailable'),
-              );
-            const context = salesPlanReturnDestination(fresh, item.access.approvalRole);
-            request.adjustments = salesPlanReturnAdjustments(
+            row: item.row,
+            period: { periodId: item.row.periodId, planTypeCode: item.row.planTypeCode },
+          },
+          fresh,
+        );
+        if (item.detail) checkSubmissionSkus(item.row.versionId, item.detail.skus, fresh.skus);
+        const freshAccess = salesPlanAccessForRow(
+          item.row,
+          fresh,
+          [item.access.approvalRole],
+          item.access.approvalRole,
+        );
+        if (!freshAccess?.allowedActions.includes(kind))
+          throw new SubmissionSourceError('accessChanged');
+        if (freshAccess.snapshotHash) request.expectedSnapshot = freshAccess.snapshotHash;
+        const stored = await salesPlan.draft?.invoke({
+          planId: item.row.planId,
+          versionId: item.row.versionId,
+          approvalRole: item.access.approvalRole,
+        });
+        if (stored?.stale) throw new SubmissionSourceError('draftStale');
+        if (kind === 'REJECT') {
+          preparingReturn = true;
+          if (!item.detail)
+            throw new Error(
+              t('common.assistantSurface.regionalApproval.returnDestinationUnavailable'),
+            );
+          const context = salesPlanReturnDestination(fresh, item.access.approvalRole);
+          request.adjustments = salesPlanReturnAdjustments(
+            fresh,
+            item.row,
+            item.access.approvalRole,
+            context,
+            stored?.draft?.role && stored.draft.role !== item.access.approvalRole
+              ? []
+              : (stored?.draft?.adjustments ?? []),
+            item.pendingValues,
+          );
+          request.expectedReturnTargetStage = context.targetStage;
+        } else {
+          const adjustments = Object.entries(
+            salesPlanApprovalDraftValues(
               fresh,
               item.row,
               item.access.approvalRole,
-              context,
               stored?.draft?.role && stored.draft.role !== item.access.approvalRole
                 ? []
                 : (stored?.draft?.adjustments ?? []),
               item.pendingValues,
-            );
-            request.expectedReturnTargetStage = context.targetStage;
-          } else {
-            const adjustments = Object.entries(
-              salesPlanApprovalDraftValues(
-                fresh,
-                item.row,
-                item.access.approvalRole,
-                stored?.draft?.role && stored.draft.role !== item.access.approvalRole
-                  ? []
-                  : (stored?.draft?.adjustments ?? []),
-                item.pendingValues,
-              ),
-            )
-              .filter(([, value]) => value.trim() && !/^[+-]?0+(?:\.0{1,3})?$/.test(value.trim()))
-              .map(([skuCode, adjustQty]) => ({ skuCode, adjustQty: adjustQty.trim() }));
-            if (adjustments.length) request.adjustments = adjustments;
-          }
+            ),
+          )
+            .filter(([, value]) => value.trim() && !/^[+-]?0+(?:\.0{1,3})?$/.test(value.trim()))
+            .map(([skuCode, adjustQty]) => ({ skuCode, adjustQty: adjustQty.trim() }));
+          if (adjustments.length) request.adjustments = adjustments;
         }
         actionSubmitted = true;
 
         attempts.current.set(item.row.planId, attempt);
-        await (retained
-          ? attempt.retry()
-          : attempt.submit({
-              planId: item.row.planId,
-              versionId: item.row.versionId,
-              planTypeCode: item.row.planTypeCode,
-              request,
-              serverWorkflowResult: !item.access.snapshotHash,
-              serverRoleResult: item.access.roleContractSupported,
-            }));
+        await attempt.submit({
+          planId: item.row.planId,
+          versionId: item.row.versionId,
+          planTypeCode: item.row.planTypeCode,
+          request,
+          serverWorkflowResult: !item.access.snapshotHash,
+          serverRoleResult: item.access.roleContractSupported,
+        });
         collected.push({
           planId: item.row.planId,
           label,
@@ -245,6 +298,10 @@ const RegionalApprovalBatchActionDialog: React.FC<{
       } catch (error) {
         const classified = classifySalesPlanActionError(error);
         if (classified.kind === 'permission') onPermissionDenied(item.row.versionId);
+        if (actionSubmitted && classified.retrySameIntent) {
+          collected.push(await checkResult(item, attempt));
+          continue;
+        }
         collected.push({
           planId: item.row.planId,
           label,
@@ -270,6 +327,12 @@ const RegionalApprovalBatchActionDialog: React.FC<{
     await onCompleted(collected);
   };
 
+  const wasVisible = useRef(visible);
+  useEffect(() => {
+    const reopened = visible && !wasVisible.current;
+    wasVisible.current = visible;
+    if (reopened && pending && !busy) void submit();
+  }, [visible, pending, busy, submit]);
   return (
     <Modal
       visible={visible}

@@ -157,6 +157,7 @@ export type RegionalApprovalContextEntity = {
 };
 
 export type RegionalApprovalWorkbenchContext = {
+  quickQuestions: import('../../../../company/quick-questions.ts').QuickQuestionSnapshot | null;
   analysisSummary?: ReturnType<typeof useRegionalApprovalQuery>['analysisSummary'];
   view: 'regional-approval';
   scope: {
@@ -545,6 +546,15 @@ const RegionalApprovalWorkbench: React.FC<{
   const liveActionPlanId = liveAction?.row.planId;
   const liveActionKind = liveAction?.kind ?? 'APPROVE';
   const [liveActionPending, setLiveActionPending] = useState(false);
+  const [livePendingMessage, setLivePendingMessage] = useState('');
+  const [batchPendingMessage, setBatchPendingMessage] = useState('');
+  const updateLivePending = useCallback((pending: boolean, message: string) => {
+    setLiveActionPending(pending);
+    setLivePendingMessage(message);
+  }, []);
+  const updateBatchPending = useCallback((_pending: boolean, message: string) => {
+    setBatchPendingMessage(message);
+  }, []);
   const [liveActionVisible, setLiveActionVisible] = useState(true);
   const [liveActionBusy, setLiveActionBusy] = useState(false);
   const [batchActionVisible, setBatchActionVisible] = useState(true);
@@ -1559,6 +1569,88 @@ const RegionalApprovalWorkbench: React.FC<{
     t,
   ]);
 
+  const quickQuestions = useMemo<RegionalApprovalWorkbenchContext['quickQuestions']>(() => {
+    if (
+      skuReviewOpen ||
+      liveCategoriesLoading ||
+      liveEvidence.queryState !== 'success' ||
+      liveEvidence.source !== 'gea-user-session' ||
+      !liveQuery.selectedPeriodMonth
+    )
+      return null;
+    const selected = new Set(selectedLiveTableRowIds.map(String));
+    const visible: RegionalApprovalLiveTableRow[] = [];
+    const visit = (rows: RegionalApprovalLiveTableRow[]) => {
+      for (const row of rows) {
+        if (row.kind !== 'plan') continue;
+        visible.push(row);
+        if (row.children && expandedLiveGroups.includes(row.tableRowId)) visit(row.children);
+      }
+    };
+    visit(liveTableRows);
+    const selectionActive = selectedRowIds.length > 0;
+    const rows = (
+      selectionActive ? visible.filter((row) => selected.has(row.tableRowId)) : visible
+    ).flatMap((tableRow) => {
+      if (tableRow.kind !== 'plan') return [];
+      const row = tableRow.plan;
+      const name = projectRegionalApprovalLiveDimension(
+        row,
+        tableRow.displayDimension ?? (tableRow.childPlan ? 'customer' : dimension),
+      ).name;
+      if (!name) return [];
+      const progress =
+        orderType === 'M'
+          ? regionalApprovalLiveProgress(row).amount
+          : row.amountProgress == null
+            ? undefined
+            : Number(row.amountProgress);
+      return [
+        {
+          name,
+          facts: {
+            progress: {
+              label: t(
+                orderType === 'M'
+                  ? 'common.correction.submissionProgress'
+                  : 'common.correction.progress',
+              ),
+              display: formattedProgress(progress),
+            },
+            plan: {
+              label: t('common.correction.plan'),
+              display: correctionDisplay(row.mPlanAmount, 'money').display,
+            },
+            target: {
+              label: t('common.correction.target'),
+              display: correctionDisplay(row.targetAmount, 'money').display,
+            },
+          },
+        },
+      ];
+    });
+    return rows.length
+      ? {
+          agent: 'sales-approval',
+          scope: `${liveQuery.selectedPeriodMonth}/${orderType}/${dimension}`,
+          selection: selectionActive ? 'selected' : 'list',
+          rows: rows.slice(0, 200),
+        }
+      : null;
+  }, [
+    skuReviewOpen,
+    liveCategoriesLoading,
+    liveEvidence,
+    liveQuery.selectedPeriodMonth,
+    selectedLiveTableRowIds,
+    selectedRowIds,
+    expandedLiveGroups,
+    liveTableRows,
+    dimension,
+    orderType,
+    t,
+  ]);
+
   useEffect(() => {
     const selectedAuthority =
       selectedLiveRows.length === 1
@@ -1576,6 +1668,7 @@ const RegionalApprovalWorkbench: React.FC<{
       {
         ...(automaticAnalysisEnabled ? { analysisSummary: scopeSummary } : {}),
         view: 'regional-approval',
+        quickQuestions,
         ...(skuReviewOpen ? { skuReview: skuReviewSnapshot } : {}),
         scope: {
           dimension,
@@ -1616,6 +1709,7 @@ const RegionalApprovalWorkbench: React.FC<{
     );
   }, [
     skuReviewOpen,
+    quickQuestions,
     skuReviewSnapshot,
     automaticAnalysisEnabled,
     scopeSummary,
@@ -2759,7 +2853,7 @@ const RegionalApprovalWorkbench: React.FC<{
         key={`${activeLiveActionRow.versionId}:${liveActionKind}`}
         visible={liveActionVisible}
         onBusyChange={setLiveActionBusy}
-        onPendingChange={setLiveActionPending}
+        onPendingChange={updateLivePending}
         embedded={false}
         autoSubmitApproval={liveActionKind === 'APPROVE'}
         row={activeLiveActionRow}
@@ -2799,7 +2893,17 @@ const RegionalApprovalWorkbench: React.FC<{
           refreshLiveAuthority();
         }}
         onRefresh={refreshLiveAuthority}
-
+        onResultConfirmed={() => {
+          setLivePendingValues((current) =>
+            Object.fromEntries(
+              Object.entries(current).filter(([id]) => id !== activeLiveActionRow.planId),
+            ),
+          );
+          setSelectedRowIds([]);
+          setLiveActionPending(false);
+          setLivePendingMessage('');
+          refreshLiveAuthority();
+        }}
         onAttemptFailed={() => setSelectedRowIds([])}
         onClose={(pending) => {
           if (pending) setLiveActionVisible(false);
@@ -2819,6 +2923,7 @@ const RegionalApprovalWorkbench: React.FC<{
         items={batchAction.items}
         t={t}
         client={liveActionClient}
+        onPendingChange={updateBatchPending}
         onPermissionDenied={(versionId) =>
           setPermissionDeniedVersions((current) => new Set(current).add(versionId))
         }
@@ -3694,10 +3799,20 @@ const RegionalApprovalWorkbench: React.FC<{
                         }
                         rowSelection={{
                           type: 'checkbox',
-                          checkAll: false,
+                          checkAll: true,
                           fixed: pinLiveColumns,
                           columnWidth: 40,
                           selectedRowKeys: selectedLiveTableRowIds,
+                          onSelectAll: (selected) => {
+                            if (selected) return;
+                            const pageKeys = new Set([
+                              ...liveTableRowById.keys(),
+                              ...liveRows.map((row) => row.planId),
+                            ]);
+                            setSelectedRowIds((current) =>
+                              current.filter((id) => !pageKeys.has(id)),
+                            );
+                          },
                           onChange: (keys) => {
                             const next = new Set(keys.map(String));
                             const displayed = new Set(selectedLiveTableRowIds);
@@ -3821,10 +3936,15 @@ const RegionalApprovalWorkbench: React.FC<{
       </Modal>
 
       {liveActionDialog}
-      {((liveActionPlanId && !liveActionVisible) || (batchAction && !batchActionVisible)) && (
+      {((liveActionPlanId && !liveActionVisible && livePendingMessage) ||
+        (batchAction && !batchActionVisible && batchPendingMessage)) && (
         <Alert
           type="warning"
-          content={t('common.assistantSurface.regionalApproval.liveSubmit.pendingNotice')}
+          content={
+            liveActionPlanId && !liveActionVisible && livePendingMessage
+              ? livePendingMessage
+              : batchPendingMessage
+          }
           action={
             <Button
               onClick={() => {

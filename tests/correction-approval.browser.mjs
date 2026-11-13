@@ -14,6 +14,7 @@ import {createRoot} from 'react-dom/client';
 import i18next from 'i18next';
 import '@arco-design/web-react/dist/css/arco.css';
 import './src/workbench/workbench.css';
+import './theme/tokens.css';
 import zh from './src/workbench/original/zh-CN.json';
 import Workbench from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalWorkbench.tsx';
 import {WorkbenchHostProvider} from './src/workbench/original/bridge.ts';
@@ -26,7 +27,7 @@ if(scenario==='original-fields'||scenario==='zero-adjustment')for(const key of [
 const second={...plan,planId:'p2',versionId:'v2',dealerCode:'d2',dealerName:'华北客户',orgCode:'o2',orgName:'华北销售组',provinceCode:'pr2',provinceName:'华北省区',areaCode:'a2',areaName:'华北大区',currentQty:'50',currentAmount:'400',mPlanQty:'50',mPlanAmount:'400',shipAmount:'200',shipQty:'20',prevAdjAddQty:'0',prevAdjCutQty:'3',corrPlanAmount:'376',corrPlanQty:'47',amountProgress:'20.0',correctionProgress:'37.6'};
 if(scenario==='duplicate')plan.planId='p-jxs-2026-10-00001';
 if(scenario==='display-baseline'){delete plan.mPlanQty;delete plan.mPlanAmount;}
-const plans=scenario==='display-baseline'?[plan,{...plan,planId:'p2',versionId:'v2',dealerCode:'d2',dealerName:'同组客户'}]:scenario==='duplicate'?[plan,{...plan,planId:'p-jxs-2026-10-00002',versionId:'v3',periodId:'20261002',planTypeCode:'DC'}]:scenario==='batch'||scenario==='filters'?[plan,second]:[plan];
+const plans=['display-baseline','correction-integer'].includes(scenario)?[plan,{...plan,planId:'p2',versionId:'v2',dealerCode:'d2',dealerName:'同组客户'}]:scenario==='duplicate'?[plan,{...plan,planId:'p-jxs-2026-10-00002',versionId:'v3',periodId:'20261002',planTypeCode:'DC'}]:scenario==='batch'||scenario==='filters'?[plan,second]:[plan];
 if(scenario==='m-source')plan.orderType='M';
 if(scenario==='zero'){plan.targetAmount='0';plan.amountProgress=null;plan.correctionProgress=null;}
 if(scenario==='shipment-unknown'){plan.shipAmount=null;plan.amountProgress=null;plan.shipmentError='发货金额来源待确认';}
@@ -34,6 +35,7 @@ if(scenario==='returned-no-channel')plan.status=7;
 if(scenario==='actual-progress')Object.assign(plan,{currentQty:'15160',currentAmount:'1623958.90',mPlanQty:'16755',mPlanAmount:'1635925.16',targetAmount:'2008135.97',shipAmount:null,shipQty:null,amountProgress:null,shipmentError:'未取得该客户当月发货数据'});
 const details=new Map(plans.map(p=>[p.planId,{currentVersion:{...p,id:p.versionId,effective:true},skus:[{id:'s-'+p.planId,skuCode:'1001',versionId:p.versionId,productCategName:'水饺',skuName:'猪肉白菜水饺',qty:p.currentQty,baseQty:p.currentQty,price:'8',amt:p.currentAmount,amtBase:p.currentAmount,adjAddQty:p.planId==='p2'||scenario==='zero-adjustment'?'0':'2',adjCutQty:p.planId==='p2'?'3':'0'}],versions:[],logs:[]}]));
 if(scenario==='display-baseline')for(const detail of details.values())Object.assign(detail.skus[0],{baseQty:'-4',amtBase:'114800',corrBaseQty:'100',qty:'100',amt:'800'});
+if(scenario==='correction-integer')for(const detail of details.values())Object.assign(detail.skus[0],{qty:'100.000',corrBaseQty:'90.000',amt:'720.00',adjAddQty:'0',adjCutQty:'0'});
 const drafts=new Map();
 const client={
  periods:{invoke:async()=>({records:[{periodId:'20261001',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
@@ -127,9 +129,13 @@ test(
     await page.getByRole('tab', { name: '按客户', exact: true }).click();
     const open = page.getByRole('button', { name: '打开 华南经销客户 调整明细', exact: true });
     await open.click();
-    const input = page.getByRole('spinbutton', { name: '追加/追减 1001', exact: true });
+    const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
     await expect(input).toBeEnabled();
-    await input.fill('-3');
+    await expect(input).toHaveValue('102');
+    await expect(input.locator('xpath=ancestor::tr[1]').getByRole('cell').nth(3)).toContainText(
+      '+2',
+    );
+    await input.fill('97');
     await page.clock.runFor(700);
     await expect
       .poll(() => page.evaluate(() => window.draftRequests.filter((q) => q.draft).length))
@@ -143,9 +149,9 @@ test(
     assert.deepEqual(await page.evaluate(() => window.actions), []);
     await open.click();
     await open.click();
-    await expect(page.getByRole('spinbutton', { name: '追加/追减 1001', exact: true })).toHaveValue(
-      '-3',
-    );
+    await expect(
+      page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }),
+    ).toHaveValue('97');
   },
 );
 
@@ -268,7 +274,7 @@ test('纠偏暂存后批量通过携带草稿，批量退回复用原原因和�
     await page.getByRole('tab', { name: '纠偏', exact: true }).click();
     await page.getByRole('tab', { name: '按客户', exact: true }).click();
     await page.getByRole('button', { name: '打开 华南经销客户 调整明细', exact: true }).click();
-    await page.getByRole('spinbutton', { name: '追加/追减 1001', exact: true }).fill('8');
+    await page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).fill('108');
     await page.clock.runFor(700);
     await expect
       .poll(() => page.evaluate(() => window.draftRequests.filter((q) => q.draft).length))
@@ -378,10 +384,10 @@ test('月初和纠偏单笔通过都带入即时编辑，纠偏输入不改月�
     await page.getByRole('button', { name: '打开 华南经销客户 调整明细', exact: true }).click();
     await page
       .getByRole('spinbutton', {
-        name: order === 'Z' ? '追加/追减 1001' : '确认计划量 1001',
+        name: '确认计划量 1001',
         exact: true,
       })
-      .fill(order === 'Z' ? '8' : '108');
+      .fill('108');
     if (order === 'Z') {
       await expect(page.getByTestId('regional-approval-month-plan-p1')).toContainText('100');
       await expect(page.getByRole('row').filter({ hasText: '华南经销客户' }).first()).toContainText(
@@ -438,7 +444,7 @@ test('Z月计划和展开基准只展示corrBaseQty与amt，M保留原base字段
     await page.getByRole('button', { name: '打开 华南经销客户 调整明细', exact: true }).click();
     const sku = page.getByRole('row').filter({ hasText: '猪肉白菜水饺' }).last();
     await expect(sku.getByRole('cell').nth(1)).toHaveText(order === 'Z' ? '100¥800' : '-4¥114,800');
-    await expect(sku.getByRole('cell')).toHaveCount(3);
+    await expect(sku.getByRole('cell')).toHaveCount(order === 'Z' ? 4 : 3);
     if (order === 'Z') {
       await page.getByRole('tab', { name: '按区域', exact: true }).click();
       await page
@@ -448,7 +454,7 @@ test('Z月计划和展开基准只展示corrBaseQty与amt，M保留原base字段
       const grouped = page.getByTestId('regional-approval-group-sku-summary');
       const groupedSku = grouped.getByRole('row').filter({ hasText: '猪肉白菜水饺' });
       await expect(groupedSku.getByRole('cell').nth(1)).toHaveText('200¥1,600');
-      await expect(groupedSku.getByRole('cell')).toHaveCount(3);
+      await expect(groupedSku.getByRole('cell')).toHaveCount(order === 'Z' ? 4 : 3);
     }
   }
 });
@@ -458,8 +464,8 @@ test('纠偏重复点击当前节点保留选择和调整输入', { timeout: 300
   await page.getByRole('tab', { name: '纠偏', exact: true }).click();
   await page.getByRole('tab', { name: '按客户', exact: true }).click();
   await page.getByRole('button', { name: '打开 华南经销客户 调整明细', exact: true }).click();
-  const input = page.getByRole('spinbutton', { name: '追加/追减 1001', exact: true });
-  await input.fill('-3');
+  const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await input.fill('97');
   const selected = page.getByRole('checkbox').first();
   await selected.locator('..').click();
   await page.getByRole('button', { name: '展开审批流程图', exact: true }).click();
@@ -468,5 +474,74 @@ test('纠偏重复点击当前节点保留选择和调整输入', { timeout: 300
   await current.click();
   await expect(current).toHaveAttribute('aria-pressed', 'true');
   await expect(selected).toBeChecked();
-  await expect(input).toHaveValue('-3');
+  await expect(input).toHaveValue('97');
+});
+
+test('纠偏确认计划量取整，客户和区域明细同步展示调整数量与金额', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t, 'correction-integer');
+  await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  await page.getByRole('button', { name: '打开 华南经销客户 调整明细', exact: true }).click();
+  const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await expect(input).toHaveValue('100');
+  await expect(input).toHaveAttribute('step', '1');
+  const row = input.locator('xpath=ancestor::tr[1]');
+  await expect(row.getByRole('cell').nth(3)).toContainText('+10');
+  await expect(row.getByRole('cell').nth(3)).toContainText('+¥80.00');
+  assert.deepEqual(await page.evaluate(() => window.draftRequests.filter((q) => q.draft)), []);
+  await input.fill('101.600');
+  await input.blur();
+  await expect(input).toHaveValue('102');
+  await expect(row.getByRole('cell').nth(3)).toContainText('+12');
+  await expect(row.getByRole('cell').nth(3)).toContainText('+¥96.00');
+  await page.clock.runFor(700);
+  await expect
+    .poll(() => page.evaluate(() => window.draftRequests.filter((q) => q.draft).length))
+    .toBeGreaterThan(0);
+  assert.equal(
+    Number(
+      await page.evaluate(
+        () => window.draftRequests.filter((q) => q.draft).at(-1).draft.adjustments[0].adjustQty,
+      ),
+    ),
+    2,
+  );
+  await page.getByRole('tab', { name: '按区域', exact: true }).click();
+  await page
+    .getByRole('button', { name: /宝阳销售组/ })
+    .first()
+    .click();
+  const summary = page.getByTestId('regional-approval-group-sku-summary');
+  const groupedInput = summary.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await expect(groupedInput).toHaveValue('202');
+  await expect(groupedInput).toHaveAttribute('step', '1');
+  const groupedRow = groupedInput.locator('xpath=ancestor::tr[1]');
+  await expect(groupedRow.getByRole('cell').nth(3)).toContainText('+22');
+  await groupedInput.fill('175');
+  await expect(groupedRow.getByRole('cell').nth(3)).toContainText('-5');
+  await expect(groupedRow.getByRole('cell').nth(3)).toContainText('-¥40.00');
+  if (process.env.DSH_REVIEW_EVIDENCE)
+    await page.screenshot({
+      path: process.env.DSH_REVIEW_EVIDENCE + '/correction-adjustment-wide.png',
+    });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const viewport = summary.getByRole('region');
+  await viewport.evaluate((node) => {
+    node.scrollLeft = node.scrollWidth;
+  });
+  const adjustmentCell = groupedRow.getByRole('cell').nth(3);
+  await expect(async () => {
+    await adjustmentCell.scrollIntoViewIfNeeded();
+    const box = await adjustmentCell.boundingBox();
+    assert.ok(
+      box && box.x >= 0 && box.x + box.width <= 390,
+      'adjustment cell stays readable after horizontal scrolling',
+    );
+  }).toPass({ timeout: 5000 });
+  await expect(adjustmentCell).toBeVisible();
+  if (process.env.DSH_REVIEW_EVIDENCE)
+    await page.screenshot({
+      path: process.env.DSH_REVIEW_EVIDENCE + '/correction-adjustment-narrow.png',
+    });
+  assert.deepEqual(await page.evaluate(() => window.actions), []);
 });
