@@ -60,6 +60,65 @@ const source = (status = 6, periodStatus = 'OPEN') => ({
     },
   ],
 });
+
+test('unknown resubmission confirms the completed successor by its request log without replaying', async () => {
+  const original = source(7);
+  const input = prepareSalesPlanResubmit(original);
+  let calls = 0;
+  const attempt = new SalesPlanSubmitAttempt(
+    {
+      submit: {
+        invoke: async () => {
+          calls++;
+          throw new TypeError('response lost');
+        },
+      },
+    },
+    () => 'same-request',
+  );
+  await assert.rejects(attempt.submit(input));
+  const detail = {
+    currentVersion: { ...original.detail.currentVersion, id: 'v2', seq: 2, status: 10 },
+    versions: [{ ...original.detail.currentVersion, effective: false }],
+    skus: [],
+    logs: [
+      {
+        planId: original.planId,
+        versionId: 'v2',
+        requestId: 'same-request',
+        actionCode: 'RESUBMIT',
+      },
+    ],
+  };
+  assert.equal(attempt.resultConfirmed(detail, original.skus), true);
+  assert.equal(attempt.resultConfirmed({ ...detail, logs: [] }, original.skus), false);
+  assert.equal(
+    attempt.resultConfirmed(
+      { ...detail, currentVersion: { ...detail.currentVersion, seq: 3 } },
+      original.skus,
+    ),
+    false,
+  );
+  assert.equal(calls, 1);
+  const completed = new SalesPlanSubmitAttempt(
+    {
+      submit: {
+        invoke: async (command) => ({
+          planId: original.planId,
+          versionId: 'v2',
+          seq: 2,
+          status: 10,
+          requestId: command.requestId,
+          traceId: 'trace',
+          replayed: false,
+        }),
+      },
+    },
+    () => 'same-request',
+  );
+  await completed.submit(input);
+  assert.equal(completed.resultConfirmed(detail, original.skus), true);
+});
 test('resubmission retains order type, sends the configured next status and validates quantities', () => {
   for (const [from, to] of [
     [6, 1],

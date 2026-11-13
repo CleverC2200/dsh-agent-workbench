@@ -546,6 +546,15 @@ const RegionalApprovalWorkbench: React.FC<{
   const liveActionPlanId = liveAction?.row.planId;
   const liveActionKind = liveAction?.kind ?? 'APPROVE';
   const [liveActionPending, setLiveActionPending] = useState(false);
+  const [livePendingMessage, setLivePendingMessage] = useState('');
+  const [batchPendingMessage, setBatchPendingMessage] = useState('');
+  const updateLivePending = useCallback((pending: boolean, message: string) => {
+    setLiveActionPending(pending);
+    setLivePendingMessage(message);
+  }, []);
+  const updateBatchPending = useCallback((_pending: boolean, message: string) => {
+    setBatchPendingMessage(message);
+  }, []);
   const [liveActionVisible, setLiveActionVisible] = useState(true);
   const [liveActionBusy, setLiveActionBusy] = useState(false);
   const [batchActionVisible, setBatchActionVisible] = useState(true);
@@ -2844,7 +2853,7 @@ const RegionalApprovalWorkbench: React.FC<{
         key={`${activeLiveActionRow.versionId}:${liveActionKind}`}
         visible={liveActionVisible}
         onBusyChange={setLiveActionBusy}
-        onPendingChange={setLiveActionPending}
+        onPendingChange={updateLivePending}
         embedded={false}
         autoSubmitApproval={liveActionKind === 'APPROVE'}
         row={activeLiveActionRow}
@@ -2884,7 +2893,17 @@ const RegionalApprovalWorkbench: React.FC<{
           refreshLiveAuthority();
         }}
         onRefresh={refreshLiveAuthority}
-
+        onResultConfirmed={() => {
+          setLivePendingValues((current) =>
+            Object.fromEntries(
+              Object.entries(current).filter(([id]) => id !== activeLiveActionRow.planId),
+            ),
+          );
+          setSelectedRowIds([]);
+          setLiveActionPending(false);
+          setLivePendingMessage('');
+          refreshLiveAuthority();
+        }}
         onAttemptFailed={() => setSelectedRowIds([])}
         onClose={(pending) => {
           if (pending) setLiveActionVisible(false);
@@ -2904,6 +2923,7 @@ const RegionalApprovalWorkbench: React.FC<{
         items={batchAction.items}
         t={t}
         client={liveActionClient}
+        onPendingChange={updateBatchPending}
         onPermissionDenied={(versionId) =>
           setPermissionDeniedVersions((current) => new Set(current).add(versionId))
         }
@@ -3916,10 +3936,15 @@ const RegionalApprovalWorkbench: React.FC<{
       </Modal>
 
       {liveActionDialog}
-      {((liveActionPlanId && !liveActionVisible) || (batchAction && !batchActionVisible)) && (
+      {((liveActionPlanId && !liveActionVisible && livePendingMessage) ||
+        (batchAction && !batchActionVisible && batchPendingMessage)) && (
         <Alert
           type="warning"
-          content={t('common.assistantSurface.regionalApproval.liveSubmit.pendingNotice')}
+          content={
+            liveActionPlanId && !liveActionVisible && livePendingMessage
+              ? livePendingMessage
+              : batchPendingMessage
+          }
           action={
             <Button
               onClick={() => {

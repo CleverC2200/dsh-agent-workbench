@@ -122,7 +122,7 @@ if(comparison==='header-selection')sourcePlans[2].status=5;
 if(comparison==='header-pagination')for(let n=4;n<=12;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
 const plans=continued?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1).map(plan=>({...plan,status:continued[0]})):['returned','return-unavailable'].includes(comparison)?(comparison==='return-unavailable'?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1):sourcePlans).map(plan=>({...plan,status:comparison==='return-unavailable'?8:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 if(comparison?.startsWith('single-'))for(const plan of plans)plan.status=4;
-window.sentDirect=[];
+window.sentDirect=[];window.completePlan=()=>{plans[0].status=10;};window.returnConfirmed=false;
 const skuFor=(versionId)=>{
   const base=baseSkuFor(versionId);
   if(continued) return {...base,regionConfirmedQty:'10',regionConfirmedAmount:'100',provinceConfirmedQty:'15',provinceConfirmedAmount:'150',areaConfirmedQty:'25',areaConfirmedAmount:'250'};
@@ -149,7 +149,7 @@ const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
   list:{invoke:async(q)=>{if(comparison==='loading'||comparison==='quick-loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1}}},
-  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
+  detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.returnConfirmed?{status:6}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:window.returnConfirmed?window.sentReturns.filter(c=>c.planId===planId).map(c=>({planId,versionId:c.versionId,actionCode:'REJECT',fromStatus:c.request.expectedStatus,toStatus:6,requestId:c.requestId})):continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{readCalls.push({history:planId});const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
     readCalls.push({review:planId});
@@ -1352,9 +1352,11 @@ for (const [scenario, reason] of [
         });
       }
       await expect(page.getByText(/hidden-error-reference|hidden-trace-reference/)).toHaveCount(0);
-      await expect(page.getByRole('button', { name: '重试并核对结果', exact: true })).toHaveCount(
-        0,
-      );
+      await expect(
+        page
+          .getByTestId('regional-approval-workbench')
+          .getByRole('button', { name: '核对提交结果', exact: true }),
+      ).toHaveCount(0);
       if (scenario === 'single-permission')
         await expect(dialog.getByRole('button', { name: '重新提交', exact: true })).toBeDisabled();
     },
@@ -1365,18 +1367,31 @@ test('single uncertain approval keeps its original intent and does not create an
   await page.locator('tbody label.arco-checkbox:visible').first().click();
   await page.getByRole('button', { name: '通过', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByText(/结果暂时未知/)).toBeVisible();
+  await expect(dialog.getByText(/尚未查到/)).toBeVisible();
   await expect(dialog.getByRole('button', { name: '关闭', exact: true })).toBeEnabled();
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await expect(page.getByRole('button', { name: '恢复待核对操作', exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByTestId('regional-approval-workbench')
+      .getByRole('button', { name: '核对提交结果', exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: '通过', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
+  await page
+    .getByTestId('regional-approval-workbench')
+    .getByRole('button', { name: '核对提交结果', exact: true })
+    .click();
   assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
-  await dialog.getByRole('button', { name: '重试并核对结果', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
-  const calls = await page.evaluate(() => window.sentDirect);
-  assert.deepEqual(calls[1], calls[0]);
-  await expect(dialog.getByText(/结果暂时未知/)).toBeVisible();
+  await dialog.getByRole('button', { name: '核对提交结果', exact: true }).click();
+  await expect(dialog.getByText(/尚未查到/)).toBeVisible();
+  assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
+  await expect(dialog).toContainText('客户1：');
+  await page.evaluate(() => window.completePlan());
+  await dialog.getByRole('button', { name: '核对提交结果', exact: true }).click();
+  await expect(dialog).toContainText('提交成功');
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByText(/客户1：.*尚未查到/)).toHaveCount(0);
+  await expect(page.getByText(/\{\{plan\}\}/)).toHaveCount(0);
+  assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
 });
 
 test('explicit single DMS rejection permits another manual submission with a new request', async (t) => {
@@ -1487,17 +1502,19 @@ test('batch return retains an unknown attempt while successful plans are not sen
     await page.screenshot({ path: process.env.GEA_RESULT_EVIDENCE + '/batch-pending-narrow.png' });
   }
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
   await page
-    .getByRole('dialog')
-    .getByRole('button', { name: '重试并核对结果', exact: true })
+    .getByTestId('regional-approval-workbench')
+    .getByRole('button', { name: '核对提交结果', exact: true })
     .click();
-  await expect.poll(() => page.evaluate(() => window.sentReturns.length)).toBe(3);
-  const calls = await page.evaluate(() => window.sentReturns);
-  assert.deepEqual(
-    calls[2],
-    calls.find((call) => call.planId === 'p1'),
-  );
+  await page.getByRole('dialog').getByRole('button', { name: '核对提交结果', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('待核对 1 笔');
+  assert.equal(await page.evaluate(() => window.sentReturns.length), 2);
+  await page.evaluate(() => {
+    window.returnConfirmed = true;
+  });
+  await page.getByRole('dialog').getByRole('button', { name: '核对提交结果', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('待核对 0 笔');
+  assert.equal(await page.evaluate(() => window.sentReturns.length), 2);
 });
 
 for (const [block, reason] of [
@@ -1549,10 +1566,13 @@ test('unknown approval survives a refreshed empty queue and resumes the frozen c
   });
   await page.getByRole('button', { name: '刷新数据', exact: true }).click();
   await expect(page.locator('tbody label.arco-checkbox:visible')).toHaveCount(0);
-  await page.getByRole('button', { name: '恢复待核对操作', exact: true }).click();
+  await page
+    .getByTestId('regional-approval-workbench')
+    .getByRole('button', { name: '核对提交结果', exact: true })
+    .click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('结果暂时未知');
-  await dialog.getByRole('button', { name: '重试并核对结果', exact: true }).click();
+  await dialog.getByRole('button', { name: '核对提交结果', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
   const calls = await page.evaluate(() => window.sentDirect);
   assert.deepEqual(calls[1], calls[0]);

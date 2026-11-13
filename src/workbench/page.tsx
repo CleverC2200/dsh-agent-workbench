@@ -344,10 +344,13 @@ export function WorkbenchPage({ t }: { t: Translate }) {
     items: readonly SalesPlanSubmissionItem[];
     visible: boolean;
     pending: boolean;
+    pendingMessage?: string;
   }>();
-  const updateResubmitPending = useCallback((pending: boolean) => {
+  const updateResubmitPending = useCallback((pending: boolean, pendingMessage: string) => {
     setResubmit((current) =>
-      current && current.pending !== pending ? { ...current, pending } : current,
+      current && (current.pending !== pending || current.pendingMessage !== pendingMessage)
+        ? { ...current, pending, pendingMessage }
+        : current,
     );
   }, []);
   useEffect(() => {
@@ -573,10 +576,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                 <Alert
                   type="warning"
                   style={{ flexShrink: 0 }}
-                  content={locale.t(
-                    'common.assistantSurface.regionalApproval.liveSubmit.pendingNotice',
-                    { plan: resubmit.items.map((item) => item.label).join('、') },
-                  )}
+                  content={resubmit.pendingMessage}
                   action={
                     <Button
                       onClick={() =>

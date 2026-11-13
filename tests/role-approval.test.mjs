@@ -39,6 +39,73 @@ const policy = (roles = ['region'], status = 2) => ({
   allowedActions: [],
   roleActions: roles.map((role) => ({ role, allowedActions: ['SAVE', 'APPROVE', 'REJECT'] })),
 });
+
+test('category completion accepts DMS status 10 with the original receipt identity', () => {
+  const input = {
+    planId: 'p',
+    versionId: 'v',
+    planTypeCode: 'Y',
+    serverRoleResult: true,
+    request: { action: 'APPROVE', expectedStatus: 4, approvalRole: 'category' },
+  };
+  const receipt = {
+    planId: 'p',
+    versionId: 'v',
+    fromStatus: 4,
+    toStatus: 10,
+    requestId: 'r',
+    traceId: 't',
+    approvalRole: 'category',
+    approvedRoles: ['region', 'province', 'area', 'category'],
+  };
+  assert.equal(m.salesPlanActionReceiptMatches(input, 'r', receipt), true);
+  assert.equal(m.salesPlanActionReceiptMatches(input, 'other', receipt), false);
+  assert.equal(
+    m.salesPlanActionReceiptMatches(input, 'r', { ...receipt, approvedRoles: [] }),
+    false,
+  );
+  assert.equal(
+    m.salesPlanActionReceiptMatches({ ...input, serverRoleResult: false }, 'r', receipt),
+    true,
+  );
+});
+
+test('unknown approval checks the effective version without sending another action', async () => {
+  let calls = 0;
+  const attempt = new m.SalesPlanActionAttempt({
+    action: {
+      invoke: async () => {
+        calls++;
+        throw new TypeError('connection closed after DMS accepted');
+      },
+    },
+  });
+  await assert.rejects(
+    attempt.submit({
+      planId: 'p',
+      versionId: 'v',
+      planTypeCode: 'Y',
+      request: { action: 'APPROVE', expectedStatus: 4 },
+    }),
+  );
+  assert.equal(attempt.resultConfirmed(detail(4)), false);
+  assert.equal(
+    attempt.resultConfirmed({
+      ...detail(10),
+      currentVersion: { ...detail(10).currentVersion, id: 'other' },
+    }),
+    false,
+  );
+  assert.equal(
+    attempt.resultConfirmed({
+      ...detail(10),
+      currentVersion: { ...detail(10).currentVersion, effective: false },
+    }),
+    false,
+  );
+  assert.equal(attempt.resultConfirmed(detail(10)), true);
+  assert.equal(calls, 1);
+});
 test('returned versions cannot approve while normal approvals and continued returns remain available', () => {
   for (const status of [1, 2, 3, 4, 6, 7, 8, 9]) {
     const access = m.salesPlanAccessForRow(row(status), detail(status), ['region']);

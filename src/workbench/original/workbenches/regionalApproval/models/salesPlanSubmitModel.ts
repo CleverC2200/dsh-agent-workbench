@@ -442,6 +442,55 @@ export class SalesPlanSubmitAttempt {
     return this.invoke();
   }
 
+  resultConfirmed(detail: GeaSalesPlanDetail, sourceSkus: readonly GeaSalesPlanSku[]): boolean {
+    const input = this.input;
+    const command = this.command;
+    if (!input || !command) return false;
+    const current = detail.currentVersion;
+    if (
+      current.planId !== input.expected.planId ||
+      current.id === input.expected.previousVersionId ||
+      current.seq !== input.expected.nextSeq ||
+      !current.effective ||
+      (this.receipt &&
+        (!validSubmitReceipt(input, command.requestId, this.receipt) ||
+          this.receipt.seq !== input.expected.nextSeq ||
+          ![input.expected.nextStatus, 10].includes(this.receipt.status) ||
+          this.receipt.versionId !== current.id)) ||
+      !detail.versions.some(
+        (version) =>
+          version.id === input.expected.previousVersionId &&
+          version.planId === current.planId &&
+          !version.effective,
+      ) ||
+      !detail.logs.some(
+        (log) =>
+          log.planId === current.planId &&
+          log.versionId === current.id &&
+          log.requestId === command.requestId &&
+          log.actionCode === 'RESUBMIT',
+      )
+    )
+      return false;
+    if (current.status === 10) return true;
+    return (
+      current.status === input.expected.nextStatus &&
+      salesPlanResubmitReadbackMatches(
+        input.expected.previousVersionId,
+        {
+          planId: current.planId,
+          versionId: current.id,
+          seq: current.seq,
+          status: current.status,
+          requestId: command.requestId,
+        },
+        detail,
+        input.request,
+        sourceSkus,
+      )
+    );
+  }
+
   private invoke(): Promise<GeaSalesPlanSubmitReceipt> {
     const command = this.command;
     const input = this.input;
@@ -481,7 +530,7 @@ export class SalesPlanSubmitAttempt {
 
 export const salesPlanResubmitReadbackMatches = (
   previousVersionId: string,
-  receipt: GeaSalesPlanSubmitReceipt,
+  receipt: Pick<GeaSalesPlanSubmitReceipt, 'planId' | 'versionId' | 'seq' | 'status' | 'requestId'>,
   detail: GeaSalesPlanDetail,
   request?: GeaSalesPlanSubmitRequest,
   sourceSkus?: readonly GeaSalesPlanSku[],

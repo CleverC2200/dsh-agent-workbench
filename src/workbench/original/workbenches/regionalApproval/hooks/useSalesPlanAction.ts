@@ -1,4 +1,8 @@
-import { useWorkbenchHost, type GeaSalesPlanActionReceipt } from '../../../bridge.ts';
+import {
+  useWorkbenchHost,
+  type GeaSalesPlanActionReceipt,
+  type GeaSalesPlanDetail,
+} from '../../../bridge.ts';
 import { useCallback, useRef, useState } from 'react';
 import {
   SalesPlanActionAttempt,
@@ -21,7 +25,6 @@ export const useSalesPlanAction = ({
 }) => {
   const host = useWorkbenchHost();
   const client = suppliedClient ?? host.salesPlan;
-
   const attempt = useRef(new SalesPlanActionAttempt(client));
   const renewAttempt = useRef(false);
   const operation = useRef(0);
@@ -61,5 +64,6 @@ export const useSalesPlanAction = ({
       }
     },
     retry: () => settle(attempt.current.retry()),
+    resultConfirmed: (detail: GeaSalesPlanDetail) => attempt.current.resultConfirmed(detail),
   };
 };
