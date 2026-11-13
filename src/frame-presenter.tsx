@@ -1,4 +1,5 @@
 import { insertPageFeedbackDraft } from './page-feedback-draft.ts';
+import { createPageRequest } from './page-request.ts';
 import React, {
   useEffect,
   useLayoutEffect,
@@ -936,36 +937,10 @@ export function mountFramePresentation(
           />
           <aside
             className="agent-workbench-native-conversation"
-            data-order-assistant={
-              page.id === 'inventory-orderworkbench' || page.id === 'inventory-orderfulfillment'
-                ? ''
-                : undefined
-            }
             aria-label="AI对话"
             hidden={view === 'center'}
           >
             {titleless && view !== 'center' && chrome}
-            {(page.id === 'inventory-orderworkbench' ||
-              page.id === 'inventory-orderfulfillment') && (
-              <div className="gea-order-assistant-head">
-                <strong>{t('pageAssistantTitle')}</strong>
-                <button
-                  type="button"
-                  aria-label={t('pageHistory')}
-                  onClick={() => workbench.showHistory(page.id)}
-                >
-                  ◴
-                </button>
-                <button
-                  type="button"
-                  aria-label={t('pageNewChat')}
-                  disabled={busy}
-                  onClick={() => void newConversation()}
-                >
-                  ⊞
-                </button>
-              </div>
-            )}
             {associated && session?.openState === 'open' ? (
               <QuickQuestionsContext.Provider
                 value={
@@ -1081,20 +1056,7 @@ function createExecution(
   ctx: Context,
   account: import('./company/account.ts').BusinessAccount,
 ): WorkbenchPageExecution {
-  const request = async (operation: string, input: object, signal: AbortSignal) => {
-    const response = await fetch('/api/agent-workbench/page', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ operation, ...input }),
-      signal,
-    });
-    const value = await response.json();
-
-    if (operation !== 'open') signal.throwIfAborted();
-    if (!response.ok) throw Error(value.error ?? 'PAGE_REQUEST_FAILED');
-    return value;
-  };
+  const request = createPageRequest();
   return {
     identity: account,
     async open(page, sessionId, resourceId, signal) {
