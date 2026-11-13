@@ -1312,7 +1312,7 @@ test('production policy preserves actual build and provenance regression consume
     ['scripts/static-author-provenance.mjs', 'tests/static-author-provenance.test.mjs'],
     ['scripts/html-author.mjs', 'tests/html-sample-resource.test.mjs'],
     ['scripts/build-inventory.mjs', 'tests/inventory-storage-build.test.mjs'],
-    ['scripts/build.mjs', 'tests/core-resource-build.test.mjs'],
+    ['scripts/build.mjs', 'tests/plugin-resource-build.test.mjs'],
     ['scripts/sql-config-build.mjs', 'tests/sql-config-build.test.mjs'],
   ])
     await t.test(source, (t) => {
