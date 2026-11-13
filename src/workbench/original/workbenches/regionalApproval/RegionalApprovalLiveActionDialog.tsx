@@ -14,6 +14,7 @@ import {
   businessSafeErrorMessage,
   salesPlanRejectionMessage,
   reportSalesPlanError,
+  classifySalesPlanActionError,
   salesPlanActionTargetStatus,
   type SalesPlanActionClient,
   type SalesPlanActionError,
@@ -148,8 +149,8 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   onAttemptFailed?: () => void;
   onClose: (pending?: boolean) => void;
   onBusyChange?: (busy: boolean) => void;
-  onPendingChange?: (pending: boolean) => void;
-
+  onPendingChange?: (pending: boolean, message: string) => void;
+  onResultConfirmed?: () => void;
   remarkPatch?: { at: number; remark: string };
 
   submitRequest?: { at: number };
@@ -172,6 +173,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   onClose,
   onBusyChange,
   onPendingChange,
+  onResultConfirmed,
   remarkPatch,
   submitRequest,
 }) => {
@@ -207,6 +209,8 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [preflightError, setPreflightError] = useState<string>();
   const [checking, setChecking] = useState(false);
+  const [verificationReason, setVerificationReason] = useState<string>();
+  const [resultConfirmed, setResultConfirmed] = useState(false);
   const submitting = useRef(false);
   const [discardConfirmVisible, setDiscardConfirmVisible] = useState(false);
   const [adjustmentValues, setAdjustmentValues] = useState<Record<string, string>>({});
@@ -287,10 +291,26 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   const action = useSalesPlanAction({ client });
   const loading = checking || action.state.status === 'loading';
   const canClose = !loading;
-  const pending = action.state.status === 'error' && action.state.error.retrySameIntent;
+  const pending =
+    !resultConfirmed && action.state.status === 'error' && action.state.error.retrySameIntent;
+  const pendingMessage =
+    pending || refreshFailed
+      ? t('common.assistantSurface.regionalApproval.liveSubmit.pendingNotice', {
+          plan: row.dealerName || row.orgName || row.planId,
+          reason: verificationReason
+            ? t(`common.assistantSurface.regionalApproval.liveSubmit.errors.${verificationReason}`)
+            : kind === 'SAVE' && pending
+              ? t('common.assistantSurface.regionalApproval.liveAction.saveUnconfirmed')
+              : refreshFailed
+                ? t('common.assistantSurface.regionalApproval.liveAction.refreshFailed')
+                : action.state.status === 'error'
+                  ? actionErrorText(t, action.state.error)
+                  : '',
+        })
+      : '';
   useEffect(
-    () => onPendingChange?.(pending || refreshFailed),
-    [pending, refreshFailed, onPendingChange],
+    () => onPendingChange?.(pending || refreshFailed, pendingMessage),
+    [pending, refreshFailed, pendingMessage, onPendingChange],
   );
   useEffect(
     () => onBusyChange?.(loading || (directApproval && !draftReady && !draftError)),
@@ -513,6 +533,26 @@ const RegionalApprovalLiveActionDialog: React.FC<{
     );
   }, [snapshot, row.versionId, supportsAdjustments, visible]);
 
+  const checkResult = async () => {
+    setChecking(true);
+    try {
+      const detail = await salesPlan.detail.invoke({ planId: row.planId });
+      if (action.resultConfirmed(detail) && onResultConfirmed) {
+        setResultConfirmed(true);
+        setRefreshFailed(false);
+        onResultConfirmed();
+        return;
+      }
+      setVerificationReason(
+        detail.currentVersion.id !== row.versionId ? 'resultVersionChanged' : 'resultUnconfirmed',
+      );
+    } catch {
+      setVerificationReason('resultReadFailed');
+    } finally {
+      setChecking(false);
+    }
+  };
+
   const complete = async (promise: Promise<GeaSalesPlanActionReceipt>) => {
     try {
       const receipt = await promise;
@@ -524,6 +564,8 @@ const RegionalApprovalLiveActionDialog: React.FC<{
         setRefreshFailed(true);
       }
     } catch (error) {
+      if (kind !== 'SAVE' && classifySalesPlanActionError(error).retrySameIntent)
+        await checkResult();
       if (error && typeof error === 'object' && 'kind' in error && error.kind === 'permission') {
         onPermissionDenied(row.versionId);
       } else {
@@ -694,8 +736,16 @@ const RegionalApprovalLiveActionDialog: React.FC<{
 
   const retry = () => {
     if (loading || action.state.status !== 'error' || !action.state.error.retrySameIntent) return;
-    void complete(action.retry());
+    if (kind === 'SAVE') void complete(action.retry());
+    else void checkResult();
   };
+
+  const wasVisible = useRef(visible);
+  useEffect(() => {
+    const reopened = visible && !wasVisible.current;
+    wasVisible.current = visible;
+    if (reopened && pending && !loading && kind !== 'SAVE') void checkResult();
+  }, [visible, pending, loading, kind, checkResult]);
 
   const requestClose = () => {
     if (!canClose) return;
@@ -756,15 +806,19 @@ const RegionalApprovalLiveActionDialog: React.FC<{
             <Button disabled={!canClose} onClick={() => onClose(pending || refreshFailed)}>
               {t('common.assistantSurface.regionalApproval.liveAction.close')}
             </Button>
-            {refreshFailed && action.state.status === 'success' ? (
+            {resultConfirmed ? null : refreshFailed && action.state.status === 'success' ? (
               <Button
                 type="primary"
                 onClick={() =>
                   action.state.status === 'success' &&
-                  void complete(Promise.resolve(action.state.receipt))
+                  void (kind === 'SAVE'
+                    ? complete(Promise.resolve(action.state.receipt))
+                    : checkResult())
                 }
               >
-                {t('common.assistantSurface.regionalApproval.liveAction.verifySave')}
+                {t(
+                  `common.assistantSurface.regionalApproval.liveAction.${kind === 'SAVE' ? 'verifySave' : 'retry'}`,
+                )}
               </Button>
             ) : action.state.status === 'error' && action.state.error.retrySameIntent ? (
               <Button type="primary" onClick={retry}>
@@ -804,8 +858,12 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           <strong>{row.dealerName || row.orgName || row.planId}</strong>
           <span>{row.planId}</span>
           <Alert
-            type={pending || refreshFailed ? 'warning' : 'error'}
+            type={resultConfirmed ? 'success' : pending || refreshFailed ? 'warning' : 'error'}
             content={
+              (resultConfirmed
+                ? t('common.assistantSurface.regionalApproval.liveSubmit.itemSuccess')
+                : '') ||
+              pendingMessage ||
               preflightError ||
               directBlock ||
               (draftError
@@ -913,14 +971,20 @@ const RegionalApprovalLiveActionDialog: React.FC<{
                   type="primary"
                   onClick={() =>
                     action.state.status === 'success' &&
-                    void complete(Promise.resolve(action.state.receipt))
+                    void (kind === 'SAVE'
+                      ? complete(Promise.resolve(action.state.receipt))
+                      : checkResult())
                   }
                 >
-                  {t('common.assistantSurface.regionalApproval.liveAction.verifySave')}
+                  {t(
+                    `common.assistantSurface.regionalApproval.liveAction.${kind === 'SAVE' ? 'verifySave' : 'retry'}`,
+                  )}
                 </Button>
               ) : action.state.status === 'error' && action.state.error.retrySameIntent ? (
                 <Button type="primary" disabled={loading} onClick={retry}>
-                  {t('common.assistantSurface.regionalApproval.liveAction.retry')}
+                  {t(
+                    `common.assistantSurface.regionalApproval.liveAction.${kind === 'SAVE' ? 'retrySave' : 'retry'}`,
+                  )}
                 </Button>
               ) : action.state.status === 'error' && action.state.error.kind === 'conflict' ? (
                 <Button

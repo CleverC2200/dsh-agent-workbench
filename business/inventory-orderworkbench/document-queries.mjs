@@ -43,6 +43,12 @@ export const cancellationEvents = cancellationEventsSql({
 });
 
 export const amendmentEventsSql = skuAmendmentEventsSql({});
+export const amendmentDimensionEventsSql = skuAmendmentEventsSql({ dimensions: true });
+export const cancellationDimensionEventsSql = cancellationEventsSql({
+  dailySource,
+  dailyOnly,
+  dimensions: true,
+});
 
 export const amendmentCohortSql = skuAmendmentEventsSql({
   stage: 'cohort',
@@ -159,7 +165,13 @@ export const fulfillmentShippingSql = `SELECT e.fromorderno,e.cust_code,e.new_ma
     ON t.executeorderno=e.executeorderno AND t.cust_code=e.cust_code
   GROUP BY e.fromorderno,e.cust_code,e.new_material_code`;
 
-export const ordersSql = `SELECT m.base,m.category,m.item,m.sku,MAX(m.name) AS name,
+export function fulfillmentGroupSql(customer = false) {
+  const geography = `SELECT fromorderno,cust_code,new_material_code,
+    ${['region_name', 'province_region_name'].map((field, index) => `CASE WHEN COUNT(NULLIF(TRIM(${field}),''))=COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(${field}),''))=1 THEN MAX(NULLIF(TRIM(${field}),'')) END AS ${index === 0 ? 'region' : 'province'}`).join(',')}
+    FROM agents_order_execute_isontime_mi WHERE exp_flag='否' AND (order_qty_origin>0 OR need_qty_origin>0)
+      AND pickup_point_kpi IN ('郑州','华东','西南','华南','遂平') AND (:gea_p900='' OR belong_base=:gea_p900)
+    GROUP BY fromorderno,cust_code,new_material_code`;
+  return `SELECT m.base,m.category,m.item,m.sku,${customer ? 'm.cust_code AS customer,g.region,g.province,' : ''}MAX(m.name) AS name,
   SUM(m.demand) AS demand,
   SUM(GREATEST(m.demand-LEAST(m.sent,m.demand),0)) AS shortage,
   SUM(CASE WHEN m.invalid=0 THEN m.demand ELSE 0 END) AS sample_demand,
@@ -168,8 +180,11 @@ export const ordersSql = `SELECT m.base,m.category,m.item,m.sku,MAX(m.name) AS n
   COUNT(*) AS records,SUM(m.invalid) AS invalid,
   0 AS missing_ship_date,0 AS unmatched_order,0 AS missing_trace,0 AS missing_ship_time
   FROM (${mergedProducts}) m
+  ${customer ? `LEFT JOIN (${geography}) g ON g.fromorderno=m.fromorderno AND g.cust_code=m.cust_code AND g.new_material_code=m.sku` : ''}
   WHERE m.period_end>=:gea_p1 AND m.period_end<:gea_p2
-  GROUP BY m.base,m.category,m.item,m.sku`;
+  GROUP BY m.base,m.category,m.item,m.sku${customer ? ',m.cust_code,g.region,g.province' : ''}`;
+}
+export const ordersSql = fulfillmentGroupSql();
 
 export const ontimeExecutionProductsSql = `SELECT cust_order_no,cust_code,material_code,executeorderno,
   belong_base,detailstatus,
@@ -187,6 +202,7 @@ export const ontimeExecutionProductsSql = `SELECT cust_order_no,cust_code,materi
   WHERE (:gea_p900='' OR belong_base=:gea_p900)
   GROUP BY cust_order_no,cust_code,material_code,executeorderno,belong_base,detailstatus`;
 export const {
+  ontimeGeographySummarySql,
   ontimeSql,
   ontimeSummarySql,
   ontimePeriodSummarySql,

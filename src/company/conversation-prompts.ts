@@ -64,12 +64,7 @@ export const reportingConversation: ConversationPromptConfig = {
       prompt: '按工作台当前结果提交',
     },
   ],
-  prompts: [
-    '这次预测能按现状走吗？',
-    '哪些商品需要重点复核？',
-    '为什么这个客户上调了？',
-    '按建议帮我把数量调下来',
-  ],
+  prompts: [],
 };
 
 export const approvalConversation: ConversationPromptConfig = {
@@ -106,12 +101,7 @@ export const approvalConversation: ConversationPromptConfig = {
       prompt: '生成审批意见',
     },
   ],
-  prompts: [
-    '这张单能直接同意吗？',
-    '哪些客户需要退回重提？',
-    '汤圆品类为什么比上一版降了？',
-    '省区整体达成偏乐观吗？',
-  ],
+  prompts: [],
 };
 
 export const mpsPlanConversation: ConversationPromptConfig = {

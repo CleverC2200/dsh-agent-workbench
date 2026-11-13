@@ -4,7 +4,7 @@ import { readWithTransientRetry } from './query-retry.mjs';
 import { applyPeriodAttributions, collectDirectorMembers } from './period-attributions.mjs';
 import { createAgentQueries } from '../../business/shared/agent-query.ts';
 import { workbenchQueries } from '../../business/inventory-orderworkbench/queries.mjs';
-import {normalizeWorkbenchBase} from '../../business/inventory-orderworkbench/base-scope.mjs';
+import { normalizeWorkbenchBase } from '../../business/inventory-orderworkbench/base-scope.mjs';
 import { decodeScalarArray, unpackRowPackets } from '../../business/shared/row-packets.mjs';
 import {
   workbenchPeriodPacketSize,
@@ -76,28 +76,69 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   const specs = options.singlePeriod
     ? { selected: 'month', month: options.singlePeriod }
     : reportPeriods(start, end, options.now);
-  const primaryNames = ['month', 'week'].filter(name => specs[name]);
-  const sectionIds = options.sections ?? ['orders', 'ontime', 'changes', 'stock', 'ages', 'directors'];
+  const primaryNames = ['month', 'week'].filter((name) => specs[name]);
+  const sectionIds = options.sections ?? [
+    'orders',
+    'ontime',
+    'changes',
+    'stock',
+    'ages',
+    'directors',
+  ];
   const base = normalizeWorkbenchBase(options.base ?? '');
   const turnoverScope = options.turnoverScope ?? (base ? 'base' : 'national');
-  const calculate = period => computeWorkbenchMetrics(period, undefined, { turnoverScope });
-  const restoredPeriod = spec => options.summary && (options.seedFacts ?? []).flatMap(facts =>
-    facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true && facts.attributionVersion === 2 && (facts.base ?? '') === base
-      ? Object.values(facts.periods ?? {}) : [],
-  ).find(period => period.start === spec.start && period.end === spec.end &&
-    period.kind === spec.kind && (period.inventoryEnd ?? period.end) === (spec.inventoryEnd ?? spec.end));
-  const ontimeWindows = Object.entries(specs).filter(([name]) => name !== 'selected').map(([, spec]) => ({
-    ...spec, enabled: spec.start < spec.end && !restoredPeriod(spec)?.sections?.some(part => part.id === 'ontime' && part.status === 'ready'),
-  }));
+  const calculate = (period) => computeWorkbenchMetrics(period, undefined, { turnoverScope });
+  const restoredPeriod = (spec) =>
+    options.summary &&
+    (options.seedFacts ?? [])
+      .flatMap((facts) =>
+        facts.metricCalculationVersion === metricCalculationVersion &&
+        facts.sqlSummary === true &&
+        facts.attributionVersion === 2 &&
+        (facts.base ?? '') === base
+          ? Object.values(facts.periods ?? {})
+          : [],
+      )
+      .find(
+        (period) =>
+          period.start === spec.start &&
+          period.end === spec.end &&
+          period.kind === spec.kind &&
+          (period.inventoryEnd ?? period.end) === (spec.inventoryEnd ?? spec.end),
+      );
+  const ontimeWindows = Object.entries(specs)
+    .filter(([name]) => name !== 'selected')
+    .map(([, spec]) => ({
+      ...spec,
+      enabled:
+        spec.start < spec.end &&
+        !restoredPeriod(spec)?.sections?.some(
+          (part) => part.id === 'ontime' && part.status === 'ready',
+        ),
+    }));
   let ontimePeriods;
-  const periodWindows = Object.entries(specs).filter(([name]) => name !== 'selected').map(([, spec]) => spec);
-  const needs = (spec, id) => spec.start < spec.end && !restoredPeriod(spec)?.sections?.some(part =>
-    part.id === id && part.status === 'ready' && !Object.keys(part.metricFailures ?? {}).length);
-  const periodParameters = id => {
-    const first = periodWindows.find(spec => needs(spec, id)) ?? specs.month;
-    const values = { start: first.start, end_exclusive: first.end,
-      period_start: first.start, period_end: first.end, owner_start: first.start, owner_end: first.end,
-      report_base: base, page_size: 200, offset: 0 };
+  const periodWindows = Object.entries(specs)
+    .filter(([name]) => name !== 'selected')
+    .map(([, spec]) => spec);
+  const needs = (spec, id) =>
+    spec.start < spec.end &&
+    !restoredPeriod(spec)?.sections?.some(
+      (part) =>
+        part.id === id && part.status === 'ready' && !Object.keys(part.metricFailures ?? {}).length,
+    );
+  const periodParameters = (id) => {
+    const first = periodWindows.find((spec) => needs(spec, id)) ?? specs.month;
+    const values = {
+      start: first.start,
+      end_exclusive: first.end,
+      period_start: first.start,
+      period_end: first.end,
+      owner_start: first.start,
+      owner_end: first.end,
+      report_base: base,
+      page_size: 200,
+      offset: 0,
+    };
     for (const [index, spec] of periodWindows.entries()) {
       values[`period_${index}_start`] = spec.start;
       values[`period_${index}_end`] = spec.end;
@@ -342,6 +383,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     signal?.throwIfAborted();
     if (
       name === 'changes.cancellation' &&
+      !options.groupedChanges &&
       !options.periodQueries &&
       config.queries['workbench.changes.cancellation.partition0']
     )
@@ -380,25 +422,55 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       if (index < 0) throw Error('INVALID_SNAPSHOT_PERIOD');
       return [{ day: (await readSnapshots(priority))['age_' + index] }];
     }
-    const definition =
+    const dimensionChanges =
+      options.groupedChanges &&
+      name.startsWith('changes.') &&
+      (options.groupDimensions ?? []).some((key) => !['base', 'item'].includes(key));
+    const customerOrders = name === 'orders' && options.customerGroups;
+    const originalDefinition =
         workbenchQueries[name] ??
         (name.startsWith('changes.') ? workbenchQueries.changes : undefined),
+      definition = customerOrders
+        ? {
+            ...originalDefinition,
+            keys: [...originalDefinition.keys, 'customer', 'region', 'province'],
+            columns: [...originalDefinition.columns, 'customer', 'region', 'province'],
+          }
+        : originalDefinition,
       logicalId =
         'workbench.' +
         name.toLowerCase() +
-        (options.summary && ['orders', 'stock', 'ages', 'ontime'].includes(name) ? '.summary' : '');
+        (name === 'ontime' && options.geographyOntime ? '.geography' : '') +
+        (customerOrders ? '.customers' : '') +
+        (options.summary && ['orders', 'stock', 'ages', 'ontime'].includes(name)
+          ? '.summary'
+          : '') +
+        (options.groupedChanges && name.startsWith('changes.')
+          ? dimensionChanges
+            ? '.dimensions'
+            : '.groups'
+          : '');
     const summarized = logicalId.endsWith('.summary');
     const packeted =
+      dimensionChanges ||
       (summarized && name === 'stock') ||
       (options.summary && ['directors', 'customers', 'customerManagers'].includes(name));
     const id = logicalId + (packeted ? '.packets' : '');
-    if (summarized)
+    if (summarized || (options.groupedChanges && name.startsWith('changes.')))
       values = {
         ...values,
         period_start: values.period_start ?? values.start,
         period_end: values.period_end ?? values.end_exclusive,
         owner_start: values.period_start ?? values.start,
         owner_end: values.period_end ?? values.end_exclusive,
+        ...(dimensionChanges
+          ? Object.fromEntries(
+              ['item', 'category', 'director', 'sku', 'customer'].map((field) => [
+                'group_' + field,
+                options.groupDimensions.includes(field),
+              ]),
+            )
+          : {}),
       };
     const periodSummary =
       options.periodQueries &&
@@ -422,13 +494,38 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
                 priority,
                 keyFields: packeted
                   ? ['packet_index']
-                  : summarized
-                    ? name === 'ontime'
-                      ? ['base', 'invalid', 'ontime']
-                      : ['base', 'category', 'item', 'director', 'names', 'sku']
-                    : definition.keys,
+                  : options.groupedChanges && name.startsWith('changes.')
+                    ? dimensionChanges
+                      ? [
+                          'base',
+                          'item',
+                          'category',
+                          'director',
+                          'sku',
+                          'customer',
+                          'names',
+                          'kind',
+                          'region',
+                          'province',
+                        ]
+                      : ['base', 'item', 'kind', 'region', 'province']
+                    : summarized
+                      ? name === 'ontime'
+                        ? ['base', 'invalid', 'ontime']
+                        : [
+                            'base',
+                            'category',
+                            'item',
+                            'director',
+                            'names',
+                            'sku',
+                            ...(customerOrders ? ['customer', 'region', 'province'] : []),
+                          ]
+                      : definition.keys,
                 requiredColumns:
-                  packeted || summarized ? config.queries[id].resultColumns : definition.columns,
+                  packeted || summarized || (options.groupedChanges && name.startsWith('changes.'))
+                    ? config.queries[id].resultColumns
+                    : definition.columns,
                 singlePageFirst: true,
               },
             )
@@ -445,9 +542,22 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
               .resultColumns,
             name === 'directors'
               ? ['base', 'sku', 'director_value', 'item_value']
-              : name === 'stock'
-                ? ['base', 'category', 'item', 'director', 'names', 'sku']
-                : definition.keys,
+              : dimensionChanges
+                ? [
+                    'base',
+                    'item',
+                    'category',
+                    'director',
+                    'sku',
+                    'customer',
+                    'names',
+                    'kind',
+                    'region',
+                    'province',
+                  ]
+                : name === 'stock'
+                  ? ['base', 'category', 'item', 'director', 'names', 'sku']
+                  : definition.keys,
           )
         : result.rows;
     const rows =
@@ -462,12 +572,13 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
                 code: 'INVALID_ORDER_PACKETS',
               });
             return packed.map((order) => {
-              const tuple = decodeWorkbenchTuple(order, 7);
+              const tuple = decodeWorkbenchTuple(order, options.geographyOntime ? 9 : 7);
               if (!tuple)
                 throw Object.assign(Error('准交订单分组字段不完整'), {
                   code: 'INVALID_ORDER_PACKETS',
                 });
-              const [order_no, customer, arrival_date, ...member] = tuple;
+              const [order_no, customer, arrival_date] = tuple;
+              const member = tuple.slice(3, 7);
               return {
                 order_no,
                 customer,
@@ -475,6 +586,9 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
                 invalid: row.invalid,
                 ontime: row.ontime,
                 members: [member],
+                ...(options.geographyOntime
+                  ? { region: tuple[7] || null, province: tuple[8] || null }
+                  : {}),
               };
             });
           })
@@ -535,7 +649,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   const section = async (id, action) => {
     try {
       const result = await action();
-      return { id, status: 'ready', ...(Array.isArray(result) ? {rows:result} : result) };
+      return { id, status: 'ready', ...(Array.isArray(result) ? { rows: result } : result) };
     } catch (error) {
       signal?.throwIfAborted();
       return {
@@ -574,8 +688,15 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
         metrics: calculate({ ...spec, sections: [] }),
       };
     const restored = restoredPeriod(spec);
-    const pending = sectionIds.map((id) =>
-      restored?.sections?.find(part => part.id === id && part.status === 'ready' && !Object.keys(part.metricFailures ?? {}).length) ?? { id, status: 'loading', rows: [] });
+    const pending = sectionIds.map(
+      (id) =>
+        restored?.sections?.find(
+          (part) =>
+            part.id === id &&
+            part.status === 'ready' &&
+            !Object.keys(part.metricFailures ?? {}).length,
+        ) ?? { id, status: 'loading', rows: [] },
+    );
     const update = () => {
       periods[name] = {
         ...spec,
@@ -626,10 +747,16 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
                   },
                   priority,
                 );
-              if (id === 'stock') return read(id, {
-                ...values, end_exclusive: spec.inventoryEnd ?? spec.end,
-                ...(options.summary ? { period_start: spec.start, period_end: spec.end } : {}),
-              }, priority);
+              if (id === 'stock')
+                return read(
+                  id,
+                  {
+                    ...values,
+                    end_exclusive: spec.inventoryEnd ?? spec.end,
+                    ...(options.summary ? { period_start: spec.start, period_end: spec.end } : {}),
+                  },
+                  priority,
+                );
               if (id !== 'ages') return read(id, values, priority);
               const dates = await read(
                 'ageDate',
@@ -678,9 +805,17 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       { id, status: 'loading', rows: [] },
     ]),
   );
-  const restoredMetadata = options.summary && (options.seedFacts ?? []).find(facts =>
-    facts.metricCalculationVersion === metricCalculationVersion && facts.sqlSummary === true &&
-    facts.attributionVersion === 2 && (facts.base ?? '') === base && facts.start === start && facts.end === end);
+  const restoredMetadata =
+    options.summary &&
+    (options.seedFacts ?? []).find(
+      (facts) =>
+        facts.metricCalculationVersion === metricCalculationVersion &&
+        facts.sqlSummary === true &&
+        facts.attributionVersion === 2 &&
+        (facts.base ?? '') === base &&
+        facts.start === start &&
+        facts.end === end,
+    );
   const snapshot = (complete = false) => ({
     base,
     turnoverScope,

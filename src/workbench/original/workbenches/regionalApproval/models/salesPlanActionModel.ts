@@ -8,6 +8,7 @@ import type {
   GeaSalesPlanActionParams,
   GeaSalesPlanActionReceipt,
   GeaSalesPlanActionRequest,
+  GeaSalesPlanDetail,
   GeaSalesPlanSku,
   GeaSalesPlanSkuAdjustment,
   GeaSalesPlanVersionSkuQuery,
@@ -304,7 +305,7 @@ export const salesPlanActionReceiptMatches = (
       const pending = flow.pending(role);
       return pending !== undefined && receipt.toStatus === flow.transition(pending, 'REJECT');
     }
-    if (receipt.toStatus === 5) {
+    if (receipt.toStatus === 5 || receipt.toStatus === 10) {
       return (
         Array.isArray(receipt.approvedRoles) &&
         SALES_PLAN_ROLES.filter((r) => r !== 'customer' && flow.pending(r) !== undefined).every(
@@ -318,6 +319,10 @@ export const salesPlanActionReceiptMatches = (
     );
   }
   return (
+    (input.request.action === 'APPROVE' &&
+      receipt.toStatus === 10 &&
+      salesPlanActionTargetStatus('APPROVE', input.request.expectedStatus, input.planTypeCode) ===
+        5) ||
     receipt.toStatus ===
       salesPlanActionTargetStatus(
         input.request.action,
@@ -331,6 +336,16 @@ export const salesPlanActionReceiptMatches = (
       receipt.toStatus === input.request.expectedStatus)
   );
 };
+
+export const salesPlanActionReadbackMatches = (
+  receipt: GeaSalesPlanActionReceipt,
+  detail: GeaSalesPlanDetail,
+): boolean =>
+  detail.currentVersion.planId === receipt.planId &&
+  detail.currentVersion.id === receipt.versionId &&
+  detail.currentVersion.effective === true &&
+  (detail.currentVersion.status === receipt.toStatus ||
+    (receipt.toStatus === 5 && detail.currentVersion.status === 10));
 
 const normalizedInput = (input: SalesPlanActionInput): SalesPlanActionInput => {
   const { remark, adjustments, ...request } = input.request;
@@ -393,6 +408,39 @@ export class SalesPlanActionAttempt {
       return Promise.reject(this.failure ?? new SalesPlanActionError('failed', false));
     }
     return this.invoke();
+  }
+
+  resultConfirmed(detail: GeaSalesPlanDetail): boolean {
+    const input = this.input;
+    const command = this.command;
+    if (!input || !command) return false;
+    const { currentVersion, logs } = detail;
+    if (
+      currentVersion.planId !== input.planId ||
+      currentVersion.id !== input.versionId ||
+      !currentVersion.effective
+    )
+      return false;
+    if (this.receipt) return salesPlanActionReadbackMatches(this.receipt, detail);
+    const { action, expectedStatus, approvalRole } = input.request;
+    if (action === 'SAVE') return false;
+    if (
+      action === 'APPROVE' &&
+      currentVersion.status === 10 &&
+      (approvalRole === 'category' ||
+        salesPlanActionTargetStatus(action, expectedStatus, input.planTypeCode) === 5)
+    )
+      return true;
+    return logs.some(
+      (log) =>
+        log.planId === input.planId &&
+        log.versionId === input.versionId &&
+        log.requestId === command.requestId &&
+        log.actionCode === action &&
+        log.fromStatus === expectedStatus &&
+        (currentVersion.status === log.toStatus ||
+          (action === 'APPROVE' && log.toStatus === 5 && currentVersion.status === 10)),
+    );
   }
 
   private invoke(): Promise<GeaSalesPlanActionReceipt> {

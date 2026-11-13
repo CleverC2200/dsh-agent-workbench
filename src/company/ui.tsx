@@ -87,15 +87,19 @@ export function CompanyWelcome({
   page,
   onFill,
   language = 'zh',
+  children,
 }: {
   page?: string;
   onFill?: (text: string) => void;
   language?: string;
+  children?: React.ReactNode;
 }) {
   const agent = page ? (agents[page] ?? prompts.homeConversation) : undefined;
   const copy = language === 'en' ? en : zh;
   return agent ? (
-    <AgentWelcome agent={agent} onFill={(prompt) => onFill?.(prompt)} />
+    <AgentWelcome agent={agent} onFill={(prompt) => onFill?.(prompt)}>
+      {children}
+    </AgentWelcome>
   ) : (
     <GeaHomeHero
       copy={{

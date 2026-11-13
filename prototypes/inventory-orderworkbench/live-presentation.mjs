@@ -23,7 +23,8 @@ import {
 } from './performance-rules.mjs';
 const text = (value, unit = '%', digits = 2) =>
   value === null || value === undefined || value === '' || !Number.isFinite(Number(value))
-    ? '—' : Number(value).toFixed(digits) + unit;
+    ? '—'
+    : Number(value).toFixed(digits) + unit;
 const value = (metrics, name) =>
   text(metricValue(metrics, name), name === '周转天数' ? '' : '%') +
   (name !== '准交率' && (metrics?.[name]?.sample || metrics?.[name]?.provisional) ? '*' : '');
@@ -101,6 +102,17 @@ export function directorNames(mappings, row) {
   );
   return names.length && (row.base === '郑州' || names.length === 1) ? names : ['归属待补全'];
 }
+export function publishedDirectorNames(mapping) {
+  return Number(mapping?.names) === 1 && mapping.director
+    ? mapping.director
+        .split(/[,，、]/)
+        .map((name) => name.trim())
+        .filter(Boolean)
+    : ['归属待补全'];
+}
+export function directorMetricUsesBase(metric, director, base) {
+  return metric === '准交率' && director === '庞丽娟' && ['郑州', '郑州基地'].includes(base);
+}
 function summaryRows(periods, field, directorMap, loading = false) {
   const selected = periods.month ?? periods.week;
   const source = [
@@ -108,12 +120,14 @@ function summaryRows(periods, field, directorMap, loading = false) {
     ...rows(selected, 'ontime'),
     ...(field === 'base' ? rows(selected, 'changes') : []),
     ...(field === 'director' ? [] : rows(selected, 'stock')),
-    ...(field === 'director' ? [] : rows(selected, 'ages').filter(
-      (row) =>
-        Number(row.active_records ?? 0) > 0 ||
-        Number(row.stock_qty) !== 0 ||
-        Number(row.invalid) !== 0,
-    )),
+    ...(field === 'director'
+      ? []
+      : rows(selected, 'ages').filter(
+          (row) =>
+            Number(row.active_records ?? 0) > 0 ||
+            Number(row.stock_qty) !== 0 ||
+            Number(row.invalid) !== 0,
+        )),
   ].filter((row) => !['base', 'director'].includes(field) || workbenchBaseIncluded(row.base));
   let groups;
   const ownerSources = new Map(),
@@ -154,12 +168,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
       return directorNames([row], row);
     if (row.base === '郑州' && Number(mapping?.names) !== 1 && row.sku)
       return directorNames(periodOwners(key), row);
-    return mapping?.names === 1 && mapping.director
-      ? mapping.director
-          .split(/[,，、]/)
-          .map((name) => name.trim())
-          .filter(Boolean)
-      : ['归属待补全'];
+    return publishedDirectorNames(mapping);
   };
   if (field === 'director')
     groups = distinct(
@@ -203,8 +212,11 @@ function summaryRows(periods, field, directorMap, loading = false) {
           const groupRows =
             field === 'director' &&
             section.id === 'ontime' &&
-            ['郑州', '郑州基地'].includes(group.labels[1]) &&
-            group.labels[0] === '庞丽娟'
+            directorMetricUsesBase(
+              section.id === 'ontime' ? '准交率' : '',
+              group.labels[0],
+              group.labels[1],
+            )
               ? allRows.filter((row) => dimensionValue(row.base) === group.labels[1])
               : typeof group.id === 'symbol'
                 ? field === 'base'
@@ -215,9 +227,14 @@ function summaryRows(periods, field, directorMap, loading = false) {
           buckets.get(group.id).push({
             ...section,
             rows: groupRows,
-            ...(section.parts ? { parts: section.parts.map((part) => ({
-              ...part, rows: part.rows.filter((row) => included.has(row)),
-            })) } : {}),
+            ...(section.parts
+              ? {
+                  parts: section.parts.map((part) => ({
+                    ...part,
+                    rows: part.rows.filter((row) => included.has(row)),
+                  })),
+                }
+              : {}),
           });
         }
       }
@@ -236,8 +253,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
     const grouped = indexedPeriods.get(key).get(group.id);
     if (
       field === 'director' &&
-      group.labels[0] === '庞丽娟' &&
-      ['郑州', '郑州基地'].includes(group.labels[1])
+      directorMetricUsesBase('准交率', group.labels[0], group.labels[1])
     ) {
       return {
         ...grouped,
@@ -274,7 +290,11 @@ function summaryRows(periods, field, directorMap, loading = false) {
             text: '—',
             title: m[name]?.missingReason ?? '当前分组尚无有效计算依据。',
           };
-        if ((m[name]?.sample || m[name]?.provisional) && currentCell && typeof currentCell === 'object')
+        if (
+          (m[name]?.sample || m[name]?.provisional) &&
+          currentCell &&
+          typeof currentCell === 'object'
+        )
           currentCell.title = metricCoverageSummary(m[name]) + '；不是全量指标。';
         if (name === '准交率' && currentCell && typeof currentCell === 'object')
           currentCell.title = onTimeDisplayNote(m[name]);
@@ -289,7 +309,11 @@ function summaryRows(periods, field, directorMap, loading = false) {
                   ? (m[name]?.missingReason ?? '当前分组尚无有效计算依据。')
                   : '比较期：' + (other[name]?.missingReason ?? '当前分组尚无有效计算依据。'),
             };
-          return text !== '—' && (m[name]?.sample || other[name]?.sample || m[name]?.provisional || other[name]?.provisional)
+          return text !== '—' &&
+            (m[name]?.sample ||
+              other[name]?.sample ||
+              m[name]?.provisional ||
+              other[name]?.provisional)
             ? { text, title: metricComparisonNote(m, other, name) }
             : text;
         };
@@ -447,7 +471,7 @@ export function workbenchPresentation(facts, options = {}) {
       all.filter((row) => workbenchBaseIncluded(row.base)).map((row) => dimensionValue(row.base)),
     );
   const metric = (period, filter, turnoverScope = 'national') =>
-    period ? computeWorkbenchMetrics(period, filter, {turnoverScope}) : {};
+    period ? computeWorkbenchMetrics(period, filter, { turnoverScope }) : {};
   const fill = (options.dimension && options.dimension !== 'category-fill' ? [] : categories).map(
     (category) => {
       const filter = (row) => dimensionValue(row.category) === category,
@@ -637,7 +661,21 @@ export function workbenchEvidence(facts) {
     source: facts.source,
     metricCalculationVersion: facts.metricCalculationVersion,
     base: facts.base ?? '',
-    metricContracts: Object.fromEntries(metricNames.map(name => [name, { ...metricContract(name, typeof ORDER_WORKBENCH_APS_CONFIG === 'undefined' ? undefined : ORDER_WORKBENCH_APS_CONFIG, facts.base ? 'base' : 'national'), version:metricCalculationVersion }])),
+    metricContracts: Object.fromEntries(
+      metricNames.map((name) => [
+        name,
+        {
+          ...metricContract(
+            name,
+            typeof ORDER_WORKBENCH_APS_CONFIG === 'undefined'
+              ? undefined
+              : ORDER_WORKBENCH_APS_CONFIG,
+            facts.base ? 'base' : 'national',
+          ),
+          version: metricCalculationVersion,
+        },
+      ]),
+    ),
     complete: facts.complete !== false,
     pendingPeriods: facts.pendingPeriods ?? [],
     pendingSources: facts.pendingSources ?? [],
@@ -652,14 +690,32 @@ export function workbenchEvidence(facts) {
           endExclusive: period.end,
           inventoryEndExclusive: period.inventoryEnd ?? period.end,
           orderWindow: {
-            basis: '按用户选择周期累计；结束边界不含边界日，包含当前日已入库数据，比较期保留相同周期长度',
+            basis:
+              '按用户选择周期累计；结束边界不含边界日，包含当前日已入库数据，比较期保留相同周期长度',
             state: period.start >= period.end ? 'no-completed-days' : 'elapsed-days',
           },
-          metrics: Object.fromEntries(Object.entries(period.metrics).map(([key, metric]) => [key,
-            facts.metricCalculationVersion === metricCalculationVersion
-              ? {...metricSnapshot(period,key,{base:facts.base ?? '',turnoverScope:facts.turnoverScope ?? (facts.base ? 'base' : 'national')}), ...(metric.counts && !metric.emptyPeriod && period.sections.some(part => part.id === 'ontime' && part.status === 'ready') ? {counts:{...metric.counts}} : {})}
-              : { value:null, unit:metric.unit, note:'指标快照版本已过期，请刷新看板后按当前代码口径读取。' }
-          ])),
+          metrics: Object.fromEntries(
+            Object.entries(period.metrics).map(([key, metric]) => [
+              key,
+              facts.metricCalculationVersion === metricCalculationVersion
+                ? {
+                    ...metricSnapshot(period, key, {
+                      base: facts.base ?? '',
+                      turnoverScope: facts.turnoverScope ?? (facts.base ? 'base' : 'national'),
+                    }),
+                    ...(metric.counts &&
+                    !metric.emptyPeriod &&
+                    period.sections.some((part) => part.id === 'ontime' && part.status === 'ready')
+                      ? { counts: { ...metric.counts } }
+                      : {}),
+                  }
+                : {
+                    value: null,
+                    unit: metric.unit,
+                    note: '指标快照版本已过期，请刷新看板后按当前代码口径读取。',
+                  },
+            ]),
+          ),
           sourceDates: Object.fromEntries(
             period.sections.map((section) => [
               section.id,
@@ -672,7 +728,7 @@ export function workbenchEvidence(facts) {
             id: section.id,
             status: section.status,
             code: section.code,
-            ...(section.metricFailures ? {metricFailures:section.metricFailures} : {}),
+            ...(section.metricFailures ? { metricFailures: section.metricFailures } : {}),
             total: section.rows.length,
             dates: distinct(
               section.rows.map((row) => row.stock_date || row.snapshot_date).filter(Boolean),

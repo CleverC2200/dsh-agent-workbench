@@ -1,4 +1,5 @@
 import { roundPlanQuantity } from './models/salesPlanQuantityModel.ts';
+import { correctionConfirmedQuantity } from './models/salesPlanCorrectionModel.ts';
 import { SkuQuantityAmount } from './SkuQuantityAmount.tsx';
 import styles from './InlineSkuDetails.module.css';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -68,7 +69,6 @@ export function InlineSkuDetails({
   ) => void;
 }) {
   const { salesPlan } = useWorkbenchHost();
-  const integerQuantity = orderType === 'M';
   const [skus, setSkus] = useState<GeaSalesPlanSku[]>();
   const [failed, setFailed] = useState(false);
   const displayedSkus = useMemo(() => {
@@ -81,7 +81,7 @@ export function InlineSkuDetails({
     Object.fromEntries(
       Object.entries(initialInputValues ?? {}).map(([code, value]) => [
         code,
-        integerQuantity ? roundPlanQuantity(value) : value,
+        roundPlanQuantity(value),
       ]),
     ),
   );
@@ -104,12 +104,7 @@ export function InlineSkuDetails({
     if (target.length === 0) return;
     userEdited.current = true;
     const changes = Object.fromEntries(
-      target.map((sku) => [
-        String(sku.skuCode),
-        orderType === 'Z'
-          ? addExactDecimals([baselineFor(sku), draftPatch.quantity])
-          : roundPlanQuantity(draftPatch.quantity),
-      ]),
+      target.map((sku) => [String(sku.skuCode), roundPlanQuantity(draftPatch.quantity)]),
     );
     onInputChange?.(changes);
     setConfirmedValues((current) => {
@@ -168,7 +163,7 @@ export function InlineSkuDetails({
             const sku = detail.skus.find((candidate) => String(candidate.skuCode) === item.skuCode);
             if (!sku) return [item.skuCode, item.adjustQty];
             const value = addExactDecimals([baseline(sku), item.adjustQty]);
-            return [item.skuCode, integerQuantity ? roundPlanQuantity(value) : value];
+            return [item.skuCode, roundPlanQuantity(value)];
           }),
         );
         setSavedDraft(JSON.stringify(next));
@@ -196,11 +191,20 @@ export function InlineSkuDetails({
       Object.fromEntries(
         (skus ?? []).map((sku) => {
           const code = String(sku.skuCode);
-          const value = confirmedValues[code] ?? baselineFor(sku);
-          return [code, integerQuantity ? roundPlanQuantity(value) : value];
+          const value =
+            confirmedValues[code] ??
+            (orderType === 'Z'
+              ? correctionConfirmedQuantity(
+                  sku,
+                  row.status,
+                  row.planTypeCode,
+                  approvalRole === 'customer' ? undefined : approvalRole,
+                )
+              : baselineFor(sku));
+          return [code, roundPlanQuantity(value)];
         }),
       ),
-    [skus, confirmedValues, integerQuantity, row.status, row.planTypeCode, approvalRole],
+    [skus, confirmedValues, row.status, row.planTypeCode, approvalRole, orderType],
   );
   const confirmedMetrics = useMemo(() => {
     if (!skus || skus.length === 0) return undefined;
@@ -245,22 +249,17 @@ export function InlineSkuDetails({
       const confirmed = canEdit
         ? (confirmedValues[code] ?? effectiveValues[code] ?? baselineFor(sku))
         : (effectiveValues[code] ?? baselineFor(sku));
-      const quantity =
-        orderType === 'Z' ? subtractExactDecimals(confirmed, baselineFor(sku)) : confirmed;
       return {
         id: `field:${row.planId}:${code}:qty`,
-        label: `${sku.materialDescription ?? sku.productCategName ?? code} ${orderType === 'Z' ? t('common.correction.adjustment') : tr('columns.qty')}`,
-        value: quantityText(quantity),
+        label: `${sku.materialDescription ?? sku.productCategName ?? code} ${tr('columns.qty')}`,
+        value: quantityText(confirmed),
         editable: Boolean(canEdit),
       };
     });
     const readOnlyFields = displayedSkus.flatMap((sku) => {
       const code = String(sku.skuCode);
       const confirmed = effectiveValues[code] ?? editableQuantityText(baselineFor(sku));
-      const amount = multiplyExactDecimals(
-        orderType === 'Z' ? subtractExactDecimals(confirmed, baselineFor(sku)) : confirmed,
-        String(sku.price),
-      );
+      const amount = multiplyExactDecimals(confirmed, String(sku.price));
       return [
         {
           id: `field:${row.planId}:${code}:baseQty`,
@@ -276,10 +275,33 @@ export function InlineSkuDetails({
         },
         {
           id: `field:${row.planId}:${code}:amount`,
-          label: `${code} ${orderType === 'Z' ? t('common.correction.adjustmentAmount') : tr('columns.amount')}`,
+          label: `${code} ${tr('columns.amount')}`,
           value: amount === undefined ? '—' : formatExactDecimal(amount),
           editable: false,
         },
+        ...(orderType === 'Z'
+          ? [
+              {
+                id: `field:${row.planId}:${code}:adjustmentQty`,
+                label: `${code} ${t('common.correction.adjustment')}`,
+                value: quantityText(
+                  subtractExactDecimals(confirmed, String(sku.corrBaseQty ?? sku.qty)),
+                ),
+                editable: false,
+              },
+              {
+                id: `field:${row.planId}:${code}:adjustmentAmount`,
+                label: `${code} ${t('common.correction.adjustmentAmount')}`,
+                value: formatExactDecimal(
+                  multiplyExactDecimals(
+                    subtractExactDecimals(confirmed, String(sku.corrBaseQty ?? sku.qty)),
+                    String(sku.price),
+                  ) ?? '—',
+                ),
+                editable: false,
+              },
+            ]
+          : []),
         {
           id: `field:${row.planId}:${code}:description`,
           label: `${code} ${tr('columns.sku')}`,
@@ -402,7 +424,7 @@ export function InlineSkuDetails({
     }
   }, [savedDraft]);
   const text = (key: string) => t(`common.assistantSurface.regionalApproval.skuDetails.${key}`);
-  const columns = ['plan', 'confirmed'];
+  const columns = orderType === 'Z' ? ['plan', 'confirmed', 'adjustment'] : ['plan', 'confirmed'];
   const groups = new Map<string, GeaSalesPlanSku[]>();
   for (const sku of displayedSkus ?? []) {
     const category = sku.productCategName.trim() || '其他';
@@ -421,7 +443,11 @@ export function InlineSkuDetails({
         <Spin />
       ) : (
         <div className={styles.viewport} tabIndex={0} role="region" aria-label={tr('columns.sku')}>
-          <table className={styles.table}>
+          <table
+            className={[orderType === 'Z' ? styles.correctionTable : undefined, styles.table]
+              .filter(Boolean)
+              .join(' ')}
+          >
             <colgroup>
               <col className={styles.skuColumn} />
               {columns.map((key) => (
@@ -434,7 +460,7 @@ export function InlineSkuDetails({
                 <th scope="col">{tr('columns.sku')}</th>
                 {columns.map((key) => (
                   <th scope="col" key={key}>
-                    {text(key)}
+                    {key === 'adjustment' ? t('common.correction.adjustment') : text(key)}
                   </th>
                 ))}
                 <th aria-hidden="true" />
@@ -455,13 +481,12 @@ export function InlineSkuDetails({
                     formatExactDecimal(row.orderType === 'Z' ? sku.amt : sku.amtBase) !==
                       formatExactDecimal(sku.amt);
                   const code = String(sku.skuCode),
-                    baseline = baselineFor(sku),
-                    confirmed = effectiveValues[code] ?? editableQuantityText(baseline);
-                  const adjustment = subtractExactDecimals(confirmed, baseline);
-                  const confirmedAmount = multiplyExactDecimals(
-                    orderType === 'Z' ? adjustment : confirmed,
-                    String(sku.price),
+                    confirmed = effectiveValues[code] ?? editableQuantityText(baselineFor(sku));
+                  const adjustment = subtractExactDecimals(
+                    confirmed,
+                    String(sku.corrBaseQty ?? sku.qty),
                   );
+                  const confirmedAmount = multiplyExactDecimals(confirmed, String(sku.price));
                   return (
                     <tr key={code + ':' + index} className={changed ? styles.changed : undefined}>
                       <td>
@@ -479,24 +504,17 @@ export function InlineSkuDetails({
                         />
                       </td>
                       <td>
-                        <SkuQuantityAmount
-                          quantity={orderType === 'Z' ? adjustment : confirmed}
-                          amount={confirmedAmount}
-                        >
+                        <SkuQuantityAmount quantity={confirmed} amount={confirmedAmount}>
                           {canEdit ? (
                             <div className={styles.quantityCell}>
                               <Input
                                 className={styles.quantityInput}
                                 type="number"
-                                step={orderType === 'Z' ? 0.001 : 1}
+                                step={1}
                                 size="small"
-                                value={
-                                  orderType === 'Z'
-                                    ? adjustment
-                                    : (confirmedValues[code] ?? confirmed)
-                                }
+                                value={confirmedValues[code] ?? confirmed}
                                 onBlur={() => {
-                                  if (integerQuantity && confirmedValues[code] !== undefined) {
+                                  if (confirmedValues[code] !== undefined) {
                                     const rounded = roundPlanQuantity(confirmedValues[code]);
                                     setConfirmedValues((current) => ({
                                       ...current,
@@ -505,18 +523,14 @@ export function InlineSkuDetails({
                                     onInputChange?.({ [code]: rounded });
                                   }
                                 }}
-                                aria-label={`${orderType === 'Z' ? t('common.correction.adjustment') : tr('columns.qty')} ${code}`}
+                                aria-label={`${tr('columns.qty')} ${code}`}
                                 onChange={(value) => {
                                   userEdited.current = true;
-                                  const quantity =
-                                    orderType === 'Z' && value.trim()
-                                      ? addExactDecimals([baseline, value])
-                                      : value;
                                   setConfirmedValues((current) => ({
                                     ...current,
-                                    [code]: quantity,
+                                    [code]: value,
                                   }));
-                                  onInputChange?.({ [code]: quantity });
+                                  onInputChange?.({ [code]: value });
                                 }}
                               />
                               {savedValues[code] === confirmedValues[code] ? null : draftState ===
@@ -546,6 +560,15 @@ export function InlineSkuDetails({
                           ) : undefined}
                         </SkuQuantityAmount>
                       </td>
+                      {orderType === 'Z' && (
+                        <td>
+                          <SkuQuantityAmount
+                            quantity={adjustment}
+                            amount={multiplyExactDecimals(adjustment, String(sku.price))}
+                            signed
+                          />
+                        </td>
+                      )}
                       <td aria-hidden="true" />
                     </tr>
                   );

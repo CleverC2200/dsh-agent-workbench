@@ -11,6 +11,7 @@ import {
   reportSalesPlanError,
   SalesPlanActionAttempt,
   classifySalesPlanActionError,
+  salesPlanActionReadbackMatches,
   type SalesPlanActionInput,
 } from './models/salesPlanActionModel.ts';
 import {
@@ -124,7 +125,7 @@ export function RegionalApprovalResubmitDialog({
   connected: boolean;
   unavailableReason?: NativeBusinessStatus['resubmitUnavailableReason'];
   visible?: boolean;
-  onPendingChange?: (pending: boolean) => void;
+  onPendingChange?: (pending: boolean, message: string) => void;
   t: TFunction;
   onClose: (pending: boolean) => void;
   onSucceeded?: () => void;
@@ -159,12 +160,22 @@ export function RegionalApprovalResubmitDialog({
   const serviceBlocked =
     !connected &&
     (rows
-      ? rows.some(
-          (row) =>
-            row.item.kind === 'resubmit' && (row.status === 'ready' || row.status === 'unknown'),
-        )
+      ? rows.some((row) => row.item.kind === 'resubmit' && row.status === 'ready')
       : needsService);
-  useEffect(() => onPendingChange?.(pending), [pending, onPendingChange]);
+  const pendingMessage =
+    rows
+      ?.filter((row) => ['unknown', 'readback', 'unresolved'].includes(row.status))
+      .map((row) =>
+        tr('pendingNotice', {
+          plan: row.item.row.dealerName || row.item.label || row.item.planId,
+          reason: tr(`errors.${row.error ?? 'resultUnconfirmed'}`),
+        }),
+      )
+      .join('；') ?? '';
+  useEffect(
+    () => onPendingChange?.(pending, pendingMessage),
+    [pending, pendingMessage, onPendingChange],
+  );
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
@@ -342,17 +353,44 @@ export function RegionalApprovalResubmitDialog({
       row.status === 'ready' ||
       row.status === 'unknown' ||
       row.status === 'readback' ||
+      row.status === 'unresolved' ||
       (row.status === 'failed' &&
         Boolean(row.attempt) &&
         !row.recovery &&
         !['permission', 'authentication', 'conflict'].includes(row.error ?? '')),
   );
+  const checkResult = async (row: SubmissionRow): Promise<SubmissionRow> => {
+    try {
+      const detail = await client.detail.invoke({ planId: row.item.planId });
+      const confirmed =
+        row.attempt instanceof SalesPlanActionAttempt
+          ? row.attempt.resultConfirmed(detail)
+          : row.attempt instanceof SalesPlanSubmitAttempt && row.source
+            ? row.attempt.resultConfirmed(detail, row.source.skus)
+            : false;
+      if (confirmed) return { ...row, status: 'success', error: undefined, rejection: undefined };
+      return {
+        ...row,
+        status: 'unknown',
+        error:
+          row.item.kind === 'approve' && detail.currentVersion.id !== row.item.versionId
+            ? 'resultVersionChanged'
+            : 'resultUnconfirmed',
+        rejection: undefined,
+      };
+    } catch {
+      return { ...row, status: 'unknown', error: 'resultReadFailed', rejection: undefined };
+    }
+  };
   const submit = async () => {
     if (!rows || submitting.current || !actionable || (initial && !valid)) return;
     submitting.current = true;
     setAttempted(true);
     setBusy(true);
     const next = [...rows];
+    const checkingResults = rows.some((row) =>
+      ['unknown', 'readback', 'unresolved'].includes(row.status),
+    );
     const processed: SubmissionRow[] = [];
     const publish = () => {
       if (mounted.current) setRows([...next]);
@@ -363,6 +401,14 @@ export function RegionalApprovalResubmitDialog({
         let row = next[index];
         if (row.status === 'skipped') {
           processed.push(row);
+          continue;
+        }
+        if (checkingResults) {
+          if (['unknown', 'readback', 'unresolved'].includes(row.status)) {
+            next[index] = await checkResult(row);
+            processed.push(next[index]);
+            publish();
+          }
           continue;
         }
         if (
@@ -427,8 +473,6 @@ export function RegionalApprovalResubmitDialog({
             if (!input) throw new Error('validation');
             let value: GeaSalesPlanSubmitReceipt;
             if (row.receipt && 'seq' in row.receipt) value = row.receipt;
-            else if (row.attempt instanceof SalesPlanSubmitAttempt)
-              value = await row.attempt.retry();
             else {
               const attempt = new SalesPlanSubmitAttempt(client);
               row = { ...row, attempt };
@@ -454,8 +498,6 @@ export function RegionalApprovalResubmitDialog({
           } else {
             let value: GeaSalesPlanActionReceipt;
             if (row.receipt && 'toStatus' in row.receipt) value = row.receipt;
-            else if (row.attempt instanceof SalesPlanActionAttempt)
-              value = await row.attempt.retry();
             else {
               if (!row.actionInput) throw new Error('validation');
               const actionInput = {
@@ -472,12 +514,7 @@ export function RegionalApprovalResubmitDialog({
             next[index] = row;
             publish();
             const detail = await client.detail.invoke({ planId: row.item.planId });
-            if (
-              detail.currentVersion.id !== value.versionId ||
-              detail.currentVersion.status !== value.toStatus ||
-              !detail.currentVersion.effective
-            )
-              throw new Error('readback');
+            if (!salesPlanActionReadbackMatches(value, detail)) throw new Error('readback');
           }
           next[index] = { ...row, status: 'success', error: undefined, rejection: undefined };
         } catch (cause) {
@@ -510,6 +547,8 @@ export function RegionalApprovalResubmitDialog({
             recovery: cause instanceof SubmissionSourceError ? 'refresh' : undefined,
             rejection,
           };
+          if (row.receipt || (row.attempt && failure.retrySameIntent))
+            next[index] = await checkResult(next[index]);
         }
         processed.push(next[index]);
         publish();
@@ -576,6 +615,12 @@ export function RegionalApprovalResubmitDialog({
       return '—';
     }
   };
+  const wasVisible = useRef(visible);
+  useEffect(() => {
+    const reopened = visible && !wasVisible.current;
+    wasVisible.current = visible;
+    if (reopened && pending && !busy) void submit();
+  }, [visible, pending, busy, submit]);
   return (
     <Modal
       visible={visible}
@@ -602,15 +647,13 @@ export function RegionalApprovalResubmitDialog({
             onClick={() => void submit()}
           >
             {tr(
-              rows?.some((row) => row.status === 'unknown')
+              rows?.some((row) => ['unknown', 'readback', 'unresolved'].includes(row.status))
                 ? 'retry'
-                : rows?.some((row) => row.status === 'readback')
-                  ? 'refresh'
-                  : attempted
-                    ? 'submitAgain'
-                    : batch
-                      ? 'confirmBatch'
-                      : 'confirm',
+                : attempted
+                  ? 'submitAgain'
+                  : batch
+                    ? 'confirmBatch'
+                    : 'confirm',
             )}
           </Button>
         </div>
@@ -749,8 +792,11 @@ export function RegionalApprovalResubmitDialog({
                   ['readback', 'unknown', 'unresolved'].includes(row.status) ? 'warning' : 'error'
                 }
                 content={
-                  row.status === 'readback'
-                    ? tr('refreshFailed')
+                  ['readback', 'unknown', 'unresolved'].includes(row.status)
+                    ? tr('pendingNotice', {
+                        plan: row.item.row.dealerName || label(row),
+                        reason: tr(`errors.${row.error}`),
+                      })
                     : row.rejection ||
                       tr(
                         `errors.${row.error}`,

@@ -1,5 +1,6 @@
 import { amendmentMetricContract } from '../../business/inventory-orderworkbench/sku-amendments.mjs';
 import { ontimeMetricContract } from '../../business/inventory-orderworkbench/ontime-queries.mjs';
+import { metricDimensionContract } from './metric-dimensions.mjs';
 
 export function metricDefinition(name, turnoverScope = 'national') {
   return {
@@ -109,6 +110,15 @@ export function metricContract(name, config, scope = 'national') {
     tables,
     queryId,
     detailsQueryId: spec.details ?? null,
+    grouping: {
+      ...metricDimensionContract(name),
+      view: 'groups', dimensions: ['base', 'item'],
+      available: true,
+      meaning: '分组汇总独立于原始明细发布；detailsQueryId为空不代表基地或品项分组未发布。',
+      dimensionScope: '总监和SKU自动带基地；可发货天数的基地维度沿基地计划口径，品项及品类维度沿看板对应口径。groups.total为维度合计，current为原卡片范围，不能强行对齐不同范围。',
+      comparison: '本期、环比、同比使用各自时间窗调用同一groups入口；按基地和品项对齐，缺同期不补零。',
+      additive: name !== '准交率',
+    },
     scope,
     baseMeaning:
       name === '改单率' || name === '作废率'

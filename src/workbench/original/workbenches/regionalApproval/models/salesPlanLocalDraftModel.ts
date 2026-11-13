@@ -35,7 +35,7 @@ export const salesPlanApprovalDraftValues = (
   role: ApprovalStageId | undefined,
   stored: readonly GeaSalesPlanSkuAdjustment[],
   pendingValues: Record<string, string> = {},
-  roundMonthly = true,
+  roundConfirmed = true,
 ): Record<string, string> => {
   const values = Object.fromEntries(stored.map((item) => [item.skuCode, item.adjustQty]));
   for (const [skuCode, value] of Object.entries(pendingValues)) {
@@ -52,7 +52,11 @@ export const salesPlanApprovalDraftValues = (
     if (!DECIMAL.test(adjustQty)) throw new SubmissionSourceError('quantityInvalid');
     values[skuCode] = adjustQty;
   }
-  if (roundMonthly && (row.orderType ?? detail?.currentVersion.orderType) === 'M' && role) {
+  if (
+    roundConfirmed &&
+    ['M', 'Z'].includes(row.orderType ?? detail?.currentVersion.orderType ?? '') &&
+    role
+  ) {
     for (const sku of detail?.skus ?? []) {
       const code = String(sku.skuCode);
       const baseline = salesPlanEditableQuantity(sku, row.status, row.planTypeCode, role);

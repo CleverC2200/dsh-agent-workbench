@@ -148,6 +148,7 @@ document.addEventListener('keydown', event => {
   const form = event.target.form;
   if (!form?.matches('.wb-adopt-form, .wb-task-edit-form')) return;
   event.preventDefault();
+  if (form.id === 'wbUnmetAddForm') return;
   form.querySelector('button[type="submit"]')?.click();
 });
 let pendingAdoption = null;
@@ -3124,11 +3125,30 @@ document.getElementById('wbUnmetAddForm').addEventListener('submit', (event) => 
 });
 document.getElementById('wbUnmetAddClose').addEventListener('click', closeWorkbenchUnmetAdd);
 document.getElementById('wbUnmetAddCancel').addEventListener('click', closeWorkbenchUnmetAdd);
-document.getElementById('wbUnmetAddOverlay').addEventListener('click', (event) => {
-  if (event.target.id === 'wbUnmetAddOverlay') closeWorkbenchUnmetAdd();
+const unmetAddOverlay = document.getElementById('wbUnmetAddOverlay');
+let unmetBackdropPointer = false;
+unmetAddOverlay.addEventListener('pointerdown', (event) => {
+  unmetBackdropPointer = event.target === unmetAddOverlay && event.button === 0;
+});
+unmetAddOverlay.addEventListener('pointerup', (event) => {
+  unmetBackdropPointer = unmetBackdropPointer && event.target === unmetAddOverlay;
+});
+unmetAddOverlay.addEventListener('pointercancel', () => {
+  unmetBackdropPointer = false;
+});
+unmetAddOverlay.addEventListener('click', (event) => {
+  const dismiss = unmetBackdropPointer && event.target === unmetAddOverlay;
+  unmetBackdropPointer = false;
+  if (dismiss) closeWorkbenchUnmetAdd();
 });
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !document.getElementById('wbUnmetAddOverlay').hidden)
+  if (
+    event.key === 'Escape' &&
+    !event.isComposing &&
+    event.keyCode !== 229 &&
+    !event.defaultPrevented &&
+    !unmetAddOverlay.hidden
+  )
     closeWorkbenchUnmetAdd();
 });
 const directorNoteOverlay = document.getElementById('wbDirectorNoteOverlay');

@@ -12,6 +12,189 @@ import {
 const root = 'lib/business/inventory-orderworkbench/';
 const config = JSON.parse(await readFile(root + 'sql.config.json', 'utf8'));
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
+test('cancellation groups remain within the gateway parser nesting boundary', () => {
+  for (const suffix of ['groups', 'dimensions', 'dimensions.packets']) {
+    const sql = config.queries['workbench.changes.cancellation.' + suffix].request.sql;
+    let depth = 0,
+      peak = 0,
+      quoted = false;
+    for (let index = 0; index < sql.length; index++) {
+      if (sql[index] === "'") {
+        if (quoted && sql[index + 1] === "'") index++;
+        else quoted = !quoted;
+      } else if (!quoted && sql[index] === '(') peak = Math.max(peak, ++depth);
+      else if (!quoted && sql[index] === ')') depth--;
+    }
+    assert.equal(depth, 0);
+    assert.equal(quoted, false);
+    assert.ok(peak <= 10, suffix + ' exceeded JSqlParser fallback depth');
+    assert.match(sql, /cancellation_lines AS/);
+    assert.match(sql, /FROM cancellation_lines s/);
+  }
+});
+
+test('stock SKU pagination applies outside the complete stock and plan union', () => {
+  const sql = config.queries['workbench.stock'].request.sql;
+  assert.match(sql, /^SELECT base,sku,category,item/);
+  assert.match(sql, /UNION ALL/);
+  assert.match(sql, /\) stock_scope ORDER BY base,sku LIMIT :gea_p1001 OFFSET :gea_p1002$/);
+});
+test('unsupported inventory customer dimensions are explicit without querying or changing scope', async () => {
+  let calls = 0;
+  const result = await readOrderMetric(
+    config,
+    {
+      metric: '货龄占比',
+      start: '2026-11-01',
+      endExclusive: '2026-11-13',
+      base: '郑州',
+      view: 'groups',
+      dimensions: ['customer'],
+    },
+    async () => {
+      calls++;
+      throw Error('must not query');
+    },
+  );
+  assert.equal(calls, 0);
+  assert.equal(result.groups.availability, 'unsupported-dimension');
+  assert.equal(result.current, null);
+  assert.equal(result.groups.unsupported[0].dimension, 'customer');
+  await assert.rejects(
+    () =>
+      readOrderMetric(
+        config,
+        {
+          metric: '满足率',
+          start: '2026-11-01',
+          endExclusive: '2026-11-13',
+          view: 'summary',
+          dimensions: ['item'],
+        },
+        async () => {
+          calls++;
+        },
+      ),
+    /DIMENSIONS_REQUIRE_GROUPS/,
+  );
+  assert.equal(calls, 0);
+});
+test('customer groups paginate display rows while retaining full totals', async () => {
+  const rows = Array.from({ length: 150 }, (_, index) => ({
+    base: '郑州',
+    category: '速冻',
+    item: '水饺',
+    sku: null,
+    name: '商品',
+    customer: 'C' + String(index).padStart(3, '0'),
+    region: '大区',
+    province: '省区',
+    demand: 10,
+    shortage: 1,
+    sample_demand: 10,
+    sample_shortage: 1,
+    sample_records: 1,
+    records: 1,
+    invalid: 0,
+    missing_ship_date: 0,
+    unmatched_order: 0,
+    missing_trace: 0,
+    missing_ship_time: 0,
+    director: null,
+    names: 0,
+    summary: 1,
+  }));
+  const execute = async () => ({ configVersion: 'pagination-test', rows });
+  const input = {
+    metric: '满足率',
+    start: '2026-11-01',
+    endExclusive: '2026-11-13',
+    base: '郑州',
+    view: 'groups',
+    dimensions: ['customer'],
+  };
+  const first = await readOrderMetric(config, input, execute);
+  const second = await readOrderMetric(config, { ...input, page: 2 }, execute);
+  const beyond = await readOrderMetric(config, { ...input, page: 3 }, execute);
+  assert.equal(first.groups.rows.length, 100);
+  assert.equal(second.groups.rows.length, 50);
+  assert.equal(first.groups.pagination.totalGroups, 150);
+  assert.equal(first.groups.pagination.hasMore, true);
+  assert.equal(second.groups.pagination.hasMore, false);
+  assert.equal(first.groups.total.denominator, 1500);
+  assert.equal(second.groups.total.denominator, 1500);
+  assert.equal(first.groups.reconciliation.matches, true);
+  assert.equal(first.groups.rows[99].customer, 'C099');
+  assert.equal(second.groups.rows[0].customer, 'C100');
+  assert.equal(beyond.groups.rows.length, 0);
+  assert.equal(beyond.groups.empty, false);
+  assert.equal(beyond.groups.pagination.outOfRange, true);
+});
+test('future groups without completed dates are empty rather than falsely unpublished', async () => {
+  let calls = 0;
+  const result = await readOrderMetric(
+    config,
+    { metric: '满足率', start: '2026-12-01', endExclusive: '2026-12-03', view: 'groups' },
+    async () => {
+      calls++;
+      throw Error('must not query');
+    },
+    undefined,
+    { now: new Date('2026-11-13T04:00:00Z') },
+  );
+  assert.equal(calls, 0);
+  assert.equal(result.groups.availability, 'available');
+  assert.equal(result.groups.empty, true);
+  assert.equal(result.groups.emptyReason, 'NO_COMPLETED_DATES');
+});
+
+test('grouped amendment dispatches published groups with explicit scope and preserves components', async () => {
+  const calls = [];
+  const result = await readOrderMetric(
+    config,
+    {
+      metric: '改单率',
+      start: '2026-10-19',
+      endExclusive: '2026-10-26',
+      base: '郑州',
+      view: 'groups',
+    },
+    async (_request, options) => {
+      calls.push(options);
+      return {
+        configVersion: 'grouped-test',
+        rows: [
+          {
+            base: '郑州',
+            item: '水饺',
+            kind: '2',
+            region: '大区',
+            province: '省区',
+            numerator: 10,
+            denominator: 100,
+            records: 1,
+            invalid: 0,
+            sample_numerator: 10,
+            sample_denominator: 100,
+            sample_records: 1,
+            unknown_quantity: 0,
+          },
+        ],
+      };
+    },
+  );
+  assert.equal(result.groups.availability, 'available');
+  assert.equal(result.groups.rows[0].item, '水饺');
+  assert.equal(result.groups.rows[0].current.numerator, 10);
+  assert.equal(result.groups.rows[0].current.denominator, 100);
+  assert.equal(result.groups.reconciliation.matches, true);
+  assert(calls.every((call) => call.queryId === 'workbench.changes.amendment.groups'));
+  assert(
+    calls.every(
+      (call) => call.values.report_base === '郑州' && call.values.owner_start === '2026-10-19',
+    ),
+  );
+});
 test('built page and independent evaluator carry the automatic fingerprint of their actual code and SQL', async () => {
   const scan = await build({
     entryPoints: ['prototypes/inventory-orderworkbench/metric-runtime.mjs'],
