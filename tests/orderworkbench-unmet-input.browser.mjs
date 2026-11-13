@@ -229,11 +229,9 @@ test('unmet form input and lifecycle regression on the complete page', async (t)
   });
   await t.test('clipboard paste clips length without dismissal', async (t) => {
     const { page, field, fill, unchanged } = await fixture(t);
-    await page
-      .context()
-      .grantPermissions(['clipboard-read', 'clipboard-write'], {
-        origin: 'https://workbench.test',
-      });
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], {
+      origin: 'https://workbench.test',
+    });
     await fill();
     for (const [id, length] of [
       ['TitleInput', 120],
