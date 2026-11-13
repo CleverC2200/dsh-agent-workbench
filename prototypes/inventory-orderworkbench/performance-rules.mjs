@@ -8,7 +8,7 @@ export const metricLimits = {
 };
 const stockLimits = { national: 12.5, 郑州: 12.5, other: 11 };
 export const shippableDaysTarget = `全国<${stockLimits.national}天（郑州≤${stockLimits.郑州}天，其他基地<${stockLimits.other}天）`;
-export const performanceStyleVersion = 13;
+export const performanceStyleVersion = 14;
 
 export function shippableDaysState(value, base = '') {
   base = normalizeWorkbenchBase(base);

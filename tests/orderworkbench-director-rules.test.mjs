@@ -57,15 +57,25 @@ test('director rows require orders while inventory-only known and unknown owners
     base: '郑州',
     sku: 'unmapped-order',
     demand: 1,
-    shortage: 0,
+    shortage: 1,
     invalid: 0,
   });
   period.metrics = computeWorkbenchMetrics(period);
-  assert.ok(
-    workbenchPresentation(facts).performance['director-performance'].month.some(
-      (r) => r[0] === '归属待补全',
-    ),
-  );
+  const after = workbenchPresentation(facts);
+  for (const key of ['month', 'week']) {
+    assert.deepEqual(
+      after.performance['director-performance'][key].map((r) => r[0]),
+      ['订单负责人'],
+    );
+    assert.equal(after.performance['director-performance'][key][0][2].raw, 100);
+    assert.equal(
+      after.performance['base-performance'][key].find((r) => r[0] === '郑州')[7].raw,
+      1000 / 11,
+    );
+    assert.equal(after.performance['item-performance'][key][0][1].raw, 1000 / 11);
+  }
+  assert.equal(after.cards.find((card) => card.key === '订单满足率').value, '90.91');
+  assert.deepEqual(after.cards.slice(4), before.cards.slice(4));
 });
 
 test('raw and SQL summaries retain both Zhengzhou owners without combining different shared products or duplicating national quantities', () => {
