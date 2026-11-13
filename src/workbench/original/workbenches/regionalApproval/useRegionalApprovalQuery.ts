@@ -1,4 +1,3 @@
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import { salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
 import { isBackendHttpError } from '../../http-error.ts';
 import {
@@ -29,7 +28,6 @@ import type { SalesPlanApprovalRole } from './models/salesPlanAccessModel.ts';
 
 const QUERY_TIMEOUT_MS = 15_000;
 
-/** 查询状态按“周期→队列→进度/分析”分层；请求序号和 AbortSignal 防止晚到结果覆盖新选择。 */
 export type SalesPlanQueryClient = {
   periods: {
     invoke: (query?: GeaSalesPlanPeriodQuery) => Promise<GeaSalesPlanPage<GeaSalesPlanPeriod>>;
@@ -37,7 +35,7 @@ export type SalesPlanQueryClient = {
   list: {
     invoke: (query?: GeaSalesPlanPageQuery) => Promise<GeaSalesPlanPage<GeaSalesPlanListItem>>;
   };
-  /** 可选：点刷新时重新解析账号角色，拿到管理员刚改过的节点权限。 */
+
   approvalRoles?: {
     invoke: (input: { signal?: AbortSignal }) => Promise<{ roles: SalesPlanApprovalRole[] }>;
   };
@@ -147,7 +145,7 @@ export const useRegionalApprovalQuery = ({
   const [progressState, setProgressState] = useState<
     QueryState<Record<ApprovalStageId, number>> & {
       statusTotals?: Partial<Record<number, number>>;
-      /** 每个节点的分子/分母，界面悬停百分比时展示；百分比本身就是它算出来的。 */
+
       tallies?: Record<ApprovalStageId, SalesPlanStageTally>;
     }
   >(idle);
@@ -266,8 +264,7 @@ export const useRegionalApprovalQuery = ({
     setQueueSettledStageKey(undefined);
     const requestedPage = clampSalesPlanPageNumber(page);
     const requestedSize = clampSalesPlanPageNumber(pageSize, 20);
-    // 列表最终按“外层组织行”分页，必须在客户端拿到筛选范围内的完整计划集合才能分组，
-    // 所以这里不再只取分页前缀，而是把每个分区取全（单页 200 条，按上游 total 循环补齐）。
+
     const serverPageSize = 200;
     const partitions = periodQueries.flatMap(({ period, statuses }) =>
       (statuses ?? [undefined]).map((status) => ({ period, status })),
@@ -313,8 +310,6 @@ export const useRegionalApprovalQuery = ({
               };
             }),
           ).then(async (results) => {
-            // 同一计划只会属于一个 (period, status) 分区；这里再去重一次，
-            // 避免上游分页异常重发同一条导致列表出现重复组织行。
             const records = [
               ...new Map(
                 results
@@ -336,8 +331,7 @@ export const useRegionalApprovalQuery = ({
                     signal: request.signal,
                   })
                 : undefined;
-            // records 是完整集合；current / size / pages 只回显调用方请求的分页参数，
-            // 真正的分页由工作台按分组后的外层行完成。
+
             return {
               records,
               total,
@@ -387,7 +381,7 @@ export const useRegionalApprovalQuery = ({
     const request = beginTimedRequest();
     setProgressState((current) => ({ status: 'loading', data: current.data }));
     const statuses = SALES_PLAN_PROGRESS_STATUSES;
-    // Progress is based on the full period and organization scope, not the active approval node.
+
     void Promise.all(
       selectedPeriods.map(async (period) => {
         const baseQuery = {
@@ -473,7 +467,7 @@ export const useRegionalApprovalQuery = ({
     const collect = async () => {
       const rows = new Map<string, GeaSalesPlanListItem>();
       let expectedTotal = 0;
-      // 顺序读取页面，避免进入工作台时无界地扩散请求。
+
       for (const { period, statuses } of periodQueries) {
         for (const status of statuses ?? [stableScope.status]) {
           let pageCount = 1;
@@ -481,7 +475,7 @@ export const useRegionalApprovalQuery = ({
           let serverPageSize = 0;
           for (let pageNo = 1; pageNo <= pageCount; pageNo++) {
             request.signal.throwIfAborted();
-            // oxlint-disable-next-line no-await-in-loop -- 下一页依赖服务端页大小，并以此限制请求并发。
+
             const response = await client.list.invoke({
               ...stableScope,
               status,

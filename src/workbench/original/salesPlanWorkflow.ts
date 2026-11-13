@@ -1,4 +1,3 @@
-/** 本地只投影 V1.2 节点与状态转换；服务端仍是权限和写入的唯一权威。 */
 export type SalesPlanRole = 'customer' | 'region' | 'province' | 'area' | 'category';
 export type SalesPlanWorkflowRow = {
   typeCode: string;
@@ -6,7 +5,6 @@ export type SalesPlanWorkflowRow = {
   nodeNum: string;
 };
 
-/** 本地投影包含用户确认移除 JD 8 / TM 9；实时 SQL 验收另行进行。 */
 export const SALES_PLAN_WORKFLOW_ROWS: readonly SalesPlanWorkflowRow[] = Object.entries({
   Y: ['0', '1', '2', '3', '4', 'Y'],
   DC: ['0', '2', '3', '4', 'Y'],
@@ -32,7 +30,6 @@ export const SALES_PLAN_RETURN_CODES: Partial<Record<SalesPlanRole, number>> = {
   area: 9,
 };
 
-// 节点含义由 V1.2 §4.0 定义；哪些节点参与由配置决定。
 const NODE_ROLES: Readonly<Record<string, SalesPlanRole>> = {
   '0': 'customer',
   '1': 'region',
@@ -43,7 +40,6 @@ const NODE_ROLES: Readonly<Record<string, SalesPlanRole>> = {
 
 let liveWorkflowRows: readonly SalesPlanWorkflowRow[] | undefined;
 
-/** 文档内查询投影；每个打包后的工作台文档都有独立的模块实例。 */
 export function replaceSalesPlanWorkflowRows(rows: readonly SalesPlanWorkflowRow[]): void {
   liveWorkflowRows = rows.map((row) => ({ ...row }));
 }
@@ -52,7 +48,6 @@ export const salesPlanWorkflow = (
   typeCode: string,
   rows: readonly SalesPlanWorkflowRow[] = liveWorkflowRows ?? SALES_PLAN_WORKFLOW_ROWS,
 ) => {
-  // 先严格验证链条和角色单调性；配置不可信时所有动作和权限计算都保持不可用。
   const chain = rows
     .filter((row) => row.typeCode === typeCode)
     .toSorted((a, b) => a.examineLevel - b.examineLevel);
@@ -118,10 +113,7 @@ export const salesPlanWorkflow = (
     const returned = role === 'category' ? undefined : status + 6;
     return returned === undefined ? [status] : [status, returned];
   };
-  /**
-   * 工作台队列的只读展示范围。品类节点同时保留待审批、待 DMS 回写和已回写的计划，
-   * 让用户能在同一处追踪审批闭环；不能用于判断可写权限。
-   */
+
   const queueStatuses = (role: SalesPlanRole): number[] =>
     role === 'category' ? [...pendingStatuses(role), 5, 10] : pendingStatuses(role);
   const visibility = (status: number, role: SalesPlanRole): 'writable' | 'read-only' | 'denied' => {
@@ -152,10 +144,10 @@ export const salesPlanWorkflow = (
     statusLabelCode: (status: number): number | undefined => {
       if (status === 0 || status === 5 || (status >= 6 && status <= 10)) return status;
       if (!rolesKnown) return undefined;
-      // 状态名称按原始节点码固定，XN 的 2 同样叫“区域已审批”。
+
       return actor(status) ? status : undefined;
     },
-    /** 原始 DMS 节点保持不透明；即使未提供角色名称也可安全使用。 */
+
     nextNode: (nodeNum: string) => {
       const index = chain.findIndex((row) => row.nodeNum === nodeNum);
       return valid && index >= 0 ? chain[index + 1]?.nodeNum : undefined;

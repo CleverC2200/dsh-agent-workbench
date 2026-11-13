@@ -16,8 +16,7 @@ class CustomerOrders(unittest.TestCase):
    tables={t.alias_or_name:t.name for t in select.find_all(exp.Table) if t.name.startswith('agents_')}
    for column in select.find_all(exp.Column):
     if column.table in tables:schema.setdefault(tables[column.table],set()).add(column.name)
-  # Legacy scenario tests mutate their backing rows. Project the newly published
-  # sources dynamically; test_fc_new_warehouse_sources uses independent real tables.
+
   execution_fields = schema.pop('agents_dwd_scm_execute_detail_mi')
   schema.pop('agents_scm_warehouse_total_data_d')
   schema['agents_scm_execute_detail_d'].update(execution_fields - {'organizationid','ownerid','adjust_order_qty','pack_unitqty','delivery_qty'})

@@ -99,7 +99,7 @@ async function assertAuthorizedSqlCustomerCodes(
 ) {
   const scopedCustomerCodes = customerCodes;
   if (scopedCustomerCodes.length === 0) return scopedCustomerCodes;
-  // GEA 会在该受控 SQL 上注入当前用户的数据范围；不再为二次校验拉取完整客户清单。
+
   const rows = await queryWorkbenchLatestSnapshot(scopedCustomerCodes, options);
   if (!dateOnly(rows[0]?.[dealerCubeContract.snapshotDimension])) {
     throw new GeaSqlApiError(
@@ -113,44 +113,43 @@ async function assertAuthorizedSqlCustomerCodes(
 }
 
 export type DealerDashboardLoadOptions = {
-  /** Internal overview reads use only metadata and database aggregate queries. */
   overviewOnly?: boolean;
   overviewCustomerCodes?: string[];
-  /** UI default: select the sole visible customer using the queried total. */
+
   autoSelectOnlyCustomer?: boolean;
-  /** Only fetch this stock tab; omitted by existing full-workspace consumers. */
+
   stockTab?: 'customer' | 'category' | 'sku' | 'shortage' | 'expiry';
-  /** Partial table response; global metrics remain in the existing document. */
+
   tabDataOnly?: boolean;
   planMonth?: string;
   inventoryDailyStatDate?: string;
-  /** Include the current page of authorized products for the company catalog. */
+
   includeCompanyProducts?: boolean;
-  /** Catalog pagination needs only product facts, not dashboard aggregates. */
+
   companyProductsOnly?: boolean;
   companyProductFilters?: CompanyProductFilters;
   companyProductFacets?: boolean;
   onTiming?: (stage: string, durationMs: number) => void;
-  /** Internal export scope; never used for normal screen pagination. */
+
   exportTab?: 'sku' | 'shortage' | 'customer' | 'category' | 'expiry';
   actionId?: string;
   clientRequestId?: string;
   signal?: AbortSignal;
-  /** Zero-based database detail page used by the review prototype. */
+
   detailPage?: number;
-  /** Database detail page size; summary metrics remain scoped to all rows. */
+
   detailPageSize?: number;
-  /** Independent zero-based customer-summary page for the customer inventory tab. */
+
   customerPage?: number;
-  /** Customer-summary page size; does not change SKU detail pagination. */
+
   customerPageSize?: number;
-  /** Independent zero-based shortage-SKU page for the shortage inventory tab. */
+
   shortagePage?: number;
-  /** Shortage-SKU page size; does not change the regular SKU page. */
+
   shortagePageSize?: number;
   scope?: 'single' | 'sales' | 'all';
   snapshotDate?: string;
-  /** Trusted GEA dealer identity; narrows customer-list queries to one code. */
+
   lockedCustomerCode?: string;
 };
 
@@ -161,10 +160,6 @@ export type DealerCustomerSearchResult = {
   hasMore: boolean;
 };
 
-/**
- * Search the authorized customer list with a bound JDBC parameter. The result
- * stays server-paged, so opening the picker never reads all authorized rows.
- */
 export async function loadDealerCustomers(
   search = '',
   offset = 0,
@@ -210,7 +205,6 @@ export async function loadDealerCustomers(
   };
 }
 
-/** Read one result-table page using the exact scope recorded by the Agent. */
 export async function loadDealerResultPage(
   scope: DealerDetailScope,
   page: number,
@@ -245,8 +239,7 @@ export async function loadDealerResultPage(
           : numberOf(row[`${cube}.stock_qty`]) === 0,
       )
     : (await queryWorkbenchSqlPage(query, safePage, safePageSize)).records;
-  // 主粒度去重：明细模式按 snapshot+cust+material+plan_month 保留最新记录，
-  // 与 Agent 侧 workspace 的口径一致；汇总模式行已由 Cube 聚合，不再重复。
+
   const deduped = scope.mode === 'detail' ? dedupeRows(rows).rows : rows;
   const pageRows = needsInMemoryFilter
     ? deduped.slice(safePage * safePageSize, (safePage + 1) * safePageSize)
@@ -332,7 +325,7 @@ export async function loadDealerDashboard(
       dedupedRows: 0,
     };
   }
-  // 已明确客户或全部范围时，客户目录与月份列表只依赖同一个快照。
+
   const metadataMonths = pinnedMonth
     ? [{ [planMonthDimension]: pinnedMonth }]
     : combinedMetadata
@@ -340,7 +333,7 @@ export async function loadDealerDashboard(
           (row) => dateOnly(row[dealerCubeContract.snapshotDimension]) === snapshotDate,
         )
       : null;
-  // The daily snapshot and full daily totals do not depend on plan-order details.
+
   const earlyDailySnapshot = knownScope
     ? measure('daily_snapshot', () =>
         options.tabDataOnly && options.inventoryDailyStatDate
@@ -360,7 +353,7 @@ export async function loadDealerDashboard(
         )
       : ({} as CubeRow);
   });
-  // Join below; attach a handler now so an earlier independent failure cannot leak a rejection.
+
   earlyDailySummary?.catch(() => {});
   const customerQuery = measure('customers', () =>
     queryWorkbenchCustomers(
@@ -486,7 +479,6 @@ export async function loadDealerDashboard(
     };
   }
 
-  // 页签只读取自己的明细，顶部指标仍使用全范围汇总。下载保留完整数据。
   const stockTab = options.companyProductsOnly
     ? 'sku'
     : options.exportTab
@@ -785,8 +777,7 @@ export async function loadDealerAging(
       rows: withRatio(ageRowsFromCube(rows, '提报推演')),
     };
   }
-  // 主表库存来源缺失或不明确：不直接穿透单一明细表、不合并口径判断，
-  // 两套来源分别展示并提示先确认主表库存口径（规划规则包 5.4/6.2）。
+
   const [wlRows, simulatedRows] = await Promise.all([
     queryWorkbenchAging('wl', customerCode, materialCode),
     queryWorkbenchAging('simulated', customerCode, materialCode),

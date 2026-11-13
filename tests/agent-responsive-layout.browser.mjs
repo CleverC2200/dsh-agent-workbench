@@ -61,7 +61,6 @@ for (const id of ['fc', 'qll', 'aqkc', 'apsplan'])
     const cards = frame.locator(selector);
     await expect(cards.first()).toBeVisible();
     for (const width of [1440, 1024, 768, 560, 390, 320]) {
-      // The iframe is the client business pane; the outer desktop remains wide.
       await page.locator('iframe').evaluate((el, w) => {
         el.style.width = `${w}px`;
       }, width);

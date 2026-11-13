@@ -1,4 +1,3 @@
-/** Display state never grants access or substitutes inventory facts. */
 export const customerLoadLocales = {
   zh: {
     waiting: '正在连接客户库存，数据尚未读取。',
@@ -61,7 +60,6 @@ export function customerLoadFailure(error) {
   return 'query';
 }
 
-/** Fixed local markup only: never interpolate query rows or server diagnostics. */
 export function customerShellMarkup() {
   return (
     '<section class="customer-static-shell" aria-label="客户库存"><div class="customer-static-metrics">' +

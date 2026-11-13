@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 const source = resolve('business/inventory-personal/source/inventory-light-plugins');
 const require = createRequire(resolve('package.json'));
 let result;
-/** Offline regression for UI intent and draft behavior, with fixed facts at the source-input seam. */
+
 export function personalFixtureHtml() {
   return (result ??= (async () => {
     const output = await build({

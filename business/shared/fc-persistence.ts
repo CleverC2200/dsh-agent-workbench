@@ -8,7 +8,7 @@ type Storage = {
   removeItem(key: string): void;
 };
 type Call = (method: string, input: any, options: { signal: AbortSignal }) => Promise<any>;
-/** Pending user write intent is kept under the existing identity/session owner, never a credential. */
+
 export class FcPersistence {
   constructor(
     private call: Call,
@@ -23,7 +23,7 @@ export class FcPersistence {
   pending(scope: FcStoreScope) {
     return this.storage.getItem(this.key(scope)) !== null;
   }
-  /** Only locate existing receipt write intents; their contents are not a verified receipt. */
+
   pendingReceipts(): FcStoreScope[] {
     const scopes: FcStoreScope[] = [];
     for (const key of this.storage.keys?.() ?? []) {
@@ -44,9 +44,7 @@ export class FcPersistence {
           };
           if (this.key(scope) === key) scopes.push(scope);
         }
-      } catch {
-        // Preserve malformed intents for diagnosis; never reinterpret them as completed writes.
-      }
+      } catch {}
     }
     return scopes;
   }

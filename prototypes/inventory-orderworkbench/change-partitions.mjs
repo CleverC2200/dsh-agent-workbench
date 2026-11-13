@@ -9,7 +9,6 @@ const sums = [
   'unknown_quantity',
 ];
 
-/** Called only after both disjoint partitions pass complete-packet validation. */
 export function mergeCancellationPartitions(partitions) {
   if (partitions.length !== 2 || partitions.some((rows) => !Array.isArray(rows)))
     throw Error('CANCELLATION_PARTITIONS_INCOMPLETE');

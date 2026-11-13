@@ -2,7 +2,6 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import ts from 'typescript';
 
-// Preserve the accepted pre-format data identity; this reference never follows HEAD.
 const ref = '9b4863692cb29a3edc8a2358e98feb7846526d1b';
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const retiredMpsPrototype = new Set([
@@ -71,7 +70,6 @@ function valueAST(node) {
   return result;
 }
 
-/** Verify original bytes against frozen metadata, then current data semantics without evaluating it. */
 export function verifyFixedAuthoredData(page, files, source) {
   if (!['category', 'mps'].includes(page)) throw Error('STATIC_AUTHORED_PROVENANCE_CHANGED: page');
   const originalSource = JSON.parse(

@@ -1,7 +1,3 @@
-/**
- * 各业务页面的欢迎文案、固定功能与推荐问题。
- * Workbench 只贡献呈现；输入、草稿和模型任务沿当前 Core 接口。
- */
 export type ConversationActionIcon =
   | 'chart'
   | 'alert'
@@ -16,25 +12,23 @@ export type ConversationActionTone = 'brand' | 'info' | 'success';
 export type ConversationPromptAction = {
   icon: ConversationActionIcon;
   tone: ConversationActionTone;
-  /** 功能标题。 */
+
   label: string;
-  /** 一行说明。 */
+
   detail: string;
-  /** 点击后填入输入框的内容。 */
+
   prompt: string;
 };
 
 export type ConversationPromptConfig = {
-  /** 会话区顶栏名称：统一用「功能模块名 + Agent」，和左侧菜单保持一致；不再挂副标。 */
   name: string;
   intro: string;
-  /** 简介里加粗的边界句。 */
+
   boundary: string;
   actions: ConversationPromptAction[];
   prompts: string[];
 };
 
-/** 方案 A · 提报版：客户 / 代报人（KA、行销综合、业务员）的提报界面。 */
 export const reportingConversation: ConversationPromptConfig = {
   name: '销售计划Agent',
   intro:
@@ -78,7 +72,6 @@ export const reportingConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 方案 B · 审批版：城市经理（区域计划审批）/ 省区总 / 大区总 / 品类计划审核人的审批工作台。 */
 export const approvalConversation: ConversationPromptConfig = {
   name: '销售计划Agent',
   intro: '我可以按你当前节点的口径核对这张计划：先给结论，再给依据，异常项逐条给处理建议。',
@@ -121,7 +114,6 @@ export const approvalConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 主生产计划（MPS）：统一 Agent 命名，保留原型定位与推荐问题。 */
 export const mpsPlanConversation: ConversationPromptConfig = {
   name: '主生产计划Agent',
   intro:
@@ -137,7 +129,6 @@ export const mpsPlanConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 经销商补货（库存）业务页沿用原有助手文案。 */
 export const regionalPlanConversation: ConversationPromptConfig = {
   name: '区域计划Agent',
   intro: '我可以跨模块盯提报进度、找异常，给提报与跟催的参考意见。',
@@ -180,7 +171,6 @@ export const regionalPlanConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 品类计划工作台：文案沿用原型内的「品类计划助手」（简介 / 4 项固定功能 / 4 条推荐问题）。 */
 export const categoryPlanConversation: ConversationPromptConfig = {
   name: '品类计划Agent',
   intro:
@@ -224,7 +214,6 @@ export const categoryPlanConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 经销商补货（库存）业务页沿用原有助手文案。 */
 export const inventoryConversation: ConversationPromptConfig = {
   name: '经销商补货Agent',
   intro: '我可以帮你分析客户库存，生成补货建议并跟进执行进度。',
@@ -267,7 +256,6 @@ export const inventoryConversation: ConversationPromptConfig = {
   ],
 };
 
-/** AI 工作台首页：没有打开具体业务页时的通用助手。 */
 export const homeConversation: ConversationPromptConfig = {
   name: 'AI 工作台Agent',
   intro: '我可以从你正在解决的问题入手：找数据、看计划进度、盯库存和交付风险。',
@@ -310,7 +298,6 @@ export const homeConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 业务待办页：GEA 消息待办与审批提醒。 */
 export const inboxConversation: ConversationPromptConfig = {
   name: '业务待办Agent',
   intro: '我可以帮你看 GEA 消息待办：还有多少没处理、哪些卡在你这一节点、下一步该找谁。',
@@ -353,7 +340,6 @@ export const inboxConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 需求运营管理页：需求信号研判。 */
 export const demandOpsConversation: ConversationPromptConfig = {
   name: '需求运营Agent',
   intro: '我可以帮你看需求波动、预测偏差和需求共识待办，给出下期需求计划的调整参考。',
@@ -396,7 +382,6 @@ export const demandOpsConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 交付运营管理页：订单履约风险。 */
 export const deliveryOpsConversation: ConversationPromptConfig = {
   name: '交付运营Agent',
   intro: '我可以帮你看订单履约：准交率、在途订单和重点客户延期，给出优先处理顺序。',
@@ -439,7 +424,6 @@ export const deliveryOpsConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 安全库存页：基地口径的库存水位与货龄。 */
 export const safetyStockConversation: ConversationPromptConfig = {
   name: '基地库存Agent',
   intro: '我可以按基地口径核对库存水位、周转天数、货龄和订单满足率，指出低于目标的部分。',
@@ -482,7 +466,6 @@ export const safetyStockConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 分仓库存页：分仓经营与补货。 */
 export const branchStockConversation: ConversationPromptConfig = {
   name: '分仓库存Agent',
   intro: '我可以按分仓看缺货订单、补货确认、大日期和滞库风险，给出先处理谁的建议。',
@@ -525,7 +508,6 @@ export const branchStockConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 库存管理工作台：基地 + 分仓的今日运营。 */
 export const inventoryWorkbenchConversation: ConversationPromptConfig = {
   name: '库存管理Agent',
   intro: '我可以把基地和分仓的今日运营情况汇总起来，按优先级说清今天先处理什么。',
@@ -568,7 +550,6 @@ export const inventoryWorkbenchConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 全链路库存页：基地到分仓的链路视角。 */
 export const fullChainStockConversation: ConversationPromptConfig = {
   name: '全链库存管理Agent',
   intro: '我可以沿基地到分仓的链路看库存分布、缺货和大日期风险，以及可调拨的机会。',
@@ -611,7 +592,6 @@ export const fullChainStockConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 产销协同页：经营计划、库存与履约的跨模块视角。 */
 export const supplyCoordinationConversation: ConversationPromptConfig = {
   name: '产销协同Agent',
   intro: '我可以结合计划、库存与订单履约，定位当前产销协同中的偏差和风险。',
@@ -654,7 +634,6 @@ export const supplyCoordinationConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 客户库存页：客户库存健康度、周转与大日期风险。 */
 export const customerStockConversation: ConversationPromptConfig = {
   name: '客户库存Agent',
   intro: '我可以帮你分析客户库存健康度、周转和大日期风险，并给出改善建议。',
@@ -697,7 +676,6 @@ export const customerStockConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 订单工作台：订单状态、供应风险与提报审批进度。 */
 export const orderManagementConversation: ConversationPromptConfig = {
   name: '订单工作台助手',
   intro: '可解读当前月报或周报的指标、预警事项',
@@ -741,7 +719,6 @@ export const orderManagementConversation: ConversationPromptConfig = {
   ],
 };
 
-/** 订单履约页：接收、校验与 OMS 推送进度。 */
 export const orderFulfillmentConversation: ConversationPromptConfig = {
   name: '订单履约助手',
   intro: '按订单、商品、基地或销售组织问数',

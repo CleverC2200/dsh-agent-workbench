@@ -5,7 +5,7 @@ W=Path(__file__).resolve().parents[1]
 loader=importlib.util.spec_from_file_location('batch',W/'scripts/update-inventory-batch-source.py');batch=importlib.util.module_from_spec(loader);loader.loader.exec_module(batch)
 prefix=batch.adapter(" AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '') AND (:gea_p2 = FALSE OR b.belong_base IN (:gea_p3)) AND (:gea_p4 IS NULL OR b.warehouseid = :gea_p4) AND (:gea_p5 IS NULL OR b.material_code = :gea_p5)").split('), inventory_batch_totals AS (')[0]+')'
 prefix=prefix.replace('b.warehouseid AS warehouseid,','b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid,',1).replace('d.warehouseid AS warehouseid,','d.warehouse_classify AS warehouse_classify, d.warehouseid AS warehouseid,',1)
-# Validate actual month lengths before civil-day arithmetic; Feb 30 is not a batch age.
+
 y='d.production_year'
 leap=f"({y}-4*FLOOR({y}/4.0)=0 AND ({y}-100*FLOOR({y}/100.0)<>0 OR {y}-400*FLOOR({y}/400.0)=0))"
 max_day=f"CASE WHEN d.production_month=2 THEN CASE WHEN {leap} THEN 29 ELSE 28 END WHEN d.production_month IN (4,6,9,11) THEN 30 ELSE 31 END"

@@ -1,7 +1,6 @@
 import { fcPersistence } from './fc-storage-client';
 import type { FcStoreScope } from '../../../../../shared/fc-persistence';
 
-/** Recover only the persisted receipt. This path never calls DMS or creates another SQL write. */
 export async function verifyFcReceiptArchive(scope: FcStoreScope, signal: AbortSignal) {
   signal.throwIfAborted();
   if (scope.kind !== 'submission' || !scope.entityId) throw Error('补货回执核对参数无效');
@@ -33,7 +32,7 @@ const canonical = (value: any): string =>
         )
       : v,
   );
-/** Confirmed snapshot precedes DMS; DMS acknowledgement is retained even if SQL receipt persistence fails. */
+
 export async function persistAndSubmitFc(
   warehouseCode: string,
   snapshot: any,
@@ -75,7 +74,7 @@ export async function persistAndSubmitFc(
   }
   const scope = { kind: 'submission' as const, warehouseCode, entityId: snapshot.aiPreOrderCode };
   if (fcPersistence.pending(scope)) await fcPersistence.verify(scope, signal);
-  // Verification confirms the original event; a later receipt or unknown event still wins.
+
   let previous = await fcPersistence.load(scope, signal);
   signal.throwIfAborted();
   if (previous.value?.stage === 'dms-received') {
@@ -86,7 +85,7 @@ export async function persistAndSubmitFc(
     throw Error('该补货批次DMS结果待核对，不自动重新下单');
   if (previous.value && canonical(previous.value) !== canonical(snapshot))
     throw Error('同一补货批次的确认快照已变化，请核对原记录');
-  // Reserve the maximum serialized receipt size before DMS accepts an order.
+
   const archived = {
     ...snapshot,
     stage: 'dms-received',

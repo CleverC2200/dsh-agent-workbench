@@ -1,6 +1,5 @@
 import React, { type FormHTMLAttributes, type FormEvent, type SyntheticEvent } from 'react';
 
-/** HTML plugins cannot submit forms. Keep validation, but invoke local reads from input events. */
 export function LocalQueryForm({
   onSubmit,
   onClick,

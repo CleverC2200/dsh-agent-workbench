@@ -17,7 +17,6 @@ function coverage(summary: any, count: string) {
   return `${knownNumber(summary?.[count]) ?? '-'} / ${knownNumber(summary?.row_count) ?? '-'} 个SKU`;
 }
 
-/** Put available facts in view without presenting a partial base scope as company stock. */
 export function fullChainCards(
   stock: any,
   orders: any,
@@ -157,8 +156,6 @@ const inventoryQuantityLabels = new Set([
   '备单量',
 ]);
 
-// Older dashboard payloads contain formatted text instead of numeric quantities.
-// Only known quantity metrics may acquire a unit; other metrics stay unchanged.
 export function formatInventoryMetricTextParts(label: string, text: string) {
   if (!inventoryQuantityLabels.has(label)) return { value: text, unit: '' };
   const match = text

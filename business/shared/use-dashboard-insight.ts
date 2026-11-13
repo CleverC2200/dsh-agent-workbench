@@ -7,7 +7,7 @@ type InsightState =
   | { key: string; status: 'loading' | 'error' }
   | { key: string; status: 'ready'; answer: string };
 const insightResponse = z.object({ answer: z.string().trim().min(1) });
-/** Only the insight awaits the model; metrics and tables keep their own loading lifetimes. */
+
 export function useDashboardInsight(evidence: unknown, enabled: boolean): InsightState {
   const [sessionEpoch, setSessionEpoch] = useState(0);
   useEffect(() => {
@@ -32,7 +32,7 @@ export function useDashboardInsight(evidence: unknown, enabled: boolean): Insigh
       controller.abort();
     }, 90000);
     setState({ key, status: 'loading' });
-    // Coalesce progressive overview updates before spending a model request.
+
     const timer = setTimeout(() => {
       void ready
         .then(async () => {

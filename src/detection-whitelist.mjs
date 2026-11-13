@@ -1,4 +1,3 @@
-/** State authority is PG-Warning via the GEA SQL whitelist API. No local database or file fallback. */
 export function createWhitelistStore(ctx) {
   let revision;
   const invoke = async (body) => {

@@ -91,7 +91,7 @@ test('cards and the list share one pending inventory-date read through their act
   );
   const { readFile } = await import('node:fs/promises');
   const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
-  delete config.dailySummary.bundle; // This test isolates pending snapshot reads from bootstrap bundling.
+  delete config.dailySummary.bundle;
   const calls = [];
   const execute = async (_, o) => {
     calls.push(o.queryId);

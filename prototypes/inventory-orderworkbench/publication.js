@@ -1,4 +1,3 @@
-// State is supplied by the report renderer, never discovered from host DOM.
 import { ready, call, reportElements } from '../../business/shared/channel.js';
 
 export function publishReport(snapshot, disposePage, importer) {

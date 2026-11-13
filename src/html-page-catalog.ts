@@ -1,4 +1,3 @@
-/** Pages publish elements; GEA owns the surface/tool identity and validates their data. */
 export function htmlPageCatalog(input: {
   surface: string;
   tool: string;

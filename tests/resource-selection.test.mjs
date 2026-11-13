@@ -257,7 +257,7 @@ test('native navigation hands off to Core without treating its new navigation as
     uiWorkspace: {
       openSession: () => {
         calls.push('native-navigation');
-        // Core's accepted main-view navigation invalidates the prior layout intent.
+
         controller.abort();
       },
     },

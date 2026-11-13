@@ -12,7 +12,6 @@ SOURCES = {
     'shared': ROOT / 'business/shared/current-shortage-source.sql',
 }
 
-
 def update(config):
     sources = {key: {cte.alias: cte for cte in sqlglot.parse_one(path.read_text(), read='postgres').ctes}
                for key, path in SOURCES.items()}
@@ -49,9 +48,8 @@ def update(config):
             query['notes'] = query.get('notes', '').split(' 订单需求、占用逐行')[0].split(' 订单需求、占用按业务')[0] + ' 订单需求、占用按业务单位转换率逐行换算为件；换算缺失或无效保持未知。'
     return config
 
-
 def write_queries(path, config):
-    # Preserve unrelated configuration formatting and any concurrent source edits.
+
     text = path.read_text()
     original = json.loads(text)['queries']
     for key, query in config['queries'].items():
@@ -63,7 +61,6 @@ def write_queries(path, config):
         encoded = json.dumps(query, ensure_ascii=False, indent=2).replace('\n', '\n    ')
         text = text[:start] + encoded + text[start + size:]
     path.write_text(text)
-
 
 if __name__ == '__main__':
     for agent in ['aqkc', 'fc', 'qll', 'apsplan']:

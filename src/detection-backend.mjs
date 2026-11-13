@@ -487,7 +487,7 @@ export async function installDetection(ctx) {
       };
     await save();
     const metric = await metricInfo(t.metric);
-    // A task may define its rule; the Agent must verify every unspecified metric rule from its authorized knowledge tools.
+
     if (metric.status !== 'available')
       run.metricLibraryIssue = metric.message || '指标库口径需通过授权工具核对';
     const metricContext = Object.fromEntries(

@@ -4,7 +4,6 @@ const fields=['carrier_name','carrier_id','waybillno','order_stage','odo_order_s
 const key=row=>JSON.stringify([row.executeorderno,row.cust_code]);
 const present=value=>value!==null&&value!==undefined&&value!=='';
 
-/** Header facts never supply SKU quantities or multiply the authorized detail rows. */
 export function attachExecutionTrace(facts,trace,nodeTrace) {
   if(!facts)return facts;
   const byKey=new Map(),duplicates=new Set();
@@ -51,7 +50,6 @@ export function attachExecutionTrace(facts,trace,nodeTrace) {
   return {...facts,rows};
 }
 
-/** Arrival assessment is limited to the current creation-date list, not a formal period KPI. */
 export function assessTraceArrivals(rows,{start,end}={}) {
   const groups=new Map();
   for(const row of rows.filter(r=>Number(r.detailstatus)===10&&String(r.is_stat)==='1')){
@@ -70,7 +68,7 @@ export function assessTraceArrivals(rows,{start,end}={}) {
     for(const trace of exec.values()){
       const arrival=shanghaiTime(trace.gpsisinraildate_to)??shanghaiTime(trace.arriveconfirm_time);
       const promises=[trace.requireddeliverytimebak,trace.requireddeliverytime,trace.expected_deliv_time].map(shanghaiTime);
-      // Missing promise inputs cannot establish which of the three is latest.
+
       if(arrival===null||promises.some(t=>t===null))break;
       arrived.push(arrival);deadlines.push(Math.max(...promises)+12*3600000);
     }

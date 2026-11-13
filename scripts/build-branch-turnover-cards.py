@@ -5,8 +5,7 @@ from sqlglot import exp
 ROOT=Path(__file__).resolve().parents[1]
 p=ROOT/'business/inventory-qll/sql.config.json';c=json.loads(p.read_text());source=c['queries']['replenishment.summary'];tree=sqlglot.parse_one(source['request']['sql'],read='postgres')
 ctes={x.alias_or_name:x for x in tree.args['with_'].expressions}
-# fc_current_orders has exactly the eligible location/SKU keys. Its allocation,
-# stock gap and classification projections do not determine this key union.
+
 required=set()
 def retain(name):
  if name in required or name not in ctes:return

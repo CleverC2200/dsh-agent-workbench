@@ -11,7 +11,6 @@ type Placement = {
   contentWidth: number;
 };
 
-/** Share the visible table's horizontal position with a viewport-bottom scrollbar. */
 export function FloatingTableScrollbar({ bottomInset = 0 }: { bottomInset?: number }) {
   const anchor = useRef<HTMLSpanElement>(null);
   const scrollbar = useRef<HTMLInputElement>(null);
@@ -47,7 +46,7 @@ export function FloatingTableScrollbar({ bottomInset = 0 }: { bottomInset?: numb
       let next: Placement | null = null;
       for (const container of containers) {
         const rect = container.getBoundingClientRect();
-        // Native and floating tracks share explicit styling, including on macOS.
+
         if (
           container.scrollWidth <= container.clientWidth + 1 ||
           rect.top >= bottom - 24 ||
@@ -59,7 +58,7 @@ export function FloatingTableScrollbar({ bottomInset = 0 }: { bottomInset?: numb
         let right = Math.min(viewportRight, rect.right);
         let visibleTop = Math.max(top, rect.top);
         let visibleBottom = bottom;
-        // Nested drill-down tables may also be clipped by an outer table.
+
         for (
           let parent = container.parentElement;
           parent && parent !== root;
@@ -79,7 +78,7 @@ export function FloatingTableScrollbar({ bottomInset = 0 }: { bottomInset?: numb
         if (right - left < 48 || visibleTop >= visibleBottom - 24 || rect.bottom <= visibleTop)
           continue;
         selected = container;
-        // Once the native track is fully visible, do not render a second track.
+
         next =
           rect.bottom <= visibleBottom
             ? null
@@ -102,7 +101,7 @@ export function FloatingTableScrollbar({ bottomInset = 0 }: { bottomInset?: numb
     };
     const selectTable = (event: Event) => {
       if (!(event.target instanceof Element)) return;
-      // Prefer the innermost overflowing table the user points at or focuses.
+
       const element = event.target;
       preferred =
         containers

@@ -1,6 +1,5 @@
 import type { WarehouseSnapshot } from '../../fc/src/lib/domain.ts';
 
-/** A partial ratio uses the same SKU cohort in numerator and denominator. */
 export function forecastCoverage(snapshot: WarehouseSnapshot) {
   const bySku = new Map(snapshot.replenishments.map((row) => [row.sku, row]));
   const skus = new Set([...bySku.keys(), ...snapshot.inventory.map((row) => row.sku)]);

@@ -123,8 +123,7 @@ async function fixture(t, id, width = 559, theme = 'light', authorDocument, font
         };
       assert.match(sql, /agents_scm_cust_plan_order_analysis_d/);
       assert.match(sql, /AS snapshot_date/);
-      // This page now loads governed rows before mounting. Keep layout
-      // fixtures synthetic and separate from production query acceptance.
+
       const rows = [
         {
           snapshot_date: '2026-10-17',

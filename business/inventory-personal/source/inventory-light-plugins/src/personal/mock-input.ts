@@ -1,5 +1,5 @@
 import type { DailyReportInput } from 'dsh-agent-manage/inventory-compute/daily-report';
-/** Fixed reception input. This module has no network, workspace or real Consumer access. */
+
 export const dataMode = 'mock';
 let lifetime = new AbortController();
 export const readSignal = () => lifetime.signal;

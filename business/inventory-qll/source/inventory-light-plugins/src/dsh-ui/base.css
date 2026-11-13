@@ -1,4 +1,3 @@
-/* Shared paint tokens; geometry remains owned by each business page. */
 :root {
   --ui-font: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
   --ui-ink: #20232a;
@@ -33,7 +32,7 @@
   --ui-shadow-floating: 0 12px 32px #1d20281a;
   --ui-focus: 0 0 0 3px #df173226;
 }
-/* Isolated HTML pages supply fallbacks for the same token names used by DSH. */
+
 :root {
   color-scheme: light;
   --dsw-alias-label-primary: var(--ui-ink);
@@ -122,7 +121,6 @@ a {
   width: 100%;
 }
 
-/* Shared control states, without changing widths, spacing, or table density. */
 button,
 input,
 select,
@@ -171,7 +169,6 @@ th {
   }
 }
 
-/* Workbench visual contract. Business layout remains in each page module. */
 a:focus-visible,
 summary:focus-visible,
 [tabindex]:focus-visible {

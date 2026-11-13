@@ -1,5 +1,3 @@
-// A source fixture can read this task's immutable, separately built assets.
-// CI builds in its own source tree and leaves this override unset.
 import { readFile as readSourceFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 export * from 'node:fs/promises';

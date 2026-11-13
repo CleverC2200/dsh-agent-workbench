@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises';
 
-/** Installed pages read the adjacent config injected by the Host, not a bundled copy. */
 export function sqlConfigPlugin({ inlineTemplates = false } = {}) {
   return {
     name: 'installed-agent-sql-config',

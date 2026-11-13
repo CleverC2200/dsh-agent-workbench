@@ -1,4 +1,3 @@
-/** Only the latest version of a logical batch renders; its full import history remains persisted. */
 export function projectReportImports(history = [], overrides = {}) {
   const latest = new Map();
   for (const entry of history)

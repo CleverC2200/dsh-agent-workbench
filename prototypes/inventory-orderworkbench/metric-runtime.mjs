@@ -14,7 +14,6 @@ export {
   resolveMetricName,
 };
 
-/** The same reader and evaluator serve a page and a page-independent governed read. */
 export async function readOrderMetric(config, input, execute, signal, { now = new Date() } = {}) {
   signal?.throwIfAborted();
   const metric = resolveMetricName(input.metric),

@@ -1,4 +1,3 @@
-/** Pure, deterministic report contract. Never treats unknown facts as zero. */
 export const DAILY_REPORT_BASES = ['华东', '华南', '西南', '遂平', '郑州'];
 export type DailySource = 'stock' | 'age' | 'pending' | 'fulfillment';
 export type DailyStock = {
@@ -166,8 +165,6 @@ const objectName = (row: { base: string; material: string; name: string }) =>
 const visible = (row: { base: string; material: string }) =>
   DAILY_REPORT_BASES.includes(row.base) && Boolean(row.material);
 
-/** All inputs must already have passed GEA row permissions; the intersection is
- * additional protection against joining auxiliary rows outside visible objects. */
 export function buildDailyReport(input: DailyReportInput): DailyReport {
   const inScope = (row: { base: string; material: string }) =>
     visible(row) && (!input.selectedBases || input.selectedBases.includes(row.base));
@@ -464,8 +461,7 @@ export function buildDailyReport(input: DailyReportInput): DailyReport {
   risks.sort(
     (a, b) => a.priority - b.priority || b.quantity - a.quantity || a.id.localeCompare(b.id),
   );
-  // Reserve examples for every risk type, but do not turn the daily report into
-  // a SKU list. The fixed board remains the complete-detail surface.
+
   const kindCounts = new Map<string, number>();
   const selectedRisks = risks
     .filter((row) => {
@@ -981,7 +977,6 @@ export function buildDailyReport(input: DailyReportInput): DailyReport {
   };
 }
 
-/** A signed production session always uses GEA, even if the workbench is direct. */
 export function dailyReportTransport(
   hasSession: boolean,
   config: { nodeEnv: string; workbenchMode: string; requireLaunch: boolean },

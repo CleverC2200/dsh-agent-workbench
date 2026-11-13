@@ -23,7 +23,6 @@ export type PageSessionRestore = (
   expected?: Pick<DocumentSession, 'preset' | 'cwd' | 'subject'>,
 ) => Promise<void>;
 
-/** Page associations borrow Core Sessions. GEA remains the only identity authority. */
 export function usePageSessionCoordination({
   ctx,
   workbench,
@@ -105,7 +104,6 @@ export function usePageSessionCoordination({
     } catch (failure: unknown) {
       if (!signal.aborted) setError(failure instanceof Error ? failure.message : String(failure));
     } finally {
-      // A late completion cannot clear the next intent's busy state.
       if (pending.current === flight) {
         pending.current = undefined;
         setBusy(false);
@@ -196,8 +194,7 @@ export function usePageSessionCoordination({
       let cached = reuse
         ? workbench.selectionFor(page.id, interpreterId ?? null, identity.scope, directory)
         : undefined;
-      // Host scope changes across restarts. Reopen the same subject's retained
-      // Session through the public owner, which validates its preset and cwd.
+
       if (
         !cached &&
         reuse &&
@@ -233,7 +230,6 @@ export function usePageSessionCoordination({
       return;
     }
     await runSelection(undefined, async (signal) => {
-      // Borrow the current Core Workspace before requesting another directory.
       const cwd = await resourceWorkspace(host, signal, selection?.cwd ?? currentCwd);
       const { workspaceId } = await host.workspace(cwd);
       signal.throwIfAborted();
@@ -278,7 +274,7 @@ export function usePageSessionCoordination({
     resourceRows.current = [];
     resourceRowsOwner.current = undefined;
     const owner = identity.scope + '\0' + page.resourceId;
-    // Restored presentation discovers choices; an explicit page/resource action starts its Session.
+
     const prepare =
       ((!selection && !restoredWithoutSession) ||
         (selection &&
@@ -358,7 +354,6 @@ export function usePageSessionCoordination({
   };
 }
 
-/** Restore only an actual Core projection; a missing or mismatched Session is never replaced. */
 export function createPageSessionRestorer({
   ctx,
   workbench,
@@ -388,7 +383,6 @@ export function createPageSessionRestorer({
   };
 }
 
-/** Keep navigation intent for the UI lifetime, even when Core remounts its Documents seat. */
 export function createPageSessionNavigation({
   workbench,
   restore,
@@ -427,7 +421,6 @@ export function createPageSessionNavigation({
         return;
       }
       if (recovery.resourceId) {
-        // Presentation memory supplies a hint; recovery waits for GEA's current identity.
         const account = identity();
         if (account?.state !== 'confirmed' || account.error || account.pagesReady === false) return;
         if (

@@ -55,7 +55,7 @@ def snapshot_query(config,key,source_name,variant,mapping,kind='current',window=
  config['queries'][key]['summaryRoute']=route
 
 def customer_page_filters(tree):
- # Every positive shortage belongs in the shortage list, including small gaps.
+
  sql=render(tree).replace('COUNT(l.demand) = COUNT(*) AND COUNT(l.shortage) = COUNT(*) AND SUM(l.demand) > 0 AND SUM(l.shortage) >= SUM(l.demand) * 0.2', 'SUM(l.shortage) > 0')
  sql=sql.replace('CASE WHEN COUNT(l.shortage) = COUNT(*) THEN SUM(l.shortage) END AS shortage', 'SUM(l.shortage) AS shortage')
  tree=parse(sql)
@@ -77,7 +77,7 @@ def main():
   q['notes']='分仓向下游客户供货的当前未完成订单；有效执行行按件计量，异常行不参与正常行汇总；分仓SKU库存只扣一次。ASN不参与此指标。'
   persist_query(q,t)
   snapshot_query(fc,key,'current_source','BRANCH_CUSTOMER_CURRENT',CURRENT_MAP)
- # The card summary and SKU-location count share exactly the same current customer source.
+
  q=copy.deepcopy(fc['queries']['current-shortage.summary']);q.pop('summaryRoute',None)
  t=parse(q['request']['sql']);filtered=next(c for c in t.find_all(exp.CTE) if c.alias=='filtered')
  count=parse('SELECT COUNT(*) AS n FROM filtered AS f WHERE f.shortage>0 AND f.sku IS NOT NULL')
@@ -88,23 +88,23 @@ def main():
  fc['queries']['current-shortage.overview']=q;snapshot_query(fc,'current-shortage.overview','current_source','BRANCH_CUSTOMER_CURRENT',CURRENT_MAP)
  for key in ['branch-current-orders.page','branch-current-orders.lines']:
   q=fc['queries'][key];t=replace_cte(parse(q['request']['sql']),'open_lines',lines)
-  # Warehouse filtering previously lived inside the removed ASN source.
+
   c=next(c for c in t.find_all(exp.CTE) if c.alias=='open_lines')
   c.this.where(':gea_p1 IS NULL OR r.warehouse_code=:gea_p1',copy=False)
   if key=='branch-current-orders.page':t=customer_page_filters(t)
   q['notes']='分仓下游客户订单；按有效执行行归属实际发货仓。缺口按仓库SKU共享库存分配一次，不使用ASN。'
   persist_query(q,t);snapshot_query(fc,key,'open_lines','BRANCH_CUSTOMER_LINES',LINES_MAP)
-  # Keep warehouse selection outside the cached source, including per-order detail calls.
+
   sq=fc['queries']['snapshot.'+key];st=parse(sq['request']['sql']);c=next(c for c in st.find_all(exp.CTE) if c.alias=='open_lines')
   c.this.where(':gea_p1 IS NULL OR m.warehouseid=:gea_p1',copy=False);persist_query(sq,st)
- # Full-chain retains the untouched base customer cohort and swaps only branch source.
+
  for key,q in list(qll['queries'].items()):
   if not key.startswith('current-shortage.'):continue
   t=replace_cte(parse(q['request']['sql']),'branch_current_source',current)
   q['notes']='基地保持原有效客户订单口径；分仓为下游客户订单。分仓SKU共享库存只扣一次；ASN只用于补货调拨。'
   persist_query(q,t)
   sq=qll['queries']['snapshot.'+key];st=replace_cte(parse(sq['request']['sql']),'branch_current_source',snapshot('BRANCH_CUSTOMER_CURRENT',current.named_selects,CURRENT_MAP));persist_query(sq,st)
- # Replenishment consumes downstream customer demand, while upstream transfer quantities stay separate.
+
  repl_names={'location_type':'location_type','warehouseid':'warehouse_code','material_code':'sku','demand_qty':'demand','allocated_qty':'allocated','remaining_qty':'remaining','shortage_qty':'shortage','invalid_sku':'invalid'}
  for cfg in configs.values():
   for key,q in list(cfg['queries'].items()):
@@ -118,7 +118,7 @@ def main():
     elif node.alias=='fc_order_keys':
      body=snapshot('BRANCH_CUSTOMER_CURRENT',current.named_selects,CURRENT_MAP) if cached else current.copy()
      replacement=parse('SELECT c.warehouse_code AS warehouse_code,c.sku AS material_code FROM ('+render(body)+') AS c WHERE c.sku IS NOT NULL GROUP BY c.warehouse_code,c.sku')
-     # Canonical key contracts use either sku or material_code.
+
      replacement.set('expressions',[parse('SELECT c.'+repl_names.get(n,n)+' AS '+n).expressions[0] for n in node.this.named_selects])
      replacement.group_by(*['c.'+repl_names.get(n,n) for n in node.this.named_selects],append=False,copy=False)
      node.set('this',replacement);changed=True
@@ -132,7 +132,7 @@ def main():
     if net.alias!='fc_net_input':continue
     remaining=next((e for e in net.this.expressions if e.alias_or_name=='fc_remaining_orders'),None)
     if remaining is None:continue
-    # Older upstream calculations intentionally used zero here; customer demand must reduce stock.
+
     if isinstance(remaining.this,exp.Case):remaining.this.set('default',parse('SELECT COALESCE(dc.remaining,0) AS v').expressions[0].this)
     if not any(table.alias_or_name=='dc' for table in net.this.find_all(exp.Table)) and not any(sub.alias=='dc' for sub in net.this.find_all(exp.Subquery)):
      body=snapshot('BRANCH_CUSTOMER_CURRENT',current.named_selects,CURRENT_MAP) if cached else current.copy()
@@ -146,14 +146,14 @@ def main():
       combined.this.set('expressions',[e for e in combined.this.expressions if e.alias_or_name!='sku'])
      if 'sku' not in combined.this.named_selects:combined.this.select(source_alias+'.'+source_column+' AS sku',append=True,copy=False)
     changed=True
-   # Doris DECIMAL(38,0) target arithmetic otherwise truncates fractional inventory.
+
    for value in t.find_all(exp.Alias):
     if value.alias!='known_inventory_deviation_qty':continue
     for difference in value.find_all(exp.Sub):
      if not isinstance(difference.this,exp.Cast):
       difference.set('this',exp.Cast(this=difference.this.copy(),to=exp.DataType.build('DOUBLE')));changed=True
    if changed:persist_query(q,eliminate_ctes(t))
- # Restore dealer execution facts for FC. Warehouse association is accepted only when unique.
+
  mapping=parse('''WITH customer_execute_warehouse AS (
  SELECT e.executeorderno AS execute_order,CASE WHEN COUNT(DISTINCT NULLIF(TRIM(e.warehouseid),''))=1 THEN MAX(e.warehouseid) END AS warehouse_code
  FROM agents_scm_execute_detail_d AS e GROUP BY e.executeorderno
@@ -168,7 +168,7 @@ def main():
   t=parse(q['request']['sql'])
   for c in list(t.find_all(exp.CTE)):
    if c.alias=='business_rows':
-    # Local WITH keeps atomic detail/count scopes independent.
+
     c.this.join(exp.Subquery(this=mapping.copy(),alias=exp.TableAlias(this=exp.to_identifier('cw'))),on='cw.pickup_code=d.pickup_code',join_type='LEFT',copy=False)
     c.this.select('cw.warehouse_code AS warehouse_code',append=True,copy=False)
     c.this.where("d.pickup_type='分仓'",copy=False)
@@ -177,7 +177,7 @@ def main():
   q['notes']='分仓下游客户订单执行事实；已发货订单池满足率沿用基地逐行限额口径。仓库归属仅接受执行事实中唯一的提货点映射。'
   persist_query(q,t);fc['queries'][key]=q
   snapshot_query(fc,key,'business_rows','BRANCH_CUSTOMER_PERIOD',PERIOD_MAP,window='month')
- # Shipments are capped per order line; an anomalous branch row does not erase valid rows.
+
  valid="r.invalid=0 AND r.ordered>=0 AND r.shipped>=0"
  capped="CASE WHEN r.shipped>r.ordered THEN r.ordered ELSE r.shipped END"
  base_valid="COUNT(r.shipped)=COUNT(*) AND COUNT(r.ordered)=COUNT(*) AND MIN(r.shipped)>=0 AND MIN(r.ordered)>=0 AND SUM(r.invalid)=0"
@@ -203,7 +203,7 @@ def main():
     if name not in q['resultColumns']:q['resultColumns'].append(name)
   persist_query(q,t)
  snapshot_query(fc,'orders.summary','business_rows','BRANCH_CUSTOMER_PERIOD',PERIOD_MAP,window='month')
- # Export complete unfiltered materialization sources; ETL never reads its own summary.
+
  period=select_cte(parse(fc['queries']['orders.detail']['request']['sql']),'business_rows')
  exports={
   'BRANCH_CUSTOMER_CURRENT':(current,CURRENT_MAP,fc['queries']['current-shortage.summary']),

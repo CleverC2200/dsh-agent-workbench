@@ -1,7 +1,6 @@
 import sqlConfiguration from '../../../sql.config.json';
 import { sqlTemplate as configuredSql } from '../../../../shared/sql-config.ts';
-// Transport only: preserve every authorized row and let the existing business
-// engine select the month/version. Each result cell contains at most 100 rows.
+
 const orders: Record<string, string[]> = {
   'workbench-safety-stock-rows': [
     'safety_stock.base_name',
@@ -32,8 +31,7 @@ export function supportsPackedTransfer(name: string) {
 export function packedSafetyStockSql(sql: string, name = 'workbench-safety-stock-rows') {
   if (!supportsPackedTransfer(name)) throw Error('未知安全库存查询');
   const order = orders[name].map((key) => `"${key}" NULLS FIRST`).join(', ');
-  // The large safety-stock query has a fixed schema. Send field names once per
-  // packet rather than repeating 22 long names in every SKU row.
+
   const columns =
     name === 'workbench-safety-stock-rows'
       ? [...sql.matchAll(/AS "(safety_stock\.[a-z0-9_]+)"/g)].map((match) => match[1])

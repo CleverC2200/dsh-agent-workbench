@@ -4,8 +4,6 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { parseArgs } from 'node:util';
 
-// Command metadata audited read-only with npm11.11.0 --help/cmd-list and pnpm11.17.0/11.27.0 help -a.
-// Explicit run and lifecycle commands always resolve project scripts; compact metadata actions do not.
 const npmCommands = new Set([
   'access',
   'adduser',
@@ -294,6 +292,7 @@ const comparisons = [];
 let parserVersion;
 if (values['compare-ref']) {
   const ts = createRequire(resolve(root, 'package.json'))('typescript');
+  const { sourceComments } = await import('./source-comments.mjs');
   parserVersion = ts.version;
   const git = (...args) =>
     execFileSync('git', ['-C', root, ...args], {
@@ -313,7 +312,15 @@ if (values['compare-ref']) {
     .trim()
     .split('\n')
     .filter(Boolean);
-  const printer = ts.createPrinter({ removeComments: true });
+  const syntax = (node, source) => [
+    node.kind,
+    node.kind <= ts.SyntaxKind.LastToken ? node.getText(source) : null,
+    node
+      .getChildren(source)
+      .filter((child) => child.kind !== ts.SyntaxKind.JSDocComment)
+      .map((child) => syntax(child, source)),
+  ];
+  const tree = (source) => JSON.stringify(syntax(source, source));
   for (const file of files) {
     const before = git('show', `${values['compare-ref']}:${file}`);
     const after = readFileSync(resolve(root, file), 'utf8');
@@ -322,18 +329,24 @@ if (values['compare-ref']) {
     if (
       parsedBefore.parseDiagnostics.length ||
       parsedAfter.parseDiagnostics.length ||
-      printer.printFile(parsedBefore) !== printer.printFile(parsedAfter)
+      tree(parsedBefore) !== tree(parsedAfter)
     ) {
       throw Error(`AGENT_COMMENT_ONLY_REQUIRED: ${file} executable AST changed`);
     }
-    const declaration = (source) =>
-      ts.transpileDeclaration(source, { fileName: file, compilerOptions: { removeComments: true } })
-        .outputText;
+    const declaration = (source) => {
+      const text = parsedBefore.isDeclarationFile
+        ? source
+        : ts.transpileDeclaration(source, {
+            fileName: file,
+            compilerOptions: { removeComments: true },
+          }).outputText;
+      return tree(ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true));
+    };
     if (declaration(before) !== declaration(after))
       throw Error(`AGENT_COMMENT_ONLY_REQUIRED: ${file} declaration changed`);
     const protectedComments = (source) =>
-      [...source.matchAll(/\/\*[\s\S]*?\*\/|\/\/[^\r\n]*/g)]
-        .map((match) => match[0])
+      sourceComments(ts, file, source)
+        .map(({ pos, end }) => source.slice(pos, end))
         .filter((comment) =>
           /SPDX|@license|copyright|@preserve|@ts-|eslint-|oxlint-|prettier-|<reference/i.test(
             comment,
@@ -351,7 +364,7 @@ if (values['compare-ref']) {
             ts.isExportDeclaration(statement) ||
             ts.isExportAssignment(statement),
         )
-        .map((statement) => printer.printNode(ts.EmitHint.Unspecified, statement, source));
+        .map((statement) => syntax(statement, source));
     if (JSON.stringify(exports(parsedBefore)) !== JSON.stringify(exports(parsedAfter)))
       throw Error(`AGENT_COMMENT_ONLY_REQUIRED: ${file} public export changed`);
     comparisons.push({

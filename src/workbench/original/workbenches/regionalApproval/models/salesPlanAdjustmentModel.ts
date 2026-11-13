@@ -1,4 +1,3 @@
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import type { GeaSalesPlanSku } from '../../../bridge.ts';
 import type { ApprovalDimension } from '../salesPlanDomain.ts';
 import {
@@ -136,10 +135,6 @@ export const groupSalesPlanAdjustmentRecords = (
 
 const rounded = (value: number) => String(Math.round(value));
 
-/**
- * 固定业务规则：按每个客户原始基数份额分配，
- * 除最后一行外逐行取整，最后一行承接精确余数。
- */
 export const distributeAggregateQuantity = (
   records: readonly SalesPlanAdjustmentRecord[],
   desiredQuantity: number,

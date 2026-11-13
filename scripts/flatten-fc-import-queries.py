@@ -15,7 +15,6 @@ QUERIES = (
     'replenishment-confirmation.detail.atomic',
 )
 
-
 def flatten(tree):
     definitions = {}
     ctes = []
@@ -40,14 +39,13 @@ def flatten(tree):
 
     visit(tree)
     tree.set('with', exp.With(expressions=ctes))
-    # GEA accepts positional SUBSTRING, not the FROM/FOR attributes emitted by SQLGlot.
+
     for node in list(tree.find_all(exp.Substring)):
         args = [node.this.copy()]
         args.extend(node.args[name].copy() for name in ('start', 'length')
                     if node.args.get(name) is not None)
         node.replace(exp.Anonymous(this='SUBSTRING', expressions=args))
     return re.sub(r'%\((gea_p\d+)\)s', r':\1', tree.sql(dialect='postgres'))
-
 
 def main():
     path = ROOT / 'business/inventory-fc/sql.config.json'
@@ -61,7 +59,6 @@ def main():
         _, length = json.JSONDecoder().raw_decode(source[value_start:])
         source = source[:value_start] + json.dumps(sql, ensure_ascii=False) + source[value_start + length:]
     path.write_text(source)
-
 
 if __name__ == '__main__':
     main()

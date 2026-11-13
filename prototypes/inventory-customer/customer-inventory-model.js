@@ -80,8 +80,7 @@ export function mapCustomerInventoryRows(rows) {
     const completePlanTransit = planSameDate && finite(row.plan_sku_rows) > 0 && finite(row.plan_transit_coverage) === finite(row.plan_sku_rows);
     const inTransit = complete('transit_coverage') ? finite(row.in_transit_qty)
       : completePlanTransit ? finite(row.plan_in_transit_qty) : null;
-    // SKU discrepancies are diagnostics, not a business-risk rule or a reason
-    // to discard a customer's otherwise calculable aggregate.
+
     const largeDateQty = finite(row.large_date_coverage) > 0 ? finite(row.large_date_qty) : null;
     const largeDatePartial = largeDateQty !== null && !inventoryComplete('large_date_coverage');
     const largeDateInvalid =
@@ -90,9 +89,7 @@ export function mapCustomerInventoryRows(rows) {
       !largeDateInvalid && largeDateQty !== null && largeDateQuantity > 0
         ? (largeDateQty / largeDateQuantity) * 100
         : null;
-    // The confirmed customer target metrics come from the dealer-side target
-    // calculation. Do not derive a substitute from recent sales while that
-    // governed source has no rows.
+
     const planComplete = (field) => finite(row.plan_sku_rows) > 0 && finite(row[field]) === finite(row.plan_sku_rows);
     const targetQty = planComplete('target_coverage') ? finite(row.target_qty) : null;
     const targetValue = null;
@@ -185,7 +182,6 @@ export function mapCustomerInventoryRows(rows) {
   return { snapshot, inventorySnapshot: mapped[0]?.inventorySnapshot ?? null, organizationSnapshot: mapped[0]?.organizationSnapshot ?? null, rows: mapped };
 }
 
-/** Preserve book balances; incomplete or anomalous inputs cannot establish healthy KPIs. */
 export function summarizeCustomerInventory(rows) {
   const sum = (field) => {
     const available = rows.filter((row) => Number.isFinite(row[field]));
@@ -273,7 +269,6 @@ export function summarizeCustomerInventory(rows) {
   };
 }
 
-/** Only use thresholds defined in the latest customer knowledge document. */
 export function structureStatus(row) {
   return !Number.isFinite(row.structureScore)
     ? 'unknown'
@@ -284,7 +279,6 @@ export function structureStatus(row) {
         : 'risk';
 }
 
-/** Preserve source diagnostics rather than calling every unscored customer incomplete. */
 function structureIssues(row) {
   if (finite(row.structure_score) !== null) return [];
   const issues = [];
@@ -314,7 +308,7 @@ export function largeDateStatus(row) {
       : 'healthy';
 }
 export function turnoverStatus(row) {
-  // No upper turnover warning threshold is defined; do not retain demo 30.7/100.7 lines.
+
   return !Number.isFinite(row.turnover) ? 'unknown' : 'unassessed';
 }
 export function customerInventoryStatus(row) {

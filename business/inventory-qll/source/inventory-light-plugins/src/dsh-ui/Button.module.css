@@ -1,4 +1,3 @@
-/* DSH button behavior and dimensions; inventory plugins share 6px corners. */
 .button {
   display: inline-flex;
   align-items: center;
@@ -23,8 +22,6 @@
   height: 36px;
 }
 
-/* Compact height for dense rows; no dedicated figma node (Icon_container
- * 28x28 is the icon-only form) — geometry is ours. */
 .sm {
   height: 28px;
   font-size: 11px;
@@ -50,7 +47,6 @@
   background: var(--dsw-alias-interactive-bg-active);
 }
 
-/* Dialog Cancel (figma 451:18655): bordered capsule on transparent fill. */
 .outline {
   border: 1px solid var(--dsw-alias-border-l3);
   background: transparent;

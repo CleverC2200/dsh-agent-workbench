@@ -65,7 +65,7 @@ for page in pages:
   q=cfg['queries'][qid];i=len(members);prefix='r'+str(i)+'_';binding={};values={**call['values'],'summary_batch_id':None}
   sql=q['request']['sql']
   if qid=='snapshot-default.replenishment.detail.atomic':
-   # This bundle is used only when every declared input exactly matches these defaults.
+
    required={'warehouse_code_mode':'all','sku_mode':'all','category_mode':'all','search_pattern':None,'warehouse_search_pattern':None,'needed_only':False,'business_only':False}
    assert all(values.get(k)==v for k,v in required.items()),values
    member_tree=sqlglot.parse_one(sql,read='postgres')

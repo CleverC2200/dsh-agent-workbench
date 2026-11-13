@@ -20,7 +20,7 @@ function reportCatalog() {
     elements: [...pageGroups.values()].flatMap((group) => group.elements),
   });
 }
-/** Page components supply visible elements and state callbacks; no DOM discovery. */
+
 export function reportElements(key, elements, apply) {
   const group = { elements, apply };
   pageGroups.set(key, group);
@@ -35,7 +35,7 @@ let readyResolve;
 export const ready = new Promise((resolve) => {
   readyResolve = resolve;
 });
-/** Read the current Host-owned Session projection, including after a reconnect. */
+
 export function currentSessionId() {
   return context?.session;
 }
@@ -43,7 +43,7 @@ function parentOrigin() {
   try {
     const url = new URL(document.referrer || window.location.href);
     if (!url.host) return undefined;
-    // Electron serializes the current registered dsh-app origin with its host.
+
     if (url.origin !== 'null') return url.origin;
     return url.protocol === 'dsh-app:' && url.host === 'app' ? 'dsh-app://app' : undefined;
   } catch {
@@ -82,8 +82,7 @@ window.addEventListener('message', (event) => {
     pending.clear();
   }
   context = event.data.context;
-  // A renewed Host lease can keep its Session ID. The transferred port, not
-  // that ID, identifies its generation; the old port's final reset may be lost.
+
   const port = event.ports[0];
   channel = port;
   port.onmessage = (event) => {
@@ -316,7 +315,6 @@ export function publish(context, options) {
   return call('context', context, options);
 }
 
-/** Insert unsent text through the current owned Core input. No model or business write. */
 export function draft(text, options) {
   return call('draft', { text }, options);
 }

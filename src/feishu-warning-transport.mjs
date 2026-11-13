@@ -11,7 +11,7 @@ export function resolveNotificationRecipient(config, recipient = 'self') {
     if (!username || !mappings || !Object.hasOwn(mappings, username)) return null;
     const mapping = mappings[username];
     if (!mapping || typeof mapping !== 'object') return null;
-    // Require an explicit address for this account, never inherit the default recipient.
+
     resolved = {
       ...config,
       receiveId: mapping.receiveId,
@@ -187,7 +187,7 @@ export function enqueueChanges(state, before, run, config, task) {
     const old = before.get(event.id);
     if (task?.notifyMode === 'once') {
       if (!active || !observation || observation.status === '健康') continue;
-      // A send with an uncertain receipt may already have reached the recipient.
+
       for (const recipient of recipients) {
         const notified = event.notifications?.some(
           (job) =>

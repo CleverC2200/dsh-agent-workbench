@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from '../helpers/prepared-assets.mjs';
 import { injectSqlConfig } from '../../src/sql-config-document.ts';
 import { makeRequest } from '../../business/shared/configured-query-client.mjs';
-// These historical layout fixtures exercise direct-source UI behavior. Daily-summary routing
-// is covered separately with the unmodified production config and real batch responses.
+
 export function directSourceFixture(config) {
   const fixture = structuredClone(config);
   delete fixture.dailySummary;
@@ -17,7 +16,7 @@ export async function configuredPageHtml(id) {
     directSourceFixture(config),
   );
 }
-/** Synthetic external rows for the current config protocol; never shipped or used for authorization. */
+
 export async function configuredWire(id) {
   const config = JSON.parse(await readFile(`lib/business/inventory-${id}/sql.config.json`, 'utf8'));
   return (payload) => {

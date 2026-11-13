@@ -16,7 +16,6 @@ export function ownsWarningTask(task, owner) {
   return Boolean(owner?.key && task?.owner?.key === owner.key);
 }
 
-// Only a reviewed, local migration file may assign legacy records; never a page field.
 export function migrateWarningOwners(state, mappings) {
   for (const task of state.tasks) {
     const owner = mappings[task.id];
@@ -62,7 +61,7 @@ export function createOwnerScopedApi({ state, currentOwner, api }) {
       )
         throw Error('预警不存在或不属于当前用户');
     }
-    // Page-provided owner and display-name fields never grant ownership.
+
     const request =
       input.op === 'save'
         ? { ...input, task: { ...input.task, owner, definedBy: owner.name } }

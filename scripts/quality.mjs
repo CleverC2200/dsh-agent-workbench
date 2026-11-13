@@ -7,14 +7,13 @@ import { devNull } from 'node:os';
 const root = resolve(import.meta.dirname, '..');
 const output = (value) => writeFileSync(1, String(value) + '\n');
 const diagnostic = (value) => writeFileSync(2, String(value) + '\n');
-// Fixed pre-migration input; never advance this to absorb new lint/format debt.
+
 const baseline = '9814b3bcf1ae015a63fac9af864c165617791fc3';
 function refuse(message) {
   diagnostic(message);
   process.exit(2);
 }
-// Exact original b42c62e:scripts/quality.mjs bytes are data, never executed.
-// The .raw fixture keeps cold checkouts independent of an unreachable historical ref.
+
 let anchor;
 try {
   anchor = readFileSync(resolve(root, 'scripts/fixtures/quality-policy-b42.raw'));
@@ -88,7 +87,7 @@ const fixed = new Set(
 const generated = new Set(
   ['category', 'mps', 'regional'].map((page) => `static/${page}/index.html`),
 );
-// Runtime prompt bytes are governed resources, not authored code formatting targets.
+
 const runtimeResources = new Set(['static/regional/prompt.json']);
 const scope = {
   directories,
@@ -215,7 +214,7 @@ if (result.error || result.signal || ![0, 1].includes(result.status)) {
 let bad;
 if (lint) {
   const output = JSON.parse(result.stdout);
-  // Parse errors/config errors are never baseline debt.
+
   if (output.diagnostics.some((diagnostic) => !diagnostic.code)) {
     diagnostic(result.stdout);
     process.exit(2);

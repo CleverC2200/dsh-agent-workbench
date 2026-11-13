@@ -1,4 +1,3 @@
-/** Display scope comes from the server's current dashboard, never a UI role. */
 export const ALL_VISIBLE_BASES = '__all_visible_bases__';
 
 export function workbenchBasePaths(rows: ReadonlyArray<Record<string, unknown>>): string[] {

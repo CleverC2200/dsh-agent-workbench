@@ -6,14 +6,6 @@ const INFRASTRUCTURE_TERMS = [
   [/语义层/g, '数据口径'],
 ];
 
-/**
- * Keep implementation vocabulary out of business-facing copy. This is a
- * presentation guard for restored legacy answers and transport errors; it
- * never changes the persisted conversation or the underlying data payload.
- *
- * @param {unknown} value
- * @returns {string}
- */
 export function sanitizeUserVisibleCopy(value) {
   let copy = typeof value === 'string' ? value : String(value ?? '');
   for (const [pattern, replacement] of INFRASTRUCTURE_TERMS) {

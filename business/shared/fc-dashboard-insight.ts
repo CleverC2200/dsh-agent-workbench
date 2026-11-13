@@ -8,7 +8,6 @@ const number = (value: unknown): number | null =>
     ? Number(value)
     : null;
 
-/** Whole-scope summaries only. Page rows must never become rankings or inventory totals. */
 export function branchDashboardEvidence(input: {
   warehouseCode: string;
   warehouseName: string;

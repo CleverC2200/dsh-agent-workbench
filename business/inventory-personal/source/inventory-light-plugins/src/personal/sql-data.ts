@@ -1,7 +1,6 @@
 import { executeAllGeaSqlPages } from '../../../../../shared/sql-reader';
 import { bindGovernedSql } from '../../../../../shared/governed-parameters';
 
-/** A captured operation signal owns every query in its source pipeline. */
 export function scopedDatabase(signal?: AbortSignal) {
   return {
     async query(sql: string, values: unknown[] = []) {

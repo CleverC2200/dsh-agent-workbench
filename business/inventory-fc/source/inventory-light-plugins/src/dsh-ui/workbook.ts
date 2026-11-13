@@ -1,4 +1,3 @@
-// Narrow OOXML table import/export using Web APIs. No spreadsheet runtime.
 const encoder = new TextEncoder(),
   decoder = new TextDecoder();
 const xml = (s: unknown) =>

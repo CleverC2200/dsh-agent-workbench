@@ -346,8 +346,6 @@
   white-space: normal;
 }
 
-/* Embedded facts follow the author workbenches: toolbar, table, pagination.
-   Source definitions and optional fields remain available without widening the main flow. */
 .tableActions {
   display: flex;
   align-items: center;
@@ -529,7 +527,6 @@
   }
 }
 
-/* Original business panels own their navigation and cards. */
 .business .heading {
   margin-bottom: 12px;
 }

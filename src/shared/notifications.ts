@@ -1,4 +1,3 @@
-/** 面向浏览器的 GEA 通知 API 安全投影；此处不会执行任何动作。 */
 export interface NotificationItem {
   id: string;
   interactionRequestId: string | null;
@@ -56,7 +55,6 @@ function optionalBoolean(value: unknown): boolean | null {
   return value === null || value === undefined ? null : typeof value === 'boolean' ? value : null;
 }
 
-/** 投影返回的通知项；详情身份与请求不一致时拒绝返回。 */
 export function notificationDetail(value: unknown, expectedId?: string): NotificationItem {
   const row = record(value);
   if (typeof row.id !== 'string' || !row.id || (expectedId !== undefined && row.id !== expectedId))
@@ -115,7 +113,6 @@ export function notificationDetail(value: unknown, expectedId?: string): Notific
   };
 }
 
-/** 保留服务端总数；遇到重复记录或分页不一致时拒绝隐藏缺失数据。 */
 export function notificationPage(value: unknown, pageSize: number) {
   const row = record(value);
   if (!Array.isArray(row.items)) throw new Error('NOTIFICATION_INVALID_RESPONSE');

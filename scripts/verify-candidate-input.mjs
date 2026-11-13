@@ -31,7 +31,6 @@ if (values['final-group-sha256'] !== undefined) {
 const manifest = finalGroup?.manifest ?? JSON.parse(readFileSync(resolve(values.input), 'utf8'));
 let repositories;
 if (finalGroup) {
-  // Source admission already observed identities, HEADs, clean trees and committed locks.
   repositories = finalGroup.receipt.repositories.map(({ repo, path, head }) => ({
     repo,
     path,
@@ -90,7 +89,7 @@ if (finalGroup) {
       throw Error(`CANDIDATE_HEAD: ${entry.repo}`);
   }
 }
-// Declaration availability is checked after SDK preparation; source admission cannot prove it.
+
 const core = verifyOfficialInput(
   manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path,
 );

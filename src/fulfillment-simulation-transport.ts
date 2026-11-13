@@ -1,4 +1,3 @@
-/** Local acceptance transport only; it cannot choose a recipient or execute business writes. */
 export async function fulfillmentSimulationRequest(
   page: string,
   parameters: unknown,

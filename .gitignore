@@ -2,10 +2,8 @@ node_modules/
 .runtime/
 *.tgz
 
-# Owned transient build/test fixtures
 .scratch/
 __pycache__/
 
-# Public configured-facts build outputs
 /lib/configured-facts.mjs
 /lib/configured-facts.d.mts

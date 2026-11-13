@@ -1,6 +1,5 @@
 export const customerSortFields = ['value', 'quantity', 'structureScore', 'normalRatio', 'turnover', 'largeDateQty'];
 
-/** Sort the complete filtered index before slicing a page. Unknowns always follow numbers. */
 export function sortCustomerRows(rows, sorter) {
   if (!customerSortFields.includes(sorter?.field) || !['ascend', 'descend'].includes(sorter?.direction)) return rows;
   const sign = sorter.direction === 'ascend' ? 1 : -1;
@@ -12,7 +11,6 @@ export function sortCustomerRows(rows, sorter) {
   });
 }
 
-/** Preserve known business risks while disclosing that the overall assessment is incomplete. */
 export function customerAssessmentNote(row) {
   const missing = [];
   if (!Number.isFinite(row.structureScore)) missing.push('结构分缺失');

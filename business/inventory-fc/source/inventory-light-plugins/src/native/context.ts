@@ -25,7 +25,7 @@ function bounded(value: any, depth = 0): any {
 }
 export function pageContext() {
   const queryState = parts.get('queryState') as { state: string; message?: string } | undefined;
-  // A same-warehouse refresh may leave the previous KPI visible while its query is pending or failed.
+
   const visibleText =
     PLUGIN_ID === 'fc' && queryState?.state !== 'ready'
       ? queryState?.message
@@ -82,7 +82,7 @@ export function updateContext(key: string, value: unknown) {
   );
   refreshContext();
 }
-/** Re-read current context after UI work without accepting another response as business facts. */
+
 export function refreshContext() {
   clearTimeout(timer);
   timer = setTimeout(() => void publish(pageContext()).catch(() => {}), 350);

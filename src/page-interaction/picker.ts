@@ -11,7 +11,6 @@ const clean = (value: string | null | undefined) => (value ?? '').replace(/\s+/g
 export type SelectionKind = 'row' | 'table' | 'block';
 const BLOCKS = '[data-page-block],article,section,fieldset,figure,[role=region],.arco-card';
 
-/** Promote tiny DOM hits to a business-sized selection. Never select the whole document. */
 export function selectionTarget(
   element: Element | null,
   kind: SelectionKind = 'row',
@@ -148,7 +147,6 @@ export function describeElement(element: Element, page: string): PageReference {
   };
 }
 
-/** Selection is hover-to-highlight, click-to-quote. No preview or confirmation panel. */
 export function mountPicker(options: PickerOptions = {}): () => void {
   const ui = document.createElement('div');
   ui.className = 'dspi';

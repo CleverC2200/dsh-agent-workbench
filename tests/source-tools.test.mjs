@@ -21,7 +21,14 @@ test('npm tooling retains exact registry closure and rejects local or missing re
       name: 'fixture',
       version: '1',
       packageManager: 'npm@11.11.0',
-      devDependencies: { typescript: '5', core: 'file:missing' },
+      devDependencies: {
+        typescript: '5',
+        parse5: '7',
+        postcss: '8',
+        yaml: '2',
+        'highlight.js': '11',
+        core: 'file:missing',
+      },
     },
     {
       lockfileVersion: 3,
@@ -78,7 +85,15 @@ test('only proven isolated tools can omit Core and business preparation', (t) =>
     {
       name: 'fixture',
       packageManager: 'npm@11.11.0',
-      devDependencies: { oxlint: '1', oxfmt: '2', typescript: '5' },
+      devDependencies: {
+        oxlint: '1',
+        oxfmt: '2',
+        typescript: '5',
+        parse5: '7',
+        postcss: '8',
+        yaml: '2',
+        'highlight.js': '11',
+      },
     },
     {},
     'package-lock.json',
@@ -94,9 +109,22 @@ test('only proven isolated tools can omit Core and business preparation', (t) =>
   const args = { typecheck: false, joint: false, desktopTools: false };
   const selected = { files: ['cold.test.mjs', 'type.test.mjs'] };
   assert.deepEqual(sourceTools(root, 'dsh-agent-workbench', selected, args), [
+    'highlight.js',
     'oxfmt',
     'oxlint',
+    'parse5',
+    'postcss',
     'typescript',
+    'yaml',
+  ]);
+  assert.deepEqual(sourceTools(root, 'dsh-agent-workbench', { files: ['cold.test.mjs'] }, args), [
+    'highlight.js',
+    'oxfmt',
+    'oxlint',
+    'parse5',
+    'postcss',
+    'typescript',
+    'yaml',
   ]);
   assert.equal(
     sourceTools(root, 'dsh-agent-workbench', { files: ['unknown.test.mjs'] }, args),

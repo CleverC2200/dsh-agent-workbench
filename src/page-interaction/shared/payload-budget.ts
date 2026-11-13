@@ -1,21 +1,12 @@
-/**
- * 控制每次进入模型的载荷，避免重复携带整页目录和明细。
- * 小载荷原样返回；focus 只筛记录数组，标识与标量列表保留状态。
- * 超预算返回摘要，并标明省略数量和后续取数方式；不丢弃整条上下文。
- * 纯计算不执行查询或业务动作。
- */
-
-/** 单次进模型上下文的默认预算（字节）。 */
 export const MODEL_PAYLOAD_BUDGET = 12_000;
 const DEFAULT_MAX_ITEMS = 20;
 const DEFAULT_MAX_CHARS = 200;
-/** 摘要默认不带样本行：先给字段名，需要哪一行再按 focus 取。 */
+
 const DEFAULT_SAMPLE_ITEMS = 0;
 
 const byteLength = (value: unknown): number =>
   new TextEncoder().encode(JSON.stringify(value) ?? '').length;
 
-/** 从用户问题/模型给的 focus 里切出关键词；太短的词没有区分度，直接丢。 */
 export function focusTokens(focus?: string): string[] {
   if (typeof focus !== 'string') return [];
   return [
@@ -44,7 +35,6 @@ export const truncateText = (value: string, maxChars: number): string =>
 
 type Narrowed = { value: unknown; omitted: number };
 
-/** 递归收窄：记录数组按 focus 过滤，标识/标量列表只限长，字符串截断。 */
 function narrow(
   value: unknown,
   tokens: string[],
@@ -54,12 +44,11 @@ function narrow(
     return { value: truncateText(value, options.maxChars), omitted: 0 };
   if (value === null || typeof value !== 'object') return { value, omitted: 0 };
   if (Array.isArray(value)) {
-    // 标识列表没有组织名称或字段标签，不能靠 focus 判定它的状态是否存在。
     const scalars = value.every((item) => item === null || typeof item !== 'object');
     const matched = scalars ? value : value.filter((item) => includesFocus(item, tokens));
     const kept = matched.slice(0, options.maxItems);
     const children = kept.map((item) => narrow(item, tokens, options));
-    // 省略数按"原数组里没进上下文"的条数算：既包括没命中 focus 的，也包括超出上限的。
+
     const omitted =
       value.length - kept.length + children.reduce((total, child) => total + child.omitted, 0);
     return {
@@ -78,7 +67,6 @@ function narrow(
   return { value: result, omitted };
 }
 
-/** 无 focus 又超预算时的摘要：只给数量、字段名与极少量样本。 */
 function brief(value: unknown, maxChars: number, sampleItems: number): unknown {
   if (typeof value === 'string') return truncateText(value, maxChars);
   if (value === null || typeof value !== 'object') return value;
@@ -107,22 +95,15 @@ function brief(value: unknown, maxChars: number, sampleItems: number): unknown {
 }
 
 export type CompressedPayload = {
-  /** 可以直接交给模型的 JSON 字符串。 */
   json: string;
-  /** 有没有压缩过。 */
+
   compressed: boolean;
-  /** 被略过的条目数（行/元素）。 */
+
   omitted: number;
-  /** 需要告诉模型的取数提示；没压缩时为 undefined。 */
+
   note?: string;
 };
 
-/**
- * 压到预算内。
- *
- * 顺序：① 原样（小载荷 + 无 focus）；② 按 focus 收窄；③ 摘要；
- * ④ 仍然超预算就继续减少样本与字段长度，最后至少还有 key 结构。
- */
 export function compressForModel(
   payload: unknown,
   options: {
@@ -149,7 +130,7 @@ export function compressForModel(
         };
   let narrowed = attempt();
   let json = JSON.stringify(narrowed.value);
-  // 摘要本身也可能超预算（字段极多时）：继续收紧，直到落在预算内。
+
   while (byteLength(json) > budget && (maxItems > 1 || maxChars > 60)) {
     if (maxItems > 1) maxItems = Math.max(1, Math.floor(maxItems / 2));
     else maxChars = Math.max(60, Math.floor(maxChars / 2));

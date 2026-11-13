@@ -29,7 +29,6 @@ const code = (
         },
       },
     ],
-    // Only the page channel is replaced; the actual hook runs through React effects.
   })
 ).outputFiles[0].text;
 const module = { exports: {} };

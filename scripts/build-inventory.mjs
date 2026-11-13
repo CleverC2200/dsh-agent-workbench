@@ -1,5 +1,5 @@
 import { syncAgentResources } from './build-output.mjs';
-/** Build the migrated page; Agent resources are assembled from their owning package. */
+
 import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
@@ -8,7 +8,6 @@ import { createHash } from 'node:crypto';
 import { sqlConfigPlugin } from './sql-config-build.mjs';
 const root = resolve(import.meta.dirname, '..');
 
-/** Assemble each page's Agent declaration from its owning Manage resource, independently of page compilation. */
 export async function assembleInventoryAgentResources(id) {
   const author = resolve(root, `../dsh-agent-manage/business-resources/inventory-${id}`);
   const output = resolve(root, `lib/business/inventory-${id}`);

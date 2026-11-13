@@ -1,4 +1,3 @@
-// This declarative layout is also exported as JSON for the server renderer.
 const conditional = (path, yes, no) => ({
   $if: path,
   yes,

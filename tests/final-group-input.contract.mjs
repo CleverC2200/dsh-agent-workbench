@@ -59,10 +59,9 @@ test('public final-group admission binds real source only and rejects invalid in
     for (const [name, root] of Object.entries(roots)) {
       const source = name === 'dsh-agent-workbench' ? process.cwd() : resolve('..', name);
       mkdirSync(dirname(root), { recursive: true });
-      // Clone each actual peer's complete Git input; no package stubs, dependencies or borrowed outputs.
+
       command(fixture, 'git', ['clone', '--quiet', '--no-hardlinks', source, root]);
       if (name === 'dsh-agent-workbench') {
-        // Exercise the current public runner before its delivery commit exists.
         for (const file of ['run-quality-ci.mjs', 'verify-candidate-input.mjs'])
           copyFileSync(join(source, 'scripts', file), join(root, 'scripts', file));
         command(root, 'git', [
@@ -207,7 +206,7 @@ test('public final-group admission binds real source only and rejects invalid in
           env: fixtureEnvironment(name),
         },
       );
-      // Both runners require the admitted group hash before candidate execution.
+
       reject(compatibility, /CANDIDATE_FINAL_GROUP_REQUIRED/);
       command(coldCore, 'git', [
         '-c',
@@ -260,7 +259,7 @@ test('public final-group admission binds real source only and rejects invalid in
       }
     }
     writeFileSync(file, bytes);
-    // The same public reader returns the byte guard used before each quality effect.
+
     const { readFinalGroup } = await import(
       pathToFileURL(join(roots['dsh-agent-workbench'], 'scripts/candidate-input.mjs'))
     );

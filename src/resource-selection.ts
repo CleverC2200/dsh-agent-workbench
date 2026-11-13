@@ -28,7 +28,7 @@ export async function openNativeAgentSession(
     session.draft,
   );
 }
-/** Resource selection borrows the host Session/Conversation; it owns no current Session. */
+
 export interface NativeResourceSelection {
   fetch: typeof fetch;
   pickDirectory?(): Promise<string | null>;
@@ -140,7 +140,6 @@ export async function selectResource(
   return { sessionId, preset: resource.preset };
 }
 
-/** Bind the actual native client services under their Cordis effect lifetime. */
 export function mountNativeResourceSelection(
   ctx: Context,
   ready: (host: NativeResourceSelection | undefined) => void,

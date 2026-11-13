@@ -82,7 +82,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     };
   }
 }
-/** Formal AgentWelcome/GeaHomeHero JSX; only the input action comes from the current public scope. */
+
 export function CompanyWelcome({
   page,
   onFill,
@@ -112,7 +112,6 @@ export function CompanyWelcome({
   );
 }
 
-/** Formal selected UI; Workspace, Session, settings and GEA identity retain their existing authorities. */
 export function mountCompanyUI(
   ctx: Context,
   workbench: WorkbenchController,
@@ -156,7 +155,7 @@ export function mountCompanyUI(
   const SidebarGeometry = React.createContext({ collapsed: false, expand: () => {} });
   ctx.effect(() => {
     const style = document.createElement('style');
-    // Loader must not claim this effect-owned sheet for a later materializing plugin.
+
     style.dataset.plugin = '@cleverc2200/dsh-agent-workbench';
     style.dataset.companyWorkbench = 'formal-508feea';
     style.textContent =
@@ -1036,7 +1035,7 @@ export function mountCompanyUI(
       </aside>
     );
   }
-  // A page borrows its own Core binding; moving the main conversation must not remount its iframe.
+
   function RetainedDocument({
     page,
     sessionId,
@@ -1308,7 +1307,7 @@ export function mountCompanyUI(
       },
     ),
   );
-  // The public overlay keeps page DOM and recovery mounted while Core owns ordinary chats.
+
   ctx.slots.inject('shell.overlay', () =>
     ctx.slots.register(
       {

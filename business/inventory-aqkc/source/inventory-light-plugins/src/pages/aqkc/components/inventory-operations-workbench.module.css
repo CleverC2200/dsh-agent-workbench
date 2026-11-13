@@ -1100,7 +1100,6 @@
   overflow-wrap: anywhere;
 }
 
-/* 0912: compact SKU controls and bounded detail scrolling. */
 .skuDetailSection {
   width: min(100%, calc(100cqw - 96px));
   min-width: 0;
@@ -1206,7 +1205,6 @@
   min-width: 0;
 }
 
-/* workbench-ui-style: shared visual roles, original business structure. */
 .shell {
   --red: var(--ui-accent);
   --red-deep: var(--ui-accent-hover);
@@ -1420,7 +1418,6 @@
   color: var(--ui-risk);
 }
 
-/* Keep toolbar height while lowering its controls slightly. */
 .workspaceToolbar > .workspaceActions {
   position: relative;
   top: 5px;
@@ -1436,7 +1433,6 @@
   display: none;
 }
 
-/* Use the APS workbench canvas beneath page content. */
 .shell {
   --canvas: var(--ui-canvas);
 }
@@ -1444,7 +1440,6 @@
   background: var(--ui-surface);
 }
 
-/* Match the APS Sparkles mark in the AI insight heading. */
 .insightHeading > span {
   background: #df1732;
   color: transparent;
@@ -1459,7 +1454,6 @@
     center/contain no-repeat;
 }
 
-/* APS red title tag: icon and label are one unit. */
 .insightHeading {
   gap: 0;
 }
@@ -1484,7 +1478,6 @@
   margin-left: 10px;
 }
 
-/* Match the APS briefing card's stroke, spacing, and type scale. */
 .summaryBox {
   padding: 22px 24px;
   border: 1px solid #f2dadd;
@@ -1529,7 +1522,6 @@
   line-height: 1.75;
 }
 
-/* AI 洞察：仅保留大标题与有证据的关系分析。 */
 .summaryBox::before {
   display: none;
 }
@@ -1566,7 +1558,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Use the actual business pane width, including the desktop conversation split. */
 @container (max-width: 799px) {
   .kpiGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

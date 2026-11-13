@@ -1,7 +1,6 @@
 import { createAgentQueries, type ConfiguredExecution } from './agent-query';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 
-/** The current FC workbench uses the validated batch's calendar for every calculation. */
 export async function resolveFcDataDay(
   fallback: AgentSqlConfig,
   calendarDay: string,

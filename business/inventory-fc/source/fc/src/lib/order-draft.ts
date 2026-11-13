@@ -24,7 +24,7 @@ export function editDraftQuantity(
 ) {
   const quantities = { ...draft.quantities };
   const value = Math.max(0, Math.round(Number.isFinite(quantity) ? quantity : 0));
-  // An explicit zero is a durable instruction, including when today's suggestion is zero.
+
   if (value === recommended && value !== 0) delete quantities[sku];
   else quantities[sku] = value;
   return draftWithDirty({ ...draft, quantities }, saved);

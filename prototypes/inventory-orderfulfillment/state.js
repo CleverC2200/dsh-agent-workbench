@@ -1,4 +1,3 @@
-/** Explicit application-owned records, not host DOM discovery or a second data source. */
 function fulfillmentSnapshot() {
   let rows = fulfillmentRows
     .filter((row) => !row.hidden)

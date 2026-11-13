@@ -125,11 +125,24 @@ function fixture(
     JSON.stringify({
       type: 'module',
       packageManager: owner === 'dsh-agent-workbench' ? 'npm@11.11.0' : 'pnpm@11.7.0',
-      ...(tooling ? { devDependencies: { oxlint: '1', oxfmt: '1' } } : {}),
+      ...(tooling
+        ? {
+            devDependencies: {
+              oxlint: '1',
+              oxfmt: '1',
+              typescript: '5',
+              parse5: '7',
+              postcss: '8',
+              yaml: '2',
+              'highlight.js': '11',
+            },
+          }
+        : {}),
       scripts: {
         'check:knowledge': knowledge
           ? 'node scripts/check-agent-knowledge.mjs --root . --config agent-knowledge.json'
           : 'node --eval "" --',
+        'check:comments': 'node --eval ""',
         lint: 'node --check scripts/tool.mjs',
         'format:check': 'node --eval ""',
         ...(staticFailure
@@ -165,6 +178,13 @@ function fixture(
           '': {},
           'node_modules/oxlint': { version: '1', integrity: 'sha512-fixture' },
           'node_modules/oxfmt': { version: '1', integrity: 'sha512-fixture' },
+          'node_modules/typescript': { version: '5', integrity: 'sha512-fixture' },
+          ...Object.fromEntries(
+            ['parse5', 'postcss', 'yaml', 'highlight.js'].map((name) => [
+              'node_modules/' + name,
+              { version: '1', integrity: 'sha512-fixture' },
+            ]),
+          ),
         },
       }),
     );
@@ -326,7 +346,7 @@ test('isolated GEA source preparation installs owner dependencies using only ver
 
 test('each owner lint and format failure blocks the source gate with dependency needs declared', async (t) => {
   for (const repo of ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin'])
-    for (const check of ['lint', 'format:check'])
+    for (const check of ['check:comments', 'lint', 'format:check'])
       await t.test(repo + ' ' + check, (t) => {
         const f = fixture(
           t,
@@ -336,7 +356,12 @@ test('each owner lint and format failure blocks the source gate with dependency 
         const planned = f.run('affected-plan');
         assert.equal(planned.status, 0, planned.stdout + planned.stderr);
         const plan = JSON.parse(planned.stdout);
-        assert.deepEqual(plan.staticChecks, ['check:knowledge', 'lint', 'format:check']);
+        assert.deepEqual(plan.staticChecks, [
+          'check:knowledge',
+          'check:comments',
+          'lint',
+          'format:check',
+        ]);
         assert.equal(plan.dependencies, true);
         assert.equal(plan.sdk, false);
         assert.equal(plan.joint, false);
@@ -373,7 +398,12 @@ test('a tool-only source change runs its behavior test cold and excludes unrelat
   assert.deepEqual(plan.files, ['tests/tool.test.mjs']);
   assert.equal(plan.sdk, false);
   assert.equal(plan.dependencies, true);
-  assert.deepEqual(plan.staticChecks, ['check:knowledge', 'lint', 'format:check']);
+  assert.deepEqual(plan.staticChecks, [
+    'check:knowledge',
+    'check:comments',
+    'lint',
+    'format:check',
+  ]);
   assert.equal(plan.typecheck, false);
   const executed = f.run('affected-check');
   assert.equal(executed.status, 0, executed.stderr);
@@ -526,7 +556,15 @@ test('tool-only execution preserves the owner static commands and rejects their 
       const planned = f.run('affected-plan');
       assert.equal(planned.status, 0, planned.stdout + planned.stderr);
       const plan = JSON.parse(planned.stdout);
-      assert.deepEqual(plan.tools, ['oxfmt', 'oxlint']);
+      assert.deepEqual(plan.tools, [
+        'highlight.js',
+        'oxfmt',
+        'oxlint',
+        'parse5',
+        'postcss',
+        'typescript',
+        'yaml',
+      ]);
       assert.equal(plan.core, false);
       assert.equal(plan.sdk, false);
       const checked = f.run('affected-check');

@@ -12,10 +12,9 @@ spec = importlib.util.spec_from_file_location('age_update', ROOT / 'scripts/upda
 age = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(age)
 
-
 def update(config):
     queries = config['queries']
-    # The inventory calendar is the batch calendar; target calendars stay independent.
+
     calendar = copy.deepcopy(queries['source.health-date'])
     old = queries['source.stock-date']
     calendar['parameterSpec'] = old['parameterSpec']
@@ -49,8 +48,7 @@ def update(config):
                 COUNT(*) AS batch_rows FROM inventory_batch_ages AS a
                 GROUP BY a.belong_base, a.material_code""", read='postgres')
             additions = local_prefix + [exp.CTE(this=base_stock, alias=exp.TableAlias(this=exp.to_identifier('base_batch_stock')))]
-            # Daily movement/descriptive fields can use their own latest earlier daily
-            # snapshot. They never replace physical stock or determine its key set.
+
             physical = {'belong_base', 'material_code', 'material_name', 'current_stock', 'available_stock', 'allocated_qty', 'current_stock_60'}
             aux = [e.copy() for e in select.expressions if e.alias not in physical | {'source_rows', 'the_date', 'data_month'}]
             if aux:
@@ -72,7 +70,7 @@ def update(config):
             index = parent.expressions.index(cte)
             parent.expressions[index:index] = additions
         sql = age.render(tree)
-        # Keep old named input contracts even when a source no longer consumes stock_month.
+
         for param in query['parameterSpec']:
             if f':{param}' not in sql:
                 tree.where(f':{param} IS NULL OR :{param} IS NOT NULL', append=True, copy=False)
@@ -84,7 +82,7 @@ def update(config):
         age.project(ctes['batch_skus'], ['SUM(CASE WHEN a.live_qty<0 THEN a.live_qty ELSE 0 END) AS negative_qty'])
         age.project(ctes['batch_facts'], ['b.negative_qty AS negative_qty'])
         age.project(ctes['batch_groups'], ['SUM(b.negative_qty) AS negative_qty'])
-        # Atomic pages wrap batch_groups; propagate the additive measure through each layer.
+
         for select in list(tree.find_all(exp.Select)):
             if select in list(ctes.values()):
                 continue
@@ -103,7 +101,6 @@ def update(config):
 
     view = next(v for v in config['sourceViews']['views'] if v['id'] == 'age-structure')
     view['columns'] = [c for c in view['columns'] if c['field'] not in ('unknown_age_qty', 'negative_qty')]
-
 
 if __name__ == '__main__':
     path = ROOT / 'business/inventory-aqkc/sql.config.json'

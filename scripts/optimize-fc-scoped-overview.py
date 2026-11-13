@@ -38,8 +38,7 @@ def update(config):
         q['request']['sql']=base.render(tree)
     for view in config['sourceViews']['views']:
         if view['id']=='branch-stock':view['overviewFilterNames']=['warehouse_code']
-    # The combined global quick read serialized all same-snapshot calculations.
-    # Share the small snapshot-date request, then run stock/age/replenishment independently.
+
     config.pop('overviewQuickStock',None)
     return config
 

@@ -315,7 +315,6 @@
   container: fc-list / inline-size;
 }
 
-/* Keep the FC filter row independent of the migrated page's form defaults. */
 .fcToolbar.toolbar {
   display: flex;
   flex-wrap: nowrap;

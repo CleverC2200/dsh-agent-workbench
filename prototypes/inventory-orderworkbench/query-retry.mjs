@@ -10,7 +10,6 @@ function transient(error) {
   );
 }
 
-/** One retry of the same identity-bound read, never of authorization or invalid results. */
 export async function readWithTransientRetry(read, signal, delayMs = 750) {
   try {
     return await read();

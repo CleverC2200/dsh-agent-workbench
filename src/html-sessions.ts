@@ -26,7 +26,7 @@ type HtmlSession = {
   pending: Map<string, Pending>;
   expires: number;
 };
-/** The Workbench owner token indexes page actions; destruction rejects its pending calls. */
+
 export function createHtmlSessions() {
   const pages = new Map<string, HtmlSession>();
   const destroy = (key: string) => {
@@ -44,9 +44,7 @@ export function createHtmlSessions() {
       destroy(lease);
       throw Error('PAGE_LEASE_EXPIRED');
     }
-    // This is an idle lease, not a five-minute cap on an actively used page.
-    // GEA still validates delegation-token expiry on every business request;
-    // logout/identity changes explicitly destroy all leases.
+
     page.expires = Date.now() + 300000;
     return page;
   };
@@ -120,7 +118,7 @@ export function createHtmlSessions() {
         };
         const timer = setTimeout(
           () => finish(Error('PAGE_ACTION_TIMEOUT')),
-          // 页面动作可能落在提交/审批这两层，超时按能力层策略表走。
+
           LAYER_POLICY.submit.timeoutMs,
         );
         page.pending.set(id, {

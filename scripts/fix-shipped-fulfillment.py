@@ -7,10 +7,10 @@ for agent in ['aqkc','fc','qll']:
  for key,q in c['queries'].items():
   sql=q['request']['sql']
   if 'agents_order_execute_isontime_mi' not in sql:continue
-  # Keep the customer-demand detail pool intact; only fulfillment outputs use shipped lines.
+
   capped="CASE WHEN r.shipped>0 AND r.ordered>=0 THEN CASE WHEN r.shipped>r.ordered THEN r.ordered ELSE r.shipped END WHEN r.shipped=0 THEN 0 ELSE NULL END"
   valid="COUNT(r.shipped)=COUNT(*) AND COUNT(r.ordered)=COUNT(*) AND SUM(CASE WHEN r.source_rows>1 OR r.shipped<0 OR r.ordered<0 THEN 1 ELSE 0 END)=0"
-  # Grouped summaries do not always project source_rows; their invalid flag already covers duplicates.
+
   valid="COUNT(r.shipped)=COUNT(*) AND COUNT(r.ordered)=COUNT(*) AND MIN(r.shipped)>=0 AND MIN(r.ordered)>=0 AND SUM(r.invalid)=0"
   sql=re.sub(r'CASE\s+WHEN\s+SUM\(r\.invalid\)\s*=\s*0\s+AND\s+SUM\(r\.demand\)\s*>\s*0\s+THEN\s+1\s*-\s*SUM\(r\.shortage\)\s*/\s*SUM\(r\.demand\)\s+ELSE\s+NULL\s+END\s+AS\s+fulfillment_rate',f'CASE WHEN {valid} AND SUM(r.shipped_order_quantity)>0 THEN SUM({capped})/SUM(r.shipped_order_quantity) ELSE NULL END AS fulfillment_rate',sql)
   if key.startswith('page.workbench-support') or key.startswith('page.daily-report-fulfillment'):

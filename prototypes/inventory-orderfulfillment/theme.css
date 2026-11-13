@@ -1,5 +1,3 @@
-/* Preserve the user-provided fulfillment presentation; shared theme tokens are
-   still loaded by the host, but do not flatten the sample's cards or typography. */
 #prototypeStatus {
   display: none;
 }
@@ -66,7 +64,6 @@ body {
   }
 }
 
-/* The retained white search fields need body-text contrast in either Host theme. */
 .delivery-order-searches input,
 .delivery-order-searches select {
   color: #555d68;
@@ -193,7 +190,6 @@ body {
   background: #fff;
 }
 
-/* Keep table navigation outside both scroll axes. */
 .fulfillment-table-scroll {
   width: 100%;
   max-height: min(60vh, 600px);

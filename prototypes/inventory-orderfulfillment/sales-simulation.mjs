@@ -1,5 +1,5 @@
 import { call } from '../../business/shared/channel.js';
-/** Local mock operations use the existing owned page port; the sandbox never fetches directly. */
+
 export function mountSalesSimulation(document) {
   const node = document.getElementById('fulfillment-simulation-config');
   const config = node ? JSON.parse(node.textContent) : null;

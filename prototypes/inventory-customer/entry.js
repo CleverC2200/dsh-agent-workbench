@@ -82,8 +82,7 @@ async function readAuthorizationScope() {
         }
       : null;
   } catch {
-    // The governed query remains the authority. A presentation-only receipt
-    // read must not downgrade or broaden its result when the projection times out.
+
     return null;
   }
 }
@@ -96,7 +95,7 @@ async function publishLatest() {
       current = publication;
       const value = snapshot;
       try {
-        // One in-flight context prevents older transport requests from overwriting newer facts.
+
         await publish(value);
         if (!attached || !hasData) return;
         if (current !== publication) continue;

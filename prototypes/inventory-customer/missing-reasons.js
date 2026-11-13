@@ -1,6 +1,6 @@
 const finite = (value) =>
   value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
-/** Reasons use returned source coverage; unknown coverage is never called an empty database. */
+
 export function customerMissingReason(row, field) {
   const source = 'agents_scm_cust_plan_order_analysis_d';
   if (Array.isArray(row.customerCodes) && !row.customerCodes.length)

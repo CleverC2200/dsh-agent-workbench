@@ -11,7 +11,6 @@ export function baseResourceDates(start: string) {
 const numeric = (value: unknown) =>
   value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
 
-/** Only base aggregates leave SQL. An optional exact SKU never becomes a bulk detail selector. */
 export async function loadBaseResourceSnapshot(
   snapshot: WarehouseSnapshot,
   database: BusinessDatabase,
@@ -83,7 +82,7 @@ export async function loadBaseResourceSnapshot(
     row.productionTotal = days.every((day) => day.quantity !== null)
       ? days.reduce((sum, day) => sum + day.quantity!, 0)
       : null;
-    // Legacy consumers still use capacityQty; the new UI reads nullable productionTotal.
+
     row.capacityQty = row.productionTotal;
   }
   return {

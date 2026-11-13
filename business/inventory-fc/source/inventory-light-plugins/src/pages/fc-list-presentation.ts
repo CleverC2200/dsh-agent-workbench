@@ -2,7 +2,6 @@ import { agingAdvice } from '../../../fc/src/lib/inventory-aging';
 import { formatReplenishmentValue } from '../../../fc/src/lib/replenishment-columns';
 import { knownNumber } from '../../../../../shared/configured-overview';
 
-/** These are display aliases, not replacements for the governed calculation fields. */
 const fields: Record<string, string> = {
   inventory_qty: 'inventoryQty',
   available_qty: 'currentAvailableQty',
@@ -90,7 +89,6 @@ export function fcAgingDisplay(row: Record<string, unknown>, field: string): str
   return undefined;
 }
 
-/** Plan lists and their CSV share the original three-decimal quantity display. */
 export function fcPlanDisplay(row: Record<string, unknown>, field: string): string | undefined {
   if (
     ![

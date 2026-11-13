@@ -4,7 +4,7 @@ import type {} from '@deepseek-ai/dsh-agent-preset-registry/types';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
 import type { WorkbenchFramePage } from '../frame.ts';
 import type { ResourceSummary } from '../resource-selection.ts';
-/** Extra navigation for Core-owned blank Sessions omitted by the ordinary Workspace browser. */
+
 export function PageUnsentHistory({
   page,
   cwd,
@@ -71,8 +71,7 @@ export function PageUnsentHistory({
     const value = state.projectionsBySession[id]?.values.agentPreset;
     return value === undefined ? state.byId[id]?.projectionValues?.agentPreset : value;
   };
-  // Cold list rows may lack cached preset hints. The official metadata read
-  // updates the same Core list store without opening an Agent or reading a draft.
+
   const inspected = useRef(new Set<SessionId>());
   useEffect(() => {
     inspected.current.clear();

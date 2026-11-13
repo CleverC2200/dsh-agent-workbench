@@ -19,7 +19,6 @@ export type DetailInput = {
   baseName?: string;
 };
 
-/** All details are scoped to an authorized snapshot SKU; never use browser totals or warehouse codes. */
 export async function loadReplenishmentDetail(
   snapshot: WarehouseSnapshot,
   db: BusinessDatabase,
@@ -68,8 +67,7 @@ export async function loadReplenishmentDetail(
   const base = bases.baseResources.find((row) => row.baseName === input.baseName);
   if (!base || !base.stockDate)
     throw new DetailNotFoundError('该商品在所选基地没有可核实的库存快照');
-  // Match the last published batch date at or before the summary date. Never present
-  // an older batch snapshot as today's stock, or select an unpublished ingestion.
+
   const published = await db.query(
     configuredSql(sqlConfiguration, 'fc.src.lib.server.replenishment-detail.3'),
     [base.stockDate],

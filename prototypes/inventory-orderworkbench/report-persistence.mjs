@@ -1,5 +1,5 @@
 import { unpackWorkbenchReport } from './report-transfer.mjs';
-/** One loaded period owns its revision and pending save; switching identity cancels that ownership. */
+
 export function createReportPersistence(execute, status) {
   let owner;
   const notify = (state, message) => status(state, message);
@@ -41,8 +41,7 @@ export function createReportPersistence(execute, status) {
         try { received = await execute(request, signal); }
         catch (error) {
           signal.throwIfAborted();
-          // Older Hosts keep the full load contract; never lose manual content
-          // just because they do not yet support the lightweight read hint.
+
           if (includeFacts || !/ORDER_REPORT_REQUEST_INVALID/.test(error.code ?? error.message)) throw error;
           received = await execute({ operation: 'load', period }, signal);
         }

@@ -414,8 +414,6 @@ export function BranchInventoryAgent() {
       }
     })();
     return () => controller.abort();
-    // Read only after the existing page port supplies the actual Host Session.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
   const pageRequestBody = JSON.stringify({
     warehouseId,
@@ -646,7 +644,7 @@ export function BranchInventoryAgent() {
     revision: pageRevision,
     snapshotVersion: snapshot.version,
     referenceId: livePage?.referenceId,
-    // Catalog indices retain visible order without exceeding the existing bounded scope field.
+
     columns: visibleColumns.map((column) => DEFAULT_COLUMNS.indexOf(column)),
   });
   const replenishmentTableRef = useRef<HTMLTableElement>(null);
@@ -1260,8 +1258,6 @@ export function BranchInventoryAgent() {
     return () => {
       cancelled = true;
     };
-    // Full detail requests are tied to the opened drilldown and warehouse.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialog, warehouseId]);
   const currentStep =
     submissionStatus === 'pending'

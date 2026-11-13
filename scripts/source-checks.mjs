@@ -76,7 +76,7 @@ export async function sourceChecks(result, phase) {
     selected.sourceWindow ||
     selected.build ||
     selected.files.some((file) => Object.values(lanes).some((lane) => file in lane));
-  const staticChecks = joint ? [] : ['check:knowledge', 'lint', 'format:check'];
+  const staticChecks = joint ? [] : ['check:knowledge', 'check:comments', 'lint', 'format:check'];
   let upstreams = 'none';
   if (repo === 'dsh-gea-plugin' || joint)
     upstreams = typecheck || joint ? 'artifacts' : selected.upstreams;

@@ -15,7 +15,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('gea-identity-changed', clearReadCache);
   window.addEventListener('light-refresh', clearReadCache);
 }
-/** GEA owns the identity and applies the same Consumer grant to every read. */
+
 export async function queryStock(
   query: WorkbenchSqlQuery,
   signal?: AbortSignal,
@@ -25,7 +25,6 @@ export async function queryStock(
       return await readConfiguredStock(query, { signal });
     } catch (error: any) {
       if (!signal?.aborted && (error.failure || error.errorCode)) {
-        // Keep gateway diagnostics, while the original page receives an explicit permission/session message.
         error.message = sqlQueryError(error).message;
       }
       if (!signal?.aborted && error.code === 'SOURCE_NOT_AVAILABLE')

@@ -1,7 +1,6 @@
 import type { MetricData } from 'dsh-agent-manage/aps-compute/metrics';
 import type { BaseProductCategory } from 'dsh-agent-manage/aps-compute/base-product-hierarchy';
 
-/** Project returned dimensions into the existing category → item → material-group UI. */
 export function productHierarchy(data?: MetricData | null, base?: string): BaseProductCategory[] {
   const categories = new Map<string, Map<string, Set<string>>>();
   for (const section of data?.sections ?? []) {

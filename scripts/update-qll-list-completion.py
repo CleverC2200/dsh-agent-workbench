@@ -4,7 +4,7 @@ import json,copy,re
 import sqlglot
 from sqlglot import exp
 root=Path(__file__).resolve().parents[1];path=root/'business/inventory-qll/sql.config.json';c=json.loads(path.read_text());fc=json.loads((root/'business/inventory-fc/sql.config.json').read_text())
-# Keep the branch source in this plugin on the same audited contract as FC.
+
 for key,q in fc['queries'].items():
  if key.startswith('replenishment.') or key.startswith('transfer_plan.'):c['queries'][key]=copy.deepcopy(q)
 v=next(v for v in c['sourceViews']['views'] if v['id']=='branch-replenishment');original=next(v for v in fc['sourceViews']['views'] if v['id']=='replenishment');v.update({k:copy.deepcopy(original[k]) for k in ['queryId','columns','filters','description']})
@@ -24,7 +24,7 @@ if not any(x.alias=='chain_age' for x in t.ctes):
  for name,sql in expressions.items():t.select(sql+' AS '+name,append=True,copy=False,dialect='postgres')
  q['request']['sql']=t.sql();q['resultColumns']+=list(expressions)
  q['parameterSpec']['gea_p2800']={'name':'days_remaining_in_month','type':'integer','minimum':0,'maximum':30,'nullable':False,'required':True};q['request']['parameters']['gea_p2800']=9
- # Atomic count and page share the expensive scoped source CTEs.
+
  page=t.copy();page.set('with',None);page.select('1 AS page_row_present',append=True,copy=False)
  count=t.copy();count.set('with',None)
  for k in ['order','limit','offset']:count.set(k,None)
@@ -38,7 +38,7 @@ for v in c['sourceViews']['views']:
    if col['field']=='missing_judgment':col.update(valueField='business_status');col.pop('unavailable',None)
    if col['field']=='missing_month_end_turnover':col.update(valueField='estimated_month_end_turnover',format='decimal2',reason='按当前同范围库存和计划日均推算至月末，未计新增入库；缺需求或零分母不计算。');col.pop('unavailable',None)
   if not any(x['field']=='average_age' for x in v['columns']):v['columns'].append({'field':'average_age','label':'平均货龄（天）','format':'decimal2'})
-# Separate branch table contract avoids changing the card's existing health summary.
+
 if not any(v['id']=='branch-structure' for v in c['sourceViews']['views']):
  source=copy.deepcopy(next(v for v in c['sourceViews']['views'] if v['id']=='aging'));source.update(id='branch-structure',title='分仓',queryId='batch-age.groups',summaryId=None,defaultColumns=[],overrides={'group_level':'detail'})
  source['columns']=[{'field':k,'label':label,**({'format':fmt} if fmt else {})} for k,label,fmt in [('warehouse_name','分仓',None),('material_code','SKU',None),('material_name','产品',None),('total_qty','库存','decimal2'),('average_age','平均货龄','decimal2'),('historical_turnover','回顾周转','decimal2'),('overaged_qty','大日期库存','decimal2'),('warning','经营状态',None),('stat_date','数据日期',None)]];c['sourceViews']['views'].append(source)

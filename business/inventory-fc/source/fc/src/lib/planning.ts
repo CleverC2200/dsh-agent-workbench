@@ -173,7 +173,6 @@ export function nextMonth(value: string) {
   return new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 7);
 }
 
-/** Select a whole monthly source. Formal transfers are never recomputed on a normal read. */
 export function applyBusinessPlanning(
   base: WarehouseSnapshot,
   state: PlanningState,
@@ -280,7 +279,7 @@ export function applyBusinessPlanning(
     const nextTransfer = humanMonths.has(next)
       ? (future?.transferQty ?? null)
       : syncedTransfer(next);
-    // Keep the existing tomorrow-start convention; use calendar plans over exactly 30 days.
+
     const remainingDays = Math.min(30, monthDays(current) - Number(asOf.slice(8, 10)));
     const nextDays = Math.max(0, 30 - remainingDays);
     const shippedValue = shipped.get(sku);
@@ -291,7 +290,7 @@ export function applyBusinessPlanning(
       shippedValue >= 0
         ? shippedValue
         : null;
-    // A confirmed zero plan has zero remaining demand even if shipments are unavailable.
+
     const remainingOutbound =
       outbound === 0
         ? 0
@@ -332,7 +331,7 @@ export function applyBusinessPlanning(
       daily === null || orderAdjustedAvailableQty === null
         ? null
         : Math.max(0, target - orderAdjustedAvailableQty);
-    // Current open transfers include all outstanding orders, not just this month's activity.
+
     const reportedOpenTransfer =
       original && 'openTransferQty' in original
         ? (original.openTransferQty ?? null)
@@ -466,7 +465,7 @@ export function applyBusinessPlanning(
     ([sku, gap]) => gap > 0 && !skuSet.has(sku),
   ).length;
   const replenishmentBySku = new Map(replenishments.map((row) => [row.sku, row]));
-  // Every inventory SKU must be covered; a partial plan must not masquerade as a warehouse total.
+
   const forecastCoverage =
     base.inventory.length > 0 &&
     replenishments.length > 0 &&

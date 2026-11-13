@@ -8,8 +8,6 @@ import { tmpdir } from 'node:os';
 import { chromium, _electron, expect } from '@playwright/test';
 import { configuredPageHtml, configuredWire } from './fixtures/configured-page.mjs';
 
-// Actual cached Document, sidebar creation action, HTML bridge and built business
-// page. Only Core public services and the authorized external query are fixtures.
 async function fixture(t, id, { dropDisconnect = false, deferFirstOpen = false } = {}) {
   const output = await build({
     stdin: {

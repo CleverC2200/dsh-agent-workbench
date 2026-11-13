@@ -1,5 +1,3 @@
-// Local entries contain phase names and durations, never business rows or
-// identity. Retain only the latest measurement of each phase per dashboard.
 export function startDashboardTiming(page, signal) {
   const clock = globalThis.performance;
   const start = clock?.now();

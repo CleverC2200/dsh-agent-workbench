@@ -2,7 +2,6 @@ import { mountSalesConfirmationPeople } from './sales-confirmation-people.mjs';
 import { confirmationDraft, salesConfirmationCard } from './sales-confirmation-card.mjs';
 export { confirmationDraft, salesConfirmationCard } from './sales-confirmation-card.mjs';
 
-/** The client only initiates notification; sales actions live in the Feishu card. */
 export function mountSalesConfirmation(document, simulation, formal) {
   const overlay = document.getElementById('salesConfirmOverlay');
   const dialog = overlay.querySelector('.confirmation-dialog');

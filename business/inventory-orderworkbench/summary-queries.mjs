@@ -1,12 +1,12 @@
 import { ontimeSummarySql, ontimePeriodSummarySql } from './document-queries.mjs';
 import { rowPacketSql } from '../shared/row-packets.mjs';
 import { addPeriodSummaryQuery } from './period-summary-queries.mjs';
-/** Derive summaries and bounded SKU pages from the same scoped, validated SKU queries. */
+
 export function addWorkbenchSummaryQueries(config) {
   const names = ['orders', 'stock', 'ages'];
   const raw = (name) => {
     const sql = config.queries['workbench.' + name].request.sql;
-    // Only remove the final page ordering; shipment attribution has a window ORDER BY.
+
     return sql.endsWith(' LIMIT :gea_p1001 OFFSET :gea_p1002')
       ? sql.slice(0, sql.lastIndexOf(' ORDER BY '))
       : sql;
@@ -98,8 +98,7 @@ export function addWorkbenchSummaryQueries(config) {
       pagination: { countQuery: 'workbench.directors.packets.count' },
     };
   }
-  // Keep every whole-order verdict and its dimensions, but transport them in
-  // a few packets instead of re-running the same arrival query for 200 orders per page.
+
   if (config.queries['workbench.ontime'])
     register(
       'workbench.ontime.summary',
@@ -209,8 +208,6 @@ export function addWorkbenchSummaryQueries(config) {
         ...extra,
       ]);
     if (name === 'stock') {
-      // A 200-row gateway page otherwise re-runs this stock join and its count
-      // for every dimension group. Pack complete groups without changing totals.
       register(
         'workbench.stock.summary.packets',
         rowPacketSql(

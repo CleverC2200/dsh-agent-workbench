@@ -213,7 +213,7 @@ export default function Dealer() {
     setExportBusy(false);
     setSuggestions([]);
     setLoading(true);
-    // Keep the current workbench mounted for pagination within the same scope.
+
     if (loadedScope.current !== scopeKey) setData(null);
     setError('');
     loadDealerDemoPayload(customer || undefined, {

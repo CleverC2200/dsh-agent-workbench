@@ -1,7 +1,6 @@
 import { currentShortageSum } from './current-shortage';
 import { knownNumber } from './configured-overview';
 
-/** Keep an explicitly labelled known subtotal without presenting it as a complete cohort. */
 export function fcCurrentMetric(
   rows: Array<Record<string, unknown>> | undefined,
   field: 'demand' | 'allocated' | 'shortage',

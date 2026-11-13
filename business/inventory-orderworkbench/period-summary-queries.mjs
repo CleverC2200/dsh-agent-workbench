@@ -93,8 +93,6 @@ function periodOrders() {
 }
 
 function periodStock() {
-  // stock_date already identifies each snapshot; extra batch_date projections
-  // inside these CTEs are rejected by the gateway's published-field analysis.
   let plans = parts.stockPlans;
   plans = replace(
     plans,

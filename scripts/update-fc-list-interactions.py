@@ -35,7 +35,7 @@ for id in ['replenishment.detail','replenishment.count','replenishment.detail.at
         dest['request']['sql']=common+f', list_count AS (SELECT COUNT(*) AS total FROM list_filtered AS r), list_page AS (SELECT {project("r")},1 AS page_row_present FROM list_filtered AS r ORDER BY {order("r")} LIMIT :gea_p8 OFFSET :gea_p9) SELECT {project("p")}, p.page_row_present AS page_row_present, n.total AS page_scope_total FROM list_count AS n LEFT JOIN list_page AS p ON TRUE ORDER BY {order("p")} LIMIT :gea_p8'
     else:
         dest['request']['sql']=common+f' SELECT {project("r")} FROM list_filtered AS r ORDER BY {order("r")} LIMIT :gea_p8 OFFSET :gea_p9'
-# Keep a single explicit page+count statement for the visible list.
+
 atomic=c['queries']['replenishment.detail.atomic']
 if ' AS page_scope_has_material_group' not in atomic['request']['sql']:
     atomic['request']['sql']=atomic['request']['sql'].replace(
@@ -94,7 +94,6 @@ c['queries']['branch-transfers.page']={
  'parameters':{'gea_p1':'A020','gea_p2':'10000034','gea_p4':10,'gea_p5':0},'includeTotal':False},
  'resultColumns':['order_no','order_status','demand_qty','allocated_qty','shipped_qty','pending_qty','in_transit_qty','source_snapshot','page_row_present','page_scope_total','detail_qty']}
 
-# FC uses the original non-overlapping [0,30), [30,60), [60,90), [90,+) buckets.
 for query in c['queries'].values():
     sql=query['request']['sql']
     for old,new in [

@@ -52,7 +52,7 @@ const numbers = new Set([
   'names',
   'items',
 ]);
-// Doris LENGTH counts UTF-8 bytes; Chinese/emoji must not use JS string offsets.
+
 export function decodeWorkbenchTuple(value, count) {
   const bytes = new TextEncoder().encode(String(value)),
     tuple = [];
@@ -548,8 +548,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       };
     }
   };
-  // Share only a fully validated collection inside this one identity-bound load.
-  // Each period gets its own rows because its product-item mapping may differ.
+
   const batchSnapshots = new Map();
   const readBatchSnapshot = async (values, priority) => {
     signal?.throwIfAborted();

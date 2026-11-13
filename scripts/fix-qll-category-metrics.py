@@ -128,7 +128,7 @@ def update(config):
     return config
 
 def branch_organization(config):
-    # Organization drill rows must retain the branch workbench stock/movement pool.
+
     for prefix, suffix in [(p, s) for p in ['', 'snapshot.'] for s in ['groups', 'atomic']]:
         query = copy.deepcopy(config['queries'][prefix + 'batch-age.' + suffix])
         tree = sqlglot.parse_one(query['request']['sql'], read='postgres')

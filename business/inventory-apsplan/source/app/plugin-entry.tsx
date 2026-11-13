@@ -4,7 +4,7 @@ import Home from './workbench-app';
 import { ready } from '../../../shared/channel.js';
 
 document.documentElement.classList.add('aps-plugin-host');
-// Inform the owning frame when a page modal blocks the business surface.
+
 let lastModalState: boolean | undefined;
 const reportModalState = () => {
   const open = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).some(

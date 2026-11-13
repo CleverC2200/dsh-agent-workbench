@@ -1,4 +1,3 @@
-/** Fixed offline input. This reader never opens a Host, HTTP or database connection. */
 import sample from './dealer-mock-input.json';
 import { dealerWorkbenchSql } from '../../dealer/web/src/lib/dealer-workbench-sql';
 export async function readDealerMock(parameters: any, options: { signal?: AbortSignal } = {}) {
@@ -125,7 +124,7 @@ export async function readDealerMock(parameters: any, options: { signal?: AbortS
       : [],
   );
   let all = fullRoutes.get(parameters.sql);
-  // These declared original master-data inputs have no fixture records. Keep their real gap visible.
+
   if (
     !all &&
     /FROM (agents_scm_cust_pickup_point|agents_scm_customer_car_current|agents_scm_customer_receive|agents_scm_promotion_policy_scope_view)\b/.test(

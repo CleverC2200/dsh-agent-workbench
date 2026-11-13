@@ -8,7 +8,7 @@ declare const DSH_COLUMNAR_SQL: boolean;
 declare const DSH_GOVERNED_SQL: boolean;
 const governed = typeof DSH_GOVERNED_SQL !== 'undefined' && DSH_GOVERNED_SQL;
 import { packedSafetyStockSql, unpackSafetyStock, supportsPackedTransfer } from './aqkc-transfer';
-// Isolated per iframe/identity; only pending reads and a short-lived directory are shared.
+
 const pendingReads = new Map<string, Promise<any>>();
 const catalogs = new Map<string, { expires: number; value: any }>();
 export function clearReadCache() {
@@ -42,7 +42,7 @@ async function readSql(parameters: any, options: { signal?: AbortSignal } = {}) 
   const cached = catalogs.get(key);
   if (!options.signal && cached && cached.expires > Date.now())
     return structuredClone(cached.value);
-  // Scoped requests must remain cancellable independently of shared reads.
+
   let request = options.signal ? call('sql', parameters, options) : pendingReads.get(key);
   if (!request) {
     request =
@@ -67,7 +67,7 @@ async function readSql(parameters: any, options: { signal?: AbortSignal } = {}) 
     }
     if (isCatalog && pendingReads.get(key) === request)
       catalogs.set(key, { expires: Date.now() + 30000, value });
-    // Business loaders mutate rows while normalizing; give each caller its own copy.
+
     return structuredClone(value);
   } finally {
     if (pendingReads.get(key) === request) pendingReads.delete(key);
@@ -202,5 +202,4 @@ export async function geaSqlSession() {
   throw Error('由 GEA 公共插件管理会话');
 }
 
-// Original Agent's GEA-only query path uses the same governed host bridge.
 export const executeGeaSqlQuery = executeWorkbenchSqlQuery;

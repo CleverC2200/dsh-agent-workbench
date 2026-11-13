@@ -1,4 +1,3 @@
-/** A page observation is not an immutable upstream database snapshot. */
 export function customerObservationNotice(value) {
   const total = value.summary?.customerCodes?.length ?? 0;
   const filtered = value.totalFilteredRows ?? total;

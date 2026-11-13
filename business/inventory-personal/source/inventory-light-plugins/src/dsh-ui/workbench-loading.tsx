@@ -94,7 +94,6 @@ export function DashboardTableSkeleton({ label }: { label: string }) {
   );
 }
 
-/** Shared safety-stock loading treatment; owns presentation only. */
 export function WorkbenchLoading({
   title,
   cards = 5,

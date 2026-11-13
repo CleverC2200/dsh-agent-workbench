@@ -42,7 +42,5 @@ export const writeAssistantSurfaceState = <T>(
   try {
     const snapshot: StoredSnapshot<T> = { version: SNAPSHOT_VERSION, value };
     window.sessionStorage.setItem(storageKey(surfaceId, scope), JSON.stringify(snapshot));
-  } catch {
-    // Session 存储已满或不可用时，不能阻止工作台渲染。
-  }
+  } catch {}
 };

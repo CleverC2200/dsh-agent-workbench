@@ -1,4 +1,3 @@
-/** Only the branch Host can supply the destination; HTML cannot provide an arbitrary URL. */
 export async function openBranchDms(
   pageId: string,
   parameters: unknown,

@@ -8,8 +8,7 @@ config = json.loads(path.read_text())
 for query_id, query in config['queries'].items():
     sql = query['request']['sql']
     if query_id.startswith(('health.', 'batch-age.', 'replenishment.', 'replenishment-suggestions.')) or query_id in ['source.health-date', 'source.branch-stock-date', 'calendar.health_dates', 'calendar.health_dates.count']:
-        # These exact adapters are shared by the displayed stock, risk and
-        # replenishment queries. Current-order CTEs retain their own pool rules.
+
         sql = sql.replace('FROM agents_scm_inventory_sku_data_d AS b\nWHERE TRUE AND ', "FROM agents_scm_inventory_sku_data_d AS b\nWHERE b.warehouse_classify = '20' AND ")
         sql = sql.replace('FROM agents_scm_inventory_sku_data_d AS b\n)', "FROM agents_scm_inventory_sku_data_d AS b\nWHERE b.warehouse_classify = '20'\n)")
     if query_id.startswith('base_resources.'):

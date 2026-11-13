@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { scrollbarGeometry } from '../../../../../fc/src/lib/table-scrollbar.ts';
 
-/** A viewport-bottom horizontal scrollbar for the active business table. */
 export function FixedTableScrollbar({
   viewKey,
   boundary = '.workspace',
@@ -40,7 +39,7 @@ export function FixedTableScrollbar({
       frame = 0;
       const viewport = { width: window.innerWidth, height: window.innerHeight };
       const bounds = workspace.getBoundingClientRect();
-      // Only bind visible overflowing tables; a prior answer may contain an offscreen table.
+
       const table = Array.from(host.querySelectorAll<HTMLElement>(selector)).find(
         (element) =>
           scrollbarGeometry(

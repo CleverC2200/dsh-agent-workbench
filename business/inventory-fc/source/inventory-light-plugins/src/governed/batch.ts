@@ -1,4 +1,3 @@
-/** One local HTTP envelope; each query retains its own GEA authorization/result. */
 export function createQueryBatch(transport: (method: string, parameters: any) => Promise<any>) {
   let pending: Array<{ parameters: any; resolve: (v: any) => void; reject: (e: any) => void }> = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -24,7 +23,7 @@ export function createQueryBatch(transport: (method: string, parameters: any) =>
             return;
           }
           const value = result.value;
-          // Older hosts may still return both aliases; preserve their exact response.
+
           if (value && Array.isArray(value.rows) && !('records' in value))
             value.records = value.rows;
           items[index].resolve(value);

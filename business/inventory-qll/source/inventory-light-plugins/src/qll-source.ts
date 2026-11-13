@@ -61,13 +61,12 @@ async function query(
     )
       throw Error('GEA_SQL_RESULT_INCOMPLETE');
     for (const row of page.rows) {
-      // The original query groups the raw order period; its displayed month can repeat.
       if (
         name === 'ORDER_TREND_SQL' &&
         (typeof row.source_order_period !== 'string' || !row.source_order_period)
       )
         throw Error('GEA_SQL_RESULT_INCOMPLETE');
-      // Original branch zero-stock packets group distinct age bands under one empty batch ID.
+
       const key = JSON.stringify([
         ...identityFields[name].map((field) => row[field]),
         ...(name === 'BRANCH_AGE_SQL' && Number(row.qty) === 0 ? [row.age_days] : []),
@@ -79,7 +78,7 @@ async function query(
   };
   const rows = validate(first, 1);
   const count = Math.ceil(first.total / 200);
-  // Keep the original complete-read bound: two logical reads, up to three pages each.
+
   for (let start = 2; start <= count; start += 3) {
     const pages = await Promise.all(
       Array.from({ length: Math.min(3, count - start + 1) }, (_, i) => start + i).map(
@@ -93,7 +92,6 @@ async function query(
   return rows;
 }
 
-/** Page IO only. Role scope comes from the current GEA grant; computation belongs to Manage. */
 export async function readCompanySource(
   request: BuildWorkspaceRequest,
   part: 'current' | 'history',

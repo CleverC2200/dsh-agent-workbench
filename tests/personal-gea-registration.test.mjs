@@ -32,6 +32,7 @@ test('the delivered hidden personal package registers the real declaration and r
     },
   };
   const business = {
+    capture: { run: (_session, _action, work) => work() },
     status: () => ({ authenticated: false }),
     pageSessionScope: () => undefined,
     setSurface: (id, v) => {

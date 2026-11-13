@@ -50,7 +50,7 @@ for layer, (source, fields) in sources.items():
     if layer == 'branch':
         sql = sql.replace("b.warehouse_classify IN ('01', '02', '20')", "b.warehouse_classify = '20'")
         sql = sql.replace(':gea_p9', "'detail'")
-    # Retain only parameters actually consumed by the source; paging is applied after grouping.
+
     query['parameterSpec'] = {k: v for k, v in query['parameterSpec'].items() if re.search(r':' + k + r'\b', sql)}
     query['request']['parameters'] = {k: v for k, v in query['request']['parameters'].items() if k in query['parameterSpec']}
     extra = [
@@ -73,7 +73,7 @@ for layer, (source, fields) in sources.items():
     key = "CASE WHEN :gea_p9100 = 'category' THEN COALESCE(NULLIF(TRIM(n.category), ''), '未分类') WHEN :gea_p9100 = 'organization' THEN COALESCE(NULLIF(TRIM(n.organization), ''), '未归属') ELSE n.sku END"
     name = "CASE WHEN :gea_p9100 = 'category' THEN COALESCE(NULLIF(TRIM(n.category), ''), '未分类') WHEN :gea_p9100 = 'organization' THEN COALESCE(NULLIF(TRIM(n.organization_name), ''), NULLIF(TRIM(n.organization), ''), '未归属') ELSE COALESCE(n.material_name, n.sku) END"
     risk = "CASE n.risk WHEN '缺货' THEN 1 WHEN '库存偏低' THEN 2 WHEN '库存偏高' THEN 3 WHEN '滞库' THEN 4 WHEN '预警' THEN 5 WHEN '无目标' THEN 6 WHEN '正常' THEN 8 ELSE 7 END"
-    # Exact parent identity is applied before SKU risk/search. Summaries never inherit leaf filters.
+
     query['request']['sql'] = f"""WITH tree_source AS ({sql}), normalized AS (SELECT {normalized} FROM tree_source AS r)
 SELECT {key} AS node_key, MAX({name}) AS node_name,
 SUM(n.inventory) AS inventory, COUNT(*) - COUNT(n.inventory) AS missing_inventory,

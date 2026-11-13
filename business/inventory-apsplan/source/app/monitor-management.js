@@ -877,8 +877,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     });
     more.onclick = () => void search(page + 1);
     drawRecipients();
-    // Saved recipients contain stable accounts; resolve display names independently
-    // of the interactive search, without changing the saved notification targets.
+
     void Promise.all(
       saved
         .filter((id) => id.startsWith('gea:'))
@@ -899,9 +898,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
               recipients.set(id, matches[0].realname);
               drawRecipients();
             }
-          } catch {
-            // Keep the account visible and selected if the directory is unavailable.
-          }
+          } catch {}
         }),
     );
   }

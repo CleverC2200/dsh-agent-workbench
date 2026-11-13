@@ -1,4 +1,3 @@
-/* Bind the retained business layout to shared theme 1.0.0. */
 body {
   --ui-font: var(--workbench-font-family);
   --ui-ink: var(--workbench-text);
@@ -116,7 +115,6 @@ body {
   overflow: visible;
 }
 
-/* Retain the authored light palette; dark colors remain host projections. */
 body:not([data-ds-dark-theme]) {
   --ui-muted: #858c96;
   --ui-faint: #a0a4ac;

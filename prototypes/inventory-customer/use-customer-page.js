@@ -1,4 +1,3 @@
-/** The complete KPI/filter index stays separate from the visible table page. */
 export function useCustomerPage(react, inventory, rows) {
   const codes = rows.map(row => row.code);
   const key = JSON.stringify(codes);

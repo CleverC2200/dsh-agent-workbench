@@ -11,17 +11,14 @@ VARIANTS = {
     '60-90,90+': ('BRANCH_AGE:60+', 'a.age_days >= 60'),
 }
 
-
 def filter_batches(tree, condition):
     ctes = [c for c in tree.find_all(exp.CTE) if c.alias == 'batch_skus']
     assert len(ctes) == 1, 'Expected one physical batch aggregate'
     ctes[0].this.set('where', exp.Where(this=sqlglot.parse_one(condition, read='postgres')))
 
-
 def governed_sql(tree):
-    # Preserve gateway named binds and Doris-compatible DOUBLE instead of DB-API/PostgreSQL spellings.
-    return tree.sql()
 
+    return tree.sql()
 
 def main():
     path = Path(__file__).resolve().parents[1] / 'business/inventory-fc/sql.config.json'
@@ -51,7 +48,6 @@ def main():
     column = next(c for c in view['columns'] if c['field'] == 'total_qty')
     column.update(label='库存量', reason='按当前筛选范围汇总库存；选择货龄时，仅统计所选货龄批次。')
     path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + '\n')
-
 
 if __name__ == '__main__':
     main()

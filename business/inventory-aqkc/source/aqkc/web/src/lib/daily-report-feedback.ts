@@ -182,7 +182,7 @@ const validDate = (v: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(v) &&
   Number.isFinite(Date.parse(v)) &&
   new Date(v).toISOString().slice(0, 10) === v;
-/** Target and author always come from server-owned report/session, never client labels. */
+
 export function validateFeedback(
   raw: unknown,
   report: DailyReport,

@@ -58,7 +58,7 @@ export function inventoryAging(row: InventoryRow) {
     suggestion,
   };
 }
-/** Select whole SKU rows; never truncate batches or recalculate their quantities after filtering. */
+
 export function filterInventory(rows: InventoryRow[], search: string, ages: AgeFilter[] = []) {
   const query = search.trim().toLowerCase();
   return rows.filter(
@@ -93,7 +93,6 @@ export function agingCells(row: InventoryRow): Array<string | number> {
   ];
 }
 
-/** Shared by batch-backed and configured-table projections of the same inventory. */
 export function agingAdvice(
   buckets: readonly number[],
   positiveQty: number,

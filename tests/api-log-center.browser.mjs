@@ -6,7 +6,6 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 
-// Use the GEA checkout from the same candidate group.
 const hostSource = resolve('../dsh-gea-plugin/src/host/api-log.ts');
 const host = await build({
   entryPoints: [hostSource],

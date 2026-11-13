@@ -270,7 +270,7 @@
 .confidence {
   font-size: 12px;
 }
-/* Visual tokens and spacing mirror safety stock's inventory-operations-workbench cards. */
+
 .kpiGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
@@ -575,7 +575,7 @@
   font-size: 13px;
   font-weight: 600;
 }
-/* Match the dealer inventory stock-tabs and stock-table surface. */
+
 .detailCard {
   border: 0;
   border-radius: 0;
@@ -1172,7 +1172,6 @@
 @media (prefers-reduced-motion: reduce) {
 }
 
-/* workbench-ui-style: shared visual roles, original business structure. */
 .shell {
   --red: var(--ui-accent);
   --red-deep: var(--ui-accent-hover);
@@ -1302,7 +1301,6 @@
   }
 }
 
-/* Same headline and supporting-row rhythm as the other KPI cards. */
 .kpiScopeLabel {
   margin-left: 6px;
   color: var(--muted);
@@ -1312,7 +1310,6 @@
   vertical-align: baseline;
 }
 
-/* The scope tabs begin at the board edge; their underline meets the header divider. */
 .header {
   height: 60px;
   min-height: 60px;
@@ -1397,12 +1394,10 @@
   display: none;
 }
 
-/* Use the APS workbench canvas beneath page content. */
 .shell {
   --canvas: var(--ui-canvas);
 }
 
-/* Keep the detail tabs unboxed; frame only the data table, as in base inventory. */
 .detailCard {
   background: transparent;
   box-shadow: none;
@@ -1420,7 +1415,6 @@
   background: var(--ui-surface);
 }
 
-/* Match the APS Sparkles mark in the AI insight heading. */
 .aiInsightIcon {
   background: #df1732;
   color: #fff;
@@ -1437,7 +1431,6 @@
     center/contain no-repeat;
 }
 
-/* APS red title tag: icon and label are one unit. */
 .aiInsightHeading {
   gap: 0;
 }
@@ -1459,7 +1452,6 @@
   letter-spacing: 0.08em;
 }
 
-/* Match the APS briefing card's stroke, spacing, and type scale. */
 .aiInsight {
   padding: 22px 24px;
   border: 1px solid #f2dadd;
@@ -1495,7 +1487,6 @@
   line-height: 1.75;
 }
 
-/* V1.7 central work area: compact toolbar, five metrics, one insight, structured detail. */
 .shell {
   --canvas: var(--ui-canvas);
   font-family: var(--ui-font);
@@ -1898,7 +1889,6 @@
   text-align: right;
 }
 
-/* The configured overview adapts to the actual business pane without oversized cards. */
 .shell .kpiGrid.compactKpiGrid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;

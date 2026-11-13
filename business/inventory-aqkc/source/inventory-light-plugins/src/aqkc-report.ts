@@ -67,7 +67,7 @@ export async function loadDailyReportInput(
         'safety_stock.material_name',
       ].some((field) => text(row[field]).includes('粽子'));
       const demand = nonnegative(row['safety_stock.planned_daily_demand']);
-      // Do not let the legacy numeric fallback turn missing seasonal facts into zero.
+
       const target =
         seasonal &&
         (demand === null ||

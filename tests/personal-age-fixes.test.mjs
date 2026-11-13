@@ -151,7 +151,7 @@ test('31-plus uses all three source bands and preserves a proven zero', async ()
   ]) {
     const input = daily();
     input.age[0].bands = bands;
-    // Deliberately unrelated average: over30 must come from counts, not the mean.
+
     input.age[0].weightedAge = 200;
     fixture(input);
     const { objects } = await personal.loadPersonal(() => {});

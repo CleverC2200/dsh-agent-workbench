@@ -1,5 +1,3 @@
-/* HTML pages use the current Workbench palette when Core has no overrides.
- * Host-projected inline tokens retain priority. Native Core styles are separate. */
 html body {
   --dsw-font-family: var(--workbench-font-family);
   --dsw-alias-label-primary: var(--workbench-text);

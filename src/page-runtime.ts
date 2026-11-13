@@ -24,7 +24,7 @@ function compressPageContext(
   const source = value.context as
     | (Record<string, unknown> & { parts?: Record<string, unknown> })
     | null;
-  // Card facts are not detail rows: a focus or row limit must not change their count or order.
+
   const preserveMetrics = [
     'inventory-customer',
     'inventory-orderfulfillment',
@@ -66,7 +66,7 @@ function compressPageContext(
     Buffer.byteLength(JSON.stringify(cardFacts), 'utf8') > MODEL_PAYLOAD_BUDGET - 1000
   )
     throw Error('PAGE_METRIC_CONTEXT_TOO_LARGE');
-  // Preserve query choices and computed scope facts; focus narrows result rows, including top objects.
+
   const controls =
     source?.parts?.pageFilters === undefined
       ? undefined
@@ -113,9 +113,7 @@ function compressPageContext(
   let context: unknown = value.context ?? null;
   try {
     context = JSON.parse(compressed.json);
-  } catch {
-    // 压缩结果不是合法 JSON 时退回原值：宁可大一点，也不能让上下文消失。
-  }
+  } catch {}
   if (
     (controls || riskFacts) &&
     context &&
@@ -152,17 +150,16 @@ function compressPageContext(
   };
 }
 
-/** The installed business adapter owns credentials, identity and actual authorization. */
 export interface PageBusinessGrant {
   readonly signal: AbortSignal;
-  /** Stable environment/tenant/user ownership from the installed authority; never a grant. */
+
   readonly referenceScope: string;
   readonly access: unknown;
-  /** Optional dedicated DMS grant, provided only by the authorized branch adapter. */
+
   branchStorage?(input: any, signal: AbortSignal): Promise<unknown>;
   branchDms?(input: any, signal: AbortSignal): Promise<unknown>;
   readSql?(input: any, signal: AbortSignal): Promise<unknown>;
-  /** Read-only model interpretation, executed under this page's business identity. */
+
   insight?(input: unknown, signal: AbortSignal): Promise<unknown>;
   workspace?(input: any, signal: AbortSignal): Promise<unknown>;
   heartbeat?(): void;
@@ -195,7 +192,6 @@ type OwnedPage = {
   off: () => void;
 };
 
-/** One page owner, queue, tool registry and reference lifetime for both real rendering modes. */
 export class PageRuntime {
   private readonly declarations = new Map<
     string,
@@ -377,7 +373,7 @@ export class PageRuntime {
     this.tools.dispose(owner.session);
     this.bridge.reset(owner.session);
     if (owner.htmlLease) this.html.close(owner.htmlLease);
-    // Reference access checks this owner again after saving; other Sessions keep their binding.
+
     owner.grant.release();
   }
   private async open(pageId: string, sessionId: string, resourceId: string, signal: AbortSignal) {

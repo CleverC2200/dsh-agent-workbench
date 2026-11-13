@@ -49,8 +49,7 @@ def update_agents(agents):
    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);module.main()
    continue
   if agent=='qll':
-   # Full-chain combines the independent base and downstream customer contracts, including
-   # their own missing-source checks. The legacy shared order probe is invalid here.
+
    import importlib.util
    spec=importlib.util.spec_from_file_location('qll_branch_orders',ROOT/'scripts/update-qll-branch-orders.py')
    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)

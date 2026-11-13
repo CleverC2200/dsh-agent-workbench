@@ -218,7 +218,7 @@ for (const failure of ['HTTP', 'network'])
     assert.match(h.notice(), /retry/);
     await new Promise((resolve) => setTimeout(resolve, 15));
     assert.equal(calls, 1);
-    // The button calls the current public discovery action, not a timer or secondary identity reader.
+
     await h.retry();
     assert.equal(calls, 2);
     assert.equal(h.notice(), '');

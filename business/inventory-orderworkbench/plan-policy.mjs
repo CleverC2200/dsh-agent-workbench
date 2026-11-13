@@ -1,10 +1,6 @@
-// Replaced only by an explicitly registered, governed policy query at assembly.
-// Missing policy data must never silently become a fixed calendar or next-month plan.
 export const missingPlanPolicySql =
   'SELECT NULL AS initial_day,NULL AS corrected_day,NULL AS rolling_day';
 
-// series_sort holds the maintained day; belong_to (777/888/999) is a node code.
-// Require exactly one record per node, including when duplicate values agree.
 export const publishedPlanPolicyQuery = {
   resultColumns: ['initial_day', 'corrected_day', 'rolling_day'],
   request: {

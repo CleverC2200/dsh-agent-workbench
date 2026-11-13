@@ -1,5 +1,3 @@
-// Source: 客户库存知识库, revision 431, 2026-10-20.
-// Formula and business classification stay separate from implementation caveats.
 export const customerMetricDefinitions = {
   stockedCustomers: {
     title: '有库存的客户数',

@@ -24,7 +24,7 @@ def replace_current(tree, etl=False, prune=True):
     for c in list(tree.find_all(exp.CTE)):
         name=c.alias
         if name=='customer_execution':
-            # Names remain metadata only. Quantities/statuses come exclusively from the new fact.
+
             cols=['executeorderno','executeorderlineno','warehouseid','cust_order_no','cust_code','header_addtime','requireddeliverytime','qtyordered','qtyallocated','qtyshipped','bizunitconvertrate','prapare_order_status','bizflowstatus','detailstatus','order_close_time','wms_close_time','canceltime','dmscanceltime','order_type','adjust_order_qty','pack_unitqty','delivery_qty','organizationid','ownerid','material_code']
             c.set('this',parse('SELECT DISTINCT '+','.join('e.'+n+' AS '+n for n in cols)+",n.cust_name AS cust_name,COALESCE(t.material_name,n.material_name) AS material_name FROM "+EXEC+" AS e INNER JOIN customer_warehouses AS w ON e.warehouseid=w.warehouse_code LEFT JOIN ("+unique_total()+") AS t ON t.warehouseid=e.warehouseid AND t.material_code=e.material_code LEFT JOIN (SELECT o.executeorderno AS executeorderno,o.executeorderlineno AS executeorderlineno,CASE WHEN COUNT(DISTINCT o.cust_name)=1 THEN MAX(o.cust_name) END AS cust_name,CASE WHEN COUNT(DISTINCT o.material_name)=1 THEN MAX(o.material_name) END AS material_name FROM agents_scm_execute_detail_d AS o GROUP BY o.executeorderno,o.executeorderlineno) AS n ON n.executeorderno=e.executeorderno AND n.executeorderlineno=e.executeorderlineno WHERE NULLIF(TRIM(e.executeorderno),'') IS NOT NULL AND e.executeorderlineno IS NOT NULL"));changed=True
         elif name=='customer_execution_keys':
@@ -79,7 +79,7 @@ def replace_health_stock(tree):
         if c.alias not in ['batch_skus','inventory_batch_totals']:continue
         original=c.this.copy()
         if 'overaged_qty' not in original.named_selects:continue
-        # Lot dates/aging stay in the lot source. Override only SKU quantities, once per key.
+
         for key in ['warehouseid','material_code']:
             if key not in original.named_selects:original.select('a.'+key+' AS '+key,copy=False)
         names=c.this.named_selects
@@ -89,8 +89,7 @@ def replace_health_stock(tree):
     return tree
 
 def preserve_selected_age_quantities(tree, age_filter):
-    # Warehouse totals have no batch age. An explicit age band must retain only
-    # the selected lot quantities, not the SKU's inventory across every age.
+
     if not age_filter:return tree
     for c in tree.find_all(exp.CTE):
         if c.alias!='batch_skus':continue
@@ -101,7 +100,7 @@ def preserve_selected_age_quantities(tree, age_filter):
     return tree
 
 def preserve_parameters(q,tree):
-    # Changing a source may make a calendar binding redundant; keep the public query contract.
+
     used=set(re.findall(r':(gea_p\d+)',tree.sql()))
     missing=set(q.get('parameterSpec',{}))-used
     if missing:
@@ -112,7 +111,7 @@ def preserve_parameters(q,tree):
     return tree
 
 def write_config(path,data):
-    # Preserve the repository JSON formatting; only replace changed SQL literals.
+
     text=path.read_text();before=json.loads(text);changes={}
     if isinstance(data,dict):
         pairs=[(before['queries'][k]['request']['sql'],q['request']['sql']) for k,q in data['queries'].items()]

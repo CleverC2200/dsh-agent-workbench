@@ -1,4 +1,3 @@
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import { useWorkbenchHost, type GeaSalesPlanActionReceipt } from '../../../bridge.ts';
 import { useCallback, useRef, useState } from 'react';
 import {
@@ -22,7 +21,7 @@ export const useSalesPlanAction = ({
 }) => {
   const host = useWorkbenchHost();
   const client = suppliedClient ?? host.salesPlan;
-  // attempt 固定一次用户意图和幂等键；retry 只能重放可安全重试的未知结果。
+
   const attempt = useRef(new SalesPlanActionAttempt(client));
   const renewAttempt = useRef(false);
   const operation = useRef(0);

@@ -1,4 +1,3 @@
-/** GEA 消息待办：服务端掌握状态，页面只提交当前版本和幂等键。 */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CopyKey } from './locales.ts';
 import type { NotificationItem } from '../shared/notifications.ts';
@@ -20,7 +19,6 @@ export interface InboxViewState {
   readonly readState: string;
 }
 
-/** 列表和详情读取彼此独立；导航后到达的旧响应直接丢弃。 */
 export function Inbox({
   t,
   navigation,
@@ -35,7 +33,7 @@ export function Inbox({
   const { pageNo, readState: state } = view;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
-  // 每次唤醒独立读取详情；手动选择不继续受上一条导航约束。
+
   const [selectedReceipt, setSelectedReceipt] = useState<string>();
   const navigationOwned = useRef(false);
   useLayoutEffect(() => {
@@ -521,10 +519,6 @@ export function Inbox({
   );
 }
 
-/**
- * 上游把业务类型、通知类型、来源都按内部编码下发，业务不需要看到编码本身。
- * 这里只登记可读名称；没登记的编码一律降级成通用说法，服务端给的可读文案才原样展示。
- */
 const businessTypeLabels: Readonly<Record<string, CopyKey>> = {
   sales_forecast: 'inboxBusinessTypeSalesPlan',
   sales_plan: 'inboxBusinessTypeSalesPlan',
@@ -536,7 +530,7 @@ const notificationSourceLabels: Readonly<Record<string, CopyKey>> = {
   'sales_plan.approval_required': 'inboxSourceSalesPlanApproval',
   'sales_plan.approval': 'inboxSourceSalesPlanApproval',
 };
-/** 上游 target 里的技术跳转类型（例如 AGENT）对业务没有意义，直接省略。 */
+
 const technicalTargetTypes = new Set(['agent', 'system', 'service', 'user', 'internal']);
 
 function readableText(
@@ -570,7 +564,6 @@ function sourceText(item: NotificationItem, t: Translate): string {
   );
 }
 
-/** 待办去向只保留业务能看懂的部分；全是技术字段时整段不显示。 */
 function targetText(item: NotificationItem, t: Translate): string {
   const target = item.target;
   if (!target) return '';
@@ -611,7 +604,6 @@ function formatDate(value: string | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-/** 待办列表/详情共用的一次读取；主页面「预警事件」抽屉也复用同一入口。 */
 export async function readNotifications<T = { value: unknown }>(
   query: object,
   signal?: AbortSignal,

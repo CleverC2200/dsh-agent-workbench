@@ -1,4 +1,3 @@
-/* Business Document geometry. Formal 508feea visuals and shipped Workbench width contract. */
 .agent-workbench-document {
   position: relative;
   height: 100%;
@@ -174,7 +173,6 @@ html[data-platform='darwin'] .agent-workbench-document-chrome {
   }
 }
 
-/* Formal conversation widgets consume the shared theme in the Core Document seat. */
 .agent-workbench-document .gea-conversation-toolbar,
 .agent-workbench-document .gea-agent-welcome {
   background: var(--workbench-surface);
@@ -284,7 +282,6 @@ html[data-platform='darwin'] .agent-workbench-document-chrome {
   font-weight: 600;
 }
 
-/* Share the FC toolbar row only when the complete controls fit. */
 .agent-workbench-document-chrome-shared {
   position: absolute;
   top: 0;

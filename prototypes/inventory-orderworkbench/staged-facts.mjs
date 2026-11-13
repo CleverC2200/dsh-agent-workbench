@@ -1,4 +1,3 @@
-/** Gateway-authorized cold reads may overlap report restore, but stay private until scope verification. */
 export function startWorkbenchStagedRead(load, signal) {
   const controller = new AbortController();
   const readSignal = AbortSignal.any([signal, controller.signal]);
