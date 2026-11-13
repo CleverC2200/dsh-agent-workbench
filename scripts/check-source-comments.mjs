@@ -52,7 +52,10 @@ const policy = existsSync(policyFile)
   : { assets: [] };
 for (const manifest of policy.manifests ?? []) {
   const source = JSON.parse(readFileSync(resolve(root, manifest.path), 'utf8'));
-  for (const [file, sha256] of Object.entries(source.files)) {
+  const files = Array.isArray(source.files)
+    ? source.files.map(({ path, sha256 }) => [path, sha256])
+    : Object.entries(source.files);
+  for (const [file, sha256] of files) {
     if (manifest.adapted?.includes(file)) continue;
     if (!/^[a-f0-9]{64}$/.test(sha256)) throw Error(`SOURCE_COMMENTS_MANIFEST: ${manifest.path}`);
     policy.assets.push({

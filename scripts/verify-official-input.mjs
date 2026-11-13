@@ -1,5 +1,5 @@
 import { readFileSync, realpathSync, existsSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, relative, isAbsolute, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 
@@ -46,11 +46,16 @@ export function verifyOfficialInput(
   const official = resolve(dirname(cordis), '../../../..');
   const head = verifyOfficialCore(official, registry);
   for (const [name, paths] of Object.entries(configuration.compilerOptions.paths)) {
-    if (
-      name.startsWith('@deepseek-ai/') &&
-      !paths.some((path) => existsSync(resolve(root, path)))
-    ) {
+    if (!name.startsWith('@deepseek-ai/')) continue;
+    const declarations = paths.map((path) => resolve(root, path)).filter(existsSync);
+    if (!declarations.length) {
       throw Error(`OFFICIAL_MATERIAL_REQUIRED: ${name} (${paths.join(', ')})`);
+    }
+    for (const declaration of declarations) {
+      const actual = realpathSync(declaration);
+      const local = relative(official, actual);
+      if (isAbsolute(local) || local === '..' || local.startsWith('..' + sep))
+        throw Error(`OFFICIAL_SOURCE_MISMATCH: ${name} (${actual}); expected ${official}`);
     }
   }
   return head;
