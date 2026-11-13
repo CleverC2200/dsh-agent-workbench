@@ -8,7 +8,6 @@ export type PasswordLoginInput = {
   captcha: string;
 };
 
-/** A read-only view of GEA's sole Host identity and its explicit login actions. */
 export interface BusinessAccount {
   getSnapshot(): Readonly<{
     state: string;

@@ -163,8 +163,7 @@ type LiveDemoPayload = DealerPromotionResult & {
   shortagePageSize: number;
   shortageSkus: LiveDemoSku[];
   mockedFields: string[];
-  // 当前经销商库存 Agent 尚未发布待审批任务数据源，页面必须保持真实空态，
-  // 不能沿用设计稿或参考项目中的示例任务。
+
   pendingTaskCount: number | null;
   pendingTasks: LivePendingTask[];
   capabilities: {
@@ -176,7 +175,6 @@ type LiveDemoPayload = DealerPromotionResult & {
   };
 };
 
-/** Adapt authorized inventory records without synthetic data fallback. */
 export async function loadDealerDemoPayload(
   customerCode?: string,
   options: DealerDashboardLoadOptions & { orderSuggestionsOnly?: boolean } = {},
@@ -362,7 +360,7 @@ export async function loadDealerDemoPayload(
   const hasNormalInventory = Boolean(inventoryDailySummary?.normalStockCoverage);
   const liveSkuFor = (record: Dashboard['records'][number], useDailyInventory = true) =>
     computeDealerSku(record, orderPrice(record), useDailyInventory);
-  // Reuse the final recommendation builder; non-suggested SKUs cannot consume the SAP budget.
+
   const pricingRecords = options.orderSuggestionsOnly
     ? dashboard.records.filter(
         (record) =>
@@ -481,7 +479,7 @@ export async function loadDealerDemoPayload(
       skuCount: customer.skuCount,
       stock: customer.inventory,
       transit: customer.inTransit ?? 0,
-      nearExpiryStock: 0, // 汇总源未提供临期数量，按用户约定取0。
+      nearExpiryStock: 0,
       normalStock: customer.normalInventory,
       stockAmount: customer.stockAmount,
       dailyRowCount: customer.dailyRowCount,
@@ -495,7 +493,7 @@ export async function loadDealerDemoPayload(
       skuCount: category.skuCount,
       stock: category.inventory,
       transit: category.inTransit ?? 0,
-      nearExpiryStock: 0, // 汇总源未提供临期数量，按用户约定取0。
+      nearExpiryStock: 0,
       normalStock: category.normalInventory,
       sales30: category.sales30,
       stockAmount: category.stockAmount,

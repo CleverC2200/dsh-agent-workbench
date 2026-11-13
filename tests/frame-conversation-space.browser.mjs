@@ -5,8 +5,6 @@ import { build } from 'esbuild';
 import { resolve } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 
-// Exercise the owned Document and the unmodified official Conversation content.
-// Public Session and composer-bar slots are recording fixtures, not live authorization.
 const bundle = await build({
   stdin: {
     contents: `

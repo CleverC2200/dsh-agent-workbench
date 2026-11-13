@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 
-/** Retain query diagnostics while missing business values render as dashes. */
 export function QueryErrors({
   errors,
   scope = 'business-data',

@@ -66,7 +66,6 @@ const shift = (day: string, days: number) => {
   return result.toISOString().slice(0, 10);
 };
 
-/** Select a covered snapshot before execution. Query failures never choose another source. */
 export function dailySummaryQuery(
   definition: unknown,
   snapshot: DailySummarySnapshot,

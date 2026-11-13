@@ -5,7 +5,6 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { candidatePackageNames, verifyCandidatePackageIdentity } from './candidate-input.mjs';
 
-/** Observe an explicit task input; admission and runtime receipts remain separate. */
 try {
   const { values } = parseArgs({
     options: {
@@ -186,7 +185,7 @@ try {
         };
       }
     });
-    // Remote observation may take time; report current local sources, not the earlier snapshot.
+
     rows = repositories.map(observeRepository);
     for (const row of rows) {
       if (row.error) reasons.push(`SOURCE_ERROR: ${row.repo}`);

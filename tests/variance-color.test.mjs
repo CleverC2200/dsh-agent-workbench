@@ -17,7 +17,6 @@ const m = await import(
   'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
 );
 
-/** V1.8 #14：差额正数红、负数绿、零和缺值保持中性，正负号保留在文案里。 */
 test('variance sign drives the colour class in both directions', () => {
   const classOf = (value) => m.salesPlanVarianceClass(value, 'red', 'green');
   assert.equal(classOf('924.74'), 'red', '正数用红色');

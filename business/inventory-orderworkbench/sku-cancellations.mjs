@@ -1,15 +1,7 @@
 import { ontimeWarehousesSql } from './ontime-queries.mjs';
 
-// User confirmed on 2026-11-09: movement pickup_point is the published
-// warehouse-master 归属工厂提货点 projection, not 自身提货点. Reduce the
-// warehouse mapping before joining; missing/conflicting assignments stay unknown.
 export const cancellationWarehousesSql = ontimeWarehousesSql;
 
-// Recover '*' only from the actual latest trace version. Retain all observations
-// at that version: partial/multiple warehouses or header identities cannot be
-// resolved by choosing MAX, nor by falling back to an older non-null version.
-// Apply this recovery only to positive known quantities; quantity-missing rows
-// remain pending under the separate quantity contract.
 export const cancellationWarehouseRecoverySql = `SELECT t.executeorderno,t.cust_code,
   MAX(NULLIF(TRIM(t.fromorderno),'')) AS fromorderno,
   MAX(NULLIF(TRIM(t.receive_wh),'')) AS receive_wh,
@@ -27,7 +19,6 @@ export const cancellationWarehouseRecoverySql = `SELECT t.executeorderno,t.cust_
     AND COUNT(DISTINCT NULLIF(TRIM(t.deliver_wh),''))=1
     AND MAX(NULLIF(TRIM(t.deliver_wh),''))<>'*'`;
 
-// Cancellation quantities belong to actual execution lines, never one unit per order.
 const fields = [
   'cust_code',
   'cust_order_no',
@@ -83,10 +74,6 @@ const sameSupplementLine = lineKeys
   )
   .join(' AND ');
 export function cancellationEventsSql({ dailySource, dailyOnly, periods = false }) {
-  // Preserve existing hourly lines and every known hourly quantity, including 0.
-  // User confirmed daily-only detailstatus=10 means valid and not deleted.
-  // Recover each missing field at the exact daily line before applying quantity
-  // priority. Known hourly 0 wins; never choose conflicting field data.
   const dailyQuantities = `SELECT ${lineKeys.join(',')},
     ${quantityFields
       .map(
@@ -134,17 +121,14 @@ export function cancellationEventsSql({ dailySource, dailyOnly, periods = false 
     LEFT JOIN agents_scm_execute_detail_hourly_d line_seen ON ${sameSupplementLine}
     WHERE (:gea_p900='' OR :gea_p900='郑州' OR d.belong_base=:gea_p900)
       AND (${dailyOnly} OR (d.detailstatus=10 AND line_seen.executeorderno IS NULL))`;
-  // Identical observations may be repeated by the snapshot. Conflicting values
-  // on one execution line remain unknown rather than choosing a quantity.
+
   const details = `SELECT ${fields.map((field) => (executionLineKeys.includes(field) ? field : `MAX(${field}) AS ${field}`)).join(',')},
     MAX(quantity_conflict) AS quantity_conflict,MAX(cancelled) AS cancelled,COUNT(*) AS source_rows,
     MIN(CASE WHEN orderstatus=90 THEN cancelled ELSE header_addtime END) AS first_business_time,
     MAX(CASE WHEN orderstatus=90 THEN cancelled ELSE header_addtime END) AS last_business_time
     FROM (SELECT DISTINCT ${fields.join(',')},quantity_conflict,cancelled FROM cancellation_source source_observations) distinct_lines
     GROUP BY ${executionLineKeys.join(',')}`;
-  // User-authorized missing-warehouse fallback: compare the order pickup point
-  // with the receiving warehouse's factory pickup. Keep actual/verified trace
-  // warehouses authoritative. Daily source publishes class names, hourly codes.
+
   const missingWarehouse =
     "NULLIF(NULLIF(TRIM(s.warehouseid),''),'*') IS NULL AND t.deliver_wh IS NULL";
   const sourceClass = `CASE

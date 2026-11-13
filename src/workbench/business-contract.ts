@@ -1,4 +1,3 @@
-/** Read-only actual GEA domain response contract used by the Native page. */
 export interface NativeBusinessStatus {
   environment: 'production' | 'test';
   environments: string[];

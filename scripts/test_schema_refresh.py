@@ -13,7 +13,7 @@ class SchemaRefreshTests(unittest.TestCase):
         self.assertEqual(row['last_month_actual_qty'],44)
         self.assertEqual(row['current_day_avg_qty'],2)
         self.assertEqual(row['rolling_ship_daily'],1)
-        # Missing new fields do not erase known stock or shipment quantities.
+
         self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET last_month_actual_qty=NULL,current_day_avg_qty=NULL')
         row=self.read('replenishment.detail.atomic')[0]
         self.assertIsNone(row['last_month_actual_qty'])
@@ -42,8 +42,7 @@ class SchemaRefreshTests(unittest.TestCase):
 
     def test_branch_turnover_cards_preserve_scope_and_denominator(self):
         self.config=config_for('qll')
-        # Recent movement on an order-only SKU belongs in the denominator;
-        # unrelated shipment-only SKUs remain outside the inventory/plan/order union.
+
         self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='WH2',warehouse_classify='20',material_code='OTHER',belong_base='基地1',live_qty=0,available_qty=0)
         self.insert('agents_scm_material_in_out_summary_d',warehouseid='WH2',pickup_point='P2',material_code='S3')
         self.insert('agents_scm_execute_detail_d',cust_order_no='O3',material_code='S3',pickup_point='P2',belong_base='基地1',bizflowstatus='创建',adjust_order_qty=40,qtyallocated=5)
@@ -87,7 +86,7 @@ class BasePlanSourceFieldTests(unittest.TestCase):
             tree=sqlglot.parse_one(q['request']['sql'],read='postgres')
             for cast in list(tree.find_all(sqlglot.exp.Cast)):
                 if cast.args['to'].this==sqlglot.exp.DataType.Type.DATE:cast.replace(cast.this.copy())
-            # The disabled base IN predicate still binds a scalar fixture, without changing SQL logic.
+
             for k,v in list(values.items()):
                 if isinstance(v,list):values[k]=v[0]
             row=dict(db.execute(tree.sql(dialect='sqlite'),values).fetchone())
@@ -96,4 +95,3 @@ class BasePlanSourceFieldTests(unittest.TestCase):
             self.assertEqual(row['base_sales_adjusted_plan'],9)
             self.assertEqual(row['base_production_plan'],14)
             self.assertEqual(row['base_production_adjusted_plan'],12)
-    # All generated SQL is additionally audited against the observed schema.

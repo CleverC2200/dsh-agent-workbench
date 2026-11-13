@@ -91,7 +91,6 @@ export async function executeAllGeaSqlPages(
   sql: string,
   options: GeaSqlRequestOptions = {},
 ): Promise<GeaSqlRow[]> {
-  // One range and identity own the entire read; no page can publish a partial result.
   const signal = options.signal
     ? AbortSignal.any([options.signal, lifetime.signal])
     : lifetime.signal;
@@ -122,10 +121,7 @@ export async function executeAllGeaSqlPages(
     const page = result.value!;
     signal.throwIfAborted();
     const pagePermissions = JSON.stringify([page.returnedColumns, page.rejectedColumns]);
-    // Some governed SQL hosts apply the statement as one atomic read and return
-    // every row even when the request carries page metadata. A complete first
-    // response is safe to consume; treating it as a short 200-row page leaves
-    // the business page blank despite having a consistent result set.
+
     const completeUnpagedFirstResponse =
       pageNo === 1 &&
       Array.isArray(page.rows) &&

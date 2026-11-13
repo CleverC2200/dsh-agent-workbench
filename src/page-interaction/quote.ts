@@ -1,4 +1,3 @@
-/** Explicit page-authored text enters the current Main draft, never a prompt or business receipt. */
 export type PageQuote = {
   label: string;
   text: string;

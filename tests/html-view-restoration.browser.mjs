@@ -81,7 +81,7 @@ async function fixture(t, includedAssets) {
   if (process.env.HTML_VIEW_BASELINE === '1')
     assets.sample = execFileSync('git', ['show', `${baseline}:samples/html-table.html`], {
       encoding: 'utf8',
-    }).replace('/* SHARED_THEME_RESOURCE */', await readFile('theme/tokens.css', 'utf8'));
+    }).replace('__SHARED_THEME_RESOURCE__', await readFile('theme/tokens.css', 'utf8'));
   await page.route('http://127.0.0.1:19478/**', (route) => {
     const key = new URL(route.request().url()).pathname.slice(1);
     return route.fulfill({
@@ -440,7 +440,7 @@ test('regional visible filters use the current public catalog and cancellation l
     .toBe(false);
   const author = page.frames().find((frame) => frame.url().endsWith('/regional'));
   assert.ok(author);
-  // Hold the author's application frame so cancellation reaches its actual pending task.
+
   await author.evaluate(() => {
     const requestFrame = window.requestAnimationFrame;
     const checkAbort = AbortSignal.prototype.throwIfAborted;
@@ -541,7 +541,6 @@ test('regional mounted author restores and republishes after its existing channe
     .toBe('2026-10-12');
 });
 
-// MPS reception observes the existing authored iframe and current channel output.
 async function addMpsProduct(frame) {
   const expand = frame.getByRole('button', { name: '展开产品明细', exact: true });
   if (await expand.isVisible()) await expand.click();
@@ -864,8 +863,6 @@ test('received MPS commits restored navigation and isolates restored local input
   assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
 });
 
-// Delay only the external transport. Context writes and reads use the real public
-// PageRuntime route and official Core tool service, never the iframe observation map.
 async function publicMpsContext(t, page) {
   const official = (path) => pathToFileURL(resolve('../../official-latest-standard', path)).href;
   const { Context } = await import(official('vendor/cordis/lib/index.js'));
@@ -1139,8 +1136,7 @@ test('MPS Host context discards a held old Session publication before restored a
     .poll(() => page.evaluate(() => window.heldHostContext?.parts?.navigation?.tab))
     .toBe('process');
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估' }).click();
-  // Settle the authored navigation/hash event before rebinding its Session;
-  // the external context delivery remains held across the entire switch.
+
   await expect(frame.locator('.ap-board-title')).toHaveText('产能评估与缺口');
   await expect
     .poll(() => page.evaluate(() => window.readState('plan-category-production')?.tab))
@@ -1319,9 +1315,7 @@ for (const boundary of ['Session', 'identity']) {
     await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
     await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
     await expect(frame.locator('.sp-count')).toHaveText(Array(6).fill('0 个单品'));
-    await expect(frame.getByRole('region', { name: '发货本地核对' })).not.toContainText(
-      'old-identity.csv',
-    );
+    await expect(frame.locator('body')).not.toContainText('old-identity.csv');
   });
 }
 

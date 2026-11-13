@@ -176,7 +176,6 @@ const inventoryAgentPages = new Set([
   'inventory-apsplan',
 ]);
 
-/** The single native/HTML presentation module. Host Session references are explicitly borrowed. */
 export type FrameCopyKey =
   | 'pageReconnect'
   | 'pageReconnecting'
@@ -209,7 +208,7 @@ export function mountFramePresentation(
     document.head.append(style);
     return () => style.remove();
   });
-  // Width preference survives page and mode changes within this Workbench instance.
+
   let rememberedConversationWidth: number | undefined;
   let execution: WorkbenchPageExecution | undefined;
   const backendListeners = new Set<() => void>();
@@ -1024,8 +1023,7 @@ function createExecution(
       signal,
     });
     const value = await response.json();
-    // Return a late opening's owner to setup so it can close it before releasing the Session.
-    // Other replies must never cross their cancelled generation.
+
     if (operation !== 'open') signal.throwIfAborted();
     if (!response.ok) throw Error(value.error ?? 'PAGE_REQUEST_FAILED');
     return value;

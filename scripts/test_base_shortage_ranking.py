@@ -3,12 +3,11 @@ import sqlite3
 import unittest
 from pathlib import Path
 
-
 class BaseShortageRankingTests(unittest.TestCase):
     def test_merges_bases_before_ranking_and_counts_only_positive_skus(self):
         config = json.loads((Path(__file__).resolve().parents[1] / 'business/inventory-aqkc/sql.config.json').read_text())
         sql = config['queries']['snapshot.current-shortage.sku-ranking']['request']['sql']
-        # Exercise the shipped aggregation and page SQL against independent input rows.
+
         sql = 'WITH filtered AS (SELECT * FROM facts)' + sql[sql.index('\n, sku_totals AS'):]
         with sqlite3.connect(':memory:') as db:
             db.execute('CREATE TABLE facts(snapshot_date TEXT,location_type TEXT,sku TEXT,material_name TEXT,demand REAL,allocated REAL,remaining REAL,available REAL,shortage REAL,invalid INTEGER)')
@@ -30,7 +29,6 @@ class BaseShortageRankingTests(unittest.TestCase):
             self.assertEqual(second[0]['scope_shortage'], 41)
             db.execute('UPDATE facts SET invalid=1 WHERE sku="C"')
             self.assertEqual(db.execute(sql, {'gea_p4': 10, 'gea_p5': 0}).fetchone()['scope_invalid'], 1)
-
 
 if __name__ == '__main__':
     unittest.main()

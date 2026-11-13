@@ -1,5 +1,3 @@
-// User definition, 2026-11-06: kamd/dc are late at 18h; other types at 12h.
-// Warehouse facts are reduced before joins; product movements must never multiply orders.
 export const ontimeMetricContract = {
   version: 'execution-arrival-18-12-complete-v1',
   source: 'agents_scm_order_trace_final_di',
@@ -48,7 +46,6 @@ const excluded = `CASE WHEN TRIM(t.is_dispatch)='否'
   OR TRIM(t.timeout_code) IN ('14','16','安全库存','调账订单')
   OR (${shortTransfer})=1 THEN 1 ELSE 0 END`;
 
-// Apply exclusions to the entire latest header, not to individual conflicting observations.
 const extendedGrace = "CASE WHEN LOWER(TRIM(t.cust_type)) IN ('kamd','dc') THEN 1 ELSE 0 END";
 const deadlineWithGrace = (fields) => `CASE WHEN MIN(${extendedGrace})=1
     THEN GREATEST(${fields}) + INTERVAL '18' HOUR
@@ -78,8 +75,6 @@ export const ontimeTraceHeadersSql = `SELECT t.executeorderno,t.cust_code,
 const tuple = (fields) =>
   fields.map((field) => `LENGTH(COALESCE(${field},'')),':',COALESCE(${field},'')`).join(',');
 export function createOntimeQueries(productsSql) {
-  // Find candidate keys first, then retain every observation at the actual latest
-  // update. Filtering latest rows by arrival would hide conflicting observations.
   const scopedTraces = ontimeTraceHeadersSql.replace(
     'SELECT executeorderno,cust_code,MAX(update_time) AS updated FROM agents_scm_order_trace_final_di GROUP BY executeorderno,cust_code',
     `SELECT history.executeorderno,history.cust_code,MAX(history.update_time) AS updated
@@ -91,13 +86,13 @@ export function createOntimeQueries(productsSql) {
       GROUP BY history.executeorderno,history.cust_code`,
   );
   const members = ['h.belong_base', 'd.product_categ_name', 'h.product_item', 'h.material_code'];
-  // Actual destination arrival proves shipment; a missing shipment timestamp must not drop it.
+
   const arrivals = `SELECT t.executeorderno,t.cust_code,t.arrived AS arrival_date,
     CASE WHEN t.invalid_scope=0 AND t.arrived<t.known_deadline THEN 1
       WHEN t.deadline IS NOT NULL AND t.invalid_scope=0 THEN CASE WHEN t.arrived<t.deadline THEN 1 ELSE 0 END END AS ontime,
     CASE WHEN t.invalid_scope>0 OR (t.deadline IS NULL AND (t.known_deadline IS NULL OR t.arrived>=t.known_deadline)) THEN 1 ELSE 0 END AS invalid
     FROM ontime_traces t WHERE t.arrived>=:gea_p1 AND t.arrived<:gea_p2`;
-  // Reject an entire virtual execution, even when different product lines disagree.
+
   const scopedProducts = productsSql.replace(
     ') execution_rows\n  WHERE ',
     `) execution_rows

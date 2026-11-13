@@ -1,4 +1,3 @@
-// Business-confirmed snapshot-day cutoffs apply independently to demand and transfer plans.
 export function workbenchPlanSql(kind) {
   if (!['sales', 'transfer'].includes(kind)) throw Error('INVALID_WORKBENCH_PLAN_KIND');
   const day = 'CAST(SUBSTRING(CAST(the_date AS CHAR),9,2) AS INTEGER)';

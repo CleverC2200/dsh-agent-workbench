@@ -8,7 +8,7 @@ import { GroupSkuSummary } from './GroupSkuSummary.tsx';
 import { RegionalSkuReview, type SkuReviewSnapshot } from './RegionalSkuReview.tsx';
 import { DashboardTableSkeleton } from './workbench-loading.tsx';
 import type { GeaSalesPlanListItem, GeaSalesPlanDetail } from '../../contracts.ts';
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
+
 import { salesPlanQueueStatusText, salesPlanStatusText } from './regionalApprovalQueryModel.ts';
 import { SALES_PLAN_RETURN_CODES } from '../../salesPlanWorkflow.ts';
 import {
@@ -173,9 +173,9 @@ export type RegionalApprovalWorkbenchContext = {
   skuReview?: SkuReviewSnapshot | null;
   visibleEntities: RegionalApprovalContextEntity[];
   selectedEntities: RegionalApprovalContextEntity[];
-  /** 当前展开的行（实时队列里就是 planId），用于让外部读到"展开了什么"。 */
+
   expandedPlanIds: string[];
-  /** 已展开行里的可编辑字段（SKU 确认计划量）：让外部能回读改后的值。 */
+
   expandedFields: Array<{
     id: string;
     label: string;
@@ -315,7 +315,7 @@ type PersistedApprovalWorkbenchState = {
   pageSize: number;
   dimension: ApprovalDimension;
   categoryComparison: boolean;
-  /** 审批流程图默认收起；同一次会话内记住用户展开/收起的选择。 */
+
   stageLaneOpen: boolean;
   selectedRowIds: string[];
   liveActionReceipts: Record<string, GeaSalesPlanActionReceipt>;
@@ -368,12 +368,12 @@ const RegionalApprovalWorkbench: React.FC<{
   submissionOutcomes?: readonly SalesPlanSubmissionOutcome[];
   submissionPending?: boolean;
   submissionRefreshRequest?: readonly string[];
-  /** 当前账号可审批的节点：由账号角色映射得出（Host 经网关解析用户角色后传入）。 */
+
   approvalStages?: readonly ApprovalStageId[];
-  /** AG-UI 前端工具调用：agent 让页面改这一屏怎么看。 */
+
   toolCall?: { toolCallId: string; command: Record<string, unknown> };
   onToolResult?: (toolCallId: string, applied: boolean, error?: string) => void;
-  /** 页面元素清单单独上报：它是页面能力，不属于页面状态快照。 */
+
   onCatalogChange?: (elements: PageElement[]) => void;
 }> = ({
   headerControls,
@@ -445,7 +445,7 @@ const RegionalApprovalWorkbench: React.FC<{
   >({});
   const [liveCategoriesLoading, setLiveCategoriesLoading] = useState(false);
   const [liveCategoriesError, setLiveCategoriesError] = useState(false);
-  // 只有最后一次品类汇总请求可以复位加载态，避免被中断的那次把遮罩留在页面上。
+
   const liveCategoriesRequest = useRef(0);
   const [versionMetrics, setVersionMetrics] = useState<
     Record<
@@ -479,8 +479,7 @@ const RegionalApprovalWorkbench: React.FC<{
   const [appliedLiveFilters, setAppliedLiveFilters] = useState<LiveApprovalFilters>(
     initialState.appliedLiveFilters,
   );
-  // 节点口径只认账号角色；没有角色就一个节点都没有（界面全灰），不再用通知/任务反推。
-  // 默认用登录时那一份；点刷新会重新解析角色并覆盖，管理员刚改完权限的人不必重新登录。
+
   const [refreshedStages, setRefreshedStages] = useState<readonly ApprovalStageId[]>();
   const roleSource = refreshedStages ?? approvalStages ?? [];
   const roleKey = [...roleSource].join(',');
@@ -494,9 +493,7 @@ const RegionalApprovalWorkbench: React.FC<{
     try {
       const result = await client.invoke({});
       setRefreshedStages(salesPlanStagesForRoles(result.roles ?? []));
-    } catch {
-      // 角色一时读不到就沿用当前节点口径，不把用户突然变成"一个节点都不能点"。
-    }
+    } catch {}
   };
   const [liveStageFilter, setLiveStageFilter] = useState<ApprovalStageId | undefined>(
     () => roleStages[0],
@@ -525,7 +522,6 @@ const RegionalApprovalWorkbench: React.FC<{
     return () => observer.disconnect();
   }, []);
 
-  // 销售计划审批默认收起筛选，用户通过漏斗图标展开。
   const [narrowFiltersExpanded, setNarrowFiltersExpanded] = useState(false);
   const filterPanelId = React.useId();
   const [exportFeedback, setExportFeedback] = useState<ExportFeedback>();
@@ -533,7 +529,7 @@ const RegionalApprovalWorkbench: React.FC<{
   const [liveAdjustmentMetrics, setLiveAdjustmentMetrics] = useState<
     Record<string, { quantity: string; amount: string }>
   >({});
-  // 内联明细里当前显示的本节点确认量（用户改过但可能还没落盘）；通过时优先用这份内存值，避免丢数。
+
   const [livePendingValues, setLivePendingValues] = useState<
     Record<string, Record<string, string>>
   >({});
@@ -552,7 +548,7 @@ const RegionalApprovalWorkbench: React.FC<{
   const [liveActionVisible, setLiveActionVisible] = useState(true);
   const [liveActionBusy, setLiveActionBusy] = useState(false);
   const [batchActionVisible, setBatchActionVisible] = useState(true);
-  // 对话下发的审批确认 / 退回理由草稿；审批本身仍走页面原有的对话框逻辑。
+
   const [approvalSubmitRequest, setApprovalSubmitRequest] = useState<{ at: number }>();
   const [approvalRemarkPatch, setApprovalRemarkPatch] = useState<{ at: number; remark: string }>();
   const [liveActionReceipts, setLiveActionReceipts] = useState(initialState.liveActionReceipts);
@@ -644,7 +640,6 @@ const RegionalApprovalWorkbench: React.FC<{
   }, [liveStageFilter, orderType]);
   const liveFiltersDirty = JSON.stringify(draftLiveFilters) !== JSON.stringify(appliedLiveFilters);
 
-  // 筛选范围内的完整计划集合：分组要覆盖全部数据，再按外层组织行分页。
   const allLiveRows = useMemo(
     () => (liveQuery.queueState.data?.records ?? []).map(toRegionalApprovalLiveRow),
     [liveQuery.queueState.data?.records],
@@ -706,10 +701,7 @@ const RegionalApprovalWorkbench: React.FC<{
     area: 0,
     category: 0,
   };
-  /**
-   * 悬停百分比时给出分子/分母：分母是该月该范围内全部状态的计划单数，分子是"已过本节点"的单数。
-   * 口径见 regionalApprovalQueryModel 的 salesPlanStageTallies，矩阵锁在 tests/approval-visibility。
-   */
+
   const stageProgressDetail = (stageId: ApprovalStageId) => {
     const tally =
       liveQuery.progressState.status === 'success'
@@ -778,8 +770,7 @@ const RegionalApprovalWorkbench: React.FC<{
     () => allLiveRows.toSorted((left, right) => livePriority(left) - livePriority(right)),
     [allLiveRows],
   );
-  // 外层行分页：先按维度分组，再按组织行翻页；页脚与分页器统计的都是外层行条数。
-  // 分组只依赖计划本身，不依赖版本汇总 / 品类汇总，避免“汇总刷新 → 行数组更新 → effect 再跑”的相互触发。
+
   const liveOuterRows = useMemo(() => {
     const levels: ApprovalDimension[] = ['base', 'area', 'province', 'region', 'customer'];
     const level = levels.indexOf(dimension);
@@ -800,9 +791,9 @@ const RegionalApprovalWorkbench: React.FC<{
     () => liveOuterRows.slice(livePageRange[0], livePageRange[1]),
     [liveOuterRows, livePageRange],
   );
-  // 当前页可见的计划行（未合并版本汇总与本节点调整）：能力预取、选择、导出、详情都只看这一页。
+
   const liveRows = useMemo(() => pagedOuterRows.flatMap((row) => row.members), [pagedOuterRows]);
-  // 展示用：把版本汇总与本节点调整叠加到当前页每条计划上（指标卡、助手上下文也读这份）。
+
   const draftedRowsByPlanId = useMemo(
     () => new Map(draftedAllLiveRows.map((row) => [String(row.planId), row])),
     [draftedAllLiveRows],
@@ -811,7 +802,7 @@ const RegionalApprovalWorkbench: React.FC<{
     () => liveRows.map((row) => draftedRowsByPlanId.get(String(row.planId)) ?? row),
     [draftedRowsByPlanId, liveRows],
   );
-  // 当前位置的展示树：外层行已在分组阶段切好，组内成员不会被拆到两页。
+
   const liveTableRows = useMemo<RegionalApprovalLiveTableRow[]>(() => {
     const planRows = (
       plans: RegionalApprovalLiveRow[],
@@ -877,14 +868,14 @@ const RegionalApprovalWorkbench: React.FC<{
     () => [...new Set([...expandedLiveGroups, ...(inlinePlanId ? [inlinePlanId] : [])])],
     [expandedLiveGroups, inlinePlanId],
   );
-  // 对话下发的草稿改写（确认计划量），交给对应行的内联编辑器应用。
+
   const [draftPatch, setDraftPatch] = useState<{
     at: number;
     planId: string;
     quantity: string;
     skuCodes?: string[];
   }>();
-  // 已展开行上报的"可编辑字段 + 集合"，合进本页元素清单。
+
   const [inlineElements, setInlineElements] = useState<
     Record<
       string,
@@ -902,7 +893,7 @@ const RegionalApprovalWorkbench: React.FC<{
     ) => {
       setInlineElements((current) => {
         const next = { ...current, [planId]: { fields, collection } };
-        // 子组件回调身份每轮都会变，内容没变就不要触发父级重渲染。
+
         return JSON.stringify(next) === JSON.stringify(current) ? current : next;
       });
     },
@@ -926,12 +917,7 @@ const RegionalApprovalWorkbench: React.FC<{
     visit(liveTableRows);
     return [...selected];
   }, [liveTableRows, selectedRowIds]);
-  /**
-   * 选中行必须与表格里「勾上的那些行」一一对应：按行的 tableRowId 展开成计划，
-   * 再按计划 ID 兜底。用字符串比较是为了不受上游 planId 是数字还是字符串的影响；
-   * 只按 liveRows.planId 过滤时，一旦选中集合里混进分组行 id，就会出现
-   * 「行是勾上的、通过/退回却是灰的」。
-   */
+
   const selectedLiveRows = useMemo(() => {
     const ids = new Set(selectedRowIds.map((id) => String(id)));
     const picked = new Map<string, RegionalApprovalLiveRow>();
@@ -1070,11 +1056,10 @@ const RegionalApprovalWorkbench: React.FC<{
   const sourceTypeReadOnly = (row: RegionalApprovalLiveRow) =>
     row.orderType != null && row.orderType !== orderType;
 
-  // 能审批的节点只来自账号角色：通知、任务、服务端对象能力都不参与身份判定。
   const authorizedStages = roleStages;
-  // 收起态的节点口径跟展开态高亮一致：用户选了哪个节点就显示哪个，切到「全部节点」就显示全部节点。
+
   const stageIndicatorStage = displayStage;
-  // 首次未选择节点时使用账号角色允许的第一个节点；只自动设一次，不覆盖后续用户选择。
+
   const defaultStageApplied = useRef(false);
   useEffect(() => {
     if (defaultStageApplied.current) return;
@@ -1168,7 +1153,6 @@ const RegionalApprovalWorkbench: React.FC<{
     ],
   );
 
-  // 节点身份由账号和当前选择决定；退回目标只决定通知位置。
   const liveActionRolesFor = (): readonly ApprovalStageId[] =>
     liveStageFilter ? [liveStageFilter] : roleStages;
   const liveActionDisabledReason = (
@@ -1199,7 +1183,6 @@ const RegionalApprovalWorkbench: React.FC<{
     return undefined;
   };
 
-  /** 与单笔按钮同源的角色解析：多角色账号按当前节点过滤逐个尝试，取第一个允许该动作的角色。 */
   const liveActionAccessFor = (row: RegionalApprovalLiveRow, kind: LiveActionKind) => {
     if (sourceTypeReadOnly(row)) return undefined;
     const detail = liveAccess.entries[row.versionId];
@@ -1225,7 +1208,7 @@ const RegionalApprovalWorkbench: React.FC<{
           }
         : { row, skipReason: liveActionDisabledReason(row, kind) ?? 'missingAuthority' };
     });
-  /** 分组内有可按角色审批或退回的成员时允许勾选。 */
+
   const resubmitAllowed = (row: RegionalApprovalLiveRow) => {
     const detail = liveAccess.entries[row.versionId];
     return Boolean(
@@ -1247,8 +1230,7 @@ const RegionalApprovalWorkbench: React.FC<{
         resubmitAllowed(plan),
     );
   };
-  // 分组选择会包含待回写/已回写成员；这两类终态在批次中明确跳过。
-  // 非终态的权限、版本或读取失败仍阻止执行，不能把未知权限当成可跳过。
+
   const selectedPendingActionRows = selectedLiveRows.filter(
     (row) => row.status !== 5 && row.status !== 10,
   );
@@ -1285,7 +1267,7 @@ const RegionalApprovalWorkbench: React.FC<{
       visibleCount: liveRows.length,
       pendingCount: liveRows.filter((row) => row.approvalState === 'pending').length,
       warningCount: liveRows.filter((row) => row.approvalState === 'returned').length,
-      // 汇总读展示行（含版本汇总与本节点调整），和表格里看到的数保持一致。
+
       quantity: serverSummary
         ? (serverSummary.planQty ?? '—')
         : draftedLiveRows.length === 0
@@ -1377,7 +1359,7 @@ const RegionalApprovalWorkbench: React.FC<{
 
   useEffect(() => {
     if (liveQuery.queueState.status !== 'success') return;
-    // 分页改为按分组后的外层行：页码只受本地页数约束，数据变化后越界就回到最后一页。
+
     if (page !== liveCurrentPage) setPage(liveCurrentPage);
   }, [liveQuery.queueState.status, page, liveCurrentPage]);
 
@@ -1432,12 +1414,11 @@ const RegionalApprovalWorkbench: React.FC<{
     };
   }, [liveQuery.periods.length, liveQuery.periodsState, liveQuery.queueState]);
 
-  // 这一屏"渲染出来的元素"：行 / 控件 / 可编辑字段，供页面桥声明给模型。
   const catalogElements = useMemo<PageElement[]>(() => {
     const fields = liveRows.flatMap((row) =>
       expandedLiveRowKeys.includes(row.planId) ? (inlineElements[row.planId]?.fields ?? []) : [],
     );
-    // 每一行都给一个"整行一起改"的集合：不必先展开，页面收到后会自己展开并加载 SKU。
+
     const collections = liveRows.map((row) => {
       const label = projectRegionalApprovalLiveDimension(row, dimension).name ?? row.planId;
       const members = inlineElements[row.planId]?.collection?.members ?? [];
@@ -1450,7 +1431,7 @@ const RegionalApprovalWorkbench: React.FC<{
     return buildWorkbenchElements({
       rows: liveRows.map((row) => ({
         planId: row.planId,
-        // label 不带勾选状态：勾选变化不该让元素清单整份变掉（它已经在页面状态里）。
+
         label: projectRegionalApprovalLiveDimension(row, dimension).name ?? row.planId,
         value: String(row.currentAmount ?? ''),
         expanded: expandedLiveRowKeys.includes(row.planId),
@@ -1513,7 +1494,6 @@ const RegionalApprovalWorkbench: React.FC<{
       fields,
       collections,
       ...(() => {
-        // 工具栏动作：只有按钮当前可点时才声明，和人工能点的范围一致。
         const actionRow = selectedLiveRows.length === 1 ? selectedLiveRows[0] : undefined;
         const actionElements: Array<{
           id: string;
@@ -1527,7 +1507,7 @@ const RegionalApprovalWorkbench: React.FC<{
               id: 'action:approve',
               label: `通过（${projectRegionalApprovalLiveDimension(actionRow, dimension).name ?? actionRow.planId}）`,
               actions: ['invoke'],
-              // 通过会真的落审批状态：对话必须在用户明确要求、并带上 confirm 时才下发。
+
               effect: 'approve',
             });
           if (actionRow.status !== 5 && !liveActionDisabledReason(actionRow, 'REJECT'))
@@ -1625,7 +1605,6 @@ const RegionalApprovalWorkbench: React.FC<{
           .slice(0, 120),
         metrics,
         pagination: {
-          // 与界面一致：分页对象是分组后的外层组织行。
           page: liveCurrentPage,
           pageSize,
           total: liveOuterRows.length,
@@ -1672,7 +1651,7 @@ const RegionalApprovalWorkbench: React.FC<{
 
   const changeStage = (stage: ApprovalStageId) => {
     if (orderType === 'Z' && liveStageFilter === stage) return;
-    // 再点当前节点就回到「全部节点」；没权限的节点已置灰，切不过来。
+
     const nextStage = liveStageFilter === stage ? undefined : stage;
     setLiveStageFilter(nextStage);
     setDimension(APPROVAL_DIMENSIONS_BY_STAGE[nextStage ?? 'category'][0]);
@@ -1720,14 +1699,11 @@ const RegionalApprovalWorkbench: React.FC<{
     return;
   };
 
-  // AG-UI 前端工具：右侧对话让页面改这一屏怎么看，只改视图，不改任何 GEA 数据。
-  // 参数是外部来源，先按当前可见行核对 planId，再走和手动操作一样的 setState；
-  // 结果统一按 AG-UI 的 tool 消息回填（失败必须带 error）。
   const appliedToolCallRef = useRef<string>();
-  // 始终指向最新的字段上报，供 apply 等待"值真的落上去"。
+
   const inlineElementsRef = useRef(inlineElements);
   inlineElementsRef.current = inlineElements;
-  // 元素清单改变时上报给页面桥（独立通道，不进页面状态快照）。
+
   useEffect(() => {
     onCatalogChange?.(catalogElements);
   }, [catalogElements, onCatalogChange]);
@@ -1856,7 +1832,7 @@ const RegionalApprovalWorkbench: React.FC<{
               const planId = id.split(':')[1];
               const row = liveRows.find((candidate) => candidate.planId === planId);
               if (!row) return rejectWith('PLAN_NOT_ON_CURRENT_PAGE');
-              // 复用界面自己的编辑权限判断：不允许编辑的计划，对话也改不了。
+
               if (!inlineSkuAccess(row).detail) return rejectWith('NO_EDIT_PERMISSION');
               const skuCode = id.startsWith('field:') ? id.split(':')[2] : undefined;
               setExpandedLiveGroups((current) =>
@@ -1868,7 +1844,7 @@ const RegionalApprovalWorkbench: React.FC<{
                 quantity: value,
                 ...(skuCode === undefined ? {} : { skuCodes: [skuCode] }),
               });
-              // 等字段真的变成目标值再回执：只报"收到"会让模型以为改好了。
+
               const landedDeadline = Date.now() + 4000;
               let landed = false;
               while (Date.now() < landedDeadline) {
@@ -1974,7 +1950,7 @@ const RegionalApprovalWorkbench: React.FC<{
             request.signal.throwIfAborted();
             const index = nextRow++;
             const row = liveRows[index];
-            // oxlint-disable-next-line no-await-in-loop -- bound detail reads to four concurrent requests；详情读取并发限制为四个。
+
             const skus = await (detailClient ?? salesPlan).versionSkus.invoke({
               versionId: row.versionId,
               signal: request.signal,
@@ -2142,17 +2118,12 @@ const RegionalApprovalWorkbench: React.FC<{
     return;
   };
 
-  // 节点条始终展示全部节点：角色决定能进哪些节点，没权限的节点置灰不可点，
-  // 明细由数据权限决定，因此「全部节点」这一视图保留。
   const stageAuthorized = (id: ApprovalStageId) =>
     (authorizedStages as readonly ApprovalStageId[]).includes(id);
 
-  // 先保留可读的最小宽度，再把面板剩余空间分配给内容列。
-  // Keep the approval queue dense once its columns have enough room to scan.
-  // The expanded SKU table deliberately follows a separate, roomier layout.
   const liveMinimumWidths =
     orderType === 'Z' ? [220, 112, 136, 136, 120, 136] : [220, 112, 136, 136];
-  // 选择框与展开按钮各占 40px，必须一起计入列宽预算。
+
   const liveMinimumWidth = liveMinimumWidths.reduce((total, width) => total + width, 260);
   const liveTableWidth = Math.max(
     liveMinimumWidth,
@@ -2301,7 +2272,7 @@ const RegionalApprovalWorkbench: React.FC<{
                     : organizationName
                 }
               >
-                {/* 展开态用名称前置小三角体现，不再单独占一列控件。 */}
+                {}
                 <span
                   className={styles.organizationCaret}
                   data-expanded={rowExpanded}
@@ -2394,7 +2365,7 @@ const RegionalApprovalWorkbench: React.FC<{
             data-testid={`regional-approval-month-plan-${tableRow.tableRowId}`}
           >
             <span>{exactMoney(tableRow.category.amount)}</span>
-            {/* 品类汇总行也带数量，单位跟指标卡一致：业务方 2026-09-23 反馈"数量要带件"。 */}
+            {}
             <small>
               {/^-?\d+(?:\.\d+)?$/.test(tableRow.category.quantity ?? '')
                 ? `${quantityText(tableRow.category.quantity)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`
@@ -2437,7 +2408,7 @@ const RegionalApprovalWorkbench: React.FC<{
                 };
           return (
             <div className={styles.categoryProgressCell}>
-              {/* V1.8 #09：达成率用进度条 + 百分比，百分比前不再带「金额」。 */}
+              {}
               <strong
                 title={
                   Number(tableRow.plan.targetAmount) === 0
@@ -2501,7 +2472,7 @@ const RegionalApprovalWorkbench: React.FC<{
           Number(baseTotal) !== 0
             ? (Number(tableRow.plan.targetAmount) * Number(category.baseAmount)) / Number(baseTotal)
             : undefined;
-        // 品类金额进度统一按「计划金额 ÷ 目标金额」计算，避免把原计划金额误当作分母。
+
         const categoryProgress =
           categoryTarget && categoryTarget !== 0
             ? (Number(category.amount) / categoryTarget) * 100
@@ -2828,7 +2799,7 @@ const RegionalApprovalWorkbench: React.FC<{
           refreshLiveAuthority();
         }}
         onRefresh={refreshLiveAuthority}
-        // 退回/通过只要没被服务端受理，勾选立刻收掉：留着会让人以为这批还能直接再点一次。
+
         onAttemptFailed={() => setSelectedRowIds([])}
         onClose={(pending) => {
           if (pending) setLiveActionVisible(false);
@@ -2840,7 +2811,6 @@ const RegionalApprovalWorkbench: React.FC<{
       />
     ) : null;
 
-  /** 多选批量审批：逐笔提交并逐笔回报结果，成功的先刷新权威队列，失败的保留在弹窗里。 */
   const liveBatchActionDialog =
     batchAction && liveActionsEnabled ? (
       <RegionalApprovalBatchActionDialog
@@ -2876,7 +2846,7 @@ const RegionalApprovalWorkbench: React.FC<{
           candidate.currentVersion.id === row.versionId,
       );
     if (!detail) return { detail: undefined, role: undefined, canEdit: false };
-    // 能编辑/审批的角色只来自账号角色；没有审批角色时只能靠服务端给的详情可读能力。
+
     const accessRoles = liveActionRolesFor();
     const editableRole = accessRoles
       .map((candidate) => ({
@@ -2969,7 +2939,7 @@ const RegionalApprovalWorkbench: React.FC<{
           {null}
         </div>
         <div className={styles.headerRight}>
-          {/* 流程图默认收起：收起态只在标题行右侧留一个「当前节点」入口，点开才占一整行。 */}
+          {}
           <Button
             type="text"
             size="small"
@@ -3459,7 +3429,7 @@ const RegionalApprovalWorkbench: React.FC<{
                   </Select>
                 </div>
                 {null}
-                {/* 删掉「组织范围」标题行后，状态标签跟查询/重置放在同一格，不丢信息也不挤占筛选列。 */}
+                {}
                 <div className={styles.filterActions}>
                   {null}
                   {liveFiltersDirty ? (
@@ -3711,8 +3681,7 @@ const RegionalApprovalWorkbench: React.FC<{
                             />
                           );
                         }}
-                        // V1.8 #10：去掉行首独立展开箭头，展开/收起统一走组织名称；这里只保留展开能力。
-                        // 宽度必须给非 0 值：Arco 计算固定列偏移时用 `width || 40`，给 0 会被当成 40，左列会压掉 40px。
+
                         expandProps={{ width: 1, icon: () => null }}
                         expandedRowKeys={expandedLiveRowKeys}
                         onExpandedRowsChange={setExpandedLiveGroups}
@@ -3730,8 +3699,6 @@ const RegionalApprovalWorkbench: React.FC<{
                           columnWidth: 40,
                           selectedRowKeys: selectedLiveTableRowIds,
                           onChange: (keys) => {
-                            // 分组行的勾选状态是「组内成员全部选中」的派生结果，不能按 key 是否存在直接重算：
-                            // 取消分组时只去掉分组 key，成员计划还在选，下一次渲染又把分组派生成勾选，表现为取消不掉。
                             const next = new Set(keys.map(String));
                             const displayed = new Set(selectedLiveTableRowIds);
                             const planIds = new Set(selectedRowIds);
@@ -3749,8 +3716,7 @@ const RegionalApprovalWorkbench: React.FC<{
                             for (const key of displayed) {
                               if (next.has(key)) continue;
                               const row = liveTableRowById.get(key);
-                              // 分组行只有在成员仍全部保留时才是「用户取消了整个分组」；
-                              // 否则它只是成员变化引起的派生取消，交给成员自己的 key 处理。
+
                               if (row?.kind === 'plan' && row.members?.length) {
                                 const members = row.members.map((member) => member.planId);
                                 if (!members.every((planId) => next.has(planId))) continue;
@@ -3762,8 +3728,6 @@ const RegionalApprovalWorkbench: React.FC<{
                             setSelectedRowIds([...planIds]);
                           },
                           checkboxProps: (row) => ({
-                            // 只要行里有能提交或退回的计划就允许勾选；整行都不可操作才置灰，
-                            // 保证「能勾上的行，按钮一定点得动」。
                             disabled: !liveRowSelectable(row),
                           }),
                         }}

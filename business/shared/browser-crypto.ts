@@ -1,5 +1,3 @@
-// Synchronous SHA-256 for deterministic workspace IDs, not credentials/signatures.
-// FIPS 180-4 operations; tested against Web Crypto/Node for UTF-8 and block boundaries.
 const K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
   0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -56,7 +54,7 @@ function digest(text: string) {
       b = a;
       a = (t1 + t2) >>> 0;
     }
-    // Avoid allocating arrays and iterators for every 64-byte data block.
+
     h[0] += a;
     h[1] += b;
     h[2] += c;

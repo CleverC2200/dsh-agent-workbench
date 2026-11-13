@@ -2,7 +2,6 @@ const empty = (value) => value === null || value === undefined || value === '';
 const valid = (value) => !empty(value) && Number.isFinite(Number(value));
 const key = (execution, material, customer) => JSON.stringify([execution, material, customer]);
 
-/** Explain the existing governed shortage join without inventing a SKU-only fallback. */
 export function shortageDiagnostics(facts, source, field = 'final_short_qty', kind = 'pending') {
   if (!source)
     return { reason: '系统未完成数据读取：缺货来源查询未成功或尚未完成，不能判定为源表无数据。' };

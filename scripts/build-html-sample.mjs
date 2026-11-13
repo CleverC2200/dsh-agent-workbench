@@ -1,4 +1,3 @@
-/** Assemble the verification page with the exact shared resource; no network assets. */
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { compileHtmlAuthor } from './html-author.mjs';
@@ -6,12 +5,12 @@ import { fileURLToPath } from 'node:url';
 
 const resource = await readFile(new URL('../theme/tokens.css', import.meta.url), 'utf8');
 const sha256 = createHash('sha256').update(resource).digest('hex');
-if (sha256 !== '281fe7eebe0775b6bedabad6806753db6afe5eded52e6d9ade54067d23e20ef8') {
+if (sha256 !== '51d07dd91c4e2851301c046556a9c34aded00c5fa94525420b949badce9a5497') {
   throw new Error('HTML_SAMPLE_THEME_RESOURCE_MISMATCH: expected shared theme 1.1.1');
 }
 const source = await readFile(new URL('../samples/html-table.html', import.meta.url), 'utf8');
 const html = await compileHtmlAuthor(
-  source.replace('/* SHARED_THEME_RESOURCE */', resource),
+  source.replace('__SHARED_THEME_RESOURCE__', resource),
   fileURLToPath(new URL('../samples/', import.meta.url)),
 );
 const directory = new URL('../lib/samples/', import.meta.url);

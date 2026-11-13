@@ -2,24 +2,19 @@ import { createOntimeQueries } from './ontime-queries.mjs';
 export { ontimeTraceHeadersSql } from './ontime-queries.mjs';
 import { skuAmendmentEventsSql, aggregateAmendmentSql } from './sku-amendments.mjs';
 import { cancellationEventsSql, aggregateCancellationSql } from './sku-cancellations.mjs';
-// A refresh can empty the hourly table, and its retention does not cover history.
-// Prefer a whole hourly execution header, including cancelled/excluded rows, so
-// the daily snapshot cannot resurrect obsolete SKU membership or order status.
+
 const sameExecution = ['cust_code', 'cust_order_no', 'executeorderno', 'belong_base']
   .map(
     (key) =>
       `(CASE WHEN seen.${key} IS NULL THEN 'N' ELSE CONCAT('V',seen.${key}) END)=(CASE WHEN d.${key} IS NULL THEN 'N' ELSE CONCAT('V',d.${key}) END)`,
   )
   .join(' AND ');
-// An uncorrelated anti join preserves NULL-safe header identity on the governed gateway.
+
 const dailySource = `agents_scm_execute_detail_d d LEFT JOIN
   (SELECT DISTINCT cust_code,cust_order_no,executeorderno,belong_base,1 AS header_present
    FROM agents_scm_execute_detail_hourly_d) seen ON ${sameExecution}`;
 const dailyOnly = 'seen.header_present IS NULL';
 
-// Header event observations remain available independently of quantity aggregation.
-// Daily and hourly snapshots publish the same OMS event fields. Keep the newer
-// hourly value; recover a missing value only from an unambiguous exact header.
 export const orderEventRowsSql = `SELECT h.cust_code,h.cust_order_no,h.belong_base,
   h.region_name,h.province_region_name,h.cust_name,h.header_addtime,
   h.requireddeliverytime,h.orderstatus,
@@ -83,7 +78,6 @@ export function periodChangesSql(kind) {
   };
 }
 
-// Collapse the latest header observation before joining any product quantities.
 export const traceHeadersSql = `SELECT t.executeorderno,t.cust_code,
   CASE WHEN COUNT(DISTINCT COALESCE(t.lastshipmenttime,t.wms_order_close_time))=1
     AND COUNT(COALESCE(t.lastshipmenttime,t.wms_order_close_time))=COUNT(*)
@@ -116,9 +110,6 @@ export const executionProductsSql = `SELECT cust_order_no,cust_code,material_cod
   WHERE detailstatus=10 AND is_stat='1' AND (:gea_p900='' OR belong_base=:gea_p900)
   GROUP BY cust_order_no,cust_code,material_code,executeorderno,belong_base,detailstatus`;
 
-// fromorderno_month is the upstream final-shipment business date. Select the
-// latest original-order period before summing splits, so older observations
-// cannot duplicate demand or invalidate a normally split product.
 const mergedProducts = `SELECT fromorderno,cust_code,new_material_code AS sku,
   MAX(belong_base) AS base,MAX(product_categ_name) AS category,MAX(pinxiang) AS item,
   MAX(new_material_name) AS name,SUM(need_qty_origin) AS demand,SUM(qtyshipped) AS sent,
@@ -138,9 +129,6 @@ const mergedProducts = `SELECT fromorderno,cust_code,new_material_code AS sku,
       AND (:gea_p900='' OR belong_base=:gea_p900)) cleaned
   GROUP BY fromorderno,cust_code,new_material_code`;
 
-// The fulfillment source also declares its exact child executions (comma list).
-// Use those only when no unambiguous execution-detail link exists. Never bypass
-// a known but incomplete split, or substitute the source's refresh complete_time.
 export const fulfillmentExecutionsSql = `SELECT DISTINCT m.fromorderno,m.cust_code,m.new_material_code,
   TRIM(child_execution) AS executeorderno
   FROM agents_order_execute_isontime_mi m
@@ -155,8 +143,6 @@ export const fulfillmentShippingSql = `SELECT e.fromorderno,e.cust_code,e.new_ma
     ON t.executeorderno=e.executeorderno AND t.cust_code=e.cust_code
   GROUP BY e.fromorderno,e.cust_code,e.new_material_code`;
 
-// The upstream business period is assigned once per original order, after final
-// shipment. Do not reassign each SKU through incomplete downstream trace tables.
 export const ordersSql = `SELECT m.base,m.category,m.item,m.sku,MAX(m.name) AS name,
   SUM(m.demand) AS demand,
   SUM(GREATEST(m.demand-LEAST(m.sent,m.demand),0)) AS shortage,
@@ -169,7 +155,6 @@ export const ordersSql = `SELECT m.base,m.category,m.item,m.sku,MAX(m.name) AS n
   WHERE m.period_end>=:gea_p1 AND m.period_end<:gea_p2
   GROUP BY m.base,m.category,m.item,m.sku`;
 
-// Virtual codes use OMS details, not the normalized trace label.
 export const ontimeExecutionProductsSql = `SELECT cust_order_no,cust_code,material_code,executeorderno,
   belong_base,detailstatus,
   CASE WHEN COUNT(DISTINCT NULLIF(TRIM(product_item),''))=1 THEN MAX(NULLIF(TRIM(product_item),'')) END AS product_item,

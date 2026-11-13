@@ -4,7 +4,6 @@ type Flight<T> = {
   subscribers: number;
 };
 
-/** Share pending reads only; completed results and identity-scoped caching belong to the Host. */
 export function inFlightQueries<T>() {
   const pending = new Map<string, Flight<T>>();
   return (key: string, run: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal) => {

@@ -1,4 +1,3 @@
-/** Select required and affected tests from the admitted source group, never a full-suite fallback. */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, globSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -124,7 +123,7 @@ function references(file, roots, known, importsOnly = false) {
   const result = new Map();
   if (/\.(?:json|ya?ml)$/.test(file)) return result;
   const text = readFileSync(file, 'utf8');
-  // Keep comments and quoted examples out of the executable syntax we inspect.
+
   const tokenize = (source) =>
     (
       source.match(
@@ -211,7 +210,7 @@ function references(file, roots, known, importsOnly = false) {
       parameters: argumentsOf(open).map(({ start, end }) => (start === end ? tokens[start] : null)),
     });
   }
-  // Array callbacks consume the receiver's values; declaration text alone is not a dependency.
+
   const mappedValues = [];
   for (let index = 2; index < tokens.length; index++) {
     if (tokens[index] !== 'map' || tokens[index - 1] !== '.' || tokens[index + 1] !== '(') continue;
@@ -324,7 +323,7 @@ function references(file, roots, known, importsOnly = false) {
     return names;
   };
   const names = [];
-  // esbuild executes stdin.contents as source, so its imports are real dependency edges.
+
   for (let index = 0; index < tokens.length; index++) {
     if (tokens[index] !== 'stdin' || tokens[index + 1] !== ':' || tokens[index + 2] !== '{')
       continue;
@@ -389,7 +388,6 @@ function references(file, roots, known, importsOnly = false) {
       ['resolve', 'join'].includes(tokens[index + 2]) &&
       tokens[index + 3] === '('
     ) {
-      // Cordis plugin entries execute the named module, including lib -> src inputs.
       start = index + 3;
       recursive = true;
     }
@@ -662,7 +660,7 @@ export function selectCiTests({
         : pool.filter((file) => reaches(resolve(root, file), change.path));
     const matched = [...mapped, ...consumers];
     const files = [...new Set(matched.map(directFile))].sort();
-    // Source with no known consumer must be mapped explicitly, rather than silently receiving a green result.
+
     if (
       !files.length &&
       !rules.length &&

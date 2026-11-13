@@ -1,4 +1,3 @@
-// Management is open to all users in this version.
 export async function deleteDetectionTask({
   state,
   id,
@@ -14,7 +13,7 @@ export async function deleteDetectionTask({
     return task;
   }
   if (running.has(id)) throw Error('检测正在执行，请执行结束后再删除');
-  // Stop the scheduler first: a failed stop must leave a recoverable task.
+
   running.add(id);
   try {
     await stopJob(task.jobId);

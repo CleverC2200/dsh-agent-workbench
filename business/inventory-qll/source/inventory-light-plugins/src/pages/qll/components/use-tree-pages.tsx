@@ -100,8 +100,7 @@ export function useTreePages(workspace: any, kind: 'structure' | 'aging' | 'orde
         controllers.current.delete(key);
       }
   };
-  // A stored child expansion key is not visible when its ancestor is collapsed
-  // or when its parent's current page no longer contains that child.
+
   const retainVisible = (roots: readonly any[], expanded: readonly (string | number)[]) => {
     const activeKeys: (string | number)[] = [],
       open = new Set(expanded);

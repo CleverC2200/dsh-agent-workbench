@@ -33,7 +33,7 @@ export function apply(
         references: createReferenceStore(domain.table('references')),
       })));
     };
-    // Pending writes drain through Core's domain lifecycle. User snapshots survive teardown.
+
     scope.effect(() => () => {
       closed = true;
       writes.controller.abort();

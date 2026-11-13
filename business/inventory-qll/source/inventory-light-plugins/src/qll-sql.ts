@@ -1,6 +1,6 @@
 import sqlConfiguration from '../../../sql.config.json';
 import { sqlTemplate as configuredSql } from '../../../../shared/sql-config.ts';
-// Fixed company queries selected from registered original15 096e2ccf43a2d766853163754d7469ccb8879fb1.
+
 const BASE_SQL = configuredSql(sqlConfiguration, 'inventory-light-plugins.src.qll-sql.1');
 
 const BRANCH_SQL = configuredSql(sqlConfiguration, 'inventory-light-plugins.src.qll-sql.2');

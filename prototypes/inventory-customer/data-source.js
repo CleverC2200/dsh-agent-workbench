@@ -18,8 +18,6 @@ async function readCustomerRows(sql, columns, options, order = ['cust_code']) {
   return unpackRowPackets(packets, columns, ['cust_code']);
 }
 
-// Keep the SQL fixed. GEA supplies the current business identity and enforces
-// the consumer's table/column grant before any row reaches this page.
 export const CUSTOMER_INVENTORY_SQL = `
 WITH snapshot AS (
   SELECT MAX(create_date) AS plan_date FROM agents_scm_cust_plan_order_analysis_d
@@ -176,8 +174,7 @@ export async function loadCustomerInventory(options = {}) {
     }));
     const inventory = {...mapCustomerInventoryRows(mergeCustomerPlanRows(joined, plans)),
       planState, addressState: addresses.state, managerState: managers.state};
-    // A table page uses exactly the complete, validated facts behind its cards.
-    // Refresh and identity/session invalidation own the lifetime of this load.
+
     const byCode = new Map(inventory.rows.map(row => [String(row.code), structuredClone(row)]));
     if (byCode.size !== inventory.rows.length) throw Error('CUSTOMER_PAGE_INCOMPLETE');
     inventory.readDetails = async (codes, {signal} = {}) => {
@@ -198,7 +195,7 @@ export async function loadCustomerInventory(options = {}) {
     addressRead.then(value => { supplements.addresses = value; notify(); }),
     managerRead.then(value => { supplements.managers = value; notify(); }),
   ]);
-  // Observe cancellation/errors even if the primary inventory fails first.
+
   void enrichment.catch(() => {});
   rows = await inventoryRead;
   options.signal?.throwIfAborted();

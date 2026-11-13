@@ -1,4 +1,3 @@
-/** SQL lives in the installed Agent configuration. No eval or executable config. */
 import { immutableQueryConfig } from './configured-query-client.mjs';
 export type AgentSqlConfig = {
   schemaVersion: number;
@@ -12,15 +11,11 @@ const configs = new Map<string, AgentSqlConfig>();
 export const isDirectSqlPreview = () =>
   typeof document !== 'undefined' && !!document.getElementById('agent-sql-direct');
 
-/** Select the configured source independently of the execution transport. */
 export const usesConfiguredSql = () =>
   isDirectSqlPreview() ||
   (typeof document !== 'undefined' && !!document.getElementById('agent-sql-config'));
 
-/** The Host injects the current adjacent file before the application starts. */
 export function agentSqlConfig(fallback: AgentSqlConfig): AgentSqlConfig {
-  // A Host read supplies its installed config on each execution. Only a page
-  // owns a stable DOM-injected config for its lifetime.
   const previous = typeof document === 'undefined' ? undefined : configs.get(fallback.agentId);
   if (previous) return previous;
   const element =
@@ -40,7 +35,6 @@ export function agentSqlConfig(fallback: AgentSqlConfig): AgentSqlConfig {
   return snapshot;
 }
 
-/** Fixed SQL fragments retain their original composition; values stay bound separately. */
 export function sqlTemplate(
   fallback: AgentSqlConfig,
   id: string,

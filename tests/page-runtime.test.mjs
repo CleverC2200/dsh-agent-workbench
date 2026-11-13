@@ -625,7 +625,6 @@ test('a saved reference survives normal page reopen but requires its current vie
   assert.equal((await h.readReference(receipt.id)).status, 403);
 });
 
-// Migrated from GEA's retired html-sessions tests: exercise the owned fetch/tool interface.
 test('invalid context is rejected without replacing the current HTML observation', async (t) => {
   const h = await mount(t);
   const owner = (await h.open()).value.owner;

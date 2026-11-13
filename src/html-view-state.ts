@@ -1,5 +1,5 @@
 import { mpsLocalStateSchema, type MpsLocalState } from './mps-local-draft.ts';
-/** UI intent only. Page owners re-check restored object IDs against their current visible data. */
+
 export type HtmlViewPage =
   | 'workbench-html-table'
   | 'gea-regional-plan'
@@ -38,7 +38,7 @@ type FcFilters = {
   ageFilters: string[];
   orderStatusV2: string;
 };
-/** Versioned transport projections of the existing Repository records, excluding applied/action facts. */
+
 type FcDraft = {
   quantities: Record<string, number>;
   reasons: Record<string, string>;
@@ -512,7 +512,7 @@ const line = (v: unknown) =>
   });
 const transfer = (v: unknown) =>
   shape(v, { id: text, from: text, to: text, code: text, name: text });
-/** Reject undeclared fields rather than turning a page snapshot into a generic state/authority store. */
+
 export function validHtmlViewState(page: string, value: unknown): value is HtmlViewState {
   if (!isHtmlViewPage(page) || !object(value) || value.version !== 1) return false;
   switch (page) {

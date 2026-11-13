@@ -61,7 +61,6 @@ test('confirmed identity invalidates inactive business associations before a pag
   owner.leaveDocument();
   navigated.length = 0;
 
-  // Initialization and observation errors are not logout receipts.
   for (const identity of [
     { state: 'unknown', scope: null, status: null },
     { state: 'confirmed', scope: 'new-generation', status: null, error: 'unavailable' },

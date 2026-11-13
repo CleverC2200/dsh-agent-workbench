@@ -2,8 +2,7 @@
 from pathlib import Path
 import json,re,datetime
 ROOT=Path(__file__).resolve().parents[1];p=ROOT/'business/inventory-fc/sql.config.json';c=json.loads(p.read_text());aps=json.loads((ROOT/'business/inventory-apsplan/sql.config.json').read_text())
-# Reuse the already-reviewed MES production-base mapping; warehouse ownership
-# is not the production factory of transferred inventory.
+
 case=re.search(r"CASE t.factory_code WHEN .*? ELSE NULL END",aps['queries']['page.production']['request']['sql'])[0].replace('t.factory_code','p.factory_code')
 sql='''WITH plant_bases AS (
  SELECT b.plant AS plant,CASE WHEN COUNT(DISTINCT NULLIF(TRIM(b.belong_base),''))=1 THEN MAX(NULLIF(TRIM(b.belong_base),'')) ELSE NULL END AS base

@@ -22,7 +22,6 @@ const { outputFiles } = await build({
 });
 const css = await readFile(new URL('../src/client/native-pages.css', import.meta.url), 'utf8');
 
-/** 上游真实下发的形状：业务类型、来源、通知类型都是内部编码，聚合标识是 UUID。 */
 const aggregateId = '31babed6-1b81-4d7b-a2c3-52bfa571bd23';
 const item = {
   id: 'notice-1',
@@ -68,7 +67,6 @@ test('inbox shows business wording instead of upstream codes and identifiers', a
   await page.addStyleTag({ content: css });
   await page.addScriptTag({ content: outputFiles[0].text });
 
-  // 列表：业务类型列只出现业务名称。
   const kindCell = page.locator('.gea-inbox-kind').first();
   await expect(kindCell).toHaveText('销售计划');
   await expect(page.locator('.gea-inbox table')).not.toContainText('sales_forecast');
@@ -78,7 +76,6 @@ test('inbox shows business wording instead of upstream codes and identifiers', a
   const drawer = page.getByRole('dialog');
   await expect(drawer.getByRole('heading', { name: item.title, exact: true })).toBeVisible();
 
-  // 详情：来源与动作提示换成业务说法，技术跳转类型 AGENT 不再出现。
   const info = drawer.locator('article > dl.gea-inbox-info').first();
   await expect(info).toContainText('销售计划审批');
   await expect(info).not.toContainText('sales_plan.approval_required');
@@ -90,7 +87,6 @@ test('inbox shows business wording instead of upstream codes and identifiers', a
   await mkdir('.runtime/web-evidence', { recursive: true });
   await page.screenshot({ path: '.runtime/web-evidence/inbox-business-labels.png' });
 
-  // 详情只保留业务要看的字段，上游标识与通知类型/有效期整块不再展示。
   await expect(drawer).not.toContainText('更多信息');
   await expect(drawer).not.toContainText('审批通知');
   await expect(drawer).not.toContainText('有效期至');

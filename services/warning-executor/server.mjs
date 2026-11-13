@@ -113,8 +113,7 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
         invalid('执行器认证失败', 403);
       return;
     }
-    // This deployment's admin has no protocol token. Its loopback-only requests
-    // still need an independently authenticated scheduler log before execution.
+
     if (
       config.protocolAuth !== 'loopback-log' ||
       config.host !== '127.0.0.1' ||
@@ -143,8 +142,7 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
       author: '',
     });
     const task = definitions.data?.find((item) => item.id === input.jobId);
-    // XXL writes executor details into its log after /run returns. The saved
-    // task definition is authoritative for those fields during dispatch.
+
     if (
       !log ||
       log.jobGroup !== groupId ||

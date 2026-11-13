@@ -6,7 +6,7 @@ path=ROOT/'business/inventory-fc/sql.config.json';config=json.loads(path.read_te
 source=(ROOT/'business/inventory-fc/current-shortage-source.sql').read_text().strip()
 canonical_ctes,canonical_select=source.rsplit('\nSELECT',1)
 canonical_ctes=canonical_ctes.removeprefix('WITH ')
-# Keep the same source/status/allocation/three-stage formula as the current-order card.
+
 current_ctes=canonical_ctes+', fc_current_orders AS (SELECT'+canonical_select+'''), fc_order_presence AS (
 SELECT COUNT(*) AS source_order_count FROM (SELECT 1 AS present FROM agents_scm_execute_detail_d AS probe_order LIMIT 1) AS order_probe
 )'''
@@ -27,7 +27,7 @@ def period_cte():
 def add_period_params(q):
  for key,name,example in [(month_key,'month','2026-10-01')]:
   q['parameterSpec'][key]={'name':name,'type':'string','format':'YYYY-MM-01','nullable':False,'required':True,'example':example};q['request']['parameters'][key]=example
- # Some existing replenishment queries already expose month. Reuse that slot.
+
  existing=next((k for k,s in q['parameterSpec'].items() if s['name']=='month' and k!=month_key),None)
  if existing:
   q['parameterSpec'].pop(month_key);q['request']['parameters'].pop(month_key)
@@ -42,7 +42,7 @@ for id in ['replenishment.detail','replenishment.detail.atomic','transfer_plan.d
  s='WITH '+prefix+', '+s.removeprefix('WITH ')
  final_from=s.rfind(' FROM scope_count AS n') if id=='replenishment.detail.atomic' else s.rfind(' FROM filtered AS r')
  if id=='transfer_plan.detail.atomic':
-  # Existing atomic transfer page is wrapped in a derived page; enrich its inner detail once.
+
   inner_marker=' FROM filtered AS r LEFT JOIN branch_stock AS hs'
   final_from=s.index(inner_marker)
   alias='r'
@@ -59,7 +59,7 @@ for id in ['replenishment.detail','replenishment.detail.atomic','transfer_plan.d
   for out,field in [('current_order_demand','demand_qty'),('current_order_allocated','allocated_qty'),('current_order_remaining','remaining_qty'),('current_order_shortage','shortage_qty')]:
    cols[out]=f'CASE WHEN op.source_order_count=0 OR co.invalid_sku<>0 THEN NULL ELSE COALESCE(co.{field},0) END'
   cols['expected_month_end_qty']='CAST(NULL AS DECIMAL(20,6))'
- # Add fields to the selected page without changing its scope, ordering or count.
+
  s=s[:final_from]+', '+', '.join(expr+' AS '+name for name,expr in cols.items())+s[final_from:]
  if id=='replenishment.detail.atomic':
   needle=' FROM scope_count AS n LEFT JOIN page_rows AS p ON 1 = 1'
@@ -70,16 +70,16 @@ for id in ['replenishment.detail','replenishment.detail.atomic','transfer_plan.d
  at=s.rfind(needle)
  s=s[:at+len(needle)]+join+s[at+len(needle):]
  if id=='transfer_plan.detail.atomic':
-  # Atomic envelope's outer projection must carry every enriched detail field.
+
   at=s.index(' FROM ')
-  # The first FROM belongs to a CTE, so locate the outer page projection explicitly.
+
   marker='SELECT p.warehouse_code AS warehouse_code'
   start=s.rfind(marker)
   outer_from=s.index(' FROM ',start)
   s=s[:outer_from]+', '+', '.join('p.'+name+' AS '+name for name in cols)+s[outer_from:]
  q['request']['sql']=s;q['resultColumns']+=list(cols)
  q['notes']=str(q.get('notes',''))+' 原业务列按计划月份匹配；stat_month匹配自然月；次月出货取warehouse_future30_qty；月调拨计划尚无来源，依赖它的月末测算保持NULL；同月多版本冲突保持未知。补货量仍沿用原有效计划/历史动销规则。当前备单中量=11种未备单完成状态的订单需求，当前缺货复用三层模型，库存占用不替代订单自身占用。'
-# Base resources use raw stock availability, not the removed field in the old daily target view.
+
 base='''WITH fc_base_stock AS (
  SELECT NULLIF(TRIM(b.belong_base),'') AS base,COUNT(DISTINCT b.material_code) AS row_count,
  SUM(COALESCE(b.available_qty,0)) AS known_available,COUNT(b.available_qty) AS known_available_count
@@ -115,7 +115,7 @@ for v in config['sourceViews']['views']:
    if c['field'].startswith('missing_current_') or c['field'].startswith('missing_next_'):c['reason']='按stat_month匹配出货计划；真实0保持0，缺失和同月重复保持未知；月调拨计划尚无真实来源。'
 path.write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n')
 print('Completed FC current-order columns, period plan display, base availability')
-# Current demand with no stock/plan key must still be visible in replenishment.
+
 config=json.loads(path.read_text())
 for key,q in config['queries'].items():
  if not key.startswith('replenishment.') or 'source_keys AS (' not in q['request']['sql']:continue
@@ -128,7 +128,7 @@ for key,q in config['queries'].items():
   s=s[:a]+body+s[b:]
  q['request']['sql']=s
 path.write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n')
-# Derived period columns reuse the exact-month aggregates, without reclassifying undated plans.
+
 config=json.loads(path.read_text())
 for id in ['replenishment.detail','replenishment.detail.atomic']:
  q=config['queries'][id];s=q['request']['sql'];alias='p' if id.endswith('.atomic') else 'r'
@@ -146,6 +146,5 @@ for id in ['base_resources.detail','base_resources.count','base_resources.detail
  config['queries'][id]['request']['sql']=config['queries'][id]['request']['sql'].replace('COUNT(b.available_qty) AS known_available_count','COUNT(DISTINCT CASE WHEN b.available_qty IS NOT NULL THEN b.material_code ELSE NULL END) AS known_available_count')
 path.write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n')
 
-# Preserve FC net-demand semantics when regenerating the base list queries.
 import runpy
 runpy.run_path(str(Path(__file__).with_name("align-fc-workflow.py")))

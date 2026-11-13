@@ -1,4 +1,3 @@
-/** Scalar memberships avoid nested ARRAY casts on the governed SQL endpoint. */
 export function collectDirectorMembers(rows) {
   const groups = new Map();
   for (const row of rows) {
@@ -18,7 +17,6 @@ export function collectDirectorMembers(rows) {
   });
 }
 
-// Attributes describe this period only, keyed by both base and SKU.
 export function applyPeriodAttributions(sections, mappings, sharedItems = []) {
   const byKey = new Map(mappings.filter(row => row.base && row.sku)
     .map(row => [JSON.stringify([row.base, row.sku]), row]));

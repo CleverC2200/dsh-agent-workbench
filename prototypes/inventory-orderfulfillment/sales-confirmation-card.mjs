@@ -1,5 +1,5 @@
 import { salesCardTemplate, renderSalesCardTemplate } from './sales-card-template.mjs';
-/** Presentation only. Host-verified links and recipients are not supplied by page data. */
+
 export function confirmationDraft(input) {
   const draft = structuredClone(input);
   const rate =
@@ -20,7 +20,6 @@ export function confirmationDraft(input) {
   return draft;
 }
 
-/** Generates no execution authority. Without Host-resolved URLs, action buttons stay disabled. */
 export function salesConfirmationCard(input, options = {}) {
   const draft = confirmationDraft(input);
   const escape = (value) =>

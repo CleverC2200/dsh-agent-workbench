@@ -82,8 +82,7 @@ for (const page of ['fc', 'aqkc'])
     await until(() => /登录|连接/.test(root.textContent));
     const requests = [];
     let closed = false;
-    // A recording protocol peer supplies no inventory rows or business facts.
-    // It records the real page pipeline and deliberately rejects each SQL read.
+
     const port = {
       onmessage: null,
       start() {},
@@ -124,38 +123,35 @@ for (const page of ['fc', 'aqkc'])
       }),
     );
     await until(() => requests.some((message) => message.method === 'sql'));
-    await until(() => navigation(page, root).length === (page === 'fc' ? 6 : 3));
+    await until(() =>
+      page === 'fc' ? root.querySelector('[role="alert"]') : navigation(page, root).length === 3,
+    );
     assert.ok(!root.textContent.includes('部分数据暂不可用'));
     assert.ok(
       requests.some((message) => message.method === (page === 'fc' ? 'sql' : 'access')),
       'connected reads stay on the existing Host-authorized operation',
     );
-    assert.equal(navigation(page, root).length, page === 'fc' ? 6 : 3);
+    assert.equal(navigation(page, root).length, page === 'fc' ? 0 : 3);
     if (page === 'fc') {
-      assert.equal(root.querySelectorAll('.kpi-card').length, 5);
-      assert.ok(
-        [...root.querySelectorAll('.kpi-value')].every((node) =>
-          /^[-—]$/.test(node.textContent.trim()),
-        ),
-        'failed sources must remain unknown, not become zero facts',
+      assert.equal(root.querySelectorAll('.kpi-card').length, 0);
+      assert.match(root.textContent, /读取失败/);
+      assert.equal(
+        root.querySelectorAll('.kpi-value').length,
+        0,
+        'failed governed reads expose no business facts',
       );
     }
     const before = requests.filter((message) => message.method === 'sql').length;
     [...root.querySelectorAll('button')]
-      .find((button) => ['刷新', '刷新数据'].includes(button.textContent.trim()))
+      .find((button) => ['刷新', '刷新数据', '重新读取数据'].includes(button.textContent.trim()))
       .click();
     await until(() => requests.filter((message) => message.method === 'sql').length > before);
     port.onmessage({ data: { type: 'identity-changed' } });
     await until(() =>
       /登录身份已变化|登录并连接|页面已显示|暂不可用|读取失败|当前库存/.test(root.textContent),
     );
-    assert.equal(navigation(page, root).length, page === 'fc' ? 6 : 3);
-    if (page === 'fc')
-      assert.ok(
-        [...root.querySelectorAll('.kpi-value')].every((node) =>
-          /^[-—]$/.test(node.textContent.trim()),
-        ),
-      );
+    assert.equal(navigation(page, root).length, page === 'fc' ? 0 : 3);
+    if (page === 'fc') assert.equal(root.querySelectorAll('.kpi-value').length, 0);
     assert.deepEqual(external, []);
     assert.deepEqual(errors, []);
   });

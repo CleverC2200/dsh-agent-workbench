@@ -13,7 +13,7 @@ import { createPortal } from 'react-dom';
 import { Button as DshButton } from './DshButton';
 import { DashboardTableSkeleton } from './workbench-loading';
 import css from './controls.module.css';
-// Business controls use the same React + native HTML + CSS Modules boundary as DSH.
+
 export function Button({
   type,
   htmlType = 'button',

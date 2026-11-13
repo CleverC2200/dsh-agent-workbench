@@ -1,7 +1,6 @@
 import { createAgentQueries, type ConfiguredExecution } from './agent-query';
 import type { AgentSqlConfig } from './sql-config';
 
-/** One scan, separate business scopes: never sum factory and branch fulfillment rates. */
 export async function readGroupedOrderOverview(
   config: AgentSqlConfig,
   asOf: string,

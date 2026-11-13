@@ -36,7 +36,7 @@ export type InventoryRow = {
   materialGroup: string;
   quantity: number;
   inTransitQty: number | null;
-  /** ASN expected quantity, display only; not verified outstanding stock. */
+
   reportedInTransitQty?: number | null;
   orderedNotShippedQty: number | null;
   shippedNotReceivedQty: number | null;
@@ -81,7 +81,7 @@ export type ReplenishmentRow = {
   inventoryQty: number;
   availableQty: number;
   inTransitQty: number | null;
-  /** ASN expected quantity, display only; not verified outstanding stock. */
+
   reportedInTransitQty?: number | null;
   monthlyDemand: number;
   plannedDailyShipment: number;
@@ -522,9 +522,7 @@ export function buildWarehouseSnapshot(
   });
 
   const planVersion = `month-start-${parts.year}${String(parts.month).padStart(2, '0')}-bi-v1`;
-  // The selected version must cover the same SKU universe as replenishment.
-  // Otherwise a nominally "whole" human version can silently retain BI values
-  // for replenishment rows that were absent from the plan template.
+
   const plans = PRODUCTS.map((product, index): PlanRow => {
     const currentOutboundQty = scale(900 + index * 115, config.factor, index);
     return {
@@ -720,8 +718,7 @@ function isPopulatedWarehouseSnapshot(
   if (!candidate || typeof candidate !== 'object') return false;
 
   const snapshot = candidate as Partial<WarehouseSnapshot>;
-  // Inventory-only branches remain real snapshots; an empty plan is a missing
-  // business input, not a transport failure. Never relax inventory or identity.
+
   const requiredCollections = [snapshot.inventory];
   const optionalCollections = [
     snapshot.replenishments,
@@ -766,11 +763,6 @@ function isPopulatedWarehouseSnapshot(
   );
 }
 
-/**
- * Keep the workspace useful while platform data is not connected yet. A complete
- * restored snapshot wins; absent, mismatched, or empty data falls back to the
- * deterministic demo snapshot for the currently selected warehouse.
- */
 export function resolveWarehouseSnapshot(
   warehouseId: WarehouseId,
   candidate: unknown,
@@ -782,7 +774,6 @@ export function resolveWarehouseSnapshot(
       : emptyWarehouseSnapshot(warehouseId);
 }
 
-/** Non-business placeholder for hooks while a PG-only branch loads; never mock. */
 export function emptyWarehouseSnapshot(warehouseId: WarehouseId): WarehouseSnapshot {
   return {
     warehouseId,
@@ -855,7 +846,6 @@ export function hasLiveWarehouseSource(
   return liveSources.includes(snapshot.dataSource) && snapshot.version.startsWith('pg-');
 }
 
-/** 直连 PG 与 GEA SQL 共用真实快照契约；查询失败不得回退为演示数据。 */
 export function requireLiveWarehouseSnapshot(
   warehouseId: WarehouseId,
   candidate: unknown,
@@ -890,7 +880,6 @@ export function summarizeSnapshot(snapshot: WarehouseSnapshot): SnapshotSummary 
   };
 }
 
-/** Unknown quantities must remain unknown, never implicitly become zero. */
 export function sumKnownQuantities(values: Array<number | null>): number | null {
   return values.every((value) => value !== null && Number.isFinite(value))
     ? (values as number[]).reduce((sum, value) => sum + value, 0)

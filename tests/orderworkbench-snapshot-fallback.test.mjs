@@ -36,7 +36,6 @@ test('daily history survives an empty hourly refresh and hourly exclusions suppr
       4,
     );
 
-    // A new cancelled execution has removed S2. Do not restore either daily SKU.
     db.exec(`INSERT INTO agents_scm_execute_detail_hourly_d VALUES
       ('C','O','E','郑州','S1',20,'1','水饺','','','','2025-10-20','2025-10-25',90,'2025-10-24',NULL);`);
     const remaining = products('郑州');

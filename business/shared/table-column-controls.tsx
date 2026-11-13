@@ -65,7 +65,7 @@ export function ColumnFilterControl({
     setPosition(null);
     button.current?.focus();
   };
-  // 客户端页面容器禁止原生表单提交，点击和回车须直接应用筛选。
+
   const applyDraft = () => {
     if (popup.current?.reportValidity()) apply(draft);
   };

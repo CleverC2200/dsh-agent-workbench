@@ -75,8 +75,7 @@ export function applyWorkbenchDraft(
     reason: draft.reasons[row.sku] ?? '',
   }));
   if (!snapshot.page) return { ...snapshot, replenishments };
-  // The server summary covers all pages. Apply only the visible rows' change
-  // relative to this response; earlier pages' drafts are already in its baseline.
+
   const quantityDelta = replenishments.reduce(
     (sum, row, index) =>
       sum + (row.actualQty ?? 0) - (snapshot.replenishments[index].actualQty ?? 0),
@@ -161,7 +160,7 @@ export function filterReplenishments(
       return (sort.direction === 'asc' ? diff : -diff) || a.sku.localeCompare(b.sku);
     });
 }
-/** A list projection of a complete server snapshot. Overview facts never depend on the current page. */
+
 export function projectWarehousePage(
   original: WarehouseSnapshot,
   input: WorkbenchPageInput,

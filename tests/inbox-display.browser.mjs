@@ -131,7 +131,6 @@ test('opening and closing inbox details preserves the list without a blank reloa
   );
   assert.equal(listReads, 1, 'closing read-only details must not reload the list');
 
-  // Closing while a detail request is pending must cancel it without refreshing the list.
   releaseDetail = undefined;
   await page.getByRole('button', { name: '消息一', exact: true }).click();
   await expect.poll(() => Boolean(releaseDetail)).toBe(true);

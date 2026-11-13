@@ -6,7 +6,7 @@ import * as store from '../../../official-latest-standard/packages/client/store/
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 const { Context } = cordis;
-// Execute existing official client artifacts through their public module-loader entry, without changing/rebuilding Core.
+
 const modules = new Map([
   ['@deepseek-ai/cordis', cordis],
   ['@deepseek-ai/dsh-client-store', store],

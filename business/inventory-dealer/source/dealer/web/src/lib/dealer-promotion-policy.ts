@@ -66,7 +66,6 @@ export function promotionBusinessDate(now = new Date()) {
   }).format(now);
 }
 
-/** 保留源条件，不解析政策名称计算折扣，不将空商品范围解释为全部商品。 */
 export function mapDealerPromotionPolicies(
   rows: GeaSqlRow[],
   customerCode: string,
@@ -78,7 +77,7 @@ export function mapDealerPromotionPolicies(
       throw new Error('政策客户范围不匹配');
     const id = text(row.promotion_code);
     if (!id || !text(row.range_record_id)) throw new Error('政策标识缺失');
-    // 视图未发布独立范围周期/批次；商品范围沿用政策周期，空日期不限该侧。
+
     const start = date(row.promotion_start_date);
     const end = date(row.promotion_end_date) || null;
     if ((start && start > businessDate) || (end && end < businessDate)) continue;
@@ -139,7 +138,6 @@ export function mapDealerPromotionPolicies(
   return [...policies.values()];
 }
 
-/** 仅读取已授权单客户。失败时保持真实错误态，不补造活动。 */
 export async function loadDealerPromotionPolicies(
   customerCode: string,
   options: GeaSqlRequestOptions = {},
@@ -164,7 +162,7 @@ export async function loadDealerPromotionPolicies(
     stage = 'pickup_query';
     const pickupRows = await queryWorkbenchCustomerPickupPoints(customerCode, options);
     const pickups = pickupRows.filter((point) => point.available);
-    // 源范围用于展示；核验结果只决定优惠是否可用，不删除或补造源范围。
+
     policies = policies.map((policy) => {
       const scopes = policy.scopes.map((scope) => {
         const matches =

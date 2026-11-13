@@ -1,0 +1,114 @@
+{
+  "assets": [
+    {
+      "path": "docs/history",
+      "kind": "historical-evidence",
+      "source": "Git history"
+    },
+    {
+      "path": "docs/agent-inputs",
+      "kind": "business-resource",
+      "source": "business/"
+    },
+    {
+      "path": "docs/reports",
+      "kind": "historical-evidence",
+      "source": "Git history"
+    },
+    {
+      "path": "lib",
+      "kind": "generated",
+      "source": "scripts/build.mjs"
+    },
+    {
+      "path": "static/category/source/vendor.js",
+      "kind": "third-party",
+      "source": "static/category/source/SOURCE.json"
+    },
+    {
+      "path": "static/category/source/vendor.css",
+      "kind": "third-party",
+      "source": "static/category/source/SOURCE.json"
+    },
+    {
+      "path": "static/category/source/data.js",
+      "kind": "business-data",
+      "source": "static/category/source/SOURCE.json"
+    },
+    {
+      "path": "static/mps/source/vendor.js",
+      "kind": "third-party",
+      "source": "static/mps/source/SOURCE.json"
+    },
+    {
+      "path": "static/mps/source/vendor.css",
+      "kind": "third-party",
+      "source": "static/mps/source/SOURCE.json"
+    },
+    {
+      "path": "static/mps/source/data.js",
+      "kind": "business-data",
+      "source": "static/mps/source/SOURCE.json"
+    },
+    {
+      "path": "static/category/index.html",
+      "kind": "generated",
+      "source": "scripts/build-static-authors.mjs"
+    },
+    {
+      "path": "static/mps/index.html",
+      "kind": "generated",
+      "source": "scripts/build-static-authors.mjs"
+    },
+    {
+      "path": "static/regional/index.html",
+      "kind": "generated",
+      "source": "scripts/build-static-authors.mjs"
+    },
+    {
+      "path": "prototypes/inventory-orderworkbench/source.html",
+      "kind": "received-prototype",
+      "source": "prototypes/inventory-orderworkbench/SOURCE.json"
+    },
+    {
+      "path": "prototypes/inventory-orderfulfillment/source.html",
+      "kind": "received-prototype",
+      "source": "prototypes/inventory-orderfulfillment/SOURCE.json"
+    },
+    {
+      "path": "prototypes/inventory-orderworkbench/index.html",
+      "kind": "received-prototype",
+      "source": "prototypes/inventory-orderworkbench/SOURCE.json"
+    },
+    {
+      "path": "prototypes/inventory-customer/application.js",
+      "kind": "generated-with-third-party",
+      "source": "scripts/build-customer-prototype.mjs"
+    },
+    {
+      "path": "prototypes/inventory-customer/application.css",
+      "kind": "generated-with-third-party",
+      "source": "scripts/build-customer-prototype.mjs; prototypes/inventory-customer/SOURCE.json"
+    },
+    {
+      "path": "business/inventory-apsplan/source/reference/provided-board.css",
+      "kind": "received-generated-reference",
+      "source": "business/inventory-apsplan/SOURCE.md"
+    },
+    {
+      "path": "tests/fixtures/sql-template-baseline.json",
+      "kind": "fixture-data",
+      "source": "tests/"
+    },
+    {
+      "path": "tests/fixtures/aps-light-theme.json",
+      "kind": "fixture-data",
+      "source": "tests/"
+    },
+    {
+      "path": "tests/fixtures/original-fc-columns.json",
+      "kind": "fixture-data",
+      "source": "tests/"
+    }
+  ]
+}

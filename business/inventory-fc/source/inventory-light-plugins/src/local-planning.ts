@@ -23,7 +23,6 @@ const rule = z
     '结束日期不能早于生效日期',
   );
 
-// Memory belongs to this iframe only. A preview never changes the GEA baseline.
 export class LocalPlanning {
   private states = new Map<string, PlanningState>();
   get(id: string): PlanningState | undefined {
@@ -61,7 +60,7 @@ export class LocalPlanning {
         now,
       );
       if (errors.length) throw Object.assign(Error('计划校验失败，未应用任何行'), { errors });
-      // Imported months are complete packages. Preserve other months, never fill omitted SKUs from an old package.
+
       const months = new Set(plans.map((p) => p.month));
       next.imports = [...before.imports.filter((p) => !months.has(p.month)), ...plans];
     } else if (input.action === 'cycle') {

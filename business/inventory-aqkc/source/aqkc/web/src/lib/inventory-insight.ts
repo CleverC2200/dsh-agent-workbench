@@ -1,4 +1,3 @@
-/** Read-only interpretation of confirmed facts. No thresholds or causes are invented. */
 export type InsightSku = {
   base: string;
   category: string;
@@ -138,7 +137,7 @@ export function buildInventoryInsight(input: {
     (row) => row.category && row.category !== '未分类' && row.category !== '-',
   );
   const deficit = shortage !== null && shortage > 0;
-  // Ranking is dimensional and explicit: current shortage first, then target gap, then age.
+
   const ranking = deficit
     ? '当前订单缺口'
     : records.some((row) => row.gap !== null && row.gap !== 0)
@@ -274,7 +273,7 @@ export function buildInventoryInsight(input: {
   if (!completeRanking || !names || top.length < 3) missing.push('不足以确认完整前三对象');
   if (!completeAge) missing.push('货龄明细不全');
   if (input.stale) missing.push('快照过期');
-  // Aggregate category overlap is never evidence of a specific SKU cause.
+
   lines.push(
     `数据边界：${missing.length ? missing.join('、') + '；' : ''}当前只能判断到基地/品类层，不能确认具体SKU原因。`,
   );
@@ -302,7 +301,6 @@ export function buildInventoryInsight(input: {
   };
 }
 
-/** Exact engine evidence published to the page interpreter; no model-side recomputation. */
 export type InventoryRiskEvidence = Omit<
   Pick<
     ReturnType<typeof buildInventoryInsight>,

@@ -5,7 +5,6 @@ import type { DocumentSession } from './workbench.ts';
 
 type PageSessionProjection = Pick<DocumentSession, 'sessionId' | 'preset' | 'cwd'>;
 
-/** Read and check the actual Core Session while its reference is held. */
 export async function withReadyPageSession(
   ctx: Pick<Context, 'sessions'>,
   id: SessionId,
@@ -26,7 +25,7 @@ export async function withReadyPageSession(
     const cwd = ctx.sessions.list.getSnapshot().byId[reference.sessionId]?.cwd;
     if (expected && (preset !== expected.preset || cwd !== expected.cwd))
       throw Error('PAGE_SESSION_RECOVERY_MISMATCH');
-    // The accepted Core navigation can revoke the old layout intent; check before that handoff.
+
     await accept({
       reference,
       projection: {

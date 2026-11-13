@@ -1,4 +1,3 @@
-/** Build editable author modules while preserving the existing vendor, data and visual resources. */
 import { readFile, writeFile, cp, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { build } from 'esbuild';
@@ -76,7 +75,7 @@ await writeFile(
     fileURLToPath(new URL('../static/regional/source/', import.meta.url)),
   ),
 );
-// Manage remains the owner of the original declared resource; the installed page carries its files.
+
 await syncAgentResources(
   new URL('../../dsh-agent-manage/business-resources/plan-regional/', import.meta.url),
   new URL('regional/', outputs),

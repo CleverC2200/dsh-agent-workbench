@@ -228,18 +228,18 @@ test(
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect.poll(() => finished).toBe(1);
     assert.equal(await page.evaluate(() => window.opens), 1);
-    // 已完成唤醒不能锁死消息列表，用户仍可手动阅读另一条详情。
+
     await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click();
     await page.getByRole('button', { name: '另一条通知', exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('另一条通知');
     await expect.poll(() => detailRequests).toBe(2);
-    // 同目标的新 receipt 必须等待本次详情，不能复用旧详情提前确认。
+
     ready.receipt = 'receipt-2';
     finished = 0;
     release = undefined;
     await expect.poll(() => detailRequests).toBe(3);
     assert.equal(finished, 0);
-    // 退出登录撤销旧页面，即使上一导航曾经完成或本次详情尚未返回。
+
     logged = false;
     identityRevision++;
     await expect(page.getByRole('button', { name: '登录并继续' })).toBeVisible();

@@ -29,7 +29,6 @@ import type { HtmlPage } from './html-pages.ts';
 import css from '../theme/tokens.css';
 import referenceStyles from './page-interaction/reference-message.css';
 
-// The existing client builder publishes CSS modules beside the bundled contribution.
 declare const WORKBENCH_MODULE_STYLES: string;
 import { mountFramePresentation } from './frame-presenter.tsx';
 
@@ -92,7 +91,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Keep the official frame, workspace browser and Conversation. Only contribute public seats. */
 export function apply(ctx: Context): void {
   mountReferenceMessages(ctx);
   ctx.effect(() => ctx.locale.register('agentWorkbench', { zh, en }));

@@ -32,8 +32,7 @@ class PlanTemplate(unittest.TestCase):
         return [dict(r) for r in self.db.execute(sql,params)]
 
     def test_gateway_default_page_does_not_truncate_plan_exports(self):
-        # The gateway defaults an unbounded outer SELECT to 50 rows, even if
-        # an inner CTE has LIMIT 200. Both list and export retain a full page.
+
         self.db.execute('ALTER TABLE agents_scm_warehouse_transfer_plan_data_d ADD COLUMN last_month_actual_qty REAL')
         self.db.execute('ALTER TABLE agents_scm_warehouse_transfer_plan_data_d ADD COLUMN current_day_avg_qty REAL')
         self.db.executemany('INSERT INTO agents_scm_warehouse_transfer_plan_data_d (warehouseid,material_code,warehouse_name,material_name,stat_month) VALUES (?,?,?,?,?)',
@@ -43,7 +42,7 @@ class PlanTemplate(unittest.TestCase):
                 self.query = self.config['queries'][query_id]
                 tree = sqlglot.parse_one(self.query['request']['sql'], read='postgres')
                 if tree.args.get('limit') is None:
-                    # Emulate the governed gateway's documented default page.
+
                     self.query = {**self.query, 'request': {**self.query['request'], 'sql': self.query['request']['sql'] + ' LIMIT 50'}}
                 first = self.read(gea_p8=200, gea_p9=0)
                 second = self.read(gea_p8=200, gea_p9=200)

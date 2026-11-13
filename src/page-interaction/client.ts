@@ -32,14 +32,11 @@ export type PageInteraction = {
   mountTrigger(container: HTMLElement, sessionId: string): () => void;
 };
 
-/** Uses the public DSH reference/input faces, without replacing the composer. */
 export function installPageInteraction(ctx: Context): PageInteraction {
   try {
     const existing = ctx.get('pageInteraction');
     if (existing) return existing;
-  } catch {
-    /* optional service */
-  }
+  } catch {}
   let ready: Context | undefined;
   let disposed = false;
   type PickerBinding = {
@@ -345,7 +342,7 @@ export function installPageInteraction(ctx: Context): PageInteraction {
               throw Error('已切换对话，请在当前页面重新引用。');
             if (!options.inputActions.insertText(quote, span))
               throw Error('草稿已变化或正在发送，请重新选择内容。');
-            // Alpha exposes an explicit flush; rc.2 publishes edits to its Core-owned writer.
+
             if (
               'persistDraft' in options.inputActions &&
               typeof options.inputActions.persistDraft === 'function'
@@ -370,7 +367,7 @@ export function installPageInteraction(ctx: Context): PageInteraction {
           const receipt = await response.json();
           if (!active || controller.signal.aborted) return;
           if (!response.ok) throw Error(receipt.error || '引用未保存，请重试。');
-          // The Host may rotate identity while a successful save response is delayed in transit.
+
           const bindingResponse = await fetch('/api/page-interaction/binding', {
             cache: 'no-store',
             signal: controller.signal,
@@ -379,7 +376,7 @@ export function installPageInteraction(ctx: Context): PageInteraction {
           if (!active || controller.signal.aborted) return;
           if (!bindingResponse.ok || currentBinding.generation !== generation)
             throw Error('登录身份已变化，请重新选择引用。');
-          // A Session-specific owner can be revoked without changing the global write generation.
+
           const access = await fetch('/api/agent-workbench/page', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -1,5 +1,5 @@
 'use strict';
-//update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】草稿与订单快照隔离，未知值保留横线，未接改单禁止提交-----------
+
 window.OrderShortageEditor = (() => {
   const number = (value) =>
     (typeof value === 'number' || typeof value === 'string') &&
@@ -616,4 +616,3 @@ window.OrderShortageEditor = (() => {
   }
   return { mount, route, identifiers };
 })();
-//update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】草稿与订单快照隔离，未知值保留横线，未接改单禁止提交-----------

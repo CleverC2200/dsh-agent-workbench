@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { salesCardTemplate } from '../prototypes/inventory-orderfulfillment/sales-card-template.mjs';
 
-/** Build frontend-owned assets for an existing same-origin, authorized sales window. Never deploys them. */
 export async function buildFulfillmentSalesWindow({ output } = {}) {
   const root = resolve(import.meta.dirname, '..');
   const source = resolve(root, 'prototypes/inventory-orderfulfillment');

@@ -9,7 +9,7 @@ import type { NativeResourceSelection } from './resource-selection.ts';
 import type { WorkbenchController } from './workbench.ts';
 
 type EntryCopyKey = 'inventoryEntry' | 'inventoryEntryHint' | 'inventoryEntryFailed';
-/** Public Core input dock; the entry owns only transient creation state. */
+
 export function mountInventoryEntry(
   ctx: Context,
   workbench: WorkbenchController,

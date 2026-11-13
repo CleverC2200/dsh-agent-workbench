@@ -27,8 +27,7 @@ export function batchAges(rows,asOf=null) {
     for(const row of group){
       const snapshot=date(row.batch_date),production=date(row.production_date),quantity=row.quantity===null?NaN:Number(row.quantity);
       if(snapshot===null||(asOf!==null&&(date(asOf)===null||snapshot!==date(asOf)))||!Number.isFinite(quantity)||quantity<0||row.minimum_quantity===null||!Number.isFinite(Number(row.minimum_quantity))||Number(row.minimum_quantity)<0||!(Number(row.batch_rows)>0)||Number(row.batch_rows)!==Number(row.known_quantities)){valid=false;continue;}
-      // A fully known zero-stock batch contributes nothing to any age bucket.
-      // Its absent production date must not hide other, dated inventory.
+
       if(quantity===0)continue;
       const age=production!==null?(snapshot-production)/86400000:null;
       if(age===null||age<0){valid=false;continue;}
@@ -78,7 +77,6 @@ const alias = (value) =>
     ? value
     : (value.outputAlias ?? value.alias ?? value.name ?? value.columnName);
 
-/** Render only granted outputs; a rejected field never becomes an empty/zero business fact. */
 export function visibleResult(result) {
   const denied = new Set((result.rejectedColumns ?? []).map(alias));
   const columns = (
@@ -99,7 +97,6 @@ export function visibleResult(result) {
   };
 }
 
-/** Each collection keeps count/page/config and permission checks separate from other cards. */
 export function createFulfillmentReader(config, execute) {
   const client = createQueryClient(config, execute);
   async function collection(id, filters, { signal, page = 1, size = 20, priority = 10 } = {}) {
@@ -190,7 +187,6 @@ export function createFulfillmentReader(config, execute) {
   };
 }
 
-/** A newer load owns publication, even if an old transport ignores cancellation. */
 export function createLoadOwner() {
   let generation = 0,
     controller;

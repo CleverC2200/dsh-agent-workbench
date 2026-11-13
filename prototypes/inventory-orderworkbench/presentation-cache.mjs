@@ -1,6 +1,5 @@
 import { workbenchPresentation, workbenchEvidence } from './live-presentation.mjs';
 
-/** Cache facts, never edits or revision owners; every new Session must recheck its server scope. */
 export function createWorkbenchScopedFactsCache({ maxAge, reusable, now = Date.now }) {
   const entries = new Map();
   return {
@@ -33,7 +32,6 @@ export function createWorkbenchScopedFactsCache({ maxAge, reusable, now = Date.n
   };
 }
 
-/** Retain clean, identity-bound results, including successful sections of interrupted reads. */
 export function createWorkbenchPeriodCacheLifecycle(reports, { maxAge, reusable, now = Date.now }) {
   let sessionId;
   const discard = (key, entry) => {

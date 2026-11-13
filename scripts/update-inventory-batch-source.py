@@ -6,16 +6,13 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = 'agents_scm_inventory_sku_data_d'
 
-
 def ordinal(year, month, day):
     adjusted_year = f'({year} - CASE WHEN {month} <= 2 THEN 1 ELSE 0 END)'
     adjusted_month = f'({month} + CASE WHEN {month} > 2 THEN -3 ELSE 9 END)'
     return f'(365 * {adjusted_year} + FLOOR({adjusted_year} / 4.0) - FLOOR({adjusted_year} / 100.0) + FLOOR({adjusted_year} / 400.0) + FLOOR((153 * {adjusted_month} + 2) / 5.0) + {day})'
 
-
 def adapter(predicate='', branch_risks=False):
-    # Civil-day ordinals use only gateway-approved arithmetic/functions and agree
-    # across PostgreSQL and Doris; subtracting Doris DATEs subtracts YYYYMMDD.
+
     snapshot = ordinal('d.snapshot_year', 'd.snapshot_month', 'd.snapshot_day')
     production = ordinal('d.production_year', 'd.production_month', 'd.production_day')
     sql = f"""inventory_batch_dates AS (
@@ -78,30 +75,26 @@ LEFT JOIN inventory_batch_names AS n ON n.warehouseid = a.warehouseid AND n.mate
 )"""
 
     if branch_risks:
-        # Original branch rules: >=60 days is big-date stock; >=90 is stagnant.
-        # Sum positive batch quantities before grouping; SKU maximum age is not a quantity classifier.
+
         sql = sql.replace('MAX(a.age_days) AS age_days', "MAX(a.age_days) AS age_days,\n SUM(CASE WHEN a.age_days >= 60 THEN a.live_qty ELSE 0 END) AS overaged_qty,\n SUM(CASE WHEN a.age_days >= 90 THEN a.live_qty ELSE 0 END) AS stagnant_qty")
         sql = sql.replace('CAST(NULL AS INTEGER) AS is_overaged, CAST(NULL AS DECIMAL(18, 3)) AS overaged_qty', 'CASE WHEN a.overaged_qty > 0 THEN 1 ELSE 0 END AS is_overaged, a.overaged_qty AS overaged_qty, a.stagnant_qty AS stagnant_qty')
     return sql
-
 
 def migrate(sql, branch_risks=False):
     if SOURCE not in sql:
         return sql
     if 'inventory_batch_dates AS (' in sql:
-        # Refresh the adapter in already migrated configs without replacing
-        # newer downstream queries with an older frozen SQL configuration.
+
         end = sql.index('\n)', sql.index('), inventory_batch_source AS (')) + 2
         prefix, rest = sql[:end], sql[end:]
         predicate = re.search(r" AND b\.month_date = REPLACE\(CAST\(:gea_p\d+ AS VARCHAR\(10\)\), '-', ''\)", prefix)
         return 'WITH ' + adapter(predicate.group(0) if predicate else '', branch_risks) + rest
     if 'inventory_batch_source AS' in sql:
-        # Calendar adapters expose only snapshot date and the legacy grouping
-        # alias; that alias now contains the source warehouse code, not a type.
+
         sql = sql.replace("CASE WHEN b.warehouse_classify IN ('01', '02') THEN '基地仓' ELSE '分仓' END AS warehouse_type", 'b.warehouseid AS warehouse_type')
         sql = sql.replace("NULLIF(TRIM(b.warehouse_name), '') AS warehouse_type", 'b.warehouseid AS warehouse_type')
         return sql.replace(" WHERE b.warehouse_classify IN ('01', '02', '20')", '')
-    # Push snapshot equality into the physical scan, retaining named parameters.
+
     dates = re.findall(r'\b(?:t|h)\.stat_date\s*=\s*CAST\(:(gea_p\d+) AS DATE\)', sql, re.I)
     predicate = ''
     if dates and len(set(dates)) == 1:
@@ -120,7 +113,6 @@ FROM {SOURCE} AS b
     if sql.startswith('WITH '):
         return 'WITH ' + prefix + ', ' + sql[5:]
     return 'WITH ' + prefix + ' ' + sql
-
 
 def attribution_columns(sql, query_id):
     if 'inventory_batch_dates AS (' not in sql:
@@ -150,18 +142,15 @@ def attribution_columns(sql, query_id):
         sql = sql.replace('GROUP BY s.warehouse, s.warehouse_name, s.product_categ_name)', 'GROUP BY s.warehouse, s.warehouse_name, s.product_categ_name, s.belong_base)')
     return sql
 
-
 def source_dimensions(query):
     sql = query['request']['sql']
     if 'inventory_batch_source AS' not in sql:
         return
-    # Warehouses join by source ID and bases by source name. Classification
-    # codes do not select disjoint base/warehouse inventory populations.
+
     sql = re.sub(r"\b([a-z]+)\.warehouse_type\s*=\s*'分仓'", r"NULLIF(TRIM(\1.warehouseid), '') IS NOT NULL", sql)
     sql = re.sub(r"NULLIF\(TRIM\(([a-z]+)\.warehouse_name\), ''\) IS NOT NULL", r"NULLIF(TRIM(\1.warehouseid), '') IS NOT NULL", sql)
     sql = re.sub(r"\b([a-z]+)\.warehouse_type\s*=\s*'基地仓'", r"NULLIF(TRIM(\1.belong_base), '') IS NOT NULL", sql)
-    # Date-only adapters need the corresponding dimension when used to choose
-    # a base/warehouse snapshot.
+
     if 'inventory_batch_dates AS (' not in sql:
         if 'b.warehouseid AS warehouseid' not in sql:
             sql = sql.replace('b.warehouseid AS warehouse_type', 'b.warehouseid AS warehouse_type, b.warehouseid AS warehouseid')
@@ -178,7 +167,6 @@ def source_dimensions(query):
             spec['example'] = 'A020'
     query['request']['sql'] = sql
 
-
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -192,7 +180,7 @@ def main():
         changed = []
         for name, query in config.get('queries', {}).items():
             if name.startswith('current-shortage.'):
-                continue  # This source owns raw batch identities for the three-stage calculation.
+                continue
             old = query.get('request', {}).get('sql', '')
             branch_risks = path.parent.name == 'inventory-fc'
             new = attribution_columns(migrate(old, branch_risks), name)
@@ -243,9 +231,8 @@ def main():
             path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + '\n')
             print(path.parent.name, len(changed))
 
-
 if __name__ == '__main__':
     main()
-    # The FC page is a branch inventory scope, independent of its grouping keys.
+
     import runpy
     runpy.run_path(str(ROOT / 'scripts/update-fc-inventory-scope.py'), run_name='__main__')

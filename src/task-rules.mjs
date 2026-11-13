@@ -1,4 +1,3 @@
-// Task rules are auditable execution inputs, not registrations in the metric library.
 export function permitsNullHealthy(description = '') {
   const normalized = String(description).replace(
     /((?:空值|NULL|null)(?:时|的情况下))[，,]\s*(?:该对象|该指标|该项)?(?=\s*(?:算|视为|按|判为|作为))/g,
@@ -49,7 +48,7 @@ export function validateTaskRule(row, task) {
       lte: row.value <= r.healthy,
     }[r.healthyOperator];
   }
-  // No severe threshold was provided: never invent a severe grade.
+
   let status = healthy ? '健康' : '预警';
   if (r.severe != null) {
     if (

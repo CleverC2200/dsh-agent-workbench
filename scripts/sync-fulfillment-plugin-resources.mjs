@@ -113,7 +113,6 @@ function pax(bytes) {
   return fields;
 }
 
-/** Read only the six presentation files and package identity; never unpack or execute plugin code. */
 export function readPresentationArchive(archive) {
   const tar = gunzipSync(archive, { maxOutputLength: 128 * 1024 * 1024 });
   const files = new Map();
@@ -183,7 +182,6 @@ async function optionalJson(path) {
   }
 }
 
-/** Follow the existing plugin channel. Only a verified Workbench companion can change active.json. */
 export async function syncFulfillmentPluginResources({
   channelUrl,
   channel,

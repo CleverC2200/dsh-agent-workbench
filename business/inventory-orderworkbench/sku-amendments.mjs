@@ -2,7 +2,6 @@ export function amendmentReductionSql(requested = 'requested_qty', effective = '
   return `CASE WHEN ${requested}>=0 AND ${requested}<${effective} THEN ${effective}-${requested} ELSE 0 END`;
 }
 
-// Quantity sums over daily execution details; no source-order/SKU deduplication.
 export const amendmentMetricContract = {
   version: 'quantity-order-close-reduction-only-bi-v5',
   source: 'agents_scm_execute_detail_d',

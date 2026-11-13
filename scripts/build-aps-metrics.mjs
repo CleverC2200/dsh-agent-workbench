@@ -31,7 +31,7 @@ const result = await build({
   entryPoints: [join(ui, 'app/plugin-entry.tsx')],
   outfile: 'inventory-apsplan.js',
   loader: { '.module.css': 'local-css' },
-  // Shared source panels must use the same React instance as the APS renderer.
+
   alias: {
     react: join(ui, 'node_modules/react'),
     'react-dom': join(ui, 'node_modules/react-dom'),
@@ -119,7 +119,7 @@ for (const path of Object.keys(result.metafile.inputs)) {
 }
 for (const file of ['plugin.json', 'page.json', 'sql.config.json'])
   inputs[file] = hash(await readFile(join(resource, file)));
-// Track every copied Skill asset so helpers/templates cannot silently reuse stale output.
+
 async function resourceFiles(directory, prefix = '') {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {

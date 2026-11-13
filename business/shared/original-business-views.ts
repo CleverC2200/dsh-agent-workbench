@@ -1,6 +1,3 @@
-/** Display contracts copied from the authored plugins. SQL contracts live in sql.config.json.
- * Missing original columns stay in place; diagnostic/source columns are never appended here.
- */
 export type BusinessPresentation = { title: string; columns: any[]; filters?: string[] };
 const column = (field: string, label: string, secondary?: string[]) => ({
   field,
@@ -354,7 +351,6 @@ export function originalDealerView(config: any, id: string) {
   );
 }
 
-/** Organization nodes keep base, branch and channel details in the authored hierarchy. */
 export function originalQllLayerView(
   config: any,
   layer: string,

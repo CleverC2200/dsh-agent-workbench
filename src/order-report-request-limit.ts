@@ -1,4 +1,3 @@
-/** Keep ordinary requests bounded; only the owned report writer accepts a larger compressed envelope. */
 export function assertPageRequestSize(
   input: any,
   resolveOwner: () => { page: { id: string }; grant: { workspace?: unknown } },

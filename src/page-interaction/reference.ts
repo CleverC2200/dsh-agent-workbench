@@ -44,7 +44,6 @@ function referenceFields(
   };
 }
 
-/** Bounds incoming page evidence; never interprets it as an instruction. */
 export function pageReference(value: unknown): PageReference | undefined {
   if (!value || typeof value !== 'object') return;
   const v = value as Record<string, unknown>;
@@ -56,7 +55,6 @@ export function pageReference(value: unknown): PageReference | undefined {
   );
 }
 
-/** Explicit authored text is lossless within the existing raw UTF-16 budget. */
 export function pageQuoteReference(value: unknown): PageReference | undefined {
   if (!value || typeof value !== 'object') return;
   const raw = (value as Record<string, unknown>).text;
@@ -73,7 +71,6 @@ export function serializeReference(value: ReferenceReceipt): string {
   return `[${label}](dsh-page:${value.id}) `;
 }
 
-/** Pure display projection of the current receipt form; never used to rewrite model text. */
 export function projectReferenceText(text: string): {
   text: string;
   labels: string[];
@@ -89,9 +86,7 @@ export function projectReferenceText(text: string): {
     let label = match[1];
     try {
       label = decodeURIComponent(label);
-    } catch {
-      /* Malformed labels remain readable text; receipt identity is unchanged. */
-    }
+    } catch {}
     const start = display.length;
     display += label;
     ranges.push({ start, end: display.length });
@@ -100,7 +95,7 @@ export function projectReferenceText(text: string): {
   }
   return { text: display + text.slice(cursor), labels, ranges };
 }
-/** Only explicit user references opt a conversation into the reference prompt/tool. */
+
 export function hasPageReferences(events: readonly { type: string; data: unknown }[]): boolean {
   return events.some(
     (event) =>

@@ -304,7 +304,7 @@
     flex-wrap: wrap;
   }
 }
-/* Demo V0.9 middle panel geometry; shared skill controls the visual tokens. */
+
 .page {
   padding: 0;
 }
@@ -620,7 +620,6 @@
   }
 }
 
-/* Keep all five KPIs on one row when the workspace itself is wide enough. */
 .metric > div {
   align-content: start;
   min-height: 30px;
@@ -650,7 +649,6 @@
   }
 }
 
-/* Five compact metrics fit the usual middle panel; narrow panels scroll one row. */
 .metrics {
   grid-template-columns: repeat(5, minmax(128px, 1fr));
   gap: 8px;

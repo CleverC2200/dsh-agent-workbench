@@ -3,7 +3,6 @@ import { knownNumber } from '../../../../../shared/configured-overview';
 import { applyFcPlan, readFcActionFacts, type FcRow } from './fc-workflow';
 import type { ImportedPlan } from '../../../fc/src/lib/planning';
 
-/** As in the original page: calculate first, then filter/sort the complete scope, then paginate. */
 export function projectFcPlannedRows(
   rows: FcRow[],
   plans: ImportedPlan[],
@@ -56,7 +55,6 @@ export function projectFcPlannedRows(
   return sortFcReplenishmentRows(filtered, input, viewId);
 }
 
-/** Confirmation reads may use a materialized key order; present them in the list's order. */
 export function sortFcReplenishmentRows(rows: FcRow[], input: FactInput, viewId = 'replenishment') {
   const filters = input.filters ?? {};
   const query = filters.search?.trim() ?? '';
@@ -117,7 +115,6 @@ function listTotals(rows: FcRow[], fields: string[]) {
   );
 }
 
-/** Normal reads stay server-paged. Only active manual plans require a whole-scope recalculation. */
 export function fcPlannedReader(plans: ImportedPlan[]): typeof readConfiguredFacts {
   return async (config, viewId, input, options = {}) => {
     if (!plans.length || !['replenishment', 'plan'].includes(viewId) || options.summaryOnly)

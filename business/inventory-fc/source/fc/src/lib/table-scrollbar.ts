@@ -14,8 +14,7 @@ export function scrollbarGeometry(
     width: Math.max(0, right - left),
     bottom: Math.max(0, viewport.height - bottomEdge),
     maxScroll,
-    // Once the native bottom scrollbar is reachable, do not show a second one.
-    // A one-pixel tolerance avoids flicker from fractional layout/zoom coordinates.
+
     visible:
       maxScroll > 1 && right > left && table.bottom > bottomEdge + 1 && table.top < bottomEdge - 20,
   };

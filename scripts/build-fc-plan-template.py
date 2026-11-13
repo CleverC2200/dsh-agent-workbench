@@ -16,8 +16,7 @@ tree = sqlglot.parse_one(base['request']['sql'], read='postgres')
 keep = {'warehouse_code', 'material_code', 'warehouse_name', 'material_name', 'product_categ_name', 'warehouse_month_out_plan', 'warehouse_future30_qty', 'source_rows', 'sku', 'category', 'month_out_plan', 'future30_qty'}
 for cte in tree.ctes:
     cte.this.set('expressions', [e for e in cte.this.expressions if e.alias_or_name in keep])
-# Reuse the exact current-month scope, optional branch/SKU filters and duplicate-plan rules.
-# Preserve syntax by attaching the existing CTE AST to the dedicated projection.
+
 fields = ['warehouse_code','sku','warehouse_name','material_name','month_out_plan','future30_qty','source_rows']
 projection = ', '.join(f'r.{f} AS {f}' for f in fields)
 projection += ", CASE WHEN r.source_rows=1 THEN SUBSTRING(REPLACE(CAST(:gea_p2700 AS VARCHAR(10)), '-', ''), 1, 6) ELSE NULL END AS stat_month, CAST(NULL AS DECIMAL(20,6)) AS warehouse_month_transfer_plan, r.future30_qty AS period_next_out"

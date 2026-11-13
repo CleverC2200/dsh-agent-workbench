@@ -1,9 +1,3 @@
-/**
- * 提交/审批类动作的确认边界（宿主侧硬规则）：
- *   - 元素可以声明影响等级（draft / submit / approve）；
- *   - 声明为提交/审批的元素，没有用户明确要求（confirm）时一律不下发；
- *   - 说明里把这类元素标出来，并给出 confirm 参数。
- */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -89,7 +83,7 @@ test('没有用户明确要求时，提交/审批类元素不下发', () => {
     }),
     null,
   );
-  // 普通动作不需要确认。
+
   assert.equal(
     m.resolvePageAction(parsed, {
       kind: 'invoke',

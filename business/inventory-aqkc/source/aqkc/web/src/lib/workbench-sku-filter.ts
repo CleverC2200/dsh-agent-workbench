@@ -5,7 +5,7 @@ export function defaultSkuRisks(age: boolean): string[] {
 }
 
 export type SkuSort = { key: string; direction: 'asc' | 'desc' };
-// Cells are formatted by the board. Accept only its numeric formats, never SKU text.
+
 export function skuNumericValue(value: string | number | undefined): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   const clean = (value ?? '')
@@ -16,7 +16,6 @@ export function skuNumericValue(value: string | number | undefined): number | nu
   return match ? Number(match[1]) : null;
 }
 
-/** Filters and pages only the already-loaded SKU layer; parent totals stay intact. */
 export function skuDetailPage(
   rows: SkuRow[],
   risks: string[],

@@ -44,7 +44,6 @@ async function flush() {
       if (next.epoch !== epoch || next.session !== currentSessionId()) continue;
       const signal = lifetime.signal;
       try {
-        // Await the previous delivery before sending the latest authored context.
         await publish(next.snapshot, { signal });
         if (active && !signal.aborted && next.epoch === epoch && next.revision === revision)
           document.getElementById('mps-context-status').textContent = '';
@@ -94,7 +93,7 @@ function cancelPublication() {
   lifetime = new AbortController();
   latest = undefined;
 }
-/** Component owners report their current state, without discovering DOM. */
+
 export function useMpsPart(react, key, value, label, active = true) {
   const serialized = JSON.stringify(value);
   const [restoreRevision, setRestoreRevision] = react.useState(restoration);
@@ -189,8 +188,7 @@ window.addEventListener('gea-session-changed', () => {
   restored = false;
   for (const part of parts.values()) part.stop();
   parts.clear();
-  // Ask the current Workbench binding to restore its own Session scope, then
-  // publish only after the authors have committed that restored projection.
+
   window.parent.postMessage(
     {
       protocol: 'dsh-workbench-view-v1',

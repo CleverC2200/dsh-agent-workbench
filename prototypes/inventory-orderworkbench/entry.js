@@ -135,7 +135,7 @@ document.addEventListener('click', event => {
   }
 
 }, true);
-// Hosted pages keep native form navigation disabled; submit only the page-owned action.
+
 document.addEventListener('click', event => {
   const button = event.target.closest('button[type="submit"]');
   const form = button?.form;
@@ -2492,8 +2492,7 @@ async function readCurrentPeriod() {
         cached.persistence.scope()?.base === base && retainableWorkbenchFacts(cached.facts) &&
         Date.now() - Date.parse(cached.facts.readAt) < periodCacheMaxAge)
         .map(cached => cached.facts).concat(scopedFacts);
-      // Publish only after the independent report scope is verified. A narrower
-      // scope discards the provisional result and performs its exact scoped read.
+
       if (staged && entry.persistence.scope()?.key && base === '') facts = await staged.accept(progress.push);
       else {
         staged?.cancel();

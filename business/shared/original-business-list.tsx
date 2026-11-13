@@ -35,7 +35,6 @@ const agingColumnWidths: Record<string, number> = {
   product_tag: 128,
 };
 
-/** Only presentation: the caller owns governed reads, errors and server pagination. */
 export function OriginalBusinessList({
   agentId,
   view,

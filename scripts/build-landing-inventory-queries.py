@@ -20,9 +20,7 @@ for agent,source_id in [('aqkc','page.dashboard-groups'),('apsplan','overview.st
   needed.add(name)
   for t in ctes[name].this.find_all(exp.Table):retain(t.name)
  retain('aligned');root.set('with_',exp.With(expressions=[v for k,v in ctes.items() if k in needed]));root=pushdown_projections(root)
- # Dictionaries are only needed where the selected target has no category.
- # Both dictionary adapters already collapse to one row per SKU. Remove the
- # unused product-list join and limit fallback lookups to that exact key set.
+
  adapters={x.alias_or_name:x for x in root.args['with_'].expressions}
  aligned=adapters['aligned'].this
  aligned.set('joins',[j for j in aligned.args.get('joins',[]) if not any(t.name=='product_list_dictionary' for t in j.find_all(exp.Table))])
@@ -38,7 +36,7 @@ for agent,source_id in [('aqkc','page.dashboard-groups'),('apsplan','overview.st
   for t in adapters[name].this.find_all(exp.Table):order(t.name)
   ordered.append(adapters[name])
  order('aligned');root.set('with_',exp.With(expressions=ordered))
- # Optimizer-created internal constants still need explicit unique aliases.
+
  for select in root.find_all(exp.Select):
   for i,e in enumerate(list(select.expressions)):
    if not isinstance(e,exp.Alias):select.expressions[i]=exp.alias_(e.copy(),'constant_'+str(i),quoted=False)

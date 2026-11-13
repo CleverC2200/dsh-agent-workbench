@@ -1,4 +1,3 @@
-/** Workbench Native 业务文档中的审批页面；GEA 保留认证与业务授权。 */
 import {
   RegionalApprovalResubmitDialog,
   type SalesPlanSubmissionItem,
@@ -302,7 +301,6 @@ function requestErrorMessage(error: unknown, t: Translate): string {
   return t('retry');
 }
 
-/** 只挂载真实 GEA 数据；未认证或查询失败时绝不切换到 fixture。 */
 export function WorkbenchPage({ t }: { t: Translate }) {
   const [businessStatus, setBusinessStatus] = useState<{
     scope: string | null;
@@ -422,7 +420,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
     toolCallId: string;
     command: Record<string, unknown>;
   }>();
-  // 页面桥的工具定义来自工作台当前这一屏上报的元素清单。
+
   const catalogElements = useRef<PageElement[]>([]);
   const quotedContext = useRef(conversationContext);
   quotedContext.current = conversationContext;
@@ -437,7 +435,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       }),
     });
   }, [status?.authenticated, apiLogOpen]);
-  // 组件执行完成后才向页面桥回填本次调用结果。
+
   const pendingToolResult = useRef<{
     toolCallId: string;
     resolve: (result: PageBridgeApplyResult) => void;
@@ -454,8 +452,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
   }, []);
   useEffect(() => {
     if (!sessionId) return;
-    // 首次进入时 live 查询可能还在加载；不要把一个暂时为空的快照当成最终结果。
-    // conversationContext 一旦产生会立即触发本 effect，后续分页/筛选也会持续同步。
+
     if (!conversationContext) return;
     let controller = new AbortController();
     const sync = () => {
@@ -465,12 +462,10 @@ export function WorkbenchPage({ t }: { t: Translate }) {
         'context',
         { owner, parameters: conversationContext ?? null },
         controller.signal,
-      ).catch(() => {
-        // 上下文同步失败不能影响审批工作台；下一轮会自动重试。
-      });
+      ).catch(() => {});
     };
     sync();
-    // 定时重申：宿主重启或状态丢失后，页面不必等下一次操作就能恢复同步。
+
     const heartbeat = setInterval(sync, 15_000);
     return () => {
       clearInterval(heartbeat);
@@ -479,8 +474,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
   }, [conversationContext, sessionId, owner]);
   useEffect(() => {
     if (!sessionId) return;
-    // 通用页面桥：取走 agent 发起的前端工具调用，交给工作台执行，再把结果回填。
-    // 桥不可用不能影响审批工作台本身；参数怎么解释由本页的 apply 决定。
+
     return startPageBridgeClient({
       endpoint: 'catalog',
       request: (endpoint, payload) => pageRpc(endpoint, { owner, parameters: payload }),
@@ -505,14 +499,11 @@ export function WorkbenchPage({ t }: { t: Translate }) {
             command: (args ?? {}) as Record<string, unknown>,
           });
         }),
-      // 页面自述能力：工具的定义与说明由桥按这份目录生成。
-      // 只有"审批工作台"这一屏才报目录；切到迁移过来的插件页面时这一屏不是它，
-      // 必须报 null，让宿主把上一屏的元素立刻注销（否则模型会对着上一屏下指令）。
+
       catalog: () => workbenchCatalog(catalogElements.current),
     });
   }, [sessionId, owner]);
-  // 离开这一屏时（切页、切插件、切会话、关页面），把"当前这一屏"从宿主里撤掉：
-  // 元素目录随桥的关闭撤掉，可见上下文在这里显式清空。
+
   useEffect(() => {
     if (!sessionId) return;
     return () => {
@@ -533,8 +524,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       controller.abort();
     };
   }, [identity?.state, identity?.scope]);
-  // 面板切换会重建本文档：首次 status 返回前先显示中性加载态，
-  // 避免刚切进业务面板时闪出「扫码登录」页面。
+
   if (!status)
     return (
       <main className="gea-workbench-boot" aria-busy="true" aria-label={t('loading')}>

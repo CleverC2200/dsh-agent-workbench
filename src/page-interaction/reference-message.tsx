@@ -14,7 +14,6 @@ import {
 import css from '@deepseek-ai/dsh-client-ui-chat/src/client/chat/MessageItem.module.css';
 import { projectReferenceText } from './reference.ts';
 
-/** Display contribution only; Core continues to own node data and message actions. */
 export function mountReferenceMessages(ctx: Context): void {
   for (const key of ['user', 'steering'] as const) {
     ctx.slots.inject('conversation.chat.node', () =>
@@ -26,7 +25,6 @@ export function mountReferenceMessages(ctx: Context): void {
   }
 }
 
-/** Project page receipts without changing the durable content sent to models or Copy. */
 export function ReferenceMessage(props: ChatNodeViewProps<'user' | 'steering'>) {
   const { node, t, renderMessageImages, openFile, openSkill } = props;
   const { content, time, referenceLabels = [], skillNames = [] } = node.data;

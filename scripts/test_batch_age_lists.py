@@ -67,7 +67,7 @@ class BatchAgeLists(unittest.TestCase):
  def test_fifo_consumes_old_stock_first_and_excludes_existing_sixty_plus(self):
   self.batch(90,10);self.batch(55,20);self.sales(60)
   self.batch(55,30,warehouse='OTHER');self.sales(3000,sku='UNRELATED')
-  # Each warehouse/SKU owns its own consumption, current old stock is excluded.
+
   r=self.read()[0];self.assertEqual(r['future7'],46);self.assertEqual(r['future14'],32);self.assertEqual(r['daily_movement'],2)
  def test_return_and_out_of_window_shipments_do_not_inflate_daily_movement(self):
   self.batch(55,20);self.sales(30);self.sales(-300);self.sales(300,day='20260922');self.sales(300,day='20261023')
@@ -144,7 +144,7 @@ class BatchAgeLists(unittest.TestCase):
   self.batch(10,4277,base='濮阳',warehouse='PY',sku='P')
   self.batch(10,-242,sku='NEG')
   config=json.loads((ROOT/'business/inventory-aqkc/sql.config.json').read_text())
-  # Exercise each delivered physical stock CTE, including those used by SKU drills.
+
   names=[name for name,q in config['queries'].items() if 'base_batch_stock AS' in q['request']['sql']]
   for name in names:
    with self.subTest(query=name):
@@ -156,7 +156,7 @@ class BatchAgeLists(unittest.TestCase):
     columns={'the_date','belong_base','material_code'}
     if attrs:columns.update(c.name for c in attrs.find_all(sqlglot.exp.Column) if c.table=='t')
     self.db.execute('CREATE TABLE agents_scm_stock_detail_d ('+','.join(c+' TEXT' for c in sorted(columns))+')')
-    # A stale daily record must never supply or multiply physical inventory.
+
     for _ in range(2):
      self.db.execute("INSERT INTO agents_scm_stock_detail_d (the_date,belong_base,material_code) VALUES ('2026-10-21','郑州','S')")
     query=sqlglot.parse_one('SELECT s.belong_base AS base,s.material_code AS sku,s.current_stock AS inventory FROM stock_source AS s',read='postgres')

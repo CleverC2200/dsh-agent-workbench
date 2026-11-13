@@ -19,7 +19,6 @@ export function referenceText(text: string) {
   return text.slice(0, cut) + '…';
 }
 
-/** External IDs obey the existing page contract; business/tree keys stay intact. */
 export function structureReferences(
   workspaceId: string,
   visible: StructureRow[],
@@ -32,7 +31,7 @@ export function structureReferences(
     ...visible.filter((r) => r.sku === '全部SKU'),
   ];
   const unique = [...new Map(ordered.map((row) => [row.key, row])).values()];
-  const rows = unique.slice(0, maxRows); // Reserve the remaining slots for page controls and trend references.
+  const rows = unique.slice(0, maxRows);
   return {
     rows,
     coverage: {
@@ -64,7 +63,6 @@ export function structureReferences(
 const quantity = (value: number | null | undefined) =>
   value == null ? '-' : value.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
 
-/** Filtered, already-calculated aggregates are separate from the paged SKU detail. */
 export function structureViewEvidence(
   workspace: FullChainWorkspace,
   rows: StructureRow[],

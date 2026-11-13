@@ -108,7 +108,7 @@ test('the opaque inventory build keeps memory storage after repository formattin
       },
     );
   const ui = join(workbench, 'business/inventory-fc/source/inventory-light-plugins');
-  // Reuse the prepared content cache, but give this build its own writable installation.
+
   execFileSync('corepack', ['pnpm', 'install', '--frozen-lockfile', '--offline'], {
     cwd: ui,
     stdio: 'pipe',

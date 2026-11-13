@@ -8,7 +8,6 @@ from sqlglot import exp
 ROOT = Path(__file__).resolve().parents[1]
 DEALER_TABLES = {'agents_order_execute_isontime_mi', 'agents_scm_shortage_trace_f'}
 
-
 def clean(config):
     removed, changed = [], []
     for name in list(config['queries']):
@@ -34,8 +33,7 @@ def clean(config):
             for join in list(select.args.get('joins') or []):
                 if isinstance(join.this, exp.Table) and join.this.name == 'order_sku_names':
                     select.set('joins', [j for j in select.args['joins'] if j is not join])
-                    # Inventory names remain authoritative in the next layer.
-                    # Its fallback uses stock movements and product master only.
+
                     for expression in select.expressions:
                         if expression.alias == 'material_name':
                             expression.set('this', sqlglot.parse_one('''COALESCE(
@@ -48,7 +46,6 @@ def clean(config):
         changed.append(name)
     config['fieldGaps'] = [g for g in config.get('fieldGaps', []) if g.get('id') != 'common.pickup-key']
     return {'removed': removed, 'changed': changed}
-
 
 if __name__ == '__main__':
     path = ROOT / 'business/inventory-fc/sql.config.json'

@@ -39,7 +39,6 @@ function sample(part, count) {
   };
 }
 
-/** Publish card evidence and scope without duplicating order-level inputs into every group. */
 export function fulfillmentPageContext(snapshot) {
   if (!snapshot || snapshot.state === 'unavailable') return snapshot;
   const counts = snapshot.calculated?.orderCounts;

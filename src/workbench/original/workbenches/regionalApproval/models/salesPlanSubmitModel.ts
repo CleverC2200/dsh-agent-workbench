@@ -4,7 +4,7 @@ import {
   correctionLine,
   correctionDecimal,
 } from './salesPlanCorrectionModel.ts';
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
+
 import { salesPlanWorkflow, type SalesPlanWorkflowRow } from '../../../salesPlanWorkflow.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 import { isBackendHttpError } from '../../../http-error.ts';
@@ -184,12 +184,10 @@ const validateSku = (sku: GeaSalesPlanSku) => {
   };
 };
 
-/** 重提请求必须由当前 GEA 来源重建，并用精确整数刻度校验数量、金额和边界。 */
 export const prepareSalesPlanResubmit = (
   source: SalesPlanResubmitSource,
   rows?: readonly SalesPlanWorkflowRow[],
 ): SalesPlanSubmitInput => {
-  // source 中的身份、价格、周期和路由字段均来自已重新读取的 GEA；调用方只能提供数量调整。
   const version: GeaSalesPlanVersion = source.detail.currentVersion;
   const nextStatus = salesPlanWorkflow(version.planTypeCode, rows).resubmit(version.status);
   const correction = version.orderType === 'Z';
@@ -481,7 +479,6 @@ export class SalesPlanSubmitAttempt {
   }
 }
 
-/** 刷新队列前确认新的生效版本及其重提日志。 */
 export const salesPlanResubmitReadbackMatches = (
   previousVersionId: string,
   receipt: GeaSalesPlanSubmitReceipt,

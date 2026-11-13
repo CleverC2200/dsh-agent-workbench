@@ -1,4 +1,3 @@
-/** No internal service calls or credentials may enter an HTML plugin. */
 export type SapPricingResult = {
   ok: boolean;
   data: { prices: Array<{ materialCode: string; price: number }> } | null;

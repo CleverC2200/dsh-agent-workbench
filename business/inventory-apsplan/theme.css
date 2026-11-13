@@ -1,4 +1,3 @@
-/* The supplied board CSS remains the visual source; bind its roles to shared tokens. */
 html.aps-plugin-host body {
   --font-sans: var(--workbench-font-family);
   --background: var(--workbench-page);
@@ -74,7 +73,6 @@ html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
   }
 }
 
-/* The optional source detail shares the other inventory tables' theme roles. */
 .plugin-source-supplement {
   --ui-font: var(--workbench-font-family);
   --ui-ink: var(--workbench-text);
@@ -95,7 +93,6 @@ html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
   --ui-warning-soft: var(--workbench-subtle);
 }
 
-/* Original board light colors; retain the host's dark palette. */
 html.aps-plugin-host body:not([data-ds-dark-theme]) {
   --v02-text-muted: #858c96;
   --v02-hover-border: #efabb4;

@@ -220,7 +220,7 @@ export function PersistedCycleSettings({
   }
   function save() {
     if (saving) return;
-    // Do not wait for setRules to commit: send the locally composed result.
+
     const updated = dirty ? add() : rules;
     if (updated) void onSave(updated);
   }

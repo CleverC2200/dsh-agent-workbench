@@ -4,7 +4,6 @@ import { build } from 'esbuild';
 import { readFile } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
 
-// Workbench owns the presentation; the fixture supplies only public Core and fetch contracts.
 const { outputFiles } = await build({
   stdin: {
     contents: `

@@ -210,12 +210,10 @@
   }
 }
 
-/* Embedded panels already provide the same padding as their loaded cards. */
 .embedded .content {
   padding: 0;
 }
 
-/* Embedded lists already provide their own border and corners. */
 .embeddedTable {
   margin: 0;
   border: 0;

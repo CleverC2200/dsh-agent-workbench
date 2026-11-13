@@ -1,6 +1,6 @@
 import sqlConfiguration from '../../../sql.config.json';
 import { sqlTemplate as configuredSql } from '../../../../shared/sql-config.ts';
-// Transfer complete rows in bounded packets; keep business filtering and calculations unchanged.
+
 type Database = { query(sql: string, values?: unknown[]): Promise<{ rows: any[] }> };
 type Packing = { order: string[]; timestamps?: string[] };
 function columnsFor(sql: string): string[] | undefined {

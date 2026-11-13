@@ -17,7 +17,6 @@ let generation = 0;
 let disposeCatalog = () => {};
 const lifetime = new AbortController();
 
-/** Only the latest mock snapshot is queued; the existing channel owns Session and cancellation. */
 async function publishState() {
   publicationNeeded = true;
   if (publicationRunning || lifetime.signal.aborted) return;

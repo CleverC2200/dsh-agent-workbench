@@ -10,7 +10,6 @@ import { readConfiguredTargetScope } from './configured-target-scope';
 import type { ConfiguredExecution } from './agent-query';
 import { qllPublishedDate } from './qll-published-date';
 
-/** Independent base shortage views share the page's authorized daily batch. */
 export async function readBaseCurrentShortage(
   config: AgentSqlConfig,
   id: string,
@@ -53,7 +52,6 @@ export async function readBaseCurrentShortage(
   return client.read(id, values, readOptions);
 }
 
-/** Kept for already installed Hosts during the coordinated plugin update. */
 export function readBaseShortageSkuRanking(
   config: AgentSqlConfig,
   values: Record<string, unknown>,
@@ -127,7 +125,6 @@ const errorInfo = (error: any) => ({
   rejectedColumns: error.rejectedColumns,
 });
 
-/** Parent filters apply only to compatible source views; production bases are not warehouse ownership. */
 export function initialFiltersForView(
   config: AgentSqlConfig,
   id: string,
@@ -143,7 +140,6 @@ export function initialFiltersForView(
   );
 }
 
-/** A source page is independent of other domains. Display paging never feeds a full-scope calculation. */
 export async function readConfiguredFacts(
   fallback: AgentSqlConfig,
   viewId: string,
@@ -219,15 +215,13 @@ export async function readConfiguredFacts(
     (q.summaryRoute || ['stock', 'health', 'shipment'].includes(view.timeMode))
   )
     input = { ...input, asOf: await qllPublishedDate(config, input.asOf, options) };
-  // Display reads fetch only the requested page; full-scope totals and explicit
-  // export/submission reads retain their independent contracts.
+
   const readSize = pageSize;
   const displayOffset = (page - 1) * pageSize;
   const readOffset = displayOffset;
   let version: any,
     versionSeen = false;
-  // Only non-calculating labels may be absent on a display page. Quantity,
-  // scope, sorting and pagination columns keep their complete read contract.
+
   const optionalLabels =
     config.agentId === 'inventory-fc' &&
     ['replenishment', 'replenishment-confirmation'].includes(viewId) &&
@@ -243,8 +237,6 @@ export async function readConfiguredFacts(
         ? new Set(['product_tag'])
         : new Set<string>();
   const read = async (id: string, values: Record<string, any>, snapshot = false) => {
-    // Owned by one overview load, never reused across refreshes or identities.
-    // Keep rejected promises too: a denied snapshot must not trigger a retry.
     const key = JSON.stringify([config.agentId, id, values]);
     const shared = snapshot ? options.snapshotReads : options.scopeReads;
     let job = shared?.get(key);
@@ -456,9 +448,7 @@ export async function readConfiguredFacts(
     Object.fromEntries(
       Object.values(config.queries[id].parameterSpec).map((s: any) => [s.name, values[s.name]]),
     );
-  // A single aggregate already computes its own scope count in the same SQL
-  // statement. Extra counts neither improve that snapshot nor validate details
-  // (none are requested). Keep the paired counts for displayed detail pages.
+
   if (
     options.summaryOnly &&
     view.summaryId &&
@@ -513,7 +503,7 @@ export async function readConfiguredFacts(
   }
   const countId = q.pagination?.countQuery;
   if (!countId) return fail('INVALID_COLLECTION_CONTRACT', '分页缺少配对计数');
-  // The aggregate reads the full filter scope independently of the ten-row page.
+
   const readSummary = async () => {
     if (!view.summaryId || options.detailsOnly) return { summary: null, summaryError: null };
     try {
@@ -525,7 +515,7 @@ export async function readConfiguredFacts(
       return { summary: null, summaryError: errorInfo(error) };
     }
   };
-  // This auxiliary source cannot remove independently authorized stock rows.
+
   const readProduction = async () => {
     if (!view.productionQueryId) return { rows: [], error: null, configVersion: undefined };
     const productionValues: Record<string, unknown> = {
@@ -645,9 +635,7 @@ export async function readConfiguredFacts(
   }
   const before = await read(countId, subset(countId)),
     total = totalOf(before);
-  // An empty scope needs no detail/aggregate scan. Keep the second count and
-  // config check; zero rows must not conceal a source change or imply permission
-  // to return detail columns that were never requested.
+
   const [result, { summary, summaryError }] =
     total === 0
       ? [
@@ -693,7 +681,7 @@ export async function readConfiguredFacts(
     source: result.source,
     authorization: result.authorization,
     consistency: 'count_checked_not_atomic_snapshot',
-    // Dates do not filter undated current master/plan facts.
+
     period:
       view.timeMode === 'current'
         ? null

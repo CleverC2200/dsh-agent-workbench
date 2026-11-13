@@ -151,16 +151,20 @@ for (const name of ['category', 'mps'])
           path: process.env.HTML_LAYOUT_EVIDENCE + '/' + name + '-600-low.png',
         });
       await page.evaluate(() => window.unassociate());
-      if (name === 'mps')
-        await page
-          .frameLocator('iframe')
-          .getByRole('button', { name: '页面说明', exact: true })
-          .click();
-      await page.frameLocator('iframe').locator('.author-questions summary').click();
-      await page.frameLocator('iframe').locator('.author-question-list button').first().click();
-      await expect(page.frameLocator('iframe').locator('.author-quote-status')).toContainText(
-        '关联当前页面',
-      );
+      if (name === 'mps') {
+        await expect(
+          page.frameLocator('iframe').locator('.author-question-list button:visible'),
+        ).toHaveCount(0);
+        await expect(
+          page.getByRole('textbox', { name: 'Core草稿接口fixture', exact: true }),
+        ).toHaveCount(0);
+      } else {
+        await page.frameLocator('iframe').locator('.author-questions summary').click();
+        await page.frameLocator('iframe').locator('.author-question-list button').first().click();
+        await expect(page.frameLocator('iframe').locator('.author-quote-status')).toContainText(
+          '关联当前页面',
+        );
+      }
       assert.equal(await page.evaluate(() => window.persisted), 3);
     },
   );

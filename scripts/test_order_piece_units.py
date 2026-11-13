@@ -4,7 +4,6 @@ from test_base_current_orders import BaseCurrentOrders
 from test_fc_current_orders import BranchCurrentOrders
 from test_fc_card_scope import BranchCardScope
 
-
 class PieceUnits(unittest.TestCase):
  def base_fixture(self):
   fixture=BaseCurrentOrders();fixture.setUp();self.addCleanup(fixture.doCleanups);return fixture
@@ -45,7 +44,7 @@ class PieceUnits(unittest.TestCase):
   f=BranchCardScope();f.setUp();self.addCleanup(f.doCleanups)
   f.add('DEALER',qtyordered=1600,qtyallocated=800,bizunitconvertrate=16)
   row=next(r for r in f.f.read('replenishment.detail') if r['sku']=='S1')
-  # The confirmed reported fields are pieces; warehouse_transfer_qty is not used.
+
   self.assertEqual((row['current_order_demand'],row['calculation_order_remaining'],row['recommended_qty']),(100,50,125))
   self.assertEqual(row['in_transit'],0)
   f.f.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='BASE',warehouse_classify='01',belong_base='基地1',material_code='S1',live_qty=0,available_qty=0)

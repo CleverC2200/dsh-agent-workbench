@@ -11,7 +11,7 @@ class CompactOverview(unittest.TestCase):
     def assert_same(self, **values):
         expected = self.f.read('replenishment.summary', **values)
         for row in expected:
-            # This count is supplied by the independently authorized order read.
+
             row.pop('known_shortage_sku_count')
         self.assertEqual(expected, self.f.read('replenishment.overview', **values))
 

@@ -20,12 +20,13 @@ const check = (name) => ({
       throw Error(child.error?.message ?? child.signal ?? 'exit ' + child.status);
   },
 });
-// Invalid source references reject this input before dependency-based checks.
+
 const checks = runQualityChecks([check('check:knowledge')]);
 if (checks[0].status === 'passed')
   checks.push(
     ...runQualityChecks(
       [
+        'check:comments',
         'lint',
         'format:check',
         values['declarations-in-build'] ? 'check:official-input' : 'typecheck:official',

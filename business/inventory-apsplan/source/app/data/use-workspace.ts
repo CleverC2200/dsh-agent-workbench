@@ -17,7 +17,7 @@ type Result = {
   busy: boolean;
   comparisonBusy: boolean;
 };
-/** Keep completed source sections visible while an expanded scope is loading. */
+
 function retainLoadingSections(next: Data, previous: Data | null): Data {
   if (!previous) return next;
   return {
@@ -39,7 +39,7 @@ export function useWorkspace(
   { paused = false }: { paused?: boolean } = {},
 ) {
   const periodKey = JSON.stringify([date, granularity, summary, detailMode, productScope?.mode]);
-  // Closing a branch changes visibility, not the data required for this period.
+
   const requested = useRef({ periodKey, categories: new Set<string>(), items: new Set<string>() });
   if (requested.current.periodKey !== periodKey)
     requested.current = { periodKey, categories: new Set(), items: new Set() };
@@ -112,7 +112,6 @@ export function useWorkspace(
       const current = () => active && id === generation.current && !signal.aborted;
       let loaded: Data | null = samePeriod(lastData.current.key) ? lastData.current.data : null;
       function publish(data: Data, busy: boolean) {
-        // Track raw readiness before retaining completed rows from the previous scope.
         const sourcePending = data.sections
           .filter(
             (section) =>
@@ -177,7 +176,6 @@ export function useWorkspace(
       );
       setLiveContext({ realData: !!loaded, status: 'loading', period: input });
       try {
-        // Core cards enter the bounded queue first without blocking other slots.
         const dataRead = workspace({
           ...input,
           refresh,

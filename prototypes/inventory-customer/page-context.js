@@ -1,6 +1,5 @@
 import { customerMetricDefinitions } from './metric-definitions.js';
 
-/** Exact visible KPI names and units are data, not something the model should infer from summary keys. */
 export function customerPageContext(value) {
   const s = value.summary ?? {};
   const total = s.customerCodes?.length;

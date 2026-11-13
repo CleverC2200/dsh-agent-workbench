@@ -1,5 +1,3 @@
-// Merge progress bursts into one paint. Final facts are applied by the caller
-// after cancel(), so a queued partial can never replace a completed report.
 export function createFrameProgress(publish, signal, frames = globalThis) {
   const schedule =
     frames.requestAnimationFrame?.bind(frames) ?? ((callback) => setTimeout(callback, 0));

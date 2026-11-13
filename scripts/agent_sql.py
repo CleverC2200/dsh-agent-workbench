@@ -20,12 +20,10 @@ from sqlglot.optimizer.scope import traverse_scope
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 AGENTS = ('aqkc', 'fc', 'qll', 'apsplan', 'dealer')
 
-
 class ContractError(Exception):
     def __init__(self, code, message):
         self.code = code
         super().__init__(message)
-
 
 def config_for(agent):
     if agent not in AGENTS:
@@ -35,7 +33,6 @@ def config_for(agent):
     if data.get('schemaVersion') != 1 or data.get('agentId') != 'inventory-' + agent:
         raise ContractError('INVALID_AGENT_SQL_CONFIG', 'Agent SQL 配置身份不匹配')
     return data
-
 
 def validate_parameters(query, values, query_id=''):
     if not isinstance(values, dict):
@@ -102,15 +99,13 @@ def validate_parameters(query, values, query_id=''):
             raise ContractError('INVALID_PERIOD', '订单和交货截止日必须一致')
     return parameters
 
-
 @lru_cache(maxsize=128)
 def parsed_syntax(sql):
-    # Syntax only: no credentials, parameters, schema, permissions or result rows.
+
     return tuple(sqlglot.parse(sql, read='postgres'))
 
-
 def inspect(sql, parameters, schema):
-    # Each request validates its own copied AST against current parameters/catalog.
+
     trees = [tree.copy() if tree is not None else None for tree in parsed_syntax(sql)]
     if len(trees) != 1 or not isinstance(trees[0], exp.Select):
         raise ContractError('READ_ONLY_QUERY_REQUIRED', '只允许配置中的单条只读 SELECT')
@@ -170,10 +165,9 @@ def inspect(sql, parameters, schema):
                 raise ContractError('FIELD_NOT_AVAILABLE', '派生字段不可用：' + col.name)
     return tree
 
-
 def bind(sql, parameters):
     bound = {}
-    # PyMySQL performs binding; double percent signs before introducing its placeholders.
+
     sql = sql.replace('%', '%%')
     tokens = r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|--[^\r\n]*|/\*[\s\S]*?\*/|:(gea_p\d+)\b"
     def replace(match):
@@ -189,7 +183,6 @@ def bind(sql, parameters):
         return '%(' + name + ')s'
     return re.sub(tokens, replace, sql), bound
 
-
 def json_value(value):
     if isinstance(value, decimal.Decimal):
         return str(value)
@@ -197,14 +190,11 @@ def json_value(value):
         return value.isoformat()
     raise TypeError(type(value).__name__)
 
-
 def direct_preview_document(html):
-    # QLL's packaged page prohibits network IO. Only this loopback preview
-    # needs same-origin POST; keep the installed document and other directives intact.
+
     return re.sub(r'<meta\b[^>]*http-equiv="Content-Security-Policy"[^>]*>',
                   lambda match: match[0].replace("connect-src 'none'", "connect-src 'self'"),
                   html, flags=re.I)
-
 
 class Executor:
     def __init__(self, connection_file):
@@ -232,8 +222,7 @@ class Executor:
             return result
 
     def query_schema(self, conn):
-        # Physical metadata only, for this explicit direct-preview account.
-        # Business results, permissions and query validation are never cached.
+
         stamp = self.connection_file.stat() if self.connection_file.exists() else None
         identity = (stamp.st_mtime_ns, stamp.st_size) if stamp else None
         with self._catalog_lock:
@@ -269,7 +258,6 @@ class Executor:
             if own:
                 conn.close()
 
-
 def replay(executor, report_path):
     results, conn = [], executor.connect()
     try:
@@ -303,7 +291,6 @@ def replay(executor, report_path):
         if row['status'] == 'failed':
             print(row['agent'], row['queryId'], row['code'], row['message'][:250])
     return report['failed'] == 0
-
 
 def serve(executor, port):
     token = secrets.token_urlsafe(32)
@@ -389,7 +376,6 @@ document.addEventListener('DOMContentLoaded',function(){const note=document.crea
     finally:
         server.server_close()
         settings.unlink(missing_ok=True)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)

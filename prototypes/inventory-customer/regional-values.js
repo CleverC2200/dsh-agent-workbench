@@ -1,4 +1,3 @@
-/** Disjoint customer partitions from the same observation as the visible KPI cards. */
 export function customerRegionalValues(rows, customerCodes) {
   const scope = new Set(customerCodes ?? []);
   return Object.fromEntries(['region', 'province'].map(dimension => {

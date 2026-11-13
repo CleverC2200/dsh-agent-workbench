@@ -1,4 +1,3 @@
-/** Build the migrated memory-only demo; never import GEA Host or deployment files. */
 import { build } from 'esbuild';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
@@ -11,7 +10,7 @@ const output = resolve(root, 'lib/prototypes/dms');
 const agent = resolve(root, '../dsh-agent-manage/business-resources/inventory-dms');
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const theme = await readFile(resolve(root, 'theme/tokens.css'), 'utf8');
-if (sha256(theme) !== '281fe7eebe0775b6bedabad6806753db6afe5eded52e6d9ade54067d23e20ef8')
+if (sha256(theme) !== '51d07dd91c4e2851301c046556a9c34aded00c5fa94525420b949badce9a5497')
   throw Error('DMS_THEME_RESOURCE_MISMATCH');
 const result = await build({
   entryPoints: [resolve(source, 'main.ts')],
@@ -32,9 +31,9 @@ const template = await readFile(resolve(source, 'index.html'), 'utf8');
 const css = await readFile(resolve(source, 'style.css'), 'utf8');
 const code = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 const html = template
-  .replace('/* SHARED_THEME_RESOURCE */', theme)
-  .replace('/* DMS_STYLE */', css)
-  .replace('/* DMS_SCRIPT */', code);
+  .replace('__SHARED_THEME_RESOURCE__', theme)
+  .replace('__DMS_STYLE__', css)
+  .replace('__DMS_SCRIPT__', code);
 await mkdir(output, { recursive: true });
 await writeFile(resolve(output, 'index.html'), html);
 await build({

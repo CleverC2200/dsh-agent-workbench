@@ -158,7 +158,7 @@ for (const mode of ['complete', 'partial', 'denied-columns', 'failed-branch']) {
     try {
       const prior = await before.loadPersonal(() => {}),
         current = await after.loadPersonal(() => {});
-      // Exempt only the newly wired over30 field; assert its value independently below.
+
       const originalFields = (result) => ({
         ...result,
         objects: result.objects.map(({ over30: _over30, ...fields }) => fields),

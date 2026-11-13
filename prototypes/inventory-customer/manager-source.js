@@ -1,5 +1,3 @@
-// The business owner confirmed order sales_person is the customer manager.
-// Keep one row per plan customer; conflicting or missing names remain unknown.
 export const CUSTOMER_MANAGER_SQL = `SELECT e.cust_code,
   COUNT(DISTINCT NULLIF(TRIM(e.sales_person), '')) AS manager_names,
   CASE WHEN COUNT(DISTINCT NULLIF(TRIM(e.sales_person), '')) = 1

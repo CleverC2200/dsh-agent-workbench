@@ -12,7 +12,6 @@ const readDate = (value: unknown) =>
 const labelDate = (value: string) =>
   `${value.slice(0, 4)}年${value.slice(5, 7)}月${value.slice(8, 10)}日`;
 
-/** The native date field preserves ISO form validation; the calendar has an explicit Chinese UI. */
 export function BusinessDateInput({
   className,
   value,

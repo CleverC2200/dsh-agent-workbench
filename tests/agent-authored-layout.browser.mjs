@@ -7,7 +7,7 @@ import { configuredPageHtml, configuredWire } from './fixtures/configured-page.m
 async function selectProductionDimension(frame, name) {
   await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
   const tab = frame.getByRole('tab', { name, exact: true });
-  // Center below sticky toolbars after the initial cards stop changing the document height.
+
   await tab.evaluate((element) => element.scrollIntoView({ block: 'center' }));
   await tab.click();
 }
@@ -1152,7 +1152,7 @@ for (const deniedBudget of [false, true])
       await expect(card('销售预算达成率').locator('.achievement-status')).toHaveText('读取失败');
       await expect(row('销售预算达成率').locator('.status-neutral')).toHaveText('读取失败');
       const budgetCalls = calls.filter((query) => query.queryId === 'page.budget-performance');
-      // Summary and organization are separate page loads; neither retries denied comparisons.
+
       assert.ok(budgetCalls.length <= 2);
       assert.ok(budgetCalls.every((query) => query.parameters.start_month === '202610'));
     }
@@ -1747,7 +1747,7 @@ test('FC restores real plan template, validates warehouse scope and applies an i
   const card = frame
     .locator('[data-overview-cards="fc"] article')
     .filter({ has: frame.getByText('待补货量', { exact: true }) });
-  await expect(card.locator('.kpi-value')).toHaveText('80件'); // Unknown SKUs do not erase the valid imported recommendation.
+  await expect(card.locator('.kpi-value')).toHaveText('80件');
   await frame.getByRole('button', { name: '补货确认', exact: true }).click();
   await expect(
     frame.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }),

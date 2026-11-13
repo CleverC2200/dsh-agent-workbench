@@ -24,7 +24,7 @@ for agent in ['aqkc','fc','qll','apsplan']:
             conditions.extend(["b.month_date <= REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')","LENGTH(b.month_date) = 8",digits('b.month_date'),"SUBSTRING(b.month_date, 5, 2) BETWEEN '01' AND '12'","SUBSTRING(b.month_date, 7, 2) BETWEEN '01' AND '31'"])
             sql="WITH latest AS (SELECT MAX(b.month_date) AS day_key FROM agents_scm_inventory_sku_data_d AS b WHERE "+' AND '.join(conditions)+") SELECT CASE WHEN l.day_key IS NULL THEN NULL ELSE CONCAT(SUBSTRING(l.day_key, 1, 4), '-', SUBSTRING(l.day_key, 5, 2), '-', SUBSTRING(l.day_key, 7, 2)) END AS day FROM latest AS l"
         sql=sql.replace('FROM agents_scm_material_in_out_summary_d AS n INNER JOIN inventory_batch_totals AS scoped_stock ON scoped_stock.warehouseid = n.warehouseid AND scoped_stock.material_code = n.material_code GROUP BY n.warehouseid, n.material_code','FROM agents_scm_material_in_out_summary_d AS n GROUP BY n.warehouseid, n.material_code')
-        # Malformed production dates invalidate age only; quantities remain in the same inventory pool.
+
         sql=re.sub(r"(?<!THEN )CAST\(SUBSTRING\(NULLIF\(([a-z]+\.prod_date), ''\), (\d+), (\d+)\) AS INTEGER\)",safe_part,sql)
         q['request']['sql']=sql
     path.write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n')

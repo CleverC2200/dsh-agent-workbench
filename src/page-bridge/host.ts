@@ -1,9 +1,3 @@
-/**
- * 页面桥的宿主侧状态机：把「前端工具调用」排队，等页面取走并把 tool 消息回填。
- *
- * 与业务无关：业务方只说"工具叫什么、参数是什么"，这里不解释参数含义，
- * 也不碰任何业务数据。路由由消费方自己挂（鉴权与路径属于业务/部署决定）。
- */
 import { randomUUID } from 'node:crypto';
 import {
   AGUI_EVENT_TOOL_CALL_ARGS,
@@ -25,18 +19,17 @@ type PendingToolCall = {
 type BridgeSession = {
   toolCalls: PendingToolCall[];
   results: Map<string, { message: AgUiToolMessage; receivedAt: number }>;
-  /** 已取消的调用：既阻止排队下发，也丢弃页面迟到的回执。 */
+
   cancelled: Map<string, number>;
 };
 
 export type PageBridgeOptions = {
-  /** 命令在页面取走前的最长存活时间。 */
   ttlMs?: number;
-  /** 单会话最多挂起多少条调用。 */
+
   maxQueued?: number;
-  /** 便于测试注入时钟。 */
+
   now?: () => number;
-  /** 便于测试注入 id 生成。 */
+
   id?: () => string;
 };
 
@@ -44,7 +37,7 @@ export type PageBridge = {
   enqueue(sessionId: string, input: { toolCallName: string; args: unknown }): string;
   pull(sessionId: string, toolMessages: unknown): AgUiEvent[];
   take(sessionId: string, toolCallId: string): AgUiToolMessage | undefined;
-  /** 取消尚未完成的调用；迟到的页面回执不会再进入宿主结果队列。 */
+
   cancel(sessionId: string, toolCallId: string): void;
   wait(
     sessionId: string,
@@ -54,11 +47,10 @@ export type PageBridge = {
     signal?: AbortSignal,
   ): Promise<AgUiToolMessage | undefined>;
   reset(sessionId: string): void;
-  /** 身份或部署整体变化时清空所有会话。 */
+
   resetAll(): void;
 };
 
-/** 建一个页面桥；每个宿主进程一个实例即可。 */
 export function createPageBridge(options: PageBridgeOptions = {}): PageBridge {
   const now = options.now ?? (() => Date.now());
   const nextId = options.id ?? (() => randomUUID());
@@ -124,7 +116,7 @@ export function createPageBridge(options: PageBridgeOptions = {}): PageBridge {
       prune(session, now());
       for (const message of validateToolMessages(toolMessages)) {
         if (!session.toolCalls.some((call) => call.toolCallId === message.toolCallId)) continue;
-        // 超时取消后，页面可能已经在执行并迟到回传；这条回执不能复活调用。
+
         if (session.cancelled.has(message.toolCallId)) continue;
         session.results.set(message.toolCallId, {
           message,

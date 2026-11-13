@@ -29,7 +29,6 @@ export type WarehouseSnapshotDatabase = BusinessDatabase;
 
 export class WarehouseSnapshotDataError extends Error {}
 
-// 页面、AI、提交复核共用此入口；应用自己的计划配置仍在本地业务库。
 export async function loadWarehouseSnapshotForIdentity(
   warehouseId: WarehouseId,
   identity: TrustedIdentity,
@@ -67,8 +66,7 @@ function optionalNumber(value: unknown): number | null {
 
 function usableSourcePlan(row: Record<string, unknown> | undefined): boolean {
   if (!row || optionalNumber(row.shipment_plan_qty) === null) return false;
-  // Upstream can publish numeric zero placeholders alongside BI_TARGET_MISSING.
-  // Only a ready plan is a business quantity, including an explicitly ready zero.
+
   return (
     text(row.plan_status).toUpperCase() === 'READY' &&
     !/MISSING|INVALID|INCOMPLETE|PENDING/.test(text(row.bi_target_status).toUpperCase())
@@ -191,8 +189,7 @@ export async function loadWarehouseSnapshot(
         orderBy: inventoryDetail === 'summary' ? ['material_code'] : ['material_code', 'prod_date'],
       },
     ),
-    // Keep snapshot and warehouse scope as independent scalar/array subqueries:
-    // PostgreSQL can combine the two operation-scope indexes without scanning the whole snapshot.
+
     queryBusinessDatabase(
       database,
       configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.4'),
@@ -224,11 +221,10 @@ export async function loadWarehouseSnapshot(
       addDays(calculationDate, -1),
     ]),
   ];
-  // Observe failures immediately; the original promises are still awaited below.
+
   for (const query of independentQueries) void query.catch(() => {});
   const [planResult, optionalTables] = await planPromise;
 
-  // Choose one version for the whole warehouse/month, never a per-SKU fallback.
   const versionPriority = (value: unknown) =>
     text(value) === 'MONTH_START' ? 0 : text(value) === 'ROLLING' ? 1 : 2;
   const selectedVersions = new Map<string, string>();
@@ -246,8 +242,7 @@ export async function loadWarehouseSnapshot(
   const planDates = [
     ...new Set(planResult.rows.map((row) => text(row.target_month)).filter(Boolean)),
   ].sort();
-  // Plans belong to the calculation month and its calendar successor. Missing
-  // months stay unknown; historical or later plans never fill their place.
+
   const currentPlanDate = `${calculationDate.slice(0, 7)}-01`;
   const nextPlanDate = `${nextMonth(calculationDate.slice(0, 7))}-01`;
   const currentPlanRows = planResult.rows.filter(
@@ -281,14 +276,11 @@ export async function loadWarehouseSnapshot(
     independentQueries[4],
   ];
 
-  // Details depend only on pending order keys, not inventory/operations totals.
   const orderDetailPromise = queries[2].then(async (pendingOrderResult) => {
     const orderNumbers = [
       ...new Set(pendingOrderResult.rows.map((row) => text(row.executeorderno)).filter(Boolean)),
     ];
-    // GEA rejects FROM UNNEST. Keep the same paired membership test with scalar
-    // parameters: independent order/SKU IN lists would admit cross-pair matches.
-    // OR does not multiply rows when a pending order/SKU pair appears twice.
+
     const orderPairs = pendingOrderResult.rows.flatMap((row) => [
       text(row.executeorderno),
       text(row.material_code),
@@ -313,7 +305,7 @@ export async function loadWarehouseSnapshot(
         )
       : { rows: [] };
   });
-  // Product dimensions depend on inventory SKU keys and plans, not on operations or order details.
+
   const productMetadataPromise = queries[0].then((inventory) =>
     hasOrderFulfillment
       ? loadPlanProductMetadata(
@@ -446,9 +438,7 @@ export async function loadWarehouseSnapshot(
   const activitySum = (sku: string, names: string[]) =>
     sumKnownQuantities(names.map((name) => activityBySku.get(sku)?.get(name) ?? null));
   const inTransitBySku = new Map<string, number | null>();
-  // Separate, server-owned metric contract: deduplicated open ASN remaining
-  // quantities, with business-confirmed statuses and stock-unit conversion.
-  // Explicit zero rows are required; absence never means zero.
+
   const verifiedTransitBySku = new Map<string, number | null>();
   const operationNameBySku = new Map<string, string>();
   const operationTotals = new Map<string, number>();
@@ -523,8 +513,7 @@ export async function loadWarehouseSnapshot(
     const inventory = inventoryGroups.get(sku);
     const inventoryQty = optionalNumber(inventory?.quantity ?? row.current_inventory_qty) ?? 0;
     const availableQty = optionalNumber(inventory?.available ?? row.current_inventory_qty) ?? 0;
-    // Legacy expectedqty totals include historical ASN records. They cannot
-    // establish current unreceived stock without status/receipt-level data.
+
     const inTransitQty = verifiedTransitBySku.get(sku) ?? null;
     const monthlyDemand = quantity(row.shipment_plan_qty);
     const plannedDailyShipment = monthlyDemand / daysInMonth(currentPlanDate);
@@ -607,10 +596,10 @@ export async function loadWarehouseSnapshot(
         availableQty: group?.available ?? null,
         inTransitQty,
         reportedInTransitQty: inTransitBySku.get(sku) ?? null,
-        // Order-stage quantities are separate from verified physical in-transit stock.
+
         orderedNotShippedQty: activityBySku.get(sku)?.get('open_pending_qty') ?? null,
         shippedNotReceivedQty: activityBySku.get(sku)?.get('open_shipped_qty') ?? null,
-        turnoverDays: null, // Filled only from the dated actual outbound measure below.
+        turnoverDays: null,
         batches,
         ...(inventoryDetail === 'summary'
           ? {
@@ -648,7 +637,7 @@ export async function loadWarehouseSnapshot(
         row.cust_name,
         text(detail?.cust_name, text(row.cust_code, text(detail?.cust_code, '客户信息未提供'))),
       ),
-      requestedDate: text(row.required_delivery_at).slice(0, 10) || '—', // Only the authoritative requested delivery date.
+      requestedDate: text(row.required_delivery_at).slice(0, 10) || '—',
       status: '正常',
       lines: [],
     };
@@ -697,7 +686,7 @@ export async function loadWarehouseSnapshot(
     ? sumKnownQuantities(replenishments.map((row) => row.recommendedQty))
     : null;
   const baseResources: BaseResource[] = [...productionByBase.entries()].map(([baseName, value]) => {
-    const leadTimeDays = null; // Production dates do not establish transport lead time.
+    const leadTimeDays = null;
     return {
       baseName,
       materialGroup: 'PG 基地生产计划覆盖当前补货 SKU',
@@ -759,8 +748,7 @@ export async function loadWarehouseSnapshot(
     (sum, row) => sum + (optionalNumber(row.outbound_qty) ?? 0),
     0,
   );
-  // The warehouse denominator includes all actual shipments, including sold-out SKUs.
-  // Do not require a shipment row for every inventory SKU or average SKU ratios.
+
   const turnoverDays =
     dailyOutbound.rows.length > 0 &&
     dailyOutbound.rows.every((row) => optionalNumber(row.outbound_qty) !== null) &&

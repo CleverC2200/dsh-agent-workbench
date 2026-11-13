@@ -1,5 +1,5 @@
--- Deduplicate before projecting the six governed fields: separate batches may
--- have identical quantities and ages. Preserve every differing source field.
+
+
 ALTER VIEW ai_db.dwd_scm_material_age_his AS
 SELECT dt, warehouseid, belong_base, material_code, inv_qty, age_days
 FROM (

@@ -26,7 +26,7 @@ test('HTML sample assembly refuses a missing or changed fixed theme resource', a
   run();
   const assembled = await readFile(join(root, 'lib/samples/html-table.html'), 'utf8');
   assert.ok(assembled.includes(await readFile('theme/tokens.css', 'utf8')));
-  assert.ok(!assembled.includes('/* SHARED_THEME_RESOURCE */'));
+  assert.ok(!assembled.includes('__SHARED_THEME_RESOURCE__'));
   await writeFile(join(root, 'theme/tokens.css'), '/* changed */');
   assert.throws(run, /HTML_SAMPLE_THEME_RESOURCE_MISMATCH/);
   await rm(join(root, 'theme/tokens.css'));

@@ -1,7 +1,7 @@
 import type { WorkbenchController } from './workbench.ts';
 import { isBusinessViewPage, isHtmlViewPage } from './html-view-state.ts';
 export const HTML_VIEW_PROTOCOL = 'dsh-workbench-view-v1';
-/** This binding owns one real frame generation, independently of GEA grant and quote lifetimes. */
+
 export function connectHtmlViewState(
   frame: HTMLIFrameElement,
   page: string,

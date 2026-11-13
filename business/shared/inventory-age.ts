@@ -6,7 +6,6 @@ type AgeMeasures = {
   age_weight_qty?: unknown;
 };
 
-/** Combine batch sums, never averages of SKU/base averages or maximum ages. */
 export function inventoryAverageAge(...groups: (AgeMeasures | null | undefined)[]): number | null {
   if (!groups.length) return null;
   let weighted = 0;

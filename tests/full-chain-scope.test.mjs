@@ -124,7 +124,7 @@ test('the actual Qll filter hook mounts with Qll fields and applies scope/month/
       },
     ],
   });
-  // A file import lets the real hook share the same React instance as its caller.
+
   const { mkdir, writeFile } = await import('node:fs/promises');
   const { pathToFileURL } = await import('node:url');
   await mkdir('.runtime', { recursive: true });

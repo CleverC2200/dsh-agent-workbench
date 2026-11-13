@@ -43,7 +43,6 @@ function withdrawReferences() {
   withdraw = () => {};
 }
 
-/** Publish application state directly; only the committed current page is referenceable. */
 function sync() {
   if (!restoringView) {
     const state = fulfillmentSnapshot();
@@ -105,8 +104,6 @@ function schedulePresentationSync(event) {
 for (const type of ['input', 'change', 'click'])
   document.addEventListener(type, schedulePresentationSync);
 
-// Same public insertion contract as AuthorQuestions in category/MPS pages.
-// No private transcript, fake reply, Session creation or automatic model send.
 let quoteTask;
 async function transferQuestion(button, text) {
   if (quoteTask) return;

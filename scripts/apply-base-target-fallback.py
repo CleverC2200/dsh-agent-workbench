@@ -11,8 +11,7 @@ for agent in ['aqkc', 'fc', 'qll']:
     changed = []
     for query_id, query in config['queries'].items():
         sql = query['request']['sql']
-        # The existing unique-version aggregation already makes daily demand NULL
-        # on duplicate source rows. Preserve optimized CTEs and their projections.
+
         sql, count = TARGET.subn(lambda match: 'CASE WHEN t.final_target_inventory = 0 THEN 0 ELSE COALESCE(' + match.group(0).removesuffix(' AS target') + ', CASE WHEN t.avg_daily_planned_demand >= 0 THEN t.avg_daily_planned_demand * 9 ELSE NULL END) END AS target', sql)
         if not count:
             continue

@@ -6,7 +6,6 @@ from sqlglot import exp
 from agent_sql import config_for
 from optimize_base_scoped_queries import optimize, FROM_KEY
 
-
 class BaseScopedQueries(unittest.TestCase):
     def test_source_scopes_are_early_and_generation_is_idempotent(self):
         config = config_for('aqkc')
@@ -22,7 +21,7 @@ class BaseScopedQueries(unittest.TestCase):
                     self.assertTrue(any(node.name == 'belong_base'
                         for where in source.find_all(exp.Where)
                         for node in where.find_all(exp.Column)))
-                # The shared global snapshot date stays independent of a selected base.
+
                 for cte in tree.find_all(exp.CTE):
                     if cte.alias_or_name == 'base_daily_date':
                         self.assertNotIn(' IN ', cte.this.args['where'].sql())
@@ -32,7 +31,6 @@ class BaseScopedQueries(unittest.TestCase):
                 if query_id == 'page.dashboard-groups':
                     self.assertEqual(ages.args[FROM_KEY].this.name, 'inventory_batch_ordinals')
                     self.assertEqual(sum(cte.alias_or_name == 'inventory_batch_ordinals' for cte in tree.find_all(exp.CTE)), 1)
-
 
 if __name__ == '__main__':
     unittest.main()

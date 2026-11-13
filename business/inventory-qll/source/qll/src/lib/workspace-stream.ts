@@ -18,7 +18,6 @@ function assertCompanyWorkspace(value: any): asserts value is CompanyWorkspace {
     throw Error('公司库存数据来源或范围无效');
 }
 
-/** Background history enriches the same view; a new query resets selections. */
 export function workspaceViewKey(workspace: FullChainWorkspace | null) {
   return workspace
     ? JSON.stringify([
@@ -30,7 +29,6 @@ export function workspaceViewKey(workspace: FullChainWorkspace | null) {
     : '';
 }
 
-/** Handles split UTF-8 characters/lines and treats a truncated stream as failure. */
 export async function readWorkspaceResponse(
   response: Response,
   receive: (workspace: CompanyWorkspace) => void,

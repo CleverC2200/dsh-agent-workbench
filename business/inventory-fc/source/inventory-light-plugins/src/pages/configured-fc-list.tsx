@@ -362,7 +362,7 @@ export function FcConfiguredList(
     const value = raw.trim() ? Number(raw) : 0;
     if (!Number.isFinite(value) || value < 0 || value > 1e9) return;
     const key = rowKey(row);
-    // Keep the editing text separate from the numeric draft used by exports.
+
     setQuantityInputs((current) => ({ ...current, [key]: raw }));
     save({ ...draft, quantities: { ...draft.quantities, [key]: value }, dirty: true });
   };
@@ -567,8 +567,7 @@ export function FcConfiguredList(
       setPlanDraft(next);
       if (!parsed.errors.length) memoryStorage.setItem(planDraftKey, JSON.stringify(next));
     });
-  // Filter before pagination; explicitly edited quantities and local plans still need
-  // their source row for recalculation and submission provenance (including zero edits).
+
   const confirmationInput = (filters: FactInput['filters']): FactInput => ({
     ...scope.input,
     filters: Object.fromEntries(
@@ -822,7 +821,7 @@ export function FcConfiguredList(
   const hasReplenishmentQuantity = (row: FcRow) =>
     (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0;
   const submissionRows = previewRows.filter(hasReplenishmentQuantity);
-  // Keep an active edit mounted while the user clears the field before typing.
+
   const displayedPreviewRows =
     dialog === 'export'
       ? previewRows.filter(
@@ -1199,7 +1198,7 @@ export function FcConfiguredList(
     (dialogPage - 1) * 10,
     dialogPage * 10,
   );
-  // The atomic aggregate describes the whole filtered scope, not just this page.
+
   const hideMaterialGroup =
     scope.viewId === 'replenishment' &&
     props.result?.rows?.[0]?.page_scope_has_material_group != null &&

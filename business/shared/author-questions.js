@@ -1,5 +1,5 @@
 import { quotePage } from '../../src/page-interaction/quote.ts';
-/** Page-authored questions only enter the current Core draft after an explicit click. */
+
 export function useAuthorQuote(react) {
   const [pending, setPending] = react.useState(false),
     [status, setStatus] = react.useState('');

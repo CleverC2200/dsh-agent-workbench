@@ -14,7 +14,7 @@ def add_atomic(c,id,shared_scope=False):
  projections={e.alias:e.this for e in t.expressions if isinstance(e,exp.Alias)}
  for n,o in enumerate(outerorder.expressions):
   expr=o.this.copy()
-  # ORDER BY may refer to a SELECT alias; resolve it before projecting the sort value.
+
   expr=expr.transform(lambda e: projections[e.name].copy() if isinstance(e,exp.Column) and not e.table and e.name in projections else e)
   t.select(exp.alias_(expr,'page_sort_'+str(n)),append=True,copy=False)
   o.set('this',exp.column('page_sort_'+str(n),table='p'))
@@ -61,7 +61,7 @@ count=copy.deepcopy(nq);count.pop('pagination');count['request']['sql']='SELECT 
 for k in ['gea_p20','gea_p21']:count['parameterSpec'].pop(k);count['request']['parameters'].pop(k)
 c['queries']['page.structure-groups.count']=count
 q=c['queries']['page.workbench-order-structure'];t=sqlglot.parse_one(q['request']['sql'],read='postgres');t.set('limit',None);t.set('offset',None);t.set('order',None)
-# Group directly from the order fact scope rather than first shipping SKU groups.
+
 t.set('expressions',[e for e in t.expressions if e.alias not in ['material_code','material_name']]);t.set('group',sqlglot.parse_one('SELECT 1 GROUP BY fact.base, fact.category',read='postgres').args['group'])
 base=sql(t);nq=copy.deepcopy(q);nq['request']['sql']=base+' ORDER BY base, category LIMIT :gea_p1001 OFFSET :gea_p1002';nq['resultColumns']=[e.alias for e in t.expressions];nq['grain']=['base','category'];nq['pagination']={'countQuery':'page.structure-orders.count'};c['queries']['page.structure-orders']=nq
 count=copy.deepcopy(nq);count.pop('pagination');count['request']['sql']='SELECT COUNT(*) AS total FROM ('+base+') AS g';count['resultColumns']=['total']

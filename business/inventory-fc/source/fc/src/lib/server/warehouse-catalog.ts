@@ -17,8 +17,6 @@ export type WarehouseCatalog = {
   issues: Array<{ name: string; reason: string }>;
 };
 
-// Verified naming differences between the plan pickup-point and stock warehouse.
-// These are name aliases, not a fixed list of branches or guessed code mappings.
 const STOCK_NAME_ALIASES: Record<string, string> = {
   上海配送中心: '上海分仓',
   武汉配送中心: '武汉分仓',
@@ -51,9 +49,6 @@ export async function loadWarehouseCatalog(
   const seenPickupCodes = new Set<string>();
   const conflictingPickupCodes = new Set<string>();
   const addCandidate = (candidate: WarehouseSource) => {
-    // A source can publish both its code and its display-name form. They are the
-    // same physical branch; keep the first (code form is ordered first) instead
-    // of later discarding both as a duplicate warehouse ID.
     if (conflictingPickupCodes.has(candidate.pickupPointCode)) return;
     if (seenPickupCodes.has(candidate.pickupPointCode)) {
       const existing = candidates.find(
@@ -85,8 +80,7 @@ export async function loadWarehouseCatalog(
     if (!point || seen.has(point)) continue;
     seen.add(point);
     const name = point.replace(/提货点$/, '');
-    // Plans may use the physical pickup-point code directly. Prefer that exact,
-    // database-owned relation before applying the display-name compatibility map.
+
     const directNames = [...(namesByCode.get(point) ?? [])];
     if (directNames.length === 1) {
       addCandidate({
@@ -122,8 +116,7 @@ export async function loadWarehouseCatalog(
       branchPickupPoint: point,
     });
   }
-  // Current inventory is independent of SKU-plan coverage. Add only an
-  // authoritative one-to-one pickup/name/warehouse mapping from class-20 stock.
+
   const warehouseIdsByCode = new Map<string, Set<string>>();
   const codesByWarehouseId = new Map<string, Set<string>>();
   for (const row of inventory.rows) {

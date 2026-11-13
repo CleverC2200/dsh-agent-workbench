@@ -2,7 +2,6 @@ import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain';
 import { z } from 'zod';
 import type { BoundReference } from './reference.ts';
 
-/** Explicitly selected evidence is a Session sidecar, never a grant or restored page fact. */
 export type StoredReference = BoundReference & { principal: string };
 
 export const storedReferenceSchema = z

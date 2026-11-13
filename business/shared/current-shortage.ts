@@ -25,7 +25,6 @@ export const currentShortageValues = (
   offset: (page - 1) * pageSize,
 });
 
-/** Read server-side three-stage results. Values are current, independent of historical page dates. */
 export async function readCurrentShortage(
   config: AgentSqlConfig,
   queryId = 'current-shortage.summary',

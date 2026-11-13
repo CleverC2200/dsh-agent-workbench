@@ -1,4 +1,3 @@
-/** Adapted from AionUi salesPlanExportModel and salesPlanAccessModel unit tests; Apache-2.0. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -110,7 +109,6 @@ const detail = {
 };
 
 test('copied action projection does not infer write permission from readable plans', () => {
-  // 审批身份只看账号角色：角色编码（或中文名）决定能进哪些节点，其它来源一律不发身份。
   assert.deepEqual(salesPlanStagesForRoles(), []);
   assert.deepEqual(salesPlanStagesForRoles([{ code: 'sales-plan:plan:approve' }]), []);
   assert.deepEqual(salesPlanStagesForRoles([{ code: 'sales_plan_province_approver' }]), [
@@ -211,7 +209,7 @@ test('approval identity comes from the account role, and a notification never gr
   assert.equal(salesPlanAccessForRow(row, value), undefined);
   assert.equal(salesPlanAccessForRow(row, value, ['region'])?.approvalRole, 'region');
   assert.equal(salesPlanAccessForRow(row, value, ['region'], 'province'), undefined);
-  // 通知只是提醒：哪怕服务端派了同版本任务，也不授予审批身份。
+
   const assigned = {
     ...value,
     workflowApproval: { versionId: 'v', notificationId: 'n', instanceId: 'i', actionable: true },
@@ -232,14 +230,13 @@ for (const [typeCode, status, actor, wrong] of [
       currentVersion: { id: 'v', planId: 'p', status, planTypeCode: typeCode, effective: true },
     };
     const granted = [actor];
-    // 角色决定身份，数据权限决定明细：只要有这个节点的角色就是审批人，不再按「这行当前停在哪个节点」卡一遍，
-    // 表里看得见的行都能提交或退回；写权限最终由 GEA 按组织、角色、版本和状态校验。
+
     assert.deepEqual(salesPlanAccessForRow(row, value, granted)?.allowedActions, [
       'APPROVE',
       'REJECT',
     ]);
     assert.equal(salesPlanAccessForRow(row, value, [wrong])?.approvalRole, wrong);
-    // 没有角色就没有身份；显式指定的节点也必须在这个账号的角色里。
+
     assert.equal(salesPlanAccessForRow(row, value, []), undefined);
     assert.equal(salesPlanAccessForRow(row, value, granted, wrong), undefined);
     assert.equal(

@@ -3,7 +3,6 @@ import type { PageExecutionConnection, WorkbenchPageExecution } from './frame.ts
 import { startPageBridgeClient } from './page-interaction/page-bridge/client.ts';
 import { fulfillmentSimulationRequest } from './fulfillment-simulation-transport.ts';
 
-/** One owned HTML port/lease. Switching identity or reference destroys this exact connection. */
 export function connectHtmlFrame(
   frame: HTMLIFrameElement,
   connection: PageExecutionConnection,
@@ -293,6 +292,6 @@ export function connectHtmlFrame(
   signal.addEventListener('abort', dispose, { once: true });
   if (signal.aborted) dispose();
   else void poll();
-  // Theme updates are sent through the same owned port, never a second identity channel.
+
   return Object.assign(dispose, { sendTheme });
 }

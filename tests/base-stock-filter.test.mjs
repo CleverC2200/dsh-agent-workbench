@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 test('filter publishes pending scope before returning, without stale facts; no-op and invalid choices keep current evidence', async () => {
-  // Export the same context module from the hook bundle to observe the public context contract.
   const combined = await build({
     stdin: {
       contents:

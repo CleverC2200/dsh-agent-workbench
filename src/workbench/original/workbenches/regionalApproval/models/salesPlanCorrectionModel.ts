@@ -10,7 +10,7 @@ import type { ApprovalStageId } from '../salesPlanDomain.ts';
 import { salesPlanAccessForRow } from './salesPlanAccessModel.ts';
 
 const Exact = Decimal.clone({ precision: 60, rounding: Decimal.ROUND_HALF_UP });
-/** 纠偏量使用高精度十进制；缺失字段表示继承，显式 0 表示用户确实选择了零。 */
+
 export type CorrectionNode = Exclude<SalesPlanRole, 'customer'>;
 export type CorrectionFields = Partial<
   Record<
@@ -29,7 +29,6 @@ export function correctionDecimal(value: unknown): Decimal {
   return new Exact(value);
 }
 
-/** NULL 表示继承；显式的一对零表示已记录的真实决策。 */
 export function correctionNodeQuantities(
   sku: CorrectionSku,
   status: number,
@@ -128,7 +127,6 @@ export function correctionDisplay(value: string | null | undefined, kind: 'money
   }
 }
 
-/** @deprecated Retained unchanged for existing Host peers; current UI uses the shared approval flow. */
 export function correctionAccess(
   detail: GeaSalesPlanDetail,
   workflowRows?: readonly SalesPlanWorkflowRow[],
@@ -159,7 +157,6 @@ export function correctionAccess(
   );
 }
 
-/** @deprecated Compatibility export for existing Host peers; preserves absolute decisions and explicit zero. */
 export function correctionAdjustments(
   detail: GeaSalesPlanDetail,
   edits: Record<string, string>,

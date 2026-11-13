@@ -39,7 +39,6 @@ const series = {
   ],
 };
 
-/** Same 30-day SQL window; absent dates/layers are display gaps, never new facts. */
 export function trendView(
   trends: FullChainWorkspace['trends'],
   metric: Metric,

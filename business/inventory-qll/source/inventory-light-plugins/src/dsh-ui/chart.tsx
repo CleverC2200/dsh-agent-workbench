@@ -5,7 +5,7 @@ export type Series = {
   color: string;
   visible?: boolean;
 };
-// Missing observations break a line. Neither interpolation nor a zero is inserted.
+
 export function trendSegments(data: Record<string, unknown>[], key: string) {
   const segments: { index: number; value: number }[][] = [];
   let current: { index: number; value: number }[] = [];

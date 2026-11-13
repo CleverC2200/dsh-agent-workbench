@@ -9,7 +9,7 @@ for agent in ['aqkc','fc','qll','apsplan']:
   sql=q['request']['sql']
   if 'agents_sales_forecast_detail_mi' in sql:
    sql=sql.replace('t.dealer_code','t.cust_code')
-  # Preserve the physical base inventory pool even when a branch shares the base name.
+
   if key.startswith('base_resources.') and 'fc_base_stock AS' in sql:
    sql=sql.replace("WHERE b.month_date=", "WHERE b.warehouse_classify IN ('01','02') AND b.month_date=") if "b.warehouse_classify IN ('01','02')" not in sql else sql
   if 't.future30_avg_plan' in sql:
@@ -33,7 +33,7 @@ for agent in ['aqkc','fc','qll','apsplan']:
    pattern=r'(COALESCE\(SUM\(([a-z]+)\.demand_adjusted_plan\), 0\) AS demand_adjusted_plan)(?!, SUM\([a-z]+\.base_sales_plan\))'
    sql=re.sub(pattern,lambda m:m[1]+', '+', '.join(f'SUM({m[2]}.{f}) AS {f}' for f in ['base_sales_plan','base_sales_adjusted_plan','base_production_plan','base_production_adjusted_plan']),sql)
   q['request']['sql']=sql
-  # The public return shape follows the actual top-level projection; counts do not gain fields.
+
   if 'last_month_actual_qty AS last_month_actual_qty' in sql or 'base_sales_plan' in sql:
    aliases=sqlglot.parse_one(sql,read='postgres').named_selects
    q['resultColumns']=aliases

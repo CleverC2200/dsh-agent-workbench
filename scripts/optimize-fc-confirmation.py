@@ -13,17 +13,17 @@ p=repo/'business/inventory-fc/sql.config.json';cfg=json.loads(p.read_text())
 original=cfg['queries']['snapshot-default.replenishment.detail.atomic']
 tree=sqlglot.parse_one(original['request']['sql'])
 source=next(x.this for x in tree.ctes if x.alias=='list_source')
-# This derived table is the existing persisted projection including its exact numeric casts.
+
 projection=source.args['from'].this.this.copy()
 assert isinstance(projection,exp.Select)
 assert {x.name for x in projection.find_all(exp.Table)}=={'agents_inv_branch_sku_day'}
 filtered=source.copy();filtered.set('with',None);filtered.set('joins',[])
-# Quick activity/order joins were used only by the optional business-only filter.
+
 filtered=sqlglot.parse_one(filtered.sql().replace(':gea_p3901 = FALSE', 'TRUE'))
 filtered=simplify(filtered)
 assert not any(c.table in {'quick_orders','quick_transfers'} for c in filtered.find_all(exp.Column))
 filtered.set('expressions',[exp.alias_(exp.column(x.alias,'r'),x.alias) for x in projection.expressions])
-# Fuzzy warehouse-name matching uses the same full summary grain, not a restricted SKU subset.
+
 measured=next(x.copy() for x in source.ctes if x.alias=='measured')
 measured.this.set('expressions',[x for x in measured.this.expressions if x.alias in ['warehouse_code','warehouse_name']])
 count=next(x.this.copy() for x in tree.ctes if x.alias=='scope_count')
@@ -40,7 +40,7 @@ ORDER BY p.warehouse_code, p.sku LIMIT :gea_p8"""
 fast=copy.deepcopy(original);fast['request']['sql']=sqlglot.parse_one(sql).sql()
 import re
 used=set(re.findall(r':(gea_p\d+)\b',sql))
-# Preserve the route's exact parameter contract, even for values unused by this fast path.
+
 contract=[]
 for key,spec in fast['parameterSpec'].items():
  if key in used:continue

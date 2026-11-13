@@ -58,7 +58,7 @@ function useDetail(input: Input) {
           setState({ key, error: error instanceof Error ? error.message : '明细读取失败' });
       });
     return () => controller.abort();
-  }, [key]); // key includes every request field and the explicit retry revision.
+  }, [key]);
   return { ...(state.key === key ? state : {}), retry: () => setRevision((value) => value + 1) };
 }
 function DetailState({

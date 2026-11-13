@@ -24,7 +24,7 @@ for query in config['queries'].values():
                 sums = list(item.find_all(exp.Sum))
                 if len(sums) == 1 and isinstance(sums[0].this, exp.Column) and sums[0].this.name == name:
                     column = sums[0].this.sql()
-                    # Net available inventory can legitimately be negative after current orders.
+
                     valid = f'{column} IS NOT NULL' if name == 'order_adjusted_available_qty' else f'{column} >= 0'
                     value = f'SUM(CASE WHEN {valid} THEN {column} END)'
             if name in {'missing_calculation_count', 'calculated_sku_count'} and item.find(exp.Count):

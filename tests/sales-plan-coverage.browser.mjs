@@ -6,8 +6,6 @@ import { chromium, expect } from '@playwright/test';
 import { readFile } from './helpers/prepared-assets.mjs';
 import * as XLSX from 'xlsx-republish';
 
-// Exercise the actual workbench effects, monthly cells and visible failure feedback.
-// This fixture has no GEA/Core runtime, credentials, model or write transport.
 const bundle = await build({
   stdin: {
     resolveDir: process.cwd(),

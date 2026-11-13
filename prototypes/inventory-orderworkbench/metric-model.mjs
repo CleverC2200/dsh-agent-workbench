@@ -81,9 +81,7 @@ export function stockDaily(row, scope = 'national') {
   if (days === null) return null;
   return (Number(sales) + (scope === 'base' ? 0.5 * Number(row.transfer_plan) : 0)) / days;
 }
-// Each dimension sums stock and plans independently, not an intersection of SKUs.
-// A missing counterpart contributes no record; a NULL inside an existing source
-// remains an error, including after SQL summaries have summed the contributions.
+
 export function stockComponents(rows, scope = 'national') {
   if (!rows.some((row) => 'national_stock_records' in row)) {
     const numerator = sum(rows, 'inventory'),
@@ -217,7 +215,7 @@ export function computeWorkbenchMetrics(
     metricDefinition('周转天数', turnoverScope),
     '天',
   );
-  // A partial rate has its own proven numerator/denominator; never reinterpret missing rows as zero.
+
   const sample = (name, numerator, denominator, known, total, unit) => {
     if (
       result[name].value !== null ||
@@ -457,7 +455,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
             ? ['stock_qty', 'aged_qty']
             : ['numerator', 'denominator'];
   const absent = fields.filter((field) => source.some((row) => row[field] == null));
-  // Existing zero policies are retained; a known zero denominator is a calculation condition.
+
   if (absent.length && !['作废率', '改单率'].includes(name))
     return `源数据未提供：计算${name}需要的 ${absent.join('、')} 存在空值；${note}`;
   if (source.some((row) => Number(row.source_rows) > 1))

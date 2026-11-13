@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom';
 import { Table as NativeTable, type TableProps } from '../../../dsh-ui/controls';
 import styles from './viewport-table.module.css';
 
-/** Keep the horizontal control within the table's visible scroll panel. */
 export function Table<T>(props: TableProps<T>) {
   const root = useRef<HTMLDivElement>(null);
   const proxy = useRef<HTMLInputElement>(null);
@@ -24,7 +23,7 @@ export function Table<T>(props: TableProps<T>) {
     const measure = () => {
       frame = 0;
       const body = host.querySelector<HTMLElement>('.dsh-table-body, .dsh-table-content-inner');
-      // With fixed headers the body, not content-inner, owns scrollLeft.
+
       source.current = host.querySelector<HTMLElement>('.dsh-table-body') ?? body;
       const target = source.current;
       const modal = !!host.closest('.dsh-modal');
@@ -58,8 +57,7 @@ export function Table<T>(props: TableProps<T>) {
       }
       left = Math.max(left, rect.left);
       right = Math.min(right, rect.right);
-      // Handoff when the top of the native scrollbar enters view, not its bottom.
-      // Overlay scrollbars do not reduce clientHeight; reserve their hit area too.
+
       const scrollbarHeight = Math.max(
         8,
         target.offsetHeight - target.clientHeight - target.clientTop * 2,

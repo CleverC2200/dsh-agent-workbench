@@ -1,8 +1,6 @@
 import sqlConfiguration from '../../../../sql.config.json';
 import { sqlTemplate as configuredSql } from '../../../../../shared/sql-config.ts';
-/** Preserve field-level RETURN lineage: each output aggregates only that same field.
- * No whole-row JSON, synthetic values, windows or hidden permission fields.
- */
+
 export function columnarQuery(sql: string): string | null {
   const tokens = [
     ...sql.matchAll(

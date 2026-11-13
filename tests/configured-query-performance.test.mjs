@@ -22,8 +22,6 @@ const [name, binding] = Object.entries(config.workspaceBindings).find(
 );
 assert.ok(binding);
 
-// Model each gateway roundtrip as one deterministic wave. Keep SQL, parameter
-// mapping, collection validation and the workspace caller real.
 test('large workspace source does not serialize every 200-row gateway page', async () => {
   const q = config.queries[binding.queryId],
     total = 5881;

@@ -3,7 +3,6 @@ import { sqlTemplate as configuredSql } from '../../../../../../shared/sql-confi
 import { fulfillmentWarehouseScope } from './warehouse-scope.ts';
 import type { CatalogDatabase } from './warehouse-catalog.ts';
 
-/** Use synchronized, warehouse-scoped dimensions; never imported placeholders. */
 export async function loadPlanProductMetadata(
   database: CatalogDatabase,
   pickupPoint: string,

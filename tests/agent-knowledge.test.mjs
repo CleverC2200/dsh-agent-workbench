@@ -196,6 +196,44 @@ test('Markdown link examples inside code are preserved without becoming active r
   assert.equal(result.status, 0, result.stderr);
 });
 
+test('comment-only comparison accepts declaration cleanup and does not treat URLs as protected comments', (t) => {
+  const { root, run } = fixture(t);
+  mkdirSync(resolve(root, 'src'));
+  writeFileSync(resolve(root, 'src/assets.d.ts'), '/** CSS import. */\ndeclare module "*.css";\n');
+  writeFileSync(
+    resolve(root, 'src/url.ts'),
+    'export const url = "https://example.invalid/@license"; // explanation\n',
+  );
+  writeFileSync(
+    resolve(root, 'src/optional.ts'),
+    'export function optional() { try { return 1; } catch {\n// optional observation\n} }\n',
+  );
+  git(root, 'init', '-q');
+  git(root, 'add', '.');
+  git(
+    root,
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-qm',
+    'declarations and URLs',
+  );
+  const ref = git(root, 'rev-parse', 'HEAD');
+  writeFileSync(resolve(root, 'src/assets.d.ts'), 'declare module "*.css";\n');
+  writeFileSync(
+    resolve(root, 'src/url.ts'),
+    'export const url = "https://example.invalid/@license";\n',
+  );
+  writeFileSync(
+    resolve(root, 'src/optional.ts'),
+    'export function optional() { try { return 1; } catch {} }\n',
+  );
+  const result = run(['--compare-ref', ref]);
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test('official core build refuses absent SDK before generating any output', (t) => {
   const { root } = fixture(t);
   mkdirSync(resolve(root, 'scripts'));

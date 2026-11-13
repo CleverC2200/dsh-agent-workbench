@@ -1,4 +1,3 @@
-/** Fixed widths keep frozen offsets identical for headers and cells. */
 export function replenishmentColumnWidth(column: string): number {
   return column === 'sku'
     ? 120

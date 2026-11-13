@@ -11,7 +11,6 @@ import {
 } from '../../aqkc/web/src/lib/safety-stock-scope';
 import type { WorkbenchSqlQuery } from '../../aqkc/web/src/lib/workbench-sql-types';
 
-/** Map verified facts into the existing page contract, retaining the page's month/version policy. */
 export async function readConfiguredStock(
   query: WorkbenchSqlQuery,
   options: { signal?: AbortSignal; execute?: any; now?: Date } = {},
@@ -124,7 +123,7 @@ export async function readConfiguredStock(
         row[source] ?? null,
       ]),
     ),
-    // Stock-only keys stay in the view; this label identifies the selected comparison version, not a fabricated target.
+
     'safety_stock.inventory_version': row.effective_version ?? scope.versions[0],
     'safety_stock.id': JSON.stringify([row.base, row.sku]),
     'safety_stock.source': row.target_source_rows > 0 ? 'ai-db-daily-stock' : 'ai-db-stock-only',
@@ -150,7 +149,7 @@ let readCycle:
       snapshots?: Map<string, Promise<any>>;
     }
   | undefined;
-/** Pin business date/version metadata for this page's refresh cycle, never rows or authorization. */
+
 export function startConfiguredStockReadCycle(signal?: AbortSignal) {
   readCycle = signal ? { signal } : undefined;
 }
@@ -187,8 +186,6 @@ async function resolveStockContext(
   signal?.throwIfAborted();
   const end = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(now);
   const load = async () => {
-    // Metadata belongs to the refresh cycle. Cancelling one drill must not
-    // poison another drill waiting for the same date/version resolution.
     const readSignal = cycle?.signal ?? signal;
     const month = end.slice(0, 7) + '-01';
     const [versions, latest] = await Promise.all([
@@ -203,8 +200,7 @@ async function resolveStockContext(
           singlePageFirst: true,
         },
       ),
-      // Both cards use the same base-batch date. The month check below still
-      // rejects an old-month snapshot for stock/target comparisons.
+
       readBatchSnapshot(client, end, readSignal),
     ]);
     if (latest.configVersion !== versions.configVersion)
@@ -289,7 +285,6 @@ export function configuredStockRows(rows: any[], version: string) {
   }));
 }
 
-/** Fetch one displayed SKU page. Filtering, ordering and counting happen before LIMIT in SQL. */
 export async function readConfiguredStockPage(
   input: StockPageInput,
   options: { signal?: AbortSignal; execute?: any; now?: Date } = {},
@@ -377,8 +372,7 @@ export async function readConfiguredStockPage(
     shipment_end_exclusive: next.toISOString().slice(0, 10).replaceAll('-', ''),
     order_start: month,
     order_end_exclusive: next.toISOString().slice(0, 10),
-    // Orders are joined per base; the final bases filter scopes both stock and order facts.
-    // Keep the source default so a selected base still uses its equivalent daily summary.
+
     order_bases_enabled: false,
     order_bases: bases.length ? bases : ['郑州'],
   });
@@ -430,7 +424,6 @@ export async function readConfiguredStockPage(
   };
 }
 
-/** Batch aggregates supply base list ages and the quantity-weighted average-age card in two reads. */
 export async function readConfiguredHealthSummary(
   bases: string[] | undefined,
   signal?: AbortSignal,
@@ -490,7 +483,6 @@ export async function readConfiguredHealthSummary(
   };
 }
 
-/** Server aggregates preserve per-SKU target rules before reducing transport volume. */
 export async function readConfiguredStockSummary(
   selectedBases?: string[],
   options: {

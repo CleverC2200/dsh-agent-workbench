@@ -1,7 +1,6 @@
 import { readConfiguredFacts } from './configured-facts';
 import type { AgentSqlConfig } from './sql-config';
 
-/** Read daily/base aggregates, never SKU detail; refuse a truncated or changing collection. */
 export async function readConfiguredHistory(
   config: AgentSqlConfig,
   asOf: string,

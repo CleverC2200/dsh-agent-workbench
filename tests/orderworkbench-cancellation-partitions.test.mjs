@@ -45,7 +45,6 @@ test('national cancellation first reads retain more than the gateway default 50 
       const client = createQueryClient(config, async (request) => {
         let rows = run(request.sql, request.parameters);
         if (!/\bLIMIT\s+:gea_p1001\s+OFFSET\s+:gea_p1002\s*$/i.test(request.sql)) {
-          // The governed gateway defaults an unbounded statement to 50 rows.
           rows = rows.slice(round).concat(rows.slice(0, round)).slice(0, 50);
         }
         return { rows, configVersion: 'gateway-default-50' };

@@ -1,4 +1,3 @@
-/** Assemble the original report UI, current page channel and Agent-owned resources. */
 import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -50,7 +49,7 @@ sqlConfig.metricRuntime = {
   file: 'metric-runtime.mjs',
   sha256: digest(runtime.outputFiles[0].contents),
 };
-if (digest(theme) !== '281fe7eebe0775b6bedabad6806753db6afe5eded52e6d9ade54067d23e20ef8')
+if (digest(theme) !== '51d07dd91c4e2851301c046556a9c34aded00c5fa94525420b949badce9a5497')
   throw Error('ORDER_THEME_RESOURCE_MISMATCH');
 const bundled = await build({
   entryPoints: [resolve(source, 'entry.js')],
@@ -75,9 +74,9 @@ const bundled = await build({
   ],
 });
 const html = (await readFile(resolve(source, 'index.html'), 'utf8'))
-  .replace('/* SHARED_THEME_RESOURCE */', theme)
-  .replace('/* ORDER_THEME */', await readFile(resolve(source, 'theme.css'), 'utf8'))
-  .replace('/* ORDER_ENTRY */', bundled.outputFiles[0].text.replace(/<\/script/gi, '<\\/script'));
+  .replace('__SHARED_THEME_RESOURCE__', theme)
+  .replace('__ORDER_THEME__', await readFile(resolve(source, 'theme.css'), 'utf8'))
+  .replace('__ORDER_ENTRY__', bundled.outputFiles[0].text.replace(/<\/script/gi, '<\\/script'));
 await mkdir(out, { recursive: true });
 await writeFile(resolve(out, 'sql.config.json'), JSON.stringify(sqlConfig, null, 2) + '\n');
 await writeFile(resolve(out, 'metric-runtime.mjs'), runtime.outputFiles[0].contents);

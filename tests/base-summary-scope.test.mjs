@@ -62,7 +62,7 @@ globalThis.baseSummaryHost = async (_, call) => {
   else if (id === 'source.health-date') rows = [{ day: new Date().toISOString().slice(0, 10) }];
   else if (['page.inventory-groups', 'page.dashboard-groups'].includes(id)) {
     if (failStock) throw Error('STOCK_SOURCE_FAILED');
-    // Deliberately return a wider scope; the page must still enforce the selected scope.
+
     rows = bases.map((base) =>
       row({
         base,

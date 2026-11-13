@@ -15,7 +15,7 @@ export function knownNumber(value: unknown): number | null {
 export function completeValue(summary: any, field: string) {
   return Number(summary?.['missing_' + field]) > 0 ? null : knownNumber(summary?.[field]);
 }
-/** SQL counts retain zero, but missing identities/quantities are not complete counts. */
+
 export function completeCount(summary: any, field: string, missingFields: string[] = []) {
   const value = knownNumber(summary?.[field]);
   return value !== null &&
@@ -25,12 +25,12 @@ export function completeCount(summary: any, field: string, missingFields: string
     ? value
     : null;
 }
-/** Fulfillment summaries return a fraction; display converts it once. */
+
 export function fulfillmentPercent(summary: any) {
   const value = completeValue(summary, 'fulfillment_rate');
   return value == null ? null : value * 100;
 }
-/** These are separate business scopes, never summed into a full-chain total. */
+
 export async function readConfiguredOverview(
   config: AgentSqlConfig,
   asOf: string,
@@ -191,8 +191,7 @@ export async function readConfiguredOverview(
     ids.map(async (id) => {
       let part: any;
       const view = config.sourceViews?.views.find((view: any) => view.id === id);
-      // Only reads sharing its inventory snapshot wait for quick stock. Order
-      // metrics have independent inputs and must not inherit that latency.
+
       if (
         ['health', 'branch-stock'].includes(id) ||
         ['source.health-date', 'source.branch-stock-date'].includes(view?.snapshotQuery)
@@ -243,8 +242,7 @@ export async function readConfiguredOverview(
                   : {},
           };
           const readOptions = { ...options, snapshotReads, scopeReads, summaryOnly: true };
-          // Quantities can be shown before batch-age calculation completes. A late
-          // age failure cannot invalidate the separately completed inventory read.
+
           if (view?.inventorySummaryId && !parts[id]?.summary) {
             const inventory = await readConfiguredFacts(config, id, input, {
               ...readOptions,

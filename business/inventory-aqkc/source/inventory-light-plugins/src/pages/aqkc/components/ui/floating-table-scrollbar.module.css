@@ -46,7 +46,6 @@
   outline-offset: 1px;
 }
 
-/* Same track and thumb at the table bottom and at the viewport bottom. */
 .nativeScrollbar {
   scrollbar-width: auto;
 }

@@ -1,4 +1,3 @@
-/** Field scope follows currentOrderCtes; interpretation must not narrow an allocation to one stage. */
 export const currentOrderMetricScopes = {
   orderQuantity: '当前有效且未发货完成订单的需求件数，包含未备单完成和备单完成未发货订单',
   preparingQuantity: '当前未发货完成订单逐订单与SKU截零后汇总的还需满足件数',
@@ -24,7 +23,6 @@ function numberOrNull(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-/** Reused for JSON workspace normalization; missing values must not become zero. */
 export function normalizeCurrentOrderBases(value: unknown): CurrentOrderBase[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -54,7 +52,6 @@ export function currentOrderBases(rows: OrderSummaryRow[]): CurrentOrderBase[] {
   );
 }
 
-/** Deficits have already been calculated per base/material, so quantities are additive. */
 function currentOrderSummary(rows: CurrentOrderBase[], paths: string[] = ['全国']) {
   const bases = paths.includes('全国')
     ? BASES
@@ -97,7 +94,6 @@ export function currentOrderCard(rows: CurrentOrderBase[], paths: string[] = ['�
   };
 }
 
-/** Same monthly fulfillment scope; only rows with actual shipments contribute helpers. */
 export function shippedOrderMetricHelpers(rows: OrderSummaryRow[]) {
   const orders = rows.filter((row) => row['workbench.domain'] === 'order');
   const sum = (key: string) => {

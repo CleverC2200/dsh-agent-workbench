@@ -40,11 +40,7 @@ const coveredComparison = (rows: CubeRow[]) =>
 const coveredDays = (days: number | null, partial: boolean) =>
   days === null ? '-' : partialTargetDisplay(`${days.toFixed(1)}天`, partial);
 
-/** Current stock comes exclusively from the same rows as the age tab.
- * Keep target-only SKUs, and include age-only SKUs without inventing targets.
- */
 export function alignAgeInventory(targetRows: CubeRow[], ageRows: CubeRow[]): CubeRow[] {
-  // ai_db has a daily base stock fact independently of its unavailable batch ages.
   if (usesConfiguredSql()) return targetRows.map((row) => ({ ...row }));
   const keyOf = (row: CubeRow, prefix: string) =>
     `${String(row[`${prefix}.base_name`] ?? '').trim()}\u0000${String(row[`${prefix}.material_code`] ?? '').trim()}`;
@@ -68,7 +64,7 @@ export function alignAgeInventory(targetRows: CubeRow[], ageRows: CubeRow[]): Cu
     const key = keyOf(row, 'safety_stock');
     const base = String(row['safety_stock.base_name'] ?? '').trim();
     if (!bases.has(base)) throw new Error(`基地${base}暂无货龄库存数据，无法计算当前库存`);
-    // Missing SKU quantities remain unknown; never reuse a plan snapshot.
+
     const quantity = seen.has(key)
       ? 0
       : (age.get(key)?.['inventory_age.current_inventory'] ?? null);
@@ -136,7 +132,6 @@ const measures = [
   'safety_stock.average_target_fill_rate',
 ];
 
-// The header and the age-structure tab both describe the same 60+ day stock.
 const WORKBENCH_OVER_AGE_DAYS = 60;
 
 type WorkbenchBusinessSummary = {
@@ -283,21 +278,14 @@ const sourceColumns = (columns: { key: string; label: string }[]) => columns;
 function fixedWorkbenchWarning(current: number, target: number, demand: number) {
   if (target <= 0 && current > 0) return { label: '目标为0但有库存，暂不比较', tone: 'gray' };
   if (target <= 0) return { label: '目标为0，不适用', tone: 'gray' };
-  // 受控阈值尚未配置，不能把库存差异直接判为超储或缺货风险。
+
   if (current < target) return { label: '库存低于目标', tone: 'gray' };
   if (current > target) return { label: '库存高于目标', tone: 'gray' };
   if (demand <= 0) return { label: '计划日均需求为0，周转不适用', tone: 'gray' };
   return { label: '正常', tone: 'gray' };
 }
 
-/**
- * 当前处于端午节后规则期。目标库存必须在 SKU 粒度调整后才能汇总，不能
- * 因为用户没有在问题里提“粽子”而回退到宽表的 final_target_inventory。
- * 仅完整“粽子”可命中，避免把“粽味”等无关商品误归为节令品。
- */
 export function targetInventoryOutput(row: CubeRow): number | null {
-  // An age-only SKU has no published target row. In particular, the seasonal
-  // rule below must not turn its absent demand into a fabricated zero target.
   if (
     row['safety_stock.source'] === 'age-only' ||
     row['safety_stock.source'] === 'ai-db-stock-only'
@@ -354,7 +342,6 @@ function skuRisk(current: number, target: number | null, shortage?: number | nul
         : '正常';
 }
 
-/** Group warnings use child-SKU counts; net inventory must not cancel opposite risks. */
 export function stockGroupRisk(rows: Record<string, any>[], shortage: number | null) {
   const sum = (key: string) => rows.reduce((n, row) => n + (numeric(row[key]) ?? 0), 0);
   if (shortage != null && shortage > 0) return '缺货';
@@ -422,15 +409,14 @@ async function loadWorkbenchSqlQuery(
   _geaOnly = false,
 ) {
   const rows = await queryStock(query, signal);
-  // Apply the published base scope before version selection, aggregation or
-  // pagination, including national queries that carry no user base filter.
+
   return rows
     .filter((row) => {
       if (row['workbench.domain'] === 'order_total') return true;
       const baseKey = ['safety_stock.base_name', 'inventory_age.base_name', 'workbench.base'].find(
         (key) => key in row,
       );
-      // The scope query has no base dimension; its fixed SQL uses the same scope.
+
       return baseKey === undefined || KNOWN_BASES.has(String(row[baseKey] ?? ''));
     })
     .map((row) => {
@@ -585,7 +571,7 @@ function sortDetailRows(rows: CubeRow[], sort: string | undefined) {
       skuVersionKey(left).localeCompare(skuVersionKey(right), 'zh-CN'),
     );
   }
-  // Sorting follows whole-base version selection and user filters.
+
   detailOrder(sort);
   const [label, direction] = sort.split(':');
   const valueOf = (row: CubeRow) => {
@@ -608,7 +594,6 @@ function sortDetailRows(rows: CubeRow[], sort: string | undefined) {
   });
 }
 
-/** Fetch one bounded, fallback-aware detail page. */
 export async function loadSafetyStockDetailPage(
   gatewayContextRef: string | undefined,
   filters: DetailFilters,
@@ -617,13 +602,10 @@ export async function loadSafetyStockDetailPage(
   operation?: GatewayOperationContext,
   signal?: AbortSignal,
 ): Promise<SafetyStockDetailPage> {
-  // Page size is bounded to protect each request; offset deliberately has no
-  // total-record ceiling so users can continue through every matching SKU.
   const safeOffset = Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
   const safePageSize = Number.isInteger(pageSize) ? Math.min(Math.max(pageSize, 1), 100) : 10;
   const scoped = detailFilters(filters);
-  // User filters are applied after the fixed SQL query so no request value is
-  // concatenated into executable SQL.
+
   const candidates = (
     await loadWorkbenchSqlQuery(gatewayContextRef, workbenchSql.safetyStockRows, operation, signal)
   ).filter((row) => inSafetyStockScope(row, scoped.targetMonth, scoped.versions));
@@ -1012,7 +994,6 @@ function displayQuantityShare(quantity: number, total: number) {
   return `${displayNumber(quantity)} / ${total > 0 ? `${((quantity / total) * 100).toFixed(1)}%` : '0.0%'}`;
 }
 
-/** Daily stock supports current and 60+ quantities, independently of absent batch ages. */
 function dailyAgeRows(rows: CubeRow[], groupBy: 'base' | 'category' | 'sku') {
   const groups = new Map<string, CubeRow[]>();
   for (const row of rows) {
@@ -1174,7 +1155,6 @@ function batchAgeDisplay(row: BatchAgeRow): Record<string, string | number> {
   };
 }
 
-/** Read-only tab aggregates. Every row is calculated from fixed GEA SQL results. */
 export async function loadInventoryDashboardTabs(
   gatewayContextRef?: string,
   base?: string,
@@ -1466,7 +1446,6 @@ export function dashboardBaseFilter(value: string | null): string[] | undefined 
   return bases;
 }
 
-/** Share the reviewed target selection with read-only reports, before aggregation. */
 export function selectWorkbenchTargetRows(allRows: CubeRow[], now = new Date()) {
   const rows = allRows.filter((row) =>
     KNOWN_BASES.has(String(row['safety_stock.base_name'] ?? '')),
@@ -1502,7 +1481,7 @@ export async function loadInitialDashboard(
       selectedBases,
       onProgress,
     );
-  // 安全库存、当月履约与当前待发订单并行读取，各自保留来源口径。
+
   const [allSafetyRows, supportRows, pendingRows, insightOrders, sourceHealth] = await Promise.all([
     loadWorkbenchSqlQuery(
       gatewayContextRef,
@@ -1545,14 +1524,12 @@ export async function loadInitialDashboard(
         })
       : Promise.resolve(null),
   ]);
-  // 工作台与对话共用目标月份和版本规则：同月纠偏→月初→滚动；
-  // 21 日后仅在次月已发布时切换，否则继续使用当月最新已发布版本。
+
   const scope = resolveInitialSafetyStockScope(allSafetyRows);
   if (!scope.published) {
     return unavailableWorkspace();
   }
 
-  // 按基地与月份整体选版，再汇总；已选版本中的空值和真实0保持原样。
   const sourceSkuRows = allSafetyRows.filter(
     (row) =>
       inSafetyStockScope(row, scope.targetMonth, targetVersionCandidates(scope.versions)) &&
@@ -1576,9 +1553,7 @@ export async function loadInitialDashboard(
     (row) =>
       selectedBases === undefined || selectedBases.includes(String(row['inventory_age.base_name'])),
   );
-  // A large all-base transfer can omit an entire base while the independently
-  // queried age rows still contain it. Retry only those bases via the same GEA
-  // consumer; never substitute local DB data or infer missing target values.
+
   const missingBaseRows = missingSafetyStockTargetBases(sourceSkuRows, selectedAgeRows);
   const ageBases = [
     ...new Set(selectedAgeRows.map((row) => String(row['inventory_age.base_name'] ?? '').trim())),
@@ -1770,7 +1745,7 @@ export async function loadInitialDashboard(
       )
     : '-';
   const visibleBases = [...new Set(rows.map((row) => String(row['safety_stock.base_name'])))];
-  // The pending-order SQL contains five scaffold rows even when GEA exposes fewer bases.
+
   const currentOrders = currentOrderBases(pendingRows).filter((row) =>
     visibleBases.includes(row.base),
   );
@@ -1794,7 +1769,7 @@ export async function loadInitialDashboard(
   );
   const targetMissing = rowsWithTargetOutput.some((row) => row.targetCoverage.missingCount > 0);
   const finalTarget = rowsWithTargetOutput.reduce((sum, row) => sum + (row.targetOutput ?? 0), 0);
-  // The user-approved partial policy compares current totals with known targets.
+
   const knownTarget = rowsWithTargetOutput.reduce((sum, row) => sum + row.targetCoverage.total, 0);
   const targetPresentCount = rowsWithTargetOutput.reduce(
     (sum, row) => sum + row.targetCoverage.presentCount,
@@ -2336,7 +2311,6 @@ function unavailableWorkspace(): WorkspaceState {
   };
 }
 
-/** The original inline table consumes one server-filtered page; parent totals stay independent. */
 export async function loadInventorySkuPage(input: StockPageInput, signal?: AbortSignal) {
   if (input.tab === '货龄结构') {
     if (input.risks?.length) throw Error('该货龄风险筛选尚未配置');
@@ -2397,7 +2371,7 @@ export async function loadInventorySkuPage(input: StockPageInput, signal?: Abort
   const computed = age
     ? dailyAgeRows(result.rows, 'sku')
     : aggregateDrillMetricRows(result.rows, null, orders, 'sku', null, { retainZeroRows: true });
-  // The formatter has legacy ordering; restore the database's stable sort/page order.
+
   const order = new Map<string, number>(
     result.facts.map((row: any, index: number) => [String(row.sku), index]),
   );
@@ -2434,9 +2408,6 @@ export async function loadInventorySkuPage(input: StockPageInput, signal?: Abort
   };
 }
 
-/** Landing cards and base rows need sufficient statistics, not every SKU.
- * Drill tabs and server-paged SKU details retain their independent exact reads.
- */
 async function loadConfiguredSummaryDashboard(
   context?: string,
   operation?: GatewayOperationContext,
@@ -2538,7 +2509,7 @@ function configuredSummaryWorkspace(
   const currentRows = current.rows?.filter(
     (r: any) => !selectedBases?.length || selectedBases.includes(r.base),
   );
-  // Cards and drill-downs retain every category in the same base batch scope.
+
   const groups = sourceGroups
     .filter(
       (r: any) =>
@@ -2645,8 +2616,7 @@ function configuredSummaryWorkspace(
       skuCount: displayNumber(s.n),
     };
   });
-  // Insight ranking only uses base/category totals when pending and batch facts
-  // are unavailable. Strict sums preserve the same null propagation as SKU rows.
+
   const insight = buildInventoryInsight({
     coverage: {
       total: all.n,
@@ -2675,7 +2645,7 @@ function configuredSummaryWorkspace(
     '数据边界：',
     `数据边界：库存快照${day}，目标月份${scope.targetMonthLabel}、版本${scope.versionLabel}；差额覆盖${all.gapCount}/${all.n}个基地SKU，周转覆盖${all.turnCount}/${all.n}个基地SKU，均只比较同一匹配范围；`,
   );
-  // All three current metrics share the same effective, not fully shipped orders.
+
   const orderCard = {
     title: '当前订单',
     value: displayCurrentQuantity(currentRows, 'demand'),

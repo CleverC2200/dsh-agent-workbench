@@ -1,4 +1,3 @@
-/** Isolated test records. This module has no OMS, SQL or business-write transport. */
 export function applySimulationEvent(state, event, scope) {
   if (
     event.chat_id !== scope.chatId ||

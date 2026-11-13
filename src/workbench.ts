@@ -3,19 +3,18 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types';
 import type { PageIdentitySnapshot, WorkbenchFramePage } from './frame.ts';
 import { isBusinessViewPage, validHtmlViewState, type HtmlViewState } from './html-view-state.ts';
 
-/** Presentation metadata only. Resource selection and authorization have their own owners. */
 export interface WorkbenchPage {
   readonly id: MainPanelId;
   readonly label?: string | (() => string);
 }
 export interface AgentWorkbench {
   register(page: WorkbenchPage): () => void;
-  /** Start a fresh native Conversation with this preset; preserve defaults and existing Sessions. */
+
   startAgent(preset: string): Promise<void>;
   openAgentSession(session: NativeAgentSession): Promise<void>;
-  /** Open a page; a Document restores its associated Core Session without creating one. */
+
   open(id: MainPanelId): Promise<boolean>;
-  /** Contribute a Document inside the actual main Conversation. */
+
   registerFrame(page: WorkbenchFramePage): () => void;
 }
 export interface NativeAgentSession {
@@ -29,7 +28,7 @@ export interface DocumentSession {
   readonly preset: string | null;
   readonly ownerScope: string | null;
   readonly cwd?: string;
-  /** Stable subject supplied by GEA; this remains a presentation hint, never a grant. */
+
   readonly subject?: string | null;
 }
 export interface WorkbenchSnapshot {
@@ -38,7 +37,7 @@ export interface WorkbenchSnapshot {
   readonly visitedDocuments: readonly WorkbenchFramePage[];
   readonly selectedDocument?: WorkbenchFramePage;
   readonly selection?: DocumentSession;
-  /** Runtime presentation intent. The presenter discovers resources but waits for explicit selection. */
+
   readonly restoredWithoutSession?: boolean;
 }
 export interface WorkbenchPorts {
@@ -48,7 +47,7 @@ export interface WorkbenchPorts {
   hasPanel?(id: MainPanelId): boolean;
   document?(sessionId?: SessionId): void;
 }
-/** Browser presentation only; Core still resolves every referenced Session. */
+
 export interface WorkbenchPresentation {
   version: 2;
   page?: MainPanelId;
@@ -99,7 +98,7 @@ function presentation(value: unknown): WorkbenchPresentation | undefined {
     return;
   return state;
 }
-/** Page selection and associations describe UI; Core owns every Session and its main reference. */
+
 export class WorkbenchController implements AgentWorkbench {
   private readonly pages = new Map<MainPanelId, WorkbenchPage>();
   private readonly documents = new Map<MainPanelId, WorkbenchFramePage>();
@@ -206,7 +205,7 @@ export class WorkbenchController implements AgentWorkbench {
     if (!this.ports.document) throw Error('WORKBENCH_DOCUMENT_UNAVAILABLE');
     const unregister = this.register(page);
     this.documents.set(page.id, page);
-    // A page with no Session association restores presentation only; Core navigation stays untouched.
+
     if (this.rememberedPage === page.id && !this.associations.has(page.id)) {
       this.selectedDocument = page;
       this.restoredWithoutSession = true;
@@ -228,7 +227,7 @@ export class WorkbenchController implements AgentWorkbench {
     if (this.selectedDocument?.id === page) this.restoredWithoutSession = false;
     this.changed();
   }
-  /** A hint for a declared interpretation; identity confirmation and authorization remain external. */
+
   selectionFor(
     page: MainPanelId,
     preset: string | null,
@@ -260,7 +259,7 @@ export class WorkbenchController implements AgentWorkbench {
     this.activePresets.delete(page);
     this.changed();
   }
-  /** Revoke business presentation hints only after GEA has confirmed its current identity. */
+
   reconcileBusinessIdentity(identity: PageIdentitySnapshot): void {
     if (identity.state !== 'confirmed' || identity.error) return;
     const subject = identity.status?.authenticated ? identity.subject : undefined;
@@ -329,7 +328,7 @@ export class WorkbenchController implements AgentWorkbench {
     this.changed();
     for (const listener of this.historyListeners) listener();
   }
-  /** A selection intent, not a Core Session or persisted Session directory. */
+
   selectHistorySession(
     page: MainPanelId,
     sessionId: SessionId,
@@ -368,12 +367,12 @@ export class WorkbenchController implements AgentWorkbench {
       ...(selection ? { expected: selection.expected } : {}),
     };
   }
-  /** Finish the still-owned History navigation without revoking its own restore. */
+
   async completeHistory(target: { page: MainPanelId; signal: AbortSignal }): Promise<boolean> {
     target.signal.throwIfAborted();
     if (this.historyIntent?.controller.signal !== target.signal)
       throw Error('PAGE_HISTORY_CANCELLED');
-    // Hand the completed intent back to normal navigation before open cancels prior intents.
+
     this.historyIntent = undefined;
     return this.open(target.page);
   }

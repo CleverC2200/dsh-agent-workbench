@@ -47,7 +47,6 @@ export const passwordLoginCopy = {
   ],
 } as const;
 
-/** 独立销售计划页面使用的本地化文案。 */
 const copy = {
   workspaceDirectoryTitle: ['先选择工作文件夹', 'Choose a working folder'],
   workspaceDirectoryDescription: [

@@ -1,11 +1,9 @@
-// One HTML document shares this queue across its cards and collections. Avoid
-// multiplying collection concurrency by the number of independently loaded cards.
 let runningQueries = 0;
 const waitingQueries = [];
 let queueTimer;
 function drainQueries() {
   if (queueTimer) return;
-  // Allow dependent reads to join the queue before choosing the next priority.
+
   queueTimer = setTimeout(() => {
     queueTimer = undefined;
     while (waitingQueries.length && runningQueries < waitingQueries[0].concurrency)

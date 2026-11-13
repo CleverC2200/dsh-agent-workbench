@@ -12,7 +12,6 @@ function shifted(value: string, days = 0, months = 0) {
   return iso(date);
 }
 
-/** Translate period inputs to the named business parameters declared in config. */
 export async function readWorkspaceQuery(
   fallback: AgentSqlConfig,
   name: string,
@@ -43,8 +42,7 @@ export async function readWorkspaceQuery(
       fullReady = true;
       return rows;
     });
-    // A successful full result never waits for optional inventory work. On a
-    // data failure, finish the already-requested quantity projection first.
+
     return full.catch(async (error) => {
       options.signal?.throwIfAborted();
       await quick;
@@ -115,7 +113,6 @@ export async function readWorkspaceQuery(
     values.base = input.base;
   }
   if ('stock_date' in values) {
-    // Stock is a snapshot at the period end, including annual views.
     values.month = end.slice(0, 7) + '-01';
     const result = await (options.stockSnapshot ??
       client.read(
@@ -130,8 +127,7 @@ export async function readWorkspaceQuery(
       throw Object.assign(Error('所选月份没有可用库存快照'), { code: 'SOURCE_NOT_AVAILABLE' });
     values.stock_date = day;
   }
-  // Expanded stock groups need several batches. Attach the scope total to each
-  // batch so completeness checks do not need separate gateway round trips.
+
   const expandedProductStock =
     input.detailMode === 'product' &&
     Boolean(input.productScope?.items?.length) &&

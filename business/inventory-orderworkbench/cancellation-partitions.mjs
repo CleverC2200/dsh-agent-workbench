@@ -1,6 +1,5 @@
 import { cancellationSnapshotColumns } from './sku-cancellations.mjs';
 
-/** Partition only by execution identity, retaining all header/line observations. */
 export function cancellationPartitionSql(sql, partition) {
   if (![0, 1].includes(partition)) throw Error('INVALID_CANCELLATION_PARTITION');
   for (const table of ['agents_scm_execute_detail_hourly_d', 'agents_scm_execute_detail_d']) {

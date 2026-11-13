@@ -16,7 +16,6 @@ export function filterCurrentOrders(
   );
 }
 
-/** Every positive customer-order shortage is included in the shortage filter. */
 export function currentOrderStatus(
   shortage: number | null,
   ordered: number | null,

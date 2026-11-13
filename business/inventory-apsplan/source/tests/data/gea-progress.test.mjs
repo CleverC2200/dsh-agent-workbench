@@ -122,9 +122,9 @@ test('previous-period data publishes before annual comparisons finish', async ()
   });
   await new Promise((r) => setImmediate(r));
   const early = snapshots.some((value) => value.previous && !value.annual);
-  // Abort lets queued annual reads stop without adding further gates.
+
   pending.forEach((resolve) => resolve({ rows: [], total: 0 }));
-  // This test only verifies the early publication; remaining mocked annual pages are immediately released.
+
   const drain = setInterval(
     () => pending.splice(0).forEach((resolve) => resolve({ rows: [], total: 0 })),
     1,

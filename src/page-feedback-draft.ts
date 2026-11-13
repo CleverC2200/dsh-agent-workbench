@@ -8,7 +8,6 @@ declare module '@deepseek-ai/dsh-api-session-controller/client' {
   }
 }
 
-/** Append through the Core's public revision-guarded event. Core persists the semantic edit. */
 export async function insertPageFeedbackDraft(
   ctx: Pick<Context, 'sessions' | 'conversation'>,
   sessionId: string,
@@ -25,7 +24,7 @@ export async function insertPageFeedbackDraft(
     const input = ctx.conversation.input.for(reference.binding.ctx);
     const state = input.state.getSnapshot();
     if (state.phase !== 'plain') throw Error('RESOURCE_DRAFT_CHANGED');
-    // Clipboard projection expands chips. The scoped event accepts atomic editor coordinates.
+
     const end =
       state.draft.length -
       state.occurrences.reduce((expanded, occurrence) => expanded + occurrence.length - 1, 0);

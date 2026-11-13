@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 QUERIES = {
     'aqkc': ['page.health-groups', 'page.workbench-support-by-base', 'current-shortage.locations',
              'page.inventory-groups', 'page.dashboard-groups'],
-    # Replenishment is owned by update-fc-card-scope.py; preserve its canonical CTEs.
+
     'fc': ['health.cards', 'orders.summary', 'current-shortage.summary'],
     'qll': ['health.cards', 'branch-health.cards', 'current-shortage.summary',
             'orders.summary', 'inventory.summary', 'branch-turnover.cards'],
@@ -45,8 +45,7 @@ for agent in args.agents:
             difference = age.args['ifs'][0].args['true']
             assert isinstance(difference, exp.Sub)
             snapshot, production = difference.this.copy(), difference.expression.copy()
-            # Keep the same guarded date parsing and calendar arithmetic. Compute
-            # each civil-day ordinal once before validation and subtraction.
+
             columns = [exp.alias_(exp.column(e.alias_or_name, 'd'), e.alias_or_name) for e in dates.this.expressions]
             ordinals = exp.select(*columns, exp.alias_(snapshot.copy(), 'snapshot_ordinal'), exp.alias_(production.copy(), 'production_ordinal')).from_('inventory_batch_dates AS d')
             cte = exp.CTE(this=ordinals, alias=exp.TableAlias(this=exp.to_identifier('inventory_batch_ordinals')))

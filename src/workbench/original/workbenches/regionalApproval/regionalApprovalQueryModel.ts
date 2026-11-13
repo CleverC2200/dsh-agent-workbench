@@ -1,6 +1,6 @@
 import { salesPlanPeriodMonthForPlanId } from './models/salesPlanSubmitModel.ts';
 import type { GeaSalesPlanGroupMetrics } from '../../contracts.ts';
-/** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
+
 import type { TFunction } from 'i18next';
 import { SALES_PLAN_ROLES, salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
 import type {
@@ -11,7 +11,6 @@ import type {
 } from '../../bridge.ts';
 import type { ApprovalDimension, ApprovalStageId } from './salesPlanDomain.ts';
 
-// Y 链的待处理状态投影；其他链通过 salesPlanWorkflow 解析。
 export const SALES_PLAN_STATUS_BY_STAGE: Record<ApprovalStageId, number> = {
   customer: 0,
   region: 1,
@@ -27,7 +26,7 @@ export const VISIBLE_SALES_PLAN_STATUSES_BY_STAGE = Object.fromEntries(
   SALES_PLAN_ROLES.map((role) => [role, salesPlanWorkflow('Y').pendingStatuses(role)]),
 ) as Record<ApprovalStageId, number[]>;
 export const SALES_PLAN_PROGRESS_STATUSES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
-/** 状态可见性会与服务端管理的组织/版本范围取交集，绝不代表授权。 */
+
 export const salesPlanVisibleStatuses = (
   typeCode: string,
   roles: readonly ApprovalStageId[],
@@ -38,23 +37,19 @@ export const salesPlanVisibleStatuses = (
   );
 };
 
-/** 一个节点的分子/分母：界面上悬停百分比时直接展示这两个数，不必再靠人肉对照口径。 */
 export type SalesPlanStageTally = {
-  /** 分子：该范围内"已经过这个节点"的计划单数。 */
   completed: number;
-  /** 分母：该范围内全部状态的计划单数；月度把 Y/DC/FC… 各条流程分别统计后相加。 */
+
   total: number;
 };
 
 const emptySalesPlanStageTally = (): SalesPlanStageTally => ({ completed: 0, total: 0 });
 
-/** 分母为 0 记 0%；没全完成时封顶 99%，避免四舍五入被读成"已经全审完"。 */
 export const salesPlanStagePercent = ({ completed, total }: SalesPlanStageTally): number =>
   total > 0
     ? Math.max(0, Math.min(completed >= total ? 100 : 99, Math.round((completed / total) * 100)))
     : 0;
 
-/** 单条工作流的分子/分母；哪些状态算哪个节点已完成见 tests/approval-visibility 的口径矩阵。 */
 export const salesPlanStageTalliesForWorkflow = (period: {
   total: number;
   statusTotals: Readonly<Partial<Record<number, number>>>;
@@ -69,8 +64,6 @@ export const salesPlanStageTalliesForWorkflow = (period: {
         return [role, tally];
       tally.total = period.total;
       tally.completed = SALES_PLAN_PROGRESS_STATUSES.reduce<number>((sum, status) => {
-        // 退回目标保留其确认结果；发起退回的节点必须再次审批。
-        // 状态 5（审批完成·待回写）表示全部审批节点已完成，品类同样计入进度。
         const active = workflow.actor(status);
         const activePending = active && workflow.pending(active);
         const done =
@@ -98,7 +91,6 @@ export const approvalStageProgressForSalesPlanStatusTotals = (
     salesPlanStageTalliesForWorkflow({ total, statusTotals, planTypeCode: typeCode }),
   );
 
-/** 月度分子/分母：先把该月每条工作流分别算出来，再按节点相加。 */
 export const salesPlanStageTallies = (
   periods: readonly {
     total: number;
@@ -258,7 +250,6 @@ export const chooseInitialSalesPlanPeriod = (
 ): GeaSalesPlanPeriod | undefined =>
   periods.find((period) => period.status?.toUpperCase() === 'OPEN') ?? periods[0];
 
-/** 用户只选择月份；Y/DC 等流程类型留在同月各计划内部用于审批判断。 */
 export const salesPlanPeriodMonths = (periods: readonly GeaSalesPlanPeriod[]): string[] => [
   ...new Set(periods.map((period) => period.periodMonth)),
 ];
@@ -270,7 +261,6 @@ export const salesPlanPeriodsForMonth = (
 
 export const salesPlanPeriodOptionLabel = (periodMonth: string): string => periodMonth;
 
-/** 聚合展示总数，但不把多个计划版本变成可写对象。 */
 export const groupRegionalApprovalLiveRows = (
   rows: readonly RegionalApprovalLiveRow[],
   dimension: ApprovalDimension,
@@ -514,7 +504,6 @@ export const multiplyExactDecimals = (
   return `${negative ? '-' : ''}${raw.slice(0, -targetScale)}.${raw.slice(-targetScale)}`;
 };
 
-/** 未知角色映射保留原始代码，不虚构 Y 链审批标签。 */
 export const salesPlanStatusText = (status: number, typeCode: string, t: TFunction): string => {
   const code = salesPlanWorkflow(typeCode).statusLabelCode(status);
   return code === undefined
@@ -522,7 +511,6 @@ export const salesPlanStatusText = (status: number, typeCode: string, t: TFuncti
     : t(`common.assistantSurface.regionalApproval.query.status.${code}`);
 };
 
-/** 队列、筛选、导出及详情使用同一状态名称，不随所选审批节点变化。 */
 export const salesPlanQueueStatusText = (
   status: number,
   typeCode: string,

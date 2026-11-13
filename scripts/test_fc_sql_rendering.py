@@ -13,10 +13,8 @@ from sqlglot import exp
 
 ROOT = Path(__file__).resolve().parents[1]
 
-
 def parse(sql):
     return sqlglot.parse_one(sql, read='postgres')
-
 
 class GovernedFcRendering(unittest.TestCase):
     def test_regeneration_preserves_queries_and_positional_substrings(self):
@@ -24,7 +22,7 @@ class GovernedFcRendering(unittest.TestCase):
         targets = {key: query for key, query in config['queries'].items()
                    if key.startswith(('replenishment', 'transfer_plan'))}
         before = {key: parse(query['request']['sql']) for key, query in targets.items()}
-        # Reproduce SQLGlot's canonical output, including queries already migrated.
+
         for key, tree in before.items():
             config['queries'][key]['request']['sql'] = re.sub(
                 r'%\((gea_p\d+)\)s', r':\1', tree.sql(dialect='postgres'))
@@ -51,7 +49,6 @@ class GovernedFcRendering(unittest.TestCase):
             first = target.read_bytes()
             subprocess.run([sys.executable, str(script)], check=True, capture_output=True)
             self.assertEqual(first, target.read_bytes())
-
 
 if __name__ == '__main__':
     unittest.main()
