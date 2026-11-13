@@ -214,25 +214,33 @@ test('line configuration comments preserve escaped patterns and literal values',
   ]);
 });
 
-test('received input exemptions follow the existing hash manifest and never cover new own files', (t) => {
-  const { put, run } = fixture(t);
-  const input = '/* received instruction */\nexport const value=1;';
-  put('old.ts', 'export const value=1;');
-  put('received/input.js', input);
-  put(
-    'received/SOURCE.json',
-    JSON.stringify({ files: { 'input.js': createHash('sha256').update(input).digest('hex') } }),
-  );
-  put(
-    'source-comments.json',
-    JSON.stringify({ assets: [], manifests: [{ root: 'received', path: 'received/SOURCE.json' }] }),
-  );
-  assert.equal(run().status, 0);
-  put('received/input.js', input + '\n');
-  assert.match(run().stderr, /SOURCE_COMMENTS_RECEIVED_BYTES_CHANGED/);
-  put('received/input.js', input);
-  put('received/own.js', '// own comment\nexport const value=2;');
-  const result = run();
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /received\/own.js:1/);
+test('received input and fixture manifests preserve exact bytes without exempting new own files', (t) => {
+  for (const layout of ['map', 'provenance']) {
+    const { put, run } = fixture(t);
+    const input = '/* received instruction */\nexport const value=1;';
+    const sha256 = createHash('sha256').update(input).digest('hex');
+    put('old.ts', 'export const value=1;');
+    put('received/input.js', input);
+    put(
+      'received/SOURCE.json',
+      JSON.stringify({
+        files: layout === 'map' ? { 'input.js': sha256 } : [{ path: 'input.js', sha256 }],
+      }),
+    );
+    put(
+      'source-comments.json',
+      JSON.stringify({
+        assets: [],
+        manifests: [{ root: 'received', path: 'received/SOURCE.json' }],
+      }),
+    );
+    assert.equal(run().status, 0, layout);
+    put('received/input.js', input + '\n');
+    assert.match(run().stderr, /SOURCE_COMMENTS_RECEIVED_BYTES_CHANGED/, layout);
+    put('received/input.js', input);
+    put('received/own.js', '// own comment\nexport const value=2;');
+    const result = run();
+    assert.equal(result.status, 1, layout);
+    assert.match(result.stderr, /received\/own.js:1/, layout);
+  }
 });
