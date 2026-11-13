@@ -156,7 +156,7 @@ const host={salesPlan:{
     return {versionId,skus:skusFor(versionId).map(sku=>sku.skuCode==='1001'?{...sku,amt:versionId==='v1'?'100.10':versionId==='v2'?'200.20':'0'}:sku),months:['2025-10','2026-08','2026-09'],shipmentUnavailable:false,
       rows:[{skuCode:'1001',shipments:['1.5','10','20']},{skuCode:'2002',shipments:['2','3','4']}]};
   }},
-  versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId)}},
+  versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading'||comparison==='quick-category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId)}},
   draft:{invoke:async(q)=>{if(window.autoBlock==='draft')return {draft:null,stale:true};if(window.sentDirect.length){if(comparison==='single-dms-stale-second')return {draft:null,stale:true};if(comparison==='single-dms-unreadable-second')throw Error('fixture draft read failed');}const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
   logs:{invoke:async()=>[]},compare:{invoke:async({planId,fromVersionId,toVersionId})=>{
     readCalls.push({planId,fromVersionId,toVersionId});
@@ -1624,4 +1624,14 @@ test('quick questions hide while loading and refresh when changing dimensions', 
     .getByRole('button')
     .allTextContents();
   assert.ok(questions.every((q) => /客户[123]/.test(q)));
+});
+
+test('quick questions wait for visible version totals to finish loading', async (t) => {
+  const { page } = await openWorkbench(t, false, 'quick-category-loading');
+  await page.waitForFunction(() => window.readCalls.some((call) => call.versionId));
+  const questions = page.getByRole('region', { name: '推荐问法' });
+  await expect(page.getByText('销售计划加载中', { exact: true })).toBeVisible();
+  await expect(questions).toHaveCount(0, { timeout: 500 });
+  await expect(questions.getByRole('button')).toHaveCount(4, { timeout: 15000 });
+  await expect(page.getByText('销售计划加载中', { exact: true })).toHaveCount(0);
 });

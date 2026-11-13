@@ -1563,6 +1563,7 @@ const RegionalApprovalWorkbench: React.FC<{
   const quickQuestions = useMemo<RegionalApprovalWorkbenchContext['quickQuestions']>(() => {
     if (
       skuReviewOpen ||
+      liveCategoriesLoading ||
       liveEvidence.queryState !== 'success' ||
       liveEvidence.source !== 'gea-user-session' ||
       !liveQuery.selectedPeriodMonth
@@ -1629,6 +1630,7 @@ const RegionalApprovalWorkbench: React.FC<{
       : null;
   }, [
     skuReviewOpen,
+    liveCategoriesLoading,
     liveEvidence,
     liveQuery.selectedPeriodMonth,
     selectedLiveTableRowIds,
