@@ -166,7 +166,7 @@ async function version(frame, month = '2026-10') {
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
 }
 
-test('product replacement fields populate old-product columns and the list omits base names', async (t) => {
+test('product replacement fields retain source columns and explain combined history without base names', async (t) => {
   const { frame } = await mpsPage(t, config, (query) => {
     const result = fixture(query);
     if (query.queryId.startsWith('products.'))
@@ -194,7 +194,10 @@ test('product replacement fields populate old-product columns and the list omits
   await expect(dialog).toContainText('REPLACE');
   await expect(dialog).toContainText('产品A');
   await expect(dialog).toContainText('产品B');
-  await expect(dialog).toContainText('对应老品编码、老品名称分别取替换物料编码、替换品');
+  await expect(dialog).toContainText(
+    '替换物料编码、替换品名称分别读取源表的替换编码及替换品名称。',
+  );
+  await expect(dialog).toContainText('历史合计量＝同基地当前SKU自身历史量＋替换品历史量×替换系数');
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   const child = section
     .locator('tbody tr')

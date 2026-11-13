@@ -1962,7 +1962,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'p',
             {},
-            '业务数据由月主计划授权读取。产品关系调整保留在本地版本，历史继承、冲突口径和正式保存待接入。',
+            '业务数据由月主计划授权读取。产品关系调整保留在本地版本，自身历史与替换品历史按系数合计。冲突口径和正式保存待接入。',
           ),
           h(
             'button',
@@ -2081,7 +2081,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               className: 'dc-product-search',
               value: search,
               'aria-label': '搜索产品',
-              placeholder: '搜索编码 / 名称 / 基地 / 老品',
+              placeholder: '搜索编码 / 名称 / 基地 / 替换品',
               onChange: (event) => {
                 setSearch(event.target.value);
                 setProductPage(0);
@@ -2168,8 +2168,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     '系列',
                     '物料组编码',
                     '物料组名称',
-                    '对应老品编码',
-                    '老品名称',
+                    '替换物料编码',
+                    '替换品名称',
                     '未税到岸单价',
                     '新品标记',
                     '操作',
@@ -2344,15 +2344,19 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       column === '基地'
                         ? '基地名称'
                         : column === '老品编码'
-                          ? '对应老品编码'
-                          : column,
+                          ? '替换物料编码'
+                          : column === '老品名称'
+                            ? '替换品名称'
+                            : column,
                       h('input', {
                         'aria-label':
                           column === '基地'
                             ? '基地名称'
                             : column === '老品编码'
-                              ? '对应老品编码'
-                              : column,
+                              ? '替换物料编码'
+                              : column === '老品名称'
+                                ? '替换品名称'
+                                : column,
                         value: product[column],
                         onChange: (event) =>
                           setProduct({ ...product, [column]: event.target.value }),
@@ -2370,7 +2374,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h(
                 'p',
                 { className: 'dc-muted' },
-                '对应老品编码用于引用同基地、同财年的历史发货并计算需求拆分系数。按所填编码直接引用，不递归替换；原始发货记录保留。',
+                '历史量为同基地同财年的当前SKU自身历史加替换品历史×替换系数。缺源行不覆盖另一品已有历史，同码只计一次、不递归；已有源行数量空值仍待补，原始记录保留。',
               ),
             ),
         ),
@@ -2391,7 +2395,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'p',
               { className: 'dc-muted' },
-              '对应老品编码、老品名称分别取替换物料编码、替换品。物料组分类和系列只在子SKU源值唯一时展示，多值分别列出。',
+              '替换物料编码、替换品名称分别读取源表的替换编码及替换品名称。物料组分类和系列只在子SKU源值唯一时展示，多值分别列出。',
             ),
             table(
               ['字段', '源值'],
@@ -2434,7 +2438,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'p',
               { className: 'dc-muted' },
-              '以下为最新统计月份的源记录。替换参考量＝同基地老品历史量×替换系数；净重为每个计量单位的重量。缺值保留为空，不按0计算。',
+              '以下为最新统计月份的源记录。历史合计量＝同基地当前SKU自身历史量＋替换品历史量×替换系数；净重为每个计量单位的重量。缺值保留为空，不按0计算。',
             ),
             table(productSourceColumns, selectedProduct.sourceDetails),
           ),
