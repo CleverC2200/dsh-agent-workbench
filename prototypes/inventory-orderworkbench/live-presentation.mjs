@@ -173,7 +173,9 @@ function summaryRows(periods, field, directorMap, loading = false) {
   if (field === 'director')
     groups = distinct(
       source.flatMap((row) =>
-        directors(row).map((name) => JSON.stringify([name, dimensionValue(row.base)])),
+        directors(row)
+          .filter((name) => name && name !== '归属待补全')
+          .map((name) => JSON.stringify([name, dimensionValue(row.base)])),
       ),
     ).map((key) => {
       const [name, base] = JSON.parse(key);

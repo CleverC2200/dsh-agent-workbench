@@ -54,6 +54,14 @@ test('base and director tables omit Puyang and exclude it from current and histo
             },
           ],
         },
+        {
+          id: 'directors',
+          status: 'ready',
+          rows: [
+            { base: '郑州', sku: 'A', director: '总监甲', names: 1 },
+            { base: '濮阳', sku: 'B', director: '总监乙', names: 1 },
+          ],
+        },
       ],
     };
     value.metrics = computeWorkbenchMetrics(value);
@@ -237,7 +245,10 @@ test('summary inventory without a SKU owner uses the unique period base owner ou
       table.filter((row) => row[1] === '华东').map((row) => row[0]),
       ['本期负责人'],
     );
-    assert.equal(table.find((row) => row[1] === '郑州')[0], '归属待补全');
+    assert.equal(
+      table.find((row) => row[1] === '郑州'),
+      undefined,
+    );
   }
   const east = presentation.performance['director-performance'].month.find(
     (row) => row[1] === '华东',
@@ -250,8 +261,8 @@ test('summary inventory without a SKU owner uses the unique period base owner ou
   assert.equal(
     workbenchPresentation(facts).performance['director-performance'].month.find(
       (row) => row[1] === '华东',
-    )[0],
-    '归属待补全',
+    ),
+    undefined,
   );
 });
 
