@@ -100,6 +100,21 @@ export function createOntimeQueries(productsSql) {
   );
   const prefix = `WITH ontime_traces AS (${scopedTraces}),ontime_arrivals AS (${arrivals}),
     ontime_products AS (${scopedProducts}) `;
+  const geographyFields = ['region_name', 'province_region_name']
+    .map(
+      (field, index) =>
+        `CASE WHEN COUNT(NULLIF(TRIM(t.${field}),''))=COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(t.${field}),''))=1 THEN MAX(NULLIF(TRIM(t.${field}),'')) END AS ${index === 0 ? 'region' : 'province'}`,
+    )
+    .join(',');
+  const geographyTraces = scopedTraces.replace(
+    'SELECT t.executeorderno,t.cust_code,',
+    `SELECT t.executeorderno,t.cust_code,${geographyFields},`,
+  );
+  const geographyArrivals = arrivals.replace(
+    't.arrived AS arrival_date,',
+    't.arrived AS arrival_date,t.region,t.province,',
+  );
+  const geographyPrefix = `WITH ontime_traces AS (${geographyTraces}),ontime_arrivals AS (${geographyArrivals}),ontime_products AS (${scopedProducts}) `;
   const from = `FROM ontime_products h INNER JOIN ontime_arrivals a
     ON a.executeorderno=h.executeorderno AND a.cust_code=h.cust_code
     INNER JOIN (SELECT executeorderno,cust_code FROM ontime_products GROUP BY executeorderno,cust_code
@@ -144,6 +159,11 @@ export function createOntimeQueries(productsSql) {
         THEN 1 ELSE a.invalid END) AS invalid
       ${from} GROUP BY h.executeorderno) `;
   return {
+    ontimeGeographySummarySql:
+      geographyPrefix +
+      `SELECT h.belong_base AS base,a.invalid,a.ontime,
+      ARRAY_AGG(CONCAT(${tuple(['h.executeorderno', 'h.cust_code', 'CAST(a.arrival_date AS CHAR)', ...members, 'a.region', 'a.province'])})) AS packed_orders
+      ${from} GROUP BY h.belong_base,a.invalid,a.ontime`,
     ontimeAgentSummarySql:
       executionPrefix +
       `SELECT

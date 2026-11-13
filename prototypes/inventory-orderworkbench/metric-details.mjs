@@ -26,7 +26,10 @@ export function metricDetailsRequest(facts, key, selection, card = {}) {
       : null;
   const base = facts.base ?? '';
   const scope = base ? 'base' : 'national';
-  const current = metricSnapshot(facts.periods.month, key, {base,turnoverScope:facts.turnoverScope ?? scope});
+  const current = metricSnapshot(facts.periods.month, key, {
+    base,
+    turnoverScope: facts.turnoverScope ?? scope,
+  });
   const config =
     typeof ORDER_WORKBENCH_APS_CONFIG === 'undefined' ? undefined : ORDER_WORKBENCH_APS_CONFIG;
   const contract = { ...metricContract(key, config, scope), version: metricCalculationVersion };
@@ -40,8 +43,8 @@ export function metricDetailsRequest(facts, key, selection, card = {}) {
   return {
     text:
       `请使用 operations-order-kpi-details skill，在右侧生成“${label}指标明细”表格。\n当前报告：${selection.label}；本期月累计：${window(facts.periods.month)}；本周：${window(facts.periods.week)}。\n` +
-      '同比必须读取页面 yearMonth（月累计）或 yearWeek（本周）的同长度同期，沿用相同 metric、base、view、版本和授权范围。输出大区/基地/品项表时，先按维度值过滤各周期，再分别汇总并判断该行分子、分母和 invalid；未映射或异常分组单独列示，不得阻断其他分组。未查询不等于不可计算；仅该行确实缺同期数据、分母为0或口径冲突时标记不可计算，有有效同期分子分母必须输出同比差值。' +
-      `点击的是${base ? base+'基地汇总卡' : '全国汇总卡'}的本期值，主周期为本期月累计，本周另列。按本次current、contract和queries回答，数值、单位、样本及待判定状态保持原意；旧会话、Skill和知识库不覆盖当前代码口径。明细未发布不等于底表无数据；剔除数未发布不写0。不从汇总编造明细，单页不推断全国分布或原因。独立询问这六项指标时使用gea_order_kpi，其他问题继续使用已授权Cube和知识库。`,
+      '同比必须读取页面 yearMonth（月累计）或 yearWeek（本周）的同长度同期，沿用相同 metric、base、view、版本和授权范围。维度分组按contract.grouping.supported使用queries.groups对应的gea_order_kpi view=groups和dimensions，分组回答读取groups.contract与每行目标状态，按各周期分别调用；detailsQueryId为空不代表分组未发布。先按维度值对齐各周期，再分别判断该行分子、分母和待判定；未映射或异常分组单独列示，不得阻断其他分组。未查询不等于不可计算；仅该行确实缺同期数据、分母为0或口径冲突时标记不可计算，有有效同期分子分母必须输出同比差值。' +
+      `点击的是${base ? base + '基地汇总卡' : '全国汇总卡'}的本期值，主周期为本期月累计，本周另列。按本次current、contract和queries回答，数值、单位、样本及待判定状态保持原意；旧会话、Skill和知识库不覆盖当前代码口径。明细未发布不等于底表无数据；剔除数未发布不写0。不从汇总编造明细，单页不推断全国分布或原因。独立询问这六项指标时使用gea_order_kpi，其他问题继续使用已授权Cube和知识库。`,
     context: {
       pageId: 'inventory-orderworkbench',
       instance: 'default',
@@ -88,6 +91,7 @@ export function metricDetailsRequest(facts, key, selection, card = {}) {
           },
         },
         queries: {
+          groups: { tool: 'gea_order_kpi', parameters: { ...parameters, view: 'groups' } },
           summary: { tool: 'gea_order_kpi', parameters: { ...parameters, view: 'summary' } },
           details: {
             tool: 'gea_order_kpi',

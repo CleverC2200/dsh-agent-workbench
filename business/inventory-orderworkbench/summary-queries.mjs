@@ -1,9 +1,21 @@
-import { ontimeSummarySql, ontimePeriodSummarySql } from './document-queries.mjs';
+import {
+  ontimeSummarySql,
+  ontimePeriodSummarySql,
+  ontimeGeographySummarySql,
+} from './document-queries.mjs';
 import { rowPacketSql } from '../shared/row-packets.mjs';
 import { addPeriodSummaryQuery } from './period-summary-queries.mjs';
+import {
+  amendmentDimensionEventsSql,
+  cancellationDimensionEventsSql,
+} from './document-queries.mjs';
+import { aggregateAmendmentSql } from './sku-amendments.mjs';
+import { aggregateCancellationSql } from './sku-cancellations.mjs';
 
 export function addWorkbenchSummaryQueries(config) {
-  const names = ['orders', 'stock', 'ages'];
+  const names = ['orders', 'orders.customers', 'stock', 'ages'].filter(
+    (name) => config.queries['workbench.' + name],
+  );
   const raw = (name) => {
     const sql = config.queries['workbench.' + name].request.sql;
 
@@ -50,6 +62,114 @@ export function addWorkbenchSummaryQueries(config) {
       resultColumns: columns,
       pagination: { countQuery: id + '.count' },
     };
+  }
+  for (const [name, events] of [
+    ['amendment', amendmentDimensionEventsSql],
+    ['cancellation', cancellationDimensionEventsSql],
+  ]) {
+    if (!config.queries['workbench.changes.' + name]) continue;
+    const fields =
+      name === 'amendment'
+        ? [
+            'base',
+            'cust_code',
+            'cust_order_no',
+            'material_code',
+            'name',
+            'region',
+            'province',
+            'change_numerator',
+            'change_denominator',
+            'invalid_denominator',
+            'invalid_change',
+            'unknown_quantity',
+          ]
+        : [
+            'base',
+            'cust_code',
+            'cust_order_no',
+            'executeorderno',
+            'executeorderlineno',
+            'material_code',
+            'name',
+            'region',
+            'province',
+            'cancel_numerator',
+            'cancel_denominator',
+            'invalid_cancel',
+          ];
+    const mapped = `SELECT ${fields.map((field) => 'e.' + field).join(',')},${mappedItem} AS item FROM (${events}) e
+      LEFT JOIN (${owner}) own ON own.base=e.base AND own.sku=e.material_code
+      LEFT JOIN (${sharedItems}) shared ON shared.sku=e.material_code`;
+    const sql =
+      name === 'amendment'
+        ? aggregateAmendmentSql(mapped, false, false, ['base', 'item'])
+        : aggregateCancellationSql(mapped, { dimensions: ['base', 'item'] });
+    const original = config.queries['workbench.changes.' + name];
+    register(
+      'workbench.changes.' + name + '.groups',
+      sql,
+      original,
+      ['base', 'item', ...original.resultColumns],
+      ['base', 'item', 'kind', 'region', 'province'],
+    );
+    const fieldsByDimension = {
+      item: mappedItem,
+      category: 'dictionary.category',
+      director: 'CASE WHEN own.names=1 THEN own.director END',
+      sku: 'e.material_code',
+      customer: 'e.cust_code',
+    };
+    const masks = Object.keys(fieldsByDimension);
+    const projected = Object.entries(fieldsByDimension).map(
+      ([field, expression], index) =>
+        `CASE WHEN :gea_p${750 + index} THEN ${expression} END AS ${field}`,
+    );
+    const dimensionRows = `SELECT ${fields.map((field) => 'e.' + field).join(',')},${projected.join(',')},
+      CASE WHEN :gea_p752 AND own.names=1 THEN 1 ELSE 0 END AS names
+      FROM (${events}) e LEFT JOIN (${owner}) own ON own.base=e.base AND own.sku=e.material_code
+      LEFT JOIN (${sharedItems}) shared ON shared.sku=e.material_code
+      LEFT JOIN (SELECT material_code,CASE WHEN COUNT(DISTINCT product_categ_name)=1 THEN MAX(product_categ_name) END AS category
+        FROM agents_scm_material_in_out_summary_d GROUP BY material_code) dictionary ON dictionary.material_code=e.material_code`;
+    const dimensionKeys = ['base', ...masks, 'names'];
+    const dimensionAggregate =
+      name === 'amendment'
+        ? aggregateAmendmentSql(dimensionRows, false, false, dimensionKeys)
+        : aggregateCancellationSql(dimensionRows, { dimensions: dimensionKeys });
+    const dimensionColumns = [...dimensionKeys, ...original.resultColumns, 'summary'];
+    const dimensionSql = `SELECT ${dimensionColumns.filter((field) => field !== 'summary').join(',')},1 AS summary FROM (${dimensionAggregate}) mapped_dimensions`;
+    const dimensionSpec = {
+      ...original,
+      parameterSpec: {
+        ...original.parameterSpec,
+        ...Object.fromEntries(
+          masks.map((field, index) => [
+            'gea_p' + (750 + index),
+            { name: 'group_' + field, type: 'boolean', required: true },
+          ]),
+        ),
+      },
+    };
+    register(
+      'workbench.changes.' + name + '.dimensions',
+      dimensionSql,
+      dimensionSpec,
+      dimensionColumns,
+      [...dimensionKeys, 'kind', 'region', 'province'],
+    );
+    const packets = rowPacketSql(dimensionSql, dimensionColumns, [
+      ...dimensionKeys,
+      'kind',
+      'region',
+      'province',
+    ]);
+    register(
+      'workbench.changes.' + name + '.dimensions.packets',
+      packets.slice(0, packets.lastIndexOf(' ORDER BY ')),
+      dimensionSpec,
+      ['packet_index', 'packet_count', 'packet_scope_total', 'packet_rows'],
+      ['packet_index'],
+    );
   }
   const directors = config.queries['workbench.directormembers'];
   for (const [name, keys] of [
@@ -101,6 +221,14 @@ export function addWorkbenchSummaryQueries(config) {
 
   if (config.queries['workbench.ontime'])
     register(
+      'workbench.ontime.geography.summary',
+      ontimeGeographySummarySql,
+      config.queries['workbench.ontime'],
+      ['base', 'invalid', 'ontime', 'packed_orders'],
+      ['base', 'invalid', 'ontime'],
+    );
+  if (config.queries['workbench.ontime'])
+    register(
       'workbench.ontime.summary',
       ontimeSummarySql,
       config.queries['workbench.ontime'],
@@ -138,9 +266,17 @@ export function addWorkbenchSummaryQueries(config) {
     const item = name === 'ages' ? mappedItem : "COALESCE(NULLIF(q.item,'')," + mappedItem + ')';
     const director = 'CASE WHEN own.names=1 THEN own.director ELSE NULL END';
     const known = 'CASE WHEN own.names=1 THEN 1 ELSE 0 END';
-    const group = ['q.base', 'q.category', item, director, known];
+    const group = [
+      'q.base',
+      'q.category',
+      item,
+      director,
+      known,
+      ...(name === 'orders.customers' ? ['q.customer', 'q.region', 'q.province'] : []),
+    ];
     const fields = original.resultColumns.map((field) => {
       if (field === 'base' || field === 'category') return 'q.' + field + ' AS ' + field;
+      if (['customer', 'region', 'province'].includes(field)) return 'q.' + field + ' AS ' + field;
       if (field === 'item') return item + ' AS item';
       if (field === 'sku') return 'NULL AS sku';
       if (
@@ -197,7 +333,14 @@ export function addWorkbenchSummaryQueries(config) {
       sql,
       original,
       [...original.resultColumns, 'director', 'names', 'summary', ...extra],
-      ['base', 'category', 'item', 'director', 'names'],
+      [
+        'base',
+        'category',
+        'item',
+        'director',
+        'names',
+        ...(name === 'orders.customers' ? ['customer', 'region', 'province'] : []),
+      ],
     );
     if (config.queries['workbench.ontime.periods.summary'])
       addPeriodSummaryQuery(config, name, fields, group, [

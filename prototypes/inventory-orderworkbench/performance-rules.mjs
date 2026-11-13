@@ -1,4 +1,4 @@
-import {normalizeWorkbenchBase} from '../../business/inventory-orderworkbench/base-scope.mjs';
+import { normalizeWorkbenchBase } from '../../business/inventory-orderworkbench/base-scope.mjs';
 
 export const metricLimits = {
   作废率: { healthy: 6, warning: 10, direction: 'lower' },
@@ -32,6 +32,12 @@ export function metricTarget(name, base = '') {
         ? `<${stockLimits.other}天`
         : shippableDaysTarget;
   return name === '货龄（>60天库存占比）' ? '越低越好' : null;
+}
+
+export function metricGroupTarget(name, base, dimensions) {
+  return name === '周转天数' && !dimensions.includes('base')
+    ? `<${stockLimits.national}天`
+    : metricTarget(name, base);
 }
 
 export function workbenchMetricState(name, value, base = '') {

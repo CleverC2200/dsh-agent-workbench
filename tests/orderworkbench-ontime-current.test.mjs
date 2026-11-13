@@ -22,7 +22,7 @@ test('execution arrival cohort, all exclusions, missing evidence and summary par
   const db = new DatabaseSync(':memory:');
   try {
     const fields =
-      'executeorderno,cust_code,update_time,lastshipmenttime,gpsisinraildate_to,arriveconfirm_time,requireddeliverytimebak,requireddeliverytime,expected_deliv_time,is_dispatch,region_name,timeout_code,is_virtual_odo,vehicle_type,vehicle_type_name,deliver_wh,receive_wh,cust_type'.split(
+      'executeorderno,cust_code,update_time,lastshipmenttime,gpsisinraildate_to,arriveconfirm_time,requireddeliverytimebak,requireddeliverytime,expected_deliv_time,is_dispatch,region_name,province_region_name,timeout_code,is_virtual_odo,vehicle_type,vehicle_type_name,deliver_wh,receive_wh,cust_type'.split(
         ',',
       );
     db.exec(`CREATE TABLE agents_scm_order_trace_final_di(${fields.join(',')});
@@ -58,6 +58,7 @@ test('execution arrival cohort, all exclusions, missing evidence and summary par
         expected_deliv_time: '2026-09-20 21:00:00',
         is_dispatch: '是',
         region_name: '华东大区',
+        province_region_name: '华东省区',
         timeout_code: '',
         is_virtual_odo: '否',
         vehicle_type: '11',

@@ -4,6 +4,7 @@ import {
   amendmentChangesSql,
   customersSql,
   ordersSql,
+  fulfillmentGroupSql,
   ontimeSql,
   ontimeAgentSummarySql,
   ontimeAgentDetailsSql,
@@ -374,6 +375,12 @@ export const workbenchQueries = {
 export function addWorkbenchQueries(config) {
   const definitions = {
     ...workbenchQueries,
+    'orders.customers': {
+      ...workbenchQueries.orders,
+      keys: [...workbenchQueries.orders.keys, 'customer', 'region', 'province'],
+      columns: [...workbenchQueries.orders.columns, 'customer', 'region', 'province'],
+      sql: fulfillmentGroupSql(true),
+    },
     'changes.cancellation': {
       ...workbenchQueries.changes,
       sql: cancellationChangesSql,
@@ -422,6 +429,8 @@ export function addWorkbenchQueries(config) {
               ? 'NULLIF(TRIM(d.'
               : ''),
       );
+    if (name === 'stock')
+      definition.sql = `SELECT ${definition.columns.join(',')} FROM (${definition.sql}) stock_scope`;
     const id = 'workbench.' + name.toLowerCase();
     const parameterSpec = {
       gea_p900: { name: 'report_base', type: 'string', required: false },

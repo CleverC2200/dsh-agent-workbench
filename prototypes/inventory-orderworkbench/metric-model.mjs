@@ -82,7 +82,7 @@ export function stockDaily(row, scope = 'national') {
   return (Number(sales) + (scope === 'base' ? 0.5 * Number(row.transfer_plan) : 0)) / days;
 }
 
-export function stockComponents(rows, scope = 'national') {
+export function stockComponents(rows, scope = 'national', { allowZeroDenominator = false } = {}) {
   if (!rows.some((row) => 'national_stock_records' in row)) {
     const numerator = sum(rows, 'inventory'),
       daily = rows.map((row) => stockDaily(row, scope));
@@ -95,7 +95,7 @@ export function stockComponents(rows, scope = 'national') {
     )
       return null;
     const denominator = daily.reduce((total, value) => total + value, 0);
-    return denominator > 0 ? { numerator, denominator } : null;
+    return denominator > 0 || (allowZeroDenominator && denominator === 0) ? { numerator, denominator } : null;
   }
   const planInvalid = scope === 'base' ? 'base_plan_invalid' : 'national_plan_invalid';
   if (
@@ -127,7 +127,7 @@ export function stockComponents(rows, scope = 'national') {
   );
   if (daily.some((value) => value === null)) return null;
   const demand = daily.reduce((total, value) => total + value, 0);
-  return demand > 0 ? { numerator: inventory, denominator: demand } : null;
+  return demand > 0 || (allowZeroDenominator && demand === 0) ? { numerator: inventory, denominator: demand } : null;
 }
 function scopedStockDays(rows, scope = 'national') {
   const quantities = stockComponents(rows, scope);
