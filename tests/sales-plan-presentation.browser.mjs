@@ -118,6 +118,8 @@ if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50'
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 if(comparison?.startsWith('sku-review')) for(const plan of sourcePlans) plan.skuCount=2;
 if(comparison==='mixed-terminal')sourcePlans[1].status=5;
+if(comparison==='header-selection')sourcePlans[2].status=5;
+if(comparison==='header-pagination')for(let n=4;n<=12;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
 const plans=continued?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1).map(plan=>({...plan,status:continued[0]})):['returned','return-unavailable'].includes(comparison)?(comparison==='return-unavailable'?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1):sourcePlans).map(plan=>({...plan,status:comparison==='return-unavailable'?8:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 if(comparison?.startsWith('single-'))for(const plan of plans)plan.status=4;
 window.sentDirect=[];
@@ -176,7 +178,7 @@ function QuickQuestionFixture(){
  const observe=React.useCallback(context=>{window.quickQuestionSnapshot=context.quickQuestions;setSnapshot(context.quickQuestions)},[]);
  return <WorkbenchHostProvider value={host}><div style={{display:'flex',height:'100%'}}><div className="gea-original-workbench" style={{width:'75%',height:'100%'}}><Workbench stateScope="local-render" t={translate} onContextChange={observe} approvalStages={[approvalRole]} liveActionsEnabled/></div><aside style={{width:'25%',padding:12,boxSizing:'border-box'}}><QuickQuestionsContext.Provider value={snapshot}><QuickQuestions onFill={setDraft}/></QuickQuestionsContext.Provider><textarea aria-label="Agent输入框" value={draft} onChange={event=>setDraft(event.target.value)}/></aside></div></WorkbenchHostProvider>;
 }
-root.render(comparison?.startsWith('quick-') ? <QuickQuestionFixture/> : <WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={translate} onContextChange={()=>{}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
+root.render(comparison?.startsWith('quick-') ? <QuickQuestionFixture/> : <WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={translate} onContextChange={context=>{window.approvalContext=context}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
 `,
   },
   outfile: '/fixture/app.js',
@@ -1634,4 +1636,97 @@ test('quick questions wait for visible version totals to finish loading', async 
   await expect(questions).toHaveCount(0, { timeout: 500 });
   await expect(questions.getByRole('button')).toHaveCount(4, { timeout: 15000 });
   await expect(page.getByText('销售计划加载中', { exact: true })).toHaveCount(0);
+});
+
+test('header select all skips disabled rows and supports partial selection and cancellation', async (t) => {
+  const { page } = await openWorkbench(t, true, 'header-selection');
+  const header = page.locator('thead label.arco-checkbox:visible').first();
+  await expect(header).toBeVisible();
+  await header.check();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
+    )
+    .toEqual(['p1', 'p2']);
+  await expect(page.locator('tbody input[value="p3"]')).toBeDisabled();
+  await expect(page.locator('tbody input[value="p3"]')).not.toBeChecked();
+  await header.uncheck();
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
+    .toBe(0);
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  await header.check();
+  await page.locator('tbody label.arco-checkbox:has(input[value="p1"])').uncheck();
+  await expect(header).toHaveClass(/arco-checkbox-indeterminate/);
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id)))
+    .toEqual(['p2']);
+  await header.click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
+    )
+    .toEqual(['p1', 'p2']);
+  await header.uncheck();
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
+    .toBe(0);
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+test('header cancellation clears terminal members inherited from a selected organization', async (t) => {
+  const { page } = await openWorkbench(t, true, 'mixed-terminal');
+  const header = page.locator('thead label.arco-checkbox:visible').first();
+  await header.check();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
+    )
+    .toEqual(['p1', 'p2', 'p3']);
+  await header.uncheck();
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
+    .toBe(0);
+  await expect(page.getByRole('button', { name: '通过', exact: true })).toBeDisabled();
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+test('header select all only selects plans on the current page', async (t) => {
+  const { page } = await openWorkbench(t, true, 'header-pagination');
+  await page.getByRole('combobox', { name: '每页条数' }).click();
+  await page.getByRole('option', { name: '10 条/页', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.pagination.pageSize))
+    .toBe(10);
+  const visibleIds = await page.evaluate(() =>
+    window.approvalContext.visibleEntities.map((row) => row.id).sort(),
+  );
+  assert.equal(visibleIds.length, 11);
+  const header = page.locator('thead label.arco-checkbox:visible').first();
+  await header.check();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
+    )
+    .toEqual(visibleIds);
+  await page.locator('.arco-pagination-item-next:visible').click();
+  await expect.poll(() => page.evaluate(() => window.approvalContext?.pagination.page)).toBe(2);
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
+    .toBe(0);
+  const nextPageIds = await page.evaluate(() =>
+    window.approvalContext.visibleEntities.map((row) => row.id).sort(),
+  );
+  assert.equal(nextPageIds.length, 1);
+  await header.check();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
+    )
+    .toEqual(nextPageIds);
+  await header.uncheck();
+  await expect
+    .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
+    .toBe(0);
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
 });

@@ -3779,10 +3779,20 @@ const RegionalApprovalWorkbench: React.FC<{
                         }
                         rowSelection={{
                           type: 'checkbox',
-                          checkAll: false,
+                          checkAll: true,
                           fixed: pinLiveColumns,
                           columnWidth: 40,
                           selectedRowKeys: selectedLiveTableRowIds,
+                          onSelectAll: (selected) => {
+                            if (selected) return;
+                            const pageKeys = new Set([
+                              ...liveTableRowById.keys(),
+                              ...liveRows.map((row) => row.planId),
+                            ]);
+                            setSelectedRowIds((current) =>
+                              current.filter((id) => !pageKeys.has(id)),
+                            );
+                          },
                           onChange: (keys) => {
                             const next = new Set(keys.map(String));
                             const displayed = new Set(selectedLiveTableRowIds);
