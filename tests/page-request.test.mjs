@@ -13,6 +13,24 @@ const { createPageRequest } = await import(
   'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
 );
 
+test('default transport resolves fetch when invoked after page initialization', async (t) => {
+  const original = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = original;
+  });
+  const request = createPageRequest();
+  const operations = [];
+  globalThis.fetch = async (_url, options) => {
+    const { operation } = JSON.parse(options.body);
+    operations.push(operation);
+    return Response.json({ operation });
+  };
+  const signal = new AbortController().signal;
+  assert.deepEqual(await request('open', {}, signal), { operation: 'open' });
+  assert.deepEqual(await request('sql', {}, signal), { operation: 'sql' });
+  assert.deepEqual(operations, ['open', 'sql']);
+});
+
 test('slow SQL leaves control traffic available and cancelled queued reads never start', async () => {
   const started = [],
     pending = [];

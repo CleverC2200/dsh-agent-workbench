@@ -31,10 +31,10 @@ function scheduleRead<T>(execute: () => Promise<T>, signal: AbortSignal): Promis
   });
 }
 
-export function createPageRequest(fetcher: typeof fetch = fetch) {
+export function createPageRequest(fetcher?: typeof fetch) {
   return (operation: string, input: object, signal: AbortSignal): Promise<any> => {
     const execute = async () => {
-      const response = await fetcher('/api/agent-workbench/page', {
+      const response = await (fetcher ?? fetch)('/api/agent-workbench/page', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
