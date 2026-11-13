@@ -95,11 +95,7 @@ export function CompanyWelcome({
   const agent = page ? (agents[page] ?? prompts.homeConversation) : undefined;
   const copy = language === 'en' ? en : zh;
   return agent ? (
-    <AgentWelcome
-      agent={agent}
-      orderTemplate={page === 'inventory-orderworkbench' || page === 'inventory-orderfulfillment'}
-      onFill={(prompt) => onFill?.(prompt)}
-    />
+    <AgentWelcome agent={agent} onFill={(prompt) => onFill?.(prompt)} />
   ) : (
     <GeaHomeHero
       copy={{
