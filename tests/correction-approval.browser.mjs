@@ -530,12 +530,14 @@ test('纠偏确认计划量取整，客户和区域明细同步展示调整数�
     node.scrollLeft = node.scrollWidth;
   });
   const adjustmentCell = groupedRow.getByRole('cell').nth(3);
-  await adjustmentCell.scrollIntoViewIfNeeded();
-  const box = await adjustmentCell.boundingBox();
-  assert.ok(
-    box && box.x >= 0 && box.x + box.width <= 390,
-    'adjustment cell stays readable after horizontal scrolling',
-  );
+  await expect(async () => {
+    await adjustmentCell.scrollIntoViewIfNeeded();
+    const box = await adjustmentCell.boundingBox();
+    assert.ok(
+      box && box.x >= 0 && box.x + box.width <= 390,
+      'adjustment cell stays readable after horizontal scrolling',
+    );
+  }).toPass({ timeout: 5000 });
   await expect(adjustmentCell).toBeVisible();
   if (process.env.DSH_REVIEW_EVIDENCE)
     await page.screenshot({

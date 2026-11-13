@@ -72,15 +72,15 @@ test('MPS product relationships stay in their local month draft and can be edite
     大类: '汤圆',
     系列: '系列甲',
     物料组: '物料组乙',
-    对应老品编码: 'OLD1',
-    老品名称: '老品',
+    替换物料编码: 'OLD1',
+    替换品名称: '老品',
   }))
     await editor.getByLabel(label, { exact: true }).fill(value);
   await editor.getByRole('button', { name: '新增', exact: true }).click();
   await expect(products.getByRole('cell', { name: 'P1', exact: true })).toBeVisible();
   await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: '页面说明', exact: true })).toContainText(
-    '历史继承、冲突口径和正式保存待接入',
+    '自身历史与替换品历史按系数合计',
   );
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await frame.getByLabel('评估版本选择').selectOption('local-1');
@@ -113,8 +113,8 @@ test('MPS rejects reversed known replacement fields in edits and imports while p
   const products = frame.getByRole('region', { name: '产品明细', exact: true });
   await products.getByRole('button', { name: '编辑 NEW1', exact: true }).click();
   const editor = frame.getByRole('dialog', { name: '修改产品', exact: true });
-  await editor.getByLabel('对应老品编码', { exact: true }).fill('老品甲');
-  await editor.getByLabel('老品名称', { exact: true }).fill('00123');
+  await editor.getByLabel('替换物料编码', { exact: true }).fill('老品甲');
+  await editor.getByLabel('替换品名称', { exact: true }).fill('00123');
   await editor.getByRole('button', { name: '保存', exact: true }).click();
   await expect(editor.getByRole('alert')).toContainText('填反');
   await editor.getByRole('button', { name: '取消', exact: true }).click();
@@ -122,8 +122,8 @@ test('MPS rejects reversed known replacement fields in edits and imports while p
   await expect(products.getByRole('alert')).toContainText('第2行');
   await expect(products.getByRole('cell', { name: '00123', exact: true })).toBeVisible();
   await products.getByRole('button', { name: '编辑 NEW1', exact: true }).click();
-  await editor.getByLabel('对应老品编码', { exact: true }).fill('000-UNKNOWN');
-  await editor.getByLabel('老品名称', { exact: true }).fill('资料外老品');
+  await editor.getByLabel('替换物料编码', { exact: true }).fill('000-UNKNOWN');
+  await editor.getByLabel('替换品名称', { exact: true }).fill('资料外老品');
   await editor.getByRole('button', { name: '保存', exact: true }).click();
   await expect(editor).toHaveCount(0);
   await expect(products.getByRole('cell', { name: '000-UNKNOWN', exact: true })).toBeVisible();
@@ -311,7 +311,7 @@ test('MPS starts without sample products when no source is configured and still 
     0,
   );
   await expect(
-    products.getByRole('columnheader', { name: '对应老品编码', exact: true }),
+    products.getByRole('columnheader', { name: '替换物料编码', exact: true }),
   ).toBeVisible();
   await expect(products.getByLabel('产品名称', { exact: true })).toHaveCount(0);
   await products.getByRole('button', { name: '新增产品', exact: true }).click();

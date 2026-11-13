@@ -694,6 +694,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           '分层缺项',
           '历史参考物料编码',
           '历史源数量',
+          '自身历史源数量',
+          '自身历史源记录数',
+          '替换品历史源记录数',
+          '历史合计数量',
           '替换系数',
           '历史参考口径',
           '公式说明',
@@ -760,12 +764,19 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           分层缺项: row.layerMissing?.join('；'),
           历史参考物料编码: row.historyCode || row.code,
           历史源数量: row.historyReferenceQuantity,
+          自身历史源数量: row.historyOwnQuantity,
+          自身历史源记录数: row.historyOwnRows,
+          替换品历史源记录数: row.historyReferenceRows,
+          历史合计数量: row.historyQuantity,
           替换系数: row.historyCode
             ? row.historyFactor === undefined
               ? 1
               : row.historyFactor
             : '',
-          历史参考口径: row.historyCode ? '同基地老品历史量×替换系数' : '自身历史',
+          历史参考口径:
+            row.historyCode && row.historyCode !== row.code
+              ? '同基地自身历史＋替换品历史×替换系数；同码一次、不递归'
+              : '自身历史，同码只计一次',
           公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
           ...inventoryDependencyFields(row),
           系统SKU需求: row.systemDemand,

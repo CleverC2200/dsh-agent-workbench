@@ -700,6 +700,7 @@ for (const orderType of ['M', 'Z']) {
           'SKU 编码 / 物料描述',
           '月计划',
           '确认计划量',
+          ...(orderType === 'Z' ? ['追加/追减'] : []),
         ]);
         assert.ok(
           (await page.evaluate(() => window.readCalls)).every(
@@ -1555,11 +1556,11 @@ test('actual toolbar retains terminal members as skipped in a mixed organization
   assert.equal(await page.evaluate(() => window.writes.length), 0);
 });
 
-test('unknown approval survives a refreshed empty queue and resumes the frozen command', async (t) => {
+test('unknown approval survives an empty queue and only rechecks its result', async (t) => {
   const { page } = await openWorkbench(t, false, 'single-unknown');
   await page.locator('tbody label.arco-checkbox:visible').first().click();
   await page.getByRole('button', { name: '通过', exact: true }).click();
-  await expect(page.getByRole('dialog')).toContainText('结果暂时未知');
+  await expect(page.getByRole('dialog')).toContainText('尚未查到能确认本次提交结果的记录');
   await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click();
   await page.evaluate(() => {
     window.queueGone = true;
@@ -1571,11 +1572,10 @@ test('unknown approval survives a refreshed empty queue and resumes the frozen c
     .getByRole('button', { name: '核对提交结果', exact: true })
     .click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog).toContainText('结果暂时未知');
+  await expect(dialog).toContainText('尚未查到能确认本次提交结果的记录');
   await dialog.getByRole('button', { name: '核对提交结果', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.sentDirect.length)).toBe(2);
-  const calls = await page.evaluate(() => window.sentDirect);
-  assert.deepEqual(calls[1], calls[0]);
+  await expect(dialog).toContainText('尚未查到能确认本次提交结果的记录');
+  assert.equal(await page.evaluate(() => window.sentDirect.length), 1);
 });
 
 test('quick questions follow visible rows and selected objects, preserving displayed values and only filling the draft', async (t) => {
