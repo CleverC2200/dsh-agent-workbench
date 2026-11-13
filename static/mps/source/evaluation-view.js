@@ -349,8 +349,15 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         产品名称: row.name,
         历史参考物料编码: row.historyCode || row.code,
         历史源数量: row.historyReferenceQuantity,
+        自身历史源数量: row.historyOwnQuantity,
+        自身历史源记录数: row.historyOwnRows,
+        替换品历史源记录数: row.historyReferenceRows,
+        历史合计数量: row.historyQuantity,
         替换系数: row.historyCode ? (row.historyFactor === undefined ? 1 : row.historyFactor) : '',
-        历史参考口径: row.historyCode ? '同基地老品历史量×替换系数' : '自身历史',
+        历史参考口径:
+          row.historyCode && row.historyCode !== row.code
+            ? '同基地自身历史＋替换品历史×替换系数；同码一次、不递归'
+            : '自身历史，同码只计一次',
         ...Object.fromEntries(plannedFields.map((field, index) => [labels[index], row[field]])),
         需求已满足量: row.fulfilledDemand,
         ODM默认计划到货吨数: row.odmArrivalTons,
@@ -391,6 +398,10 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           '产品名称',
           '历史参考物料编码',
           '历史源数量',
+          '自身历史源数量',
+          '自身历史源记录数',
+          '替换品历史源记录数',
+          '历史合计数量',
           '替换系数',
           '历史参考口径',
           ...labels,
@@ -766,6 +777,10 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                           '源值与证据',
                           '核对处理',
                           '处理性质',
+                          '根因月份',
+                          '根因链',
+                          '根因源表',
+                          '根因字段',
                         ],
                         selectedIssues.map((row) => ({
                           评估版本: draft.name,
@@ -782,6 +797,10 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                           字段: row.sourceFields,
                           源值与证据: row.reason,
                           核对处理: row.action,
+                          根因月份: row.rootMonth,
+                          根因链: row.rootCause,
+                          根因源表: row.rootSourceTable,
+                          根因字段: row.rootSourceFields,
                           处理性质: row.blocking
                             ? '仅影响对应基地SKU月份，补齐后重算'
                             : row.kind === '拆分依据待补'

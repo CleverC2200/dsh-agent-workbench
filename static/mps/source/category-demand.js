@@ -2,6 +2,7 @@ import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { computeMpsCategoryDemand } from 'dsh-agent-manage/mps-compute/category-demand';
 import {
   createSourceProductMatcher,
+  historyDependentCodes,
   sourceCheckRows,
   sourceDimensions,
   sourceProductMappings,
@@ -123,14 +124,18 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
   ].filter(({ row, field }) => !row['基地'] && number(row[field]) !== 0);
   for (const fact of unassigned) {
     const matched = matchProduct(fact.row['产品编码']);
-    const codes = matched.currentCode
-      ? [matched.currentCode]
-      : productMappings
-          .filter(
-            (product) =>
-              (product['老品编码'] || product.replacement_material_code) === fact.row['产品编码'],
-          )
-          .map((product) => product['产品编码'] || product.material_code);
+    const codes =
+      fact.source === '上一财年发货'
+        ? historyDependentCodes(productMappings, fact.row['产品编码'])
+        : matched.currentCode
+          ? [matched.currentCode]
+          : productMappings
+              .filter(
+                (product) =>
+                  (product['老品编码'] || product.replacement_material_code) ===
+                  fact.row['产品编码'],
+              )
+              .map((product) => product['产品编码'] || product.material_code);
     if (
       ['BI实绩', '计划量'].includes(fact.source) &&
       !codes.some(
@@ -186,14 +191,17 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
       if (row['基地']) return included(row['基地'], code) ? [row] : [];
       if (number(row[field]) === 0) return [row];
       const products = productMappings;
-      const possible = matched.currentCode
-        ? [matched.currentCode]
-        : products
-            .filter(
-              (product) =>
-                (product['老品编码'] || product.replacement_material_code) === row['产品编码'],
-            )
-            .map((product) => product['产品编码'] || product.material_code);
+      const possible =
+        source === '上一财年发货'
+          ? historyDependentCodes(productMappings, row['产品编码'])
+          : matched.currentCode
+            ? [matched.currentCode]
+            : products
+                .filter(
+                  (product) =>
+                    (product['老品编码'] || product.replacement_material_code) === row['产品编码'],
+                )
+                .map((product) => product['产品编码'] || product.material_code);
       const codes = possible.length ? possible : [code];
       if (!codes.some((code) => excludedCodes.has(code))) return [row];
       if (!codes.some((code) => includedCodes.has(code))) return [];

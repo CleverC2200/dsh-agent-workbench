@@ -2,6 +2,7 @@ import {
   sourceDimensions,
   sourceProductMappings,
   createSourceProductMatcher,
+  historyDependentCodes,
 } from './source-projections.js';
 import { buildCategoryDemand } from './category-demand.js';
 import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
@@ -88,20 +89,24 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       .filter((row) => !excludedShipmentKeys.has(rowKey(row)))
       .map((row) => row.code),
   );
-  const includedShipment = (row) => {
+  const includedSource = (row, history) => {
     const matched = sourceMatcher(row.code, row.base);
-    const codes = matched.currentCode
-      ? [matched.currentCode]
-      : mappings
-          .filter(
-            (product) => (product['老品编码'] || product.replacement_material_code) === row.code,
-          )
-          .map((product) => product['产品编码'] || product.material_code);
+    const codes = history
+      ? historyDependentCodes(mappings, row.code, row.base)
+      : matched.currentCode
+        ? [matched.currentCode]
+        : mappings
+            .filter(
+              (product) => (product['老品编码'] || product.replacement_material_code) === row.code,
+            )
+            .map((product) => product['产品编码'] || product.material_code);
     if (!codes.length) return !excludedShipmentKeys.has(rowKey(row));
     return row.base
       ? codes.some((code) => !excludedShipmentKeys.has(rowKey({ base: row.base, code })))
       : codes.some((code) => !excludedCodes.has(code) || participatingCodes.has(code));
   };
+  const includedShipment = (row) => includedSource(row, false);
+  const includedHistory = (row) => includedSource(row, true);
   const reportColumn = draft.pull === 'monthly' ? '月初数量' : '纠偏数量';
   const readQuantity = (rows, column) =>
     (rows ?? []).map((row) => ({
@@ -184,7 +189,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         quantity: issues.length ? null : number(row['数量']),
       }));
     })
-    .filter(includedShipment);
+    .filter(includedHistory);
   const relationSources =
     relations && (!relations.month || relations.month === draft.month) ? relations.sources : null;
   const capacities = (relationSources?.sku_capacity ?? []).map((row) => ({
@@ -237,15 +242,18 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     for (const row of source === 'report' ? report : history) {
       if (!row.base || !row.code || !/^\d{4}-(0[1-9]|1[0-2])$/.test(row.month)) continue;
       const month = draft.month;
-      productMonths.set(JSON.stringify([month, row.base, row.code]), {
-        month,
-        base: row.base,
-        code: row.code,
-      });
+      if (!excludedShipmentKeys.has(rowKey(row)))
+        productMonths.set(JSON.stringify([month, row.base, row.code]), {
+          month,
+          base: row.base,
+          code: row.code,
+        });
       if (source === 'history') {
         for (const product of products.filter(
           (product) =>
-            product.historyCode === row.code && (!product.base || product.base === row.base),
+            product.historyCode === row.code &&
+            (!product.base || product.base === row.base) &&
+            !excludedShipmentKeys.has(rowKey({ base: row.base, code: product.code })),
         )) {
           productMonths.set(JSON.stringify([month, row.base, product.code]), {
             month,
