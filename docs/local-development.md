@@ -115,3 +115,5 @@ JSON 输出分开记录源码准备、同步计算、JSON 序列化和 structure
 录制对象可附 `reads: [{queryId, parameters, calls, rows, elapsedMs}]`，查询标识只接受本仓 MPS `sql.config.json` 中的 keys，另保留日期范围、分页及非负计数。`months` 只输出合法源月份别名的去重排序值与 `sourceAliasCount`；`codes` 只输出去重数量，以及排序后完整编码集合 JSON 的 SHA256 指纹。两者的 `complete` 仅表示所有输入项均通过相应校验，不证明来源覆盖完整；含非法项时为 false，非法原文不输出。它们是录制元数据，不证明本次发生查询，也不累加并发查询耗时。输入原文、草稿名称、SKU、headers 和凭据均不输出；失败只报告阶段。业务输入和原始输出放本票自有目录，不提交真实数据。
 
 `tests/mps-performance.test.mjs` 复用现有 workflow 夹具，验证 200 SKU 的正需求、共享资源竞争与公平满足率、结果不改输入、计时字段和输出脱敏。使用相邻 Manage；隔离源码组合可显式设 `DSH_MPS_MANAGE`。该低成本行为测试接入既有选测规则；真实录制输入与浏览器计时按需运行。
+
+共享官方输入检查可显式使用 `node scripts/verify-official-input.mjs --root <目标仓绝对路径> --registry <目标注册清单绝对路径>`。不传参数保留本仓默认入口；目标仓配置与注册清单共同决定验证对象，工具只读取现有 SDK，不准备或切换 Core。
