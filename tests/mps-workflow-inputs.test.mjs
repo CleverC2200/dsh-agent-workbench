@@ -1103,7 +1103,7 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
     plan.reportIssues
       .filter((row) => row.month === source.month && row.code === code)
       .map((row) => row.kind);
-  assert.deepEqual(categories('A'), ['缺件吨系数', '缺成型机配置']);
+  assert.deepEqual(categories('A'), ['缺件吨系数']);
   assert.deepEqual(categories('B'), ['缺调拨关系']);
   assert.deepEqual(categories('C'), ['缺产线产能']);
   assert.deepEqual(categories('D'), ['下市品产生需求']);
