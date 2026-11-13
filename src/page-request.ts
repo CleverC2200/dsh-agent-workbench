@@ -46,7 +46,6 @@ export function createPageRequest(fetcher: typeof fetch = fetch) {
       if (!response.ok) throw Error(value.error ?? 'PAGE_REQUEST_FAILED');
       return value;
     };
-    // Leave browser connections available for identity, ownership and Agent traffic.
     return operation === 'sql' ? scheduleRead(execute, signal) : execute();
   };
 }
