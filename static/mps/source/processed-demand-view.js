@@ -414,7 +414,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
               ? h(
                   'small',
                   { className: 'wf-note' },
-                  `历史参考 · ${processRow.historyCode} × ${processRow.historyFactor === undefined ? 1 : (processRow.historyFactor ?? '待补系数')}`,
+                  `历史合计 · 自身＋替换品 ${processRow.historyCode} × ${processRow.historyFactor === undefined ? 1 : (processRow.historyFactor ?? '待补系数')}`,
                 )
               : null,
             entry.kind === 'base-sku' &&

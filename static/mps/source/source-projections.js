@@ -228,6 +228,26 @@ export function sourceProductMappings(products, raw = []) {
   });
 }
 
+export function historyDependentCodes(products, sourceCode, sourceBase = '') {
+  const base = canonicalBaseName(sourceBase);
+  const code = text(sourceCode);
+  return [
+    ...new Set(
+      (products ?? [])
+        .filter((product) => {
+          const productBase = canonicalBaseName(product.target_base ?? product['基地']);
+          return (
+            (!base || !productBase || productBase === base) &&
+            (text(product['产品编码'] ?? product.material_code) === code ||
+              text(product['老品编码'] ?? product.replacement_material_code) === code)
+          );
+        })
+        .map((product) => text(product['产品编码'] ?? product.material_code))
+        .filter(Boolean),
+    ),
+  ];
+}
+
 export function createSourceProductMatcher(rawProducts) {
   const byBase = new Map();
   const categoriesByCode = new Map();

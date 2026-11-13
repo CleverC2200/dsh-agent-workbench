@@ -308,7 +308,7 @@ test('产品老品编码接入历史参考并建立老品所在基地的新品�
   const result = buildMpsWorkflow(source);
   const row = result.rows.find((row) => row.base === '甲' && row.code === 'A');
   assert.equal(row.historyCode, 'OLD');
-  assert.equal(row.historyQuantity, 100);
+  assert.equal(row.historyQuantity, 160);
   assert.equal(
     result.rows.find((row) => row.base === '丙' && row.code === 'A').historyQuantity,
     20,
@@ -1266,7 +1266,7 @@ test('最新产品源按基地应用替换系数，重复标签不倍增，零�
   );
   assert.equal(rows.length, 3);
   assert.equal(rows.find((row) => row.base === '甲').historyReferenceQuantity, 100);
-  assert.equal(rows.find((row) => row.base === '甲').historyQuantity, 200);
+  assert.equal(rows.find((row) => row.base === '甲').historyQuantity, 260);
   assert.equal(rows.find((row) => row.base === '丙').historyQuantity, 0);
   assert.equal(rows.find((row) => row.base === '丁').historyQuantity, null);
   assert.deepEqual(source.historyAnnual, raw);
@@ -1496,4 +1496,50 @@ test('只配置成型机时保留真实隧道，成型机不会成为替代隧�
   );
   const input = buildMpsWorkflow(source, relations, null, {});
   assert.ok(input.resourceLoads.some((row) => row.resourceId === 'F'));
+});
+
+test('老品历史缺基地时隔离全部直接引用新品，其他有效单品继续且源值不改', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.products.push({ ...source.products[0], 产品编码: 'NEW', 产品名称: '新品', 老品编码: 'A' });
+  source.report.push({ 月份: source.month, 基地: '甲', 产品编码: 'NEW', 月初数量: 50 });
+  source.historyAnnual.periods[0].rows.push({ 基地: '', 产品编码: 'A', 数量: 50 });
+  snapshot.rows[1] = { ...snapshot.rows[1], fin: 200, end: 0, missingFields: [] };
+  snapshot.rows.push({ base: '甲', code: 'NEW', category: '点心', fin: 50, end: 0 });
+  const before = structuredClone({ source, snapshot });
+  const result = buildMpsWorkflow(source, null, snapshot);
+  assert.ok(
+    result.excludedShipments
+      .find((row) => row.code === 'NEW')
+      ?.missing.some((reason) => reason.includes('A') && reason.includes('缺基地')),
+  );
+  assert.ok(result.rows.length > 0 && result.rows.every((row) => row.code === 'B'));
+  assert.equal(result.categoryComputation.bases[0].actual, 3000);
+  assert.deepEqual({ source, snapshot }, before);
+});
+
+test('有效新品引用的历史源只供参考，不把已隔离的老品重新带回需求范围', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.products.push({ ...source.products[1], 产品编码: 'NEW', 产品名称: '新品', 老品编码: 'B' });
+  source.report.push({ 月份: source.month, 基地: '乙', 产品编码: 'NEW', 月初数量: 50 });
+  snapshot.rows.push({ base: '乙', code: 'NEW', category: '点心', fin: 50, end: 0 });
+  const result = buildMpsWorkflow(source, null, snapshot);
+  assert.ok(result.excludedShipments.some((row) => row.code === 'B'));
+  assert.ok(!result.rows.some((row) => row.code === 'B'));
+  assert.equal(result.rows.find((row) => row.code === 'NEW').historyQuantity, 40);
+});
+
+test('后月期初库存缺项追溯首月来源，不重复要求人工补后月库存', () => {
+  const { draft: source, shipment, evaluation } = workflowPerformanceInput(1);
+  shipment.rows[0].end = null;
+  const result = buildMpsWorkflow(source, null, shipment, evaluation);
+  const stocks = result.plan.reportIssues.filter((issue) => issue.kind === '缺期初库存');
+  assert.equal(stocks.length, 3);
+  const later = stocks.filter((issue) => issue.month !== source.month);
+  assert.ok(
+    later.every(
+      (issue) => issue.rootMonth === source.month && issue.rootCause.includes('缺期初库存'),
+    ),
+  );
+  assert.ok(later.every((issue) => issue.rootSourceTable.includes('agents_scm_stock_detail_d')));
+  assert.ok(later.every((issue) => issue.action.includes('不另补后续月份期初库存')));
 });

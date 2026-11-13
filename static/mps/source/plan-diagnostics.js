@@ -101,10 +101,10 @@ export function attachPlanReport(
     if (row.missing?.historyQuantity?.includes('替换系数缺失、冲突或无效'))
       add(
         '缺替换系数',
-        '同基地老品历史参考量无法换算，替换系数缺失、冲突或无效',
+        '同基地替换品历史量无法换算，替换系数缺失、冲突或无效',
         'ai_db.agents_dim_product_list_mi',
         'stat_period / target_base / material_code / replacement_material_code / replace_num',
-        `核对最新月份${row.base}基地${row.code}对应老品${row.historyCode}的替换系数；同基地同SKU各标签应一致，零系数有效，缺值不能按1计算`,
+        `核对最新月份${row.base}基地${row.code}对应替换品${row.historyCode}的替换系数；同基地同SKU各标签应一致，零系数有效，缺值不能按1计算`,
         row.demand !== 0,
       );
     if (row.planMissing.includes('缺有效需求'))
@@ -113,12 +113,13 @@ export function attachPlanReport(
         [
           ...new Set([
             ...(row.missing?.demand ?? []),
+            ...(row.missing?.historyShare?.length ? (row.missing?.historyQuantity ?? []) : []),
             ...(categoryIssues.get(JSON.stringify([row.month, row.category])) ?? []),
           ]),
         ].join('；') || '基地SKU有效需求尚未形成，缺值保留待补',
-        '大类需求 / 销售提报 / 上一财年发货',
-        '需求月份 / 大类需求数量 / 历史基地 / SKU / 发货数量 / 拆分占比',
-        `人工核对${row.month}大类需求及本月预估发货、销售提报；补齐历史发货的基地、SKU和数量或提供经确认的基地映射，再重新评估`,
+        '大类需求测算 / ai_db.agents_scm_dimension_plan_rate_mi / ai_db.agents_scm_cust_deliv_daily_di',
+        '需求月及大类有效数量；stat_month / belong_base / material_code / dimension_allnum；shipment_date / belong_base / material_code / act_dl_qty_total（发布指标）',
+        `先核对${row.month}大类需求；再核对${row.base}当前SKU ${row.code}${row.historyCode ? `及替换品 ${row.historyCode}` : ''}在上一完整财年的发货。自身历史源行${row.historyOwnRows}条，替换品历史源行${row.historyReferenceRows}条；两品历史合计，已有源行的空值不补0，缺基地需从来源补齐后重算`,
       );
     if (row.planMissing.includes('缺前月实际结存')) {
       const source = stock.get(pair(row.base, row.code));
@@ -402,6 +403,55 @@ export function attachPlanReport(
       ),
     ];
     report.push(...issues);
+  }
+  const byMonth = new Map(
+    plan.rows.map((row) => [JSON.stringify([row.month, row.base, row.code]), row]),
+  );
+  const issueIndex = groupBy(
+    report.filter((issue) => issue.blocking),
+    (issue) => JSON.stringify([issue.month, issue.base, issue.code]),
+  );
+  for (const issue of report) {
+    issue.rootMonth = issue.month;
+    issue.rootCause = issue.kind;
+    issue.rootSourceTable = issue.sourceTable;
+    issue.rootSourceFields = issue.sourceFields;
+    if (issue.kind !== '缺期初库存' || issue.month === plan.context.month) continue;
+    const roots = [];
+    let month = issue.month;
+    while (month > plan.context.month) {
+      const date = new Date(month + '-01T00:00:00Z');
+      date.setUTCMonth(date.getUTCMonth() - 1);
+      month = date.toISOString().slice(0, 7);
+      const id = JSON.stringify([month, issue.base, issue.code]);
+      const previous = byMonth.get(id);
+      const previousIssues = issueIndex.get(id) ?? [];
+      roots.push(
+        ...previousIssues.filter(
+          (entry) => entry.kind !== '缺期初库存' || month === plan.context.month,
+        ),
+      );
+      if (!previous || !previous.planMissing.includes('缺前月实际结存')) {
+        if (!previousIssues.length)
+          roots.push({
+            month,
+            kind: previous?.planMissing.join('；') || '上月同基地SKU未形成完整结果',
+            sourceTable: previous?.planMissing.includes(genericSupplyMissing)
+              ? 'ai_db.agents_dim_production_line_sku_capacity_mi / ai_db.agents_dim_tunnel_capacity_mi / ai_db.agents_dim_transfer_direction_mi / 当前评估生产日历'
+              : '上月求解结果',
+            sourceFields: previous?.planMissing.includes(genericSupplyMissing)
+              ? 'belong_base / material_code / workshop / tunnel_no / standard_daily_output_ton；target_base / transfer_tag / transfer_direction；base / month / days'
+              : '同基地SKU有效需求及实际期末结存',
+          });
+        break;
+      }
+    }
+    issue.rootMonth = roots.at(-1)?.month ?? month;
+    issue.rootCause = [...new Set(roots.map((entry) => entry.month + ' ' + entry.kind))].join('；');
+    issue.rootSourceTable = [...new Set(roots.map((entry) => entry.sourceTable))].join('；');
+    issue.rootSourceFields = [...new Set(roots.map((entry) => entry.sourceFields))].join('；');
+    issue.reason += '；根因链：' + issue.rootCause;
+    issue.action = '先处理根因月份和来源，不另补后续月份期初库存；' + issue.action;
   }
   plan.reportIssues = report;
 }
