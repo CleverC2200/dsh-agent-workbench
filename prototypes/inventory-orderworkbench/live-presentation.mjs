@@ -101,6 +101,14 @@ export function directorNames(mappings, row) {
   );
   return names.length && (row.base === '郑州' || names.length === 1) ? names : ['归属待补全'];
 }
+export function publishedDirectorNames(mapping) {
+  return Number(mapping?.names) === 1 && mapping.director
+    ? mapping.director.split(/[,，、]/).map(name => name.trim()).filter(Boolean)
+    : ['归属待补全'];
+}
+export function directorMetricUsesBase(metric, director, base) {
+  return metric === '准交率' && director === '庞丽娟' && ['郑州', '郑州基地'].includes(base);
+}
 function summaryRows(periods, field, directorMap, loading = false) {
   const selected = periods.month ?? periods.week;
   const source = [
@@ -147,12 +155,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
       if (!ownerNames.has(id)) ownerNames.set(id, directorNames(periodOwners(key), row));
       return ownerNames.get(id);
     }
-    return mapping?.names === 1 && mapping.director
-      ? mapping.director
-          .split(/[,，、]/)
-          .map((name) => name.trim())
-          .filter(Boolean)
-      : ['归属待补全'];
+    return publishedDirectorNames(mapping);
   };
   if (field === 'director')
     groups = distinct(
@@ -195,8 +198,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
           const groupRows =
             field === 'director' &&
             section.id === 'ontime' &&
-            ['郑州', '郑州基地'].includes(group.labels[1]) &&
-            group.labels[0] === '庞丽娟'
+            directorMetricUsesBase(section.id === 'ontime' ? '准交率' : '', group.labels[0], group.labels[1])
               ? section.rows.filter((row) => dimensionValue(row.base) === group.labels[1])
               : typeof group.id === 'symbol'
                 ? field === 'base'
@@ -221,8 +223,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
     const grouped = indexedPeriods.get(key).get(group.id);
     if (
       field === 'director' &&
-      group.labels[0] === '庞丽娟' &&
-      ['郑州', '郑州基地'].includes(group.labels[1])
+      directorMetricUsesBase('准交率', group.labels[0], group.labels[1])
     ) {
       return {
         ...grouped,

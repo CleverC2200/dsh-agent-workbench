@@ -73,7 +73,12 @@ const sameSupplementLine = lineKeys
       `(CASE WHEN d.${key} IS NULL THEN 'N' ELSE CONCAT('V',d.${key}) END)=(CASE WHEN line_seen.${key} IS NULL THEN 'N' ELSE CONCAT('V',line_seen.${key}) END)`,
   )
   .join(' AND ');
-export function cancellationEventsSql({ dailySource, dailyOnly, periods = false }) {
+export function cancellationEventsSql({
+  dailySource,
+  dailyOnly,
+  periods = false,
+  dimensions = false,
+}) {
   const dailyQuantities = `SELECT ${lineKeys.join(',')},
     ${quantityFields
       .map(
@@ -163,7 +168,7 @@ export function cancellationEventsSql({ dailySource, dailyOnly, periods = false 
   const inPeriod = (start, end) => `(q.business_time>=${start} AND q.business_time<${end})
     OR (q.source_rows>1 AND q.first_business_time<${end} AND q.last_business_time>=${start})
     OR (q.business_time IS NULL AND (q.header_addtime<${end} OR q.header_addtime IS NULL))`;
-  const cohort = `SELECT ${periods ? 'rw.period_index,' : ''}q.cust_code,q.cust_order_no,q.executeorderno,
+  const cohort = `SELECT ${periods ? 'rw.period_index,' : ''}${dimensions ? "CASE WHEN :gea_p900<>'' THEN :gea_p900 ELSE q.belong_base END AS base," : ''}q.cust_code,q.cust_order_no,q.executeorderno,
     q.executeorderlineno,q.material_code,q.cust_name AS name,q.region_name AS region,q.province_region_name AS province,
     q.header_addtime AS created,q.latestsendcardate AS latest_departure,q.orderstatus AS status,
     q.cancelled,q.business_time,q.locked,q.effective_qty,q.source_rows,q.short_transfer,q.scope_pickup_point
@@ -180,7 +185,7 @@ export function cancellationEventsSql({ dailySource, dailyOnly, periods = false 
       AND (q.source_rows<>1 OR q.orderstatus IS NULL OR q.orderstatus<>90 OR q.cancelled IS NULL
         OR q.header_addtime IS NULL OR q.cancelled<q.header_addtime
         OR q.cancelled>q.header_addtime + INTERVAL '12' HOUR)`;
-  const classified = `SELECT ${periods ? 'period_index,' : ''}cust_code,cust_order_no,executeorderno,executeorderlineno,
+  const classified = `SELECT ${periods ? 'period_index,' : ''}${dimensions ? 'base,' : ''}cust_code,cust_order_no,executeorderno,executeorderlineno,
     material_code,name,region,province,effective_qty,
     CASE WHEN status=90 AND cancelled>=locked AND cancelled>created + INTERVAL '12' HOUR
       THEN effective_qty ELSE 0 END AS cancel_numerator,
@@ -193,15 +198,32 @@ export function cancellationEventsSql({ dailySource, dailyOnly, periods = false 
       OR (status=90 AND (cancelled IS NULL OR cancelled<created OR latest_departure IS NULL))
       THEN 1 ELSE 0 END AS invalid_cancel
     FROM (${cohort}) cancellation_cohort`;
-  return `WITH cancellation_source AS (${source}) SELECT ${periods ? 'period_index,' : ''}cust_code,cust_order_no,executeorderno,executeorderlineno,
+  const dimensionPrefix = dimensions
+    ? 'WITH cancellation_source AS (' +
+      source +
+      '), cancellation_lines AS (' +
+      details +
+      '), cancellation_quantities AS (' +
+      quantities.replace('FROM (' + details + ') s', 'FROM cancellation_lines s') +
+      '), cancellation_cohort AS (' +
+      cohort.replace('FROM (' + quantities + ') q', 'FROM cancellation_quantities q') +
+      '), classified_cancellations AS (' +
+      classified.replace('FROM (' + cohort + ') cancellation_cohort', 'FROM cancellation_cohort') +
+      ') '
+    : 'WITH cancellation_source AS (' + source + ') ';
+  return `${dimensionPrefix}SELECT ${periods ? 'period_index,' : ''}${dimensions ? 'base,' : ''}cust_code,cust_order_no,executeorderno,executeorderlineno,
     material_code,name,region,province,cancel_numerator,effective_qty AS cancel_denominator,invalid_cancel
-    FROM (${classified}) classified_cancellations`
+    FROM ${dimensions ? 'classified_cancellations' : '(' + classified + ') classified_cancellations'}`
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-export function aggregateCancellationSql(events, { periods = false, sourceName = false } = {}) {
-  return `SELECT ${periods ? 'period_index,' : ''}'1' AS kind,region,province,
+export function aggregateCancellationSql(
+  events,
+  { periods = false, sourceName = false, dimensions = [] } = {},
+) {
+  const grouped = dimensions.length ? dimensions.join(',') + ',' : '';
+  return `SELECT ${periods ? 'period_index,' : ''}${grouped}'1' AS kind,region,province,
     CASE WHEN SUM(invalid_cancel)=0 THEN SUM(cancel_numerator) END AS numerator,
     CASE WHEN SUM(invalid_cancel)=0 THEN SUM(cancel_denominator) END AS denominator,
     SUM(CASE WHEN invalid_cancel=0 THEN cancel_numerator ELSE 0 END) AS sample_numerator,
@@ -210,5 +232,5 @@ export function aggregateCancellationSql(events, { periods = false, sourceName =
     SUM(CASE WHEN invalid_cancel>0 THEN cancel_denominator ELSE 0 END) AS unknown_quantity,
     COUNT(*) AS records,SUM(invalid_cancel) AS invalid
     FROM ${sourceName ? events : '(' + events + ')'} cancellation_events
-    GROUP BY ${periods ? 'period_index,' : ''}region,province`;
+    GROUP BY ${periods ? 'period_index,' : ''}${grouped}region,province`;
 }
