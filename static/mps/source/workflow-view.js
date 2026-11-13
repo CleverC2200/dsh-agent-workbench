@@ -1200,12 +1200,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
       ...(!resources.some((row) => row.kind === 'tunnel')
         ? [['B5 隧道台账', '缺正式物理ID与基地车间映射，不把SKU兼容行作为设备']]
         : []),
-      ...(!resources.some((row) => row.kind === 'forming')
-        ? [['B5 成型机台账', '缺实际成型机资源数据']]
-        : []),
-      ...(!assignments.length
-        ? [['B5 月度分配', '缺基地SKU月份对隧道和成型机各自合计1的批准分配']]
-        : []),
       ...bases
         .filter((item) => result.rows.some((row) => row.base === item && row.safetyDays === null))
         .map((item) => [`B6 ${item}安全天数`, '缺真实值；0为有效值，空白不补0']),
@@ -1646,7 +1640,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
                   h(
                     'p',
                     { className: 'wf-note' },
-                    '每台隧道或成型机只登记一个唯一资源，不按SKU重复累计。濮阳合并与8:2外协尚无完整映射，暂不折入可用能力。',
+                    '每个实际使用的产能资源只登记一个唯一编号，不按SKU重复累计。未使用的设备无需补配。濮阳合并与8:2外协尚无完整映射，暂不折入可用能力。',
                   ),
                   table(
                     '产能资源配置',
@@ -1677,7 +1671,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
                   h(
                     'p',
                     { className: 'wf-note' },
-                    '按基地、SKU、月份为隧道和成型机分别分配；每种资源类型的比例合计须为1。未分配或候选不明确时保留未评估。',
+                    '本地分配用于显式维护的资源评估，按基地、SKU、月份校验份额。实际排产使用已读取的隧道承接关系及产能上限，不将未使用的资源类型作为必填项。',
                   ),
                   table(
                     '资源分配配置',
