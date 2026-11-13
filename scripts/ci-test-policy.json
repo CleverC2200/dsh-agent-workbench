@@ -43,6 +43,9 @@
     },
     "tests/aps-default-package.test.mjs": {
       "dependencies": false
+    },
+    "tests/official-input-cli.test.mjs": {
+      "dependencies": false
     }
   },
   "rules": [
@@ -424,6 +427,12 @@
       "repo": "dsh-agent-workbench",
       "pattern": "^src/workbench/original/workbenches/regionalApproval/hooks/useSalesPlanAdvice\\.ts$",
       "tests": ["tests/sales-plan-presentation.browser.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/verify-official-input\\.mjs$",
+      "tests": ["tests/official-input-cli.test.mjs"],
+      "sourceTests": ["tests/official-input-cli.test.mjs"]
     }
   ],
   "sourceTools": {
