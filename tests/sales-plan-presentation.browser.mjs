@@ -1658,6 +1658,14 @@ test('header select all skips disabled rows and supports partial selection and c
   await header.check();
   await page.locator('tbody label.arco-checkbox:has(input[value="p1"])').uncheck();
   await expect(header).toHaveClass(/arco-checkbox-indeterminate/);
+  const checkboxColor = (checkbox) =>
+    checkbox
+      .locator('.arco-checkbox-mask')
+      .evaluate((mask) => getComputedStyle(mask).backgroundColor);
+  assert.equal(
+    await checkboxColor(header),
+    await checkboxColor(page.locator('tbody label.arco-checkbox:has(input[value="p2"])')),
+  );
   await expect
     .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id)))
     .toEqual(['p2']);
