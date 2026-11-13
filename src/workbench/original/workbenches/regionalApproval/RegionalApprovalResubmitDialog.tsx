@@ -404,10 +404,11 @@ export function RegionalApprovalResubmitDialog({
           continue;
         }
         if (checkingResults) {
-          if (['unknown', 'readback', 'unresolved'].includes(row.status))
+          if (['unknown', 'readback', 'unresolved'].includes(row.status)) {
             next[index] = await checkResult(row);
-          processed.push(next[index]);
-          publish();
+            processed.push(next[index]);
+            publish();
+          }
           continue;
         }
         if (

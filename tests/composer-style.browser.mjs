@@ -201,7 +201,7 @@ for (const welcome of [false, true])
         const errors = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.setContent(
-          `<style>${css}\n${bundle.outputFiles.find((file) => file.path.endsWith('.css')).text}\nhtml,body{margin:0;height:100%}#root{height:100%;margin-left:64px}#original{display:none}</style><div id="root"></div><div id="original"></div><script>window.fixturePageId=${JSON.stringify(id)};window.fixtureWelcome=${welcome}</script>`,
+          `<style>${css}\n${bundle.outputFiles.find((file) => file.path.endsWith('.css')).text}\nhtml,body{margin:0;height:100%}#root{height:100%;margin-left:64px}#original{display:none}*,*::before,*::after{transition:none!important;animation:none!important;}</style><div id="root"></div><div id="original"></div><script>window.fixturePageId=${JSON.stringify(id)};window.fixtureWelcome=${welcome}</script>`,
         );
         await page.addScriptTag({
           content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
