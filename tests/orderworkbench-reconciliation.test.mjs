@@ -282,10 +282,11 @@ test('base and item formulas retain documented weights instead of fitting the sc
 test('cancellations use cancellation or actual last shipment time while amendments retain BI order close time', () => {
   assert.match(
     changesSql,
-    /CASE WHEN s.cancelled IS NOT NULL THEN s.cancelled ELSE shipment.shipped_at END AS business_time/,
+    /CASE WHEN s.cancelled IS NOT NULL THEN s.cancelled WHEN shipment.confirmed_trace=1 OR s.orderstatus=100 THEN shipment.shipped_at END AS business_time/,
   );
   assert.doesNotMatch(changesSql, /COUNT\(DISTINCT header_addtime\)=1/);
-  assert.match(changesSql, /MAX\(lastshipmenttime\) AS shipped_at/);
+  assert.match(changesSql, /COALESCE\(lastshipmenttime,wms_order_close_time\) AS shipped_at/);
+  assert.match(changesSql, /wms_ship_status='99' OR load_status='装车完成'/);
   assert.match(
     changesSql,
     /shipment.executeorderno=s.executeorderno AND shipment.cust_code=s.cust_code/,

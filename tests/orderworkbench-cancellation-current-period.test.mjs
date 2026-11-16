@@ -29,7 +29,7 @@ test('daily cancellation recovery, shipment period, zero quantity and no seven-d
   });
   try {
     const insert = db.prepare(
-      'INSERT INTO agents_scm_order_trace_final_di(executeorderno,cust_code,update_time,load_time,lastshipmenttime) VALUES(?,?,?,?,?)',
+      "INSERT INTO agents_scm_order_trace_final_di(executeorderno,cust_code,update_time,load_time,lastshipmenttime,wms_ship_status,load_status) VALUES(?,?,?,?,?,'99','装车完成')",
     );
     for (const [id, date] of [
       ['active', '2026-11-12'],
