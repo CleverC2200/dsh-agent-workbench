@@ -22,6 +22,12 @@ const emptySource = ({ queryId }) => ({
   rejectedColumns: [],
   configVersion: 'workflow-fixture-v1',
 });
+async function columnCell(table, row, name) {
+  const index = await table
+    .getByRole('columnheader', { name, exact: true })
+    .evaluate((header) => header.cellIndex);
+  return row.getByRole('cell').nth(index - 1);
+}
 const annualFixtures = new WeakMap();
 async function workflowPage(t) {
   const state = { rows: [] };
@@ -1587,9 +1593,12 @@ test('MPS processing compares both forecast months and persists fixed quantities
   const categoryDetail = processed.locator('tbody tr').first();
   await expect(categoryDetail.getByRole('cell').nth(0)).toHaveText('100');
   await expect(categoryDetail.getByRole('cell').nth(1)).toHaveText('100');
-  await expect(categoryDetail.getByRole('cell').nth(2)).toHaveText('300系统预估300');
-  await expect(categoryDetail.getByRole('cell').nth(3)).toContainText('0');
-  await expect(categoryDetail.getByRole('cell').nth(3)).toContainText('已知小计');
+  await expect(
+    await columnCell(processed, categoryDetail, '2026-11 本月预估发货（可调整）'),
+  ).toHaveText('300系统预估300');
+  const demand = await columnCell(processed, categoryDetail, 'M+1 2026-12 需求（可调整）');
+  await expect(demand).toContainText('0');
+  await expect(demand).toContainText('已知小计');
   await view.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
   await view.getByText('大类 · 汤圆', { exact: true }).click();
   await view.getByText('物料组 · 组', { exact: true }).click();
@@ -1987,13 +1996,17 @@ test(
     await saveAdjustment(view);
     const detail = view.getByRole('table', { name: '加工后的需求明细', exact: true });
     const total = detail.locator('tbody tr').first();
+    const reportTotal = await columnCell(detail, total, 'M+1 2026-12 计划提报');
+    const demandTotal = await columnCell(detail, total, 'M+1 2026-12 需求（可调整）');
+    const thirdMonthTotal = await columnCell(detail, total, 'M+3 2027-02 需求');
+
     await expect(total.getByRole('rowheader')).toHaveText('全国合计');
-    for (const index of [0, 3]) {
-      await expect(total.getByRole('cell').nth(index)).toContainText('15');
-      await expect(total.getByRole('cell').nth(index)).toContainText('已知小计 · 1项待补');
+    for (const cell of [reportTotal, demandTotal]) {
+      await expect(cell).toContainText('15');
+      await expect(cell).toContainText('已知小计 · 1项待补');
     }
-    await expect(total.getByRole('cell').nth(5)).toContainText('待补');
-    const subtotalCell = total.getByRole('cell').nth(0);
+    await expect(thirdMonthTotal).toContainText('待补');
+    const subtotalCell = reportTotal;
     const valueBounds = await subtotalCell.evaluate((cell) => {
       const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
       let node;
@@ -2032,8 +2045,8 @@ test(
     await expect(missing).toContainText('2026-12');
     await view.getByLabel('基地筛选').selectOption('华东');
     await expect(total.getByRole('rowheader')).toHaveText('当前范围合计');
-    await expect(total.getByRole('cell').nth(0)).toHaveText('5');
-    await expect(total.getByRole('cell').nth(3)).toHaveText('5模型预测5');
+    await expect(reportTotal).toHaveText('5');
+    await expect(demandTotal).toHaveText('5模型预测5');
     const csv = await download(page, view, '下载当前范围需求');
     const exported = XLSX.utils.sheet_to_json(
       XLSX.read(csv, { type: 'string', raw: true }).Sheets.Sheet1,
@@ -2050,12 +2063,12 @@ test(
     await view.getByLabel('丙类 2026-12 需求数量', { exact: true }).fill('7');
     await view.getByLabel('批量调整原因').fill('当前筛选内复核调整');
     await saveAdjustment(view);
-    await expect(total.getByRole('cell').nth(3)).toHaveText('7模型预测5');
+    await expect(demandTotal).toHaveText('7模型预测5');
     await view.getByLabel('基地筛选').selectOption('');
     await view.getByLabel('搜索当前步骤').fill('B');
-    await expect(total.getByRole('cell').nth(0)).toHaveText('待补');
-    await expect(total.getByRole('cell').nth(3)).toHaveText('待补模型预测待补');
-    await expect(total.getByRole('cell').nth(3)).not.toContainText('0');
+    await expect(reportTotal).toHaveText('待补');
+    await expect(demandTotal).toHaveText('待补模型预测待补');
+    await expect(demandTotal).not.toContainText('0');
     if (process.env.MPS07_EVIDENCE_DIR) {
       await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/all-missing.png` });
     }

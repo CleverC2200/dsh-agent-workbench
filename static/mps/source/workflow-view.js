@@ -91,14 +91,15 @@ const display = (value) => (value == null || value === '' ? '—' : String(value
 const numberText = (value, percent = false, decimals = 0) =>
   value == null
     ? '—'
-    : new Intl.NumberFormat('zh-CN', {
-        ...(percent && value !== 0 && Math.abs(value * 100) < 0.01
+    : new Intl.NumberFormat(
+        'zh-CN',
+        percent && value !== 0 && Math.abs(value * 100) < 0.01
           ? { maximumSignificantDigits: 3 }
           : {
               minimumFractionDigits: percent ? 2 : 0,
               maximumFractionDigits: percent ? 2 : decimals,
-            }),
-      }).format(percent ? value * 100 : value) + (percent ? '%' : '');
+            },
+      ).format(percent ? value * 100 : value) + (percent ? '%' : '');
 const reasons = (row, fields) => [
   ...new Set(fields.flatMap((field) => row.missing?.[field] ?? [])),
 ];
@@ -612,7 +613,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
             ? '源目标周转天数待补，本轮临时按0天计算，目标库存为0；源缺项保留，补齐后重新评估'
             : '安全天数明确为0，目标库存为0，无需下一月需求';
       if (field === 'requiredProduction')
-        expression = `需求${value(row.demand)}件，期初库存${value(row.openingInventory)}件，需保留目标库存${value(row.targetInventory)}件。本期需补充生产${value(row.requiredProduction)}件，不足按0件处理，仅供需求推导参考`;
+        expression = `需求${value(row.demand)}件，期初库存${value(row.openingInventory)}件，需保留目标库存${value(row.targetInventory)}件。本期需补充生产${value(row.requiredProduction)}件，库存已能覆盖需求和目标库存时无需补充生产，仅供需求推导参考`;
       if (field === 'projectedClosing')
         expression = `期初库存${value(row.openingInventory)}件，补充生产${value(row.requiredProduction)}件并满足需求${value(row.demand)}件后，参考期末库存${value(row.projectedClosing)}件`;
       if (field === 'requiredProductionTons')
