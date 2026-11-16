@@ -4024,7 +4024,7 @@ async function openMetricDetail(key) {
     }, topMetricCards.find(item => item.key === key));
     sendingMetricDetails = true;
     button?.setAttribute('aria-busy', 'true');
-    await ask(request.text, request.context);
+    await ask(request.displayText, request.context);
     showWorkbenchToast('明细请求已发送至右侧 Agent，正在生成表格。');
   } catch (error) {
     showWorkbenchToast('无法发送指标明细请求：' + error.message);
