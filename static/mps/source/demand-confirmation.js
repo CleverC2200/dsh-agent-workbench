@@ -1,7 +1,6 @@
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { encodeLocalDrafts, decodeLocalDrafts, changeAdjustment } from './local-draft.js';
 import { createCategoryDemand } from './category-demand-view.js';
-import { buildCategoryDemand } from './category-demand.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
 import {

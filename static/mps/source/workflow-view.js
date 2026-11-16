@@ -578,7 +578,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           (item) => item.month === row.month && item.category === row.category,
         );
         const history = result.comparisonSources.historyPeriod;
-        expression = `${row.category}有效大类需求${value(total)}件，采用基地SKU有效占比${percent(row.share)}，分配需求${value(row.demand)}件。系统占比${percent(row.systemShare)}保留供核对。`;
+        expression = row.quantityAdjusted
+          ? `${row.base} ${row.code}在${row.month}人工修正为${value(row.demand)}件，系统原值${value(row.systemDemand)}件保留供核对。物料组、大类及全国由当前基地SKU有效需求加总，其他SKU及基地数量独立。`
+          : `${row.category}有效大类需求${value(total)}件，当前基地SKU需求${value(row.demand)}件，有效占比${percent(row.share)}。系统占比${percent(row.systemShare)}保留供核对。`;
         expression +=
           row.splitBasis === 'history-only-zero-report'
             ? '整类提报合计为0，本类完全按历史占比拆分。'
@@ -587,9 +589,17 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         if (category) {
           const index = result.months.indexOf(row.month);
           expression += `大类需求采用${index < 2 ? '三年历史平均' : '年度需求'}环比倍率${percent(category.chain)}${category.chain == null ? '' : `，对应环比增长率${percent(category.chain - 1)}`}及同期平均占比${percent(category.share)}。同比未参与本次大类需求计算。`;
-          if (category.adjusted) expression += '大类有效需求由基地SKU修正后汇总。';
+          if (
+            result.categoryRows.some(
+              (item) => item.month === row.month && item.category === row.category && item.adjusted,
+            )
+          )
+            expression += '大类有效需求由基地SKU修正后汇总。';
         }
-        if (row.share !== row.systemShare) expression += '有效占比含人工调整及剩余占比承接。';
+        if (row.share !== row.systemShare)
+          expression += row.quantityAdjusted
+            ? '有效占比按修正后的基地SKU需求与当前大类有效合计计算。'
+            : '有效占比含历史占比调整。';
         if (row.quantityAdjusted) expression += '当前SKU需求已采用人工调整。';
       }
       if (row.coefficientFallback?.length) expression += `；${row.coefficientFallback.join('；')}`;
@@ -601,7 +611,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
       if (field === 'nextMonthDemand')
         expression =
           row.month === result.months[2]
-            ? `以M+4大类有效需求按M+3有效拆分系数分配，得到${value(row.nextMonthDemand)}件，仅供目标库存参考，不生成M+4 SKU需求`
+            ? `读取M+4同基地SKU有效参考需求${value(row.nextMonthDemand)}件，系统原值按M+4大类需求和M+3拆分系数推导；仅供M+3目标库存参考，不进入生产评估`
             : `采用下一月有效SKU需求${value(row.nextMonthDemand)}件`;
       if (field === 'targetInventory') {
         expression = `按下一月需求${value(row.nextMonthDemand)}件和${row.nextMonthDays}个自然日折算日均需求，备足${value(row.safetyDays)}天，目标库存${value(row.targetInventory)}件。源最终目标周转天数${value(row.turnoverPolicy.sourceDays)}天，采用人工补充及已生效规则后的有效天数`;
@@ -755,7 +765,17 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
       const rows = (includeCategory ? scopedRows : filtered).map((row) => {
         const shipment = shipmentByProduct.get(JSON.stringify([row.base, row.code]));
         const forecast = forecastByMonth.get(JSON.stringify([row.month, row.base, row.code]));
-        const adjustment = draft.adjustments?.shares?.find((item) => item.rowId === row.id);
+        const adjustment = row.quantityAdjusted
+          ? draft.adjustments?.quantities?.find(
+              (item) =>
+                item.kind === 'base-sku' &&
+                item.month === row.month &&
+                item.base === row.base &&
+                item.code === row.code &&
+                item.category === row.category &&
+                item.group === row.group,
+            )
+          : draft.adjustments?.shares?.find((item) => item.rowId === row.id);
         const layerValues = ['reportLayers', 'historyLayers'].flatMap((key) =>
           ['groupShare', 'skuShare', 'baseShare', 'product'].map((field) => row[key]?.[field]),
         );
@@ -1495,7 +1515,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
               ? h(
                   'p',
                   { role: 'status', className: 'wf-note wf-unavailable' },
-                  `以下调整未生效：${result.adjustmentIssues.join('；')}。可从当前占比调整中撤销失效记录。`,
+                  `以下调整未生效：${result.adjustmentIssues.join('；')}。历史上层修正请在冲突提示中归档，其他失效记录可在调整记录中撤销。`,
                 )
               : null,
             (draft.adjustments?.shares?.length ?? 0) > 0 &&

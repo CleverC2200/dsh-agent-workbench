@@ -21,20 +21,11 @@ const comparison = (value) =>
 const matches = (row, entry) =>
   row.month === entry.month &&
   row.category === entry.category &&
-  (entry.kind === 'categoryDemand' ||
-    (row.group === entry.group &&
-      (entry.kind === 'group' ||
-        (row.code === entry.code && (entry.kind === 'sku' || row.base === entry.base)))));
+  row.group === entry.group &&
+  row.code === entry.code &&
+  row.base === entry.base;
 const label = (entry) =>
-  [
-    entry.category,
-    entry.kind !== 'categoryDemand' ? entry.group : '',
-    entry.code,
-    entry.base,
-    entry.month,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  [entry.category, entry.group, entry.code, entry.base, entry.month].filter(Boolean).join(' ');
 
 export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
   const h = react.createElement;
@@ -105,26 +96,11 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
     const categoryValue = (category, month) =>
       result.categoryRows.find((row) => row.category === category && row.month === month);
     const saved = (entry) =>
-      entry.kind === 'categoryDemand'
-        ? draft.adjustments?.categoryDemand?.find(
-            (item) => item.month === entry.month && item.category === entry.category,
-          )
-        : quantities.find((item) => quantityAdjustmentKey(item) === quantityAdjustmentKey(entry));
+      quantities.find((item) => quantityAdjustmentKey(item) === quantityAdjustmentKey(entry));
     const effective = (computed, entry) =>
-      entry.kind === 'categoryDemand'
-        ? (computed.categoryRows.find(
-            (row) => row.month === entry.month && row.category === entry.category,
-          )?.quantity ?? null)
-        : sum(
-            [...computed.rows, ...(computed.referenceRows ?? [])].filter((row) =>
-              matches(row, entry),
-            ),
-            'demand',
-          );
-    const fieldKey = (entry) =>
-      entry.kind === 'categoryDemand'
-        ? JSON.stringify(['categoryDemand', entry.month, entry.category])
-        : quantityAdjustmentKey(entry);
+      [...computed.rows, ...(computed.referenceRows ?? [])].find((row) => matches(row, entry))
+        ?.demand ?? null;
+    const fieldKey = quantityAdjustmentKey;
     const applyBatch = (entries, reason) => {
       if (!entries.length) return;
       const shipments = entries.filter((entry) => entry.meta.kind === 'shipment');
@@ -146,16 +122,10 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       const undos = new Map();
       const quantities = entries.filter((entry) => entry.meta.kind !== 'shipment');
       for (const entry of quantities) {
-        const { kind: level, editorRow: _editorRow, ...fields } = entry.meta;
-        const kind = level === 'categoryDemand' ? 'categoryDemand' : 'quantities';
-        const input = {
-          ...fields,
-          ...(kind === 'quantities' ? { kind: level } : {}),
-          quantity: entry.value,
-          reason,
-        };
+        const { editorRow: _editorRow, ...fields } = entry.meta;
+        const input = { ...fields, quantity: entry.value, reason };
         const before = adjustments?.history?.length ?? 0;
-        adjustments = changeAdjustment(adjustments, kind, input, entry.value === null);
+        adjustments = changeAdjustment(adjustments, 'quantities', input, entry.value === null);
         if (entry.value === null && adjustments.history.length > before)
           undos.set(before, entry.meta);
       }
@@ -167,7 +137,6 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       for (const entry of quantities) {
         if (
           entry.value !== null &&
-          entry.meta.kind !== 'categoryDemand' &&
           ![...candidate.rows, ...(candidate.referenceRows ?? [])].some(
             (row) => matches(row, entry.meta) && row.quantityAdjusted,
           )
@@ -384,7 +353,8 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       `${result.shipmentMonth} 本月预估发货（可调整）`,
       `M+1 ${months[0]} 需求（可调整）`,
       `M+2 ${months[1]} 需求（可调整）`,
-      `M+3 ${months[2]} 需求`,
+      `M+3 ${months[2]} 需求（可调整）`,
+      `M+4 ${months[3]} 库存参考（可调整）`,
     ];
     const isExpanded = (key) => Boolean(filters.search) || expanded.has(key);
     const visible = [];
