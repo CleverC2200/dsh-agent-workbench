@@ -23,8 +23,8 @@ export function selectedPlanSql(initial, corrected, rolling, next) {
         `plan_policy.${field} BETWEEN 1 AND 31 AND plan_policy.${field}=CAST(plan_policy.${field} AS INTEGER)`,
     )
     .concat([
-      'plan_policy.initial_day<plan_policy.corrected_day',
-      'plan_policy.corrected_day<plan_policy.rolling_day',
+      'plan_policy.initial_day<=plan_policy.corrected_day',
+      'plan_policy.corrected_day<=plan_policy.rolling_day',
     ])
     .join(' AND ');
   const day = 'CAST(SUBSTRING(CAST(the_date AS CHAR),9,2) AS INTEGER)';

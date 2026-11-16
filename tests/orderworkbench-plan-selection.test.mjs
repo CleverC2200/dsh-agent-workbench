@@ -109,6 +109,31 @@ test('published node changes select different versions without changing the quer
   }
 });
 
+test('equal published cutoffs skip empty periods while preserving other demand versions', () => {
+  for (const [cutoffs, day, sales, transfer] of [
+    [[17, 28, 28], 14, 310, 62],
+    [[17, 28, 28], 17, 310, 62],
+    [[17, 28, 28], 18, 620, 124],
+    [[17, 28, 28], 28, 620, 124],
+    [[17, 28, 28], 29, 1240, 248],
+    [[17, 17, 28], 18, 930, 186],
+    [[17, 17, 17], 17, 310, 62],
+    [[17, 17, 17], 18, 1240, 248],
+  ]) {
+    const [row] = snapshot(`2026-11-${String(day).padStart(2, '0')}`, {}, { cutoffs });
+    assert.equal(row.sales_plan, sales);
+    assert.equal(row.transfer_plan, transfer);
+    assert.equal(row.national_plan_invalid, 0);
+    assert.equal(row.base_plan_invalid, 0);
+    const period = { sections: [{ id: 'stock', status: 'ready', rows: [row] }] };
+    assert.equal(computeWorkbenchMetrics(period)['周转天数'].value, 100 / stockDaily(row));
+    assert.equal(
+      computeWorkbenchMetrics(period, () => true, { turnoverScope: 'base' })['周转天数'].value,
+      100 / stockDaily(row, 'base'),
+    );
+  }
+});
+
 for (const [day, sales, transfer] of [
   [1, 310, 62],
   [16, 310, 62],
