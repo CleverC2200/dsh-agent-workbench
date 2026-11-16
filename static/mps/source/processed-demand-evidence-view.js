@@ -1,5 +1,13 @@
 import { useStepViewField } from './step-view-state.js';
-const valueText = (value) => (value == null ? '待补' : String(value));
+const valueText = (value, percent = false) => {
+  if (value == null) return '待补';
+  const amount = percent ? value * 100 : value;
+  const precision =
+    percent && amount !== 0 && Math.abs(amount) < 0.01
+      ? { maximumSignificantDigits: 3 }
+      : { minimumFractionDigits: percent ? 2 : 0, maximumFractionDigits: percent ? 2 : 0 };
+  return new Intl.NumberFormat('zh-CN', precision).format(amount) + (percent ? '%' : '');
+};
 
 export function createProcessedDemandEvidence(react, { downloadCsv }) {
   const h = react.createElement;
@@ -37,17 +45,22 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
           ['本月有效预估发货', selected.shipment, `${selected.baseMonth} 第二页同版有效预估`],
           ['近三月实际发货', basis.actual, `${result.recent.join('、')} 合计`],
           ['近三月计划数量', basis.plan, '近三月历史计划数量合计'],
-          ['近三月历史占比合计', basis.recentShare, '三个统计月历史同期占比合计'],
-          ['全年预估', basis.annualEstimate, '近三月实际发货 ÷ 近三月历史占比合计'],
+          ['近三月历史占比合计', basis.recentShare, '三个统计月历史同期占比合计', true],
+          ['全年预估', basis.annualEstimate, '以近期发货和历史季节分布估计全年数量'],
           [
             '环比起点',
             index === 0 ? selected.shipment : previous[index - 1]?.momMethod,
             index === 0 ? '本月有效预估发货' : '前月环比测算量，独立于加权及人工调整',
           ],
-          ['所用环比系数', selected.chain, index < 2 ? '三年历史平均环比' : '年度环比'],
-          ['独立环比测算量', selected.momMethod, '环比起点 × 所用环比系数'],
-          ['同期平均占比', selected.share, '三年该月占比平均'],
-          ['占比测算量', selected.shareMethod, '全年预估 × 同期平均占比'],
+          [
+            '所用环比系数',
+            selected.chain,
+            index < 2 ? '三年历史平均环比倍率' : '年度需求环比倍率',
+            true,
+          ],
+          ['独立环比测算量', selected.momMethod, '以所用环比系数延续前月发货水平'],
+          ['同期平均占比', selected.share, '三年该月占比平均', true],
+          ['占比测算量', selected.shareMethod, '按历史季节分布分配全年预估'],
           ['两法平均量', selected.methodAverage, '环比测算量与占比测算量各占一半'],
           [
             '销售提报量',
@@ -61,12 +74,13 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
           [
             '近三月达成率',
             index === 0 ? selected.achievementRate : null,
-            index === 0 ? '近三月实际发货合计 ÷ 近三月计划数量合计' : '本月不采用提报加权',
+            index === 0 ? '近三月实际发货相对计划的达成比例' : '本月不采用提报加权',
+            true,
           ],
           [
             '销售校正量',
             selected.salesCorrected,
-            index === 0 ? '销售提报量 × 近三月达成率' : '本月不采用提报加权',
+            index === 0 ? '按近三月计划达成情况校正本期销售提报' : '本月不采用提报加权',
           ],
           [
             '最终两次平均',
@@ -134,7 +148,7 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
         h(
           'p',
           { className: 'wf-note' },
-          '大类计算使用全国口径，预览随当前大类和月份筛选。基地与SKU筛选决定可预览的大类。数值保留原始小数，未采用的方法显示不适用。',
+          '大类计算使用全国口径，预览随当前大类和月份筛选。基地与SKU筛选决定可预览的大类。数量显示整数，系数显示百分比，下载保留原始精度；未采用的方法显示不适用。',
         ),
         selected
           ? h(
@@ -177,12 +191,33 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
                 ),
                 h('button', { onClick: exportRows }, '下载当前计算过程'),
               ),
+              h(
+                'section',
+                { className: 'wf-calculation-basis', 'aria-label': '本月采用依据与业务影响' },
+                h(
+                  'p',
+                  null,
+                  `采用环比：${index < 2 ? '三年历史平均环比' : '年度需求环比'}。${selected.chain == null ? '所用环比系数待补。' : `${valueText(selected.chain, true)} 表示${new Intl.NumberFormat('zh-CN', { maximumSignificantDigits: 6 }).format(selected.chain)}倍，环比增长率为${valueText(selected.chain - 1, true)}。`}同比未参与本次大类需求计算。`,
+                ),
+                h(
+                  'p',
+                  null,
+                  `数量来源：${selected.baseMonth} 第二步同版有效预估发货；${result.recent.join('、')} 实际发货和历史计划量；${(history?.years ?? []).map((row) => row.month).join('、')} 历史发货及财年发货。${index >= 2 ? `本月环比使用${previous[index - 1]?.month}与${selected.month}年度需求源数量。` : '历史环比使用同期月份与其上月发货。'}`,
+                ),
+                h(
+                  'p',
+                  null,
+                  `业务影响：${index === 0 ? '环比和季节占比各占两法平均量的一半，再与校正销售提报各占最终系统需求的一半。' : '环比和季节占比各占系统需求的一半，本月不采用销售提报加权。'}${selected.adjusted ? `人工调整后采用${valueText(selected.quantity)}件，系统测算${valueText(selected.systemQuantity)}件保留供核对。` : `当前采用系统需求${valueText(selected.quantity)}件。`}缺项保留待补，不按零计算。`,
+                ),
+              ),
               table(
                 '大类计算步骤',
                 ['步骤', '数值', '计算依据'],
-                steps.map(([name, value, reason]) => [
+                steps.map(([name, value, reason, percent]) => [
                   name,
-                  value == null && reason.startsWith('本月不采用') ? '不适用' : valueText(value),
+                  value == null && reason.startsWith('本月不采用')
+                    ? '不适用'
+                    : valueText(value, percent),
                   reason,
                 ]),
               ),
@@ -196,7 +231,7 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
                     row.priorMonthQuantity,
                     row.priorYearQuantity,
                     row.annualQuantity,
-                  ].map(valueText),
+                  ].map((value) => valueText(value)),
                 ]),
               ),
             )
