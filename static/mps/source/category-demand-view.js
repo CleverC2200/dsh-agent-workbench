@@ -136,7 +136,6 @@ export function createCategoryDemand(
   const UpperAdjustmentConflicts = createUpperAdjustmentConflicts(react);
   return function CategoryDemand({
     draft,
-    shipmentSnapshot,
     update,
     active,
 

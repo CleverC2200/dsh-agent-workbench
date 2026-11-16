@@ -589,7 +589,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           expression += `大类需求采用${index < 2 ? '三年历史平均' : '年度需求'}环比倍率${percent(category.chain)}${category.chain == null ? '' : `，对应环比增长率${percent(category.chain - 1)}`}及同期平均占比${percent(category.share)}。同比未参与本次大类需求计算。`;
           if (category.adjusted) expression += '大类有效需求由基地SKU修正后汇总。';
         }
-        if (row.share !== row.systemShare) expression += '有效占比含人工调整及剩余占比承接。';
+        if (row.share !== row.systemShare)
+          expression += row.quantityAdjusted
+            ? '有效占比按修正后的基地SKU需求与当前大类有效合计计算。'
+            : '有效占比含历史占比调整。';
         if (row.quantityAdjusted) expression += '当前SKU需求已采用人工调整。';
       }
       if (row.coefficientFallback?.length) expression += `；${row.coefficientFallback.join('；')}`;
@@ -1495,7 +1498,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
               ? h(
                   'p',
                   { role: 'status', className: 'wf-note wf-unavailable' },
-                  `以下调整未生效：${result.adjustmentIssues.join('；')}。可从当前占比调整中撤销失效记录。`,
+                  `以下调整未生效：${result.adjustmentIssues.join('；')}。历史上层修正请在冲突提示中归档，其他失效记录可在调整记录中撤销。`,
                 )
               : null,
             (draft.adjustments?.shares?.length ?? 0) > 0 &&

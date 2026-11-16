@@ -218,7 +218,8 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
           `M+${index + 1} ${month} 有效需求`,
           `M+${index + 1} ${month} 模型预测`,
         ]),
-      `M+3 ${months[2]} 需求`,
+      `M+3 ${months[2]} 需求（可调整）`,
+      `M+4 ${months[3]} 库存参考（可调整）`,
       `M+4 ${result.months[3]} 库存参考`,
     ];
     const summaryRows = categories.map((category) => {
