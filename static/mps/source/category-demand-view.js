@@ -145,6 +145,14 @@ export function createCategoryDemand(
     const [reason, setReason] = react.useState('');
     const [error, setError] = react.useState('');
     const [notice, setNotice] = react.useState('');
+    const [category, setCategory] = react.useState('');
+    const categoryFilterId = react.useId();
+    const selectedCategory = result.bases.some((basis) => basis.category === category)
+      ? category
+      : '';
+    const selectedRows = result.rows.filter(
+      (row) => !selectedCategory || row.category === selectedCategory,
+    );
     const triggerRef = react.useRef(null);
     const reasonRef = react.useRef(null);
     const fieldsRef = react.useRef(new Map());
@@ -310,17 +318,57 @@ export function createCategoryDemand(
         ),
       };
     });
-    const summary = result.bases.map((basis) => ({
-      大类: basis.category,
-      ...Object.fromEntries(
-        result.rows
-          .filter((row) => row.category === basis.category)
-          .map((row, index) => {
-            const detail = rows[result.rows.indexOf(row)];
-            return [`M+${index + 1}`, detail['操作']];
+    const visibleRows = rows.filter((row) => !selectedCategory || row['大类'] === selectedCategory);
+    const summary = result.bases
+      .filter((basis) => !selectedCategory || basis.category === selectedCategory)
+      .map((basis) => ({
+        大类: basis.category,
+        ...Object.fromEntries(
+          result.rows
+            .filter((row) => row.category === basis.category)
+            .map((row, index) => {
+              const detail = rows[result.rows.indexOf(row)];
+              return [`M+${index + 1}`, detail['操作']];
+            }),
+        ),
+      }));
+    if (summary.length)
+      summary.push({
+        大类: selectedCategory ? '当前范围合计' : '合计',
+        ...Object.fromEntries(
+          [...new Set(result.rows.map((row) => row.month))].map((month, index) => {
+            const entries = selectedRows.filter((row) => row.month === month);
+            const known = entries.filter((row) => row.quantity !== null);
+            const missing = entries.length - known.length;
+            return [
+              `M+${index + 1}`,
+              h(
+                'div',
+                { className: 'dc-demand-quantity' },
+                h(
+                  'span',
+                  {
+                    className: known.length
+                      ? 'dc-demand-amount'
+                      : 'dc-demand-amount dc-demand-missing',
+                  },
+                  known.length
+                    ? String(Math.round(known.reduce((sum, row) => sum + row.quantity, 0)))
+                    : '待补',
+                ),
+                missing > 0 &&
+                  h(
+                    'small',
+                    { className: 'dc-adjusted-mark' },
+                    `${known.length ? '已知小计 · ' : ''}${missing}项待补`,
+                  ),
+                entries.some((row) => row.coverage === 'partial') &&
+                  h('small', { className: 'dc-adjusted-mark' }, '部分可计算'),
+              ),
+            ];
           }),
-      ),
-    }));
+        ),
+      });
     useMpsPart(
       react,
       'category-demand',
@@ -375,6 +423,24 @@ export function createCategoryDemand(
           { className: 'dc-card-head dc-demand-edit-bar' },
           h('h3', {}, '大类预估需求数量'),
           h('span', { className: 'dc-card-note' }, '单位：件'),
+          h(
+            react.Fragment,
+            {},
+            h('label', { htmlFor: categoryFilterId }, '大类筛选'),
+            h(
+              'select',
+              {
+                id: categoryFilterId,
+                value: selectedCategory,
+                disabled: pending !== null,
+                onChange: (event) => setCategory(event.target.value),
+              },
+              h('option', { value: '' }, '全部大类'),
+              result.bases.map((basis) =>
+                h('option', { key: basis.category, value: basis.category }, basis.category),
+              ),
+            ),
+          ),
           pending === null
             ? h(
                 'button',
@@ -420,6 +486,11 @@ export function createCategoryDemand(
             notice &&
             h('span', { role: 'status', className: 'mps-edit-notice dc-batch-feedback' }, notice),
         ),
+        h(
+          'p',
+          { className: 'dc-card-note' },
+          '合计、逐月测算和明细下载均按当前大类筛选；缺项不补零。',
+        ),
         table(
           ['大类', 'M+1', 'M+2', 'M+3', 'M+4'],
           summary,
@@ -447,7 +518,7 @@ export function createCategoryDemand(
             h(
               'span',
               { className: 'dc-card-note' },
-              `${result.rows.filter((row) => row.quantity !== null).length} / ${rows.length} 项可计算 · 单位：件`,
+              `${selectedRows.filter((row) => row.quantity !== null).length} / ${visibleRows.length} 项可计算 · 单位：件`,
             ),
             h(
               'button',
@@ -456,7 +527,7 @@ export function createCategoryDemand(
                   downloadCsv(
                     `大类逐月测算-${draft.month}.csv`,
                     [...columns, ...detailColumns.filter((column) => !columns.includes(column))],
-                    rows,
+                    visibleRows,
                   ),
               },
               '下载测算明细',
@@ -474,7 +545,7 @@ export function createCategoryDemand(
             { className: 'dc-category-demand-main' },
             table(
               columns,
-              rows,
+              visibleRows,
               Object.fromEntries(
                 [
                   ['① 环比法', '本月预估发货*环比'],
