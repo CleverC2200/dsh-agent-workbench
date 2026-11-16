@@ -1,3 +1,4 @@
+import { useStepViewField } from './step-view-state.js';
 import { createCapacityReport } from './capacity-report-view.js';
 import {
   turnoverDaysSources,
@@ -157,6 +158,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     };
   };
   return function EvaluationOverview({
+    view,
     step,
     draft,
     currentEvaluation,
@@ -171,22 +173,63 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     numberText,
   }) {
     const [trace, setTrace] = react.useState(null);
-    const [skuPages, setSkuPages] = react.useState({});
-    const [detailPages, setDetailPages] = react.useState({});
-    const [expanded, setExpanded] = react.useState({});
+    const [skuPages, setSkuPages] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.skuPages',
+      {},
+    );
+    const [detailPages, setDetailPages] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.detailPages',
+      {},
+    );
+    const [expanded, setExpanded] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.expanded',
+      {},
+    );
     const [reportOpen, setReportOpen] = react.useState(null);
-    const [detailSelection, setDetailSelection] = react.useState({});
-    const [issueKind, setIssueKind] = react.useState('');
+    const [detailSelection, setDetailSelection] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.detailSelection',
+      {},
+    );
+    const [issueKind, setIssueKind] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.issueKind',
+      '',
+    );
     const plan = currentEvaluation?.result.plan;
     const stamp = currentEvaluation?.at;
+    const inputScope = JSON.stringify([
+      stamp,
+      filters.month,
+      filters.base,
+      filters.category,
+      filters.search,
+      filters.onlyMissing,
+    ]);
+    const [shownInput, setShownInput] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.input',
+      inputScope,
+    );
     react.useEffect(() => {
+      if (shownInput === inputScope) return;
+      setShownInput(inputScope);
       setTrace(null);
       setSkuPages({});
       setReportOpen(null);
       setDetailSelection({});
       setDetailPages({});
       setIssueKind('');
-    }, [stamp, filters.month, filters.base, filters.category, filters.search, filters.onlyMissing]);
+    }, [inputScope, shownInput, setShownInput]);
     const physicalRows = react.useMemo(() => {
       if (!plan) return [];
       const rows = [...plan.rows];
@@ -306,7 +349,11 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         'details',
         {
           className: 'wf-plan-disclosure',
-          onToggle: (event) => setExpanded((value) => ({ ...value, [name]: event.target.open })),
+          open: Boolean(expanded[name]),
+          onToggle: (event) => {
+            if (event.target === event.currentTarget)
+              setExpanded((value) => ({ ...value, [name]: event.currentTarget.open }));
+          },
         },
         h('summary', null, name, h('span', null, `${count}条`)),
         expanded[name] ? body() : null,
@@ -740,7 +787,17 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             react.Fragment,
             null,
             step === 'capacity'
-              ? h(CapacityReport, { plan, draft, stamp, filters, card, table, numberText, active })
+              ? h(CapacityReport, {
+                  view,
+                  plan,
+                  draft,
+                  stamp,
+                  filters,
+                  card,
+                  table,
+                  numberText,
+                  active,
+                })
               : null,
             card(
               '问题分类与补充清单',
