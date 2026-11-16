@@ -647,7 +647,7 @@ export function workbenchPresentation(facts, options = {}) {
       'region-change': { rows: changes, customerDetails: customers },
       'province-performance': !options.dimension || options.dimension === 'province-performance'
         ? provinceAnalysis(facts)
-        : { title: '省区维度分析', tables: [], ordersStatus: 'idle' },
+        : { title: '省区维度达成分析', tables: [], ordersStatus: 'idle' },
       'base-category': {
         columns: ['基地 \\ 品类', ...categories],
         rows:
