@@ -787,7 +787,17 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             react.Fragment,
             null,
             step === 'capacity'
-              ? h(CapacityReport, { plan, draft, stamp, filters, card, table, numberText, active })
+              ? h(CapacityReport, {
+                  view,
+                  plan,
+                  draft,
+                  stamp,
+                  filters,
+                  card,
+                  table,
+                  numberText,
+                  active,
+                })
               : null,
             card(
               '问题分类与补充清单',
