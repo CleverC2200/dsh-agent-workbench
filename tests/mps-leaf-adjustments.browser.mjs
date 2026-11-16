@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
+import * as XLSX from 'xlsx-republish';
+import { mpsDownloadText } from './helpers/mps-download.mjs';
 import { authorPage } from './helpers/author-page.mjs';
 import { workflowExportRows } from './helpers/mps-workflow-export.mjs';
 
@@ -44,6 +46,8 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
     const seed = window.readView();
     const draft = seed.localDrafts.drafts.find((row) => row.id === seed.localDrafts.selected);
     const audit = { systemValue: null, reason: '历史原因原文', at: '2026-11-01T00:00:00.000Z' };
+    const next = new Date(`${month}-01T00:00:00Z`);
+    next.setUTCMonth(next.getUTCMonth() + 1);
     draft.adjustments.quantities = [
       {
         kind: 'base-sku',
@@ -52,7 +56,7 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
         group: 'G1',
         base: '郑州',
         code: 'A',
-        quantity: 60,
+        quantity: 50,
         ...audit,
       },
       {
@@ -65,7 +69,14 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
         quantity: 40,
         ...audit,
       },
-      { kind: 'group', month, category: '汤圆', group: 'G1', quantity: 120, ...audit },
+      {
+        kind: 'group',
+        month: next.toISOString().slice(0, 7),
+        category: '汤圆',
+        group: 'G1',
+        quantity: 120,
+        ...audit,
+      },
     ];
     draft.adjustments.categoryDemand = [{ month, category: '汤圆', quantity: 130, ...audit }];
     await window.openAuthor('mps', 1200, seed);
@@ -74,13 +85,44 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   const category = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
   await expect(category.getByRole('button', { name: '调整', exact: true })).toHaveCount(0);
   await expect(frame.getByRole('region', { name: '历史上层修正冲突', exact: true })).toBeVisible();
+  await expect(category).toContainText('90');
+  await frame.getByText('逐月测算依据', { exact: true }).click();
+  const download = page.waitForEvent('download');
+  await frame.getByRole('button', { name: '下载测算明细', exact: true }).click();
+  const csv = await mpsDownloadText(await (await download).path());
+  const book = XLSX.read(csv, { type: 'string', raw: true });
+  const categoryRows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
+  const effectiveCategory = categoryRows.find((row) => row['月份'] === `${month}（M+1）`);
+  assert.equal(Number(effectiveCategory['大类预估需求数量']), 90);
+  assert.equal(effectiveCategory['调整原因'], '');
+  assert.equal(effectiveCategory['调整时间'], '');
+  assert.equal(effectiveCategory['需求数量来源'], '基地SKU汇总，调整原因和时间见逐叶子明细');
+  assert.equal(categoryRows.find((row) => row !== effectiveCategory)['需求数量来源'], '系统测算');
+  const unarchived = await page.evaluate(() => {
+    const state = window.readView().localDrafts;
+    return state.drafts.find((draft) => draft.id === state.selected).adjustments.categoryDemand;
+  });
+  assert.deepEqual(unarchived, [
+    {
+      month,
+      category: '汤圆',
+      quantity: 130,
+      systemValue: null,
+      reason: '历史原因原文',
+      at: '2026-11-01T00:00:00.000Z',
+    },
+  ]);
   await frame.getByRole('button', { name: '归档历史上层修正', exact: true }).click();
+  const history = frame.getByRole('region', { name: '大类调整记录', exact: true });
+  await expect(history).toContainText('130');
+  await expect(history).toContainText('历史原因原文');
+  await expect(history).toContainText('2026-11-01T00:00:00.000Z');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   await frame.getByLabel('搜索当前步骤', { exact: true }).fill('产品甲');
   await view.getByRole('button', { name: '调整', exact: true }).click();
   const field = view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true });
-  await field.fill('50');
+  await field.fill('55');
   await view.getByRole('button', { name: '保存调整', exact: true }).click();
   await expect(view.getByRole('alert')).toContainText('请选择');
   await view.getByLabel('批量调整原因', { exact: true }).selectOption('其他');
@@ -96,7 +138,7 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
         (row) => row['月份'] === month && row['基地'] === '郑州' && row['产品编码'] === 'A',
       )['需求数量'],
     ),
-    50,
+    55,
   );
   assert.equal(
     Number(
@@ -140,10 +182,10 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
         (row) => row['月份'] === month && row['基地'] === '郑州' && row['产品编码'] === 'A',
       )['需求数量'],
     ),
-    50,
+    55,
   );
   await frame.getByLabel('需求层级视角', { exact: true }).selectOption('national');
-  await expect(table.locator('tbody tr').first()).toContainText('90');
+  await expect(table.locator('tbody tr').first()).toContainText('95');
   await expect(
     table.getByRole('columnheader', {
       name: `M+4 ${referenceMonth} 库存参考（可调整）`,
@@ -161,7 +203,11 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   assert.equal(draft.adjustments.categoryDemand.length, 0);
   assert.ok(
     draft.adjustments.history.some(
-      (row) => row.action === 'archive' && row.value === 130 && row.reason === '历史原因原文',
+      (row) =>
+        row.action === 'archive' &&
+        row.value === 130 &&
+        row.reason === '历史原因原文' &&
+        row.at === '2026-11-01T00:00:00.000Z',
     ),
   );
   assert.ok(draft.adjustments.history.some((row) => row.reason === '其他：合同调整复核'));
@@ -170,6 +216,6 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   assert.deepEqual(restored.localDrafts, saved.localDrafts);
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await expect(frame.getByRole('region', { name: '大类预估需求数量', exact: true })).toContainText(
-    '90',
+    '95',
   );
 });
