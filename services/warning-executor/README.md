@@ -11,3 +11,13 @@ XXL-JOB 负责定时调度，已登录的 GEA 客户端执行原有 Agent 检测
 `GET /health` 为运行状态；`POST /client` 仅支持任务所属账号的调度管理、领取及回执。操作路径固定，任务编号和日志编号去重，执行结果确认后不得改写。
 
 本地验证：`node --test tests/warning-executor.test.mjs tests/detection-whitelist.test.mjs`。真实部署仍需核验调度中心注册、登录客户端执行和白名单写入回读。
+
+## 飞书应用与接收人
+
+预警默认通过同一服务查询接收人和发送通知，不再要求每台客户端准备 Python、个人飞书 token 或人员映射文件。服务端私有配置新增 `feishu.appId`、`feishu.appSecret`、`feishu.receiptDirectory`，指定应用为“思念GEA-测试”（`cli_aaf07a77f7789bfb`）。Secret 只保留在服务配置，文件权限为 `0600`；代码、安装包、频道及日志中不保存凭据。`receiptDirectory` 应位于既有可写状态目录下，与调度队列一并持久保留。
+
+客户端沿现有 HTTPS `/gea-warning/client` 调用 `feishu-status`、`feishu-recipient` 和 `feishu-send`。服务校验 GEA 登录态与 APS 授权后，从同租户人员目录读取所选账号，以飞书通讯录的工号精确匹配在职、激活的应用内身份；不使用登录用户信息接口代替所选接收人。姓名只用于缩小搜索范围，同名、冻结、离职或分页不完整时拒绝选择。接口仅返回 GEA 账号和展示名称，不返回飞书 token、Secret 或接收人的 Open ID。
+
+发送前还校验调度任务属于当前用户。稳定通知 UUID、服务端发送意图及消息回执共同防重：成功回读原回执；发送超时或回执损坏时保留待核实状态，不自动重发。选择人员的验证不发送消息。历史通知记录继续保留原发送方式，不将其他应用下的 Open ID 当成本应用接收人。
+
+部署更新应备份原服务代码和配置，保留状态目录，更新源码后只重启该执行器。校验 `/health`、当前账号授权、接收人查询与调度注册；不得重启 GEA、XXL-JOB 或其他业务服务。

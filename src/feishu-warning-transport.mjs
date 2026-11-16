@@ -161,6 +161,9 @@ export function enqueueNotification(event, kind, runId, config) {
     key,
     uuid: createHash('sha256').update(key).digest('hex').slice(0, 32),
     eventId: event.id,
+    ...(config.transport === 'shared-feishu-app'
+      ? { transport: config.transport, taskId: event.monitorId }
+      : {}),
     runId,
     kind,
     credentialProfile: config.credentialProfile || 'default',

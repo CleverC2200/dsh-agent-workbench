@@ -1,3 +1,4 @@
+import { warningMetricNames } from '../../../shared/warning-metrics.mjs';
 import { describeRunResult, showRunContext, showRunResult } from './detection-record-view.js';
 import { call } from '../../../shared/channel.js';
 const monitorScheduleLabel = function (v) {
@@ -191,6 +192,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
         return [];
       }
     };
+  catalog.push(...warningMetricNames.filter((name) => !catalog.includes(name)));
   const api = (data) => call('detection', data);
   let monitors = [],
     logs = [],
@@ -911,7 +913,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     main.innerHTML =
       '<h3>' +
       (edit ? '修改检测任务' : '新增检测任务') +
-      '</h3><p class="am-mode-note">选择指标后沿用指标库规则，无需填写阈值。新建后按设定时间检测，可勾选保存后立即执行一次；修改仅更新配置，保留原启用状态。</p><form class="am-form"><label style="grid-column:1/-1">选择指标<select name="metric"><option value="">请选择检测指标</option>' +
+      '</h3><p class="am-mode-note">选择指标后沿用指标库规则；未维护阈值时，请在任务说明中明确判断规则。新建后按设定时间检测，可勾选保存后立即执行一次；修改仅更新配置，保留原启用状态。</p><form class="am-form"><label style="grid-column:1/-1">选择指标<select name="metric"><option value="">请选择检测指标</option>' +
       catalog.map((n) => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('') +
       '</select><small>共 ' +
       catalog.length +
@@ -1003,7 +1005,9 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
         box.innerHTML =
           '<div class="am-metric-heading"><h4>指标库口径</h4><span>' +
           esc(m.version) +
-          '</span></div><dl><div><dt>度量规则</dt><dd>' +
+          '</span></div><dl><div><dt>业务定义</dt><dd>' +
+          esc(m.definition || '未维护') +
+          '</dd></div><div><dt>度量规则</dt><dd>' +
           esc(m.measureRules || '指标库未维护').replace(/\n/g, '<br>') +
           '</dd></div><div><dt>排除逻辑</dt><dd>' +
           esc(m.exclusions || '指标库未维护').replace(/\n/g, '<br>') +
@@ -1020,10 +1024,10 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
           '</dd></div></dl><p class="am-metric-source">来源：' +
           esc(m.source) +
           ' · ' +
-          esc(m.sheet) +
-          ' · 第 ' +
-          esc(m.row) +
-          ' 行</p></details>';
+          esc(
+            m.recordId ? '记录 ' + m.recordId : (m.sheet || '') + ' 第 ' + (m.row || '-') + ' 行',
+          ) +
+          '</p></details>';
       } catch (error) {
         if (seq === metadataSequence)
           box.innerHTML = '<p>指标口径读取失败：' + esc(error.message) + '</p>';
