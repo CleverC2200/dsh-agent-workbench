@@ -1,3 +1,7 @@
+import {
+  provinceAnalysis,
+  provinceAnalysisContext,
+} from '../prototypes/inventory-orderworkbench/province-analysis.mjs';
 import { mountReportImport } from '../prototypes/inventory-orderworkbench/report-import.mjs';
 import {
   projectReportImports,
@@ -43,6 +47,9 @@ test('order workbench reference interactions', async () => {
   window.AbortController = AbortController;
   window.AbortSignal = AbortSignal;
   Object.assign(window, {
+    provinceAnalysis,
+    provinceAnalysisContext,
+    loadWorkbenchProvinceOrderCounts: async () => ({ status: 'ready', rows: [] }),
     mountReportImport,
     projectReportImports,
     importedSummary,
