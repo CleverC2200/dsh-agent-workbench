@@ -1,3 +1,4 @@
+import { createStepViewState, useStepViewField } from './step-view-state.js';
 import { createBatchEdit } from './batch-edit.js';
 import { createShipmentScopeNotice } from './category-demand-view.js';
 import { createProcessedDemand } from './processed-demand-view.js';
@@ -120,6 +121,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
   const ConstraintPanel = createConstraintPanel(react, { Dialog });
   const EvaluationOverview = createEvaluationOverview(react, { downloadCsv, Dialog });
   return function Workflow({
+    active = true,
     evaluation,
     setEvaluation,
     step,
@@ -133,7 +135,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
     onUndoShareAdjustment,
     onEditingChange,
   }) {
-    const [search, setSearch] = react.useState('');
+    const viewScope = JSON.stringify([savedDraft.id, savedDraft.month, scopeGeneration]);
+    const stepViews = react.useRef({ scope: viewScope, views: new Map() });
+    if (stepViews.current.scope !== viewScope)
+      stepViews.current = { scope: viewScope, views: new Map() };
+    if (!stepViews.current.views.has(step))
+      stepViews.current.views.set(step, createStepViewState());
+    const view = stepViews.current.views.get(step);
+    const [search, setSearch] = useStepViewField(react, view, 'search', '');
     const [configuration, setConfiguration] = react.useState({});
     const batch = useBatchEdit({
       scope: `${savedDraft.id}:${savedDraft.month}:${step}:${scopeGeneration}`,
@@ -149,11 +158,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         setConfiguration((current) => ({ ...current, ...changes }));
       else persistUpdate(changes);
     };
-    const [base, setBase] = react.useState('');
-    const [category, setCategory] = react.useState('');
-    const [month, setMonth] = react.useState('');
-    const [onlyMissing, setOnlyMissing] = react.useState(false);
-    const [page, setPage] = react.useState(0);
+    const [base, setBase] = useStepViewField(react, view, 'base', '');
+    const [category, setCategory] = useStepViewField(react, view, 'category', '');
+    const [month, setMonth] = useStepViewField(react, view, 'month', '');
+    const [onlyMissing, setOnlyMissing] = useStepViewField(react, view, 'onlyMissing', false);
+    const [page, setPage] = useStepViewField(react, view, 'page', 0);
     const [formula, setFormula] = react.useState(null);
     const [shareError, setShareError] = react.useState('');
     const [executing, setExecuting] = react.useState(false);
@@ -415,16 +424,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
     );
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(filtered.length / 25) - 1));
     const visible = filtered.slice(pageIndex * 25, (pageIndex + 1) * 25);
-    const scopeKey = JSON.stringify([draft.id, draft.month, step]);
+    const scopeKey = JSON.stringify([draft.id, draft.month, scopeGeneration]);
     const [shownScope, setShownScope] = react.useState(scopeKey);
     if (shownScope !== scopeKey) {
       setShownScope(scopeKey);
-      setSearch('');
-      setBase('');
-      setCategory('');
-      setMonth('');
-      setOnlyMissing(false);
-      setPage(0);
       setFormula(null);
       setShareError('');
     }
@@ -467,6 +470,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           : null,
       }),
       titles[step],
+      active,
     );
     const table = (name, columns, rows, renderDetail) =>
       h(
@@ -1395,6 +1399,18 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         if (batch.commit.current === applyConfiguration) batch.commit.current = null;
       };
     }, [step, batch.commit, applyConfiguration]);
+    const [diagnosticsOpen, setDiagnosticsOpen] = useStepViewField(
+      react,
+      view,
+      'diagnosticsOpen',
+      false,
+    );
+    const [limitationsOpen, setLimitationsOpen] = useStepViewField(
+      react,
+      view,
+      'limitationsOpen',
+      false,
+    );
     const localRules = draft.constraints?.rules?.local ?? result.constraints.rules.local ?? [];
     return h(
       'section',
@@ -1448,6 +1464,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
             react.Fragment,
             null,
             h(ProcessedDemand, {
+              view,
               draft,
               result,
               rows: filtered,
@@ -1501,7 +1518,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
               ),
             h(
               'details',
-              { className: 'wf-disclosure' },
+              {
+                className: 'wf-disclosure',
+                open: diagnosticsOpen,
+                onToggle: (event) => {
+                  if (event.target === event.currentTarget)
+                    setDiagnosticsOpen(event.currentTarget.open);
+                },
+              },
               h('summary', null, '来源诊断与缺项清单'),
               h(
                 react.Fragment,
@@ -1521,7 +1545,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
                       ]),
                     ),
                   ),
-                h(SourceDiagnostics, { draft, result, table }),
+                h(SourceDiagnostics, { draft, result, table, view }),
               ),
             ),
           )
@@ -1530,6 +1554,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
               ConstraintPanel,
               {
                 key: JSON.stringify([draft.id, draft.month, scopeGeneration]),
+                view,
                 draft,
                 result,
                 update,
@@ -1553,6 +1578,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
               h(InventoryTargetPanel, {
                 batch,
                 key: JSON.stringify([draft.id, draft.month, scopeGeneration]),
+                view,
                 draft,
                 result,
                 update,
@@ -1841,6 +1867,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
               react.Fragment,
               null,
               h(EvaluationOverview, {
+                key: step,
+                view,
                 step,
                 draft,
                 currentEvaluation,
@@ -1867,7 +1895,15 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
       ['process', 'constraints'].includes(step) && result.missing.length
         ? h(
             'details',
-            { className: 'wf-limitations', role: 'status' },
+            {
+              className: 'wf-limitations',
+              role: 'status',
+              open: limitationsOpen,
+              onToggle: (event) => {
+                if (event.target === event.currentTarget)
+                  setLimitationsOpen(event.currentTarget.open);
+              },
+            },
             h('summary', null, `计算说明与缺项 · ${result.missing.length}条`),
             h(
               'ul',
