@@ -5148,6 +5148,19 @@
         border-radius: 7px;
         scrollbar-width: thin;
       }
+      .wb-province-scroll {
+        max-height: 414px;
+        overscroll-behavior-y: contain;
+      }
+      .wb-province-scroll .wb-performance-table {
+        border-collapse: separate;
+        border-spacing: 0;
+      }
+      .wb-province-scroll thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+      }
       .wb-performance-table {
         width: 100%;
         min-width: 1120px;
@@ -5732,7 +5745,7 @@
                 tabindex="-1"
                 data-wb-dimension-tab="province-performance"
               >
-                省区维度分析
+                省区维度达成分析
               </button>
             </div>
             <div
