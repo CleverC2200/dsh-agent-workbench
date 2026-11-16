@@ -52,7 +52,8 @@ export async function readOrderMetric(config, input, execute, signal, { now = ne
   if (input.dimensions !== undefined && !['groups', 'contract'].includes(input.view))
     throw Error('ORDER_METRIC_DIMENSIONS_REQUIRE_GROUPS');
   const today = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
-  const end = input.endExclusive < today ? input.endExclusive : today;
+  const tomorrow = dayOffset(today, 1);
+  const end = input.endExclusive < tomorrow ? input.endExclusive : tomorrow;
   const inventoryEnd =
     input.endExclusive < dayOffset(today, 1) ? input.endExclusive : dayOffset(today, 1);
   const period = { start: input.start, end, inventoryEnd, kind: 'range' };

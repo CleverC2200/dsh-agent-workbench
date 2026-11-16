@@ -472,8 +472,8 @@ test('card target and status are passed from the rendered card without inventing
     .current;
   assert.equal(current.target, '<6%');
   assert.equal(current.status, '健康');
-  assert.match(current.periodBasis, /作废记录按canceltime，非作废记录按header_addtime/);
-  assert.match(current.cancellationBoundary, /latestsendcardate前7天/);
+  assert.match(current.periodBasis, /有作废时间取canceltime.*lastshipmenttime/);
+  assert.match(current.cancellationBoundary, /暂不执行最晚发车时间前7天锁单条件/);
   assert.equal(
     metricDetailsRequest(facts, '作废率', selection).context.metricDetails.current.target,
     '<6%',
