@@ -39,17 +39,45 @@ test('province tab renders all three document tables and lazily caches distinct 
       window.provinceReads = 0;
       window.savedWrites = 0;
       window.countFailure = true;
-      window.fixtureEdits = {imports:[{batch:{batchId:'title-regression',unmet:[{key:'base-test',dimension:'base',entity:'郑州',base:'郑州',reason:'待核验',measure:'待制定改善措施'}]}}]};
+      window.fixtureEdits = {
+        imports: [
+          {
+            batch: {
+              batchId: 'title-regression',
+              unmet: [
+                {
+                  key: 'base-test',
+                  dimension: 'base',
+                  entity: '郑州',
+                  base: '郑州',
+                  reason: '待核验',
+                  measure: '待制定改善措施',
+                },
+              ],
+            },
+          },
+        ],
+      };
       window.fixtureEditVersion = 0;
       channel.port1.onmessage = ({ data }) => {
         if (data.type !== 'request') return;
         let result = { ok: true };
         if (data.method === 'workspace') {
           if (data.parameters.operation !== 'load') window.savedWrites++;
-          if(data.parameters.operation === 'save-edits') {
+          if (data.parameters.operation === 'save-edits') {
             window.fixtureEdits = data.parameters.report.edits;
-            result = {saved:true,requestId:data.parameters.requestId,version:++window.fixtureEditVersion};
-          } else result = { version: 0, editVersion:window.fixtureEditVersion, report: {edits:window.fixtureEdits}, scope: { key: 'province-fixture-scope', base: '' } };
+            result = {
+              saved: true,
+              requestId: data.parameters.requestId,
+              version: ++window.fixtureEditVersion,
+            };
+          } else
+            result = {
+              version: 0,
+              editVersion: window.fixtureEditVersion,
+              report: { edits: window.fixtureEdits },
+              scope: { key: 'province-fixture-scope', base: '' },
+            };
         }
         if (data.method === 'sql') {
           const id = data.parameters.queryId,
@@ -159,9 +187,7 @@ test('province tab renders all three document tables and lazily caches distinct 
   await expect(panel.locator('table')).toHaveCount(3);
   await expect(panel.getByRole('heading', { name: '省区作废率' })).toBeVisible();
   await expect(panel.getByRole('heading', { name: '省区改单率' })).toBeVisible();
-  await expect(
-    panel.getByRole('heading', { name: '省区改单和作废综合排名 TOP10' }),
-  ).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '省区改单和作废综合排名 TOP10' })).toBeVisible();
   await expect(panel.locator('table').nth(0).locator('tbody tr')).toHaveCount(2);
   await expect(panel.locator('table').nth(0).locator('tbody tr').first()).toContainText('10.00%');
   await expect(panel.locator('table').nth(2).locator('tbody tr').first()).toContainText('13.00%');
@@ -202,7 +228,9 @@ test('province tab renders all three document tables and lazily caches distinct 
       .evaluate((element) => element.scrollWidth > element.clientWidth),
   );
   assert.equal(await page.evaluate(() => window.savedWrites), 0);
-  await expect(panel.getByRole('heading', {name:'省区未达成项：原因分析与改善措施'})).toBeVisible();
+  await expect(
+    panel.getByRole('heading', { name: '省区未达成项：原因分析与改善措施' }),
+  ).toBeVisible();
   await panel.locator('[data-wb-add-unmet="province"]').click();
   const option = await page.locator('#wbUnmetEntity option').nth(1).getAttribute('value');
   await page.locator('#wbUnmetEntity').selectOption(option);
@@ -214,21 +242,34 @@ test('province tab renders all three document tables and lazily caches distinct 
   await panel.locator('[data-wb-edit-unmet]').click();
   await expect(page.locator('#wbUnmetAddTitle')).toHaveText('编辑省区未达成项');
   await page.keyboard.press('Escape');
-  await page.getByRole('tab', {name:'基地维度达成分析', exact:true}).click();
+  await page.getByRole('tab', { name: '基地维度达成分析', exact: true }).click();
   await tab.click();
   await expect(panel.locator('[data-wb-unmet-card]')).toContainText('省区联调');
-  await page.getByRole('tab', {name:'基地维度达成分析',exact:true}).click();
-  const importedCard = panel.locator('[data-wb-unmet-card]').filter({hasText:'郑州'});
+  await page.getByRole('tab', { name: '基地维度达成分析', exact: true }).click();
+  const importedCard = panel.locator('[data-wb-unmet-card]').filter({ hasText: '郑州' });
   await importedCard.locator('[data-wb-edit-unmet]').click();
   await page.locator('#wbUnmetTitleInput').fill('货龄改善跟进');
   await page.locator('#wbUnmetAddSubmit').click();
   await expect(importedCard).toContainText('郑州基地｜货龄改善跟进');
-  await expect.poll(() => page.evaluate(() => window.fixtureEdits.overrides?.some(([key,value]) => key.includes(':import:') && value.title === '货龄改善跟进'))).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.fixtureEdits.overrides?.some(
+          ([key, value]) => key.includes(':import:') && value.title === '货龄改善跟进',
+        ),
+      ),
+    )
+    .toBe(true);
   await importedCard.locator('[data-wb-edit-unmet]').click();
   await expect(page.locator('#wbUnmetTitleInput')).toHaveValue('货龄改善跟进');
   await page.keyboard.press('Escape');
-  await page.evaluate(() => { window.dispatchEvent(new Event('gea-session-changing')); window.dispatchEvent(new Event('gea-session-changed')); });
-  await expect(panel.locator('[data-wb-unmet-card]').filter({hasText:'郑州'})).toContainText('郑州基地｜货龄改善跟进');
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('gea-session-changing'));
+    window.dispatchEvent(new Event('gea-session-changed'));
+  });
+  await expect(panel.locator('[data-wb-unmet-card]').filter({ hasText: '郑州' })).toContainText(
+    '郑州基地｜货龄改善跟进',
+  );
   await tab.click();
   assert.deepEqual(errors, []);
   if (process.env.PROVINCE_PREVIEW_SCREENSHOT) {
