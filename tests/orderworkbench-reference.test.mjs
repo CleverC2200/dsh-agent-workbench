@@ -188,7 +188,18 @@ test('order workbench reference interactions', async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(document.getElementById('wbDetailOverlay').hidden, true);
     assert.equal(window.detailRequests.length, 1);
-    assert.match(window.detailRequests[0].text, /operations-order-kpi-details.*作废率指标明细/);
+    assert.match(window.detailRequests[0].text, /请生成郑州基地作废率指标明细/);
+    assert.ok(window.detailRequests[0].text.length < 180);
+    assert.doesNotMatch(window.detailRequests[0].text, /页面指标快照|页面基地分组/);
+    assert.match(
+      window.detailRequests[0].context.metricDetails.agentPrompt,
+      /operations-order-kpi-details.*作废率指标明细/,
+    );
+    assert.match(window.detailRequests[0].context.metricDetails.agentPrompt, /页面指标快照/);
+    assert.equal(
+      window.detailRequests[0].context.metricDetails.displayText,
+      window.detailRequests[0].text,
+    );
     assert.equal(window.detailRequests[0].context.consumerCode, 'order');
     click('#periodPickerTrigger');
     assert.equal(document.getElementById('periodPickerMenu').hidden, false);
