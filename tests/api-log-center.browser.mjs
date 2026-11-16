@@ -6,7 +6,10 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 
-const hostSource = resolve('../dsh-gea-plugin/src/host/api-log.ts');
+const hostSource = resolve(
+  process.env.DSH_TEST_GEA_CHECKOUT ?? '../dsh-gea-plugin',
+  'src/host/api-log.ts',
+);
 const host = await build({
   entryPoints: [hostSource],
   bundle: true,
@@ -161,6 +164,23 @@ test('original log page opens Interface, Permission and Agent tabs without issui
     'true',
   );
   assert.equal(upstream.length, 1);
+});
+
+test('metadata-only sales details display and search the actual target origin', async (t) => {
+  const { page, capture, origin } = await openCenter(t);
+  await page.getByRole('button', { name: '实时', exact: true }).click();
+  await capture('sales-plan/plans', 'req-metadata-origin');
+  await page.getByRole('button', { name: '刷新', exact: true }).click();
+  const search = page.getByRole('textbox', { name: '搜索调用记录' });
+  await search.fill('req-metadata-origin');
+  await expect(page.locator('.gea-api-call-row')).toHaveCount(1);
+  await page.locator('.gea-api-call-row').click();
+  await expect(page.locator('.gea-api-request-line code')).toHaveText(
+    origin + ' /sales-plan/plans',
+  );
+  await expect(page.getByRole('complementary', { name: '调用详情' })).toContainText('登录环境');
+  await search.fill(origin);
+  await expect(page.locator('.gea-api-call-row')).toHaveCount(2);
 });
 
 test('request ID search retains buffer counts and HTTP 200 business denial stays outside transport failures', async (t) => {
