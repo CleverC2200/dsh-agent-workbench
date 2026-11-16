@@ -39,7 +39,8 @@ const quantityAdjustment = z.discriminatedUnion('kind', [
 const adjustmentHistory = z.strictObject({
   kind: z.enum(['categoryDemand', 'shares', 'quantities']),
   key: text,
-  action: z.enum(['set', 'undo']),
+  action: z.enum(['set', 'undo', 'archive']),
+  archivedAt: z.iso.datetime().optional(),
   value: numeric.nullable(),
   ...audit,
 });

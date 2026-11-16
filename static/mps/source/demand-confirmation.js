@@ -1,6 +1,6 @@
+import { buildMpsWorkflow } from './workflow-inputs.js';
 import { encodeLocalDrafts, decodeLocalDrafts, changeAdjustment } from './local-draft.js';
 import { createCategoryDemand } from './category-demand-view.js';
-import { buildCategoryDemand } from './category-demand.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
 import {
@@ -1493,14 +1493,33 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         products,
         productSource: draft.productSource.startsWith('demo') ? 'demo-edited' : 'local-edited',
       });
-    const categoryComputation = react.useMemo(
+    const workflowResult = react.useMemo(
       () =>
-        buildCategoryDemand(
+        buildMpsWorkflow(
           draft,
+          relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
+            ? relations
+            : null,
           shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
         ),
-      [draft, shipmentSnapshot, scopeGeneration],
+      [draft, relations, shipmentSnapshot, scopeGeneration],
     );
+    const categoryComputation = react.useMemo(() => {
+      const result = workflowResult.categoryComputation;
+      if (!(draft.adjustments?.quantities ?? []).some((entry) => entry.kind === 'base-sku'))
+        return result;
+      return {
+        ...result,
+        rows: result.rows.map((row) => {
+          const effective = workflowResult.categoryRows.find(
+            (entry) => entry.month === row.month && entry.category === row.category,
+          );
+          return effective?.adjusted
+            ? { ...row, quantity: effective.quantity, adjusted: true }
+            : row;
+        }),
+      };
+    }, [draft, workflowResult]);
     const calculatedRows = categoryComputation.rows.filter((row) => row.quantity !== null).length;
     const calculation = {
       status: !calculatedRows
@@ -2024,6 +2043,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(Workflow, {
             key: workflowScope,
             active: workflowActive,
+            result: workflowResult,
             evaluation,
             setEvaluation,
             syncInventoryTargets,
