@@ -45,10 +45,10 @@ test('同版本返回步骤保留独立筛选、层级展开和滚动位置', as
   const { frame } = await navigationPage(t);
   await selectStep(frame, '需求加工与收敛');
   const search = frame.getByLabel('搜索当前步骤', { exact: true });
-  await search.fill('产品甲');
   const base = frame.getByRole('button', { name: '基地 · 郑州', exact: true });
   await base.press('Enter');
   await expect(base).toHaveAttribute('aria-expanded', 'true');
+  await search.fill('产品甲');
   const disclosure = frame.getByText('来源诊断与缺项清单', { exact: true });
   await disclosure.click();
   const scroll = await frame.locator('.ap-board-body').evaluate((element) => {

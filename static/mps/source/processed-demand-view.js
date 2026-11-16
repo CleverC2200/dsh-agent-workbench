@@ -60,6 +60,13 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       'ProcessedDemand.expanded',
       () => new Set(),
     );
+    const [hierarchy, setHierarchy] = useStepViewField(
+      react,
+      view,
+      'ProcessedDemand.hierarchy',
+      'base',
+    );
+    const hierarchyId = react.useId();
     const [historyOpen, setHistoryOpen] = useStepViewField(
       react,
       view,
@@ -242,7 +249,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
     const indexed = react.useMemo(() => {
       const all = new Map();
       const children = new Map();
-      const bases = new Map();
+      const roots = new Map();
       const groupNames = new Map();
       for (const product of draft.products ?? []) {
         const key = JSON.stringify([product['大类'], product['物料组']]);
@@ -254,22 +261,29 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         if (!map.has(key)) map.set(key, []);
         map.get(key).push(row);
       };
-      const path = (row) => [
-        { kind: 'base', base: row.base },
-        { kind: 'base-category', base: row.base, category: row.category },
-        { kind: 'base-group', base: row.base, category: row.category, group: row.group },
-        {
-          kind: 'base-sku',
-          category: row.category,
-          group: row.group,
-          code: row.code,
-          base: row.base,
-        },
-      ];
+      const path = (row) =>
+        hierarchy === 'national'
+          ? [
+              { kind: 'national-category', category: row.category },
+              { kind: 'national-group', category: row.category, group: row.group },
+              { kind: 'national-sku', category: row.category, group: row.group, code: row.code },
+            ]
+          : [
+              { kind: 'base', base: row.base },
+              { kind: 'base-category', base: row.base, category: row.category },
+              { kind: 'base-group', base: row.base, category: row.category, group: row.group },
+              {
+                kind: 'base-sku',
+                category: row.category,
+                group: row.group,
+                code: row.code,
+                base: row.base,
+              },
+            ];
       for (const row of rows) for (const entry of path(row)) add(all, entry, row);
       for (const row of rows) {
         const entries = path(row);
-        bases.set(nodeKey(entries[0]), entries[0]);
+        roots.set(nodeKey(entries[0]), entries[0]);
         for (let index = 0; index < entries.length - 1; index++) {
           const parent = nodeKey(entries[index]);
           if (!children.has(parent)) children.set(parent, new Map());
@@ -288,8 +302,8 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         if (!forecasts.has(key)) forecasts.set(key, []);
         forecasts.get(key).push(row);
       }
-      return { all, children, bases, groupNames, shipment, forecasts };
-    }, [result, rows, draft.products]);
+      return { all, children, roots, groupNames, shipment, forecasts };
+    }, [result, rows, draft.products, hierarchy]);
     const sourceSummary = (source) => {
       const values = source.map((value) => (value == null || value === '' ? null : Number(value)));
       const available = values.filter((value) => value != null);
@@ -357,15 +371,16 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
     };
     const nodeName = (entry, data) => {
       if (entry.kind === 'base') return `基地 · ${entry.base || '基地缺失'}`;
-      if (entry.kind === 'base-category') return `大类 · ${entry.category}`;
-      if (entry.kind === 'base-group') {
+      if (entry.kind === 'base-category' || entry.kind === 'national-category')
+        return `大类 · ${entry.category}`;
+      if (entry.kind === 'base-group' || entry.kind === 'national-group') {
         const names = indexed.groupNames.get(JSON.stringify([entry.category, entry.group]));
         return `物料组 · ${[entry.group || '物料组缺失', names?.size === 1 ? [...names][0] : ''].filter(Boolean).join(' ')}`;
       }
       return `SKU · ${entry.code} ${data.full[0]?.name ?? ''}`;
     };
     const detailColumns = [
-      '基地 / 大类 / 物料组 / SKU',
+      hierarchy === 'national' ? '全国 / 大类 / 物料组 / SKU' : '基地 / 大类 / 物料组 / SKU',
       `M+1 ${months[0]} 计划提报`,
       `上一财年发货 ${result.comparisonSources.historyPeriod.start.slice(0, 7)}至${result.comparisonSources.historyPeriod.end.slice(0, 7)}`,
       `${result.shipmentMonth} 本月预估发货（可调整）`,
@@ -373,14 +388,15 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       `M+2 ${months[1]} 需求（可调整）`,
       `M+3 ${months[2]} 需求`,
     ];
+    const isExpanded = (key) => Boolean(filters.search) || expanded.has(key);
     const visible = [];
     const append = (entry, depth) => {
       const key = nodeKey(entry);
       visible.push({ entry, depth });
-      if (expanded.has(key))
+      if (isExpanded(key))
         for (const child of indexed.children.get(key)?.values() ?? []) append(child, depth + 1);
     };
-    for (const entry of indexed.bases.values()) append(entry, 0);
+    for (const entry of indexed.roots.values()) append(entry, 0);
     const detailRows = visible.map(({ entry, depth }) => {
       const key = nodeKey(entry);
       const data = nodeData(entry);
@@ -402,15 +418,16 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
                   'button',
                   {
                     className: 'wf-demand-toggle',
-                    'aria-label': entry.kind === 'base' ? name : `${entry.base} ${name}`,
-                    'aria-expanded': expanded.has(key),
+                    disabled: Boolean(filters.search),
+                    'aria-label': entry.kind === 'base' ? name : `${entry.base || '全国'} ${name}`,
+                    'aria-expanded': isExpanded(key),
                     onClick: () => toggle(key),
                   },
                   h(
                     'svg',
                     { viewBox: '0 0 12 12', width: 12, height: 12, 'aria-hidden': true },
                     h('path', {
-                      d: expanded.has(key) ? 'M2 4 L6 8 L10 4' : 'M4 2 L8 6 L4 10',
+                      d: isExpanded(key) ? 'M2 4 L6 8 L10 4' : 'M4 2 L8 6 L4 10',
                       fill: 'none',
                       stroke: 'currentColor',
                       strokeWidth: 1.5,
@@ -453,7 +470,10 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
               kind: 'shipment',
               keys: data.identities.map((row) => productKey(row.base, row.code)),
             },
-            disabled: currentShipment == null || !shipmentSnapshot?.prepareForecast,
+            disabled:
+              hierarchy === 'national' ||
+              currentShipment == null ||
+              !shipmentSnapshot?.prepareForecast,
             integer: true,
             min: null,
             format: number,
@@ -729,6 +749,18 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
             'span',
             { className: 'dc-card-note' },
             `${new Set(rows.map((row) => row.code)).size}个单品 · ${new Set(rows.map((row) => row.base)).size}个基地 · 单位：件`,
+          ),
+          h('label', { htmlFor: hierarchyId }, '需求层级视角'),
+          h(
+            'select',
+            {
+              id: hierarchyId,
+              value: hierarchy,
+              disabled: batch.active,
+              onChange: (event) => setHierarchy(event.target.value),
+            },
+            h('option', { value: 'base' }, '按基地查看'),
+            h('option', { value: 'national' }, '全国汇总查看'),
           ),
           h('button', { onClick: exportScope }, '下载当前范围需求'),
         ),
