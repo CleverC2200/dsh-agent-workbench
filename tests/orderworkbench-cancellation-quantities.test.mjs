@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { cancellationPartitionSql } from '../business/inventory-orderworkbench/cancellation-partitions.mjs';
 import {
   cancellationEvents,
   cancellationChangesSql,
@@ -50,7 +51,7 @@ test('sums customer changes then DMS last quantities then backup quantities, ret
   })['作废率'];
   assert.ok(Math.abs(metric.value - 3100 / 64) < 1e-10);
   assert.match(metric.note, /need_qty_origin/);
-  assert.match(metric.note, /有作废时间取canceltime.*lastshipmenttime归属周期/);
+  assert.match(metric.note, /有作废时间取canceltime.*lastshipmenttime归属周期.*wms_close_time/);
 });
 
 test('cancelled products use cancellation month; other products use their actual last shipment month', (t) => {
@@ -308,7 +309,7 @@ test('reported order can include the 304 known boxes using pickup fallback witho
   assert.equal(read().invalid, 1);
 });
 
-test('daily recovery supplies only the exact unique event and cannot restore stale hourly products or quantities', (t) => {
+test('daily recovery retains hourly quantities and supplements missing cancelled product lines', (t) => {
   const { read } = calculate(t, {
     hourly: [cancelled('O', { canceltime: null, need_qty_origin: 5 })],
     daily: [
@@ -318,9 +319,9 @@ test('daily recovery supplies only the exact unique event and cannot restore sta
     ],
   });
   const r = read();
-  assert.equal(r.numerator, 14);
-  assert.equal(r.denominator, 14);
-  assert.equal(r.records, 2);
+  assert.equal(r.numerator, 314);
+  assert.equal(r.denominator, 314);
+  assert.equal(r.records, 3);
 });
 
 test('recovers exact daily quantities using customer then DMS then backup after recovering individual missing hourly fields', (t) => {
@@ -354,9 +355,9 @@ test('recovers exact daily quantities using customer then DMS then backup after 
     ],
   });
   const row = read();
-  assert.equal(row.numerator, 167);
-  assert.equal(row.denominator, 167);
-  assert.equal(row.records, 8);
+  assert.equal(row.numerator, 467);
+  assert.equal(row.denominator, 467);
+  assert.equal(row.records, 9);
   assert.equal(row.invalid, 0);
 });
 
@@ -382,12 +383,14 @@ test('field recovery retains daily and hourly zero before lower priorities for a
       }),
     ],
   });
-  assert.equal(read().numerator, 57);
-  assert.equal(read().denominator, 57);
-  assert.equal(read().records, 5);
+  assert.equal(read().numerator, 1056);
+  assert.equal(read().denominator, 1056);
+  assert.equal(read().records, 6);
   const rows = db.prepare(sql(cancellationEvents)).all(params);
   for (const row of rows.filter(
-    (r) => !['known-client-first', 'known-dms-zero'].includes(r.cust_order_no),
+    (r) =>
+      r.executeorderlineno === 1 &&
+      !['known-client-first', 'known-dms-zero'].includes(r.cust_order_no),
   ))
     assert.equal(row.cancel_denominator, 0);
   assert.equal(rows.find((r) => r.cust_order_no === 'known-dms-zero').cancel_denominator, 50);
@@ -434,8 +437,17 @@ test('quantity recovery rejects conflicting daily tuples and never borrows anoth
     .prepare(sql(cancellationEvents))
     .all({ ...params, gea_p900: '' })
     .filter((row) => row.cust_code === 'C' && row.executeorderno === 'E-wrong-key');
-  assert.equal(target.length, 1);
-  assert.equal(target[0].invalid_cancel, 1);
+  assert.equal(target.length, 3);
+  assert.equal(
+    target.find((row) => row.executeorderlineno === 1 && row.material_code === 'S').invalid_cancel,
+    1,
+  );
+  assert.equal(
+    target
+      .filter((row) => row.invalid_cancel === 0)
+      .reduce((sum, row) => sum + row.cancel_denominator, 0),
+    20,
+  );
 });
 
 test('unpublished/missing short-transfer facts retain a nonzero line as unknown; known zero cannot affect the rate', (t) => {
@@ -768,4 +780,217 @@ test('reported E2600228660 counts cancellation quantities without the former sev
   );
   assert.equal(read().numerator, 2000);
   assert.equal(read().denominator, 2001);
+});
+
+test('reported E2600233296 recovers all cancelled daily lines without replacing the surviving unknown hourly line', (t) => {
+  const base = {
+    executeorderno: 'E2600233296',
+    header_addtime: '2026-09-29 14:37:24',
+    canceltime: '2026-11-02 09:48:33',
+  };
+  const values = [60, 50, 30, 50, 14, 50, 30, 0, 10, 0, 100, null];
+  const { db } = calculate(t, {
+    hourly: [cancelled('S00693316', { ...base, executeorderlineno: 14, need_qty_origin: null })],
+    daily: [
+      ...values.map((quantity, index) =>
+        cancelled('S00693316', {
+          ...base,
+          executeorderlineno: index + 1,
+          material_code: 'S' + index,
+          need_qty_origin: quantity,
+        }),
+      ),
+      cancelled('S00693316', { ...base, executeorderlineno: 14, need_qty_origin: null }),
+    ],
+  });
+  const row = db
+    .prepare(sql(cancellationChangesSql))
+    .all({ ...params, gea_p1: '2026-11-01', gea_p2: '2026-11-16' })[0];
+  assert.equal(row.sample_numerator, 394);
+  assert.equal(row.sample_denominator, 394);
+  assert.equal(row.records, 13);
+  assert.equal(row.invalid, 2);
+});
+
+test('WMS shipment fallback requires completed orders and real shipment, retains all products, and never uses OMS creation', (t) => {
+  const shipped = { orderstatus: 100, wms_close_time: '2026-11-15 07:52:23', qtyshipped: 1 };
+  const { db } = calculate(t, {
+    hourly: [
+      line('daily-fallback', { orderstatus: 100, need_qty_origin: 20 }),
+      line('whole-execution', { ...shipped, need_qty_origin: 10 }),
+      line('whole-execution', {
+        ...shipped,
+        executeorderlineno: 2,
+        material_code: 'unfilled-product',
+        qtyshipped: 0,
+        need_qty_origin: 30,
+      }),
+      line('not-shipped', { ...shipped, qtyshipped: 0, need_qty_origin: 100 }),
+      line('not-complete', { ...shipped, orderstatus: 10, need_qty_origin: 100 }),
+      line('created-only', { header_addtime: '2026-11-15', need_qty_origin: 100 }),
+    ],
+    daily: [
+      line('daily-fallback', { ...shipped, need_qty_origin: 20 }),
+      line('not-complete', { ...shipped, need_qty_origin: 100 }),
+    ],
+    shipments: [],
+  });
+  const row = db
+    .prepare(sql(cancellationChangesSql))
+    .all({ ...params, gea_p1: '2026-11-01', gea_p2: '2026-11-16' })[0];
+  assert.equal(row.denominator, 60);
+  assert.equal(row.records, 3);
+  assert.equal(row.invalid, 0);
+});
+
+test('confirmed trace shipment wins over later WMS completion while unshipped trace timestamps are rejected', (t) => {
+  const { db } = calculate(t, {
+    hourly: [
+      line('trace-priority', {
+        orderstatus: 100,
+        qtyshipped: 1,
+        wms_close_time: '2026-11-16 09:03:42',
+        need_qty_origin: 1821,
+      }),
+      line('dirty-trace', { orderstatus: 10, need_qty_origin: 100 }),
+      line('prior-month', {
+        orderstatus: 100,
+        qtyshipped: 1,
+        wms_close_time: '2026-11-01 10:00:50',
+        need_qty_origin: 1372,
+      }),
+    ],
+    shipments: [
+      {
+        executeorderno: 'E-trace-priority',
+        cust_code: 'C',
+        lastshipmenttime: '2026-11-15 07:52:10',
+      },
+      {
+        executeorderno: 'E-dirty-trace',
+        cust_code: 'C',
+        lastshipmenttime: '2026-11-15',
+        wms_ship_status: '10',
+        load_status: '未装车',
+      },
+      {
+        executeorderno: 'E-prior-month',
+        cust_code: 'C',
+        lastshipmenttime: '2026-10-31 11:34:56',
+      },
+    ],
+  });
+  const row = db
+    .prepare(sql(cancellationChangesSql))
+    .all({ ...params, gea_p1: '2026-11-01', gea_p2: '2026-11-16' })[0];
+  assert.equal(row.denominator, 1821);
+  assert.equal(row.records, 1);
+});
+
+test('upstream short-transfer labels cannot override distinct pickup points or a non-factory warehouse', (t) => {
+  const { db, read } = calculate(t, {
+    hourly: [
+      line('N417-keep', { warehouseid: 'N417', receive_wh: 'R', need_qty_origin: 1015 }),
+      line('N417-other', { warehouseid: 'N417', receive_wh: 'R', need_qty_origin: 514 }),
+      line('same-factory', {
+        warehouseid: '*',
+        warehouse_classify: '02',
+        receive_wh: 'R',
+        need_qty_origin: 10,
+      }),
+    ],
+  });
+  db.exec(
+    "INSERT INTO agents_scm_material_in_out_summary_d VALUES ('N417','34','20'); INSERT INTO dim_bas_warehouse VALUES ('N417','20'); ALTER TABLE agents_scm_execute_detail_hourly_d ADD COLUMN is_short_transfer; UPDATE agents_scm_execute_detail_hourly_d SET is_short_transfer='短拨'",
+  );
+  assert.equal(read().denominator, 1529);
+  assert.equal(read().records, 2);
+  assert.equal(read().invalid, 0);
+});
+
+test('partitioned card queries retain WMS shipment proof and reconcile with the unpartitioned Agent query', (t) => {
+  const { db } = calculate(t, {
+    daily: [
+      line('W0', {
+        orderstatus: 100,
+        wms_close_time: '2026-10-02',
+        qtyshipped: 1,
+        need_qty_origin: 10,
+      }),
+      line('W1', {
+        orderstatus: 100,
+        wms_close_time: '2026-10-02',
+        qtyshipped: 1,
+        need_qty_origin: 20,
+      }),
+    ],
+    shipments: [],
+  });
+  const partitions = [0, 1].map(
+    (part) =>
+      db
+        .prepare(
+          sql(cancellationPartitionSql(cancellationChangesSql, part)).replaceAll(
+            "RIGHT(COALESCE(executeorderno,''),1)",
+            "SUBSTR(COALESCE(executeorderno,''),-1)",
+          ),
+        )
+        .all(params)[0],
+  );
+  assert.equal(
+    partitions.reduce((sum, row) => sum + (row.denominator ?? 0), 0),
+    30,
+  );
+  assert.equal(db.prepare(sql(cancellationChangesSql)).all(params)[0].denominator, 30);
+});
+
+test('reported zero-quantity executions retain confirmed dispatch evidence rather than being treated as unshipped', (t) => {
+  const cases = [
+    ['E2600262287', 860],
+    ['E2600260837', 3],
+    ['E2600259275', 10],
+    ['E2600265875', 1],
+  ];
+  const { db } = calculate(t, {
+    hourly: [
+      ...cases.map(([id, quantity]) =>
+        line(id, {
+          executeorderno: id,
+          orderstatus: 100,
+          qtyshipped: 0,
+          need_qty_origin: quantity,
+        }),
+      ),
+      line('unconfirmed', {
+        orderstatus: 100,
+        qtyshipped: 0,
+        wms_close_time: '2026-11-04',
+        need_qty_origin: 500,
+      }),
+    ],
+    shipments: [
+      ...cases.map(([id]) => ({
+        executeorderno: id,
+        cust_code: 'C',
+        lastshipmenttime: null,
+        wms_order_close_time: '2026-11-04 12:20:32',
+        wms_ship_status: '99',
+        load_status: '装车完成',
+      })),
+      {
+        executeorderno: 'E-unconfirmed',
+        cust_code: 'C',
+        lastshipmenttime: null,
+        wms_order_close_time: '2026-11-04',
+        wms_ship_status: '10',
+        load_status: '未装车',
+      },
+    ],
+  });
+  const row = db
+    .prepare(sql(cancellationChangesSql))
+    .all({ ...params, gea_p1: '2026-11-01', gea_p2: '2026-11-16' })[0];
+  assert.equal(row.denominator, 874);
+  assert.equal(row.records, 4);
+  assert.equal(row.invalid, 0);
 });
