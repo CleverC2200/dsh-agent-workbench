@@ -154,9 +154,8 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
     .locator('..')
     .evaluate((element) => ({ viewport: element.clientWidth, content: element.scrollWidth }));
   assert.ok(width.content <= width.viewport + 1, JSON.stringify(width));
-  await page.screenshot({
-    path: '/Users/synear/Documents/ChatGPT/插件拆分/.scratch/mps-report-20261116/evidence/phase2-06/leaf-national.png',
-  });
+  if (process.env.MPS06_EVIDENCE_DIR)
+    await page.screenshot({ path: `${process.env.MPS06_EVIDENCE_DIR}/leaf-national.png` });
   const saved = await page.evaluate(() => window.readView());
   const draft = saved.localDrafts.drafts.find((row) => row.id === saved.localDrafts.selected);
   assert.equal(draft.adjustments.categoryDemand.length, 0);
