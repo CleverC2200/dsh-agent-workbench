@@ -73,6 +73,12 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       'ProcessedDemand.historyOpen',
       false,
     );
+    const restoreTableScroll = react.useCallback(
+      (element) => {
+        if (element) element.scrollLeft = view.get()['ProcessedDemand.scrollLeft'] ?? 0;
+      },
+      [view],
+    );
     const quantities = draft.adjustments?.quantities ?? [];
     const toggle = (key) => {
       setExpanded((previous) => {
@@ -661,6 +667,9 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         tabIndex: 0,
         role: 'region',
         'aria-label': '加工后的需求横向滚动区',
+        ref: restoreTableScroll,
+        onScroll: (event) =>
+          view.update({ 'ProcessedDemand.scrollLeft': event.currentTarget.scrollLeft }),
       },
       h(
         'table',

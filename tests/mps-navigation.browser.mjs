@@ -17,10 +17,10 @@ const emptySource = ({ queryId }) => ({
 const selectStep = (frame, title) =>
   frame.locator('.ap-page-tab').filter({ hasText: title }).click();
 
-async function navigationPage(t, connected = false) {
+async function navigationPage(t, connected = false, width = 1200) {
   const source = connected ? await mpsPage(t, config, emptySource) : null;
   const page = source?.page ?? (await authorPage(t));
-  if (!connected) await page.evaluate(() => window.openAuthor('mps', 1200));
+  if (!connected) await page.evaluate((width) => window.openAuthor('mps', width), width);
   const frame = page.frameLocator('iframe');
   await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
     name: '产品.csv',
@@ -40,6 +40,24 @@ async function navigationPage(t, connected = false) {
   });
   return { page, frame, calls: source?.calls, month };
 }
+
+test('窄屏加工表切步返回恢复横向位置，新版本从起点浏览', async (t) => {
+  const { frame } = await navigationPage(t, false, 720);
+  await selectStep(frame, '需求加工与收敛');
+  const area = frame.getByRole('region', { name: '加工后的需求横向滚动区', exact: true });
+  const left = await area.evaluate((element) => {
+    element.scrollLeft = 200;
+    return element.scrollLeft;
+  });
+  assert.ok(left > 0);
+  await selectStep(frame, '约束与配置');
+  await selectStep(frame, '需求加工与收敛');
+  await expect.poll(() => area.evaluate((element) => element.scrollLeft)).toBe(left);
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  const dialog = frame.getByRole('dialog', { name: '新建评估版本' });
+  await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await expect.poll(() => area.evaluate((element) => element.scrollLeft)).toBe(0);
+});
 
 test('同版本返回步骤保留独立筛选、层级展开和滚动位置', async (t) => {
   const { frame } = await navigationPage(t);
