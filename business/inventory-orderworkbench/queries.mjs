@@ -16,6 +16,7 @@ import {
   amendmentMetricContract,
   amendmentReductionSql,
   skuAmendmentEventsSql,
+  provinceAmendmentOrderCountSql,
 } from './sku-amendments.mjs';
 import { missingPlanPolicySql, selectedPlanSql } from './plan-policy.mjs';
 
@@ -388,6 +389,12 @@ export const workbenchQueries = {
 export function addWorkbenchQueries(config) {
   const definitions = {
     ...workbenchQueries,
+    'province.amendment.orders': {
+      scoped: true,
+      keys: ['region', 'province'],
+      columns: ['region', 'province', 'changed_orders'],
+      sql: provinceAmendmentOrderCountSql(),
+    },
     'orders.customers': {
       ...workbenchQueries.orders,
       keys: [...workbenchQueries.orders.keys, 'customer', 'region', 'province'],
