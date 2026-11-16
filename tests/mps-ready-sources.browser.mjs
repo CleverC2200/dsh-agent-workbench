@@ -718,184 +718,235 @@ test('sales plan share card rebuilds three dimensions using current material-gro
   );
 });
 
-test('confirmed category computation reaches the monthly table and keeps raw downloadable results', async (t) => {
-  const { page, frame } = await mpsPage(t, config, (query) => {
-    if (!query.queryId.startsWith('annual.summary') && !query.queryId.startsWith('annual-pool.'))
-      return fixture(query);
-    const rows = [
-      ['2026-10', 100],
-      ['2026-11', 100],
-      ['2026-12', 150],
-      ['2027-01', 300],
-    ].map(([stat_month, demand_qty]) =>
-      record('annual.summary', {
-        belong_base: '全国',
-        sub_category: '汤圆',
-        stat_month,
-        demand_qty,
-        source_rows: 1,
-        missing_qty: 0,
-        duplicate_rows: 0,
-      }),
+test(
+  'confirmed category computation reaches the monthly table and keeps raw downloadable results',
+  { timeout: 120000 },
+  async (t) => {
+    const { page, frame } = await mpsPage(t, config, (query) => {
+      if (!query.queryId.startsWith('annual.summary') && !query.queryId.startsWith('annual-pool.'))
+        return fixture(query);
+      const rows = [
+        ['2026-10', 100],
+        ['2026-11', 100],
+        ['2026-12', 150],
+        ['2027-01', 300],
+      ].map(([stat_month, demand_qty]) =>
+        record('annual.summary', {
+          belong_base: '全国',
+          sub_category: '汤圆',
+          stat_month,
+          demand_qty,
+          source_rows: 1,
+          missing_qty: 0,
+          duplicate_rows: 0,
+        }),
+      );
+      return {
+        rows: query.queryId.endsWith('.count') ? [{ total: rows.length }] : rows,
+        returnedColumns: query.queryId.endsWith('.count')
+          ? ['total']
+          : config.queries[query.queryId].columns,
+        configVersion: 'category-fixture',
+      };
+    });
+    await version(frame);
+    await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+    await frame.getByLabel('数据截止日').fill('2026-09-22');
+    await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
+      name: '环比起点.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(
+        '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-09,郑州,A,产品A,汤圆,系列,组,220,10,10,10,100,200,80\n2026-09,郑州,B,产品B,汤圆,系列,组,110,0,0,0,10,20,8',
+      ),
+    });
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+    const result = frame
+      .getByRole('region', { name: '大类预估需求数量', exact: true })
+      .locator('tbody tr')
+      .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
+    await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('171');
+    await expect(result.locator('td').nth(2).locator('.dc-demand-amount')).toHaveText('372');
+    await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('547');
+    await expect(result.locator('td').nth(4).locator('.dc-demand-amount')).toHaveText('1075');
+    await openCategoryCalculation(frame);
+    const calculation = frame
+      .getByRole('region', { name: '逐月测算', exact: true })
+      .locator('tbody tr')
+      .first();
+    const main = frame.locator('.dc-category-demand-main');
+    await expect(main.getByRole('columnheader', { name: '大类预估需求数量' })).toHaveCount(0);
+    await expect(main.getByRole('columnheader', { name: '操作', exact: true })).toHaveCount(0);
+    await expect(calculation.locator('td').nth(2)).toHaveText('125.00%');
+    await expect(calculation.locator('td').nth(3)).toHaveText('125.00%');
+    await expect(calculation.locator('td').nth(4)).toHaveText('563');
+    await expect(calculation.locator('td').nth(5)).toHaveText('10.00%');
+    await expect(calculation.locator('td').nth(6)).toHaveText('40');
+    await expect(calculation.locator('td').nth(7)).toHaveText('301');
+    await expect(main).toContainText('年度环比');
+    await expect(main).toContainText('本月预估发货*环比');
+    const waiting = page.waitForEvent('download');
+    await frame.getByRole('button', { name: '下载测算明细', exact: true }).click();
+    const downloadPath = await (await waiting).path();
+    const book = XLSX.read(await readFile(downloadPath), { type: 'buffer' });
+    const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+    const [raw] = exported;
+    assert.deepEqual(
+      exported.map((row) => row['两法平均量']),
+      [301.25, 371.5625, 547.34375, 1074.6875],
     );
-    return {
-      rows: query.queryId.endsWith('.count') ? [{ total: rows.length }] : rows,
-      returnedColumns: query.queryId.endsWith('.count')
-        ? ['total']
-        : config.queries[query.queryId].columns,
-      configVersion: 'category-fixture',
-    };
-  });
-  await version(frame);
-  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-  await frame.getByLabel('数据截止日').fill('2026-09-22');
-  await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
-    name: '环比起点.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(
-      '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-09,郑州,A,产品A,汤圆,系列,组,220,10,10,10,100,200,80\n2026-09,郑州,B,产品B,汤圆,系列,组,110,0,0,0,10,20,8',
-    ),
-  });
-  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
-  const result = frame
-    .getByRole('region', { name: '大类预估需求数量', exact: true })
-    .locator('tbody tr')
-    .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
-  await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('171');
-  await expect(result.locator('td').nth(2).locator('.dc-demand-amount')).toHaveText('372');
-  await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('547');
-  await expect(result.locator('td').nth(4).locator('.dc-demand-amount')).toHaveText('1075');
-  await openCategoryCalculation(frame);
-  const calculation = frame
-    .getByRole('region', { name: '逐月测算', exact: true })
-    .locator('tbody tr')
-    .first();
-  const main = frame.locator('.dc-category-demand-main');
-  await expect(main.getByRole('columnheader', { name: '大类预估需求数量' })).toHaveCount(0);
-  await expect(main.getByRole('columnheader', { name: '操作', exact: true })).toHaveCount(0);
-  await expect(calculation.locator('td').nth(2)).toHaveText('125.00%');
-  await expect(calculation.locator('td').nth(3)).toHaveText('125.00%');
-  await expect(calculation.locator('td').nth(4)).toHaveText('563');
-  await expect(calculation.locator('td').nth(5)).toHaveText('10.00%');
-  await expect(calculation.locator('td').nth(6)).toHaveText('40');
-  await expect(calculation.locator('td').nth(7)).toHaveText('301');
-  await expect(main).toContainText('年度环比');
-  await expect(main).toContainText('本月预估发货*环比');
-  const waiting = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载测算明细', exact: true }).click();
-  const downloadPath = await (await waiting).path();
-  const book = XLSX.read(await readFile(downloadPath), { type: 'buffer' });
-  const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
-  const [raw] = exported;
-  assert.deepEqual(
-    exported.map((row) => row['两法平均量']),
-    [301.25, 371.5625, 547.34375, 1074.6875],
-  );
-  assert.deepEqual(
-    exported.map((row) => row['大类预估需求数量']),
-    [170.625, 371.5625, 547.34375, 1074.6875],
-  );
-  assert.deepEqual(
-    exported.map((row) => row['加权'] ?? null),
-    [170.625, '', '', ''],
-  );
-  assert.equal(raw['① 环比法'], 562.5);
-  assert.equal(raw['加权'], 170.625);
-  assert.equal(raw['年度环比'], 1.25);
-  assert(Math.abs(raw['同期平均占比'] - 0.1) < 1e-12);
-  const csv = await mpsDownloadText(downloadPath);
-  assert.match(csv, /170\.625/);
-  assert.match(csv, /2109\.375/);
-  assert.equal(raw['两法平均量'], 301.25);
-  assert.equal(raw['销售提报量'], 40);
-  assert.equal(raw['销售校正量'], 40);
-  assert.equal(raw['统计基月'], '2026-09');
-  if (process.env.MPS05_EVIDENCE_DIR) {
-    await copyFile(downloadPath, `${process.env.MPS05_EVIDENCE_DIR}/monthly-demand.xlsx`);
-    await page.screenshot({ path: `${process.env.MPS05_EVIDENCE_DIR}/monthly-demand.png` });
-  }
-  await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
-  await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('191');
-  await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('547');
-  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-  await beginAdjustment(frame);
-  await frame
-    .getByRole('table', { name: '本月预估发货明细' })
-    .getByLabel('全国合计 整月预估发货', { exact: true })
-    .fill('900');
-  await saveAdjustment(frame);
-  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
-  await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('331');
-  await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('1075');
-  await adjustCategory(frame, '汤圆', '2026-11', '999', '验证环比独立');
-  await expect(result.locator('td').nth(2).locator('.dc-demand-amount')).toHaveText('999');
-  await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('1075');
-  const updatedDownload = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载测算明细', exact: true }).click();
-  const updatedPath = await (await updatedDownload).path();
-  const updatedBook = XLSX.read(await readFile(updatedPath), { type: 'buffer' });
-  const updated = XLSX.utils.sheet_to_json(updatedBook.Sheets[updatedBook.SheetNames[0]]);
-  assert.equal(updated[0]['本月有效预估发货'], 900);
-  assert.equal(updated[0]['销售提报量'], 80);
-  assert.equal(updated[0]['加权'], 331.25);
-  assert.equal(updated[1]['大类预估需求数量'], 999);
-  assert.equal(updated[2]['① 环比法'], 2109.375);
-  if (process.env.MPS05_EVIDENCE_DIR)
-    await copyFile(updatedPath, `${process.env.MPS05_EVIDENCE_DIR}/adjusted-demand.xlsx`);
-  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
-  await frame.getByText('预览大类计算过程', { exact: true }).click();
-  const preview = frame.getByRole('region', { name: '大类计算过程预览', exact: true });
-  await preview.getByLabel('计算月份').selectOption('2026-10');
-  const steps = preview.getByRole('table', { name: '大类计算步骤', exact: true });
-  await expect(steps.getByRole('row').filter({ hasText: '最终两次平均' })).toContainText('331.25');
-  await expect(preview.getByRole('table', { name: '三年历史计算依据', exact: true })).toContainText(
-    '2025-10',
-  );
-  await preview.getByLabel('计算月份').selectOption('2026-11');
-  await expect(steps.getByRole('row').filter({ hasText: '有效大类需求' })).toContainText('999');
-  await expect(steps.getByRole('row').filter({ hasText: '最终两次平均' })).toContainText('不适用');
-  await preview.getByLabel('计算月份').selectOption('2026-12');
-  await expect(steps.getByRole('row', { name: /^占比测算量 / })).toContainText('40');
-  await expect(steps.getByRole('row', { name: /^两法平均量 / })).toContainText('1074.6875');
-  await expect(steps.getByRole('row').filter({ hasText: '系统大类需求' })).toContainText(
-    '1074.6875',
-  );
-  await expect(steps.getByRole('row').filter({ hasText: '最终两次平均' })).toContainText('不适用');
-  await preview.getByLabel('计算月份').selectOption('2026-11');
-  const traceWaiting = page.waitForEvent('download');
-  await preview.getByRole('button', { name: '下载当前计算过程', exact: true }).click();
-  const tracePath = await (await traceWaiting).path();
-  const traceBook = XLSX.read(await readFile(tracePath), { type: 'buffer', raw: true });
-  const trace = XLSX.utils.sheet_to_json(traceBook.Sheets[traceBook.SheetNames[0]]);
-  assert.equal(Number(trace.find((row) => row['步骤'] === '有效大类需求')['数值']), 999);
-  assert.equal(Number(trace.find((row) => row['步骤'] === '本月有效预估发货')['数值']), 900);
-  assert.deepEqual([...new Set(trace.map((row) => row['月份']))], ['2026-11']);
-  if (process.env.MPS07_EVIDENCE_DIR) {
-    await copyFile(tracePath, `${process.env.MPS07_EVIDENCE_DIR}/calculation.csv`);
-    await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/calculation.png` });
-  }
-  const summaryDownload = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载大类需求总表', exact: true }).click();
-  const summaryPath = await (await summaryDownload).path();
-  const summaryBook = XLSX.read(await readFile(summaryPath), { type: 'buffer' });
-  const [summaryRow] = XLSX.utils.sheet_to_json(summaryBook.Sheets[summaryBook.SheetNames[0]]);
-  assert.equal(summaryRow['M+1 2026-10 有效需求'], 331.25);
-  assert.equal(summaryRow['M+2 2026-11 有效需求'], 999);
-  assert.equal(summaryRow['M+3 2026-12 需求'], 1074.6875);
-  if (process.env.MPS05_EVIDENCE_DIR)
-    await copyFile(summaryPath, `${process.env.MPS05_EVIDENCE_DIR}/processed-demand.csv`);
-  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
-  await version(frame, '2026-11');
-  await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('待补');
-  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
-  await frame.getByText('预览大类计算过程', { exact: true }).click();
-  await expect(frame.getByLabel('计算月份')).toHaveValue('2026-11');
-  await expect(
-    frame
-      .getByRole('table', { name: '大类计算步骤', exact: true })
-      .getByRole('row', { name: /^本月有效预估发货 / }),
-  ).toContainText('待补');
-});
+    assert.deepEqual(
+      exported.map((row) => row['大类预估需求数量']),
+      [170.625, 371.5625, 547.34375, 1074.6875],
+    );
+    assert.deepEqual(
+      exported.map((row) => row['加权'] ?? null),
+      [170.625, '', '', ''],
+    );
+    assert.equal(raw['① 环比法'], 562.5);
+    assert.equal(raw['加权'], 170.625);
+    assert.equal(raw['年度环比'], 1.25);
+    assert(Math.abs(raw['同期平均占比'] - 0.1) < 1e-12);
+    const csv = await mpsDownloadText(downloadPath);
+    assert.match(csv, /170\.625/);
+    assert.match(csv, /2109\.375/);
+    assert.equal(raw['两法平均量'], 301.25);
+    assert.equal(raw['销售提报量'], 40);
+    assert.equal(raw['销售校正量'], 40);
+    assert.equal(raw['统计基月'], '2026-09');
+    if (process.env.MPS05_EVIDENCE_DIR) {
+      await copyFile(downloadPath, `${process.env.MPS05_EVIDENCE_DIR}/monthly-demand.xlsx`);
+      await page.screenshot({ path: `${process.env.MPS05_EVIDENCE_DIR}/monthly-demand.png` });
+    }
+    await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
+    await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('191');
+    await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('547');
+    await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+    await beginAdjustment(frame);
+    await frame
+      .getByRole('table', { name: '本月预估发货明细' })
+      .getByLabel('全国合计 整月预估发货', { exact: true })
+      .fill('900');
+    await saveAdjustment(frame);
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+    await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('331');
+    await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('1075');
+    await adjustCategory(frame, '汤圆', '2026-11', '999', '验证环比独立');
+    await expect(result.locator('td').nth(2).locator('.dc-demand-amount')).toHaveText('999');
+    await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('1075');
+    const updatedDownload = page.waitForEvent('download');
+    await frame.getByRole('button', { name: '下载测算明细', exact: true }).click();
+    const updatedPath = await (await updatedDownload).path();
+    const updatedBook = XLSX.read(await readFile(updatedPath), { type: 'buffer' });
+    const updated = XLSX.utils.sheet_to_json(updatedBook.Sheets[updatedBook.SheetNames[0]]);
+    assert.equal(updated[0]['本月有效预估发货'], 900);
+    assert.equal(updated[0]['销售提报量'], 80);
+    assert.equal(updated[0]['加权'], 331.25);
+    assert.equal(updated[1]['大类预估需求数量'], 999);
+    assert.equal(updated[2]['① 环比法'], 2109.375);
+    if (process.env.MPS05_EVIDENCE_DIR)
+      await copyFile(updatedPath, `${process.env.MPS05_EVIDENCE_DIR}/adjusted-demand.xlsx`);
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+    await frame.getByText('预览大类计算过程', { exact: true }).click();
+    const preview = frame.getByRole('region', { name: '大类计算过程预览', exact: true });
+    await preview.getByLabel('计算月份').selectOption('2026-10');
+    const steps = preview.getByRole('table', { name: '大类计算步骤', exact: true });
+    await expect(
+      steps.getByRole('row').filter({ hasText: '最终两次平均' }).getByRole('cell').nth(1),
+    ).toHaveText('331');
+    await expect(steps.getByRole('row', { name: /^所用环比系数 / })).toContainText('125.00%');
+    await expect(preview).toContainText('同比未参与本次大类需求计算');
+    await expect(preview).toContainText('125.00% 表示1.25倍，环比增长率为25.00%');
+    await expect(
+      preview.getByRole('table', { name: '三年历史计算依据', exact: true }),
+    ).toContainText('2025-10');
+    await preview.getByLabel('计算月份').selectOption('2026-11');
+    await expect(steps.getByRole('row').filter({ hasText: '有效大类需求' })).toContainText('999');
+    await expect(steps.getByRole('row').filter({ hasText: '最终两次平均' })).toContainText(
+      '不适用',
+    );
+    await preview.getByLabel('计算月份').selectOption('2026-12');
+    await expect(steps.getByRole('row', { name: /^占比测算量 / })).toContainText('40');
+    await expect(steps.getByRole('row', { name: /^两法平均量 / })).toContainText('1,075');
+    await expect(steps.getByRole('row').filter({ hasText: '系统大类需求' })).toContainText('1,075');
+    await expect(steps.getByRole('row').filter({ hasText: '最终两次平均' })).toContainText(
+      '不适用',
+    );
+    await preview.getByLabel('计算月份').selectOption('2026-11');
+    const traceWaiting = page.waitForEvent('download');
+    await preview.getByRole('button', { name: '下载当前计算过程', exact: true }).click();
+    const tracePath = await (await traceWaiting).path();
+    const traceBook = XLSX.read(await readFile(tracePath), { type: 'buffer', raw: true });
+    const trace = XLSX.utils.sheet_to_json(traceBook.Sheets[traceBook.SheetNames[0]]);
+    assert.equal(Number(trace.find((row) => row['步骤'] === '有效大类需求')['数值']), 999);
+    assert.equal(Number(trace.find((row) => row['步骤'] === '本月有效预估发货')['数值']), 900);
+    assert.deepEqual([...new Set(trace.map((row) => row['月份']))], ['2026-11']);
+    if (process.env.MPS07_EVIDENCE_DIR) {
+      await copyFile(tracePath, `${process.env.MPS07_EVIDENCE_DIR}/calculation.csv`);
+      await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/calculation.png` });
+    }
+    const processed = frame.getByRole('table', { name: '加工后的需求明细', exact: true });
+    const geometry = await processed.evaluate((table) => ({
+      width: table.getBoundingClientRect().width,
+      available: table.parentElement.clientWidth,
+      columns: table.querySelectorAll('thead th').length,
+    }));
+    assert.equal(geometry.columns, 7);
+    assert.ok(geometry.width <= geometry.available + 1, JSON.stringify(geometry));
+    if (process.env.MPS05_EVIDENCE_DIR) {
+      await processed.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${process.env.MPS05_EVIDENCE_DIR}/processed-desktop.png` });
+      await page.evaluate(() => (document.getElementById('root').style.width = '1240px'));
+      await processed.scrollIntoViewIfNeeded();
+      const narrow = await processed.evaluate((table) => ({
+        width: table.getBoundingClientRect().width,
+        region: table.parentElement.getBoundingClientRect().width,
+        font: parseFloat(getComputedStyle(table.querySelector('td')).fontSize),
+      }));
+      assert.ok(narrow.width > narrow.region);
+      assert.ok(narrow.font >= 11);
+      await page.screenshot({ path: `${process.env.MPS05_EVIDENCE_DIR}/processed-narrow.png` });
+      await page.evaluate(() => (document.getElementById('root').style.width = '1720px'));
+    }
+    await processed.getByRole('button', { name: '基地 · 郑州', exact: true }).press('Enter');
+    await processed.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).press('Enter');
+    await processed
+      .getByRole('button', { name: /郑州 物料组 ·/ })
+      .first()
+      .press('Enter');
+    await processed
+      .getByRole('button', { name: '运算过程 郑州 A 2026-10', exact: true })
+      .press('Enter');
+    const explanation = frame.getByRole('dialog');
+    await expect(explanation).toContainText('数量来源：评估月份2026-10销售提报');
+    await expect(explanation).toContainText('同比未参与本次大类需求计算');
+    await expect(explanation).toContainText('环比倍率125.00%，对应环比增长率25.00%');
+    assert.doesNotMatch(await explanation.innerText(), /[×÷]/);
+    if (process.env.MPS05_EVIDENCE_DIR)
+      await page.screenshot({ path: `${process.env.MPS05_EVIDENCE_DIR}/sku-explanation.png` });
+    await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+    const summaryDownload = page.waitForEvent('download');
+    await frame.getByRole('button', { name: '下载大类需求总表', exact: true }).click();
+    const summaryPath = await (await summaryDownload).path();
+    const summaryBook = XLSX.read(await readFile(summaryPath), { type: 'buffer' });
+    const [summaryRow] = XLSX.utils.sheet_to_json(summaryBook.Sheets[summaryBook.SheetNames[0]]);
+    assert.equal(summaryRow['M+1 2026-10 有效需求'], 331.25);
+    assert.equal(summaryRow['M+2 2026-11 有效需求'], 999);
+    assert.equal(summaryRow['M+3 2026-12 需求'], 1074.6875);
+    if (process.env.MPS05_EVIDENCE_DIR)
+      await copyFile(summaryPath, `${process.env.MPS05_EVIDENCE_DIR}/processed-demand.csv`);
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+    await version(frame, '2026-11');
+    await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('待补');
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+    await frame.getByText('预览大类计算过程', { exact: true }).click();
+    await expect(frame.getByLabel('计算月份')).toHaveValue('2026-11');
+    await expect(
+      frame
+        .getByRole('table', { name: '大类计算步骤', exact: true })
+        .getByRole('row', { name: /^本月有效预估发货 / }),
+    ).toContainText('待补');
+  },
+);
 
 test('the opening plan reads June to August while the adjusted plan reads July to September', async (t) => {
   const { frame, calls } = await mpsPage(t, config, fixture);

@@ -356,11 +356,8 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       '基地 / 大类 / 物料组 / SKU',
       `M+1 ${months[0]} 计划提报`,
       `上一财年发货 ${result.comparisonSources.historyPeriod.start.slice(0, 7)}至${result.comparisonSources.historyPeriod.end.slice(0, 7)}`,
-      `${result.shipmentMonth} 本月预估发货（系统）`,
       `${result.shipmentMonth} 本月预估发货（可调整）`,
-      `M+1 ${months[0]} 模型预测`,
       `M+1 ${months[0]} 需求（可调整）`,
-      `M+2 ${months[1]} 模型预测`,
       `M+2 ${months[1]} 需求（可调整）`,
       `M+3 ${months[2]} 需求`,
     ];
@@ -432,7 +429,6 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         ),
         h('td', null, sourceCell(data.report)),
         h('td', null, sourceCell(data.history)),
-        h('td', null, sourceCell(data.shipmentSystem)),
         h(
           'td',
           null,
@@ -456,21 +452,31 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
           currentShipment != null &&
             sourceStatus(data.shipmentEffective) &&
             h('small', { className: 'wf-source-status' }, sourceStatus(data.shipmentEffective)),
+          h(
+            'div',
+            { className: 'wf-demand-reference' },
+            h('span', null, '系统预估'),
+            sourceCell(data.shipmentSystem),
+          ),
         ),
         ...months.flatMap((month, index) => {
           const selected = data.full.filter((row) => row.month === month);
           const value = sum(selected, 'demand');
           const system = sum(selected, 'systemDemand');
-          const cell = h(
+          return h(
             'td',
             { key: month },
             entry.kind === 'base-sku'
               ? controls({ ...entry, month, editorRow: key }, system, value, '', true)
               : sourceCell(sourceSummary(selected.map((row) => row.demand))),
+            index < 2 &&
+              h(
+                'div',
+                { className: 'wf-demand-reference' },
+                h('span', null, '模型预测'),
+                sourceCell(data.forecasts[index]),
+              ),
           );
-          return index < 2
-            ? [h('td', { key: `${month}-model` }, sourceCell(data.forecasts[index])), cell]
-            : [cell];
         }),
       );
       return rendered;
@@ -482,18 +488,35 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         'tr',
         { key: 'scope-total', className: 'wf-demand-row wf-demand-total' },
         h('th', { scope: 'row' }, scopeLabel),
-        ...[
-          total.report,
-          total.history,
-          total.shipmentSystem,
-          total.shipmentEffective,
-          ...months.flatMap((month, index) => {
-            const demand = sourceSummary(
-              rows.filter((row) => row.month === month).map((row) => row.demand),
-            );
-            return index < 2 ? [total.forecasts[index], demand] : [demand];
-          }),
-        ].map((value, index) => h('td', { key: index }, sourceCell(value))),
+        h('td', null, sourceCell(total.report)),
+        h('td', null, sourceCell(total.history)),
+        h(
+          'td',
+          null,
+          sourceCell(total.shipmentEffective),
+          h(
+            'div',
+            { className: 'wf-demand-reference' },
+            h('span', null, '系统预估'),
+            sourceCell(total.shipmentSystem),
+          ),
+        ),
+        ...months.map((month, index) =>
+          h(
+            'td',
+            { key: month },
+            sourceCell(
+              sourceSummary(rows.filter((row) => row.month === month).map((row) => row.demand)),
+            ),
+            index < 2 &&
+              h(
+                'div',
+                { className: 'wf-demand-reference' },
+                h('span', null, '模型预测'),
+                sourceCell(total.forecasts[index]),
+              ),
+          ),
+        ),
       ),
     );
     const missingRows = rows.flatMap((row) => {
@@ -604,6 +627,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       {
         className: 'dc-table-scroll wf-table-scroll wf-processed-scroll',
         tabIndex: 0,
+        role: 'region',
         'aria-label': '加工后的需求横向滚动区',
       },
       h(
