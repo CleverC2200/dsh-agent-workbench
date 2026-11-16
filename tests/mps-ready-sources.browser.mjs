@@ -859,6 +859,11 @@ test(
     await expect(
       preview.getByRole('table', { name: '三年历史计算依据', exact: true }),
     ).toContainText('2025-10');
+    const historyQuantities = await preview
+      .getByRole('table', { name: '三年历史计算依据', exact: true })
+      .locator('tbody tr td')
+      .allTextContents();
+    assert.ok(historyQuantities.every((value) => !value.includes('%')));
     await preview.getByLabel('计算月份').selectOption('2026-11');
     await expect(steps.getByRole('row').filter({ hasText: '有效大类需求' })).toContainText('999');
     await expect(steps.getByRole('row').filter({ hasText: '最终两次平均' })).toContainText(

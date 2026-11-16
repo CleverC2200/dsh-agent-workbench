@@ -231,7 +231,7 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
                     row.priorMonthQuantity,
                     row.priorYearQuantity,
                     row.annualQuantity,
-                  ].map(valueText),
+                  ].map((value) => valueText(value)),
                 ]),
               ),
             )

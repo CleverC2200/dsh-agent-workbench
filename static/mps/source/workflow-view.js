@@ -582,13 +582,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         expression +=
           row.splitBasis === 'history-only-zero-report'
             ? '整类提报合计为0，本类完全按历史占比拆分。'
-            : '拆分以销售提报占比和上一财年发货占比各占一半。';
+            : '系统拆分以销售提报占比和上一财年发货占比各占一半。';
         expression += `数量来源：评估月份${draft.month}销售提报，${history.start.slice(0, 7)}至${history.end.slice(0, 7)}实际发货。`;
         if (category) {
           const index = result.months.indexOf(row.month);
           expression += `大类需求采用${index < 2 ? '三年历史平均' : '年度需求'}环比倍率${percent(category.chain)}${category.chain == null ? '' : `，对应环比增长率${percent(category.chain - 1)}`}及同期平均占比${percent(category.share)}。同比未参与本次大类需求计算。`;
           if (category.adjusted) expression += '大类需求已采用人工调整。';
         }
+        if (row.share !== row.systemShare) expression += '有效占比含人工调整及剩余占比承接。';
         if (row.quantityAdjusted) expression += '当前SKU需求已采用人工调整。';
       }
       if (row.coefficientFallback?.length) expression += `；${row.coefficientFallback.join('；')}`;
