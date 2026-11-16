@@ -366,7 +366,10 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     ]);
     if (!reads.has(key)) {
       const pending = (
-        name.startsWith('changes.') && name !== 'changes.cancellation' && !options.periodQueries
+        options.retryTransient !== false &&
+        name.startsWith('changes.') &&
+        name !== 'changes.cancellation' &&
+        !options.periodQueries
           ? readWithTransientRetry(() => readSource(name, values, priority), signal)
           : readSource(name, values, priority)
       ).catch((error) => {
@@ -426,6 +429,12 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       options.groupedChanges &&
       name.startsWith('changes.') &&
       (options.groupDimensions ?? []).some((key) => !['base', 'item'].includes(key));
+    const baseOnlyCancellation =
+      options.groupedChanges &&
+      name === 'changes.cancellation' &&
+      options.groupDimensions?.length === 1 &&
+      options.groupDimensions[0] === 'base' &&
+      config.queries['workbench.changes.cancellation.base-groups'];
     const customerOrders = name === 'orders' && options.customerGroups;
     const originalDefinition =
         workbenchQueries[name] ??
@@ -446,9 +455,11 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
           ? '.summary'
           : '') +
         (options.groupedChanges && name.startsWith('changes.')
-          ? dimensionChanges
-            ? '.dimensions'
-            : '.groups'
+          ? baseOnlyCancellation
+            ? '.base-groups'
+            : dimensionChanges
+              ? '.dimensions'
+              : '.groups'
           : '');
     const summarized = logicalId.endsWith('.summary');
     const packeted =
@@ -508,7 +519,9 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
                           'region',
                           'province',
                         ]
-                      : ['base', 'item', 'kind', 'region', 'province']
+                      : baseOnlyCancellation
+                        ? ['base', 'kind', 'region', 'province']
+                        : ['base', 'item', 'kind', 'region', 'province']
                     : summarized
                       ? name === 'ontime'
                         ? ['base', 'invalid', 'ontime']
