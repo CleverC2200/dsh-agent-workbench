@@ -124,6 +124,9 @@ test('MPS shipment applies SKU, base and national adjustments to current effecti
     '2026-09,华东,C,产品C,汤圆,系列,组,110,0,0,0,10,20,8',
     '2026-09,濮阳,D,不计入全国,汤圆,系列,组,999,0,0,1,0,0,0',
   ]);
+  await beginAdjustment(frame);
+  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
+  await saveAdjustment(frame);
   await expandShipmentBase(frame, '郑州');
   await edit(table, '郑州 A 整月预估发货', 301);
   await expectShipment(table, '郑州 B 整月预估发货', '150');
