@@ -46,7 +46,7 @@ test('shared application verifies a selected GEA employee without returning app 
   const executor = createWarningExecutor(
     {
       environment: 'production',
-      geaBase: 'https://gea',
+      geaBase: 'https://gea/',
       feishu: { appId: 'cli_aaf07a77f7789bfb', appSecret: 'private-app-secret' },
     },
     fetcher,

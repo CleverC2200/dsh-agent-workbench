@@ -258,7 +258,7 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
   async function recipient(req, username) {
     if (!id(username)) invalid('飞书接收人账号无效');
     const response = await fetchImpl(
-      config.geaBase +
+      geaBase +
         '/sys/user/queryUserComponentData?' +
         new URLSearchParams({ username, pageNo: '1', pageSize: '20' }),
       {
