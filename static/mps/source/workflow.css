@@ -656,12 +656,14 @@
   top: 38px;
 }
 .wf-processed-table {
-  min-width: 1770px;
+  width: 100%;
+  min-width: 920px;
+  table-layout: fixed;
   font-variant-numeric: tabular-nums;
 }
 .wf-page .wf-processed-table th {
   white-space: normal;
-  min-width: 145px;
+  min-width: 0;
 }
 .wf-page .wf-processed-table thead th {
   height: 44px;
@@ -670,9 +672,9 @@
 .wf-page .wf-processed-table tr > :first-child {
   position: sticky;
   left: 0;
-  min-width: 330px;
-  max-width: 330px;
-  width: 330px;
+  min-width: 230px;
+  max-width: 230px;
+  width: 230px;
   z-index: 2;
   background: #fff;
   text-align: left;
@@ -725,8 +727,8 @@
   margin-left: 20px;
 }
 .wf-source-value {
-  display: flex;
-  align-items: center;
+  display: grid;
+  justify-items: end;
   gap: 4px;
 }
 .wf-source-status {
@@ -737,7 +739,7 @@
   color: #555d68;
 }
 .wf-page .wf-processed-table td:last-child {
-  min-width: 145px;
+  min-width: 0;
   max-width: none;
 }
 .wf-demand-toggle:focus-visible,
@@ -821,4 +823,36 @@
 .wf-page .wf-processed-table .wf-demand-total > * {
   background: var(--dc-head, #f7f8fa);
   font-weight: 600;
+}
+
+.wf-page .wf-processed-table th,
+.wf-page .wf-processed-table td {
+  padding: 10px 8px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.wf-source-value small,
+.wf-demand-reference {
+  color: #858c96;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.wf-demand-reference {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  margin-block-start: 8px;
+}
+.wf-calculation-basis {
+  display: grid;
+  gap: 8px;
+  margin-block: 12px;
+}
+.wf-calculation-basis p {
+  margin: 0;
+  line-height: 1.7;
+}
+.wf-page .wf-processed-table .mps-batch-input {
+  width: 100%;
+  min-width: 0;
 }

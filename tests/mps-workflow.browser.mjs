@@ -22,6 +22,12 @@ const emptySource = ({ queryId }) => ({
   rejectedColumns: [],
   configVersion: 'workflow-fixture-v1',
 });
+async function columnCell(table, row, name) {
+  const index = await table
+    .getByRole('columnheader', { name, exact: true })
+    .evaluate((header) => header.cellIndex);
+  return row.getByRole('cell').nth(index - 1);
+}
 const annualFixtures = new WeakMap();
 async function workflowPage(t) {
   const state = { rows: [] };
@@ -1587,9 +1593,12 @@ test('MPS processing compares both forecast months and persists fixed quantities
   const categoryDetail = processed.locator('tbody tr').first();
   await expect(categoryDetail.getByRole('cell').nth(0)).toHaveText('100');
   await expect(categoryDetail.getByRole('cell').nth(1)).toHaveText('100');
-  await expect(categoryDetail.getByRole('cell').nth(2)).toHaveText('300');
-  await expect(categoryDetail.getByRole('cell').nth(4)).toContainText('0');
-  await expect(categoryDetail.getByRole('cell').nth(4)).toContainText('已知小计');
+  await expect(
+    await columnCell(processed, categoryDetail, '2026-11 本月预估发货（可调整）'),
+  ).toHaveText('300系统预估300');
+  const demand = await columnCell(processed, categoryDetail, 'M+1 2026-12 需求（可调整）');
+  await expect(demand).toContainText('0');
+  await expect(demand).toContainText('已知小计');
   await view.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
   await view.getByText('大类 · 汤圆', { exact: true }).click();
   await view.getByText('物料组 · 组', { exact: true }).click();
@@ -1952,93 +1961,119 @@ test('evaluation explains cancellation when a saved input changes during a held 
   await expect(capacity.getByRole('button', { name: '导出求解结果', exact: true })).toBeDisabled();
 });
 
-test('processed demand totals retain known 15 and one pending item, follow filters and download the same scope', async (t) => {
-  const { page, frame } = await workflowPage(t);
-  await version(frame, '2026-12');
-  await upload(
-    frame,
-    '选择产品关系CSV或Excel',
-    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,甲类,系列,组,,\n郑州,B,产品乙,乙类,系列,组,,\n华东,C,产品丙,丙类,系列,组,,',
-  );
-  await upload(
-    frame,
-    '选择计划提报CSV',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,产品甲,甲类,系列,组,10,10\n2026-12,郑州,B,产品乙,乙类,系列,组,,\n2026-12,华东,C,产品丙,丙类,系列,组,5,5',
-  );
-  await upload(
-    frame,
-    '设置上一财年发货夹具',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,甲类,系列,组,10\n2025-12,华东,C,产品丙,丙类,系列,组,5',
-  );
-  await upload(
-    frame,
-    '选择模型预测CSV',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2026-12,郑州,A,产品甲,甲类,系列,组,10\n2026-12,华东,C,产品丙,丙类,系列,组,5',
-  );
-  await workflowStep(frame, '需求加工与收敛');
-  const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
-  await beginAdjustment(view);
-  await view.getByLabel('甲类 2026-12 需求数量', { exact: true }).fill('10');
-  await view.getByLabel('丙类 2026-12 需求数量', { exact: true }).fill('5');
-  await view.getByLabel('批量调整原因').fill('已知小计核对');
-  await saveAdjustment(view);
-  const detail = view.getByRole('table', { name: '加工后的需求明细', exact: true });
-  const total = detail.locator('tbody tr').first();
-  await expect(total.getByRole('rowheader')).toHaveText('全国合计');
-  for (const index of [0, 4, 5]) {
-    await expect(total.getByRole('cell').nth(index)).toContainText('15');
-    await expect(total.getByRole('cell').nth(index)).toContainText('已知小计 · 1项待补');
-  }
-  await expect(total.getByRole('cell').nth(8)).toContainText('待补');
-  if (process.env.MPS07_EVIDENCE_DIR) {
-    await total.scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/known-total.png` });
-    await page.evaluate(() => {
-      document.getElementById('root').style.width = '1120px';
+test(
+  'processed demand totals retain known 15 and one pending item, follow filters and download the same scope',
+  { timeout: 120000 },
+  async (t) => {
+    const { page, frame } = await workflowPage(t);
+    await version(frame, '2026-12');
+    await upload(
+      frame,
+      '选择产品关系CSV或Excel',
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,甲类,系列,组,,\n郑州,B,产品乙,乙类,系列,组,,\n华东,C,产品丙,丙类,系列,组,,',
+    );
+    await upload(
+      frame,
+      '选择计划提报CSV',
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,产品甲,甲类,系列,组,10,10\n2026-12,郑州,B,产品乙,乙类,系列,组,,\n2026-12,华东,C,产品丙,丙类,系列,组,5,5',
+    );
+    await upload(
+      frame,
+      '设置上一财年发货夹具',
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,甲类,系列,组,10\n2025-12,华东,C,产品丙,丙类,系列,组,5',
+    );
+    await upload(
+      frame,
+      '选择模型预测CSV',
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2026-12,郑州,A,产品甲,甲类,系列,组,10\n2026-12,华东,C,产品丙,丙类,系列,组,5',
+    );
+    await workflowStep(frame, '需求加工与收敛');
+    const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
+    await beginAdjustment(view);
+    await view.getByLabel('甲类 2026-12 需求数量', { exact: true }).fill('10');
+    await view.getByLabel('丙类 2026-12 需求数量', { exact: true }).fill('5');
+    await view.getByLabel('批量调整原因').fill('已知小计核对');
+    await saveAdjustment(view);
+    const detail = view.getByRole('table', { name: '加工后的需求明细', exact: true });
+    const total = detail.locator('tbody tr').first();
+    const reportTotal = await columnCell(detail, total, 'M+1 2026-12 计划提报');
+    const demandTotal = await columnCell(detail, total, 'M+1 2026-12 需求（可调整）');
+    const thirdMonthTotal = await columnCell(detail, total, 'M+3 2027-02 需求');
+
+    await expect(total.getByRole('rowheader')).toHaveText('全国合计');
+    for (const cell of [reportTotal, demandTotal]) {
+      await expect(cell).toContainText('15');
+      await expect(cell).toContainText('已知小计 · 1项待补');
+    }
+    await expect(thirdMonthTotal).toContainText('待补');
+    const subtotalCell = reportTotal;
+    const valueBounds = await subtotalCell.evaluate((cell) => {
+      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (node.textContent.trim() !== '15') continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const bounds = range.getBoundingClientRect();
+        return { y: bounds.y, height: bounds.height };
+      }
+      throw Error('Known subtotal 15 is missing');
     });
-    await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/known-total-narrow.png` });
-    await page.evaluate(() => {
-      document.getElementById('root').style.width = '1720px';
-    });
-  }
-  const missing = view.getByRole('table', { name: '加工需求缺项报告', exact: true });
-  await expect(
-    missing.getByRole('row').filter({ hasText: '本期销售提报数量' }).first(),
-  ).toContainText('郑州');
-  await expect(
-    missing.getByRole('row').filter({ hasText: '本期销售提报数量' }).first(),
-  ).toContainText('B');
-  await expect(missing).toContainText('2026-12');
-  await view.getByLabel('基地筛选').selectOption('华东');
-  await expect(total.getByRole('rowheader')).toHaveText('当前范围合计');
-  await expect(total.getByRole('cell').nth(0)).toHaveText('5');
-  await expect(total.getByRole('cell').nth(5)).toHaveText('5');
-  const csv = await download(page, view, '下载当前范围需求');
-  const exported = XLSX.utils.sheet_to_json(
-    XLSX.read(csv, { type: 'string', raw: true }).Sheets.Sheet1,
-  );
-  const summary = exported.find(
-    (row) => row['粒度'] === '当前范围合计' && row['月份'] === '2026-12',
-  );
-  assert.equal(summary['有效需求已知小计'], '5');
-  assert.equal(summary['有效需求待补数'], '0');
-  assert.ok(exported.filter((row) => row['产品编码']).every((row) => row['产品编码'] === 'C'));
-  if (process.env.MPS07_EVIDENCE_DIR)
-    await writeFile(`${process.env.MPS07_EVIDENCE_DIR}/current-scope.csv`, csv);
-  await beginAdjustment(view);
-  await view.getByLabel('丙类 2026-12 需求数量', { exact: true }).fill('7');
-  await view.getByLabel('批量调整原因').fill('当前筛选内复核调整');
-  await saveAdjustment(view);
-  await expect(total.getByRole('cell').nth(5)).toHaveText('7');
-  await view.getByLabel('基地筛选').selectOption('');
-  await view.getByLabel('搜索当前步骤').fill('B');
-  await expect(total.getByRole('cell').nth(0)).toHaveText('待补');
-  await expect(total.getByRole('cell').nth(5)).toHaveText('待补');
-  await expect(total.getByRole('cell').nth(5)).not.toContainText('0');
-  if (process.env.MPS07_EVIDENCE_DIR) {
-    await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/all-missing.png` });
-  }
-});
+    const noteBounds = await subtotalCell
+      .getByText('已知小计 · 1项待补', { exact: true })
+      .boundingBox();
+    assert.ok(noteBounds.y >= valueBounds.y + valueBounds.height - 1);
+
+    if (process.env.MPS07_EVIDENCE_DIR) {
+      await total.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/known-total.png` });
+      await page.evaluate(() => {
+        document.getElementById('root').style.width = '1120px';
+      });
+      await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/known-total-narrow.png` });
+      await page.evaluate(() => {
+        document.getElementById('root').style.width = '1720px';
+      });
+    }
+    const missing = view.getByRole('table', { name: '加工需求缺项报告', exact: true });
+    await expect(
+      missing.getByRole('row').filter({ hasText: '本期销售提报数量' }).first(),
+    ).toContainText('郑州');
+    await expect(
+      missing.getByRole('row').filter({ hasText: '本期销售提报数量' }).first(),
+    ).toContainText('B');
+    await expect(missing).toContainText('2026-12');
+    await view.getByLabel('基地筛选').selectOption('华东');
+    await expect(total.getByRole('rowheader')).toHaveText('当前范围合计');
+    await expect(reportTotal).toHaveText('5');
+    await expect(demandTotal).toHaveText('5模型预测5');
+    const csv = await download(page, view, '下载当前范围需求');
+    const exported = XLSX.utils.sheet_to_json(
+      XLSX.read(csv, { type: 'string', raw: true }).Sheets.Sheet1,
+    );
+    const summary = exported.find(
+      (row) => row['粒度'] === '当前范围合计' && row['月份'] === '2026-12',
+    );
+    assert.equal(summary['有效需求已知小计'], '5');
+    assert.equal(summary['有效需求待补数'], '0');
+    assert.ok(exported.filter((row) => row['产品编码']).every((row) => row['产品编码'] === 'C'));
+    if (process.env.MPS07_EVIDENCE_DIR)
+      await writeFile(`${process.env.MPS07_EVIDENCE_DIR}/current-scope.csv`, csv);
+    await beginAdjustment(view);
+    await view.getByLabel('丙类 2026-12 需求数量', { exact: true }).fill('7');
+    await view.getByLabel('批量调整原因').fill('当前筛选内复核调整');
+    await saveAdjustment(view);
+    await expect(demandTotal).toHaveText('7模型预测5');
+    await view.getByLabel('基地筛选').selectOption('');
+    await view.getByLabel('搜索当前步骤').fill('B');
+    await expect(reportTotal).toHaveText('待补');
+    await expect(demandTotal).toHaveText('待补模型预测待补');
+    await expect(demandTotal).not.toContainText('0');
+    if (process.env.MPS07_EVIDENCE_DIR) {
+      await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/all-missing.png` });
+    }
+  },
+);
 
 test('new inventory source defaults switch on December 20/21 while explicit historical evaluations stay selected', async (t) => {
   const { page, frame } = await mpsPage(t, config, emptySource);

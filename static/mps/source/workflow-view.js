@@ -91,10 +91,15 @@ const display = (value) => (value == null || value === '' ? '—' : String(value
 const numberText = (value, percent = false, decimals = 0) =>
   value == null
     ? '—'
-    : new Intl.NumberFormat('zh-CN', {
-        minimumFractionDigits: percent ? 2 : 0,
-        maximumFractionDigits: percent ? 2 : decimals,
-      }).format(percent ? value * 100 : value) + (percent ? '%' : '');
+    : new Intl.NumberFormat(
+        'zh-CN',
+        percent && value !== 0 && Math.abs(value * 100) < 0.01
+          ? { maximumSignificantDigits: 3 }
+          : {
+              minimumFractionDigits: percent ? 2 : 0,
+              maximumFractionDigits: percent ? 2 : decimals,
+            },
+      ).format(percent ? value * 100 : value) + (percent ? '%' : '');
 const reasons = (row, fields) => [
   ...new Set(fields.flatMap((field) => row.missing?.[field] ?? [])),
 ];
@@ -541,11 +546,12 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
     const explain = (row, field) => {
       const missing = row.missing?.[field] ?? [];
       let expression = missing.join('、');
-      const value = (item) => (item == null ? '未定义' : String(item));
+      const value = (item) => (item == null ? '待补' : numberText(item));
+      const percent = (item) => (item == null ? '待补' : numberText(item, true));
       if (field === 'reportShare' || field === 'historyShare') {
         const layer = row[field === 'reportShare' ? 'reportLayers' : 'historyLayers'];
         if (layer)
-          expression = `物料组 / 大类：${value(layer.groupQuantity)} ÷ ${value(layer.categoryQuantity)} = ${value(layer.groupShare)}；${coverage}SKU / 物料组：${value(layer.skuQuantity)} ÷ ${value(layer.groupQuantity)} = ${value(layer.skuShare)}；基地SKU / ${coverage}SKU：${value(layer.baseQuantity)} ÷ ${value(layer.skuQuantity)} = ${value(layer.baseShare)}；三层连乘：${value(layer.groupShare)} × ${value(layer.skuShare)} × ${value(layer.baseShare)} = ${value(layer.product)}`;
+          expression = `数量来源：物料组${value(layer.groupQuantity)}件，大类${value(layer.categoryQuantity)}件，${coverage}SKU ${value(layer.skuQuantity)}件，基地SKU ${value(layer.baseQuantity)}件。依次采用物料组占比${percent(layer.groupShare)}、SKU占比${percent(layer.skuShare)}、基地占比${percent(layer.baseShare)}，形成拆分系数${percent(layer.product)}`;
         if (
           field === 'reportShare' &&
           layer &&
@@ -554,46 +560,52 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
             (quantity) => quantity === null,
           )
         )
-          expression = `部分原始数量缺项，保留原值。按源计划占比与Top1剩余占比拆分：物料组占比 ${value(layer.groupShare)}；SKU占比 ${value(layer.skuShare)}；基地占比 ${value(layer.baseShare)}；有效提报系数 ${value(row.reportShare)}`;
+          expression = `部分原始数量缺项，保留原值。按源计划占比与Top1剩余占比拆分：物料组占比 ${percent(layer.groupShare)}；SKU占比 ${percent(layer.skuShare)}；基地占比 ${percent(layer.baseShare)}；有效提报系数 ${percent(row.reportShare)}`;
       }
       if ((field === 'reportShare' || field === 'historyShare') && row.layerMissing?.length)
         expression += `；${row.layerMissing.join('、')}`;
       if (field === 'systemShare')
         expression =
           row.splitBasis === 'history-only-zero-report'
-            ? `整类提报合计为0，按历史占比100%拆分：${value(row.historyShare)} × 100% = ${value(row.systemShare)}`
-            : `(${value(row.reportShare)} + ${value(row.historyShare)}) ÷ 2 = ${value(row.systemShare)}`;
+            ? `整类提报合计为0，采用历史占比${percent(row.historyShare)}拆分，系统占比${percent(row.systemShare)}`
+            : `提报占比${percent(row.reportShare)}与历史占比${percent(row.historyShare)}各占一半，系统占比${percent(row.systemShare)}`;
       if (field === 'share')
-        expression = `系统占比 ${value(row.systemShare)}；有效占比 ${value(row.share)}。${row.fallback ? 'Top1承接剩余占比，人工调整与系统基线分别保留。' : ''}`;
+        expression = `系统占比 ${percent(row.systemShare)}；有效占比 ${percent(row.share)}。${row.fallback ? 'Top1承接剩余占比，人工调整与系统基线分别保留。' : ''}`;
       if (field === 'demand') {
         const total = result.categoryRows.find(
           (item) => item.month === row.month && item.category === row.category,
         )?.quantity;
-        expression = `${value(total)} × ${value(row.share)} = ${value(row.demand)}`;
-        for (const [name, layer] of [
-          ['提报', row.reportLayers],
-          ['历史', row.historyLayers],
-        ]) {
-          if (layer)
-            expression += `；${name}三层占比：${value(layer.groupShare)} × ${value(layer.skuShare)} × ${value(layer.baseShare)} = ${value(layer.product)}`;
+        const category = result.categoryComputation.rows.find(
+          (item) => item.month === row.month && item.category === row.category,
+        );
+        const history = result.comparisonSources.historyPeriod;
+        expression = `${row.category}有效大类需求${value(total)}件，采用基地SKU有效占比${percent(row.share)}，分配需求${value(row.demand)}件。系统占比${percent(row.systemShare)}保留供核对。`;
+        expression +=
+          row.splitBasis === 'history-only-zero-report'
+            ? '整类提报合计为0，本类完全按历史占比拆分。'
+            : '系统拆分以销售提报占比和上一财年发货占比各占一半。';
+        expression += `数量来源：评估月份${draft.month}销售提报，${history.start.slice(0, 7)}至${history.end.slice(0, 7)}实际发货。`;
+        if (category) {
+          const index = result.months.indexOf(row.month);
+          expression += `大类需求采用${index < 2 ? '三年历史平均' : '年度需求'}环比倍率${percent(category.chain)}${category.chain == null ? '' : `，对应环比增长率${percent(category.chain - 1)}`}及同期平均占比${percent(category.share)}。同比未参与本次大类需求计算。`;
+          if (category.adjusted) expression += '大类需求已采用人工调整。';
         }
-        expression += `；系统占比 ${value(row.systemShare)}，有效占比 ${value(row.share)}`;
-        if (row.splitBasis === 'history-only-zero-report')
-          expression += '；整类提报合计为0，本类按历史占比100%拆分';
+        if (row.share !== row.systemShare) expression += '有效占比含人工调整及剩余占比承接。';
+        if (row.quantityAdjusted) expression += '当前SKU需求已采用人工调整。';
       }
       if (row.coefficientFallback?.length) expression += `；${row.coefficientFallback.join('；')}`;
       if (field === 'openingInventory')
         expression =
           row.month === result.months[0]
-            ? `${result.shipmentMonth}月末结存 = ${value(row.openingInventory)}`
-            : `承接上一月参考期末库存 = ${value(row.openingInventory)}，不代表超载后的实际库存`;
+            ? `${result.shipmentMonth}月末结存${value(row.openingInventory)}件，作为本期起点`
+            : `承接上一月参考期末库存${value(row.openingInventory)}件，不代表超载后的实际库存`;
       if (field === 'nextMonthDemand')
         expression =
           row.month === result.months[2]
-            ? `M+4大类有效需求 × M+3有效拆分系数 = ${value(row.nextMonthDemand)}，仅供目标库存参考，不生成M+4 SKU需求`
-            : `下一月有效SKU需求 = ${value(row.nextMonthDemand)}`;
+            ? `以M+4大类有效需求按M+3有效拆分系数分配，得到${value(row.nextMonthDemand)}件，仅供目标库存参考，不生成M+4 SKU需求`
+            : `采用下一月有效SKU需求${value(row.nextMonthDemand)}件`;
       if (field === 'targetInventory') {
-        expression = `${value(row.safetyDays)} × ${value(row.nextMonthDemand)} ÷ ${row.nextMonthDays} = ${value(row.targetInventory)}；源最终目标周转天数 ${value(row.turnoverPolicy.sourceDays)}天，人工补充及已采用规则生效后使用有效天数`;
+        expression = `按下一月需求${value(row.nextMonthDemand)}件和${row.nextMonthDays}个自然日折算日均需求，备足${value(row.safetyDays)}天，目标库存${value(row.targetInventory)}件。源最终目标周转天数${value(row.turnoverPolicy.sourceDays)}天，采用人工补充及已生效规则后的有效天数`;
       }
       if (field === 'targetInventory' && row.safetyDays === 0)
         expression =
@@ -601,11 +613,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
             ? '源目标周转天数待补，本轮临时按0天计算，目标库存为0；源缺项保留，补齐后重新评估'
             : '安全天数明确为0，目标库存为0，无需下一月需求';
       if (field === 'requiredProduction')
-        expression = `max(0, ${value(row.demand)} + ${value(row.targetInventory)} − ${value(row.openingInventory)}) = ${value(row.requiredProduction)}，需求推导参考`;
+        expression = `需求${value(row.demand)}件，期初库存${value(row.openingInventory)}件，需保留目标库存${value(row.targetInventory)}件。本期需补充生产${value(row.requiredProduction)}件，库存已能覆盖需求和目标库存时无需补充生产，仅供需求推导参考`;
       if (field === 'projectedClosing')
-        expression = `${value(row.openingInventory)} + ${value(row.requiredProduction)} − ${value(row.demand)} = ${value(row.projectedClosing)}，需求推导参考`;
+        expression = `期初库存${value(row.openingInventory)}件，补充生产${value(row.requiredProduction)}件并满足需求${value(row.demand)}件后，参考期末库存${value(row.projectedClosing)}件`;
       if (field === 'requiredProductionTons')
-        expression = `${value(row.requiredProduction)} × 明确维护的件吨系数 = ${value(row.requiredProductionTons)}`;
+        expression = `生产需求${value(row.requiredProduction)}件，按明确维护的件吨系数折算为${value(row.requiredProductionTons)}吨`;
       if (['reportShare', 'historyShare', 'systemShare', 'share', 'demand'].includes(field))
         expression += `；拆分系数来源为评估月份${draft.month}，同一套系数用于M+1至M+3`;
       if (missing.length) expression += `${expression ? '；' : ''}缺项：${missing.join('、')}`;
