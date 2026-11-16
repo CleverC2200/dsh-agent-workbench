@@ -121,6 +121,7 @@ export function createCategoryDemand(
     '月份',
     '系统需求数量',
     '大类预估需求数量',
+    '需求数量来源',
     '调整原因',
     '调整时间',
     '评估版本',
@@ -150,9 +151,6 @@ export function createCategoryDemand(
       (row) => !selectedCategory || row.category === selectedCategory,
     );
     const rows = result.rows.map((row, index) => {
-      const edit = draft.adjustments?.categoryDemand?.find(
-        (entry) => entry.month === row.month && entry.category === row.category,
-      );
       const missing = categoryDemandMissing(result, row);
       return {
         大类: row.category,
@@ -181,8 +179,9 @@ export function createCategoryDemand(
         计算口径: row.method,
         系统需求数量: row.systemQuantity ?? '',
         大类预估需求数量: row.quantity ?? '',
-        调整原因: edit?.reason ?? '',
-        调整时间: edit?.at ?? '',
+        需求数量来源: row.adjusted ? '基地SKU汇总，调整原因和时间见逐叶子明细' : '系统测算',
+        调整原因: '',
+        调整时间: '',
         缺项说明: missing.join('；'),
         操作: h(
           'div',
