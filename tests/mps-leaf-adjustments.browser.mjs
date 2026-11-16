@@ -8,26 +8,22 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('mps', 1200));
   let frame = page.frameLocator('iframe');
-  await frame
-    .getByLabel('选择产品关系CSV或Excel', { exact: true })
-    .setInputFiles({
-      name: '产品.csv',
-      mimeType: 'text/csv',
-      buffer: Buffer.from(
-        '基地,产品编码,产品名称,大类,系列,物料组,物料组名称,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,G1,物料组甲,,\n华东,A,产品甲,汤圆,系列甲,G1,物料组甲,,',
-      ),
-    });
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '产品.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,物料组名称,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,G1,物料组甲,,\n华东,A,产品甲,汤圆,系列甲,G1,物料组甲,,',
+    ),
+  });
   const selected = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
   const month = selected.match(/\d{4}-\d{2}/)[0];
-  await frame
-    .getByLabel('选择计划提报CSV', { exact: true })
-    .setInputFiles({
-      name: '提报.csv',
-      mimeType: 'text/csv',
-      buffer: Buffer.from(
-        `月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n${month},郑州,A,产品甲,汤圆,系列甲,G1,60,60\n${month},华东,A,产品甲,汤圆,系列甲,G1,40,40`,
-      ),
-    });
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: '提报.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      `月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n${month},郑州,A,产品甲,汤圆,系列甲,G1,60,60\n${month},华东,A,产品甲,汤圆,系列甲,G1,40,40`,
+    ),
+  });
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -110,6 +106,12 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
     ),
     40,
   );
+  assert.equal(
+    rows.find((row) => row['月份'] === month && row['基地'] === '郑州' && row['产品编码'] === 'A')[
+      '调整原因'
+    ],
+    '其他：合同调整复核',
+  );
   const fourth = new Date(`${month}-01T00:00:00Z`);
   fourth.setUTCMonth(fourth.getUTCMonth() + 3);
   const referenceMonth = fourth.toISOString().slice(0, 7);
@@ -142,6 +144,16 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   );
   await frame.getByLabel('需求层级视角', { exact: true }).selectOption('national');
   await expect(table.locator('tbody tr').first()).toContainText('90');
+  await expect(
+    table.getByRole('columnheader', {
+      name: `M+4 ${referenceMonth} 库存参考（可调整）`,
+      exact: true,
+    }),
+  ).toBeVisible();
+  const width = await table
+    .locator('..')
+    .evaluate((element) => ({ viewport: element.clientWidth, content: element.scrollWidth }));
+  assert.ok(width.content <= width.viewport + 1, JSON.stringify(width));
   await page.screenshot({
     path: '/Users/synear/Documents/ChatGPT/插件拆分/.scratch/mps-report-20261116/evidence/phase2-06/leaf-national.png',
   });
@@ -157,4 +169,8 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   await page.evaluate(async (seed) => window.openAuthor('mps', 1200, seed), saved);
   const restored = await page.evaluate(() => window.readView());
   assert.deepEqual(restored.localDrafts, saved.localDrafts);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  await expect(frame.getByRole('region', { name: '大类预估需求数量', exact: true })).toContainText(
+    '90',
+  );
 });

@@ -133,18 +133,10 @@ export const quantityAdjustmentKey = (entry) =>
   ]);
 export function changeAdjustment(adjustments, kind, input, undo = false) {
   const state = adjustments ?? emptyAdjustments();
-  const key =
-    kind === 'categoryDemand'
-      ? JSON.stringify([input.month, input.category])
-      : kind === 'quantities'
-        ? quantityAdjustmentKey(input)
-        : input.rowId;
-  const keyOf = (entry) =>
-    kind === 'categoryDemand'
-      ? JSON.stringify([entry.month, entry.category])
-      : kind === 'quantities'
-        ? quantityAdjustmentKey(entry)
-        : entry.rowId;
+  if (kind !== 'shares' && (kind !== 'quantities' || input.kind !== 'base-sku'))
+    throw Error('需求仅支持基地SKU和月份修正，历史上层记录请归档。');
+  const keyOf = kind === 'quantities' ? quantityAdjustmentKey : (entry) => entry.rowId;
+  const key = keyOf(input);
   const previous = (state[kind] ?? []).find((entry) => keyOf(entry) === key);
   if (undo && !previous) return state;
   const entry = undo
