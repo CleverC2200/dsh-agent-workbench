@@ -1,9 +1,10 @@
 import { expandShipmentBase } from './helpers/mps-shipment.mjs';
+import { workflowExportRows } from './helpers/mps-workflow-export.mjs';
 import { beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { mpsPage } from './helpers/mps-page.mjs';
 import { authorPage } from './helpers/author-page.mjs';
 
@@ -923,4 +924,167 @@ test('shipment national SKU preserves base adjustment sources, aggregate days an
     await table.getByRole('button', { name: '展开 全国合计', exact: true }).click();
     await page.screenshot({ path: process.env.MPS_SHIPMENT_SCREENSHOT, fullPage: true });
   }
+});
+
+test('shipment transfer plans keep blanks and zeros distinct and save leaf inventory into downloads and restored versions', async (t) => {
+  const { page, frame, table } = await shipment(t);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '产品.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品A,汤圆,系列,组,,\n郑州,B,产品B,汤圆,系列,组,,',
+    ),
+  });
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: '提报.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,产品A,汤圆,系列,组,100,100\n2026-10,郑州,B,产品B,汤圆,系列,组,100,100',
+    ),
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+
+  await upload(frame, [
+    '2026-09,郑州,A,产品A,汤圆,系列,组,220,10,10,10,100,200,80',
+    '2026-09,郑州,B,产品B,汤圆,系列,组,110,0,0,0,10,20,8',
+  ]);
+  await expect(
+    table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('待定');
+  for (const who of ['郑州', '郑州 汤圆', '郑州 汤圆 组'])
+    await table.getByRole('button', { name: `展开 ${who}`, exact: true }).press('Enter');
+  await beginAdjustment(frame);
+  await table.getByLabel('郑州 A 调入计划', { exact: true }).fill('50');
+  await table.getByLabel('郑州 A 调出计划', { exact: true }).fill('20');
+  await frame.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(
+    table.getByRole('button', { name: '郑州 A 调入计划 计算过程', exact: true }),
+  ).toHaveText('待定');
+  await beginAdjustment(frame);
+  await table.getByLabel('郑州 A 调入计划', { exact: true }).fill('50');
+  await table.getByLabel('郑州 A 调出计划', { exact: true }).fill('20');
+  await table.getByLabel('郑州 B 调入计划', { exact: true }).fill('0');
+  await table.getByLabel('郑州 B 调出计划', { exact: true }).fill('0');
+  await saveAdjustment(frame);
+  await expect(
+    table.getByRole('button', { name: '郑州 A 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('110');
+  await expect(
+    table.getByRole('button', { name: '郑州 B 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('-112');
+  await expect(
+    table.getByRole('button', { name: '全国合计 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('-2');
+  const csv = await exported(page, frame);
+  const { read, utils } = await import('xlsx-republish');
+  const records = utils.sheet_to_json(read(csv, { type: 'string', raw: true }).Sheets.Sheet1);
+  assert.deepEqual(
+    records.map((row) => [row['调入计划'], row['调出计划'], row['预计月末结存']]),
+    [
+      ['50', '20', '110'],
+      ['0', '0', '-112'],
+    ],
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const downstream = await workflowExportRows(frame);
+  assert.deepEqual(
+    downstream
+      .filter((row) => row['月份'] === '2026-10' && row['产品编码'])
+      .map((row) => [row['产品编码'], row['期初库存']]),
+    [
+      ['A', '110'],
+      ['B', '-112'],
+    ],
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  const saved = await page.evaluate(() => window.readView());
+  if (process.env.MPS_TRANSFER_EVIDENCE_DIR) {
+    await writeFile(`${process.env.MPS_TRANSFER_EVIDENCE_DIR}/shipment.csv`, csv);
+    await writeFile(
+      `${process.env.MPS_TRANSFER_EVIDENCE_DIR}/downstream.json`,
+      JSON.stringify(downstream, null, 2),
+    );
+    await writeFile(
+      `${process.env.MPS_TRANSFER_EVIDENCE_DIR}/restore.json`,
+      JSON.stringify(saved, null, 2),
+    );
+    await page.screenshot({
+      path: `${process.env.MPS_TRANSFER_EVIDENCE_DIR}/shipment.png`,
+      fullPage: true,
+    });
+  }
+  const otherMonth = structuredClone(saved);
+  otherMonth.localDrafts.drafts
+    .find((row) => row.id === otherMonth.localDrafts.selected)
+    .shipment.transferPlans.forEach((plan) => {
+      plan.month = '2026-08';
+    });
+  await page.evaluate((seed) => window.openAuthor('mps', 1200, seed), otherMonth);
+  await expect(
+    table.getByRole('button', { name: '全国合计 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('待定');
+  await page.evaluate((seed) => window.openAuthor('mps', 1200, seed), saved);
+  await expect(
+    frame
+      .getByRole('table', { name: '本月预估发货明细' })
+      .getByRole('button', { name: '全国合计 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('-2');
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
+  await dialog.getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await dialog.getByLabel('参考版本', { exact: true }).selectOption(saved.localDrafts.selected);
+  await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await frame.getByLabel('数据截止日').fill('2026-09-22');
+  await upload(frame, ['2026-09,郑州,A,产品A,汤圆,系列,组,220,10,10,10,100,200,80']);
+  await expect(
+    table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('待定');
+});
+
+test('shipment transfer bulk confirmation validates before saving and leaves cleared plans unknown', async (t) => {
+  const { page, frame, table } = await shipment(t);
+  await upload(frame, [
+    '2026-09,郑州,A,产品A,汤圆,系列,组,220,10,10,10,100,200,80',
+    '2026-09,郑州,B,产品B,汤圆,系列,组,110,0,0,0,10,20,8',
+  ]);
+  for (const who of ['郑州', '郑州 汤圆', '郑州 汤圆 组'])
+    await table.getByRole('button', { name: `展开 ${who}`, exact: true }).press('Enter');
+  await frame.getByLabel('搜索发货单品', { exact: true }).fill('A');
+  await beginAdjustment(frame);
+  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
+  await table.getByLabel('郑州 A 调入计划', { exact: true }).fill('-1');
+  await saveAdjustment(frame);
+  await expect(frame.getByRole('alert')).toContainText('不能小于0');
+  await table.getByLabel('郑州 A 调入计划', { exact: true }).fill('0');
+  await saveAdjustment(frame);
+  await expect(
+    table.getByRole('button', { name: '全国合计 调入计划 计算过程', exact: true }),
+  ).toHaveText('0');
+  await expect(
+    table.getByRole('button', { name: '全国合计 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('-32');
+  await beginAdjustment(frame);
+  await expect(table.getByLabel('全国合计 调入计划', { exact: true })).toHaveCount(0);
+  await frame.getByLabel('搜索发货单品', { exact: true }).fill('');
+  await table.getByLabel('郑州 B 调出计划', { exact: true }).fill('');
+  await saveAdjustment(frame);
+  await expect(
+    table.getByRole('button', { name: '郑州 B 调出计划 计算过程', exact: true }),
+  ).toHaveText('待定');
+  await expect(
+    table.getByRole('button', { name: '全国合计 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('80');
+  await expect(table.locator('tr.sp-total')).toContainText('部分汇总');
+  const csv = await exported(page, frame);
+  const { read, utils } = await import('xlsx-republish');
+  const records = utils.sheet_to_json(read(csv, { type: 'string', raw: true }).Sheets.Sheet1, {
+    defval: '',
+  });
+  assert.equal(records.find((row) => row['产品编码'] === 'B')['调出计划'], '');
+  assert.equal(records.find((row) => row['产品编码'] === 'B')['预计月末结存'], '');
+  assert.match(records.find((row) => row['产品编码'] === 'B')['缺失输入'], /调出计划/);
+  await frame.getByLabel('搜索发货单品', { exact: true }).fill('A');
+  assert.equal(await exported(page, frame), csv);
 });
