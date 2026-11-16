@@ -202,7 +202,7 @@ export function createShipment(
         controller.current?.abort();
       };
     }, [draft.id, draft.month, cutoff]);
-    const categories = react.useMemo(() => {
+    const dimensions = react.useMemo(() => {
       if (sourceKind !== 'business') return new Map();
       const products = ['loading', 'failed'].includes(draft.productsRead?.status)
         ? []
@@ -211,7 +211,7 @@ export function createShipment(
         sourceDimensions(
           sourceRows.map((row) => ({ 基地: row.base, 产品编码: row.code })),
           products,
-        ).map((row) => [JSON.stringify([row['基地'], row['产品编码']]), row['大类']]),
+        ).map((row) => [JSON.stringify([row['基地'], row['产品编码']]), row]),
       );
     }, [sourceKind, sourceRows, draft.products, draft.productsRead]);
     const deriveRows = (currentState) =>
@@ -219,6 +219,7 @@ export function createShipment(
         .filter((row) => row.month === month && bases.includes(row.base))
         .map((row) => {
           const derived = derive(row, passed, totalDays);
+          const dimension = dimensions.get(keyOf(row));
           const adjustment = currentState.values?.[keyOf(row)];
           const remainingEdit = currentState.remaining?.[row.base];
           const remaining = remainingEdit ? remainingEdit.values[keyOf(row)] : row.remaining;
@@ -228,7 +229,14 @@ export function createShipment(
             : null;
           return {
             ...derived,
-            ...(sourceKind === 'business' ? { category: categories.get(keyOf(row)) ?? '' } : {}),
+            ...(sourceKind === 'business'
+              ? {
+                  category: dimension?.['大类'] ?? '',
+                  group: dimension?.['物料组'] ?? '',
+                  groupName: dimension?.['物料组名称'] ?? '',
+                  dimensionIssue: dimension?.['缺项原因'] ?? '',
+                }
+              : {}),
             fin,
             remaining,
             inputRemaining: row.remaining,
@@ -245,7 +253,7 @@ export function createShipment(
         });
     const rows = react.useMemo(
       () => deriveRows(state),
-      [sourceRows, sourceKind, categories, month, passed, totalDays, state.values, state.remaining],
+      [sourceRows, sourceKind, dimensions, month, passed, totalDays, state.values, state.remaining],
     );
     const aggregate = (children, who) => {
       const inputs = Object.fromEntries(
@@ -670,6 +678,8 @@ export function createShipment(
         '发运速度来源',
         '发运速度',
         '预估待补原因',
+        '物料组名称',
+        '分类待补原因',
       ];
       downloadCsv(
         `MPS-${draft.month}-${draft.id}-发货与结存.csv`,
@@ -709,6 +719,8 @@ export function createShipment(
           发运速度来源: row.paceSource,
           发运速度: row.pace,
           预估待补原因: row.forecastIssue,
+          物料组名称: row.groupName ?? '',
+          分类待补原因: row.dimensionIssue ?? '',
         })),
       );
     };
@@ -825,6 +837,8 @@ export function createShipment(
                   },
                   '缺项',
                 ),
+          row.dimensionIssue &&
+            h('span', { className: 'sp-warning', title: row.dimensionIssue }, '分类待补'),
           row.end < 0 && h('span', { className: 'sp-warning' }, '需含调拨'),
         ),
         ...fields.map((field) => numberCell(row, field, who)),
@@ -870,7 +884,9 @@ export function createShipment(
           'span',
           {
             className: 'sp-product-name',
-            title: `${row.name} · ${row.category} · ${row.series} · ${row.group}`,
+            title: [row.name, row.category, row.series, row.group, row.groupName]
+              .filter(Boolean)
+              .join(' · '),
           },
           row.name || '产品名称未提供',
         ),
@@ -886,7 +902,18 @@ export function createShipment(
           if (!partition.has(name)) partition.set(name, []);
           partition.get(name).push(row);
         }
-        return [...partition].flatMap(([name, children]) => {
+        return [...partition].flatMap(([value, children]) => {
+          const groupNames = [...new Set(children.map((row) => row.groupName).filter(Boolean))];
+          const name =
+            dimension === 'group' && sourceKind === 'business' && children[0].group
+              ? `${value} · ${
+                  groupNames.length > 1
+                    ? '名称冲突'
+                    : children.every((row) => row.groupName) && groupNames.length === 1
+                      ? groupNames[0]
+                      : '名称未提供'
+                }`
+              : value;
           const nextPath = [...path, name];
           const who = [scope, ...nextPath].join(' ');
           const group = {
@@ -923,12 +950,15 @@ export function createShipment(
         scope === '全国合计'
           ? [...byCode].map(([code, children]) => ({
               ...Object.fromEntries(
-                ['code', 'name', 'category', 'series', 'group'].map((key) => [
+                ['code', 'name', 'category', 'series', 'group', 'groupName'].map((key) => [
                   key,
                   children[0][key],
                 ]),
               ),
               ...aggregate(children, `${scope} ${code}`),
+              dimensionIssue: [
+                ...new Set(children.map((row) => row.dimensionIssue).filter(Boolean)),
+              ].join('；'),
               readOnly: true,
             }))
           : parent.children;
