@@ -50,6 +50,18 @@ class TemplateSnapshot(unittest.TestCase):
                 for id in ['transfer_plan.template','transfer_plan.template.atomic','transfer_plan.template.count']:
                     self.assertEqual(self.read(id,**values),self.read(id,summary=True,**values))
 
+    def test_virtual_warehouse_is_excluded_from_source_and_snapshot_export_rows_and_counts(self):
+        self.db.executemany('INSERT INTO agents_scm_warehouse_transfer_plan_data_d VALUES(?,?,?,?,?,?,?,?,?)',
+            [('A540','VIRTUAL','中冷虚拟仓','虚拟商品','汤圆',99999,0,99999,'202611'),('A052','CLOSED','西安分仓','库存商品','汤圆',5,0,5,'202611')])
+        for warehouse in ['A540', 'A052']:
+            record={'warehouseid':warehouse,'warehouse_code':warehouse,'sku':'EXTRA','inv_batch_id':'fixture','inv_variant_id':'BRANCH_PLAN_TEMPLATE','warehouse_name':warehouse,'month_out_plan':5}
+            self.db.execute('INSERT INTO agents_inv_branch_sku_day ('+','.join(self.fields)+') VALUES ('+','.join('?' for _ in self.fields)+')',[record.get(x) for x in self.fields])
+        for summary in [False, True]:
+            rows = self.read('transfer_plan.template',summary=summary,page_size=200)
+            self.assertNotIn('A540', {row['warehouse_code'] for row in rows})
+            self.assertIn('A052', {row['warehouse_code'] for row in rows})
+            self.assertEqual(self.read('transfer_plan.template.count',summary=summary,warehouse_code_mode='equal',warehouse_code='A540'), [{'total':0}])
+
     def test_gateway_default_limit_cannot_truncate_snapshot_export(self):
 
         self.db.executemany('INSERT INTO agents_scm_warehouse_transfer_plan_data_d VALUES(?,?,?,?,?,?,?,?,?)',

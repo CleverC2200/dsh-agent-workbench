@@ -4275,6 +4275,32 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
   height: 14px;
   align-self: center;
 }
+.warehouse-select-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+}
+.fc-warehouse-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.warehouse-select-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.warehouse-select-status {
+  flex: none;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: #eef1f5;
+  color: #667085;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.4;
+}
 .warehouse-select-trigger:hover:not(:disabled),
 .warehouse-select-trigger[aria-expanded='true'] {
   border-color: var(--ui-accent-line);

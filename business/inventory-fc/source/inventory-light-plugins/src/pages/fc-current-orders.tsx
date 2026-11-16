@@ -3,6 +3,7 @@ import type { AgentSqlConfig } from '../../../../../shared/sql-config';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { currentOrderStatus, ORDER_STATUSES } from '../../../fc/src/lib/current-orders';
 import { useFcWorkflow } from './configured-fc-list';
+import { fcWarehouseStatus } from './fc-warehouse-presentation';
 import { PlanPagination } from '../../../../../shared/plan-pagination';
 import { DashboardTableSkeleton } from '../dsh-ui/workbench-loading';
 import { ColumnResizeHandle } from '../../../../../shared/table-column-controls';
@@ -510,7 +511,14 @@ export function FcCurrentOrders({
                           {row.order_no}
                         </button>
                       </td>
-                      <td>{text(row.warehouse_name || row.warehouse_code)}</td>
+                      <td>
+                        <span className="fc-warehouse-cell">
+                          {text(row.warehouse_name || row.warehouse_code)}
+                          {fcWarehouseStatus(row.warehouse_code ?? '') && (
+                            <span className="warehouse-select-status">已关仓</span>
+                          )}
+                        </span>
+                      </td>
                       <td>{text(row.customer_name || row.customer_code)}</td>
                       <td>{text(row.created_at?.slice(0, 10) ?? null)}</td>
                       <td>{qty(row.sku_count)}</td>

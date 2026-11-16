@@ -10,7 +10,7 @@ export function WarehouseSelect({
   compact = false,
 }: {
   value: string;
-  options: { id: string; name: string }[];
+  options: { id: string; name: string; status?: string }[];
   disabled: boolean;
   onChange: (value: string) => void;
   label?: string;
@@ -22,6 +22,7 @@ export function WarehouseSelect({
   const [open, setOpen] = useState(false),
     [active, setActive] = useState(0);
   const [position, setPosition] = useState({ left: 0, top: 0, width: 180, maxHeight: 280 });
+  const selected = options.find((option) => option.id === value);
   const close = () => {
     setOpen(false);
     trigger.current?.focus();
@@ -104,7 +105,10 @@ export function WarehouseSelect({
           }
         }}
       >
-        <span>{options.find((o) => o.id === value)?.name ?? '选择分仓'}</span>
+        <span className="warehouse-select-label">
+          <span className="warehouse-select-name">{selected?.name ?? '选择分仓'}</span>
+          {selected?.status && <span className="warehouse-select-status">{selected.status}</span>}
+        </span>
         <svg
           className="warehouse-select-chevron"
           aria-hidden="true"
@@ -166,7 +170,10 @@ export function WarehouseSelect({
                 onMouseMove={() => setActive(i)}
                 onClick={() => choose(i)}
               >
-                <span>{o.name}</span>
+                <span className="warehouse-select-label">
+                  <span className="warehouse-select-name">{o.name}</span>
+                  {o.status && <span className="warehouse-select-status">{o.status}</span>}
+                </span>
                 <span aria-hidden="true">{o.id === value ? '✓' : ''}</span>
               </div>
             ))}

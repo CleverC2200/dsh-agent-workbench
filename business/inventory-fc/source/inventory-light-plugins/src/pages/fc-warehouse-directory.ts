@@ -1,5 +1,6 @@
 import { createAgentQueries, type ConfiguredExecution } from '../../../../../shared/agent-query';
 import type { AgentSqlConfig } from '../../../../../shared/sql-config';
+import { presentFcWarehouses } from './fc-warehouse-presentation';
 
 export type FcWarehouse = {
   warehouse_code: string;
@@ -48,7 +49,7 @@ export async function readFcWarehouseDirectory(
     );
   try {
     const result = await read();
-    if (result.rows.length) return result.rows;
+    if (result.rows.length) return presentFcWarehouses(result.rows);
   } catch (error) {
     signal.throwIfAborted();
     if (!transportFailure(error)) throw error;
@@ -65,5 +66,5 @@ export async function readFcWarehouseDirectory(
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) abort();
   });
-  return (await read()).rows;
+  return presentFcWarehouses((await read()).rows);
 }
