@@ -1,6 +1,6 @@
 import { createDemandConfirmation, downloadCsv } from './demand-confirmation.js';
 import { createRelations } from './relations-view.js';
-import { mpsView, useMpsPart, useMpsNavigation } from './context.js';
+import { mpsView, useMpsPart, useMpsNavigation, askMpsQuestion } from './context.js';
 import { AuthorQuestions, useAuthorQuote } from '../../../business/shared/author-questions.js';
 import { usePageViewField } from '../../../business/shared/view-state.js';
 
@@ -36,7 +36,7 @@ function Mps() {
   const [scope, setScope] = y.useState(null);
   const [adjusting, setAdjusting] = y.useState(false);
   const [relations, setRelations] = y.useState(null);
-  const actions = useAuthorQuote(y);
+  const actions = useAuthorQuote(y, askMpsQuestion);
   const select = y.useCallback(
     (key) => {
       if (adjusting || !mpsSteps.some((item) => item.key === key)) return;
@@ -67,6 +67,7 @@ function Mps() {
     draft: assistantDraft,
     onClearDraft: () => setAssistantDraft(''),
     actions,
+    expanded: true,
   });
   useMpsNavigation(
     y,
