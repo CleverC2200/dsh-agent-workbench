@@ -174,3 +174,35 @@ export function changeAdjustment(adjustments, kind, input, undo = false) {
     ],
   };
 }
+
+export function archiveUpperAdjustments(adjustments) {
+  const state = adjustments ?? emptyAdjustments();
+  const upper = [
+    ...state.categoryDemand.map((entry) => ({ kind: 'categoryDemand', entry })),
+    ...state.quantities
+      .filter((entry) => entry.kind !== 'base-sku')
+      .map((entry) => ({ kind: 'quantities', entry })),
+  ];
+  if (!upper.length) return state;
+  return {
+    ...state,
+    categoryDemand: [],
+    quantities: state.quantities.filter((entry) => entry.kind === 'base-sku'),
+    history: [
+      ...state.history,
+      ...upper.map(({ kind, entry }) => ({
+        kind,
+        key:
+          kind === 'categoryDemand'
+            ? JSON.stringify([entry.month, entry.category])
+            : quantityAdjustmentKey(entry),
+        action: 'archive',
+        systemValue: entry.systemValue ?? null,
+        value: entry.quantity,
+        reason: entry.reason,
+        at: entry.at,
+        archivedAt: new Date().toISOString(),
+      })),
+    ],
+  };
+}

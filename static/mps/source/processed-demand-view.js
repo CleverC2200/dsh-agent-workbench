@@ -1,3 +1,4 @@
+import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
 import { useStepViewField } from './step-view-state.js';
 import { createProcessedDemandEvidence } from './processed-demand-evidence-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
@@ -39,6 +40,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
   const h = react.createElement;
   const { Field } = createBatchEdit(react);
   const AmountReconciliation = createAmountReconciliation(react, { downloadCsv: downloadAmounts });
+  const UpperAdjustmentConflicts = createUpperAdjustmentConflicts(react);
   const Evidence = createProcessedDemandEvidence(react, { downloadCsv });
   return function ProcessedDemand({
     view,
@@ -88,7 +90,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         return next;
       });
     };
-    const months = result.months.slice(0, 3);
+    const months = result.months;
     const categories = [
       ...new Set(
         rows
@@ -114,7 +116,9 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
             (row) => row.month === entry.month && row.category === entry.category,
           )?.quantity ?? null)
         : sum(
-            computed.rows.filter((row) => matches(row, entry)),
+            [...computed.rows, ...(computed.referenceRows ?? [])].filter((row) =>
+              matches(row, entry),
+            ),
             'demand',
           );
     const fieldKey = (entry) =>
@@ -164,9 +168,11 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         if (
           entry.value !== null &&
           entry.meta.kind !== 'categoryDemand' &&
-          !candidate.rows.some((row) => matches(row, entry.meta) && row.quantityAdjusted)
+          ![...candidate.rows, ...(candidate.referenceRows ?? [])].some(
+            (row) => matches(row, entry.meta) && row.quantityAdjusted,
+          )
         )
-          throw Error('当前分层数量未生效，请先补齐权重或撤销冲突调整。');
+          throw Error('当前基地SKU数量未生效，请核对月份和产品范围。');
       }
       if (undos.size)
         adjustments = {
@@ -185,20 +191,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
     }, [batch.commit, applyBatch]);
     const controls = (entry, systemValue, value) => {
       const fixed = saved(entry);
-      const shareConflict =
-        entry.kind !== 'categoryDemand' &&
-        (draft.adjustments?.shares ?? []).some((item) =>
-          result.rows.some(
-            (row) =>
-              row.id === item.rowId && row.month === entry.month && row.category === entry.category,
-          ),
-        );
-      const disabled =
-        entry.kind !== 'categoryDemand' &&
-        (!months.slice(0, 2).includes(entry.month) ||
-          !entry.group ||
-          value == null ||
-          shareConflict);
+      const disabled = entry.kind !== 'base-sku' || !months.includes(entry.month);
       return h(
         'div',
         { className: 'wf-quantity-cell' },
@@ -211,10 +204,9 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
           disabled,
           format: number,
           editFormat: (value) => String(Math.round(value)),
-          title: shareConflict ? '先撤销同月大类占比调整' : '留空恢复系统值',
+          title: '留空恢复系统值',
         }),
         fixed && h('small', null, '已调整'),
-        shareConflict && h('small', null, '先撤销同月大类占比调整'),
       );
     };
     const summaryColumns = [
@@ -788,6 +780,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
               rows.length ? '当前范围无需求和对照数量缺项。' : '当前筛选暂无输入。',
             ),
       ),
+      h(UpperAdjustmentConflicts, { draft, update }),
       h(AmountReconciliation, { draft, result, rows, filters, card, table }),
       h(
         'details',
@@ -810,7 +803,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
             .filter((item) => item.kind === 'quantities')
             .map((item) => [
               item.key,
-              item.action === 'undo' ? '撤销' : '调整',
+              item.action === 'archive' ? '归档' : item.action === 'undo' ? '撤销' : '调整',
               number(item.systemValue),
               number(item.value),
               item.reason,
@@ -821,27 +814,29 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
           table(
             '当前固定数量',
             ['对象', '固定数量', '原因', '时间', '操作'],
-            quantities.map((item) => [
-              label(item),
-              number(item.quantity),
-              item.reason,
-              item.at,
-              h(
-                'button',
-                {
-                  'aria-label': `撤销固定数量 ${label(item)}`,
-                  disabled: !batch.active,
-                  onClick: () =>
-                    batch.stage(fieldKey(item), {
-                      label: label(item),
-                      text: '',
-                      meta: item,
-                      min: 0,
-                    }),
-                },
-                '撤销',
-              ),
-            ]),
+            quantities
+              .filter((item) => item.kind === 'base-sku')
+              .map((item) => [
+                label(item),
+                number(item.quantity),
+                item.reason,
+                item.at,
+                h(
+                  'button',
+                  {
+                    'aria-label': `撤销固定数量 ${label(item)}`,
+                    disabled: !batch.active,
+                    onClick: () =>
+                      batch.stage(fieldKey(item), {
+                        label: label(item),
+                        text: '',
+                        meta: item,
+                        min: 0,
+                      }),
+                  },
+                  '撤销',
+                ),
+              ]),
           ),
       ),
     );

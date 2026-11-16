@@ -127,6 +127,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
   const EvaluationOverview = createEvaluationOverview(react, { downloadCsv, Dialog });
   return function Workflow({
     active = true,
+    result,
     evaluation,
     setEvaluation,
     step,
@@ -186,10 +187,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         executionController.current?.abort();
       };
     }, [savedDraft, relations, shipmentSnapshot, scopeGeneration]);
-    const result = react.useMemo(
-      () => buildMpsWorkflow(savedDraft, relations, shipmentSnapshot),
-      [savedDraft, relations, shipmentSnapshot],
-    );
+
     const preparingInputs =
       (savedDraft.productSource === 'business' &&
         (!shipmentSnapshot || ['unread', 'loading'].includes(shipmentSnapshot.status))) ||
@@ -392,7 +390,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
       }
     };
     const fields = step === 'process' ? processFields : planFields;
-    const scopedRows = result.rows;
+    const scopedRows =
+      step === 'process' ? [...result.rows, ...(result.referenceRows ?? [])] : result.rows;
     const scopedCategories = result.categoryRows;
     const configurationPairs = [
       ...new Map(
@@ -588,7 +587,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         if (category) {
           const index = result.months.indexOf(row.month);
           expression += `大类需求采用${index < 2 ? '三年历史平均' : '年度需求'}环比倍率${percent(category.chain)}${category.chain == null ? '' : `，对应环比增长率${percent(category.chain - 1)}`}及同期平均占比${percent(category.share)}。同比未参与本次大类需求计算。`;
-          if (category.adjusted) expression += '大类需求已采用人工调整。';
+          if (category.adjusted) expression += '大类有效需求由基地SKU修正后汇总。';
         }
         if (row.share !== row.systemShare) expression += '有效占比含人工调整及剩余占比承接。';
         if (row.quantityAdjusted) expression += '当前SKU需求已采用人工调整。';
@@ -804,7 +803,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           本月预估发货缺项数: shipment?.fin != null ? 0 : 1,
           模型预测数量: forecast,
           模型已知小计: forecast,
-          数量调整状态: row.quantityAdjusted ? '数量固定及下级联动' : '系统拆分或占比调整',
+          数量调整状态: row.quantityAdjusted ? '基地SKU修正' : '系统拆分或占比调整',
           Top1托底: row.fallback ? '是' : '否',
           提报数量口径: row.reportMissingAsZero ? '完整读取后未提报按0' : '源记录数量',
           需求拆分口径:
@@ -849,7 +848,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
             大类: row.category,
             需求数量: row.quantity,
             系统大类需求: row.systemQuantity,
-            大类调整状态: row.adjusted ? '人工调整' : '系统值',
+            大类调整状态: row.adjusted ? '基地SKU修正汇总' : '系统值',
             本月预估发货: compare?.shipment.quantity,
             本月预估发货已知小计: compare?.shipment.knownQuantity,
             本月预估发货完整性: compare?.shipment.excluded
