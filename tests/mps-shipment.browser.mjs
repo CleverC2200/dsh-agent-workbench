@@ -75,6 +75,9 @@ test('MPS shipment summarizes available values and marks missing SKUs without fi
     '2026-09,华东,C,全缺产品,汤圆,系列,组,,,,,,,',
     '2026-09,西南,Z,真实零,汤圆,系列,组,0,0,0,0,0,0,0',
   ]);
+  await beginAdjustment(frame);
+  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
+  await saveAdjustment(frame);
   for (const [field, value] of [
     ['本月已发货', '330'],
     ['已备', '10'],
@@ -142,9 +145,7 @@ test('MPS shipment applies SKU, base and national adjustments to current effecti
   ).toHaveText('1');
   await edit(table, '郑州 A 整月预估发货', -3);
   await edit(table, '华东 整月预估发货', 1000);
-  await expect(table.getByRole('row').filter({ hasText: '华东' }).first()).toContainText(
-    '需含调拨',
-  );
+  await expect(table.getByRole('row').filter({ hasText: '华东' }).first()).toContainText('负结存');
   await table.getByRole('button', { name: '郑州 B 整月预估发货 计算过程', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText('全国合计覆盖101件');
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
@@ -348,6 +349,9 @@ test('MPS shipment finishes the current sync after moving to processing', async 
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   release();
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await beginAdjustment(frame);
+  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
+  await saveAdjustment(frame);
   await expect(
     table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
   ).toHaveText('76');
@@ -369,6 +373,9 @@ test('MPS shipment loads every warehouse input from the stock table and derives 
     ).toHaveText(value);
   await expectShipment(table, '郑州 整月预估发货', '300');
   await expectShipment(table, '郑州 剩余天数入库', '76');
+  await beginAdjustment(frame);
+  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
+  await saveAdjustment(frame);
   await expect(
     table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
   ).toHaveText('76');

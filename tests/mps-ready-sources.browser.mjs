@@ -1,7 +1,7 @@
 import {
   beginAdjustment,
   saveAdjustment,
-  adjustCategory,
+  adjustLeaf,
   openCategoryCalculation,
 } from './helpers/mps-edit.mjs';
 import test from 'node:test';
@@ -830,8 +830,14 @@ test(
     await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
     await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('331');
     await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('1075');
-    await adjustCategory(frame, '汤圆', '2026-11', '999', '验证环比独立');
-    await expect(result.locator('td').nth(2).locator('.dc-demand-amount')).toHaveText('999');
+    await adjustLeaf(
+      frame,
+      { base: '郑州', code: 'A', category: '汤圆', group: 'G', month: '2026-11' },
+      999,
+      '验证环比独立',
+    );
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+    await expect(result.locator('td').nth(2).locator('.dc-demand-amount')).toHaveText('701');
     await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('1075');
     const updatedDownload = page.waitForEvent('download');
     await frame.getByRole('button', { name: '下载测算明细', exact: true }).click();
@@ -841,7 +847,7 @@ test(
     assert.equal(updated[0]['本月有效预估发货'], 900);
     assert.equal(updated[0]['销售提报量'], 80);
     assert.equal(updated[0]['加权'], 331.25);
-    assert.equal(updated[1]['大类预估需求数量'], 999);
+    assert.equal(updated[1]['大类预估需求数量'], 701.25);
     assert.equal(updated[2]['① 环比法'], 2109.375);
     if (process.env.MPS05_EVIDENCE_DIR)
       await copyFile(updatedPath, `${process.env.MPS05_EVIDENCE_DIR}/adjusted-demand.xlsx`);
