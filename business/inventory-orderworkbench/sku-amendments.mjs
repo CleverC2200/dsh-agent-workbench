@@ -122,3 +122,11 @@ export function aggregateAmendmentSql(events, customer = false, periods = false,
     COUNT(*) AS records,SUM(invalid_change) AS invalid
     FROM (${events}) sku_events GROUP BY ${periods ? 'period_index,' : ''}${grouped}region,province${customer ? ',cust_code' : ''}`;
 }
+
+export function provinceAmendmentOrderCountSql() {
+  return `SELECT region,province,COUNT(*) AS changed_orders FROM (
+    SELECT DISTINCT NULLIF(TRIM(region),'') AS region,NULLIF(TRIM(province),'') AS province,cust_code,cust_order_no
+    FROM (${skuAmendmentEventsSql()}) province_events
+    WHERE invalid_change=0 AND change_numerator>0
+  ) changed_orders GROUP BY region,province`;
+}
