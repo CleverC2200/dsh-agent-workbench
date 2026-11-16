@@ -27,6 +27,8 @@ export const cancellationColumns = [
   'receive_wh',
   'pickup_point',
   'warehouse_classify',
+  'wms_close_time',
+  'qtyshipped',
 ];
 export const cancellationLine = (id, overrides = {}) => ({
   cust_code: 'C',
@@ -70,7 +72,7 @@ export function cancellationDb({ hourly = [], daily = [], trace = [], shipments 
     for (const row of rows) insert.run(...cancellationColumns.map((k) => row[k] ?? null));
   }
   db.exec(`CREATE TABLE agents_scm_material_in_out_summary_d(warehouseid,pickup_point,warehouse_classify);
-    CREATE TABLE agents_scm_order_trace_final_di(executeorderno,cust_code,fromorderno,receive_wh,deliver_wh,update_time,lastshipmenttime,load_time);
+    CREATE TABLE agents_scm_order_trace_final_di(executeorderno,cust_code,fromorderno,receive_wh,deliver_wh,update_time,lastshipmenttime,load_time,wms_ship_status,load_status,wms_order_close_time);
     CREATE TABLE dim_bas_warehouse(warehouse_id,warehouse_classify);
     INSERT INTO agents_scm_material_in_out_summary_d VALUES
       ('F','01','01'),('F','01','01'),('R','01','02'),('OTHER','02','02'),('OEM','01','03');
@@ -84,6 +86,9 @@ export function cancellationDb({ hourly = [], daily = [], trace = [], shipments 
     'update_time',
     'lastshipmenttime',
     'load_time',
+    'wms_ship_status',
+    'load_status',
+    'wms_order_close_time',
   ];
   const insertTrace = db.prepare(
     `INSERT INTO agents_scm_order_trace_final_di VALUES (${traceFields.map(() => '?').join(',')})`,
@@ -115,6 +120,8 @@ export function cancellationDb({ hourly = [], daily = [], trace = [], shipments 
       (other) => other.executeorderno === row.executeorderno && other.cust_code === row.cust_code,
     );
     const value = {
+      wms_ship_status: '99',
+      load_status: '装车完成',
       ...row,
       lastshipmenttime:
         row.lastshipmenttime === undefined ? line?.header_addtime : row.lastshipmenttime,
