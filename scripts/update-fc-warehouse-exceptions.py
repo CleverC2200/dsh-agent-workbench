@@ -35,6 +35,13 @@ for agent in parser.parse_args().agents:
             updated = fc_warehouse_scope(updated)
         if updated.startswith(MARKER + '\nWITH '):
             updated = 'WITH ' + MARKER + '\n' + updated[len(MARKER + '\nWITH '):]
+        if agent == 'fc':
+            while True:
+                clean = re.sub(r'^(\s*(?:WITH\s+)?)/\*[\s\S]*?\*/\s*', r'\1', updated, count=1, flags=re.I)
+                if clean == updated:
+                    break
+                updated = clean
+            updated = updated.lstrip()
         if updated != original:
             source.write_text(updated)
     materializations = path.parent / 'customer-order-materializations.json'

@@ -1,5 +1,6 @@
 """Behavioral checks for the latest confirmed warehouse ownership rule."""
 import sqlite3
+import re
 import unittest
 from inventory_warehouse_scope import warehouse_scope, branch_read_scope, fc_warehouse_scope
 
@@ -54,6 +55,8 @@ class WarehouseScope(unittest.TestCase):
             raw = "SELECT s.warehouseid AS warehouseid FROM stock AS s WHERE s.warehouse_classify='20' ORDER BY s.warehouseid"
             scoped = fc_warehouse_scope(warehouse_scope(raw))
             self.assertEqual(db.execute(scoped).fetchall(), [('A052',),('A110',)])
+            plain = re.sub(r'/\*.*?\*/', '', scoped)
+            self.assertEqual(fc_warehouse_scope(plain), plain)
             base = "SELECT s.warehouseid AS warehouseid FROM stock AS s WHERE s.warehouse_classify IN ('01','02')"
             self.assertEqual(db.execute(fc_warehouse_scope(base)).fetchall(), [('A540',)])
 

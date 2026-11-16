@@ -49,6 +49,18 @@ def warehouse_scope(sql, dialect='postgres'):
             else:
                 raise ValueError('Warehouse classification source is ambiguous')
             alias = column.table
+            parent = predicate.parent
+            while isinstance(parent, exp.Paren):
+                parent = parent.parent
+            if isinstance(parent, exp.And) and any(
+                isinstance(guard.this, exp.In)
+                and isinstance(guard.this.this, exp.Column)
+                and guard.this.this.table == alias
+                and guard.this.this.name == field
+                and set(EXCLUDED).issubset({node.this for node in guard.this.expressions if isinstance(node, exp.Literal)})
+                for guard in parent.find_all(exp.Not)
+            ):
+                continue
             raw = (re.escape(alias) + r'\s*\.\s*' if alias else '') + 'warehouse_classify'
             value = rf'(?:TRIM\s*\(\s*{raw}\s*\)|{raw})'
             suffix = r"\s*=\s*'20'" if branch else r"\s+IN\s*\(\s*'01'\s*,\s*'02'\s*,\s*'20'\s*\)"

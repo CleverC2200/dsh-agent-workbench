@@ -1,4 +1,3 @@
-/* inventory-branch-exclusions:N436,Y204 */
 WITH
 latest_inventory AS (
   SELECT
