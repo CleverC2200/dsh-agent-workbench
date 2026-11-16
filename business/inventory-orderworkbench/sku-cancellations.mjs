@@ -220,10 +220,21 @@ export function cancellationEventsSql({
 
 export function aggregateCancellationSql(
   events,
-  { periods = false, sourceName = false, base = false, dimensions = base ? ['base'] : [] } = {},
+  {
+    periods = false,
+    sourceName = false,
+    base = false,
+    dimensions = base ? ['base'] : [],
+    geography = true,
+  } = {},
 ) {
   const grouped = dimensions.length ? dimensions.join(',') + ',' : '';
-  return `SELECT ${periods ? 'period_index,' : ''}${grouped}'1' AS kind,region,province,
+  const groupKeys = [
+    ...(periods ? ['period_index'] : []),
+    ...dimensions,
+    ...(geography ? ['region', 'province'] : []),
+  ];
+  return `SELECT ${periods ? 'period_index,' : ''}${grouped}'1' AS kind,${geography ? 'region,province' : 'NULL AS region,NULL AS province'},
     CASE WHEN SUM(invalid_cancel)=0 THEN SUM(cancel_numerator) END AS numerator,
     CASE WHEN SUM(invalid_cancel)=0 THEN SUM(cancel_denominator) END AS denominator,
     SUM(CASE WHEN invalid_cancel=0 THEN cancel_numerator ELSE 0 END) AS sample_numerator,
@@ -232,5 +243,5 @@ export function aggregateCancellationSql(
     SUM(CASE WHEN invalid_cancel>0 THEN cancel_denominator ELSE 0 END) AS unknown_quantity,
     COUNT(*) AS records,SUM(invalid_cancel) AS invalid
     FROM ${sourceName ? events : '(' + events + ')'} cancellation_events
-    GROUP BY ${periods ? 'period_index,' : ''}${grouped}region,province`;
+    ${groupKeys.length ? 'GROUP BY ' + groupKeys.join(',') : ''}`;
 }

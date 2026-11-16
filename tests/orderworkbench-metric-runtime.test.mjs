@@ -13,7 +13,7 @@ const root = 'lib/business/inventory-orderworkbench/';
 const config = JSON.parse(await readFile(root + 'sql.config.json', 'utf8'));
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 test('cancellation groups remain within the gateway parser nesting boundary', () => {
-  for (const suffix of ['groups', 'dimensions', 'dimensions.packets']) {
+  for (const suffix of ['base-groups', 'groups', 'dimensions', 'dimensions.packets']) {
     const sql = config.queries['workbench.changes.cancellation.' + suffix].request.sql;
     let depth = 0,
       peak = 0,
@@ -31,6 +31,85 @@ test('cancellation groups remain within the gateway parser nesting boundary', ()
     assert.match(sql, /cancellation_lines AS/);
     assert.match(sql, /FROM cancellation_lines s/);
   }
+});
+
+test('base-only cancellation groups use one direct aggregation without product attribution or count paging', async () => {
+  const query = config.queries['workbench.changes.cancellation.base-groups'];
+  assert.match(query.request.sql, /GROUP BY base\s+ORDER BY/);
+  assert.doesNotMatch(query.request.sql, /AS item|own\.items|shared\.names|GROUP BY base,item/);
+  const rows = [
+    {
+      base: '郑州',
+      kind: '1',
+      region: null,
+      province: null,
+      numerator: 10,
+      denominator: 100,
+      sample_numerator: 10,
+      sample_denominator: 100,
+      sample_records: 2,
+      records: 2,
+      invalid: 0,
+      unknown_quantity: 0,
+    },
+    {
+      base: '华东',
+      kind: '1',
+      region: null,
+      province: null,
+      numerator: null,
+      denominator: null,
+      sample_numerator: 5,
+      sample_denominator: 50,
+      sample_records: 1,
+      records: 2,
+      invalid: 1,
+      unknown_quantity: 20,
+    },
+  ];
+  const calls = [];
+  const result = await readOrderMetric(
+    config,
+    {
+      metric: '作废率',
+      start: '2026-11-01',
+      endExclusive: '2026-11-16',
+      view: 'groups',
+      dimensions: ['base'],
+    },
+    async (_request, options) => {
+      calls.push(options.queryId);
+      return { rows, configVersion: 'base-only-test' };
+    },
+  );
+  assert.deepEqual(calls, ['workbench.changes.cancellation.base-groups']);
+  assert.equal(result.groups.rows.length, 2);
+  assert.equal(result.current.numerator, 15);
+  assert.equal(result.current.denominator, 150);
+  assert.equal(result.current.pending, 1);
+  assert.equal(result.groups.reconciliation.matches, true);
+});
+
+test('a failed cancellation group query is returned once without an automatic transient retry', async () => {
+  let calls = 0;
+  const result = await readOrderMetric(
+    config,
+    {
+      metric: '作废率',
+      start: '2026-11-01',
+      endExclusive: '2026-11-16',
+      view: 'groups',
+      dimensions: ['base'],
+    },
+    async () => {
+      calls++;
+      throw Object.assign(Error('GEA SQL unavailable'), { code: 'GEA_SQL_UNAVAILABLE' });
+    },
+  );
+  assert.equal(calls, 1);
+  assert.equal(result.groups.availability, 'unavailable');
+  assert.equal(result.sources[0].code, 'GEA_SQL_UNAVAILABLE');
+  assert.equal(result.current.value, null);
 });
 
 test('stock SKU pagination applies outside the complete stock and plan union', () => {

@@ -29,6 +29,18 @@ const selection = {
   label: '2026年10月 · 第四周',
 };
 
+test('all card clicks request an immediate snapshot answer before optional detail queries', () => {
+  for (const metric of metricNames) {
+    const request = metricDetailsRequest(facts, metric, selection);
+    assert.match(request.text, /立即依据metricDetails.current和contract输出卡片值/);
+    assert.match(request.text, /不为重复核对而调用view=summary或view=contract/);
+    assert.match(request.text, /查询前先给出已知卡片结论/);
+    assert.match(request.text, /不自动反复重试或改走Cube重算/);
+    assert.ok(request.context.metricDetails.current);
+    assert.ok(request.context.metricDetails.contract);
+  }
+});
+
 test('an absent amendment cohort keeps the same unavailable state even when cancellations exist', () => {
   const row = { kind: '1', numerator: 1, denominator: 100, records: 1, invalid: 0 };
   const combined = {
