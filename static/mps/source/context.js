@@ -4,6 +4,7 @@ import {
   currentSessionId,
   reportElements,
   action,
+  ask,
 } from '../../../business/shared/channel.js';
 import { createPageViewState } from '../../../business/shared/view-state.js';
 export const mpsView = createPageViewState('plan-category-production');
@@ -64,27 +65,35 @@ function schedule() {
   queueMicrotask(() => {
     scheduled = false;
     const session = currentSessionId();
-    if (
-      !active ||
-      !restored ||
-      !session ||
-      !parts.has('navigation') ||
-      [...parts.values()].some((part) => part.restoration !== restoration)
-    )
-      return;
+    const snapshot = mpsSnapshot();
+    if (!active || !session || !snapshot) return;
     latest = {
       revision,
       epoch,
       session,
-      snapshot: {
-        page: '主生产计划(MPS)',
-        scope: 'read-only-master-data-local-drafts',
-        notice,
-        parts: Object.fromEntries([...parts].map(([key, part]) => [key, part.value])),
-      },
+      snapshot,
     };
     void flush();
   });
+}
+function mpsSnapshot() {
+  if (
+    !restored ||
+    !parts.has('navigation') ||
+    [...parts.values()].some((part) => part.restoration !== restoration)
+  )
+    return;
+  return {
+    page: '主生产计划(MPS)',
+    scope: 'read-only-master-data-local-drafts',
+    notice,
+    parts: Object.fromEntries([...parts].map(([key, part]) => [key, part.value])),
+  };
+}
+export function askMpsQuestion(text, signal) {
+  const snapshot = mpsSnapshot();
+  if (!connected || !snapshot) throw Error('页面能力尚未连接，请重新连接页面后重试。');
+  return ask(text, snapshot, { signal });
 }
 function cancelPublication() {
   epoch++;
