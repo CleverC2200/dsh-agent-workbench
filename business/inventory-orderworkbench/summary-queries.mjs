@@ -106,6 +106,14 @@ export function addWorkbenchSummaryQueries(config) {
         ? aggregateAmendmentSql(mapped, false, false, ['base', 'item'])
         : aggregateCancellationSql(mapped, { dimensions: ['base', 'item'] });
     const original = config.queries['workbench.changes.' + name];
+    if (name === 'cancellation')
+      register(
+        'workbench.changes.cancellation.base-groups',
+        aggregateCancellationSql(events, { dimensions: ['base'], geography: false }),
+        original,
+        ['base', ...original.resultColumns.filter((field) => field !== 'base')],
+        ['base', 'kind', 'region', 'province'],
+      );
     register(
       'workbench.changes.' + name + '.groups',
       sql,

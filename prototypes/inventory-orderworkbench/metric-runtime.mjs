@@ -91,6 +91,7 @@ export async function readOrderMetric(config, input, execute, signal, { now = ne
   const facts = await loadWorkbenchReport(input.start, input.endExclusive, signal, {
     config,
     execute,
+    retryTransient: metric === '作废率' ? false : undefined,
     now,
     singlePeriod: period,
     sections: [
