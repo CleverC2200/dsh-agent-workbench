@@ -2,6 +2,7 @@ import { openBranchDms } from './html-dms-navigation.ts';
 import type { PageExecutionConnection, WorkbenchPageExecution } from './frame.ts';
 import { startPageBridgeClient } from './page-interaction/page-bridge/client.ts';
 import { fulfillmentSimulationRequest } from './fulfillment-simulation-transport.ts';
+import { searchWarningPeople } from './warning-people-request.ts';
 
 export function connectHtmlFrame(
   frame: HTMLIFrameElement,
@@ -217,17 +218,19 @@ export function connectHtmlFrame(
               throw Error('无法读取当前 GEA 登录姓名，请重新登录后保存预警');
             body = { ...parameters, task: { ...parameters?.task, definedBy: name.trim() } };
           }
-          const endpoint =
-            op === 'people' ? '/api/gea-proof/people/search' : '/api/agent-workbench/detection';
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: task.signal,
-          });
-          result = await response.json();
-          if (!response.ok)
-            throw Error((result as { error?: string }).error || 'DETECTION_REQUEST_FAILED');
+          if (op === 'people') {
+            result = await searchWarningPeople(body, task.signal);
+          } else {
+            const response = await fetch('/api/agent-workbench/detection', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+              signal: task.signal,
+            });
+            result = await response.json();
+            if (!response.ok)
+              throw Error((result as { error?: string }).error || 'DETECTION_REQUEST_FAILED');
+          }
         } else if (message.method === 'fulfillment-simulation') {
           result = await fulfillmentSimulationRequest(
             connection.page.id,
