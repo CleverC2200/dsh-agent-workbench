@@ -1,3 +1,4 @@
+import { createFeishuWarningApp } from './feishu-app.mjs';
 import { createServer } from 'node:http';
 import { createHash, timingSafeEqual, randomUUID } from 'node:crypto';
 import { readFile, writeFile, rename } from 'node:fs/promises';
@@ -17,6 +18,7 @@ const invalid = (message, status = 400) => {
 };
 const id = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 export function createWarningExecutor(config, fetchImpl = fetch) {
+  const feishu = createFeishuWarningApp(config.feishu, fetchImpl);
   let cookie = '',
     groupId = config.groupId;
   const identities = new Map(),
@@ -192,7 +194,10 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
     const access = await session.json();
     if (!session.ok || access.result?.accessDecision?.allowed !== true)
       invalid('无权访问产销协同Agent', 403);
-    const owner = { key: JSON.stringify(['production', tenant, String(user.id)]) };
+    const owner = {
+      key: JSON.stringify(['production', tenant, String(user.id)]),
+      username: user.username,
+    };
     identities.set(key, { owner, until: now() + 15000 });
     if (identities.size > 1000) identities.delete(identities.keys().next().value);
     return owner;
@@ -229,8 +234,72 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
     job.finishedAt = now();
     await persist();
   }
+  async function recipient(req, username) {
+    if (!id(username)) invalid('飞书接收人账号无效');
+    const response = await fetchImpl(
+      config.geaBase +
+        '/sys/user/queryUserComponentData?' +
+        new URLSearchParams({ username, pageNo: '1', pageSize: '20' }),
+      {
+        headers: {
+          'X-Access-Token': req.headers['x-access-token'],
+          'X-Tenant-Id': req.headers['x-tenant-id'],
+        },
+        signal: AbortSignal.timeout(15000),
+        redirect: 'error',
+      },
+    );
+    const body = await response.json();
+    if (!response.ok || body.success !== true || !Array.isArray(body.result?.records))
+      invalid('GEA接收人目录查询失败', 403);
+    const people = body.result.records.filter(
+      (p) => p.username === username && [1, '1'].includes(p.status),
+    );
+    if (people.length !== 1) invalid('所选GEA账号不存在、未启用或当前无权查询', 403);
+    return people[0];
+  }
   async function client(req, input) {
     const owner = await identity(req);
+    if (input.operation === 'feishu-status')
+      return { enabled: feishu.configured(), appId: feishu.appId };
+    if (input.operation === 'feishu-recipient') {
+      const username = input.username === 'self' ? owner.username : input.username;
+      const person = await recipient(req, username);
+      const mapped = await feishu.resolveEmployee(person);
+      return {
+        mapped: true,
+        transport: 'shared-feishu-app',
+        appId: feishu.appId,
+        credentialProfile: 'shared-feishu-app:' + feishu.appId,
+        receiveId: username,
+        receiveIdType: 'gea',
+        recipientName: mapped.name,
+        enabled: true,
+      };
+    }
+    if (input.operation === 'feishu-send') {
+      if (
+        !id(input.taskId) ||
+        !/^[a-f0-9]{32}$/.test(input.uuid || '') ||
+        !input.card ||
+        typeof input.card !== 'object' ||
+        JSON.stringify(input.card).length > 100000
+      )
+        invalid('飞书预警通知参数无效');
+      const jobs = await ownedJobs(owner);
+      if (!jobs.some((j) => decode(j.executorParam)?.taskId === input.taskId))
+        invalid('预警任务不属于当前用户', 403);
+      try {
+        return await feishu.send({
+          ownerKey: owner.key,
+          person: await recipient(req, input.username),
+          uuid: input.uuid,
+          card: input.card,
+        });
+      } catch (error) {
+        return { ok: false, error: error.message, unknown: error.unknown === true };
+      }
+    }
     if (input.operation === 'poll') {
       clients.set(owner.key, now());
       if (input.busy) return { job: null };
@@ -321,7 +390,7 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
         return reply(res, {
           ok: true,
           service: 'gea-warning-executor',
-          version: '20261112.2',
+          version: '20261116.1',
           groupId,
         });
       if (req.method !== 'POST') invalid('请求方法不支持', 405);
