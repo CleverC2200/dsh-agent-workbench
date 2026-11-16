@@ -61,6 +61,21 @@ const shipmentEdits = z.strictObject({
   remaining: z.record(text, z.strictObject({ values: keyedNumbers, source: text })).optional(),
 });
 const shipment = z.strictObject({
+  transferPlans: list(
+    z.strictObject({
+      month,
+      base: z.enum(['西南', '郑州', '遂平', '华东', '华南']),
+      code: text.min(1),
+      inbound: quantity.int().max(Number.MAX_SAFE_INTEGER).nullable(),
+      outbound: quantity.int().max(Number.MAX_SAFE_INTEGER).nullable(),
+    }),
+  )
+    .refine(
+      (plans) =>
+        new Set(plans.map((plan) => JSON.stringify([plan.month, plan.base, plan.code]))).size ===
+        plans.length,
+    )
+    .optional(),
   ...shipmentEdits.shape,
   sourceEdits: z
     .strictObject({

@@ -17,6 +17,8 @@ const fields = [
   'open',
   'inbound',
   'remaining',
+  'transferIn',
+  'transferOut',
   'end',
 ];
 const names = [
@@ -31,6 +33,8 @@ const names = [
   '月初库存',
   '本月生产入库',
   '剩余天数入库',
+  '调入计划',
+  '调出计划',
   '预计月末结存',
 ];
 const inputFields = ['shipped', 'prepped', 'unprepped', 'daily3', 'open', 'inbound', 'remaining'];
@@ -214,8 +218,13 @@ export function createShipment(
         ).map((row) => [JSON.stringify([row['基地'], row['产品编码']]), row]),
       );
     }, [sourceKind, sourceRows, draft.products, draft.productsRead]);
-    const deriveRows = (currentState) =>
-      sourceRows
+    const deriveRows = (currentState) => {
+      const plans = new Map(
+        (currentState.transferPlans ?? [])
+          .filter((plan) => plan.month === month)
+          .map((plan) => [keyOf(plan), plan]),
+      );
+      return sourceRows
         .filter((row) => row.month === month && bases.includes(row.base))
         .map((row) => {
           const derived = derive(row, passed, totalDays);
@@ -224,8 +233,14 @@ export function createShipment(
           const remainingEdit = currentState.remaining?.[row.base];
           const remaining = remainingEdit ? remainingEdit.values[keyOf(row)] : row.remaining;
           const fin = adjustment ? adjustment.value : derived.prediction;
-          const end = [row.open, row.inbound, remaining, fin].every((value) => value != null)
-            ? finite(row.open + row.inbound + remaining - fin)
+          const plan = plans.get(keyOf(row));
+          const transferIn = plan?.inbound ?? null;
+          const transferOut = plan?.outbound ?? null;
+          const inputs = { ...row, transferIn, transferOut };
+          const end = [row.open, row.inbound, remaining, fin, transferIn, transferOut].every(
+            (value) => value != null,
+          )
+            ? finite(row.open + row.inbound + remaining + transferIn - transferOut - fin)
             : null;
           return {
             ...derived,
@@ -240,20 +255,33 @@ export function createShipment(
             fin,
             remaining,
             inputRemaining: row.remaining,
+            transferIn,
+            transferOut,
             end,
             adjustment: adjustment ?? null,
             remainingSource: remainingEdit?.source ?? null,
-            missingFields: fields.filter(
-              (field) =>
-                (inputFields.includes(field) ||
-                  (sourceKind === 'business' && field === 'average')) &&
-                row[field] == null,
-            ),
+            missingFields: [
+              ...inputFields,
+              'transferIn',
+              'transferOut',
+              ...(sourceKind === 'business' ? ['average'] : []),
+            ].filter((field) => inputs[field] == null),
           };
         });
+    };
     const rows = react.useMemo(
       () => deriveRows(state),
-      [sourceRows, sourceKind, dimensions, month, passed, totalDays, state.values, state.remaining],
+      [
+        sourceRows,
+        sourceKind,
+        dimensions,
+        month,
+        passed,
+        totalDays,
+        state.values,
+        state.remaining,
+        state.transferPlans,
+      ],
     );
     const aggregate = (children, who) => {
       const inputs = Object.fromEntries(
@@ -271,6 +299,8 @@ export function createShipment(
         ...calculation,
         ...inputs,
         average: knownSum(children, 'average'),
+        transferIn: knownSum(children, 'transferIn'),
+        transferOut: knownSum(children, 'transferOut'),
         who,
         fin: knownSum(children, 'fin'),
         end: knownSum(children, 'end'),
@@ -565,7 +595,28 @@ export function createShipment(
     const applyBatch = (entries) => {
       if (!entries.length) return;
       let next = stateRef.current;
-      for (const entry of entries.sort((a, b) => a.meta.level - b.meta.level)) {
+      const transfers = entries.filter((entry) =>
+        ['transferIn', 'transferOut'].includes(entry.meta.kind),
+      );
+      if (transfers.length) {
+        const key = (plan) => JSON.stringify([plan.month, plan.base, plan.code]);
+        const plans = new Map((next.transferPlans ?? []).map((plan) => [key(plan), plan]));
+        const currentRows = new Set(deriveRows(next).map(keyOf));
+        for (const entry of transfers) {
+          const identity = { month, base: entry.meta.base, code: entry.meta.code };
+          if (!currentRows.has(keyOf(identity)))
+            throw Error(`${entry.label} 已不在当前范围，请取消后重新调整。`);
+          const id = key(identity);
+          plans.set(id, {
+            ...(plans.get(id) ?? { ...identity, inbound: null, outbound: null }),
+            [entry.meta.kind === 'transferIn' ? 'inbound' : 'outbound']: entry.value,
+          });
+        }
+        next = { ...next, transferPlans: [...plans.values()] };
+      }
+      for (const entry of entries
+        .filter((entry) => !['transferIn', 'transferOut'].includes(entry.meta.kind))
+        .sort((a, b) => a.meta.level - b.meta.level)) {
         const current = calculate(next);
         const row =
           entry.meta.level === 0
@@ -670,6 +721,9 @@ export function createShipment(
         '近30天日均发货',
         '本月预测量',
         '整月预估发货',
+        '调入计划',
+        '调出计划',
+        '调拨计划来源',
         '预计月末结存',
         '输入来源',
         '调整来源',
@@ -703,6 +757,9 @@ export function createShipment(
           近30天日均发货: row.average ?? '',
           本月预测量: row.prediction ?? '',
           整月预估发货: row.fin ?? '',
+          调入计划: row.transferIn ?? '',
+          调出计划: row.transferOut ?? '',
+          调拨计划来源: '当前评估版本本地计划；空白待补，明确0表示无调拨',
           预计月末结存: row.end ?? '',
           输入来源: source,
           调整来源: row.adjustment ? JSON.stringify(row.adjustment) : '默认单品预测值',
@@ -734,6 +791,8 @@ export function createShipment(
       'forecastIssue',
       'prediction',
       'fin',
+      'transferIn',
+      'transferOut',
       'end',
     ];
     const contextRows = [];
@@ -776,7 +835,9 @@ export function createShipment(
     const numberCell = (row, field, who) => {
       const editable =
         !row.readOnly &&
-        (field === 'fin' || (field === 'remaining' && row.children && who !== '全国合计'));
+        (field === 'fin' ||
+          (['transferIn', 'transferOut'].includes(field) && !row.children) ||
+          (field === 'remaining' && row.children && who !== '全国合计'));
       return h(
         'td',
         {
@@ -800,7 +861,7 @@ export function createShipment(
               value: row[field],
               integer: true,
               placeholder: '待定',
-              min: field === 'remaining' ? 0 : null,
+              min: field === 'fin' ? null : 0,
               label: `${who} ${names[fields.indexOf(field)]}`,
               format: display,
               editFormat: (value) => String(Math.round(value)),
@@ -839,7 +900,7 @@ export function createShipment(
                 ),
           row.dimensionIssue &&
             h('span', { className: 'sp-warning', title: row.dimensionIssue }, '分类待补'),
-          row.end < 0 && h('span', { className: 'sp-warning' }, '需含调拨'),
+          row.end < 0 && h('span', { className: 'sp-warning' }, '负结存'),
         ),
         ...fields.map((field) => numberCell(row, field, who)),
       );
@@ -976,7 +1037,7 @@ export function createShipment(
           { key: `${id}-page` },
           h(
             'td',
-            { colSpan: 13 },
+            { colSpan: fields.length + 1 },
             h(
               'div',
               { className: 'sp-sku-pages' },
@@ -1051,13 +1112,21 @@ export function createShipment(
                     : `${raw('inbound')} ÷ ${passed - 1} × ${totalDays - passed}，逐SKU四舍五入`
                   : '本地CSV输入，BI排产未核齐'),
           ],
+          transferIn: [
+            '调入计划 = 当前评估版本、月份、基地及SKU的本地人工计划，未填写保留待定',
+            `本地计划 ${raw('transferIn')} 件；不根据调拨方向推导数量`,
+          ],
+          transferOut: [
+            '调出计划 = 当前评估版本、月份、基地及SKU的本地人工计划，未填写保留待定',
+            `本地计划 ${raw('transferOut')} 件；明确0表示无调出`,
+          ],
           end: [
             row.children
               ? '预计月末结存 = 已有单品结存之和；缺项单品保留待定'
-              : '预计月末结存 = 月初库存 + 本月生产入库 + 剩余天数入库 − 整月预估发货',
+              : '预计月末结存 = 月初库存 + 本月生产入库 + 剩余天数入库 + 调入计划 − 调出计划 − 整月预估发货',
             row.children
               ? `${row.children.length - row.missingCounts.end}个可计算单品结存求和 = ${raw('end')}`
-              : `${raw('open')} + ${raw('inbound')} + ${raw('remaining')} − ${raw('fin')}`,
+              : `${raw('open')} + ${raw('inbound')} + ${raw('remaining')} + ${raw('transferIn')} − ${raw('transferOut')} − ${raw('fin')}`,
           ],
         };
         const [expression, substitution] = expressions[field] ?? [
@@ -1093,7 +1162,7 @@ export function createShipment(
                   prediction: ['shipped', 'prepped', 'unprepped', 'shipDays'],
                   fin: ['prediction', 'fin'],
                   remaining: ['inbound', 'remaining'],
-                  end: ['open', 'inbound', 'remaining', 'fin'],
+                  end: ['open', 'inbound', 'remaining', 'transferIn', 'transferOut', 'fin'],
                 }[field] ?? [field]
               ).map((key) =>
                 h(
@@ -1141,7 +1210,7 @@ export function createShipment(
                   `另有${row.children.length - 12}条未展开，完整输入与调整来源见下载明细。`,
                 ),
             ),
-          row.end < 0 && h('p', {}, '负结存保留，需含调拨。'),
+          row.end < 0 && h('p', {}, '负结存保留，请核对生产、发货及调拨计划。'),
         );
       })();
     return h(
@@ -1244,7 +1313,40 @@ export function createShipment(
             ' 件',
           ),
           h('span', { className: 'sp-spacer' }),
-          h(Actions, { batch, disabled: busy || !rows.length }),
+          h(Actions, {
+            batch,
+            disabled: busy || !rows.length,
+            hint: '调拨仅改基地单品；留空表示待补，明确0表示无调拨',
+          }),
+          batch.active &&
+            h(
+              'button',
+              {
+                type: 'button',
+                onClick: () =>
+                  batch.replace({
+                    ...batch.pending,
+                    ...Object.fromEntries(
+                      rows.flatMap((row) =>
+                        ['transferIn', 'transferOut'].map((field) => {
+                          const who = `${row.base} ${row.code}`;
+                          return [
+                            `${who}:${field}`,
+                            {
+                              label: `${who} ${names[fields.indexOf(field)]}`,
+                              text: '0',
+                              min: 0,
+                              integer: true,
+                              meta: { who, kind: field, level: 2, base: row.base, code: row.code },
+                            },
+                          ];
+                        }),
+                      ),
+                    ),
+                  }),
+              },
+              '确认当前月份全部明细无调拨',
+            ),
           batch.active &&
             (Object.keys(state.values ?? {}).length > 0 ||
               Object.keys(state.remaining ?? {}).length > 0) &&
@@ -1291,6 +1393,11 @@ export function createShipment(
               ? '数仓输入同步失败，未采用旧业务结果'
               : source,
         ),
+        h(
+          'p',
+          { className: 'dc-card-note' },
+          `${month}调拨数量未接入业务来源，按当前评估版本本地维护。空白待补，明确0表示无调拨；汇总和下载包含全部明细，不随单品搜索缩小范围。`,
+        ),
         business?.metadata.omittedRows > 0 &&
           h(
             'p',
@@ -1323,7 +1430,7 @@ export function createShipment(
             h(
               'colgroup',
               {},
-              ...[132, 72, 62, 62, 82, 82, 94, 88, 96, 68, 72, 98, 94].map((width, index) =>
+              ...[132, 72, 62, 62, 82, 82, 94, 88, 96, 68, 72, 98, 80, 80, 94].map((width, index) =>
                 h('col', { key: index, style: { width } }),
               ),
             ),
@@ -1339,7 +1446,7 @@ export function createShipment(
                   ['派生', 1],
                   ['本月结果', 1],
                   ['人工覆盖', 1],
-                  ['当月结存', 4],
+                  ['当月结存', 6],
                 ].map(([label, span]) =>
                   h('th', { key: label, colSpan: span, scope: 'colgroup' }, label),
                 ),

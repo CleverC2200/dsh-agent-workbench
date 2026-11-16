@@ -75,7 +75,13 @@ export function encodeLocalDrafts(drafts, selected) {
       ...(draft.shipment
         ? {
             shipment: {
-              ...fields(draft.shipment, ['cutoff', 'activeSource', 'values', 'remaining']),
+              ...fields(draft.shipment, [
+                'cutoff',
+                'activeSource',
+                'values',
+                'remaining',
+                'transferPlans',
+              ]),
               ...(draft.shipment.sourceEdits
                 ? {
                     sourceEdits: Object.fromEntries(
