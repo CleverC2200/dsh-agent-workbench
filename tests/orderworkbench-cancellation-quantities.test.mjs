@@ -50,10 +50,10 @@ test('sums customer changes then DMS last quantities then backup quantities, ret
   })['作废率'];
   assert.ok(Math.abs(metric.value - 3100 / 64) < 1e-10);
   assert.match(metric.note, /need_qty_origin/);
-  assert.match(metric.note, /作废时间canceltime归月/);
+  assert.match(metric.note, /有作废时间取canceltime.*lastshipmenttime归属周期/);
 });
 
-test('cancelled products use cancellation month; other products use their own OMS creation month', (t) => {
+test('cancelled products use cancellation month; other products use their actual last shipment month', (t) => {
   const { read } = calculate(t, {
     hourly: [
       cancelled('old-order', {
@@ -150,7 +150,12 @@ test('warehouse recovery keeps missing, conflicting, stale or mismatched latest 
   ];
   const { read } = calculate(t, {
     hourly: ids.map((id) =>
-      cancelled(id, { warehouseid: '*', receive_wh: 'OTHER', need_qty_origin: 10 }),
+      cancelled(id, {
+        warehouseid: '*',
+        receive_wh: 'OTHER',
+        pickup_point: '02',
+        need_qty_origin: 10,
+      }),
     ),
     trace: [
       warehouseTrace('latest-null', { update_time: '2026-11-08 11:00:00' }),
@@ -193,49 +198,49 @@ test('missing warehouses use the order pickup point while retaining factory-clas
     hourly: [
       cancelled('short', {
         warehouseid: '*',
-        pickup_point: 'P',
+        pickup_point: '01',
         warehouse_classify: '01',
         receive_wh: 'R',
         need_qty_origin: 100,
       }),
       cancelled('daily-name', {
         warehouseid: null,
-        pickup_point: 'P',
+        pickup_point: '01',
         warehouse_classify: '工厂成品仓',
         receive_wh: 'OTHER',
         need_qty_origin: 20,
       }),
       cancelled('rented-name', {
         warehouseid: '',
-        pickup_point: 'P',
+        pickup_point: '01',
         warehouse_classify: '工厂外租库',
         receive_wh: 'OTHER',
         need_qty_origin: 30,
       }),
       cancelled('known-warehouse', {
         warehouseid: 'F',
-        pickup_point: 'Q',
+        pickup_point: '02',
         warehouse_classify: '01',
         receive_wh: 'OTHER',
         need_qty_origin: 7,
       }),
       cancelled('different-points', {
         warehouseid: '*',
-        pickup_point: 'P',
+        pickup_point: '01',
         warehouse_classify: null,
         receive_wh: 'OTHER',
         need_qty_origin: 11,
       }),
       cancelled('nonfactory', {
         warehouseid: '*',
-        pickup_point: 'P',
+        pickup_point: '01',
         warehouse_classify: '电商仓',
         receive_wh: 'R',
         need_qty_origin: 4,
       }),
       cancelled('trace-priority', {
         warehouseid: '*',
-        pickup_point: 'Q',
+        pickup_point: '02',
         warehouse_classify: '01',
         receive_wh: 'R',
         need_qty_origin: 100,
@@ -250,13 +255,13 @@ test('missing warehouses use the order pickup point while retaining factory-clas
   assert.equal(row.invalid, 0);
 });
 
-test('matching pickup points still require both factory classes, and absent source pickup stays unknown', (t) => {
+test('matching pickup points require both factory classes; an absent order pickup is outside the confirmed scope', (t) => {
   const { read } = calculate(t, {
     hourly: [
       line('keep', { need_qty_origin: 5 }),
       cancelled('unknown-class', {
         warehouseid: '*',
-        pickup_point: 'P',
+        pickup_point: '01',
         warehouse_classify: null,
         receive_wh: 'R',
         need_qty_origin: 10,
@@ -270,9 +275,9 @@ test('matching pickup points still require both factory classes, and absent sour
       }),
     ],
   });
-  assert.equal(read().invalid, 2);
+  assert.equal(read().invalid, 1);
   assert.equal(read().sample_denominator, 5);
-  assert.equal(read().unknown_quantity, 30);
+  assert.equal(read().unknown_quantity, 10);
 });
 
 test('reported order can include the 304 known boxes using pickup fallback without inventing the missing 280 quantity', (t) => {
@@ -510,9 +515,7 @@ test('six-window combined queries use the same cancellation event period and qua
       ['is_short_transfer', 'TEXT'],
     ])
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${field} ${type}`);
-  db.exec(`ALTER TABLE agents_scm_order_trace_final_di ADD COLUMN lastshipmenttime;
-    ALTER TABLE agents_scm_order_trace_final_di ADD COLUMN load_time;
-    CREATE TABLE agents_dim_bas_warehouse_d(warehouseid,pickup_point,warehouse_classify);`);
+  db.exec(`CREATE TABLE agents_dim_bas_warehouse_d(warehouseid,pickup_point,warehouse_classify);`);
   const q = periodChangesSql();
   const windows =
     "SELECT 0 AS period_index,'2026-10-01' AS start_date,'2026-11-01' AS end_date,TRUE AS enabled UNION ALL SELECT 1,'2026-09-01','2026-10-01',TRUE";
@@ -571,7 +574,7 @@ test('reported interface cancellations use OMS latest departures recovered from 
   assert.equal(read().invalid, 0);
 });
 
-test('cancellations exclude both quantities before seven days ahead of OMS departure and include the boundary', (t) => {
+test('cancellations before and at the former seven-day boundary both count after twelve hours', (t) => {
   const { read } = calculate(t, {
     hourly: [
       cancelled('before-lock', {
@@ -589,8 +592,8 @@ test('cancellations exclude both quantities before seven days ahead of OMS depar
     ],
   });
   const row = read();
-  assert.equal(row.numerator, 20);
-  assert.equal(row.denominator, 20);
+  assert.equal(row.numerator, 50);
+  assert.equal(row.denominator, 50);
   assert.equal(row.invalid, 0);
 });
 
@@ -643,8 +646,8 @@ test('Zhengzhou scope uses order pickup 01 across source bases, never warehouse 
   const row = db.prepare(sql(cancellationChangesSql)).all({ ...params, gea_p900: '郑州' })[0];
   assert.equal(row.sample_numerator, 108);
   assert.equal(row.sample_denominator, 108);
-  assert.equal(row.records, 3);
-  assert.equal(row.invalid, 1);
+  assert.equal(row.records, 2);
+  assert.equal(row.invalid, 0);
 });
 
 test('order pickup scope retains both the 10 and 3 product lines when warehouse pickup differs', (t) => {
@@ -688,8 +691,8 @@ test('missing hourly order pickup recovers only a unique exact daily header and 
   });
   const row = db.prepare(sql(cancellationChangesSql)).all({ ...params, gea_p900: '郑州' })[0];
   assert.equal(row.sample_denominator, 30);
-  assert.equal(row.records, 3);
-  assert.equal(row.invalid, 1);
+  assert.equal(row.records, 2);
+  assert.equal(row.invalid, 0);
 });
 
 test('supplements only missing valid daily product lines without replacing existing hourly lines or their zero', (t) => {
@@ -745,7 +748,7 @@ test('warehouse pickup mappings still govern short transfers independently of or
   assert.equal(row.records, 1);
 });
 
-test('reported E2600228660 is excluded from both quantities before departure minus seven days', (t) => {
+test('reported E2600228660 counts cancellation quantities without the former seven-day lock', (t) => {
   const { db, read } = calculate(t, {
     daily: [
       cancelled('E2600228660', {
@@ -761,8 +764,8 @@ test('reported E2600228660 is excluded from both quantities before departure min
   const events = db.prepare(sql(cancellationEvents)).all(params);
   assert.equal(
     events.some((row) => row.executeorderno === 'E2600228660'),
-    false,
+    true,
   );
-  assert.equal(read().numerator, 0);
-  assert.equal(read().denominator, 1);
+  assert.equal(read().numerator, 2000);
+  assert.equal(read().denominator, 2001);
 });
