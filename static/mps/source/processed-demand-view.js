@@ -1,3 +1,4 @@
+import { useStepViewField } from './step-view-state.js';
 import { createProcessedDemandEvidence } from './processed-demand-evidence-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { changeAdjustment, quantityAdjustmentKey } from './local-draft.js';
@@ -40,6 +41,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
   const AmountReconciliation = createAmountReconciliation(react, { downloadCsv: downloadAmounts });
   const Evidence = createProcessedDemandEvidence(react, { downloadCsv });
   return function ProcessedDemand({
+    view,
     draft,
     result,
     rows,
@@ -52,8 +54,18 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
     batch,
     filters = {},
   }) {
-    const [expanded, setExpanded] = react.useState(() => new Set());
-    react.useEffect(() => setExpanded(new Set()), [draft.id, draft.month]);
+    const [expanded, setExpanded] = useStepViewField(
+      react,
+      view,
+      'ProcessedDemand.expanded',
+      () => new Set(),
+    );
+    const [historyOpen, setHistoryOpen] = useStepViewField(
+      react,
+      view,
+      'ProcessedDemand.historyOpen',
+      false,
+    );
     const quantities = draft.adjustments?.quantities ?? [];
     const toggle = (key) => {
       setExpanded((previous) => {
@@ -700,7 +712,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
           h('button', { onClick: exportSummary }, '下载大类需求总表'),
         ),
       ),
-      h(Evidence, { draft, result: result.categoryComputation, rows, filters, table }),
+      h(Evidence, { view, draft, result: result.categoryComputation, rows, filters, table }),
       card(
         '加工后的需求',
         h(
@@ -738,7 +750,13 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       h(AmountReconciliation, { draft, result, rows, filters, card, table }),
       h(
         'details',
-        { className: 'wf-disclosure' },
+        {
+          className: 'wf-disclosure',
+          open: historyOpen,
+          onToggle: (event) => {
+            if (event.target === event.currentTarget) setHistoryOpen(event.currentTarget.open);
+          },
+        },
         h(
           'summary',
           null,

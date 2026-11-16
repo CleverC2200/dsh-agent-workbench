@@ -1072,6 +1072,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [scopeGeneration, setScopeGeneration] = react.useState(0);
     const [shipmentSnapshot, setShipmentSnapshot] = react.useState(null);
     const [evaluation, setEvaluation] = react.useState(null);
+    const workflowStep = react.useRef({ scope: '', step: null });
     const receiveShipment = react.useCallback(
       (snapshot) => setShipmentSnapshot({ ...snapshot, scopeGeneration }),
       [scopeGeneration],
@@ -1345,6 +1346,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       }
     };
     const draft = drafts.find((entry) => entry.id === selected) ?? drafts[0];
+    const workflowScope = JSON.stringify([draft.id, draft.month, scopeGeneration]);
+    if (workflowStep.current.scope !== workflowScope)
+      workflowStep.current = { scope: workflowScope, step: null };
+    const workflowActive =
+      active && ['process', 'constraints', 'capacity', 'report'].includes(step);
+    if (workflowActive) workflowStep.current.step = step;
     react.useEffect(() => {
       onScopeChange?.({
         id: draft.id,
@@ -2010,27 +2017,32 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         }),
       ),
       h('div', { hidden: step !== 'masterdata' }, masterData),
-      active &&
-        ['process', 'constraints', 'capacity', 'report'].includes(step) &&
-        h(Workflow, {
-          evaluation,
-          setEvaluation,
-          syncInventoryTargets,
-          inventoryTargetsBusy: busy.inventoryTargets,
-          step,
-          draft,
-          scopeGeneration,
-          update,
-          onEditingChange: setAdjusting,
-          onUndoShareAdjustment: (input) =>
-            update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input, true) }),
-          relations:
-            relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
-              ? relations
-              : null,
-          shipmentSnapshot:
-            shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
-        }),
+      h(
+        'div',
+        { hidden: !workflowActive },
+        workflowStep.current.step &&
+          h(Workflow, {
+            key: workflowScope,
+            active: workflowActive,
+            evaluation,
+            setEvaluation,
+            syncInventoryTargets,
+            inventoryTargetsBusy: busy.inventoryTargets,
+            step: workflowStep.current.step,
+            draft,
+            scopeGeneration,
+            update,
+            onEditingChange: setAdjusting,
+            onUndoShareAdjustment: (input) =>
+              update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input, true) }),
+            relations:
+              relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
+                ? relations
+                : null,
+            shipmentSnapshot:
+              shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
+          }),
+      ),
       h(
         'div',
         { hidden: step !== 'check' },

@@ -1,3 +1,4 @@
+import { useStepViewField } from './step-view-state.js';
 import { sourceDimensions } from './source-projections.js';
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const key = (base, code) => JSON.stringify([text(base), text(code)]);
@@ -23,9 +24,9 @@ const columns = [
 
 export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
   const h = react.createElement;
-  return function SourceDiagnostics({ draft, result, table }) {
+  return function SourceDiagnostics({ draft, result, table, view }) {
     const [preview, setPreview] = react.useState(null);
-    const [page, setPage] = react.useState(0);
+    const [page, setPage] = useStepViewField(react, view, 'SourceDiagnostics.page', 0);
     const products = new Map();
     for (const row of ['loading', 'failed'].includes(draft.productsRead?.status)
       ? []

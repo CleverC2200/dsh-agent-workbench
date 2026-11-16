@@ -760,7 +760,7 @@ test('shipment exposes national and base category, material group and SKU levels
   await expectShipment(table, '郑州 A 整月预估发货', '300');
 });
 
-test('shipment hierarchy uses current unique product categories and keeps unmatched or conflicting categories with their quantities', async (t) => {
+test('shipment hierarchy uses current unique product categories and material codes with names while retaining unmatched and conflicting quantities', async (t) => {
   const { page, frame, table } = await businessShipment(t, (query) => {
     const result = shipmentFacts(query);
     if (query.queryId === 'products.detail')
@@ -822,7 +822,38 @@ test('shipment hierarchy uses current unique product categories and keeps unmatc
   await expectShipment(table, '全国合计 汤圆 整月预估发货', '300');
   await expectShipment(table, '全国合计 大类未提供 整月预估发货', '600');
   await expectShipment(table, '全国合计 整月预估发货', '900');
+  await table.getByRole('button', { name: '展开 全国合计 汤圆', exact: true }).click();
+  await expectShipment(table, '全国合计 汤圆 G · 组 整月预估发货', '300');
+  await table.getByRole('button', { name: '展开 全国合计 汤圆 G · 组', exact: true }).click();
+  await expectShipment(table, '全国合计 A 整月预估发货', '300');
+  await table.getByRole('button', { name: '展开 全国合计 大类未提供', exact: true }).focus();
+  await table.getByRole('button', { name: '展开 全国合计 大类未提供', exact: true }).press('Enter');
+  await expectShipment(table, '全国合计 大类未提供 物料组未提供 整月预估发货', '600');
+  await table
+    .getByRole('button', { name: '展开 全国合计 大类未提供 物料组未提供', exact: true })
+    .press('Enter');
+  await expect(
+    table.locator('tr.sp-sku').filter({ hasText: '产品B' }).getByText('分类待补', { exact: true }),
+  ).toHaveAttribute('title', /物料组存在多个当前值/);
+  await expect(table.locator('tr.sp-sku').filter({ hasText: '产品C' })).toContainText('分类待补');
   const csv = await exported(page, frame);
+  const { read, utils } = await import('xlsx-republish');
+  const records = utils.sheet_to_json(read(csv, { type: 'string', raw: true }).Sheets.Sheet1);
+  assert.equal(records.length, 3);
+  assert.equal(
+    records.reduce((sum, row) => sum + Number(row['整月预估发货']), 0),
+    900,
+  );
+  assert.equal(records.find((row) => row['产品编码'] === 'A')['物料组'], 'G');
+  assert.equal(records.find((row) => row['产品编码'] === 'A')['物料组名称'], '组');
+  assert.match(
+    records.find((row) => row['产品编码'] === 'B')['分类待补原因'],
+    /物料组存在多个当前值/,
+  );
+  assert.match(
+    records.find((row) => row['产品编码'] === 'C')['分类待补原因'],
+    /未匹配当前产品明细/,
+  );
   assert.match(csv, /郑州,A,产品A,汤圆,/);
   assert.match(csv, /郑州,B,产品B,,/);
   assert.match(csv, /郑州,C,产品C,,/);

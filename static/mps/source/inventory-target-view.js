@@ -1,3 +1,4 @@
+import { useStepViewField } from './step-view-state.js';
 import { inventoryVersionOrder, selectedInventoryMonth } from './inventory-selection.js';
 
 const number = (value, decimals = 4) =>
@@ -36,6 +37,7 @@ export function inventoryDependencyFields(row) {
 export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) {
   const h = react.createElement;
   return function InventoryTargetPanel({
+    view,
     draft,
     batch,
     result,
@@ -46,10 +48,20 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
     card,
     policyRows,
   }) {
-    const [month, setMonth] = react.useState(draft.month);
-    const [base, setBase] = react.useState('');
-    const [search, setSearch] = react.useState('');
-    const [supplementPage, setSupplementPage] = react.useState(0);
+    const [month, setMonth] = useStepViewField(
+      react,
+      view,
+      'InventoryTargetPanel.month',
+      draft.month,
+    );
+    const [base, setBase] = useStepViewField(react, view, 'InventoryTargetPanel.base', '');
+    const [search, setSearch] = useStepViewField(react, view, 'InventoryTargetPanel.search', '');
+    const [supplementPage, setSupplementPage] = useStepViewField(
+      react,
+      view,
+      'InventoryTargetPanel.supplementPage',
+      0,
+    );
     const version = draft.constraints?.targetVersion ?? 'auto';
     const sourceMonth = selectedInventoryMonth(draft);
     const sourceVersion = result.rows[0]?.turnoverPolicy.sourceVersion ?? '';

@@ -1,3 +1,4 @@
+import { useStepViewField } from './step-view-state.js';
 const valueText = (value, percent = false) => {
   if (value == null) return '待补';
   const amount = percent ? value * 100 : value;
@@ -10,12 +11,18 @@ const valueText = (value, percent = false) => {
 
 export function createProcessedDemandEvidence(react, { downloadCsv }) {
   const h = react.createElement;
-  return function ProcessedDemandEvidence({ draft, result, rows, filters, table }) {
+  return function ProcessedDemandEvidence({ draft, result, rows, filters, table, view }) {
     const categories = [...new Set(rows.map((row) => row.category))];
     const available = result.rows.filter(
       (row) => categories.includes(row.category) && (!filters.month || row.month === filters.month),
     );
-    const [selection, setSelection] = react.useState({});
+    const [selection, setSelection] = useStepViewField(
+      react,
+      view,
+      'ProcessedDemandEvidence.selection',
+      {},
+    );
+    const [open, setOpen] = useStepViewField(react, view, 'ProcessedDemandEvidence.open', false);
     const scope = JSON.stringify([draft.id, draft.month, filters.category, filters.month]);
     const selectedCategory =
       selection.scope === scope && categories.includes(selection.category)
@@ -127,7 +134,13 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
     };
     return h(
       'details',
-      { className: 'wf-disclosure' },
+      {
+        className: 'wf-disclosure',
+        open,
+        onToggle: (event) => {
+          if (event.target === event.currentTarget) setOpen(event.currentTarget.open);
+        },
+      },
       h('summary', null, '预览大类计算过程'),
       h(
         'section',
