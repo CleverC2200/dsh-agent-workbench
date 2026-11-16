@@ -928,8 +928,12 @@ test('missing current shipment keeps demand pending and exports the missing sour
   const methods = frame.getByRole('region', { name: '逐月测算', exact: true });
   await expect(methods).toContainText('0 / 4 项可计算');
   const summary = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
-  await expect(summary.locator('tbody tr')).toHaveCount(1);
-  const cells = await summary.locator('.dc-demand-amount').allTextContents();
+  await expect(summary.locator('tbody tr')).toHaveCount(2);
+  const cells = await summary
+    .locator('tbody tr')
+    .first()
+    .locator('.dc-demand-amount')
+    .allTextContents();
   assert.deepEqual(cells, ['待补', '待补', '待补', '待补']);
   const waiting = page.waitForEvent('download');
   await methods.getByRole('button', { name: '下载测算明细', exact: true }).click();
