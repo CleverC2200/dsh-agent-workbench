@@ -1,4 +1,5 @@
 import { metricSection, readySectionRows } from './metric-sections.mjs';
+import { provinceAnalysis } from './province-analysis.mjs';
 import { metricSnapshot, metricDisplayState } from './metric-components.mjs';
 import { shippableReferenceVersion } from './historical-shippable-reference.mjs';
 import { metricContract } from './metric-definitions.mjs';
@@ -644,6 +645,9 @@ export function workbenchPresentation(facts, options = {}) {
         ],
       },
       'region-change': { rows: changes, customerDetails: customers },
+      'province-performance': !options.dimension || options.dimension === 'province-performance'
+        ? provinceAnalysis(facts)
+        : { title: '省区维度达成分析', tables: [], ordersStatus: 'idle' },
       'base-category': {
         columns: ['基地 \\ 品类', ...categories],
         rows:

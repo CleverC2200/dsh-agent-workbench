@@ -912,6 +912,28 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   signal?.throwIfAborted();
   return snapshot(true);
 }
+export async function loadWorkbenchProvinceOrderCounts(start, end, signal, base = '', options = {}) {
+  const config = options.config ?? defaultConfig;
+  if (!config) throw Error('ORDER_METRIC_CONFIG_REQUIRED');
+  if (start >= end) return { status: 'ready', rows: [] };
+  const client = createAgentQueries(config, options.execute);
+  const result = await client.readAll('workbench.province.amendment.orders', {
+    start,
+    end_exclusive: end,
+    report_base: normalizeWorkbenchBase(base),
+    page_size: 200,
+    offset: 0,
+  }, {
+    signal,
+    priority: 20,
+    keyFields: ['region', 'province'],
+    requiredColumns: ['region', 'province', 'changed_orders'],
+    singlePageFirst: true,
+  });
+  if (result.rows.some((row) => row.changed_orders == null || row.changed_orders === '' || !Number.isSafeInteger(Number(row.changed_orders)) || Number(row.changed_orders) < 0)) throw Error('INVALID_PROVINCE_ORDER_COUNT');
+  return { status: 'ready', rows: result.rows, start, end, configVersion: result.configVersion };
+}
+
 export async function loadWorkbenchSkuPage(
   start,
   end,

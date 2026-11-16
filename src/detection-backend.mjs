@@ -1,8 +1,9 @@
+import { warningMetricInfo, warningMetricContext } from '../business/shared/warning-metrics.mjs';
 import { validateTaskRule, displayRule, displayValue } from './task-rules.mjs';
 import { warningOwner, ownsWarningTask, createOwnerScopedApi } from './warning-ownership.mjs';
 import { deleteDetectionTask } from './task-management.mjs';
 import {
-  notificationConfig,
+  sendPersonalNotification,
   enqueueChanges,
   enqueueNotification,
   drainNotifications,
@@ -408,6 +409,37 @@ export async function installDetection(ctx) {
     if (!response.ok || body.ok !== true) throw Error(body.error?.message || '预警调度服务不可用');
     return body.value;
   }
+  async function notificationConfig(recipient = 'self') {
+    if (recipient === 'none') return null;
+    const username =
+      recipient === 'self' ? 'self' : recipient.startsWith('gea:') ? recipient.slice(4) : '';
+    if (!username) throw Error('请选择有效的GEA飞书接收人');
+    return scheduler({ operation: 'feishu-recipient', username });
+  }
+  async function sendNotification(job) {
+    if (job.transport !== 'shared-feishu-app') return sendPersonalNotification(job);
+    let result;
+    try {
+      result = await scheduler({
+        operation: 'feishu-send',
+        taskId: job.taskId,
+        username: job.receiveId,
+        uuid: job.uuid,
+        card: job.card,
+      });
+    } catch {
+      throw Object.assign(Error('飞书发送结果待核实，请核对原通知；不自动重发'), { unknown: true });
+    }
+    if (
+      result?.ok !== true ||
+      typeof result.messageId !== 'string' ||
+      !result.messageId.startsWith('om_')
+    )
+      throw Object.assign(Error(result?.error || '飞书通知未取得成功回执'), {
+        unknown: result?.unknown !== false,
+      });
+    return result;
+  }
   const xxl = async (path, data) => {
     if (path === '/jobinfo/trigger') await scheduler({ operation: 'poll', busy: true });
     return scheduler({ operation: 'xxl', path, data });
@@ -446,22 +478,17 @@ export async function installDetection(ctx) {
       .map((x) => ({ id: x.id, name: x.name || x.id, broken: x.broken || null }));
   }
   async function metricInfo(name) {
-    let catalog = {};
+    const metric = warningMetricInfo(name);
+    if (metric.status === 'available' || metric.variants) return metric;
     try {
-      catalog = JSON.parse(await readFile(ROOT + '/config/metric-catalog.json', 'utf8'));
+      const legacy = JSON.parse(await readFile(ROOT + '/config/metric-catalog.json', 'utf8'));
+      return legacy[name] || metric;
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
+      return metric;
     }
-    return (
-      catalog[name] || {
-        name,
-        status: 'unavailable',
-        source: '产销协同数据指标_核心指标问数V0.5.xlsx',
-        version: 'V0.5',
-        message: '当前指标库快照未匹配到同名指标；不推断度量规则或排除逻辑。',
-      }
-    );
   }
+
   async function ai(t, run, signal) {
     const requestedAgent = t.agentPreset || DEFAULT_AGENT;
     const agents = await availableAgents();
@@ -490,22 +517,13 @@ export async function installDetection(ctx) {
 
     if (metric.status !== 'available')
       run.metricLibraryIssue = metric.message || '指标库口径需通过授权工具核对';
-    const metricContext = Object.fromEntries(
-      [
-        'name',
-        'status',
-        'message',
-        'unit',
-        'direction',
-        'measureRules',
-        'dimensions',
-        'cubeNotes',
-      ].map((key) => [key, metric[key] ?? '']),
-    );
+    const metricContext = warningMetricContext(metric);
     run.context = { metricContext, scope: t.scope, description: t.description };
     const prompt = `指标：${t.metric}
 检测范围：${t.scope}
 任务说明：${t.description}
+已核实的指标库口径：${JSON.stringify(metricContext)}
+以上公式、排除项、统计期间与单位须在取数和汇总中一致执行；阈值未维护时不能自行推断健康线。
 当前上海时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
 
 请使用已授权的问数和知识库工具完成检测，按指标定义、统计期间和规则查询该范围的全部对象，包括健康对象。区分事实与待核查原因；任务说明中明确的阈值、区间和空值处理规则优先于指标库，规则来源标为任务自定义；缺少指标库编号、版本或严重阈值不能单独作为失败理由。任务未指定的规则才查指标库。成功查询且返回空值时，若任务明确指定空值算正常，则按正常返回；不得将工具报错、查询失败或遗漏对象当成空值。其余无法核实维度、规则、数据覆盖或指标值时，不要猜测，返回完整性失败，避免错误判断预警恢复。仅执行只读查询。无人值守任务不得请求权限升级或等待人工审批；所需工具不可用时立即返回完整性失败并说明具体错误。
@@ -887,10 +905,10 @@ export async function installDetection(ctx) {
   );
   let delivering = false;
   async function deliver() {
-    if (delivering || !(await notificationConfig())) return;
+    if (delivering || (await scheduler({ operation: 'feishu-status' })).enabled !== true) return;
     delivering = true;
     try {
-      await drainNotifications({ state, save, locked });
+      await drainNotifications({ state, save, locked, send: sendNotification });
     } finally {
       delivering = false;
     }

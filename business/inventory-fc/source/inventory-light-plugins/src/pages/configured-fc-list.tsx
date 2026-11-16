@@ -1,3 +1,4 @@
+import { fcDmsReceiptNotice } from './fc-dms-receipt';
 import type { FcWarehouse } from './fc-warehouse-directory';
 import { PlanningTable } from './fc/components/planning-settings';
 import { projectFcPlannedRows, sortFcReplenishmentRows } from './fc-planned-page';
@@ -287,6 +288,7 @@ export function FcConfiguredList(
   const [dmsReceipt, setDmsReceipt] = useState<{
     orderCode: string;
     aiPreOrderCode: string;
+    dmsMessage?: string;
   } | null>(null);
   const [receiptArchived, setReceiptArchived] = useState(false);
   const pendingReceipts = fcPersistence.pendingReceipts();
@@ -1032,7 +1034,7 @@ export function FcConfiguredList(
                 signal.throwIfAborted();
                 setReceiptArchived(false);
                 setDmsReceipt(received);
-                setNotice(`DMS已返回订单号：${received.orderCode}；正在保存回执，请勿重复下单。`);
+                setNotice(`${fcDmsReceiptNotice(received)}；正在保存回执，请勿重复下单。`);
               },
               legacyAiPreOrderCode,
             );
@@ -1042,6 +1044,7 @@ export function FcConfiguredList(
           orderCode: z.string().min(1),
           aiPreOrderCode: z.string().min(1),
           requestAiPreOrderCode: z.string().optional(),
+          dmsMessage: z.string().min(1).max(1000).optional(),
         })
         .parse(result);
       if ((receipt.requestAiPreOrderCode ?? receipt.aiPreOrderCode) !== aiPreOrderCode)
@@ -1050,17 +1053,17 @@ export function FcConfiguredList(
       confirmation.completed = true;
       setDmsReceipt(receipt);
       setReceiptArchived(true);
-      setNotice(`已暂存至DMS，订单号：${receipt.orderCode}。尚未审核或推单。`);
+      setNotice(`${fcDmsReceiptNotice(receipt)}。尚未审核或推单。`);
       try {
         await call('branch-dms-open', {}, { signal });
         signal.throwIfAborted();
         setNotice(
-          `已暂存至DMS，订单号：${receipt.orderCode}；已请求打开订单管理。若未打开，请点击“进入DMS订单管理”，无需重新提交。`,
+          `${fcDmsReceiptNotice(receipt)}；已请求打开订单管理。若未打开，请点击“进入DMS订单管理”，无需重新提交。`,
         );
       } catch {
         if (!signal.aborted)
           setNotice(
-            `已暂存至DMS，订单号：${receipt.orderCode}；跳转未完成，请点击“进入DMS订单管理”重试，无需重新提交。`,
+            `${fcDmsReceiptNotice(receipt)}；跳转未完成，请点击“进入DMS订单管理”重试，无需重新提交。`,
           );
       }
     }).finally(() => {
@@ -1073,7 +1076,7 @@ export function FcConfiguredList(
       signal.throwIfAborted();
       if (pending.warehouseCode === exportWarehouse && receipt.orderCode === dmsReceipt?.orderCode)
         setReceiptArchived(true);
-      setNotice(`DMS订单 ${receipt.orderCode} 的回执归档已核实；未重新下单。`);
+      setNotice(`${fcDmsReceiptNotice(receipt)}；回执归档已核实，未重新下单。`);
     });
   const loginDms = () =>
     run(async (signal) => {

@@ -93,6 +93,7 @@ export async function persistAndSubmitFc(
       orderCode: '\u0000'.repeat(128),
       aiPreOrderCode: '\u0000'.repeat(64),
       requestAiPreOrderCode: snapshot.aiPreOrderCode,
+      dmsMessage: '\u0000'.repeat(1000),
     },
   };
   if (new TextEncoder().encode(JSON.stringify(archived)).byteLength > 48000)
