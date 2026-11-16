@@ -30,14 +30,33 @@ const selection = {
 };
 
 test('card click includes measured values directly and restricts evidence to the clicked metric', () => {
-  const month=period('2026-10-01','2026-11-01');
-  month.sections=[{id:'changes',status:'ready',rows:[{kind:'1',sample_numerator:0,sample_denominator:100,sample_records:9,records:10,invalid:1}]}];
-  month.metrics=computeWorkbenchMetrics(month);
-  const request=metricDetailsRequest({...facts,readAt:'2026-11-16T04:00:00Z',periods:{month,week:month}},'作废率',selection);
-  const inline=JSON.parse(request.text.split('页面指标快照：')[1].split('\n')[0]);
-  assert.equal(inline.month.numerator,0);
-  assert.equal(inline.month.denominator,100);
-  assert.equal(inline.month.pending,1);
+  const month = period('2026-10-01', '2026-11-01');
+  month.sections = [
+    {
+      id: 'changes',
+      status: 'ready',
+      rows: [
+        {
+          kind: '1',
+          sample_numerator: 0,
+          sample_denominator: 100,
+          sample_records: 9,
+          records: 10,
+          invalid: 1,
+        },
+      ],
+    },
+  ];
+  month.metrics = computeWorkbenchMetrics(month);
+  const request = metricDetailsRequest(
+    { ...facts, readAt: '2026-11-16T04:00:00Z', periods: { month, week: month } },
+    '作废率',
+    selection,
+  );
+  const inline = JSON.parse(request.text.split('页面指标快照：')[1].split('\n')[0]);
+  assert.equal(inline.month.numerator, 0);
+  assert.equal(inline.month.denominator, 100);
+  assert.equal(inline.month.pending, 1);
   const groupsInline = JSON.parse(request.text.split('页面基地分组：')[1].split('\n')[0]);
   const row = groupsInline.periods.month.rows[0];
   assert.equal(row[groupsInline.columns.indexOf('sampleKnown')], 9);
@@ -45,43 +64,85 @@ test('card click includes measured values directly and restricts evidence to the
   assert.equal(groupsInline.periods.month.pagination.totalGroups, 1);
   assert.equal(groupsInline.periods.month.pagination.hasMore, false);
   assert.equal(request.context.metricDetails.baseGroups.month.contract.scope, 'base');
-  assert.equal(request.context.metricDetails.trigger,'metric-card');
+  assert.equal(request.context.metricDetails.trigger, 'metric-card');
   assert.ok(request.displayText.length < 180);
   assert.doesNotMatch(request.displayText, /页面指标快照|sample_numerator|页面基地分组/);
   assert.equal(request.context.metricDetails.agentPrompt, request.text);
-  assert.deepEqual(Object.keys(request.context.evidence.metricContracts),['作废率']);
-  assert.deepEqual(Object.keys(request.context.evidence.periods.month.metrics),['作废率']);
-  assert.equal(request.context.evidence.periods.month.metrics['作废率'].formula,undefined);
-  assert.match(request.text,/不必再调用gea_page、gea_evidence_read或summary/);
+  assert.deepEqual(Object.keys(request.context.evidence.metricContracts), ['作废率']);
+  assert.deepEqual(Object.keys(request.context.evidence.periods.month.metrics), ['作废率']);
+  assert.equal(request.context.evidence.periods.month.metrics['作废率'].formula, undefined);
+  assert.match(request.text, /不必再调用gea_page、gea_evidence_read或summary/);
 });
 
 test('card clicks retain complete base rows and valid zero year comparisons without rereading SQL', () => {
   const ready = (start, end, quantities) => {
-    const p = { start, end, sections: [{ id: 'changes', status: 'ready', rows:
-      quantities.map(([base, numerator, denominator]) => ({ base, kind: '2', numerator, denominator, records: 1, invalid: 0 })) }] };
+    const p = {
+      start,
+      end,
+      sections: [
+        {
+          id: 'changes',
+          status: 'ready',
+          rows: quantities.map(([base, numerator, denominator]) => ({
+            base,
+            kind: '2',
+            numerator,
+            denominator,
+            records: 1,
+            invalid: 0,
+          })),
+        },
+      ],
+    };
     p.metrics = computeWorkbenchMetrics(p);
     return p;
   };
-  const month = ready('2026-10-01', '2026-10-19', [['郑州', 30, 1000], ['华东', 20, 500]]);
-  const week = ready('2026-10-12', '2026-10-19', [['郑州', 10, 400], ['华东', 0, 100]]);
-  const yearMonth = ready('2025-10-01', '2025-10-19', [['郑州', 0, 800], ['华东', 0, 300]]);
-  const yearWeek = ready('2025-10-13', '2025-10-20', [['郑州', 0, 200], ['华东', 0, 100]]);
-  const request = metricDetailsRequest({ ...facts, periods: { month, week, yearMonth, yearWeek } }, '改单率', selection);
+  const month = ready('2026-10-01', '2026-10-19', [
+    ['郑州', 30, 1000],
+    ['华东', 20, 500],
+  ]);
+  const week = ready('2026-10-12', '2026-10-19', [
+    ['郑州', 10, 400],
+    ['华东', 0, 100],
+  ]);
+  const yearMonth = ready('2025-10-01', '2025-10-19', [
+    ['郑州', 0, 800],
+    ['华东', 0, 300],
+  ]);
+  const yearWeek = ready('2025-10-13', '2025-10-20', [
+    ['郑州', 0, 200],
+    ['华东', 0, 100],
+  ]);
+  const request = metricDetailsRequest(
+    { ...facts, periods: { month, week, yearMonth, yearWeek } },
+    '改单率',
+    selection,
+  );
   const groups = request.context.metricDetails.baseGroups;
   assert.deepEqual(Object.keys(groups), ['month', 'week', 'yearMonth', 'yearWeek']);
   const inlineGroups = JSON.parse(request.text.split('页面基地分组：')[1].split('\n')[0]);
   assert.deepEqual(inlineGroups.columns.slice(0, 4), ['base', 'value', 'numerator', 'denominator']);
   assert.equal(inlineGroups.periods.month.rows.length, 2);
-  assert.equal(inlineGroups.periods.yearMonth.rows.find(row => row[0] === '郑州')[2], 0);
-  assert.equal(inlineGroups.periods.month.rows.find(row => row[0] === '郑州')[inlineGroups.columns.indexOf('yearDifference')], 3);
-  assert.equal(inlineGroups.periods.week.rows.find(row => row[0] === '郑州')[inlineGroups.columns.indexOf('yearDifference')], 2.5);
+  assert.equal(inlineGroups.periods.yearMonth.rows.find((row) => row[0] === '郑州')[2], 0);
+  assert.equal(
+    inlineGroups.periods.month.rows.find((row) => row[0] === '郑州')[
+      inlineGroups.columns.indexOf('yearDifference')
+    ],
+    3,
+  );
+  assert.equal(
+    inlineGroups.periods.week.rows.find((row) => row[0] === '郑州')[
+      inlineGroups.columns.indexOf('yearDifference')
+    ],
+    2.5,
+  );
   assert.ok(request.text.length <= 10000);
   assert.equal(groups.month.rows.length, 2);
   assert.equal(groups.month.total.numerator, 50);
   assert.equal(groups.month.total.denominator, 1500);
   assert.equal(groups.month.reconciliation.matches, true);
-  assert.equal(groups.week.rows.find(row => row.base === '华东').current.numerator, 0);
-  assert.equal(groups.yearMonth.rows.find(row => row.base === '郑州').current.value, 0);
+  assert.equal(groups.week.rows.find((row) => row.base === '华东').current.numerator, 0);
+  assert.equal(groups.yearMonth.rows.find((row) => row.base === '郑州').current.value, 0);
   assert.equal(groups.yearWeek.endExclusive, '2025-10-20');
   assert.match(request.text, /不得缩减为仅全国汇总/);
   assert.match(request.text, /同比必须/);
@@ -224,9 +285,22 @@ test('all six base card handoffs retain scope, current components and the curren
       for (const name of ['month', 'week']) {
         const snapshot = handoff.evidence.periods[name].metrics[card.key];
         assert.deepEqual(Object.keys(handoff.evidence.periods[name].metrics), [card.key]);
-        for (const field of ['value', 'numerator', 'denominator', 'pending', 'quantityUnit', 'pendingUnit', 'status']) {
-          assert.equal(inline[name][field], snapshot[field], `${base || '全国'} ${card.key} ${name} ${field}`);
-          if (name === 'month') assert.equal(inline[name][field], handoff.metricDetails.current[field]);
+        for (const field of [
+          'value',
+          'numerator',
+          'denominator',
+          'pending',
+          'quantityUnit',
+          'pendingUnit',
+          'status',
+        ]) {
+          assert.equal(
+            inline[name][field],
+            snapshot[field],
+            `${base || '全国'} ${card.key} ${name} ${field}`,
+          );
+          if (name === 'month')
+            assert.equal(inline[name][field], handoff.metricDetails.current[field]);
         }
       }
     }
