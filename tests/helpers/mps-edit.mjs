@@ -10,12 +10,26 @@ export async function openCategoryCalculation(frame) {
     await fold.locator('summary').first().click();
 }
 
-export async function adjustCategory(frame, category, month, value, reason) {
-  const matrix = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
-  await matrix.getByRole('button', { name: '调整', exact: true }).click();
-  await matrix.getByLabel(`${category} ${month} 需求数量`, { exact: true }).fill(value);
-  await matrix.getByLabel('批量调整原因', { exact: true }).fill(reason);
-  await matrix.getByRole('button', { name: '保存调整', exact: true }).click();
+export async function selectAdjustmentReason(view, reason) {
+  const choices = ['销售变化', '促销活动', '库存调整', '供应变化', '数据纠错', '其他'];
+  await view
+    .getByLabel('批量调整原因', { exact: true })
+    .selectOption(choices.includes(reason) ? reason : '其他');
+  if (!choices.includes(reason))
+    await view.getByLabel('其他原因说明', { exact: true }).fill(reason);
+}
+
+export async function adjustLeaf(frame, { category, group, code, base, month }, value, reason) {
+  await workflowStep(frame, '需求加工与收敛');
+  const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
+  await view.getByLabel('搜索当前步骤', { exact: true }).fill(code);
+  await beginAdjustment(view);
+  await view
+    .getByLabel(`${category} ${group} ${code} ${base} ${month} 需求数量`, { exact: true })
+    .fill(String(value));
+  await selectAdjustmentReason(view, reason);
+  await saveAdjustment(view);
+  await view.getByLabel('搜索当前步骤', { exact: true }).fill('');
 }
 
 export async function beginAdjustment(view) {

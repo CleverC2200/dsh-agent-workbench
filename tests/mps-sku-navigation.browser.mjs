@@ -1,3 +1,5 @@
+import { seedLeafQuantities } from './helpers/mps-fixtures.mjs';
+import { selectAdjustmentReason } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
@@ -6,7 +8,7 @@ import { mpsDownloadText } from './helpers/mps-download.mjs';
 import * as XLSX from 'xlsx-republish';
 import { readFile } from 'node:fs/promises';
 import { mpsPage } from './helpers/mps-page.mjs';
-import { adjustCategory, beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
+import { beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
 import { workflowExportRows } from './helpers/mps-workflow-export.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
@@ -65,8 +67,22 @@ async function skuPage(t, history = false) {
   if (history) {
     await frame.getByRole('button', { name: '读取去年发运占比源值', exact: true }).click();
     await expect(frame.getByText('全年历史读取中…')).toHaveCount(0);
-    await adjustCategory(frame, '汤圆', month, '100', '已有上层调整');
-    await adjustCategory(frame, '水饺', month, '20', '已有上层调整');
+    await seedLeafQuantities(
+      frame,
+      [
+        ['郑州', 'A', '汤圆', 'G1', 60],
+        ['华东', 'A', '汤圆', 'G1', 40],
+        ['郑州', 'B', '水饺', 'G2', 20],
+      ].map(([base, code, category, group, quantity]) => ({
+        base,
+        code,
+        category,
+        group,
+        month,
+        quantity,
+        systemValue: null,
+      })),
+    );
   }
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   return {
@@ -145,7 +161,7 @@ test('全国视角逐层汇总大类、物料组和SKU，不重复累计多月�
   );
 });
 
-test('基地SKU修正后父级读取有效数量，全国汇总与明细下载一致并保留原有上层调整', async (t) => {
+test('基地SKU修正后父级读取有效数量，全国汇总与明细下载一致且不挤占其他基地', async (t) => {
   const { frame, table, month } = await skuPage(t, true);
   const base = table.getByRole('button', { name: '基地 · 郑州', exact: true });
   await base.press('Enter');
@@ -156,7 +172,7 @@ test('基地SKU修正后父级读取有效数量，全国汇总与明细下载�
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   await beginAdjustment(view);
   await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('50');
-  await view.getByLabel('批量调整原因', { exact: true }).fill('基地SKU数量复核');
+  await selectAdjustmentReason(view, '基地SKU数量复核');
   await saveAdjustment(view);
   const demandCell = async (name, expected) => {
     const row = table
@@ -176,10 +192,10 @@ test('基地SKU修正后父级读取有效数量，全国汇总与明细下载�
   await table
     .getByRole('button', { name: '全国 物料组 · G1 物料组甲', exact: true })
     .press('Enter');
-  await demandCell('SKU · A 产品甲', '100');
-  await demandCell('物料组 · G1 物料组甲', '100');
-  await demandCell('大类 · 汤圆', '100');
-  await demandCell('全国合计', '120');
+  await demandCell('SKU · A 产品甲', '90');
+  await demandCell('物料组 · G1 物料组甲', '90');
+  await demandCell('大类 · 汤圆', '90');
+  await demandCell('全国合计', '110');
   const exported = await workflowExportRows(frame);
   const skus = exported.filter((row) => row['月份'] === month && row['产品编码']);
   assert.deepEqual(
@@ -187,7 +203,7 @@ test('基地SKU修正后父级读取有效数量，全国汇总与明细下载�
       .filter((row) => row['产品编码'] === 'A')
       .map((row) => Number(row['需求数量']))
       .sort(),
-    [50, 50],
+    [40, 50],
   );
   assert.equal(skus.find((row) => row['产品编码'] === 'B')['需求数量'], '20');
   await frame.getByText('数量调整与撤销记录（1）', { exact: true }).click();

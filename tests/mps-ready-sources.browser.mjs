@@ -1,7 +1,7 @@
 import {
   beginAdjustment,
   saveAdjustment,
-  adjustCategory,
+  adjustLeaf,
   openCategoryCalculation,
 } from './helpers/mps-edit.mjs';
 import test from 'node:test';
@@ -830,8 +830,14 @@ test(
     await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
     await expect(result.locator('td').nth(1).locator('.dc-demand-amount')).toHaveText('331');
     await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('1075');
-    await adjustCategory(frame, '汤圆', '2026-11', '999', '验证环比独立');
-    await expect(result.locator('td').nth(2).locator('.dc-demand-amount')).toHaveText('999');
+    await adjustLeaf(
+      frame,
+      { base: '郑州', code: 'A', category: '汤圆', group: 'G', month: '2026-11' },
+      999,
+      '验证环比独立',
+    );
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+    await expect(result.locator('td').nth(2).locator('.dc-demand-amount')).toHaveText('1180');
     await expect(result.locator('td').nth(3).locator('.dc-demand-amount')).toHaveText('1075');
     const updatedDownload = page.waitForEvent('download');
     await frame.getByRole('button', { name: '下载测算明细', exact: true }).click();
@@ -841,7 +847,8 @@ test(
     assert.equal(updated[0]['本月有效预估发货'], 900);
     assert.equal(updated[0]['销售提报量'], 80);
     assert.equal(updated[0]['加权'], 331.25);
-    assert.equal(updated[1]['大类预估需求数量'], 999);
+    assert.equal(updated[1]['大类预估需求数量'], 1179.78125);
+    assert.equal(updated[1]['系统需求数量'], 723.125);
     assert.equal(updated[2]['① 环比法'], 2109.375);
     if (process.env.MPS05_EVIDENCE_DIR)
       await copyFile(updatedPath, `${process.env.MPS05_EVIDENCE_DIR}/adjusted-demand.xlsx`);
@@ -865,7 +872,7 @@ test(
       .allTextContents();
     assert.ok(historyQuantities.every((value) => !value.includes('%')));
     await preview.getByLabel('计算月份').selectOption('2026-11');
-    await expect(steps.getByRole('row').filter({ hasText: '有效大类需求' })).toContainText('999');
+    await expect(steps.getByRole('row').filter({ hasText: '有效大类需求' })).toContainText('723');
     await expect(steps.getByRole('row').filter({ hasText: '最终两次平均' })).toContainText(
       '不适用',
     );
@@ -882,7 +889,7 @@ test(
     const tracePath = await (await traceWaiting).path();
     const traceBook = XLSX.read(await readFile(tracePath), { type: 'buffer', raw: true });
     const trace = XLSX.utils.sheet_to_json(traceBook.Sheets[traceBook.SheetNames[0]]);
-    assert.equal(Number(trace.find((row) => row['步骤'] === '有效大类需求')['数值']), 999);
+    assert.equal(Number(trace.find((row) => row['步骤'] === '有效大类需求')['数值']), 723.125);
     assert.equal(Number(trace.find((row) => row['步骤'] === '本月有效预估发货')['数值']), 900);
     assert.deepEqual([...new Set(trace.map((row) => row['月份']))], ['2026-11']);
     if (process.env.MPS07_EVIDENCE_DIR) {
@@ -895,7 +902,7 @@ test(
       available: table.parentElement.clientWidth,
       columns: table.querySelectorAll('thead th').length,
     }));
-    assert.equal(geometry.columns, 7);
+    assert.equal(geometry.columns, 8);
     assert.ok(geometry.width <= geometry.available + 1, JSON.stringify(geometry));
     if (process.env.MPS05_EVIDENCE_DIR) {
       await processed.scrollIntoViewIfNeeded();
@@ -935,7 +942,7 @@ test(
     const summaryBook = XLSX.read(await readFile(summaryPath), { type: 'buffer' });
     const [summaryRow] = XLSX.utils.sheet_to_json(summaryBook.Sheets[summaryBook.SheetNames[0]]);
     assert.equal(summaryRow['M+1 2026-10 有效需求'], 331.25);
-    assert.equal(summaryRow['M+2 2026-11 有效需求'], 999);
+    assert.equal(summaryRow['M+2 2026-11 有效需求'], 1179.78125);
     assert.equal(summaryRow['M+3 2026-12 需求'], 1074.6875);
     if (process.env.MPS05_EVIDENCE_DIR)
       await copyFile(summaryPath, `${process.env.MPS05_EVIDENCE_DIR}/processed-demand.csv`);
