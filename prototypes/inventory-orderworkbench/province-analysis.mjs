@@ -189,7 +189,7 @@ export function provinceAnalysis(facts) {
       : '当前授权范围和统计周期内暂无省区数据。';
   const table = (title, headers, rows) => ({ title, groups: headers, rows, loading, emptyText });
   return {
-    title: '省区维度分析',
+    title: '省区维度达成分析',
     periodNote: ['month', 'week']
       .map((key) => {
         const p = periods[key];

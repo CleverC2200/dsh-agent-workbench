@@ -120,7 +120,11 @@ test('province tab renders all three document tables and lazily caches distinct 
             const records = [];
             for (let i = 0; i < 6; i++)
               if (parameters['period_' + i + '_enabled']) {
-                for (const province of ['河南', '湖南']) {
+                for (const province of [
+                  '河南',
+                  '湖南',
+                  ...Array.from({ length: 18 }, (_, i) => '测试省区' + i),
+                ]) {
                   const numerator = kind === '1' ? (province === '河南' ? 10 : 5) : 3;
                   records.push({
                     ...Object.fromEntries(columns.map((key) => [key, null])),
@@ -181,16 +185,48 @@ test('province tab renders all three document tables and lazily caches distinct 
     )
     .toBe(1);
   assert.equal(await page.evaluate(() => window.provinceReads), 0);
-  const tab = page.getByRole('tab', { name: '省区维度分析', exact: true });
+  const tab = page.getByRole('tab', { name: '省区维度达成分析', exact: true });
   await tab.click();
   const panel = page.locator('#wbDimensionPanel');
   await expect(panel.locator('table')).toHaveCount(3);
   await expect(panel.getByRole('heading', { name: '省区作废率' })).toBeVisible();
   await expect(panel.getByRole('heading', { name: '省区改单率' })).toBeVisible();
   await expect(panel.getByRole('heading', { name: '省区改单和作废综合排名 TOP10' })).toBeVisible();
-  await expect(panel.locator('table').nth(0).locator('tbody tr')).toHaveCount(2);
-  await expect(panel.locator('table').nth(0).locator('tbody tr').first()).toContainText('10.00%');
-  await expect(panel.locator('table').nth(2).locator('tbody tr').first()).toContainText('13.00%');
+  await expect(panel.locator('table').nth(0).locator('tbody tr')).toHaveCount(20);
+  await expect(
+    panel.locator('table').nth(0).locator('tbody tr').filter({ hasText: '河南' }).first(),
+  ).toContainText('10.00%');
+  await expect(
+    panel.locator('table').nth(2).locator('tbody tr').filter({ hasText: '河南' }).first(),
+  ).toContainText('13.00%');
+  await expect(panel.locator('.wb-province-scroll')).toHaveCount(2);
+  for (const wrap of await panel.locator('.wb-province-scroll').all()) {
+    const geometry = await wrap.evaluate((element) => {
+      const rect = element.getBoundingClientRect(),
+        rows = [...element.querySelectorAll('tbody tr')];
+      return {
+        scrollable: element.scrollHeight > element.clientHeight,
+        tenth: rows[9].getBoundingClientRect().bottom <= rect.top + element.clientHeight + 2,
+        eleventh: rows[10].getBoundingClientRect().top >= rect.top + element.clientHeight - 2,
+        header: element.querySelector('th').getBoundingClientRect().top,
+      };
+    });
+    assert.ok(geometry.scrollable && geometry.tenth && geometry.eleventh);
+    await wrap.evaluate((element) => {
+      element.scrollTop = 200;
+    });
+    assert.ok(
+      Math.abs(
+        (await wrap
+          .locator('th')
+          .first()
+          .evaluate((element) => element.getBoundingClientRect().top)) - geometry.header,
+      ) < 2,
+    );
+    await wrap.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+  }
   const retry = panel.getByRole('button', { name: '重新读取改单笔数' });
   await expect(retry).toBeVisible();
   await page.evaluate(() => {
@@ -198,7 +234,14 @@ test('province tab renders all three document tables and lazily caches distinct 
   });
   await retry.click();
   await expect(
-    panel.locator('table').nth(1).locator('tbody tr').first().locator('td').nth(6),
+    panel
+      .locator('table')
+      .nth(1)
+      .locator('tbody tr')
+      .filter({ hasText: '河南' })
+      .first()
+      .locator('td')
+      .nth(6),
   ).toHaveText('2');
   const reads = await page.evaluate(() => window.provinceReads);
   await page.getByRole('tab', { name: '基地维度达成分析', exact: true }).click();
@@ -209,7 +252,14 @@ test('province tab renders all three document tables and lazily caches distinct 
     window.dispatchEvent(new Event('gea-session-changed'));
   });
   await expect(
-    panel.locator('table').nth(1).locator('tbody tr').first().locator('td').nth(6),
+    panel
+      .locator('table')
+      .nth(1)
+      .locator('tbody tr')
+      .filter({ hasText: '河南' })
+      .first()
+      .locator('td')
+      .nth(6),
   ).toHaveText('2');
   assert.equal(await page.evaluate(() => window.provinceReads), reads);
   await expect(panel.locator('table').nth(0).locator('thead tr')).toHaveCount(1);
