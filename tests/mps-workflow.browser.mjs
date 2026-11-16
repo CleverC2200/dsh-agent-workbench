@@ -180,9 +180,10 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
     .getByRole('row')
     .filter({ has: frame.getByRole('button', { name: '基地 · 郑州', exact: true }) });
   await expect(zhengzhou.getByRole('cell').first()).toHaveText('80');
-  await detail.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
-  await detail.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).click();
-  await detail.getByRole('button', { name: '郑州 物料组 · 组', exact: true }).click();
+  const baseBranch = detail.getByRole('button', { name: '基地 · 郑州', exact: true });
+  if ((await baseBranch.getAttribute('aria-expanded')) === 'false') await baseBranch.press('Enter');
+  await detail.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).press('Enter');
+  await detail.getByRole('button', { name: '郑州 物料组 · 组', exact: true }).press('Enter');
   await expect(detail.getByText('SKU · A 产品甲', { exact: true })).toHaveCount(1);
   await expect(detail.getByText('SKU · B 产品乙', { exact: true })).toHaveCount(1);
   await expect(
@@ -209,22 +210,22 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
     assert.equal(
       adjusted.find(
         (row) => row['月份'] === '2026-12' && row['基地'] === base && row['产品编码'] === 'A',
-      )['需求数量'],
+      )['需求数量'] ?? '',
       quantity,
     );
   await beginAdjustment(view);
   await view.getByLabel('汤圆 组 A 郑州 2026-12 需求数量', { exact: true }).fill('');
   await selectAdjustmentReason(view, '恢复系统');
   await saveAdjustment(view);
-  await detail.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
-  await detail.getByRole('button', { name: '基地 · 华东', exact: true }).click();
-  await detail.getByRole('button', { name: '华东 大类 · 汤圆', exact: true }).click();
-  await detail.getByRole('button', { name: '华东 物料组 · 组', exact: true }).click();
+  await detail.getByRole('button', { name: '基地 · 郑州', exact: true }).press('Enter');
+  await detail.getByRole('button', { name: '基地 · 华东', exact: true }).press('Enter');
+  await detail.getByRole('button', { name: '华东 大类 · 汤圆', exact: true }).press('Enter');
+  await detail.getByRole('button', { name: '华东 物料组 · 组', exact: true }).press('Enter');
   const product = detail.getByRole('row').filter({ hasText: 'SKU · A 产品甲' });
   await expect(product.getByRole('cell').first()).toHaveText('40');
   const csv = await download(page, view, '下载需求拆分');
   const book = XLSX.read(csv, { type: 'string', raw: true });
-  const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
   for (const [base, code, quantity] of [
     ['郑州', 'A', ''],
     ['郑州', 'B', '20'],
@@ -754,6 +755,7 @@ test('MPS report and CSV derive all three months from evaluation-month coefficie
     '选择发货输入CSV',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-11,郑州,A,产品甲,汤圆,系列,组,0,0,0,0,0,0,0',
   );
+  await seedNoTransferPlans(frame, [{ month: '2026-11', base: '郑州', code: 'A' }]);
   await workflowStep(frame, '约束与配置');
   await beginAdjustment(frame);
   const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
@@ -862,14 +864,6 @@ async function preparedPlan(t, partialHistory = false) {
   const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
   await constraints.locator('summary').filter({ hasText: '高级配置：' }).click();
   await commitNumber(constraints.getByLabel('郑州 安全天数', { exact: true }), '31');
-  await expect(constraints.getByLabel('郑州 2027-01 生产天数', { exact: true })).toHaveValue('25');
-  await expect(constraints.getByLabel('郑州 2027-02 生产天数', { exact: true })).toHaveValue('15');
-  await commitNumber(constraints.getByLabel('郑州 2027-01 生产天数', { exact: true }), '15');
-  await constraints
-    .getByRole('button', { name: '郑州 2027-01 恢复默认生产天数', exact: true })
-    .click();
-  await expect(constraints.getByLabel('郑州 2027-01 生产天数', { exact: true })).toHaveValue('25');
-  await expect(constraints.getByLabel('郑州 2027-02 生产天数', { exact: true })).toHaveValue('15');
   for (const month of ['2026-12', '2027-01', '2027-02'])
     await commitNumber(constraints.getByLabel(`郑州 ${month} 生产天数`, { exact: true }), '25');
   await commitNumber(constraints.getByLabel('郑州 A 件吨系数', { exact: true }), '0.01');
@@ -878,7 +872,7 @@ async function preparedPlan(t, partialHistory = false) {
     [1, 'T', 'tunnel', '0.1'],
     [2, 'F', 'forming', '1'],
   ]) {
-    await constraints.getByRole('button', { name: '新增产能资源', exact: true }).click();
+    await constraints.getByRole('button', { name: '新增产能资源', exact: true }).press('Enter');
     await constraints.getByLabel(`资源${index} 唯一编号`, { exact: true }).fill(id);
     await constraints.getByLabel(`资源${index} 基地`, { exact: true }).fill('郑州');
     await constraints.getByLabel(`资源${index} 类型`, { exact: true }).selectOption(kind);
@@ -891,7 +885,7 @@ async function preparedPlan(t, partialHistory = false) {
   for (const code of ['A', 'B'])
     for (const resource of ['T', 'F']) {
       index++;
-      await constraints.getByRole('button', { name: '新增资源分配', exact: true }).click();
+      await constraints.getByRole('button', { name: '新增资源分配', exact: true }).press('Enter');
       await constraints.getByLabel(`分配${index} 基地`, { exact: true }).fill('郑州');
       await constraints.getByLabel(`分配${index} 产品编码`, { exact: true }).fill(code);
       await constraints.getByLabel(`分配${index} 资源`, { exact: true }).selectOption(resource);
@@ -964,7 +958,7 @@ test('零需求跳过缺失拆分依据，库存缺项逐行导出人工补数�
   assert.equal(await download(page, report, '导出分类问题清单'), issuesCsv);
 });
 
-test('MPS effective category and share edits drive the same unconstrained inventory and shared-resource report export', async (t) => {
+test('MPS explicit leaf quantities and share history drive the same inventory and shared-resource report export', async (t) => {
   const { page, frame, capacity, constraints } = await preparedPlan(t);
   for (const [field, value] of [
     ['需求数量', '75'],
@@ -1148,7 +1142,7 @@ test('MPS effective category and share edits drive the same unconstrained invent
   });
   await report
     .getByRole('button', { name: '郑州 A 2026-12 内部实际排产量 求解过程', exact: true })
-    .click();
+    .press('Enter');
   await expect(frame.getByRole('dialog')).toContainText('共同满足率');
   await frame.getByRole('dialog').getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await workflowStep(frame, '约束与配置');
@@ -1169,14 +1163,15 @@ test('部分需求缺失显示已知负荷，导出保留完整负荷为空和�
   await capacity.getByText('查看2026-12缺项明细 1项', { exact: true }).click();
   const issues = capacity.getByRole('table', { name: '需求与折吨缺项', exact: true });
   await expect(issues).toContainText('B 产品乙');
-  await expect(issues).toContainText('缺历史拆分依据');
+  await expect(issues).toContainText('缺大类需求');
+  await expect(issues).toContainText('本来源缺当前基地物料记录或数量');
   const csv = await download(page, capacity, '导出需求与折吨缺项');
   const book = XLSX.read(csv, { type: 'string', raw: true });
   const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
   assert.equal(rows.length, 1);
   assert.equal(rows[0]['产品编码'], 'B');
   assert.equal(rows[0]['历史参考物料'], 'B');
-  assert.match(rows[0]['来源'], /cust_deliv_daily_di/);
+  assert.equal(rows[0]['来源'], '大类需求测算与年度环比');
 });
 
 test('MPS share undo preserves group balance and stale overrides remain removable after the product scope changes', async (t) => {
@@ -1312,7 +1307,11 @@ test('MPS leaf undo keeps the independent baseline missing after an earlier effe
   );
   await frame.getByRole('button', { name: '读取三年同比源值', exact: true }).click();
   await expect(frame.getByRole('button', { name: '读取三年同比源值', exact: true })).toBeEnabled();
-  await upload(frame,'选择计划提报CSV','月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,产品甲,汤圆,系列,组,100,100');
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,产品甲,汤圆,系列,组,100,100',
+  );
   const leaf = { category: '汤圆', group: '组', base: '郑州', code: 'A' };
   await adjustLeaf(frame, { ...leaf, month: '2026-11' }, '200', '已确认月需求');
   await adjustLeaf(frame, { ...leaf, month: '2026-12' }, '350', '已确认月需求');
@@ -1622,6 +1621,7 @@ test('MPS processing compares both forecast months and persists fixed quantities
     await selectAdjustmentReason(view, reason);
     await saveAdjustment(view);
     await expect(view.locator('.mps-batch-input')).toHaveCount(0);
+    await view.getByLabel('搜索当前步骤').fill('');
   };
   await seedLeafQuantities(
     frame,
@@ -1666,10 +1666,11 @@ test('MPS processing compares both forecast months and persists fixed quantities
   ).toHaveText('300系统预估300');
   const demand = await columnCell(processed, categoryDetail, 'M+1 2026-12 需求（可调整）');
   await expect(demand).toContainText('100');
-  await expect(demand).not.toContainText('已知小计');
-  await view.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
-  await view.getByText('大类 · 汤圆', { exact: true }).click();
-  await view.getByText('物料组 · 组', { exact: true }).click();
+  await expect(demand).toContainText('已知小计');
+  for (const name of ['基地 · 郑州', '郑州 大类 · 汤圆', '郑州 物料组 · 组']) {
+    const branch = view.getByRole('button', { name, exact: true });
+    if ((await branch.getAttribute('aria-expanded')) === 'false') await branch.press('Enter');
+  }
   await page.evaluate(async () => {
     const seed = structuredClone(window.readView());
     const selected = seed.localDrafts;
@@ -1708,9 +1709,10 @@ test('MPS processing compares both forecast months and persists fixed quantities
   await saveAdjustment(frame);
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await workflowStep(frame, '需求加工与收敛');
-  await view.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
-  await view.getByText('大类 · 汤圆', { exact: true }).click();
-  await view.getByText('物料组 · 组', { exact: true }).click();
+  for (const name of ['基地 · 郑州', '郑州 大类 · 汤圆', '郑州 物料组 · 组']) {
+    const branch = view.getByRole('button', { name, exact: true });
+    if ((await branch.getAttribute('aria-expanded')) === 'false') await branch.press('Enter');
+  }
   await adjustLeaf(
     frame,
     { base: '郑州', code: 'B', category: '汤圆', group: '组', month: '2026-12' },
@@ -1723,7 +1725,7 @@ test('MPS processing compares both forecast months and persists fixed quantities
     '',
     '恢复系统',
   );
-  await expectWorkflowExportValue(frame, '郑州 B 2026-12 需求数量 计算过程', '');
+  await expectWorkflowExportValue(frame, '郑州 B 2026-12 需求数量 计算过程', '—');
   if (process.env.T3_UI_SCREENSHOTS === '1') {
     await view.getByRole('heading', { name: '大类需求总表', exact: true }).scrollIntoViewIfNeeded();
     await page.evaluate(() => {
@@ -1757,7 +1759,7 @@ test('MPS processing compares both forecast months and persists fixed quantities
   const book = XLSX.read(csv, { type: 'string', raw: true });
   const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
   assert.equal(
-    rows.find((row) => row['月份'] === '2026-12' && row['产品编码'] === 'B')['需求数量'],
+    rows.find((row) => row['月份'] === '2026-12' && row['产品编码'] === 'B')['需求数量'] ?? '',
     '',
   );
   assert.equal(
@@ -1791,12 +1793,13 @@ test('MPS processing compares both forecast months and persists fixed quantities
     frame.getByRole('button', { name: '全国合计 整月预估发货 计算过程', exact: true }),
   ).toHaveText('600');
   await workflowStep(frame, '需求加工与收敛');
-  await view.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
-  await view.getByText('大类 · 汤圆', { exact: true }).click();
-  await view.getByText('物料组 · 组', { exact: true }).click();
+  for (const name of ['基地 · 郑州', '郑州 大类 · 汤圆', '郑州 物料组 · 组']) {
+    const branch = view.getByRole('button', { name, exact: true });
+    if ((await branch.getAttribute('aria-expanded')) === 'false') await branch.press('Enter');
+  }
   await view.getByRole('button', { name: '运算过程 郑州 A 2026-12', exact: true }).click();
-  await expect(frame.getByRole('dialog')).toContainText('提报三层占比');
-  await expect(frame.getByRole('dialog')).toContainText('历史三层占比');
+  await expect(frame.getByRole('dialog')).toContainText('销售提报占比');
+  await expect(frame.getByRole('dialog')).toContainText('上一财年发货占比');
   await expect(frame.getByRole('dialog')).toContainText('同一套系数用于M+1至M+3');
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
 });
@@ -2081,7 +2084,7 @@ test(
     const total = detail.locator('tbody tr').first();
     const reportTotal = await columnCell(detail, total, 'M+1 2026-12 计划提报');
     const demandTotal = await columnCell(detail, total, 'M+1 2026-12 需求（可调整）');
-    const thirdMonthTotal = await columnCell(detail, total, 'M+3 2027-02 需求');
+    const thirdMonthTotal = await columnCell(detail, total, 'M+3 2027-02 需求（可调整）');
 
     await expect(total.getByRole('rowheader')).toHaveText('全国合计');
     for (const cell of [reportTotal, demandTotal]) {

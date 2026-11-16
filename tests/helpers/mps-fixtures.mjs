@@ -1,3 +1,4 @@
+import { expect } from '@playwright/test';
 export async function seedLeafQuantities(frame, rows) {
   const page = frame.locator('body').page();
   await page.evaluate(async (rows) => {
@@ -37,13 +38,21 @@ export async function seedLeafQuantities(frame, rows) {
 
 export async function seedNoTransferPlans(frame, rows) {
   const page = frame.locator('body').page();
-  await page.evaluate(async (rows) => {
-    const seed = structuredClone(window.readView());
-    const state = seed.localDrafts;
-    const draft = state.drafts.find((row) => row.id === state.selected);
-    if (!draft?.shipment)
-      throw Error('Shipment fixture must exist before explicit no-transfer plans');
-    draft.shipment.transferPlans = rows.map((row) => ({ ...row, inbound: 0, outbound: 0 }));
-    await window.openAuthor('mps', 1200, seed);
-  }, rows);
+  await expect
+    .poll(() =>
+      page.evaluate((rows) => {
+        const state = window.readView()?.localDrafts;
+        const draft = state?.drafts.find((row) => row.id === state.selected);
+        return rows.every((input) =>
+          draft?.shipment?.rows?.some((row) => row.base === input.base && row.code === input.code),
+        );
+      }, rows),
+    )
+    .toBe(true);
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await frame.getByRole('button', { name: '调整', exact: true }).press('Enter');
+  await frame
+    .getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true })
+    .press('Enter');
+  await frame.getByRole('button', { name: '保存调整', exact: true }).press('Enter');
 }

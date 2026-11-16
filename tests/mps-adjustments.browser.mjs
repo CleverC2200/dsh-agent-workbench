@@ -49,7 +49,13 @@ test('MPS base SKU override records a reason and time, survives reload and undo 
   });
   const month = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
   const period = month.match(/\d{4}-\d{2}/)[0];
-  await frame.getByLabel('选择计划提报CSV',{exact:true}).setInputFiles({name:'叶子提报.csv',mimeType:'text/csv',buffer:Buffer.from(`月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n${period},郑州,A,产品甲,汤圆,系列,组,100,100`) });
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: '叶子提报.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      `月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n${period},郑州,A,产品甲,汤圆,系列,组,100,100`,
+    ),
+  });
   const leaf = { category: '汤圆', group: '组', code: 'A', base: '郑州', month: period };
   await adjustLeaf(frame, leaf, '120.375', '客户已确认增量');
   const matrix = frame.getByRole('region', { name: '需求加工与收敛', exact: true });

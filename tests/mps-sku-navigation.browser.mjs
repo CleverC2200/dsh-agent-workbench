@@ -1,4 +1,4 @@
-import { seedLeafQuantities, seedNoTransferPlans } from './helpers/mps-fixtures.mjs';
+import { seedLeafQuantities } from './helpers/mps-fixtures.mjs';
 import { selectAdjustmentReason } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';

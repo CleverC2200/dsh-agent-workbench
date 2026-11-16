@@ -160,7 +160,13 @@ test('Tab1 is read only and leaf edits cancel or save atomically at either width
   const matrix = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
   const selected = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
   const month = selected.match(/\d{4}-\d{2}/)[0];
-  await frame.getByLabel('选择计划提报CSV',{exact:true}).setInputFiles({name:'叶子提报.csv',mimeType:'text/csv',buffer:Buffer.from(`月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n${month},郑州,A,产品甲,汤圆,系列,组,100,100\n${month},郑州,B,产品乙,水饺,系列,组,200,200`) });
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: '叶子提报.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      `月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n${month},郑州,A,产品甲,汤圆,系列,组,100,100\n${month},郑州,B,产品乙,水饺,系列,组,200,200`,
+    ),
+  });
   await expect(matrix.getByRole('button', { name: '调整', exact: true })).toHaveCount(0);
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   const leafView = frame.getByRole('region', { name: '需求加工与收敛', exact: true });

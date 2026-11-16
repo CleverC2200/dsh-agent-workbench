@@ -1,4 +1,4 @@
-import { seedLeafQuantities, seedNoTransferPlans } from './helpers/mps-fixtures.mjs';
+import { seedLeafQuantities } from './helpers/mps-fixtures.mjs';
 import { selectAdjustmentReason } from './helpers/mps-edit.mjs';
 import { expandShipmentBase } from './helpers/mps-shipment.mjs';
 import test from 'node:test';
@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { mpsPage } from './helpers/mps-page.mjs';
-import { adjustLeaf } from './helpers/mps-edit.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 async function setup(t) {
@@ -155,7 +154,9 @@ test('processing saves multiple base SKU months atomically and keeps other bases
   await view.getByLabel('搜索当前步骤').fill('A');
   const original = (await draft(page)).adjustments;
   await begin(view);
-  await expect(view.getByLabel('汤圆 2026-12 需求数量', { exact: true })).toHaveCount(0);
+  await expect(
+    view.getByRole('textbox', { name: '汤圆 2026-12 需求数量', exact: true }),
+  ).toHaveCount(0);
   const first = view.getByLabel('汤圆 组 A 郑州 2026-12 需求数量', { exact: true });
   const second = view.getByLabel('汤圆 组 A 郑州 2027-01 需求数量', { exact: true });
   await first.fill('50.75');

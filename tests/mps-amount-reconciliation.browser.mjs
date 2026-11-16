@@ -1,5 +1,4 @@
-import { seedLeafQuantities, seedNoTransferPlans } from './helpers/mps-fixtures.mjs';
-import { selectAdjustmentReason } from './helpers/mps-edit.mjs';
+import { seedLeafQuantities } from './helpers/mps-fixtures.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -119,6 +118,18 @@ async function setup(t, extra = {}) {
       systemValue: null,
     })),
   );
+  await frame
+    .getByRole('region', { name: '计划提报数据', exact: true })
+    .getByRole('button', { name: '同步', exact: true })
+    .press('Enter');
+  await expect(frame.getByRole('region', { name: '计划提报数据', exact: true })).toContainText(
+    /最终计划总金额：[0-9]/,
+  );
+  await expect(
+    frame
+      .getByRole('region', { name: '计划提报数据', exact: true })
+      .getByRole('button', { name: '同步', exact: true }),
+  ).toBeEnabled();
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   return { ...result, amounts: frame.getByRole('region', { name: '需求金额对比', exact: true }) };
 }
@@ -228,7 +239,10 @@ test('完整分页金额包含池外及缺基地，缺价显示已知小计，�
   await frame.getByLabel('基地筛选', { exact: true }).selectOption('郑州');
   await expect(amounts).toContainText('1条源金额无法归属当前筛选范围');
   await expect(amounts).toContainText('分别为10.00、10.00元');
-  await frame.getByLabel('大类筛选', { exact: true }).selectOption('汤圆');
+  await frame
+    .getByRole('region', { name: '需求加工与收敛', exact: true })
+    .getByLabel('大类筛选', { exact: true })
+    .selectOption('汤圆');
   await expect(amounts).toContainText('199条源金额无法归属当前筛选范围');
   await expect(amounts).toContainText('分别为208.00、208.00元');
   const pending = page.waitForEvent('download');

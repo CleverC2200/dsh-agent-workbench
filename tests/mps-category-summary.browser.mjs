@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { mpsPage } from './helpers/mps-page.mjs';
-import { openCategoryCalculation } from './helpers/mps-edit.mjs';
+import { openCategoryCalculation, beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
@@ -68,40 +68,41 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   const creation = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await creation.getByLabel('评估月份', { exact: true }).fill('2026-12');
   await creation.getByRole('button', { name: '创建本地版本', exact: true }).click();
-  await frame
-    .getByLabel('选择产品关系CSV或Excel', { exact: true })
-    .setInputFiles({
-      name: '大类.csv',
-      mimeType: 'text/csv',
-      buffer: Buffer.from(
-        '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,甲产品,甲类,系列,组,,\n郑州,B,乙产品,乙类,系列,组,,\n郑州,C,丙产品,丙类,系列,组,,',
-      ),
-    });
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '大类.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,甲产品,甲类,系列,组,,\n郑州,B,乙产品,乙类,系列,组,,\n郑州,C,丙产品,丙类,系列,组,,',
+    ),
+  });
   const matrix = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
   const total = () => matrix.getByRole('row').filter({ hasText: /^(合计|当前范围合计)/ });
   await expect(total().locator('.dc-demand-amount')).toHaveText(['待补', '待补', '待补', '待补']);
   await expect(matrix.getByRole('button', { name: '调整', exact: true })).toHaveCount(0);
-  await frame
-    .getByLabel('选择计划提报CSV', { exact: true })
-    .setInputFiles({
-      name: '计划.csv',
-      mimeType: 'text/csv',
-      buffer: Buffer.from(
-        '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,甲产品,甲类,系列,组,100,100\n2026-12,郑州,B,乙产品,乙类,系列,组,100,100',
-      ),
-    });
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: '计划.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,甲产品,甲类,系列,组,100,100\n2026-12,郑州,B,乙产品,乙类,系列,组,100,100',
+    ),
+  });
   await frame.getByRole('button', { name: '读取三年同比源值', exact: true }).click();
   await expect(frame.getByRole('button', { name: '读取三年同比源值', exact: true })).toBeEnabled();
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-  await frame
-    .getByLabel('选择发货输入CSV', { exact: true })
-    .setInputFiles({
-      name: '发货.csv',
-      mimeType: 'text/csv',
-      buffer: Buffer.from(
-        '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-11,郑州,A,甲产品,甲类,系列,组,100,0,0,0,0,0,0\n2026-11,郑州,B,乙产品,乙类,系列,组,0,0,0,0,0,0,0',
-      ),
-    });
+  await frame.getByLabel('数据截止日', { exact: true }).fill('2026-11-22');
+  await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
+    name: '发货.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-11,郑州,A,甲产品,甲类,系列,组,100,0,0,0,0,0,0\n2026-11,郑州,B,乙产品,乙类,系列,组,0,0,0,0,0,0,0',
+    ),
+  });
+  await beginAdjustment(frame);
+  await frame.getByLabel('全国合计 整月预估发货', { exact: true }).fill('100');
+  await saveAdjustment(frame);
+  await expect(
+    frame.getByRole('button', { name: '全国合计 整月预估发货 计算过程', exact: true }),
+  ).toHaveText('100');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await expect(total().locator('.dc-demand-amount')).toHaveText(['100', '100', '待补', '待补']);
   await expect(total().getByRole('cell').nth(1)).toContainText('已知小计 · 1项待补');

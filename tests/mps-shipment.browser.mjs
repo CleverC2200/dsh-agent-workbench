@@ -63,7 +63,7 @@ async function edit(table, label, value) {
 }
 async function exported(page, frame) {
   const waiting = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载明细', exact: true }).click();
+  await frame.getByRole('button', { name: '下载明细', exact: true }).press('Enter');
   const chunks = [];
   for await (const chunk of await (await waiting).createReadStream()) chunks.push(chunk);
   return Buffer.concat(chunks).toString('utf8');
