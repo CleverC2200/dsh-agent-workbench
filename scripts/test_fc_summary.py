@@ -59,4 +59,14 @@ class Summary(unittest.TestCase):
         self.assertEqual(r['row_count'],0)
         self.assertIsNone(r['inventory_qty'])
 
+    def test_all_scope_excludes_virtual_warehouse_but_keeps_closed_warehouse(self):
+        for warehouse, quantity in [('A540', 99999), ('A052', 25)]:
+            self.db.execute('INSERT INTO agents_inv_branch_sku_day (inv_batch_id,inv_variant_id,warehouseid,sku,warehouse_name,recommended_qty,inventory_qty,available_qty,rolling_ship_daily,calculation_order_remaining) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                            ('batch','BRANCH_DEFAULT',warehouse,'extra',warehouse,quantity,quantity,quantity,10,5))
+        row = self.read(warehouse_code_mode='all', warehouse_code=None)
+        self.assertEqual(row['inventory_qty'], 160 + 999 + 25)
+        self.assertEqual(row['recommended_qty'], 10 + 999 + 25)
+        self.assertEqual(self.read(warehouse_code='A540')['row_count'], 0)
+        self.assertEqual(self.read(warehouse_code='A052')['inventory_qty'], 25)
+
 if __name__ == '__main__': unittest.main()

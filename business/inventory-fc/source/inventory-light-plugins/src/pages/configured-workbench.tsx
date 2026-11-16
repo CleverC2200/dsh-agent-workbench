@@ -10,6 +10,7 @@ import {
   formatChainValueParts,
 } from '../../../../../shared/full-chain-display';
 import { readFcWarehouseDirectory, type FcWarehouse } from './fc-warehouse-directory';
+import { fcWarehouseOption } from './fc-warehouse-presentation';
 import { refreshConfiguredQueries } from '../../../../../shared/query-cache';
 import { inventoryAverageAge } from '../../../../../shared/inventory-age';
 import { FcPersistencePanel } from './fc-persistence-panel';
@@ -397,10 +398,7 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
                   ...(warehouse && !warehouses.some((item) => item.warehouse_code === warehouse)
                     ? [{ id: warehouse, name: warehouse }]
                     : []),
-                  ...warehouses.map((item) => ({
-                    id: item.warehouse_code,
-                    name: `${item.warehouse_name || item.warehouse_code}（${item.warehouse_code}）`,
-                  })),
+                  ...warehouses.map(fcWarehouseOption),
                 ]}
                 onChange={(value) => {
                   changeWarehouse(value);

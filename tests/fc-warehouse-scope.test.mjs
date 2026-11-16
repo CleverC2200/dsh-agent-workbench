@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
-test('N436 and Y204 are excluded from branches even when their source classification is 20', () => {
+test('N436, Y204 and A540 are excluded while closed branches remain available', () => {
   const db = new DatabaseSync(':memory:');
   try {
     db.exec(
@@ -14,6 +14,8 @@ test('N436 and Y204 are excluded from branches even when their source classifica
       ['20261029', '20', 'A020', '长沙分仓', '遂平'],
       ['20261029', '20', 'N436', '郑州DC仓', '郑州'],
       ['20261029', '20', 'Y204', '上海分仓', '郑州'],
+      ['20261029', '20', 'A540', '中冷虚拟仓', '郑州'],
+      ['20261029', '20', 'A052', '西安分仓', '郑州'],
       ['20261029', '02', 'Y302', '成都配送中心仓', '西南'],
       ['20261029', '03', 'OTHER', '其他仓', '其他'],
     ])
@@ -22,7 +24,7 @@ test('N436 and Y204 are excluded from branches even when their source classifica
     const rows = db.prepare(q.request.sql).all({ gea_p1: '2026-10-30', gea_p2: 200, gea_p3: 0 });
     assert.deepEqual(
       rows.map((x) => x.warehouse_code),
-      ['A020'],
+      ['A020', 'A052'],
     );
   } finally {
     db.close();

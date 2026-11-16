@@ -49,6 +49,18 @@ def warehouse_scope(sql, dialect='postgres'):
             else:
                 raise ValueError('Warehouse classification source is ambiguous')
             alias = column.table
+            parent = predicate.parent
+            while isinstance(parent, exp.Paren):
+                parent = parent.parent
+            if isinstance(parent, exp.And) and any(
+                isinstance(guard.this, exp.In)
+                and isinstance(guard.this.this, exp.Column)
+                and guard.this.this.table == alias
+                and guard.this.this.name == field
+                and set(EXCLUDED).issubset({node.this for node in guard.this.expressions if isinstance(node, exp.Literal)})
+                for guard in parent.find_all(exp.Not)
+            ):
+                continue
             raw = (re.escape(alias) + r'\s*\.\s*' if alias else '') + 'warehouse_classify'
             value = rf'(?:TRIM\s*\(\s*{raw}\s*\)|{raw})'
             suffix = r"\s*=\s*'20'" if branch else r"\s+IN\s*\(\s*'01'\s*,\s*'02'\s*,\s*'20'\s*\)"
@@ -67,9 +79,10 @@ def warehouse_scope(sql, dialect='postgres'):
     return MARKER + '\n' + sql if sql != original else sql
 
 
-def branch_read_scope(sql):
+def branch_read_scope(sql, excluded=EXCLUDED, branch_sources=False):
     """Reject excluded warehouses in cached rows and mapped customer orders, too."""
-    if not any(token in sql for token in ['agents_inv_branch_sku_day', 'agents_inv_order_summary_day', 'cw.warehouse_code']):
+    branch_tables = {'agents_scm_warehouse_transfer_plan_data_d', 'agents_scm_warehouse_total_data_d'} if branch_sources else set()
+    if not any(token in sql for token in ['agents_inv_branch_sku_day', 'agents_inv_order_summary_day', 'cw.warehouse_code', *branch_tables]):
         return sql
     tree = sqlglot.parse_one(sql, read='postgres')
     changed = False
@@ -78,7 +91,7 @@ def branch_read_scope(sql):
         for alias, source in scope.sources.items():
             if not isinstance(source, exp.Table) or alias not in scope.selected_sources:
                 continue
-            if source.name == 'agents_inv_branch_sku_day':
+            if source.name == 'agents_inv_branch_sku_day' or source.name in branch_tables:
                 guards.append(alias + '.warehouseid')
             elif source.name == 'agents_inv_order_summary_day':
                 where = scope.expression.args.get('where')
@@ -91,7 +104,8 @@ def branch_read_scope(sql):
         ):
             guards.append('cw.warehouse_code')
         for field in guards:
-            guard = f"{field} IS NULL OR {field} NOT IN ('N436', 'Y204')"
+            excluded_values = ', '.join(repr(code) for code in excluded)
+            guard = f"{field} IS NULL OR {field} NOT IN ({excluded_values})"
             where = scope.expression.args.get('where')
             if where and sqlglot.parse_one(guard).sql() in where.sql():
                 continue
@@ -103,3 +117,8 @@ def branch_read_scope(sql):
         node.replace(exp.Anonymous(this='SUBSTRING', expressions=[node.this.copy(), node.args['start'].copy(), node.args['length'].copy()]))
     rendered = re.sub(r'%\((gea_p\d+)\)s', r':\1', tree.sql(dialect='postgres'))
     return MARKER + '\n' + rendered.replace(MARKER, '').lstrip().replace(' AS DOUBLE PRECISION)', ' AS DOUBLE)')
+
+
+def fc_warehouse_scope(sql):
+    scoped = warehouse_scope(sql).replace("('N436', 'Y204')", "('N436', 'Y204', 'A540')")
+    return branch_read_scope(scoped, excluded=(*EXCLUDED, 'A540'), branch_sources=True)

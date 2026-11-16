@@ -4,7 +4,7 @@ upstream_snapshot AS (
     MAX(i.month_date) AS month_date
   FROM agents_scm_inventory_sku_data_d AS i
   WHERE
-    (i.warehouse_classify IN ('01', '02', '20') AND (i.warehouse_classify <> '20' OR i.warehouseid NOT IN ('N436', 'Y204')))
+    ((i.warehouse_classify IN ('01', '02', '20') AND (i.warehouse_classify <> '20' OR i.warehouseid NOT IN ('N436', 'Y204', 'A540'))) AND (i.warehouse_classify <> '20' OR i.warehouseid NOT IN ('N436', 'Y204', 'A540')))
 ), latest_inventory AS (
   SELECT
     s.month_date AS month_date
@@ -18,7 +18,7 @@ upstream_snapshot AS (
     ON i.month_date = s.month_date
   WHERE
     (
-      (i.warehouse_classify = '20' AND i.warehouseid NOT IN ('N436', 'Y204'))
+      ((i.warehouse_classify = '20' AND i.warehouseid NOT IN ('N436', 'Y204', 'A540')) AND i.warehouseid NOT IN ('N436', 'Y204', 'A540'))
     )
   GROUP BY
     i.warehouseid
@@ -131,7 +131,7 @@ upstream_snapshot AS (
   FROM agents_scm_asn_detail_d AS a
   WHERE
     (
-      (a.warehouse_classify = '20' AND a.warehouseid NOT IN ('N436', 'Y204'))
+      ((a.warehouse_classify = '20' AND a.warehouseid NOT IN ('N436', 'Y204', 'A540')) AND a.warehouseid NOT IN ('N436', 'Y204', 'A540'))
     )
     AND a.asntype IN ('TT', 'COMPANY_SALE')
     AND a.asnstatus = '00'

@@ -30,6 +30,7 @@ import { z } from 'zod';
 import { OriginalBusinessList } from '../../../../../shared/original-business-list';
 import { Modal, DataPagination } from '../dsh-ui/controls';
 import { WarehouseSelect } from './fc/components/warehouse-select';
+import { fcWarehouseLabel, fcWarehouseStatus } from './fc-warehouse-presentation';
 import { downloadWorkbook, readWorkbook } from '../dsh-ui/workbook';
 import { memoryStorage } from '../native/memory-storage';
 import {
@@ -420,6 +421,15 @@ export function FcConfiguredList(
     scope.viewId,
   ]);
   const renderCell = (row: FcRow, column: { field: string; valueField?: string }) => {
+    if (column.field === 'warehouse_name') {
+      const status = fcWarehouseStatus(String(row.warehouse_code ?? ''));
+      return (
+        <span className="fc-warehouse-cell">
+          {text(row.warehouse_name)}
+          {status && <span className="warehouse-select-status">{status}</span>}
+        </span>
+      );
+    }
     if (
       scope.viewId === 'base-resources' &&
       column.field === 'known_available' &&
@@ -1396,7 +1406,7 @@ export function FcConfiguredList(
                   : directory.rows
                 ).map((row) => (
                   <option key={row.warehouse_code} value={row.warehouse_code}>
-                    {row.warehouse_name ?? row.warehouse_code}（{row.warehouse_code}）
+                    {fcWarehouseLabel(row)}
                   </option>
                 ))}
               </select>
