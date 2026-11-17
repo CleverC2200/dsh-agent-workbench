@@ -45,6 +45,7 @@ export type ApiLogRecord = ApiLogContext & {
   replayUnavailableReason?: string;
   replayedFrom?: string;
   request: {
+    origin?: string;
     method: string;
     url: string;
     path: string;

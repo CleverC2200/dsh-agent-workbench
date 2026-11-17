@@ -45,7 +45,8 @@ test('shared application verifies a selected GEA employee without returning app 
   };
   const executor = createWarningExecutor(
     {
-      geaBase: 'http://gea',
+      environment: 'production',
+      geaBase: 'https://gea/',
       feishu: { appId: 'cli_aaf07a77f7789bfb', appSecret: 'private-app-secret' },
     },
     fetcher,
@@ -57,6 +58,7 @@ test('shared application verifies a selected GEA employee without returning app 
       headers: {
         'Content-Type': 'application/json',
         'X-Access-Token': 'owner-token',
+        'X-GEA-Environment': 'production',
         'X-Tenant-Id': '0',
       },
       body: JSON.stringify({ operation: 'feishu-recipient', username: '10008447' }),
