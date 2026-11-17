@@ -478,7 +478,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
       const missing = reportMissing(row).join('；');
       const explanation =
         field === 'closingInventory'
-          ? `可用量=${value(row.openingInventory)}+${value(row.mainPlan)}+${value(row.odmArrival)}+${value(row.transferIn)}-${value(row.transferOut)}；扣除本期已满足需求${value(row.fulfilledDemand)}，期末=${value(row.closingInventory)}。未满足需求单列，不自动修改下月原需求。`
+          ? `可用量=${value(row.openingInventory)}+既有生产入库${value(row.existingProductionInbound)}+既有在途入库${value(row.existingInTransitInbound)}+本期新增生产${value(row.mainPlan)}+${value(row.odmArrival)}+${value(row.transferIn)}-${value(row.transferOut)}；扣除本期发货${value(row.fulfilledDemand)}，期末=${value(row.closingInventory)}。未满足需求单列，不自动修改下月原需求。`
           : field === 'odmArrival'
             ? `ODM默认计划到货量按件/月估算：单基地净缺口=max(0,有效需求+目标期末库存-可用期初库存)；多基地按同一供方SKU月汇总净缺口，在收货点记录一次到货，后续逐段调拨。当前收货点计划到货=${value(row.odmArrival)}件。内部排产为0；${row.odmBasis || '默认估算，供方真实能力、交期及实际到货尚未验证'}。`
             : field === 'mainPlan'

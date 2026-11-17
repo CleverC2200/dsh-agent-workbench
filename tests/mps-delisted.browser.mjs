@@ -9,11 +9,13 @@ const compiled = await build({
     resolveDir: process.cwd(),
     contents: `import React from 'react';import {createRoot} from 'react-dom/client';
       import {createWorkflow} from './static/mps/source/workflow-view.js';
+      import {computeWorkflow} from './static/mps/source/workflow-worker-client.js';
       import {buildMpsWorkflow} from './static/mps/source/workflow-inputs.js';
       import {delistedInput} from './tests/helpers/mps-delisted.mjs';
       const sample=delistedInput();sample.shipment.rows[0].average=null;
       sample.draft.adjustments={quantities:[{kind:'base-sku',month:'2026-12',category:'点心',group:'包点',code:'0',base:'甲',quantity:120,reason:'人工确认',at:'2026-11-17T08:00:00Z',systemValue:50}]};
       window.downloads=[];window.originalAdjustments=structuredClone(sample.draft.adjustments);
+      window.runFailedWorker=()=>computeWorkflow(sample.draft,sample.relations,{...sample.shipment,status:'failed',error:'库存源访问拒绝'},sample.evaluation,new AbortController().signal);
       const Workflow=createWorkflow(React,()=>{},{downloadCsv:(name,columns,rows)=>window.downloads.push({name,columns,rows}),downloadAmounts:()=>{},Dialog:()=>null});
       function Page(){const [draft,setDraft]=React.useState(sample.draft);const [step,setStep]=React.useState('process');
         const result=buildMpsWorkflow(draft,sample.relations,sample.shipment,sample.evaluation);window.result=result;window.adjustments=draft.adjustments;
@@ -77,6 +79,12 @@ test('下市品报告及需求和产销存下载保留人工有效修正、日�
   assert.deepEqual(
     await page.evaluate(() => window.adjustments),
     await page.evaluate(() => window.originalAdjustments),
+  );
+  const failed = await page.evaluate(() => window.runFailedWorker());
+  assert.ok(
+    failed.delistedIssues.some(
+      (issue) => issue.kind === '下市品日均缺失' && /库存源访问拒绝/.test(issue.reason),
+    ),
   );
   assert.deepEqual(errors, []);
 });
