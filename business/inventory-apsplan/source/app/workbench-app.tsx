@@ -82,8 +82,10 @@ import {
 import { browserStorage } from './data/browser-storage';
 import { useWorkspace } from './data/use-workspace';
 import { useDefaultProductionDate } from './data/use-default-production-date';
+import { usesConfiguredSql } from '../../../shared/sql-config';
 import { comparisonEvidence } from './data/comparison-evidence';
-import { deriveMetrics } from 'dsh-agent-manage/aps-compute/metrics';
+import { deriveMetrics, type MetricData } from 'dsh-agent-manage/aps-compute/metrics';
+import { budgetProgress } from 'dsh-agent-manage/aps-compute/budget-progress';
 import {
   metricValues as _metricValues,
   comparisonValues,
@@ -579,7 +581,7 @@ function productionMetricClass(metric: OverviewMetricName): '经营指标' | '�
 
 const metricHelp: Record<OverviewMetricName, string> = {
   销售预算达成率:
-    '月度销售预算达成率 = 不含税销售额 ÷ 月度预算 × 100%；年度按已确认口径取月度达成率平均。健康 >95%，预警为 90%<x≤95%，严重 ≤90%。',
+    '月度销售预算达成率 = 不含税销售额 ÷ 月度预算 × 100%；年度按已确认口径取月度达成率平均。月中与截止日已过天数÷当月自然天数比较时间进度，差额为预算达成率减时间进度；完整月份健康 >95%，预警为 90%<x≤95%，严重 ≤90%。',
   销售提报准确率:
     '月度终值 = 初版准确率×50% + 月中纠偏准确率×50%；单阶段准确率 = 1 − Σ|单品偏差量| ÷ Σ单品计划量。年度取月度平均。健康 >70%，预警为 65%<x≤70%，严重 ≤65%。',
   销售提报达成率:
@@ -1540,13 +1542,17 @@ function productionMetricDisplay(name: ProductionDrillMetricName, value: number)
   return `${formatNumber(value, 2)}%`;
 }
 
-function metricValueState(name: OverviewMetricName, value: number) {
-  const judgement = judgeMetric(name, value);
+function metricValueState(name: OverviewMetricName, value: number, data?: MetricData | null) {
+  const judgement = judgeMetric(name, value, data);
+  if (name === '销售预算达成率' && budgetProgress(data, value) && !judgement.achieved)
+    return 'warning-text';
   return judgement.kind !== 'evaluated' ? 'neutral' : judgement.achieved ? 'good' : 'bad';
 }
 
-function metricStatus(name: OverviewMetricName, value: number) {
-  const judgement = judgeMetric(name, value);
+function metricStatus(name: OverviewMetricName, value: number, data?: MetricData | null) {
+  const judgement = judgeMetric(name, value, data);
+  if (name === '销售预算达成率' && budgetProgress(data, value))
+    return judgement.achieved ? '进度正常' : '进度偏慢';
   return judgement.kind === 'missing'
     ? '无数据'
     : judgement.kind === 'observation'
@@ -2916,7 +2922,6 @@ function IntelligentWorkbenchPage({
   );
   const sourceDateLabel = (id: string) => readSourceDateLabel(live?.data, id);
   const stockSnapshotLabel = sourceDateLabel('stock');
-  const productionSourceDate = sourceDateLabel('production');
   const productionSection = live?.data?.sections.find((section) => section.id === 'production');
   const productionObservation =
     live?.data?.missingValuePolicy !== 'zero' && productionSection?.status === 'ready'
@@ -2943,7 +2948,7 @@ function IntelligentWorkbenchPage({
         gap: `${budgetObservation.matchedKeys}/${budgetObservation.budgetKeys} 客户SKU`,
         status: '匹配范围',
         tone: 'neutral',
-        period: `未税收入 ÷ 月度预算 · 收入截至${sourceDateLabel('finance')}`,
+        period: `未税收入 ÷ 月度预算 · 统计截至${live?.data?.end ?? '-'}`,
         deltaDirection: 'none',
         yoyDirection: 'none',
       };
@@ -2960,7 +2965,7 @@ function IntelligentWorkbenchPage({
         gap: `${productionObservation.count}/${productionObservation.total} 条有效记录，排除 ${productionObservation.excluded} 条异常`,
         status: '有效范围',
         tone: 'neutral',
-        period: `本期累计 · 源截至${productionSourceDate}`,
+        period: `本期累计 · 截至${live?.data?.end ?? '-'}`,
         deltaDirection: 'none',
         yoyDirection: 'none',
       };
@@ -2974,7 +2979,8 @@ function IntelligentWorkbenchPage({
       { 销售预算达成率: 95, 生产计划达成率: 99, 订单满足率: 95 } as Record<string, number>
     )[item.name];
     const hasTarget = Number.isFinite(target),
-      met = hasTarget && present && value > target;
+      progress = item.name === '销售预算达成率' ? budgetProgress(live?.data, value) : null,
+      met = hasTarget && present && (progress ? progress.achieved : value > target);
     return {
       ...item,
       value: present ? formatNumber(value) : '-',
@@ -2985,35 +2991,46 @@ function IntelligentWorkbenchPage({
       same: datum.same === null ? '-' : `${formatNumber(datum.same)}${item.unit}`,
       delta: delta(datum.change),
       yoy: delta(datum.yoy),
-      target: item.name === '库存量' ? '无目标' : hasTarget ? `健康 > ${target}%` : '目标待接入',
+      target:
+        item.name === '库存量'
+          ? '无目标'
+          : progress
+            ? `时间进度 ${formatNumber(progress.target)}%`
+            : hasTarget
+              ? `健康 > ${target}%`
+              : '目标待接入',
       gap:
         item.name === '库存量'
           ? '数量观察项'
-          : hasTarget && present
-            ? `距健康线 ${formatNumber(value - target)}pp`
-            : live?.busy && !present
-              ? '正在读取业务数据'
-              : present
-                ? '指标已计算'
-                : '数据不足，暂不计算',
+          : progress
+            ? `较时间进度 ${formatNumber(progress.gap)}pp`
+            : hasTarget && present
+              ? `距健康线 ${formatNumber(value - target)}pp`
+              : live?.busy && !present
+                ? '正在读取业务数据'
+                : present
+                  ? '指标已计算'
+                  : '数据不足，暂不计算',
       status: present
         ? item.name === '库存量'
           ? '已更新'
-          : hasTarget
-            ? met
-              ? '达标'
-              : '未达'
-            : '已更新'
+          : progress
+            ? progress.achieved
+              ? '进度正常'
+              : '进度偏慢'
+            : hasTarget
+              ? met
+                ? '达标'
+                : '未达'
+              : '已更新'
         : live?.busy
           ? '读取中'
           : '暂不可用',
-      tone: hasTarget && present ? (met ? 'good' : 'critical') : 'neutral',
+      tone: hasTarget && present ? (met ? 'good' : progress ? 'warning' : 'critical') : 'neutral',
       period:
         item.statistic === '快照指标'
           ? `最新快照 · 截至${stockSnapshotLabel}`
-          : item.name === '生产计划达成率' && productionSourceDate !== '-'
-            ? `本期累计 · 源截至${productionSourceDate}`
-            : '本期累计',
+          : `本期累计 · 截至${live?.data?.end ?? '-'}`,
       deltaDirection: Number.isFinite(datum.change) ? (datum.change < 0 ? 'down' : 'up') : 'none',
       yoyDirection: datum.yoy === null ? 'none' : datum.yoy < 0 ? 'down' : 'up',
     };
@@ -3322,7 +3339,12 @@ function IntelligentWorkbenchPage({
                   type="button"
                   className="kpi-card period-kpi-card intelligent-period-kpi-card"
                   key={item.name}
-                  title={item.name === '销售预算达成率' ? budgetScopeNote || undefined : undefined}
+                  title={
+                    item.name === '销售预算达成率'
+                      ? budgetScopeNote ||
+                        '月中按截止日已过天数÷当月天数比较时间进度；完整月份按整月健康目标评价。'
+                      : undefined
+                  }
                   data-context-id={`intelligent-metric-${item.name}`}
                   data-context-scope="经营指标"
                   data-context-label={item.name}
@@ -3334,7 +3356,7 @@ function IntelligentWorkbenchPage({
                   <div className="kpi-name">
                     <span>{item.name}</span>
                     <i
-                      className={`achievement-status ${item.tone === 'neutral' ? 'status-neutral' : item.tone === 'good' ? 'status-ok' : 'status-bad'}`}
+                      className={`achievement-status ${item.tone === 'neutral' ? 'status-neutral' : item.tone === 'good' ? 'status-ok' : item.tone === 'warning' ? 'level-watch' : 'status-bad'}`}
                     >
                       {item.status}
                     </i>
@@ -3387,7 +3409,13 @@ function IntelligentWorkbenchPage({
                     <span>{item.target}</span>
                     <b
                       className={
-                        item.tone === 'good' ? 'good' : item.tone === 'neutral' ? 'neutral' : 'bad'
+                        item.tone === 'good'
+                          ? 'good'
+                          : item.tone === 'neutral'
+                            ? 'neutral'
+                            : item.tone === 'warning'
+                              ? 'warning-text'
+                              : 'bad'
                       }
                     >
                       {item.gap}
@@ -5097,6 +5125,12 @@ export default function Home({
         : 'month',
   );
 
+  const [intelligentDateMode, setIntelligentDateMode] = usePageViewField<'latest' | 'manual'>(
+    React,
+    apsView,
+    'intelligentDateMode',
+    'latest',
+  );
   const [intelligentYearKey, setIntelligentYearKey] = usePageViewField(
     React,
     apsView,
@@ -5125,6 +5159,9 @@ export default function Home({
   const [selectedDay, setSelectedDay] = intelligentPeriod
     ? ([intelligentDay, setIntelligentDay] as const)
     : ([boardDay, setBoardDay] as const);
+  const [selectedDateMode, setSelectedDateMode] = intelligentPeriod
+    ? ([intelligentDateMode, setIntelligentDateMode] as const)
+    : ([boardDateMode, setBoardDateMode] as const);
   const timeGranularity: TimeGranularity = intelligentPeriod ? 'month' : boardGranularity;
   const [toast, setToast] = useState('');
   const [chatInput, setChatInput] = useState('');
@@ -5261,7 +5298,10 @@ export default function Home({
     naturalWeekOptions[naturalWeekOptions.length - 1];
   const selectedPeriodLabel = `${selectedYear.label}${selectedMonth.label}`;
   const selectedDateLabel = `${selectedPeriodLabel}${selectedDay}日`;
-  const selectedPeriodEndDay = timeGranularity === 'week' ? selectedWeek.endDay : selectedDay;
+  const defaultCalendarCutoff =
+    liveData && !APS_MOCK && usesConfiguredSql() && selectedDateMode === 'latest';
+  const selectedPeriodEndDay =
+    timeGranularity === 'week' && !defaultCalendarCutoff ? selectedWeek.endDay : selectedDay;
   const effectiveEnd = liveData
     ? effectivePeriodEnd(Number(selectedYear.key), selectedMonth.value, selectedPeriodEndDay)
     : {
@@ -5323,21 +5363,28 @@ export default function Home({
   const liveDate = effectiveEnd.iso;
   const applyDefaultDate = React.useCallback(
     (date: string) => {
-      if (apsView.get().boardDateMode === 'manual') return;
+      if (apsView.get()[intelligentPeriod ? 'intelligentDateMode' : 'boardDateMode'] === 'manual')
+        return;
       const [year, month, day] = date.split('-');
-      setBoardYearKey(year);
-      setBoardMonthKey(month);
-      setBoardDay(Number(day));
+      setSelectedYearKey(year);
+      setSelectedMonthKey(month);
+      setSelectedDay(Number(day));
       const weeks = buildNaturalWeeks(Number(year), Number(month));
       const week = weeks.find((item) => Number(day) >= item.startDay && Number(day) <= item.endDay);
-      if (week) setSelectedWeekKey(week.key);
+      if (!intelligentPeriod && week) setSelectedWeekKey(week.key);
     },
-    [setBoardYearKey, setBoardMonthKey, setBoardDay, setSelectedWeekKey],
+    [
+      intelligentPeriod,
+      setSelectedYearKey,
+      setSelectedMonthKey,
+      setSelectedDay,
+      setSelectedWeekKey,
+    ],
   );
   const defaultProductionDate = useDefaultProductionDate({
-    enabled: liveData && !APS_MOCK && activeWorkspace === 'plan',
-    manual: boardDateMode === 'manual',
-    base: selectedBase === '全部基地' ? '' : selectedBase,
+    enabled: liveData && !APS_MOCK && ['intelligent', 'plan'].includes(activeWorkspace),
+    manual: selectedDateMode === 'manual',
+    currentDate: liveDate,
     onDate: applyDefaultDate,
   });
   const periodLive = useWorkspace(
@@ -5371,17 +5418,24 @@ export default function Home({
   };
   const attainmentTarget =
     timeGranularity === 'month' ? ((effectiveEnd.day - 1) / daysInSelectedMonth) * 100 - 3 : null;
+  const budgetTimeProgress = budgetProgress(live.data, 0);
   const metricMetaWithDynamicTargets = demoOverviewMetricMeta.map((meta) =>
-    ['销售提报达成率', '需求预测达成率'].includes(meta.name)
+    meta.name === '销售预算达成率' && budgetTimeProgress
       ? {
           ...meta,
-          target: attainmentTarget,
-          targetText:
-            attainmentTarget === null
-              ? '仅确认月度口径'
-              : `健康 > ${formatNumber(attainmentTarget, 2)}%（动态）`,
+          target: budgetTimeProgress.target,
+          targetText: `时间进度 ${formatNumber(budgetTimeProgress.target)}%`,
         }
-      : meta,
+      : ['销售提报达成率', '需求预测达成率'].includes(meta.name)
+        ? {
+            ...meta,
+            target: attainmentTarget,
+            targetText:
+              attainmentTarget === null
+                ? '仅确认月度口径'
+                : `健康 > ${formatNumber(attainmentTarget, 2)}%（动态）`,
+          }
+        : meta,
   );
   const confirmedLiveTargets = new Set<OverviewMetricName>([
     '销售预算达成率',
@@ -5758,15 +5812,16 @@ export default function Home({
     const value = periodConfig.current[meta.name];
     const previous = periodConfig.previous[meta.name];
     const delta = activeComparison[meta.name].change;
-    const ok = productionMetricNames.some((name) => name === meta.name)
-      ? judgeMetric(meta.name, value).achieved
-      : !Number.isFinite(value) || meta.target === null
-        ? null
-        : meta.lowerBetter
-          ? meta.target === 0
-            ? value <= 0
-            : value < meta.target
-          : value > meta.target;
+    const ok =
+      meta.name === '销售预算达成率' || productionMetricNames.some((name) => name === meta.name)
+        ? judgeMetric(meta.name, value, live.data).achieved
+        : !Number.isFinite(value) || meta.target === null
+          ? null
+          : meta.lowerBetter
+            ? meta.target === 0
+              ? value <= 0
+              : value < meta.target
+            : value > meta.target;
     const improved = meta.lowerBetter ? delta < 0 : delta > 0;
     return {
       ...meta,
@@ -5841,6 +5896,7 @@ export default function Home({
       unit: item.unit,
       previous: item.previous,
     })),
+    live.data,
   );
   const scopeSummary = {
     tag:
@@ -5985,6 +6041,7 @@ export default function Home({
               : null
         : null;
     const displayValue = observation?.value ?? kpi.value;
+    const budgetPace = kpi.name === '销售预算达成率' ? budgetProgress(live.data, kpi.value) : null;
     const readFailed = metricReadFailed(kpi.name);
     const comparisonValue = (value: number | null) =>
       !observation && value !== null && Number.isFinite(value)
@@ -6017,7 +6074,7 @@ export default function Home({
         <div className="kpi-name">
           <span>{kpi.name}</span>
           <i
-            className={`achievement-status ${kpi.ok === null ? 'status-neutral' : kpi.ok ? 'status-ok' : 'status-bad'}`}
+            className={`achievement-status ${kpi.ok === null ? 'status-neutral' : kpi.ok ? 'status-ok' : budgetPace ? 'level-watch' : 'status-bad'}`}
           >
             {observation
               ? kpi.name === '生产计划达成率'
@@ -6029,13 +6086,17 @@ export default function Home({
                 ? readFailed
                   ? '读取失败'
                   : '数据不足'
-                : kpi.ok === null
-                  ? liveData
-                    ? '已更新'
-                    : '无目标'
-                  : kpi.ok
-                    ? '达标'
-                    : '未达'}
+                : budgetPace
+                  ? budgetPace.achieved
+                    ? '进度正常'
+                    : '进度偏慢'
+                  : kpi.ok === null
+                    ? liveData
+                      ? '已更新'
+                      : '无目标'
+                    : kpi.ok
+                      ? '达标'
+                      : '未达'}
           </i>
         </div>
         <div
@@ -6051,7 +6112,7 @@ export default function Home({
           {Number.isFinite(displayValue) && <span>{kpi.unit}</span>}
         </div>
         {liveData &&
-          kpi.name === '需求预测准确率' &&
+          ['需求预测准确率', '可发货天数'].includes(kpi.name) &&
           !readFailed &&
           liveMetricNotes[kpi.name]?.detail && (
             <p className="kpi-source-note">{liveMetricNotes[kpi.name].detail}</p>
@@ -6105,7 +6166,7 @@ export default function Home({
               {liveData && kpi.name !== '库存量' ? '待配置目标' : '数量观察项'}
             </b>
           ) : (
-            <b className={kpi.ok ? 'good' : 'bad'}>
+            <b className={kpi.ok ? 'good' : budgetPace ? 'warning-text' : 'bad'}>
               {'差距 '}
               {formatDelta(kpi.value - kpi.target, kpi.unit)}
             </b>
@@ -6195,13 +6256,13 @@ export default function Home({
   const renderSalesMetricCells = (path: string) => {
     const values = salesOrgMetrics(path);
     const statusCell = (name: OverviewMetricName, value: number) => {
-      const judgement = judgeMetric(name, value);
+      const judgement = judgeMetric(name, value, live.data);
       return (
         <span
           role="gridcell"
-          className={`achievement-status ${judgement.kind !== 'evaluated' ? 'status-neutral' : judgement.achieved ? 'status-ok' : 'status-bad'}`}
+          className={`achievement-status ${judgement.kind !== 'evaluated' ? 'status-neutral' : judgement.achieved ? 'status-ok' : name === '销售预算达成率' && budgetTimeProgress ? 'level-watch' : 'status-bad'}`}
         >
-          {metricStatus(name, value)}
+          {metricStatus(name, value, live.data)}
         </span>
       );
     };
@@ -6213,11 +6274,17 @@ export default function Home({
           <span role="gridcell">
             {Number.isFinite(values.sales) ? `${values.sales.toLocaleString('zh-CN')}万元` : '-'}
           </span>
-          <b role="gridcell" className={metricValueState('销售预算达成率', values.budget)}>
+          <b
+            role="gridcell"
+            className={metricValueState('销售预算达成率', values.budget, live.data)}
+          >
             {percent(values.budget)}
           </b>
           {statusCell('销售预算达成率', values.budget)}
-          <b role="gridcell" className={metricValueState('销售提报准确率', values.reporting)}>
+          <b
+            role="gridcell"
+            className={metricValueState('销售提报准确率', values.reporting, live.data)}
+          >
             {percent(values.reporting)}
           </b>
           {statusCell('销售提报准确率', values.reporting)}
@@ -6232,7 +6299,7 @@ export default function Home({
           {overviewMetricMeta.find((meta) => meta.name === name)?.targetText.replace('健康 ', '')}
         </span>
         {statusCell(name, current)}
-        <b role="gridcell" className={metricValueState(name, current)}>
+        <b role="gridcell" className={metricValueState(name, current, live.data)}>
           {percent(current)}
         </b>
         <span role="gridcell">{percent(previous)}</span>
@@ -6261,7 +6328,7 @@ export default function Home({
         salesMetricTab === 'overview' || index === (salesMetricTab === 'budget' ? 0 : 1),
     );
     const evaluated = metrics.flatMap((metric) => {
-      const judgement = judgeMetric(metric.name, metric.value);
+      const judgement = judgeMetric(metric.name, metric.value, live.data);
       return judgement.kind === 'evaluated' ? [{ ...metric, risk: judgement.risk }] : [];
     });
     const risk = evaluated.length ? worstRiskLevel(evaluated.map((metric) => metric.risk)) : null;
@@ -6450,7 +6517,7 @@ export default function Home({
   const drillMetricRiskLevel = (
     name: ProductionDrillMetricName,
     values: ProductionDrillValues,
-  ): MatrixRiskLevel | null => judgeMetric(name, values[name]).risk;
+  ): MatrixRiskLevel | null => judgeMetric(name, values[name], live.data).risk;
   const periodizedDrillValues = (values: ProductionDrillValues): ProductionDrillValues => ({
     需求预测准确率: categoryPeriodDatum('需求预测准确率', values).current,
     生产计划达成率: categoryPeriodDatum('生产计划达成率', values).current,
@@ -6513,7 +6580,11 @@ export default function Home({
       return activeProductionMetricNames.map((name) => {
         const datum = categoryPeriodDatum(name, values);
         return (
-          <b role="gridcell" className={metricValueState(name, datum.current)} key={name}>
+          <b
+            role="gridcell"
+            className={metricValueState(name, datum.current, live.data)}
+            key={name}
+          >
             {drillMetricDisplay(name, datum.current, values)}
           </b>
         );
@@ -6521,7 +6592,7 @@ export default function Home({
     }
     const datum = categoryPeriodDatum(activeCategoryMetric, values);
     const hasTarget = categoryMetricMeta.target !== null;
-    const periodOk = judgeMetric(activeCategoryMetric, datum.current).achieved;
+    const periodOk = judgeMetric(activeCategoryMetric, datum.current, live.data).achieved;
     const improved =
       hasTarget && Number.isFinite(datum.change)
         ? categoryMetricMeta.lowerBetter
@@ -6535,7 +6606,7 @@ export default function Home({
           role="gridcell"
           className={`category-drill-status achievement-status ${periodOk === null ? 'status-neutral' : periodOk ? 'status-ok' : 'status-bad'}`}
         >
-          {metricStatus(activeCategoryMetric, datum.current)}
+          {metricStatus(activeCategoryMetric, datum.current, live.data)}
         </span>
         <b role="gridcell" className={periodOk === null ? 'neutral' : periodOk ? 'good' : 'bad'}>
           {drillMetricDisplay(activeCategoryMetric, datum.current, values)}
@@ -6571,7 +6642,11 @@ export default function Home({
       return activeProductionMetricNames.map((name) => {
         const datum = categoryPeriodDatum(name, values);
         return (
-          <b role="gridcell" className={metricValueState(name, datum.current)} key={name}>
+          <b
+            role="gridcell"
+            className={metricValueState(name, datum.current, live.data)}
+            key={name}
+          >
             {drillMetricDisplay(name, datum.current, values)}
           </b>
         );
@@ -6579,7 +6654,7 @@ export default function Home({
     }
     const datum = categoryPeriodDatum(activeBaseMetric, values);
     const hasTarget = baseMetricMeta.target !== null;
-    const periodOk = judgeMetric(activeBaseMetric, datum.current).achieved;
+    const periodOk = judgeMetric(activeBaseMetric, datum.current, live.data).achieved;
     const improved =
       hasTarget && Number.isFinite(datum.change)
         ? baseMetricMeta.lowerBetter
@@ -6593,7 +6668,7 @@ export default function Home({
           role="gridcell"
           className={`category-drill-status achievement-status ${periodOk === null ? 'status-neutral' : periodOk ? 'status-ok' : 'status-bad'}`}
         >
-          {metricStatus(activeBaseMetric, datum.current)}
+          {metricStatus(activeBaseMetric, datum.current, live.data)}
         </span>
         <b role="gridcell" className={periodOk === null ? 'neutral' : periodOk ? 'good' : 'bad'}>
           {drillMetricDisplay(activeBaseMetric, datum.current, values)}
@@ -6630,7 +6705,7 @@ export default function Home({
   ) => {
     const datum = categoryPeriodDatum(name, values);
     const meta = overviewMetricMeta.find((item) => item.name === name)!;
-    const state = metricValueState(name, datum.current);
+    const state = metricValueState(name, datum.current, live.data);
     const gap =
       liveData && !Number.isFinite(datum.current)
         ? '缺少完整同口径数据'
@@ -6704,7 +6779,7 @@ export default function Home({
     setTimeout(() => setToast(''), 1600);
   };
   const chooseYear = (year: YearOption) => {
-    if (!intelligentPeriod) setBoardDateMode('manual');
+    setSelectedDateMode('manual');
     setSelectedYearKey(year.key);
     const maxDay = new Date(Number(year.key), selectedMonth.value, 0).getDate();
     const nextDay = Math.min(selectedDay, maxDay);
@@ -6720,7 +6795,7 @@ export default function Home({
     setTimeout(() => setToast(''), 1800);
   };
   const chooseMonth = (month: MonthOption) => {
-    if (!intelligentPeriod) setBoardDateMode('manual');
+    setSelectedDateMode('manual');
     setSelectedMonthKey(month.key);
     const maxDay = new Date(Number(selectedYear.key), month.value, 0).getDate();
     const nextDay = Math.min(selectedDay, maxDay);
@@ -6736,14 +6811,14 @@ export default function Home({
     setTimeout(() => setToast(''), 1800);
   };
   const chooseWeek = (week: WeekOption) => {
-    if (!intelligentPeriod) setBoardDateMode('manual');
+    setSelectedDateMode('manual');
     setSelectedWeekKey(week.key);
     closePeriodMenus();
     setToast(`已筛选${selectedPeriodLabel}${week.label}（${week.range}）数据`);
     setTimeout(() => setToast(''), 1800);
   };
   const chooseDay = (day: number) => {
-    if (!intelligentPeriod) setBoardDateMode('manual');
+    setSelectedDateMode('manual');
     setSelectedDay(day);
     closePeriodMenus();
     setToast(`已筛选${selectedPeriodLabel}${day}日数据`);
@@ -6862,8 +6937,13 @@ export default function Home({
   apsViewRef.current = {
     current: apsCurrent,
     periodSetters: {
-      intelligent: [setIntelligentYearKey, setIntelligentMonthKey, setIntelligentDay],
-      plan: [setBoardYearKey, setBoardMonthKey, setBoardDay],
+      intelligent: [
+        setIntelligentYearKey,
+        setIntelligentMonthKey,
+        setIntelligentDay,
+        setIntelligentDateMode,
+      ],
+      plan: [setBoardYearKey, setBoardMonthKey, setBoardDay, setBoardDateMode],
     },
     bases: apsBases,
     weekKey: selectedWeek.key,
@@ -6994,8 +7074,9 @@ export default function Home({
         await acknowledgePendingView(changed, options);
         options.signal?.throwIfAborted();
         if (input.date !== undefined) {
-          const [setYear, setMonth, setDay] =
+          const [setYear, setMonth, setDay, setDateMode] =
             periodSetters[targetWorkspace === 'intelligent' ? 'intelligent' : 'plan'];
+          setDateMode('manual');
           setYear(input.date.slice(0, 4));
           setMonth(input.date.slice(5, 7));
           setDay(Number(input.date.slice(8)));
@@ -8166,13 +8247,15 @@ export default function Home({
                   {scopedOverviewMetricMeta.map((meta) => {
                     const datum = activeComparison[meta.name];
                     const hasTarget = meta.target !== null;
-                    const periodOk = productionMetricNames.some((name) => name === meta.name)
-                      ? judgeMetric(meta.name, datum.current).achieved
-                      : hasTarget && Number.isFinite(datum.current)
-                        ? meta.lowerBetter
-                          ? datum.current <= meta.target!
-                          : datum.current > meta.target!
-                        : null;
+                    const periodOk =
+                      meta.name === '销售预算达成率' ||
+                      productionMetricNames.some((name) => name === meta.name)
+                        ? judgeMetric(meta.name, datum.current, live.data).achieved
+                        : hasTarget && Number.isFinite(datum.current)
+                          ? meta.lowerBetter
+                            ? datum.current <= meta.target!
+                            : datum.current > meta.target!
+                          : null;
                     const improved =
                       hasTarget && Number.isFinite(datum.change)
                         ? meta.lowerBetter
@@ -8207,17 +8290,13 @@ export default function Home({
                         )}
                         <span>{meta.targetText.replace('目标 ', '')}</span>
                         <em
-                          className={`achievement-status ${periodOk === null ? 'status-neutral' : periodOk ? 'status-ok' : 'status-bad'}`}
+                          className={`achievement-status ${periodOk === null ? 'status-neutral' : periodOk ? 'status-ok' : meta.name === '销售预算达成率' && budgetTimeProgress ? 'level-watch' : 'status-bad'}`}
                         >
                           {!Number.isFinite(datum.current)
                             ? metricMissingText(meta.name, live.data)
-                            : periodOk === null
-                              ? '无目标'
-                              : periodOk
-                                ? '达标'
-                                : '未达'}
+                            : metricStatus(meta.name, datum.current, live.data)}
                         </em>
-                        <b className={periodOk === null ? 'neutral' : periodOk ? 'good' : 'bad'}>
+                        <b className={metricValueState(meta.name, datum.current, live.data)}>
                           {Number.isFinite(datum.current)
                             ? `${formatNumber(datum.current, 2)}${meta.unit}`
                             : '—'}
@@ -8322,9 +8401,19 @@ export default function Home({
                           >
                             <span>
                               {'销售预算达成率'}
-                              <small>{'目标 > 95%'}</small>
+                              <small>
+                                {budgetTimeProgress
+                                  ? `时间进度 ${formatNumber(budgetTimeProgress.target)}%`
+                                  : '目标 > 95%'}
+                              </small>
                             </span>
-                            <b className={metricValueState('销售预算达成率', values.budget)}>
+                            <b
+                              className={metricValueState(
+                                '销售预算达成率',
+                                values.budget,
+                                live.data,
+                              )}
+                            >
                               {Number.isFinite(values.budget)
                                 ? `${formatNumber(values.budget, 2)}%`
                                 : '-'}
@@ -8344,7 +8433,13 @@ export default function Home({
                               {'销售提报准确率'}
                               <small>{'目标 > 70%'}</small>
                             </span>
-                            <b className={metricValueState('销售提报准确率', values.reporting)}>
+                            <b
+                              className={metricValueState(
+                                '销售提报准确率',
+                                values.reporting,
+                                live.data,
+                              )}
+                            >
                               {Number.isFinite(values.reporting)
                                 ? `${formatNumber(values.reporting, 2)}%`
                                 : '-'}

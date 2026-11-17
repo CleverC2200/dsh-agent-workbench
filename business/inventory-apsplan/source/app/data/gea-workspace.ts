@@ -127,6 +127,15 @@ export function period(end: string, kind: string): [string, string] {
     end,
   ];
 }
+export function snapshotMatchesDate(rows: Record<string, unknown>[], end: string) {
+  return rows.every((row) => {
+    if (!Object.hasOwn(row, 'source_date')) return true;
+    const day = String(row.source_date ?? '')
+      .replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3')
+      .slice(0, 10);
+    return day === end;
+  });
+}
 const today = () =>
   new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai',
@@ -437,6 +446,17 @@ export function createGeaWorkspace(transport: SqlTransport) {
                   : null;
           }
         }
+        if (
+          usesConfiguredSql() &&
+          ['stock', 'shippable'].includes(key) &&
+          !snapshotMatchesDate(rows, end)
+        )
+          return {
+            ...result,
+            status: 'unavailable',
+            rows: [],
+            note: `${end} 库存快照不完整，未用其他日期替代。`,
+          };
         return { ...result, status: rows.length ? 'ready' : 'empty', rows };
       } catch (e) {
         const error = e as GeaQueryError & {
@@ -529,6 +549,17 @@ export function createGeaWorkspace(transport: SqlTransport) {
     });
     publishInventory = (rows) => {
       input.signal?.throwIfAborted();
+      if (!snapshotMatchesDate(rows, end)) {
+        byId.set('stock', {
+          id: 'stock',
+          label: labels.stock,
+          note: `${end} 库存快照不完整，未用其他日期替代。`,
+          status: 'unavailable',
+          rows: [],
+        });
+        input.onProgress?.(snapshot());
+        return;
+      }
       byId.set('stock', {
         id: 'stock',
         label: labels.stock,

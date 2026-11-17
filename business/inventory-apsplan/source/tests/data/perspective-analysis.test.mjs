@@ -204,3 +204,31 @@ test('shortage analysis and drill judgement share the same zero target and risk 
   assert.equal(result.score, 0);
   assert.match(result.copy, /订单缺货量0.25万箱（预警/);
 });
+
+test('partial-month judgement uses calendar progress while completed months keep final thresholds', () => {
+  const data = { start: '2026-11-01', end: '2026-11-16', granularity: 'month', sections: [] };
+  assert.deepEqual(judgeMetric('销售预算达成率', 48.55, data), {
+    kind: 'evaluated',
+    risk: '预警',
+    achieved: false,
+  });
+  assert.deepEqual(judgeMetric('销售预算达成率', 54, data), {
+    kind: 'evaluated',
+    risk: '健康',
+    achieved: true,
+  });
+  const analysis = analyzePerspective(
+    'overview',
+    '本月',
+    [{ name: '销售预算达成率', value: 48.55, unit: '%' }],
+    data,
+  );
+  assert.match(analysis.copy, /53.33/);
+  assert.match(analysis.copy, /4.78/);
+  assert.doesNotMatch(analysis.copy, /46.45/);
+  assert.deepEqual(judgeMetric('销售预算达成率', 48.55, { ...data, end: '2026-11-30' }), {
+    kind: 'evaluated',
+    risk: '严重',
+    achieved: false,
+  });
+});

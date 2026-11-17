@@ -14,7 +14,9 @@ await build({
   format: 'esm',
   outfile: join(dir, 'period.mjs'),
 });
-const { effectivePeriodEnd, isFutureCalendarDay } = await import(join(dir, 'period.mjs'));
+const { effectivePeriodEnd, isFutureCalendarDay, calendarDay } = await import(
+  join(dir, 'period.mjs')
+);
 const today = new Date(2026, 8, 22, 15);
 
 test('当前自然周跨到未来时，查询截止日截到今天', () => {
@@ -33,3 +35,20 @@ test('历史周期保留原截止日，未来日期可用于禁用筛选项', ()
 });
 
 await rm(dir, { recursive: true, force: true });
+
+test('calendar subtraction handles month, year and leap boundaries without machine timezone drift', () => {
+  const original = process.env.TZ;
+  try {
+    for (const zone of ['Asia/Shanghai', 'America/Los_Angeles', 'Pacific/Kiritimati']) {
+      process.env.TZ = zone;
+      assert.equal(calendarDay('2026-11-17').previous, '2026-11-16');
+      assert.equal(calendarDay('2026-01-01').previous, '2025-12-31');
+      assert.equal(calendarDay('2024-03-01').previous, '2024-02-29');
+      assert.equal(calendarDay('2026-03-01').previous, '2026-02-28');
+      assert.throws(() => calendarDay('2026-02-29'));
+    }
+  } finally {
+    if (original === undefined) delete process.env.TZ;
+    else process.env.TZ = original;
+  }
+});

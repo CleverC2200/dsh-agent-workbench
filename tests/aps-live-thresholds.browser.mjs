@@ -223,13 +223,13 @@ test('live sales organization metrics use configured targets and preserve unavai
   await page.addScriptTag({ content: bundle.outputFiles.find((x) => x.path.endsWith('.js')).text });
   await page.getByRole('tab', { name: '销售视角', exact: true }).click();
   const region = page.locator('.sales-org-row.sales-org-region').filter({ hasText: '国外大区' });
-  await expect(region.locator('.achievement-status')).toHaveText(['达标', '未达']);
+  await expect(region.locator('.achievement-status')).toHaveText(['进度正常', '未达']);
   await expect(region.locator('.sales-org-risk')).toHaveText('预警');
   const missing = page.locator('.sales-org-row.sales-org-region').filter({ hasText: 'B端营销部' });
   await expect(missing.locator('.achievement-status')).toHaveText(['无数据', '无数据']);
   await expect(missing.locator('.sales-org-risk')).toHaveText('无数据');
   await page.getByRole('tab', { name: '销售预算达成率', exact: true }).last().click();
-  await expect(region).toContainText('> 95%');
-  await expect(region.locator('.achievement-status')).toHaveText('达标');
+  await expect(region).toContainText('时间进度 30.00%');
+  await expect(region.locator('.achievement-status')).toHaveText('进度正常');
   await expect(region.locator('.sales-org-risk')).toHaveText('健康');
 });
