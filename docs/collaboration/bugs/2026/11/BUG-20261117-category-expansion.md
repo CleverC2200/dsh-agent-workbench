@@ -1,5 +1,5 @@
 <!-- collaboration-record
-{"kind":"bug","id":"BUG-20261117-category-expansion","date":"2026-11-17","title":"品类维度仍可展开组织编辑且品类只读","module":"销售计划","category":"功能逻辑","cause":"原始遗漏","severity":"P2","status":"已修复待发布"}
+{"kind":"bug","id":"BUG-20261117-category-expansion","date":"2026-11-17","title":"品类维度仍可展开组织编辑且品类只读","module":"销售计划","category":"功能逻辑","cause":"原始遗漏","severity":"P2","status":"已关闭"}
 -->
 # 品类维度仍可展开组织编辑且品类只读
 
@@ -9,4 +9,14 @@
 
 原回归先稳定复现组织编辑入口仍存在。新增验证覆盖单客户、跨客户不同单价、切换品类保留其他草稿、省区与大区退回后审批、只读权限；同时保留月计划、达成率、顶部差额、导出和草稿恢复回归。
 
-候选 Workbench 0.1.128，配套 GEA 0.0.307。PR、CI、发布和实际客户端验收分别核对，完成后补记；未提交业务审批。本次按用户明确要求关闭品类模式下的组织展开入口，其他旧修复与功能保留。
+初始候选为 Workbench 0.1.128、GEA 0.0.307；因并行发行占用版本号，最终使用0.1.129与0.0.308，发布及实际客户端验收见下文。未提交业务审批。本次按用户明确要求关闭品类模式下的组织展开入口，其他旧修复与功能保留。
+
+## 发布与客户端验收
+
+2026-11-17：[修复 PR #363](https://github.com/CleverC2200/dsh-agent-workbench/pull/363) 与 [配套 PR #443](https://github.com/CleverC2200/dsh-gea-plugin/pull/443) 已合并。[Workbench 0.1.129](https://github.com/CleverC2200/dsh-agent-workbench/releases/tag/v0.1.129) 和 [GEA 0.0.308](https://github.com/CleverC2200/dsh-gea-plugin/releases/tag/v0.0.308) 已发布，Manage company.81 复用原不可变归档。
+
+[固定源码正式构建、预检及隔离安装接收](https://github.com/CleverC2200/dsh-gea-plugin/actions/runs/44042445035) 通过。test revision139、stable revision131已写入并读回，生产更新源三包实际下载与摘要核验通过。两仓修复候选及合并后的主线检查通过。
+
+正式 Mac 客户端已通过内置更新器更新，安装、Host与界面版本一致。品类开关开启后组织行只有汇总，品类行可展开对应SKU；跨客户修改已逐客户核对分配量与金额、切换视图及刷新恢复。测试后恢复原值，刷新再核对通过，后台原数量及节点确认量未变，未提交审批。重启后经现有飞书入口回到应用，未输入新凭据。Windows实机品类编辑未验证。
+
+远端首轮纠偏回归仍要求品类模式下组织按钮存在，已按本次要求替换为组织静态汇总与品类明细编辑断言，保留原筛选、分页和金额断言。15项纠偏回归通过；原99项定向回归与2项版本合同通过。没有放宽门禁或删除既有业务保护。
