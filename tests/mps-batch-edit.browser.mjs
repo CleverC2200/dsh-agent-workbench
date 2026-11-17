@@ -40,7 +40,8 @@ async function setup(t) {
           configVersion: 'batch-fixture',
         },
   );
-  const { frame } = result;
+  const { page, frame } = result;
+  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-12');
@@ -48,7 +49,7 @@ async function setup(t) {
   await upload(
     frame,
     '选择产品关系CSV或Excel',
-    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n,A,产品甲,汤圆,系列,组,,\n,B,产品乙,汤圆,系列,组,,',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,\n郑州,B,产品乙,汤圆,系列,组,,\n华东,A,产品甲,汤圆,系列,组,,\n华东,B,产品乙,汤圆,系列,组,,',
   );
   await upload(
     frame,
@@ -204,7 +205,7 @@ test('configuration stages calendar, weights, rules and resources together; inva
   await expect(view.locator('.mps-batch-input')).toHaveCount(0);
   const original = await draft(page);
   await begin(view);
-  await view.getByLabel('郑州 安全天数', { exact: true }).fill('7');
+  await view.getByLabel('郑州 A 补充目标周转天数', { exact: true }).fill('7');
   await view.getByLabel('郑州 2026-12 生产天数', { exact: true }).fill('32');
   await view.getByLabel('郑州 A 件吨系数', { exact: true }).fill('0.123456789');
   await view.getByRole('button', { name: '新增产能资源', exact: true }).click();
@@ -220,11 +221,16 @@ test('configuration stages calendar, weights, rules and resources together; inva
   await expect
     .poll(
       async () =>
-        (await draft(page)).constraints?.safetyDays?.find((row) => row.base === '郑州')?.days,
+        (await draft(page)).constraints?.turnoverDays?.find(
+          (row) => row.base === '郑州' && row.code === 'A',
+        )?.days,
     )
     .toBe(7);
   const saved = await draft(page);
-  assert.equal(saved.constraints.safetyDays.find((row) => row.base === '郑州').days, 7);
+  assert.equal(
+    saved.constraints.turnoverDays.find((row) => row.base === '郑州' && row.code === 'A').days,
+    7,
+  );
   assert.equal(
     saved.productionDays.find((row) => row.base === '郑州' && row.month === '2026-12').days,
     15,
@@ -235,7 +241,7 @@ test('configuration stages calendar, weights, rules and resources together; inva
   );
   assert.equal(saved.resources[0].dailyTons, 8);
   await begin(view);
-  await view.getByLabel('郑州 安全天数', { exact: true }).fill('999');
+  await view.getByLabel('郑州 A 补充目标周转天数', { exact: true }).fill('999');
   await view.getByRole('button', { name: '删除资源1', exact: true }).click();
   await view.getByRole('button', { name: '取消', exact: true }).click();
   assert.deepEqual(await draft(page), saved);

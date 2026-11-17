@@ -80,7 +80,13 @@ export function encodeLocalDrafts(drafts, selected) {
             },
           }
         : {}),
-      ...fields(draft, ['productionDays', 'unitWeights', 'resources', 'resourceAssignments']),
+      ...fields(draft, [
+        'productionDays',
+        'unitWeights',
+        'resources',
+        'resourceAssignments',
+        'inventoryMovements',
+      ]),
       ...(draft.shipment
         ? {
             shipment: {

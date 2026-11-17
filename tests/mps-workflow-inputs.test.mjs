@@ -2,6 +2,7 @@ import test from 'node:test';
 import {
   workflowDraft as draft,
   workflowPerformanceInput,
+  confirmNoExistingInventoryMovements,
 } from './helpers/mps-workflow-fixture.mjs';
 import assert from 'node:assert/strict';
 import { buildPlanSources } from '../static/mps/source/plan-inputs.js';
@@ -1052,6 +1053,7 @@ test('纯中转基地由最新关系识别并读取件吨，不要求已有本�
 
 test('报告按确认口径区分下市需求、产线、调拨和件吨系数，有资源不误报缺产能', () => {
   const source = draft();
+  confirmNoExistingInventoryMovements(source);
   source.constraints.rules = {};
   const codes = ['A', 'B', 'C', 'D'];
   source.products = codes.map((code) => ({
@@ -1115,6 +1117,7 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
     sourceKind: 'business',
     rows: codes.map((code) => ({ base: '甲', code, end: 0 })),
   };
+  confirmNoExistingInventoryMovements(source);
   const run = () => buildMpsWorkflow(source, relations, shipment, { weights: { rows: [] } }).plan;
   const plan = run();
   const categories = (code) =>
@@ -1173,6 +1176,7 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
 
 test('组合系列为空但物理隧道有效时保留产能，不进入缺产能报告', () => {
   const source = draft();
+  confirmNoExistingInventoryMovements(source);
   source.constraints.turnoverDays = [{ base: '甲', code: 'A', days: 0 }];
   source.resources = [
     { id: 'F', base: '甲', kind: 'forming', name: '已批准成型机', dailyTons: 100 },

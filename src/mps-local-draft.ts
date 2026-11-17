@@ -194,6 +194,9 @@ export const mpsLocalDraftSchema = z.strictObject({
       kind: z.enum(['tunnel', 'forming']),
       name: text,
       dailyTons: quantity.nullable(),
+      workshop: text.optional(),
+      tunnel: text.optional(),
+      productionLines: list(text).optional(),
     }),
   ).optional(),
   resourceAssignments: list(
@@ -205,6 +208,26 @@ export const mpsLocalDraftSchema = z.strictObject({
       share: quantity.nullable(),
     }),
   ).optional(),
+  inventoryMovements: list(
+    z.strictObject({
+      month,
+      base: text.min(1),
+      code: text.min(1),
+      productionInbound: quantity.nullable(),
+      inTransitInbound: quantity.nullable(),
+      transferIn: quantity.nullable(),
+      transferOut: quantity.nullable(),
+      source: text.trim().min(1),
+      reason: text.trim().min(1),
+      at: z.iso.datetime(),
+    }),
+  )
+    .refine(
+      (rows) =>
+        new Set(rows.map((row) => JSON.stringify([row.month, row.base, row.code]))).size ===
+        rows.length,
+    )
+    .optional(),
   shipment: shipment.optional(),
 });
 export const mpsLocalStateSchema = z

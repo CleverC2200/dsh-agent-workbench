@@ -9,6 +9,7 @@ import { mpsDownloadText } from './helpers/mps-download.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const prefix = 'agents_scm_cust_deliv_daily_di.';
+let downloadIndex = 0;
 const raw = (queryId, base, code, quantity) => ({
   ...Object.fromEntries(config.queries[queryId].columns.map((column) => [column, null])),
   [prefix + 'belong_base']: base,
@@ -22,16 +23,20 @@ async function upload(frame, label, text) {
 }
 async function download(page, button) {
   const pending = page.waitForEvent('download');
-  await button.focus();
-  await button.press('Enter');
-  const text = await mpsDownloadText(await (await pending).path());
+  await button.click();
+  const file = await pending;
+  if (process.env.MPS_HISTORY_EXPORT_DIR)
+    await file.saveAs(
+      `${process.env.MPS_HISTORY_EXPORT_DIR}/${++downloadIndex}-${file.suggestedFilename()}`,
+    );
+  const text = await mpsDownloadText(await file.path());
   const book = XLSX.read(text, { type: 'string', raw: true });
   return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
 }
 
 test('第三步完整月分类、财年补0与当前范围CSV贯通，并保留原始值和二十四月依据', async (t) => {
   const { page, frame, calls } = await mpsPage(t, config, ({ queryId, parameters }) => {
-    const now = new Date();
+    const now = new Date('2026-11-17T12:00:00+08:00');
     now.setUTCDate(1);
     now.setUTCMonth(now.getUTCMonth() - 2);
     const isRecent = parameters.month >= now.toISOString().slice(0, 7) + '-01';
@@ -60,6 +65,7 @@ test('第三步完整月分类、财年补0与当前范围CSV贯通，并保留�
       hasMorePages: false,
     };
   });
+  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-12');
   await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
@@ -133,6 +139,7 @@ test('完整月读取拒绝时报告失败与原因，财年有效数量继续�
       hasMorePages: false,
     };
   });
+  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-12');
   await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();

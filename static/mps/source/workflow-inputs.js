@@ -148,6 +148,9 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
             month: text(row['月份']),
             base: text(row['基地']),
             code: text(row['产品编码']),
+            category: text(row['大类']),
+            group: text(row['物料组']),
+            series: text(row['系列']),
             quantity:
               reportIssues().length ||
               planKeys.get(
@@ -408,17 +411,32 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     },
     openingInventory,
     delistedProducts,
-    inventoryMovements: (draft.shipment?.transferPlans ?? [])
-      .filter((row) => row.month >= draft.month && row.month <= months.at(-1))
-      .map((row) => ({
-        month: text(row.month),
-        base: text(row.base),
-        code: text(row.code),
-        productionInbound: 0,
-        inTransitInbound: 0,
-        transferIn: number(row.inbound),
-        transferOut: number(row.outbound),
-      })),
+    inventoryMovements: [
+      ...new Map([
+        ...(draft.shipment?.transferPlans ?? []).map((row) => [
+          JSON.stringify([row.month, row.base, row.code]),
+          {
+            month: text(row.month),
+            base: text(row.base),
+            code: text(row.code),
+            productionInbound: null,
+            inTransitInbound: null,
+            transferIn: number(row.inbound),
+            transferOut: number(row.outbound),
+          },
+        ]),
+        ...(draft.inventoryMovements ?? []).map((row) => [
+          JSON.stringify([row.month, row.base, row.code]),
+          {
+            ...row,
+            productionInbound: number(row.productionInbound),
+            inTransitInbound: number(row.inTransitInbound),
+            transferIn: number(row.transferIn),
+            transferOut: number(row.transferOut),
+          },
+        ]),
+      ]).values(),
+    ].filter((row) => row.month >= draft.month && row.month <= months.at(-1)),
     capacities,
     adjustments: {
       categoryDemand: (draft.adjustments?.categoryDemand ?? []).map(

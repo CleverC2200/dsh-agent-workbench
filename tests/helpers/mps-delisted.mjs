@@ -9,6 +9,12 @@ export function delistedInput() {
       { month: '2027-01', base: '甲', code: '0', inbound: 5, outbound: 10 },
     ],
   };
+  sample.draft.inventoryMovements.find(
+    (row) => row.month === '2027-01' && row.code === '0',
+  ).transferIn = 5;
+  sample.draft.inventoryMovements.find(
+    (row) => row.month === '2027-01' && row.code === '0',
+  ).transferOut = 10;
   sample.shipment.rows.forEach((row) => Object.assign(row, { end: 100, average: 2 }));
   sample.relations = {
     sources: {

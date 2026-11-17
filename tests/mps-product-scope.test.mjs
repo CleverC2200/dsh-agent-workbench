@@ -64,3 +64,33 @@ test('本地产品清单缺基地时报告缺项，不由历史或提报扩张�
   assert.match(issue.reason, /缺基地/);
   assert.ok(result.poolExceptions.total.some((row) => row.base === '甲' && row.code === 'A'));
 });
+
+test('业务提报池外项保留大类，与同大类历史合并时保留双来源', () => {
+  const draft = workflowDraft();
+  draft.reportSource = 'business';
+  draft.planRatesRead = { status: 'ready' };
+  draft.planRates = [
+    {
+      维度类型: '基地+产品',
+      月份: draft.month,
+      基地: '甲',
+      产品编码: 'OUT',
+      大类: '点心',
+      系列: '系列',
+      物料组: '包点',
+      当前维度计划量: 8,
+    },
+  ];
+  draft.historyAnnual.periods[0].rows.push({ 基地: '甲', 产品编码: 'OUT', 大类: '点心', 数量: 20 });
+  const result = buildMpsWorkflow(draft);
+  const records = result.poolExceptions.total
+    .find((row) => row.code === 'OUT')
+    .records.filter((row) => row.category === '点心');
+  assert.deepEqual(
+    records.map((row) => [row.source, row.quantity]),
+    [
+      ['history', 20],
+      ['report', 8],
+    ],
+  );
+});
