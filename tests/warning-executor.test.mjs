@@ -6,14 +6,17 @@ test('XXL-JOB registration, ownership, duplicate triggers and client receipts', 
   const jobs = [],
     callbacks = [],
     registrations = [];
+  let identityChecks = 0;
   const json = (body, headers = {}) => Response.json(body, { headers });
   const external = async (url, options = {}) => {
     const path = new URL(url).pathname;
-    if (path === '/sys/user/getUserInfo')
+    if (path === '/sys/user/getUserInfo') {
+      identityChecks++;
       return json({
         success: true,
         result: { userInfo: { id: options.headers['X-Access-Token'], username: 'test' } },
       });
+    }
     if (path === '/ai/gateway/agent/session')
       return json({ result: { accessDecision: { allowed: true } } });
     if (path === '/login')
@@ -46,7 +49,8 @@ test('XXL-JOB registration, ownership, duplicate triggers and client receipts', 
       appName: 'gea-warning-executor',
       adminUrl: 'http://xxl',
       executorUrl: 'http://executor:18112',
-      geaBase: 'http://gea',
+      environment: 'production',
+      geaBase: 'https://production.gea.fixture',
       username: 'admin',
       password: 'private',
       accessToken: 'xxl-private',
@@ -65,7 +69,23 @@ test('XXL-JOB registration, ownership, duplicate triggers and client receipts', 
       return { status: r.status, body: await r.json() };
     };
     const client = (body, who = 'me') =>
-      request('/client', body, { 'X-Access-Token': who, 'X-Tenant-Id': 't' });
+      request('/client', body, {
+        'X-Access-Token': who,
+        'X-Tenant-Id': 't',
+        'X-GEA-Environment': 'production',
+      });
+    assert.equal(
+      (
+        await request(
+          '/client',
+          { operation: 'poll' },
+          { 'X-Access-Token': 'me', 'X-Tenant-Id': 't', 'X-GEA-Environment': 'test' },
+        )
+      ).status,
+      403,
+    );
+    assert.equal(identityChecks, 0);
+    assert.equal(jobs.length, 0);
     assert.equal(registrations[0].registryKey, 'gea-warning-executor');
     const data = {
       executorParam: JSON.stringify({ taskId: 'monitor-test' }),
@@ -133,6 +153,25 @@ test('XXL-JOB registration, ownership, duplicate triggers and client receipts', 
   }
 });
 
+test('warning deployment rejects missing environment and known inverted GEA authorities', () => {
+  assert.throws(
+    () => createWarningExecutor({ geaBase: 'https://production.fixture' }),
+    /WARNING_DEPLOYMENT_ENVIRONMENT_REQUIRED/,
+  );
+  assert.throws(
+    () =>
+      createWarningExecutor({
+        environment: 'production',
+        geaBase: 'https://gea.synear.cn:4443/gea-boot',
+      }),
+    /WARNING_DEPLOYMENT_ENVIRONMENT_MISMATCH/,
+  );
+  assert.throws(
+    () => createWarningExecutor({ environment: 'test', geaBase: 'https://gea.synear.cn/gea-boot' }),
+    /WARNING_DEPLOYMENT_ENVIRONMENT_MISMATCH/,
+  );
+});
+
 test('tokenless admin accepts only loopback requests matching authenticated scheduler logs', async () => {
   const timestamp = Date.now();
   const params = JSON.stringify({ taskId: 'monitor-local', ownerKey: 'owner' });
@@ -148,6 +187,8 @@ test('tokenless admin accepts only loopback requests matching authenticated sche
       password: 'private',
       accessToken: '',
       protocolAuth: 'loopback-log',
+      environment: 'production',
+      geaBase: 'https://production.gea.fixture',
     },
     async (url) => {
       const path = new URL(url).pathname;

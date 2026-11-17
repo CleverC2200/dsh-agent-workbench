@@ -209,6 +209,7 @@ export function ApiLogCenter({ environment, onClose, request }: Props) {
         record.group,
         record.request.method,
         record.request.url,
+        record.request.origin,
         record.id,
         record.request.headers['x-request-id'],
         record.response?.headers['x-request-id'],
@@ -687,7 +688,7 @@ export function ApiLogCenter({ environment, onClose, request }: Props) {
                     </dd>
                   </div>
                   <div>
-                    <dt>记录环境</dt>
+                    <dt>登录环境</dt>
                     <dd>{activeRecord.environment === 'production' ? '生产环境' : '测试环境'}</dd>
                   </div>
                   <div>
@@ -738,7 +739,12 @@ export function ApiLogCenter({ environment, onClose, request }: Props) {
                     <span className={`gea-api-method ${methodClass(activeRecord.request.method)}`}>
                       {activeRecord.request.method}
                     </span>
-                    <code>{activeRecord.request.url}</code>
+                    <code>
+                      {activeRecord.request.origin && activeRecord.request.url.startsWith('/')
+                        ? activeRecord.request.origin + ' '
+                        : ''}
+                      {activeRecord.request.url}
+                    </code>
                   </p>
                 </CodeBlock>
                 <details className="gea-api-payload-details">
