@@ -14,6 +14,11 @@ export function permitsNullHealthy(description = '') {
 export function validateTaskRule(row, task) {
   const r = row.rule;
   if (r?.sourceType !== 'task') return false;
+  const wholeTask = `指标：${task.metric}；检测范围：${task.scope}；任务说明：${task.description}`;
+  if (r.taskQuote === wholeTask && task.description) {
+    r.originalTaskQuote = r.taskQuote;
+    r.taskQuote = task.description;
+  }
   if (!r.taskQuote || !String(task.description || '').includes(r.taskQuote))
     throw Error('任务规则缺少原文依据');
   r.source = '任务自定义：' + r.taskQuote;
@@ -64,6 +69,8 @@ export function validateTaskRule(row, task) {
   return true;
 }
 export function displayRule(r, unit = '') {
+  if (r.nullPolicy === 'healthy' && r.kind !== 'range' && !Number.isFinite(r.healthy))
+    return '查询成功返回空值按任务规则正常（非实测达标）';
   if (r.kind === 'range') return `正常区间 ${r.min}—${r.max}${unit}；区间外预警`;
   return (
     `健康 ${{ gt: '>', gte: '≥', lt: '<', lte: '≤' }[r.healthyOperator]} ${r.healthy}${unit}` +

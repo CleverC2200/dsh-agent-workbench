@@ -51,7 +51,7 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^(?:src/(?:detection-(?:backend|postgres|whitelist)|task-rules|warning-ownership|feishu-warning-transport|task-management)\\.|services/warning-executor/|docs/alert-module-local/)",
+      "pattern": "^(?:src/(?:detection-(?:backend|postgres|whitelist|null-policy|output)|task-rules|warning-ownership|warning-owner-directory|warning-recipient-routing|feishu-warning-transport|task-management)\\.|services/warning-executor/|docs/alert-module-local/)",
       "tests": [
         "tests/alert-lifecycle.test.mjs",
         "tests/cross-period-lifecycle.test.mjs",
@@ -61,7 +61,13 @@
         "tests/warning-ownership.test.mjs",
         "tests/alert-unconfigured.test.mjs",
         "tests/detection-whitelist.test.mjs",
-        "tests/warning-executor.test.mjs"
+        "tests/warning-executor.test.mjs",
+        "tests/detection-null-policy.test.mjs",
+        "tests/detection-output.test.mjs",
+        "tests/warning-owner-directory.test.mjs",
+        "tests/warning-recipient-routing.test.mjs",
+        "tests/warning-notification-digest.test.mjs",
+        "tests/warning-routing-integration.test.mjs"
       ],
       "sourceTests": [
         "tests/alert-lifecycle.test.mjs",
@@ -72,8 +78,19 @@
         "tests/warning-ownership.test.mjs",
         "tests/alert-unconfigured.test.mjs",
         "tests/detection-whitelist.test.mjs",
-        "tests/warning-executor.test.mjs"
+        "tests/warning-executor.test.mjs",
+        "tests/detection-null-policy.test.mjs",
+        "tests/detection-output.test.mjs",
+        "tests/warning-owner-directory.test.mjs",
+        "tests/warning-recipient-routing.test.mjs",
+        "tests/warning-notification-digest.test.mjs",
+        "tests/warning-routing-integration.test.mjs"
       ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-apsplan/source/app/(?:monitor-management|warning-owner-directory|detection-record-view)\\.(?:js|css)$",
+      "tests": ["tests/aps-alert-client.browser.mjs", "tests/warning-owner-directory.browser.mjs"]
     },
     {
       "repo": "dsh-agent-workbench",

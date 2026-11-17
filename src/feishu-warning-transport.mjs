@@ -161,6 +161,7 @@ export function enqueueNotification(event, kind, runId, config) {
     key,
     uuid: createHash('sha256').update(key).digest('hex').slice(0, 32),
     eventId: event.id,
+    taskId: event.monitorId,
     ...(config.transport === 'shared-feishu-app'
       ? { transport: config.transport, taskId: event.monitorId }
       : {}),
@@ -179,7 +180,8 @@ export function enqueueNotification(event, kind, runId, config) {
 }
 export function enqueueChanges(state, before, run, config, task) {
   if (!config) return;
-  const recipients = Array.isArray(config) ? config : [config];
+  const routes = config instanceof Map ? config : null;
+  const specified = Array.isArray(config) ? config : [config];
   const senderName = task?.definedBy || '未记录';
   for (const event of state.events) {
     if (run.taskId && event.monitorId !== run.taskId) continue;
@@ -187,6 +189,8 @@ export function enqueueChanges(state, before, run, config, task) {
     const recovered = event.eventStatus === '已恢复' && event.pendingClose === true;
     if (!active && !recovered) continue;
     const observation = event.history?.find((item) => item.runId === run.id);
+    if (routes && !observation) continue;
+    const recipients = routes ? routes.get(event.objectKey) || [] : specified;
     const old = before.get(event.id);
     if (task?.notifyMode === 'once') {
       if (!active || !observation || observation.status === '健康') continue;
@@ -268,41 +272,132 @@ export async function sendPersonalNotification(job) {
     );
   });
 }
+function deliveryGroup(event, job) {
+  if (job.kind === 'test' || !job.runId || !(job.taskId || event.monitorId))
+    return job.key || job.id;
+  return JSON.stringify([
+    job.taskId || event.monitorId,
+    job.runId,
+    job.transport || 'personal',
+    job.credentialProfile || 'default',
+    job.receiveIdType,
+    job.receiveId,
+  ]);
+}
+export function notificationDigest(entries) {
+  const counts = { severe: 0, warning: 0, recovered: 0 };
+  for (const { job } of entries) {
+    const template = job.card.header?.template;
+    counts[template === 'green' ? 'recovered' : template === 'red' ? 'severe' : 'warning']++;
+  }
+  const lines = entries.map(({ job }, index) => {
+    const title = String(job.card.header?.title?.content || '指标预警').slice(0, 180);
+    const fields = job.card.elements?.[0]?.fields || [];
+    const details = fields
+      .slice(0, 5)
+      .map((field) => String(field.text?.content || '').slice(0, 200))
+      .join('；')
+      .replaceAll('\n', ' ');
+    return `${index + 1}. ${title}\n${details}`;
+  });
+  const card = {
+    config: { wide_screen_mode: true },
+    header: {
+      template: counts.severe ? 'red' : counts.warning ? 'orange' : 'green',
+      title: { tag: 'plain_text', content: `预警检测汇总｜${entries.length} 项` },
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content: '' } },
+      {
+        tag: 'note',
+        elements: [
+          {
+            tag: 'plain_text',
+            content: `同一检测任务本轮向你合并发送一条通知。执行编号：${entries[0].job.runId}。请在 GEA 预警管理的执行记录查看完整明细与取数依据。`,
+          },
+        ],
+      },
+    ],
+  };
+  const summary = `严重 ${counts.severe} 项 · 预警 ${counts.warning} 项 · 已恢复 ${counts.recovered} 项`;
+  const shown = [];
+  for (const line of lines) {
+    if (shown.length >= 30) break;
+    const candidate = summary + '\n\n' + [...shown, line].join('\n\n');
+    card.elements[0].text.content = candidate;
+    if (Buffer.byteLength(JSON.stringify({ content: JSON.stringify(card) })) > 22000) break;
+    shown.push(line);
+  }
+  card.elements[0].text.content =
+    summary +
+    '\n\n' +
+    shown.join('\n\n') +
+    (shown.length < entries.length
+      ? `\n\n其余 ${entries.length - shown.length} 项请在 GEA 查看本次执行记录。`
+      : '');
+  return card;
+}
 export async function drainNotifications({ state, save, locked, send = sendPersonalNotification }) {
+  const groups = new Set();
   for (const event of state.events)
-    for (const job of event.notifications || []) {
-      if (job.status !== '待发送') continue;
-      const claimed = await locked(async () => {
-        if (job.status !== '待发送') return false;
-        if (
-          job.kind !== 'test' &&
-          (event.eventStatus === '已关闭' || event.eventStatus === '已合并')
-        ) {
-          job.status = '已取消';
-          await save();
-          return false;
+    for (const job of event.notifications || [])
+      if (job.status === '待发送') groups.add(deliveryGroup(event, job));
+  for (const key of groups) {
+    const batch = await locked(async () => {
+      const entries = [],
+        cancelled = [];
+      for (const event of state.events)
+        for (const job of event.notifications || []) {
+          if (job.status !== '待发送' || deliveryGroup(event, job) !== key) continue;
+          if (job.kind !== 'test' && ['已关闭', '已合并'].includes(event.eventStatus)) {
+            job.status = '已取消';
+            cancelled.push(job);
+          } else entries.push({ event, job });
         }
-        job.status = '发送中';
-        job.attemptedAt = new Date().toISOString();
-        await save();
-        return true;
-      });
-      if (!claimed) continue;
-      try {
-        const receipt = await send(job);
-        await locked(async () => {
-          job.status = '已发送';
-          job.messageId = receipt.messageId;
-          job.sentAt = new Date().toISOString();
-          await save();
-        });
-      } catch (e) {
-        await locked(async () => {
-          job.status = e.unknown ? '待核实' : '发送失败';
-          job.error = e.message;
-          job.providerCode = e.providerCode;
-          await save();
-        });
+      if (!entries.length) {
+        if (cancelled.length) await save();
+        return null;
       }
+      const first = entries[0].job;
+      const uuid = createHash('sha256')
+        .update('warning-digest|' + key)
+        .digest('hex')
+        .slice(0, 32);
+      const delivery = {
+        ...first,
+        uuid: first.kind === 'test' ? first.uuid : uuid,
+        card: entries.length === 1 ? first.card : notificationDigest(entries),
+      };
+      for (const { job } of entries)
+        Object.assign(job, {
+          status: '发送中',
+          attemptedAt: new Date().toISOString(),
+          batchId: delivery.uuid,
+        });
+      await save();
+      return { entries, delivery };
+    });
+    if (!batch) continue;
+    let outcome;
+    try {
+      const receipt = await send(batch.delivery);
+      if (!receipt?.messageId)
+        throw Object.assign(Error('飞书发送未返回有效回执，请核实'), { unknown: true });
+      outcome = {
+        status: '已发送',
+        messageId: receipt.messageId,
+        sentAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      outcome = {
+        status: error.unknown ? '待核实' : '发送失败',
+        error: error.message,
+        providerCode: error.providerCode,
+      };
     }
+    await locked(async () => {
+      for (const { job } of batch.entries) Object.assign(job, outcome);
+      await save();
+    });
+  }
 }

@@ -1,3 +1,4 @@
+import { renderOwnerDirectory } from './warning-owner-directory.js';
 import { warningMetricNames, warningMetricInfo } from '../../../shared/warning-metrics.mjs';
 import { describeRunResult, showRunContext, showRunResult } from './detection-record-view.js';
 import { call } from '../../../shared/channel.js';
@@ -56,7 +57,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
   const mask = document.createElement('div');
   mask.className = 'am-mask';
   mask.innerHTML =
-    '<section class="am-panel" role="dialog" aria-modal="true" aria-label="预警管理"><header><div><small>工作台运营</small><h2>预警管理</h2></div><button data-close>×</button></header><div class="am-notice">通过 XXL-JOB 定时执行 GEA 问数；风险规则沿用指标库。缺少规则或数据时记录失败。</div><nav role="tablist" aria-label="预警管理内容"><button role="tab" data-tab="monitors">检测任务</button><button role="tab" data-tab="logs">执行记录</button></nav><main role="tabpanel"></main></section>';
+    '<section class="am-panel" role="dialog" aria-modal="true" aria-label="预警管理"><header><div><small>工作台运营</small><h2>预警管理</h2></div><button data-close>×</button></header><div class="am-notice">通过 XXL-JOB 定时执行 GEA 问数；风险规则沿用指标库。缺少规则或数据时记录失败。</div><nav role="tablist" aria-label="预警管理内容"><button role="tab" data-tab="monitors">检测任务</button><button role="tab" data-tab="logs">执行记录</button><button role="tab" data-tab="owners">通知负责人</button></nav><main role="tabpanel"></main></section>';
   document.body.append(mask);
   const main = mask.querySelector('main');
   const nav = mask.querySelector('nav');
@@ -111,6 +112,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
   }
   const _persist = () => {};
   async function refresh() {
+    if (tab === 'owners') return;
     const before = JSON.stringify([monitors, logs]);
     const state = await api({ op: 'list' });
     if (!mask.isConnected) return;
@@ -162,7 +164,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     runPage = Math.min(runPage, pageCount - 1);
     const pageLogs = logs.slice(runPage * pageSize, (runPage + 1) * pageSize);
     const previousScroll = main.querySelector('.am-table')?.scrollLeft || 0;
-    main.classList.remove('am-editing');
+    main.classList.remove('am-editing', 'am-owner-page');
     mask
       .querySelectorAll('[data-tab]')
       .forEach(
@@ -172,6 +174,10 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
           (b.tabIndex = b.dataset.tab === tab ? 0 : -1)
         ),
       );
+    if (tab === 'owners') {
+      void renderOwnerDirectory(main, api, { canWrite, writeReason });
+      return;
+    }
     main.innerHTML =
       (writeReason
         ? '<div class="am-run-notice" role="status">' + esc(writeReason) + '</div>'
@@ -790,7 +796,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
           String(i).padStart(2, '0') +
           '</option>',
       ).join('') +
-      '</select></label><small>上海时间</small></div></div><fieldset data-week hidden><legend>执行星期（可多选）</legend><label><input type="checkbox" name="days" value="1" checked>周一</label><label><input type="checkbox" name="days" value="2" >周二</label><label><input type="checkbox" name="days" value="3" >周三</label><label><input type="checkbox" name="days" value="4" >周四</label><label><input type="checkbox" name="days" value="5" >周五</label><label><input type="checkbox" name="days" value="6" >周六</label><label><input type="checkbox" name="days" value="7" >周日</label></fieldset><label data-month hidden>每月日期<select name="monthday"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option></select><small>仅支持 1—28 日，避免部分月份跳过。</small></label><label data-interval hidden>每隔小时数<input name="interval" type="number" min="1" max="23" step="1" value="2"></label><p data-preview aria-live="polite"></p></div><label style="grid-column:1/-1">任务说明<textarea name="description" required placeholder="描述关注的问题和期望的分析" style="min-height:90px"></textarea></label><label style="grid-column:1/-1">执行数字人<select name="agentPreset" required disabled><option value="">正在读取数字人…</option></select><small data-agent-status aria-live="polite"></small></label><fieldset style="grid-column:1/-1" class="am-people"><legend>消息通知</legend><div class="am-recipient-picker" data-recipient-picker><label for="am-recipient-search">飞书接收人</label><div class="am-recipient-control"><div class="am-recipient-chips" data-people-selected></div><input id="am-recipient-search" data-people-keyword type="search" maxlength="80" placeholder="输入姓名或 GEA 账号，搜索添加"></div><div class="am-recipient-menu" data-people-menu hidden><p data-people-status role="status"></p><div data-people-results></div><button type="button" data-people-more hidden>加载更多</button></div><small>可选择多位接收人，留空不发送通知。</small></div><label>通知频率<select name="notifyMode"><option value="repeat">重复通知</option><option value="once">通知一次</option></select><small>通知一次：首次异常发送。重复通知：异常触发后，每次检测都发送，恢复后也继续，直到手动关闭预警。</small></label></fieldset><p class="am-mode-note">时间按上海时区。指标定义、公式、排除规则和统计期间按 V0.6 固定配置执行。</p>' +
+      '</select></label><small>上海时间</small></div></div><fieldset data-week hidden><legend>执行星期（可多选）</legend><label><input type="checkbox" name="days" value="1" checked>周一</label><label><input type="checkbox" name="days" value="2" >周二</label><label><input type="checkbox" name="days" value="3" >周三</label><label><input type="checkbox" name="days" value="4" >周四</label><label><input type="checkbox" name="days" value="5" >周五</label><label><input type="checkbox" name="days" value="6" >周六</label><label><input type="checkbox" name="days" value="7" >周日</label></fieldset><label data-month hidden>每月日期<select name="monthday"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option></select><small>仅支持 1—28 日，避免部分月份跳过。</small></label><label data-interval hidden>每隔小时数<input name="interval" type="number" min="1" max="23" step="1" value="2"></label><p data-preview aria-live="polite"></p></div><label style="grid-column:1/-1">任务说明<textarea name="description" required placeholder="描述关注的问题和期望的分析" style="min-height:90px"></textarea></label><label style="grid-column:1/-1">执行数字人<select name="agentPreset" required disabled><option value="">正在读取数字人…</option></select><small data-agent-status aria-live="polite"></small></label><fieldset style="grid-column:1/-1" class="am-people"><legend>消息通知</legend><label for="am-notify-strategy">接收人策略<select id="am-notify-strategy" name="notifyStrategy"><option value="specified">指定接收人</option><option value="automatic">按责任范围自动匹配</option><option value="off">不发送通知</option></select></label><p data-routing-help role="status" hidden>请先在“通知负责人”维护配置。交叉范围专属负责人优先，否则合并品类、基地负责人；同一任务同次检测向每人只发一条汇总。</p><div class="am-recipient-picker" data-recipient-picker><label for="am-recipient-search">飞书接收人</label><div class="am-recipient-control"><div class="am-recipient-chips" data-people-selected></div><input id="am-recipient-search" data-people-keyword type="search" maxlength="80" placeholder="输入姓名或 GEA 账号，搜索添加"></div><div class="am-recipient-menu" data-people-menu hidden><p data-people-status role="status"></p><div data-people-results></div><button type="button" data-people-more hidden>加载更多</button></div><small>可选择多位接收人，留空不发送通知。</small></div><label>通知频率<select name="notifyMode"><option value="repeat">重复通知</option><option value="once">通知一次</option></select><small>通知一次：首次异常发送。重复通知：异常触发后，每次检测都发送，恢复后也继续，直到手动关闭预警。</small></label></fieldset><p class="am-mode-note">时间按上海时区。指标定义、公式、排除规则和统计期间按 V0.6 固定配置执行。</p>' +
       (!edit
         ? '<label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" name="runImmediately" style="width:16px;height:16px;margin:0;flex:none">保存后立即执行一次</label>'
         : '') +
@@ -798,6 +804,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       (edit ? '保存修改' : '保存检测任务') +
       '</button></footer></form>';
     let f = main.querySelector('form');
+    f.elements.notifyStrategy.value = edit?.notifyStrategy || 'specified';
     if (edit) {
       f.elements.notifyMode.value = edit.notifyMode || 'repeat';
       const v = edit.schedule || { frequency: 'daily', time: '09:00' };
@@ -817,6 +824,17 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       enhanceSelect(select, select.name === 'metric'),
     );
     bindPersonnelSearch(f, api, edit);
+    const syncRouting = () => {
+      const specified = f.elements.notifyStrategy.value === 'specified';
+      const picker = f.querySelector('[data-recipient-picker]');
+      picker.hidden = !specified;
+      picker.inert = !specified;
+      f.querySelector('[data-routing-help]').hidden =
+        f.elements.notifyStrategy.value !== 'automatic';
+      f.elements.notifyMode.disabled = f.elements.notifyStrategy.value === 'off';
+    };
+    f.elements.notifyStrategy.addEventListener('change', syncRouting);
+    syncRouting();
     void bindAgentSelect(f, api, edit?.agentPreset);
     const updateSchedule = () => {
       f.elements.time.value = f.elements.timeHour.value + ':' + f.elements.timeMinute.value;
@@ -887,7 +905,10 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     main.querySelector('[data-cancel]').onclick = render;
     f.onsubmit = async (e) => {
       e.preventDefault();
-      if (f.querySelector('[data-recipient-picker][aria-busy=true]')) {
+      if (
+        f.elements.notifyStrategy.value === 'specified' &&
+        f.querySelector('[data-recipient-picker][aria-busy=true]')
+      ) {
         main.querySelector('.am-validation').textContent = '正在核验飞书接收人，请稍候再保存';
         return;
       }
@@ -899,7 +920,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       }
       m.days = [...f.querySelectorAll('[name=days]:checked')].map((x) => x.value).join(',');
       Object.keys(m).forEach((k) => (m[k] = m[k].trim()));
-      m.notifyRecipients = data.getAll('notifyRecipients');
+      m.notifyRecipients = m.notifyStrategy === 'specified' ? data.getAll('notifyRecipients') : [];
       m.runImmediately = !edit && f.elements.runImmediately.checked;
       if (!catalog.includes(m.metric)) {
         main.querySelector('.am-validation').textContent = '请从指标清单选择有效指标';
@@ -1000,14 +1021,16 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
   mask.querySelector('nav').onkeydown = (e) => {
     if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
       e.preventDefault();
+      const tabs = [...nav.querySelectorAll('[data-tab]')].map((button) => button.dataset.tab);
+      const index = tabs.indexOf(tab);
       tab =
-        e.key === 'Home'
-          ? 'monitors'
-          : e.key === 'End'
-            ? 'logs'
-            : tab === 'monitors'
-              ? 'logs'
-              : 'monitors';
+        tabs[
+          e.key === 'Home'
+            ? 0
+            : e.key === 'End'
+              ? tabs.length - 1
+              : (index + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length
+        ];
       render();
       mask.querySelector('[data-tab="' + tab + '"]').focus();
     }

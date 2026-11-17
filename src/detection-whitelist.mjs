@@ -1,5 +1,5 @@
 export function createWhitelistStore(ctx) {
-  let revision;
+  let revision, directoryId;
   const invoke = async (body) => {
     const response = await ctx.connection.createSharedFetchHandler('/api').fetch(
       new Request('http://host/api/gea-proof/warning/storage', {
@@ -16,6 +16,17 @@ export function createWhitelistStore(ctx) {
     return result.value;
   };
   return {
+    ownerDirectory: {
+      async load() {
+        const value = await invoke({ operation: 'directory-load' });
+        directoryId = value.directoryId;
+        return value;
+      },
+      save: (revision, owners) => {
+        if (!directoryId) throw Error('请先读取责任人配置');
+        return invoke({ operation: 'directory-save', directoryId, revision, owners });
+      },
+    },
     async load() {
       const value = await invoke({ operation: 'load' });
       revision = value.revision;
