@@ -991,6 +991,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
   const DeliveryMetrics = createDeliveryMetrics(react, { table, downloadCsv, useMpsPart });
   const Workflow = createWorkflow(react, useMpsPart, {
     Dialog,
+    Upload,
+    parseCsv,
     downloadCsv: downloadCsvLegacy,
     downloadAmounts: downloadCsv,
   });

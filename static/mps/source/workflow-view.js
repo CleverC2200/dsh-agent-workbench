@@ -107,7 +107,11 @@ const reasons = (row, fields) => [
 const status = (row, fields) => reasons(row, fields).join('、') || '已计算';
 const sourceText = '①大类需求；②月末结存；③两路占比；④源产能；⑤源最终目标周转天数与人工补充';
 
-export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts, Dialog }) {
+export function createWorkflow(
+  react,
+  useMpsPart,
+  { downloadCsv, downloadAmounts, Dialog, Upload, parseCsv },
+) {
   const h = react.createElement;
   const ShipmentScopeNotice = createShipmentScopeNotice(react, { downloadCsv });
   const { useBatchEdit, Actions, Field } = createBatchEdit(react);
@@ -121,7 +125,13 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
       placeholder: '未填写',
       onStage: commit,
     });
-  const ProcessedDemand = createProcessedDemand(react, { downloadCsv, downloadAmounts });
+  const ProcessedDemand = createProcessedDemand(react, {
+    downloadCsv,
+    downloadAmounts,
+    Dialog,
+    Upload,
+    parseCsv,
+  });
   const PoolExceptionReport = createPoolExceptionReport(react, { downloadCsv });
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
   const InventoryTargetPanel = createInventoryTargetPanel(react, { downloadCsv, NumberInput });
