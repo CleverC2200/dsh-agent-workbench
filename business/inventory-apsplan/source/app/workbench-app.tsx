@@ -82,6 +82,7 @@ import {
 import { browserStorage } from './data/browser-storage';
 import { useWorkspace } from './data/use-workspace';
 import { useDefaultProductionDate } from './data/use-default-production-date';
+import { usesConfiguredSql } from '../../../shared/sql-config';
 import { comparisonEvidence } from './data/comparison-evidence';
 import { deriveMetrics, type MetricData } from 'dsh-agent-manage/aps-compute/metrics';
 import { budgetProgress } from 'dsh-agent-manage/aps-compute/budget-progress';
@@ -5297,7 +5298,10 @@ export default function Home({
     naturalWeekOptions[naturalWeekOptions.length - 1];
   const selectedPeriodLabel = `${selectedYear.label}${selectedMonth.label}`;
   const selectedDateLabel = `${selectedPeriodLabel}${selectedDay}日`;
-  const selectedPeriodEndDay = timeGranularity === 'week' ? selectedWeek.endDay : selectedDay;
+  const defaultCalendarCutoff =
+    liveData && !APS_MOCK && usesConfiguredSql() && selectedDateMode === 'latest';
+  const selectedPeriodEndDay =
+    timeGranularity === 'week' && !defaultCalendarCutoff ? selectedWeek.endDay : selectedDay;
   const effectiveEnd = liveData
     ? effectivePeriodEnd(Number(selectedYear.key), selectedMonth.value, selectedPeriodEndDay)
     : {

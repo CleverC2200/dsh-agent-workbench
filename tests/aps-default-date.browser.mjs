@@ -51,7 +51,13 @@ const bundle = await build({
 test('default uses yesterday; manual day and restored selection stay exact', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
-  async function pageFor(hold = false, manual = false, workspace = 'plan', report = null) {
+  async function pageFor(
+    hold = false,
+    manual = false,
+    workspace = 'plan',
+    report = null,
+    granularity = 'day',
+  ) {
     const page = await browser.newPage({
       timezoneId: workspace === 'intelligent' ? 'America/Los_Angeles' : 'Asia/Shanghai',
     });
@@ -84,7 +90,7 @@ test('default uses yesterday; manual day and restored selection stay exact', asy
     await page.goto('http://aps.test/');
     await page.addStyleTag({ content: css });
     await page.evaluate(
-      ({ hold, manual, workspace, report }) => {
+      ({ hold, manual, workspace, report, granularity }) => {
         window.reportData = report;
         window.initialWorkspace = workspace;
         window.calendarReads = [];
@@ -105,7 +111,7 @@ test('default uses yesterday; manual day and restored selection stay exact', asy
                 state: {
                   version: 1,
                   activeWorkspace: workspace,
-                  timeGranularity: report ? 'month' : 'day',
+                  timeGranularity: report ? 'month' : granularity,
                   selectedYearKey: '2026',
                   selectedMonthKey: '11',
                   selectedDay: manual ? 9 : 10,
@@ -120,7 +126,7 @@ test('default uses yesterday; manual day and restored selection stay exact', asy
             );
         });
       },
-      { hold, manual, workspace, report },
+      { hold, manual, workspace, report, granularity },
     );
     await page.addScriptTag({
       content: bundle.outputFiles.find((x) => x.path.endsWith('.js')).text,
@@ -160,6 +166,16 @@ test('default uses yesterday; manual day and restored selection stay exact', asy
     [],
     'The default cutoff must not depend on a source latest-date response',
   );
+  for (const granularity of ['week', 'year', 'month']) {
+    const calendar = await pageFor(false, false, 'plan', null, granularity);
+    await expect
+      .poll(() =>
+        calendar.evaluate(
+          () => window.periodReads.filter((x) => x.enabled && !x.paused).at(-1)?.date,
+        ),
+      )
+      .toBe('2026-11-16');
+  }
   const intelligent = await pageFor(false, false, 'intelligent', {
     start: '2026-11-01',
     end: '2026-11-16',
