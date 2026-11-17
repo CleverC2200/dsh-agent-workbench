@@ -1124,13 +1124,13 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
   assert.deepEqual(categories('A'), ['缺件吨系数']);
   assert.deepEqual(categories('B'), ['缺调拨关系']);
   assert.deepEqual(categories('C'), ['缺产线产能']);
-  assert.deepEqual(categories('D'), ['下市品产生需求']);
+  assert.deepEqual(categories('D'), ['负库存归零', '下市品停止自动补货']);
   assert.ok(
     plan.rows
       .find((row) => row.code === 'A')
       .reportMissing.every((reason) => !reason.startsWith('缺产线产能')),
   );
-  assert.equal(plan.rows.find((row) => row.code === 'D').demand, 25);
+  assert.equal(plan.rows.find((row) => row.code === 'D').demand, 0);
   source.report[3].月初数量 = 0;
   source.historyAnnual.periods[0].rows[3].数量 = 0;
   assert.ok(
