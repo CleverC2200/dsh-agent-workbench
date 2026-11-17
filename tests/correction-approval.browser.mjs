@@ -335,9 +335,7 @@ test('纠偏复用品类维度、筛选汇总和分页控件', { timeout: 30000 
   await page.getByLabel('客户', { exact: true }).click();
   await page.getByRole('option', { name: '华南经销客户', exact: true }).click();
   await expect(page.getByRole('button', { name: '查询', exact: true })).toBeDisabled();
-  await expect(
-    page.getByRole('button', { name: '打开 华北客户 调整明细', exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole('row').filter({ hasText: '华北客户' })).toHaveCount(0);
   await expect(page.getByTestId('regional-approval-workbench')).toContainText('计划金额¥816');
   assert.ok(
     await page.evaluate(() =>
@@ -346,9 +344,13 @@ test('纠偏复用品类维度、筛选汇总和分页控件', { timeout: 30000 
   );
   await expect(page.getByLabel('每页条数', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '重置', exact: true }).click();
-  await expect(
-    page.getByRole('button', { name: '打开 华北客户 调整明细', exact: true }),
-  ).toBeVisible();
+  const north = page.getByRole('row').filter({ hasText: '华北客户' });
+  await expect(north).toBeVisible();
+  await expect(north.getByRole('button')).toHaveCount(0);
+  await page.getByTestId('regional-approval-category-row-p2-水饺').getByRole('button').click();
+  await expect(page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true })).toHaveValue(
+    '47',
+  );
 });
 
 test('同月Y/DC不同周期的发货按客户月份去重，金额未确认保持未知', { timeout: 30000 }, async (t) => {
