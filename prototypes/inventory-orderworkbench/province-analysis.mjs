@@ -1,3 +1,4 @@
+import { cancellationReasonGroups } from '../../business/inventory-orderworkbench/cancellation-reason-groups.mjs';
 import {
   computeWorkbenchMetrics,
   metricDelta,
@@ -20,7 +21,8 @@ export function provinceAnalysisContext(analysis) {
   return {
     title: analysis.title,
     periodNote: analysis.periodNote,
-    omittedRanking: analysis.omittedRanking,
+    unrankedCount: analysis.unrankedCount,
+    reasonsStatus: analysis.reasonsStatus,
     ordersStatus: analysis.ordersStatus,
     tables: analysis.tables.map((table) => ({
       title: table.title,
@@ -112,6 +114,15 @@ export function provinceAnalysis(facts) {
   const countMap = new Map(
     (counts?.rows ?? []).map((row) => [groupKey(row), Number(row.changed_orders)]),
   );
+  const reasons = facts.provinceReasons;
+  const reasonMap = new Map();
+  for (const row of reasons?.status === 'ready' ? reasons.rows : []) {
+    const key = groupKey(row);
+    if (!reasonMap.has(key)) reasonMap.set(key, new Map());
+    const amounts = reasonMap.get(key);
+    const reason = cancellationReasonGroups.includes(row.reason) ? row.reason : '未明确';
+    amounts.set(reason, (amounts.get(reason) ?? 0) + Number(row.cancel_qty));
+  }
   const records = keys.map((key) => {
     const [province, region] = JSON.parse(key);
     const labels = [
@@ -131,6 +142,38 @@ export function provinceAnalysis(facts) {
     });
     const cancellation = values('作废率'),
       amendment = values('改单率');
+    const reasonAmounts = reasonMap.get(key) ?? new Map();
+    const cancelled = metricSnapshot(current, '作废率').numerator;
+    const reasonTotal = [...reasonAmounts.values()].reduce((sum, value) => sum + value, 0);
+    const reconciled =
+      reasons?.status === 'ready' &&
+      cancelled > 0 &&
+      metricValue(current?.metrics, '作废率') !== null &&
+      Math.abs(reasonTotal - cancelled) <= Math.max(0.000001, Math.abs(cancelled) * 1e-9);
+    cancellation.reasons = cancellationReasonGroups.map((reason) => {
+      const value = reasonAmounts.get(reason) ?? 0;
+      return cell(
+        reconciled
+          ? ((value / cancelled) * 100).toFixed(2) + '%'
+          : reasons?.status === 'loading'
+            ? '加载中'
+            : '—',
+        reconciled
+          ? reason +
+              '：' +
+              quantity(value) +
+              ' 件 / 本期已确认作废 ' +
+              quantity(cancelled) +
+              ' 件；过期作废归系统·车型·交期，空白或分类冲突归未明确。'
+          : reasons?.status === 'error'
+            ? '作废原因读取失败：' + (reasons.code || 'QUERY_FAILED') + '，可重新读取。'
+            : reasons?.status !== 'ready'
+              ? '作废原因尚未返回。'
+              : cancelled === 0
+                ? '本期无已确认作废量，不计算原因占比。'
+                : '原因合计与本期作废量尚未一致，暂不显示占比。',
+      );
+    });
     cancellation.year = comparison(current, year, '作废率', loading);
     const amendmentSource = metricSection(current, 'changes', '改单率');
     const count =
@@ -162,6 +205,8 @@ export function provinceAnalysis(facts) {
       amendment,
       denominator,
       score,
+      cancellationRate: a,
+      amendmentRate: b,
       scoreCell: cell(
         score === null
           ? '—'
@@ -177,10 +222,15 @@ export function provinceAnalysis(facts) {
       ),
     };
   });
-  const ranked = records
-    .filter((row) => row.score !== null)
-    .sort((a, b) => b.score - a.score || a.key.localeCompare(b.key, 'zh'))
-    .slice(0, 10);
+  const descending = (field) => (a, b) =>
+    (a[field] === null && b[field] === null
+      ? 0
+      : a[field] === null
+        ? 1
+        : b[field] === null
+          ? -1
+          : b[field] - a[field]) || a.key.localeCompare(b.key, 'zh');
+  const ranked = [...records].sort(descending('score'));
   const section = metricSection(periods.month, 'changes');
   const emptyText = loading
     ? '加载中…'
@@ -205,19 +255,23 @@ export function provinceAnalysis(facts) {
           '订单量（件）',
           '作废量（件）',
           '本期作废率',
+          ...cancellationReasonGroups,
           '本期环比',
           '本期同比',
           '本周作废率',
         ]),
-        records.map(({ labels, cancellation: c }) => [
-          ...labels,
-          c.denominator,
-          c.numerator,
-          c.value,
-          c.previous,
-          c.year,
-          c.week,
-        ]),
+        [...records]
+          .sort(descending('cancellationRate'))
+          .map(({ labels, cancellation: c }) => [
+            ...labels,
+            c.denominator,
+            c.numerator,
+            c.value,
+            ...c.reasons,
+            c.previous,
+            c.year,
+            c.week,
+          ]),
       ),
       table(
         '省区改单率',
@@ -231,18 +285,20 @@ export function provinceAnalysis(facts) {
           '本期改单笔数',
           '本周改单率',
         ]),
-        records.map(({ labels, amendment: a }) => [
-          ...labels,
-          a.denominator,
-          a.numerator,
-          a.value,
-          a.previous,
-          a.orders,
-          a.week,
-        ]),
+        [...records]
+          .sort(descending('amendmentRate'))
+          .map(({ labels, amendment: a }) => [
+            ...labels,
+            a.denominator,
+            a.numerator,
+            a.value,
+            a.previous,
+            a.orders,
+            a.week,
+          ]),
       ),
       table(
-        '省区改单和作废综合排名 TOP10',
+        '省区改单和作废综合排名',
         [
           ...groups(['省区', '所属大区', '订单量（件）']),
           { label: '作废数据', columns: ['作废量（件）', '作废率', '环比', '同比', '本周'] },
@@ -266,7 +322,8 @@ export function provinceAnalysis(facts) {
         ]),
       ),
     ],
-    omittedRanking: records.filter((row) => row.score === null).length,
+    unrankedCount: records.filter((row) => row.score === null).length,
     ordersStatus: counts?.status ?? 'idle',
+    reasonsStatus: reasons?.status ?? 'idle',
   };
 }
