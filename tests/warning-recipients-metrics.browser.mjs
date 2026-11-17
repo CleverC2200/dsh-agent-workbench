@@ -135,3 +135,37 @@ test('selecting the base-stock metric immediately shows its workbook exclusions 
   await info.locator('summary').click();
   await expect(info).toContainText('第 157 行');
 });
+
+test('two empty browser profiles show all fixed definitions without network or machine configuration', async (t) => {
+  const results = [];
+  for (let profile = 0; profile < 2; profile++) {
+    const page = await warningPage(t);
+    assert.equal(await page.evaluate(() => localStorage.length), 0);
+    await page.route('**/*', (route) => route.abort());
+    await page.evaluate(() => window.openWarning());
+    const definitions = await page.evaluate(() => {
+      const select = document.querySelector('select[name=metric]');
+      return [...select.options]
+        .filter((option) => option.value)
+        .map((option) => {
+          select.value = option.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          return {
+            name: option.value,
+            text: document.querySelector('[data-metric-info]').textContent,
+          };
+        });
+    });
+    assert.equal(definitions.length, 161);
+    for (const definition of definitions) {
+      assert.match(definition.text, /指标库口径V0\.6/, definition.name);
+      assert.doesNotMatch(definition.text, /待核实|请先明确业务模块|未登记此指标/, definition.name);
+    }
+    assert.equal(
+      (await page.evaluate(() => window.calls)).filter((call) => call.input.op === 'metric').length,
+      0,
+    );
+    results.push(definitions);
+  }
+  assert.deepEqual(results[0], results[1]);
+});

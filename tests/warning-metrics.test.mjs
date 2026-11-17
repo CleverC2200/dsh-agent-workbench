@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import catalog from '../business/shared/warning-metric-catalog.json' with { type: 'json' };
 import {
   warningMetricInfo,
   warningMetricContext,
@@ -88,6 +90,35 @@ test('blank, none and pending-confirmation bands do not become configured rules'
 
 test('unregistered definitions are not replaced by a similar registered name', () => {
   assert.equal(warningMetricInfo('不存在的库存指标').status, 'unavailable');
+});
+
+test('production host and warning UI bundle every definition rather than referencing a machine file', async () => {
+  for (const [entry, platform] of [
+    ['src/host.ts', 'node'],
+    ['business/inventory-apsplan/source/app/monitor-management.js', 'browser'],
+  ]) {
+    const result = await build({
+      entryPoints: [entry],
+      bundle: true,
+      packages: 'external',
+      platform,
+      format: 'esm',
+      write: false,
+      metafile: true,
+    });
+    assert.ok(
+      Object.keys(result.metafile.inputs).includes('business/shared/warning-metric-catalog.json'),
+    );
+    const emitted = result.outputFiles[0].text;
+    for (const record of catalog.records)
+      assert.ok(emitted.includes(record.recordId), entry + ': ' + record.selectionName);
+    for (const output of Object.values(result.metafile.outputs))
+      assert.ok(
+        output.imports.every(
+          (dependency) => !/warning-metrics|warning-metric-catalog|\.xlsx/.test(dependency.path),
+        ),
+      );
+  }
 });
 
 test('the authenticated warning metric endpoint returns the bundled definition without a per-machine catalog file', async () => {
