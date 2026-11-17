@@ -336,8 +336,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     inventoryTargetVersion: draft.constraints?.targetVersion ?? 'auto',
     inventoryTurnoverMonth: selectedInventoryMonth(draft),
     inventoryTargetPriority: inventoryVersionOrder(selectedInventoryMonth(draft)),
-    requireSourceTurnoverDays: draft.productSource === 'business',
-    missingTurnoverDaysAsZero: draft.productSource === 'business',
+    requireSourceTurnoverDays: true,
     inventoryTargetIssues:
       draft.inventoryTargetsRead?.status === 'ready'
         ? []

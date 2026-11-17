@@ -1053,42 +1053,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         return rowId;
       }
     };
-    const constraintRows = bases
-      .filter((sourceBase) => !base || sourceBase === base)
-      .map((sourceBase) => {
-        const matches = (draft.constraints?.safetyDays ?? result.constraints.safetyDays).filter(
-          (item) => item.base === sourceBase,
-        );
-        const current = matches.length === 1 ? matches[0] : null;
-        return [
-          sourceBase,
-          h(NumberInput, {
-            batch,
-            key: `${draft.id}-${sourceBase}-days`,
-            label: `${sourceBase} 安全天数`,
-            value: current?.days,
-            commit: (text) =>
-              update({
-                constraints: {
-                  ...draft.constraints,
-                  rules: draft.constraints?.rules ?? { local: [] },
-                  safetyDays: [
-                    ...(draft.constraints?.safetyDays ?? result.constraints.safetyDays).filter(
-                      (item) => item.base !== sourceBase,
-                    ),
-                    { base: sourceBase, days: text === '' ? null : text },
-                  ],
-                },
-              }),
-          }),
-          matches.length > 1
-            ? '重复策略，请维护唯一值'
-            : current?.days == null
-              ? '未维护'
-              : '当前评估版本',
-          `${draft.month}评估 · M+1至M+3共用；修改后需重新评估`,
-        ];
-      });
     const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER) =>
       h(NumberInput, {
         batch,
@@ -1657,7 +1621,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
                 busy: inventoryTargetsBusy,
                 table,
                 card,
-                policyRows: constraintRows,
               }),
               card(
                 '可用生产天数',
