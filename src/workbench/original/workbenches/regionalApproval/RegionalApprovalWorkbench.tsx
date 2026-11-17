@@ -26,6 +26,7 @@ import {
 } from './models/salesPlanAccessModel.ts';
 import { salesPlanProgressBarColor } from './models/salesPlanProgressModel.ts';
 import { salesPlanConfirmedQuantity } from './models/salesPlanQuantityModel.ts';
+import { salesPlanDraftInputValues } from './models/salesPlanLocalDraftModel.ts';
 import { salesPlanVarianceClass } from './models/salesPlanVarianceModel.ts';
 import {
   Alert,
@@ -1020,13 +1021,22 @@ const RegionalApprovalWorkbench: React.FC<{
       const metrics: typeof versionMetrics = {};
       const categories: typeof liveCategorySummaries = {};
       const currentSkus: typeof currentSkusByPlan = {};
+      const restoredInputs: typeof livePendingValues = {};
       for (const row of metricRows) {
         controller.signal.throwIfAborted();
         const versionId = row.versionId;
-        const skus = await detailClient.versionSkus.invoke({
-          versionId,
-          signal: controller.signal,
-        });
+        const approvalRole = liveStageFilter ?? roleStages[0];
+        const [skus, stored] = await Promise.all([
+          detailClient.versionSkus.invoke({ versionId, signal: controller.signal }),
+          orderType === 'M' && row.orderType !== 'Z' && detailClient.draft
+            ? detailClient.draft.invoke({
+                planId: row.planId,
+                versionId,
+                approvalRole,
+                signal: controller.signal,
+              })
+            : undefined,
+        ]);
         if (
           (orderType === 'M' && skus.length !== row.skuCount) ||
           skus.some((sku) => sku.versionId !== versionId) ||
@@ -1034,6 +1044,13 @@ const RegionalApprovalWorkbench: React.FC<{
         )
           throw new Error('INVALID_VERSION_SKUS');
         currentSkus[row.planId] = skus;
+        if (stored && !stored.stale)
+          restoredInputs[row.planId] = salesPlanDraftInputValues(
+            skus,
+            row,
+            stored.draft,
+            approvalRole,
+          );
         const displaySkus =
           row.orderType === 'Z'
             ? skus.map((sku) => ({ ...sku, baseQty: sku.corrBaseQty ?? sku.qty, amtBase: sku.amt }))
@@ -1089,6 +1106,12 @@ const RegionalApprovalWorkbench: React.FC<{
         }
       }
       if (!controller.signal.aborted) {
+        setLivePendingValues((current) => {
+          const next = { ...current };
+          for (const [planId, values] of Object.entries(restoredInputs))
+            next[planId] = { ...values, ...current[planId] };
+          return next;
+        });
         setVersionMetrics(metrics);
         setLiveCategorySummaries(categories);
         setCurrentSkusByPlan(currentSkus);
@@ -1102,7 +1125,7 @@ const RegionalApprovalWorkbench: React.FC<{
         if (liveCategoriesRequest.current === requestId) setLiveCategoriesLoading(false);
       });
     return () => controller.abort();
-  }, [detailClient, metricRows, orderType, liveStageFilter]);
+  }, [detailClient, metricRows, orderType, liveStageFilter, roleKey]);
   const scopeSummary = liveQuery.analysisSummary;
   const liveAccess = useSalesPlanAccess(
     liveRows,
@@ -3777,24 +3800,27 @@ const RegionalApprovalWorkbench: React.FC<{
                                   : undefined
                               }
                               onInputChange={
-                                conversationId
-                                  ? (changes) => {
-                                      const key = liveInputKey(
-                                        conversationId,
-                                        record.plan.planId,
-                                        versionMetrics[record.plan.planId]?.versionId ??
-                                          record.plan.versionId,
-                                        access.role,
-                                      );
-                                      setViewState((current) => ({
-                                        ...current,
-                                        liveInputs: {
-                                          ...current.liveInputs,
-                                          [key]: { ...current.liveInputs?.[key], ...changes },
-                                        },
-                                      }));
-                                    }
-                                  : undefined
+                                orderType === 'M'
+                                  ? (changes) =>
+                                      handleGroupPendingValues({ [record.plan.planId]: changes })
+                                  : conversationId
+                                    ? (changes) => {
+                                        const key = liveInputKey(
+                                          conversationId,
+                                          record.plan.planId,
+                                          versionMetrics[record.plan.planId]?.versionId ??
+                                            record.plan.versionId,
+                                          access.role,
+                                        );
+                                        setViewState((current) => ({
+                                          ...current,
+                                          liveInputs: {
+                                            ...current.liveInputs,
+                                            [key]: { ...current.liveInputs?.[key], ...changes },
+                                          },
+                                        }));
+                                      }
+                                    : undefined
                               }
                               row={{
                                 ...record.plan,
@@ -3827,6 +3853,7 @@ const RegionalApprovalWorkbench: React.FC<{
                                   : undefined
                               }
                               onPendingValuesChange={
+                                orderType === 'Z' &&
                                 record.kind === 'plan' &&
                                 !record.members &&
                                 !sourceTypeReadOnly(record.plan)

@@ -15,6 +15,7 @@ import {
 } from './regionalApprovalQueryModel.ts';
 import {
   salesPlanDraftSnapshot,
+  salesPlanDraftInputValues,
   type SalesPlanLocalDraft,
 } from './models/salesPlanLocalDraftModel.ts';
 import { salesPlanEditableQuantity } from './models/salesPlanAccessModel.ts';
@@ -154,18 +155,7 @@ export function InlineSkuDetails({
           setDraftState('idle');
           return;
         }
-        const restoreRole = result.draft?.role ?? approvalRole;
-        const baseline = (sku: GeaSalesPlanSku) =>
-          salesPlanEditableQuantity(sku, row.status, row.planTypeCode, restoreRole) ??
-          String(sku.qty);
-        const next = Object.fromEntries(
-          (result.draft?.adjustments ?? []).map((item) => {
-            const sku = detail.skus.find((candidate) => String(candidate.skuCode) === item.skuCode);
-            if (!sku) return [item.skuCode, item.adjustQty];
-            const value = addExactDecimals([baseline(sku), item.adjustQty]);
-            return [item.skuCode, roundPlanQuantity(value)];
-          }),
-        );
+        const next = salesPlanDraftInputValues(detail.skus, row, result.draft, approvalRole);
         setSavedDraft(JSON.stringify(next));
 
         setConfirmedValues((current) => ({ ...next, ...current }));
