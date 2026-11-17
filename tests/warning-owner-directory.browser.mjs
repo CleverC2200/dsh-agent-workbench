@@ -27,10 +27,10 @@ const bundle = await build({
     },
   ],
 });
-async function setup(t, width = 1280) {
+async function setup(t, width = 1280, { sandboxed = false } = {}) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
-  const page = await browser.newPage({ viewport: { width, height: 900 } });
+  let page = await browser.newPage({ viewport: { width, height: 900 } });
   await page.route('http://owner.test/**', (route) =>
     route.fulfill({
       contentType: 'text/html',
@@ -38,6 +38,13 @@ async function setup(t, width = 1280) {
     }),
   );
   await page.goto('http://owner.test/');
+  if (sandboxed) {
+    const attached = page.waitForEvent('framenavigated', (frame) => !!frame.parentFrame());
+    await page.setContent(
+      '<iframe title="负责人" sandbox="allow-scripts allow-downloads" src="http://owner.test/frame" style="width:100%;height:850px"></iframe>',
+    );
+    page = await attached;
+  }
   await page.evaluate(() => {
     window.calls = [];
     window.owners = [];
@@ -148,4 +155,27 @@ test('automatic notification strategy hides manual picker and round trips throug
   const saved = await page.evaluate(() => window.calls.find((call) => call.op === 'save').task);
   assert.equal(saved.notifyStrategy, 'automatic');
   assert.deepEqual(saved.notifyRecipients, []);
+});
+
+test('owner form validates and saves by click and Enter inside the production opaque sandbox', async (t) => {
+  const page = await setup(t, 1280, { sandboxed: true });
+  assert.equal(await page.evaluate(() => self.origin), 'null');
+  await page.getByRole('tab', { name: '通知负责人' }).click();
+  await page.getByRole('button', { name: '新增责任人' }).click();
+  await page.getByLabel('责任人姓名').fill('测试负责人');
+  await page.getByLabel('工号').fill('10000001');
+  await page.getByRole('button', { name: '保存责任关系' }).click();
+  await expect(page.locator('[data-count]')).toContainText('共 1 条');
+  await page.getByRole('button', { name: '修改', exact: true }).click();
+  await page.getByLabel('工号').fill('invalid');
+  await page.getByRole('button', { name: '保存责任关系' }).click();
+  assert.equal(await page.evaluate(() => window.revision), 1);
+  await expect(page.getByLabel('工号')).toBeFocused();
+  await page.getByLabel('工号').fill('10000002');
+  await page.getByLabel('工号').press('Enter');
+  await expect(page.locator('tbody')).toContainText('10000002');
+  assert.equal(await page.evaluate(() => window.revision), 2);
+  await page.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect(page.locator('tbody')).toContainText('10000002');
+  assert.equal(await page.evaluate(() => self.origin), 'null');
 });
