@@ -87,7 +87,15 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
         code: String(index),
         tonsPerPiece: 0.01,
       })),
-      constraints: { safetyDays: [{ base: '甲', days: 15 }], rules: { local: [] } },
+      constraints: {
+        safetyDays: [],
+        turnoverDays: Array.from({ length: 200 }, (_, index) => ({
+          base: '甲',
+          code: String(index),
+          days: 15,
+        })),
+        rules: { local: [] },
+      },
     };
     const shipment = {
       draftId: draft.id,

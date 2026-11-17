@@ -1,4 +1,5 @@
 import { createCapacityScopeView } from './capacity-scope-view.js';
+import { delistedDownloadColumns, delistedDownloadFields } from './delisted-report.js';
 import { useStepViewField } from './step-view-state.js';
 import { createCapacityReport } from './capacity-report-view.js';
 import {
@@ -13,7 +14,7 @@ const reportStatus = (row) => {
   const missing = reportMissing(row).join('；');
   const status = missing || (row.unfulfilled > 0 ? '供应受限，未满足量已单列' : '已评估');
   const result =
-    row.reportIssueKinds?.includes('下市品产生需求') && !status.includes('下市品产生需求')
+    row.reportIssueKinds?.includes('下市品人工正需求') && !status.includes('下市品人工正需求')
       ? `${status}；下市品产生需求`
       : status;
   const supply =
@@ -287,7 +288,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     );
     const issueKinds = [
       ...new Set([
-        '下市品产生需求',
+        '下市品人工正需求',
         '缺产线产能',
         '缺调拨关系',
         '缺件吨系数',
@@ -408,6 +409,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             ? '同基地自身历史＋替换品历史×替换系数；同码一次、不递归'
             : '自身历史，同码只计一次',
         ...Object.fromEntries(plannedFields.map((field, index) => [labels[index], row[field]])),
+        ...delistedDownloadFields(row),
         需求已满足量: row.fulfilledDemand,
         ODM默认计划到货吨数: row.odmArrivalTons,
         ODM估算说明: row.odmBasis,
@@ -454,6 +456,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           '替换系数',
           '历史参考口径',
           ...labels,
+          ...delistedDownloadColumns,
           '需求已满足量',
           'ODM默认计划到货吨数',
           'ODM估算说明',
@@ -477,7 +480,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
       const missing = reportMissing(row).join('；');
       const explanation =
         field === 'closingInventory'
-          ? `可用量=${value(row.openingInventory)}+${value(row.mainPlan)}+${value(row.odmArrival)}+${value(row.transferIn)}-${value(row.transferOut)}；扣除本期已满足需求${value(row.fulfilledDemand)}，期末=${value(row.closingInventory)}。未满足需求单列，不自动修改下月原需求。`
+          ? `可用量=${value(row.openingInventory)}+既有生产入库${value(row.existingProductionInbound)}+既有在途入库${value(row.existingInTransitInbound)}+本期新增生产${value(row.mainPlan)}+${value(row.odmArrival)}+${value(row.transferIn)}-${value(row.transferOut)}；扣除本期发货${value(row.fulfilledDemand)}，期末=${value(row.closingInventory)}。未满足需求单列，不自动修改下月原需求。`
           : field === 'odmArrival'
             ? `ODM默认计划到货量按件/月估算：单基地净缺口=max(0,有效需求+目标期末库存-可用期初库存)；多基地按同一供方SKU月汇总净缺口，在收货点记录一次到货，后续逐段调拨。当前收货点计划到货=${value(row.odmArrival)}件。内部排产为0；${row.odmBasis || '默认估算，供方真实能力、交期及实际到货尚未验证'}。`
             : field === 'mainPlan'
@@ -843,6 +846,8 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                           '需求数量',
                           '源表',
                           '字段',
+                          '原始值',
+                          '计算用值',
                           '源值与证据',
                           '核对处理',
                           '处理性质',
@@ -864,6 +869,8 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                           需求数量: row.demand,
                           源表: row.sourceTable,
                           字段: row.sourceFields,
+                          原始值: row.rawValue === null ? '缺失或无效' : row.rawValue,
+                          计算用值: row.calculationValue,
                           源值与证据: row.reason,
                           核对处理: row.action,
                           根因月份: row.rootMonth,
@@ -878,7 +885,11 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                                 ? '来源缺项提示，不阻断当前零需求'
                                 : row.kind === '缺件吨系数'
                                   ? '来源缺项提示，不阻断当前件数计划；吨数报告待补'
-                                  : '下市风险提示，原需求保留',
+                                  : row.kind === '下市品停止自动补货'
+                                    ? '自动新增需求及补货已停止，库存继续滚动'
+                                    : row.kind === '下市品日均缺失'
+                                      ? '仅日均计算补0，来源状态保留'
+                                      : '有效人工正需求保留，由人决定是否停用',
                         })),
                       ),
                   },
