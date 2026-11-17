@@ -860,11 +860,13 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                           根因字段: row.rootSourceFields,
                           处理性质: row.blocking
                             ? '仅影响对应基地SKU月份，补齐后重算'
-                            : row.kind === '拆分依据待补'
-                              ? '来源缺项提示，不阻断当前零需求'
-                              : row.kind === '缺件吨系数'
-                                ? '来源缺项提示，不阻断当前件数计划；吨数报告待补'
-                                : '下市风险提示，原需求保留',
+                            : row.kind === '负库存归零'
+                              ? '库存计算用值已归0；原始不足及修正历史保留'
+                              : row.kind === '拆分依据待补'
+                                ? '来源缺项提示，不阻断当前零需求'
+                                : row.kind === '缺件吨系数'
+                                  ? '来源缺项提示，不阻断当前件数计划；吨数报告待补'
+                                  : '下市风险提示，原需求保留',
                         })),
                       ),
                   },

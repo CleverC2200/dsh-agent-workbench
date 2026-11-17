@@ -718,6 +718,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           '相对月份',
           ...identityColumns.map(([, label]) => label),
           ...exportFields.map((key) => labels[key]),
+          '原始期初库存',
+          '原始预测期末库存',
+          '库存归零记录',
           ...layerColumns,
           ...layerQuantityColumns,
           '分层缺项',
@@ -819,6 +822,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
           ...inventoryDependencyFields(row),
           系统SKU需求: row.systemDemand,
+          原始期初库存: row.rawOpeningInventory,
+          原始预测期末库存: row.rawProjectedClosing,
+          库存归零记录: (row.inventoryIssues ?? [])
+            .map(
+              (issue) =>
+                `${issue.metric} 原始值${issue.rawValue}，计算用值${issue.calculationValue}；${issue.reason}`,
+            )
+            .join('；'),
           本月预估所属月: result.shipmentMonth,
           本月系统预估发货: shipment?.prediction,
           本月预估发货: shipment?.fin,
@@ -1032,42 +1043,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         return rowId;
       }
     };
-    const constraintRows = bases
-      .filter((sourceBase) => !base || sourceBase === base)
-      .map((sourceBase) => {
-        const matches = (draft.constraints?.safetyDays ?? result.constraints.safetyDays).filter(
-          (item) => item.base === sourceBase,
-        );
-        const current = matches.length === 1 ? matches[0] : null;
-        return [
-          sourceBase,
-          h(NumberInput, {
-            batch,
-            key: `${draft.id}-${sourceBase}-days`,
-            label: `${sourceBase} 安全天数`,
-            value: current?.days,
-            commit: (text) =>
-              update({
-                constraints: {
-                  ...draft.constraints,
-                  rules: draft.constraints?.rules ?? { local: [] },
-                  safetyDays: [
-                    ...(draft.constraints?.safetyDays ?? result.constraints.safetyDays).filter(
-                      (item) => item.base !== sourceBase,
-                    ),
-                    { base: sourceBase, days: text === '' ? null : text },
-                  ],
-                },
-              }),
-          }),
-          matches.length > 1
-            ? '重复策略，请维护唯一值'
-            : current?.days == null
-              ? '未维护'
-              : '当前评估版本',
-          `${draft.month}评估 · M+1至M+3共用；修改后需重新评估`,
-        ];
-      });
     const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER) =>
       h(NumberInput, {
         batch,
@@ -1629,7 +1604,6 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
                 busy: inventoryTargetsBusy,
                 table,
                 card,
-                policyRows: constraintRows,
               }),
               card(
                 '可用生产天数',

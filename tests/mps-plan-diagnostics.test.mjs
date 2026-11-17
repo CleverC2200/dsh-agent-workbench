@@ -220,3 +220,36 @@ test('补数问题清单列明替换系数和产品净重字段，零需求的�
   assert.match(weight.sourceFields, /net_weight.*weight_unit.*measure_unit/);
   assert.match(weight.reason, /缺计量单位/);
 });
+
+test('负库存归零报告保留原数和不足，提示不阻断其他输入齐备行', () => {
+  const plan = {
+    context: { month: '2026-11' },
+    resourceSchedules: [],
+    rows: [
+      {
+        month: '2026-11',
+        base: '甲',
+        code: 'A',
+        name: 'A',
+        category: '点心',
+        group: '组',
+        demand: 10,
+        planMissing: [],
+        inventoryIssues: [
+          {
+            metric: 'openingInventory',
+            rawValue: -20,
+            calculationValue: 0,
+            reason: '原始期初库存为负，原因待核；计算用值归0',
+          },
+        ],
+      },
+    ],
+  };
+  attachPlanReport(plan, { planCandidates: [], unitWeights: [], transferRoutes: [] }, null);
+  const issue = plan.reportIssues.find((row) => row.kind === '负库存归零');
+  assert.ok(issue);
+  assert.match(issue.reason, /-20.*0|0.*-20/);
+  assert.match(issue.action, /不足.*保留/);
+  assert.equal(issue.blocking, false);
+});
