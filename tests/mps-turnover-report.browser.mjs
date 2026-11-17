@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
 import { mpsPage } from './helpers/mps-page.mjs';
@@ -27,18 +27,47 @@ const zeroSource = (base) => ({
 });
 let exportIndex = 0;
 async function downloadRows(page, view, name) {
-  const pending = page.waitForEvent('download');
+  const pointer = process.env.MPS_TURNOVER_POINTER === '1';
   const button = view.getByRole('button', { name, exact: true });
   exportIndex++;
-  if (process.env.MPS_TURNOVER_POINTER === '1') await button.click();
+  const capture = async (stage) => {
+    const prefix = process.env.MPS_TURNOVER_POINTER_EVIDENCE;
+    if (!prefix) return;
+    await writeFile(
+      `${prefix}-${exportIndex}-${stage}.json`,
+      JSON.stringify(
+        {
+          name,
+          selector: `region[name="约束与配置"] button[name="${name}"]`,
+          month: await view.getByLabel('目标明细月份', { exact: true }).inputValue(),
+          base: await view.getByLabel('目标明细基地', { exact: true }).inputValue(),
+          search: await view.getByLabel('搜索目标单品', { exact: true }).inputValue(),
+          disabled: await button.isDisabled(),
+          box: await button.boundingBox(),
+          text: await view.innerText(),
+        },
+        null,
+        2,
+      ),
+    );
+    await page.screenshot({ path: `${prefix}-${exportIndex}-${stage}.png`, fullPage: true });
+  };
+  if (pointer) await capture('before');
+  const pending = page.waitForEvent('download', { timeout: pointer ? 5000 : 30000 });
+  if (pointer) await button.click();
   else await button.press('Enter');
-  const file = await pending;
+  let file;
+  try {
+    file = await pending;
+  } catch (error) {
+    if (pointer) await capture('after-no-download');
+    throw error;
+  }
   if (process.env.MPS_TURNOVER_EXPORT_DIR)
     await file.saveAs(`${process.env.MPS_TURNOVER_EXPORT_DIR}/${exportIndex}-${name}.csv`);
   const csv = await mpsDownloadText(await file.path());
   const book = XLSX.read(csv.replace(/^\uFEFF/, ''), { type: 'string', raw: true });
-  const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
-  return rows;
+  return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
 }
 
 test('周转报告区分有效零、缺失待补和人工补充，筛选后下载与目标库存同步', async (t) => {
