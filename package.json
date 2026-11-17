@@ -1,9 +1,9 @@
 {
   "name": "@cleverc2200/dsh-agent-workbench",
-  "version": "0.1.125",
+  "version": "0.1.126",
   "private": true,
   "type": "module",
-  "description": "\u63d0\u4f9b\u7edf\u4e00\u7684\u667a\u80fd\u4f53\u5de5\u4f5c\u53f0\u5e03\u5c40\uff0c\u8fde\u63a5\u4e1a\u52a1\u9875\u9762\u4e0e\u4f1a\u8bdd\u3002",
+  "description": "提供统一的智能体工作台布局，连接业务页面与会话。",
   "exports": {
     "./fulfillment-sales-card": "./lib/business/inventory-orderfulfillment/sales-window/card.mjs",
     "./fulfillment-sales-window/window.html": "./lib/business/inventory-orderfulfillment/sales-window/window.html",
