@@ -6,7 +6,7 @@ export const workflowDraft = () => ({
   productSource: 'local-file',
   products: [
     {
-      基地: '',
+      基地: '甲',
       产品编码: 'A',
       产品名称: '产品A',
       大类: '点心',
@@ -14,7 +14,7 @@ export const workflowDraft = () => ({
       物料组: '包点',
     },
     {
-      基地: '',
+      基地: '乙',
       产品编码: 'B',
       产品名称: '产品B',
       大类: '点心',

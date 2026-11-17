@@ -226,7 +226,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   const products = demo(draft.productSource)
     ? []
     : productHistoryMappings(
-        (draft.products ?? []).map((row) => ({
+        mappings.map((row) => ({
           base: text(row['基地']),
           code: text(row['产品编码']),
           name: text(row['产品名称']),
@@ -237,33 +237,18 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         })),
         draft.productRaw,
       );
-  const productMonths = new Map();
-  for (const source of ['report', 'history']) {
-    for (const row of source === 'report' ? report : history) {
-      if (!row.base || !row.code || !/^\d{4}-(0[1-9]|1[0-2])$/.test(row.month)) continue;
-      const month = draft.month;
-      if (!excludedShipmentKeys.has(rowKey(row)))
-        productMonths.set(JSON.stringify([month, row.base, row.code]), {
-          month,
+  const productMonths = new Map(
+    products
+      .filter((row) => row.base && row.code && !excludedShipmentKeys.has(rowKey(row)))
+      .map((row) => [
+        JSON.stringify([draft.month, row.base, row.code]),
+        {
+          month: draft.month,
           base: row.base,
           code: row.code,
-        });
-      if (source === 'history') {
-        for (const product of products.filter(
-          (product) =>
-            product.historyCode === row.code &&
-            (!product.base || product.base === row.base) &&
-            !excludedShipmentKeys.has(rowKey({ base: row.base, code: product.code })),
-        )) {
-          productMonths.set(JSON.stringify([month, row.base, product.code]), {
-            month,
-            base: row.base,
-            code: product.code,
-          });
-        }
-      }
-    }
-  }
+        },
+      ]),
+  );
   const reportRead =
     draft.reportSource === 'business'
       ? draft.planRatesRead
