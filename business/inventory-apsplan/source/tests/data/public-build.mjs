@@ -12,6 +12,7 @@ export async function build(options) {
     'metrics',
     'period',
     'page-analysis',
+    'budget-progress',
     'perspective-analysis',
     'workbench-insights',
   ];
