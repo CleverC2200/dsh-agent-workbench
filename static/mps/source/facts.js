@@ -45,7 +45,13 @@ export async function readHistoryWindow(month, signal) {
             return { month, ...(await readFactMonth('history', month, signal)) };
           } catch (error) {
             if (signal?.aborted) throw error;
-            return { month, rows: [], error: error.message };
+            return {
+              month,
+              rows: [],
+              error: error.message.startsWith('数据读取失败')
+                ? `${error.message}；实际原因待核`
+                : error.message,
+            };
           }
         }),
       )),

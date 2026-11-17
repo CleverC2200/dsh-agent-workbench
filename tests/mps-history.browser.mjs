@@ -154,6 +154,7 @@ test('完整月读取拒绝时报告失败与原因，财年有效数量继续�
   await expect(report.getByRole('table').first()).not.toContainText('疑似新品或重新上市');
   await expect(report.getByRole('table').last()).toContainText('读取失败');
   await expect(report.getByRole('table').last()).toContainText('数据读取失败');
+  await expect(report.getByRole('table').last()).toContainText('实际原因待核');
   const rows = await download(
     page,
     report.getByRole('button', { name: '下载当前历史及异常明细', exact: true }),
