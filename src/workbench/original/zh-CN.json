@@ -313,6 +313,8 @@
         "planType": "计划类型",
         "version": "数据版本",
         "currentVersion": "当前有效版本",
+        "monthlyBasis": "月计划口径",
+        "confirmedMonthlyBasis": "当前节点确认计划量×SKU单价，包含当前编辑的确认计划量",
         "page": "页码",
         "pageSize": "每页条数",
         "exported": "导出条数",
@@ -326,6 +328,8 @@
         "all": "全部"
       },
       "exportColumns": {
+        "mPlanQty": "月计划数量",
+        "mPlanAmount": "月计划金额",
         "statusCode": "审批状态编码",
         "returnReason": "退回原因",
         "updatedAt": "更新时间",
