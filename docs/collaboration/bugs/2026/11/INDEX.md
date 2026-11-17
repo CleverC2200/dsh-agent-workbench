@@ -5,3 +5,4 @@
 - [BUG-20261117-category-expansion](BUG-20261117-category-expansion.md)
 
 - [安全沙箱阻断通知负责人保存](BUG-20261117-owner-sandbox-save.md)
+- [按大类 SKU 汇总表无法向下滚动](BUG-20261117-sku-review-scroll.md)

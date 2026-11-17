@@ -117,7 +117,7 @@ const approvalRole = comparison?.startsWith('single-') ? 'category' : continued?
 if(comparison==='history-correction')for(const plan of sourcePlans)plan.orderType='Z';
 if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50';
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
-if(comparison?.startsWith('sku-review')||comparison==='category-allocation') for(const plan of sourcePlans) plan.skuCount=2;
+if(comparison?.startsWith('sku-review')||comparison==='category-allocation') for(const plan of sourcePlans) plan.skuCount=comparison==='sku-review-scroll'?40:2;
 if(comparison==='mixed-terminal')sourcePlans[1].status=5;
 if(comparison==='header-selection')sourcePlans[2].status=5;
 if(comparison==='header-pagination')for(let n=4;n<=12;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
@@ -136,7 +136,7 @@ const skuFor=(versionId)=>{
   const price=old?'8':older?'7':prefix==='v2'?'12':prefix==='v3'?'8':'10';
   return {...base,qty,price,amt:String(Number(qty)*Number(price))};
 };
-const skusFor=versionId=>comparison==='confirmed-monthly'&&versionId==='v1'?[
+const skusFor=versionId=>comparison==='sku-review-scroll'?Array.from({length:40},(_,index)=>({...skuFor(versionId),id:'s-'+versionId+'-'+index,skuCode:String(30000000+index),productCategName:index<20?'饼类':'汤圆',materialDescription:'滚动测试SKU '+index})):comparison==='confirmed-monthly'&&versionId==='v1'?[
  {...skuFor(versionId),qty:'8000',amt:'600000',baseQty:'6752',amtBase:'506400',regionConfirmedQty:'8420.4',price:'75'},
  {...skuFor(versionId),skuCode:'2002',productCategName:'面点',qty:'200',amt:'20000',baseQty:'1834',amtBase:'183400',regionConfirmedQty:'288',price:'100'},
 ]:comparison?.startsWith('sku-review')||comparison==='category-allocation'?[skuFor(versionId),{...skuFor(versionId),id:'s-'+versionId+'-2002',skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
@@ -160,7 +160,7 @@ const host={salesPlan:{
     if(comparison==='sku-review-failure') throw Error('fixture failure');
     signal?.throwIfAborted();
     return {versionId,skus:skusFor(versionId).map(sku=>sku.skuCode==='1001'?{...sku,amt:versionId==='v1'?'100.10':versionId==='v2'?'200.20':'0'}:sku),months:['2025-10','2026-08','2026-09'],shipmentUnavailable:false,
-      rows:[{skuCode:'1001',shipments:['1.5','10','20']},{skuCode:'2002',shipments:['2','3','4']}]};
+      rows:comparison==='sku-review-scroll'?skusFor(versionId).map(sku=>({skuCode:sku.skuCode,shipments:['1','2','3']})):[{skuCode:'1001',shipments:['1.5','10','20']},{skuCode:'2002',shipments:['2','3','4']}]};
   }},
   versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading'||comparison==='quick-category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId)}},
   draft:{invoke:async(q)=>{if(window.autoBlock==='draft')return {draft:null,stale:true};if(window.sentDirect.length){if(comparison==='single-dms-stale-second')return {draft:null,stale:true};if(comparison==='single-dms-unreadable-second')throw Error('fixture draft read failed');}const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
@@ -1313,6 +1313,42 @@ test(
       });
   },
 );
+
+test('regional SKU review scrolls to its final rows with wheel and keyboard in a bounded panel', async (t) => {
+  const { page } = await openWorkbench(t, true, 'sku-review-scroll');
+  await page.getByRole('tab', { name: '按大类 / SKU' }).click();
+  const review = page.getByRole('region', { name: '按大类 / SKU', exact: true }).first();
+  const viewport = review.getByRole('region', { name: '按大类 / SKU', exact: true });
+  await expect(review.getByRole('rowheader', { name: /30000039/ })).toHaveCount(1);
+  for (const size of [
+    { width: 1280, height: 820 },
+    { width: 920, height: 700 },
+  ]) {
+    await page.setViewportSize(size);
+    await viewport.focus();
+    await page.keyboard.press('Home');
+    await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBe(0);
+    await viewport.hover({ position: { x: 100, y: 100 } });
+    await page.mouse.wheel(0, 10000);
+    await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    const bounds = await viewport.boundingBox();
+    assert.ok(bounds.y + bounds.height <= size.height, 'table viewport must fit inside the page');
+    const total = review.locator('tfoot');
+    await expect(total).toBeInViewport();
+    await expect(review.getByRole('button', { name: '重置', exact: true })).toBeInViewport();
+    await viewport.focus();
+    await page.keyboard.press('Home');
+    await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBe(0);
+    await page.keyboard.press('End');
+    await expect(total).toBeInViewport();
+    if (size.width < 1050) {
+      await viewport.hover({ position: { x: 100, y: 100 } });
+      await page.mouse.wheel(10000, 0);
+      await expect.poll(() => viewport.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+    }
+  }
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
 
 test(
   'regional SKU review exposes incomplete reads and retry without showing a partial total',
