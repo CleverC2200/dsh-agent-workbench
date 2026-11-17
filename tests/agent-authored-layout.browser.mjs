@@ -2762,13 +2762,13 @@ test('APS list expansion keeps loaded rows and collapse does not reread the work
   await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
   assert.ok(calls.length > count, 'new branch still reads its own detail');
   assert.equal(budgets(), initialBudgets, 'branch expansion must not reread unrelated budget data');
+  await expect(table.locator('.item-level').filter({ hasText: '测试品项' })).toBeVisible();
   const loadedCount = calls.length;
   await row.locator('.category-drill-toggle').click();
   await expect(row).toHaveAttribute('aria-expanded', 'false');
   await row.locator('.category-drill-toggle').click();
   await expect(row).toHaveAttribute('aria-expanded', 'true');
   assert.equal(calls.length, loadedCount, 'collapse/reopen must reuse the loaded branch');
-  await expect(table.locator('.item-level').filter({ hasText: '测试品项' })).toBeVisible();
   await frame.locator('body').evaluate(() => window.dispatchEvent(new Event('gea-page-refresh')));
   await expect.poll(budgets).toBeGreaterThan(initialBudgets);
   await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
