@@ -1,3 +1,4 @@
+import { completeHistoryMonths } from 'dsh-agent-manage/mps-compute/history';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { sourceAmount } from './source-money.js';
 import { call } from '../../../business/shared/channel.js';
@@ -29,6 +30,34 @@ export async function readFactMonth(type, month, signal) {
 export async function readHistoryAnnual(month, signal) {
   const period = previousFiscalYear(month);
   return readFacts('facts.history-annual', period, signal, 'historyAnnual');
+}
+export async function readHistoryWindow(month, signal) {
+  const months = completeHistoryMonths(
+    month,
+    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+  );
+  const periods = [];
+  for (let offset = 0; offset < months.length; offset += 4) {
+    periods.push(
+      ...(await Promise.all(
+        months.slice(offset, offset + 4).map(async (month) => {
+          try {
+            return { month, ...(await readFactMonth('history', month, signal)) };
+          } catch (error) {
+            if (signal?.aborted) throw error;
+            return {
+              month,
+              rows: [],
+              error: error.message.startsWith('数据读取失败')
+                ? `${error.message}；实际原因待核`
+                : error.message,
+            };
+          }
+        }),
+      )),
+    );
+  }
+  return { periods };
 }
 async function readFacts(id, parameters, signal, type, month) {
   const element = document.getElementById('agent-sql-config');

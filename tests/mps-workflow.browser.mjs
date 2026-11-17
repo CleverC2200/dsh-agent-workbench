@@ -487,6 +487,7 @@ test('MPS 评估月提报与完整财年形成固定系数，后月提报不改�
     '设置上一财年发货夹具',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,甲,A,产品甲,汤圆,系列,组甲,60\n2026-01,乙,B,产品乙,面点,系列,组乙,40',
   );
+  await expect(frame.getByText('2 / 2 条可计算', { exact: true })).toBeVisible();
   await workflowStep(frame, '需求加工与收敛');
   await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });

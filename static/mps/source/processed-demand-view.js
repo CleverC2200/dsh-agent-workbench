@@ -1,3 +1,4 @@
+import { createHistoryReport, historyColumns, historyExportRows } from './history-report-view.js';
 import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
 import { useStepViewField } from './step-view-state.js';
 import { createProcessedDemandEvidence } from './processed-demand-evidence-view.js';
@@ -32,6 +33,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
   const { Field } = createBatchEdit(react);
   const AmountReconciliation = createAmountReconciliation(react, { downloadCsv: downloadAmounts });
   const UpperAdjustmentConflicts = createUpperAdjustmentConflicts(react);
+  const HistoryReport = createHistoryReport(react, { downloadCsv });
   const Evidence = createProcessedDemandEvidence(react, { downloadCsv });
   return function ProcessedDemand({
     view,
@@ -312,7 +314,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       const identities = [
         ...new Map(full.map((row) => [productKey(row.base, row.code), row])).values(),
       ];
-      const first = full.filter((row) => row.month === months[0]);
+      const first = identities;
       const shipment = identities.map((row) =>
         indexed.shipment.get(productKey(row.base, row.code)),
       );
@@ -582,6 +584,10 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         '有效需求待补数',
         '缺项指标',
         '原因',
+        ...historyColumns.filter((column) => column !== '原因'),
+        '系统需求数量',
+        '人工修正状态',
+        '调整原因',
       ];
       const context = { 评估版本: draft.name, 评估月份: draft.month };
       downloadCsv(`${draft.month}-当前范围需求.csv`, columns, [
@@ -596,6 +602,8 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
               ...context,
               粒度: scopeLabel,
               月份: month,
+              计算用历史数量: total.history.quantity,
+              历史期间: `${result.comparisonSources.historyPeriod.start}至${result.comparisonSources.historyPeriod.end}`,
               ...(index === 0
                 ? {
                     计划提报已知小计: total.report.knownQuantity,
@@ -609,16 +617,59 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
               有效需求待补数: demand.missing,
             };
           }),
+        ...[
+          ...indexed.roots.values(),
+          ...[...indexed.children.values()].flatMap((children) => [...children.values()]),
+        ]
+          .filter((entry) => entry.kind !== 'base-sku')
+          .flatMap((entry) => {
+            const data = nodeData(entry);
+            const level =
+              entry.kind === 'base'
+                ? '基地汇总'
+                : entry.kind.endsWith('category')
+                  ? '大类汇总'
+                  : entry.kind.endsWith('group')
+                    ? '物料组汇总'
+                    : '全国SKU汇总';
+            return months
+              .filter((month) => !filters.month || filters.month === month)
+              .map((month) => {
+                const demand = sourceSummary(
+                  data.full.filter((row) => row.month === month).map((row) => row.demand),
+                );
+                return {
+                  ...context,
+                  粒度: level,
+                  月份: month,
+                  基地: entry.base || '全国',
+                  大类: entry.category,
+                  物料组: entry.group,
+                  产品编码: entry.code,
+                  计算用历史数量: data.history.quantity,
+                  历史期间: `${result.comparisonSources.historyPeriod.start}至${result.comparisonSources.historyPeriod.end}`,
+                  有效需求数量: demand.quantity,
+                  有效需求已知小计: demand.knownQuantity,
+                  有效需求待补数: demand.missing,
+                };
+              });
+          }),
         ...rows.map((row) => ({
           ...context,
-          粒度: '基地SKU',
           月份: row.month,
           基地: row.base,
           产品编码: row.code,
           产品名称: row.name,
           大类: row.category,
           有效需求数量: row.demand,
+          ...historyExportRows([row], {}, result.comparisonSources.historyPeriod, false)[0],
+          粒度: '基地SKU',
+          系统需求数量: row.systemDemand,
+          人工修正状态: row.quantityAdjusted ? '有效人工修正' : '系统值',
+          调整原因: quantities.find((item) => item.kind === 'base-sku' && matches(row, item))
+            ?.reason,
         })),
+        ...historyExportRows(rows, context, result.comparisonSources.historyPeriod),
         ...missingRows.map((row) => ({ ...context, 粒度: '缺项报告', ...row })),
       ]);
     };
@@ -736,6 +787,14 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
           h('button', { onClick: exportScope }, '下载当前范围需求'),
         ),
       ),
+      h(HistoryReport, {
+        view,
+        draft,
+        rows,
+        period: result.comparisonSources.historyPeriod,
+        card,
+        table,
+      }),
       card(
         '加工需求缺项报告',
         missingRows.length

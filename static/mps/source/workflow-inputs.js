@@ -167,9 +167,12 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     const issues = sourceIssues(draft, 'historyAnnual');
     return [
       ...issues,
+      ...(data?.metadata?.partial ? ['上一完整财年发货读取不完整'] : []),
+      ...(data?.metadata?.warnings ?? []),
       ...(data?.error
         ? [data.error]
-        : !data || (draft.historyAnnualRead?.status !== 'ready' && !issues.length)
+        : !data ||
+            (!['ready', 'partial'].includes(draft.historyAnnualRead?.status) && !issues.length)
           ? ['尚未读取上一完整财年的发货数量']
           : []),
     ];
@@ -180,13 +183,17 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       const data = draft.historyAnnual?.periods?.find(
         (entry) => entry.start === period.start && entry.end === period.end,
       );
-      const issues = annualIssues();
       return (data?.rows ?? []).map((row) => ({
         month,
         base: text(row['基地']),
         code: text(row['产品编码']),
         category: text(row['大类']),
-        quantity: issues.length ? null : number(row['数量']),
+        quantity:
+          sourceIssues(draft, 'historyAnnual').length ||
+          data?.error ||
+          !['ready', 'partial'].includes(draft.historyAnnualRead?.status)
+            ? null
+            : number(row['数量']),
       }));
     })
     .filter(includedHistory);
@@ -299,6 +306,11 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     }
   }
   const productIssues = sourceIssues(draft, 'products');
+  const windowRead = draft.historyWindowRead;
+  const windowFailure =
+    windowRead?.status === 'failed' &&
+    !(draft.historyWindow?.periods ?? []).some((period) => period.error);
+  const windowUnread = !windowRead || ['loading', 'unread'].includes(windowRead.status);
   const workflowInput = {
     context,
     inventoryTargets: draft.inventoryTargets ?? [],
@@ -329,6 +341,36 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     report,
     reportRatios: excludedShipments.length ? [] : reportRatios,
     history,
+    historySourceIssues: annualIssues(),
+    historySourceStatus: ['ready', 'partial'].includes(draft.historyAnnualRead?.status)
+      ? draft.historyAnnualRead.status
+      : ['failed', 'denied', 'error'].includes(draft.historyAnnualRead?.status)
+        ? 'failed'
+        : 'unread',
+    historyAsOfMonth: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+    historyPeriods: (draft.historyWindow?.periods ?? []).map((period) => ({
+      month: period.month,
+      status: windowUnread
+        ? 'unread'
+        : windowFailure
+          ? 'failed'
+          : period.error
+            ? 'failed'
+            : period.metadata?.partial
+              ? 'partial'
+              : 'ready',
+      issues: [
+        ...(windowFailure ? [windowRead.error || '历史窗口读取失败'] : []),
+        ...(period.error ? [period.error] : []),
+        ...(period.metadata?.warnings ?? []),
+      ],
+      rows: (period.rows ?? []).map((row) => ({
+        month: period.month,
+        base: text(row['基地']),
+        code: text(row['产品编码']),
+        quantity: number(row['数量']),
+      })),
+    })),
     sourceIssues: {
       report: productIssues,
       history: productIssues,
