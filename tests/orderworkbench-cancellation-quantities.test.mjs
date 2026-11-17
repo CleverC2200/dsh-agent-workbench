@@ -553,6 +553,55 @@ test('cached metrics from the previous cancellation quantity definition are reje
   );
 });
 
+test('shallow cancellation stages retain overlapping period and partition totals with pending lines', (t) => {
+  const { db } = calculate(t, {
+    hourly: [
+      cancelled('cancel0', { need_qty_origin: 25 }),
+      line('shipped1', { need_qty_origin: 75 }),
+      cancelled('pending2', { need_qty_origin: null }),
+      cancelled('zero3', { change_order_qty: 0 }),
+    ],
+    daily: [cancelled('daily4', { need_qty_origin: 10 })],
+  });
+  const period = periodChangesSql('1', { base: true });
+  assert.match(period.ctes, /cancellation_lines AS/);
+  assert.match(period.ctes, /FROM cancellation_lines s/);
+  assert.match(period.ctes, /FROM cancellation_quantities q/);
+  const windows =
+    "SELECT 0 AS period_index,'2026-10-01' AS start_date,'2026-11-01' AS end_date,TRUE AS enabled UNION ALL SELECT 1,'2026-10-01','2026-10-03',TRUE UNION ALL SELECT 2,'2026-09-01','2026-10-01',TRUE";
+  const totals = (rows) =>
+    ['sample_numerator', 'sample_denominator', 'records', 'invalid'].map((key) =>
+      rows.reduce((sum, row) => sum + Number(row[key] ?? 0), 0),
+    );
+  const single = db.prepare(sql(cancellationChangesSql)).all(params);
+  assert.deepEqual(totals(single), [35, 110, 5, 1]);
+  const read = (query) =>
+    db
+      .prepare(
+        sql(query).replaceAll(
+          "RIGHT(COALESCE(executeorderno,''),1)",
+          "SUBSTR(COALESCE(executeorderno,''),-1)",
+        ),
+      )
+      .all({ gea_p900: '' });
+  const combined = `WITH report_windows AS (${windows}),${period.ctes} ${period.sql}`;
+  const rows = read(combined);
+  const partitioned = [0, 1].flatMap((partition) =>
+    read(cancellationPartitionSql(combined, partition)),
+  );
+  for (const index of [0, 1]) {
+    assert.deepEqual(totals(rows.filter((row) => row.period_index === index)), totals(single));
+    assert.deepEqual(
+      totals(partitioned.filter((row) => row.period_index === index)),
+      totals(single),
+    );
+  }
+  assert.equal(
+    rows.some((row) => row.period_index === 2),
+    false,
+  );
+});
+
 test('reported interface cancellations use OMS latest departures recovered from daily headers', (t) => {
   const orders = [
     ['E2600246486', '2026-10-15 19:24:07', '2026-10-25 19:23:58', '2026-10-23 13:36:55'],
