@@ -1,3 +1,4 @@
+import { createCapacityScopeView } from './capacity-scope-view.js';
 import { delistedDownloadColumns, delistedDownloadFields } from './delisted-report.js';
 import { useStepViewField } from './step-view-state.js';
 import { createCapacityReport } from './capacity-report-view.js';
@@ -128,6 +129,7 @@ export function planContext(plan, visible, { base, month }) {
 
 export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
   const CapacityReport = createCapacityReport(react, { downloadCsv, Dialog });
+  const CapacityScopeView = createCapacityScopeView(react, downloadCsv);
   const h = react.createElement;
   const plannedFields = [
     'demand',
@@ -789,6 +791,16 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         : h(
             react.Fragment,
             null,
+            h(CapacityScopeView, {
+              plan,
+              month: filters.month || plan.capacityReport?.referenceMonth,
+              filters,
+              view,
+              active,
+              card,
+              table,
+              numberText,
+            }),
             step === 'capacity'
               ? h(CapacityReport, {
                   view,

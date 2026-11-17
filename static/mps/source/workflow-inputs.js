@@ -457,6 +457,13 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       kind: row.kind,
       name: text(row.name),
       dailyTons: number(row.dailyTons),
+      workshop: text(row.workshop),
+      tunnel: text(row.tunnel),
+      productionLines: [
+        ...new Set(
+          (Array.isArray(row.productionLines) ? row.productionLines : []).map(text).filter(Boolean),
+        ),
+      ],
     })),
     resourceAssignments: (draft.resourceAssignments ?? []).map((row) => ({
       month: text(row.month),
@@ -602,6 +609,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       return {
         resourceId: resource.id,
         workshop: resource.workshop ?? '',
+        productionLines: resource.productionLines ?? [],
         tunnel: resource.tunnel ?? '',
         specification: source?.tunnel_tonnage ?? '',
         outsourced: /濮阳|代工/.test(resource.workshop ?? resource.name),

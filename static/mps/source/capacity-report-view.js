@@ -781,7 +781,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         ),
       ),
       card(
-        '产线产能明细',
+        '物理隧道产能明细',
         h(
           react.Fragment,
           null,
@@ -801,10 +801,10 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                       toggle(setOpenLines, base, event.currentTarget.open);
                   },
                 },
-                h('summary', null, `${base} · ${lines.length}条产线`),
+                h('summary', null, `${base} · ${lines.length}条物理隧道`),
                 openLines[base]
                   ? table(
-                      '物理产线产能明细',
+                      '物理隧道产能明细',
                       [
                         '车间',
                         '隧道号',
@@ -821,7 +821,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                           info?.workshop || '待补',
                           info?.tunnel || '待补',
                           info?.specification || '待补',
-                          row.name,
+                          info?.productionLines?.join('、') || '产线归属待补',
                           numberText(row.dailyTons),
                           row.days ?? '待补',
                           numberText(row.capacity),
