@@ -22,7 +22,12 @@ export async function withReadyPageSession(
     const preset = reference.binding.session.projections.faceOf('agentPreset').getSnapshot();
     if (preset !== null && (typeof preset !== 'string' || !preset))
       throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
-    const cwd = ctx.sessions.list.getSnapshot().byId[reference.sessionId]?.cwd;
+    let cwd = ctx.sessions.list.getSnapshot().byId[reference.sessionId]?.cwd;
+    if (cwd === undefined) {
+      await ctx.sessions.refresh();
+      signal.throwIfAborted();
+      cwd = ctx.sessions.list.getSnapshot().byId[reference.sessionId]?.cwd;
+    }
     if (expected && (preset !== expected.preset || cwd !== expected.cwd))
       throw Error('PAGE_SESSION_RECOVERY_MISMATCH');
 
