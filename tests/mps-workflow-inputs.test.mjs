@@ -1572,3 +1572,53 @@ test('后月期初库存缺项追溯首月来源，不重复要求人工补后�
   assert.ok(later.every((issue) => issue.rootSourceTable.includes('agents_scm_stock_detail_d')));
   assert.ok(later.every((issue) => issue.action.includes('不另补后续月份期初库存')));
 });
+
+test('设备报告复用物理隧道与标准日产吨数，来源未提供的独立产线不虚构', () => {
+  const sample = workflowPerformanceInput(2);
+  sample.draft.resources = [];
+  sample.draft.resourceAssignments = [];
+  sample.draft.productionDays = [{ base: '甲', month: '2026-12', days: 1 }];
+  const tunnel = {
+    belong_base: '甲',
+    production_unit: '实际车间',
+    tunnel_no: 'T1',
+    tunnel_tonnage: 999,
+    standard_daily_output_ton: 28,
+  };
+  sample.relations = {
+    sources: {
+      tunnels: [tunnel, { ...tunnel, series: '另一系列' }],
+      sku_capacity: sample.draft.products.map((row) => ({
+        belong_base: '甲',
+        workshop: '实际车间',
+        tunnel_no: 'T1',
+        material_code: row.产品编码,
+      })),
+      transfers: [],
+    },
+  };
+  const report = buildMpsWorkflow(
+    sample.draft,
+    sample.relations,
+    sample.shipment,
+    sample.evaluation,
+  ).plan.capacityReport;
+  const lines = report.lines.filter((row) => row.month === '2026-12');
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].dailyTons, 28);
+  assert.equal(lines[0].capacity, 28);
+  assert.equal(lines[0].workshop, '实际车间');
+  assert.equal(lines[0].tunnel, 'T1');
+  assert.deepEqual(lines[0].productionLines, []);
+  assert.ok(
+    report.hierarchyIssues.some(
+      (row) =>
+        row.reason.includes('来源未提供独立产线') && row.sourceTable.includes('tunnel_capacity'),
+    ),
+  );
+  assert.ok(
+    report.productDetails
+      .filter((row) => row.month === '2026-12')
+      .every((row) => row.resourceIds.length === 1),
+  );
+});
