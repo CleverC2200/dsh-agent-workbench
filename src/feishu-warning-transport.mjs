@@ -61,14 +61,15 @@ export function warningCard(e,kind,senderName='未记录',runNote=''){return {co
 export function enqueueNotification(event,kind,runId,config){event.notifications??=[];const key=[config.credentialProfile||'default',event.id,kind,runId,config.receiveIdType,config.receiveId].join('|');const old=event.notifications.find(n=>n.key===key);if(old)return old;const job={id:'delivery-'+randomUUID(),key,uuid:createHash('sha256').update(key).digest('hex').slice(0,32),eventId:event.id,runId,kind,credentialProfile:config.credentialProfile||'default',status:'待发送',at:new Date().toISOString(),recipientName:config.recipientName,receiveId:config.receiveId,receiveIdType:config.receiveIdType,card:warningCard(event,kind,config.senderName,config.runNote)};event.notifications.push(job);return job}
 export function enqueueChanges(state, before, run, config, task) {
   if (!config) return;
-  const recipients = Array.isArray(config) ? config : [config];
   const senderName = task?.definedBy || '未记录';
   for (const event of state.events) {
     if (run.taskId && event.monitorId !== run.taskId) continue;
+    const recipients = config instanceof Map ? config.get(event.objectKey) ?? [] : Array.isArray(config) ? config : [config];
     const active = event.eventStatus === '活跃';
     const recovered = event.eventStatus === '已恢复' && event.pendingClose === true;
     if (!active && !recovered) continue;
     const observation = event.history?.find(item => item.runId === run.id);
+    if (config instanceof Map && !observation) continue;
     const old = before.get(event.id);
     if (task?.notifyMode === 'once') {
       if (!active || !observation || observation.status === '健康') continue;
@@ -93,10 +94,58 @@ export function enqueueChanges(state, before, run, config, task) {
   }
 }
 export async function sendPersonalNotification(job){return new Promise((resolve,reject)=>{const p=spawn('python',[ROOT+'/send-feishu-warning.py'],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:{...process.env,PYTHONUTF8:'1'}});let out='';const timer=setTimeout(()=>{p.kill();reject(Object.assign(Error('飞书发送超时，结果待核实，不自动重发'),{unknown:true}))},45000);p.stdout.on('data',d=>out+=d);p.stderr.on('data',()=>{});p.on('error',()=>{clearTimeout(timer);reject(Object.assign(Error('飞书发送进程未能启动'),{unknown:false}))});p.on('close',()=>{clearTimeout(timer);try{const v=JSON.parse(out);if(v.ok&&/^om_/.test(v.messageId))resolve(v);else reject(Object.assign(Error(v.error||'飞书发送未返回有效回执'),{unknown:v.unknown!==false,providerCode:v.code}))}catch{reject(Object.assign(Error('飞书发送回执无法解析，需核实'),{unknown:true}))}});p.stdin.end(JSON.stringify({credentialProfile:job.credentialProfile||'default',receiveId:job.receiveId,receiveIdType:job.receiveIdType,uuid:job.uuid,card:job.card}))})}
-export async function drainNotifications({state,save,locked,send=sendPersonalNotification}){for(const event of state.events)for(const job of event.notifications||[]){if(job.status!=='待发送')continue;const claimed=await locked(async()=>{
-  if(job.status!=='待发送')return false;
-  if(job.kind!=='test'&&(event.eventStatus==='已关闭'||event.eventStatus==='已合并')){
-    job.status='已取消';await save();return false;
+export async function drainNotifications({state,save,locked,send=sendPersonalNotification}) {
+  const batches = new Map();
+  for (const event of state.events) for (const job of event.notifications ?? []) {
+    if (job.status !== '待发送') continue;
+    const key = JSON.stringify(job.kind === 'test' || !job.runId ? [job.id] :
+      [job.runId, job.credentialProfile ?? 'default', job.receiveIdType, job.receiveId]);
+    if (!batches.has(key)) batches.set(key, []);
+    batches.get(key).push({event,job});
   }
-  job.status='发送中';job.attemptedAt=new Date().toISOString();await save();return true;
-});if(!claimed)continue;try{const receipt=await send(job);await locked(async()=>{job.status='已发送';job.messageId=receipt.messageId;job.sentAt=new Date().toISOString();await save()})}catch(e){await locked(async()=>{job.status=e.unknown?'待核实':'发送失败';job.error=e.message;job.providerCode=e.providerCode;await save()})}}}
+  for (const batch of batches.values()) {
+    for (let offset = 0; offset < batch.length; offset += 10) {
+      const jobs = await locked(async () => {
+        const pending = batch.slice(offset, offset + 10).filter(({job}) => job.status === '待发送');
+        const claimed = [];
+        for (const {event,job} of pending) {
+          if (job.kind !== 'test' && ['已关闭','已合并'].includes(event.eventStatus)) {
+            job.status = '已取消';
+          } else {
+            job.status = '发送中';
+            job.attemptedAt = new Date().toISOString();
+            claimed.push(job);
+          }
+        }
+        if (pending.length) await save();
+        return claimed;
+      });
+      if (!jobs.length) continue;
+      const outbound = jobs.length === 1 ? jobs[0] : {
+        ...jobs[0],
+        uuid: createHash('sha256').update(JSON.stringify(jobs.map(job => job.key).sort())).digest('hex').slice(0,32),
+        card: {
+          config: {wide_screen_mode:true},
+          header: {template:'orange',title:{tag:'plain_text',content:'预警汇总｜'+jobs.length+' 项'}},
+          elements: jobs.flatMap(job => [
+            {tag:'div',text:job.card.header.title},
+            job.card.elements[0],
+            {tag:'div',text:{tag:'lark_md',content:String(job.card.elements[1]?.text?.content ?? '').slice(0,500)}},
+            job.card.elements.at(-1),
+          ]),
+        },
+      };
+      let outcome;
+      try {
+        const receipt = await send(outbound);
+        outcome = {status:'已发送',messageId:receipt.messageId,sentAt:new Date().toISOString()};
+      } catch (error) {
+        outcome = {status:error.unknown?'待核实':'发送失败',error:error.message,providerCode:error.providerCode};
+      }
+      await locked(async () => {
+        for (const job of jobs) Object.assign(job,outcome);
+        await save();
+      });
+    }
+  }
+}

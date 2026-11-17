@@ -11,6 +11,8 @@ export function permitsNullHealthy(description='') {
 export function validateTaskRule(row,task) {
  const r=row.rule;
  if(r?.sourceType!=='task')return false;
+ const wrapped=`指标：${task.metric}；检测范围：${task.scope}；任务说明：${task.description}`;
+ if(r.taskQuote===wrapped){r.originalTaskQuote=r.taskQuote;r.taskQuote=task.description;}
  if(!r.taskQuote || !String(task.description||'').includes(r.taskQuote))throw Error('任务规则缺少原文依据');
  r.source='任务自定义：'+r.taskQuote;r.id='task:'+task.id;r.version='任务执行快照';
  let healthy;
@@ -38,6 +40,7 @@ export function validateTaskRule(row,task) {
  return true;
 }
 export function displayRule(r,unit=''){
+ if(r.nullPolicy==='healthy'&&!Number.isFinite(r.healthy)&&!Number.isFinite(r.min))return '查询成功返回空值按任务规则正常；未取得可用数值阈值';
  if(r.kind==='range')return `正常区间 ${r.min}—${r.max}${unit}；区间外预警`;
  return `健康 ${({gt:'>',gte:'≥',lt:'<',lte:'≤'})[r.healthyOperator]} ${r.healthy}${unit}`+(r.severe==null?'；未设置严重阈值':`；严重${r.direction==='higher'?'<':'>'}${r.severe}${unit}`);
 }
