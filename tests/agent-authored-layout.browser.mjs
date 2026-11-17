@@ -1086,55 +1086,60 @@ for (const id of ['aqkc', 'qll', 'fc', 'apsplan'])
 
 for (const deniedBudget of [false, true])
   test(`APS sales view keeps cards, list and analysis consistent with zero-fill; denied budget=${deniedBudget}`, async (t) => {
-    const { frame, errors, calls } = await mountCurrentMonthly(t, 'apsplan', 1280, (query, result) => {
-      if (query.queryId === 'page.budget-performance') {
-        if (deniedBudget)
-          return {
-            failure: {
-              reasonCode: 'RESOURCE_NOT_IN_DATASET',
-              stage: 'BIND',
-              message: 'budget resource not in dataset',
-            },
-          };
-        result.rows =
-          query.parameters.start_month === '202610'
-            ? [
-                {
-                  ...result.rows[0],
-                  source_basis: 'MONTHLY_BUDGET_UNTAXED_INCOME',
-                  month: '202610',
-                  actual: 50,
-                  budget: 100,
-                  invalid: 2,
-                  base: null,
-                  category: null,
-                  region: null,
-                  province: null,
-                  sales_group: null,
-                },
-              ]
-            : [];
-      }
-      if (/^(page|overview|drill\.organization)\.sales-accuracy$/.test(query.queryId)) {
-        result.rows =
-          query.parameters.start_month === '2026-10-01'
-            ? [
-                {
-                  ...result.rows[0],
-                  month: '202610',
-                  initial_plan: 100,
-                  adjusted_plan: 100,
-                  initial_deviation: 25,
-                  adjusted_deviation: 25,
-                  actual: 75,
-                  invalid: 2,
-                  missing_actual: 1,
-                },
-              ]
-            : [];
-      }
-      return result;
-    });
+    const { frame, errors, calls } = await mountCurrentMonthly(
+      t,
+      'apsplan',
+      1280,
+      (query, result) => {
+        if (query.queryId === 'page.budget-performance') {
+          if (deniedBudget)
+            return {
+              failure: {
+                reasonCode: 'RESOURCE_NOT_IN_DATASET',
+                stage: 'BIND',
+                message: 'budget resource not in dataset',
+              },
+            };
+          result.rows =
+            query.parameters.start_month === '202610'
+              ? [
+                  {
+                    ...result.rows[0],
+                    source_basis: 'MONTHLY_BUDGET_UNTAXED_INCOME',
+                    month: '202610',
+                    actual: 50,
+                    budget: 100,
+                    invalid: 2,
+                    base: null,
+                    category: null,
+                    region: null,
+                    province: null,
+                    sales_group: null,
+                  },
+                ]
+              : [];
+        }
+        if (/^(page|overview|drill\.organization)\.sales-accuracy$/.test(query.queryId)) {
+          result.rows =
+            query.parameters.start_month === '2026-10-01'
+              ? [
+                  {
+                    ...result.rows[0],
+                    month: '202610',
+                    initial_plan: 100,
+                    adjusted_plan: 100,
+                    initial_deviation: 25,
+                    adjusted_deviation: 25,
+                    actual: 75,
+                    invalid: 2,
+                    missing_actual: 1,
+                  },
+                ]
+              : [];
+        }
+        return result;
+      },
+    );
     await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
     await frame.getByRole('tab', { name: '销售视角', exact: true }).click();
     const card = (name) =>
