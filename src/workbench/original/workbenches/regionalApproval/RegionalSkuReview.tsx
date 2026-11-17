@@ -31,7 +31,6 @@ export function RegionalSkuReview({
   plans,
   month,
   role,
-  revision,
   pendingValues,
   t,
   onSnapshot,
@@ -39,7 +38,6 @@ export function RegionalSkuReview({
   plans: readonly RegionalApprovalLiveRow[];
   month: string;
   role?: ApprovalStageId;
-  revision: number;
   pendingValues: Readonly<Record<string, Readonly<Record<string, string>>>>;
   t: TFunction;
   onSnapshot: (snapshot: SkuReviewSnapshot | null) => void;
@@ -83,7 +81,7 @@ export function RegionalSkuReview({
       if (!controller.signal.aborted) setState({ kind: 'failed' });
     });
     return () => controller.abort();
-  }, [plans, month, role, revision, salesPlan, retry, onSnapshot]);
+  }, [plans, month, role, salesPlan, retry, onSnapshot]);
   const rows = useMemo(() => {
     if (state.kind !== 'ready') return [];
     try {

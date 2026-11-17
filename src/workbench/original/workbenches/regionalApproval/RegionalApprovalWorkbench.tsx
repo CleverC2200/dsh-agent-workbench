@@ -645,8 +645,8 @@ const RegionalApprovalWorkbench: React.FC<{
     page,
     pageSize,
     scope: liveQueryScope,
-    loadStageProgress: queryClient !== null,
-    loadAnalysisSummary: queryClient !== null,
+    loadStageProgress: queryClient !== null && stageLaneOpen,
+    loadAnalysisSummary: queryClient !== null && (automaticAnalysisEnabled || progressOpen),
     stage: liveStageFilter,
     roles: roleStages,
   });
@@ -1102,7 +1102,7 @@ const RegionalApprovalWorkbench: React.FC<{
       const categories: typeof liveCategorySummaries = {};
       const currentSkus: typeof currentSkusByPlan = {};
       const restoredInputs: typeof livePendingValues = {};
-      for (const row of metricRows) {
+      const readRow = async (row: RegionalApprovalLiveRow) => {
         controller.signal.throwIfAborted();
         const versionId = row.versionId;
         const approvalRole = liveStageFilter ?? roleStages[0];
@@ -1184,6 +1184,10 @@ const RegionalApprovalWorkbench: React.FC<{
                 : null,
           };
         }
+      };
+      for (let offset = 0; offset < metricRows.length; offset += 4) {
+        controller.signal.throwIfAborted();
+        await Promise.all(metricRows.slice(offset, offset + 4).map(readRow));
       }
       if (!controller.signal.aborted) {
         setLivePendingValues((current) => {
@@ -1210,7 +1214,7 @@ const RegionalApprovalWorkbench: React.FC<{
   const liveAccess = useSalesPlanAccess(
     liveRows,
     detailClient,
-    liveActionsEnabled && liveQuery.queueState.status === 'success',
+    liveActionsEnabled && !skuReviewOpen && liveQuery.queueState.status === 'success',
   );
 
   const sourceTypeReadOnly = (row: RegionalApprovalLiveRow) =>
@@ -3734,7 +3738,6 @@ const RegionalApprovalWorkbench: React.FC<{
               plans={allLiveRows}
               month={liveQuery.selectedPeriodMonth}
               role={liveStageFilter}
-              revision={liveQuery.refreshing ? 1 : 0}
               pendingValues={livePendingValues}
               t={t}
               onSnapshot={setSkuReviewSnapshot}
