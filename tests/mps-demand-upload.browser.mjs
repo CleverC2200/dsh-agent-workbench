@@ -213,6 +213,7 @@ test('取消上传不写入，版本切换及恢复保留各自修正并丢弃�
   assert.notEqual(second.id, first.id);
   assert.equal(second.adjustments.quantities.length, 0);
   await frame.getByLabel('评估版本选择', { exact: true }).selectOption(first.id);
+  await expect.poll(async () => (await draft(page)).id).toBe(first.id);
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   await frame.locator('body').evaluate(() => {
     const original = File.prototype.text;
@@ -225,10 +226,12 @@ test('取消上传不写入，版本切换及恢复保留各自修正并丢弃�
   });
   await upload(frame, '选择需求修正CSV', `${columns}\n郑州,A,${month},99,销售变化,`);
   await frame.getByLabel('评估版本选择', { exact: true }).selectOption(second.id);
+  await expect.poll(async () => (await draft(page)).id).toBe(second.id);
   await frame.locator('body').evaluate(() => window.releaseDemandUpload());
   await expect(frame.getByRole('dialog', { name: '确认需求修正上传', exact: true })).toHaveCount(0);
   assert.deepEqual(await draft(page), second);
   await frame.getByLabel('评估版本选择', { exact: true }).selectOption(first.id);
+  await expect.poll(async () => (await draft(page)).id).toBe(first.id);
   assert.deepEqual((await draft(page)).adjustments, first.adjustments);
   const saved = await page.evaluate(() => window.readView());
   await page.evaluate(async (seed) => window.openAuthor('mps', 1200, seed), saved);
@@ -268,17 +271,21 @@ test('下市品上传正需求保持有效，其他基地及兄弟SKU不重摊�
       .filter((row) => row['产品编码'] && (row['基地'] !== '郑州' || row['产品编码'] !== 'A'))
       .map((row) => [row['基地'], row['产品编码'], row['月份'], row['需求数量']]);
   assert.deepEqual(unaffected(after), unaffected(before));
+  await expect(
+    view.getByRole('table', { name: '加工后的需求明细', exact: true }).locator('tbody tr').first(),
+  ).toContainText('148');
   await view.getByLabel('基地筛选', { exact: true }).selectOption('郑州');
   await view.getByLabel('月份筛选', { exact: true }).selectOption(month);
   const downloading = page.waitForEvent('download');
   await report.getByRole('button', { name: '下载下市品异常明细', exact: true }).click();
   const text = await mpsDownloadText(await (await downloading).path());
-  const book = XLSX.read(text, { type: 'string', raw: true });
+  const book = XLSX.read(text.replace(/^\uFEFF/, ''), { type: 'string', raw: true });
   const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
   assert.ok(
     rows.length > 0 && rows.every((row) => row['基地'] === '郑州' && row['月份'] === month),
   );
   assert.ok(
     rows.some((row) => row['异常类别'] === '下市品人工正需求' && Number(row['计算用值']) === 88),
+    JSON.stringify(rows),
   );
 });
