@@ -1,7 +1,7 @@
 import type { GeaSalesPlanSku, GeaSalesPlanSkuReview } from '../../../bridge.ts';
 import type { RegionalApprovalLiveRow } from '../regionalApprovalQueryModel.ts';
 import { addExactDecimals, multiplyExactDecimals } from '../regionalApprovalQueryModel.ts';
-import { salesPlanEditableQuantity, roundPlanQuantity } from './salesPlanQuantityModel.ts';
+import { salesPlanConfirmedQuantity } from './salesPlanQuantityModel.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 
 export const skuReviewMonths = (month: string): [string, string, string] => {
@@ -81,10 +81,12 @@ export function summarizeSkuReview(
       if (!plan.dealerCode) throw new Error('INCOMPLETE_CUSTOMER_SKU_REVIEW');
       const duplicateFact = facts.has(factKey);
       facts.add(factKey);
-      const confirmedQty = roundPlanQuantity(
-        pendingValues[plan.planId]?.[code] ??
-          salesPlanEditableQuantity(sku, plan.status, plan.planTypeCode, role) ??
-          sku.qty,
+      const confirmedQty = salesPlanConfirmedQuantity(
+        sku,
+        plan.status,
+        plan.planTypeCode,
+        role,
+        pendingValues[plan.planId]?.[code],
       );
       const confirmedAmount = multiplyExactDecimals(confirmedQty, sku.price);
       if (confirmedAmount === undefined) throw new Error('INVALID_SKU_REVIEW');

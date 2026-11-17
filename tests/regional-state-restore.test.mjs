@@ -361,7 +361,7 @@ test('opening an original plan name publishes the same displayed inline SKU fiel
     currentAmount: '20',
     targetQty: '12',
     targetAmount: '24',
-    skuCount: 1,
+    skuCount: 2,
   };
   const secondSku = {
     ...sku,
