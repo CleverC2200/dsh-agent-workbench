@@ -58,6 +58,23 @@ test('monthly quantities round exactly without floating point loss and months ro
   assert.deepEqual(m.skuReviewMonths('2027-01'), ['2026-01', '2026-11', '2026-12']);
 });
 
+test('restored draft uses the matching approval role baseline and rounds confirmed pieces', () => {
+  const { plan, skus } = source('a', 'v1', '10.4', '0', '0');
+  skus[0].regionConfirmedQty = '20.4';
+  const draft = {
+    planId: plan.planId,
+    versionId: plan.versionId,
+    status: plan.status,
+    sourceSnapshot: 'fixture',
+    role: 'region',
+    adjustments: [{ skuCode: '1001', adjustQty: '0.2' }],
+    remark: '',
+  };
+  assert.deepEqual(m.salesPlanDraftInputValues(skus, plan, draft, 'region'), { 1001: '21' });
+  assert.deepEqual(m.salesPlanDraftInputValues(skus, plan, draft, 'province'), {});
+  assert.deepEqual(m.salesPlanDraftInputValues(skus, plan, null, 'region'), {});
+});
+
 test('summary combines customer SKU budgets, computes confirmed amounts from rounded pieces and retains unknowns', () => {
   const rows = m.summarizeSkuReview(
     [source('a', 'v1', '501.600', '100.10', '20'), source('b', 'v2', '10.400', '200.20', '30')],
