@@ -714,6 +714,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           '相对月份',
           ...identityColumns.map(([, label]) => label),
           ...exportFields.map((key) => labels[key]),
+          '原始期初库存',
+          '原始预测期末库存',
+          '库存归零记录',
           ...layerColumns,
           ...layerQuantityColumns,
           '分层缺项',
@@ -815,6 +818,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
           ...inventoryDependencyFields(row),
           系统SKU需求: row.systemDemand,
+          原始期初库存: row.rawOpeningInventory,
+          原始预测期末库存: row.rawProjectedClosing,
+          库存归零记录: (row.inventoryIssues ?? [])
+            .map(
+              (issue) =>
+                `${issue.metric} 原始值${issue.rawValue}，计算用值${issue.calculationValue}；${issue.reason}`,
+            )
+            .join('；'),
           本月预估所属月: result.shipmentMonth,
           本月系统预估发货: shipment?.prediction,
           本月预估发货: shipment?.fin,

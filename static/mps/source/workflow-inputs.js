@@ -221,6 +221,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         base: text(row.base),
         code: text(row.code),
         quantity: number(row.end),
+        rawQuantity: number(row.rawEnd === undefined ? row.end : row.rawEnd),
       }))
     : [];
   const products = demo(draft.productSource)
