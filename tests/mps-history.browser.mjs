@@ -114,6 +114,8 @@ test('第三步完整月分类、财年补0与当前范围CSV贯通，并保留�
     '30',
   );
   assert.equal(demand.find((row) => row.粒度 === '当前范围合计').计算用历史数量, '120');
+  for (const level of ['基地汇总', '大类汇总', '物料组汇总'])
+    assert.equal(demand.find((row) => row.粒度 === level).计算用历史数量, '120');
   if (process.env.MPS_HISTORY_SCREENSHOT)
     await page.screenshot({ path: process.env.MPS_HISTORY_SCREENSHOT, fullPage: true });
 });

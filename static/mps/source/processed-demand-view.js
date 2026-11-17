@@ -617,6 +617,43 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
               有效需求待补数: demand.missing,
             };
           }),
+        ...[
+          ...indexed.roots.values(),
+          ...[...indexed.children.values()].flatMap((children) => [...children.values()]),
+        ]
+          .filter((entry) => entry.kind !== 'base-sku')
+          .flatMap((entry) => {
+            const data = nodeData(entry);
+            const level =
+              entry.kind === 'base'
+                ? '基地汇总'
+                : entry.kind.endsWith('category')
+                  ? '大类汇总'
+                  : entry.kind.endsWith('group')
+                    ? '物料组汇总'
+                    : '全国SKU汇总';
+            return months
+              .filter((month) => !filters.month || filters.month === month)
+              .map((month) => {
+                const demand = sourceSummary(
+                  data.full.filter((row) => row.month === month).map((row) => row.demand),
+                );
+                return {
+                  ...context,
+                  粒度: level,
+                  月份: month,
+                  基地: entry.base || '全国',
+                  大类: entry.category,
+                  物料组: entry.group,
+                  产品编码: entry.code,
+                  计算用历史数量: data.history.quantity,
+                  历史期间: `${result.comparisonSources.historyPeriod.start}至${result.comparisonSources.historyPeriod.end}`,
+                  有效需求数量: demand.quantity,
+                  有效需求已知小计: demand.knownQuantity,
+                  有效需求待补数: demand.missing,
+                };
+              });
+          }),
         ...rows.map((row) => ({
           ...context,
           月份: row.month,
