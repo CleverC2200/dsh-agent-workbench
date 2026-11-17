@@ -114,6 +114,7 @@ test('月份切换贯通取数、需求计算和下载，保留历史版本、�
       '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-11,郑州,A,产品A,汤圆,系列甲,G,123,124',
     ),
   });
+  await expect(report).toContainText('数量合计123件');
   const legacy = await page.evaluate(async () => {
     const seed = structuredClone(window.readView());
     const saved = structuredClone(seed.localDrafts.drafts[0]);
