@@ -76,6 +76,12 @@ export function createCapacityScopeView(react, downloadCsv) {
         [field]: value,
       }));
     };
+    const scopeTable = (name, columns, rows) =>
+      react.cloneElement(table(name, columns, rows), {
+        role: 'region',
+        'aria-label': `${name}滚动区`,
+        tabIndex: 0,
+      });
     const selector = (name, value, options, onChange) =>
       h(
         'label',
@@ -191,7 +197,7 @@ export function createCapacityScopeView(react, downloadCsv) {
           { className: 'wf-note' },
           '关联需求按当前设备范围的有效关联去重。多个候选设备可能对应同一需求，各设备需求不能直接相加；实际占用来自本轮排产分配，包含调拨供给。产品占比使用当前范围去重总产能，不为各产品重复累计产能。',
         ),
-        table(
+        scopeTable(
           '所选设备范围汇总',
           [
             '设备范围',
@@ -228,7 +234,7 @@ export function createCapacityScopeView(react, downloadCsv) {
             '下载设备范围明细',
           ),
         ),
-        table(
+        scopeTable(
           '设备范围产品占用',
           [
             '大类',
@@ -273,7 +279,7 @@ export function createCapacityScopeView(react, downloadCsv) {
             '下一页产品',
           ),
         ),
-        table(
+        scopeTable(
           '设备范围明细',
           [
             '基地',
@@ -320,7 +326,7 @@ export function createCapacityScopeView(react, downloadCsv) {
                 },
                 '下载设备归属问题',
               ),
-              table(
+              scopeTable(
                 '设备归属问题',
                 ['基地', '资源', '问题', '来源'],
                 issues.map((row) => [row.base, row.name, row.reason, row.sourceTable]),
@@ -362,7 +368,7 @@ export function createCapacityScopeView(react, downloadCsv) {
                 },
                 '下载无设备关联需求',
               ),
-              table(
+              scopeTable(
                 '无设备关联需求',
                 ['基地', '大类', '物料组', 'SKU', '需求（吨）'],
                 selected.unassigned.map((row) => [

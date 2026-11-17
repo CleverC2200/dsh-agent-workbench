@@ -28,7 +28,7 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
         const View=createEvaluationOverview(React,{Dialog:()=>null,downloadCsv:(name,columns,rows)=>{window.downloads.push({name,columns,rows});return downloadCsv(name,columns,rows)}});
         const h=React.createElement;
         const card=(title,body)=>h('section',{className:'dc-card','aria-label':title},h('div',{className:'dc-card-head'},h('h2',null,title)),body);
-        const table=(name,columns,rows)=>h('div',{className:'dc-table-scroll wf-table-scroll',role:'region','aria-label':name+'滚动区',tabIndex:0},h('table',{'aria-label':name},h('thead',null,h('tr',null,...columns.map((c,i)=>h('th',{key:i,scope:'col'},c)))),h('tbody',null,...rows.map((r,i)=>h('tr',{key:i},...r.map((v,j)=>h('td',{key:j},v?.content??v)))))));
+        const table=(name,columns,rows)=>h('div',{className:'dc-table-scroll wf-table-scroll'},h('table',{'aria-label':name},h('thead',null,h('tr',null,...columns.map((c,i)=>h('th',{key:i,scope:'col'},c)))),h('tbody',null,...rows.map((r,i)=>h('tr',{key:i},...r.map((v,j)=>h('td',{key:j},v?.content??v)))))));
         window.showStep=(step)=>root.render(h(View,{step,draft:sample.draft,currentEvaluation:{at:'验收时间',result},filters:{month:'2026-12'},table,card,numberText:value=>value===null?'待补':new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(value),onExecute(){}}));
         window.showStep('capacity');};window.runCapacity();`,
     },
@@ -67,6 +67,9 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     await page.setViewportSize({ width: 1200, height: 1000 });
   }
+  await expect(
+    page.getByRole('region', { name: '设备范围明细滚动区', exact: true }),
+  ).toHaveAttribute('tabindex', '0');
   const summary = page.getByRole('table', { name: '所选设备范围汇总', exact: true });
   await expect(summary).toContainText('100');
   await page.getByLabel('产品查看层级', { exact: true }).selectOption('sku');
