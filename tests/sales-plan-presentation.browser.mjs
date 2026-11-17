@@ -1327,6 +1327,7 @@ test('regional SKU review scrolls to its final rows with wheel and keyboard in a
     await page.setViewportSize(size);
     await viewport.focus();
     await page.keyboard.press('Home');
+    await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBe(0);
     await viewport.hover({ position: { x: 100, y: 100 } });
     await page.mouse.wheel(0, 10000);
     await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
