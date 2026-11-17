@@ -196,6 +196,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
       [
         savedDraft.productsRead,
         savedDraft.historyAnnualRead,
+        savedDraft.historyWindowRead,
         savedDraft.sourceChecksRead,
         savedDraft.historicalIndicatorsRead,
         savedDraft.planRatesRead,

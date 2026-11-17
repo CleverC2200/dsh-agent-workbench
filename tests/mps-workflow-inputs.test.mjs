@@ -403,10 +403,12 @@ test('按实际期间撤销失效提报与历史，别月成功或失败不改�
   };
   source.historyAnnual.periods[0].error = '上一财年历史拒权';
   const failed = buildMpsWorkflow(source);
-  assert.equal(failed.rows[0].historyQuantity, null);
+  assert.equal(failed.rows[0].historyQuantity, 0);
+  assert.equal(failed.rows[0].historyAudit.zeroFilled, true);
   assert.equal(failed.rows[0].reportQuantity, 30);
   assert.equal(failed.rows[0].demand, null);
-  assert.match(failed.rows[0].missing.demand.join(''), /上一财年历史拒权/);
+  assert.match(failed.rows[0].historyAudit.reasons.join(''), /上一财年历史拒权/);
+  assert.equal(failed.rows[0].historyShare, null);
   delete source.historyAnnual.periods[0].error;
   source.historyAnnual.periods.push({
     start: '2024-07-01',
@@ -632,7 +634,7 @@ test('跨7月仍用评估月所属上一完整财年，后月不切换本轮系�
     9,
   );
   source.historyAnnual.periods = [];
-  assert.equal(buildMpsWorkflow(source).rows[0].historyQuantity, null);
+  assert.equal(buildMpsWorkflow(source).rows[0].historyQuantity, 0);
 });
 
 test('完整财年查询使用起止日期，不落回单月查询', async () => {
@@ -1557,4 +1559,56 @@ test('后月期初库存缺项追溯首月来源，不重复要求人工补后�
   );
   assert.ok(later.every((issue) => issue.rootSourceTable.includes('agents_scm_stock_detail_d')));
   assert.ok(later.every((issue) => issue.action.includes('不另补后续月份期初库存')));
+});
+
+test('原始完整月分类与财年补0分别传入计算，来源失败状态不被补0覆盖', () => {
+  const source = draft();
+  source.products[0]['老品编码'] = 'OLD';
+  source.historyAnnual.periods[0].rows = [
+    { 基地: '甲', 产品编码: 'A', 数量: '' },
+    { 基地: '甲', 产品编码: 'OLD', 数量: 30 },
+    { 基地: '乙', 产品编码: 'B', 数量: 40 },
+  ];
+  const completedMonth = new Date();
+  completedMonth.setUTCDate(1);
+  const through =
+    source.month < completedMonth.toISOString().slice(0, 7)
+      ? source.month
+      : completedMonth.toISOString().slice(0, 7);
+  source.historyWindow = {
+    periods: Array.from({ length: 24 }, (_, index) => {
+      const date = new Date(`${through}-01T00:00:00Z`);
+      date.setUTCMonth(date.getUTCMonth() - index - 1);
+      return { month: date.toISOString().slice(0, 7), rows: [], metadata: { partial: false } };
+    }),
+  };
+  source.historyWindowRead = { status: 'ready', month: source.month };
+  let row = buildMpsWorkflow(source).rows[0];
+  assert.equal(row.historyQuantity, 30);
+  assert.equal(row.historyAudit.classification, '疑似新品或重新上市');
+  source.historyWindow.periods[0] = {
+    month: source.historyWindow.periods[0].month,
+    rows: [],
+    error: '月历史拒权',
+  };
+  source.historyWindowRead.status = 'failed';
+  row = buildMpsWorkflow(source).rows[0];
+  assert.equal(row.historyQuantity, 30);
+  assert.equal(row.historyAudit.classification, '来源异常或其他历史异常');
+  assert.match(row.historyAudit.months[0].reasons.join('；'), /月历史拒权/);
+  assert.equal(source.historyWindowRead.status, 'failed');
+});
+
+test('整轮历史读取失败不复用旧成功窗口作为分类依据', () => {
+  const source = draft();
+  source.historyWindow = {
+    periods: [{ month: '2026-10', rows: [], metadata: { partial: false } }],
+  };
+  source.historyWindowRead = { status: 'failed', error: '窗口读取中断' };
+  const audit = buildMpsWorkflow(source).rows[0].historyAudit;
+  assert.equal(audit.months.find((month) => month.month === '2026-10').status, 'failed');
+  assert.match(
+    audit.months.find((month) => month.month === '2026-10').reasons.join('；'),
+    /窗口读取中断/,
+  );
 });
