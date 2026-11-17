@@ -138,7 +138,7 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
   await upload(
     frame,
     '选择产品关系CSV或Excel',
-    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n,A,产品甲,汤圆,系列,组,,\n,B,产品乙,汤圆,系列,组,,',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,\n郑州,B,产品乙,汤圆,系列,组,,\n华东,A,产品甲,汤圆,系列,组,,\n华东,B,产品乙,汤圆,系列,组,,',
   );
   await upload(
     frame,
@@ -189,7 +189,7 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
   await expect(
     detail.getByRole('button', { name: '运算过程 华东 A 2026-12', exact: true }),
   ).toHaveCount(0);
-  await detail.getByRole('button', { name: '运算过程 郑州 A 2026-12', exact: true }).click();
+  await detail.getByRole('button', { name: '运算过程 郑州 A 2026-12', exact: true }).press('Enter');
   await expect(frame.getByRole('dialog')).toContainText('结果：60');
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await beginAdjustment(view);
@@ -1797,7 +1797,7 @@ test('MPS processing compares both forecast months and persists fixed quantities
     const branch = view.getByRole('button', { name, exact: true });
     if ((await branch.getAttribute('aria-expanded')) === 'false') await branch.press('Enter');
   }
-  await view.getByRole('button', { name: '运算过程 郑州 A 2026-12', exact: true }).click();
+  await view.getByRole('button', { name: '运算过程 郑州 A 2026-12', exact: true }).press('Enter');
   await expect(frame.getByRole('dialog')).toContainText('销售提报占比');
   await expect(frame.getByRole('dialog')).toContainText('上一财年发货占比');
   await expect(frame.getByRole('dialog')).toContainText('同一套系数用于M+1至M+3');

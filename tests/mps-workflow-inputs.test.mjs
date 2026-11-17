@@ -297,7 +297,7 @@ test('ODM来源与自产标签冲突可导出人工修正说明，不能伪造�
   assert.match(issue.sourceFields, /transfer_tag/);
 });
 
-test('产品老品编码接入历史参考并建立老品所在基地的新品拆分范围', () => {
+test('产品老品编码接入同基地历史参考，其他基地老品不扩张产品范围', () => {
   const source = draft();
   source.products[0]['老品编码'] = 'OLD';
   source.historyAnnual.periods[0].rows.push(
@@ -310,17 +310,18 @@ test('产品老品编码接入历史参考并建立老品所在基地的新品�
   assert.equal(row.historyCode, 'OLD');
   assert.equal(row.historyQuantity, 160);
   assert.equal(
-    result.rows.find((row) => row.base === '丙' && row.code === 'A').historyQuantity,
-    20,
+    result.rows.some((row) => row.base === '丙' && row.code === 'A'),
+    false,
   );
+  assert.equal(result.poolExceptions.history.find((row) => row.base === '丙').quantity, 20);
   assert.deepEqual(source.historyAnnual, raw);
   const solved = buildMpsWorkflow(source, null, null, {
     weights: { rows: [{ material_code: 'A', channel_name: '经销商', ton_per_piece: 0.1 }] },
   });
-  assert.ok(solved.plan.rows.find((row) => row.base === '丙' && row.code === 'A').demandTons > 0);
+  assert.ok(solved.plan.rows.find((row) => row.base === '甲' && row.code === 'A').demandTons > 0);
   assert.ok(
     !solved.plan.rows
-      .find((row) => row.base === '丙' && row.code === 'A')
+      .find((row) => row.base === '甲' && row.code === 'A')
       .planMissing.includes('缺唯一有效件吨系数'),
   );
 });
@@ -456,13 +457,15 @@ test('产能与有效结存不能扩充月度需求范围，缺正式归属和�
   };
   const relations = { sources: { sku_capacity: [{ belong_base: '甲', material_code: 'A' }] } };
   const result = buildMpsWorkflow(source, relations, snapshot);
-  assert.deepEqual(result.rows, []);
+  assert.equal(result.rows.length, 6);
+  assert.ok(result.rows.every((row) => ['甲', '乙'].includes(row.base)));
+  assert.equal(result.poolExceptions.other.find((row) => row.base === '郑州').quantity, -8);
   assert.equal(result.scopeCoverage, 'in-scope');
   assert.match(result.missing.join(''), /当前产品明细.*物料编码.*物料组编码/);
   assert.match(result.missing.join(''), /全国覆盖.*实际证明/);
 });
 
-test('空月来源拒权不能随着月度候选为空而消失', () => {
+test('空月来源拒权保留产品清单范围和来源问题', () => {
   const source = draft();
   source.report = [];
   source.history = [];
@@ -470,7 +473,7 @@ test('空月来源拒权不能随着月度候选为空而消失', () => {
   source.reportRead = { periods: { '2026-12': { status: 'failed', error: '十二月提报拒权' } } };
   source.historyAnnual.periods[0].error = '十二月历史读取失败';
   const result = buildMpsWorkflow(source);
-  assert.equal(result.rows.length, 0);
+  assert.equal(result.rows.length, 6);
   assert.match(result.missing.join(''), /2026-12.*十二月提报拒权/);
   assert.match(result.missing.join(''), /2026-12.*十二月历史读取失败/);
   assert.equal(result.summary.requiredProductionTons, null);
@@ -1038,7 +1041,7 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
   source.constraints.rules = {};
   const codes = ['A', 'B', 'C', 'D'];
   source.products = codes.map((code) => ({
-    基地: '',
+    基地: '甲',
     产品编码: code,
     产品名称: code,
     大类: '点心',
@@ -1232,6 +1235,7 @@ test('安全天数采用实际读取来源起月与版本，评估月保持独�
 
 test('最新产品源按基地应用替换系数，重复标签不倍增，零与未知分开', () => {
   const source = draft();
+  source.products[0]['基地'] = '';
   source.products[0]['老品编码'] = 'OLD';
   source.productRaw = [
     {
@@ -1264,11 +1268,14 @@ test('最新产品源按基地应用替换系数，重复标签不倍增，零�
   const rows = buildMpsWorkflow(source).rows.filter(
     (row) => row.month === source.month && row.code === 'A',
   );
-  assert.equal(rows.length, 3);
+  assert.equal(rows.length, 2);
   assert.equal(rows.find((row) => row.base === '甲').historyReferenceQuantity, 100);
   assert.equal(rows.find((row) => row.base === '甲').historyQuantity, 260);
   assert.equal(rows.find((row) => row.base === '丙').historyQuantity, 0);
-  assert.equal(rows.find((row) => row.base === '丁').historyQuantity, null);
+  assert.equal(
+    rows.some((row) => row.base === '丁'),
+    false,
+  );
   assert.deepEqual(source.historyAnnual, raw);
   source.productRaw[1].replace_num = '3';
   const conflict = buildMpsWorkflow(source).rows.find(
@@ -1373,9 +1380,17 @@ test('新版产品源缺目标基地或只有另一基地系数时，不能落�
       source.productRaw = [
         { material_code: 'A', replacement_material_code: 'OLD', target_base, replace_num: '2' },
       ];
-      const row = buildMpsWorkflow(source).rows.find(
-        (row) => row.base === '甲' && row.code === 'A',
-      );
+      const result = buildMpsWorkflow(source);
+      const row = result.rows.find((row) => row.base === '甲' && row.code === 'A');
+      if (!base) {
+        assert.equal(row, undefined);
+        assert.ok(
+          result.poolExceptions.history.some(
+            (issue) => issue.base === '甲' && issue.code === 'OLD',
+          ),
+        );
+        continue;
+      }
       assert.equal(row.historyReferenceQuantity, 100);
       assert.equal(row.historyQuantity, null);
       assert.match(row.missing.historyQuantity.join(), /系数/);

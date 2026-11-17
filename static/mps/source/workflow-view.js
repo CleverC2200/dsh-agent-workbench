@@ -9,6 +9,7 @@ import {
 } from './inventory-target-view.js';
 import { createConstraintPanel } from './constraint-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
+import { createPoolExceptionReport } from './pool-exception-view.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
 import { call } from '../../../business/shared/channel.js';
 import { readUnitWeights, unitWeightCandidate, productWeightCandidate } from './unit-weights.js';
@@ -121,6 +122,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
       onStage: commit,
     });
   const ProcessedDemand = createProcessedDemand(react, { downloadCsv, downloadAmounts });
+  const PoolExceptionReport = createPoolExceptionReport(react, { downloadCsv });
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
   const InventoryTargetPanel = createInventoryTargetPanel(react, { downloadCsv, NumberInput });
   const ConstraintPanel = createConstraintPanel(react, { Dialog });
@@ -407,6 +409,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
       ...new Set(
         [
           ...scopedRows.map((row) => row.base),
+          ...(result.poolExceptions?.total ?? []).map((row) => row.base),
           ...configurationPairs.map((row) => row.base),
           ...(draft.resources ?? []).map((row) => row.base),
           ...(draft.productionDays ?? []).map((row) => row.base),
@@ -1490,6 +1493,14 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         scope: result.categoryComputation.shipmentScope,
         month: draft.month,
       }),
+      ['process', 'report'].includes(step) &&
+        h(PoolExceptionReport, {
+          draft,
+          result,
+          filters: { base, category, month, search },
+          table,
+          view,
+        }),
       step === 'process'
         ? h(
             react.Fragment,
