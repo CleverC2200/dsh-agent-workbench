@@ -2,6 +2,7 @@ import type {
   GeaSalesPlanDetail,
   GeaSalesPlanListItem,
   GeaSalesPlanSkuAdjustment,
+  GeaSalesPlanSku,
 } from '../../../bridge.ts';
 import {
   addExactDecimals,
@@ -27,6 +28,25 @@ export type SalesPlanLocalDraft = {
 
 export type SalesPlanLocalDraftStore = Record<string, SalesPlanLocalDraft>;
 const DECIMAL = /^[+-]?\d{1,15}(?:\.\d{1,3})?$/;
+
+export const salesPlanDraftInputValues = (
+  skus: readonly GeaSalesPlanSku[],
+  row: Pick<GeaSalesPlanListItem, 'status' | 'planTypeCode'>,
+  draft: SalesPlanLocalDraft | null,
+  role?: ApprovalStageId,
+): Record<string, string> => {
+  if (draft?.role && draft.role !== role) return {};
+  return Object.fromEntries(
+    (draft?.adjustments ?? []).flatMap((item) => {
+      const sku = skus.find((candidate) => String(candidate.skuCode) === item.skuCode);
+      if (!sku) return [];
+      const baseline =
+        salesPlanEditableQuantity(sku, row.status, row.planTypeCode, draft?.role ?? role) ??
+        String(sku.qty);
+      return [[item.skuCode, roundPlanQuantity(addExactDecimals([baseline, item.adjustQty]))]];
+    }),
+  );
+};
 
 export const salesPlanApprovalDraftValues = (
   detail: GeaSalesPlanDetail | undefined,
