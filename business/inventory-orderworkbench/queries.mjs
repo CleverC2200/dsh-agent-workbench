@@ -1,3 +1,4 @@
+import { provinceCancellationReasonsSql } from './province-cancellation-reasons.mjs';
 import {
   baseChangesSql,
   baseCancellationChangesSql,
@@ -389,6 +390,12 @@ export const workbenchQueries = {
 export function addWorkbenchQueries(config) {
   const definitions = {
     ...workbenchQueries,
+    'province.cancellation.reasons': {
+      scoped: true,
+      keys: ['region', 'province', 'reason'],
+      columns: ['region', 'province', 'reason', 'cancel_qty'],
+      sql: provinceCancellationReasonsSql(),
+    },
     'province.amendment.orders': {
       scoped: true,
       keys: ['region', 'province'],
