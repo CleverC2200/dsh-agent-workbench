@@ -1,3 +1,5 @@
+import { delistedReportIssues } from './delisted-report.js';
+import { canonicalBaseName, latestTransferSnapshot } from './relations.js';
 import {
   sourceDimensions,
   sourceProductMappings,
@@ -12,7 +14,6 @@ import { attachPlanReport } from './plan-diagnostics.js';
 import { inventoryVersionOrder, selectedInventoryMonth } from './inventory-selection.js';
 import { buildCapacityReport } from 'dsh-agent-manage/mps-compute/capacity-report';
 import { productionCalendarDays } from './production-calendar.js';
-import { canonicalBaseName } from './relations.js';
 
 const number = (value) => {
   if (
@@ -299,6 +300,36 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     }
   }
   const productIssues = sourceIssues(draft, 'products');
+  const transferLabels = Map.groupBy(
+    latestTransferSnapshot(relations?.sources?.transfers ?? []).rows,
+    (row) => JSON.stringify([canonicalBaseName(row.target_base), text(row.material_code)]),
+  );
+  const delistedProducts = products.flatMap((product) => {
+    const tags = [
+      ...new Set(
+        (transferLabels.get(rowKey(product)) ?? [])
+          .map((row) => text(row.transfer_tag))
+          .filter(Boolean),
+      ),
+    ];
+    if (tags.length !== 1 || tags[0] !== '下市品') return [];
+    const stock = (shipmentSnapshot?.rows ?? []).find((row) => rowKey(row) === rowKey(product));
+    const average = validShipment ? number(stock?.average) : null;
+    const issue = !validShipment
+      ? `库存日报读取状态${shipmentSnapshot?.status ?? 'unread'}；${shipmentSnapshot?.error ?? '同版本库存快照尚未就绪'}`
+      : !stock
+        ? `${shipmentSnapshot.cutoff ?? '截止日'}库存日报无同基地SKU记录`
+        : average === null || average < 0
+          ? '截止日库存日报avg_30d_send为空或无效'
+          : null;
+    return [
+      {
+        ...product,
+        dailyShipment: issue ? null : average,
+        ...(issue ? { dailyShipmentIssue: issue } : {}),
+      },
+    ];
+  });
   const workflowInput = {
     context,
     inventoryTargets: draft.inventoryTargets ?? [],
@@ -335,6 +366,18 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       history: productIssues,
     },
     openingInventory,
+    delistedProducts,
+    inventoryMovements: (draft.shipment?.transferPlans ?? [])
+      .filter((row) => row.month >= draft.month && row.month <= months.at(-1))
+      .map((row) => ({
+        month: text(row.month),
+        base: text(row.base),
+        code: text(row.code),
+        productionInbound: 0,
+        inTransitInbound: 0,
+        transferIn: number(row.inbound),
+        transferOut: number(row.outbound),
+      })),
     capacities,
     adjustments: {
       categoryDemand: (draft.adjustments?.categoryDemand ?? []).map(
@@ -395,6 +438,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     },
   };
   const result = computeMpsWorkflow(workflowInput);
+  result.delistedIssues = delistedReportIssues(result.rows, result.context);
   result.categoryComputation = categoryComputation;
   result.excludedShipments = excludedShipments;
   result.partial = excludedShipments.length > 0;

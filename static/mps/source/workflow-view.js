@@ -1,3 +1,8 @@
+import {
+  createDelistedReport,
+  delistedDownloadColumns,
+  delistedDownloadFields,
+} from './delisted-report.js';
 import { createStepViewState, useStepViewField } from './step-view-state.js';
 import { createBatchEdit } from './batch-edit.js';
 import { createShipmentScopeNotice } from './category-demand-view.js';
@@ -121,7 +126,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
       placeholder: '未填写',
       onStage: commit,
     });
-  const ProcessedDemand = createProcessedDemand(react, { downloadCsv, downloadAmounts });
+  const ProcessedDemand = createProcessedDemand(react, {
+    downloadCsv,
+    downloadAmounts,
+  });
+  const DelistedReport = createDelistedReport(react, { downloadCsv });
   const PoolExceptionReport = createPoolExceptionReport(react, { downloadCsv });
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
   const InventoryTargetPanel = createInventoryTargetPanel(react, { downloadCsv, NumberInput });
@@ -720,6 +729,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           '原始期初库存',
           '原始预测期末库存',
           '库存归零记录',
+          ...delistedDownloadColumns,
           ...layerColumns,
           ...layerQuantityColumns,
           '分层缺项',
@@ -768,7 +778,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           '未评估原因',
         ]),
       ];
-      const rows = (includeCategory ? scopedRows : filtered).map((row) => {
+      const rows = filtered.map((row) => {
         const shipment = shipmentByProduct.get(JSON.stringify([row.base, row.code]));
         const forecast = forecastByMonth.get(JSON.stringify([row.month, row.base, row.code]));
         const adjustment = row.quantityAdjusted
@@ -821,6 +831,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
           ...inventoryDependencyFields(row),
           系统SKU需求: row.systemDemand,
+          ...delistedDownloadFields(row),
           原始期初库存: row.rawOpeningInventory,
           原始预测期末库存: row.rawProjectedClosing,
           库存归零记录: (row.inventoryIssues ?? [])
@@ -868,7 +879,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
         };
       });
       rows.unshift(
-        ...(includeCategory ? scopedCategories : categoryRows).map((row) => {
+        ...categoryRows.map((row) => {
           const compare = result.categoryComparisons?.find(
             (item) => item.category === row.category,
           );
@@ -1476,7 +1487,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
             h(
               react.Fragment,
               null,
-              h('span', { className: 'dc-card-note' }, '全版本下载，不随下方筛选变化'),
+              h('span', { className: 'dc-card-note' }, '按当前月份、基地、大类和搜索范围下载'),
               h(
                 'button',
                 { onClick: () => exportRows('需求拆分', processFields, true) },
@@ -1511,6 +1522,13 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, downloadAmounts
           filters: { base, category, month, search },
           table,
           view,
+        }),
+      ['process', 'report'].includes(step) &&
+        h(DelistedReport, {
+          draft,
+          result,
+          filters: { base, category, month, search },
+          table,
         }),
       step === 'process'
         ? h(
