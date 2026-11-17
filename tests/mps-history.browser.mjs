@@ -35,37 +35,41 @@ async function download(page, button) {
 }
 
 test('第三步完整月分类、财年补0与当前范围CSV贯通，并保留原始值和二十四月依据', async (t) => {
-  const { page, frame, calls } = await mpsPage(t, config, ({ queryId, parameters }) => {
-    const now = new Date('2026-11-17T12:00:00+08:00');
-    now.setUTCDate(1);
-    now.setUTCMonth(now.getUTCMonth() - 2);
-    const isRecent = parameters.month >= now.toISOString().slice(0, 7) + '-01';
-    const rows =
-      queryId === 'facts.history-annual'
-        ? [
-            ['甲', 'A', null],
-            ['甲', 'OLD', 30],
-            ['甲', 'B', 40],
-            ['甲', 'C', 50],
-            ['乙', 'D', 90],
-          ].map((row) => raw(queryId, ...row))
-        : queryId === 'facts.history'
+  const { page, frame, calls } = await mpsPage(
+    t,
+    config,
+    ({ queryId, parameters }) => {
+      const now = new Date('2026-11-17T12:00:00+08:00');
+      now.setUTCDate(1);
+      now.setUTCMonth(now.getUTCMonth() - 2);
+      const isRecent = parameters.month >= now.toISOString().slice(0, 7) + '-01';
+      const rows =
+        queryId === 'facts.history-annual'
           ? [
-              raw(queryId, '甲', 'B', isRecent ? 0 : 9),
-              raw(queryId, '甲', 'C', null),
-              raw(queryId, '乙', 'D', 1),
-            ]
-          : [];
-    return {
-      rows: queryId.endsWith('.count') ? [{ total: 0 }] : rows,
-      returnedColumns: config.queries[queryId].columns,
-      configVersion: 'history-v1-fixture',
-      totalRowCount: rows.length,
-      offset: parameters.offset ?? 0,
-      hasMorePages: false,
-    };
-  });
-  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
+              ['甲', 'A', null],
+              ['甲', 'OLD', 30],
+              ['甲', 'B', 40],
+              ['甲', 'C', 50],
+              ['乙', 'D', 90],
+            ].map((row) => raw(queryId, ...row))
+          : queryId === 'facts.history'
+            ? [
+                raw(queryId, '甲', 'B', isRecent ? 0 : 9),
+                raw(queryId, '甲', 'C', null),
+                raw(queryId, '乙', 'D', 1),
+              ]
+            : [];
+      return {
+        rows: queryId.endsWith('.count') ? [{ total: 0 }] : rows,
+        returnedColumns: config.queries[queryId].columns,
+        configVersion: 'history-v1-fixture',
+        totalRowCount: rows.length,
+        offset: parameters.offset ?? 0,
+        hasMorePages: false,
+      };
+    },
+    { time: '2026-11-17T12:00:00+08:00' },
+  );
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-12');
   await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
@@ -127,19 +131,23 @@ test('第三步完整月分类、财年补0与当前范围CSV贯通，并保留�
 });
 
 test('完整月读取拒绝时报告失败与原因，财年有效数量继续展示且不判新品', async (t) => {
-  const { page, frame } = await mpsPage(t, config, ({ queryId, parameters }) => {
-    if (queryId === 'facts.history') throw Error('历史月查询拒绝');
-    const rows = queryId === 'facts.history-annual' ? [raw(queryId, '甲', 'A', 25)] : [];
-    return {
-      rows: queryId.endsWith('.count') ? [{ total: 0 }] : rows,
-      returnedColumns: config.queries[queryId].columns,
-      configVersion: 'history-failed-fixture',
-      totalRowCount: rows.length,
-      offset: parameters.offset ?? 0,
-      hasMorePages: false,
-    };
-  });
-  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
+  const { page, frame } = await mpsPage(
+    t,
+    config,
+    ({ queryId, parameters }) => {
+      if (queryId === 'facts.history') throw Error('历史月查询拒绝');
+      const rows = queryId === 'facts.history-annual' ? [raw(queryId, '甲', 'A', 25)] : [];
+      return {
+        rows: queryId.endsWith('.count') ? [{ total: 0 }] : rows,
+        returnedColumns: config.queries[queryId].columns,
+        configVersion: 'history-failed-fixture',
+        totalRowCount: rows.length,
+        offset: parameters.offset ?? 0,
+        hasMorePages: false,
+      };
+    },
+    { time: '2026-11-17T12:00:00+08:00' },
+  );
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-12');
   await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();

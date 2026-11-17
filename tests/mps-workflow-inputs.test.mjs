@@ -8,11 +8,22 @@ import assert from 'node:assert/strict';
 import { buildPlanSources } from '../static/mps/source/plan-inputs.js';
 import { build } from 'esbuild';
 import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
-import {
-  summarizeEvaluation,
-  planContext,
-  workflowContextPreview,
-} from '../static/mps/source/evaluation-view.js';
+
+const compiled = await build({
+  stdin: {
+    contents:
+      "export {buildMpsWorkflow} from './static/mps/source/workflow-inputs.js'; export {summarizeEvaluation,planContext,workflowContextPreview} from './static/mps/source/evaluation-view.js';",
+    resolveDir: process.cwd(),
+  },
+  plugins: [await mpsComputePlugin()],
+  bundle: true,
+  write: false,
+  platform: 'browser',
+  format: 'esm',
+});
+const { buildMpsWorkflow, summarizeEvaluation, planContext, workflowContextPreview } = await import(
+  'data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].text).toString('base64')
+);
 
 test('产销存汇总保留已知小计、真实零值与缺项，并隔离基地和月份', () => {
   const groups = summarizeEvaluation([
@@ -28,18 +39,6 @@ test('产销存汇总保留已知小计、真实零值与缺项，并隔离基�
   assert.equal(groups.find((row) => row.base === '乙').metrics.demand.value, 0);
   assert.equal(groups.find((row) => row.month === '2027-01').metrics.demand.value, null);
 });
-
-const compiled = await build({
-  entryPoints: ['static/mps/source/workflow-inputs.js'],
-  plugins: [await mpsComputePlugin()],
-  bundle: true,
-  write: false,
-  platform: 'browser',
-  format: 'esm',
-});
-const { buildMpsWorkflow } = await import(
-  'data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].text).toString('base64')
-);
 
 function partialDemandFixture() {
   const source = draft();

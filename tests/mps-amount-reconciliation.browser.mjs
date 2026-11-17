@@ -12,6 +12,7 @@ async function setup(t, extra = {}) {
   const sources = {
     'products.detail': ['A', 'B'].map((code) => ({
       material_code: code,
+      target_base: '郑州',
       material_name: `产品${code}`,
       sub_category: '汤圆',
       series: '系列',

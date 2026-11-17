@@ -172,6 +172,6 @@ for (const name of ['category', 'mps'])
           '关联当前页面',
         );
       }
-      assert.equal(await page.evaluate(() => window.persisted), 3);
+      assert.equal(await page.evaluate(() => window.persisted), name === 'mps' ? 2 : 3);
     },
   );

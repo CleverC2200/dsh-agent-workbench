@@ -762,7 +762,14 @@ export function createShipment(
       setBusy(true);
       try {
         if (file.size > 5 * 1024 * 1024) throw Error('文件超过5 MiB上限，未读取任何行。');
-        const records = parseCsv(await file.text(), columns);
+        const text = await file.text();
+        let records;
+        try {
+          records = parseCsv(text, [...columns, '近30天日均发货']);
+        } catch (failure) {
+          if (!failure.message.startsWith('表头必须依模板排列：')) throw failure;
+          records = parseCsv(text, columns);
+        }
         const seen = new Set();
         const parsed = records.map((record, index) => {
           const row = {
@@ -786,8 +793,8 @@ export function createShipment(
           const key = JSON.stringify([row.month, row.base, row.code]);
           if (seen.has(key)) throw Error(`第${index + 2}行同月同基地产品重复，未替换原输入。`);
           seen.add(key);
-          inputFields.forEach((field) => {
-            const value = record[names[fields.indexOf(field)]];
+          [...inputFields, 'average'].forEach((field) => {
+            const value = record[names[fields.indexOf(field)]] ?? '';
             if (value !== '' && (!/^\d+(\.\d+)?$/.test(value) || finite(Number(value)) == null))
               throw Error(
                 `第${index + 2}行${names[fields.indexOf(field)]}须为非负有限数或留空，未替换原输入。`,
@@ -796,7 +803,7 @@ export function createShipment(
           });
           return row;
         });
-        for (const field of inputFields)
+        for (const field of [...inputFields, 'average'])
           if (finite(parsed.reduce((sum, row) => sum + (row[field] ?? 0), 0)) == null)
             throw Error('输入合计超出安全范围，未替换原输入。');
         if (!valid()) return;
@@ -1515,7 +1522,7 @@ export function createShipment(
         h(
           'p',
           { className: 'dc-card-note' },
-          `${month}调拨数量未接入业务来源，按当前评估版本本地维护。空白待补，明确0表示无调拨；汇总和下载包含全部明细，不随单品搜索缩小范围。`,
+          `${month}调拨数量未接入业务来源，按当前评估版本本地维护。空白待补，明确0表示无调拨；汇总包含全部明细，下载按当前单品搜索范围提供明细。`,
         ),
         business?.metadata.omittedRows > 0 &&
           h(
@@ -1694,7 +1701,11 @@ export function createShipment(
             '同步实际发货',
           ),
           !batch.active && h(Upload, { label: '选择发货输入CSV', text: '上传输入', read }),
-          h('button', { onClick: () => downloadCsv('发货输入-模板.csv', columns, []) }, 'CSV模板'),
+          h(
+            'button',
+            { onClick: () => downloadCsv('发货输入-模板.csv', [...columns, '近30天日均发货'], []) },
+            'CSV模板',
+          ),
           h('span', { className: 'sp-spacer' }),
           h('button', { onClick: download, disabled: !cutoff || !rows.length }, '下载明细'),
         ),

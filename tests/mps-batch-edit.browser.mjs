@@ -265,7 +265,7 @@ test('seven pages retain readable compact headers and contained toolbars at desk
       await frame.locator('.ap-page-tab').filter({ hasText: name }).click();
       await expect(frame.getByRole('heading', { name, exact: true }).first()).toBeVisible();
       await expect(frame.getByRole('button', { name: /^下一步[:：]/ })).toHaveCount(0);
-      const toolbar = frame.locator('.wf-toolbar').first();
+      const toolbar = frame.locator('.wf-toolbar:visible').first();
       if (await toolbar.count()) {
         const bounds = await toolbar.boundingBox();
         const container = await frame.locator('.dc-page').boundingBox();

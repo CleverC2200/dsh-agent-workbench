@@ -324,8 +324,11 @@ export function createProcessedDemand(
       );
     const nodeData = (entry) => {
       const full = entry ? (indexed.all.get(nodeKey(entry)) ?? []) : rows;
+      const current = full.filter((row) => row.month === months[0]);
       const identities = [
-        ...new Map(full.map((row) => [productKey(row.base, row.code), row])).values(),
+        ...new Map(
+          [...full, ...current].map((row) => [productKey(row.base, row.code), row]),
+        ).values(),
       ];
       const first = identities;
       const shipment = identities.map((row) =>

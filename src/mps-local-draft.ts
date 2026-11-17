@@ -100,6 +100,7 @@ const shipment = z.strictObject({
       prepped: numeric.nullable(),
       unprepped: numeric.nullable(),
       daily3: numeric.nullable(),
+      average: quantity.nullable().optional(),
       open: numeric.nullable(),
       inbound: numeric.nullable(),
       remaining: numeric.nullable(),

@@ -30,6 +30,7 @@ const products = [
       product_item: 'G',
       product_item_name: '物料组甲',
       material_code: code,
+      target_base: '郑州',
       material_name: '产品' + code,
       sub_category: '汤圆',
       series: '系列甲',
@@ -160,6 +161,10 @@ function fixture({ queryId, parameters }) {
   };
 }
 async function version(frame, month = '2026-10') {
+  await frame
+    .locator('body')
+    .page()
+    .clock.setFixedTime(new Date(`${month}-15T12:00:00+08:00`));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await dialog.getByLabel('评估月份', { exact: true }).fill(month);

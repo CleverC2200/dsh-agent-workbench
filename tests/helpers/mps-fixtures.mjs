@@ -34,6 +34,7 @@ export async function seedLeafQuantities(frame, rows) {
     ];
     await window.openAuthor('mps', 1200, seed);
   }, rows);
+  await expect(frame.getByLabel('评估月份选择', { exact: true })).toBeVisible();
 }
 
 export async function seedNoTransferPlans(frame, rows) {
@@ -55,4 +56,25 @@ export async function seedNoTransferPlans(frame, rows) {
     .getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true })
     .press('Enter');
   await frame.getByRole('button', { name: '保存调整', exact: true }).press('Enter');
+}
+
+export async function seedNoExistingMovements(frame, rows) {
+  const page = frame.locator('body').page();
+  await page.evaluate(async (rows) => {
+    const seed = structuredClone(window.readView());
+    const state = seed.localDrafts;
+    const draft = state.drafts.find((row) => row.id === state.selected);
+    draft.inventoryMovements = rows.map((row) => ({
+      ...row,
+      productionInbound: 0,
+      inTransitInbound: 0,
+      transferIn: 0,
+      transferOut: 0,
+      source: '既有计划核对夹具',
+      reason: '明确确认当前期间无既有库存变动',
+      at: '2026-11-17T00:00:00.000Z',
+    }));
+    await window.openAuthor('mps', 1200, seed);
+  }, rows);
+  await expect(frame.getByLabel('评估月份选择', { exact: true })).toBeVisible();
 }

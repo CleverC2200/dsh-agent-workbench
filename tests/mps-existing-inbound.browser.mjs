@@ -131,6 +131,7 @@ test('既有入库确认保存重开后进入计算与真实下载，取消、�
       .fill('核对已有入库，零值确认无计划');
   }
   await view.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect.poll(async () => (await current(page)).inventoryMovements?.length).toBe(2);
   const saved = (await current(page)).inventoryMovements;
   assert.equal(saved.length, 2);
   await page.evaluate(async () =>
@@ -138,7 +139,7 @@ test('既有入库确认保存重开后进入计算与真实下载，取消、�
   );
   await step(frame, '约束与配置');
   await expect(frame.getByLabel('郑州 A 2026-12 既有生产入库', { exact: true })).toHaveText('20');
-  assert.deepEqual((await current(page)).inventoryMovements, saved);
+  await expect.poll(async () => (await current(page)).inventoryMovements).toEqual(saved);
   await step(frame, '本月预估发货');
   await expect(frame.getByText('库存.csv', { exact: false }).first()).toBeVisible();
   await step(frame, '需求加工与收敛');
@@ -175,12 +176,12 @@ test('既有入库确认保存重开后进入计算与真实下载，取消、�
   await view.getByRole('button', { name: '调整', exact: true }).click();
   await frame.getByRole('button', { name: '郑州 A 2027-02 恢复既有计划待补', exact: true }).click();
   await view.getByRole('button', { name: '保存调整', exact: true }).click();
-  assert.deepEqual((await current(page)).inventoryMovements, saved);
+  await expect.poll(async () => (await current(page)).inventoryMovements).toEqual(saved);
   await step(frame, '需求确认');
   await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2027-01');
   await expect.poll(async () => (await current(page)).month).toBe('2027-01');
   assert.equal((await current(page)).inventoryMovements, undefined);
   await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-12');
   await expect.poll(async () => (await current(page)).month).toBe('2026-12');
-  assert.deepEqual((await current(page)).inventoryMovements, saved);
+  await expect.poll(async () => (await current(page)).inventoryMovements).toEqual(saved);
 });

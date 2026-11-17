@@ -16,6 +16,10 @@ async function confirmation(t) {
 }
 
 async function createVersion(frame, month) {
+  await frame
+    .locator('body')
+    .page()
+    .clock.setFixedTime(new Date(`${month}-15T12:00:00+08:00`));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await dialog.getByLabel('评估月份', { exact: true }).fill(month);
@@ -235,7 +239,7 @@ test('MPS annual grid retains July to June and unresolved business calculations 
   );
   const results = frame.getByRole('region', { name: '大类预估需求数量' });
   await expect(results.getByRole('row')).toHaveCount(3);
-  await expect(results.getByRole('button', { name: '调整', exact: true })).toHaveCount(1);
+  await expect(results.getByRole('button', { name: '调整', exact: true })).toHaveCount(0);
   await expect(results.getByRole('button', { name: /^调整 / })).toHaveCount(0);
   await expect(
     results

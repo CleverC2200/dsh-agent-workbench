@@ -380,6 +380,51 @@ test('MPS local input drafts recover only in their subject and Session with no c
   );
 });
 
+test('MPS local shipment averages retain zero, missing and positive input through the codec and reject invalid values', () => {
+  const owner = new WorkbenchController({ panel() {}, document() {} });
+  const page = 'plan-category-production';
+  owner.registerFrame({ id: page, kind: 'html', src: '/mps' });
+  const row = {
+    month: '2026-11',
+    base: '郑州',
+    code: 'A',
+    name: '产品甲',
+    category: '汤圆',
+    series: '系列',
+    group: '组',
+    shipped: 0,
+    prepped: 0,
+    unprepped: 0,
+    daily3: 0,
+    open: 0,
+    inbound: 0,
+    remaining: 0,
+  };
+  const save = (input) => {
+    const draft = {
+      id: 'average-input',
+      name: '日均输入',
+      month: '2026-12',
+      pull: 'monthly',
+      files: {},
+      shipment: { rows: [input] },
+    };
+    const localDrafts = encodeLocalDrafts([draft], draft.id);
+    owner.saveHtmlViewState(page, 'tenant/user/session', { version: 1, localDrafts });
+    return decodeLocalDrafts(
+      owner.readHtmlViewState(page, 'tenant/user/session').localDrafts,
+      (id, month) => ({ id, month, files: {} }),
+      () => {
+        throw Error('Unexpected fallback');
+      },
+    ).drafts[0].shipment.rows[0];
+  };
+  for (const average of [0, null, 12.3456])
+    assert.equal(save({ ...row, average }).average, average);
+  assert.equal(save(row).average, undefined);
+  for (const average of [-1, Infinity, NaN, '0']) assert.throws(() => save({ ...row, average }));
+});
+
 test('a rejected local view save reaches the page while retaining unsaved user input', async () => {
   const listeners = new Map();
   const parent = { postMessage() {} };

@@ -53,6 +53,7 @@ export async function authorPage(t, options = {}) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1920, height: 720 } });
+  if (options.time) await page.clock.setFixedTime(new Date(options.time));
   const css = (
     await Promise.all(
       ['theme/tokens.css', 'src/company/shell.css', 'src/company/layout.css'].map((file) =>

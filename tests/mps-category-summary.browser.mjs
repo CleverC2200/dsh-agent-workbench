@@ -94,12 +94,13 @@ test('category monthly totals retain missing inputs and real zero, and filters m
     name: '发货.csv',
     mimeType: 'text/csv',
     buffer: Buffer.from(
-      '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-11,郑州,A,甲产品,甲类,系列,组,100,0,0,0,0,0,0\n2026-11,郑州,B,乙产品,乙类,系列,组,0,0,0,0,0,0,0',
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库,近30天日均发货\n2026-11,郑州,A,甲产品,甲类,系列,组,100,0,0,0,0,0,0,0\n2026-11,郑州,B,乙产品,乙类,系列,组,0,0,0,0,0,0,0,0',
     ),
   });
   await beginAdjustment(frame);
   await frame.getByLabel('全国合计 整月预估发货', { exact: true }).fill('100');
   await saveAdjustment(frame);
+  await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
   await expect(
     frame.getByRole('button', { name: '全国合计 整月预估发货 计算过程', exact: true }),
   ).toHaveText('100');

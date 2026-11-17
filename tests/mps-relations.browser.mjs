@@ -139,6 +139,10 @@ async function relations(t, execute = fixture) {
   };
 }
 async function version(frame, month) {
+  await frame
+    .locator('body')
+    .page()
+    .clock.setFixedTime(new Date(`${month}-15T12:00:00+08:00`));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await dialog.getByLabel('评估月份', { exact: true }).fill(month);

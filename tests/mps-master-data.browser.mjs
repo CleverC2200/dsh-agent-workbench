@@ -274,6 +274,7 @@ test('annual plan starts collapsed and keeps sync beside its detail title and th
 
 test('annual explanations show rounded results without numeric substitution and preserve source decimals', async (t) => {
   const { page, frame, contexts } = await livePage(t, fixture);
+  await frame.locator('body').page().clock.setFixedTime(new Date('2026-10-15T12:00:00+08:00'));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const version = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await version.getByLabel('评估月份', { exact: true }).fill('2026-10');

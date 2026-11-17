@@ -182,7 +182,6 @@ test('标题旁月份入口只列实际本月及后两个月，选择后不扩�
   ]) {
     await month.focus();
     await page.clock.setSystemTime(new Date(`${date}T12:00:00+08:00`));
-    await month.press('ArrowDown');
     await month.press('Escape');
     await expect(month.locator('option:enabled')).toHaveText(expected);
     await month.focus();

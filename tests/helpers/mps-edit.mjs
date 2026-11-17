@@ -40,6 +40,15 @@ export async function saveAdjustment(view) {
   const save = view.getByRole('button', { name: '保存调整', exact: true });
   if (await save.count()) await save.click();
 }
+export async function fillTurnoverDays(view, base, value) {
+  const { expect } = await import('@playwright/test');
+  await beginAdjustment(view);
+  const fields = view.getByRole('textbox', { name: new RegExp(`^${base} .+ 补充目标周转天数$`) });
+  await expect(fields).not.toHaveCount(0);
+  for (const field of await fields.all()) await field.fill(value);
+  await saveAdjustment(view);
+  await beginAdjustment(view);
+}
 export async function expectNumber(locator, expected) {
   const { expect } = await import('@playwright/test');
   await expect

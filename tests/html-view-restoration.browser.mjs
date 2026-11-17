@@ -542,20 +542,15 @@ test('regional mounted author restores and republishes after its existing channe
 });
 
 async function addMpsProduct(frame) {
-  const expand = frame.getByRole('button', { name: '展开产品明细', exact: true });
-  if (await expand.isVisible()) await expand.click();
-  await frame.getByRole('button', { name: '新增产品', exact: true }).click();
-  const dialog = frame.getByRole('dialog', { name: '新增产品', exact: true });
-  for (const [name, value] of Object.entries({
-    产品编码: 'A',
-    产品名称: '产品甲',
-    大类: '汤圆',
-    系列: '系列',
-    物料组: '组',
-  }))
-    await dialog.getByLabel(name, { exact: true }).fill(value);
-  await dialog.getByRole('button', { name: '新增', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '上下文产品范围.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
+    ),
+  });
 }
+
 test('received MPS publishes committed source edits and removes the previous step context', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
@@ -852,7 +847,7 @@ test('received MPS commits restored navigation and isolates restored local input
     assert.deepEqual(Object.keys(row.context.parts).sort(), ['navigation', 'process']);
     assert.deepEqual(
       row.context.parts.process.rows.map((item) => item.month),
-      ['2026-10', '2026-11', '2026-12'],
+      ['2026-10', '2026-11', '2026-12', '2027-01'],
     );
     assert.ok(
       row.context.parts.process.rows.every(
@@ -1338,7 +1333,12 @@ test('MPS S2 publishes actual local inputs and carry output within the Host cont
       '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-09,郑州,A,产品,汤圆,系列,组,220,10,10,10,100,200,80',
     ),
   });
+  await expect.poll(async () => (await readHost())?.parts?.ship?.rowCount).toBe(1);
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
+  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
   await expect.poll(async () => (await readHost())?.parts?.ship?.totals?.fin).toBe(300);
+  await expect.poll(async () => (await readHost())?.parts?.ship?.totals?.end).toBe(80);
   const data = (await readHost()).parts.ship;
   assert.equal(data.totals.end, 80);
   assert.equal(data.rows[0][data.rowFields.indexOf('shipped')], 220);

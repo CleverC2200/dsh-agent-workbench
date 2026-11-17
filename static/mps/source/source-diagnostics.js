@@ -46,7 +46,7 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
     };
     const diagnostics = ['report', 'history'].flatMap((source) =>
       result.months.slice(0, 3).map((month) => {
-        const fiscal = previousFiscalYear(month);
+        const fiscal = previousFiscalYear(draft.month);
         const period = source === 'report' ? month : `${month}（${fiscal.start}至${fiscal.end}）`;
         const sales = source === 'report' && draft.reportSource === 'business';
         const local = draft[source + 'Source'] === 'local-file';
@@ -91,7 +91,7 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
             : '数量';
         const quantity = (row) => row[source === 'report' ? '源' + column : column] ?? row[column];
         const matched = (row) => hasKey(row) && pool.has(key(row['基地'], row['产品编码']));
-        const ready = read?.status === 'ready';
+        const ready = ['ready', 'partial'].includes(read?.status);
         const total =
           sales || (local && source === 'report') ? records.length : read?.metadata?.total;
         const counted = ready && Number.isSafeInteger(total) && total === records.length;
