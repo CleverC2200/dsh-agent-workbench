@@ -606,3 +606,62 @@ test('branch summary and rows select the same default cycle and retain custom cy
     assert.equal(dailySummaryQuery(query, snapshot, { ...values, as_of: '2026-11-01' }), null);
   }
 });
+
+test('explicit warehouse scopes use registered queries without changing branch summary routing', async () => {
+  const cfg = config();
+  cfg.scopedQueryRoutes = [
+    { parameter: 'warehouse_code', values: ['Y204', 'N436', 'A221'], prefix: 'base-warehouse.' },
+  ];
+  for (const id of ['fact', 'snapshot.fact']) {
+    cfg.queries[id].parameterSpec.gea_p2 = {
+      name: 'warehouse_code',
+      type: 'string',
+      nullable: true,
+    };
+    cfg.queries[id].request.parameters.gea_p2 = null;
+    cfg.queries[id].request.sql += ' WHERE :gea_p2 IS NULL OR :gea_p2 IS NOT NULL';
+  }
+  cfg.queries['base-warehouse.fact'] = structuredClone(cfg.queries.fact);
+  delete cfg.queries['base-warehouse.fact'].summaryRoute;
+  const calls = [];
+  const execute = async (_, options) => {
+    calls.push(options.queryId);
+    return {
+      rows:
+        options.queryId === 'summary.snapshot' ? [row] : [{ value: options.values.warehouse_code }],
+    };
+  };
+  for (const warehouse of cfg.scopedQueryRoutes[0].values) {
+    const result = await createAgentQueries(cfg, execute).read('fact', {
+      warehouse_code: warehouse,
+    });
+    assert.equal(result.rows[0].value, warehouse);
+  }
+  assert.deepEqual(calls, ['base-warehouse.fact', 'base-warehouse.fact', 'base-warehouse.fact']);
+  await createAgentQueries(cfg, execute).read('fact', { warehouse_code: 'A110' });
+  assert.deepEqual(calls.slice(-2), ['summary.snapshot', 'snapshot.fact']);
+});
+
+test('scoped warehouse authorization failure is returned without retrying any alternative query', async () => {
+  const cfg = config();
+  cfg.scopedQueryRoutes = [
+    { parameter: 'warehouse_code', values: ['Y204'], prefix: 'base-warehouse.' },
+  ];
+  cfg.queries['base-warehouse.fact'] = {
+    parameterSpec: { gea_p1: { name: 'warehouse_code', type: 'string', enum: ['Y204'] } },
+    request: { sql: 'SELECT :gea_p1 AS value', parameters: { gea_p1: 'Y204' } },
+    resultColumns: ['value'],
+  };
+  const calls = [];
+  const failure = Object.assign(Error('DATA_PERMISSION_DENIED'), {
+    code: 'DATA_PERMISSION_DENIED',
+  });
+  await assert.rejects(
+    createAgentQueries(cfg, async (_, options) => {
+      calls.push(options.queryId);
+      throw failure;
+    }).read('fact', { warehouse_code: 'Y204' }),
+    (error) => error === failure,
+  );
+  assert.deepEqual(calls, ['base-warehouse.fact']);
+});

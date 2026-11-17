@@ -120,5 +120,5 @@ def branch_read_scope(sql, excluded=EXCLUDED, branch_sources=False):
 
 
 def fc_warehouse_scope(sql):
-    scoped = warehouse_scope(sql).replace("('N436', 'Y204')", "('N436', 'Y204', 'A540')")
-    return branch_read_scope(scoped, excluded=(*EXCLUDED, 'A540'), branch_sources=True)
+    scoped = warehouse_scope(sql).replace("('N436', 'Y204')", "('N436', 'Y204', 'A221', 'A540')").replace("('N436', 'Y204', 'A540')", "('N436', 'Y204', 'A221', 'A540')")
+    return branch_read_scope(scoped, excluded=(*EXCLUDED, 'A221', 'A540'), branch_sources=True)

@@ -232,6 +232,18 @@ export function createAgentQueries(
     return selectedRead.snapshot;
   };
   const selectRead = async (id: string, values: Record<string, unknown>) => {
+    const scoped = config.scopedQueryRoutes?.find((route) => {
+      const value = values[route.parameter];
+      return (
+        typeof value === 'string' &&
+        route.values.includes(value) &&
+        config.queries[route.prefix + id]
+      );
+    });
+    if (scoped) {
+      const queryId = scoped.prefix + id;
+      return { id: queryId, values: { ...values, ...config.queries[queryId].inputOverrides } };
+    }
     if (!config.dailySummary || !config.queries[id]?.summaryRoute) return { id, values };
     const snapshot = await readSnapshot();
     const selected = dailySummaryQuery(config.queries[id], snapshot, values);
