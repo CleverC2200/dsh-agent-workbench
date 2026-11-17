@@ -2,19 +2,19 @@
 
 修改某个页面时读取下列入口，再核本票 checkout 的声明、实际源码和候选构建输入。表中只导航来源；当前运行模式不从旧验收或页面名称推断。业务 Prompt、Skill 和能力由相邻 Manage 源维护，`lib` 中是构建装配副本。真实身份、Consumer、权限和受控执行由 GEA Host 决定。
 
-| 页面         | 来源与特有约束                                                                                                           |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| 原销售审批   | [页面与业务合同](../src/workbench/original/README.md)，[迁入来源](../src/workbench/original/SOURCE.md)                   |
-| 分仓库存     | [固定迁入来源与两种版本基线](../business/inventory-fc/SOURCE.md)                                                         |
-| 基地库存     | [迁入来源与原库存计算](../business/inventory-aqkc/SOURCE.md)                                                             |
-| 经销商库存   | [当前范围及未完成验收](../business/inventory-dealer/README.md)，[来源和完整分页](../business/inventory-dealer/SOURCE.md) |
-| 全链分布     | [公司只读来源、历史范围与未完成验收](../business/inventory-qll/SOURCE.md)                                                |
-| 个人库存     | [独立 Consumer、隐藏入口和反馈边界](../business/inventory-personal/SOURCE.md)                                            |
-| APS 产销协同 | [真实生成链、显式 mock 构建与遗留验收](../business/inventory-apsplan/SOURCE.md)                                          |
-| 客户库存     | [固定 HTML 来源和受控读取范围](../prototypes/inventory-customer/SOURCE.md)                                               |
+| 页面         | 来源与特有约束                                                                                                                                |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 原销售审批   | [页面与业务合同](../src/workbench/original/README.md)，[迁入来源](../src/workbench/original/SOURCE.md)                                        |
+| 分仓库存     | [固定迁入来源与两种版本基线](../business/inventory-fc/SOURCE.md)                                                                              |
+| 基地库存     | [迁入来源与原库存计算](../business/inventory-aqkc/SOURCE.md)                                                                                  |
+| 经销商库存   | [当前范围及未完成验收](../business/inventory-dealer/README.md)，[来源和完整分页](../business/inventory-dealer/SOURCE.md)                      |
+| 全链分布     | [公司只读来源、历史范围与未完成验收](../business/inventory-qll/SOURCE.md)                                                                     |
+| 个人库存     | [独立 Consumer、隐藏入口和反馈边界](../business/inventory-personal/SOURCE.md)                                                                 |
+| APS 产销协同 | [真实生成链、显式 mock 构建与遗留验收](../business/inventory-apsplan/SOURCE.md)                                                               |
+| 客户库存     | [固定 HTML 来源和受控读取范围](../prototypes/inventory-customer/SOURCE.md)                                                                    |
 | 订单工作台   | [页面与效果声明](../prototypes/inventory-orderworkbench/page.json)、[指标合同](order-workbench-metrics.md)与[分组能力](order-kpi-grouping.md) |
-| 订单履约     | [当前读取入口与来源](../prototypes/inventory-orderfulfillment/README.md)、[数据接入与未完成验收](order-fulfillment-data.md) |
-| DMS          | [来源、内存模拟和真实写入边界](../prototypes/dms/README.md)                                                              |
+| 订单履约     | [当前读取入口与来源](../prototypes/inventory-orderfulfillment/README.md)、[数据接入与未完成验收](order-fulfillment-data.md)                   |
+| DMS          | [来源、内存模拟和真实写入边界](../prototypes/dms/README.md)                                                                                   |
 
 ## 区域、品类与 MPS 页面
 
