@@ -8,7 +8,7 @@ const out = await build({
   format: 'esm',
   write: false,
 });
-const { createGeaWorkspace, period } = await import(
+const { createGeaWorkspace, period, snapshotMatchesDate } = await import(
   'data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64')
 );
 const input = { date: '2026-08-31', granularity: 'month', version: '滚动', orderType: 'M' };
@@ -104,4 +104,17 @@ test('month facts stay missing for historical partial month; leap comparisons us
     ),
   );
   assert.deepEqual(period('2026-09-22', 'week'), ['2026-09-21', '2026-09-22']);
+});
+
+test('inventory snapshots retain the selected day and reject a known earlier snapshot', () => {
+  assert.equal(snapshotMatchesDate([{ source_date: '2026-11-16' }], '2026-11-16'), true);
+  assert.equal(snapshotMatchesDate([{ source_date: '20261116' }], '2026-11-16'), true);
+  assert.equal(snapshotMatchesDate([{ source_date: '2026-11-15' }], '2026-11-16'), false);
+  assert.equal(
+    snapshotMatchesDate(
+      [{ source_date: '2026-11-16' }, { source_date: '2026-11-15' }],
+      '2026-11-16',
+    ),
+    false,
+  );
 });

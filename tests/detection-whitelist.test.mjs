@@ -48,3 +48,33 @@ test('authorization and unknown save failures do not fall back to local state', 
   };
   await assert.rejects(createWhitelistStore(ctx).load(), { code: 'DENIED', message: '禁止访问' });
 });
+
+test('owner configuration shares the authenticated whitelist and binds saves to the directory just loaded', async () => {
+  const calls = [];
+  const ctx = {
+    connection: {
+      createSharedFetchHandler: () => ({
+        fetch: async (req) => {
+          const body = await req.json();
+          calls.push(body);
+          return Response.json({
+            ok: true,
+            value: {
+              directoryId: 'bound-owner-id',
+              revision: body.operation === 'directory-load' ? 0 : 1,
+              owners: [],
+            },
+          });
+        },
+      }),
+    },
+  };
+  const store = createWhitelistStore(ctx);
+  assert.throws(() => store.ownerDirectory.save(0, []), /先读取/);
+  await store.ownerDirectory.load();
+  await store.ownerDirectory.save(0, []);
+  assert.deepEqual(calls, [
+    { operation: 'directory-load' },
+    { operation: 'directory-save', directoryId: 'bound-owner-id', revision: 0, owners: [] },
+  ]);
+});

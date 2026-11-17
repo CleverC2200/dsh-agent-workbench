@@ -35,6 +35,17 @@ export const roundPlanQuantity = (value: string): string => {
   return `${match[1] === '-' && rounded !== 0n ? '-' : ''}${rounded}`;
 };
 
+export const salesPlanConfirmedQuantity = (
+  sku: GeaSalesPlanSku,
+  status: number,
+  typeCode: string,
+  role?: ApprovalStageId,
+  pendingValue?: string,
+): string =>
+  roundPlanQuantity(
+    pendingValue ?? salesPlanEditableQuantity(sku, status, typeCode, role) ?? String(sku.qty),
+  );
+
 export const salesPlanDecimalValue = (value: unknown): string | null => {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();

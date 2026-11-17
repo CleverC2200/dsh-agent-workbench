@@ -1,1 +1,1 @@
-export { loadWorkbenchReport as loadWorkbenchFacts, loadWorkbenchSkuPage, loadWorkbenchProvinceOrderCounts } from './report-source.js';
+export { loadWorkbenchReport as loadWorkbenchFacts, loadWorkbenchSkuPage, loadWorkbenchProvinceOrderCounts, loadWorkbenchProvinceCancellationReasons } from './report-source.js';

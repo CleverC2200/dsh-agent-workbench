@@ -6,7 +6,7 @@ import { createPageViewState } from '../../business/shared/view-state.js';
 import { ask, draft, ready, call, currentSessionId } from '../../business/shared/channel.js';
 import { metricDetailsRequest } from './metric-details.mjs';
 import { metricDefinition } from './metric-definitions.mjs';
-import { loadWorkbenchFacts, loadWorkbenchSkuPage, loadWorkbenchProvinceOrderCounts } from './live-source.js';
+import { loadWorkbenchFacts, loadWorkbenchSkuPage, loadWorkbenchProvinceOrderCounts, loadWorkbenchProvinceCancellationReasons } from './live-source.js';
 import { provinceAnalysis, provinceAnalysisContext } from './province-analysis.mjs';
 import { createFrameProgress } from '../../business/shared/frame-progress.js';
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
@@ -2406,6 +2406,8 @@ async function readCurrentPeriod() {
     if (controller.signal.aborted) return;
     entry.provinceOrders ??= facts.provinceOrders;
     if (entry.provinceOrders && facts.provinceOrders !== entry.provinceOrders) facts = { ...facts, provinceOrders: entry.provinceOrders };
+    entry.provinceReasons ??= facts.provinceReasons;
+    if (entry.provinceReasons && facts.provinceReasons !== entry.provinceReasons) facts = { ...facts, provinceReasons: entry.provinceReasons };
     entry.facts=facts;
     if (entry.loaded) scopedFactsCache.set(entry.persistence.scope(), facts);
     if (liveReadKey!==key) return;
@@ -2548,7 +2550,7 @@ const resumeWorkbenchConnection = () => {
   liveConnected=true;liveReadKey='';renderSelectedPeriod();
 };
 const suspendWorkbenchConnection = (clear = false) => {
-  for (const entry of periodReports.values()) entry.provinceOrderController?.abort();
+  for (const entry of periodReports.values()) { entry.provinceOrderController?.abort(); entry.provinceReasonController?.abort(); }
   if (clear) scopedFactsCache.clear();
   if (clear) periodCacheLifecycle.clear(); else periodCacheLifecycle.suspend();
   activePeriodReport=null;liveController=undefined;
@@ -2688,7 +2690,7 @@ function renderWorkbenchRegionCustomerDetail(regionIndex) {
   const rows=customers.map(customer=>`<tr><td>${escapeHtml(customer.name)}（${escapeHtml(customer.code)}）</td><td>${escapeHtml(customer.manager)}</td><td>${count(customer.changedQuantity)}</td><td>${count(customer.orderedQuantity)}</td></tr>`).join('');
   return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>锁定期调整商品数量</th><th>有效商品数量</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户订单明细</td></tr>'}</tbody></table></div>`;
 }
-function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
+function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex, scrollRows = 0) {
   const groups = table.groups.map(group => baseColumnIndex === 0 && group.label.startsWith('可发货天数')
     ? { ...group, label: `可发货天数 ${shippableDaysTarget}` } : group);
   const firstHeader = groups
@@ -2731,7 +2733,7 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
     ? ''
     : `<tr><td class="wb-performance-empty" colspan="${headings.length}">${escapeHtml(table.emptyText || (table.loading ? '加载中…' : '当前基地筛选下暂无数据'))}</td></tr>`;
   const tableClass = `wb-performance-table ${table.groups.length > 5 ? 'wide' : ''}`;
-  return `<div class="wb-performance-table-wrap" role="region" aria-label="${escapeHtml(table.title)}表格，可横向滚动" tabindex="0"><table class="${tableClass}"><thead><tr>${firstHeader}</tr>${secondHeader ? `<tr>${secondHeader}</tr>` : ''}</thead><tbody>${body || empty}</tbody></table></div>`;
+  return `<div class="wb-performance-table-wrap${scrollRows ? ' wb-province-scroll' : ''}"${scrollRows ? ` data-scroll-rows="${scrollRows}"` : ''} role="region" aria-label="${escapeHtml(table.title)}表格，可${scrollRows ? '纵向及' : ''}横向滚动" tabindex="0"><table class="${tableClass}"><thead><tr>${firstHeader}</tr>${secondHeader ? `<tr>${secondHeader}</tr>` : ''}</thead><tbody>${body || empty}</tbody></table></div>`;
 }
 function renderWorkbenchUnmetCards(sectionTitle, items, emptyText) {
   const cards = items
@@ -2880,7 +2882,12 @@ function renderWorkbenchDimensions() {
   headingMeta.textContent = '当前授权范围 · '+selectedPeriodLabel();
   const dimension = workbenchDimensions[dimensionTab];
   if (dimensionTab === 'province-performance') {
-    panel.innerHTML = dimension.tables.map((table) => `<section class="wb-performance-period"><h3>${escapeHtml(table.title)}</h3>${renderWorkbenchPerformanceTable(table, '', null)}</section>`).join('') + renderWorkbenchUnmetCards('省区未达成项：原因分析与改善措施', getWorkbenchUnmetItems('province'), '当前暂无省区未达成事项。') + `<p class="wb-performance-note">${escapeHtml(dimension.periodNote)}。本期为月累计，本周按所选周内已结束日期；环比、同比沿用同长度比较期。件数为商品数量，改单笔数为客户＋原订单去重数。综合排名按本期作废率＋改单率降序排列，两项分母不同时分别注明。${dimension.omittedRanking ? `另有${dimension.omittedRanking}个省区因指标不可计算未参与排名。` : ''}*表示样本或暂算，详见悬浮说明。${dimension.ordersStatus === 'error' ? '<button type="button" data-wb-province-retry>重新读取改单笔数</button>' : ''}</p>`;
+    panel.innerHTML = dimension.tables.map((table) => `<section class="wb-performance-period"><h3>${escapeHtml(table.title)}</h3>${renderWorkbenchPerformanceTable(table)}</section>`).join('') + renderWorkbenchUnmetCards('省区未达成项：原因分析与改善措施', getWorkbenchUnmetItems('province'), '当前暂无省区未达成事项。') + `<p class="wb-performance-note">${escapeHtml(dimension.periodNote)}。本期为月累计，本周按所选周内已结束日期；环比、同比沿用同长度比较期。件数为商品数量，改单笔数为客户＋原订单去重数。综合排名按本期作废率＋改单率降序排列，两项分母不同时分别注明。${dimension.unrankedCount ? `另有${dimension.unrankedCount}个省区综合值不可计算，保留在末尾显示。` : ''}原因占比以该省区本期已确认作废件数为分母；空白、冲突或未配置分类归入未明确。*表示样本或暂算，详见悬浮说明。${dimension.reasonsStatus === 'error' ? '<button type="button" data-wb-province-reasons-retry>重新读取作废原因</button>' : ''}${dimension.ordersStatus === 'error' ? '<button type="button" data-wb-province-retry>重新读取改单笔数</button>' : ''}</p>`;
+    for (const wrap of panel.querySelectorAll('[data-scroll-rows]')) {
+      const table = wrap.querySelector('table');
+      const rows = [...table.tBodies[0].rows].slice(0, Number(wrap.dataset.scrollRows));
+      if (rows.length === Number(wrap.dataset.scrollRows)) wrap.style.maxHeight = (table.tHead.getBoundingClientRect().height + rows.reduce((height, row) => height + row.getBoundingClientRect().height, 0) + wrap.offsetHeight - wrap.clientHeight) + 'px';
+    }
     return;
   }
   const visibleRows = dimension.rows;
@@ -2943,7 +2950,29 @@ function renderWorkbenchDimensions() {
   );
 }
 const wbDimensionTabButtons = [...workbenchView.querySelectorAll('[data-wb-dimension-tab]')];
+async function ensureProvinceReasons(entry = activePeriodReport) {
+  const month = entry?.facts?.periods?.month;
+  if (!month || entry !== activePeriodReport || entry.controller.signal.aborted || dimensionTab !== 'province-performance') return;
+  const key = JSON.stringify([month.start, month.end, entry.facts.base || '']);
+  if (entry.provinceReasons?.key === key && entry.provinceReasons.status !== 'idle') return;
+  const controller = entry.provinceReasonController = new AbortController();
+  const signal = AbortSignal.any([entry.controller.signal, controller.signal]);
+  const pending = entry.provinceReasons = { key, status: 'loading', rows: [] };
+  entry.apply(entry.facts, undefined, { dimensionOnly: true });
+  try {
+    const result = await loadWorkbenchProvinceCancellationReasons(month.start, month.end, signal, entry.facts.base || '');
+    if (entry.provinceReasons !== pending) return;
+    if (signal.aborted) { entry.provinceReasons = { key, status: 'idle', rows: [] }; return; }
+    entry.provinceReasons = { ...result, key };
+  } catch (error) {
+    if (entry.provinceReasons !== pending) return;
+    if (signal.aborted) { entry.provinceReasons = { key, status: 'idle', rows: [] }; return; }
+    entry.provinceReasons = { key, status: 'error', rows: [], code: error.code || error.message || 'QUERY_FAILED' };
+  }
+  if (entry === activePeriodReport) entry.apply(entry.facts, undefined, { dimensionOnly: true });
+}
 async function ensureProvinceOrderCounts(entry = activePeriodReport) {
+  void ensureProvinceReasons(entry);
   const month = entry?.facts?.periods?.month;
   if (!month || entry !== activePeriodReport || entry.controller.signal.aborted || dimensionTab !== 'province-performance') return;
   const key = JSON.stringify([month.start, month.end, entry.facts.base || '']);
@@ -2965,6 +2994,7 @@ async function ensureProvinceOrderCounts(entry = activePeriodReport) {
   if (entry === activePeriodReport) entry.apply(entry.facts, undefined, { dimensionOnly: true });
 }
 workbenchView.addEventListener('click', (event) => {
+  if (event.target.closest('[data-wb-province-reasons-retry]') && activePeriodReport) { activePeriodReport.provinceReasons = undefined; void ensureProvinceReasons(); return; }
   if (!event.target.closest('[data-wb-province-retry]') || !activePeriodReport) return;
   activePeriodReport.provinceOrders = undefined;
   void ensureProvinceOrderCounts();

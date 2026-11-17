@@ -70,6 +70,7 @@ export async function configuredWire(id) {
             belong_base: '华东',
             stat_date: date,
             stock_date: date,
+            source_date: date,
             health_date: date,
             upload_date: date,
             earliest_upload: date,

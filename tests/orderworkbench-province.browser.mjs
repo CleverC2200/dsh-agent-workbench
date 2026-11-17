@@ -37,6 +37,7 @@ test('province tab renders all three document tables and lazily caches distinct 
     ({ config }) => {
       const channel = new MessageChannel();
       window.provinceReads = 0;
+      window.reasonReads = 0;
       window.savedWrites = 0;
       window.countFailure = true;
       window.fixtureEdits = {
@@ -93,7 +94,17 @@ test('province tab renders all three document tables and lazily caches distinct 
               ),
             ];
           else if (id.endsWith('.count')) rows = [{ total: 0 }];
-          else if (id === 'workbench.province.amendment.orders') {
+          else if (id === 'workbench.province.cancellation.reasons') {
+            window.reasonReads++;
+            rows = ['河南', '湖南', ...Array.from({ length: 18 }, (_, i) => '测试省区' + i)].map(
+              (province) => ({
+                province,
+                region: '华中',
+                reason: '系统·车型·交期',
+                cancel_qty: province === '河南' ? 10 : 5,
+              }),
+            );
+          } else if (id === 'workbench.province.amendment.orders') {
             window.provinceReads++;
             if (window.countFailure) {
               channel.port1.postMessage({
@@ -120,7 +131,11 @@ test('province tab renders all three document tables and lazily caches distinct 
             const records = [];
             for (let i = 0; i < 6; i++)
               if (parameters['period_' + i + '_enabled']) {
-                for (const province of ['河南', '湖南']) {
+                for (const province of [
+                  '河南',
+                  '湖南',
+                  ...Array.from({ length: 18 }, (_, i) => '测试省区' + i),
+                ]) {
                   const numerator = kind === '1' ? (province === '河南' ? 10 : 5) : 3;
                   records.push({
                     ...Object.fromEntries(columns.map((key) => [key, null])),
@@ -181,16 +196,35 @@ test('province tab renders all three document tables and lazily caches distinct 
     )
     .toBe(1);
   assert.equal(await page.evaluate(() => window.provinceReads), 0);
-  const tab = page.getByRole('tab', { name: '省区维度分析', exact: true });
+  assert.equal(await page.evaluate(() => window.reasonReads), 0);
+  const tab = page.getByRole('tab', { name: '省区维度达成分析', exact: true });
   await tab.click();
   const panel = page.locator('#wbDimensionPanel');
   await expect(panel.locator('table')).toHaveCount(3);
   await expect(panel.getByRole('heading', { name: '省区作废率' })).toBeVisible();
   await expect(panel.getByRole('heading', { name: '省区改单率' })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: '省区改单和作废综合排名 TOP10' })).toBeVisible();
-  await expect(panel.locator('table').nth(0).locator('tbody tr')).toHaveCount(2);
-  await expect(panel.locator('table').nth(0).locator('tbody tr').first()).toContainText('10.00%');
-  await expect(panel.locator('table').nth(2).locator('tbody tr').first()).toContainText('13.00%');
+  await expect(panel.getByRole('heading', { name: '省区改单和作废综合排名' })).toBeVisible();
+  await expect(panel.locator('table').nth(0).locator('tbody tr')).toHaveCount(20);
+  await expect(
+    panel.locator('table').nth(0).locator('tbody tr').filter({ hasText: '河南' }).first(),
+  ).toContainText('10.00%');
+  await expect(
+    panel.locator('table').nth(2).locator('tbody tr').filter({ hasText: '河南' }).first(),
+  ).toContainText('13.00%');
+  await expect(panel.locator('table').nth(2).locator('tbody tr')).toHaveCount(20);
+  await expect(
+    panel
+      .locator('table')
+      .nth(0)
+      .locator('tbody tr')
+      .filter({ hasText: '河南' })
+      .locator('td')
+      .nth(7),
+  ).toHaveText('100.00%');
+  await expect(panel.locator('.wb-province-scroll')).toHaveCount(0);
+  for (const wrap of await panel.locator('.wb-performance-table-wrap').all()) {
+    assert.ok(await wrap.evaluate((element) => element.scrollHeight <= element.clientHeight + 1));
+  }
   const retry = panel.getByRole('button', { name: '重新读取改单笔数' });
   await expect(retry).toBeVisible();
   await page.evaluate(() => {
@@ -198,7 +232,14 @@ test('province tab renders all three document tables and lazily caches distinct 
   });
   await retry.click();
   await expect(
-    panel.locator('table').nth(1).locator('tbody tr').first().locator('td').nth(6),
+    panel
+      .locator('table')
+      .nth(1)
+      .locator('tbody tr')
+      .filter({ hasText: '河南' })
+      .first()
+      .locator('td')
+      .nth(6),
   ).toHaveText('2');
   const reads = await page.evaluate(() => window.provinceReads);
   await page.getByRole('tab', { name: '基地维度达成分析', exact: true }).click();
@@ -209,7 +250,14 @@ test('province tab renders all three document tables and lazily caches distinct 
     window.dispatchEvent(new Event('gea-session-changed'));
   });
   await expect(
-    panel.locator('table').nth(1).locator('tbody tr').first().locator('td').nth(6),
+    panel
+      .locator('table')
+      .nth(1)
+      .locator('tbody tr')
+      .filter({ hasText: '河南' })
+      .first()
+      .locator('td')
+      .nth(6),
   ).toHaveText('2');
   assert.equal(await page.evaluate(() => window.provinceReads), reads);
   await expect(panel.locator('table').nth(0).locator('thead tr')).toHaveCount(1);

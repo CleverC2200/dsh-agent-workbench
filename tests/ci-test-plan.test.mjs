@@ -1312,7 +1312,7 @@ test('production policy preserves actual build and provenance regression consume
     ['scripts/static-author-provenance.mjs', 'tests/static-author-provenance.test.mjs'],
     ['scripts/html-author.mjs', 'tests/html-sample-resource.test.mjs'],
     ['scripts/build-inventory.mjs', 'tests/inventory-storage-build.test.mjs'],
-    ['scripts/build.mjs', 'tests/core-resource-build.test.mjs'],
+    ['scripts/build.mjs', 'tests/plugin-resource-build.test.mjs'],
     ['scripts/sql-config-build.mjs', 'tests/sql-config-build.test.mjs'],
   ])
     await t.test(source, (t) => {
@@ -2026,6 +2026,25 @@ test('retired static-menu test deletion selects the current company UI coverage 
     assert.deepEqual(plan.reasons['dsh-agent-workbench/' + retired], [consumer]);
     assert.ok(plan.files.includes(consumer));
     assert.ok(!plan.files.includes(retired));
+  };
+  check(f.plan(undefined, { sourceOnly: true, workingTree: true }));
+  f.repositories[0].head = f.commit(f.root);
+  check(f.plan(undefined, { sourceOnly: true }));
+  check(f.plan());
+});
+
+test('renamed plugin-build coverage retains the deleted test mapping in local and frozen plans', (t) => {
+  const f = productionFixture(t);
+  const previous = 'tests/core-resource-build.test.mjs';
+  const current = 'tests/plugin-resource-build.test.mjs';
+  f.put(f.root, previous, 'export const previousBuild = true;');
+  f.put(f.root, current, 'export const pluginBuild = true;');
+  f.checkpoint();
+  unlinkSync(join(f.root, previous));
+  const check = (plan) => {
+    assert.deepEqual(plan.reasons['dsh-agent-workbench/' + previous], [current]);
+    assert.ok(plan.files.includes(current));
+    assert.ok(!plan.files.includes(previous));
   };
   check(f.plan(undefined, { sourceOnly: true, workingTree: true }));
   f.repositories[0].head = f.commit(f.root);

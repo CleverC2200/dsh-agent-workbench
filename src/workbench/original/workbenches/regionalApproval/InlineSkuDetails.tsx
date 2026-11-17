@@ -1,4 +1,4 @@
-import { roundPlanQuantity } from './models/salesPlanQuantityModel.ts';
+import { roundPlanQuantity, salesPlanConfirmedQuantity } from './models/salesPlanQuantityModel.ts';
 import { correctionConfirmedQuantity } from './models/salesPlanCorrectionModel.ts';
 import { SkuQuantityAmount } from './SkuQuantityAmount.tsx';
 import styles from './InlineSkuDetails.module.css';
@@ -15,6 +15,7 @@ import {
 } from './regionalApprovalQueryModel.ts';
 import {
   salesPlanDraftSnapshot,
+  salesPlanDraftInputValues,
   type SalesPlanLocalDraft,
 } from './models/salesPlanLocalDraftModel.ts';
 import { salesPlanEditableQuantity } from './models/salesPlanAccessModel.ts';
@@ -154,18 +155,7 @@ export function InlineSkuDetails({
           setDraftState('idle');
           return;
         }
-        const restoreRole = result.draft?.role ?? approvalRole;
-        const baseline = (sku: GeaSalesPlanSku) =>
-          salesPlanEditableQuantity(sku, row.status, row.planTypeCode, restoreRole) ??
-          String(sku.qty);
-        const next = Object.fromEntries(
-          (result.draft?.adjustments ?? []).map((item) => {
-            const sku = detail.skus.find((candidate) => String(candidate.skuCode) === item.skuCode);
-            if (!sku) return [item.skuCode, item.adjustQty];
-            const value = addExactDecimals([baseline(sku), item.adjustQty]);
-            return [item.skuCode, roundPlanQuantity(value)];
-          }),
-        );
+        const next = salesPlanDraftInputValues(detail.skus, row, result.draft, approvalRole);
         setSavedDraft(JSON.stringify(next));
 
         setConfirmedValues((current) => ({ ...next, ...current }));
@@ -191,17 +181,26 @@ export function InlineSkuDetails({
       Object.fromEntries(
         (skus ?? []).map((sku) => {
           const code = String(sku.skuCode);
-          const value =
-            confirmedValues[code] ??
-            (orderType === 'Z'
-              ? correctionConfirmedQuantity(
+          return [
+            code,
+            orderType === 'Z'
+              ? roundPlanQuantity(
+                  confirmedValues[code] ??
+                    correctionConfirmedQuantity(
+                      sku,
+                      row.status,
+                      row.planTypeCode,
+                      approvalRole === 'customer' ? undefined : approvalRole,
+                    ),
+                )
+              : salesPlanConfirmedQuantity(
                   sku,
                   row.status,
                   row.planTypeCode,
-                  approvalRole === 'customer' ? undefined : approvalRole,
-                )
-              : baselineFor(sku));
-          return [code, roundPlanQuantity(value)];
+                  approvalRole,
+                  confirmedValues[code],
+                ),
+          ];
         }),
       ),
     [skus, confirmedValues, row.status, row.planTypeCode, approvalRole, orderType],

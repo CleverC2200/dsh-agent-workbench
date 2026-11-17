@@ -170,7 +170,7 @@ test('纠偏六列与月初四列共用表格，保留发货和节点进度', { 
   await expect(row).toContainText('+2 / −0');
 });
 
-test('月初提报达成使用实际金额，纠偏保留发货达成口径', { timeout: 30000 }, async (t) => {
+test('月初提报达成使用确认数量乘单价，纠偏保留发货达成口径', { timeout: 30000 }, async (t) => {
   const page = await openWorkbench(t, 'actual-progress');
   for (const mode of ['月初', '纠偏']) {
     await page.getByRole('tab', { name: mode, exact: true }).click();
@@ -182,9 +182,9 @@ test('月初提报达成使用实际金额，纠偏保留发货达成口径', { 
     );
     assert.ok(progressColumn >= 0);
     const cell = row.getByRole('cell').nth(progressColumn);
-    await expect(cell.locator('strong')).toHaveText(mode === '月初' ? '80.9%' : '—');
+    await expect(cell.locator('strong')).toHaveText(mode === '月初' ? '6.0%' : '—');
     if (mode === '月初') {
-      await expect(cell).toContainText('¥162.40万 / ¥200.81万');
+      await expect(cell).toContainText('¥12.13万 / ¥200.81万');
       await expect(cell).not.toContainText('发货实绩未取得');
     } else {
       await expect(cell).toContainText('发货实绩未取得');
@@ -335,9 +335,7 @@ test('纠偏复用品类维度、筛选汇总和分页控件', { timeout: 30000 
   await page.getByLabel('客户', { exact: true }).click();
   await page.getByRole('option', { name: '华南经销客户', exact: true }).click();
   await expect(page.getByRole('button', { name: '查询', exact: true })).toBeDisabled();
-  await expect(
-    page.getByRole('button', { name: '打开 华北客户 调整明细', exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole('row').filter({ hasText: '华北客户' })).toHaveCount(0);
   await expect(page.getByTestId('regional-approval-workbench')).toContainText('计划金额¥816');
   assert.ok(
     await page.evaluate(() =>
@@ -346,9 +344,13 @@ test('纠偏复用品类维度、筛选汇总和分页控件', { timeout: 30000 
   );
   await expect(page.getByLabel('每页条数', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '重置', exact: true }).click();
-  await expect(
-    page.getByRole('button', { name: '打开 华北客户 调整明细', exact: true }),
-  ).toBeVisible();
+  const north = page.getByRole('row').filter({ hasText: '华北客户' });
+  await expect(north).toBeVisible();
+  await expect(north.getByRole('button')).toHaveCount(0);
+  await page.getByTestId('regional-approval-category-row-p2-水饺').getByRole('button').click();
+  await expect(page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true })).toHaveValue(
+    '47',
+  );
 });
 
 test('同月Y/DC不同周期的发货按客户月份去重，金额未确认保持未知', { timeout: 30000 }, async (t) => {
@@ -433,14 +435,14 @@ test('真实零追加追减显示零值而非缺失', { timeout: 30000 }, async 
   );
 });
 
-test('Z月计划和展开基准只展示corrBaseQty与amt，M保留原base字段', { timeout: 30000 }, async (t) => {
+test('月初汇总取确认量，纠偏和SKU展开基准保留原来源字段', { timeout: 30000 }, async (t) => {
   for (const order of ['Z', 'M']) {
     const page = await openWorkbench(t, 'display-baseline');
     if (order === 'Z') await page.getByRole('tab', { name: '纠偏', exact: true }).click();
     await page.getByRole('tab', { name: '按客户', exact: true }).click();
     const monthly = page.getByTestId('regional-approval-month-plan-p1');
-    await expect(monthly).toContainText(order === 'Z' ? '100' : '−4');
-    await expect(monthly).toContainText(order === 'Z' ? '¥800' : '¥11.48万');
+    await expect(monthly).toContainText('100');
+    await expect(monthly).toContainText('¥800');
     await page.getByRole('button', { name: '打开 华南经销客户 调整明细', exact: true }).click();
     const sku = page.getByRole('row').filter({ hasText: '猪肉白菜水饺' }).last();
     await expect(sku.getByRole('cell').nth(1)).toHaveText(order === 'Z' ? '100¥800' : '-4¥114,800');

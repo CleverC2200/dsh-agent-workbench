@@ -234,30 +234,31 @@ test('comment-only comparison accepts declaration cleanup and does not treat URL
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('official core build refuses absent SDK before generating any output', (t) => {
-  const { root } = fixture(t);
-  mkdirSync(resolve(root, 'scripts'));
-  for (const file of ['build.mjs', 'build-output.mjs', 'verify-official-input.mjs']) {
+for (const target of ['plugin', 'core'])
+  test(`${target} build refuses absent SDK before generating any output`, (t) => {
+    const { root } = fixture(t);
+    mkdirSync(resolve(root, 'scripts'));
+    for (const file of ['build.mjs', 'build-output.mjs', 'verify-official-input.mjs']) {
+      writeFileSync(
+        resolve(root, 'scripts', file),
+        readFileSync(resolve(import.meta.dirname, '../scripts', file)),
+      );
+    }
     writeFileSync(
-      resolve(root, 'scripts', file),
-      readFileSync(resolve(import.meta.dirname, '../scripts', file)),
+      resolve(root, 'tsconfig.official.json'),
+      JSON.stringify({
+        compilerOptions: { paths: { '@deepseek-ai/cordis': ['missing/lib/types/index.d.ts'] } },
+      }),
     );
-  }
-  writeFileSync(
-    resolve(root, 'tsconfig.official.json'),
-    JSON.stringify({
-      compilerOptions: { paths: { '@deepseek-ai/cordis': ['missing/lib/types/index.d.ts'] } },
-    }),
-  );
-  const result = spawnSync(process.execPath, ['scripts/build.mjs', '--target', 'core'], {
-    cwd: root,
-    encoding: 'utf8',
-    env: { ...process.env, DSH_TYPECHECK_PROJECT: 'tsconfig.official.json' },
+    const result = spawnSync(process.execPath, ['scripts/build.mjs', '--target', target], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, DSH_TYPECHECK_PROJECT: 'tsconfig.official.json' },
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /OFFICIAL_MATERIAL_REQUIRED/);
+    assert.equal(existsSync(resolve(root, 'lib')), false);
   });
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /OFFICIAL_MATERIAL_REQUIRED/);
-  assert.equal(existsSync(resolve(root, 'lib')), false);
-});
 
 test('a compact pnpm command for a removed target is refused', (t) => {
   const { root, run } = fixture(t);

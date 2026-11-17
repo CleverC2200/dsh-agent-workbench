@@ -58,6 +58,23 @@ test('monthly quantities round exactly without floating point loss and months ro
   assert.deepEqual(m.skuReviewMonths('2027-01'), ['2026-01', '2026-11', '2026-12']);
 });
 
+test('restored draft uses the matching approval role baseline and rounds confirmed pieces', () => {
+  const { plan, skus } = source('a', 'v1', '10.4', '0', '0');
+  skus[0].regionConfirmedQty = '20.4';
+  const draft = {
+    planId: plan.planId,
+    versionId: plan.versionId,
+    status: plan.status,
+    sourceSnapshot: 'fixture',
+    role: 'region',
+    adjustments: [{ skuCode: '1001', adjustQty: '0.2' }],
+    remark: '',
+  };
+  assert.deepEqual(m.salesPlanDraftInputValues(skus, plan, draft, 'region'), { 1001: '21' });
+  assert.deepEqual(m.salesPlanDraftInputValues(skus, plan, draft, 'province'), {});
+  assert.deepEqual(m.salesPlanDraftInputValues(skus, plan, null, 'region'), {});
+});
+
 test('summary combines customer SKU budgets, computes confirmed amounts from rounded pieces and retains unknowns', () => {
   const rows = m.summarizeSkuReview(
     [source('a', 'v1', '501.600', '100.10', '20'), source('b', 'v2', '10.400', '200.20', '30')],
@@ -67,6 +84,8 @@ test('summary combines customer SKU budgets, computes confirmed amounts from rou
   assert.equal(rows[0].budgetAmount, '300.30');
   assert.equal(Number(rows[0].confirmedQty), 512);
   assert.equal(Number(rows[0].confirmedAmount), 1280);
+  assert.equal(rows[0].planQty, rows[0].confirmedQty);
+  assert.equal(rows[0].planAmount, rows[0].confirmedAmount);
   assert.deepEqual(rows[0].shipments.map(Number), [50, 0, 14]);
   const unknown = m.summarizeSkuReview([
     source('a', 'v1', '1', '100', null),
@@ -75,6 +94,27 @@ test('summary combines customer SKU budgets, computes confirmed amounts from rou
   assert.equal(Number(unknown[0].budgetAmount), 100);
   assert.equal(unknown[0].shipments[0], null);
   assert.equal(Number(unknown[0].shipments[1]), 0);
+});
+
+test('monthly review uses role confirmations and pending zero with each customer price', () => {
+  const a = source('a', 'v1', '2', '100', '0');
+  const b = source('b', 'v2', '3', '200', '0');
+  a.skus[0].regionConfirmedQty = '10.6';
+  b.skus[0].regionConfirmedQty = '4.4';
+  b.skus[0].price = '7.25';
+  let [row] = m.summarizeSkuReview([a, b], 'region');
+  assert.equal(Number(row.planQty), 15);
+  assert.equal(Number(row.planAmount), 56.5);
+  [row] = m.summarizeSkuReview([a, b], 'region', { v1: { 1001: '0' } });
+  assert.equal(Number(row.planQty), 4);
+  assert.equal(Number(row.planAmount), 29);
+  assert.equal(row.planAmount, row.confirmedAmount);
+  assert.equal(Number(row.budgetAmount), 300);
+  a.plan.orderType = 'Z';
+  b.plan.orderType = 'Z';
+  [row] = m.summarizeSkuReview([a, b], 'region');
+  assert.equal(Number(row.planQty), 20);
+  assert.equal(Number(row.planAmount), 24.6);
 });
 
 test('multiple plans for one customer sum plans but count historical facts once', () => {

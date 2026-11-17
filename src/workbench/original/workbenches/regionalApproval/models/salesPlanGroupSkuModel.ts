@@ -7,7 +7,7 @@ import {
   multiplyExactDecimals,
   subtractExactDecimals,
 } from '../regionalApprovalQueryModel.ts';
-import { salesPlanEditableQuantity, roundPlanQuantity } from './salesPlanQuantityModel.ts';
+import { salesPlanConfirmedQuantity, roundPlanQuantity } from './salesPlanQuantityModel.ts';
 
 type GroupSkuSource = {
   plan: RegionalApprovalLiveRow;
@@ -54,18 +54,24 @@ export const summarizeGroupSkus = (
       const code = String(sku.skuCode).trim();
       if (!code || codes.has(code)) throw new Error('INCOMPLETE_GROUP_SKUS');
       codes.add(code);
-      const originalQty =
-        pendingValues[plan.planId]?.[code] ??
-        (plan.orderType === 'Z'
-          ? correctionConfirmedQuantity(
+      const qty =
+        plan.orderType === 'Z'
+          ? roundPlanQuantity(
+              pendingValues[plan.planId]?.[code] ??
+                correctionConfirmedQuantity(
+                  sku,
+                  plan.status,
+                  plan.planTypeCode,
+                  approvalRole === 'customer' ? undefined : approvalRole,
+                ),
+            )
+          : salesPlanConfirmedQuantity(
               sku,
               plan.status,
               plan.planTypeCode,
-              approvalRole === 'customer' ? undefined : approvalRole,
-            )
-          : salesPlanEditableQuantity(sku, plan.status, plan.planTypeCode, approvalRole)) ??
-        String(sku.qty);
-      const qty = roundPlanQuantity(originalQty);
+              approvalRole,
+              pendingValues[plan.planId]?.[code],
+            );
       const baseQty = String(plan.orderType === 'Z' ? (sku.corrBaseQty ?? sku.qty) : sku.baseQty);
       const baseAmount = String(plan.orderType === 'Z' ? sku.amt : sku.amtBase);
       const amount = multiplyExactDecimals(qty, String(sku.price));
