@@ -1,4 +1,4 @@
-import { roundPlanQuantity } from './models/salesPlanQuantityModel.ts';
+import { roundPlanQuantity, salesPlanConfirmedQuantity } from './models/salesPlanQuantityModel.ts';
 import { correctionConfirmedQuantity } from './models/salesPlanCorrectionModel.ts';
 import { SkuQuantityAmount } from './SkuQuantityAmount.tsx';
 import styles from './InlineSkuDetails.module.css';
@@ -191,17 +191,26 @@ export function InlineSkuDetails({
       Object.fromEntries(
         (skus ?? []).map((sku) => {
           const code = String(sku.skuCode);
-          const value =
-            confirmedValues[code] ??
-            (orderType === 'Z'
-              ? correctionConfirmedQuantity(
+          return [
+            code,
+            orderType === 'Z'
+              ? roundPlanQuantity(
+                  confirmedValues[code] ??
+                    correctionConfirmedQuantity(
+                      sku,
+                      row.status,
+                      row.planTypeCode,
+                      approvalRole === 'customer' ? undefined : approvalRole,
+                    ),
+                )
+              : salesPlanConfirmedQuantity(
                   sku,
                   row.status,
                   row.planTypeCode,
-                  approvalRole === 'customer' ? undefined : approvalRole,
-                )
-              : baselineFor(sku));
-          return [code, roundPlanQuantity(value)];
+                  approvalRole,
+                  confirmedValues[code],
+                ),
+          ];
         }),
       ),
     [skus, confirmedValues, row.status, row.planTypeCode, approvalRole, orderType],
