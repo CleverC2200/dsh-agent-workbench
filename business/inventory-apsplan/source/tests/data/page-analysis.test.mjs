@@ -68,7 +68,7 @@ test('销售页面只分析本页指标，不借用其他页面订单结论', ()
     },
   ]);
   const result = summarizePage(input, true, ['未税销售额', '销售预算达成率']);
-  assert.match(result.title, /销售预算已完成50%/);
+  assert.match(result.title, /销售预算进度偏慢/);
   assert.match(result.copy, /未税销售额10万元/);
   assert.doesNotMatch(result.title + result.copy, /订单|缺货|库存/);
 });
@@ -101,4 +101,46 @@ test('a single-day shipment briefing retains its daily label', () => {
     granularity: 'day',
   });
   assert.match(result.copy, /日发货量0万箱/);
+});
+
+test('the reported month prioritizes budget pace over an achieved fulfillment target and explains coverage operands', () => {
+  const result = summarizePage({
+    start: '2026-11-01',
+    end: '2026-11-16',
+    granularity: 'month',
+    sections: [
+      { id: 'finance', status: 'ready', rows: [{ month: '202611', actual: 485500, invalid: 0 }] },
+      {
+        id: 'sales-budget',
+        status: 'ready',
+        rows: [{ month: '202611', budget: 1000000, invalid: 0 }],
+      },
+      { id: 'orders', status: 'ready', rows: [{ demand: 100000, shortage: 2580, invalid: 0 }] },
+      { id: 'stock', status: 'ready', rows: [{ inventory: 4277600 }] },
+      {
+        id: 'shippable',
+        status: 'ready',
+        rows: [{ available: 3652000, demand: 400000, invalid: 0 }],
+      },
+      { id: 'delivery-daily', status: 'ready', rows: [{ actual: 3765300, missing_qty: 0 }] },
+    ],
+  });
+  assert.match(result.title, /销售预算进度偏慢/);
+  assert.match(result.copy, /统计截至2026-11-16/);
+  assert.match(result.copy, /订单满足率97.42%（已达标）/);
+  assert.match(result.copy, /时间进度53.33%/);
+  assert.match(result.copy, /-4.78个百分点/);
+  assert.match(result.copy, /可发货天数9.13天/);
+  assert.match(result.copy, /可用库存365.2万箱 ÷ 计划日均需求40万箱\/天/);
+  assert.match(result.copy, /期间发货量376.53万箱/);
+  assert.doesNotMatch(result.title + result.copy, /订单仍有缺口|优先核查缺货|46.45/);
+});
+
+test('achieved fulfillment with remaining shortage is described as follow-up rather than a failed target', () => {
+  const result = summarizePage(
+    data([{ id: 'orders', status: 'ready', rows: [{ demand: 10000, shortage: 258, invalid: 0 }] }]),
+  );
+  assert.match(result.title, /订单满足率已达标/);
+  assert.match(result.copy, /剩余订单跟进/);
+  assert.doesNotMatch(result.title, /缺口|未达/);
 });
