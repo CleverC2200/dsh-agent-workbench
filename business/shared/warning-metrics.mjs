@@ -4,39 +4,29 @@ const normalized = (value) =>
   String(value || '')
     .trim()
     .normalize('NFC');
-export const warningMetricNames = [...new Set(catalog.records.map((r) => r.name))];
+export const warningMetricNames = catalog.records.map((r) => r.selectionName);
 export function warningMetricInfo(name) {
   const key = normalized(name);
-  const exact = catalog.records.filter((r) => normalized(r.name) === key);
-  const matches = exact.length
-    ? exact
-    : catalog.records.filter((r) =>
-        r.aliases.split(/[、，,；;\n]/).some((a) => normalized(a) === key),
-      );
+  let metric = catalog.records.find((r) => normalized(r.selectionName) === key);
+  if (!metric) {
+    const aliases = catalog.records.filter((r) =>
+      r.aliases.split(/[、，,；;\n]/).some((a) => normalized(a) === key),
+    );
+    const names = new Set(aliases.map((r) => r.name));
+    if (names.size === 1)
+      metric = catalog.records.find((r) => r.recordId === catalog.defaults[aliases[0].name]);
+  }
   const source = { source: catalog.source, sourceUrl: catalog.sourceUrl, version: catalog.version };
-  if (!matches.length)
+  if (!metric)
     return {
       name: key,
       status: 'unavailable',
       ...source,
-      message: '指标登记表中没有匹配的名称，请核对指标名称或定义。',
+      message: 'V0.6 中没有该名称的唯一固定口径，请使用表内已登记的指标。',
     };
-  const definitions = new Set(
-    matches.map(({ module: _module, recordId: _recordId, aliases: _aliases, ...definition }) =>
-      JSON.stringify(definition),
-    ),
-  );
-  if (definitions.size > 1)
-    return {
-      name: key,
-      status: 'unavailable',
-      ...source,
-      message: '同名指标存在不同口径，请先明确业务模块。',
-      variants: matches,
-    };
-  const metric = matches[0];
   const ruleText = metric.measureRules.replace(/(?:健康|预警|严重)[：:]?|[\s；;，,、。-]/g, '');
-  const hasRules = !!ruleText && !/^(待确认|待维护|未维护|待补充|暂无|未配置)$/.test(ruleText);
+  const hasRules =
+    !!ruleText && !/^(?:待业务确认|待确认|待维护|未维护|待补充|暂无|未配置|无)+$/.test(ruleText);
   return {
     ...metric,
     ...source,
@@ -44,19 +34,23 @@ export function warningMetricInfo(name) {
     rulesStatus: hasRules ? 'configured' : 'unconfigured',
     measureRules: hasRules
       ? metric.measureRules
-      : '指标库尚未维护健康、预警、严重阈值；请在任务说明中明确判断规则，未明确时不判定风险等级。',
+      : 'V0.6 未维护健康、预警、严重阈值；未提供明确任务规则时不判定风险等级。',
   };
 }
 export function warningMetricContext(metric) {
   return Object.fromEntries(
     [
       'name',
+      'selectionName',
+      'module',
       'status',
       'message',
       'version',
       'source',
       'sourceUrl',
       'recordId',
+      'sheet',
+      'row',
       'unit',
       'direction',
       'definition',

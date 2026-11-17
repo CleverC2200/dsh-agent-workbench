@@ -478,15 +478,7 @@ export async function installDetection(ctx) {
       .map((x) => ({ id: x.id, name: x.name || x.id, broken: x.broken || null }));
   }
   async function metricInfo(name) {
-    const metric = warningMetricInfo(name);
-    if (metric.status === 'available' || metric.variants) return metric;
-    try {
-      const legacy = JSON.parse(await readFile(ROOT + '/config/metric-catalog.json', 'utf8'));
-      return legacy[name] || metric;
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-      return metric;
-    }
+    return warningMetricInfo(name);
   }
 
   async function ai(t, run, signal) {
@@ -522,11 +514,11 @@ export async function installDetection(ctx) {
     const prompt = `指标：${t.metric}
 检测范围：${t.scope}
 任务说明：${t.description}
-已核实的指标库口径：${JSON.stringify(metricContext)}
-以上公式、排除项、统计期间与单位须在取数和汇总中一致执行；阈值未维护时不能自行推断健康线。
+已固定的V0.6指标口径：${JSON.stringify(metricContext)}
+以上定义、公式、排除项、统计期间与单位须在取数和汇总中一致执行，不得另查其他版本覆盖。阈值未维护时不能自行推断健康线。实际数据仍使用当前授权工具查询。
 当前上海时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
 
-请使用已授权的问数和知识库工具完成检测，按指标定义、统计期间和规则查询该范围的全部对象，包括健康对象。区分事实与待核查原因；任务说明中明确的阈值、区间和空值处理规则优先于指标库，规则来源标为任务自定义；缺少指标库编号、版本或严重阈值不能单独作为失败理由。任务未指定的规则才查指标库。成功查询且返回空值时，若任务明确指定空值算正常，则按正常返回；不得将工具报错、查询失败或遗漏对象当成空值。其余无法核实维度、规则、数据覆盖或指标值时，不要猜测，返回完整性失败，避免错误判断预警恢复。仅执行只读查询。无人值守任务不得请求权限升级或等待人工审批；所需工具不可用时立即返回完整性失败并说明具体错误。
+请使用已授权的问数和知识库工具完成检测，按指标定义、统计期间和规则查询该范围的全部对象，包括健康对象。区分事实与待核查原因；任务说明中明确的阈值、区间和空值处理规则优先于指标库，规则来源标为任务自定义；缺少指标库编号、版本或严重阈值不能单独作为失败理由。任务未指定的规则使用上面的V0.6固定配置，不再查询外部指标库；任务说明可补充阈值和空值判定，但不改变本指标的定义、公式和排除范围。成功查询且返回空值时，若任务明确指定空值算正常，则按正常返回；不得将工具报错、查询失败或遗漏对象当成空值。其余无法核实维度、规则、数据覆盖或指标值时，不要猜测，返回完整性失败，避免错误判断预警恢复。仅执行只读查询。无人值守任务不得请求权限升级或等待人工审批；所需工具不可用时立即返回完整性失败并说明具体错误。
 
 仅返回 JSON，格式如下；字段值必须依据实际查询，不得照抄示例或编造。每个对象必须具有唯一且稳定的 objectKey；优先使用来源系统稳定编码，若只能用名称，直接用 objectName，不拼接检测范围。value 为数值，百分比用 0 至 100 的数值；仅在成功查询返回空值且任务明确允许空值正常时，value 返回 null，dataStatus 返回 queried-null，status 返回健康，analysis 注明空值按任务规则视为正常，不得伪造为0。scope 必须与检测范围一致，period 为实际统计期间，cutoff 为业务数据截止时间。rule 的健康线比较符 healthyOperator 只能为 gt、gte、lt、lte，direction 只能为 higher 或 lower。status 按规则返回健康、预警或严重。规则编号或版本未登记时请明确标注，不得编造。任务自定义规则使用 sourceType:"task"、taskQuote（完整引用任务中规则和空值条款原文）、nullPolicy:"healthy"（仅明确授权空值正常时）；id和version由系统记录任务执行来源。没有严重阈值时 severe:null，异常只判预警。双侧区间使用 kind:"range"、min、max（含边界为正常）；例如偏离目标超过±20%，min=目标×0.8，max=目标×1.2，计算须有工具证据，保留原指标值和单位。不要硬套单侧阈值结构。
 {"complete":true,"results":[{"scope":"检测范围","objectKey":"稳定对象编码或名称","objectName":"对象名称","value":0,"unit":"单位","period":"统计期间","cutoff":"业务数据截止时间","status":"健康或预警或严重","evidence":"取数及规则依据","analysis":"事实及待核查原因","rule":{"id":"规则编号或未登记","version":"规则版本或未登记","source":"规则来源","direction":"higher或lower","healthy":0,"healthyOperator":"gt或gte或lt或lte","severe":0}}]}
