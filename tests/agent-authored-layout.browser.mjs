@@ -70,7 +70,7 @@ test('QLL 只保留品类与组织结构，不加载已移除的趋势与缺口'
 const styles = (
   await Promise.all(['theme/tokens.css', 'theme/html-defaults.css'].map((p) => readFile(p, 'utf8')))
 ).join('\n');
-async function mount(t, id, width, override, insight) {
+async function mount(t, id, width, override, insight, restoredState = { version: 1 }) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width, height: 900 } }),
@@ -108,12 +108,25 @@ async function mount(t, id, width, override, insight) {
         new URL(route.request().url()).pathname === '/page'
           ? html.replace('</head>', `<style>${styles}</style></head>`)
           : `<!doctype html><html><body style="margin:0"><iframe title="业务插件" src="/page" style="display:block;width:100%;height:100vh;border:0"></iframe><script>
- const frame=document.querySelector('iframe');window.addEventListener('message',event=>{if(event.data?.protocol==='gea-html-v2'&&event.data.type==='ready'){const pair=new MessageChannel();pair.port1.onmessage=async({data:message})=>{if(message.type==='request'){try{pair.port1.postMessage({type:'response',id:message.id,result:await window.queryLayoutFixture(message)});}catch(error){pair.port1.postMessage({type:'response',id:message.id,error:error.message});}}if(message.type==='theme:subscribe')pair.port1.postMessage({type:'theme',version:'1.1.1',context:{session:'layout-session',plugin:'inventory-${id}'},colorScheme:'light',fontSize:14,tokens:{}});};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:'layout-session',plugin:'inventory-${id}'}},'*',[pair.port2]);}if(event.data?.protocol==='dsh-workbench-view-v1'&&event.data.type==='ready')frame.contentWindow.postMessage({protocol:'dsh-workbench-view-v1',type:'restore',page:event.data.page,version:1,channel:'layout-view',generation:1,state:{version:1}},'*');});</script></body></html>`,
+ const frame=document.querySelector('iframe');window.addEventListener('message',event=>{if(event.data?.protocol==='gea-html-v2'&&event.data.type==='ready'){const pair=new MessageChannel();pair.port1.onmessage=async({data:message})=>{if(message.type==='request'){try{pair.port1.postMessage({type:'response',id:message.id,result:await window.queryLayoutFixture(message)});}catch(error){pair.port1.postMessage({type:'response',id:message.id,error:error.message});}}if(message.type==='theme:subscribe')pair.port1.postMessage({type:'theme',version:'1.1.1',context:{session:'layout-session',plugin:'inventory-${id}'},colorScheme:'light',fontSize:14,tokens:{}});};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:'layout-session',plugin:'inventory-${id}'}},'*',[pair.port2]);}if(event.data?.protocol==='dsh-workbench-view-v1'&&event.data.type==='ready')frame.contentWindow.postMessage({protocol:'dsh-workbench-view-v1',type:'restore',page:event.data.page,version:1,channel:'layout-view',generation:1,state:${JSON.stringify(restoredState)}},'*');});</script></body></html>`,
     }),
   );
   await page.goto('http://agent-layout.test/');
   const frame = page.frameLocator('iframe');
   return { page, frame, errors, calls, insightCalls, diagnostics };
+}
+function mountCurrentMonthly(t, id, width, override) {
+  return mount(t, id, width, override, undefined, {
+    version: 1,
+    boardDateMode: 'manual',
+    intelligentDateMode: 'manual',
+    selectedYearKey: '2026',
+    selectedMonthKey: '10',
+    selectedDay: 20,
+    intelligentYearKey: '2026',
+    intelligentMonthKey: '10',
+    intelligentDay: 20,
+  });
 }
 test('QLL counts one inventory snapshot once across base and warehouse dimensions', async (t) => {
   const { frame, errors, calls } = await mount(t, 'qll', 1280, (query, result) => {
@@ -297,7 +310,7 @@ for (const width of [1280, 900, 760]) {
 }
 
 test('APS demand attainment fills after matching plan data arrives', async (t) => {
-  const { frame, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
+  const { frame, errors } = await mountCurrentMonthly(t, 'apsplan', 1280, (query, result) => {
     if (/^(overview|page|drill\.organization|drill\.product)\.demand-accuracy$/.test(query.queryId))
       return {
         ...result,
@@ -344,7 +357,7 @@ test('APS demand attainment fills after matching plan data arrives', async (t) =
 test('APS demand accuracy retains the initial-stage explanation without replacing the composite', async (t) => {
   for (const width of [1280, 760]) {
     await t.test(`${width}px`, async (t) => {
-      const { frame, errors } = await mount(t, 'apsplan', width, (query, result) => {
+      const { frame, errors } = await mountCurrentMonthly(t, 'apsplan', width, (query, result) => {
         if (
           !/^(overview|page|drill\.organization|drill\.product)\.demand-accuracy$/.test(
             query.queryId,
@@ -397,7 +410,7 @@ test('APS demand accuracy retains the initial-stage explanation without replacin
 test('APS demand accuracy omits the stage explanation after completion or a failed read', async (t) => {
   for (const state of ['complete', 'failed']) {
     await t.test(state, async (t) => {
-      const { frame, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
+      const { frame, errors } = await mountCurrentMonthly(t, 'apsplan', 1280, (query, result) => {
         if (
           !/^(overview|page|drill\.organization|drill\.product)\.demand-accuracy$/.test(
             query.queryId,
@@ -1030,7 +1043,8 @@ for (const [quantity, demand, expected] of [
       .filter({ has: frame.locator('.kpi-name > span').filter({ hasText: /^可发货天数$/ }) });
     await expect(card.locator('.kpi-value strong')).toHaveText(expected);
     await expect(card.locator('.kpi-period-label')).toContainText('快照指标');
-    assert.doesNotMatch(await card.innerText(), /同范围|仅作观察/);
+    assert.doesNotMatch(await card.locator('.achievement-status').innerText(), /同范围|仅作观察/);
+    assert.doesNotMatch(await card.innerText(), /仅作观察/);
     if (!demand) await expect(card.locator('.kpi-value > span')).toHaveCount(0);
     assert.deepEqual(errors, []);
   });
@@ -1072,7 +1086,7 @@ for (const id of ['aqkc', 'qll', 'fc', 'apsplan'])
 
 for (const deniedBudget of [false, true])
   test(`APS sales view keeps cards, list and analysis consistent with zero-fill; denied budget=${deniedBudget}`, async (t) => {
-    const { frame, errors, calls } = await mount(t, 'apsplan', 1280, (query, result) => {
+    const { frame, errors, calls } = await mountCurrentMonthly(t, 'apsplan', 1280, (query, result) => {
       if (query.queryId === 'page.budget-performance') {
         if (deniedBudget)
           return {
@@ -2672,7 +2686,7 @@ for (const [view, label] of [
   ['年度视角', '2026年'],
   ['月度视角', '2026年10月'],
   ['周度视角', /2026年10月.*W43/],
-  ['日度视角', '2026年10月20日'],
+  ['日度视角', '2026年10月19日'],
 ])
   test(`APS intelligent workspace stays monthly independently of board: ${view}`, async (t) => {
     const { frame, errors, calls } = await mount(t, 'apsplan', 1280);
@@ -2699,7 +2713,7 @@ for (const [view, label] of [
           (q) =>
             q.queryId === 'overview.production' &&
             q.parameters.start === '20260901' &&
-            q.parameters.end_exclusive === '20260921',
+            q.parameters.end_exclusive === '20260920',
         ),
       )
       .toBe(true);
