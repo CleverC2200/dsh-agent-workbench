@@ -15,7 +15,6 @@ import { readFactMonth, readInventoryTargets } from './facts.js';
 import { readSourceTable, forecastDimensions } from './source-tables.js';
 import { createDeliveryMetrics } from './delivery-metrics.js';
 import { createWorkflow } from './workflow-view.js';
-import { defaultInventoryMonth } from './inventory-selection.js';
 import {
   productProjections,
   productSourceColumns,
@@ -189,7 +188,8 @@ const amount = new Intl.NumberFormat('zh-CN', {
 const quantity = (rows, column) =>
   rows.reduce((sum, row) => (row[column] === '' ? sum : sum + Number(row[column])), 0);
 const currentMonth = () => {
-  return defaultInventoryMonth();
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 };
 const blankProduct = () => Object.fromEntries(productColumns.map((column) => [column, '']));
 const makeDraft = (id, month) => ({
@@ -1050,6 +1050,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       saveLocal({ ...current, drafts: typeof next === 'function' ? next(current.drafts) : next });
     };
     const setSelected = (selected) => saveLocal({ ...localRef.current, selected });
+    const [actualMonth, setActualMonth] = react.useState(currentMonth);
+    const evaluationMonths = [
+      actualMonth,
+      monthOffset(actualMonth, 1),
+      monthOffset(actualMonth, 2),
+    ];
     const [month, setMonth] = react.useState(currentMonth);
     const [product, setProduct] = react.useState(blankProduct);
     const [editing, setEditing] = react.useState(null);
@@ -1768,6 +1774,38 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'select',
               {
+                'aria-label': '评估月份选择',
+                disabled: adjusting,
+                value: draft.month,
+                onFocus: () => setActualMonth(currentMonth()),
+                onPointerDown: () => setActualMonth(currentMonth()),
+                onKeyDown: () => setActualMonth(currentMonth()),
+                onChange: (event) => {
+                  const month = event.target.value;
+                  const start = currentMonth();
+                  if (month < start || month > monthOffset(start, 2)) return;
+                  const current = localRef.current;
+                  if (
+                    current.drafts.find((entry) => entry.id === current.selected)?.month === month
+                  )
+                    return;
+                  const existing = current.drafts.find((entry) => entry.month === month);
+                  const next = existing ?? makeDraft(`local-${current.drafts.length + 1}`, month);
+                  clearFiles();
+                  saveLocal({
+                    drafts: existing ? current.drafts : [...current.drafts, next],
+                    selected: next.id,
+                  });
+                  resetEditor();
+                },
+              },
+              !evaluationMonths.includes(draft.month) &&
+                h('option', { value: draft.month, disabled: true }, `历史月份 · ${draft.month}`),
+              evaluationMonths.map((month) => h('option', { key: month, value: month }, month)),
+            ),
+            h(
+              'select',
+              {
                 'aria-label': '评估版本选择',
                 disabled: adjusting,
                 value: draft.id,
@@ -1787,6 +1825,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 disabled: adjusting,
                 onClick: () => {
                   setVersionName('');
+                  setActualMonth(currentMonth());
                   setMonth(currentMonth());
                   setReference('');
                   setVersionOpen(true);
@@ -1831,9 +1870,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 'button',
                 {
                   className: 'dc-primary',
-                  disabled:
-                    !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || Number(month.slice(0, 4)) < 1000,
+                  disabled: !evaluationMonths.includes(month),
                   onClick: () => {
+                    const start = currentMonth();
+                    if (month < start || month > monthOffset(start, 2)) return;
                     const id = `local-${drafts.length + 1}`,
                       base = drafts.find((entry) => entry.id === reference);
                     const next = {
@@ -1880,6 +1920,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h('input', {
                 type: 'month',
                 'aria-label': '评估月份',
+                min: evaluationMonths[0],
+                max: evaluationMonths[2],
                 value: month,
                 onChange: (event) => setMonth(event.target.value),
               }),
