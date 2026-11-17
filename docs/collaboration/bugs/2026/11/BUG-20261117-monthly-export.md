@@ -1,5 +1,5 @@
 <!-- collaboration-record
-{"kind":"bug","id":"BUG-20261117-monthly-export","date":"2026-11-17","title":"月计划导出未统一确认量口径","module":"销售计划","category":"数据计算","cause":"原始遗漏","severity":"P2","status":"已验证待发布"}
+{"kind":"bug","id":"BUG-20261117-monthly-export","date":"2026-11-17","title":"月计划导出未统一确认量口径","module":"销售计划","category":"数据计算","cause":"原始遗漏","severity":"P2","status":"已关闭"}
 -->
 # 月计划导出未统一确认量口径
 
@@ -9,4 +9,10 @@
 
 修复复用页面当前确认量汇总，包括尚未审批的当前编辑。销售提报及各审批节点已保存的历史列保留，纠偏原计划比较口径保留。导出等待期间确认量变化时，原导出失效，避免生成混合状态文件。
 
-回归先复现缺列和 20 件不等于 512 件，再验证两个真实 XLSX 下载、逐 SKU、小计、合计、修改后收起导出及原有精确小数、取消、缺失明细和刷新恢复场景。受影响回归通过，正式构建、发布和本机导出验收待完成，修复版本为 Workbench 0.1.127。没有删除功能或恢复历史缺陷。
+回归先复现缺列和 20 件不等于 512 件，再验证两个真实 XLSX 下载、逐 SKU、小计、合计、修改后收起导出及原有精确小数、取消、缺失明细和刷新恢复场景。受影响回归通过，修复版本为 Workbench 0.1.127，正式发布与本机验收见下方补记。没有删除功能或恢复历史缺陷。
+
+## 发布与验收补记
+
+2026-11-17：[Workbench 0.1.127](https://github.com/CleverC2200/dsh-agent-workbench/releases/tag/v0.1.127) 与 [GEA 0.0.306](https://github.com/CleverC2200/dsh-gea-plugin/releases/tag/v0.0.306) 已发布，Manage company.81 复用。[固定源码构建、预检及隔离安装接收](https://github.com/CleverC2200/dsh-gea-plugin/actions/runs/44027920642) 通过，两条频道和生产下载核验通过。
+
+本机 macOS 已通过内置更新器更新并确认实际装载版本。当前页计划和 SKU 汇总的实际 Excel 下载，已与同范围逐 SKU 确认量乘各自单价独立对账。修改确认量、收起后导出、SKU 小计与合计联动均通过；恢复原值后再次导出对账通过，后端原值未改，未提交审批。Windows 实机导出未验证。
