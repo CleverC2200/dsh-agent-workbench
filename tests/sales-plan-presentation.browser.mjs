@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { resolve } from 'node:path';
+import { delimiter, resolve } from 'node:path';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 
@@ -107,6 +107,7 @@ const baseSkuFor = (versionId) => ({
 });
 
 const comparison=new URL(location.href).searchParams.get('comparison');
+if(['confirmed-monthly','monthly-incomplete'].includes(comparison))Object.assign(sourcePlans[0],{mPlanAmount:'689800',mPlanQty:'8586',currentAmount:'689800',currentQty:'8586',targetAmount:'714400',skuCount:2});
 const continued = {
   'return-continued-region': [7, 'region', 1],
   'return-continued-province': [8, 'province', 2],
@@ -135,7 +136,10 @@ const skuFor=(versionId)=>{
   const price=old?'8':older?'7':prefix==='v2'?'12':prefix==='v3'?'8':'10';
   return {...base,qty,price,amt:String(Number(qty)*Number(price))};
 };
-const skusFor=versionId=>comparison?.startsWith('sku-review')?[skuFor(versionId),{...skuFor(versionId),skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
+const skusFor=versionId=>comparison==='confirmed-monthly'&&versionId==='v1'?[
+ {...skuFor(versionId),qty:'8000',amt:'600000',baseQty:'6752',amtBase:'506400',regionConfirmedQty:'8420.4',price:'75'},
+ {...skuFor(versionId),skuCode:'2002',productCategName:'面点',qty:'200',amt:'20000',baseQty:'1834',amtBase:'183400',regionConfirmedQty:'288',price:'100'},
+]:comparison?.startsWith('sku-review')?[skuFor(versionId),{...skuFor(versionId),skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
 window.sentReturns=[];
 window.savedDrafts=[];
 if (['history','history-correction','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
@@ -148,7 +152,7 @@ const forbidden=async()=>{writes.push('write');throw Error('LOCAL_RENDER_ACTION_
 const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
-  list:{invoke:async(q)=>{if(comparison==='loading'||comparison==='quick-loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1}}},
+  list:{invoke:async(q)=>{if(comparison==='loading'||comparison==='quick-loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1,...(comparison==='confirmed-monthly'?{summary:{planAmount:'689800',planQty:'8586',targetAmount:'714400'}}:{})}}},
   detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.returnConfirmed?{status:6}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:window.returnConfirmed?window.sentReturns.filter(c=>c.planId===planId).map(c=>({planId,versionId:c.versionId,actionCode:'REJECT',fromStatus:c.request.expectedStatus,toStatus:6,requestId:c.requestId})):continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{readCalls.push({history:planId});const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
@@ -183,6 +187,7 @@ root.render(comparison?.startsWith('quick-') ? <QuickQuestionFixture/> : <Workbe
   },
   outfile: '/fixture/app.js',
   bundle: true,
+  nodePaths: (process.env.WORKBENCH_BROWSER_NODE_PATH ?? '').split(delimiter).filter(Boolean),
   write: false,
   format: 'esm',
   platform: 'browser',
@@ -490,6 +495,62 @@ test('多计划组织行展开后显示同一 SKU 的真实汇总', { timeout: 3
   const skuRow = summary.getByRole('row').filter({ hasText: '1001' });
   await expect(skuRow).toContainText(String(count * 20));
   await expect(skuRow).toContainText((count * 200).toFixed(2));
+});
+
+test(
+  'monthly plan uses confirmed quantities before expansion and after edits and collapse',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t, false, 'confirmed-monthly');
+    const plan = page.getByTestId('regional-approval-month-plan-p1');
+    await expect(plan).toContainText('66.03万');
+    await expect(plan).toContainText('8,708');
+    const totals = page.getByRole('region', { name: '当前页明细汇总', exact: true });
+    await expect(totals).toContainText('66.03万');
+    const row = page.getByRole('row').filter({ has: plan });
+    await expect(row).toContainText('92.4%');
+    const expand = page.getByRole('button', { name: /宝阳销售组/ }).first();
+    await expand.click();
+    const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+    await expect(input).toHaveValue('8420');
+    await expect(plan).toContainText('66.03万');
+    await input.fill('8421');
+    await input.blur();
+    await expect(plan).toContainText('66.04万');
+    await expect(totals).toContainText('66.04万');
+    await expand.click();
+    await expect(input).toHaveCount(0);
+    await expect(plan).toContainText('66.04万');
+    await page.getByRole('switch', { name: '品类维度', exact: true }).click();
+    await expect(page.getByTestId('regional-approval-month-plan-p1:category:汤圆')).toContainText(
+      '63.16万',
+    );
+    await expect(page.getByTestId('regional-approval-month-plan-p1:category:面点')).toContainText(
+      '2.88万',
+    );
+    assert.deepEqual(await page.evaluate(() => window.sentDirect), []);
+  },
+);
+
+test('monthly organization totals aggregate confirmed quantities from every customer', async (t) => {
+  const { page } = await openWorkbench(t, true, 'confirmed-monthly');
+  const row = page.locator('tbody tr').filter({ hasText: '宝阳销售组' }).first();
+  const plan = row.locator('[data-testid^="regional-approval-month-plan-"]');
+  await expect(plan).toContainText('66.05万');
+  await expect(plan).toContainText('8,728');
+  await row.getByRole('button').first().click();
+  await expect(page.getByTestId('regional-approval-group-sku-summary')).toBeVisible();
+  await expect(plan).toContainText('66.05万');
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+test('incomplete monthly SKU reads keep amounts unknown instead of showing the old summary', async (t) => {
+  const { page } = await openWorkbench(t, false, 'monthly-incomplete');
+  await expect(page.getByTestId('regional-approval-sku-coverage-error')).toBeVisible();
+  await expect(page.getByTestId('regional-approval-month-plan-p1')).not.toContainText('68.98万');
+  const totals = page.getByRole('region', { name: '当前页明细汇总', exact: true });
+  await expect(totals).not.toContainText('68.98万');
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
 });
 
 test('editable quantity inputs are white, outlined and rounded', { timeout: 30000 }, async (t) => {
@@ -1721,6 +1782,8 @@ test('header cancellation clears terminal members inherited from a selected orga
 
 test('header select all only selects plans on the current page', async (t) => {
   const { page } = await openWorkbench(t, true, 'header-pagination');
+  const totals = page.getByRole('region', { name: '当前页明细汇总', exact: true });
+  await expect(totals).toContainText('¥2,400');
   await page.getByRole('combobox', { name: '每页条数' }).click();
   await page.getByRole('option', { name: '10 条/页', exact: true }).click();
   await expect
@@ -1739,6 +1802,11 @@ test('header select all only selects plans on the current page', async (t) => {
     .toEqual(visibleIds);
   await page.locator('.arco-pagination-item-next:visible').click();
   await expect.poll(() => page.evaluate(() => window.approvalContext?.pagination.page)).toBe(2);
+  await expect(totals).toContainText('¥2,400');
+  assert.equal(
+    await page.evaluate(() => window.readCalls.filter((call) => call.versionId).length),
+    12,
+  );
   await expect
     .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
     .toBe(0);

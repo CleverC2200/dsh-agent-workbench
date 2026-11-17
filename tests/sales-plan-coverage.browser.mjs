@@ -127,10 +127,10 @@ test(
       '月计划明细未完整读取',
     );
     const totals = page.getByRole('region', { name: '当前页明细汇总', exact: true });
-    await expect(totals).toContainText('¥600');
+    await expect(totals.locator('strong').nth(1)).toHaveText('—');
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
-    await expect(monthly).toContainText('¥100');
-    await expect(monthly).toContainText('10 件');
+    await expect(monthly).toContainText('¥200');
+    await expect(monthly).toContainText('20 件');
     await expect(page.getByTestId('regional-approval-sku-coverage-error')).toHaveCount(0);
     await page.getByRole('button', { name: '切换到等待中的测试上下文' }).click();
     await expect
@@ -138,7 +138,7 @@ test(
       .toBe(true);
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
     await page.evaluate(() => window.rejectPending());
-    await expect(monthly).toContainText('¥100');
+    await expect(monthly).toContainText('¥200');
     await expect(page.getByTestId('regional-approval-sku-coverage-error')).toHaveCount(0);
     assert.deepEqual(pageErrors, []);
     assert.deepEqual(
@@ -160,7 +160,7 @@ test(
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
     await expect(
       page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
-    ).toContainText('¥100');
+    ).toContainText('¥200');
     await expect
       .poll(() => page.evaluate(() => window.coverageCalls.detail.includes('p1')))
       .toBe(true);
@@ -192,7 +192,7 @@ test(
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
     await expect(
       page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
-    ).toContainText('¥100');
+    ).toContainText('¥200');
     await page.evaluate(() => {
       window.exportBehavior = 'precise';
     });
@@ -253,7 +253,7 @@ test(
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
     await expect(
       page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
-    ).toContainText('¥100');
+    ).toContainText('¥200');
     await page.evaluate(() => {
       window.exportBehavior = 'held';
     });
@@ -272,7 +272,7 @@ test(
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
     await expect(
       page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
-    ).toContainText('¥100');
+    ).toContainText('¥200');
     for (const behavior of ['partial', 'foreign', 'failed']) {
       await page.evaluate((behavior) => {
         window.exportBehavior = behavior;
