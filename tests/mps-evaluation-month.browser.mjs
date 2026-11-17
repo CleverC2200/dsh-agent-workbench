@@ -66,6 +66,103 @@ function source({ queryId, parameters }) {
   };
 }
 
+function completeSystemSource(query) {
+  const { queryId, parameters } = query;
+  const response = source(query);
+  let rows;
+  if (queryId === 'facts.report' || queryId === 'facts.report.count')
+    rows = [
+      record('facts.report', {
+        belong_base: '郑州',
+        material_code: 'A',
+        material_name: '产品A',
+        sub_category: '汤圆',
+        series: '系列甲',
+        product_item: 'G',
+        product_item_name: '物料组甲',
+        plannum_total: parameters.month === '2026-11-01' ? 150 : 250,
+        allnum_total: parameters.month === '2026-11-01' ? 150 : 250,
+      }),
+    ];
+  if (queryId === 'facts.history' || queryId === 'facts.history-annual')
+    rows = [
+      record(queryId, {
+        'agents_scm_cust_deliv_daily_di.belong_base': '郑州',
+        'agents_scm_cust_deliv_daily_di.material_code': 'A',
+        'agents_scm_cust_deliv_daily_di.material_name': '产品A',
+        'agents_scm_cust_deliv_daily_di.product_categ_name': '汤圆',
+        'agents_scm_cust_deliv_daily_di.material_group_name': '物料组甲',
+        'agents_scm_cust_deliv_daily_di.act_dl_qty_total': 100,
+      }),
+    ];
+  if (queryId.startsWith('facts.plan-quantity'))
+    rows = [
+      record('facts.plan-quantity', {
+        belong_base: '郑州',
+        material_code: 'A',
+        plan_qty_total: 125,
+        known_plan_qty_total: 125,
+        source_plan_qty_total: 125,
+        source_date_start: '20260701',
+        source_date_end: '20270131',
+        source_rows: 1,
+        missing_rows: 0,
+        duplicate_rows: 0,
+      }),
+    ];
+  if (queryId.startsWith('category-history.'))
+    rows = parameters.months.map((month) =>
+      record('category-history.detail', {
+        dimension_type: '基地+大类',
+        stat_month: month,
+        belong_base: '郑州',
+        dimension_value: '汤圆',
+        dimension_act_dl_qty: 100,
+        last_year_dimension_act_dl_qty: 100,
+        last_month_dimension_act_dl_qty: 100,
+        national_dimension_fiscal_act_dl_qty: 1200,
+        fiscal_year: month.slice(0, 4),
+        source_rows: 1,
+      }),
+    );
+  if (queryId.startsWith('annual-pool.'))
+    rows = ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04'].map((month) =>
+      record('annual-pool.detail', {
+        belong_base: '全国',
+        sub_category: '汤圆',
+        stat_month: month,
+        source_rows: 1,
+        missing_qty: 0,
+        duplicate_rows: 0,
+        demand_qty: 100,
+      }),
+    );
+  if (queryId.startsWith('plan-rate.'))
+    rows = ['大类+物料组', '物料组+产品', '基地+产品'].map((dimension_type, index) =>
+      record('plan-rate.detail', {
+        dimension_type,
+        stat_month: parameters.months[0],
+        belong_base: index === 2 ? '郑州' : null,
+        category_name: index === 0 ? '汤圆' : null,
+        material_group_name: index !== 2 ? '物料组甲' : null,
+        material_code: index ? 'A' : null,
+        product_name: index ? '产品A' : null,
+        dimension_allnum: 100,
+        parent_allnum: 100,
+        dimension_rate: 1,
+      }),
+    );
+  return rows
+    ? {
+        ...response,
+        rows: queryId.endsWith('.count') ? [{ total: rows.length }] : rows,
+        totalRowCount: rows.length,
+        dataStatus: 'ok',
+        warnings: [],
+      }
+    : response;
+}
+
 test('标题旁月份入口只列实际本月及后两个月，选择后不扩张并跨月跨年顺延', async (t) => {
   const page = await authorPage(t);
   await page.clock.install({ time: new Date('2026-11-30T12:00:00+08:00') });
@@ -236,4 +333,96 @@ test('月份切换贯通取数、需求计算和下载，保留历史版本、�
     legacy,
   );
   assert.equal(await page.evaluate(() => window.peerDraft), '历史草稿，请保留。');
+});
+
+test('两个评估月的完整来源驱动系统有效需求，期间切换与回切不复用结果', async (t) => {
+  const { page, frame, calls } = await mpsPage(t, config, completeSystemSource);
+  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
+  const results = [];
+  for (const [month, previous, cutoff, expected] of [
+    ['2026-11', '2026-10', '2026-10-31', 110],
+    ['2027-01', '2026-12', '2026-12-31', 150],
+    ['2026-11', '2026-10', '2026-10-31', 110],
+  ]) {
+    const before = results.length ? calls.length : 0;
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+    await frame.getByLabel('评估月份选择', { exact: true }).selectOption(month);
+    await expect(frame.getByRole('region', { name: '计划提报数据', exact: true })).toContainText(
+      `数量合计${month === '2026-11' ? 150 : 250}件`,
+    );
+    await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+    await frame.getByLabel('数据截止日').fill(cutoff);
+    await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
+      name: `${previous}-有效发货输入.csv`,
+      mimeType: 'text/csv',
+      buffer: Buffer.from(
+        `月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n${previous},郑州,A,产品A,汤圆,系列甲,G,100,0,0,1,200,0,0`,
+      ),
+    });
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+    await expect(frame.getByRole('table', { name: '大类需求总表', exact: true })).toContainText(
+      String(expected),
+    );
+    const rows = await workflowExportRows(frame);
+    const demand = rows.filter((row) => row.产品编码 === 'A');
+    assert.equal(demand.length, 4);
+    assert.deepEqual(
+      demand.map((row) => Number(row.系统SKU需求)),
+      [expected, 100, 100, 100],
+    );
+    assert.deepEqual(
+      demand.map((row) => Number(row.需求数量)),
+      [expected, 100, 100, 100],
+    );
+    assert.ok(
+      demand.every((row) => row.评估月份 === month && row.数量调整状态 === '系统拆分或占比调整'),
+    );
+    const monthCalls = calls.slice(before);
+    assert.ok(
+      monthCalls.some(
+        (call) => call.queryId === 'facts.report' && call.parameters.month === `${month}-01`,
+      ),
+    );
+    const recent =
+      month === '2026-11'
+        ? ['2026-07-01', '2026-08-01', '2026-09-01']
+        : ['2026-09-01', '2026-10-01', '2026-11-01'];
+    assert.deepEqual(
+      [
+        ...new Set(
+          monthCalls
+            .filter((call) => call.queryId === 'facts.plan-quantity')
+            .map((call) => call.parameters.month),
+        ),
+      ].sort(),
+      recent,
+    );
+    const historical = [1, 2, 3].map(
+      (year) => `${Number(month.slice(0, 4)) - year}${month.slice(5)}`,
+    );
+    for (const period of historical)
+      assert.ok(
+        monthCalls.some(
+          (call) =>
+            call.queryId === 'category-history.detail' && call.parameters.months.includes(period),
+        ),
+      );
+
+    const saved = await page.evaluate(() => {
+      const state = window.readView().localDrafts;
+      return state.drafts.find((draft) => draft.id === state.selected);
+    });
+    assert.deepEqual(saved.adjustments.quantities, []);
+    assert.deepEqual(saved.adjustments.categoryDemand, []);
+    assert.deepEqual(saved.adjustments.shares, []);
+    results.push({
+      month,
+      reportPeriod: `${month}-01`,
+      recent,
+      historical,
+      systemDemand: demand.map((row) => Number(row.系统SKU需求)),
+      effectiveDemand: demand.map((row) => Number(row.需求数量)),
+    });
+  }
+  console.log('MPS_SYSTEM_MONTH_RESULTS', JSON.stringify(results));
 });
