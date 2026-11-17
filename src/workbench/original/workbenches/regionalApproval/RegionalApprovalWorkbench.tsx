@@ -2060,13 +2060,13 @@ const RegionalApprovalWorkbench: React.FC<{
     pageSize,
   ]);
   const exportScopeRef = useRef(exportScope);
-  const exportRowsRef = useRef(liveRows);
+  const exportRowsRef = useRef(draftedLiveRows);
   const exportMountedRef = useRef(true);
   const exportRequestRef = useRef<AbortController | null>(null);
   const [exporting, setExporting] = useState(false);
-  useEffect(() => () => exportRequestRef.current?.abort(), [exportScope, liveRows]);
+  useEffect(() => () => exportRequestRef.current?.abort(), [exportScope, draftedLiveRows]);
   exportScopeRef.current = exportScope;
-  exportRowsRef.current = liveRows;
+  exportRowsRef.current = draftedLiveRows;
   useEffect(() => {
     exportMountedRef.current = true;
     return () => {
@@ -2091,22 +2091,26 @@ const RegionalApprovalWorkbench: React.FC<{
     const scopeChanged = () =>
       !exportMountedRef.current ||
       exportScopeRef.current !== exportScope ||
-      exportRowsRef.current !== liveRows;
+      exportRowsRef.current !== draftedLiveRows;
     try {
       const XLSX = await import('xlsx-republish');
       if (
         !exportMountedRef.current ||
         exportScopeRef.current !== exportScope ||
-        exportRowsRef.current !== liveRows
+        exportRowsRef.current !== draftedLiveRows
       )
         return;
       if (
-        liveRows.some(
+        draftedLiveRows.some(
           (row) =>
             [row.planId, row.versionId, row.periodId, row.dealerCode].some(
               (value) => !String(value ?? '').trim(),
             ) ||
-            [row.targetQty, row.targetAmount].some((value) => !/^-?\d+(?:\.\d+)?$/.test(value)),
+            [
+              row.targetQty,
+              row.targetAmount,
+              ...(orderType === 'M' ? [row.mPlanQty, row.mPlanAmount] : []),
+            ].some((value) => !/^-?\d+(?:\.\d+)?$/.test(value ?? '')),
         )
       ) {
         setExportFeedback({
@@ -2180,12 +2184,13 @@ const RegionalApprovalWorkbench: React.FC<{
         'updatedAt',
         'returnReason',
         'statusCode',
+        ...(orderType === 'M' ? (['mPlanQty', 'mPlanAmount'] as const) : []),
       ] as const;
       const sheet = XLSX.utils.aoa_to_sheet([
         headers.map((field) =>
           t(`common.assistantSurface.regionalApproval.exportColumns.${field}`),
         ),
-        ...liveRows.map((row, index) => [
+        ...draftedLiveRows.map((row, index) => [
           row.planId,
           row.versionId,
           row.periodId,
@@ -2214,15 +2219,19 @@ const RegionalApprovalWorkbench: React.FC<{
           row.updatedAt ?? '',
           row.returnReason ?? '',
           row.status,
+          ...(orderType === 'M'
+            ? [numericValue(row.mPlanQty ?? ''), numericValue(row.mPlanAmount ?? '')]
+            : []),
         ]),
       ]);
       sheet['!cols'] = headers.map(() => ({ wch: 24 }));
       for (let row = 2; row <= liveRows.length + 1; row++) {
         for (const field of [
           'targetAmount',
+          ...(orderType === 'M' ? (['mPlanAmount'] as const) : []),
           ...SALES_PLAN_EXPORT_AMOUNT_PAIRS.map((pair) => pair[1]),
         ] as const) {
-          const column = XLSX.utils.encode_col(headers.indexOf(field));
+          const column = XLSX.utils.encode_col(headers.findIndex((header) => header === field));
           if (sheet[`${column}${row}`]?.t === 'n') sheet[`${column}${row}`].z = '#,##0.00';
         }
       }
@@ -2238,6 +2247,9 @@ const RegionalApprovalWorkbench: React.FC<{
         [exportLabel('scope'), exportLabel('currentPage')],
         [exportLabel('month'), liveQuery.selectedPeriodMonth ?? '—'],
         [exportLabel('version'), exportLabel('currentVersion')],
+        ...(orderType === 'M'
+          ? [[exportLabel('monthlyBasis'), exportLabel('confirmedMonthlyBasis')]]
+          : []),
         [exportLabel('page'), liveCurrentPage],
         [exportLabel('pageSize'), pageSize],
         [exportLabel('exported'), liveRows.length],

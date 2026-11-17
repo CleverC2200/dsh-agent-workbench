@@ -139,7 +139,7 @@ const skuFor=(versionId)=>{
 const skusFor=versionId=>comparison==='confirmed-monthly'&&versionId==='v1'?[
  {...skuFor(versionId),qty:'8000',amt:'600000',baseQty:'6752',amtBase:'506400',regionConfirmedQty:'8420.4',price:'75'},
  {...skuFor(versionId),skuCode:'2002',productCategName:'面点',qty:'200',amt:'20000',baseQty:'1834',amtBase:'183400',regionConfirmedQty:'288',price:'100'},
-]:comparison?.startsWith('sku-review')?[skuFor(versionId),{...skuFor(versionId),skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
+]:comparison?.startsWith('sku-review')?[skuFor(versionId),{...skuFor(versionId),id:'s-'+versionId+'-2002',skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
 window.sentReturns=[];
 window.savedDrafts=[];
 if (['history','history-correction','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
@@ -1097,6 +1097,48 @@ test(
     await expect(page.locator('.arco-spin-loading')).toHaveCount(0);
     await expect(skeleton).toBeHidden({ timeout: 15000 });
     await expect(page.getByText('华南大区').first()).toBeVisible();
+  },
+);
+
+test(
+  'monthly XLSX exports match confirmed page totals before expansion and after a collapsed edit',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t, false, 'sku-review');
+    const { readFile } = await import('node:fs/promises');
+    const xlsx = await import('xlsx-republish');
+    const exported = async (button) => {
+      const pending = page.waitForEvent('download');
+      await button.click();
+      const download = await pending;
+      const workbook = xlsx.read(await readFile(await download.path()), { type: 'buffer' });
+      return xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+    };
+    const plan = page.getByTestId('regional-approval-month-plan-p1');
+    await expect(plan).toContainText('¥250');
+    let rows = await exported(page.getByRole('button', { name: '导出当前页', exact: true }));
+    assert.equal(rows[0]['月计划数量'], 25);
+    assert.equal(rows[0]['月计划金额'], 250);
+    const expand = page.getByRole('button', { name: /宝阳销售组/ }).first();
+    await expand.click();
+    await page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).fill('21');
+    await page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).blur();
+    await expand.click();
+    await expect(plan).toContainText('¥260');
+    rows = await exported(page.getByRole('button', { name: '导出当前页', exact: true }));
+    assert.equal(rows[0]['月计划数量'], 26);
+    assert.equal(rows[0]['月计划金额'], 260);
+    await page.getByRole('tab', { name: '按大类 / SKU' }).click();
+    const review = page.getByRole('region', { name: '按大类 / SKU', exact: true }).first();
+    await expect(review.getByRole('rowheader', { name: /1001/ })).toBeVisible();
+    rows = await exported(review.getByRole('button', { name: '导出汇总', exact: true }));
+    for (const row of rows) {
+      assert.equal(row['月计划量（件）'], row['确认计划量（件）']);
+      assert.equal(row['月计划金额（元）'], row['确认计划金额（元）']);
+    }
+    assert.equal(rows.at(-1)['月计划金额（元）'], 260);
+    assert.deepEqual(await page.evaluate(() => window.sentDirect), []);
+    assert.deepEqual(await page.evaluate(() => window.sentReturns), []);
   },
 );
 
