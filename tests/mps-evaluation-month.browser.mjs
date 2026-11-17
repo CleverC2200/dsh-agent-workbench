@@ -272,6 +272,7 @@ test('月份切换贯通取数、需求计算和下载，保留历史版本、�
       systemValue: null,
     },
   ]);
+  await expect(frame.getByRole('button', { name: '基地 · 郑州', exact: true })).toBeVisible();
   const validJanuary = await workflowExportRows(frame);
   assert.equal(
     validJanuary.find((row) => row.月份 === '2027-01' && row.产品编码 === 'A').需求数量,
@@ -301,6 +302,7 @@ test('月份切换贯通取数、需求计算和下载，保留历史版本、�
     },
   ]);
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await expect(frame.getByRole('button', { name: '基地 · 郑州', exact: true })).toBeVisible();
   const validNovember = await workflowExportRows(frame);
   assert.equal(
     validNovember.find((row) => row.月份 === '2026-11' && row.产品编码 === 'A').需求数量,
@@ -309,6 +311,7 @@ test('月份切换贯通取数、需求计算和下载，保留历史版本、�
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2027-01');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await expect(frame.getByRole('button', { name: '基地 · 郑州', exact: true })).toBeVisible();
   const restoredJanuary = await workflowExportRows(frame);
   assert.equal(
     restoredJanuary.find((row) => row.月份 === '2027-01' && row.产品编码 === 'A').需求数量,
