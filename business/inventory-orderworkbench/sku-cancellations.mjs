@@ -229,22 +229,21 @@ export function cancellationEventsSql({
       OR (status=90 AND (cancelled IS NULL OR cancelled<created OR latest_departure IS NULL))
       THEN 1 ELSE 0 END AS invalid_cancel
     FROM (${cohort}) cancellation_cohort`;
-  const dimensionPrefix = dimensions
-    ? 'WITH cancellation_source AS (' +
-      source +
-      '), cancellation_lines AS (' +
-      details +
-      '), cancellation_quantities AS (' +
-      quantities.replace('FROM (' + details + ') s', 'FROM cancellation_lines s') +
-      '), cancellation_cohort AS (' +
-      cohort.replace('FROM (' + quantities + ') q', 'FROM cancellation_quantities q') +
-      '), classified_cancellations AS (' +
-      classified.replace('FROM (' + cohort + ') cancellation_cohort', 'FROM cancellation_cohort') +
-      ') '
-    : 'WITH cancellation_source AS (' + source + ') ';
-  return `${dimensionPrefix}SELECT ${periods ? 'period_index,' : ''}base,cust_code,cust_order_no,executeorderno,executeorderlineno,
+  const prefix =
+    'WITH cancellation_source AS (' +
+    source +
+    '), cancellation_lines AS (' +
+    details +
+    '), cancellation_quantities AS (' +
+    quantities.replace('FROM (' + details + ') s', 'FROM cancellation_lines s') +
+    '), cancellation_cohort AS (' +
+    cohort.replace('FROM (' + quantities + ') q', 'FROM cancellation_quantities q') +
+    '), classified_cancellations AS (' +
+    classified.replace('FROM (' + cohort + ') cancellation_cohort', 'FROM cancellation_cohort') +
+    ') ';
+  return `${prefix}SELECT ${periods ? 'period_index,' : ''}base,cust_code,cust_order_no,executeorderno,executeorderlineno,
     material_code,name,region,province,cancel_numerator,effective_qty AS cancel_denominator,invalid_cancel
-    FROM ${dimensions ? 'classified_cancellations' : '(' + classified + ') classified_cancellations'}`
+    FROM classified_cancellations`
     .replace(/\s+/g, ' ')
     .trim();
 }
