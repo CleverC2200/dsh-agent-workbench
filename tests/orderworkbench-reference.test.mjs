@@ -49,6 +49,7 @@ test('order workbench reference interactions', async () => {
   Object.assign(window, {
     provinceAnalysis,
     provinceAnalysisContext,
+    loadWorkbenchProvinceCancellationReasons: async () => ({ status: 'ready', rows: [] }),
     loadWorkbenchProvinceOrderCounts: async () => ({ status: 'ready', rows: [] }),
     mountReportImport,
     projectReportImports,
