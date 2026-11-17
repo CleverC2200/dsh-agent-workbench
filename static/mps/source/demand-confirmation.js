@@ -261,6 +261,14 @@ function downloadFile(name, mime, text) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+function reportAmountSource(draft, period) {
+  return draft.reportSource === 'business' &&
+    draft.reportRead?.periods?.[period]?.status === 'ready' &&
+    draft.reportAmounts?.[period]?.period === period
+    ? draft.reportAmounts[period]
+    : null;
+}
+
 export function createDemandConfirmation(react, useMpsPart, view) {
   const h = react.createElement;
   const CategoryDemand = createCategoryDemand(react, {
@@ -427,13 +435,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ]
       : [...sourceColumns, column];
     react.useEffect(() => setPage(0), [draft[type]]);
-    const amountRead =
-      type === 'report' &&
-      business &&
-      draft.reportRead?.periods?.[period]?.status === 'ready' &&
-      draft.reportAmounts?.[period]?.period === period
-        ? draft.reportAmounts[period]
-        : null;
+    const amountRead = type === 'report' ? reportAmountSource(draft, period) : null;
     const amountRows = amountRead?.status === 'ready' ? amountRead.rows : [];
     const monthlyAmount = sumSourceAmounts(amountRows, '月初计划金额');
     const finalAmount = sumSourceAmounts(amountRows, '最终计划金额');
@@ -1624,6 +1626,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const sourceSummaries = Object.fromEntries(
       Object.keys(sourceDefinitions).map((type) => {
         const { period, column, rows } = sourceSelection(draft, type);
+        const amountRead = type === 'report' ? reportAmountSource(draft, period) : null;
+        const amountRows = amountRead?.status === 'ready' ? amountRead.rows : [];
         return [
           type,
           {
@@ -1648,6 +1652,21 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             metadata: draft[type + 'Metadata'] ?? null,
             read: draft[type + 'Read'] ?? null,
             versions: type === 'report' ? ['月初数量', '纠偏数量'] : undefined,
+            amounts:
+              type === 'report'
+                ? {
+                    period,
+                    unit: '元',
+                    status: amountRead?.status ?? 'unread',
+                    sourceTable:
+                      amountRead?.sourceTable ?? 'ai_db.agents_scm_dws_scm_cust_plan_exe_di',
+                    rowCount: amountRows.length,
+                    initialPlan: sumSourceAmounts(amountRows, '月初计划金额'),
+                    finalPlan: sumSourceAmounts(amountRows, '最终计划金额'),
+                    missingDimensions: amountRows.filter((row) => row['缺项原因']).length,
+                    error: amountRead?.error ?? null,
+                  }
+                : undefined,
             shipmentMetrics:
               type === 'history' && draft.historySource === 'business'
                 ? ['数量', '含赠品数量', '不含税收入']

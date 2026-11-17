@@ -212,7 +212,11 @@ test('MPS reads complete channel coefficients and adopts only an explicitly appl
       }),
     )
     .toBe('weights-test-v1');
+  const reloaded = page.waitForEvent('framenavigated', {
+    predicate: (frame) => frame.parentFrame() !== null,
+  });
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
+  await reloaded;
   await workflowStep(frame, '约束与配置');
   await showAdvanced(view);
   await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toHaveValue('0.00576');
