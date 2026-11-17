@@ -12,18 +12,19 @@
 | 个人库存     | [独立 Consumer、隐藏入口和反馈边界](../business/inventory-personal/SOURCE.md)                                            |
 | APS 产销协同 | [真实生成链、显式 mock 构建与遗留验收](../business/inventory-apsplan/SOURCE.md)                                          |
 | 客户库存     | [固定 HTML 来源和受控读取范围](../prototypes/inventory-customer/SOURCE.md)                                               |
-| 订单履约     | [固定输入与模拟范围](../prototypes/inventory-orderfulfillment/README.md)                                                 |
+| 订单工作台   | [页面与效果声明](../prototypes/inventory-orderworkbench/page.json)、[指标合同](order-workbench-metrics.md)与[分组能力](order-kpi-grouping.md) |
+| 订单履约     | [当前读取入口与来源](../prototypes/inventory-orderfulfillment/README.md)、[数据接入与未完成验收](order-fulfillment-data.md) |
 | DMS          | [来源、内存模拟和真实写入边界](../prototypes/dms/README.md)                                                              |
 
 ## 区域、品类与 MPS 页面
 
 客户库存右侧 Agent 使用 Manage 提供的完整提示词、页面证据桥接 Skill 和五个专项 Skill：库存诊断、缺货补货、高库存控补、货龄风险、库存变化。Workbench 的 plugin.json 按 Prompt 中的顺序登记全部六个 Skill 文件；构建仍从 Manage 复制资源，不在本仓重复维护业务原文。此次资源接入不新增页面数据源、写操作或权限。
 
-客户库存由 Workbench 保留原展示并通过 GEA 受控 SQL 读取最新客户库存快照；Manage 声明其 Prompt、Skill、表和 `governed-sql-read` 能力，身份、凭据、行列权限仍归 GEA Host。订单工作台与订单履约仍是模拟交互和零业务能力声明。资源选用关联实际 Core Session，不自行创建 Session。订单工作台的本地演示任务在冷刷新后清空。其固定作者输入和边界见 `prototypes/inventory-orderworkbench` 下的 SOURCE.json。
+客户库存由 Workbench 保留原展示并通过 GEA 受控 SQL 读取最新客户库存快照；Manage 声明其 Prompt、Skill、表和 `governed-sql-read` 能力，身份、凭据、行列权限仍归 GEA Host。订单页面的当前效果与输入读取上表合同、同组 Manage 的 capability 声明及 GEA 授权实现；固定 SOURCE.json 和原型参考只说明来源，不能据此将当前页面认定为模拟。资源选用关联实际 Core Session，不自行创建 Session；能力声明不证明某个安装版本已启用或验收通过。
 
 区域计划复用静态作者页与 `plan-regional` 资源。模块、模拟日期、提报维度、节奏草稿和未保存节奏编辑按实际 Session 恢复，重新派生模拟上下文。品类计划复用静态作者页、`category-plan` Prompt、Skill 和空 MCP 声明；指标、事件、建议和任务由作者状态发布为模拟快照。临时模拟任务不落库。
 
-MPS 页面 `plan-category-production` 接收 `inventory-mps` 资源，构建从相邻 Manage 装配。主数据、提报和历史发货经 GEA 只读接入；销售预测表 `agents_scm_sales_forecast_mi` 按固定批次读取本月与次月，基地多维发货表 `agents_scm_base_dimension_delivery_mi` 按源维度展示，缺项和未确认口径留空。七步共用本地评估草稿并发布当前页面上下文，CSV 可真实下载；下载不等于业务保存。UI 意图和未发文字按实际 Session 恢复，输入仅保存在内存，刷新或切换对话会清除。正式保存、提交和结转尚未接入，实际客户端与业务验收仍以本票回执为准。
+MPS 页面 `plan-category-production` 接收 `inventory-mps` 资源，构建从相邻 Manage 装配。当前事实、七步评估和缺失规则的边界见[页面上下文](../static/mps/source/context.js)，本地草稿按[呈现恢复合同](presentation-recovery.md)处理，业务来源重新读取。CSV 下载和本地恢复不等于正式业务保存；正式保存、提交和结转仍保留未完成验收，实际客户端与业务结果须由对应输入的回执证明。
 
 页侧恢复合同见[呈现恢复](presentation-recovery.md)，view 动作的影响范围与授权见[页面桥](page-interaction.md)。
 
