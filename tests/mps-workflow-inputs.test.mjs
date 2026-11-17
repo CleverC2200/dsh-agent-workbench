@@ -1456,6 +1456,31 @@ test('大型加工结果只投影有条数的上下文预览，计算结果和�
   assert.deepEqual(context, before);
 });
 
+test('多层真实规模的约束预览在通道限额内保留条数与来源', () => {
+  const context = {
+    months: ['2026-11', '2026-12', '2027-01'],
+    constraints: Array.from({ length: 50 }, (_, id) => ({
+      id,
+      source: '已读业务来源',
+      rows: Array.from({ length: 100 }, (_, code) => ({
+        code,
+        missing: Array.from({ length: 20 }, (_, field) => ({
+          field,
+          reason: '待核来源'.repeat(50),
+        })),
+      })),
+    })),
+  };
+  const before = structuredClone(context);
+  const preview = workflowContextPreview(context);
+  assert.ok(JSON.stringify(preview).length < 60000);
+  assert.equal(preview.constraintsTotal, 50);
+  assert.equal(preview.constraints[0].rowsTotal, 100);
+  assert.equal(preview.constraints[0].rows[0].missingTotal, 20);
+  assert.equal(preview.constraints[0].source, '已读业务来源');
+  assert.deepEqual(context, before);
+});
+
 test('无关缓存财年与提报月份不改变当前参与范围', () => {
   const { source, snapshot } = partialDemandFixture();
   source.historyAnnualRead = { status: 'ready' };

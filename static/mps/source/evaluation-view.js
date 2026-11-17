@@ -31,17 +31,25 @@ const fields = [
   'requiredProductionTons',
 ];
 
-export function workflowContextPreview(value) {
+function previewValue(value, rowLimit) {
   if (typeof value === 'string') return value.length > 200 ? value.slice(0, 200) + '…' : value;
-  if (Array.isArray(value)) return value.slice(0, 10).map(workflowContextPreview);
+  if (Array.isArray(value))
+    return value.slice(0, rowLimit).map((item) => previewValue(item, rowLimit));
   if (value && typeof value === 'object')
     return Object.fromEntries(
       Object.entries(value).flatMap(([key, item]) => [
-        [key, workflowContextPreview(item)],
-        ...(Array.isArray(item) && item.length > 10 ? [[key + 'Total', item.length]] : []),
+        [key, previewValue(item, rowLimit)],
+        ...(Array.isArray(item) && item.length > rowLimit ? [[key + 'Total', item.length]] : []),
       ]),
     );
   return value;
+}
+
+export function workflowContextPreview(value) {
+  for (const rowLimit of [10, 5, 2, 1, 0]) {
+    const preview = { ...previewValue(value, rowLimit), previewRowsPerGroup: rowLimit };
+    if (JSON.stringify(preview).length < 60000 || rowLimit === 0) return preview;
+  }
 }
 
 export function summarizeEvaluation(rows) {
