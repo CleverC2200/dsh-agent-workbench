@@ -83,7 +83,11 @@ export function workflowPerformanceInput(size = 200) {
   }));
   draft.unitWeights = codes.map((code) => ({ base: '甲', code, tonsPerPiece: 1 }));
   draft.productionDays = months.map((month) => ({ base: '甲', month, days: 25 }));
-  draft.constraints = { safetyDays: [{ base: '甲', days: 0 }], rules: { local: [] } };
+  draft.constraints = {
+    safetyDays: [],
+    turnoverDays: codes.map((code) => ({ base: '甲', code, days: 0 })),
+    rules: { local: [] },
+  };
   const shipment = {
     draftId: draft.id,
     month: draft.month,

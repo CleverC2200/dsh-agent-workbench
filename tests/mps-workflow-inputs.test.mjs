@@ -326,9 +326,17 @@ test('产品老品编码接入同基地历史参考，其他基地老品不扩�
   );
 });
 
-test('业务版本缺源周转天数临时按零参与，原始缺项保留且人工补充值优先', () => {
+test('业务版本缺源周转天数保留待补，人工补充后重新计算', () => {
   const source = draft();
+  source.constraints.safetyDays = [{ base: '甲', days: 99 }];
+  const local = buildMpsWorkflow(source, null);
+  assert.ok(local.rows.length > 0);
+  assert.ok(local.rows.every((row) => row.safetyDays === null && row.targetInventory === null));
   source.productSource = 'business';
+  source.products = source.products.map((row, index) => ({
+    ...row,
+    基地: index === 0 ? '甲' : '乙',
+  }));
   source.productsRead = { status: 'ready' };
   source.inventoryTargetsRead = { status: 'ready' };
   let result = buildMpsWorkflow(source, null);
@@ -336,9 +344,9 @@ test('业务版本缺源周转天数临时按零参与，原始缺项保留且�
   assert.ok(
     result.rows.every(
       (row) =>
-        row.safetyDays === 0 &&
-        row.targetInventory === 0 &&
-        row.safetyDaysSource === 'missing-turnover-days-zero',
+        row.safetyDays === null &&
+        row.targetInventory === null &&
+        row.safetyDaysSource === 'missing',
     ),
   );
   assert.ok(
@@ -488,7 +496,7 @@ test('M+2调整后的大类有效链进入需求与M+3库存，系统基线和�
   const source = draft();
   source.month = '2026-10';
   source.products = [source.products[0]];
-  source.constraints.safetyDays = [{ base: '甲', days: 5 }];
+  source.constraints.turnoverDays = [{ base: '甲', code: 'A', days: 5 }];
   source.report = ['2026-10', '2026-11', '2026-12'].map((month) => ({
     月份: month,
     基地: '甲',
@@ -1063,6 +1071,7 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
     数量: 25,
   }));
   source.categoryDemand = [{ month: source.month, category: '点心', quantity: 100 }];
+  source.constraints.turnoverDays = codes.map((code) => ({ base: '甲', code, days: 0 }));
   source.resources = [{ id: 'R', base: '甲', kind: 'tunnel', name: '产线', dailyTons: 100 }];
   source.resourceAssignments = [{ base: '甲', code: 'A', resourceId: 'R', share: 1 }];
   source.unitWeights = ['B', 'C', 'D'].map((code) => ({ base: '甲', code, tonsPerPiece: 1 }));
@@ -1162,6 +1171,7 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
 
 test('组合系列为空但物理隧道有效时保留产能，不进入缺产能报告', () => {
   const source = draft();
+  source.constraints.turnoverDays = [{ base: '甲', code: 'A', days: 0 }];
   source.resources = [
     { id: 'F', base: '甲', kind: 'forming', name: '已批准成型机', dailyTons: 100 },
   ];
