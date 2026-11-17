@@ -381,7 +381,10 @@ test('仅同版同月非演示结存进入期初，空白不变0，原型产品�
     status: 'ready',
     rows: [{ base: '甲', code: 'A', end: -5 }],
   };
-  assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].openingInventory, -5);
+  assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].openingInventory, 0);
+  assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].rawOpeningInventory, -5);
+  snapshot.rows[0] = { ...snapshot.rows[0], end: 0, rawEnd: -5 };
+  assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].rawOpeningInventory, -5);
   snapshot.draftId = 'v2';
   assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].openingInventory, null);
   snapshot.draftId = 'v1';
@@ -438,7 +441,8 @@ test('产品读取中或失败撤销依赖分类的拆分，但保留独立数�
     assert.equal(row.historyShare, null);
     assert.equal(row.reportQuantity, 30);
     assert.equal(row.historyQuantity, 60);
-    assert.equal(row.openingInventory, -8);
+    assert.equal(row.openingInventory, 0);
+    assert.equal(row.rawOpeningInventory, -8);
     assert.match(row.missing.demand.join(''), status === 'loading' ? /正在读取/ : /产品权限已失效/);
   }
 });

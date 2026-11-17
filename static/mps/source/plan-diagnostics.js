@@ -163,6 +163,19 @@ export function attachPlanReport(
           : '先处理上月该基地SKU的需求、库存或产能异常，取得实际期末结存后重新评估',
       );
     }
+    for (const issue of row.inventoryIssues ?? [])
+      add(
+        '负库存归零',
+        `${issue.metric === 'openingInventory' ? '期初库存' : '预测期末库存'}原始值${issue.rawValue}，计算用值${issue.calculationValue}；${issue.reason}`,
+        issue.metric === 'openingInventory' && row.month === plan.context.month
+          ? '本月预估发货 / 前月结存'
+          : '库存收支计算',
+        issue.metric === 'openingInventory'
+          ? 'openingInventory / rawOpeningInventory'
+          : 'projectedClosing / rawProjectedClosing',
+        '已逐SKU归0后承接汇总；原始库存、修正历史及供需不足继续保留，原因待核',
+        false,
+      );
     if (row.planMissing.includes('缺目标库存'))
       add(
         '缺目标库存',
