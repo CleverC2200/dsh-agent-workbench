@@ -1,3 +1,4 @@
+import { mpsLocalDraftSchema } from '../../../src/mps-local-draft.ts';
 import { createDemandAdjustmentUpload } from './demand-adjustment-upload.js';
 import { createHistoryReport, historyColumns, historyExportRows } from './history-report-view.js';
 import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
@@ -162,6 +163,8 @@ export function createProcessedDemand(
             undos.has(index) ? { ...item, value: effective(candidate, undos.get(index)) } : item,
           ),
         };
+      if (!mpsLocalDraftSchema.shape.adjustments.safeParse(adjustments).success)
+        throw Error('修正及完整历史超出本地草稿可保存范围。请先导出核对，未应用本次修正。');
       update({ adjustments, ...(shipping ? { shipment: shipping.state } : {}) });
     };
     react.useLayoutEffect(() => {

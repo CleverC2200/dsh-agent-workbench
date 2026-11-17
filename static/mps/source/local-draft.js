@@ -1,5 +1,14 @@
 import { mpsLocalStateSchema } from '../../../src/mps-local-draft.ts';
 
+export const adjustmentReasons = [
+  '销售变化',
+  '促销活动',
+  '库存调整',
+  '供应变化',
+  '数据纠错',
+  '其他',
+];
+
 export const emptyAdjustments = () => ({
   categoryDemand: [],
   shares: [],

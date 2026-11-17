@@ -16,7 +16,7 @@ const compiled = await build({
       sample.draft.adjustments={quantities:[{kind:'base-sku',month:'2026-12',category:'点心',group:'包点',code:'0',base:'甲',quantity:120,reason:'人工确认',at:'2026-11-17T08:00:00Z',systemValue:50}]};
       window.downloads=[];window.originalAdjustments=structuredClone(sample.draft.adjustments);
       window.runFailedWorker=()=>computeWorkflow(sample.draft,sample.relations,{...sample.shipment,status:'failed',error:'库存源访问拒绝'},sample.evaluation,new AbortController().signal);
-      const Workflow=createWorkflow(React,()=>{},{downloadCsv:(name,columns,rows)=>window.downloads.push({name,columns,rows}),downloadAmounts:()=>{},Dialog:()=>null});
+      const Workflow=createWorkflow(React,()=>{},{downloadCsv:(name,columns,rows)=>window.downloads.push({name,columns,rows}),downloadAmounts:()=>{},Dialog:()=>null,Upload:()=>null});
       function Page(){const [draft,setDraft]=React.useState(sample.draft);const [step,setStep]=React.useState('process');
         const result=buildMpsWorkflow(draft,sample.relations,sample.shipment,sample.evaluation);window.result=result;window.adjustments=draft.adjustments;
         window.showReport=()=>setStep('report');
