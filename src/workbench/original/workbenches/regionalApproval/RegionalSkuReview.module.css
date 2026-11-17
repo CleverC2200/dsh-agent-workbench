@@ -1,10 +1,16 @@
 .root {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
   padding: 12px 16px;
 }
 .filters {
   display: flex;
   align-items: flex-end;
   flex-wrap: wrap;
+  flex-shrink: 0;
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -17,11 +23,14 @@
   max-width: 360px;
 }
 .scope {
+  flex-shrink: 0;
   margin: 8px 0 12px;
   color: var(--text-secondary);
   font-size: 12px;
 }
 .viewport {
+  min-height: 0;
+  flex: 1 1 auto;
   overflow: auto;
   margin-top: 12px;
 }
@@ -52,6 +61,11 @@
 .subtotal,
 .table tfoot {
   background: var(--bg-2);
+}
+.table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 .table th {
   font-weight: 600;
