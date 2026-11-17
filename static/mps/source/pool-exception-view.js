@@ -128,9 +128,7 @@ export function createPoolExceptionReport(react, { downloadCsv }) {
         { role: 'status', className: 'dc-card-note' },
         `当前查看${kinds[kind]}，共${rows.length}${kind === 'total' ? '项' : '条'}`,
       ),
-      h(
-        'div',
-        { tabIndex: 0, role: 'region', 'aria-label': `${kinds[kind]}明细，可横向滚动` },
+      react.cloneElement(
         table(
           `${kinds[kind]}明细`,
           columns,
@@ -138,6 +136,7 @@ export function createPoolExceptionReport(react, { downloadCsv }) {
             .slice(pageIndex * 25, (pageIndex + 1) * 25)
             .map((row) => columns.map((column) => row[column])),
         ),
+        { tabIndex: 0, role: 'region', 'aria-label': `${kinds[kind]}明细，可横向滚动` },
       ),
       rows.length > 25 &&
         h(

@@ -73,6 +73,10 @@ test('三类池外报告页面与下载保留双来源，基地筛选同步，�
   const report = view.getByRole('region', { name: '产品范围与池外异常', exact: true });
   await expect(report).toBeVisible();
   await report.getByRole('button', { name: '总异常清单（3项）', exact: true }).click();
+  const scroll = report.getByRole('region', { name: '总异常清单明细，可横向滚动', exact: true });
+  await scroll.focus();
+  await scroll.press('ArrowRight');
+  await expect.poll(() => scroll.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
   const total = await downloadRows(
     page,
     report.getByRole('button', { name: '下载当前池外异常明细', exact: true }),
