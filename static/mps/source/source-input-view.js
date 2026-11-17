@@ -3,7 +3,7 @@ import { buildCategoryDemand } from './category-demand.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createPlanRates } from './plan-rate-view.js';
 import { hasMpsSource } from './master-data.js';
-import { readFactMonth, readHistoryAnnual } from './facts.js';
+import { readFactMonth, readHistoryAnnual, readHistoryWindow } from './facts.js';
 import { readSourceTable } from './source-tables.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { sourceCheckRows, sourceProductMappings } from './source-projections.js';
@@ -48,7 +48,10 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           update({
             [type + 'Read']: { status: 'unread', month: draft.month },
             ...(kind === 'parameters'
-              ? { historyAnnualRead: { status: 'unread', month: draft.month } }
+              ? {
+                  historyAnnualRead: { status: 'unread', month: draft.month },
+                  historyWindowRead: { status: 'unread', month: draft.month },
+                }
               : {}),
           });
       }
@@ -61,7 +64,10 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       update({
         [type + 'Read']: { status: 'loading', month: draft.month },
         ...(kind === 'parameters'
-          ? { historyAnnualRead: { status: 'loading', month: draft.month } }
+          ? {
+              historyAnnualRead: { status: 'loading', month: draft.month },
+              historyWindowRead: { status: 'loading', month: draft.month },
+            }
           : {}),
       });
       const read = async (operation) => {
@@ -75,28 +81,35 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       if (kind === 'parameters')
         void (async () => {
           try {
-            const periods = await Promise.all(
-              [draft.month].map(async (month) => ({
-                ...previousFiscalYear(month),
-                ...(await read(() => readHistoryAnnual(month, stop.signal))),
-              })),
-            );
+            const [annual, historyWindow] = await Promise.all([
+              read(() => readHistoryAnnual(draft.month, stop.signal)),
+              readHistoryWindow(draft.month, stop.signal),
+            ]);
+            const periods = [{ ...previousFiscalYear(draft.month), ...annual }];
+            const readState = (entries) => ({
+              status: entries.some((entry) => entry.error)
+                ? 'failed'
+                : entries.some((entry) => entry.metadata?.partial)
+                  ? 'partial'
+                  : 'ready',
+              month: draft.month,
+              error: entries
+                .filter((entry) => entry.error)
+                .map((entry) => `${entry.month || `${entry.start}至${entry.end}`}：${entry.error}`)
+                .join('；'),
+            });
             if (!stop.signal.aborted)
               update({
                 historyAnnual: { periods },
-                historyAnnualRead: {
-                  status: 'ready',
-                  month: draft.month,
-                  error: periods
-                    .filter((period) => period.error)
-                    .map((period) => `${period.start}至${period.end}：${period.error}`)
-                    .join('；'),
-                },
+                historyAnnualRead: readState(periods),
+                historyWindow,
+                historyWindowRead: readState(historyWindow.periods),
               });
           } catch (error) {
             if (!stop.signal.aborted)
               update({
                 historyAnnualRead: { status: 'failed', month: draft.month, error: error.message },
+                historyWindowRead: { status: 'failed', month: draft.month, error: error.message },
               });
           }
         })();
