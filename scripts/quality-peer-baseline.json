@@ -7,11 +7,11 @@
     },
     {
       "repo": "dsh-agent-manage",
-      "head": "a1e5a738faae31dfe3b768d3e078ccffdb76c808"
+      "head": "017538ba72df4a444e42007c8fb62263373546de"
     },
     {
       "repo": "dsh-gea-plugin",
-      "head": "976b8e064cec43726605c63685916460a316b172"
+      "head": "41ef70ddd3f6acdbcd4631e9e92bd83b307dc4bd"
     }
   ]
 }
