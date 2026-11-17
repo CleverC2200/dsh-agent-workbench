@@ -130,3 +130,33 @@ test('日均真实零与缺失补零报告可区分，原始来源失败原因�
   );
   assert.equal(sample.shipment.status, 'failed');
 });
+
+test('未来既有生产和在途按月份确认入账，前月不重复，缺记录不会被日均补0覆盖', () => {
+  const sample = delistedInput();
+  sample.shipment.rows[0].average = null;
+  sample.draft.inventoryMovements = ['2026-11', '2026-12', '2027-01', '2027-02'].map((month) => ({
+    month,
+    base: '甲',
+    code: '0',
+    productionInbound: month === '2026-12' ? 20 : 0,
+    inTransitInbound: month === '2027-01' ? 5 : 0,
+    transferIn: 0,
+    transferOut: 0,
+    source: '已有计划核对',
+    reason: '人工确认',
+    at: '2026-11-17T08:00:00.000Z',
+  }));
+  let result = buildMpsWorkflow(sample.draft, sample.relations, sample.shipment, sample.evaluation);
+  assert.deepEqual(
+    result.rows.filter((row) => row.code === '0').map((row) => row.projectedClosing),
+    [70, 75, 75],
+  );
+  sample.draft.inventoryMovements = sample.draft.inventoryMovements.filter(
+    (row) => row.month !== '2027-01',
+  );
+  result = buildMpsWorkflow(sample.draft, sample.relations, sample.shipment, sample.evaluation);
+  assert.deepEqual(
+    result.rows.filter((row) => row.code === '0').map((row) => row.projectedClosing),
+    [70, null, null],
+  );
+});

@@ -1,3 +1,4 @@
+import { seedLeafQuantities } from './helpers/mps-fixtures.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -164,6 +165,22 @@ test('月份切换贯通取数、需求计算和下载，保留历史版本、�
     [...new Set(rows.map((row) => row['月份']))],
     ['2027-01', '2027-02', '2027-03', '2027-04'],
   );
+  await seedLeafQuantities(frame, [
+    {
+      month: '2027-01',
+      category: '汤圆',
+      group: 'G',
+      base: '郑州',
+      code: 'A',
+      quantity: 91,
+      systemValue: null,
+    },
+  ]);
+  const validJanuary = await workflowExportRows(frame);
+  assert.equal(
+    validJanuary.find((row) => row.月份 === '2027-01' && row.产品编码 === 'A').需求数量,
+    '91',
+  );
   await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   const downloading = page.waitForEvent('download');
   await frame.getByRole('button', { name: '导出核对底稿', exact: true }).click();
@@ -176,6 +193,33 @@ test('月份切换贯通取数、需求计算和下载，保留历史版本、�
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-11');
   await expect(report).toContainText('数量合计123件');
+  await seedLeafQuantities(frame, [
+    {
+      month: '2026-11',
+      category: '汤圆',
+      group: 'G',
+      base: '郑州',
+      code: 'A',
+      quantity: 123,
+      systemValue: null,
+    },
+  ]);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const validNovember = await workflowExportRows(frame);
+  assert.equal(
+    validNovember.find((row) => row.月份 === '2026-11' && row.产品编码 === 'A').需求数量,
+    '123',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2027-01');
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const restoredJanuary = await workflowExportRows(frame);
+  assert.equal(
+    restoredJanuary.find((row) => row.月份 === '2027-01' && row.产品编码 === 'A').需求数量,
+    '91',
+  );
+  assert.ok(restoredJanuary.every((row) => row.评估月份 === '2027-01'));
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await frame.getByLabel('评估版本选择').selectOption('legacy-october');
   await expect(frame.getByLabel('评估月份选择').locator('option:checked')).toHaveText(
     '历史月份 · 2026-10',

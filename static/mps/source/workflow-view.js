@@ -737,6 +737,10 @@ export function createWorkflow(
           '原始期初库存',
           '原始预测期末库存',
           '库存归零记录',
+          '参考期末库存',
+          '既有计划来源',
+          '既有计划确认原因',
+          '既有计划状态',
           ...delistedDownloadColumns,
           ...layerColumns,
           ...layerQuantityColumns,
@@ -840,6 +844,25 @@ export function createWorkflow(
           ...inventoryDependencyFields(row),
           系统SKU需求: row.systemDemand,
           ...delistedDownloadFields(row),
+          参考期末库存: row.projectedClosing,
+          既有计划来源:
+            (draft.inventoryMovements ?? []).find(
+              (item) =>
+                item.month === row.month && item.base === row.base && item.code === row.code,
+            )?.source ?? '',
+          既有计划确认原因:
+            (draft.inventoryMovements ?? []).find(
+              (item) =>
+                item.month === row.month && item.base === row.base && item.code === row.code,
+            )?.reason ?? '',
+          既有计划状态: [
+            row.existingProductionInbound,
+            row.existingInTransitInbound,
+            row.existingTransferIn,
+            row.existingTransferOut,
+          ].every((value) => value !== null)
+            ? '已确认'
+            : '待补，未知不补0',
           原始期初库存: row.rawOpeningInventory,
           原始预测期末库存: row.rawProjectedClosing,
           库存归零记录: (row.inventoryIssues ?? [])
@@ -1264,6 +1287,70 @@ export function createWorkflow(
         value: value ?? '',
         onChange: (event) => change(event.target.value),
       });
+    const movementFields = [
+      ['productionInbound', '既有生产入库'],
+      ['inTransitInbound', '既有在途入库'],
+      ['transferIn', '既有调入'],
+      ['transferOut', '既有调出'],
+    ];
+    const movements = draft.inventoryMovements ?? [];
+    const movementRows = configurationPairs
+      .flatMap((pair) =>
+        Array.from({ length: 3 }, (_, offset) => {
+          const date = new Date(`${draft.month}-01T00:00:00Z`);
+          date.setUTCMonth(date.getUTCMonth() + offset);
+          return { ...pair, month: date.toISOString().slice(0, 7) };
+        }),
+      )
+      .map((row) => {
+        const identity = { month: row.month, base: row.base, code: row.code };
+        const key = (item) => JSON.stringify([item.month, item.base, item.code]);
+        const existing = movements.find((item) => key(item) === key(identity));
+        const label = `${row.base} ${row.code} ${row.month}`;
+        const change = (patch) =>
+          update({
+            inventoryMovements: [
+              ...movements.filter((item) => key(item) !== key(identity)),
+              {
+                ...identity,
+                productionInbound: null,
+                inTransitInbound: null,
+                transferIn: null,
+                transferOut: null,
+                source: '',
+                reason: '',
+                ...existing,
+                ...patch,
+                at: new Date().toISOString(),
+              },
+            ],
+          });
+        return [
+          row.month,
+          row.base,
+          row.code,
+          ...movementFields.map(([field, title]) =>
+            numberInput(`${label} ${title}`, existing?.[field] ?? null, (value) =>
+              change({ [field]: value }),
+            ),
+          ),
+          textEntry(`${label} 既有计划来源`, existing?.source, (source) => change({ source })),
+          textEntry(`${label} 既有计划确认原因`, existing?.reason, (reason) => change({ reason })),
+          existing?.at ?? '待确认',
+          h(
+            'button',
+            {
+              disabled: !batch.active || !existing,
+              'aria-label': `${label} 恢复既有计划待补`,
+              onClick: () =>
+                update({
+                  inventoryMovements: movements.filter((item) => key(item) !== key(identity)),
+                }),
+            },
+            '恢复待补',
+          ),
+        ];
+      });
     const resourceRows = resources.map((resource, index) => [
       textEntry(`资源${index + 1} 唯一编号`, resource.id, (id) =>
         editEntry('resources', resources, index, { id }),
@@ -1412,6 +1499,26 @@ export function createWorkflow(
           ...row,
           dailyTons: number(row.dailyTons, `资源${index + 1} 日产吨数`),
         }));
+      if (changes.inventoryMovements)
+        changes.inventoryMovements = changes.inventoryMovements.map((row) => {
+          const values = Object.fromEntries(
+            movementFields.map(([field, title]) => [
+              field,
+              number(row[field], `${row.base} ${row.code} ${row.month} ${title}`),
+            ]),
+          );
+          if (!row.source.trim() || !row.reason.trim())
+            throw Error(
+              `${row.base} ${row.code} ${row.month}：请填写既有计划来源和确认原因；明确0表示已确认无计划。`,
+            );
+          return {
+            ...row,
+            ...values,
+            source: row.source.trim(),
+            reason: row.reason.trim(),
+            at: row.at ?? new Date().toISOString(),
+          };
+        });
       if (changes.resourceAssignments)
         changes.resourceAssignments = changes.resourceAssignments.map((row, index) => ({
           ...row,
@@ -1630,6 +1737,35 @@ export function createWorkflow(
                 table,
                 card,
               }),
+              card(
+                '既有库存变动确认',
+                h(
+                  react.Fragment,
+                  null,
+                  h(
+                    'p',
+                    { className: 'wf-note' },
+                    '按月份、基地及SKU确认已经存在的生产入库、在途和调拨计划。空白待补，明确0表示已确认无计划；填写来源和原因后保存。本页不创建生产或采购单。前月已计变动由期初承接，不重复登记。',
+                  ),
+                  table(
+                    '既有库存变动确认',
+                    [
+                      '月份',
+                      '基地',
+                      'SKU',
+                      '既有生产入库',
+                      '既有在途入库',
+                      '既有调入',
+                      '既有调出',
+                      '来源',
+                      '确认原因',
+                      '确认时间',
+                      '操作',
+                    ],
+                    movementRows,
+                  ),
+                ),
+              ),
               card(
                 '可用生产天数',
                 table(

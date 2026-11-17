@@ -27,7 +27,7 @@ export function delistedReportIssues(rows, context) {
             'ai_db.agents_dim_transfer_direction_mi / ai_db.agents_scm_stock_detail_d / 原需求拆分',
           sourceFields: 'transfer_tag / avg_30d_send / 原系统拆分需求',
           action:
-            '停止自动新增需求和补货。第二步已含生产及在途入库通过期初承接，已维护的后续调拨继续入账；独立未来生产及在途计划来源尚未接入，不视为已确认零计划',
+            '停止自动新增需求和补货。第二步已含生产及在途入库通过期初承接，本地已确认的后续生产入库、在途和调拨按月份入账；缺确认保留待补，明确0才表示无计划',
         });
       else if (row.quantityAdjusted && row.demand > 0)
         issues.push({

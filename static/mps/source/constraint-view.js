@@ -280,7 +280,7 @@ export function createConstraintPanel(react, { Dialog }) {
           ),
         ),
       ),
-      children[0],
+      children.slice(0, 2),
       evaluations.length > 0 &&
         card(
           '冲突与放宽建议',
@@ -364,7 +364,7 @@ export function createConstraintPanel(react, { Dialog }) {
         },
         h('summary', null, '高级配置：生产日历、件吨系数与资源分配'),
         (advancedOpen || !disabled) &&
-          h('div', { className: 'wf-advanced-body' }, children.slice(1)),
+          h('div', { className: 'wf-advanced-body' }, children.slice(2)),
       ),
       editor &&
         h(

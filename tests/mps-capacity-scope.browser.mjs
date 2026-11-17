@@ -16,13 +16,19 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
         import {createEvaluationOverview} from './static/mps/source/evaluation-view.js';
         import {buildMpsWorkflow} from './static/mps/source/workflow-inputs.js';
         import {downloadCsv} from './static/mps/source/demand-confirmation.js';
+        import {encodeLocalDrafts,decodeLocalDrafts} from './static/mps/source/local-draft.js';
         import {workflowPerformanceInput} from './tests/helpers/mps-workflow-fixture.mjs';
         const root=createRoot(document.getElementById('root'));
-        window.runCapacity=(size=2)=>{
+        window.runCapacity=(size=2,restore=false)=>{
         const sample=workflowPerformanceInput(size);
         sample.draft.resources[0]={...sample.draft.resources[0],workshop:'一车间',tunnel:'T1',productionLines:['一产线','共用产线']};
         sample.draft.resources.push({id:'R2',base:'甲',kind:'tunnel',name:'第二隧道',dailyTons:2,workshop:'二车间',tunnel:'T2'});
         sample.draft.resourceAssignments.push(...sample.draft.resourceAssignments.map(row=>({...row,resourceId:'R2'})));
+        sample.draft.files={};
+        sample.draft.resourceAssignments=sample.draft.resourceAssignments.map(row=>({...row,month:sample.draft.month}));
+        if(!restore) localStorage.setItem('capacityDraft',JSON.stringify(encodeLocalDrafts([sample.draft],sample.draft.id)));
+        const restored=decodeLocalDrafts(JSON.parse(localStorage.getItem('capacityDraft')),(id,month)=>({id,month,files:{}}),()=>{throw Error('草稿恢复失败')});
+        sample.draft={...sample.draft,...restored.drafts[0]};
         const result=buildMpsWorkflow(sample.draft,sample.relations,sample.shipment,sample.evaluation);
         window.result=result;window.downloads=[];
         const View=createEvaluationOverview(React,{Dialog:()=>null,downloadCsv:(name,columns,rows)=>{window.downloads.push({name,columns,rows});return downloadCsv(name,columns,rows)}});
@@ -30,7 +36,7 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
         const card=(title,body)=>h('section',{className:'dc-card','aria-label':title},h('div',{className:'dc-card-head'},h('h2',null,title)),body);
         const table=(name,columns,rows)=>h('div',{className:'dc-table-scroll wf-table-scroll'},h('table',{'aria-label':name},h('thead',null,h('tr',null,...columns.map((c,i)=>h('th',{key:i,scope:'col'},c)))),h('tbody',null,...rows.map((r,i)=>h('tr',{key:i},...r.map((v,j)=>h('td',{key:j},v?.content??v)))))));
         window.showStep=(step)=>root.render(h(View,{step,draft:sample.draft,currentEvaluation:{at:'验收时间',result},filters:{month:'2026-12'},table,card,numberText:value=>value===null?'待补':new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(value),onExecute(){}}));
-        window.showStep('capacity');};window.runCapacity();`,
+        window.showStep('capacity');};window.runCapacity(2,localStorage.getItem('capacityDraft')!==null);`,
     },
     plugins: [await mpsComputePlugin()],
     bundle: true,
@@ -52,6 +58,16 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
   for (const name of ['vendor.css', 'layout.css', 'demand-confirmation.css', 'workflow.css'])
     await page.addStyleTag({ content: await readFile('static/mps/source/' + name, 'utf8') });
   await page.addScriptTag({ content: output.outputFiles[0].text });
+  await page.evaluate(() => window.runCapacity(3));
+  const savedDraft = await page.evaluate(() => localStorage.getItem('capacityDraft'));
+  await page.reload();
+  for (const name of ['vendor.css', 'layout.css', 'demand-confirmation.css', 'workflow.css'])
+    await page.addStyleTag({ content: await readFile('static/mps/source/' + name, 'utf8') });
+  await page.addScriptTag({ content: output.outputFiles[0].text });
+  assert.equal(await page.evaluate(() => localStorage.getItem('capacityDraft')), savedDraft);
+  assert.ok(await page.evaluate(() => window.result.rows.some((row) => row.code === '2')));
+  await page.evaluate(() => window.runCapacity(2));
+
   await expect(
     page.getByRole('heading', { name: '设备范围与产品占用', exact: true }),
   ).toBeVisible();

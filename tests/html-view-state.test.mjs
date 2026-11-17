@@ -633,3 +633,30 @@ test('MPS quantity adjustments persist their level and audit while old drafts de
     { invalid: true },
   );
 });
+
+test('人工资源设备归属经严格草稿保存重开，旧资源仍保留未知归属', () => {
+  const resources = [
+    {
+      id: 'R',
+      base: '甲',
+      kind: 'tunnel',
+      name: '共享隧道',
+      dailyTons: 10,
+      workshop: '一车间',
+      tunnel: 'T1',
+      productionLines: ['一产线', '共用产线'],
+    },
+    { id: 'OLD', base: '甲', kind: 'tunnel', name: '旧资源', dailyTons: null },
+  ];
+  const draft = { id: 'v1', name: '本地', month: '2026-12', pull: 'monthly', files: {}, resources };
+  const saved = JSON.parse(JSON.stringify(encodeLocalDrafts([draft], draft.id)));
+  const restored = decodeLocalDrafts(
+    saved,
+    (id, month) => ({ id, month, files: {} }),
+    () => {
+      throw Error('不应丢弃有效草稿');
+    },
+  );
+  assert.deepEqual(restored.drafts[0].resources, resources);
+  assert.equal(Object.hasOwn(restored.drafts[0].resources[1], 'productionLines'), false);
+});
