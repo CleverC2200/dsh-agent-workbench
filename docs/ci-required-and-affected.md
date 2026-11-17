@@ -34,7 +34,7 @@ Workbench 的日常 lint/format 通过已有 CLI 的 `--changed` 检查本票差
 
 Core 下载内容与产物缓存分别保存。Workbench 的下载缓存保留恢复入口；缓存生产者须另有实际回执，不能仅由 restore 宣称已变热。SDK 核验成功后在产品检查前保存，后续无关测试失败仍可复用该次已验证准备。SDK 缓存枚举 Git 登记包的具体产物目录，包含 native JavaScript 封装和类型，不递归搜索 node_modules；保存为最多一分钟的可选步骤，上传失败不影响实际检查判定。恢复产物后仍核 Core、原锁、Node、平台、架构、构建脚本和完整产物清单，冻结安装仍执行。缓存改变、缺文件、额外文件或链接替换不能获得通过；缓存不持有用户 Home、登录、Session 或凭据。
 
-Workbench 的 `build` 需求来自选中测试对本仓 lib 或生成 HTML 的实际消费。无需这些产物时保留官方 noEmit 类型检查，省去页面构建及无关 APS 安装；需要产物时由同次声明构建完成类型分析，构建前仍核 stamp 一致及固定官方输入。基础检查失败后不进入构建。构建后的知识检查只核导出目标，源知识引用在此前检查。FC 依赖仅供实际 FC 测试或 storage 构建使用，不因其他 business 路径改动安装。需要页面产物时当前仍采用原 build:core 装配范围，尚未拆成逐页面构建。
+Workbench 的 `build` 需求来自选中测试对本仓 lib 或生成 HTML 的实际消费。无需这些产物时保留官方 noEmit 类型检查，省去页面构建及无关 APS 安装；需要产物时由同次声明构建完成类型分析，构建前仍核 stamp 一致及固定官方输入。基础检查失败后不进入构建。构建后的知识检查只核导出目标，源知识引用在此前检查。FC 依赖仅供实际 FC 测试或 storage 构建使用，不因其他 business 路径改动安装。需要页面产物时当前仍采用原 build:plugin 装配范围，尚未拆成逐页面构建。
 
 相邻 SQL 配置的动态页面和计算消费者由既有 policy 明确登记。直连执行器的原 Python 单测归属 `tests/agent-sql-direct.test.mjs`，按 `scripts/requirements-sql.txt` 通过 uv 运行；只有该 owner 入选时 workflow 准备 uv，普通 Node 检查不增加 Python 阶段。配置生成器的实际重新生成仍是显式操作，CI 不运行该写入口。
 

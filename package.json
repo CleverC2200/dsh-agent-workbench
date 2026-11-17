@@ -122,6 +122,7 @@
     "build": "node scripts/build.mjs",
     "typecheck": "node scripts/generate-plugin-package-version.mjs --check && tsc --noEmit --emitDeclarationOnly false",
     "test": "node --test --test-concurrency=2 tests/*.test.mjs business/inventory-fc/source/inventory-light-plugins/tests/*.test.mjs",
+    "build:plugin": "node scripts/build.mjs --target plugin",
     "build:core": "node scripts/build.mjs --target core",
     "typecheck:official": "npm run check:official-input && tsc -p tsconfig.official.json --noEmit --emitDeclarationOnly false",
     "test:browser": "node --test --test-concurrency=1 tests/*.browser.mjs",

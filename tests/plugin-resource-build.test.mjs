@@ -17,10 +17,10 @@ import { createHash } from 'node:crypto';
 
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
-test('the core build assembles current inventory Agent resources without recompiling those pages', async (t) => {
+test('the plugin build assembles current inventory Agent resources without recompiling those pages', async (t) => {
   const source = process.cwd();
   await mkdir('.runtime', { recursive: true });
-  const fixture = await mkdtemp(resolve('.runtime/core-resource-build-'));
+  const fixture = await mkdtemp(resolve('.runtime/plugin-resource-build-'));
   const workbench = join(fixture, 'jobs/dsh-agent-workbench');
   await mkdir(join(fixture, 'jobs'));
   execFileSync('git', ['worktree', 'add', '--detach', workbench, 'HEAD'], {
@@ -34,6 +34,7 @@ test('the core build assembles current inventory Agent resources without recompi
   });
   for (const file of ['build.mjs', 'build-inventory.mjs', 'build-output.mjs'])
     await cp(join(source, 'scripts', file), join(workbench, 'scripts', file));
+  await cp(join(source, 'package.json'), join(workbench, 'package.json'));
   const manage = await realpath(
     resolve(process.env.WORKBENCH_TEST_MANAGE_ROOT ?? '../dsh-agent-manage'),
   );
@@ -56,26 +57,28 @@ test('the core build assembles current inventory Agent resources without recompi
   );
   const obsoleteType = join(workbench, 'lib/types/removed-module.d.ts');
   const obsoleteSkill = join(workbench, 'lib/business/inventory-fc/skills/removed-skill.md');
-  await writeFile(obsoleteType, 'export declare const retired: true;\n');
-  await writeFile(obsoleteSkill, 'retired Skill\n');
-  execFileSync('npm', ['run', 'build:core'], {
-    cwd: workbench,
-    stdio: 'pipe',
-    env: { ...process.env, APS_BUILD_MODE: 'mock' },
-  });
-  await assert.rejects(access(obsoleteType), { code: 'ENOENT' });
-  await assert.rejects(access(obsoleteSkill), { code: 'ENOENT' });
-  for (const [index, id] of ['fc', 'aqkc'].entries()) {
-    assert.deepEqual(
-      await readFile(join(workbench, `lib/business/inventory-${id}/index.html`)),
-      pages[index],
-      `${id}: core target retains the existing page compilation`,
-    );
-    for (const file of ['capability.json', 'prompt.json', 'mcp.json', `skills/${id}/SKILL.md`])
+  for (const script of ['build:plugin', 'build:core']) {
+    await writeFile(obsoleteType, 'export declare const retired: true;\n');
+    await writeFile(obsoleteSkill, 'retired Skill\n');
+    execFileSync('npm', ['run', script], {
+      cwd: workbench,
+      stdio: 'pipe',
+      env: { ...process.env, APS_BUILD_MODE: 'mock' },
+    });
+    await assert.rejects(access(obsoleteType), { code: 'ENOENT' });
+    await assert.rejects(access(obsoleteSkill), { code: 'ENOENT' });
+    for (const [index, id] of ['fc', 'aqkc'].entries()) {
       assert.deepEqual(
-        digest(await readFile(join(workbench, `lib/business/inventory-${id}`, file))),
-        digest(await readFile(join(manage, `business-resources/inventory-${id}`, file))),
-        `${id}/${file}: core target must assemble the current owning Manage source bytes`,
+        await readFile(join(workbench, `lib/business/inventory-${id}/index.html`)),
+        pages[index],
+        `${id}: plugin target retains the existing page compilation`,
       );
+      for (const file of ['capability.json', 'prompt.json', 'mcp.json', `skills/${id}/SKILL.md`])
+        assert.deepEqual(
+          digest(await readFile(join(workbench, `lib/business/inventory-${id}`, file))),
+          digest(await readFile(join(manage, `business-resources/inventory-${id}`, file))),
+          `${id}/${file}: plugin target must assemble the current owning Manage source bytes`,
+        );
+    }
   }
 });

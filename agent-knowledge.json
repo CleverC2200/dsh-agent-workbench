@@ -32,7 +32,7 @@
     "check:knowledge",
     "candidate:verify",
     "typecheck:official",
-    "build:core",
+    "build:plugin",
     "test",
     "quality:fast",
     "quality:ci",

@@ -345,7 +345,7 @@ try {
                     const previousTypecheck = process.env.DSH_TYPECHECK_PROJECT;
                     process.env.DSH_TYPECHECK_PROJECT = 'tsconfig.official.json';
                     try {
-                      run('npm', ['run', buildAllPages ? 'build' : 'build:core']);
+                      run('npm', ['run', buildAllPages ? 'build' : 'build:plugin']);
                     } finally {
                       if (previousTypecheck === undefined) delete process.env.DSH_TYPECHECK_PROJECT;
                       else process.env.DSH_TYPECHECK_PROJECT = previousTypecheck;

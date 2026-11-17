@@ -172,7 +172,12 @@
     {
       "repo": "dsh-agent-workbench",
       "pattern": "^scripts/build\\.mjs$",
-      "tests": ["tests/core-resource-build.test.mjs", "tests/plugin-package-version.test.mjs"]
+      "tests": ["tests/plugin-resource-build.test.mjs", "tests/plugin-package-version.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^tests/core-resource-build\\.test\\.mjs$",
+      "tests": ["tests/plugin-resource-build.test.mjs"]
     },
     {
       "repo": "dsh-agent-workbench",
@@ -220,7 +225,7 @@
     {
       "repo": "dsh-agent-workbench",
       "pattern": "^scripts/(?:build|build-inventory|build-inventory-fc)\\.mjs$",
-      "tests": ["tests/core-resource-build.test.mjs", "tests/inventory-storage-build.test.mjs"]
+      "tests": ["tests/plugin-resource-build.test.mjs", "tests/inventory-storage-build.test.mjs"]
     },
     {
       "repo": "dsh-agent-workbench",
