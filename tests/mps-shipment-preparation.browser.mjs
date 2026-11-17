@@ -13,7 +13,7 @@ const compiled = await build({
       import {createShipment} from './static/mps/source/shipment.js';
       const Shipment=createShipment(React,()=>{},{Dialog:()=>null,Upload:()=>null,downloadCsv(){},monthOffset:()=> '2026-10'});
       function Page(){
-        const [draft,setDraft]=React.useState({id:'restore',month:'2026-11',productSource:'business',products:[{基地:'郑州',产品编码:'A',大类:'汤圆'}],shipment:window.initialShipment??{cutoff:'2026-10-22',activeSource:'business',values:{},remaining:{}}});
+        const [draft,setDraft]=React.useState({id:'restore',month:'2026-11',productSource:'business',products:[{基地:'郑州',产品编码:'A',大类:'汤圆'}],shipment:window.initialShipment??{cutoff:'2026-10-22',activeSource:'business',values:{},remaining:{},transferPlans:[{month:'2026-10',base:'郑州',code:'A',inbound:0,outbound:0}]}});
         const generation=React.useRef(0);
         return React.createElement(Shipment,{draft,scopeGeneration:generation,active:false,autoRead:true,update:changes=>setDraft(d=>({...d,...changes})),onSnapshot:snapshot=>{window.snapshot={status:snapshot.status,error:snapshot.error,sourceKind:snapshot.sourceKind,rows:snapshot.rows.map(({base,code,fin,end})=>({base,code,fin,end}))};}});
       }
@@ -141,6 +141,7 @@ test('背景准备保留本地CSV和人工发货调整，不覆盖为业务来�
         remaining: 90,
       },
     ],
+    transferPlans: [{ month: '2026-10', base: '郑州', code: 'A', inbound: 0, outbound: 0 }],
     values: { '["郑州","A"]': { value: 400 } },
     remaining: {},
   });
