@@ -18,6 +18,25 @@ const invalid = (message, status = 400) => {
 };
 const id = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 export function createWarningExecutor(config, fetchImpl = fetch) {
+  const environment = config.environment;
+  if (!['production', 'test'].includes(environment))
+    throw Error('WARNING_DEPLOYMENT_ENVIRONMENT_REQUIRED');
+  const gea = new URL(config.geaBase);
+  if (
+    (gea.protocol !== 'https:' &&
+      !(gea.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(gea.hostname))) ||
+    gea.username ||
+    gea.password ||
+    gea.search ||
+    gea.hash
+  )
+    throw Error('WARNING_DEPLOYMENT_GEA_INVALID');
+  const geaBase = gea.href.replace(/\/$/, '');
+  if (
+    (environment === 'production' && geaBase === 'https://gea.synear.cn:4443/gea-boot') ||
+    (environment === 'test' && geaBase === 'https://gea.synear.cn/gea-boot')
+  )
+    throw Error('WARNING_DEPLOYMENT_ENVIRONMENT_MISMATCH');
   const feishu = createFeishuWarningApp(config.feishu, fetchImpl);
   let cookie = '',
     groupId = config.groupId;
@@ -162,6 +181,8 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
       invalid('执行请求与调度中心记录不一致', 403);
   }
   async function identity(req) {
+    if (req.headers['x-gea-environment'] !== environment)
+      invalid('预警部署环境与客户端身份环境不一致', 403);
     const token = req.headers['x-access-token'],
       tenant = req.headers['x-tenant-id'];
     if (typeof token !== 'string' || !token || typeof tenant !== 'string' || !tenant)
@@ -170,7 +191,7 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
     const prior = identities.get(key);
     if (prior && prior.until > now()) return prior.owner;
     const headers = { 'X-Access-Token': token, 'X-Tenant-Id': tenant };
-    const r = await fetchImpl(config.geaBase + '/sys/user/getUserInfo', {
+    const r = await fetchImpl(geaBase + '/sys/user/getUserInfo', {
       headers,
       signal: AbortSignal.timeout(15000),
       redirect: 'error',
@@ -179,7 +200,7 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
       user = body.result?.userInfo;
     if (!r.ok || body.success !== true || !user?.id || !user?.username)
       invalid('GEA登录身份核对失败', 401);
-    const session = await fetchImpl(config.geaBase + '/ai/gateway/agent/session', {
+    const session = await fetchImpl(geaBase + '/ai/gateway/agent/session', {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -195,7 +216,7 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
     if (!session.ok || access.result?.accessDecision?.allowed !== true)
       invalid('无权访问产销协同Agent', 403);
     const owner = {
-      key: JSON.stringify(['production', tenant, String(user.id)]),
+      key: JSON.stringify([environment, tenant, String(user.id)]),
       username: user.username,
     };
     identities.set(key, { owner, until: now() + 15000 });
@@ -237,7 +258,7 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
   async function recipient(req, username) {
     if (!id(username)) invalid('飞书接收人账号无效');
     const response = await fetchImpl(
-      config.geaBase +
+      geaBase +
         '/sys/user/queryUserComponentData?' +
         new URLSearchParams({ username, pageNo: '1', pageSize: '20' }),
       {
@@ -392,6 +413,8 @@ export function createWarningExecutor(config, fetchImpl = fetch) {
           service: 'gea-warning-executor',
           version: '20261116.1',
           groupId,
+          environment,
+          identityOrigin: gea.origin,
         });
       if (req.method !== 'POST') invalid('请求方法不支持', 405);
       let data = '';
