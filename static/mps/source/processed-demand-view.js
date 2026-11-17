@@ -1,3 +1,5 @@
+import { mpsLocalDraftSchema } from '../../../src/mps-local-draft.ts';
+import { createDemandAdjustmentUpload } from './demand-adjustment-upload.js';
 import { createHistoryReport, historyColumns, historyExportRows } from './history-report-view.js';
 import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
 import { useStepViewField } from './step-view-state.js';
@@ -28,9 +30,18 @@ const matches = (row, entry) =>
 const label = (entry) =>
   [entry.category, entry.group, entry.code, entry.base, entry.month].filter(Boolean).join(' ');
 
-export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
+export function createProcessedDemand(
+  react,
+  { downloadCsv, downloadAmounts, Upload, Dialog, parseCsv },
+) {
   const h = react.createElement;
   const { Field } = createBatchEdit(react);
+  const DemandAdjustmentUpload = createDemandAdjustmentUpload(react, {
+    Upload,
+    Dialog,
+    parseCsv,
+    downloadCsv,
+  });
   const AmountReconciliation = createAmountReconciliation(react, { downloadCsv: downloadAmounts });
   const UpperAdjustmentConflicts = createUpperAdjustmentConflicts(react);
   const HistoryReport = createHistoryReport(react, { downloadCsv });
@@ -125,7 +136,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       const quantities = entries.filter((entry) => entry.meta.kind !== 'shipment');
       for (const entry of quantities) {
         const { editorRow: _editorRow, ...fields } = entry.meta;
-        const input = { ...fields, quantity: entry.value, reason };
+        const input = { ...fields, quantity: entry.value, reason: entry.reason ?? reason };
         const before = adjustments?.history?.length ?? 0;
         adjustments = changeAdjustment(adjustments, 'quantities', input, entry.value === null);
         if (entry.value === null && adjustments.history.length > before)
@@ -152,6 +163,8 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
             undos.has(index) ? { ...item, value: effective(candidate, undos.get(index)) } : item,
           ),
         };
+      if (!mpsLocalDraftSchema.shape.adjustments.safeParse(adjustments).success)
+        throw Error('修正及完整历史超出本地草稿可保存范围。请先导出核对，未应用本次修正。');
       update({ adjustments, ...(shipping ? { shipment: shipping.state } : {}) });
     };
     react.useLayoutEffect(() => {
@@ -760,6 +773,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         h(
           react.Fragment,
           null,
+          h(DemandAdjustmentUpload, { draft, result, batch, table, apply: applyBatch }),
           detailTable,
           !rows.length &&
             h('p', { className: 'wf-note' }, '当前筛选暂无基地SKU输入，展开来源诊断查看缺项。'),

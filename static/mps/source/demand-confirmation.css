@@ -561,7 +561,12 @@
   color: var(--dc-text);
   box-shadow: 0 12px 32px #1d202833;
 }
+.dc-dialog:modal {
+  overscroll-behavior: contain;
+}
 .dc-dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
   background: #11182766;
 }
 .dc-dialog[open] {

@@ -1,6 +1,8 @@
+import { adjustmentReasons } from './local-draft.js';
+
 export function createBatchEdit(react) {
   const h = react.createElement;
-  const reasons = ['销售变化', '促销活动', '库存调整', '供应变化', '数据纠错', '其他'];
+  const reasons = adjustmentReasons;
   function useBatchEdit({ scope, onEditingChange, requireReason = false, onStart, onCancel }) {
     const [active, setActive] = react.useState(false);
     const [pending, setPending] = react.useState({});
