@@ -163,7 +163,7 @@ export async function renderOwnerDirectory(main, api, { canWrite = true, writeRe
       input.addEventListener('invalid', validate);
     });
     view.querySelector('h3').focus();
-    form.onsubmit = async (event) => {
+    const submit = async (event) => {
       event.preventDefault();
       if (busy || !form.reportValidity()) return;
       const type = form.elements.type.value;
@@ -184,6 +184,8 @@ export async function renderOwnerDirectory(main, api, { canWrite = true, writeRe
       view.querySelector('[data-status]').textContent = '正在核验并保存…';
       if (await save(next)) finish();
     };
+    form.onsubmit = submit;
+    form.querySelector('[type="submit"]').onclick = submit;
   }
   await load();
 }
