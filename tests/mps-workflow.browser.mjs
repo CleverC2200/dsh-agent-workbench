@@ -780,12 +780,19 @@ test('MPS report and CSV derive all three months from evaluation-month coefficie
   await workflowStep(frame, '产销存报告');
   const report = frame.getByRole('region', { name: '产销存报告', exact: true });
   await expect(report.getByRole('button', { name: '导出产销存结果', exact: true })).toBeDisabled();
-  const csv = await download(page, report, '下载需求推导参考');
-  const book = XLSX.read(csv, { type: 'string', raw: true });
-  const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
-  const total = exported.find((row) => row['粒度'] === '全版本汇总，需求推导参考');
+  await expect(frame.getByText('全年历史读取中…')).toHaveCount(0);
+  let total;
+  await expect
+    .poll(async () => {
+      const csv = await download(page, report, '下载需求推导参考');
+      const book = XLSX.read(csv, { type: 'string', raw: true });
+      const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
+      total = exported.find((row) => row['粒度'] === '全版本汇总，需求推导参考');
+      return total['完整生产吨数'];
+    })
+    .toBe('300');
   assert.equal(total['已知生产吨数小计'], '300');
-  assert.equal(total['完整生产吨数'], '300');
+  assert.equal(total['完整生产吨数'], '300', JSON.stringify(total));
   assert.equal(total['总行数'], '3');
   assert.doesNotMatch(total['未评估原因'], /缺月度SKU域/);
   assert.doesNotMatch(total['未评估原因'], /缺明确SKU件吨系数或所需生产/);
