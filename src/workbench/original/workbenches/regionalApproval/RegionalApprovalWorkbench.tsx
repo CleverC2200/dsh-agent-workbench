@@ -1114,11 +1114,19 @@ const RegionalApprovalWorkbench: React.FC<{
 
   const focusedLiveRow = liveRows.find((row) => row.planId === focusedLivePlanId) ?? liveRows[0];
   const metricRows = orderType === 'M' ? allLiveRows : liveRows;
+  const skuReviewLoading = skuReviewOpen && !skuReviewSnapshot;
+  const completedListDetails = useRef<{ loadId: string; rows: typeof metricRows }>();
   const detailLoadId = useMemo(
     () => crypto.randomUUID(),
     [allLiveRows, orderType, liveStageFilter, detailClient, roleKey],
   );
   useEffect(() => {
+    if (
+      skuReviewLoading ||
+      (completedListDetails.current?.loadId === detailLoadId &&
+        completedListDetails.current.rows === metricRows)
+    )
+      return;
     const requestId = ++liveCategoriesRequest.current;
     setLiveCategoriesError(false);
     setLiveCategorySummaries({});
@@ -1142,7 +1150,11 @@ const RegionalApprovalWorkbench: React.FC<{
         const versionId = row.versionId;
         const approvalRole = liveStageFilter ?? roleStages[0];
         const [skus, stored] = await Promise.all([
-          detailClient.versionSkus.invoke({ versionId, signal: controller.signal }),
+          detailClient.versionSkus.invoke({
+            versionId,
+            signal: controller.signal,
+            priority: 'low',
+          }),
           orderType === 'M' && row.orderType !== 'Z' && detailClient.draft
             ? detailClient.draft.invoke({
                 planId: row.planId,
@@ -1150,6 +1162,7 @@ const RegionalApprovalWorkbench: React.FC<{
                 approvalRole,
                 detailLoadId,
                 signal: controller.signal,
+                priority: 'low',
               })
             : undefined,
         ]);
@@ -1221,11 +1234,13 @@ const RegionalApprovalWorkbench: React.FC<{
           };
         }
       };
-      for (let offset = 0; offset < metricRows.length; offset += 4) {
-        controller.signal.throwIfAborted();
-        await Promise.all(metricRows.slice(offset, offset + 4).map(readRow));
-      }
+      let nextRow = 0;
+      const prefetch = async () => {
+        while (nextRow < metricRows.length) await readRow(metricRows[nextRow++]);
+      };
+      await Promise.all(Array.from({ length: Math.min(2, metricRows.length) }, prefetch));
       if (!controller.signal.aborted) {
+        completedListDetails.current = { loadId: detailLoadId, rows: metricRows };
         setLivePendingValues((current) => {
           const next = { ...current };
           for (const [planId, values] of Object.entries(restoredInputs))
@@ -1238,14 +1253,24 @@ const RegionalApprovalWorkbench: React.FC<{
       }
     })()
       .catch(() => {
-        if (!controller.signal.aborted && liveCategoriesRequest.current === requestId)
+        if (!controller.signal.aborted && liveCategoriesRequest.current === requestId) {
+          controller.abort();
           setLiveCategoriesError(true);
+        }
       })
       .finally(() => {
         if (liveCategoriesRequest.current === requestId) setLiveCategoriesLoading(false);
       });
     return () => controller.abort();
-  }, [detailClient, metricRows, orderType, liveStageFilter, roleKey, detailLoadId]);
+  }, [
+    detailClient,
+    metricRows,
+    orderType,
+    liveStageFilter,
+    roleKey,
+    detailLoadId,
+    skuReviewLoading,
+  ]);
   const scopeSummary = liveQuery.analysisSummary;
   const liveAccess = useSalesPlanAccess(
     liveRows,

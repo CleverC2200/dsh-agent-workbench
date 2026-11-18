@@ -1,9 +1,4 @@
-import type {
-  GeaSalesPlanDetail,
-  GeaSalesPlanResourceQuery,
-  GeaSalesPlanVersionSkuQuery,
-  GeaSalesPlanSku,
-} from '../../../bridge.ts';
+import type { GeaSalesPlanSku, WorkbenchHost } from '../../../bridge.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 import { subtractExactDecimals } from '../regionalApprovalQueryModel.ts';
 
@@ -74,7 +69,4 @@ export const salesPlanSkusMatchVersion = (
   skus: readonly GeaSalesPlanSku[],
 ): boolean => skus.every((sku) => sku.versionId === versionId);
 
-export type SalesPlanDetailClient = {
-  detail: { invoke: (query: GeaSalesPlanResourceQuery) => Promise<GeaSalesPlanDetail> };
-  versionSkus: { invoke: (query: GeaSalesPlanVersionSkuQuery) => Promise<GeaSalesPlanSku[]> };
-};
+export type SalesPlanDetailClient = Pick<WorkbenchHost['salesPlan'], 'detail' | 'versionSkus'>;

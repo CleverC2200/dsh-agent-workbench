@@ -217,11 +217,13 @@ async function rpc<T>(
     onPlanPage,
     startupScope,
     reusePeriodIndex,
+    priority,
   }: {
     detailLoadId?: string;
     onPlanPage?: (page: T) => void;
     startupScope?: string;
     reusePeriodIndex?: boolean;
+    priority?: RequestPriority;
   } = {},
 ): Promise<T> {
   const owned =
@@ -242,6 +244,7 @@ async function rpc<T>(
     },
     body: JSON.stringify(payload),
     signal,
+    priority,
   });
   const result: {
     ok?: boolean;
@@ -277,11 +280,11 @@ async function rpc<T>(
 }
 function query<T>(
   kind: string,
-  input: { signal?: AbortSignal } = {},
+  input: { signal?: AbortSignal; priority?: 'low' } = {},
   options?: { onPlanPage?: (page: T) => void; startupScope?: string; reusePeriodIndex?: boolean },
 ): Promise<T> {
-  const { signal, ...fields } = input;
-  return rpc<T>('workbench/query', { kind, query: fields }, signal, options);
+  const { signal, priority, ...fields } = input;
+  return rpc<T>('workbench/query', { kind, query: fields }, signal, { ...options, priority });
 }
 const loadWorkflowAndPeriods = createWorkflowPeriodLoader((signal, startupScope) =>
   rpc('workflow/config', {}, signal, { startupScope }),
@@ -309,8 +312,8 @@ function salesPlanStartupReads(
 export const workbenchHost: WorkbenchHost = {
   salesPlan: {
     draft: {
-      invoke: ({ signal, detailLoadId, ...input }) =>
-        rpc('sales-plan/draft', input, signal, { detailLoadId }),
+      invoke: ({ signal, detailLoadId, priority, ...input }) =>
+        rpc('sales-plan/draft', input, signal, { detailLoadId, priority }),
     },
     ...salesPlanStartupReads(),
     detail: { invoke: (input) => query('detail', input) },
@@ -319,7 +322,10 @@ export const workbenchHost: WorkbenchHost = {
     versionSkus: { invoke: (input) => query('versionSkus', input) },
     skuReview: {
       invoke: ({ signal, detailLoadId, ...query }) =>
-        rpc('workbench/query', { kind: 'skuReview', query }, signal, { detailLoadId }),
+        rpc('workbench/query', { kind: 'skuReview', query }, signal, {
+          detailLoadId,
+          priority: 'high',
+        }),
     },
     compare: { invoke: (input) => query('compare', input) },
     action: { invoke: (input) => rpc('sales-plan/action', input) },

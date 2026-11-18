@@ -147,6 +147,7 @@ window.savedDrafts=[];
 if (['history','history-correction','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
 const readCalls=window.readCalls=[];
 window.performanceReads={lists:[],active:0,peak:0};
+window.listPrefetchAborted=0;
 const writes=window.writes=[];
 const versionsFor=(plan)=>['history','history-correction','inline','missing'].includes(comparison) && !(comparison==='missing'&&plan.planId==='p2')
   ? [{...plan,id:plan.versionId,seq:3,effective:true},{...plan,id:plan.versionId+'-previous',seq:2,effective:false},{...plan,id:plan.versionId+'-older',seq:1,effective:false}]
@@ -167,7 +168,17 @@ const host={salesPlan:{
     return {versionId,skus:skusFor(versionId).map(sku=>sku.skuCode==='1001'?{...sku,amt:versionId==='v1'?'100.10':versionId==='v2'?'200.20':'0'}:sku),months:['2025-10','2026-08','2026-09'],shipmentUnavailable:false,
       rows:comparison==='sku-review-scroll'?skusFor(versionId).map(sku=>({skuCode:sku.skuCode,shipments:['1','2','3']})):[{skuCode:'1001',shipments:['1.5','10','20']},{skuCode:'2002',shipments:['2','3','4']}]};
   }},
-  versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='performance'){window.performanceReads.active++;window.performanceReads.peak=Math.max(window.performanceReads.peak,window.performanceReads.active);await new Promise(resolve=>setTimeout(resolve,40));window.performanceReads.active--;}if(comparison==='category-loading'||comparison==='quick-category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId)}},
+  versionSkus:{invoke:async({versionId,signal})=>{
+    readCalls.push({versionId});
+    if(comparison==='sku-review-preempts-prefetch'&&!window.listPrefetchAborted)
+      await new Promise((resolve,reject)=>signal.addEventListener('abort',()=>{
+        window.listPrefetchAborted++;
+        reject(signal.reason);
+      },{once:true}));
+    if(comparison==='performance'){window.performanceReads.active++;window.performanceReads.peak=Math.max(window.performanceReads.peak,window.performanceReads.active);await new Promise(resolve=>setTimeout(resolve,40));window.performanceReads.active--;}
+    if(comparison==='category-loading'||comparison==='quick-category-loading') await new Promise(resolve=>setTimeout(resolve,5000));
+    if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId);
+  }},
   draft:{invoke:async(q)=>{if(window.autoBlock==='draft')return {draft:null,stale:true};if(window.sentDirect.length){if(comparison==='single-dms-stale-second')return {draft:null,stale:true};if(comparison==='single-dms-unreadable-second')throw Error('fixture draft read failed');}const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
   logs:{invoke:async()=>[]},compare:{invoke:async({planId,fromVersionId,toVersionId})=>{
     readCalls.push({planId,fromVersionId,toVersionId});
@@ -175,12 +186,13 @@ const host={salesPlan:{
     return [{skuCode:'1001',changeType:'UPDATED',before:{...skuFor(fromVersionId),qty:'10',amt:'100'},after:skuFor(toVersionId),qtyDelta:'10',amountDelta:'100'}];
   }},action:{invoke:async(command)=>{if(comparison?.startsWith('single-')){window.sentDirect.push(command);const status=comparison==='single-permission'?403:comparison==='single-conflict'?409:502;const error=comparison.startsWith('single-dms')?'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报':comparison==='single-permission'?'当前用户没有品类审批权限':comparison==='single-conflict'?'计划版本已变化，请刷新后重试':'GEA_HTTP_502';throw new BackendHttpError({method:'POST',path:'/sales-plan/plans/versions/'+command.versionId+'/actions',status,body:{error:window.directRejection??error,details:{...(comparison.startsWith('single-dms')?{retryable:false,upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED'}:{}),requestId:'hidden-error-reference',traceId:'hidden-trace-reference'}}});}if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);if(window.returnUnknown && command.planId==='p1')throw new TypeError('offline');return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
 },modelInference:{invoke:forbidden}};
-if(comparison?.startsWith('progressive-shipment')){
+if(comparison?.startsWith('progressive-shipment')||comparison==='sku-review-preempts-prefetch'){
  const list=host.salesPlan.list.invoke;
  host.salesPlan.list.invoke=async(query,onPlanPage)=>{
   const page=await list(query);
   if(!onPlanPage || !page.records.length) return page;
   onPlanPage({...page,records:page.records.map(row=>({...row,shipmentPending:true,shipQty:null,shipAmount:null}))});
+  if(comparison==='sku-review-preempts-prefetch') return page;
   await new Promise(resolve=>{window.finishShipments=resolve});
   query.signal.throwIfAborted();
   if(comparison==='progressive-shipment-error') throw Error('fixture shipment error');
@@ -271,7 +283,7 @@ test('sales performance: hidden statistics do not query and independent SKU read
   assert.equal(reads.writes, 0);
   assert.equal(reads.active, 0);
   assert.equal(reads.lists.length, 2, JSON.stringify(reads));
-  assert.ok(reads.peak > 1 && reads.peak <= 4, JSON.stringify(reads));
+  assert.equal(reads.peak, 2, JSON.stringify(reads));
   await page.getByRole('button', { name: '展开审批流程图' }).click();
   await expect
     .poll(() => page.evaluate(() => window.performanceReads.lists.length))
@@ -348,6 +360,18 @@ test('sales performance: a completed SKU request frees its slot while the first 
   await expect(review.getByRole('table')).toHaveCount(0);
   await page.evaluate(() => window.completeFirstReview());
   await expect(review.getByRole('table')).toBeVisible();
+});
+
+test('sales performance: opening SKU review interrupts unfinished list prefetch and resumes it after review', async (t) => {
+  const { page } = await openWorkbench(t, true, 'sku-review-preempts-prefetch');
+  const prefetchReads = () =>
+    page.evaluate(() => window.readCalls.filter((call) => call.versionId).length);
+  await expect.poll(prefetchReads).toBe(2);
+  await page.getByRole('tab', { name: '按大类 / SKU' }).click();
+  const review = page.getByRole('region', { name: '按大类 / SKU', exact: true });
+  await expect(review.getByRole('table')).toBeVisible();
+  assert.equal(await page.evaluate(() => window.listPrefetchAborted), 2);
+  await expect.poll(prefetchReads).toBe(5);
 });
 
 async function assertExpandedSkuLayout(region) {

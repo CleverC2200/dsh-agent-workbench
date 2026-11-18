@@ -24,6 +24,7 @@ export const useSalesPlanAccess = (
           const detail = await client.detail.invoke({
             planId: row.planId,
             signal: controller.signal,
+            priority: 'low',
           });
           if (!controller.signal.aborted) {
             setEntries((current) => ({ ...current, [row.versionId]: detail }));
@@ -34,7 +35,7 @@ export const useSalesPlanAccess = (
         }
       }
     };
-    void Promise.all(Array.from({ length: Math.min(4, rows.length) }, worker));
+    void Promise.all(Array.from({ length: Math.min(2, rows.length) }, worker));
     return () => controller.abort();
   }, [rows, client, enabled, revision]);
   return { entries, failedVersions, refresh: () => setRevision((value) => value + 1) };

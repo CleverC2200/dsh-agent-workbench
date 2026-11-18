@@ -16,6 +16,7 @@ export interface WorkbenchHost {
         draft?: SalesPlanLocalDraft;
         detailLoadId?: string;
         signal?: AbortSignal;
+        priority?: 'low';
       }): Promise<{
         draft: SalesPlanLocalDraft | null;
         sourceSnapshot?: string;
@@ -34,10 +35,18 @@ export interface WorkbenchHost {
         onPlanPage?: (page: Api.GeaSalesPlanPage<Api.GeaSalesPlanListItem>) => void,
       ): Promise<Api.GeaSalesPlanPage<Api.GeaSalesPlanListItem>>;
     };
-    detail: { invoke(query: Api.GeaSalesPlanResourceQuery): Promise<Api.GeaSalesPlanDetail> };
+    detail: {
+      invoke(
+        query: Api.GeaSalesPlanResourceQuery & { priority?: 'low' },
+      ): Promise<Api.GeaSalesPlanDetail>;
+    };
     versions: { invoke(query: Api.GeaSalesPlanResourceQuery): Promise<Api.GeaSalesPlanVersion[]> };
     logs: { invoke(query: Api.GeaSalesPlanResourceQuery): Promise<Api.GeaSalesPlanApprovalLog[]> };
-    versionSkus: { invoke(query: Api.GeaSalesPlanVersionSkuQuery): Promise<Api.GeaSalesPlanSku[]> };
+    versionSkus: {
+      invoke(
+        query: Api.GeaSalesPlanVersionSkuQuery & { priority?: 'low' },
+      ): Promise<Api.GeaSalesPlanSku[]>;
+    };
     skuReview?: {
       invoke(query: {
         planId: string;
