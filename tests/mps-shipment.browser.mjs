@@ -66,9 +66,9 @@ async function edit(table, label, value) {
   await input.fill(String(value));
   await saveAdjustment(frame);
 }
-async function exported(page, frame) {
+async function exported(page, frame, name = '下载明细') {
   const waiting = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载明细', exact: true }).press('Enter');
+  await frame.getByRole('button', { name, exact: true }).press('Enter');
   const chunks = [];
   for await (const chunk of await (await waiting).createReadStream()) chunks.push(chunk);
   return Buffer.concat(chunks).toString('utf8');
@@ -206,15 +206,16 @@ test('MPS shipment keeps positive equal-weight residuals nonnegative and allocat
   await expectShipment(table, '全国合计 整月预估发货', '-2');
 });
 
-test('MPS shipment distinguishes missing input from zero, uses the monthly fallback and keeps orders beyond month end without fabricated data', async (t) => {
+test('MPS shipment distinguishes missing input from zero, uses the recent30 fallback and keeps orders beyond month end without fabricated data', async (t) => {
   const { frame, table } = await shipment(t);
   await upload(frame, [
     '2026-09,西南,Z,零输入,汤圆,系列,组,0,0,0,0,0,0,0,0',
-    '2026-09,郑州,F,回退日均,汤圆,系列,组,220,10,10,0,0,0,0',
+    '2026-09,郑州,F,回退日均,汤圆,系列,组,220,10,10,0,0,0,0,10',
     '2026-09,郑州,U,无可用日均,汤圆,系列,组,0,1,1,0,0,0,0',
     '2026-09,郑州,M,缺已备,汤圆,系列,组,220,,0,1,0,0,0',
     '2026-09,郑州,L,订单覆盖月底,汤圆,系列,组,22,100,0,1,0,0,0',
   ]);
+  await expectShipment(table, '郑州 整月预估发货', '422');
   await expandShipmentBase(frame, '郑州');
   await expectShipment(table, '郑州 F 整月预估发货', '300');
   await expectShipment(table, '郑州 U 整月预估发货', '');
@@ -236,7 +237,7 @@ test('MPS shipment distinguishes missing input from zero, uses the monthly fallb
     .getByRole('button', { name: '郑州 F 已备未备预估发运天数 计算过程', exact: true })
     .click();
   await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText(
-    '近三天为0，使用本月已发货÷已过天数',
+    '近三天日均不大于0，使用近30天日均：10',
   );
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await upload(frame, ['2026-09,郑州,BAD,无效替换,汤圆,系列,组,NaN,0,0,1,0,0,0']);
@@ -416,7 +417,7 @@ test('MPS shipment loads every warehouse input from the stock table and derives 
     await page.screenshot({ path: process.env.MPS_SHIPMENT_SCREENSHOT, fullPage: true });
 });
 
-test('零三天及本月发货时用近30天日均估算，零或缺失仍待定并保留来源', async (t) => {
+test('零三天及本月发货时用近30天日均估算，零日均取订单合计，缺失仍待定', async (t) => {
   let average = 5;
   const { page, frame, table } = await businessShipment(t, (query) => {
     const result = shipmentFacts(query);
@@ -441,9 +442,68 @@ test('零三天及本月发货时用近30天日均估算，零或缺失仍待定
     await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
     await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
     await expandShipmentBase(frame, '郑州');
-    await expectShipment(table, '郑州 A 整月预估发货', '');
+    await expectShipment(table, '郑州 A 整月预估发货', average === 0 ? '20' : '');
   }
 });
+test('V2发货回退、真实零及日期待核在页面和下载保持一致', async (t) => {
+  const cases = [
+    { material_code: 'NEG', shipped: 100, prepped: 10, unprepped: 10, daily3: -3, average: 5 },
+    { material_code: 'HOLD', shipped: 46, prepped: 0, unprepped: 24, daily3: 0, average: 0 },
+    { material_code: 'ZERO', shipped: 0, prepped: 0, unprepped: 0, daily3: 0, average: 39 },
+    { material_code: 'GAP', source_days: 20 },
+    { material_code: 'DUP', duplicate_days: 1 },
+    { material_code: 'MISSING', prepped: null },
+  ];
+  const { page, frame, table } = await businessShipment(t, (query) => {
+    const result = shipmentFacts(query);
+    if (query.queryId === 'facts.shipment')
+      result.rows = cases.map((row) => ({ ...result.rows[0], ...row }));
+    if (query.queryId === 'facts.shipment.count') result.rows[0].total = cases.length;
+    return result;
+  });
+  await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
+  await expandShipmentBase(frame, '郑州');
+  for (const [code, forecast] of [
+    ['NEG', '138'],
+    ['HOLD', '70'],
+    ['ZERO', '0'],
+    ['GAP', ''],
+    ['DUP', ''],
+    ['MISSING', ''],
+  ])
+    await expectShipment(table, `郑州 ${code} 整月预估发货`, forecast);
+  const { read, utils } = await import('xlsx-republish');
+  const records = utils.sheet_to_json(
+    read(await exported(page, frame), { type: 'string', raw: true }).Sheets.Sheet1,
+    { defval: '' },
+  );
+  const byCode = new Map(records.map((row) => [row['产品编码'], row]));
+  assert.equal(byCode.get('ZERO')['本月预测量'], '0');
+  assert.equal(byCode.get('HOLD')['本月预测量'], '70');
+  assert.match(byCode.get('GAP')['预估待补原因'], /2026-09-01.*2026-09-22.*缺2天/);
+  assert.match(byCode.get('DUP')['预估待补原因'], /重复1条/);
+  assert.match(byCode.get('MISSING')['预估待补原因'], /已备/);
+  assert.equal(byCode.get('NEG')['发运速度来源'], '近30天日均');
+  await frame.locator('summary').filter({ hasText: '发货与库存异常报告' }).click();
+  const issues = utils.sheet_to_json(
+    read(await exported(page, frame, '下载发货与库存异常'), { type: 'string', raw: true }).Sheets
+      .Sheet1,
+    { defval: '' },
+  );
+  assert.equal(issues.length, 3);
+  for (const issue of issues) {
+    assert.equal(issue['评估月份'], '2026-10');
+    assert.equal(issue['统计基月'], '2026-09');
+    assert.equal(issue['截止日'], '2026-09-22');
+    assert.equal(issue['基地'], '郑州');
+  }
+  assert.equal(
+    issues.find((row) => row['产品编码'] === 'MISSING')['原因'],
+    '缺失或无效发货依据：已备',
+  );
+});
+
 test('MPS cutoff average keeps four source decimal places in summaries, SKU details, formula and download', async (t) => {
   const { page, frame, table } = await businessShipment(t, (query) => {
     const result = shipmentFacts(query);
