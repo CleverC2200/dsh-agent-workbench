@@ -8,9 +8,10 @@ import { buildMpsWorkflow } from './workflow-inputs.js';
 import { changeAdjustment, quantityAdjustmentKey } from './local-draft.js';
 import { createBatchEdit } from './batch-edit.js';
 import { createAmountReconciliation } from './amount-reconciliation-view.js';
+import { createReportPage } from './report-page.js';
 
-const number = (value) =>
-  value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format(value);
+const formatInteger = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format;
+const number = (value) => (value == null ? '—' : formatInteger(value));
 const sum = (rows, field) =>
   rows.length && rows.every((row) => row[field] != null)
     ? rows.reduce((total, row) => total + row[field], 0)
@@ -45,6 +46,7 @@ export function createProcessedDemand(
   const AmountReconciliation = createAmountReconciliation(react, { downloadCsv: downloadAmounts });
   const UpperAdjustmentConflicts = createUpperAdjustmentConflicts(react);
   const HistoryReport = createHistoryReport(react, { downloadCsv });
+  const ReportPage = createReportPage(react);
   const Evidence = createProcessedDemandEvidence(react, { downloadCsv });
   return function ProcessedDemand({
     view,
@@ -344,12 +346,12 @@ export function createProcessedDemand(
         shipmentEffective: sourceSummary(shipment.map((row) => row?.fin ?? null)),
         forecasts: months.slice(0, 2).map((month) =>
           sourceSummary(
-            identities
-              .filter(() => full.some((row) => row.month === month))
-              .map((row) => {
-                const values = indexed.forecasts.get(JSON.stringify([month, row.base, row.code]));
-                return values?.length === 1 ? values[0]['数量'] : null;
-              }),
+            full.some((row) => row.month === month)
+              ? identities.map((row) => {
+                  const values = indexed.forecasts.get(JSON.stringify([month, row.base, row.code]));
+                  return values?.length === 1 ? values[0]['数量'] : null;
+                })
+              : [],
           ),
         ),
       };
@@ -815,10 +817,20 @@ export function createProcessedDemand(
       card(
         '加工需求缺项报告',
         missingRows.length
-          ? table(
-              '加工需求缺项报告',
-              ['基地', '产品编码', '产品名称', '大类', '月份', '缺项指标', '原因'],
-              missingRows.map((row) => Object.values(row)),
+          ? h(
+              ReportPage,
+              {
+                view,
+                stateKey: 'ProcessedDemand.missingPage',
+                label: '缺项报告',
+                rows: missingRows,
+              },
+              (visible) =>
+                table(
+                  '加工需求缺项报告',
+                  ['基地', '产品编码', '产品名称', '大类', '月份', '缺项指标', '原因'],
+                  visible.map((row) => Object.values(row)),
+                ),
             )
           : h(
               'p',

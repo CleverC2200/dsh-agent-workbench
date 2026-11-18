@@ -1,4 +1,5 @@
 import { useStepViewField } from './step-view-state.js';
+import { createReportPage } from './report-page.js';
 
 export const historyColumns = [
   '历史期间',
@@ -96,16 +97,14 @@ export function historyExportRows(rows, context, period, includeMonths = true) {
 }
 export function createHistoryReport(react, { downloadCsv }) {
   const h = react.createElement;
-  const number = (value) =>
-    value == null
-      ? '待补'
-      : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(value);
+  const formatNumber = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format;
+  const number = (value) => (value == null ? '待补' : formatNumber(value));
+  const ReportPage = createReportPage(react);
   return function HistoryReport({ view, draft, rows, period, card, table }) {
-    const entries = uniqueRows(rows);
+    const entries = react.useMemo(() => uniqueRows(rows), [rows]);
     const [selected, setSelected] = useStepViewField(react, view, 'HistoryReport.selection', '');
     const current = entries.find((row) => identity(row) === selected) ?? entries[0];
     const context = { 评估版本: draft.name, 评估月份: draft.month };
-    const data = historyExportRows(entries, context, period, false);
     const scrollTable = (name, columns, values) =>
       react.cloneElement(table(name, columns, values), {
         tabIndex: 0,
@@ -122,38 +121,43 @@ export function createHistoryReport(react, { downloadCsv }) {
           { className: 'wf-note' },
           '分类使用实际已结束的完整月原始历史。上一完整财年按同基地自身＋替换品×系数展示和计算，缺失数量补0，来源异常保留；0÷0仍待补。',
         ),
-        scrollTable(
-          '历史发货分类及财年数量',
-          [
-            '基地',
-            '产品编码',
-            '历史分类',
-            '自身原始数量',
-            '自身计算用数量',
-            '替换品编码',
-            '替换品原始数量',
-            '替换品计算用数量',
-            '替换系数',
-            '计算用历史数量',
-            '补0状态',
-            '来源状态',
-            '原因',
-          ],
-          data.map((row) => [
-            row.基地,
-            row.产品编码,
-            row.历史分类,
-            number(row.自身原始数量),
-            number(row.自身计算用数量),
-            row.替换品编码 || '无',
-            row.替换品编码 ? number(row.替换品原始数量) : '不适用',
-            row.替换品编码 ? number(row.替换品计算用数量) : '不适用',
-            row.替换品编码 ? number(row.替换系数) : '不适用',
-            number(row.计算用历史数量),
-            row.补0状态,
-            row.来源状态,
-            row.原因 || '无异常',
-          ]),
+        h(
+          ReportPage,
+          { view, stateKey: 'HistoryReport.page', label: '财年历史', rows: entries },
+          (visible) =>
+            scrollTable(
+              '历史发货分类及财年数量',
+              [
+                '基地',
+                '产品编码',
+                '历史分类',
+                '自身原始数量',
+                '自身计算用数量',
+                '替换品编码',
+                '替换品原始数量',
+                '替换品计算用数量',
+                '替换系数',
+                '计算用历史数量',
+                '补0状态',
+                '来源状态',
+                '原因',
+              ],
+              historyExportRows(visible, context, period, false).map((row) => [
+                row.基地,
+                row.产品编码,
+                row.历史分类,
+                number(row.自身原始数量),
+                number(row.自身计算用数量),
+                row.替换品编码 || '无',
+                row.替换品编码 ? number(row.替换品原始数量) : '不适用',
+                row.替换品编码 ? number(row.替换品计算用数量) : '不适用',
+                row.替换品编码 ? number(row.替换系数) : '不适用',
+                number(row.计算用历史数量),
+                row.补0状态,
+                row.来源状态,
+                row.原因 || '无异常',
+              ]),
+            ),
         ),
         h(
           'label',

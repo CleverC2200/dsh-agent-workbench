@@ -1035,6 +1035,7 @@ test('待定单品异常CSV和四个月部分需求沿公开页面传到后续�
   await version(frame, '2026-11');
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await frame.getByLabel('数据截止日').fill('2026-10-31');
+  await expect(frame.getByText('已过天数 31 天', { exact: true })).toBeVisible();
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
     name: '部分待定.csv',
     mimeType: 'text/csv',
@@ -1042,6 +1043,9 @@ test('待定单品异常CSV和四个月部分需求沿公开页面传到后续�
       '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-10,郑州,A,产品A,汤圆,系列甲,G,100,0,0,1,100,100,0\n2026-10,郑州,B,产品B,汤圆,系列甲,G,10,,0,1,100,100,0',
     ),
   });
+  await expect(
+    frame.getByRole('button', { name: '郑州 本月已发货 计算过程', exact: true }),
+  ).toHaveText('110');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   const notice = frame.getByRole('region', { name: '待定单品异常', exact: true });
   await expect(notice).toContainText('参与1条，排除1条');

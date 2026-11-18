@@ -7,6 +7,7 @@ import { createStepViewState, useStepViewField } from './step-view-state.js';
 import { createBatchEdit } from './batch-edit.js';
 import { createShipmentScopeNotice } from './category-demand-view.js';
 import { createProcessedDemand } from './processed-demand-view.js';
+import { createReportPage } from './report-page.js';
 import {
   createInventoryTargetPanel,
   inventoryDependencyColumns,
@@ -137,6 +138,7 @@ export function createWorkflow(
     Upload,
     parseCsv,
   });
+  const ReportPage = createReportPage(react);
   const DelistedReport = createDelistedReport(react, { downloadCsv });
   const PoolExceptionReport = createPoolExceptionReport(react, { downloadCsv });
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
@@ -1150,27 +1152,10 @@ export function createWorkflow(
               : `默认25天，春节扣减${defaultProductionCalendar(sourceMonth).holidayDates.length}天；${defaultProductionCalendar(sourceMonth).holidayDates.join('、') || '本月无春节扣减'}`,
           ]),
       );
-    const skuPairs = [
-      ...new Map(
-        configurationPairs
-          .filter(
-            (row) =>
-              (!base || row.base === base) &&
-              (!search || `${row.base} ${row.code} ${row.name}`.includes(search)),
-          )
-          .map((row) => [JSON.stringify([row.base, row.code]), row]),
-      ).values(),
-    ];
-    const weightProductRows = new Map();
-    for (const row of draft.productRaw ?? []) {
-      const rows = weightProductRows.get(row.material_code) ?? [];
-      rows.push(row);
-      weightProductRows.set(row.material_code, rows);
-    }
-    const weightRows = skuPairs.map((row) => {
+    const renderWeightRow = (row) => {
       const current = weights.find((item) => item.base === row.base && item.code === row.code);
       const productWeight = productWeightCandidate(
-        weightProductRows.get(row.code) ?? [],
+        (draft.productRaw ?? []).filter((product) => product.material_code === row.code),
         row.base,
         row.code,
       );
@@ -1196,10 +1181,8 @@ export function createWorkflow(
         row.base,
         row.code,
         row.name,
-        numberInput(
-          `${row.base} ${row.code} 件吨系数`,
-          weights.find((item) => item.base === row.base && item.code === row.code)?.tonsPerPiece,
-          (tonsPerPiece) => setWeight({ tonsPerPiece }),
+        numberInput(`${row.base} ${row.code} 件吨系数`, current?.tonsPerPiece, (tonsPerPiece) =>
+          setWeight({ tonsPerPiece }),
         ),
         h('input', {
           'aria-label': `${row.base} ${row.code} 适用渠道`,
@@ -1251,7 +1234,7 @@ export function createWorkflow(
                 '适用渠道已填写，尚未采用来源值；可按确认净重手工维护',
         ),
       ];
-    });
+    };
     const inputGaps = [
       ['B3 实际生产入库', '缺日发生或累计快照合同、正式业务类型及冲销规则；不跨日猜测累计'],
       ['B3 剩余预计入库', '缺截至时点已批准生效排程、版本及单位映射；不以历史产量或能力估算'],
@@ -1294,64 +1277,66 @@ export function createWorkflow(
       ['transferOut', '既有调出'],
     ];
     const movements = draft.inventoryMovements ?? [];
-    const movementRows = configurationPairs
-      .flatMap((pair) =>
-        Array.from({ length: 3 }, (_, offset) => {
-          const date = new Date(`${draft.month}-01T00:00:00Z`);
-          date.setUTCMonth(date.getUTCMonth() + offset);
-          return { ...pair, month: date.toISOString().slice(0, 7) };
-        }),
-      )
-      .map((row) => {
-        const identity = { month: row.month, base: row.base, code: row.code };
-        const key = (item) => JSON.stringify([item.month, item.base, item.code]);
-        const existing = movements.find((item) => key(item) === key(identity));
-        const label = `${row.base} ${row.code} ${row.month}`;
-        const change = (patch) =>
-          update({
-            inventoryMovements: [
-              ...movements.filter((item) => key(item) !== key(identity)),
-              {
-                ...identity,
-                productionInbound: null,
-                inTransitInbound: null,
-                transferIn: null,
-                transferOut: null,
-                source: '',
-                reason: '',
-                ...existing,
-                ...patch,
-                at: new Date().toISOString(),
-              },
-            ],
-          });
-        return [
-          row.month,
-          row.base,
-          row.code,
-          ...movementFields.map(([field, title]) =>
-            numberInput(`${label} ${title}`, existing?.[field] ?? null, (value) =>
-              change({ [field]: value }),
-            ),
-          ),
-          textEntry(`${label} 既有计划来源`, existing?.source, (source) => change({ source })),
-          textEntry(`${label} 既有计划确认原因`, existing?.reason, (reason) => change({ reason })),
-          existing?.at ?? '待确认',
-          h(
-            'button',
+    const movementKey = (item) => JSON.stringify([item.month, item.base, item.code]);
+    const movementByKey = react.useMemo(() => {
+      const indexed = new Map();
+      for (const item of movements) {
+        const key = movementKey(item);
+        if (!indexed.has(key)) indexed.set(key, item);
+      }
+      return indexed;
+    }, [draft.inventoryMovements]);
+    const renderMovementRow = (row) => {
+      const identity = { month: row.month, base: row.base, code: row.code };
+      const key = movementKey(identity);
+      const existing = movementByKey.get(key);
+      const label = `${row.base} ${row.code} ${row.month}`;
+      const change = (patch) =>
+        update({
+          inventoryMovements: [
+            ...movements.filter((item) => movementKey(item) !== key),
             {
-              disabled: !batch.active || !existing,
-              'aria-label': `${label} 恢复既有计划待补`,
-              onClick: () =>
-                update({
-                  inventoryMovements: movements.filter((item) => key(item) !== key(identity)),
-                }),
+              ...identity,
+              productionInbound: null,
+              inTransitInbound: null,
+              transferIn: null,
+              transferOut: null,
+              source: '',
+              reason: '',
+              ...existing,
+              ...patch,
+              at: new Date().toISOString(),
             },
-            '恢复待补',
+          ],
+        });
+      return [
+        row.month,
+        row.base,
+        row.code,
+        ...movementFields.map(([field, title]) =>
+          numberInput(`${label} ${title}`, existing?.[field] ?? null, (value) =>
+            change({ [field]: value }),
           ),
-        ];
-      });
-    const resourceRows = resources.map((resource, index) => [
+        ),
+        textEntry(`${label} 既有计划来源`, existing?.source, (source) => change({ source })),
+        textEntry(`${label} 既有计划确认原因`, existing?.reason, (reason) => change({ reason })),
+        existing?.at ?? '待确认',
+        h(
+          'button',
+          {
+            disabled: !batch.active || !existing,
+            'aria-label': `${label} 恢复既有计划待补`,
+            onClick: () =>
+              update({
+                inventoryMovements: movements.filter((item) => movementKey(item) !== key),
+              }),
+          },
+          '恢复待补',
+        ),
+      ];
+    };
+    const configuring = step === 'constraints';
+    const resourceRows = (configuring ? resources : []).map((resource, index) => [
       textEntry(`资源${index + 1} 唯一编号`, resource.id, (id) =>
         editEntry('resources', resources, index, { id }),
       ),
@@ -1387,7 +1372,7 @@ export function createWorkflow(
         '删除',
       ),
     ]);
-    const assignmentRows = assignments.map((assignment, index) => [
+    const assignmentRows = (configuring ? assignments : []).map((assignment, index) => [
       h(
         'select',
         {
@@ -1747,22 +1732,34 @@ export function createWorkflow(
                     { className: 'wf-note' },
                     '按月份、基地及SKU确认已经存在的生产入库、在途和调拨计划。空白待补，明确0表示已确认无计划；填写来源和原因后保存。本页不创建生产或采购单。前月已计变动由期初承接，不重复登记。',
                   ),
-                  table(
-                    '既有库存变动确认',
-                    [
-                      '月份',
-                      '基地',
-                      'SKU',
-                      '既有生产入库',
-                      '既有在途入库',
-                      '既有调入',
-                      '既有调出',
-                      '来源',
-                      '确认原因',
-                      '确认时间',
-                      '操作',
-                    ],
-                    movementRows,
+                  h(
+                    ReportPage,
+                    {
+                      view,
+                      stateKey: 'Workflow.movementsPage',
+                      label: '既有库存变动',
+                      rows: configurationPairs.flatMap((pair) =>
+                        result.months.slice(0, 3).map((month) => ({ ...pair, month })),
+                      ),
+                    },
+                    (visible) =>
+                      table(
+                        '既有库存变动确认',
+                        [
+                          '月份',
+                          '基地',
+                          'SKU',
+                          '既有生产入库',
+                          '既有在途入库',
+                          '既有调入',
+                          '既有调出',
+                          '来源',
+                          '确认原因',
+                          '确认时间',
+                          '操作',
+                        ],
+                        visible.map(renderMovementRow),
+                      ),
                   ),
                 ),
               ),
@@ -1831,19 +1828,33 @@ export function createWorkflow(
                       },
                       '下载系数来源',
                     ),
-                  table(
-                    '件吨系数',
-                    [
-                      '基地',
-                      '产品编码',
-                      '产品名称',
-                      '吨/件',
-                      '适用渠道',
-                      '来源候选',
-                      '采用来源值',
-                      '来源与缺项',
-                    ],
-                    weightRows,
+                  h(
+                    ReportPage,
+                    {
+                      view,
+                      stateKey: 'Workflow.weightsPage',
+                      label: '件吨系数',
+                      rows: configurationPairs.filter(
+                        (row) =>
+                          (!base || row.base === base) &&
+                          (!search || `${row.base} ${row.code} ${row.name}`.includes(search)),
+                      ),
+                    },
+                    (visible) =>
+                      table(
+                        '件吨系数',
+                        [
+                          '基地',
+                          '产品编码',
+                          '产品名称',
+                          '吨/件',
+                          '适用渠道',
+                          '来源候选',
+                          '采用来源值',
+                          '来源与缺项',
+                        ],
+                        visible.map(renderWeightRow),
+                      ),
                   ),
                 ),
               ),

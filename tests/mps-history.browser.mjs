@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
 import { mpsPage } from './helpers/mps-page.mjs';
-import { workflowStep } from './helpers/mps-edit.mjs';
+import { beginAdjustment, saveAdjustment, workflowStep } from './helpers/mps-edit.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
@@ -135,7 +135,8 @@ test('完整月读取拒绝时报告失败与原因，财年有效数量继续�
     t,
     config,
     ({ queryId, parameters }) => {
-      if (queryId === 'facts.history') throw Error('历史月查询拒绝');
+      const partial = queryId === 'facts.history' && parameters.month === '2025-11-01';
+      if (queryId === 'facts.history' && !partial) throw Error('历史月查询拒绝');
       const rows = queryId === 'facts.history-annual' ? [raw(queryId, '甲', 'A', 25)] : [];
       return {
         rows: queryId.endsWith('.count') ? [{ total: 0 }] : rows,
@@ -144,6 +145,16 @@ test('完整月读取拒绝时报告失败与原因，财年有效数量继续�
         totalRowCount: rows.length,
         offset: parameters.offset ?? 0,
         hasMorePages: false,
+        ...(partial
+          ? {
+              dataStatus: 'partial',
+              warnings: [
+                { code: 'METRIC_VALUE_UNAVAILABLE' },
+                { code: 'PARTIAL_HISTORY', message: '部分发货来源字段未返回' },
+                { code: 'PARTIAL_HISTORY', message: '部分发货来源字段未返回' },
+              ],
+            }
+          : {}),
       };
     },
     { time: '2026-11-17T12:00:00+08:00' },
@@ -170,6 +181,8 @@ test('完整月读取拒绝时报告失败与原因，财年有效数量继续�
   await expect(report.getByRole('table').last()).toContainText('读取失败');
   await expect(report.getByRole('table').last()).toContainText('数据读取失败');
   await expect(report.getByRole('table').last()).toContainText('实际原因待核');
+  await expect(report.getByRole('table').last()).toContainText('部分发货来源字段未返回');
+  await expect(report).not.toContainText('[object Object]');
   const rows = await download(
     page,
     report.getByRole('button', { name: '下载当前历史及异常明细', exact: true }),
@@ -177,7 +190,90 @@ test('完整月读取拒绝时报告失败与原因，财年有效数量继续�
   assert.equal(rows.find((row) => row.粒度 === '财年历史').计算用历史数量, '25');
   assert.ok(
     rows
-      .filter((row) => row.粒度 === '完整历史月')
+      .filter((row) => row.粒度 === '完整历史月' && row.历史期间 !== '2025-11')
       .every((row) => row.来源状态 === '读取失败' && row.原始历史数量 === ''),
   );
+  const warning = rows.find((row) => row.粒度 === '完整历史月' && row.历史期间 === '2025-11');
+  assert.equal(warning.来源状态, '读取不完整');
+  assert.equal(
+    warning.原因,
+    '部分指标未返回有效值（METRIC_VALUE_UNAVAILABLE）；部分发货来源字段未返回；历史读取失败或不完整',
+  );
+});
+
+test('历史和需求缺项分页保留全部当前范围的下载记录', async (t) => {
+  const { page, frame } = await mpsPage(
+    t,
+    config,
+    ({ queryId }) => ({
+      rows: queryId.endsWith('.count') ? [{ total: 0 }] : [],
+      returnedColumns: config.queries[queryId].columns,
+      configVersion: 'history-pagination-fixture',
+      totalRowCount: 0,
+      offset: 0,
+      hasMorePages: false,
+    }),
+    { time: '2026-11-17T12:00:00+08:00' },
+  );
+  const codes = Array.from({ length: 27 }, (_, index) => `SKU-${index + 1}`);
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    [
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称',
+      ...codes.map((code) => `郑州,${code},产品${code},点心,系列,包点,,`),
+    ].join('\n'),
+  );
+  await workflowStep(frame, '需求加工与收敛');
+  const history = frame.getByRole('region', { name: '历史发货分类与补0', exact: true });
+  const annualRows = history
+    .getByRole('table', { name: '历史发货分类及财年数量' })
+    .locator('tbody tr');
+  await expect(annualRows).toHaveCount(25);
+  await history.getByRole('button', { name: '财年历史下一页' }).click();
+  await expect(annualRows).toHaveCount(2);
+  const historical = await download(
+    page,
+    history.getByRole('button', { name: '下载当前历史及异常明细' }),
+  );
+  assert.deepEqual(
+    new Set(historical.filter((row) => row.粒度 === '财年历史').map((row) => row.产品编码)),
+    new Set(codes),
+  );
+  const issues = frame.getByRole('region', { name: '加工需求缺项报告', exact: true });
+  const issueRows = issues.getByRole('table').locator('tbody tr');
+  await expect(issueRows).toHaveCount(25);
+  await issues.getByRole('button', { name: '缺项报告下一页' }).click();
+  await expect(issues.getByRole('status')).toHaveText(/^第2\//);
+  const demand = await download(page, frame.getByRole('button', { name: '下载当前范围需求' }));
+  assert.deepEqual(
+    new Set(demand.filter((row) => row.粒度 === '缺项报告').map((row) => row.产品编码)),
+    new Set(codes),
+  );
+
+  await workflowStep(frame, '约束与配置');
+  const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
+  await constraints.locator('summary').filter({ hasText: '高级配置：' }).click();
+  const movements = constraints.getByRole('region', { name: '既有库存变动确认', exact: true });
+  const entries = movements.getByRole('table').locator('tbody tr');
+  await expect(entries).toHaveCount(25);
+  await beginAdjustment(constraints);
+  const enterMovement = async (quantity) => {
+    const entry = entries.first();
+    const input = entry.getByRole('textbox', { name: /既有生产入库$/ });
+    const label = await input.getAttribute('aria-label');
+    await input.fill(quantity);
+    await entry.getByRole('textbox', { name: /既有计划来源$/ }).fill('已确认计划');
+    await entry.getByRole('textbox', { name: /既有计划确认原因$/ }).fill('验证跨页草稿');
+    return label;
+  };
+  const firstInput = await enterMovement('10');
+  await movements.getByRole('button', { name: '既有库存变动下一页' }).click();
+  const secondInput = await enterMovement('20');
+  assert.notEqual(firstInput, secondInput);
+  await saveAdjustment(constraints);
+  await expect(constraints.getByRole('button', { name: '调整', exact: true })).toBeEnabled();
+  await expect(movements.getByLabel(secondInput, { exact: true })).toHaveText('20');
+  await movements.getByRole('button', { name: '既有库存变动上一页' }).click();
+  await expect(movements.getByLabel(firstInput, { exact: true })).toHaveText('10');
 });

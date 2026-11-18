@@ -95,6 +95,7 @@ test('CSV预览不写入，点击确认仅改变基地SKU并保留系统依据�
   assert.deepEqual(await draft(page), original);
   await preview.getByRole('button', { name: '确认应用修正', exact: true }).click();
   await expect(preview).toHaveCount(0);
+  await expect.poll(async () => (await draft(page)).adjustments.quantities.length).toBe(2);
   const saved = await draft(page);
   assert.equal(saved.adjustments.quantities.length, 2);
   assert.equal(saved.adjustments.quantities[0].quantity, 55.75);
@@ -120,6 +121,7 @@ test('CSV预览不写入，点击确认仅改变基地SKU并保留系统依据�
   await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('');
   await view.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
   await view.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect.poll(async () => (await draft(page)).adjustments.quantities.length).toBe(1);
   const undone = await draft(page);
   assert.equal(undone.adjustments.quantities.length, 1);
   assert.equal(undone.adjustments.history.at(-1).action, 'undo');
@@ -131,6 +133,7 @@ test('无效文件不覆盖有效修正，后选文件不会被先选文件的�
   const valid = `${columns}\n郑州,A,${month},80,促销活动,已确认`;
   await upload(frame, '选择需求修正CSV', valid);
   await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
+  await expect.poll(async () => (await draft(page)).adjustments.quantities[0]?.quantity).toBe(80);
   const original = await draft(page);
   const invalid = [
     ['', '没有需求修正行'],
@@ -202,6 +205,7 @@ test('取消上传不写入，版本切换及恢复保留各自修正并丢弃�
   assert.equal((await draft(page)).adjustments.quantities.length, 0);
   await upload(frame, '选择需求修正CSV', valid);
   await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
+  await expect.poll(async () => (await draft(page)).adjustments.quantities[0]?.quantity).toBe(70);
   const first = await draft(page);
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
@@ -209,6 +213,7 @@ test('取消上传不写入，版本切换及恢复保留各自修正并丢弃�
     .getByRole('dialog', { name: '新建评估版本', exact: true })
     .getByRole('button', { name: '创建本地版本', exact: true })
     .click();
+  await expect.poll(async () => (await draft(page)).id).not.toBe(first.id);
   const second = await draft(page);
   assert.notEqual(second.id, first.id);
   assert.equal(second.adjustments.quantities.length, 0);

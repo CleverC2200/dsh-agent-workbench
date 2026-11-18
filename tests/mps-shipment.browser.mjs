@@ -337,7 +337,7 @@ function shipmentFacts(query) {
 async function businessShipment(t, execute = shipmentFacts) {
   const result = await mpsPage(t, sourceConfig, execute);
   const { frame } = result;
-  await result.page.clock.setFixedTime(new Date('2026-10-15T12:00:00+08:00'));
+  await result.page.clock.setFixedTime(new Date('2026-09-30T12:00:00+08:00'));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-10');
@@ -509,6 +509,7 @@ test('MPS cutoff snapshots keep zero and missing averages distinct and do not in
   const csv = await exported(page, frame);
   assert.match(csv, /截止日日号减1为0/);
   assert.doesNotMatch(csv, /Infinity|NaN/);
+  await page.clock.setFixedTime(new Date('2026-10-22T12:00:00+08:00'));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-11');
@@ -697,6 +698,7 @@ test('MPS stock input missing product dimensions retain quantities without inven
 test('MPS shipment rounds displayed quantities while keeping decimal source values in exports', async (t) => {
   const { page, frame, table } = await shipment(t);
   await upload(frame, ['2026-09,郑州,A,产品A,汤圆,系列,组,12.5,0,0,1.5,100,200,80.375']);
+  await expectShipment(table, '郑州 本月已发货', '13');
   await expandShipmentBase(frame, '郑州');
   await expect(
     table.getByRole('button', { name: '郑州 A 本月已发货 计算过程', exact: true }),
@@ -909,6 +911,7 @@ test('shipment national SKU preserves base adjustment sources, aggregate days an
     '2026-09,郑州,B,缺项产品,汤圆,系列,组,110,,10,10,,20,8',
     '2026-09,濮阳,X,范围外产品,汤圆,系列,组,999,0,0,1,0,0,0',
   ]);
+  await expectShipment(table, '全国合计 本月已发货', '440');
   await expandShipmentBase(frame, '郑州');
   await edit(table, '郑州 A 整月预估发货', 301);
   await table.getByRole('button', { name: '展开 全国合计', exact: true }).click();
@@ -993,6 +996,7 @@ test('shipment transfer plans keep blanks and zeros distinct and save leaf inven
   await expect(
     table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
   ).toHaveText('待定');
+  await expectShipment(table, '郑州 本月已发货', '330');
   await expandShipmentBase(frame, '郑州');
   await beginAdjustment(frame);
   await table.getByLabel('郑州 A 调入计划', { exact: true }).fill('50');

@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import { mpsPage } from './helpers/mps-page.mjs';
 
+const october = { time: '2026-10-31T14:00:00+08:00' };
+const november = { time: '2026-11-18T13:30:00+08:00' };
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 function fixture({ queryId, parameters }, latest = '2026-10-31') {
   const rows =
@@ -54,7 +56,7 @@ const selected = (page) =>
   });
 
 test('new MPS versions discover the latest source date for their statistical month and export that synchronized cutoff', async (t) => {
-  const { page, frame, calls } = await mpsPage(t, config, fixture);
+  const { page, frame, calls } = await mpsPage(t, config, fixture, october);
   await create(frame);
   await expect(frame.getByLabel('数据截止日')).toHaveValue('2026-10-31');
   assert.deepEqual(calls.find((row) => row.queryId === 'facts.shipment-latest').parameters, {
@@ -79,7 +81,12 @@ test('new MPS versions discover the latest source date for their statistical mon
 
 test('an existing explicit cutoff survives restore while a new reference copy discovers its own latest date', async (t) => {
   let latest = '2026-10-31';
-  const { page, frame, calls } = await mpsPage(t, config, (query) => fixture(query, latest));
+  const { page, frame, calls } = await mpsPage(
+    t,
+    config,
+    (query) => fixture(query, latest),
+    october,
+  );
   await create(frame);
   await expect(frame.getByLabel('数据截止日')).toHaveValue(latest);
   await frame.getByLabel('数据截止日').fill('2026-10-22');
@@ -102,10 +109,15 @@ test('a late source-date response cannot overwrite a manually selected cutoff', 
   const waiting = new Promise((resolve) => {
     release = resolve;
   });
-  const { frame, calls } = await mpsPage(t, config, async (query) => {
-    if (query.queryId === 'facts.shipment-latest') await waiting;
-    return fixture(query);
-  });
+  const { frame, calls } = await mpsPage(
+    t,
+    config,
+    async (query) => {
+      if (query.queryId === 'facts.shipment-latest') await waiting;
+      return fixture(query);
+    },
+    october,
+  );
   await create(frame);
   await expect.poll(() => calls.some((row) => row.queryId === 'facts.shipment-latest')).toBe(true);
   await frame.getByLabel('数据截止日').fill('2026-10-22');
@@ -122,15 +134,21 @@ test('switching versions cancels an older statistical-month date read', async (t
   const waiting = new Promise((resolve) => {
     release = resolve;
   });
-  const { page, frame, calls } = await mpsPage(t, config, async (query) => {
-    if (query.queryId === 'facts.shipment-latest' && query.parameters.month === '2026-10-01') {
-      await waiting;
-      return fixture(query, '2026-10-31');
-    }
-    return fixture(query, '2026-11-08');
-  });
+  const { page, frame, calls } = await mpsPage(
+    t,
+    config,
+    async (query) => {
+      if (query.queryId === 'facts.shipment-latest' && query.parameters.month === '2026-10-01') {
+        await waiting;
+        return fixture(query, '2026-10-31');
+      }
+      return fixture(query, '2026-11-08');
+    },
+    october,
+  );
   await create(frame);
   await expect.poll(() => calls.some((row) => row.queryId === 'facts.shipment-latest')).toBe(true);
+  await page.clock.setFixedTime(new Date(november.time));
   await create(frame, '2026-12');
   await expect(frame.getByLabel('数据截止日')).toHaveValue('2026-11-08');
   release();
@@ -148,11 +166,16 @@ for (const [name, latest] of [
   ['failed source read', 'failure'],
 ]) {
   test(`new MPS versions keep an unknown cutoff for ${name} instead of inventing a default`, async (t) => {
-    const { frame } = await mpsPage(t, config, (query) => {
-      if (query.queryId === 'facts.shipment-latest' && latest === 'failure')
-        throw Error('SOURCE_UNAVAILABLE');
-      return fixture(query, latest);
-    });
+    const { frame } = await mpsPage(
+      t,
+      config,
+      (query) => {
+        if (query.queryId === 'facts.shipment-latest' && latest === 'failure')
+          throw Error('SOURCE_UNAVAILABLE');
+        return fixture(query, latest);
+      },
+      october,
+    );
     await create(frame);
     const view = frame.getByRole('region', { name: '发货本地核对' });
     await expect(view.getByRole('alert')).toContainText(/日期|SOURCE_UNAVAILABLE/);
@@ -160,3 +183,86 @@ for (const [name, latest] of [
     await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeDisabled();
   });
 }
+
+test('11月评估版本可按11月截止日读取实际发货并追踪公式', async (t) => {
+  const { frame, calls } = await mpsPage(
+    t,
+    config,
+    (query) =>
+      fixture(query, query.parameters.month === '2026-11-01' ? '2026-11-16' : '2026-10-31'),
+    november,
+  );
+  await create(frame);
+  const cutoff = frame.getByLabel('数据截止日');
+  const view = frame.getByRole('region', { name: '发货本地核对' });
+  await expect(cutoff).toHaveValue('2026-11-16');
+  await expect(cutoff).toHaveAttribute('max', '2026-11-18');
+  await cutoff.fill('2026-11-15');
+  await view.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  await expect(view).toContainText('2026-11-01 至 2026-11-15');
+  await expect(view).toContainText('已过天数 15 天');
+  await expect(view).toContainText('本月共计天数 30 天');
+  const query = calls.find(
+    (row) => row.queryId === 'facts.shipment' && row.parameters.cutoff === '2026-11-15',
+  );
+  assert.equal(query.parameters.month, '2026-11-01');
+  assert.equal(query.parameters.cutoff, '2026-11-15');
+  assert.equal(query.parameters.recent_start, '2026-11-13');
+  const result = view.getByRole('button', { name: '郑州 本月预测量 计算过程', exact: true });
+  await expect(result).toHaveText('620');
+  await result.click();
+  await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText('620');
+});
+
+test('未到数的当日保持待补，未来评估月不读取未来实际发货', async (t) => {
+  const { frame, calls } = await mpsPage(
+    t,
+    config,
+    (query) => {
+      const data = fixture(query, null);
+      if (query.queryId === 'facts.shipment.count') data.rows = [{ total: 0 }];
+      if (query.queryId === 'facts.shipment') data.rows = [];
+      return data;
+    },
+    november,
+  );
+  await create(frame);
+  const view = frame.getByRole('region', { name: '发货本地核对' });
+  const cutoff = view.getByLabel('数据截止日');
+  await expect(view.getByRole('alert')).toContainText('暂无可用发货日期');
+  await expect(cutoff).toHaveValue('');
+  await cutoff.fill('2026-11-19');
+  await expect(cutoff).toHaveValue('');
+  await cutoff.fill('2026-11-18');
+  await expect(view).toContainText('该取数区间没有实际发货记录，预估待补');
+  await expect(view).toContainText('2026-11-01 至 2026-11-18');
+  const count = calls.filter((row) => row.queryId === 'facts.shipment-latest').length;
+  await create(frame, '2027-01');
+  await expect(cutoff).toBeDisabled();
+  await expect(view).toContainText('该评估版本尚无可选截止日');
+  assert.equal(calls.filter((row) => row.queryId === 'facts.shipment-latest').length, count);
+  await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
+  await expect(frame.getByRole('button', { name: '执行评估', exact: true })).toBeEnabled();
+});
+
+test('旧草稿跨月切换后可恢复原截止日的人工调整', async (t) => {
+  const { page, frame } = await mpsPage(t, config, (query) => fixture(query, null), november);
+  await create(frame);
+  const oldDraft = await page.evaluate(() => window.readView());
+  const draft = oldDraft.localDrafts.drafts.find((row) => row.id === oldDraft.localDrafts.selected);
+  const values = { '["郑州","A"]': { value: 77, source: '本地调整', previous: 50 } };
+  draft.shipment = { cutoff: '2026-10-22', activeSource: 'business', values };
+  await page.evaluate((seed) => window.openAuthor('mps', 1200, seed), oldDraft);
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  const cutoff = frame.getByLabel('数据截止日');
+  await expect(cutoff).toHaveValue('2026-10-22');
+  await cutoff.fill('2026-11-16');
+  await expect.poll(async () => (await selected(page)).shipment.values).toEqual({});
+  const saved = await page.evaluate(() => window.readView());
+  await page.evaluate((seed) => window.openAuthor('mps', 1200, seed), saved);
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await expect(cutoff).toHaveValue('2026-11-16');
+  await cutoff.fill('2026-10-22');
+  await expect.poll(async () => (await selected(page)).shipment.values).toEqual(values);
+  assert.equal(await page.evaluate(() => window.peerDraft), '历史草稿，请保留。');
+});

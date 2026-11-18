@@ -6,6 +6,7 @@ import { compileHtmlAuthor } from './html-author.mjs';
 import { verifyFixedAuthoredData } from './static-author-provenance.mjs';
 import { syncAgentResources } from './build-output.mjs';
 import { mpsComputePlugin } from './mps-compute-build.mjs';
+import { maxHtmlBytes } from '../src/html-document.ts';
 const questionStyles = await readFile(
   new URL('../business/shared/author-questions.css', import.meta.url),
   'utf8',
@@ -44,6 +45,7 @@ for (const page of ['category', 'mps']) {
     platform: 'browser',
     target: 'es2022',
     legalComments: 'inline',
+    minifyWhitespace: page === 'mps',
   });
   const confirmationStyles =
     page === 'mps'
@@ -65,6 +67,8 @@ for (const page of ['category', 'mps']) {
         '\n' +
         confirmationStyles,
     );
+  const bytes = Buffer.byteLength(html);
+  if (bytes > maxHtmlBytes) throw Error(`HTML_TOO_LARGE: ${page} (${bytes} > ${maxHtmlBytes})`);
   await writeFile(new URL(`${page}/index.html`, outputs), html);
 }
 const regionalSource = new URL('../static/regional/source/index.html', import.meta.url);
