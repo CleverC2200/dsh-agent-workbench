@@ -99,3 +99,24 @@ test('原有正日均与月底以外待发订单场景保持原公式，缺失�
   assert.equal(delayed.prediction, 122);
   assert.equal(deriveShipmentForecast(input({ daily3: null }), 20, 30).prediction, null);
 });
+
+test('月初不足三天时三数量确认是零且日期完整仍预估为零，历史缺项继续待核', () => {
+  for (const passed of [1, 2]) {
+    const zero = input({ shipped: 0, prepped: 0, unprepped: 0, daily3: null, sourceDays: passed });
+    const result = deriveShipmentForecast(zero, passed, 30);
+    assert.equal(result.prediction, 0);
+    assert.equal(result.confirmedNoShipment, true);
+    assert.equal(result.forecastIssue, '');
+    for (const changes of [
+      { sourceDays: 0 },
+      { duplicateDays: 1 },
+      { average: null },
+      { sourceDays: undefined, duplicateDays: undefined },
+      { daily3: undefined },
+    ]) {
+      const pending = deriveShipmentForecast({ ...zero, ...changes }, passed, 30);
+      assert.equal(pending.prediction, null);
+      assert.match(pending.forecastIssue, /缺|重复|待核/);
+    }
+  }
+});

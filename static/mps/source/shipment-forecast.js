@@ -41,7 +41,12 @@ export function deriveShipmentForecast(row, passed, total) {
   const shipmentSourceComplete = !sourceDateIssues.length;
   const confirmedNoShipment =
     noShipmentQuantities &&
-    finite(row.daily3) != null &&
+    (finite(row.daily3) != null ||
+      (passed > 0 &&
+        passed < 3 &&
+        row.daily3 === null &&
+        row.sourceDays === passed &&
+        row.duplicateDays === 0)) &&
     finite(row.average) != null &&
     shipmentSourceComplete;
   const prediction = !shipmentSourceComplete

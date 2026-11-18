@@ -1,9 +1,10 @@
-import { fillTurnoverDays } from './helpers/mps-edit.mjs';
 import {
-  seedLeafQuantities,
-  seedNoTransferPlans,
-  seedNoExistingMovements,
-} from './helpers/mps-fixtures.mjs';
+  shipmentSourceRow,
+  shipmentSourceResponse,
+  syncShipmentSource,
+} from './helpers/mps-shipment-source.mjs';
+import { fillTurnoverDays } from './helpers/mps-edit.mjs';
+import { seedLeafQuantities, seedNoExistingMovements } from './helpers/mps-fixtures.mjs';
 import { selectAdjustmentReason } from './helpers/mps-edit.mjs';
 import { expandShipmentBase } from './helpers/mps-shipment.mjs';
 import {
@@ -37,8 +38,10 @@ async function columnCell(table, row, name) {
 }
 const annualFixtures = new WeakMap();
 async function workflowPage(t) {
-  const state = { rows: [] };
+  const state = { rows: [], shipmentRows: [] };
   const result = await mpsPage(t, config, (query) => {
+    const shipment = shipmentSourceResponse(config, query, state.shipmentRows, null);
+    if (shipment) return shipment;
     if (query.queryId !== 'facts.history-annual') return emptySource(query);
     const rows = state.rows.slice(
       query.parameters.offset,
@@ -366,12 +369,18 @@ test('MPS processing carries the same-version shipment closing stock into its vi
     '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,产品甲,汤圆,系列,组,100,100',
   );
   await workflowStep(frame, '本月预估发货');
-  await upload(
-    frame,
-    '选择发货输入CSV',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-09,郑州,A,产品甲,汤圆,系列,组,220,10,10,10,100,200,80',
-  );
-  await seedNoTransferPlans(frame, [{ month: '2026-09', base: '郑州', code: 'A' }]);
+  annualFixtures.get(frame).shipmentRows = [
+    shipmentSourceRow({
+      shipped: 220,
+      prepped: 10,
+      unprepped: 10,
+      daily3: 10,
+      average: 10,
+      open: 90,
+      inbound: 210,
+    }),
+  ];
+  await syncShipmentSource(frame, '2026-09-22');
   await workflowStep(frame, '需求加工与收敛');
   await frame.getByText('来源诊断与缺项清单', { exact: true }).click();
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
@@ -762,12 +771,8 @@ test('MPS report and CSV derive all three months from evaluation-month coefficie
     })),
   );
   await workflowStep(frame, '本月预估发货');
-  await upload(
-    frame,
-    '选择发货输入CSV',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库,近30天日均发货\n2026-11,郑州,A,产品甲,汤圆,系列,组,0,0,0,0,0,0,0,0',
-  );
-  await seedNoTransferPlans(frame, [{ month: '2026-11', base: '郑州', code: 'A' }]);
+  annualFixtures.get(frame).shipmentRows = [shipmentSourceRow()];
+  await syncShipmentSource(frame, '2026-11-17');
   await workflowStep(frame, '约束与配置');
   await beginAdjustment(frame);
   const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
@@ -779,6 +784,7 @@ test('MPS report and CSV derive all three months from evaluation-month coefficie
     frame,
     ['2026-12', '2027-01', '2027-02'].map((month) => ({ month, base: '郑州', code: 'A' })),
   );
+  await syncShipmentSource(frame, '2026-11-17');
   await workflowStep(frame, '产销存报告');
   const report = frame.getByRole('region', { name: '产销存报告', exact: true });
   await expect(report.getByRole('button', { name: '导出产销存结果', exact: true })).toBeDisabled();
@@ -868,16 +874,13 @@ async function preparedPlan(t, partialHistory = false) {
     await expectWorkflowExportValue(frame, '郑州 B 2026-12 系统占比 计算过程', '40.00%');
   }
   await workflowStep(frame, '本月预估发货');
-  await upload(
-    frame,
-    '选择发货输入CSV',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库,近30天日均发货\n2026-11,郑州,A,产品甲,汤圆,系列,组,0,0,0,0,0,0,0,0\n2026-11,郑州,B,产品乙,汤圆,系列,组,0,0,0,0,0,0,0,0',
+  annualFixtures.get(frame).shipmentRows = ['A', 'B'].map((material_code) =>
+    shipmentSourceRow({
+      material_code,
+      material_name: material_code === 'A' ? '产品甲' : '产品乙',
+    }),
   );
-  await seedNoTransferPlans(
-    frame,
-    ['A', 'B'].map((code) => ({ month: '2026-11', base: '郑州', code })),
-  );
-  await workflowStep(frame, '本月预估发货');
+  await syncShipmentSource(frame, '2026-11-17');
   await expandShipmentBase(frame, '郑州');
   const shipmentEstimate = frame.getByLabel('郑州 A 整月预估发货', { exact: true });
   await beginAdjustment(frame);
@@ -922,6 +925,7 @@ async function preparedPlan(t, partialHistory = false) {
       ['A', 'B'].map((code) => ({ month, base: '郑州', code })),
     ),
   );
+  await syncShipmentSource(frame, '2026-11-17');
   await workflowStep(frame, '产能评估与缺口');
   const capacity = frame.getByRole('region', { name: '产能评估与缺口', exact: true });
   return { page, frame, capacity, constraints };
@@ -945,20 +949,12 @@ test('零需求跳过缺失拆分依据，库存缺项逐行导出人工补数�
     ),
   );
   await workflowStep(frame, '本月预估发货');
-  await upload(
-    frame,
-    '选择发货输入CSV',
-    '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库,近30天日均发货\n2026-11,郑州,A,产品甲,汤圆,系列,组,0,0,0,0,0,0,0,0',
-  );
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const state = window.readView().localDrafts;
-        return state.drafts.find((draft) => draft.id === state.selected)?.shipment?.rows?.length;
-      }),
-    )
-    .toBe(1);
+  annualFixtures.get(frame).shipmentRows = [shipmentSourceRow()];
+  await syncShipmentSource(frame, '2026-11-17');
   await expandShipmentBase(frame, '郑州');
+  await expect(
+    frame.getByRole('button', { name: '郑州 B 整月预估发货 计算过程', exact: true }),
+  ).toHaveCount(0);
   await beginAdjustment(frame);
   await frame.getByLabel('郑州 A 整月预估发货', { exact: true }).fill('5');
   await saveAdjustment(frame);

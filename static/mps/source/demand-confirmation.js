@@ -1640,9 +1640,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         draft.month,
       ],
     );
-    const filteredProducts = productViews.filter(
+    const categoryProducts = productViews.filter(({ display }) =>
+      matchesCategories(display['大类'], selectedCategories),
+    );
+    const filteredProducts = categoryProducts.filter(
       ({ display, labels, replacementCodes, targetBases, transferTags, sourcePeriods }) =>
-        matchesCategories(display['大类'], selectedCategories) &&
         [
           ...Object.values(display),
           ...labels,
@@ -2304,7 +2306,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ? '产品关系-演示数据.csv'
                       : '产品关系.csv',
                     [...productColumns, '未税到岸单价'],
-                    productViews.map(({ display }) => display),
+                    categoryProducts.map(({ display }) => display),
                   ),
               },
               '下载',
@@ -2317,7 +2319,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   downloadCsv(
                     '产品源字段.csv',
                     productSourceColumns,
-                    productSourceRows(draft.productRaw),
+                    productSourceRows(draft.productRaw).filter((row) =>
+                      matchesCategories(row['大类'], selectedCategories),
+                    ),
                   ),
               },
               '下载产品源字段',

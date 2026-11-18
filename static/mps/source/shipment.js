@@ -191,7 +191,8 @@ export function createShipment(
           const dimension = dimensions.get(keyOf(row));
           const adjustment = currentState.values?.[keyOf(row)];
           const remainingEdit = currentState.remaining?.[row.base];
-          const remaining = remainingEdit ? remainingEdit.values[keyOf(row)] : row.remaining;
+          const remainingValue = remainingEdit?.values[keyOf(row)];
+          const remaining = remainingValue ?? row.remaining;
           const fin = adjustment ? adjustment.value : derived.prediction;
           const transferIn = sourceKind === 'business' ? (row.transferIn ?? null) : null;
           const transferOut = sourceKind === 'business' ? (row.transferOut ?? null) : null;
@@ -246,7 +247,7 @@ export function createShipment(
             transferOut,
             end,
             adjustment: adjustment ?? null,
-            remainingSource: remainingEdit?.source ?? null,
+            remainingSource: remainingValue == null ? null : remainingEdit.source,
             missingFields: [
               ...inputFields,
               'transferIn',
