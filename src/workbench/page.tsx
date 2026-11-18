@@ -5,7 +5,7 @@ import {
 } from './original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
 import { createWorkflowPeriodLoader } from './workflow-loader.ts';
 import '@arco-design/web-react/dist/css/arco.css';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button } from '@arco-design/web-react';
 import i18next from 'i18next';
 import {
@@ -15,6 +15,7 @@ import {
   type WorkbenchHost,
   type RegionalApprovalWorkbenchContext,
 } from './original/index.ts';
+import { WorkbenchHostProvider } from './original/bridge.ts';
 import commonEn from './original/en-US.json' with { type: 'json' };
 import commonZh from './original/zh-CN.json' with { type: 'json' };
 
@@ -211,14 +212,21 @@ async function rpc<T>(
   endpoint: string,
   payload: object = {},
   signal?: AbortSignal,
-  detailLoadId?: string,
-  onPlanPage?: (page: T) => void,
+  {
+    detailLoadId,
+    onPlanPage,
+    startupScope,
+  }: {
+    detailLoadId?: string;
+    onPlanPage?: (page: T) => void;
+    startupScope?: string;
+  } = {},
 ): Promise<T> {
   const owned =
     /^(workbench\/query|workflow\/config|sales-plan\/|approval\/roles|model\/advice)/.test(
       endpoint,
     );
-  const owner = owned ? await pageRequestOwner(signal) : undefined;
+  const owner = owned ? (startupScope ? requestOwner : await pageRequestOwner(signal)) : undefined;
   const response = await fetch('/api/gea-proof/' + endpoint, {
     method: 'POST',
     credentials: 'same-origin',
@@ -226,6 +234,7 @@ async function rpc<T>(
       'Content-Type': 'application/json',
       ...(onPlanPage ? { Accept: 'application/x-ndjson' } : {}),
       ...(owner ? { 'X-Workbench-Page-Owner': owner } : {}),
+      ...(startupScope ? { 'X-GEA-Sales-Plan-Scope': startupScope } : {}),
       ...(detailLoadId ? { 'X-Sales-Plan-Detail-Load': detailLoadId } : {}),
     },
     body: JSON.stringify(payload),
@@ -266,32 +275,43 @@ async function rpc<T>(
 function query<T>(
   kind: string,
   input: { signal?: AbortSignal } = {},
-  onPlanPage?: (page: T) => void,
+  options?: { onPlanPage?: (page: T) => void; startupScope?: string },
 ): Promise<T> {
   const { signal, ...fields } = input;
-  return rpc<T>('workbench/query', { kind, query: fields }, signal, undefined, onPlanPage);
+  return rpc<T>('workbench/query', { kind, query: fields }, signal, options);
 }
-const loadWorkflowAndPeriods = createWorkflowPeriodLoader((signal) =>
-  rpc('workflow/config', {}, signal),
+const loadWorkflowAndPeriods = createWorkflowPeriodLoader((signal, startupScope) =>
+  rpc('workflow/config', {}, signal, { startupScope }),
 );
+function salesPlanStartupReads(
+  startupScope?: string,
+): Pick<WorkbenchHost['salesPlan'], 'periods' | 'list'> {
+  return {
+    periods: {
+      invoke: (input) =>
+        loadWorkflowAndPeriods(
+          (signal) => query('periods', { ...input, signal }, { startupScope }),
+          input?.signal,
+          startupScope,
+        ),
+    },
+    list: { invoke: (input, onPlanPage) => query('list', input, { onPlanPage, startupScope }) },
+  };
+}
 export const workbenchHost: WorkbenchHost = {
   salesPlan: {
     draft: {
       invoke: ({ signal, detailLoadId, ...input }) =>
-        rpc('sales-plan/draft', input, signal, detailLoadId),
+        rpc('sales-plan/draft', input, signal, { detailLoadId }),
     },
-    periods: {
-      invoke: (input) =>
-        loadWorkflowAndPeriods((signal) => query('periods', { ...input, signal }), input?.signal),
-    },
-    list: { invoke: (input, onPlanPage) => query('list', input, onPlanPage) },
+    ...salesPlanStartupReads(),
     detail: { invoke: (input) => query('detail', input) },
     versions: { invoke: (input) => query('versions', input) },
     logs: { invoke: (input) => query('logs', input) },
     versionSkus: { invoke: (input) => query('versionSkus', input) },
     skuReview: {
       invoke: ({ signal, detailLoadId, ...query }) =>
-        rpc('workbench/query', { kind: 'skuReview', query }, signal, detailLoadId),
+        rpc('workbench/query', { kind: 'skuReview', query }, signal, { detailLoadId }),
     },
     compare: { invoke: (input) => query('compare', input) },
     action: { invoke: (input) => rpc('sales-plan/action', input) },
@@ -388,6 +408,14 @@ export function WorkbenchPage({ t }: { t: Translate }) {
           user: identity.status.user,
         }
       : undefined;
+  const startupScope = status?.authenticated ? (status.pageScope ?? undefined) : undefined;
+  const salesPlanHost = useMemo(
+    () => ({
+      ...workbenchHost,
+      salesPlan: { ...workbenchHost.salesPlan, ...salesPlanStartupReads(startupScope) },
+    }),
+    [startupScope],
+  );
   const directApiLog = new URLSearchParams(window.location.search).get('view') === 'api-log';
   const [apiLogOpen, setApiLogOpen] = useState(directApiLog);
   const [submissionOutcomes, setSubmissionOutcomes] =
@@ -643,35 +671,37 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                   }
                 />
               )}
-              <RegionalApprovalWorkbench
-                submissionOutcomes={submissionOutcomes}
-                submissionPending={Boolean(resubmit?.pending)}
-                submissionRefreshRequest={submissionRefreshRequest}
-                stateScope={`gea-dsh:${status.environment}:${status.user?.tenantId}:${status.user?.id}`}
-                t={locale.t.bind(locale)}
-                onContextChange={onContextChange}
-                currentUserId={status.user?.id}
-                approvalStages={salesPlanStagesForRoles(status.roles)}
-                liveActionsEnabled={true}
-                onSubmitBatch={(items) =>
-                  setResubmit((current) =>
-                    current?.pending
-                      ? { ...current, visible: true }
-                      : { items, visible: true, pending: false },
-                  )
-                }
-                automaticAnalysisEnabled={true}
-                onCatalogChange={(elements) => {
-                  catalogElements.current = elements;
-                }}
-                toolCall={workbenchToolCall}
-                onToolResult={(toolCallId, applied, error) => {
-                  const pending = pendingToolResult.current;
-                  if (!pending || pending.toolCallId !== toolCallId) return;
-                  pendingToolResult.current = undefined;
-                  pending.resolve({ applied, error });
-                }}
-              />
+              <WorkbenchHostProvider value={salesPlanHost}>
+                <RegionalApprovalWorkbench
+                  submissionOutcomes={submissionOutcomes}
+                  submissionPending={Boolean(resubmit?.pending)}
+                  submissionRefreshRequest={submissionRefreshRequest}
+                  stateScope={`gea-dsh:${status.environment}:${status.user?.tenantId}:${status.user?.id}`}
+                  t={locale.t.bind(locale)}
+                  onContextChange={onContextChange}
+                  currentUserId={status.user?.id}
+                  approvalStages={salesPlanStagesForRoles(status.roles)}
+                  liveActionsEnabled={true}
+                  onSubmitBatch={(items) =>
+                    setResubmit((current) =>
+                      current?.pending
+                        ? { ...current, visible: true }
+                        : { items, visible: true, pending: false },
+                    )
+                  }
+                  automaticAnalysisEnabled={true}
+                  onCatalogChange={(elements) => {
+                    catalogElements.current = elements;
+                  }}
+                  toolCall={workbenchToolCall}
+                  onToolResult={(toolCallId, applied, error) => {
+                    const pending = pendingToolResult.current;
+                    if (!pending || pending.toolCallId !== toolCallId) return;
+                    pendingToolResult.current = undefined;
+                    pending.resolve({ applied, error });
+                  }}
+                />
+              </WorkbenchHostProvider>
             </div>
           </WorkbenchSessionProvider>
         </section>
