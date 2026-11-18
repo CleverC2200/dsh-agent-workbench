@@ -101,7 +101,15 @@ test('shipment stages multiple hierarchy edits atomically, cancels across pages 
   await view.getByLabel('郑州 A 整月预估发货', { exact: true }).fill('40');
   assert.deepEqual((await draft(page)).shipment, original);
   await expect(frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' })).toBeDisabled();
+  const switchHint = frame.getByText('请保存或取消当前调整，再切换步骤、月份或版本。', {
+    exact: true,
+  });
+  await expect(switchHint).toBeVisible();
+  await expect(frame.getByLabel('评估月份选择', { exact: true })).toBeDisabled();
+  await expect(frame.getByLabel('评估版本选择', { exact: true })).toBeDisabled();
   await view.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(switchHint).toHaveCount(0);
+  await expect(frame.getByLabel('评估版本选择', { exact: true })).toBeEnabled();
   assert.deepEqual((await draft(page)).shipment, original);
   await begin(view);
   await view.getByLabel('郑州 剩余天数入库', { exact: true }).fill('-1');

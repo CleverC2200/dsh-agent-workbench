@@ -27,6 +27,21 @@ const number = (value) => {
   return Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER ? result : null;
 };
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
+const historyWarningMessages = (warnings) => [
+  ...new Set(
+    (warnings ?? []).map((warning) => {
+      const message = text(warning) || text(warning?.message);
+      const code = text(warning?.code);
+      return (
+        message ||
+        (code === 'METRIC_VALUE_UNAVAILABLE'
+          ? '部分指标未返回有效值（METRIC_VALUE_UNAVAILABLE）'
+          : code) ||
+        '来源返回警告，未提供说明'
+      );
+    }),
+  ),
+];
 const demo = (value) => /demo|演示|原型/i.test(String(value ?? ''));
 const rowKey = (row) => JSON.stringify([row.base, row.code]);
 function productHistoryMappings(products, raw) {
@@ -178,7 +193,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   const annualIssues = () => [
     ...annualSourceIssues,
     ...(annualData?.metadata?.partial ? ['上一完整财年发货读取不完整'] : []),
-    ...(annualData?.metadata?.warnings ?? []),
+    ...historyWarningMessages(annualData?.metadata?.warnings),
     ...(annualData?.error
       ? [annualData.error]
       : !annualData || (!annualReady && !annualSourceIssues.length)
@@ -395,7 +410,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       issues: [
         ...(windowFailure ? [windowRead.error || '历史窗口读取失败'] : []),
         ...(period.error ? [period.error] : []),
-        ...(period.metadata?.warnings ?? []),
+        ...historyWarningMessages(period.metadata?.warnings),
       ],
       rows: (period.rows ?? []).map((row) => ({
         month: period.month,

@@ -1874,6 +1874,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             ),
           ),
         ),
+        adjusting &&
+          h(
+            'p',
+            { role: 'status', className: 'dc-card-note' },
+            '请保存或取消当前调整，再切换步骤、月份或版本。',
+          ),
       ),
       versionOpen &&
         h(

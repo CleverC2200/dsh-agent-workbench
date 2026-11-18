@@ -176,10 +176,11 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         controller.current?.abort();
       };
     }, [active, draft.month]);
-    const workflow = react.useMemo(
-      () => (kind === 'parameters' ? buildMpsWorkflow(draft, relations, null) : null),
-      [draft, relations, kind],
-    );
+    const readParameterWorkflow = react.useMemo(() => {
+      let result;
+      return () => (result ??= buildMpsWorkflow(draft, relations, null));
+    }, [draft, relations]);
+    const workflow = kind === 'parameters' && contextActive ? readParameterWorkflow() : null;
     const shares = workflow?.rows.filter((row) => row.month === draft.month && row.code) ?? [];
     const checks = react.useMemo(
       () =>
@@ -353,7 +354,8 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           : ['财年', '全国维度财年发货数量', '月发货占财年比例']),
       '粒度状态',
     ];
-    const shareRows = shares.map((row) => ({
+    const isShare = preview === '去年发运占比' || preview === '销售提报占比';
+    const shareRows = (isShare && !showExcluded ? shares : []).map((row) => ({
       大类: row.category,
       基地: row.base,
       产品编码: row.code,
@@ -407,8 +409,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       '历史基地占比',
       '核对状态',
     ];
-    const isShare = preview === '去年发运占比' || preview === '销售提报占比';
-    const excludedRows = (workflow?.excludedSources ?? [])
+    const excludedRows = (isShare && showExcluded ? (workflow?.excludedSources ?? []) : [])
       .filter((row) => row.month === draft.month)
       .map((row) => ({
         来源: row.source === 'report' ? '销售提报' : '上一财年发货',
