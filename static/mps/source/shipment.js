@@ -248,11 +248,6 @@ export function createShipment(
       );
     }, [sourceKind, sourceRows, draft.products, draft.productsRead]);
     const deriveRows = (currentState) => {
-      const plans = new Map(
-        (currentState.transferPlans ?? [])
-          .filter((plan) => plan.month === month)
-          .map((plan) => [keyOf(plan), plan]),
-      );
       return sourceRows
         .filter((row) => row.month === month && bases.includes(row.base))
         .map((row) => {
@@ -262,9 +257,8 @@ export function createShipment(
           const remainingEdit = currentState.remaining?.[row.base];
           const remaining = remainingEdit ? remainingEdit.values[keyOf(row)] : row.remaining;
           const fin = adjustment ? adjustment.value : derived.prediction;
-          const plan = plans.get(keyOf(row));
-          const transferIn = plan?.inbound ?? null;
-          const transferOut = plan?.outbound ?? null;
+          const transferIn = sourceKind === 'business' ? (row.transferIn ?? null) : null;
+          const transferOut = sourceKind === 'business' ? (row.transferOut ?? null) : null;
           const open = row.open == null ? null : Math.max(0, row.open);
           const inputs = { ...row, transferIn, transferOut };
           const rawEnd = [open, row.inbound, remaining, fin, transferIn, transferOut].every(
@@ -328,17 +322,7 @@ export function createShipment(
     };
     const rows = react.useMemo(
       () => deriveRows(state),
-      [
-        sourceRows,
-        sourceKind,
-        dimensions,
-        month,
-        passed,
-        totalDays,
-        state.values,
-        state.remaining,
-        state.transferPlans,
-      ],
+      [sourceRows, sourceKind, dimensions, month, passed, totalDays, state.values, state.remaining],
     );
     const visibleRows = rows.filter(
       (row) => !skuSearch || [row.code, row.name].some((value) => value?.includes(skuSearch)),
@@ -356,6 +340,22 @@ export function createShipment(
       '原因',
     ];
     const stockIssues = visibleRows.flatMap((row) => [
+      ...(row.transferIssue
+        ? [
+            {
+              月份: month,
+              基地: row.base,
+              产品编码: row.code,
+              异常类别: '调拨来源异常',
+              指标: '调入计划、调出计划',
+              原始值: row.transferDate ?? '',
+              计算用值: '待补',
+              实际处理: '保留待补，未按无计划置0',
+              来源: 'ai_db.agents_scm_stock_detail_d',
+              原因: row.transferIssue,
+            },
+          ]
+        : []),
       ...row.inventoryIssues.map((issue) => ({
         月份: month,
         基地: row.base,
@@ -570,6 +570,8 @@ export function createShipment(
           (row) =>
             inputFields.some((field) => row[field] == null) ||
             row.average == null ||
+            row.transferIn == null ||
+            row.transferOut == null ||
             row.sourceDays < passed,
         ).length;
         const duplicateRows = actualRows.filter((row) => row.duplicateDays > 0).length;
@@ -718,28 +720,7 @@ export function createShipment(
     const applyBatch = (entries) => {
       if (!entries.length) return;
       let next = stateRef.current;
-      const transfers = entries.filter((entry) =>
-        ['transferIn', 'transferOut'].includes(entry.meta.kind),
-      );
-      if (transfers.length) {
-        const key = (plan) => JSON.stringify([plan.month, plan.base, plan.code]);
-        const plans = new Map((next.transferPlans ?? []).map((plan) => [key(plan), plan]));
-        const currentRows = new Set(deriveRows(next).map(keyOf));
-        for (const entry of transfers) {
-          const identity = { month, base: entry.meta.base, code: entry.meta.code };
-          if (!currentRows.has(keyOf(identity)))
-            throw Error(`${entry.label} 已不在当前范围，请取消后重新调整。`);
-          const id = key(identity);
-          plans.set(id, {
-            ...(plans.get(id) ?? { ...identity, inbound: null, outbound: null }),
-            [entry.meta.kind === 'transferIn' ? 'inbound' : 'outbound']: entry.value,
-          });
-        }
-        next = { ...next, transferPlans: [...plans.values()] };
-      }
-      for (const entry of entries
-        .filter((entry) => !['transferIn', 'transferOut'].includes(entry.meta.kind))
-        .sort((a, b) => a.meta.level - b.meta.level)) {
+      for (const entry of [...entries].sort((a, b) => a.meta.level - b.meta.level)) {
         const current = calculate(next);
         const row =
           entry.meta.level === 0
@@ -892,7 +873,7 @@ export function createShipment(
           整月预估发货: row.fin ?? '',
           调入计划: row.transferIn ?? '',
           调出计划: row.transferOut ?? '',
-          调拨计划来源: '当前评估版本本地计划；空白待补，明确0表示无调拨',
+          调拨计划来源: `ai_db.agents_scm_stock_detail_d；纠偏优先，初版回退；调入：${row.transferInSource ?? '来源未同步'}；调出：${row.transferOutSource ?? '来源未同步'}`,
           预计月末结存: row.end ?? '',
           原始月初库存: row.rawOpen ?? '',
           原始预计月末结存: row.rawEnd ?? '',
@@ -971,9 +952,7 @@ export function createShipment(
     const numberCell = (row, field, who) => {
       const editable =
         !row.readOnly &&
-        (field === 'fin' ||
-          (['transferIn', 'transferOut'].includes(field) && !row.children) ||
-          (field === 'remaining' && row.children && who !== '全国合计'));
+        (field === 'fin' || (field === 'remaining' && row.children && who !== '全国合计'));
       return h(
         'td',
         {
@@ -1249,12 +1228,12 @@ export function createShipment(
                   : '本地CSV输入，BI排产未核齐'),
           ],
           transferIn: [
-            '调入计划 = 当前评估版本、月份、基地及SKU的本地人工计划，未填写保留待定',
-            `本地计划 ${raw('transferIn')} 件；不根据调拨方向推导数量`,
+            '调入计划 = 相同统计月、基地及SKU截止日前最新库存日报快照；纠偏优先于初版，确认无计划取0',
+            `${raw('transferIn')} 件；${row.transferInSource ?? '逐SKU来源汇总；未同步来源的单品保留待定'}`,
           ],
           transferOut: [
-            '调出计划 = 当前评估版本、月份、基地及SKU的本地人工计划，未填写保留待定',
-            `本地计划 ${raw('transferOut')} 件；明确0表示无调出`,
+            '调出计划 = 相同统计月、基地及SKU截止日前最新库存日报快照；纠偏优先于初版，确认无计划取0',
+            `${raw('transferOut')} 件；${row.transferOutSource ?? '逐SKU来源汇总；未同步来源的单品保留待定'}`,
           ],
           end: [
             row.children
@@ -1480,37 +1459,8 @@ export function createShipment(
           h(Actions, {
             batch,
             disabled: busy || !rows.length,
-            hint: '调拨仅改基地单品；留空表示待补，明确0表示无调拨',
+            hint: '调拨计划由库存日报读取，整月预估发货和基地剩余入库可调整',
           }),
-          batch.active &&
-            h(
-              'button',
-              {
-                type: 'button',
-                onClick: () =>
-                  batch.replace({
-                    ...batch.pending,
-                    ...Object.fromEntries(
-                      rows.flatMap((row) =>
-                        ['transferIn', 'transferOut'].map((field) => {
-                          const who = `${row.base} ${row.code}`;
-                          return [
-                            `${who}:${field}`,
-                            {
-                              label: `${who} ${names[fields.indexOf(field)]}`,
-                              text: '0',
-                              min: 0,
-                              integer: true,
-                              meta: { who, kind: field, level: 2, base: row.base, code: row.code },
-                            },
-                          ];
-                        }),
-                      ),
-                    ),
-                  }),
-              },
-              '确认当前月份全部明细无调拨',
-            ),
           batch.active &&
             (Object.keys(state.values ?? {}).length > 0 ||
               Object.keys(state.remaining ?? {}).length > 0) &&
@@ -1560,7 +1510,7 @@ export function createShipment(
         h(
           'p',
           { className: 'dc-card-note' },
-          `${month}调拨数量未接入业务来源，按当前评估版本本地维护。空白待补，明确0表示无调拨；汇总包含全部明细，下载按当前单品搜索范围提供明细。`,
+          `${month}调拨计划取库存日报截止日前最新适用快照，调入和调出分别按纠偏、初版、确认无计划时的0取值；重复或失败保留待核。汇总包含全部明细，下载按当前单品搜索范围提供明细。`,
         ),
         sourceKind === 'business' &&
           !(business.sourceRecords ?? business.rows).length &&

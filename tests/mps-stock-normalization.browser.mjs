@@ -59,16 +59,17 @@ async function mount(t, rows) {
       productSource: 'local-file',
       shipment: {
         cutoff: '2026-10-22',
-        activeSource: 'local-file',
-        file: '库存fixture.csv',
-        rows,
-        transferPlans: rows.map((row) => ({
-          month: row.month,
-          base: row.base,
-          code: row.code,
-          inbound: row.planIn ?? 5,
-          outbound: row.planOut ?? 10,
-        })),
+        activeSource: 'business',
+        business: {
+          month: '2026-10',
+          cutoff: '2026-10-22',
+          metadata: { partial: false },
+          rows: rows.map((row) => ({
+            ...row,
+            transferIn: row.planIn ?? 5,
+            transferOut: row.planOut ?? 10,
+          })),
+        },
       },
     };
   }, rows);

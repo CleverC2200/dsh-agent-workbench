@@ -55,6 +55,12 @@ async function mount(t, initialShipment) {
                   inbound: 210,
                   source_days: 22,
                   duplicate_days: 0,
+                  transfer_date: '2026-10-22',
+                  transfer_rows: 1,
+                  transfer_in_plan_v1: null,
+                  transfer_in_plan_adj: null,
+                  transfer_out_plan_v1: null,
+                  transfer_out_plan_adj: null,
                 },
               ],
       returnedColumns: config.queries[queryId].columns,
@@ -147,7 +153,7 @@ test('背景准备保留本地CSV和人工发货调整，不覆盖为业务来�
   });
   await expect.poll(() => page.evaluate(() => window.snapshot?.sourceKind)).toBe('local-file');
   assert.deepEqual(await page.evaluate(() => window.snapshot.rows), [
-    { base: '郑州', code: 'A', fin: 400, end: 0 },
+    { base: '郑州', code: 'A', fin: 400, end: null },
   ]);
   assert.equal(calls.length, 0);
 });

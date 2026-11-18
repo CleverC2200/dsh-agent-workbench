@@ -1704,3 +1704,26 @@ test('设备报告复用物理隧道与标准日产吨数，来源未提供的�
       .every((row) => row.resourceIds.length === 1),
   );
 });
+
+test('历史手填调拨保留在版本中但不进入后续既有库存变动，数仓结存继续承接', () => {
+  const source = draft();
+  source.shipment = {
+    transferPlans: [{ month: '2026-12', base: '甲', code: 'A', inbound: 999, outbound: 10 }],
+  };
+  const snapshot = {
+    draftId: source.id,
+    month: source.month,
+    shipmentMonth: '2026-11',
+    source: 'ai_db.agents_scm_stock_detail_d',
+    sourceKind: 'business',
+    status: 'ok',
+    rows: [{ base: '甲', code: 'A', end: 56, rawEnd: 56 }],
+  };
+  const row = buildMpsWorkflow(source, null, snapshot).rows.find(
+    (row) => row.base === '甲' && row.code === 'A',
+  );
+  assert.equal(row.openingInventory, 56);
+  assert.equal(row.existingTransferIn, null);
+  assert.equal(row.existingTransferOut, null);
+  assert.equal(source.shipment.transferPlans[0].inbound, 999);
+});
