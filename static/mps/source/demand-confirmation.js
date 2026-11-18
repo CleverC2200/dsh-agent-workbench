@@ -403,7 +403,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [page, setPage] = react.useState(0);
     const { period, column, rows } = sourceSelection(draft, type);
     const business = draft[type + 'Source'] === 'business';
-    const reportPeriodStatus = draft.reportRead?.periods?.[period]?.status;
+    const reportRead = draft.reportRead;
+    const reportPeriodStatus = reportRead?.periods?.[period]?.status;
+    const reportLoading =
+      (reportRead?.periods ? reportPeriodStatus : reportRead?.status) === 'loading';
     const visibleColumns =
       type === 'forecast' && business
         ? ['月份', '基地', '产品编码', '产品名称', '物料组', '物料组名称', '大类', '系列']
@@ -718,9 +721,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               ? '当前期间提报源未返回记录，数量待补。'
               : '当前期间无已读取记录，不能判定业务数据为零。',
           ),
-        busy &&
-          (type !== 'report' || reportPeriodStatus === 'loading') &&
-          h('p', { role: 'status' }, '正在读取…'),
+        busy && (type !== 'report' || reportLoading) && h('p', { role: 'status' }, '正在读取…'),
         error && h('p', { role: 'alert' }, error),
         !forecastReady &&
           rows.length > 0 &&
