@@ -911,6 +911,7 @@ test('shipment national SKU preserves base adjustment sources, aggregate days an
     '2026-09,郑州,B,缺项产品,汤圆,系列,组,110,,10,10,,20,8',
     '2026-09,濮阳,X,范围外产品,汤圆,系列,组,999,0,0,1,0,0,0',
   ]);
+  await expectShipment(table, '全国合计 本月已发货', '440');
   await expandShipmentBase(frame, '郑州');
   await edit(table, '郑州 A 整月预估发货', 301);
   await table.getByRole('button', { name: '展开 全国合计', exact: true }).click();
