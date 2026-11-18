@@ -15,7 +15,7 @@ def clean(config):
             removed.append(name)
             del config['queries'][name]
             continue
-        if name.startswith(('orders.', 'snapshot.orders.')):
+        if name.removeprefix('base-warehouse.').startswith(('orders.', 'snapshot.orders.')):
             continue
         query = config['queries'][name]
         if not any(table in query['request']['sql'] for table in DEALER_TABLES):

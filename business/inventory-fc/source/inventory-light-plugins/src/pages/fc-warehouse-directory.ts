@@ -1,5 +1,6 @@
 import { createAgentQueries, type ConfiguredExecution } from '../../../../../shared/agent-query';
 import type { AgentSqlConfig } from '../../../../../shared/sql-config';
+import type { FcWarehouseGroup } from './fc/components/warehouse-group-tabs';
 import { presentFcWarehouses } from './fc-warehouse-presentation';
 
 export type FcWarehouse = {
@@ -35,10 +36,11 @@ export async function readFcWarehouseDirectory(
   date: string,
   signal: AbortSignal,
   execute?: ConfiguredExecution,
+  group: FcWarehouseGroup = 'branch',
 ): Promise<FcWarehouse[]> {
   const read = () =>
     createAgentQueries(config, execute).readAll(
-      'branch-warehouse.directory',
+      group === 'base' ? 'base-warehouse.directory' : 'branch-warehouse.directory',
       { as_of: date, page_size: 200, offset: 0 },
       {
         signal,
@@ -49,7 +51,7 @@ export async function readFcWarehouseDirectory(
     );
   try {
     const result = await read();
-    if (result.rows.length) return presentFcWarehouses(result.rows);
+    if (result.rows.length) return presentFcWarehouses(result.rows, group);
   } catch (error) {
     signal.throwIfAborted();
     if (!transportFailure(error)) throw error;
@@ -66,5 +68,5 @@ export async function readFcWarehouseDirectory(
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) abort();
   });
-  return presentFcWarehouses((await read()).rows);
+  return presentFcWarehouses((await read()).rows, group);
 }

@@ -20,7 +20,7 @@ class BranchOrderSources(unittest.TestCase):
 
     def test_only_customer_order_queries_depend_on_dealer_facts(self):
         for key, query in self.config['queries'].items():
-            if key.startswith(('orders.', 'snapshot.orders.')):
+            if key.removeprefix('base-warehouse.').startswith(('orders.', 'snapshot.orders.')):
                 continue
             for table in FORBIDDEN:
                 self.assertNotIn(table,query['request']['sql'],key)

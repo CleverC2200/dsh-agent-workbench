@@ -743,7 +743,7 @@ test('FC warehouse outbound binds inclusive selected day and actual warehouse in
       { asOf, filters: { warehouse_code: 'Y204' } },
       { ...io, summaryOnly: true },
     );
-    const reads = io.calls.filter((c) => c.queryId === 'warehouse-outbound.summary');
+    const reads = io.calls.filter((c) => c.queryId === 'base-warehouse.warehouse-outbound.summary');
     assert.equal(reads.length, 1);
     assert.deepEqual(reads[0].values, {
       month: start,
@@ -778,4 +778,33 @@ test('FC plan paging is independent of stock/shipments and binds the next calend
       ),
     );
   }
+});
+
+test('empty grouped operating summaries render an empty result while invalid counts still fail', async () => {
+  const config = configs.fc;
+  const params = { asOf: '2026-11-17', filters: { warehouse_id: 'N436' } };
+  const empty = await readConfiguredFacts(config, 'branch-operations', params, {
+    summaryOnly: true,
+    execute: async (_request, { queryId }) => ({
+      rows: [],
+      returnedColumns: config.queries[queryId].resultColumns,
+      rejectedColumns: [],
+      configVersion: 'empty-cost',
+    }),
+  });
+  assert.equal(empty.status, 'empty');
+  assert.equal(empty.total, 0);
+  assert.equal(empty.summary, null);
+  await assert.rejects(
+    readConfiguredFacts(config, 'branch-operations', params, {
+      summaryOnly: true,
+      execute: async (_request, { queryId }) => ({
+        rows: [Object.fromEntries(config.queries[queryId].resultColumns.map((key) => [key, null]))],
+        returnedColumns: config.queries[queryId].resultColumns,
+        rejectedColumns: [],
+        configVersion: 'invalid-cost',
+      }),
+    }),
+    (error) => error.code === 'INVALID_COUNT',
+  );
 });

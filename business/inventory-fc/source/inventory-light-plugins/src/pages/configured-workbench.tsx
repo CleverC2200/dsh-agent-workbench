@@ -10,7 +10,12 @@ import {
   formatChainValueParts,
 } from '../../../../../shared/full-chain-display';
 import { readFcWarehouseDirectory, type FcWarehouse } from './fc-warehouse-directory';
-import { fcWarehouseOption } from './fc-warehouse-presentation';
+import { WarehouseGroupTabs, type FcWarehouseGroup } from './fc/components/warehouse-group-tabs';
+import {
+  fcBaseWarehouses,
+  fcWarehouseOption,
+  presentFcWarehouses,
+} from './fc-warehouse-presentation';
 import { refreshConfiguredQueries } from '../../../../../shared/query-cache';
 import { inventoryAverageAge } from '../../../../../shared/inventory-age';
 import { FcPersistencePanel } from './fc-persistence-panel';
@@ -29,7 +34,7 @@ import { WarehouseSelect } from './fc/components/warehouse-select';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
-import { Fragment, useState, useEffect, useRef, useMemo } from 'react';
+import { Fragment, useState, useEffect, useRef, useMemo, useId } from 'react';
 import config from '../../../../sql.config.json';
 import { readConfiguredFacts } from '../../../../../shared/configured-facts';
 import { fcCurrentMetric } from '../../../../../shared/fc-current-metrics';
@@ -141,6 +146,12 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
     setListSearch,
   } = useFcWorkflow();
   const readPlannedFacts = useMemo(() => fcPlannedReader(planningPlans), [planningPlans]);
+  const [warehouseGroup, setWarehouseGroup] = useState<FcWarehouseGroup>('branch');
+  const warehouseGroupId = useId();
+  const groupWarehouses = useRef<Record<FcWarehouseGroup, string>>({
+    branch: '',
+    base: fcBaseWarehouses[0].code,
+  });
   const [warehouse, setWarehouse] = useState('');
   const listStates = useRef<Record<string, ConfiguredListState>>({});
   const orderStates = useRef<Record<string, { warehouse: string; shortageOnly: boolean }>>({});
@@ -148,10 +159,24 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
   const changeWarehouse = (next: string) => {
     searches.current[warehouse] = listSearch;
     setListSearch(searches.current[next] ?? '');
+    groupWarehouses.current[warehouseGroup] = next;
     setWarehouse(next);
   };
+  const changeWarehouseGroup = (next: FcWarehouseGroup) => {
+    if (next === warehouseGroup) return;
+    searches.current[warehouse] = listSearch;
+    const selected = groupWarehouses.current[next];
+    setListSearch(searches.current[selected] ?? '');
+    setWarehouse(selected);
+    setWarehouseGroup(next);
+    setTrial(null);
+  };
   const [warehouses, setWarehouses] = useState<FcWarehouse[]>([]);
-  const directoryCache = useRef<{ key: string; at: number; rows: FcWarehouse[] } | null>(null);
+  const scopedWarehouses = useMemo(
+    () => presentFcWarehouses(warehouses, warehouseGroup),
+    [warehouses, warehouseGroup],
+  );
+  const directoryCache = useRef(new Map<string, { at: number; rows: FcWarehouse[] }>());
   const [warehouseLoading, setWarehouseLoading] = useState(true);
   const [warehouseRevision, reloadWarehouses] = useState(0);
   const [warehouseError, setWarehouseError] = useState('');
@@ -228,9 +253,9 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
     [],
   );
   useEffect(() => {
-    const key = JSON.stringify([date, warehouseRevision]);
-    const cached = directoryCache.current;
-    if (cached?.key === key && Date.now() - cached.at < inventoryCacheTtl(config.agentId)) {
+    const key = JSON.stringify([date, warehouseRevision, warehouseGroup]);
+    const cached = directoryCache.current.get(key);
+    if (cached && Date.now() - cached.at < inventoryCacheTtl(config.agentId)) {
       setWarehouses(cached.rows);
       setWarehouseLoading(false);
       setWarehouseError('');
@@ -240,28 +265,33 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
     setWarehouseLoading(true);
     setWarehouseError('');
     setWarehouses([]);
-    void readFcWarehouseDirectory(config, date, task.signal)
+    void readFcWarehouseDirectory(config, date, task.signal, undefined, warehouseGroup)
       .then((rows) => {
         if (!task.signal.aborted) {
-          directoryCache.current = rows.length ? { key, rows, at: Date.now() } : null;
+          if (rows.length) directoryCache.current.set(key, { rows, at: Date.now() });
+          else directoryCache.current.delete(key);
           setWarehouses(rows);
         }
       })
       .catch(() => {
         if (!task.signal.aborted) {
           setWarehouses([]);
-          setWarehouseError('分仓列表加载失败，请刷新重试');
+          setWarehouseError(
+            (warehouseGroup === 'base' ? '基地仓' : '分仓') + '列表加载失败，请刷新重试',
+          );
         }
       })
       .finally(() => {
         if (!task.signal.aborted) setWarehouseLoading(false);
       });
     return () => task.abort();
-  }, [date, revision, warehouseRevision]);
+  }, [date, revision, warehouseRevision, warehouseGroup]);
   useEffect(() => {
     const clear = () => {
-      directoryCache.current = null;
+      directoryCache.current.clear();
       setWarehouse('');
+      setWarehouseGroup('branch');
+      groupWarehouses.current = { branch: '', base: fcBaseWarehouses[0].code };
       listStates.current = {};
       orderStates.current = {};
       searches.current = {};
@@ -299,7 +329,8 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
   const insightEvidence = branchDashboardEvidence({
     warehouseCode: warehouse,
     warehouseName:
-      warehouses.find((item) => item.warehouse_code === warehouse)?.warehouse_name || '全部分仓',
+      scopedWarehouses.find((item) => item.warehouse_code === warehouse)?.warehouse_name ||
+      '全部分仓',
     asOf: date,
     cycleDays,
     parts,
@@ -389,16 +420,24 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
         <BusinessToolbar
           filters={
             <>
+              <WarehouseGroupTabs
+                value={warehouseGroup}
+                onChange={changeWarehouseGroup}
+                id={warehouseGroupId}
+              />
               <WarehouseSelect
-                label="选择分仓"
+                label={warehouseGroup === 'base' ? '选择基地仓' : '选择分仓'}
                 value={warehouse}
                 disabled={warehouseLoading}
                 options={[
-                  { id: '', name: warehouseLoading ? '分仓加载中…' : '全部分仓' },
-                  ...(warehouse && !warehouses.some((item) => item.warehouse_code === warehouse)
-                    ? [{ id: warehouse, name: warehouse }]
+                  ...(warehouseGroup === 'branch'
+                    ? [{ id: '', name: warehouseLoading ? '分仓加载中…' : '全部分仓' }]
                     : []),
-                  ...warehouses.map(fcWarehouseOption),
+                  ...(warehouse &&
+                  !scopedWarehouses.some((item) => item.warehouse_code === warehouse)
+                    ? [fcWarehouseOption({ warehouse_code: warehouse })]
+                    : []),
+                  ...scopedWarehouses.map(fcWarehouseOption),
                 ]}
                 onChange={(value) => {
                   changeWarehouse(value);
@@ -461,7 +500,11 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
             </div>
           }
         />
-        <div className="agent-layout without-ai workspace-only">
+        <div
+          className="agent-layout without-ai workspace-only"
+          role="tabpanel"
+          aria-labelledby={`${warehouseGroupId}-${warehouseGroup}`}
+        >
           <section className="workspace">
             <QueryErrors errors={[...errors, ...(planningError ? [planningError] : [])]} />
             <FcPersistencePanel
@@ -605,7 +648,7 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
                       loading: warehouseLoading,
                       error: warehouseError,
                       retry: () => {
-                        directoryCache.current = null;
+                        directoryCache.current.clear();
                         refreshConfiguredQueries();
                         reloadWarehouses((value) => value + 1);
                       },
