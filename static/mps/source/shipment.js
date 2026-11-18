@@ -3,6 +3,7 @@ import { prototypeShipments } from './prototype-shipments.js';
 import { readLatestShipmentDate, readShipmentInputs } from './facts.js';
 import { hasMpsSource } from './master-data.js';
 import { createBatchEdit } from './batch-edit.js';
+import { mpsBusinessDate } from './business-date.js';
 const emptyRows = [];
 const bases = ['西南', '郑州', '遂平', '华东', '华南'];
 const fields = [
@@ -175,12 +176,20 @@ export function createShipment(
       scope: `${draft.id}:${draft.month}:${scopeGeneration.current}`,
       onEditingChange,
     });
-    const month = monthOffset(draft.month, -1);
+    const today = mpsBusinessDate();
+    const minCutoff = `${monthOffset(draft.month, -1)}-01`;
+    const [evaluationYear, evaluationMonth] = draft.month.split('-').map(Number);
+    const evaluationEnd = `${draft.month}-${new Date(Date.UTC(evaluationYear, evaluationMonth, 0)).getUTCDate()}`;
+    const maxCutoff = today < evaluationEnd ? today : evaluationEnd;
+    const hasCutoffRange = minCutoff <= maxCutoff;
     const state = draft.shipment ?? {};
     const cutoff = state.cutoff ?? state.business?.cutoff ?? '';
+    const cutoffIssue =
+      !cutoff && !hasCutoffRange ? `最早可选日期为 ${minCutoff}，该评估版本尚无可选截止日` : null;
+    const month = (cutoff || (hasCutoffRange ? maxCutoff : minCutoff)).slice(0, 7);
     const passed = Number(cutoff.slice(8));
     const [year, monthNumber] = month.split('-').map(Number);
-    const totalDays = new Date(year, monthNumber, 0).getDate();
+    const totalDays = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
     const demo =
       draft.productSource.startsWith('demo') &&
       state.rows == null &&
@@ -426,6 +435,7 @@ export function createShipment(
     const national = aggregate(rows, '全国合计');
     const updateState = (changes) => update({ shipment: { ...stateRef.current, ...changes } });
     const readLatestDate = async () => {
+      if (!hasCutoffRange) return;
       controller.current?.abort();
       const stop = new AbortController();
       controller.current = stop;
@@ -436,7 +446,7 @@ export function createShipment(
       setBusy(true);
       setError('');
       try {
-        const result = await readLatestShipmentDate(month, stop.signal);
+        const result = await readLatestShipmentDate(maxCutoff, stop.signal);
         if (!valid()) return;
         if (result.date === null) {
           setSyncStatus('failed');
@@ -457,7 +467,7 @@ export function createShipment(
       if ((!active && !autoRead) || cutoff) return;
       void readLatestDate();
       return () => controller.current?.abort();
-    }, [active, autoRead, draft.id, month, cutoff]);
+    }, [active, autoRead, draft.id, minCutoff, maxCutoff, cutoff]);
     const selectSource = (next) => {
       updateState({
         activeSource: next,
@@ -487,10 +497,10 @@ export function createShipment(
         cutoff,
         source,
         sourceKind,
-        error: syncStatus === 'failed' ? error : null,
+        error: cutoffIssue ?? (syncStatus === 'failed' ? error : null),
         status: busy
           ? 'loading'
-          : syncStatus === 'failed'
+          : cutoffIssue || syncStatus === 'failed'
             ? 'failed'
             : sourceKind === 'business'
               ? business.metadata.partial
@@ -517,6 +527,7 @@ export function createShipment(
       busy,
       syncStatus,
       error,
+      cutoffIssue,
     ]);
     const sync = async () => {
       if (!cutoff) return;
@@ -540,8 +551,8 @@ export function createShipment(
                 ...state.sourceEdits,
                 [activeSource]: { values: state.values, remaining: state.remaining },
               },
-              values: {},
-              remaining: {},
+              values: state.sourceEdits?.business?.values ?? {},
+              remaining: state.sourceEdits?.business?.remaining ?? {},
             }
           : {}),
       });
@@ -572,7 +583,13 @@ export function createShipment(
               ...result.metadata,
               partial:
                 result.metadata.partial ||
-                !!(omitted || missingDimensions || incompleteRows || duplicateRows),
+                !!(
+                  !actualRows.length ||
+                  omitted ||
+                  missingDimensions ||
+                  incompleteRows ||
+                  duplicateRows
+                ),
               recentStatus: passed < 3 ? 'insufficient-days' : 'ok',
               omittedRows: omitted,
               missingDimensions,
@@ -1347,7 +1364,12 @@ export function createShipment(
         { className: 'sp-parameters' },
         h('span', { className: 'sp-parameter-label' }, '算法参数'),
         h('span', {}, '已过天数 ', h('b', {}, cutoff ? `${passed} 天` : '待定')),
-        h('span', {}, '本月共计天数 ', h('b', {}, `${totalDays} 天`)),
+        h(
+          'span',
+          {},
+          '本月共计天数 ',
+          h('b', {}, cutoff || hasCutoffRange ? `${totalDays} 天` : '待定'),
+        ),
         h('span', { className: 'sp-spacer' }),
         h(
           'label',
@@ -1357,30 +1379,46 @@ export function createShipment(
             type: 'date',
             'aria-label': '数据截止日',
             value: cutoff,
-            min: `${month}-01`,
-            max: `${month}-${totalDays}`,
-            onChange: (event) => {
-              const value = event.target.value;
+            min: minCutoff,
+            max: maxCutoff,
+            disabled: !hasCutoffRange || batch.active,
+            onChange: ({ target }) => {
+              const value = target.value;
+              if (!value || value === cutoff || !target.validity.valid) return;
+              generation.current++;
+              controller.current?.abort();
+              const byCutoff = { ...state.editsByCutoff };
+              const saved = byCutoff[value] ?? {};
+              delete byCutoff[value];
+              const current = {
+                ...state.sourceEdits,
+                [activeSource]: { values: state.values, remaining: state.remaining },
+              };
               if (
-                value.startsWith(month + '-') &&
-                Number(value.slice(8)) >= 1 &&
-                Number(value.slice(8)) <= totalDays
-              ) {
-                generation.current++;
-                controller.current?.abort();
-                updateState({
-                  cutoff: value,
-                  cutoffMetadata: undefined,
-                  business: null,
-                  values: {},
-                  remaining: {},
-                });
-                setFormula(null);
-              }
+                cutoff &&
+                Object.values(current).some(
+                  (edits) =>
+                    Object.keys(edits.values ?? {}).length ||
+                    Object.keys(edits.remaining ?? {}).length,
+                )
+              )
+                byCutoff[cutoff] = current;
+              updateState({
+                cutoff: value,
+                cutoffMetadata: undefined,
+                business: null,
+                editsByCutoff: Object.keys(byCutoff).length ? byCutoff : undefined,
+                sourceEdits: saved,
+                values: saved[activeSource]?.values ?? {},
+                remaining: saved[activeSource]?.remaining ?? {},
+              });
+              setFormula(null);
             },
           }),
         ),
-        !cutoff &&
+        cutoffIssue && h('span', { role: 'status' }, cutoffIssue),
+        hasCutoffRange &&
+          !cutoff &&
           h(
             'button',
             { disabled: busy, onClick: readLatestDate },
@@ -1524,6 +1562,9 @@ export function createShipment(
           { className: 'dc-card-note' },
           `${month}调拨数量未接入业务来源，按当前评估版本本地维护。空白待补，明确0表示无调拨；汇总包含全部明细，下载按当前单品搜索范围提供明细。`,
         ),
+        sourceKind === 'business' &&
+          !(business.sourceRecords ?? business.rows).length &&
+          h('p', { role: 'status' }, '该取数区间没有实际发货记录，预估待补'),
         business?.metadata.omittedRows > 0 &&
           h(
             'p',

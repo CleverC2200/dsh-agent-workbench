@@ -948,6 +948,14 @@ test('零需求跳过缺失拆分依据，库存缺项逐行导出人工补数�
     '选择发货输入CSV',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库,近30天日均发货\n2026-11,郑州,A,产品甲,汤圆,系列,组,0,0,0,0,0,0,0,0',
   );
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const state = window.readView().localDrafts;
+        return state.drafts.find((draft) => draft.id === state.selected)?.shipment?.rows?.length;
+      }),
+    )
+    .toBe(1);
   await expandShipmentBase(frame, '郑州');
   await beginAdjustment(frame);
   await frame.getByLabel('郑州 A 整月预估发货', { exact: true }).fill('5');

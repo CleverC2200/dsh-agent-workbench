@@ -61,6 +61,10 @@ const shipmentEdits = z.strictObject({
     .optional(),
   remaining: z.record(text, z.strictObject({ values: keyedNumbers, source: text })).optional(),
 });
+const shipmentSourceEdits = z.strictObject({
+  'local-file': shipmentEdits.optional(),
+  business: shipmentEdits.optional(),
+});
 const shipment = z.strictObject({
   transferPlans: list(
     z.strictObject({
@@ -78,12 +82,8 @@ const shipment = z.strictObject({
     )
     .optional(),
   ...shipmentEdits.shape,
-  sourceEdits: z
-    .strictObject({
-      'local-file': shipmentEdits.optional(),
-      business: shipmentEdits.optional(),
-    })
-    .optional(),
+  sourceEdits: shipmentSourceEdits.optional(),
+  editsByCutoff: z.record(z.iso.date(), shipmentSourceEdits).optional(),
   cutoff: text.optional(),
   file: text.optional(),
   activeSource: z.enum(['local-file', 'business']).optional(),

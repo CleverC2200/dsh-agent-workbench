@@ -9,6 +9,7 @@ export function delistedInput() {
       { month: '2027-01', base: '甲', code: '0', inbound: 5, outbound: 10 },
     ],
   };
+  sample.shipment.cutoff = sample.draft.shipment.cutoff;
   sample.draft.inventoryMovements.find(
     (row) => row.month === '2027-01' && row.code === '0',
   ).transferIn = 5;
