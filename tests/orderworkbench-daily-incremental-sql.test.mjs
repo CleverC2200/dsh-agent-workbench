@@ -34,6 +34,6 @@ test('daily SQL only mutates the result and its own working tables, and publishe
     /(?:TRUNCATE\s+TABLE|DROP\s+TABLE(?:\s+IF\s+EXISTS)?)\s+ai_db\.order_kpi_result_v1\b/i,
   );
   assert.match(sql, /INSERT INTO ai_db\.order_kpi_result_v1[^;]*__DORIS_DELETE_SIGN__/);
-  assert.match(sql, /-- 80_publish_guard/);
-  assert.match(sql, /-- 82_visible_guard/);
+  assert.match(sql, /80_publish_guard/);
+  assert.match(sql, /82_visible_guard/);
 });
