@@ -62,6 +62,7 @@ export type GeaSalesPlanListItem = {
   mPlanAmount?: string | null;
   mPlanQty?: string | null;
   shipmentError?: string | null;
+  shipmentPending?: boolean;
   shipAmount?: string | null;
   shipQty?: string | null;
   corrPlanAmount?: string | null;

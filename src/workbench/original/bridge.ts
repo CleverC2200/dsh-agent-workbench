@@ -31,6 +31,7 @@ export interface WorkbenchHost {
     list: {
       invoke(
         query?: Api.GeaSalesPlanPageQuery,
+        onPlanPage?: (page: Api.GeaSalesPlanPage<Api.GeaSalesPlanListItem>) => void,
       ): Promise<Api.GeaSalesPlanPage<Api.GeaSalesPlanListItem>>;
     };
     detail: { invoke(query: Api.GeaSalesPlanResourceQuery): Promise<Api.GeaSalesPlanDetail> };

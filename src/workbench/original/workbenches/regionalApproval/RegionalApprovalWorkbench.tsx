@@ -661,6 +661,10 @@ const RegionalApprovalWorkbench: React.FC<{
     () => (liveQuery.queueState.data?.records ?? []).map(toRegionalApprovalLiveRow),
     [liveQuery.queueState.data?.records],
   );
+  const hasPendingShipmentRows = allLiveRows.some((row) => row.shipmentPending);
+  const showQueueSkeleton =
+    liveQuery.queueState.status === 'loading' ||
+    (liveCategoriesLoading && (categoryComparison || !hasPendingShipmentRows));
   const confirmedMonthlyCategories = useMemo<
     Record<string, RegionalApprovalLiveCategorySummary[]>
   >(() => {
@@ -972,7 +976,32 @@ const RegionalApprovalWorkbench: React.FC<{
           },
         ];
       });
-    return build(draftedLiveRows, levels.indexOf(dimension));
+    const shipments = liveQuery.shipmentRecords;
+    const plans = shipments
+      ? draftedLiveRows.map((row) => {
+          if (!row.shipmentPending) return row;
+          const shipment = shipments.get(row.planId);
+          if (
+            !shipment ||
+            shipment.versionId !== row.versionId ||
+            shipment.periodId !== row.periodId
+          )
+            return {
+              ...row,
+              shipmentPending: false,
+              shipmentError: t('common.correction.shipmentUnavailable'),
+            };
+          return {
+            ...row,
+            shipmentPending: false,
+            shipAmount: shipment.shipAmount,
+            shipQty: shipment.shipQty,
+            amountProgress: shipment.amountProgress,
+            shipmentError: shipment.shipmentError,
+          };
+        })
+      : draftedLiveRows;
+    return build(plans, levels.indexOf(dimension));
   }, [
     categoryComparison,
     draftedLiveRows,
@@ -982,6 +1011,8 @@ const RegionalApprovalWorkbench: React.FC<{
     orderType,
     dimension,
     liveQuery.queueState.data?.groupMetrics,
+    liveQuery.shipmentRecords,
+    t,
   ]);
   const liveTableRowById = useMemo(() => {
     const rows = new Map<string, RegionalApprovalLiveTableRow>();
@@ -2698,23 +2729,41 @@ const RegionalApprovalWorkbench: React.FC<{
                     : `月达成进度 ${formattedProgress(progress.amount)}，时间进度 ${timeProgress.toFixed(1)}%`
                 }
               >
-                <Progress
-                  percent={Math.min(Math.max(progress.amount ?? 0, 0), 100)}
-                  showText={false}
-                  size="small"
-                  color={salesPlanProgressBarColor(progress.amount)}
-                />
+                {progress.amount !== undefined && (
+                  <Progress
+                    percent={Math.min(Math.max(progress.amount ?? 0, 0), 100)}
+                    showText={false}
+                    size="small"
+                    color={salesPlanProgressBarColor(progress.amount)}
+                  />
+                )}
                 {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
               </div>
-              {orderType === 'M' ? (
+              {orderType === 'M' && (
                 <small>
                   {exactMoney(tableRow.plan.currentAmount)} /{' '}
                   {exactMoney(tableRow.plan.targetAmount)}
                 </small>
-              ) : (
-                <>
-                  <small title={tableRow.plan.shipmentError ?? undefined}>
-                    {tableRow.plan.shipAmount == null ? '—' : exactMoney(tableRow.plan.shipAmount)}{' '}
+              )}
+              <small
+                data-sales-plan-shipment={
+                  tableRow.plan.shipmentPending
+                    ? 'loading'
+                    : tableRow.plan.shipmentError
+                      ? 'unavailable'
+                      : 'ready'
+                }
+                aria-busy={tableRow.plan.shipmentPending || undefined}
+                title={tableRow.plan.shipmentError ?? undefined}
+              >
+                {tableRow.plan.shipmentPending ? (
+                  t('common.correction.shipmentLoading')
+                ) : (
+                  <>
+                    {orderType === 'M' ? `${t('common.correction.shipmentActual')} ` : ''}
+                    {tableRow.plan.shipAmount == null
+                      ? '—'
+                      : exactMoney(tableRow.plan.shipAmount)}{' '}
                     /{' '}
                     {tableRow.plan.shipQty == null ? (
                       '—'
@@ -2723,13 +2772,13 @@ const RegionalApprovalWorkbench: React.FC<{
                         {`${quantityText(tableRow.plan.shipQty)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`}
                       </span>
                     )}
-                  </small>
-                  {tableRow.plan.shipmentError && (
-                    <small title={tableRow.plan.shipmentError}>
-                      {t('common.correction.shipmentUnavailable')}
-                    </small>
-                  )}
-                </>
+                  </>
+                )}
+              </small>
+              {!tableRow.plan.shipmentPending && tableRow.plan.shipmentError && (
+                <small title={tableRow.plan.shipmentError}>
+                  {t('common.correction.shipmentUnavailable')}
+                </small>
               )}
             </div>
           );
@@ -3191,6 +3240,13 @@ const RegionalApprovalWorkbench: React.FC<{
       className={styles.root}
       aria-label={t('common.assistantSurface.regionalApproval.ariaLabel')}
       data-testid="regional-approval-workbench"
+      data-sales-plan-shipments={
+        liveQuery.queueState.status !== 'success'
+          ? undefined
+          : liveQuery.shipmentRecords || !hasPendingShipmentRows
+            ? 'settled'
+            : 'loading'
+      }
     >
       <h1
         style={{
@@ -3750,11 +3806,8 @@ const RegionalApprovalWorkbench: React.FC<{
             />
           ) : (
             <div ref={tableViewportRef} className={styles.tableViewport}>
-              <div
-                className={styles.querySpin}
-                aria-busy={liveQuery.queueState.status === 'loading' || liveCategoriesLoading}
-              >
-                {liveQuery.queueState.status === 'loading' || liveCategoriesLoading ? (
+              <div className={styles.querySpin} aria-busy={showQueueSkeleton}>
+                {showQueueSkeleton ? (
                   <DashboardTableSkeleton label="销售计划加载中" embedded />
                 ) : (
                   <>
@@ -4152,14 +4205,14 @@ const SalesPlanWorkbench: React.FC<React.ComponentProps<typeof RegionalApprovalW
     [props.onContextChange],
   );
   const host = useWorkbenchHost();
-  const orderHost = useMemo(
+  const orderHost = useMemo<ReturnType<typeof useWorkbenchHost>>(
     () => ({
       ...host,
       salesPlan: {
         ...host.salesPlan,
         list: {
-          invoke: (query: Parameters<typeof host.salesPlan.list.invoke>[0]) =>
-            host.salesPlan.list.invoke({ ...query, orderType }),
+          invoke: (query, onPlanPage) =>
+            host.salesPlan.list.invoke({ ...query, orderType }, onPlanPage),
         },
       },
     }),

@@ -1333,6 +1333,8 @@
     "progress": "Shipment progress",
     "submissionProgress": "Monthly submission progress",
     "shipmentUnavailable": "Shipment facts unavailable",
+    "shipmentLoading": "Loading monthly shipments…",
+    "shipmentActual": "Monthly shipments",
     "correctedProgress": "Corrected target coverage",
     "status": "Approval status",
     "actions": "Actions",

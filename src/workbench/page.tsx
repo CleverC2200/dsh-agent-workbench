@@ -179,11 +179,40 @@ async function pageRequestOwner(signal?: AbortSignal): Promise<string> {
     if (signal?.aborted) aborted();
   });
 }
+async function readProgressiveResult<T>(
+  response: Response,
+  onPlanPage: (page: T) => void,
+): Promise<unknown> {
+  if (!response.body) throw Error('GEA_LIST_RESPONSE_INCOMPLETE');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: unknown;
+  try {
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      const lines = (buffer + decoder.decode(next.value, { stream: true })).split('\n');
+      buffer = lines.pop()!;
+      for (const line of lines) {
+        const frame = JSON.parse(line);
+        if ('page' in frame) onPlanPage(frame.page);
+        else result = frame;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (buffer || decoder.decode() || result === undefined)
+    throw Error('GEA_LIST_RESPONSE_INCOMPLETE');
+  return result;
+}
 async function rpc<T>(
   endpoint: string,
   payload: object = {},
   signal?: AbortSignal,
   detailLoadId?: string,
+  onPlanPage?: (page: T) => void,
 ): Promise<T> {
   const owned =
     /^(workbench\/query|workflow\/config|sales-plan\/|approval\/roles|model\/advice)/.test(
@@ -195,13 +224,21 @@ async function rpc<T>(
     credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json',
+      ...(onPlanPage ? { Accept: 'application/x-ndjson' } : {}),
       ...(owner ? { 'X-Workbench-Page-Owner': owner } : {}),
       ...(detailLoadId ? { 'X-Sales-Plan-Detail-Load': detailLoadId } : {}),
     },
     body: JSON.stringify(payload),
     signal,
   });
-  const result = await response.json();
+  const result: {
+    ok?: boolean;
+    value: T;
+    error?: { code?: string; message?: string; details?: unknown };
+  } =
+    onPlanPage && response.headers.get('Content-Type') === 'application/x-ndjson'
+      ? ((await readProgressiveResult(response, onPlanPage)) as typeof result)
+      : await response.json();
   if (!response.ok || result.ok !== true) {
     const code = result.error?.code ?? 'GEA_REQUEST_FAILED';
     const upstreamStatus = /^GEA_HTTP_([45]\d{2})$/.exec(code)?.[1];
@@ -226,9 +263,13 @@ async function rpc<T>(
   }
   return result.value;
 }
-function query<T>(kind: string, input: { signal?: AbortSignal } = {}): Promise<T> {
+function query<T>(
+  kind: string,
+  input: { signal?: AbortSignal } = {},
+  onPlanPage?: (page: T) => void,
+): Promise<T> {
   const { signal, ...fields } = input;
-  return rpc<T>('workbench/query', { kind, query: fields }, signal);
+  return rpc<T>('workbench/query', { kind, query: fields }, signal, undefined, onPlanPage);
 }
 const loadWorkflowAndPeriods = createWorkflowPeriodLoader((signal) =>
   rpc('workflow/config', {}, signal),
@@ -243,7 +284,7 @@ export const workbenchHost: WorkbenchHost = {
       invoke: (input) =>
         loadWorkflowAndPeriods((signal) => query('periods', { ...input, signal }), input?.signal),
     },
-    list: { invoke: (input) => query('list', input) },
+    list: { invoke: (input, onPlanPage) => query('list', input, onPlanPage) },
     detail: { invoke: (input) => query('detail', input) },
     versions: { invoke: (input) => query('versions', input) },
     logs: { invoke: (input) => query('logs', input) },

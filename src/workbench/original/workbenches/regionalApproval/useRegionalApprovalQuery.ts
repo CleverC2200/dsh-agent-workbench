@@ -36,7 +36,10 @@ export type SalesPlanQueryClient = {
     invoke: (query?: GeaSalesPlanPeriodQuery) => Promise<GeaSalesPlanPage<GeaSalesPlanPeriod>>;
   };
   list: {
-    invoke: (query?: GeaSalesPlanPageQuery) => Promise<GeaSalesPlanPage<GeaSalesPlanListItem>>;
+    invoke: (
+      query?: GeaSalesPlanPageQuery,
+      onPlanPage?: (page: GeaSalesPlanPage<GeaSalesPlanListItem>) => void,
+    ) => Promise<GeaSalesPlanPage<GeaSalesPlanListItem>>;
   };
 
   approvalRoles?: {
@@ -145,6 +148,10 @@ export const useRegionalApprovalQuery = ({
   const [periodsState, setPeriodsState] = useState<QueryState<GeaSalesPlanPeriod[]>>(idle);
   const [queueState, setQueueState] =
     useState<QueryState<GeaSalesPlanPage<GeaSalesPlanListItem>>>(idle);
+  const [shipments, setShipments] = useState<{
+    page: GeaSalesPlanPage<GeaSalesPlanListItem>;
+    records: Map<string, GeaSalesPlanListItem>;
+  }>();
   const [progressState, setProgressState] = useState<
     QueryState<Record<ApprovalStageId, number>> & {
       statusTotals?: Partial<Record<number, number>>;
@@ -264,17 +271,22 @@ export const useRegionalApprovalQuery = ({
     }
     const requestId = ++queueRequest.current;
     const request = beginTimedRequest();
+    let active = true;
     setQueueState((current) => ({ status: 'loading', data: current.data }));
     setQueueSettledStageKey(undefined);
     const requestedPage = clampSalesPlanPageNumber(page);
     const requestedSize = clampSalesPlanPageNumber(pageSize, 20);
 
     const pages = new Map<string, Promise<GeaSalesPlanPage<GeaSalesPlanListItem>>>();
+    const shipmentPages: Promise<GeaSalesPlanPage<GeaSalesPlanListItem>>[] = [];
     queuePages.current = pages;
     const readPage = (query: GeaSalesPlanPageQuery) => {
-      const response = client.list.invoke({ ...query, signal: request.signal });
-      pages.set(listPageKey(query), response);
-      return response;
+      const initial = Promise.withResolvers<GeaSalesPlanPage<GeaSalesPlanListItem>>();
+      const complete = client.list.invoke({ ...query, signal: request.signal }, initial.resolve);
+      void complete.then(initial.resolve, initial.reject);
+      pages.set(listPageKey(query), initial.promise);
+      shipmentPages.push(complete);
+      return initial.promise;
     };
     const partitions = periodQueries.flatMap(({ period, statuses }) =>
       (statuses ?? [undefined]).map((status) => ({ period, status })),
@@ -352,11 +364,24 @@ export const useRegionalApprovalQuery = ({
             } satisfies GeaSalesPlanPage<GeaSalesPlanListItem>;
           });
     void queuePromise
-      .then((response) => {
+      .then(async (response) => {
         if (queueRequest.current !== requestId || request.signal.aborted) return;
         setQueueState({ status: 'success', data: response });
         setQueueSettledPage(requestedPage);
         setQueueSettledStageKey(stageStatusesKey);
+        if (!response.records.some((row) => row.shipmentPending)) return;
+        const completed = await Promise.allSettled(shipmentPages);
+        if (!active || queueRequest.current !== requestId) return;
+        setShipments({
+          page: response,
+          records: new Map(
+            completed.flatMap((page) =>
+              page.status === 'fulfilled'
+                ? page.value.records.map((row) => [row.planId, row] as const)
+                : [],
+            ),
+          ),
+        });
       })
       .catch((error: unknown) => {
         if (queueRequest.current !== requestId) return;
@@ -367,6 +392,7 @@ export const useRegionalApprovalQuery = ({
       })
       .finally(request.finish);
     return () => {
+      active = false;
       pages.clear();
       request.cancel();
     };
@@ -595,6 +621,7 @@ export const useRegionalApprovalQuery = ({
     analysisRecords: analysisResult.status === 'success' ? analysisResult.data.records : undefined,
     periodsState,
     queueState,
+    shipmentRecords: shipments?.page === queueState.data ? shipments?.records : undefined,
     progressState,
     queueSettledPage,
     queueSettledStageKey,

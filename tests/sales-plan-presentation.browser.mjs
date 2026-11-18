@@ -175,6 +175,18 @@ const host={salesPlan:{
     return [{skuCode:'1001',changeType:'UPDATED',before:{...skuFor(fromVersionId),qty:'10',amt:'100'},after:skuFor(toVersionId),qtyDelta:'10',amountDelta:'100'}];
   }},action:{invoke:async(command)=>{if(comparison?.startsWith('single-')){window.sentDirect.push(command);const status=comparison==='single-permission'?403:comparison==='single-conflict'?409:502;const error=comparison.startsWith('single-dms')?'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报':comparison==='single-permission'?'当前用户没有品类审批权限':comparison==='single-conflict'?'计划版本已变化，请刷新后重试':'GEA_HTTP_502';throw new BackendHttpError({method:'POST',path:'/sales-plan/plans/versions/'+command.versionId+'/actions',status,body:{error:window.directRejection??error,details:{...(comparison.startsWith('single-dms')?{retryable:false,upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED'}:{}),requestId:'hidden-error-reference',traceId:'hidden-trace-reference'}}});}if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);if(window.returnUnknown && command.planId==='p1')throw new TypeError('offline');return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
 },modelInference:{invoke:forbidden}};
+if(comparison?.startsWith('progressive-shipment')){
+ const list=host.salesPlan.list.invoke;
+ host.salesPlan.list.invoke=async(query,onPlanPage)=>{
+  const page=await list(query);
+  if(!onPlanPage || !page.records.length) return page;
+  onPlanPage({...page,records:page.records.map(row=>({...row,shipmentPending:true,shipQty:null,shipAmount:null}))});
+  await new Promise(resolve=>{window.finishShipments=resolve});
+  query.signal.throwIfAborted();
+  if(comparison==='progressive-shipment-error') throw Error('fixture shipment error');
+  return {...page,records:page.records.map(row=>({...row,shipQty:'123',shipAmount:'456'}))};
+ };
+}
 const root=createRoot(document.getElementById('root'));
 window.restoreIntegerInput=async(mode,role='region')=>{
  const row={...plans[0],status:role==='category'?4:plans[0].status},loaded=await host.salesPlan.detail.invoke({planId:row.planId}),detail={...loaded,currentVersion:{...loaded.currentVersion,status:row.status}};
@@ -295,6 +307,37 @@ test('sales performance: analysis and queue share one read per partition on ever
   await page.getByRole('button', { name: '刷新数据', exact: true }).click();
   await expect.poll(async () => [await analysis(), await reads()]).toEqual([0, 4]);
 });
+
+for (const fails of [false, true]) {
+  test(`sales plan rows appear before shipments and survive ${fails ? 'shipment failure' : 'shipment completion'}`, async (t) => {
+    const { page } = await openWorkbench(
+      t,
+      false,
+      fails ? 'progressive-shipment-error' : 'progressive-shipment',
+    );
+    const shipment = page.locator('[data-sales-plan-shipment]').first();
+    await expect(shipment).toBeVisible();
+    await expect(shipment).toHaveText('当月发货加载中…');
+    await expect(shipment).toHaveAttribute('aria-busy', 'true');
+    const reads = () =>
+      page.evaluate(() => window.readCalls.filter((call) => call.versionId).length);
+    await expect.poll(reads).toBeGreaterThan(0);
+    const detailReads = await reads();
+    await page.evaluate(() => window.finishShipments());
+    await expect(shipment).toHaveAttribute(
+      'data-sales-plan-shipment',
+      fails ? 'unavailable' : 'ready',
+    );
+    if (fails) {
+      await expect(shipment).toContainText('— / —');
+      await expect(page.getByText('发货实绩未取得', { exact: true }).first()).toBeVisible();
+    } else {
+      await expect(shipment).toContainText('¥456 / 123 件');
+    }
+    assert.equal(await reads(), detailReads);
+    assert.deepEqual(await page.evaluate(() => window.writes), []);
+  });
+}
 
 test('sales performance: a completed SKU request frees its slot while the first is pending', async (t) => {
   const { page } = await openWorkbench(t, true, 'sku-review-scheduling');
@@ -1163,7 +1206,7 @@ test('展开 SKU 表在宽屏保持紧凑，长描述换行且窄屏可用键盘
 
 test('发货实绩缺失时显示状态并保留期间原因', { timeout: 30000 }, async (t) => {
   const { page } = await openWorkbench(t, false, 'shipment-missing');
-  await expect(page.getByText('发货实绩未取得', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('发货实绩未取得', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: '纠偏', exact: true }).click();
   const status = page.getByText('发货实绩未取得', { exact: true });
   await expect(status).toBeVisible();
