@@ -65,22 +65,24 @@ test('actual Cordis client injection admits every native resource service and re
   let native;
   let workspaces;
   let released = false;
+  let catalog = {};
   const sessionScope = new Context();
   sessionScope.on('slash/input-insert-text', (request) => {
     operations.push(['draft', request.text]);
     return true;
   });
-  const presets = {
-    select: async (id, preset) => {
-      operations.push(['preset', id, preset]);
-      return { ok: true, value: preset };
+  const session = {
+    create: async (options) => {
+      assert.equal(workspaces.list.getSnapshot().items[0].workspaceId, options.workspaceId);
+      operations.push(['create', options]);
+      return { ok: true, value: { sessionId: 'new-session', agentPreset: options.agentPreset } };
     },
   };
   const provider = await ctx.plugin({
     name: 'native-client-dependencies',
     apply: (ctx) => {
-      ctx.provide('remote', { agentPresets: presets });
-      ctx.provide('remote.agentPresets', presets);
+      ctx.provide('remote', { session });
+      ctx.provide('remote.session', session);
       workspaces = new WorkspaceController(
         ctx,
         new ClientWorkspaceModel({
@@ -103,11 +105,10 @@ test('actual Cordis client injection admits every native resource service and re
         }),
       );
       ctx.provide('sessions', {
-        list: { getSnapshot: () => ({ byId: { 'new-session': { cwd: '/isolated/workspace' } } }) },
-        create: async (options) => {
-          assert.equal(workspaces.list.getSnapshot().items[0].workspaceId, options.workspaceId);
-          operations.push(['create', options]);
-          return 'new-session';
+        list: { getSnapshot: () => ({ byId: catalog }) },
+        refresh: async () => {
+          operations.push(['refresh']);
+          catalog = { 'new-session': { cwd: '/isolated/workspace' } };
         },
         retain: (id) => ({
           sessionId: id,
@@ -163,8 +164,8 @@ test('actual Cordis client injection admits every native resource service and re
   );
   assert.deepEqual(operations, [
     ['workspace', '/isolated/workspace'],
-    ['create', { workspaceId: 'workspace-owned' }],
-    ['preset', 'new-session', 'original'],
+    ['create', { workspaceId: 'workspace-owned', agentPreset: 'original' }],
+    ['refresh'],
     ['draft', '/existing '],
     ['open', 'new-session'],
   ]);

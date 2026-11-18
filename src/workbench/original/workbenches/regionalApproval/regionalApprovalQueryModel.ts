@@ -338,6 +338,8 @@ export const groupRegionalApprovalLiveRows = (
                   : metric.amountProgress,
               shipAmount,
               shipQty,
+              shipmentPending: members.some((row) => row.shipmentPending),
+              shipmentError: members.find((row) => row.shipmentError)?.shipmentError,
               prevAdjAddQty: sum(members, 'prevAdjAddQty'),
               prevAdjCutQty: sum(members, 'prevAdjCutQty'),
               corrPlanQty: sum(members, 'corrPlanQty'),

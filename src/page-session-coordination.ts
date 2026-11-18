@@ -189,7 +189,8 @@ export function usePageSessionCoordination({
     }
     await runSelection(ownerSignal, async (signal) => {
       const requested = await resourceWorkspace(host, signal, cwd ?? selection?.cwd ?? currentCwd);
-      const { path: directory } = await host.workspace(requested);
+      const workspace = await host.workspace(requested);
+      const directory = workspace.path;
       signal.throwIfAborted();
       let cached = reuse
         ? workbench.selectionFor(page.id, interpreterId ?? null, identity.scope, directory)
@@ -217,7 +218,7 @@ export function usePageSessionCoordination({
           !interpreters.some((row) => row.id === interpreterId)
         )
           throw Error('PAGE_INTERPRETER_UNAVAILABLE');
-        await selectResource(host, interpreterId!, signal, directory, (selected) =>
+        await selectResource(host, interpreterId!, signal, workspace, (selected) =>
           associate(selected, signal),
         );
       }
@@ -467,12 +468,15 @@ export function createPageSessionNavigation({
       const target = workbench.takeHistoryTarget(sessionId);
       if (!target) {
         const state = workbench.getSnapshot();
+        const keepsPresentationOnStartup =
+          state.restoredWithoutSession ||
+          (state.selectedDocument?.kind === 'native' && state.selectedDocument.resourceId);
         if (
           (state.selection && state.selection.sessionId !== sessionId) ||
           (changed &&
             state.selectedDocument &&
             !state.selection &&
-            !(firstSession && state.restoredWithoutSession))
+            !(firstSession && keepsPresentationOnStartup))
         )
           workbench.leaveDocument();
         return;

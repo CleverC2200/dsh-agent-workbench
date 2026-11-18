@@ -132,9 +132,7 @@ export function apply(ctx: Context): void {
         signal.throwIfAborted();
         const { workspaceId, path } = await host.workspace(cwd);
         signal.throwIfAborted();
-        const sessionId = await host.create({ workspaceId });
-        signal.throwIfAborted();
-        await host.select(sessionId, preset);
+        const sessionId = await host.create({ workspaceId, agentPreset: preset });
         signal.throwIfAborted();
         await host.open(sessionId, undefined, signal, (projection) => {
           if (projection.preset !== preset) throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
