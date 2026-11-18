@@ -1,3 +1,4 @@
+import { useStepViewField } from './step-view-state.js';
 const kinds = {
   'inventory-days': ['库存下限', '库存', '安全天数下限'],
   'resource-unavailable': ['资源停用', '产能', '停用资源'],
@@ -21,6 +22,7 @@ const ruleId = (rule, index) => rule.id || `legacy-${index}`;
 export function createConstraintPanel(react, { Dialog }) {
   const h = react.createElement;
   return function ConstraintPanel({
+    view,
     draft,
     result,
     update,
@@ -31,11 +33,27 @@ export function createConstraintPanel(react, { Dialog }) {
     children,
     disabled,
   }) {
-    const [hardOnly, setHardOnly] = react.useState(false);
-    const [advancedOpen, setAdvancedOpen] = react.useState(false);
+    const [hardOnly, setHardOnly] = useStepViewField(
+      react,
+      view,
+      'ConstraintPanel.hardOnly',
+      false,
+    );
+    const [advancedOpen, setAdvancedOpen] = useStepViewField(
+      react,
+      view,
+      'ConstraintPanel.advancedOpen',
+      false,
+    );
     const [editor, setEditor] = react.useState(null);
     const [error, setError] = react.useState('');
     const [proposal, setProposal] = react.useState(null);
+    const [historyOpen, setHistoryOpen] = useStepViewField(
+      react,
+      view,
+      'ConstraintPanel.historyOpen',
+      false,
+    );
     const rules = draft.constraints?.rules?.local ?? [];
     const evaluations = result.ruleEvaluations ?? [];
     const priority = [
@@ -262,7 +280,7 @@ export function createConstraintPanel(react, { Dialog }) {
           ),
         ),
       ),
-      children[0],
+      children.slice(0, 2),
       evaluations.length > 0 &&
         card(
           '冲突与放宽建议',
@@ -318,7 +336,13 @@ export function createConstraintPanel(react, { Dialog }) {
       (draft.constraints?.rules?.history?.length ?? 0) > 0 &&
         h(
           'details',
-          { className: 'dc-card wf-advanced' },
+          {
+            className: 'dc-card wf-advanced',
+            open: historyOpen,
+            onToggle: (event) => {
+              if (event.target === event.currentTarget) setHistoryOpen(event.currentTarget.open);
+            },
+          },
           h('summary', null, `约束变更记录（${draft.constraints?.rules?.history?.length ?? 0}条）`),
           table(
             '约束变更记录',
@@ -333,13 +357,14 @@ export function createConstraintPanel(react, { Dialog }) {
         'details',
         {
           className: 'dc-card wf-advanced',
+          open: advancedOpen,
           onToggle: (event) => {
             if (event.target === event.currentTarget) setAdvancedOpen(event.currentTarget.open);
           },
         },
         h('summary', null, '高级配置：生产日历、件吨系数与资源分配'),
         (advancedOpen || !disabled) &&
-          h('div', { className: 'wf-advanced-body' }, children.slice(1)),
+          h('div', { className: 'wf-advanced-body' }, children.slice(2)),
       ),
       editor &&
         h(

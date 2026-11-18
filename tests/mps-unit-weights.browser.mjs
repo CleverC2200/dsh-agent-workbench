@@ -1,9 +1,5 @@
-import {
-  commitNumber,
-  beginAdjustment,
-  saveAdjustment,
-  workflowStep,
-} from './helpers/mps-edit.mjs';
+import { fillTurnoverDays } from './helpers/mps-edit.mjs';
+import { beginAdjustment, saveAdjustment, workflowStep } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -198,7 +194,7 @@ test('MPS reads complete channel coefficients and adopts only an explicitly appl
   await expect(view).toContainText('缺正数吨/件系数');
   await expect(view).toContainText('系数冲突');
   await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('25');
-  await commitNumber(view.getByLabel('郑州 安全天数', { exact: true }), '0');
+  await fillTurnoverDays(view, '郑州', '0');
   const waiting = page.waitForEvent('download');
   await view.getByRole('button', { name: '下载本地配置', exact: true }).click();
   const chunks = [];
@@ -216,7 +212,11 @@ test('MPS reads complete channel coefficients and adopts only an explicitly appl
       }),
     )
     .toBe('weights-test-v1');
+  const reloaded = page.waitForEvent('framenavigated', {
+    predicate: (frame) => frame.parentFrame() !== null,
+  });
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
+  await reloaded;
   await workflowStep(frame, '约束与配置');
   await showAdvanced(view);
   await expect(view.getByLabel('郑州 A 件吨系数', { exact: true })).toHaveValue('0.00576');

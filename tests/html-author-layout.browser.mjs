@@ -137,9 +137,16 @@ for (const name of ['category', 'mps'])
         'all raw indentation and boundary LF survive the real quote pathway',
       );
       assert.equal(await page.evaluate(() => window.persisted), 2);
-      await frame.locator('.author-questions summary').click();
+      const questions = frame.locator('.author-questions details');
+      if (!(await questions.evaluate((element) => element.open)))
+        await questions.locator('summary').click();
       await frame.locator('.author-question-list button').first().click();
-      await expect.poll(() => page.evaluate(() => window.persisted)).toBe(3);
+      if (name === 'category')
+        await expect.poll(() => page.evaluate(() => window.persisted)).toBe(3);
+      else {
+        await expect(frame.locator('.author-quote-status')).toContainText('页面能力尚未连接');
+        assert.equal(await page.evaluate(() => window.persisted), 2);
+      }
       assert.match(await page.evaluate(() => window.peerDraft), /^历史草稿，请保留。/);
       await page.setViewportSize({ width: 1320, height: 480 });
       await page.evaluate((name) => window.openAuthor(name, 600), name);
@@ -165,6 +172,6 @@ for (const name of ['category', 'mps'])
           '关联当前页面',
         );
       }
-      assert.equal(await page.evaluate(() => window.persisted), 3);
+      assert.equal(await page.evaluate(() => window.persisted), name === 'mps' ? 2 : 3);
     },
   );

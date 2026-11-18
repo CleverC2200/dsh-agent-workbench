@@ -39,20 +39,21 @@ const picker = await compile(
 const parent = await compile(`
  import React from'react';import{createRoot}from'react-dom/client';import{flushSync}from'react-dom';import{mountFramePresentation}from'./src/frame-presenter.tsx';import{WorkbenchController}from'./src/workbench.ts';
  let Document;const services={};const binding={ctx:{},sessionId:'session-33333333-3333-4333-8333-333333333333'};const id=binding.sessionId;const locale={active:'zh'};const subject='fixture-author-user';const viewScope=JSON.stringify([subject,id]);const identity={state:'confirmed',scope:'fixture-author-scope',subject,status:{authenticated:true}};
- const ctx={businessAccount:{getSnapshot:()=>identity,subscribe:()=>()=>{}},remote:{session:{prompt:()=>{throw Error('UNEXPECTED_MODEL_REQUEST');}}},get:name=>services[name],provide:(name,value)=>{services[name]=value;},locale:{subscribe:()=>()=>{},getSnapshot:()=>locale},theme:{getTheme:()=>({active:{colorScheme:'light',tokens:{}},fontSize:14})},on:()=>()=>{},effect:fn=>fn(),sessions:{retain:()=>({sessionId:id,ready:Promise.resolve(binding),binding,release(){}}),retainInfo:()=>({getSnapshot:()=>({retainedBy:{mainView:true}})})},inputTriggers:{registerSource:()=>()=>{}},conversation:{input:{for:()=>({notify(){}})}},slots:{registerFactory:(_meta,component)=>{Document=component;return()=>{};},register:()=>()=>{},inject:()=>{}},inject:(names,fn)=>{if(names.includes('sidebarRight')||names.includes('slots'))return;return fn(ctx)}};
- const owner=new WorkbenchController({panel:()=>{},document:()=>{}});mountFramePresentation(ctx,()=>undefined,key=>key,owner);
- window.peerDraft='历史草稿，请保留。';window.persisted=0;
+ const ctx={businessAccount:{getSnapshot:()=>identity,subscribe:()=>()=>{}},remote:{session:{prompt:async(request)=>{if(!window.authorOptions?.mpsResource)throw Error('UNEXPECTED_MODEL_REQUEST');window.corePrompts.push(request);return {ok:true};}}},get:name=>services[name],provide:(name,value)=>{services[name]=value;},locale:{subscribe:()=>()=>{},getSnapshot:()=>locale},theme:{getTheme:()=>({active:{colorScheme:'light',tokens:{}},fontSize:14})},on:()=>()=>{},effect:fn=>fn(),sessions:{retain:()=>({sessionId:id,ready:Promise.resolve(binding),binding,release(){}}),retainInfo:()=>({getSnapshot:()=>({retainedBy:{mainView:true}})})},inputTriggers:{registerSource:()=>()=>{}},conversation:{input:{for:()=>({notify(){}})}},slots:{registerFactory:(_meta,component)=>{Document=component;return()=>{};},register:()=>()=>{},inject:()=>{}},inject:(names,fn)=>{if(names.includes('sidebarRight')||names.includes('slots'))return;return fn(ctx)}};
+ const owner=new WorkbenchController({panel:()=>{},document:()=>{}});const resourceHost={fetch:(...args)=>fetch(...args),workspace:async(path)=>({workspaceId:'fixture',path}),create:async()=>id,select:async()=>{},open:async(sessionId,_skill,signal,beforeOpen)=>{signal.throwIfAborted();beforeOpen?.({sessionId,preset:'inventory-mps',cwd:'/fixture-author-workspace'});associated=true;render();}};mountFramePresentation(ctx,()=>window.authorOptions?.mpsResource?resourceHost:undefined,key=>key,owner);
+ window.peerDraft='历史草稿，请保留。';window.persisted=0;window.corePrompts=[];
  const inputActions={captureInsertion:()=>({start:window.peerDraft.length,end:window.peerDraft.length,draftRev:7}),insertText:(text,span)=>{if(window.conflict)return false;window.peerDraft=window.peerDraft.slice(0,span.start)+text+window.peerDraft.slice(span.end);const input=document.querySelector('textarea[aria-label="Core草稿接口fixture"]');if(input)input.value=window.peerDraft;return true;},persistDraft:()=>{window.persisted++;}};
  function ComposerPeer(){const trigger=React.useRef();React.useEffect(()=>services.pageInteraction.mountTrigger(trigger.current,id),[]);return React.createElement('section',{'aria-label':'Core草稿接口fixture'},React.createElement('div',{ref:trigger}),React.createElement('textarea',{'aria-label':'Core草稿接口fixture',defaultValue:window.peerDraft,onChange:event=>{window.peerDraft=event.target.value;}}));}
  const root=createRoot(document.getElementById('root'));let page,associated=true,unregister;
  const render=()=>root.render(React.createElement(Document,{page,active:true,sessionId:associated?id:undefined,useSessions:select=>select({byId:{[id]:{id,cwd:'/fixture-author-workspace'}}}),useSession:()=>associated?{openState:'open',blank:false}:undefined,useProjection:()=>null,inputActions,renderSlot:()=>React.createElement(ComposerPeer)}));
- window.openAuthor=async(name,width,seed)=>{flushSync(()=>root.render(null));unregister?.();page={id:name==='category'?'plan-region-category':'plan-category-production',kind:'html',src:'/author/'+name,label:name};unregister=owner.registerFrame(page);await owner.open(page.id);owner.associateSession(page.id,{sessionId:id,preset:null,ownerScope:'fixture-author-scope',subject});if(seed)owner.saveHtmlViewState(page.id,viewScope,seed);associated=true;document.getElementById('root').style.width=(width+520)+'px';render();};
+ window.openAuthor=async(name,width,seed)=>{flushSync(()=>root.render(null));unregister?.();page={id:name==='category'?'plan-region-category':'plan-category-production',kind:'html',src:'/author/'+name,label:name,...(window.authorOptions?.mpsResource?{resourceId:'inventory-mps',pluginId:'inventory-mps'}:{})};unregister=owner.registerFrame(page);associated=!window.authorOptions?.mpsResource;await owner.open(page.id);if(!window.authorOptions?.mpsResource)owner.associateSession(page.id,{sessionId:id,preset:null,ownerScope:'fixture-author-scope',subject});if(seed)owner.saveHtmlViewState(page.id,viewScope,seed);document.getElementById('root').style.width=(width+520)+'px';render();};
  window.unassociate=()=>{associated=false;owner.forgetSession(page.id);render();};window.readView=()=>owner.readHtmlViewState(page.id,viewScope);
 `);
 export async function authorPage(t, options = {}) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1920, height: 720 } });
+  if (options.time) await page.clock.setFixedTime(new Date(options.time));
   const css = (
     await Promise.all(
       ['theme/tokens.css', 'src/company/shell.css', 'src/company/layout.css'].map((file) =>
@@ -97,6 +98,12 @@ export async function authorPage(t, options = {}) {
     ),
   );
   await page.goto('http://127.0.0.1:19480/');
+  await page.evaluate(
+    (options) => {
+      window.authorOptions = options;
+    },
+    { mpsResource: options.mpsResource === true },
+  );
   await page.addScriptTag({ content: parent });
   return page;
 }

@@ -6,7 +6,7 @@ export const workflowDraft = () => ({
   productSource: 'local-file',
   products: [
     {
-      基地: '',
+      基地: '甲',
       产品编码: 'A',
       产品名称: '产品A',
       大类: '点心',
@@ -14,7 +14,7 @@ export const workflowDraft = () => ({
       物料组: '包点',
     },
     {
-      基地: '',
+      基地: '乙',
       产品编码: 'B',
       产品名称: '产品B',
       大类: '点心',
@@ -81,9 +81,27 @@ export function workflowPerformanceInput(size = 200) {
     resourceId: 'R',
     share: 1,
   }));
+  draft.inventoryMovements = codes.flatMap((code) =>
+    months.map((month) => ({
+      month,
+      base: '甲',
+      code,
+      productionInbound: 0,
+      inTransitInbound: 0,
+      transferIn: 0,
+      transferOut: 0,
+      source: '夹具确认无既有变动',
+      reason: '完整输入',
+      at: '2026-11-17T00:00:00.000Z',
+    })),
+  );
   draft.unitWeights = codes.map((code) => ({ base: '甲', code, tonsPerPiece: 1 }));
   draft.productionDays = months.map((month) => ({ base: '甲', month, days: 25 }));
-  draft.constraints = { safetyDays: [{ base: '甲', days: 0 }], rules: { local: [] } };
+  draft.constraints = {
+    safetyDays: [],
+    turnoverDays: codes.map((code) => ({ base: '甲', code, days: 0 })),
+    rules: { local: [] },
+  };
   const shipment = {
     draftId: draft.id,
     month: draft.month,
@@ -93,4 +111,26 @@ export function workflowPerformanceInput(size = 200) {
     rows: codes.map((code) => ({ base: '甲', code, end: 0 })),
   };
   return { draft, relations: null, shipment, evaluation: {} };
+}
+
+export function confirmNoExistingInventoryMovements(draft) {
+  draft.inventoryMovements = draft.products.flatMap((row) =>
+    Array.from({ length: 3 }, (_, offset) => {
+      const date = new Date(`${draft.month}-01T00:00:00Z`);
+      date.setUTCMonth(date.getUTCMonth() + offset);
+      return {
+        month: date.toISOString().slice(0, 7),
+        base: row['基地'],
+        code: row['产品编码'],
+        productionInbound: 0,
+        inTransitInbound: 0,
+        transferIn: 0,
+        transferOut: 0,
+        source: '夹具明确确认',
+        reason: '无既有变动',
+        at: '2026-11-17T00:00:00.000Z',
+      };
+    }),
+  );
+  return draft;
 }

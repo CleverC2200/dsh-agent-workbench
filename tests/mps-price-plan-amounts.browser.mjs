@@ -137,10 +137,19 @@ test('提报金额独立汇总全部分页，产品关联不放大，预览和�
       })),
     })(query);
   };
-  const { page, frame, calls } = await mpsPage(t, registered, respond);
+  const { page, frame, calls, contexts } = await mpsPage(t, registered, respond);
   const section = frame.getByRole('region', { name: '计划提报数据', exact: true });
   await expect(section).toContainText('月初计划总金额：9007199254740994.01元');
   await expect(section).toContainText('最终计划总金额：121.45元');
+  await expect
+    .poll(
+      () => contexts.at(-1)?.parts?.check?.sourceSummaries?.report?.amounts?.initialPlan?.amount,
+    )
+    .toBe('9007199254740994.01');
+  const amounts = contexts.at(-1).parts.check.sourceSummaries.report.amounts;
+  assert.equal(amounts.finalPlan.amount, '121.45');
+  assert.equal(amounts.unit, '元');
+  assert.equal(amounts.rowCount, 201);
   assert(
     calls.some(
       (call) => call.queryId === 'facts.report-amounts' && call.parameters.page_size === 5000,
@@ -191,7 +200,7 @@ test('金额缺项显示已知小计，刷新失败后隐藏旧金额且不影�
       { belong_base: '基地甲', material_code: 'B', ycplanamount: null, monthamount: '2.00' },
     ],
   });
-  const { frame } = await mpsPage(t, config, (query) => {
+  const { frame, contexts } = await mpsPage(t, config, (query) => {
     if (denied && query.queryId.startsWith('facts.report-amounts'))
       throw Error('AGENT_ACCESS_DENIED');
     return respond(query);
@@ -200,12 +209,23 @@ test('金额缺项显示已知小计，刷新失败后隐藏旧金额且不影�
   await expect(section).toContainText('月初计划总金额：待补；最终计划总金额：4.00元');
   await expect(section).toContainText('月初金额缺1条');
   await expect(section).toContainText('已知小计分别为1.25、4.00元');
+  await expect
+    .poll(() => contexts.at(-1)?.parts?.check?.sourceSummaries?.report?.amounts?.finalPlan?.amount)
+    .toBe('4.00');
+  assert.equal(contexts.at(-1).parts.check.sourceSummaries.report.amounts.initialPlan.amount, null);
+  assert.equal(
+    contexts.at(-1).parts.check.sourceSummaries.report.amounts.initialPlan.knownAmount,
+    '1.25',
+  );
   await expect(section).toContainText('1条缺基地或产品编码');
   denied = true;
   await section.getByRole('button', { name: '同步', exact: true }).click();
   await expect(section.getByRole('alert')).toContainText('当前账号暂无数据权限');
   await expect(section).toContainText('最终计划总金额：待补');
   await expect(section).not.toContainText('4.00元');
+  await expect
+    .poll(() => contexts.at(-1)?.parts?.check?.sourceSummaries?.report?.amounts?.finalPlan?.amount)
+    .toBe(null);
   await section.getByText('口径与统计说明', { exact: true }).click();
   await expect(section).toContainText('数量合计5件');
 });

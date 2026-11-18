@@ -15,7 +15,7 @@ test('ODM页面与CSV同一结果：默认到货90，内部排产0，收货只�
         const sample=workflowPerformanceInput(1);
         sample.draft.name='ODM验收';
         sample.draft.resourceAssignments=[];
-        sample.draft.constraints.safetyDays=[{base:'甲',days:6.2}];
+        sample.draft.constraints.turnoverDays=[{base:'甲',code:'0',days:6.2}];
         sample.shipment.rows[0].end=30;
         sample.draft.products[0]['老品编码']='OLD';
         sample.draft.historyAnnual.periods[0].rows[0]['产品编码']='OLD';

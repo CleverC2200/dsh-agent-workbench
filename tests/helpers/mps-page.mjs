@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { authorPage } from './author-page.mjs';
-export async function mpsPage(t, config, execute) {
-  const page = await authorPage(t, { mpsConfig: config });
+export async function mpsPage(t, config, execute, options = {}) {
+  const page = await authorPage(t, { ...options, mpsConfig: config });
   const calls = [];
   const contexts = [];
   await page.exposeFunction('mpsQuery', async (message) => {

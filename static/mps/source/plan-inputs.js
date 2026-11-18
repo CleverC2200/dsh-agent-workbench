@@ -92,7 +92,23 @@ export function buildPlanSources(draft, relations, weightRead, productPairs = []
   const issues = [];
   const manual = (draft.resources ?? [])
     .filter((row) => row.base !== 'ODM')
-    .map((row) => ({ ...row, dailyTons: number(row.dailyTons) }));
+    .map((row) => ({
+      ...row,
+      dailyTons: number(row.dailyTons),
+      ...(row.workshop === undefined ? {} : { workshop: text(row.workshop) }),
+      ...(row.tunnel === undefined ? {} : { tunnel: text(row.tunnel) }),
+      ...(row.productionLines === undefined
+        ? {}
+        : {
+            productionLines: [
+              ...new Set(
+                (Array.isArray(row.productionLines) ? row.productionLines : [])
+                  .map(text)
+                  .filter(Boolean),
+              ),
+            ],
+          }),
+    }));
   const facts = [
     ...(draft.products ?? []),
     ...(draft.report ?? []),
