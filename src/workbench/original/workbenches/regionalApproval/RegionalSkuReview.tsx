@@ -29,6 +29,7 @@ type ReviewState =
 
 export function RegionalSkuReview({
   plans,
+  detailLoadId,
   month,
   role,
   pendingValues,
@@ -36,6 +37,7 @@ export function RegionalSkuReview({
   onSnapshot,
 }: {
   plans: readonly RegionalApprovalLiveRow[];
+  detailLoadId: string;
   month: string;
   role?: ApprovalStageId;
   pendingValues: Readonly<Record<string, Readonly<Record<string, string>>>>;
@@ -59,29 +61,35 @@ export function RegionalSkuReview({
       if (!salesPlan.skuReview) throw new Error('SKU_REVIEW_UNAVAILABLE');
       const sources: SkuReviewSource[] = [];
       const expectedMonths = skuReviewMonths(month);
-      for (let offset = 0; offset < plans.length; offset += 4) {
-        controller.signal.throwIfAborted();
-        const batch = await Promise.all(
-          plans.slice(offset, offset + 4).map(async (plan) => {
-            const metrics = await salesPlan.skuReview!.invoke({
-              planId: plan.planId,
-              versionId: plan.versionId,
-              signal: controller.signal,
-            });
-            if (metrics.months.some((value, index) => value !== expectedMonths[index]))
-              throw new Error('SKU_REVIEW_MONTH_MISMATCH');
-            return { plan, metrics, skus: metrics.skus };
-          }),
-        );
-        sources.push(...batch);
-      }
+      const review = salesPlan.skuReview;
+      let next = 0;
+      const readPlans = async () => {
+        while (next < plans.length) {
+          controller.signal.throwIfAborted();
+          const index = next++;
+          const plan = plans[index];
+          const metrics = await review.invoke({
+            planId: plan.planId,
+            versionId: plan.versionId,
+            detailLoadId,
+            signal: controller.signal,
+          });
+          if (metrics.months.some((value, index) => value !== expectedMonths[index]))
+            throw new Error('SKU_REVIEW_MONTH_MISMATCH');
+          sources[index] = { plan, metrics, skus: metrics.skus };
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(4, plans.length) }, readPlans));
       summarizeSkuReview(sources, role);
       if (!controller.signal.aborted) setState({ kind: 'ready', sources });
     })().catch(() => {
-      if (!controller.signal.aborted) setState({ kind: 'failed' });
+      if (!controller.signal.aborted) {
+        controller.abort();
+        setState({ kind: 'failed' });
+      }
     });
     return () => controller.abort();
-  }, [plans, month, role, salesPlan, retry, onSnapshot]);
+  }, [plans, detailLoadId, month, role, salesPlan, retry, onSnapshot]);
   const rows = useMemo(() => {
     if (state.kind !== 'ready') return [];
     try {

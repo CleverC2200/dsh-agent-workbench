@@ -14,6 +14,7 @@ export interface WorkbenchHost {
         versionId: string;
         approvalRole?: string;
         draft?: SalesPlanLocalDraft;
+        detailLoadId?: string;
         signal?: AbortSignal;
       }): Promise<{
         draft: SalesPlanLocalDraft | null;
@@ -40,6 +41,7 @@ export interface WorkbenchHost {
       invoke(query: {
         planId: string;
         versionId: string;
+        detailLoadId?: string;
         signal?: AbortSignal;
       }): Promise<Api.GeaSalesPlanSkuReview>;
     };

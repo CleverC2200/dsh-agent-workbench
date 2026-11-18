@@ -1083,6 +1083,10 @@ const RegionalApprovalWorkbench: React.FC<{
 
   const focusedLiveRow = liveRows.find((row) => row.planId === focusedLivePlanId) ?? liveRows[0];
   const metricRows = orderType === 'M' ? allLiveRows : liveRows;
+  const detailLoadId = useMemo(
+    () => crypto.randomUUID(),
+    [allLiveRows, orderType, liveStageFilter, detailClient, roleKey],
+  );
   useEffect(() => {
     const requestId = ++liveCategoriesRequest.current;
     setLiveCategoriesError(false);
@@ -1113,6 +1117,7 @@ const RegionalApprovalWorkbench: React.FC<{
                 planId: row.planId,
                 versionId,
                 approvalRole,
+                detailLoadId,
                 signal: controller.signal,
               })
             : undefined,
@@ -1209,7 +1214,7 @@ const RegionalApprovalWorkbench: React.FC<{
         if (liveCategoriesRequest.current === requestId) setLiveCategoriesLoading(false);
       });
     return () => controller.abort();
-  }, [detailClient, metricRows, orderType, liveStageFilter, roleKey]);
+  }, [detailClient, metricRows, orderType, liveStageFilter, roleKey, detailLoadId]);
   const scopeSummary = liveQuery.analysisSummary;
   const liveAccess = useSalesPlanAccess(
     liveRows,
@@ -3736,6 +3741,7 @@ const RegionalApprovalWorkbench: React.FC<{
           liveQuery.selectedPeriodMonth ? (
             <RegionalSkuReview
               plans={allLiveRows}
+              detailLoadId={detailLoadId}
               month={liveQuery.selectedPeriodMonth}
               role={liveStageFilter}
               pendingValues={livePendingValues}

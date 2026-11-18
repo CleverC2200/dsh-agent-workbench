@@ -179,7 +179,12 @@ async function pageRequestOwner(signal?: AbortSignal): Promise<string> {
     if (signal?.aborted) aborted();
   });
 }
-async function rpc<T>(endpoint: string, payload: object = {}, signal?: AbortSignal): Promise<T> {
+async function rpc<T>(
+  endpoint: string,
+  payload: object = {},
+  signal?: AbortSignal,
+  detailLoadId?: string,
+): Promise<T> {
   const owned =
     /^(workbench\/query|workflow\/config|sales-plan\/|approval\/roles|model\/advice)/.test(
       endpoint,
@@ -191,6 +196,7 @@ async function rpc<T>(endpoint: string, payload: object = {}, signal?: AbortSign
     headers: {
       'Content-Type': 'application/json',
       ...(owner ? { 'X-Workbench-Page-Owner': owner } : {}),
+      ...(detailLoadId ? { 'X-Sales-Plan-Detail-Load': detailLoadId } : {}),
     },
     body: JSON.stringify(payload),
     signal,
@@ -227,7 +233,10 @@ function query<T>(kind: string, input: { signal?: AbortSignal } = {}): Promise<T
 const loadWorkflow = createWorkflowLoader((signal) => rpc('workflow/config', {}, signal));
 export const workbenchHost: WorkbenchHost = {
   salesPlan: {
-    draft: { invoke: ({ signal, ...input }) => rpc('sales-plan/draft', input, signal) },
+    draft: {
+      invoke: ({ signal, detailLoadId, ...input }) =>
+        rpc('sales-plan/draft', input, signal, detailLoadId),
+    },
     periods: {
       invoke: async (input) => {
         await loadWorkflow(input?.signal);
@@ -239,7 +248,10 @@ export const workbenchHost: WorkbenchHost = {
     versions: { invoke: (input) => query('versions', input) },
     logs: { invoke: (input) => query('logs', input) },
     versionSkus: { invoke: (input) => query('versionSkus', input) },
-    skuReview: { invoke: (input) => query('skuReview', input) },
+    skuReview: {
+      invoke: ({ signal, detailLoadId, ...query }) =>
+        rpc('workbench/query', { kind: 'skuReview', query }, signal, detailLoadId),
+    },
     compare: { invoke: (input) => query('compare', input) },
     action: { invoke: (input) => rpc('sales-plan/action', input) },
     submit: { invoke: (input) => rpc('sales-plan/submit', input) },

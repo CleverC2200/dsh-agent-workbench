@@ -122,6 +122,7 @@ if(comparison==='mixed-terminal')sourcePlans[1].status=5;
 if(comparison==='header-selection')sourcePlans[2].status=5;
 if(comparison==='header-pagination')for(let n=4;n<=12;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
 if(comparison==='performance')for(let n=4;n<=12;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
+if(comparison==='sku-review-scheduling')for(let n=4;n<=6;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
 const plans=continued?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1).map(plan=>({...plan,status:continued[0]})):['returned','return-unavailable'].includes(comparison)?(comparison==='return-unavailable'?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1):sourcePlans).map(plan=>({...plan,status:comparison==='return-unavailable'?8:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 if(comparison?.startsWith('single-'))for(const plan of plans)plan.status=4;
 window.sentDirect=[];window.completePlan=()=>{plans[0].status=10;};window.returnConfirmed=false;
@@ -159,6 +160,8 @@ const host={salesPlan:{
   versions:{invoke:async({planId})=>{readCalls.push({history:planId});const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
     readCalls.push({review:planId});
+    if(comparison==='sku-review-scheduling'&&readCalls.filter(call=>call.review).length===1)
+      await new Promise(resolve=>{window.completeFirstReview=resolve});
     if(comparison==='sku-review-failure') throw Error('fixture failure');
     signal?.throwIfAborted();
     return {versionId,skus:skusFor(versionId).map(sku=>sku.skuCode==='1001'?{...sku,amt:versionId==='v1'?'100.10':versionId==='v2'?'200.20':'0'}:sku),months:['2025-10','2026-08','2026-09'],shipmentUnavailable:false,
@@ -184,7 +187,7 @@ function QuickQuestionFixture(){
  const observe=React.useCallback(context=>{window.quickQuestionSnapshot=context.quickQuestions;setSnapshot(context.quickQuestions)},[]);
  return <WorkbenchHostProvider value={host}><div style={{display:'flex',height:'100%'}}><div className="gea-original-workbench" style={{width:'75%',height:'100%'}}><Workbench stateScope="local-render" t={translate} onContextChange={observe} approvalStages={[approvalRole]} liveActionsEnabled/></div><aside style={{width:'25%',padding:12,boxSizing:'border-box'}}><QuickQuestionsContext.Provider value={snapshot}><QuickQuestions onFill={setDraft}/></QuickQuestionsContext.Provider><textarea aria-label="Agent输入框" value={draft} onChange={event=>setDraft(event.target.value)}/></aside></div></WorkbenchHostProvider>;
 }
-root.render(comparison?.startsWith('quick-') ? <QuickQuestionFixture/> : <WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={translate} onContextChange={context=>{window.approvalContext=context}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} liveActionsEnabled/></div></WorkbenchHostProvider>);
+root.render(comparison?.startsWith('quick-') ? <QuickQuestionFixture/> : <WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={translate} onContextChange={context=>{window.approvalContext=context}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} automaticAnalysisEnabled={comparison==='shared-list-analysis'} liveActionsEnabled/></div></WorkbenchHostProvider>);
 `,
   },
   outfile: '/fixture/app.js',
@@ -278,6 +281,30 @@ test('sales performance: workflow statistics do not reload SKU review, while ref
   await expect.poll(reviews).toBe(6);
   await expect(review.getByRole('table')).toBeVisible();
   assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+test('sales performance: analysis and queue share one read per partition on every refresh', async (t) => {
+  const { page } = await openWorkbench(t, true, 'shared-list-analysis');
+  const analysis = () => page.evaluate(() => window.approvalContext?.analysisSummary?.data?.count);
+  const reads = () => page.evaluate(() => window.performanceReads.lists.length);
+  await expect.poll(analysis).toBe(3);
+  assert.equal(await reads(), 2);
+  await page.evaluate(() => {
+    window.queueGone = true;
+  });
+  await page.getByRole('button', { name: '刷新数据', exact: true }).click();
+  await expect.poll(async () => [await analysis(), await reads()]).toEqual([0, 4]);
+});
+
+test('sales performance: a completed SKU request frees its slot while the first is pending', async (t) => {
+  const { page } = await openWorkbench(t, true, 'sku-review-scheduling');
+  await page.getByRole('tab', { name: '按大类 / SKU' }).click();
+  const reviews = () => page.evaluate(() => window.readCalls.filter((call) => call.review).length);
+  await expect.poll(reviews).toBe(6);
+  const review = page.getByRole('region', { name: '按大类 / SKU', exact: true });
+  await expect(review.getByRole('table')).toHaveCount(0);
+  await page.evaluate(() => window.completeFirstReview());
+  await expect(review.getByRole('table')).toBeVisible();
 });
 
 async function assertExpandedSkuLayout(region) {
