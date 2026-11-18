@@ -841,6 +841,7 @@ test('current turnover and target turnover use their own valid cohorts', async (
           turn_target: 20,
           target_turn_demand: 5,
           target_turn_count: 1,
+          turn_gap: 80,
         },
       ],
     };
@@ -848,5 +849,5 @@ test('current turnover and target turnover use their own valid cohorts', async (
   const w = await cube.loadInitialDashboard();
   assert.equal(w.workbench.cards[1].value, '6.0天');
   assert.equal(w.workbench.cards[1].helpers[0].value, '4.0天');
-  assert.equal(w.workbench.cards[1].helpers[1].value, '-');
+  assert.equal(w.workbench.cards[1].helpers[1].value, '16.0天');
 });

@@ -665,3 +665,87 @@ test('scoped warehouse authorization failure is returned without retrying any al
   );
   assert.deepEqual(calls, ['base-warehouse.fact']);
 });
+
+test('base warehouse materializations select their own complete batch and share one metadata read', async () => {
+  const cfg = config();
+  for (const key of ['fact', 'snapshot.fact']) {
+    cfg.queries[key].parameterSpec.gea_p2 = {
+      name: 'warehouse_code',
+      type: 'string',
+      nullable: true,
+    };
+    cfg.queries[key].request.parameters.gea_p2 = null;
+  }
+  cfg.scopedQueryRoutes = [
+    { parameter: 'warehouse_code', values: ['Y204', 'N436', 'A221'], prefix: 'base-warehouse.' },
+  ];
+  cfg.queries['base-warehouse.fact'] = {
+    ...structuredClone(cfg.queries.fact),
+    summaryRoute: {
+      queryId: 'base-warehouse.snapshot.fact',
+      kind: 'current',
+      required: true,
+      snapshotQueryId: 'base-warehouse.summary.snapshot',
+    },
+  };
+  cfg.queries['base-warehouse.summary.snapshot'] = structuredClone(cfg.queries['summary.snapshot']);
+  cfg.queries['base-warehouse.summary.snapshot'].request.sql = 'SELECT 2 AS batch_id';
+  cfg.queries['base-warehouse.snapshot.fact'] = structuredClone(cfg.queries['snapshot.fact']);
+  const calls = [];
+  const execute = async (request, options) => {
+    calls.push(options.queryId);
+    await new Promise(setImmediate);
+    return {
+      rows: options.queryId.endsWith('summary.snapshot')
+        ? [
+            {
+              ...row,
+              batch_id: options.queryId.startsWith('base-warehouse.')
+                ? 'base_complete'
+                : 'branch_complete',
+            },
+          ]
+        : [{ value: request.parameters.gea_p1 }],
+    };
+  };
+  const client = createAgentQueries(cfg, execute);
+  const results = await Promise.all(
+    ['Y204', 'N436', 'A221'].map((warehouse_code) => client.read('fact', { warehouse_code })),
+  );
+  assert.deepEqual(
+    results.map((result) => result.rows[0].value),
+    ['base_complete', 'base_complete', 'base_complete'],
+  );
+  assert.equal(calls.filter((id) => id === 'base-warehouse.summary.snapshot').length, 1);
+  assert.equal(
+    (await client.read('fact', { warehouse_code: 'A110' })).rows[0].value,
+    'branch_complete',
+  );
+});
+
+test('an incomplete base warehouse batch does not expose empty inventory or retry source SQL', async () => {
+  const cfg = config();
+  cfg.scopedQueryRoutes = [
+    { parameter: 'warehouse_code', values: ['Y204'], prefix: 'base-warehouse.' },
+  ];
+  cfg.queries['base-warehouse.fact'] = {
+    ...structuredClone(cfg.queries.fact),
+    summaryRoute: {
+      queryId: 'base-warehouse.snapshot.fact',
+      kind: 'current',
+      required: false,
+      snapshotQueryId: 'base-warehouse.summary.snapshot',
+    },
+  };
+  cfg.queries['base-warehouse.summary.snapshot'] = structuredClone(cfg.queries['summary.snapshot']);
+  cfg.queries['base-warehouse.summary.snapshot'].request.sql = 'SELECT 2 AS batch_id';
+  const calls = [];
+  await assert.rejects(
+    createAgentQueries(cfg, async (_, options) => {
+      calls.push(options.queryId);
+      return { rows: [] };
+    }).read('fact', { warehouse_code: 'Y204' }),
+    { code: 'SUMMARY_NOT_AVAILABLE' },
+  );
+  assert.deepEqual(calls, ['base-warehouse.summary.snapshot']);
+});

@@ -15,6 +15,15 @@ const date = (value: unknown): value is string => {
   return Number.isFinite(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
 };
 
+const month = (value: unknown) =>
+  typeof value !== 'string'
+    ? null
+    : /^\d{6}$/.test(value)
+      ? value.slice(0, 4) + '-' + value.slice(4) + '-01'
+      : /^\d{4}-\d{2}-01$/.test(value)
+        ? value
+        : null;
+
 export function parseDailySummarySnapshot(result: unknown): DailySummarySnapshot {
   if (result === null || typeof result !== 'object' || !('rows' in result))
     throw Error('SUMMARY_SNAPSHOT_INVALID');
@@ -27,14 +36,13 @@ export function parseDailySummarySnapshot(result: unknown): DailySummarySnapshot
   if (row.batch_id === null) return { kind: 'unavailable' };
   const businessDate: unknown = Reflect.get(row, 'business_date');
   const stockDate: unknown = Reflect.get(row, 'stock_date');
-  const targetMonth: unknown = Reflect.get(row, 'target_month');
+  const targetMonth = month(Reflect.get(row, 'target_month'));
   if (
     typeof row.batch_id !== 'string' ||
     !/^[A-Za-z0-9_:-]{1,64}$/.test(row.batch_id) ||
     !date(businessDate) ||
     !date(stockDate) ||
     !date(targetMonth) ||
-    !targetMonth.endsWith('-01') ||
     stockDate > businessDate
   )
     throw Error('SUMMARY_SNAPSHOT_INVALID');
@@ -50,15 +58,6 @@ export function parseDailySummarySnapshot(result: unknown): DailySummarySnapshot
     defaultInventoryVersion: inventoryVersion ?? null,
   };
 }
-
-const month = (value: unknown) =>
-  typeof value !== 'string'
-    ? null
-    : /^\d{6}$/.test(value)
-      ? value.slice(0, 4) + '-' + value.slice(4) + '-01'
-      : /^\d{4}-\d{2}-01$/.test(value)
-        ? value
-        : null;
 
 const shift = (day: string, days: number) => {
   const result = new Date(day + 'T00:00:00Z');
