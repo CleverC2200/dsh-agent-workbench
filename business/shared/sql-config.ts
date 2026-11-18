@@ -4,6 +4,7 @@ export type AgentSqlConfig = {
   agentId: string;
   templates: Record<string, { segments: string[]; source?: string }>;
   queries: Record<string, any>;
+  scopedQueryRoutes?: { parameter: string; values: string[]; prefix: string }[];
   [key: string]: any;
 };
 

@@ -374,7 +374,7 @@ test('actual owned anchors constrain the bell and keep one workspace heading ins
   t.after(() => dom.window.close());
   const document = dom.window.document,
     row = document.querySelector('.gea-sidebar-brand-row'),
-    bell = document.querySelector('[aria-label="消息待办"]'),
+    bell = document.querySelector('[aria-label="消息中心"]'),
     browser = document.querySelector('.gea-workspace-owned');
   assert.equal(bell.parentElement, row);
   assert.equal(

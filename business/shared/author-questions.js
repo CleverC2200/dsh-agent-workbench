@@ -1,20 +1,20 @@
 import { quotePage } from '../../src/page-interaction/quote.ts';
 
-export function useAuthorQuote(react) {
+export function useAuthorQuote(react, ask) {
   const [pending, setPending] = react.useState(false),
     [status, setStatus] = react.useState('');
   const task = react.useRef();
   react.useEffect(() => () => task.current?.abort(), []);
-  const quote = async (text, label = '分析问题') => {
+  const transfer = async (send, success) => {
     if (task.current) return false;
     const controller = new AbortController();
     task.current = controller;
     setPending(true);
     setStatus('');
     try {
-      await quotePage({ text, label }, controller.signal);
+      await send(controller.signal);
       if (controller.signal.aborted) return false;
-      setStatus('已转入当前对话草稿，确认后再发送。');
+      setStatus(success);
       return true;
     } catch (error) {
       if (!controller.signal.aborted)
@@ -27,7 +27,13 @@ export function useAuthorQuote(react) {
       }
     }
   };
-  return { quote, pending, status };
+  const quote = (text, label = '分析问题') =>
+    transfer((signal) => quotePage({ text, label }, signal), '已转入当前对话草稿，确认后再发送。');
+  const question = ask
+    ? (text) =>
+        transfer((signal) => ask(text, signal), '已发送到当前对话，请在对话区查看分析结果。')
+    : quote;
+  return { quote, question, pending, status };
 }
 export function AuthorQuestions({
   react,
@@ -37,6 +43,7 @@ export function AuthorQuestions({
   draft = '',
   onClearDraft,
   actions,
+  expanded = false,
 }) {
   const currentDraft = react.useRef(draft);
   currentDraft.current = draft;
@@ -49,6 +56,7 @@ export function AuthorQuestions({
     'aria-label': '对话草稿快捷操作',
     children: [
       jsx.jsxs('details', {
+        open: expanded,
         children: [
           jsx.jsx('summary', { children: '快捷分析问题' }),
           jsx.jsx('div', {
@@ -58,7 +66,7 @@ export function AuthorQuestions({
                 Button,
                 {
                   disabled: actions.pending,
-                  onClick: () => actions.quote(question.text, question.label),
+                  onClick: () => actions.question(question.text, question.label),
                   children: question.label,
                 },
                 question.label,

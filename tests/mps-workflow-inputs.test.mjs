@@ -2,16 +2,28 @@ import test from 'node:test';
 import {
   workflowDraft as draft,
   workflowPerformanceInput,
+  confirmNoExistingInventoryMovements,
 } from './helpers/mps-workflow-fixture.mjs';
 import assert from 'node:assert/strict';
 import { buildPlanSources } from '../static/mps/source/plan-inputs.js';
 import { build } from 'esbuild';
 import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
-import {
-  summarizeEvaluation,
-  planContext,
-  workflowContextPreview,
-} from '../static/mps/source/evaluation-view.js';
+
+const compiled = await build({
+  stdin: {
+    contents:
+      "export {buildMpsWorkflow} from './static/mps/source/workflow-inputs.js'; export {summarizeEvaluation,planContext,workflowContextPreview} from './static/mps/source/evaluation-view.js';",
+    resolveDir: process.cwd(),
+  },
+  plugins: [await mpsComputePlugin()],
+  bundle: true,
+  write: false,
+  platform: 'browser',
+  format: 'esm',
+});
+const { buildMpsWorkflow, summarizeEvaluation, planContext, workflowContextPreview } = await import(
+  'data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].text).toString('base64')
+);
 
 test('产销存汇总保留已知小计、真实零值与缺项，并隔离基地和月份', () => {
   const groups = summarizeEvaluation([
@@ -27,18 +39,6 @@ test('产销存汇总保留已知小计、真实零值与缺项，并隔离基�
   assert.equal(groups.find((row) => row.base === '乙').metrics.demand.value, 0);
   assert.equal(groups.find((row) => row.month === '2027-01').metrics.demand.value, null);
 });
-
-const compiled = await build({
-  entryPoints: ['static/mps/source/workflow-inputs.js'],
-  plugins: [await mpsComputePlugin()],
-  bundle: true,
-  write: false,
-  platform: 'browser',
-  format: 'esm',
-});
-const { buildMpsWorkflow } = await import(
-  'data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].text).toString('base64')
-);
 
 function partialDemandFixture() {
   const source = draft();
@@ -297,7 +297,7 @@ test('ODM来源与自产标签冲突可导出人工修正说明，不能伪造�
   assert.match(issue.sourceFields, /transfer_tag/);
 });
 
-test('产品老品编码接入历史参考并建立老品所在基地的新品拆分范围', () => {
+test('产品老品编码接入同基地历史参考，其他基地老品不扩张产品范围', () => {
   const source = draft();
   source.products[0]['老品编码'] = 'OLD';
   source.historyAnnual.periods[0].rows.push(
@@ -310,24 +310,33 @@ test('产品老品编码接入历史参考并建立老品所在基地的新品�
   assert.equal(row.historyCode, 'OLD');
   assert.equal(row.historyQuantity, 160);
   assert.equal(
-    result.rows.find((row) => row.base === '丙' && row.code === 'A').historyQuantity,
-    20,
+    result.rows.some((row) => row.base === '丙' && row.code === 'A'),
+    false,
   );
+  assert.equal(result.poolExceptions.history.find((row) => row.base === '丙').quantity, 20);
   assert.deepEqual(source.historyAnnual, raw);
   const solved = buildMpsWorkflow(source, null, null, {
     weights: { rows: [{ material_code: 'A', channel_name: '经销商', ton_per_piece: 0.1 }] },
   });
-  assert.ok(solved.plan.rows.find((row) => row.base === '丙' && row.code === 'A').demandTons > 0);
+  assert.ok(solved.plan.rows.find((row) => row.base === '甲' && row.code === 'A').demandTons > 0);
   assert.ok(
     !solved.plan.rows
-      .find((row) => row.base === '丙' && row.code === 'A')
+      .find((row) => row.base === '甲' && row.code === 'A')
       .planMissing.includes('缺唯一有效件吨系数'),
   );
 });
 
-test('业务版本缺源周转天数临时按零参与，原始缺项保留且人工补充值优先', () => {
+test('业务版本缺源周转天数保留待补，人工补充后重新计算', () => {
   const source = draft();
+  source.constraints.safetyDays = [{ base: '甲', days: 99 }];
+  const local = buildMpsWorkflow(source, null);
+  assert.ok(local.rows.length > 0);
+  assert.ok(local.rows.every((row) => row.safetyDays === null && row.targetInventory === null));
   source.productSource = 'business';
+  source.products = source.products.map((row, index) => ({
+    ...row,
+    基地: index === 0 ? '甲' : '乙',
+  }));
   source.productsRead = { status: 'ready' };
   source.inventoryTargetsRead = { status: 'ready' };
   let result = buildMpsWorkflow(source, null);
@@ -335,9 +344,9 @@ test('业务版本缺源周转天数临时按零参与，原始缺项保留且�
   assert.ok(
     result.rows.every(
       (row) =>
-        row.safetyDays === 0 &&
-        row.targetInventory === 0 &&
-        row.safetyDaysSource === 'missing-turnover-days-zero',
+        row.safetyDays === null &&
+        row.targetInventory === null &&
+        row.safetyDaysSource === 'missing',
     ),
   );
   assert.ok(
@@ -380,7 +389,10 @@ test('仅同版同月非演示结存进入期初，空白不变0，原型产品�
     status: 'ready',
     rows: [{ base: '甲', code: 'A', end: -5 }],
   };
-  assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].openingInventory, -5);
+  assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].openingInventory, 0);
+  assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].rawOpeningInventory, -5);
+  snapshot.rows[0] = { ...snapshot.rows[0], end: 0, rawEnd: -5 };
+  assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].rawOpeningInventory, -5);
   snapshot.draftId = 'v2';
   assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].openingInventory, null);
   snapshot.draftId = 'v1';
@@ -402,10 +414,12 @@ test('按实际期间撤销失效提报与历史，别月成功或失败不改�
   };
   source.historyAnnual.periods[0].error = '上一财年历史拒权';
   const failed = buildMpsWorkflow(source);
-  assert.equal(failed.rows[0].historyQuantity, null);
+  assert.equal(failed.rows[0].historyQuantity, 0);
+  assert.equal(failed.rows[0].historyAudit.zeroFilled, true);
   assert.equal(failed.rows[0].reportQuantity, 30);
   assert.equal(failed.rows[0].demand, null);
-  assert.match(failed.rows[0].missing.demand.join(''), /上一财年历史拒权/);
+  assert.match(failed.rows[0].historyAudit.reasons.join(''), /上一财年历史拒权/);
+  assert.equal(failed.rows[0].historyShare, null);
   delete source.historyAnnual.periods[0].error;
   source.historyAnnual.periods.push({
     start: '2024-07-01',
@@ -437,7 +451,8 @@ test('产品读取中或失败撤销依赖分类的拆分，但保留独立数�
     assert.equal(row.historyShare, null);
     assert.equal(row.reportQuantity, 30);
     assert.equal(row.historyQuantity, 60);
-    assert.equal(row.openingInventory, -8);
+    assert.equal(row.openingInventory, 0);
+    assert.equal(row.rawOpeningInventory, -8);
     assert.match(row.missing.demand.join(''), status === 'loading' ? /正在读取/ : /产品权限已失效/);
   }
 });
@@ -456,13 +471,15 @@ test('产能与有效结存不能扩充月度需求范围，缺正式归属和�
   };
   const relations = { sources: { sku_capacity: [{ belong_base: '甲', material_code: 'A' }] } };
   const result = buildMpsWorkflow(source, relations, snapshot);
-  assert.deepEqual(result.rows, []);
+  assert.equal(result.rows.length, 6);
+  assert.ok(result.rows.every((row) => ['甲', '乙'].includes(row.base)));
+  assert.equal(result.poolExceptions.other.find((row) => row.base === '郑州').quantity, -8);
   assert.equal(result.scopeCoverage, 'in-scope');
   assert.match(result.missing.join(''), /当前产品明细.*物料编码.*物料组编码/);
   assert.match(result.missing.join(''), /全国覆盖.*实际证明/);
 });
 
-test('空月来源拒权不能随着月度候选为空而消失', () => {
+test('空月来源拒权保留产品清单范围和来源问题', () => {
   const source = draft();
   source.report = [];
   source.history = [];
@@ -470,7 +487,7 @@ test('空月来源拒权不能随着月度候选为空而消失', () => {
   source.reportRead = { periods: { '2026-12': { status: 'failed', error: '十二月提报拒权' } } };
   source.historyAnnual.periods[0].error = '十二月历史读取失败';
   const result = buildMpsWorkflow(source);
-  assert.equal(result.rows.length, 0);
+  assert.equal(result.rows.length, 6);
   assert.match(result.missing.join(''), /2026-12.*十二月提报拒权/);
   assert.match(result.missing.join(''), /2026-12.*十二月历史读取失败/);
   assert.equal(result.summary.requiredProductionTons, null);
@@ -481,7 +498,7 @@ test('M+2调整后的大类有效链进入需求与M+3库存，系统基线和�
   const source = draft();
   source.month = '2026-10';
   source.products = [source.products[0]];
-  source.constraints.safetyDays = [{ base: '甲', days: 5 }];
+  source.constraints.turnoverDays = [{ base: '甲', code: 'A', days: 5 }];
   source.report = ['2026-10', '2026-11', '2026-12'].map((month) => ({
     月份: month,
     基地: '甲',
@@ -629,7 +646,7 @@ test('跨7月仍用评估月所属上一完整财年，后月不切换本轮系�
     9,
   );
   source.historyAnnual.periods = [];
-  assert.equal(buildMpsWorkflow(source).rows[0].historyQuantity, null);
+  assert.equal(buildMpsWorkflow(source).rows[0].historyQuantity, 0);
 });
 
 test('完整财年查询使用起止日期，不落回单月查询', async () => {
@@ -1035,10 +1052,11 @@ test('纯中转基地由最新关系识别并读取件吨，不要求已有本�
 
 test('报告按确认口径区分下市需求、产线、调拨和件吨系数，有资源不误报缺产能', () => {
   const source = draft();
+  confirmNoExistingInventoryMovements(source);
   source.constraints.rules = {};
   const codes = ['A', 'B', 'C', 'D'];
   source.products = codes.map((code) => ({
-    基地: '',
+    基地: '甲',
     产品编码: code,
     产品名称: code,
     大类: '点心',
@@ -1056,6 +1074,7 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
     数量: 25,
   }));
   source.categoryDemand = [{ month: source.month, category: '点心', quantity: 100 }];
+  source.constraints.turnoverDays = codes.map((code) => ({ base: '甲', code, days: 0 }));
   source.resources = [{ id: 'R', base: '甲', kind: 'tunnel', name: '产线', dailyTons: 100 }];
   source.resourceAssignments = [{ base: '甲', code: 'A', resourceId: 'R', share: 1 }];
   source.unitWeights = ['B', 'C', 'D'].map((code) => ({ base: '甲', code, tonsPerPiece: 1 }));
@@ -1097,6 +1116,7 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
     sourceKind: 'business',
     rows: codes.map((code) => ({ base: '甲', code, end: 0 })),
   };
+  confirmNoExistingInventoryMovements(source);
   const run = () => buildMpsWorkflow(source, relations, shipment, { weights: { rows: [] } }).plan;
   const plan = run();
   const categories = (code) =>
@@ -1106,13 +1126,13 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
   assert.deepEqual(categories('A'), ['缺件吨系数']);
   assert.deepEqual(categories('B'), ['缺调拨关系']);
   assert.deepEqual(categories('C'), ['缺产线产能']);
-  assert.deepEqual(categories('D'), ['下市品产生需求']);
+  assert.deepEqual(categories('D'), ['负库存归零', '下市品停止自动补货']);
   assert.ok(
     plan.rows
       .find((row) => row.code === 'A')
       .reportMissing.every((reason) => !reason.startsWith('缺产线产能')),
   );
-  assert.equal(plan.rows.find((row) => row.code === 'D').demand, 25);
+  assert.equal(plan.rows.find((row) => row.code === 'D').demand, 0);
   source.report[3].月初数量 = 0;
   source.historyAnnual.periods[0].rows[3].数量 = 0;
   assert.ok(
@@ -1155,6 +1175,8 @@ test('报告按确认口径区分下市需求、产线、调拨和件吨系数�
 
 test('组合系列为空但物理隧道有效时保留产能，不进入缺产能报告', () => {
   const source = draft();
+  confirmNoExistingInventoryMovements(source);
+  source.constraints.turnoverDays = [{ base: '甲', code: 'A', days: 0 }];
   source.resources = [
     { id: 'F', base: '甲', kind: 'forming', name: '已批准成型机', dailyTons: 100 },
   ];
@@ -1232,6 +1254,7 @@ test('安全天数采用实际读取来源起月与版本，评估月保持独�
 
 test('最新产品源按基地应用替换系数，重复标签不倍增，零与未知分开', () => {
   const source = draft();
+  source.products[0]['基地'] = '';
   source.products[0]['老品编码'] = 'OLD';
   source.productRaw = [
     {
@@ -1264,11 +1287,14 @@ test('最新产品源按基地应用替换系数，重复标签不倍增，零�
   const rows = buildMpsWorkflow(source).rows.filter(
     (row) => row.month === source.month && row.code === 'A',
   );
-  assert.equal(rows.length, 3);
+  assert.equal(rows.length, 2);
   assert.equal(rows.find((row) => row.base === '甲').historyReferenceQuantity, 100);
   assert.equal(rows.find((row) => row.base === '甲').historyQuantity, 260);
   assert.equal(rows.find((row) => row.base === '丙').historyQuantity, 0);
-  assert.equal(rows.find((row) => row.base === '丁').historyQuantity, null);
+  assert.equal(
+    rows.some((row) => row.base === '丁'),
+    false,
+  );
   assert.deepEqual(source.historyAnnual, raw);
   source.productRaw[1].replace_num = '3';
   const conflict = buildMpsWorkflow(source).rows.find(
@@ -1373,9 +1399,17 @@ test('新版产品源缺目标基地或只有另一基地系数时，不能落�
       source.productRaw = [
         { material_code: 'A', replacement_material_code: 'OLD', target_base, replace_num: '2' },
       ];
-      const row = buildMpsWorkflow(source).rows.find(
-        (row) => row.base === '甲' && row.code === 'A',
-      );
+      const result = buildMpsWorkflow(source);
+      const row = result.rows.find((row) => row.base === '甲' && row.code === 'A');
+      if (!base) {
+        assert.equal(row, undefined);
+        assert.ok(
+          result.poolExceptions.history.some(
+            (issue) => issue.base === '甲' && issue.code === 'OLD',
+          ),
+        );
+        continue;
+      }
       assert.equal(row.historyReferenceQuantity, 100);
       assert.equal(row.historyQuantity, null);
       assert.match(row.missing.historyQuantity.join(), /系数/);
@@ -1418,6 +1452,31 @@ test('大型加工结果只投影有条数的上下文预览，计算结果和�
   assert.equal(preview.constraints.weightsTotal, 6000);
   assert.equal(preview.missing.length, 10);
   assert.ok(JSON.stringify(preview).length < 100000);
+  assert.deepEqual(context, before);
+});
+
+test('多层真实规模的约束预览在通道限额内保留条数与来源', () => {
+  const context = {
+    months: ['2026-11', '2026-12', '2027-01'],
+    constraints: Array.from({ length: 50 }, (_, id) => ({
+      id,
+      source: '已读业务来源',
+      rows: Array.from({ length: 100 }, (_, code) => ({
+        code,
+        missing: Array.from({ length: 20 }, (_, field) => ({
+          field,
+          reason: '待核来源'.repeat(50),
+        })),
+      })),
+    })),
+  };
+  const before = structuredClone(context);
+  const preview = workflowContextPreview(context);
+  assert.ok(JSON.stringify(preview).length < 60000);
+  assert.equal(preview.constraintsTotal, 50);
+  assert.equal(preview.constraints[0].rowsTotal, 100);
+  assert.equal(preview.constraints[0].rows[0].missingTotal, 20);
+  assert.equal(preview.constraints[0].source, '已读业务来源');
   assert.deepEqual(context, before);
 });
 
@@ -1542,4 +1601,106 @@ test('后月期初库存缺项追溯首月来源，不重复要求人工补后�
   );
   assert.ok(later.every((issue) => issue.rootSourceTable.includes('agents_scm_stock_detail_d')));
   assert.ok(later.every((issue) => issue.action.includes('不另补后续月份期初库存')));
+});
+
+test('原始完整月分类与财年补0分别传入计算，来源失败状态不被补0覆盖', () => {
+  const source = draft();
+  source.products[0]['老品编码'] = 'OLD';
+  source.historyAnnual.periods[0].rows = [
+    { 基地: '甲', 产品编码: 'A', 数量: '' },
+    { 基地: '甲', 产品编码: 'OLD', 数量: 30 },
+    { 基地: '乙', 产品编码: 'B', 数量: 40 },
+  ];
+  const completedMonth = new Date();
+  completedMonth.setUTCDate(1);
+  const through =
+    source.month < completedMonth.toISOString().slice(0, 7)
+      ? source.month
+      : completedMonth.toISOString().slice(0, 7);
+  source.historyWindow = {
+    periods: Array.from({ length: 24 }, (_, index) => {
+      const date = new Date(`${through}-01T00:00:00Z`);
+      date.setUTCMonth(date.getUTCMonth() - index - 1);
+      return { month: date.toISOString().slice(0, 7), rows: [], metadata: { partial: false } };
+    }),
+  };
+  source.historyWindowRead = { status: 'ready', month: source.month };
+  let row = buildMpsWorkflow(source).rows[0];
+  assert.equal(row.historyQuantity, 30);
+  assert.equal(row.historyAudit.classification, '疑似新品或重新上市');
+  source.historyWindow.periods[0] = {
+    month: source.historyWindow.periods[0].month,
+    rows: [],
+    error: '月历史拒权',
+  };
+  source.historyWindowRead.status = 'failed';
+  row = buildMpsWorkflow(source).rows[0];
+  assert.equal(row.historyQuantity, 30);
+  assert.equal(row.historyAudit.classification, '来源异常或其他历史异常');
+  assert.match(row.historyAudit.months[0].reasons.join('；'), /月历史拒权/);
+  assert.equal(source.historyWindowRead.status, 'failed');
+});
+
+test('整轮历史读取失败不复用旧成功窗口作为分类依据', () => {
+  const source = draft();
+  source.historyWindow = {
+    periods: [{ month: '2026-10', rows: [], metadata: { partial: false } }],
+  };
+  source.historyWindowRead = { status: 'failed', error: '窗口读取中断' };
+  const audit = buildMpsWorkflow(source).rows[0].historyAudit;
+  assert.equal(audit.months.find((month) => month.month === '2026-10').status, 'failed');
+  assert.match(
+    audit.months.find((month) => month.month === '2026-10').reasons.join('；'),
+    /窗口读取中断/,
+  );
+});
+
+test('设备报告复用物理隧道与标准日产吨数，来源未提供的独立产线不虚构', () => {
+  const sample = workflowPerformanceInput(2);
+  sample.draft.resources = [];
+  sample.draft.resourceAssignments = [];
+  sample.draft.productionDays = [{ base: '甲', month: '2026-12', days: 1 }];
+  const tunnel = {
+    belong_base: '甲',
+    production_unit: '实际车间',
+    tunnel_no: 'T1',
+    tunnel_tonnage: 999,
+    standard_daily_output_ton: 28,
+  };
+  sample.relations = {
+    sources: {
+      tunnels: [tunnel, { ...tunnel, series: '另一系列' }],
+      sku_capacity: sample.draft.products.map((row) => ({
+        belong_base: '甲',
+        workshop: '实际车间',
+        tunnel_no: 'T1',
+        material_code: row.产品编码,
+      })),
+      transfers: [],
+    },
+  };
+  const report = buildMpsWorkflow(
+    sample.draft,
+    sample.relations,
+    sample.shipment,
+    sample.evaluation,
+  ).plan.capacityReport;
+  const lines = report.lines.filter((row) => row.month === '2026-12');
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].dailyTons, 28);
+  assert.equal(lines[0].capacity, 28);
+  assert.equal(lines[0].workshop, '实际车间');
+  assert.equal(lines[0].tunnel, 'T1');
+  assert.deepEqual(lines[0].productionLines, []);
+  assert.ok(
+    report.hierarchyIssues.some(
+      (row) =>
+        row.reason.includes('来源未提供独立产线') && row.sourceTable.includes('tunnel_capacity'),
+    ),
+  );
+  assert.ok(
+    report.productDetails
+      .filter((row) => row.month === '2026-12')
+      .every((row) => row.resourceIds.length === 1),
+  );
 });

@@ -1150,14 +1150,25 @@ test(
   },
 );
 
-test('split sales plan wraps control groups without clipping actions or the table header', async (t) => {
+test('split sales plan wraps control groups only when they cannot fit', async (t) => {
   const { page } = await openWorkbench(t);
-  for (const width of [907, 760, 620]) {
-    await page.setViewportSize({ width, height: 920 });
+  await page.getByRole('switch', { name: '品类维度' }).click();
+  for (const [orderType, width, wraps] of [
+    ['月初', 650, false],
+    ['月初', 600, true],
+    ['月初', 760, false],
+    ['月初', 907, false],
+    ['纠偏', 600, false],
+    ['纠偏', 480, true],
+  ]) {
+    await page.getByRole('tab', { name: orderType, exact: true }).click();
+    await page.setViewportSize({ width, height: 820 });
+    const layout = `${orderType} at ${width}px`;
     const actions = page.getByTestId('regional-approval-toolbar-actions');
     const geometry = await actions.evaluate((node) => {
       const actions = node.getBoundingClientRect();
       const toolbar = node.parentElement.getBoundingClientRect();
+      const tabs = node.parentElement.querySelector('[role="tablist"]').getBoundingClientRect();
       const root = node.closest('[data-testid="regional-approval-workbench"]');
       const header = node.closest('[class*="queueHeader"]').getBoundingClientRect();
       const table = root.querySelector('[class*="tableViewport"]').getBoundingClientRect();
@@ -1165,6 +1176,8 @@ test('split sales plan wraps control groups without clipping actions or the tabl
         actionTops: [...node.querySelectorAll('button')].map(
           (button) => button.getBoundingClientRect().top,
         ),
+        wraps: actions.top >= tabs.bottom,
+        wrapGap: node.querySelector('button').getBoundingClientRect().top - tabs.bottom,
         topOverflow: toolbar.top - actions.top,
         bottomOverflow: actions.bottom - toolbar.bottom,
         toolbarHeight: toolbar.height,
@@ -1174,15 +1187,17 @@ test('split sales plan wraps control groups without clipping actions or the tabl
     });
     assert.ok(
       Math.max(...geometry.actionTops) - Math.min(...geometry.actionTops) <= 1,
-      `actions aligned at ${width}px`,
+      `actions aligned for ${layout}`,
     );
     assert.ok(
       geometry.topOverflow <= 0 && geometry.bottomOverflow <= 0,
-      `actions remain inside toolbar at ${width}px`,
+      `actions remain inside toolbar for ${layout}`,
     );
-    assert.ok(geometry.toolbarHeight <= 104, `wrapped toolbar at ${width}px`);
-    assert.ok(geometry.tableGap >= 8, `table separated at ${width}px`);
-    assert.ok(geometry.rightOverflow <= 0, `actions fit at ${width}px`);
+    assert.equal(geometry.wraps, wraps, `toolbar wrapping for ${layout}`);
+    if (wraps) assert.ok(geometry.wrapGap <= 4, `compact row gap for ${layout}`);
+    assert.ok(geometry.toolbarHeight <= 104, `wrapped toolbar for ${layout}`);
+    assert.ok(geometry.tableGap >= 8, `table separated for ${layout}`);
+    assert.ok(geometry.rightOverflow <= 0, `actions fit for ${layout}`);
     const customerTab = page.getByRole('tab', { name: '按客户' });
     await customerTab.scrollIntoViewIfNeeded();
     await expect(customerTab).toBeInViewport();
@@ -1473,6 +1488,11 @@ test('regional SKU review scrolls to its final rows with wheel and keyboard in a
     await page.keyboard.press('Home');
     await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBe(0);
     await page.keyboard.press('End');
+    await expect
+      .poll(() =>
+        viewport.evaluate((node) => node.scrollHeight - node.clientHeight - node.scrollTop),
+      )
+      .toBeLessThanOrEqual(1);
     await expect(total).toBeInViewport();
     if (size.width < 1050) {
       await viewport.hover({ position: { x: 100, y: 100 } });

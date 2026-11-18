@@ -570,7 +570,7 @@ test('Test environment badge stays beside the brand subtitle without covering th
     );
     const marker = await badge.boundingBox();
     const subtitle = await page.locator('.gea-brand-subtitle').boundingBox();
-    const inbox = await page.getByRole('button', { name: '消息待办', exact: true }).boundingBox();
+    const inbox = await page.getByRole('button', { name: '消息中心', exact: true }).boundingBox();
     assert.ok(
       marker.x >= subtitle.x &&
         marker.y >= subtitle.y &&

@@ -781,7 +781,7 @@ export function mountCompanyUI(
                   type="button"
                   className="gea-inbox-quick-action"
                   aria-label={t('messageInbox')}
-                  title="业务代办"
+                  title={t('messageInbox')}
                   disabled={!available.has(INBOX)}
                   onClick={() => void workbench.open(INBOX)}
                 >

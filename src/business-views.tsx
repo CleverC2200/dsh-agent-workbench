@@ -3,7 +3,8 @@ import React, { useEffect, useSyncExternalStore } from 'react';
 import type { SettingsSectionOwnerProps } from '@deepseek-ai/dsh-client-ui-settings/client';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import { zh, en } from './client/locales.ts';
-import { Inbox, type InboxViewState } from './client/inbox.tsx';
+import type { InboxViewState } from './client/inbox.tsx';
+import { MessageCenter } from './client/message-center.tsx';
 import {
   DesktopNavigation,
   createNavigationSelection,
@@ -50,7 +51,7 @@ export function mountBusinessViews(ctx: Context) {
           style={{ height: '100%', overflow: 'auto' }}
         >
           <style>{nativeCss}</style>
-          <Inbox
+          <MessageCenter
             key={accountScope ?? 'unconfirmed'}
             t={t}
             navigation={navigation?.panel === INBOX ? navigation : null}
@@ -119,7 +120,7 @@ export function mountBusinessViews(ctx: Context) {
     ctx.slots.inject('main', () =>
       ctx.agentWorkbench.registerFrame({
         id: INBOX,
-        label: () => t('businessInbox'),
+        label: () => t('messageInbox'),
         kind: 'local',
         body: InboxPage,
         resourceId: 'gea-readonly',

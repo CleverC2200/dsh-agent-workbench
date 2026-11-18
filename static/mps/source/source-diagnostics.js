@@ -1,3 +1,4 @@
+import { useStepViewField } from './step-view-state.js';
 import { sourceDimensions } from './source-projections.js';
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const key = (base, code) => JSON.stringify([text(base), text(code)]);
@@ -23,9 +24,9 @@ const columns = [
 
 export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
   const h = react.createElement;
-  return function SourceDiagnostics({ draft, result, table }) {
+  return function SourceDiagnostics({ draft, result, table, view }) {
     const [preview, setPreview] = react.useState(null);
-    const [page, setPage] = react.useState(0);
+    const [page, setPage] = useStepViewField(react, view, 'SourceDiagnostics.page', 0);
     const products = new Map();
     for (const row of ['loading', 'failed'].includes(draft.productsRead?.status)
       ? []
@@ -45,7 +46,7 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
     };
     const diagnostics = ['report', 'history'].flatMap((source) =>
       result.months.slice(0, 3).map((month) => {
-        const fiscal = previousFiscalYear(month);
+        const fiscal = previousFiscalYear(draft.month);
         const period = source === 'report' ? month : `${month}（${fiscal.start}至${fiscal.end}）`;
         const sales = source === 'report' && draft.reportSource === 'business';
         const local = draft[source + 'Source'] === 'local-file';
@@ -90,7 +91,7 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
             : '数量';
         const quantity = (row) => row[source === 'report' ? '源' + column : column] ?? row[column];
         const matched = (row) => hasKey(row) && pool.has(key(row['基地'], row['产品编码']));
-        const ready = read?.status === 'ready';
+        const ready = ['ready', 'partial'].includes(read?.status);
         const total =
           sales || (local && source === 'report') ? records.length : read?.metadata?.total;
         const counted = ready && Number.isSafeInteger(total) && total === records.length;

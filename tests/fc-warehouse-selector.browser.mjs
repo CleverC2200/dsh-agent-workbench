@@ -570,7 +570,7 @@ test('FC aging exposes immediate risk filters, leading risk column and ten-row s
       rows = Array.from({ length: Math.min(values.page_size, total - values.offset) }, (_, i) => ({
         ...Object.fromEntries(q.resultColumns.map((k) => [k, null])),
         material_code: `TEST-SKU-${values.offset + i}`,
-        warehouseid: 'N436',
+        warehouseid: 'A160',
         stat_date: '2026-10-28',
         material_name: '货龄筛选测试商品',
         warning: values.risk || '正常',
@@ -624,8 +624,8 @@ test('FC aging exposes immediate risk filters, leading risk column and ten-row s
       .filter((c) => c.id === 'branch-batches.page')
       .map((c) => [c.values.warehouse_code, c.values.sku, c.values.page_size, c.values.offset]),
     [
-      ['N436', 'TEST-SKU-0', 10, 0],
-      ['N436', 'TEST-SKU-0', 10, 10],
+      ['A160', 'TEST-SKU-0', 10, 0],
+      ['A160', 'TEST-SKU-0', 10, 10],
     ],
   );
   await list.getByRole('button', { name: 'TEST-SKU-0', exact: true }).click();
@@ -966,7 +966,7 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
       });
     if (id === 'branch-warehouse.directory.count') rows = [{ total: 1 }];
     else if (id === 'branch-warehouse.directory')
-      rows = [{ warehouse_code: 'N436', warehouse_name: '郑州DC仓', base: '郑州' }];
+      rows = [{ warehouse_code: 'A160', warehouse_name: '南京分仓', base: '郑州' }];
     else if (id.startsWith('source.')) rows = [{ day: '2026-10-29' }];
     else if (
       ['replenishment.detail.atomic', 'replenishment-confirmation.detail.atomic'].includes(id)
@@ -989,7 +989,7 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
         rows = [
           {
             ...Object.fromEntries(q.resultColumns.map((k) => [k, null])),
-            warehouse_code: 'N436',
+            warehouse_code: 'A160',
             sku: '10000034',
             material_name: '测试汤圆',
             inventory_qty: 5,
@@ -1099,7 +1099,7 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
   await page.getByRole('button', { name: '重新加载数据', exact: true }).click();
   await expect(page.getByRole('button', { name: '10000034', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '选择分仓', exact: true }).click();
-  await page.locator('[role=option][data-value="N436"]').click();
+  await page.locator('[role=option][data-value="A160"]').click();
   await expect(
     page.getByRole('spinbutton', { name: '10000034实际补货量', exact: true }),
   ).toBeEnabled();
@@ -1404,4 +1404,182 @@ test('identity changes reload cards and lists even when both accounts select all
   await expect(page.getByRole('button', { name: 'SCOPED-SKU', exact: true })).toBeVisible();
   await expect(page.getByText(/当前账号部分展示字段未获返回权限/)).toBeVisible();
   assert.ok(calls.some((c) => c.id === 'source.branch-stock-date' && c.identity === 'scoped'));
+});
+
+test('warehouse type tabs separate three base warehouses and preserve branch selection with manual keyboard activation', async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const errors = [],
+    requests = [];
+  t.after(async () => {
+    await mkdir('.runtime/fc-warehouse-groups', { recursive: true });
+    await import('node:fs/promises').then(({ writeFile }) =>
+      writeFile(
+        '.runtime/fc-warehouse-groups/browser-state.json',
+        JSON.stringify({ errors, requests }, null, 2),
+      ),
+    );
+  });
+  page.on('pageerror', (error) => errors.push(error.message));
+  const directory = [
+    { warehouse_code: 'Y204', warehouse_name: '上海分仓', base: '华东' },
+    { warehouse_code: 'N436', warehouse_name: '郑州DC仓', base: '郑州' },
+    { warehouse_code: 'A221', warehouse_name: '重庆前置仓', base: '西南' },
+  ];
+  await page.route('http://127.0.0.1:19503/**', async (route) => {
+    if (route.request().method() !== 'POST')
+      return route.fulfill({
+        contentType: 'text/html',
+        body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
+      });
+    const { queryId: id, parameters: values } = route.request().postDataJSON();
+    requests.push({ id: id.replace(/^base-warehouse\.(?!(directory))/u, ''), values });
+    const q = config.queries[id];
+    assert.ok(q, id);
+    let rows = [];
+    const warehouse = values.warehouse_code || 'A160';
+    const inventory = { A160: 1234, Y204: 39447, N436: 63461, A221: 39065 }[warehouse];
+    const sourceId = id.replace(/^base-warehouse\.(?!(directory))/u, '');
+    if (id === 'branch-warehouse.directory')
+      rows = [{ warehouse_code: 'A160', warehouse_name: '南京分仓', base: '郑州' }];
+    else if (id === 'base-warehouse.directory') rows = directory;
+    else if (sourceId.startsWith('source.'))
+      rows = [
+        {
+          ...Object.fromEntries(q.resultColumns.map((key) => [key, 0])),
+          day: '2026-11-17',
+          row_count: 1,
+          total_qty: inventory,
+          available_qty: inventory,
+          pack_unit_qty: 0,
+          freeze_qty: 0,
+        },
+      ];
+    else if (id.endsWith('.count') || id.endsWith('_count')) rows = [{ total: 0 }];
+    else if (sourceId === 'replenishment.detail.atomic')
+      rows = [
+        {
+          ...Object.fromEntries(q.resultColumns.map((key) => [key, null])),
+          warehouse_code: warehouse,
+          warehouse_name:
+            directory.find((row) => row.warehouse_code === warehouse)?.warehouse_name || '南京分仓',
+          sku: '10000034',
+          material_name: '切换范围测试商品',
+          inventory_qty: inventory,
+          available_qty: inventory,
+          recommended_qty: 10,
+          page_row_present: 1,
+          page_scope_total: 1,
+        },
+      ];
+    else if (!['summary.snapshot', 'summary.bootstrap'].includes(id))
+      rows = [
+        {
+          ...Object.fromEntries(q.resultColumns.map((key) => [key, 0])),
+          total_qty: inventory,
+          row_count: 1,
+        },
+      ];
+    return route.fulfill({
+      json: {
+        rows,
+        configVersion: 'fixture',
+        returnedColumns: q.resultColumns,
+        rejectedColumns: [],
+      },
+    });
+  });
+  await page.goto('http://127.0.0.1:19503/');
+  const typeTabs = page.getByRole('tablist', { name: '仓库类型' });
+  const branch = typeTabs.getByRole('tab', { name: '分仓', exact: true });
+  const base = typeTabs.getByRole('tab', { name: '基地仓', exact: true });
+  await expect(branch).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('button', { name: '选择分仓', exact: true }).click();
+  await expect(page.getByRole('option')).toHaveText([/全部分仓/, /南京分仓（A160）/]);
+  await page.locator('[role=option][data-value="A160"]').click();
+  await expect
+    .poll(
+      () =>
+        requests.filter((row) => row.id === 'replenishment.detail.atomic').at(-1)?.values
+          .warehouse_code,
+    )
+    .toBe('A160');
+  await branch.focus();
+  await branch.press('ArrowRight');
+  await expect(base).toBeFocused();
+  await expect(base).toHaveAttribute('aria-selected', 'false');
+  await base.press('Space');
+  await expect(base).toHaveAttribute('aria-selected', 'true');
+  const picker = page.getByRole('button', { name: '选择基地仓', exact: true });
+  await expect(picker).toContainText('上海分仓');
+  await expect
+    .poll(
+      () =>
+        requests.filter((row) => row.id === 'replenishment.detail.atomic').at(-1)?.values
+          .warehouse_code,
+    )
+    .toBe('Y204');
+  await picker.click();
+  await expect(page.getByRole('option')).toHaveText([
+    /上海分仓（Y204）/,
+    /郑州DC仓（N436）/,
+    /重庆前置仓（A221）/,
+  ]);
+  await page.locator('[role=option][data-value="N436"]').click();
+  await expect
+    .poll(() => requests.filter((row) => row.id === 'health.cards').at(-1)?.values.warehouse_code)
+    .toBe('N436');
+  await expect
+    .poll(
+      () =>
+        requests.filter((row) => row.id === 'replenishment.detail.atomic').at(-1)?.values
+          .warehouse_code,
+    )
+    .toBe('N436');
+  await expect(
+    page.locator('.kpi-card').filter({ hasText: '当前库存' }).locator('.kpi-value'),
+  ).toContainText('6.35');
+  await page.getByRole('button', { name: '当前订单', exact: true }).click();
+  await expect
+    .poll(
+      () =>
+        requests.filter((row) => row.id === 'branch-current-orders.page').at(-1)?.values
+          .warehouse_code,
+    )
+    .toBe('N436');
+  await page.getByRole('button', { name: '补货确认', exact: true }).click();
+  await branch.click();
+  await expect(page.getByRole('button', { name: '选择分仓', exact: true })).toContainText(
+    '南京分仓',
+  );
+  await expect
+    .poll(
+      () =>
+        requests.filter((row) => row.id === 'replenishment.detail.atomic').at(-1)?.values
+          .warehouse_code,
+    )
+    .toBe('A160');
+  await base.click();
+  await expect(picker).toContainText('郑州DC仓');
+  await picker.click();
+  await page.locator('[role=option][data-value="A221"]').click();
+  await expect
+    .poll(
+      () =>
+        requests.filter((row) => row.id === 'replenishment.detail.atomic').at(-1)?.values
+          .warehouse_code,
+    )
+    .toBe('A221');
+  assert.equal(requests.filter((row) => row.id === 'branch-warehouse.directory').length, 1);
+  assert.equal(requests.filter((row) => row.id === 'base-warehouse.directory').length, 1);
+  await page.setViewportSize({ width: 640, height: 900 });
+  await expect(typeTabs).toBeVisible();
+  assert.equal(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    true,
+  );
+  await mkdir('.runtime/fc-warehouse-groups', { recursive: true });
+  await page.screenshot({ path: '.runtime/fc-warehouse-groups/base-narrow.png', fullPage: true });
+  assert.deepEqual(errors, []);
 });

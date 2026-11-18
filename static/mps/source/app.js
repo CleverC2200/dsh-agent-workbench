@@ -1,6 +1,6 @@
 import { createDemandConfirmation, downloadCsv } from './demand-confirmation.js';
 import { createRelations } from './relations-view.js';
-import { mpsView, useMpsPart, useMpsNavigation } from './context.js';
+import { mpsView, useMpsPart, useMpsNavigation, askMpsQuestion } from './context.js';
 import { AuthorQuestions, useAuthorQuote } from '../../../business/shared/author-questions.js';
 import { usePageViewField } from '../../../business/shared/view-state.js';
 
@@ -29,14 +29,22 @@ function Mps() {
     (value) => (mpsSteps.some((item) => item.key === value) ? value : 'check'),
   );
   const bodyRef = y.useRef(null);
-  y.useEffect(() => {
-    bodyRef.current?.scrollTo({ top: 0 });
-  }, [step]);
   const [assistantDraft, setAssistantDraft] = usePageViewField(y, mpsView, 'assistantDraft', '');
   const [scope, setScope] = y.useState(null);
+  const scrollPositions = y.useRef(new Map());
+  const scrollKey = JSON.stringify([scope?.id, scope?.month, scope?.generation, step]);
+  const visibleScrollKey = y.useRef(scrollKey);
+  y.useLayoutEffect(() => {
+    visibleScrollKey.current = scrollKey;
+    const position = scrollPositions.current.get(scrollKey) ?? 0;
+    const restore = () => bodyRef.current?.scrollTo({ top: position });
+    restore();
+    const frame = requestAnimationFrame(restore);
+    return () => cancelAnimationFrame(frame);
+  }, [scrollKey]);
   const [adjusting, setAdjusting] = y.useState(false);
   const [relations, setRelations] = y.useState(null);
-  const actions = useAuthorQuote(y);
+  const actions = useAuthorQuote(y, askMpsQuestion);
   const select = y.useCallback(
     (key) => {
       if (adjusting || !mpsSteps.some((item) => item.key === key)) return;
@@ -67,6 +75,7 @@ function Mps() {
     draft: assistantDraft,
     onClearDraft: () => setAssistantDraft(''),
     actions,
+    expanded: true,
   });
   useMpsNavigation(
     y,
@@ -113,7 +122,12 @@ function Mps() {
       ),
       y.createElement(
         'div',
-        { className: 'ap-board-body', ref: bodyRef },
+        {
+          className: 'ap-board-body',
+          ref: bodyRef,
+          onScroll: (event) =>
+            scrollPositions.current.set(visibleScrollKey.current, event.currentTarget.scrollTop),
+        },
         y.createElement(DemandConfirmation, {
           active: true,
           onEditingChange: setAdjusting,

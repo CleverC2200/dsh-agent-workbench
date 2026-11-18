@@ -1,3 +1,6 @@
+import { createCapacityScopeView } from './capacity-scope-view.js';
+import { delistedDownloadColumns, delistedDownloadFields } from './delisted-report.js';
+import { useStepViewField } from './step-view-state.js';
 import { createCapacityReport } from './capacity-report-view.js';
 import {
   turnoverDaysSources,
@@ -11,7 +14,7 @@ const reportStatus = (row) => {
   const missing = reportMissing(row).join('；');
   const status = missing || (row.unfulfilled > 0 ? '供应受限，未满足量已单列' : '已评估');
   const result =
-    row.reportIssueKinds?.includes('下市品产生需求') && !status.includes('下市品产生需求')
+    row.reportIssueKinds?.includes('下市品人工正需求') && !status.includes('下市品人工正需求')
       ? `${status}；下市品产生需求`
       : status;
   const supply =
@@ -28,17 +31,25 @@ const fields = [
   'requiredProductionTons',
 ];
 
-export function workflowContextPreview(value) {
+function previewValue(value, rowLimit) {
   if (typeof value === 'string') return value.length > 200 ? value.slice(0, 200) + '…' : value;
-  if (Array.isArray(value)) return value.slice(0, 10).map(workflowContextPreview);
+  if (Array.isArray(value))
+    return value.slice(0, rowLimit).map((item) => previewValue(item, rowLimit));
   if (value && typeof value === 'object')
     return Object.fromEntries(
       Object.entries(value).flatMap(([key, item]) => [
-        [key, workflowContextPreview(item)],
-        ...(Array.isArray(item) && item.length > 10 ? [[key + 'Total', item.length]] : []),
+        [key, previewValue(item, rowLimit)],
+        ...(Array.isArray(item) && item.length > rowLimit ? [[key + 'Total', item.length]] : []),
       ]),
     );
   return value;
+}
+
+export function workflowContextPreview(value) {
+  for (const rowLimit of [10, 5, 2, 1, 0]) {
+    const preview = { ...previewValue(value, rowLimit), previewRowsPerGroup: rowLimit };
+    if (JSON.stringify(preview).length < 60000 || rowLimit === 0) return preview;
+  }
 }
 
 export function summarizeEvaluation(rows) {
@@ -126,6 +137,7 @@ export function planContext(plan, visible, { base, month }) {
 
 export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
   const CapacityReport = createCapacityReport(react, { downloadCsv, Dialog });
+  const CapacityScopeView = createCapacityScopeView(react, downloadCsv);
   const h = react.createElement;
   const plannedFields = [
     'demand',
@@ -157,6 +169,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     };
   };
   return function EvaluationOverview({
+    view,
     step,
     draft,
     currentEvaluation,
@@ -171,22 +184,63 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     numberText,
   }) {
     const [trace, setTrace] = react.useState(null);
-    const [skuPages, setSkuPages] = react.useState({});
-    const [detailPages, setDetailPages] = react.useState({});
-    const [expanded, setExpanded] = react.useState({});
+    const [skuPages, setSkuPages] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.skuPages',
+      {},
+    );
+    const [detailPages, setDetailPages] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.detailPages',
+      {},
+    );
+    const [expanded, setExpanded] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.expanded',
+      {},
+    );
     const [reportOpen, setReportOpen] = react.useState(null);
-    const [detailSelection, setDetailSelection] = react.useState({});
-    const [issueKind, setIssueKind] = react.useState('');
+    const [detailSelection, setDetailSelection] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.detailSelection',
+      {},
+    );
+    const [issueKind, setIssueKind] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.issueKind',
+      '',
+    );
     const plan = currentEvaluation?.result.plan;
     const stamp = currentEvaluation?.at;
+    const inputScope = JSON.stringify([
+      stamp,
+      filters.month,
+      filters.base,
+      filters.category,
+      filters.search,
+      filters.onlyMissing,
+    ]);
+    const [shownInput, setShownInput] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.input',
+      inputScope,
+    );
     react.useEffect(() => {
+      if (shownInput === inputScope) return;
+      setShownInput(inputScope);
       setTrace(null);
       setSkuPages({});
       setReportOpen(null);
       setDetailSelection({});
       setDetailPages({});
       setIssueKind('');
-    }, [stamp, filters.month, filters.base, filters.category, filters.search, filters.onlyMissing]);
+    }, [inputScope, shownInput, setShownInput]);
     const physicalRows = react.useMemo(() => {
       if (!plan) return [];
       const rows = [...plan.rows];
@@ -242,7 +296,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     );
     const issueKinds = [
       ...new Set([
-        '下市品产生需求',
+        '下市品人工正需求',
         '缺产线产能',
         '缺调拨关系',
         '缺件吨系数',
@@ -306,7 +360,11 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         'details',
         {
           className: 'wf-plan-disclosure',
-          onToggle: (event) => setExpanded((value) => ({ ...value, [name]: event.target.open })),
+          open: Boolean(expanded[name]),
+          onToggle: (event) => {
+            if (event.target === event.currentTarget)
+              setExpanded((value) => ({ ...value, [name]: event.currentTarget.open }));
+          },
         },
         h('summary', null, name, h('span', null, `${count}条`)),
         expanded[name] ? body() : null,
@@ -359,6 +417,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             ? '同基地自身历史＋替换品历史×替换系数；同码一次、不递归'
             : '自身历史，同码只计一次',
         ...Object.fromEntries(plannedFields.map((field, index) => [labels[index], row[field]])),
+        ...delistedDownloadFields(row),
         需求已满足量: row.fulfilledDemand,
         ODM默认计划到货吨数: row.odmArrivalTons,
         ODM估算说明: row.odmBasis,
@@ -405,6 +464,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           '替换系数',
           '历史参考口径',
           ...labels,
+          ...delistedDownloadColumns,
           '需求已满足量',
           'ODM默认计划到货吨数',
           'ODM估算说明',
@@ -428,7 +488,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
       const missing = reportMissing(row).join('；');
       const explanation =
         field === 'closingInventory'
-          ? `可用量=${value(row.openingInventory)}+${value(row.mainPlan)}+${value(row.odmArrival)}+${value(row.transferIn)}-${value(row.transferOut)}；扣除本期已满足需求${value(row.fulfilledDemand)}，期末=${value(row.closingInventory)}。未满足需求单列，不自动修改下月原需求。`
+          ? `可用量=${value(row.openingInventory)}+既有生产入库${value(row.existingProductionInbound)}+既有在途入库${value(row.existingInTransitInbound)}+本期新增生产${value(row.mainPlan)}+${value(row.odmArrival)}+${value(row.transferIn)}-${value(row.transferOut)}；扣除本期发货${value(row.fulfilledDemand)}，期末=${value(row.closingInventory)}。未满足需求单列，不自动修改下月原需求。`
           : field === 'odmArrival'
             ? `ODM默认计划到货量按件/月估算：单基地净缺口=max(0,有效需求+目标期末库存-可用期初库存)；多基地按同一供方SKU月汇总净缺口，在收货点记录一次到货，后续逐段调拨。当前收货点计划到货=${value(row.odmArrival)}件。内部排产为0；${row.odmBasis || '默认估算，供方真实能力、交期及实际到货尚未验证'}。`
             : field === 'mainPlan'
@@ -739,8 +799,28 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         : h(
             react.Fragment,
             null,
+            h(CapacityScopeView, {
+              plan,
+              month: filters.month || plan.capacityReport?.referenceMonth,
+              filters,
+              view,
+              active,
+              card,
+              table,
+              numberText,
+            }),
             step === 'capacity'
-              ? h(CapacityReport, { plan, draft, stamp, filters, card, table, numberText, active })
+              ? h(CapacityReport, {
+                  view,
+                  plan,
+                  draft,
+                  stamp,
+                  filters,
+                  card,
+                  table,
+                  numberText,
+                  active,
+                })
               : null,
             card(
               '问题分类与补充清单',
@@ -774,6 +854,8 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                           '需求数量',
                           '源表',
                           '字段',
+                          '原始值',
+                          '计算用值',
                           '源值与证据',
                           '核对处理',
                           '处理性质',
@@ -795,6 +877,8 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                           需求数量: row.demand,
                           源表: row.sourceTable,
                           字段: row.sourceFields,
+                          原始值: row.rawValue === null ? '缺失或无效' : row.rawValue,
+                          计算用值: row.calculationValue,
                           源值与证据: row.reason,
                           核对处理: row.action,
                           根因月份: row.rootMonth,
@@ -803,11 +887,17 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                           根因字段: row.rootSourceFields,
                           处理性质: row.blocking
                             ? '仅影响对应基地SKU月份，补齐后重算'
-                            : row.kind === '拆分依据待补'
-                              ? '来源缺项提示，不阻断当前零需求'
-                              : row.kind === '缺件吨系数'
-                                ? '来源缺项提示，不阻断当前件数计划；吨数报告待补'
-                                : '下市风险提示，原需求保留',
+                            : row.kind === '负库存归零'
+                              ? '库存计算用值已归0；原始不足及修正历史保留'
+                              : row.kind === '拆分依据待补'
+                                ? '来源缺项提示，不阻断当前零需求'
+                                : row.kind === '缺件吨系数'
+                                  ? '来源缺项提示，不阻断当前件数计划；吨数报告待补'
+                                  : row.kind === '下市品停止自动补货'
+                                    ? '自动新增需求及补货已停止，库存继续滚动'
+                                    : row.kind === '下市品日均缺失'
+                                      ? '仅日均计算补0，来源状态保留'
+                                      : '有效人工正需求保留，由人决定是否停用',
                         })),
                       ),
                   },

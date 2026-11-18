@@ -136,17 +136,17 @@ export function createAgentQueries(
         return reads;
       })())
     : pageSummaries;
-  const readSnapshot = async (): Promise<DailySummarySnapshot> => {
+  const readSnapshot = async (scopeSnapshotId?: string): Promise<DailySummarySnapshot> => {
     const readIdentity = identityGeneration;
     if (selectedIdentity !== identityGeneration) {
       selectedSnapshot = undefined;
       preloaded = undefined;
       selectedIdentity = identityGeneration;
     }
-    if (selectedSnapshot?.kind === 'ready') return selectedSnapshot;
+    if (!scopeSnapshotId && selectedSnapshot?.kind === 'ready') return selectedSnapshot;
     if (!config.dailySummary) return { kind: 'unavailable' };
-    const bootstrapId = config.dailySummary.bundle?.bootstrapQueryId;
-    const snapshotId = bootstrapId ?? config.dailySummary.snapshotQueryId;
+    const bootstrapId = scopeSnapshotId ? undefined : config.dailySummary.bundle?.bootstrapQueryId;
+    const snapshotId = scopeSnapshotId ?? bootstrapId ?? config.dailySummary.snapshotQueryId;
     if (typeof snapshotId !== 'string' || !config.queries[snapshotId])
       throw Error('SUMMARY_SNAPSHOT_NOT_CONFIGURED');
     const key = JSON.stringify([
@@ -163,7 +163,8 @@ export function createAgentQueries(
       snapshot = undefined;
     }
     if (!snapshot) {
-      const metadataColumns = config.queries[config.dailySummary.snapshotQueryId].resultColumns;
+      const metadataColumns =
+        config.queries[scopeSnapshotId ?? config.dailySummary.snapshotQueryId].resultColumns;
       const result = client
         .read(snapshotId, {}, { requiredColumns: metadataColumns })
         .then((response: any): SummaryRead => {
@@ -227,13 +228,31 @@ export function createAgentQueries(
 
     if (selectedRead.snapshot.kind === 'unavailable')
       snapshot.expiresAt = Math.min(snapshot.expiresAt, Date.now() + 45000);
-    selectedSnapshot = selectedRead.snapshot;
-    preloaded = selectedRead.preloaded;
+    if (!scopeSnapshotId) {
+      selectedSnapshot = selectedRead.snapshot;
+      preloaded = selectedRead.preloaded;
+    }
     return selectedRead.snapshot;
   };
   const selectRead = async (id: string, values: Record<string, unknown>) => {
+    const scoped = config.scopedQueryRoutes?.find((route) => {
+      const value = values[route.parameter];
+      return (
+        typeof value === 'string' &&
+        route.values.includes(value) &&
+        config.queries[route.prefix + id]
+      );
+    });
+    if (scoped) {
+      const queryId = scoped.prefix + id;
+      id = queryId;
+      values = { ...values, ...config.queries[queryId].inputOverrides };
+    }
     if (!config.dailySummary || !config.queries[id]?.summaryRoute) return { id, values };
-    const snapshot = await readSnapshot();
+    const scopeSnapshotId = config.queries[id].summaryRoute.snapshotQueryId;
+    const snapshot = await readSnapshot(scopeSnapshotId);
+    if (scopeSnapshotId && snapshot.kind === 'unavailable')
+      throw Object.assign(Error('当前范围的汇总数据尚未就绪'), { code: 'SUMMARY_NOT_AVAILABLE' });
     const selected = dailySummaryQuery(config.queries[id], snapshot, values);
     if (!selected && config.queries[id].summaryRoute.required === true)
       throw Object.assign(Error('当前范围的汇总数据尚未就绪'), {

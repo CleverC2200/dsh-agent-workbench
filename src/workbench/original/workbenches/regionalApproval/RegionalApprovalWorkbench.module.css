@@ -2166,7 +2166,7 @@
 }
 .root .dimensionTabs :global(.arco-btn[role='tab']) {
   height: 56px;
-  min-width: 72px;
+  min-width: 64px;
   min-height: 56px;
   padding-inline: 14px;
   line-height: 22px;
@@ -2256,16 +2256,16 @@
   min-height: 44px;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
+  gap: 0 8px;
 }
 .root .dimensionControls {
-  flex: 1 1 480px;
+  flex: 1 1 max-content;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 .root .categorySwitch {
   flex: 0 0 auto;
-  padding-right: 12px;
+  padding-right: 8px;
   border-right: 1px solid var(--workbench-border);
   color: var(--workbench-body);
   font-size: 12px;
@@ -2281,7 +2281,7 @@
 .root .dimensionTabs :global(.arco-btn[role='tab']) {
   height: 44px;
   min-height: 44px;
-  padding: 0 12px;
+  padding: 0 10px;
   font-size: 12px;
 }
 .root .toolbarActions,
@@ -2391,18 +2391,6 @@
   }
 }
 @container (max-width: 620px) {
-  .root .dimensionControls {
-    flex-basis: 100%;
-  }
-  .root .dimensionTabs {
-    flex: 1;
-  }
-  .root .dimensionTabs :global(.arco-btn[role='tab']) {
-    padding-inline: 10px;
-  }
-  .root .toolbarActions {
-    width: 100%;
-  }
   .root .liveFilterRow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
