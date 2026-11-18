@@ -20,6 +20,7 @@ type PendingValues = Record<string, Record<string, string>>;
 
 export function GroupSkuSummary(props: {
   members: readonly RegionalApprovalLiveRow[];
+  categoryName?: string;
   approvalRole?: ApprovalStageId;
   pendingValues?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   skusByPlan: Readonly<Record<string, GeaSalesPlanSku[]>>;
@@ -190,7 +191,9 @@ export function GroupSkuSummary(props: {
       return null;
     }
   }, [sources, approvalRole, pendingValues]);
-  const rows = summary ?? [];
+  const rows = (summary ?? []).filter(
+    (row) => props.categoryName === undefined || row.categoryName === props.categoryName,
+  );
   const categories = new Map<string, GroupSkuSummaryRow[]>();
   for (const row of rows)
     categories.set(row.categoryName, [...(categories.get(row.categoryName) ?? []), row]);
@@ -207,7 +210,7 @@ export function GroupSkuSummary(props: {
       aria-label={groupText('title')}
     >
       <div className={styles.groupScope}>
-        {groupText('scope', { plans: members.length, skus: summary?.length ?? '—' })}
+        {groupText('scope', { plans: members.length, skus: summary ? rows.length : '—' })}
       </div>
       {editable && <div className={styles.groupScope}>{text('allocation')}</div>}
       {draftReadFailed && (

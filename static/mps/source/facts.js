@@ -1,3 +1,4 @@
+import { completeHistoryMonths } from 'dsh-agent-manage/mps-compute/history';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { sourceAmount } from './source-money.js';
 import { call } from '../../../business/shared/channel.js';
@@ -19,16 +20,44 @@ const text = (value) => {
   if (typeof value !== 'string') throw Error('事实来源返回了无效维度');
   return value;
 };
+const reportQuantityPriority = 2;
+const reportAmountPriority = 1;
+
 export async function readFactMonth(type, month, signal) {
   if (!['report', 'history', 'plan-quantity'].includes(type)) throw Error('该事实来源尚未接入');
-  const result = await readFacts('facts.' + type, { month: month + '-01' }, signal, type, month);
-  return type === 'report'
-    ? { ...result, amounts: await readReportAmounts(month, signal) }
-    : result;
+  return readFacts('facts.' + type, { month: month + '-01' }, signal, type, month);
 }
 export async function readHistoryAnnual(month, signal) {
   const period = previousFiscalYear(month);
   return readFacts('facts.history-annual', period, signal, 'historyAnnual');
+}
+export async function readHistoryWindow(month, signal) {
+  const months = completeHistoryMonths(
+    month,
+    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+  );
+  const periods = [];
+  for (let offset = 0; offset < months.length; offset += 4) {
+    periods.push(
+      ...(await Promise.all(
+        months.slice(offset, offset + 4).map(async (month) => {
+          try {
+            return { month, ...(await readFactMonth('history', month, signal)) };
+          } catch (error) {
+            if (signal?.aborted) throw error;
+            return {
+              month,
+              rows: [],
+              error: error.message.startsWith('数据读取失败')
+                ? `${error.message}；实际原因待核`
+                : error.message,
+            };
+          }
+        }),
+      )),
+    );
+  }
+  return { periods };
 }
 async function readFacts(id, parameters, signal, type, month) {
   const element = document.getElementById('agent-sql-config');
@@ -56,7 +85,13 @@ async function readFacts(id, parameters, signal, type, month) {
     const result = await client.readAll(
       id,
       { ...parameters, page_size: 5000, offset: 0 },
-      { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
+      {
+        signal,
+        keyFields: definition.grain,
+        requiredColumns: definition.columns,
+        maxRows: 100000,
+        priority: type === 'report' ? reportQuantityPriority : undefined,
+      },
     );
     if (type === 'shipment' || type === 'inventoryTargets')
       return {
@@ -202,19 +237,21 @@ const validShipmentDate = (value) =>
   Number.isFinite(Date.parse(value + 'T00:00:00Z')) &&
   new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
 
-export async function readLatestShipmentDate(month, signal) {
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw Error('发货统计月份无效');
-  const [year, monthNumber] = month.split('-').map(Number);
-  const monthEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+export async function readLatestShipmentDate(through, signal) {
+  if (!validShipmentDate(through)) throw Error('发货统计截止日期无效');
+  const month = through.slice(0, 7);
   const result = await readFacts(
     'facts.shipment-latest',
-    { month: month + '-01', month_end: monthEnd },
+    { month: month + '-01', month_end: through },
     signal,
     'shipmentDate',
   );
   if (result.rows.length !== 1) throw Error('最新发货日期来源未返回唯一结果');
   const date = result.rows[0].latest_date;
-  if (date !== null && (!validShipmentDate(date) || !date.startsWith(month + '-')))
+  if (
+    date !== null &&
+    (!validShipmentDate(date) || !date.startsWith(month + '-') || date > through)
+  )
     throw Error('源端最新发货日期无效或不属于当前统计月份');
   return {
     date,
@@ -339,6 +376,7 @@ export async function readReportAmounts(month, signal) {
         keyFields: definition.grain,
         requiredColumns: ['belong_base', 'material_code', 'ycplanamount', 'monthamount'],
         maxRows: 100000,
+        priority: reportAmountPriority,
       },
     );
     return {

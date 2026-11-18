@@ -18842,6 +18842,20 @@ body {
   color: var(--v02-warning);
   background: var(--v02-warning-soft);
 }
+.achievement-status.level-watch {
+  color: color-mix(in oklab, var(--v02-warning), black 4%);
+}
+.warning-text {
+  color: var(--v02-warning);
+}
+@media (forced-colors: active) {
+  .warning-text,
+  .analysis-workspace .level-watch,
+  .intelligent-workspace-page .level-watch {
+    color: CanvasText;
+    background: Canvas;
+  }
+}
 .analysis-workspace .status-ok,
 .analysis-workspace .status-bad,
 .analysis-workspace .status-neutral,

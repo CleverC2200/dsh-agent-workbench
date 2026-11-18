@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, symlink, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -207,4 +207,54 @@ test('a hidden declared page leaves its package and interpreter resource install
     ).status,
     200,
   );
+});
+
+test('serves the published branch inventory SQL configuration through the page host', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'workbench-fc-page-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await copyFile(resolve('business/inventory-fc/plugin.json'), join(root, 'plugin.json'));
+  await copyFile(resolve('business/inventory-fc/page.json'), join(root, 'page.json'));
+  await copyFile(resolve('business/inventory-fc/sql.config.json'), join(root, 'sql.config.json'));
+  await writeFile(
+    join(root, 'index.html'),
+    '<html><head></head><body>Branch inventory</body></html>',
+  );
+  const pages = new HtmlPages(context(t), '', async () => '');
+  await pages.registerHtml([root]);
+  const request = new Request('https://localhost/api/agent-workbench/html?id=inventory-fc');
+  const response = await pages.fetch(request);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /id="agent-sql-config"/);
+  assert.match(html, /"base-warehouse.summary.snapshot"/);
+  assert.match(html, /Branch inventory/);
+});
+
+test('keeps the SQL configuration limit scoped to the branch inventory host page', async (t) => {
+  const pages = new HtmlPages(context(t), '', async () => '');
+  for (const [id, contentBytes] of [
+    ['inventory-fc', 8_000_000],
+    ['inventory-dealer', 5_000_000],
+  ]) {
+    const root = await mkdtemp(join(tmpdir(), 'workbench-sql-limit-'));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    await writeFile(
+      join(root, 'plugin.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        id,
+        name: id,
+        html: 'index.html',
+        sqlConfig: 'sql.config.json',
+      }),
+    );
+    await writeFile(join(root, 'index.html'), '<html><body>fixture</body></html>');
+    const config = JSON.stringify({ schemaVersion: 1, agentId: id, queries: {}, templates: {} });
+    await writeFile(join(root, 'sql.config.json'), config.padEnd(contentBytes + 1));
+    await pages.registerHtml([root]);
+    await assert.rejects(
+      pages.fetch(new Request(`https://localhost/api/agent-workbench/html?id=${id}`)),
+      { message: 'SQL_CONFIG_TOO_LARGE' },
+    );
+  }
 });

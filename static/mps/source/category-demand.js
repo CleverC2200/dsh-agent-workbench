@@ -2,7 +2,7 @@ import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { computeMpsCategoryDemand } from 'dsh-agent-manage/mps-compute/category-demand';
 import {
   createSourceProductMatcher,
-  historyDependentCodes,
+  createHistoryDependentLookup,
   sourceCheckRows,
   sourceDimensions,
   sourceProductMappings,
@@ -59,6 +59,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
     ['business', 'local-file'].includes(shipmentSnapshot.sourceKind) &&
     ['ok', 'partial', 'local-file'].includes(shipmentSnapshot.status);
   const productMappings = sourceProductMappings(draft.products, draft.productRaw);
+  const historyDependents = createHistoryDependentLookup(productMappings);
   const matchProduct = createSourceProductMatcher(productMappings);
   const sourceRows = shipmentReady ? (shipmentSnapshot.rows ?? []) : [];
   const excluded = sourceRows.flatMap((row) => {
@@ -126,7 +127,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
     const matched = matchProduct(fact.row['产品编码']);
     const codes =
       fact.source === '上一财年发货'
-        ? historyDependentCodes(productMappings, fact.row['产品编码'])
+        ? historyDependents(fact.row['产品编码'])
         : matched.currentCode
           ? [matched.currentCode]
           : productMappings
@@ -193,7 +194,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
       const products = productMappings;
       const possible =
         source === '上一财年发货'
-          ? historyDependentCodes(productMappings, row['产品编码'])
+          ? historyDependents(row['产品编码'])
           : matched.currentCode
             ? [matched.currentCode]
             : products

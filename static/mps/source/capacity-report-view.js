@@ -1,3 +1,4 @@
+import { useStepViewField } from './step-view-state.js';
 import { defaultProductionCalendar, productionCalendarRule } from './production-calendar.js';
 
 const offset = (month, count) => {
@@ -8,16 +9,68 @@ const offset = (month, count) => {
 
 export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCsv }) {
   const h = react.createElement;
-  return function CapacityReport({ plan, draft, stamp, filters, card, table, numberText, active }) {
-    const [rulesOpen, setRulesOpen] = react.useState(false);
-    const [openSeries, setOpenSeries] = react.useState('');
-    const [openLines, setOpenLines] = react.useState({});
-    const [openTransfers, setOpenTransfers] = react.useState({});
-    const [issuePage, setIssuePage] = react.useState(0);
-    react.useEffect(
-      () => setIssuePage(0),
-      [filters.month, filters.base, filters.category, filters.search],
+  return function CapacityReport({
+    plan,
+    draft,
+    stamp,
+    filters,
+    card,
+    table,
+    numberText,
+    active,
+    view,
+  }) {
+    const [rulesOpen, setRulesOpen] = useStepViewField(
+      react,
+      view,
+      'CapacityReport.rulesOpen',
+      false,
     );
+    const [openSeries, setOpenSeries] = useStepViewField(
+      react,
+      view,
+      'CapacityReport.openSeries',
+      '',
+    );
+    const [openLines, setOpenLines] = useStepViewField(react, view, 'CapacityReport.openLines', {});
+    const [openTransfers, setOpenTransfers] = useStepViewField(
+      react,
+      view,
+      'CapacityReport.openTransfers',
+      {},
+    );
+    const [issuePage, setIssuePage] = useStepViewField(react, view, 'CapacityReport.issuePage', 0);
+    const inputScope = JSON.stringify([
+      filters.month,
+      filters.base,
+      filters.category,
+      filters.search,
+    ]);
+    const [shownInput, setShownInput] = useStepViewField(
+      react,
+      view,
+      'CapacityReport.input',
+      inputScope,
+    );
+    react.useEffect(() => {
+      if (shownInput === inputScope) return;
+      setShownInput(inputScope);
+      setIssuePage(0);
+    }, [shownInput, inputScope, setShownInput]);
+    const [disclosures, setDisclosures] = useStepViewField(
+      react,
+      view,
+      'CapacityReport.disclosures',
+      {},
+    );
+    const disclosure = (key) => ({
+      className: 'wf-plan-disclosure',
+      open: Boolean(disclosures[key]),
+      onToggle: (event) => {
+        if (event.target === event.currentTarget)
+          setDisclosures((current) => ({ ...current, [key]: event.currentTarget.open }));
+      },
+    });
     const report = plan.capacityReport;
     if (!report) return null;
     const downloadCsv = (name, columns, rows) =>
@@ -419,7 +472,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
           ),
           h(
             'details',
-            { className: 'wf-plan-disclosure' },
+            disclosure('issues'),
             h('summary', null, `查看${month}缺项明细 ${shownIssues.length}项`),
             shownIssues.length
               ? table(
@@ -542,7 +595,11 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                   {
                     key: period,
                     className: 'wf-plan-disclosure',
-                    onToggle: (event) => toggle(setOpenTransfers, period, event.target.open),
+                    open: Boolean(openTransfers[period]),
+                    onToggle: (event) => {
+                      if (event.target === event.currentTarget)
+                        toggle(setOpenTransfers, period, event.currentTarget.open);
+                    },
                   },
                   h('summary', null, `${period} · ${rows.length}条调拨`),
                   openTransfers[period]
@@ -556,6 +613,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                             {
                               key,
                               className: 'wf-plan-disclosure',
+                              open: Boolean(openTransfers[key]),
                               onToggle: (event) => {
                                 event.stopPropagation();
                                 toggle(setOpenTransfers, key, event.target.open);
@@ -628,7 +686,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
           ),
           h(
             'details',
-            { className: 'wf-plan-disclosure' },
+            disclosure('annualIssues'),
             h(
               'summary',
               null,
@@ -651,7 +709,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
           report.annualSource.unmappedCount
             ? h(
                 'details',
-                { className: 'wf-plan-disclosure' },
+                disclosure('unmappedAnnual'),
                 h(
                   'summary',
                   null,
@@ -723,7 +781,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         ),
       ),
       card(
-        '产线产能明细',
+        '物理隧道产能明细',
         h(
           react.Fragment,
           null,
@@ -737,12 +795,16 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                 {
                   key: base,
                   className: 'wf-plan-disclosure',
-                  onToggle: (event) => toggle(setOpenLines, base, event.target.open),
+                  open: Boolean(openLines[base]),
+                  onToggle: (event) => {
+                    if (event.target === event.currentTarget)
+                      toggle(setOpenLines, base, event.currentTarget.open);
+                  },
                 },
-                h('summary', null, `${base} · ${lines.length}条产线`),
+                h('summary', null, `${base} · ${lines.length}条物理隧道`),
                 openLines[base]
                   ? table(
-                      '物理产线产能明细',
+                      '物理隧道产能明细',
                       [
                         '车间',
                         '隧道号',
@@ -759,7 +821,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                           info?.workshop || '待补',
                           info?.tunnel || '待补',
                           info?.specification || '待补',
-                          row.name,
+                          info?.productionLines?.join('、') || '产线归属待补',
                           numberText(row.dailyTons),
                           row.days ?? '待补',
                           numberText(row.capacity),

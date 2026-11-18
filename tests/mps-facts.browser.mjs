@@ -20,6 +20,10 @@ const rate = (month, code, amount, extra = {}) => ({
   ...extra,
 });
 async function assessment(frame, month = '2026-10', codes = ['001']) {
+  await frame
+    .locator('body')
+    .page()
+    .clock.setFixedTime(new Date(`${month}-15T12:00:00+08:00`));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill(month);
   await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
@@ -297,7 +301,7 @@ test('truncated facts are rejected and a late historical period cannot overwrite
     frame.getByRole('region', { name: '计划提报数据' }).getByRole('alert'),
   ).toContainText('分页与计数不一致');
   const history = frame.getByRole('region', { name: '历史同期发货' });
-  await expect.poll(() => historyCalls).toBe(1);
+  await expect.poll(() => historyCalls).toBeGreaterThanOrEqual(1);
   await history.getByLabel('历史同期').selectOption('2');
   await expect(history.getByText('业务来源', { exact: true })).toBeVisible();
   release();
@@ -453,7 +457,7 @@ test('an annual-source denial is visible for its complete fiscal scope while sal
     await expectWorkflowExportValue(
       frame,
       '基地甲 001 ' + month + ' 上一财年发货数量 计算过程',
-      '—',
+      '0',
     );
   }
   const diagnostics = frame.getByRole('region', { name: '逐期来源诊断', exact: true });
@@ -589,7 +593,8 @@ test('batched plan loading and separate fiscal-year failure or partial emptiness
       .filter({ has: frame.getByRole('cell', { name: new RegExp('^' + month) }) });
   await expect(row('销售提报占比', '2027-07')).toContainText('读取中');
   await expect(row('上一财年发货', '2027-06')).toContainText('暂无数据权限');
-  await expect(row('上一财年发货', '2027-07')).toContainText('未读取');
+  await expect(row('上一财年发货', '2027-07')).toContainText('暂无数据权限');
+  await expect(row('上一财年发货', '2027-07')).toContainText('2025-07-01至2026-06-30');
   await expect(row('上一财年发货', '2027-07').getByRole('cell').nth(3)).toHaveText('—');
   await expect
     .poll(() => Object.keys(contexts.at(-1)?.parts ?? {}).sort())
@@ -644,6 +649,7 @@ test('history diagnostics retain complete quantity coverage when only income is 
     ];
     return response;
   });
+  await frame.locator('body').page().clock.setFixedTime(new Date('2026-10-15T12:00:00+08:00'));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
   await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();

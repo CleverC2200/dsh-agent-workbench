@@ -1,9 +1,15 @@
+import { adjustmentReasons } from './local-draft.js';
+
 export function createBatchEdit(react) {
   const h = react.createElement;
+  const reasons = adjustmentReasons;
   function useBatchEdit({ scope, onEditingChange, requireReason = false, onStart, onCancel }) {
     const [active, setActive] = react.useState(false);
     const [pending, setPending] = react.useState({});
     const [reason, setReason] = react.useState('');
+    const [reasonDetail, setReasonDetail] = react.useState('');
+    const detailRef = react.useRef(null);
+    const errorId = react.useId();
     const [error, setError] = react.useState('');
     const [notice, setNotice] = react.useState('');
     const commit = react.useRef(null);
@@ -14,6 +20,7 @@ export function createBatchEdit(react) {
       setActive(false);
       setPending({});
       setReason('');
+      setReasonDetail('');
       setError('');
     };
     react.useEffect(() => {
@@ -63,11 +70,15 @@ export function createBatchEdit(react) {
           }
           return { ...entry, id, value };
         });
-        if (requireReason && entries.length && !reason.trim()) {
+        if (requireReason && entries.length && !reasons.includes(reason)) {
           reasonRef.current?.focus();
-          throw Error('请填写本次调整原因。');
+          throw Error('请选择本次调整原因。');
         }
-        commit.current?.(entries, reason.trim());
+        if (requireReason && entries.length && reason === '其他' && !reasonDetail.trim()) {
+          detailRef.current?.focus();
+          throw Error('请填写其他原因说明。');
+        }
+        commit.current?.(entries, reason === '其他' ? `其他：${reasonDetail.trim()}` : reason);
         finish();
         setNotice('已保存到本地草稿');
       } catch (failure) {
@@ -78,6 +89,13 @@ export function createBatchEdit(react) {
       active,
       pending,
       reason,
+      reasonDetail,
+      detailRef,
+      errorId,
+      setReasonDetail: (value) => {
+        setReasonDetail(value);
+        setError('');
+      },
       error,
       notice,
       commit,
@@ -90,6 +108,7 @@ export function createBatchEdit(react) {
         onStart?.();
         setPending({});
         setReason('');
+        setReasonDetail('');
         setError('');
         setNotice('');
         setActive(true);
@@ -138,13 +157,37 @@ export function createBatchEdit(react) {
                 'label',
                 null,
                 '调整原因',
+                h(
+                  'select',
+                  {
+                    ref: batch.reasonRef,
+                    'aria-label': '批量调整原因',
+                    value: batch.reason,
+                    required: true,
+                    'aria-invalid': Boolean(batch.error && !batch.reason),
+                    'aria-describedby': batch.error && !batch.reason ? batch.errorId : undefined,
+                    onChange: (event) => batch.setReason(event.target.value),
+                  },
+                  h('option', { value: '' }, '请选择调整原因'),
+                  reasons.map((value) => h('option', { key: value, value }, value)),
+                ),
+              ),
+            requireReason &&
+              batch.reason === '其他' &&
+              h(
+                'label',
+                null,
+                '其他原因说明',
                 h('input', {
-                  ref: batch.reasonRef,
-                  'aria-label': '批量调整原因',
-                  value: batch.reason,
-                  maxLength: 1000,
-                  placeholder: '本次修改的原因',
-                  onChange: (event) => batch.setReason(event.target.value),
+                  ref: batch.detailRef,
+                  'aria-label': '其他原因说明',
+                  required: true,
+                  maxLength: 997,
+                  value: batch.reasonDetail,
+                  'aria-invalid': Boolean(batch.error && !batch.reasonDetail.trim()),
+                  'aria-describedby':
+                    batch.error && !batch.reasonDetail.trim() ? batch.errorId : undefined,
+                  onChange: (event) => batch.setReasonDetail(event.target.value),
                 }),
               ),
             hint && h('span', { className: 'dc-card-note' }, hint),
@@ -156,7 +199,8 @@ export function createBatchEdit(react) {
             { ref: batch.trigger, className: 'dc-primary', disabled, onClick: batch.start },
             '调整',
           ),
-      batch.error && h('p', { role: 'alert', className: 'mps-batch-feedback' }, batch.error),
+      batch.error &&
+        h('p', { id: batch.errorId, role: 'alert', className: 'mps-batch-feedback' }, batch.error),
       !batch.error &&
         batch.notice &&
         h('span', { role: 'status', className: 'mps-edit-notice' }, batch.notice),

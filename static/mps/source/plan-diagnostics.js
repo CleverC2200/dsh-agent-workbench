@@ -1,3 +1,4 @@
+import { delistedReportIssues } from './delisted-report.js';
 import { canonicalBaseName, latestTransferSnapshot } from './relations.js';
 import { transferSupplyPaths } from 'dsh-agent-manage/mps-compute/plan';
 import { categoryDemandMissing } from './category-demand.js';
@@ -78,7 +79,7 @@ export function attachPlanReport(
       'ai_db.agents_dim_product_list_mi / ai_db.agents_dim_material_prod_sales_info_d';
     const weightFields =
       'target_base / material_code / net_weight / weight_unit / measure_unit；旧来源：material_code / channel_name / ton_per_piece';
-    const add = (kind, reason, sourceTable, sourceFields, action, blocking = true) => {
+    const add = (kind, reason, sourceTable, sourceFields, action, blocking = true, values = {}) => {
       issues.push({
         month: row.month,
         base: row.base,
@@ -96,6 +97,7 @@ export function attachPlanReport(
         action,
         blocking,
         ownResourceCount: own.length,
+        ...values,
       });
     };
     if (row.missing?.historyQuantity?.includes('替换系数缺失、冲突或无效'))
@@ -163,6 +165,19 @@ export function attachPlanReport(
           : '先处理上月该基地SKU的需求、库存或产能异常，取得实际期末结存后重新评估',
       );
     }
+    for (const issue of row.inventoryIssues ?? [])
+      add(
+        '负库存归零',
+        `${issue.metric === 'openingInventory' ? '期初库存' : '预测期末库存'}原始值${issue.rawValue}，计算用值${issue.calculationValue}；${issue.reason}`,
+        issue.metric === 'openingInventory' && row.month === plan.context.month
+          ? '本月预估发货 / 前月结存'
+          : '库存收支计算',
+        issue.metric === 'openingInventory'
+          ? 'openingInventory / rawOpeningInventory'
+          : 'projectedClosing / rawProjectedClosing',
+        '已逐SKU归0后承接汇总；原始库存、修正历史及供需不足继续保留，原因待核',
+        false,
+      );
     if (row.planMissing.includes('缺目标库存'))
       add(
         '缺目标库存',
@@ -184,15 +199,11 @@ export function attachPlanReport(
         '人工补齐提报及历史拆分依据，供后续非零需求使用；本轮零需求继续计算',
         false,
       );
-    if (retired && row.demand > 0)
-      add(
-        '下市品产生需求',
-        `${sourceMonth}调拨来源标注下市品，${row.month}仍有正需求${row.demand}件；原需求保留`,
-        'ai_db.agents_dim_transfer_direction_mi',
-        'stat_period / target_base / material_code / transfer_tag',
-        '核对下市状态及需求是否有效，确认后调整需求或维护来源',
-        false,
-      );
+    for (const issue of delistedReportIssues([row], plan.context))
+      add(issue.kind, issue.reason, issue.sourceTable, issue.sourceFields, issue.action, false, {
+        rawValue: issue.rawValue,
+        calculationValue: issue.calculationValue,
+      });
     if (row.planMissing.includes('缺唯一有效件吨系数'))
       add(
         '缺件吨系数',

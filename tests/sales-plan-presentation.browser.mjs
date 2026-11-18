@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { resolve } from 'node:path';
+import { delimiter, resolve } from 'node:path';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 
@@ -107,6 +107,7 @@ const baseSkuFor = (versionId) => ({
 });
 
 const comparison=new URL(location.href).searchParams.get('comparison');
+if(['confirmed-monthly','monthly-incomplete'].includes(comparison))Object.assign(sourcePlans[0],{mPlanAmount:'689800',mPlanQty:'8586',currentAmount:'689800',currentQty:'8586',targetAmount:'714400',skuCount:2});
 const continued = {
   'return-continued-region': [7, 'region', 1],
   'return-continued-province': [8, 'province', 2],
@@ -116,7 +117,7 @@ const approvalRole = comparison?.startsWith('single-') ? 'category' : continued?
 if(comparison==='history-correction')for(const plan of sourcePlans)plan.orderType='Z';
 if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50';
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
-if(comparison?.startsWith('sku-review')) for(const plan of sourcePlans) plan.skuCount=2;
+if(comparison?.startsWith('sku-review')||comparison==='category-allocation') for(const plan of sourcePlans) plan.skuCount=comparison==='sku-review-scroll'?40:2;
 if(comparison==='mixed-terminal')sourcePlans[1].status=5;
 if(comparison==='header-selection')sourcePlans[2].status=5;
 if(comparison==='header-pagination')for(let n=4;n<=12;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
@@ -128,14 +129,17 @@ const skuFor=(versionId)=>{
   if(continued) return {...base,regionConfirmedQty:'10',regionConfirmedAmount:'100',provinceConfirmedQty:'15',provinceConfirmedAmount:'150',areaConfirmedQty:'25',areaConfirmedAmount:'250'};
   if(comparison==='integer')return {...base,qty:'501.600',amt:'5016.00'};
   if(comparison==='single-integer-category')return {...base,baseQty:'2480.000',amtBase:'24800.00',qty:'7000.000',amt:'70000.00'};
-  if(!['inline','missing'].includes(comparison)) return base;
+  if(!['inline','missing','category-allocation'].includes(comparison)) return base;
   const old=versionId.includes('previous'),older=versionId.includes('older');
   const prefix=versionId.slice(0,2);
   const qty=old?'10':older?'5':prefix==='v2'?'30':prefix==='v3'?'10':'20';
   const price=old?'8':older?'7':prefix==='v2'?'12':prefix==='v3'?'8':'10';
   return {...base,qty,price,amt:String(Number(qty)*Number(price))};
 };
-const skusFor=versionId=>comparison?.startsWith('sku-review')?[skuFor(versionId),{...skuFor(versionId),skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
+const skusFor=versionId=>comparison==='sku-review-scroll'?Array.from({length:40},(_,index)=>({...skuFor(versionId),id:'s-'+versionId+'-'+index,skuCode:String(30000000+index),productCategName:index<20?'饼类':'汤圆',materialDescription:'滚动测试SKU '+index})):comparison==='confirmed-monthly'&&versionId==='v1'?[
+ {...skuFor(versionId),qty:'8000',amt:'600000',baseQty:'6752',amtBase:'506400',regionConfirmedQty:'8420.4',price:'75'},
+ {...skuFor(versionId),skuCode:'2002',productCategName:'面点',qty:'200',amt:'20000',baseQty:'1834',amtBase:'183400',regionConfirmedQty:'288',price:'100'},
+]:comparison?.startsWith('sku-review')||comparison==='category-allocation'?[skuFor(versionId),{...skuFor(versionId),id:'s-'+versionId+'-2002',skuCode:'2002',productCategName:'面点',materialDescription:'测试包子',qty:'5',baseQty:'5',amt:'50',amtBase:'50',price:'10'}]:[skuFor(versionId)];
 window.sentReturns=[];
 window.savedDrafts=[];
 if (['history','history-correction','inline','missing'].includes(comparison)) for(const plan of plans) plan.seq = comparison==='missing' && plan.planId==='p2' ? 1 : 3;
@@ -148,7 +152,7 @@ const forbidden=async()=>{writes.push('write');throw Error('LOCAL_RENDER_ACTION_
 const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
-  list:{invoke:async(q)=>{if(comparison==='loading'||comparison==='quick-loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1}}},
+  list:{invoke:async(q)=>{if(comparison==='loading'||comparison==='quick-loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1,...(comparison==='confirmed-monthly'?{summary:{planAmount:'689800',planQty:'8586',targetAmount:'714400'}}:{})}}},
   detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.returnConfirmed?{status:6}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:window.returnConfirmed?window.sentReturns.filter(c=>c.planId===planId).map(c=>({planId,versionId:c.versionId,actionCode:'REJECT',fromStatus:c.request.expectedStatus,toStatus:6,requestId:c.requestId})):continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{readCalls.push({history:planId});const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
@@ -156,7 +160,7 @@ const host={salesPlan:{
     if(comparison==='sku-review-failure') throw Error('fixture failure');
     signal?.throwIfAborted();
     return {versionId,skus:skusFor(versionId).map(sku=>sku.skuCode==='1001'?{...sku,amt:versionId==='v1'?'100.10':versionId==='v2'?'200.20':'0'}:sku),months:['2025-10','2026-08','2026-09'],shipmentUnavailable:false,
-      rows:[{skuCode:'1001',shipments:['1.5','10','20']},{skuCode:'2002',shipments:['2','3','4']}]};
+      rows:comparison==='sku-review-scroll'?skusFor(versionId).map(sku=>({skuCode:sku.skuCode,shipments:['1','2','3']})):[{skuCode:'1001',shipments:['1.5','10','20']},{skuCode:'2002',shipments:['2','3','4']}]};
   }},
   versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading'||comparison==='quick-category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return skusFor(versionId)}},
   draft:{invoke:async(q)=>{if(window.autoBlock==='draft')return {draft:null,stale:true};if(window.sentDirect.length){if(comparison==='single-dms-stale-second')return {draft:null,stale:true};if(comparison==='single-dms-unreadable-second')throw Error('fixture draft read failed');}const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
@@ -183,6 +187,7 @@ root.render(comparison?.startsWith('quick-') ? <QuickQuestionFixture/> : <Workbe
   },
   outfile: '/fixture/app.js',
   bundle: true,
+  nodePaths: (process.env.WORKBENCH_BROWSER_NODE_PATH ?? '').split(delimiter).filter(Boolean),
   write: false,
   format: 'esm',
   platform: 'browser',
@@ -449,10 +454,7 @@ test(
     }
     await page.keyboard.press('Escape');
     await page.locator('.arco-switch').first().click();
-    await page
-      .getByRole('button', { name: /宝阳销售组/ })
-      .first()
-      .click();
+    await page.getByRole('button', { name: '汤圆品类', exact: true }).first().click();
     await expect(
       page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }),
     ).toBeVisible();
@@ -490,6 +492,177 @@ test('多计划组织行展开后显示同一 SKU 的真实汇总', { timeout: 3
   const skuRow = summary.getByRole('row').filter({ hasText: '1001' });
   await expect(skuRow).toContainText(String(count * 20));
   await expect(skuRow).toContainText((count * 200).toFixed(2));
+});
+
+test('品类维度关闭组织编辑入口，只展开并编辑当前品类', { timeout: 30000 }, async (t) => {
+  const { page } = await openWorkbench(t, false, 'sku-review');
+  await page.getByRole('button', { name: /打开 宝阳销售组 调整明细/ }).click();
+  await expect(
+    page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('switch', { name: '品类维度', exact: true }).click();
+  await expect(page.getByRole('button', { name: /打开 宝阳销售组 调整明细/ })).toHaveCount(0);
+  await expect(page.getByRole('spinbutton')).toHaveCount(0);
+  const category = page.getByRole('button', { name: '汤圆品类', exact: true });
+  await category.click();
+  await expect(category).toHaveAttribute('aria-expanded', 'true');
+  const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await expect(input).toHaveValue('20');
+  await expect(page.getByRole('spinbutton', { name: '确认计划量 2002', exact: true })).toHaveCount(
+    0,
+  );
+  await input.fill('40');
+  await expect(page.getByTestId('regional-approval-month-plan-p1')).toContainText('¥450');
+  await expect.poll(() => page.evaluate(() => window.savedDrafts.length)).toBeGreaterThan(0);
+  await category.click();
+  await page.getByRole('switch', { name: '品类维度', exact: true }).click();
+  await page.getByRole('button', { name: /打开 宝阳销售组 调整明细/ }).click();
+  await expect(page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true })).toHaveValue(
+    '40',
+  );
+  assert.ok((await page.evaluate(() => window.writes)).every((kind) => kind === 'draft'));
+});
+
+test('品类汇总按下级原确认量拆分，金额、草稿和其他品类保持一致', { timeout: 30000 }, async (t) => {
+  const { page, groupBox } = await openWorkbench(t, true, 'category-allocation');
+  const queue = groupBox.locator('xpath=ancestor::tr');
+  await queue.getByRole('button').first().click();
+  await expect(page.getByTestId('regional-approval-group-sku-summary').first()).toBeVisible();
+  await page.getByRole('switch', { name: '品类维度', exact: true }).click();
+  await expect(queue.getByRole('button')).toHaveCount(0);
+  await expect(page.getByRole('spinbutton')).toHaveCount(0);
+  const category = queue
+    .locator('xpath=following-sibling::tr')
+    .getByRole('button', { name: '汤圆品类', exact: true })
+    .first();
+  await category.click();
+  const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).first();
+  await expect(input).toHaveValue('50');
+  await expect(page.getByRole('spinbutton', { name: '确认计划量 2002', exact: true })).toHaveCount(
+    0,
+  );
+  await input.fill('100');
+  await expect(queue).toContainText('¥1,220');
+  await expect.poll(() => page.evaluate(() => window.savedDrafts.length)).toBe(2);
+  let latest = new Map(
+    (await page.evaluate(() => window.savedDrafts)).map((draft) => [draft.planId, draft]),
+  );
+  assert.deepEqual(latest.get('p1').adjustments, [{ skuCode: '1001', adjustQty: '20' }]);
+  assert.deepEqual(latest.get('p2').adjustments, [{ skuCode: '1001', adjustQty: '30' }]);
+  await category.click();
+  const other = queue
+    .locator('xpath=following-sibling::tr')
+    .getByRole('button', { name: '面点品类', exact: true })
+    .first();
+  await other.click();
+  const otherInput = page.getByRole('spinbutton', { name: '确认计划量 2002', exact: true });
+  await expect(otherInput).toHaveValue('10');
+  await otherInput.fill('11');
+  await expect.poll(() => page.evaluate(() => window.savedDrafts.length)).toBe(4);
+  latest = new Map(
+    (await page.evaluate(() => window.savedDrafts)).map((draft) => [draft.planId, draft]),
+  );
+  assert.deepEqual(latest.get('p1').adjustments, [
+    { skuCode: '1001', adjustQty: '20' },
+    { skuCode: '2002', adjustQty: '1' },
+  ]);
+  assert.deepEqual(latest.get('p2').adjustments, [{ skuCode: '1001', adjustQty: '30' }]);
+  await other.click();
+  await category.click();
+  await expect(input).toHaveValue('100');
+  await expect(queue).toContainText('¥1,230');
+  assert.ok((await page.evaluate(() => window.writes)).every((kind) => kind === 'draft'));
+  if (process.env.DSH_REVIEW_EVIDENCE)
+    await page.screenshot({
+      path: process.env.DSH_REVIEW_EVIDENCE + '/category-allocation.png',
+      fullPage: true,
+    });
+});
+
+for (const comparison of ['return-continued-province', 'return-continued-skipped']) {
+  test(`品类展开在上级审批维度也只保留品类编辑：${comparison}`, { timeout: 30000 }, async (t) => {
+    const { page, groupBox } = await openWorkbench(t, true, comparison);
+    const queue = groupBox.locator('xpath=ancestor::tr');
+    await page.getByRole('switch', { name: '品类维度', exact: true }).click();
+    await expect(queue.getByRole('button')).toHaveCount(0);
+    await page.getByRole('button', { name: '汤圆品类', exact: true }).click();
+    const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+    const original = comparison === 'return-continued-province' ? 30 : 50;
+    await expect(input).toHaveValue(String(original));
+    await input.fill(String(original + 1));
+    await expect.poll(() => page.evaluate(() => window.savedDrafts.length)).toBe(2);
+    const latest = new Map(
+      (await page.evaluate(() => window.savedDrafts)).map((draft) => [draft.planId, draft]),
+    );
+    assert.deepEqual(latest.get('p1').adjustments, [{ skuCode: '1001', adjustQty: '1' }]);
+    assert.deepEqual(latest.get('p2').adjustments, []);
+    assert.ok((await page.evaluate(() => window.writes)).every((kind) => kind === 'draft'));
+  });
+}
+
+test('品类明细保留原审批权限限制', { timeout: 30000 }, async (t) => {
+  const { page } = await openWorkbench(t, false, 'readonly');
+  await page.getByRole('switch', { name: '品类维度', exact: true }).click();
+  await page.getByRole('button', { name: '汤圆品类', exact: true }).first().click();
+  await expect(page.getByTestId('regional-approval-group-sku-summary').first()).toBeVisible();
+  await expect(page.getByRole('spinbutton')).toHaveCount(0);
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+test(
+  'monthly plan uses confirmed quantities before expansion and after edits and collapse',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t, false, 'confirmed-monthly');
+    const plan = page.getByTestId('regional-approval-month-plan-p1');
+    await expect(plan).toContainText('66.03万');
+    await expect(plan).toContainText('8,708');
+    const totals = page.getByRole('region', { name: '当前页明细汇总', exact: true });
+    await expect(totals).toContainText('66.03万');
+    const row = page.getByRole('row').filter({ has: plan });
+    await expect(row).toContainText('92.4%');
+    const expand = page.getByRole('button', { name: /宝阳销售组/ }).first();
+    await expand.click();
+    const input = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+    await expect(input).toHaveValue('8420');
+    await expect(plan).toContainText('66.03万');
+    await input.fill('8421');
+    await input.blur();
+    await expect(plan).toContainText('66.04万');
+    await expect(totals).toContainText('66.04万');
+    await expand.click();
+    await expect(input).toHaveCount(0);
+    await expect(plan).toContainText('66.04万');
+    await page.getByRole('switch', { name: '品类维度', exact: true }).click();
+    await expect(page.getByTestId('regional-approval-month-plan-p1:category:汤圆')).toContainText(
+      '63.16万',
+    );
+    await expect(page.getByTestId('regional-approval-month-plan-p1:category:面点')).toContainText(
+      '2.88万',
+    );
+    assert.deepEqual(await page.evaluate(() => window.sentDirect), []);
+  },
+);
+
+test('monthly organization totals aggregate confirmed quantities from every customer', async (t) => {
+  const { page } = await openWorkbench(t, true, 'confirmed-monthly');
+  const row = page.locator('tbody tr').filter({ hasText: '宝阳销售组' }).first();
+  const plan = row.locator('[data-testid^="regional-approval-month-plan-"]');
+  await expect(plan).toContainText('66.05万');
+  await expect(plan).toContainText('8,728');
+  await row.getByRole('button').first().click();
+  await expect(page.getByTestId('regional-approval-group-sku-summary')).toBeVisible();
+  await expect(plan).toContainText('66.05万');
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+test('incomplete monthly SKU reads keep amounts unknown instead of showing the old summary', async (t) => {
+  const { page } = await openWorkbench(t, false, 'monthly-incomplete');
+  await expect(page.getByTestId('regional-approval-sku-coverage-error')).toBeVisible();
+  await expect(page.getByTestId('regional-approval-month-plan-p1')).not.toContainText('68.98万');
+  const totals = page.getByRole('region', { name: '当前页明细汇总', exact: true });
+  await expect(totals).not.toContainText('68.98万');
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
 });
 
 test('editable quantity inputs are white, outlined and rounded', { timeout: 30000 }, async (t) => {
@@ -844,14 +1017,25 @@ test(
   },
 );
 
-test('split sales plan wraps control groups without clipping actions or the table header', async (t) => {
+test('split sales plan wraps control groups only when they cannot fit', async (t) => {
   const { page } = await openWorkbench(t);
-  for (const width of [907, 760, 620]) {
-    await page.setViewportSize({ width, height: 920 });
+  await page.getByRole('switch', { name: '品类维度' }).click();
+  for (const [orderType, width, wraps] of [
+    ['月初', 650, false],
+    ['月初', 600, true],
+    ['月初', 760, false],
+    ['月初', 907, false],
+    ['纠偏', 600, false],
+    ['纠偏', 480, true],
+  ]) {
+    await page.getByRole('tab', { name: orderType, exact: true }).click();
+    await page.setViewportSize({ width, height: 820 });
+    const layout = `${orderType} at ${width}px`;
     const actions = page.getByTestId('regional-approval-toolbar-actions');
     const geometry = await actions.evaluate((node) => {
       const actions = node.getBoundingClientRect();
       const toolbar = node.parentElement.getBoundingClientRect();
+      const tabs = node.parentElement.querySelector('[role="tablist"]').getBoundingClientRect();
       const root = node.closest('[data-testid="regional-approval-workbench"]');
       const header = node.closest('[class*="queueHeader"]').getBoundingClientRect();
       const table = root.querySelector('[class*="tableViewport"]').getBoundingClientRect();
@@ -859,6 +1043,8 @@ test('split sales plan wraps control groups without clipping actions or the tabl
         actionTops: [...node.querySelectorAll('button')].map(
           (button) => button.getBoundingClientRect().top,
         ),
+        wraps: actions.top >= tabs.bottom,
+        wrapGap: node.querySelector('button').getBoundingClientRect().top - tabs.bottom,
         topOverflow: toolbar.top - actions.top,
         bottomOverflow: actions.bottom - toolbar.bottom,
         toolbarHeight: toolbar.height,
@@ -868,15 +1054,17 @@ test('split sales plan wraps control groups without clipping actions or the tabl
     });
     assert.ok(
       Math.max(...geometry.actionTops) - Math.min(...geometry.actionTops) <= 1,
-      `actions aligned at ${width}px`,
+      `actions aligned for ${layout}`,
     );
     assert.ok(
       geometry.topOverflow <= 0 && geometry.bottomOverflow <= 0,
-      `actions remain inside toolbar at ${width}px`,
+      `actions remain inside toolbar for ${layout}`,
     );
-    assert.ok(geometry.toolbarHeight <= 104, `wrapped toolbar at ${width}px`);
-    assert.ok(geometry.tableGap >= 8, `table separated at ${width}px`);
-    assert.ok(geometry.rightOverflow <= 0, `actions fit at ${width}px`);
+    assert.equal(geometry.wraps, wraps, `toolbar wrapping for ${layout}`);
+    if (wraps) assert.ok(geometry.wrapGap <= 4, `compact row gap for ${layout}`);
+    assert.ok(geometry.toolbarHeight <= 104, `wrapped toolbar for ${layout}`);
+    assert.ok(geometry.tableGap >= 8, `table separated for ${layout}`);
+    assert.ok(geometry.rightOverflow <= 0, `actions fit for ${layout}`);
     const customerTab = page.getByRole('tab', { name: '按客户' });
     await customerTab.scrollIntoViewIfNeeded();
     await expect(customerTab).toBeInViewport();
@@ -1040,6 +1228,48 @@ test(
 );
 
 test(
+  'monthly XLSX exports match confirmed page totals before expansion and after a collapsed edit',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t, false, 'sku-review');
+    const { readFile } = await import('node:fs/promises');
+    const xlsx = await import('xlsx-republish');
+    const exported = async (button) => {
+      const pending = page.waitForEvent('download');
+      await button.click();
+      const download = await pending;
+      const workbook = xlsx.read(await readFile(await download.path()), { type: 'buffer' });
+      return xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+    };
+    const plan = page.getByTestId('regional-approval-month-plan-p1');
+    await expect(plan).toContainText('¥250');
+    let rows = await exported(page.getByRole('button', { name: '导出当前页', exact: true }));
+    assert.equal(rows[0]['月计划数量'], 25);
+    assert.equal(rows[0]['月计划金额'], 250);
+    const expand = page.getByRole('button', { name: /宝阳销售组/ }).first();
+    await expand.click();
+    await page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).fill('21');
+    await page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).blur();
+    await expand.click();
+    await expect(plan).toContainText('¥260');
+    rows = await exported(page.getByRole('button', { name: '导出当前页', exact: true }));
+    assert.equal(rows[0]['月计划数量'], 26);
+    assert.equal(rows[0]['月计划金额'], 260);
+    await page.getByRole('tab', { name: '按大类 / SKU' }).click();
+    const review = page.getByRole('region', { name: '按大类 / SKU', exact: true }).first();
+    await expect(review.getByRole('rowheader', { name: /1001/ })).toBeVisible();
+    rows = await exported(review.getByRole('button', { name: '导出汇总', exact: true }));
+    for (const row of rows) {
+      assert.equal(row['月计划量（件）'], row['确认计划量（件）']);
+      assert.equal(row['月计划金额（元）'], row['确认计划金额（元）']);
+    }
+    assert.equal(rows.at(-1)['月计划金额（元）'], 260);
+    assert.deepEqual(await page.evaluate(() => window.sentDirect), []);
+    assert.deepEqual(await page.evaluate(() => window.sentReturns), []);
+  },
+);
+
+test(
   'regional SKU review filters, collapses and exports the complete customer scope without writes',
   { timeout: 30000 },
   async (t) => {
@@ -1098,6 +1328,47 @@ test(
       });
   },
 );
+
+test('regional SKU review scrolls to its final rows with wheel and keyboard in a bounded panel', async (t) => {
+  const { page } = await openWorkbench(t, true, 'sku-review-scroll');
+  await page.getByRole('tab', { name: '按大类 / SKU' }).click();
+  const review = page.getByRole('region', { name: '按大类 / SKU', exact: true }).first();
+  const viewport = review.getByRole('region', { name: '按大类 / SKU', exact: true });
+  await expect(review.getByRole('rowheader', { name: /30000039/ })).toHaveCount(1);
+  for (const size of [
+    { width: 1280, height: 820 },
+    { width: 920, height: 700 },
+  ]) {
+    await page.setViewportSize(size);
+    await viewport.focus();
+    await page.keyboard.press('Home');
+    await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBe(0);
+    await viewport.hover({ position: { x: 100, y: 100 } });
+    await page.mouse.wheel(0, 10000);
+    await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    const bounds = await viewport.boundingBox();
+    assert.ok(bounds.y + bounds.height <= size.height, 'table viewport must fit inside the page');
+    const total = review.locator('tfoot');
+    await expect(total).toBeInViewport();
+    await expect(review.getByRole('button', { name: '重置', exact: true })).toBeInViewport();
+    await viewport.focus();
+    await page.keyboard.press('Home');
+    await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBe(0);
+    await page.keyboard.press('End');
+    await expect
+      .poll(() =>
+        viewport.evaluate((node) => node.scrollHeight - node.clientHeight - node.scrollTop),
+      )
+      .toBeLessThanOrEqual(1);
+    await expect(total).toBeInViewport();
+    if (size.width < 1050) {
+      await viewport.hover({ position: { x: 100, y: 100 } });
+      await page.mouse.wheel(10000, 0);
+      await expect.poll(() => viewport.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+    }
+  }
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
 
 test(
   'regional SKU review exposes incomplete reads and retry without showing a partial total',
@@ -1721,6 +1992,8 @@ test('header cancellation clears terminal members inherited from a selected orga
 
 test('header select all only selects plans on the current page', async (t) => {
   const { page } = await openWorkbench(t, true, 'header-pagination');
+  const totals = page.getByRole('region', { name: '当前页明细汇总', exact: true });
+  await expect(totals).toContainText('¥2,400');
   await page.getByRole('combobox', { name: '每页条数' }).click();
   await page.getByRole('option', { name: '10 条/页', exact: true }).click();
   await expect
@@ -1739,6 +2012,11 @@ test('header select all only selects plans on the current page', async (t) => {
     .toEqual(visibleIds);
   await page.locator('.arco-pagination-item-next:visible').click();
   await expect.poll(() => page.evaluate(() => window.approvalContext?.pagination.page)).toBe(2);
+  await expect(totals).toContainText('¥2,400');
+  assert.equal(
+    await page.evaluate(() => window.readCalls.filter((call) => call.versionId).length),
+    12,
+  );
   await expect
     .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
     .toBe(0);

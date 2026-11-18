@@ -1,6 +1,6 @@
 import { expandShipmentBase } from './helpers/mps-shipment.mjs';
-import { beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
-import { adjustCategory } from './helpers/mps-edit.mjs';
+import { beginAdjustment, saveAdjustment, workflowStep } from './helpers/mps-edit.mjs';
+import { adjustLeaf } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
@@ -36,7 +36,7 @@ test('MPS local product inputs recover after Document replacement and release cl
   await expect(products().getByRole('cell', { name: '恢复产品', exact: true })).toHaveCount(0);
 });
 
-test('MPS category override records a reason and time, survives reload and undo restores the system value', async (t) => {
+test('MPS base SKU override records a reason and time, survives reload and undo restores the system value', async (t) => {
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
@@ -49,42 +49,54 @@ test('MPS category override records a reason and time, survives reload and undo 
   });
   const month = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
   const period = month.match(/\d{4}-\d{2}/)[0];
-  await adjustCategory(frame, '汤圆', period, '120.375', '客户已确认增量');
-  const matrix = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: '叶子提报.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      `月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n${period},郑州,A,产品甲,汤圆,系列,组,100,100`,
+    ),
+  });
+  const leaf = { category: '汤圆', group: '组', code: 'A', base: '郑州', month: period };
+  await adjustLeaf(frame, leaf, '120.375', '客户已确认增量');
+  const matrix = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   await expect
     .poll(async () =>
       page.evaluate(
-        () =>
-          window.readView()?.localDrafts?.drafts?.[0]?.adjustments?.categoryDemand?.[0]?.quantity,
+        () => window.readView()?.localDrafts?.drafts?.[0]?.adjustments?.quantities?.[0]?.quantity,
       ),
     )
     .toBe(120.375);
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
+  await workflowStep(frame, '需求加工与收敛');
+  await frame.getByText('数量调整与撤销记录（1）', { exact: true }).click();
   await expect(
     frame
-      .getByRole('region', { name: '大类调整记录', exact: true })
+      .getByRole('table', { name: '数量调整记录', exact: true })
       .getByRole('row')
       .filter({ hasText: '客户已确认增量' }),
   ).toContainText('120');
   const edit = await page.evaluate(
-    () => window.readView().localDrafts.drafts[0].adjustments.categoryDemand[0],
+    () => window.readView().localDrafts.drafts[0].adjustments.quantities[0],
   );
-  assert.equal(edit.reason, '客户已确认增量');
+  assert.equal(edit.reason, '其他：客户已确认增量');
   assert.match(edit.at, /^\d{4}-\d{2}-\d{2}T/);
+  await matrix.getByLabel('搜索当前步骤', { exact: true }).fill('A');
   await matrix.getByRole('button', { name: '调整', exact: true }).click();
-  await expect(matrix.getByLabel(`汤圆 ${period} 需求数量`, { exact: true })).toHaveValue('120');
+  await expect(matrix.getByLabel(`汤圆 组 A 郑州 ${period} 需求数量`, { exact: true })).toHaveValue(
+    '120',
+  );
   await matrix.getByRole('button', { name: '保存调整', exact: true }).click();
   assert.equal(
     await page.evaluate(
-      () => window.readView().localDrafts.drafts[0].adjustments.categoryDemand[0].quantity,
+      () => window.readView().localDrafts.drafts[0].adjustments.quantities[0].quantity,
     ),
     120.375,
   );
-  await adjustCategory(frame, '汤圆', period, '', '恢复系统值');
+  await adjustLeaf(frame, leaf, '', '恢复系统值');
   await expect
     .poll(async () =>
       page.evaluate(
-        () => window.readView()?.localDrafts?.drafts?.[0]?.adjustments?.categoryDemand?.length,
+        () => window.readView()?.localDrafts?.drafts?.[0]?.adjustments?.quantities?.length,
       ),
     )
     .toBe(0);
@@ -104,11 +116,13 @@ test('MPS shipment local overrides and remaining intake survive a business-sourc
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
+  await frame.locator('body').page().clock.setFixedTime(new Date('2026-10-15T12:00:00+08:00'));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-10');
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await frame.getByLabel('数据截止日', { exact: true }).fill('2026-09-22');
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
     name: '发货.csv',
     mimeType: 'text/csv',

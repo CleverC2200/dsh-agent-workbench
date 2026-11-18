@@ -79,7 +79,10 @@ export function describeRunResult(run) {
     const count = run[key] ?? Number(legacyCounts?.[index + 1]);
     return count > 0 ? [`${label} ${count} 条`] : [];
   });
-  if (actions.length) return actions.join('；');
+  if (actions.length)
+    return (
+      actions.join('；') + (run.notificationIssue ? '；通知待处理：' + run.notificationIssue : '')
+    );
   return legacyCounts || Number.isInteger(run.created)
     ? '本次未新建、更新或恢复预警'
     : run.result || '检测完成';
@@ -131,6 +134,34 @@ function warningChanges(run, events) {
     : '';
 }
 
+function notificationDetails(run, events) {
+  const jobs = events.flatMap((event) =>
+    (event.notifications || [])
+      .filter((job) => job.runId === run.id)
+      .map((job) => ({ ...job, objectName: event.scope })),
+  );
+  if (!run.notificationRouting && !jobs.length && !run.notificationIssue) return '';
+  const batches = new Map();
+  for (const job of jobs) {
+    const key =
+      job.batchId ||
+      JSON.stringify([
+        job.taskId,
+        job.runId,
+        job.transport,
+        job.credentialProfile || 'default',
+        job.receiveIdType,
+        job.receiveId,
+      ]);
+    if (!batches.has(key)) batches.set(key, { ...job, count: 0 });
+    batches.get(key).count++;
+  }
+  const matches = run.notificationRouting?.matches || [];
+  return `<h3>消息通知</h3>${run.notificationIssue ? `<p role="status">${esc(run.notificationIssue)}</p>` : ''}
+    ${run.notificationRouting ? `<p>自动匹配 · 负责人配置版本 ${esc(run.notificationRouting.directoryRevision)}</p><ul class="audit-detection-results">${matches.map((row) => `<li><strong>${esc(row.objectName)}</strong><p>${row.recipients.map((person) => esc(person.name) + '（' + esc(person.account) + '）').join('、') || '未匹配有效负责人'}</p></li>`).join('')}</ul>` : ''}
+    <p>本次共 ${jobs.length} 条通知明细，${batches.size} 个发送批次。</p><ul class="audit-detection-results">${[...batches.values()].map((job) => `<li><strong>${esc(job.recipientName)} · ${esc(job.status)}</strong><p>合并 ${job.count} 项${job.messageId ? ' · 回执 ' + esc(job.messageId) : ''}${job.error ? ' · ' + esc(job.error) : ''}</p></li>`).join('')}</ul>`;
+}
+
 export function showRunResult(run, events = []) {
   const view = modal('执行结果', '查看本次预警处理和 AI 逐对象检测明细。');
   view.main.innerHTML = `<dl class="audit-summary">
@@ -141,6 +172,7 @@ export function showRunResult(run, events = []) {
     <h3>${run.status === '失败' ? '失败原因' : '预警处理结果'}</h3>
     <pre class="audit-pre">${esc(describeRunResult(run) || '暂无处理结果')}</pre>
     ${run.status === '成功' ? warningChanges(run, events) : ''}
+    ${notificationDetails(run, events)}
     ${detectionDetails(run)}`;
 }
 export function combineWarnings(_board, events, _range) {

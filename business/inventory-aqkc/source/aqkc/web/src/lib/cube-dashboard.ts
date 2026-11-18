@@ -2526,17 +2526,28 @@ function configuredSummaryWorkspace(
       targetDen = rs.some((r) => Object.hasOwn(r, 'target_turn_demand'))
         ? sum('target_turn_demand')
         : den;
+    const turn = den > 0 ? sum('turn_inventory') / den : null;
+    const targetTurn = targetDen > 0 ? sum('turn_target') / targetDen : null;
+    const hasTurnGap = rs.every((r) => Object.hasOwn(r, 'turn_gap'));
+    const sameTurnoverScope =
+      !rs.some((r) => Object.hasOwn(r, 'target_turn_count')) ||
+      sum('target_turn_count') === turnCount;
+    const turnGap = hasTurnGap
+      ? targetDen > 0 && rs.some((r) => numeric(r.turn_gap) !== null)
+        ? sum('turn_gap') / targetDen
+        : null
+      : sameTurnoverScope && turn !== null && targetTurn !== null
+        ? turn - targetTurn
+        : null;
     return {
       sum,
       n,
       gapCount,
       turnCount,
-      comparableTurnover:
-        !rs.some((r) => Object.hasOwn(r, 'target_turn_count')) ||
-        sum('target_turn_count') === turnCount,
       gap: gapCount ? sum('gap') : null,
-      turn: den > 0 ? sum('turn_inventory') / den : null,
-      targetTurn: targetDen > 0 ? sum('turn_target') / targetDen : null,
+      turn,
+      targetTurn,
+      turnGap,
     };
   };
   const all = stats(groups),
@@ -2680,11 +2691,7 @@ function configuredSummaryWorkspace(
         { label: '目标周转天数', value: days(all.targetTurn) },
         {
           label: '天数差额',
-          value: days(
-            all.comparableTurnover && all.turn !== null && all.targetTurn !== null
-              ? all.turn - all.targetTurn
-              : null,
-          ),
+          value: days(all.turnGap),
         },
       ],
       tone: 'neutral',

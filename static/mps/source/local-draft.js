@@ -1,5 +1,14 @@
 import { mpsLocalStateSchema } from '../../../src/mps-local-draft.ts';
 
+export const adjustmentReasons = [
+  '销售变化',
+  '促销活动',
+  '库存调整',
+  '供应变化',
+  '数据纠错',
+  '其他',
+];
+
 export const emptyAdjustments = () => ({
   categoryDemand: [],
   shares: [],
@@ -71,11 +80,24 @@ export function encodeLocalDrafts(drafts, selected) {
             },
           }
         : {}),
-      ...fields(draft, ['productionDays', 'unitWeights', 'resources', 'resourceAssignments']),
+      ...fields(draft, [
+        'productionDays',
+        'unitWeights',
+        'resources',
+        'resourceAssignments',
+        'inventoryMovements',
+      ]),
       ...(draft.shipment
         ? {
             shipment: {
-              ...fields(draft.shipment, ['cutoff', 'activeSource', 'values', 'remaining']),
+              ...fields(draft.shipment, [
+                'cutoff',
+                'activeSource',
+                'values',
+                'remaining',
+                'transferPlans',
+                'editsByCutoff',
+              ]),
               ...(draft.shipment.sourceEdits
                 ? {
                     sourceEdits: Object.fromEntries(
@@ -127,18 +149,10 @@ export const quantityAdjustmentKey = (entry) =>
   ]);
 export function changeAdjustment(adjustments, kind, input, undo = false) {
   const state = adjustments ?? emptyAdjustments();
-  const key =
-    kind === 'categoryDemand'
-      ? JSON.stringify([input.month, input.category])
-      : kind === 'quantities'
-        ? quantityAdjustmentKey(input)
-        : input.rowId;
-  const keyOf = (entry) =>
-    kind === 'categoryDemand'
-      ? JSON.stringify([entry.month, entry.category])
-      : kind === 'quantities'
-        ? quantityAdjustmentKey(entry)
-        : entry.rowId;
+  if (kind !== 'shares' && (kind !== 'quantities' || input.kind !== 'base-sku'))
+    throw Error('需求仅支持基地SKU和月份修正，历史上层记录请归档。');
+  const keyOf = kind === 'quantities' ? quantityAdjustmentKey : (entry) => entry.rowId;
+  const key = keyOf(input);
   const previous = (state[kind] ?? []).find((entry) => keyOf(entry) === key);
   if (undo && !previous) return state;
   const entry = undo
@@ -171,6 +185,38 @@ export function changeAdjustment(adjustments, kind, input, undo = false) {
         reason: entry.reason,
         at: new Date().toISOString(),
       },
+    ],
+  };
+}
+
+export function archiveUpperAdjustments(adjustments) {
+  const state = adjustments ?? emptyAdjustments();
+  const upper = [
+    ...state.categoryDemand.map((entry) => ({ kind: 'categoryDemand', entry })),
+    ...state.quantities
+      .filter((entry) => entry.kind !== 'base-sku')
+      .map((entry) => ({ kind: 'quantities', entry })),
+  ];
+  if (!upper.length) return state;
+  return {
+    ...state,
+    categoryDemand: [],
+    quantities: state.quantities.filter((entry) => entry.kind === 'base-sku'),
+    history: [
+      ...state.history,
+      ...upper.map(({ kind, entry }) => ({
+        kind,
+        key:
+          kind === 'categoryDemand'
+            ? JSON.stringify([entry.month, entry.category])
+            : quantityAdjustmentKey(entry),
+        action: 'archive',
+        systemValue: entry.systemValue ?? null,
+        value: entry.quantity,
+        reason: entry.reason,
+        at: entry.at,
+        archivedAt: new Date().toISOString(),
+      })),
     ],
   };
 }

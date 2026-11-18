@@ -1,8 +1,9 @@
+import { buildMpsWorkflow } from './workflow-inputs.js';
 import { encodeLocalDrafts, decodeLocalDrafts, changeAdjustment } from './local-draft.js';
 import { createCategoryDemand } from './category-demand-view.js';
-import { buildCategoryDemand } from './category-demand.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
+import { mpsBusinessDate } from './business-date.js';
 import {
   hasMpsSource,
   readProducts,
@@ -11,11 +12,10 @@ import {
   productRows,
 } from './master-data.js';
 import { createMasterData } from './master-data-view.js';
-import { readFactMonth, readInventoryTargets } from './facts.js';
+import { readFactMonth, readInventoryTargets, readReportAmounts } from './facts.js';
 import { readSourceTable, forecastDimensions } from './source-tables.js';
 import { createDeliveryMetrics } from './delivery-metrics.js';
 import { createWorkflow } from './workflow-view.js';
-import { defaultInventoryMonth } from './inventory-selection.js';
 import {
   productProjections,
   productSourceColumns,
@@ -188,9 +188,7 @@ const amount = new Intl.NumberFormat('zh-CN', {
 }).format;
 const quantity = (rows, column) =>
   rows.reduce((sum, row) => (row[column] === '' ? sum : sum + Number(row[column])), 0);
-const currentMonth = () => {
-  return defaultInventoryMonth();
-};
+const currentMonth = () => mpsBusinessDate().slice(0, 7);
 const blankProduct = () => Object.fromEntries(productColumns.map((column) => [column, '']));
 const makeDraft = (id, month) => ({
   id,
@@ -261,6 +259,14 @@ function downloadFile(name, mime, text) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+function reportAmountSource(draft, period) {
+  return draft.reportSource === 'business' &&
+    draft.reportRead?.periods?.[period]?.status === 'ready' &&
+    draft.reportAmounts?.[period]?.period === period
+    ? draft.reportAmounts[period]
+    : null;
+}
+
 export function createDemandConfirmation(react, useMpsPart, view) {
   const h = react.createElement;
   const CategoryDemand = createCategoryDemand(react, {
@@ -397,6 +403,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [page, setPage] = react.useState(0);
     const { period, column, rows } = sourceSelection(draft, type);
     const business = draft[type + 'Source'] === 'business';
+    const reportRead = draft.reportRead;
+    const reportPeriodStatus = reportRead?.periods?.[period]?.status;
+    const reportLoading =
+      (reportRead?.periods ? reportPeriodStatus : reportRead?.status) === 'loading';
     const visibleColumns =
       type === 'forecast' && business
         ? ['月份', '基地', '产品编码', '产品名称', '物料组', '物料组名称', '大类', '系列']
@@ -427,13 +437,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ]
       : [...sourceColumns, column];
     react.useEffect(() => setPage(0), [draft[type]]);
-    const amountRead =
-      type === 'report' &&
-      business &&
-      draft.reportRead?.periods?.[period]?.status === 'ready' &&
-      draft.reportAmounts?.[period]?.period === period
-        ? draft.reportAmounts[period]
-        : null;
+    const amountRead = type === 'report' ? reportAmountSource(draft, period) : null;
     const amountRows = amountRead?.status === 'ready' ? amountRead.rows : [];
     const monthlyAmount = sumSourceAmounts(amountRows, '月初计划金额');
     const finalAmount = sumSourceAmounts(amountRows, '最终计划金额');
@@ -447,7 +451,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'p',
           { className: 'dc-muted' },
-          `金额来源 ai_db.agents_scm_dws_scm_cust_plan_exe_di（同步自hive.dw.dws_scm_cust_plan_exe）；${amountRead?.status === 'ready' ? '已读取' + amountRows.length + '条，覆盖当前完整查询范围' : '尚未完成读取'}。`,
+          `金额来源 ai_db.agents_scm_dws_scm_cust_plan_exe_di（同步自hive.dw.dws_scm_cust_plan_exe）；${
+            amountRead?.status === 'ready'
+              ? '已读取' + amountRows.length + '条，覆盖当前完整查询范围'
+              : amountRead?.status === 'loading'
+                ? '正在读取金额'
+                : '尚未完成读取'
+          }。`,
         ),
         amountRows.some((row) => row['缺项原因']) &&
           h(
@@ -704,8 +714,14 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           ),
         ),
         !rows.length &&
-          h('p', { className: 'dc-empty' }, '当前期间无已读取记录，不能判定业务数据为零。'),
-        busy && h('p', { role: 'status' }, '正在读取…'),
+          h(
+            'p',
+            { className: 'dc-empty' },
+            type === 'report' && business && reportPeriodStatus === 'ready'
+              ? '当前期间提报源未返回记录，数量待补。'
+              : '当前期间无已读取记录，不能判定业务数据为零。',
+          ),
+        busy && (type !== 'report' || reportLoading) && h('p', { role: 'status' }, '正在读取…'),
         error && h('p', { role: 'alert' }, error),
         !forecastReady &&
           rows.length > 0 &&
@@ -991,6 +1007,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
   const DeliveryMetrics = createDeliveryMetrics(react, { table, downloadCsv, useMpsPart });
   const Workflow = createWorkflow(react, useMpsPart, {
     Dialog,
+    Upload,
+    parseCsv,
     downloadCsv: downloadCsvLegacy,
     downloadAmounts: downloadCsv,
   });
@@ -1050,6 +1068,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       saveLocal({ ...current, drafts: typeof next === 'function' ? next(current.drafts) : next });
     };
     const setSelected = (selected) => saveLocal({ ...localRef.current, selected });
+    const [actualMonth, setActualMonth] = react.useState(currentMonth);
+    const evaluationMonths = [
+      actualMonth,
+      monthOffset(actualMonth, 1),
+      monthOffset(actualMonth, 2),
+    ];
     const [month, setMonth] = react.useState(currentMonth);
     const [product, setProduct] = react.useState(blankProduct);
     const [editing, setEditing] = react.useState(null);
@@ -1072,6 +1096,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [scopeGeneration, setScopeGeneration] = react.useState(0);
     const [shipmentSnapshot, setShipmentSnapshot] = react.useState(null);
     const [evaluation, setEvaluation] = react.useState(null);
+    const workflowStep = react.useRef({ scope: '', step: null });
     const receiveShipment = react.useCallback(
       (snapshot) => setShipmentSnapshot({ ...snapshot, scopeGeneration }),
       [scopeGeneration],
@@ -1160,6 +1185,23 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         type,
         requestedPeriods ?? (type === 'report' ? periods : period),
       );
+      const syncAmounts = async (month) => {
+        let amounts;
+        try {
+          amounts = await readReportAmounts(month, signal);
+        } catch (error) {
+          if (!valid()) return;
+          amounts = { period: month, rows: [], status: 'failed', error: error.message };
+        }
+        if (valid())
+          setDrafts((entries) =>
+            entries.map((entry) =>
+              entry.id === id
+                ? { ...entry, reportAmounts: { ...entry.reportAmounts, [month]: amounts } }
+                : entry,
+            ),
+          );
+      };
       for (const readPeriod of periods) {
         if (!valid()) return;
         try {
@@ -1203,7 +1245,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ? {
                           reportAmounts: {
                             ...entry.reportAmounts,
-                            [readPeriod]: result.amounts,
+                            [readPeriod]: { period: readPeriod, rows: [], status: 'loading' },
                           },
                         }
                       : {}),
@@ -1225,6 +1267,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 : entry,
             ),
           );
+          if (type === 'report') void syncAmounts(readPeriod);
           if (type === 'products') resetEditor();
         } catch (failure) {
           if (valid()) {
@@ -1345,6 +1388,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       }
     };
     const draft = drafts.find((entry) => entry.id === selected) ?? drafts[0];
+    const workflowScope = JSON.stringify([draft.id, draft.month, scopeGeneration]);
+    if (workflowStep.current.scope !== workflowScope)
+      workflowStep.current = { scope: workflowScope, step: null };
+    const workflowActive =
+      active && ['process', 'constraints', 'capacity', 'report'].includes(step);
+    if (workflowActive) workflowStep.current.step = step;
     react.useEffect(() => {
       onScopeChange?.({
         id: draft.id,
@@ -1486,14 +1535,33 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         products,
         productSource: draft.productSource.startsWith('demo') ? 'demo-edited' : 'local-edited',
       });
-    const categoryComputation = react.useMemo(
+    const workflowResult = react.useMemo(
       () =>
-        buildCategoryDemand(
+        buildMpsWorkflow(
           draft,
+          relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
+            ? relations
+            : null,
           shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
         ),
-      [draft, shipmentSnapshot, scopeGeneration],
+      [draft, relations, shipmentSnapshot, scopeGeneration],
     );
+    const categoryComputation = react.useMemo(() => {
+      const result = workflowResult.categoryComputation;
+      if (!(draft.adjustments?.quantities ?? []).some((entry) => entry.kind === 'base-sku'))
+        return result;
+      return {
+        ...result,
+        rows: result.rows.map((row) => {
+          const effective = workflowResult.categoryRows.find(
+            (entry) => entry.month === row.month && entry.category === row.category,
+          );
+          return effective?.adjusted
+            ? { ...row, quantity: effective.quantity, adjusted: true }
+            : row;
+        }),
+      };
+    }, [draft, workflowResult]);
     const calculatedRows = categoryComputation.rows.filter((row) => row.quantity !== null).length;
     const calculation = {
       status: !calculatedRows
@@ -1590,6 +1658,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const sourceSummaries = Object.fromEntries(
       Object.keys(sourceDefinitions).map((type) => {
         const { period, column, rows } = sourceSelection(draft, type);
+        const amountRead = type === 'report' ? reportAmountSource(draft, period) : null;
+        const amountRows = amountRead?.status === 'ready' ? amountRead.rows : [];
         return [
           type,
           {
@@ -1614,6 +1684,21 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             metadata: draft[type + 'Metadata'] ?? null,
             read: draft[type + 'Read'] ?? null,
             versions: type === 'report' ? ['月初数量', '纠偏数量'] : undefined,
+            amounts:
+              type === 'report'
+                ? {
+                    period,
+                    unit: '元',
+                    status: amountRead?.status ?? 'unread',
+                    sourceTable:
+                      amountRead?.sourceTable ?? 'ai_db.agents_scm_dws_scm_cust_plan_exe_di',
+                    rowCount: amountRows.length,
+                    initialPlan: sumSourceAmounts(amountRows, '月初计划金额'),
+                    finalPlan: sumSourceAmounts(amountRows, '最终计划金额'),
+                    missingDimensions: amountRows.filter((row) => row['缺项原因']).length,
+                    error: amountRead?.error ?? null,
+                  }
+                : undefined,
             shipmentMetrics:
               type === 'history' && draft.historySource === 'business'
                 ? ['数量', '含赠品数量', '不含税收入']
@@ -1742,6 +1827,38 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'select',
               {
+                'aria-label': '评估月份选择',
+                disabled: adjusting,
+                value: draft.month,
+                onFocus: () => setActualMonth(currentMonth()),
+                onPointerDown: () => setActualMonth(currentMonth()),
+                onKeyDown: () => setActualMonth(currentMonth()),
+                onChange: (event) => {
+                  const month = event.target.value;
+                  const start = currentMonth();
+                  if (month < start || month > monthOffset(start, 2)) return;
+                  const current = localRef.current;
+                  if (
+                    current.drafts.find((entry) => entry.id === current.selected)?.month === month
+                  )
+                    return;
+                  const existing = current.drafts.find((entry) => entry.month === month);
+                  const next = existing ?? makeDraft(`local-${current.drafts.length + 1}`, month);
+                  clearFiles();
+                  saveLocal({
+                    drafts: existing ? current.drafts : [...current.drafts, next],
+                    selected: next.id,
+                  });
+                  resetEditor();
+                },
+              },
+              !evaluationMonths.includes(draft.month) &&
+                h('option', { value: draft.month, disabled: true }, `历史月份 · ${draft.month}`),
+              evaluationMonths.map((month) => h('option', { key: month, value: month }, month)),
+            ),
+            h(
+              'select',
+              {
                 'aria-label': '评估版本选择',
                 disabled: adjusting,
                 value: draft.id,
@@ -1761,6 +1878,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 disabled: adjusting,
                 onClick: () => {
                   setVersionName('');
+                  setActualMonth(currentMonth());
                   setMonth(currentMonth());
                   setReference('');
                   setVersionOpen(true);
@@ -1790,6 +1908,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             ),
           ),
         ),
+        adjusting &&
+          h(
+            'p',
+            { role: 'status', className: 'dc-card-note' },
+            '请保存或取消当前调整，再切换步骤、月份或版本。',
+          ),
       ),
       versionOpen &&
         h(
@@ -1805,9 +1929,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 'button',
                 {
                   className: 'dc-primary',
-                  disabled:
-                    !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || Number(month.slice(0, 4)) < 1000,
+                  disabled: !evaluationMonths.includes(month),
                   onClick: () => {
+                    const start = currentMonth();
+                    if (month < start || month > monthOffset(start, 2)) return;
                     const id = `local-${drafts.length + 1}`,
                       base = drafts.find((entry) => entry.id === reference);
                     const next = {
@@ -1854,6 +1979,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h('input', {
                 type: 'month',
                 'aria-label': '评估月份',
+                min: evaluationMonths[0],
+                max: evaluationMonths[2],
                 value: month,
                 onChange: (event) => setMonth(event.target.value),
               }),
@@ -2010,27 +2137,33 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         }),
       ),
       h('div', { hidden: step !== 'masterdata' }, masterData),
-      active &&
-        ['process', 'constraints', 'capacity', 'report'].includes(step) &&
-        h(Workflow, {
-          evaluation,
-          setEvaluation,
-          syncInventoryTargets,
-          inventoryTargetsBusy: busy.inventoryTargets,
-          step,
-          draft,
-          scopeGeneration,
-          update,
-          onEditingChange: setAdjusting,
-          onUndoShareAdjustment: (input) =>
-            update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input, true) }),
-          relations:
-            relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
-              ? relations
-              : null,
-          shipmentSnapshot:
-            shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
-        }),
+      h(
+        'div',
+        { hidden: !workflowActive },
+        workflowStep.current.step &&
+          h(Workflow, {
+            key: workflowScope,
+            active: workflowActive,
+            result: workflowResult,
+            evaluation,
+            setEvaluation,
+            syncInventoryTargets,
+            inventoryTargetsBusy: busy.inventoryTargets,
+            step: workflowStep.current.step,
+            draft,
+            scopeGeneration,
+            update,
+            onEditingChange: setAdjusting,
+            onUndoShareAdjustment: (input) =>
+              update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input, true) }),
+            relations:
+              relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
+                ? relations
+                : null,
+            shipmentSnapshot:
+              shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
+          }),
+      ),
       h(
         'div',
         { hidden: step !== 'check' },

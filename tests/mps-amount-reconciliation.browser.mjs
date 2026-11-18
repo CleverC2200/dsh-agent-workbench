@@ -1,16 +1,18 @@
+import { seedLeafQuantities } from './helpers/mps-fixtures.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
 import { mpsPage } from './helpers/mps-page.mjs';
-import { adjustCategory } from './helpers/mps-edit.mjs';
+import { adjustLeaf } from './helpers/mps-edit.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 async function setup(t, extra = {}) {
   const sources = {
     'products.detail': ['A', 'B'].map((code) => ({
       material_code: code,
+      target_base: '郑州',
       material_name: `产品${code}`,
       sub_category: '汤圆',
       series: '系列',
@@ -102,7 +104,33 @@ async function setup(t, extra = {}) {
   });
   await frame.getByRole('button', { name: '读取去年发运占比源值', exact: true }).click();
   await expect(frame.getByText('全年历史读取中…')).toHaveCount(0);
-  await adjustCategory(frame, '汤圆', '2026-12', '100', '金额验收');
+  await seedLeafQuantities(
+    frame,
+    [
+      ['A', 60],
+      ['B', 40],
+    ].map(([code, quantity]) => ({
+      base: '郑州',
+      category: '汤圆',
+      group: '组',
+      code,
+      month: '2026-12',
+      quantity,
+      systemValue: null,
+    })),
+  );
+  await frame
+    .getByRole('region', { name: '计划提报数据', exact: true })
+    .getByRole('button', { name: '同步', exact: true })
+    .press('Enter');
+  await expect(frame.getByRole('region', { name: '计划提报数据', exact: true })).toContainText(
+    /最终计划总金额：[0-9]/,
+  );
+  await expect(
+    frame
+      .getByRole('region', { name: '计划提报数据', exact: true })
+      .getByRole('button', { name: '同步', exact: true }),
+  ).toBeEnabled();
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   return { ...result, amounts: frame.getByRole('region', { name: '需求金额对比', exact: true }) };
 }
@@ -131,10 +159,16 @@ test('需求金额按SKU有效量计算，调整、筛选和下载使用同一�
   assert.equal(Number(monthRow['差额']), -60);
   await frame.getByLabel('搜索当前步骤').fill('');
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
-  await view.getByRole('button', { name: '调整', exact: true }).click();
-  await view.getByLabel('汤圆 2026-12 需求数量', { exact: true }).fill('120');
-  await view.getByLabel('批量调整原因', { exact: true }).fill('SKU有效量对账');
-  await view.getByRole('button', { name: '保存调整', exact: true }).click();
+  for (const [code, quantity] of [
+    ['A', 72],
+    ['B', 48],
+  ])
+    await adjustLeaf(
+      frame,
+      { category: '汤圆', group: '组', code, base: '郑州', month: '2026-12' },
+      quantity,
+      'SKU有效量对账',
+    );
   await expect.poll(() => view.getByRole('alert').allTextContents()).toEqual([]);
   await expect(total).toContainText('288.00');
   await expect(total).toContainText('-12.00');
@@ -206,7 +240,10 @@ test('完整分页金额包含池外及缺基地，缺价显示已知小计，�
   await frame.getByLabel('基地筛选', { exact: true }).selectOption('郑州');
   await expect(amounts).toContainText('1条源金额无法归属当前筛选范围');
   await expect(amounts).toContainText('分别为10.00、10.00元');
-  await frame.getByLabel('大类筛选', { exact: true }).selectOption('汤圆');
+  await frame
+    .getByRole('region', { name: '需求加工与收敛', exact: true })
+    .getByLabel('大类筛选', { exact: true })
+    .selectOption('汤圆');
   await expect(amounts).toContainText('199条源金额无法归属当前筛选范围');
   await expect(amounts).toContainText('分别为208.00、208.00元');
   const pending = page.waitForEvent('download');
@@ -217,6 +254,63 @@ test('完整分页金额包含池外及缺基地，缺价显示已知小计，�
   assert.equal(exported[0]['生成金额完整性'], '待补或已知小计');
   assert.equal(exported[0]['差额'], '');
   assert.equal(Number(exported[0]['未归属当前范围源金额条数']), 199);
+});
+
+test('跨月提报先显示已确认数量，金额等待独立完成', async (t) => {
+  let releaseAmount;
+  const holdAmount = new Promise((resolve) => {
+    releaseAmount = resolve;
+  });
+  t.after(() => releaseAmount());
+  const { frame, calls } = await mpsPage(
+    t,
+    config,
+    async ({ queryId, parameters }) => {
+      const isDecember = parameters.month === '2026-12-01';
+      const amount = queryId.startsWith('facts.report-amounts');
+      const report = queryId.startsWith('facts.report') && !amount;
+      if (isDecember && queryId === 'facts.report-amounts.count') await holdAmount;
+      const rows =
+        isDecember && (report || amount)
+          ? [
+              {
+                ...Object.fromEntries(
+                  config.queries[queryId].columns.map((column) => [column, null]),
+                ),
+                belong_base: '郑州',
+                material_code: 'A',
+                ...(report
+                  ? { plannum_total: 42, allnum_total: 43 }
+                  : { ycplanamount: '84.00', monthamount: '86.00' }),
+              },
+            ]
+          : [];
+      return {
+        rows: queryId.endsWith('.count') ? [{ total: rows.length }] : rows,
+        returnedColumns: config.queries[queryId].columns,
+        configVersion: 'separate-report-load',
+      };
+    },
+    { time: '2026-11-18T12:00:00+08:00' },
+  );
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-12');
+  const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
+  await expect
+    .poll(() =>
+      calls.some(
+        ({ queryId, parameters }) =>
+          queryId === 'facts.report-amounts.count' && parameters.month === '2026-12-01',
+      ),
+    )
+    .toBe(true);
+  await expect(report).toContainText('数量合计42件');
+  await expect(report.getByRole('button', { name: '预览当前明细', exact: true })).toBeEnabled();
+  await expect(report).toContainText('最终计划总金额：待补');
+  releaseAmount();
+  await expect(report).toContainText('最终计划总金额：86.00元');
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2027-01');
+  await expect(report).toContainText('当前期间提报源未返回记录，数量待补。');
+  await expect(report.getByText('正在读取…', { exact: true })).toHaveCount(0);
 });
 
 test('版本切换后的迟到金额响应不覆盖新版本，切回旧版本重新读取对应月份', async (t) => {

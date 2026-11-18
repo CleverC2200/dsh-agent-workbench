@@ -39,7 +39,8 @@ const quantityAdjustment = z.discriminatedUnion('kind', [
 const adjustmentHistory = z.strictObject({
   kind: z.enum(['categoryDemand', 'shares', 'quantities']),
   key: text,
-  action: z.enum(['set', 'undo']),
+  action: z.enum(['set', 'undo', 'archive']),
+  archivedAt: z.iso.datetime().optional(),
   value: numeric.nullable(),
   ...audit,
 });
@@ -60,14 +61,29 @@ const shipmentEdits = z.strictObject({
     .optional(),
   remaining: z.record(text, z.strictObject({ values: keyedNumbers, source: text })).optional(),
 });
+const shipmentSourceEdits = z.strictObject({
+  'local-file': shipmentEdits.optional(),
+  business: shipmentEdits.optional(),
+});
 const shipment = z.strictObject({
-  ...shipmentEdits.shape,
-  sourceEdits: z
-    .strictObject({
-      'local-file': shipmentEdits.optional(),
-      business: shipmentEdits.optional(),
-    })
+  transferPlans: list(
+    z.strictObject({
+      month,
+      base: z.enum(['西南', '郑州', '遂平', '华东', '华南']),
+      code: text.min(1),
+      inbound: quantity.int().max(Number.MAX_SAFE_INTEGER).nullable(),
+      outbound: quantity.int().max(Number.MAX_SAFE_INTEGER).nullable(),
+    }),
+  )
+    .refine(
+      (plans) =>
+        new Set(plans.map((plan) => JSON.stringify([plan.month, plan.base, plan.code]))).size ===
+        plans.length,
+    )
     .optional(),
+  ...shipmentEdits.shape,
+  sourceEdits: shipmentSourceEdits.optional(),
+  editsByCutoff: z.record(z.iso.date(), shipmentSourceEdits).optional(),
   cutoff: text.optional(),
   file: text.optional(),
   activeSource: z.enum(['local-file', 'business']).optional(),
@@ -84,6 +100,7 @@ const shipment = z.strictObject({
       prepped: numeric.nullable(),
       unprepped: numeric.nullable(),
       daily3: numeric.nullable(),
+      average: quantity.nullable().optional(),
       open: numeric.nullable(),
       inbound: numeric.nullable(),
       remaining: numeric.nullable(),
@@ -178,6 +195,9 @@ export const mpsLocalDraftSchema = z.strictObject({
       kind: z.enum(['tunnel', 'forming']),
       name: text,
       dailyTons: quantity.nullable(),
+      workshop: text.optional(),
+      tunnel: text.optional(),
+      productionLines: list(text).optional(),
     }),
   ).optional(),
   resourceAssignments: list(
@@ -189,6 +209,26 @@ export const mpsLocalDraftSchema = z.strictObject({
       share: quantity.nullable(),
     }),
   ).optional(),
+  inventoryMovements: list(
+    z.strictObject({
+      month,
+      base: text.min(1),
+      code: text.min(1),
+      productionInbound: quantity.nullable(),
+      inTransitInbound: quantity.nullable(),
+      transferIn: quantity.nullable(),
+      transferOut: quantity.nullable(),
+      source: text.trim().min(1),
+      reason: text.trim().min(1),
+      at: z.iso.datetime(),
+    }),
+  )
+    .refine(
+      (rows) =>
+        new Set(rows.map((row) => JSON.stringify([row.month, row.base, row.code]))).size ===
+        rows.length,
+    )
+    .optional(),
   shipment: shipment.optional(),
 });
 export const mpsLocalStateSchema = z

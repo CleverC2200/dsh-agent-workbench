@@ -1,11 +1,17 @@
+import { mpsLocalDraftSchema } from '../../../src/mps-local-draft.ts';
+import { createDemandAdjustmentUpload } from './demand-adjustment-upload.js';
+import { createHistoryReport, historyColumns, historyExportRows } from './history-report-view.js';
+import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
+import { useStepViewField } from './step-view-state.js';
 import { createProcessedDemandEvidence } from './processed-demand-evidence-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { changeAdjustment, quantityAdjustmentKey } from './local-draft.js';
 import { createBatchEdit } from './batch-edit.js';
 import { createAmountReconciliation } from './amount-reconciliation-view.js';
+import { createReportPage } from './report-page.js';
 
-const number = (value) =>
-  value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format(value);
+const formatInteger = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format;
+const number = (value) => (value == null ? '—' : formatInteger(value));
 const sum = (rows, field) =>
   rows.length && rows.every((row) => row[field] != null)
     ? rows.reduce((total, row) => total + row[field], 0)
@@ -19,27 +25,31 @@ const comparison = (value) =>
 const matches = (row, entry) =>
   row.month === entry.month &&
   row.category === entry.category &&
-  (entry.kind === 'categoryDemand' ||
-    (row.group === entry.group &&
-      (entry.kind === 'group' ||
-        (row.code === entry.code && (entry.kind === 'sku' || row.base === entry.base)))));
+  row.group === entry.group &&
+  row.code === entry.code &&
+  row.base === entry.base;
 const label = (entry) =>
-  [
-    entry.category,
-    entry.kind !== 'categoryDemand' ? entry.group : '',
-    entry.code,
-    entry.base,
-    entry.month,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  [entry.category, entry.group, entry.code, entry.base, entry.month].filter(Boolean).join(' ');
 
-export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
+export function createProcessedDemand(
+  react,
+  { downloadCsv, downloadAmounts, Upload, Dialog, parseCsv },
+) {
   const h = react.createElement;
   const { Field } = createBatchEdit(react);
+  const DemandAdjustmentUpload = createDemandAdjustmentUpload(react, {
+    Upload,
+    Dialog,
+    parseCsv,
+    downloadCsv,
+  });
   const AmountReconciliation = createAmountReconciliation(react, { downloadCsv: downloadAmounts });
+  const UpperAdjustmentConflicts = createUpperAdjustmentConflicts(react);
+  const HistoryReport = createHistoryReport(react, { downloadCsv });
+  const ReportPage = createReportPage(react);
   const Evidence = createProcessedDemandEvidence(react, { downloadCsv });
   return function ProcessedDemand({
+    view,
     draft,
     result,
     rows,
@@ -52,8 +62,31 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
     batch,
     filters = {},
   }) {
-    const [expanded, setExpanded] = react.useState(() => new Set());
-    react.useEffect(() => setExpanded(new Set()), [draft.id, draft.month]);
+    const [expanded, setExpanded] = useStepViewField(
+      react,
+      view,
+      'ProcessedDemand.expanded',
+      () => new Set(),
+    );
+    const [hierarchy, setHierarchy] = useStepViewField(
+      react,
+      view,
+      'ProcessedDemand.hierarchy',
+      'base',
+    );
+    const hierarchyId = react.useId();
+    const [historyOpen, setHistoryOpen] = useStepViewField(
+      react,
+      view,
+      'ProcessedDemand.historyOpen',
+      false,
+    );
+    const restoreTableScroll = react.useCallback(
+      (element) => {
+        if (element) element.scrollLeft = view.get()['ProcessedDemand.scrollLeft'] ?? 0;
+      },
+      [view],
+    );
     const quantities = draft.adjustments?.quantities ?? [];
     const toggle = (key) => {
       setExpanded((previous) => {
@@ -63,7 +96,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         return next;
       });
     };
-    const months = result.months.slice(0, 3);
+    const months = result.months;
     const categories = [
       ...new Set(
         rows
@@ -78,24 +111,11 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
     const categoryValue = (category, month) =>
       result.categoryRows.find((row) => row.category === category && row.month === month);
     const saved = (entry) =>
-      entry.kind === 'categoryDemand'
-        ? draft.adjustments?.categoryDemand?.find(
-            (item) => item.month === entry.month && item.category === entry.category,
-          )
-        : quantities.find((item) => quantityAdjustmentKey(item) === quantityAdjustmentKey(entry));
+      quantities.find((item) => quantityAdjustmentKey(item) === quantityAdjustmentKey(entry));
     const effective = (computed, entry) =>
-      entry.kind === 'categoryDemand'
-        ? (computed.categoryRows.find(
-            (row) => row.month === entry.month && row.category === entry.category,
-          )?.quantity ?? null)
-        : sum(
-            computed.rows.filter((row) => matches(row, entry)),
-            'demand',
-          );
-    const fieldKey = (entry) =>
-      entry.kind === 'categoryDemand'
-        ? JSON.stringify(['categoryDemand', entry.month, entry.category])
-        : quantityAdjustmentKey(entry);
+      [...computed.rows, ...(computed.referenceRows ?? [])].find((row) => matches(row, entry))
+        ?.demand ?? null;
+    const fieldKey = quantityAdjustmentKey;
     const applyBatch = (entries, reason) => {
       if (!entries.length) return;
       const shipments = entries.filter((entry) => entry.meta.kind === 'shipment');
@@ -117,16 +137,10 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       const undos = new Map();
       const quantities = entries.filter((entry) => entry.meta.kind !== 'shipment');
       for (const entry of quantities) {
-        const { kind: level, editorRow: _editorRow, ...fields } = entry.meta;
-        const kind = level === 'categoryDemand' ? 'categoryDemand' : 'quantities';
-        const input = {
-          ...fields,
-          ...(kind === 'quantities' ? { kind: level } : {}),
-          quantity: entry.value,
-          reason,
-        };
+        const { editorRow: _editorRow, ...fields } = entry.meta;
+        const input = { ...fields, quantity: entry.value, reason: entry.reason ?? reason };
         const before = adjustments?.history?.length ?? 0;
-        adjustments = changeAdjustment(adjustments, kind, input, entry.value === null);
+        adjustments = changeAdjustment(adjustments, 'quantities', input, entry.value === null);
         if (entry.value === null && adjustments.history.length > before)
           undos.set(before, entry.meta);
       }
@@ -138,10 +152,11 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       for (const entry of quantities) {
         if (
           entry.value !== null &&
-          entry.meta.kind !== 'categoryDemand' &&
-          !candidate.rows.some((row) => matches(row, entry.meta) && row.quantityAdjusted)
+          ![...candidate.rows, ...(candidate.referenceRows ?? [])].some(
+            (row) => matches(row, entry.meta) && row.quantityAdjusted,
+          )
         )
-          throw Error('当前分层数量未生效，请先补齐权重或撤销冲突调整。');
+          throw Error('当前基地SKU数量未生效，请核对月份和产品范围。');
       }
       if (undos.size)
         adjustments = {
@@ -150,6 +165,8 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
             undos.has(index) ? { ...item, value: effective(candidate, undos.get(index)) } : item,
           ),
         };
+      if (!mpsLocalDraftSchema.shape.adjustments.safeParse(adjustments).success)
+        throw Error('修正及完整历史超出本地草稿可保存范围。请先导出核对，未应用本次修正。');
       update({ adjustments, ...(shipping ? { shipment: shipping.state } : {}) });
     };
     react.useLayoutEffect(() => {
@@ -160,20 +177,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
     }, [batch.commit, applyBatch]);
     const controls = (entry, systemValue, value) => {
       const fixed = saved(entry);
-      const shareConflict =
-        entry.kind !== 'categoryDemand' &&
-        (draft.adjustments?.shares ?? []).some((item) =>
-          result.rows.some(
-            (row) =>
-              row.id === item.rowId && row.month === entry.month && row.category === entry.category,
-          ),
-        );
-      const disabled =
-        entry.kind !== 'categoryDemand' &&
-        (!months.slice(0, 2).includes(entry.month) ||
-          !entry.group ||
-          value == null ||
-          shareConflict);
+      const disabled = entry.kind !== 'base-sku' || !months.includes(entry.month);
       return h(
         'div',
         { className: 'wf-quantity-cell' },
@@ -186,10 +190,9 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
           disabled,
           format: number,
           editFormat: (value) => String(Math.round(value)),
-          title: shareConflict ? '先撤销同月大类占比调整' : '留空恢复系统值',
+          title: '留空恢复系统值',
         }),
         fixed && h('small', null, '已调整'),
-        shareConflict && h('small', null, '先撤销同月大类占比调整'),
       );
     };
     const summaryColumns = [
@@ -230,7 +233,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
     const indexed = react.useMemo(() => {
       const all = new Map();
       const children = new Map();
-      const bases = new Map();
+      const roots = new Map();
       const groupNames = new Map();
       for (const product of draft.products ?? []) {
         const key = JSON.stringify([product['大类'], product['物料组']]);
@@ -242,22 +245,29 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         if (!map.has(key)) map.set(key, []);
         map.get(key).push(row);
       };
-      const path = (row) => [
-        { kind: 'base', base: row.base },
-        { kind: 'base-category', base: row.base, category: row.category },
-        { kind: 'base-group', base: row.base, category: row.category, group: row.group },
-        {
-          kind: 'base-sku',
-          category: row.category,
-          group: row.group,
-          code: row.code,
-          base: row.base,
-        },
-      ];
+      const path = (row) =>
+        hierarchy === 'national'
+          ? [
+              { kind: 'national-category', category: row.category },
+              { kind: 'national-group', category: row.category, group: row.group },
+              { kind: 'national-sku', category: row.category, group: row.group, code: row.code },
+            ]
+          : [
+              { kind: 'base', base: row.base },
+              { kind: 'base-category', base: row.base, category: row.category },
+              { kind: 'base-group', base: row.base, category: row.category, group: row.group },
+              {
+                kind: 'base-sku',
+                category: row.category,
+                group: row.group,
+                code: row.code,
+                base: row.base,
+              },
+            ];
       for (const row of rows) for (const entry of path(row)) add(all, entry, row);
       for (const row of rows) {
         const entries = path(row);
-        bases.set(nodeKey(entries[0]), entries[0]);
+        roots.set(nodeKey(entries[0]), entries[0]);
         for (let index = 0; index < entries.length - 1; index++) {
           const parent = nodeKey(entries[index]);
           if (!children.has(parent)) children.set(parent, new Map());
@@ -276,8 +286,8 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         if (!forecasts.has(key)) forecasts.set(key, []);
         forecasts.get(key).push(row);
       }
-      return { all, children, bases, groupNames, shipment, forecasts };
-    }, [result, rows, draft.products]);
+      return { all, children, roots, groupNames, shipment, forecasts };
+    }, [result, rows, draft.products, hierarchy]);
     const sourceSummary = (source) => {
       const values = source.map((value) => (value == null || value === '' ? null : Number(value)));
       const available = values.filter((value) => value != null);
@@ -316,10 +326,13 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       );
     const nodeData = (entry) => {
       const full = entry ? (indexed.all.get(nodeKey(entry)) ?? []) : rows;
+      const current = full.filter((row) => row.month === months[0]);
       const identities = [
-        ...new Map(full.map((row) => [productKey(row.base, row.code), row])).values(),
+        ...new Map(
+          [...full, ...current].map((row) => [productKey(row.base, row.code), row]),
+        ).values(),
       ];
-      const first = full.filter((row) => row.month === months[0]);
+      const first = identities;
       const shipment = identities.map((row) =>
         indexed.shipment.get(productKey(row.base, row.code)),
       );
@@ -333,45 +346,45 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         shipmentEffective: sourceSummary(shipment.map((row) => row?.fin ?? null)),
         forecasts: months.slice(0, 2).map((month) =>
           sourceSummary(
-            identities
-              .filter(() => full.some((row) => row.month === month))
-              .map((row) => {
-                const values = indexed.forecasts.get(JSON.stringify([month, row.base, row.code]));
-                return values?.length === 1 ? values[0]['数量'] : null;
-              }),
+            full.some((row) => row.month === month)
+              ? identities.map((row) => {
+                  const values = indexed.forecasts.get(JSON.stringify([month, row.base, row.code]));
+                  return values?.length === 1 ? values[0]['数量'] : null;
+                })
+              : [],
           ),
         ),
       };
     };
     const nodeName = (entry, data) => {
       if (entry.kind === 'base') return `基地 · ${entry.base || '基地缺失'}`;
-      if (entry.kind === 'base-category') return `大类 · ${entry.category}`;
-      if (entry.kind === 'base-group') {
+      if (entry.kind === 'base-category' || entry.kind === 'national-category')
+        return `大类 · ${entry.category}`;
+      if (entry.kind === 'base-group' || entry.kind === 'national-group') {
         const names = indexed.groupNames.get(JSON.stringify([entry.category, entry.group]));
         return `物料组 · ${[entry.group || '物料组缺失', names?.size === 1 ? [...names][0] : ''].filter(Boolean).join(' ')}`;
       }
       return `SKU · ${entry.code} ${data.full[0]?.name ?? ''}`;
     };
     const detailColumns = [
-      '基地 / 大类 / 物料组 / SKU',
+      hierarchy === 'national' ? '全国 / 大类 / 物料组 / SKU' : '基地 / 大类 / 物料组 / SKU',
       `M+1 ${months[0]} 计划提报`,
       `上一财年发货 ${result.comparisonSources.historyPeriod.start.slice(0, 7)}至${result.comparisonSources.historyPeriod.end.slice(0, 7)}`,
-      `${result.shipmentMonth} 本月预估发货（系统）`,
       `${result.shipmentMonth} 本月预估发货（可调整）`,
-      `M+1 ${months[0]} 模型预测`,
       `M+1 ${months[0]} 需求（可调整）`,
-      `M+2 ${months[1]} 模型预测`,
       `M+2 ${months[1]} 需求（可调整）`,
-      `M+3 ${months[2]} 需求`,
+      `M+3 ${months[2]} 需求（可调整）`,
+      `M+4 ${months[3]} 库存参考（可调整）`,
     ];
+    const isExpanded = (key) => Boolean(filters.search) || expanded.has(key);
     const visible = [];
     const append = (entry, depth) => {
       const key = nodeKey(entry);
       visible.push({ entry, depth });
-      if (expanded.has(key))
+      if (isExpanded(key))
         for (const child of indexed.children.get(key)?.values() ?? []) append(child, depth + 1);
     };
-    for (const entry of indexed.bases.values()) append(entry, 0);
+    for (const entry of indexed.roots.values()) append(entry, 0);
     const detailRows = visible.map(({ entry, depth }) => {
       const key = nodeKey(entry);
       const data = nodeData(entry);
@@ -393,15 +406,16 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
                   'button',
                   {
                     className: 'wf-demand-toggle',
-                    'aria-label': entry.kind === 'base' ? name : `${entry.base} ${name}`,
-                    'aria-expanded': expanded.has(key),
+                    disabled: Boolean(filters.search),
+                    'aria-label': entry.kind === 'base' ? name : `${entry.base || '全国'} ${name}`,
+                    'aria-expanded': isExpanded(key),
                     onClick: () => toggle(key),
                   },
                   h(
                     'svg',
                     { viewBox: '0 0 12 12', width: 12, height: 12, 'aria-hidden': true },
                     h('path', {
-                      d: expanded.has(key) ? 'M2 4 L6 8 L10 4' : 'M4 2 L8 6 L4 10',
+                      d: isExpanded(key) ? 'M2 4 L6 8 L10 4' : 'M4 2 L8 6 L4 10',
                       fill: 'none',
                       stroke: 'currentColor',
                       strokeWidth: 1.5,
@@ -414,7 +428,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
               ? h(
                   'small',
                   { className: 'wf-note' },
-                  `历史合计 · 自身＋替换品 ${processRow.historyCode} × ${processRow.historyFactor === undefined ? 1 : (processRow.historyFactor ?? '待补系数')}`,
+                  `历史合计 · 自身＋替换品 ${processRow.historyCode}，折算倍率${processRow.historyFactor === null ? '待补' : new Intl.NumberFormat('zh-CN', { style: 'percent', maximumSignificantDigits: 4 }).format(processRow.historyFactor ?? 1)}`,
                 )
               : null,
             entry.kind === 'base-sku' &&
@@ -432,7 +446,6 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         ),
         h('td', null, sourceCell(data.report)),
         h('td', null, sourceCell(data.history)),
-        h('td', null, sourceCell(data.shipmentSystem)),
         h(
           'td',
           null,
@@ -445,7 +458,10 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
               kind: 'shipment',
               keys: data.identities.map((row) => productKey(row.base, row.code)),
             },
-            disabled: currentShipment == null || !shipmentSnapshot?.prepareForecast,
+            disabled:
+              hierarchy === 'national' ||
+              currentShipment == null ||
+              !shipmentSnapshot?.prepareForecast,
             integer: true,
             min: null,
             format: number,
@@ -456,21 +472,31 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
           currentShipment != null &&
             sourceStatus(data.shipmentEffective) &&
             h('small', { className: 'wf-source-status' }, sourceStatus(data.shipmentEffective)),
+          h(
+            'div',
+            { className: 'wf-demand-reference' },
+            h('span', null, '系统预估'),
+            sourceCell(data.shipmentSystem),
+          ),
         ),
         ...months.flatMap((month, index) => {
           const selected = data.full.filter((row) => row.month === month);
           const value = sum(selected, 'demand');
           const system = sum(selected, 'systemDemand');
-          const cell = h(
+          return h(
             'td',
             { key: month },
             entry.kind === 'base-sku'
               ? controls({ ...entry, month, editorRow: key }, system, value, '', true)
               : sourceCell(sourceSummary(selected.map((row) => row.demand))),
+            index < 2 &&
+              h(
+                'div',
+                { className: 'wf-demand-reference' },
+                h('span', null, '模型预测'),
+                sourceCell(data.forecasts[index]),
+              ),
           );
-          return index < 2
-            ? [h('td', { key: `${month}-model` }, sourceCell(data.forecasts[index])), cell]
-            : [cell];
         }),
       );
       return rendered;
@@ -482,18 +508,35 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         'tr',
         { key: 'scope-total', className: 'wf-demand-row wf-demand-total' },
         h('th', { scope: 'row' }, scopeLabel),
-        ...[
-          total.report,
-          total.history,
-          total.shipmentSystem,
-          total.shipmentEffective,
-          ...months.flatMap((month, index) => {
-            const demand = sourceSummary(
-              rows.filter((row) => row.month === month).map((row) => row.demand),
-            );
-            return index < 2 ? [total.forecasts[index], demand] : [demand];
-          }),
-        ].map((value, index) => h('td', { key: index }, sourceCell(value))),
+        h('td', null, sourceCell(total.report)),
+        h('td', null, sourceCell(total.history)),
+        h(
+          'td',
+          null,
+          sourceCell(total.shipmentEffective),
+          h(
+            'div',
+            { className: 'wf-demand-reference' },
+            h('span', null, '系统预估'),
+            sourceCell(total.shipmentSystem),
+          ),
+        ),
+        ...months.map((month, index) =>
+          h(
+            'td',
+            { key: month },
+            sourceCell(
+              sourceSummary(rows.filter((row) => row.month === month).map((row) => row.demand)),
+            ),
+            index < 2 &&
+              h(
+                'div',
+                { className: 'wf-demand-reference' },
+                h('span', null, '模型预测'),
+                sourceCell(total.forecasts[index]),
+              ),
+          ),
+        ),
       ),
     );
     const missingRows = rows.flatMap((row) => {
@@ -559,6 +602,10 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
         '有效需求待补数',
         '缺项指标',
         '原因',
+        ...historyColumns.filter((column) => column !== '原因'),
+        '系统需求数量',
+        '人工修正状态',
+        '调整原因',
       ];
       const context = { 评估版本: draft.name, 评估月份: draft.month };
       downloadCsv(`${draft.month}-当前范围需求.csv`, columns, [
@@ -573,6 +620,8 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
               ...context,
               粒度: scopeLabel,
               月份: month,
+              计算用历史数量: total.history.quantity,
+              历史期间: `${result.comparisonSources.historyPeriod.start}至${result.comparisonSources.historyPeriod.end}`,
               ...(index === 0
                 ? {
                     计划提报已知小计: total.report.knownQuantity,
@@ -586,16 +635,59 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
               有效需求待补数: demand.missing,
             };
           }),
+        ...[
+          ...indexed.roots.values(),
+          ...[...indexed.children.values()].flatMap((children) => [...children.values()]),
+        ]
+          .filter((entry) => entry.kind !== 'base-sku')
+          .flatMap((entry) => {
+            const data = nodeData(entry);
+            const level =
+              entry.kind === 'base'
+                ? '基地汇总'
+                : entry.kind.endsWith('category')
+                  ? '大类汇总'
+                  : entry.kind.endsWith('group')
+                    ? '物料组汇总'
+                    : '全国SKU汇总';
+            return months
+              .filter((month) => !filters.month || filters.month === month)
+              .map((month) => {
+                const demand = sourceSummary(
+                  data.full.filter((row) => row.month === month).map((row) => row.demand),
+                );
+                return {
+                  ...context,
+                  粒度: level,
+                  月份: month,
+                  基地: entry.base || '全国',
+                  大类: entry.category,
+                  物料组: entry.group,
+                  产品编码: entry.code,
+                  计算用历史数量: data.history.quantity,
+                  历史期间: `${result.comparisonSources.historyPeriod.start}至${result.comparisonSources.historyPeriod.end}`,
+                  有效需求数量: demand.quantity,
+                  有效需求已知小计: demand.knownQuantity,
+                  有效需求待补数: demand.missing,
+                };
+              });
+          }),
         ...rows.map((row) => ({
           ...context,
-          粒度: '基地SKU',
           月份: row.month,
           基地: row.base,
           产品编码: row.code,
           产品名称: row.name,
           大类: row.category,
           有效需求数量: row.demand,
+          ...historyExportRows([row], {}, result.comparisonSources.historyPeriod, false)[0],
+          粒度: '基地SKU',
+          系统需求数量: row.systemDemand,
+          人工修正状态: row.quantityAdjusted ? '有效人工修正' : '系统值',
+          调整原因: quantities.find((item) => item.kind === 'base-sku' && matches(row, item))
+            ?.reason,
         })),
+        ...historyExportRows(rows, context, result.comparisonSources.historyPeriod),
         ...missingRows.map((row) => ({ ...context, 粒度: '缺项报告', ...row })),
       ]);
     };
@@ -604,7 +696,11 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
       {
         className: 'dc-table-scroll wf-table-scroll wf-processed-scroll',
         tabIndex: 0,
+        role: 'region',
         'aria-label': '加工后的需求横向滚动区',
+        ref: restoreTableScroll,
+        onScroll: (event) =>
+          view.update({ 'ProcessedDemand.scrollLeft': event.currentTarget.scrollLeft }),
       },
       h(
         'table',
@@ -676,12 +772,13 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
           h('button', { onClick: exportSummary }, '下载大类需求总表'),
         ),
       ),
-      h(Evidence, { draft, result: result.categoryComputation, rows, filters, table }),
+      h(Evidence, { view, draft, result: result.categoryComputation, rows, filters, table }),
       card(
         '加工后的需求',
         h(
           react.Fragment,
           null,
+          h(DemandAdjustmentUpload, { draft, result, batch, table, apply: applyBatch }),
           detailTable,
           !rows.length &&
             h('p', { className: 'wf-note' }, '当前筛选暂无基地SKU输入，展开来源诊断查看缺项。'),
@@ -694,16 +791,46 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
             { className: 'dc-card-note' },
             `${new Set(rows.map((row) => row.code)).size}个单品 · ${new Set(rows.map((row) => row.base)).size}个基地 · 单位：件`,
           ),
+          h('label', { htmlFor: hierarchyId }, '需求层级视角'),
+          h(
+            'select',
+            {
+              id: hierarchyId,
+              value: hierarchy,
+              disabled: batch.active,
+              onChange: (event) => setHierarchy(event.target.value),
+            },
+            h('option', { value: 'base' }, '按基地查看'),
+            h('option', { value: 'national' }, '全国汇总查看'),
+          ),
           h('button', { onClick: exportScope }, '下载当前范围需求'),
         ),
       ),
+      h(HistoryReport, {
+        view,
+        draft,
+        rows,
+        period: result.comparisonSources.historyPeriod,
+        card,
+        table,
+      }),
       card(
         '加工需求缺项报告',
         missingRows.length
-          ? table(
-              '加工需求缺项报告',
-              ['基地', '产品编码', '产品名称', '大类', '月份', '缺项指标', '原因'],
-              missingRows.map((row) => Object.values(row)),
+          ? h(
+              ReportPage,
+              {
+                view,
+                stateKey: 'ProcessedDemand.missingPage',
+                label: '缺项报告',
+                rows: missingRows,
+              },
+              (visible) =>
+                table(
+                  '加工需求缺项报告',
+                  ['基地', '产品编码', '产品名称', '大类', '月份', '缺项指标', '原因'],
+                  visible.map((row) => Object.values(row)),
+                ),
             )
           : h(
               'p',
@@ -711,10 +838,17 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
               rows.length ? '当前范围无需求和对照数量缺项。' : '当前筛选暂无输入。',
             ),
       ),
+      h(UpperAdjustmentConflicts, { draft, update }),
       h(AmountReconciliation, { draft, result, rows, filters, card, table }),
       h(
         'details',
-        { className: 'wf-disclosure' },
+        {
+          className: 'wf-disclosure',
+          open: historyOpen,
+          onToggle: (event) => {
+            if (event.target === event.currentTarget) setHistoryOpen(event.currentTarget.open);
+          },
+        },
         h(
           'summary',
           null,
@@ -727,7 +861,7 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
             .filter((item) => item.kind === 'quantities')
             .map((item) => [
               item.key,
-              item.action === 'undo' ? '撤销' : '调整',
+              item.action === 'archive' ? '归档' : item.action === 'undo' ? '撤销' : '调整',
               number(item.systemValue),
               number(item.value),
               item.reason,
@@ -738,27 +872,29 @@ export function createProcessedDemand(react, { downloadCsv, downloadAmounts }) {
           table(
             '当前固定数量',
             ['对象', '固定数量', '原因', '时间', '操作'],
-            quantities.map((item) => [
-              label(item),
-              number(item.quantity),
-              item.reason,
-              item.at,
-              h(
-                'button',
-                {
-                  'aria-label': `撤销固定数量 ${label(item)}`,
-                  disabled: !batch.active,
-                  onClick: () =>
-                    batch.stage(fieldKey(item), {
-                      label: label(item),
-                      text: '',
-                      meta: item,
-                      min: 0,
-                    }),
-                },
-                '撤销',
-              ),
-            ]),
+            quantities
+              .filter((item) => item.kind === 'base-sku')
+              .map((item) => [
+                label(item),
+                number(item.quantity),
+                item.reason,
+                item.at,
+                h(
+                  'button',
+                  {
+                    'aria-label': `撤销固定数量 ${label(item)}`,
+                    disabled: !batch.active,
+                    onClick: () =>
+                      batch.stage(fieldKey(item), {
+                        label: label(item),
+                        text: '',
+                        meta: item,
+                        min: 0,
+                      }),
+                  },
+                  '撤销',
+                ),
+              ]),
           ),
       ),
     );

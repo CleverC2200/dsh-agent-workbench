@@ -25,6 +25,8 @@ import {
   verifySavedSalesPlan,
 } from './models/salesPlanAccessModel.ts';
 import { salesPlanProgressBarColor } from './models/salesPlanProgressModel.ts';
+import { salesPlanConfirmedQuantity } from './models/salesPlanQuantityModel.ts';
+import { salesPlanDraftInputValues } from './models/salesPlanLocalDraftModel.ts';
 import { salesPlanVarianceClass } from './models/salesPlanVarianceModel.ts';
 import {
   Alert,
@@ -308,7 +310,12 @@ type RegionalApprovalLiveTableRow =
       kind: 'category';
       tableRowId: string;
       plan: RegionalApprovalLiveRow;
-      category: RegionalApprovalLiveCategorySummary;
+      members: RegionalApprovalLiveRow[];
+      targetAmount: string;
+      category: Pick<
+        RegionalApprovalLiveCategorySummary,
+        'categoryName' | 'skuCount' | 'quantity' | 'amount'
+      >;
     };
 
 type PersistedApprovalWorkbenchState = {
@@ -654,11 +661,49 @@ const RegionalApprovalWorkbench: React.FC<{
     () => (liveQuery.queueState.data?.records ?? []).map(toRegionalApprovalLiveRow),
     [liveQuery.queueState.data?.records],
   );
+  const confirmedMonthlyCategories = useMemo<
+    Record<string, RegionalApprovalLiveCategorySummary[]>
+  >(() => {
+    const categories: Record<string, RegionalApprovalLiveCategorySummary[]> = {};
+    if (orderType !== 'M') return categories;
+    for (const row of allLiveRows) {
+      const skus = currentSkusByPlan[row.planId];
+      if (!skus || row.orderType === 'Z' || skus.some((sku) => sku.versionId !== row.versionId))
+        continue;
+      categories[row.planId] = aggregateRegionalApprovalLiveCategories(
+        skus.map((sku) => {
+          const qty = salesPlanConfirmedQuantity(
+            sku,
+            row.status,
+            row.planTypeCode,
+            liveStageFilter ?? roleStages[0],
+            livePendingValues[row.planId]?.[String(sku.skuCode)],
+          );
+          return { ...sku, qty, amt: multiplyExactDecimals(qty, String(sku.price)) ?? '—' };
+        }),
+      );
+    }
+    return categories;
+  }, [allLiveRows, currentSkusByPlan, livePendingValues, orderType, liveStageFilter, roleKey]);
   const draftedAllLiveRows = useMemo(
     () =>
       allLiveRows.map((row) => {
         const metrics = versionMetrics[row.planId];
         const adjusted = liveAdjustmentMetrics[row.planId];
+        const confirmed = confirmedMonthlyCategories[row.planId];
+        if (orderType === 'M' && row.orderType !== 'Z') {
+          const quantity = confirmed
+            ? addExactDecimals(confirmed.map((item) => item.quantity))
+            : '';
+          const amount = confirmed ? addExactDecimals(confirmed.map((item) => item.amount)) : '';
+          return {
+            ...row,
+            mPlanQty: quantity,
+            mPlanAmount: amount,
+            currentQty: quantity,
+            currentAmount: amount,
+          };
+        }
         const next = metrics
           ? {
               ...row,
@@ -700,7 +745,7 @@ const RegionalApprovalWorkbench: React.FC<{
             }
           : next;
       }),
-    [liveAdjustmentMetrics, allLiveRows, versionMetrics, orderType],
+    [liveAdjustmentMetrics, allLiveRows, versionMetrics, orderType, confirmedMonthlyCategories],
   );
   const dimensionStage = liveStageFilter ?? 'category';
   const availableDimensions = APPROVAL_DIMENSIONS_BY_STAGE[dimensionStage];
@@ -814,20 +859,82 @@ const RegionalApprovalWorkbench: React.FC<{
   );
 
   const liveTableRows = useMemo<RegionalApprovalLiveTableRow[]>(() => {
+    const categoryRows = (
+      plan: RegionalApprovalLiveRow,
+      members: RegionalApprovalLiveRow[],
+      parentId: string,
+    ): RegionalApprovalLiveTableRow[] => {
+      if (
+        members.some(
+          (member) =>
+            !(orderType === 'M' && member.orderType !== 'Z'
+              ? confirmedMonthlyCategories[member.planId]
+              : liveCategorySummaries[member.planId]),
+        )
+      )
+        return [];
+      const categories = new Map<
+        string,
+        {
+          entries: RegionalApprovalLiveCategorySummary[];
+          members: RegionalApprovalLiveRow[];
+          targets: string[];
+        }
+      >();
+      for (const member of members) {
+        const summaries =
+          confirmedMonthlyCategories[member.planId] ?? liveCategorySummaries[member.planId] ?? [];
+        const baseTotal = addExactDecimals(summaries.map((item) => item.baseAmount));
+        for (const category of summaries) {
+          const group = categories.get(category.categoryName) ?? {
+            entries: [],
+            members: [],
+            targets: [],
+          };
+          group.entries.push(category);
+          group.members.push(member);
+          group.targets.push(
+            Number(baseTotal) > 0 && /^-?\d+(?:\.\d+)?$/.test(member.targetAmount)
+              ? (
+                  (Number(member.targetAmount) * Number(category.baseAmount)) /
+                  Number(baseTotal)
+                ).toFixed(2)
+              : '',
+          );
+          categories.set(category.categoryName, group);
+        }
+      }
+      return [...categories].map(([categoryName, group]) => {
+        const quantity = addExactDecimals(group.entries.map((item) => item.quantity));
+        const amount = addExactDecimals(group.entries.map((item) => item.amount));
+        return {
+          kind: 'category',
+          tableRowId: `${parentId}:category:${categoryName}`,
+          plan,
+          members: group.members,
+          targetAmount: addExactDecimals(group.targets),
+          category: {
+            categoryName,
+            skuCount: new Set(
+              group.members.flatMap((member) =>
+                (currentSkusByPlan[member.planId] ?? [])
+                  .filter((sku) => (sku.productCategName.trim() || '其他') === categoryName)
+                  .map((sku) => String(sku.skuCode)),
+              ),
+            ).size,
+            quantity,
+            amount,
+          },
+        };
+      });
+    };
     const planRows = (
       plans: RegionalApprovalLiveRow[],
       childPlan = false,
     ): RegionalApprovalLiveTableRow[] =>
       plans.flatMap((plan) => [
         { kind: 'plan' as const, tableRowId: plan.planId, plan, childPlan },
-        ...(categoryComparison
-          ? (liveCategorySummaries[plan.planId] ?? []).map((category) => ({
-              kind: 'category' as const,
-              tableRowId: `${plan.planId}:category:${category.categoryName}`,
-              plan,
-              category,
-            }))
-          : []),
+        ...(categoryComparison ? categoryRows(plan, [plan], plan.planId) : []),
       ]);
     const levels: ApprovalDimension[] = ['base', 'area', 'province', 'region', 'customer'];
     const build = (
@@ -843,6 +950,17 @@ const RegionalApprovalWorkbench: React.FC<{
         if (level === levels.length - 1) return planRows(group.members, true);
         if (!parent && group.members.length === 1) return planRows(group.members);
         const id = `${parent}/group:${group.key}`;
+        if (categoryComparison)
+          return [
+            {
+              kind: 'plan',
+              tableRowId: id,
+              plan: group.summary,
+              members: group.members,
+              displayDimension: levels[level],
+            },
+            ...categoryRows(group.summary, group.members, id),
+          ];
         return [
           {
             kind: 'plan',
@@ -859,6 +977,9 @@ const RegionalApprovalWorkbench: React.FC<{
     categoryComparison,
     draftedLiveRows,
     liveCategorySummaries,
+    confirmedMonthlyCategories,
+    currentSkusByPlan,
+    orderType,
     dimension,
     liveQuery.queueState.data?.groupMetrics,
   ]);
@@ -875,8 +996,12 @@ const RegionalApprovalWorkbench: React.FC<{
   }, [liveTableRows]);
   const [expandedLiveGroups, setExpandedLiveGroups] = useState<Array<string | number>>([]);
   const expandedLiveRowKeys = useMemo(
-    () => [...new Set([...expandedLiveGroups, ...(inlinePlanId ? [inlinePlanId] : [])])],
-    [expandedLiveGroups, inlinePlanId],
+    () =>
+      [...new Set([...expandedLiveGroups, ...(inlinePlanId ? [inlinePlanId] : [])])].filter(
+        (id) =>
+          liveTableRowById.get(String(id))?.kind === (categoryComparison ? 'category' : 'plan'),
+      ),
+    [expandedLiveGroups, inlinePlanId, liveTableRowById, categoryComparison],
   );
 
   const [draftPatch, setDraftPatch] = useState<{
@@ -957,12 +1082,14 @@ const RegionalApprovalWorkbench: React.FC<{
   );
 
   const focusedLiveRow = liveRows.find((row) => row.planId === focusedLivePlanId) ?? liveRows[0];
+  const metricRows = orderType === 'M' ? allLiveRows : liveRows;
   useEffect(() => {
     const requestId = ++liveCategoriesRequest.current;
     setLiveCategoriesError(false);
     setLiveCategorySummaries({});
-    if (!liveRows.length) {
+    if (!metricRows.length) {
       setVersionMetrics({});
+      setCurrentSkusByPlan({});
       setLiveCategoriesLoading(false);
       return;
     }
@@ -974,19 +1101,36 @@ const RegionalApprovalWorkbench: React.FC<{
       const metrics: typeof versionMetrics = {};
       const categories: typeof liveCategorySummaries = {};
       const currentSkus: typeof currentSkusByPlan = {};
-      for (const row of liveRows) {
+      const restoredInputs: typeof livePendingValues = {};
+      for (const row of metricRows) {
         controller.signal.throwIfAborted();
         const versionId = row.versionId;
-        const skus = await detailClient.versionSkus.invoke({
-          versionId,
-          signal: controller.signal,
-        });
+        const approvalRole = liveStageFilter ?? roleStages[0];
+        const [skus, stored] = await Promise.all([
+          detailClient.versionSkus.invoke({ versionId, signal: controller.signal }),
+          orderType === 'M' && row.orderType !== 'Z' && detailClient.draft
+            ? detailClient.draft.invoke({
+                planId: row.planId,
+                versionId,
+                approvalRole,
+                signal: controller.signal,
+              })
+            : undefined,
+        ]);
         if (
+          (orderType === 'M' && skus.length !== row.skuCount) ||
           skus.some((sku) => sku.versionId !== versionId) ||
           new Set(skus.map((sku) => sku.skuCode)).size !== skus.length
         )
           throw new Error('INVALID_VERSION_SKUS');
         currentSkus[row.planId] = skus;
+        if (stored && !stored.stale)
+          restoredInputs[row.planId] = salesPlanDraftInputValues(
+            skus,
+            row,
+            stored.draft,
+            approvalRole,
+          );
         const displaySkus =
           row.orderType === 'Z'
             ? skus.map((sku) => ({ ...sku, baseQty: sku.corrBaseQty ?? sku.qty, amtBase: sku.amt }))
@@ -1042,6 +1186,12 @@ const RegionalApprovalWorkbench: React.FC<{
         }
       }
       if (!controller.signal.aborted) {
+        setLivePendingValues((current) => {
+          const next = { ...current };
+          for (const [planId, values] of Object.entries(restoredInputs))
+            next[planId] = { ...values, ...current[planId] };
+          return next;
+        });
         setVersionMetrics(metrics);
         setLiveCategorySummaries(categories);
         setCurrentSkusByPlan(currentSkus);
@@ -1055,7 +1205,7 @@ const RegionalApprovalWorkbench: React.FC<{
         if (liveCategoriesRequest.current === requestId) setLiveCategoriesLoading(false);
       });
     return () => controller.abort();
-  }, [detailClient, liveRows, orderType, liveStageFilter]);
+  }, [detailClient, metricRows, orderType, liveStageFilter, roleKey]);
   const scopeSummary = liveQuery.analysisSummary;
   const liveAccess = useSalesPlanAccess(
     liveRows,
@@ -1256,8 +1406,8 @@ const RegionalApprovalWorkbench: React.FC<{
         visibleCount: allLiveRows.length,
         pendingCount: 0,
         warningCount: 0,
-        quantity: skuReviewTotals?.planQty ?? '—',
-        amount: skuReviewTotals?.planAmount ?? '—',
+        quantity: skuReviewTotals?.confirmedQty ?? '—',
+        amount: skuReviewTotals?.confirmedAmount ?? '—',
         targetAmount: skuReviewTotals?.budgetAmount ?? undefined,
         savedAdjustmentCount: 0,
         localApprovalResultCount: 0,
@@ -1278,27 +1428,35 @@ const RegionalApprovalWorkbench: React.FC<{
       pendingCount: liveRows.filter((row) => row.approvalState === 'pending').length,
       warningCount: liveRows.filter((row) => row.approvalState === 'returned').length,
 
-      quantity: serverSummary
-        ? (serverSummary.planQty ?? '—')
-        : draftedLiveRows.length === 0
-          ? '0'
-          : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentQty))
-            ? addExactDecimals(draftedLiveRows.map((row) => row.currentQty))
-            : hasCompleteDetailMetrics
-              ? addExactDecimals(detailMetrics.map((detail) => detail!.baseQty))
-              : '—',
-      amount: serverSummary
-        ? (serverSummary.planAmount ?? '—')
-        : draftedLiveRows.length === 0
-          ? '0'
-          : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentAmount))
-            ? addExactDecimals(draftedLiveRows.map((row) => row.currentAmount))
-            : hasCompleteDetailMetrics
-              ? addExactDecimals(detailMetrics.map((detail) => detail!.baseAmount))
-              : '—',
+      quantity:
+        orderType === 'M'
+          ? addExactDecimals(draftedAllLiveRows.map((row) => row.currentQty))
+          : serverSummary
+            ? (serverSummary.planQty ?? '—')
+            : draftedLiveRows.length === 0
+              ? '0'
+              : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentQty))
+                ? addExactDecimals(draftedLiveRows.map((row) => row.currentQty))
+                : hasCompleteDetailMetrics
+                  ? addExactDecimals(detailMetrics.map((detail) => detail!.baseQty))
+                  : '—',
+      amount:
+        orderType === 'M'
+          ? addExactDecimals(draftedAllLiveRows.map((row) => row.currentAmount))
+          : serverSummary
+            ? (serverSummary.planAmount ?? '—')
+            : draftedLiveRows.length === 0
+              ? '0'
+              : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentAmount))
+                ? addExactDecimals(draftedLiveRows.map((row) => row.currentAmount))
+                : hasCompleteDetailMetrics
+                  ? addExactDecimals(detailMetrics.map((detail) => detail!.baseAmount))
+                  : '—',
       targetAmount:
         serverSummary?.targetAmount ??
-        addExactDecimals(draftedLiveRows.map((row) => row.targetAmount)),
+        addExactDecimals(
+          (orderType === 'M' ? draftedAllLiveRows : draftedLiveRows).map((row) => row.targetAmount),
+        ),
       savedAdjustmentCount: 0,
       localApprovalResultCount: 0,
     };
@@ -1308,6 +1466,8 @@ const RegionalApprovalWorkbench: React.FC<{
     allLiveRows,
     scopeSummary,
     draftedLiveRows,
+    draftedAllLiveRows,
+    orderType,
     liveRows,
     versionMetrics,
     liveQuery.queueState.data?.summary,
@@ -1980,13 +2140,13 @@ const RegionalApprovalWorkbench: React.FC<{
     pageSize,
   ]);
   const exportScopeRef = useRef(exportScope);
-  const exportRowsRef = useRef(liveRows);
+  const exportRowsRef = useRef(draftedLiveRows);
   const exportMountedRef = useRef(true);
   const exportRequestRef = useRef<AbortController | null>(null);
   const [exporting, setExporting] = useState(false);
-  useEffect(() => () => exportRequestRef.current?.abort(), [exportScope, liveRows]);
+  useEffect(() => () => exportRequestRef.current?.abort(), [exportScope, draftedLiveRows]);
   exportScopeRef.current = exportScope;
-  exportRowsRef.current = liveRows;
+  exportRowsRef.current = draftedLiveRows;
   useEffect(() => {
     exportMountedRef.current = true;
     return () => {
@@ -2011,22 +2171,26 @@ const RegionalApprovalWorkbench: React.FC<{
     const scopeChanged = () =>
       !exportMountedRef.current ||
       exportScopeRef.current !== exportScope ||
-      exportRowsRef.current !== liveRows;
+      exportRowsRef.current !== draftedLiveRows;
     try {
       const XLSX = await import('xlsx-republish');
       if (
         !exportMountedRef.current ||
         exportScopeRef.current !== exportScope ||
-        exportRowsRef.current !== liveRows
+        exportRowsRef.current !== draftedLiveRows
       )
         return;
       if (
-        liveRows.some(
+        draftedLiveRows.some(
           (row) =>
             [row.planId, row.versionId, row.periodId, row.dealerCode].some(
               (value) => !String(value ?? '').trim(),
             ) ||
-            [row.targetQty, row.targetAmount].some((value) => !/^-?\d+(?:\.\d+)?$/.test(value)),
+            [
+              row.targetQty,
+              row.targetAmount,
+              ...(orderType === 'M' ? [row.mPlanQty, row.mPlanAmount] : []),
+            ].some((value) => !/^-?\d+(?:\.\d+)?$/.test(value ?? '')),
         )
       ) {
         setExportFeedback({
@@ -2100,12 +2264,13 @@ const RegionalApprovalWorkbench: React.FC<{
         'updatedAt',
         'returnReason',
         'statusCode',
+        ...(orderType === 'M' ? (['mPlanQty', 'mPlanAmount'] as const) : []),
       ] as const;
       const sheet = XLSX.utils.aoa_to_sheet([
         headers.map((field) =>
           t(`common.assistantSurface.regionalApproval.exportColumns.${field}`),
         ),
-        ...liveRows.map((row, index) => [
+        ...draftedLiveRows.map((row, index) => [
           row.planId,
           row.versionId,
           row.periodId,
@@ -2134,15 +2299,19 @@ const RegionalApprovalWorkbench: React.FC<{
           row.updatedAt ?? '',
           row.returnReason ?? '',
           row.status,
+          ...(orderType === 'M'
+            ? [numericValue(row.mPlanQty ?? ''), numericValue(row.mPlanAmount ?? '')]
+            : []),
         ]),
       ]);
       sheet['!cols'] = headers.map(() => ({ wch: 24 }));
       for (let row = 2; row <= liveRows.length + 1; row++) {
         for (const field of [
           'targetAmount',
+          ...(orderType === 'M' ? (['mPlanAmount'] as const) : []),
           ...SALES_PLAN_EXPORT_AMOUNT_PAIRS.map((pair) => pair[1]),
         ] as const) {
-          const column = XLSX.utils.encode_col(headers.indexOf(field));
+          const column = XLSX.utils.encode_col(headers.findIndex((header) => header === field));
           if (sheet[`${column}${row}`]?.t === 'n') sheet[`${column}${row}`].z = '#,##0.00';
         }
       }
@@ -2158,6 +2327,9 @@ const RegionalApprovalWorkbench: React.FC<{
         [exportLabel('scope'), exportLabel('currentPage')],
         [exportLabel('month'), liveQuery.selectedPeriodMonth ?? '—'],
         [exportLabel('version'), exportLabel('currentVersion')],
+        ...(orderType === 'M'
+          ? [[exportLabel('monthlyBasis'), exportLabel('confirmedMonthlyBasis')]]
+          : []),
         [exportLabel('page'), liveCurrentPage],
         [exportLabel('pageSize'), pageSize],
         [exportLabel('exported'), liveRows.length],
@@ -2331,51 +2503,55 @@ const RegionalApprovalWorkbench: React.FC<{
         return (
           <div className={styles.organizationCell}>
             <div className={styles.organizationTitle}>
-              <Button
-                type="text"
-                size="small"
-                className={styles.detailTrigger}
-                onClick={() => {
-                  if (tableRow.members) {
-                    setExpandedLiveGroups((current) =>
-                      current.includes(tableRow.tableRowId)
-                        ? current.filter((id) => id !== tableRow.tableRowId)
-                        : [...current, tableRow.tableRowId],
-                    );
-                    return;
+              {categoryComparison ? (
+                <strong>{organizationName}</strong>
+              ) : (
+                <Button
+                  type="text"
+                  size="small"
+                  className={styles.detailTrigger}
+                  onClick={() => {
+                    if (tableRow.members) {
+                      setExpandedLiveGroups((current) =>
+                        current.includes(tableRow.tableRowId)
+                          ? current.filter((id) => id !== tableRow.tableRowId)
+                          : [...current, tableRow.tableRowId],
+                      );
+                      return;
+                    }
+                    selectLivePlanContext(row);
+                    setFocusedLivePlanId(row.planId);
+                    setInlinePlanId((current) => (current === row.planId ? undefined : row.planId));
+                  }}
+                  aria-label={t(
+                    tableRow.members
+                      ? 'common.assistantSurface.regionalApproval.expandOrganization'
+                      : 'common.assistantSurface.regionalApproval.liveAdjustment.openFor',
+                    {
+                      plan: organizationName,
+                    },
+                  )}
+                  aria-expanded={
+                    tableRow.members ? expandedLiveGroups.includes(tableRow.tableRowId) : undefined
                   }
-                  selectLivePlanContext(row);
-                  setFocusedLivePlanId(row.planId);
-                  setInlinePlanId((current) => (current === row.planId ? undefined : row.planId));
-                }}
-                aria-label={t(
-                  tableRow.members
-                    ? 'common.assistantSurface.regionalApproval.expandOrganization'
-                    : 'common.assistantSurface.regionalApproval.liveAdjustment.openFor',
-                  {
-                    plan: organizationName,
-                  },
-                )}
-                aria-expanded={
-                  tableRow.members ? expandedLiveGroups.includes(tableRow.tableRowId) : undefined
-                }
-                title={
-                  organizationName ===
-                  t('common.assistantSurface.regionalApproval.query.unnamedOrganization')
-                    ? t('common.assistantSurface.regionalApproval.query.unnamedOrganizationHint')
-                    : organizationName
-                }
-              >
-                {}
-                <span
-                  className={styles.organizationCaret}
-                  data-expanded={rowExpanded}
-                  aria-hidden="true"
+                  title={
+                    organizationName ===
+                    t('common.assistantSurface.regionalApproval.query.unnamedOrganization')
+                      ? t('common.assistantSurface.regionalApproval.query.unnamedOrganizationHint')
+                      : organizationName
+                  }
                 >
-                  {rowExpanded ? <Down size={12} /> : <Right size={12} />}
-                </span>
-                {organizationName}
-              </Button>
+                  {}
+                  <span
+                    className={styles.organizationCaret}
+                    data-expanded={rowExpanded}
+                    aria-hidden="true"
+                  >
+                    {rowExpanded ? <Down size={12} /> : <Right size={12} />}
+                  </span>
+                  {organizationName}
+                </Button>
+              )}
               {liveApprovalStatusTag(tableRow)}
             </div>
             <span
@@ -2421,17 +2597,9 @@ const RegionalApprovalWorkbench: React.FC<{
       render: (_, tableRow) => {
         const row = tableRow.plan;
         if (tableRow.kind === 'category') {
-          const categories = liveCategorySummaries[row.planId] ?? [];
-          const baseTotal = addExactDecimals(categories.map((item) => item.baseAmount));
-          const categoryTarget =
-            /^-?\d+(?:\.\d+)?$/.test(row.targetAmount) &&
-            /^-?\d+(?:\.\d+)?$/.test(baseTotal) &&
-            Number(baseTotal) !== 0
-              ? String(
-                  (Number(row.targetAmount) * Number(tableRow.category.baseAmount)) /
-                    Number(baseTotal),
-                )
-              : '';
+          const categoryTarget = /^-?\d+(?:\.\d+)?$/.test(tableRow.targetAmount)
+            ? tableRow.targetAmount
+            : undefined;
           return (
             <div className={styles.stackCell}>
               <span>{categoryTarget ? exactMoney(Number(categoryTarget).toFixed(2)) : '—'}</span>
@@ -2558,14 +2726,7 @@ const RegionalApprovalWorkbench: React.FC<{
           );
         }
         const { category } = tableRow;
-        const categories = liveCategorySummaries[tableRow.plan.planId] ?? [];
-        const baseTotal = addExactDecimals(categories.map((item) => item.baseAmount));
-        const categoryTarget =
-          /^-?\d+(?:\.\d+)?$/.test(tableRow.plan.targetAmount) &&
-          /^-?\d+(?:\.\d+)?$/.test(baseTotal) &&
-          Number(baseTotal) !== 0
-            ? (Number(tableRow.plan.targetAmount) * Number(category.baseAmount)) / Number(baseTotal)
-            : undefined;
+        const categoryTarget = Number(tableRow.targetAmount);
 
         const categoryProgress =
           categoryTarget && categoryTarget !== 0
@@ -3321,7 +3482,11 @@ const RegionalApprovalWorkbench: React.FC<{
                       size="small"
                       checked={categoryComparison}
                       aria-label={t('common.assistantSurface.regionalApproval.categoryComparison')}
-                      onChange={setCategoryComparison}
+                      onChange={(checked) => {
+                        setCategoryComparison(checked);
+                        setExpandedLiveGroups([]);
+                        setInlinePlanId(undefined);
+                      }}
                     />
                     <span>{t('common.assistantSurface.regionalApproval.categoryComparison')}</span>
                   </label>
@@ -3616,10 +3781,7 @@ const RegionalApprovalWorkbench: React.FC<{
                       <Table
                         rowKey="tableRowId"
                         onRow={(record) => ({
-                          'data-page-target': (record.kind === 'plan' && record.members
-                            ? record.members
-                            : [record.plan]
-                          )
+                          'data-page-target': (record.members ?? [record.plan])
                             .map((plan) => `row:${plan.planId}`)
                             .join('\n'),
                           'data-page-label': [
@@ -3636,7 +3798,8 @@ const RegionalApprovalWorkbench: React.FC<{
                         tableLayoutFixed
                         indentSize={20}
                         expandedRowRender={(record) => {
-                          if (record.kind === 'plan' && record.members)
+                          if (categoryComparison && record.kind === 'plan') return null;
+                          if (record.members)
                             return (
                               <GroupSkuSummary
                                 key={`${record.tableRowId}:${liveStageFilter ?? 'all'}`}
@@ -3648,6 +3811,11 @@ const RegionalApprovalWorkbench: React.FC<{
                                   skuCount:
                                     currentSkusByPlan[member.planId]?.length ?? member.skuCount,
                                 }))}
+                                categoryName={
+                                  record.kind === 'category'
+                                    ? record.category.categoryName
+                                    : undefined
+                                }
                                 skusByPlan={currentSkusByPlan}
                                 loading={liveCategoriesLoading}
                                 failed={liveCategoriesError}
@@ -3720,24 +3888,27 @@ const RegionalApprovalWorkbench: React.FC<{
                                   : undefined
                               }
                               onInputChange={
-                                conversationId
-                                  ? (changes) => {
-                                      const key = liveInputKey(
-                                        conversationId,
-                                        record.plan.planId,
-                                        versionMetrics[record.plan.planId]?.versionId ??
-                                          record.plan.versionId,
-                                        access.role,
-                                      );
-                                      setViewState((current) => ({
-                                        ...current,
-                                        liveInputs: {
-                                          ...current.liveInputs,
-                                          [key]: { ...current.liveInputs?.[key], ...changes },
-                                        },
-                                      }));
-                                    }
-                                  : undefined
+                                orderType === 'M'
+                                  ? (changes) =>
+                                      handleGroupPendingValues({ [record.plan.planId]: changes })
+                                  : conversationId
+                                    ? (changes) => {
+                                        const key = liveInputKey(
+                                          conversationId,
+                                          record.plan.planId,
+                                          versionMetrics[record.plan.planId]?.versionId ??
+                                            record.plan.versionId,
+                                          access.role,
+                                        );
+                                        setViewState((current) => ({
+                                          ...current,
+                                          liveInputs: {
+                                            ...current.liveInputs,
+                                            [key]: { ...current.liveInputs?.[key], ...changes },
+                                          },
+                                        }));
+                                      }
+                                    : undefined
                               }
                               row={{
                                 ...record.plan,
@@ -3755,12 +3926,8 @@ const RegionalApprovalWorkbench: React.FC<{
                                 access.canEdit &&
                                 !sourceTypeReadOnly(record.plan)
                               }
-                              categoryName={
-                                record.kind === 'category'
-                                  ? record.category.categoryName
-                                  : undefined
-                              }
                               onMetricsChange={
+                                orderType === 'Z' &&
                                 record.kind === 'plan' &&
                                 !record.members &&
                                 !sourceTypeReadOnly(record.plan)
@@ -3769,6 +3936,7 @@ const RegionalApprovalWorkbench: React.FC<{
                                   : undefined
                               }
                               onPendingValuesChange={
+                                orderType === 'Z' &&
                                 record.kind === 'plan' &&
                                 !record.members &&
                                 !sourceTypeReadOnly(record.plan)

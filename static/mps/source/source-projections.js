@@ -210,10 +210,16 @@ export function productRows(rows) {
 
 export function sourceProductMappings(products, raw = []) {
   if (!products) return raw;
+  const sourcesByCode = new Map();
+  for (const row of raw) {
+    const code = text(row.material_code);
+    if (!sourcesByCode.has(code)) sourcesByCode.set(code, []);
+    sourcesByCode.get(code).push(row);
+  }
   return products.flatMap((product) => {
     if (text(product['基地'])) return [product];
     const code = text(product['产品编码']);
-    const sources = raw.filter((row) => text(row.material_code) === code);
+    const sources = sourcesByCode.get(code) ?? [];
     const matching = sources.filter(
       (row) => text(row.replacement_material_code) === text(product['老品编码']),
     );
@@ -228,24 +234,25 @@ export function sourceProductMappings(products, raw = []) {
   });
 }
 
-export function historyDependentCodes(products, sourceCode, sourceBase = '') {
-  const base = canonicalBaseName(sourceBase);
-  const code = text(sourceCode);
-  return [
-    ...new Set(
-      (products ?? [])
-        .filter((product) => {
-          const productBase = canonicalBaseName(product.target_base ?? product['基地']);
-          return (
-            (!base || !productBase || productBase === base) &&
-            (text(product['产品编码'] ?? product.material_code) === code ||
-              text(product['老品编码'] ?? product.replacement_material_code) === code)
-          );
-        })
-        .map((product) => text(product['产品编码'] ?? product.material_code))
-        .filter(Boolean),
-    ),
-  ];
+export function createHistoryDependentLookup(products) {
+  const bySourceCode = new Map();
+  for (const product of products ?? []) {
+    const code = text(product['产品编码'] ?? product.material_code);
+    if (!code) continue;
+    const oldCode = text(product['老品编码'] ?? product.replacement_material_code);
+    const base = canonicalBaseName(product.target_base ?? product['基地']);
+    for (const sourceCode of oldCode === code ? [code] : [code, oldCode]) {
+      if (!bySourceCode.has(sourceCode)) bySourceCode.set(sourceCode, []);
+      bySourceCode.get(sourceCode).push({ base, code });
+    }
+  }
+  return (sourceCode, sourceBase = '') => {
+    const base = canonicalBaseName(sourceBase);
+    const codes = new Set();
+    for (const product of bySourceCode.get(text(sourceCode)) ?? [])
+      if (!base || !product.base || product.base === base) codes.add(product.code);
+    return [...codes];
+  };
 }
 
 export function createSourceProductMatcher(rawProducts) {

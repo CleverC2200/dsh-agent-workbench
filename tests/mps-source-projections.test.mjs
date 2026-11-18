@@ -6,9 +6,24 @@ import {
   sourceCheckRows,
   sourceDimensions,
   createSourceProductMatcher,
+  createHistoryDependentLookup,
   sourceProductMappings,
   productRows,
 } from '../static/mps/source/source-projections.js';
+
+test('历史匹配保留自身、同基地替换和无基地映射，并去重', () => {
+  const match = createHistoryDependentLookup([
+    { 基地: '甲', 产品编码: 'OLD' },
+    { 基地: '甲', 产品编码: 'A', 老品编码: 'OLD' },
+    { 基地: '甲', 产品编码: 'A', 老品编码: 'OLD' },
+    { target_base: '乙', material_code: 'B', replacement_material_code: 'OLD' },
+    { 产品编码: '全国', 老品编码: 'OLD' },
+  ]);
+  assert.deepEqual(match('OLD', '甲'), ['OLD', 'A', '全国']);
+  assert.deepEqual(match('OLD', '乙'), ['B', '全国']);
+  assert.deepEqual(match(' OLD '), ['OLD', 'A', 'B', '全国']);
+  assert.deepEqual(match('其他'), []);
+});
 
 test('同一老品按实际基地唯一匹配，缺基地或同基地多义继续未知', () => {
   const products = [

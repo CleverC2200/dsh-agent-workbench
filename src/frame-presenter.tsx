@@ -399,6 +399,14 @@ export function mountFramePresentation(
       selection?.sessionId === sessionId &&
       selection !== undefined &&
       (!page.resourceId || (selection.ownerScope === identity.scope && identityReady));
+    const pageError =
+      page.id === 'plan-category-production' && error && !/[\u4e00-\u9fff]/.test(error)
+        ? /SESSION_(?:EXPIRED|REJECTED|NOT_FOUND|MAX_LIFETIME_EXCEEDED)/.test(error)
+          ? '页面连接已失效，请重新连接页面能力。'
+          : /(?:PERMISSION|ACCESS_DENIED|NOT_ALLOWED)/.test(error)
+            ? '当前账号暂时无法连接此页面，请核对登录与页面权限后重试。'
+            : '页面连接失败，请重新连接页面能力；若仍失败，请核对登录状态。'
+        : error;
     const frameKey =
       page.id === 'plan-category-production'
         ? JSON.stringify([identity.scope, connectionAttempt])
@@ -792,7 +800,7 @@ export function mountFramePresentation(
           error={
             page.id === 'plan-category-production' && connectionState === 'failed'
               ? ''
-              : error || navigationError || ''
+              : pageError || navigationError || ''
           }
           tools={associated ? guide : emptyGuide}
           onOpenTool={openTool}
@@ -822,7 +830,7 @@ export function mountFramePresentation(
               )}
               {connectionState === 'failed' && error && (
                 <span className="gea-conversation-toolbar-error" role="alert">
-                  {error}
+                  {pageError}
                 </span>
               )}
             </>
@@ -958,7 +966,7 @@ export function mountFramePresentation(
               </QuickQuestionsContext.Provider>
             ) : (
               <p className="agent-workbench-page-status" role={error ? 'alert' : 'status'}>
-                {error ||
+                {pageError ||
                   navigationError ||
                   (associated ? session?.openError?.message : undefined) ||
                   t(

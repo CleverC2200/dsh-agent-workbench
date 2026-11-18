@@ -7,7 +7,7 @@ import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
 test('opaque MPS page computes in a worker without blocking UI, preserves results and terminates cancelled work', async (t) => {
   const output = await build({
     stdin: {
-      contents: `import {computeWorkflow} from './static/mps/source/workflow-worker-client.js'; import {buildMpsWorkflow} from './static/mps/source/workflow-inputs.js'; window.computeWorkflow=computeWorkflow;window.buildMpsWorkflow=buildMpsWorkflow;`,
+      contents: `import {computeWorkflow} from './static/mps/source/workflow-worker-client.js'; import {buildMpsWorkflow} from './static/mps/source/workflow-inputs.js'; import {workflowPerformanceInput} from './tests/helpers/mps-workflow-fixture.mjs';window.workflowPerformanceInput=workflowPerformanceInput;window.computeWorkflow=computeWorkflow;window.buildMpsWorkflow=buildMpsWorkflow;`,
       resolveDir: process.cwd(),
     },
     plugins: [await mpsComputePlugin()],
@@ -35,74 +35,7 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
   const frame = page.frames().find((item) => item.url().endsWith('/worker'));
   await frame.waitForFunction(() => window.computeWorkflow);
   const result = await frame.evaluate(async () => {
-    const draft = {
-      id: 'worker-test',
-      month: '2026-12',
-      pull: 'monthly',
-      productSource: 'local-file',
-      products: Array.from({ length: 200 }, (_, index) => ({
-        基地: '甲',
-        产品编码: String(index),
-        大类: '点心',
-        系列: '系列',
-        物料组: '包点',
-      })),
-      report: Array.from({ length: 200 }, (_, index) => ({
-        月份: '2026-12',
-        基地: '甲',
-        产品编码: String(index),
-        月初数量: index,
-      })),
-      history: [],
-      historyAnnual: {
-        periods: [
-          {
-            start: '2025-07-01',
-            end: '2026-06-30',
-            rows: Array.from({ length: 200 }, (_, index) => ({
-              基地: '甲',
-              产品编码: String(index),
-              数量: index + 1,
-            })),
-          },
-        ],
-      },
-      historyAnnualRead: { status: 'ready' },
-      reportRead: { status: 'ready' },
-      historyRead: { status: 'ready' },
-      categoryDemand: ['2026-12', '2027-01', '2027-02', '2027-03'].map((month) => ({
-        month,
-        category: '点心',
-        quantity: 12000,
-      })),
-      resources: [{ id: 'R', base: '甲', kind: 'tunnel', name: '共享产线', dailyTons: 1 }],
-      resourceAssignments: Array.from({ length: 200 }, (_, index) => ({
-        base: '甲',
-        code: String(index),
-        resourceId: 'R',
-        share: 1,
-      })),
-      unitWeights: Array.from({ length: 200 }, (_, index) => ({
-        base: '甲',
-        code: String(index),
-        tonsPerPiece: 0.01,
-      })),
-      constraints: { safetyDays: [{ base: '甲', days: 15 }], rules: { local: [] } },
-    };
-    const shipment = {
-      draftId: draft.id,
-      month: draft.month,
-      shipmentMonth: '2026-11',
-      status: 'ready',
-      sourceKind: 'local-file',
-      source: 'local-file',
-      rows: Array.from({ length: 200 }, (_, index) => ({
-        base: '甲',
-        code: String(index),
-        end: 0,
-      })),
-      adjustForecast() {},
-    };
+    const { draft, shipment, evaluation } = window.workflowPerformanceInput(200);
     draft.resourceAssignments = draft.resourceAssignments.filter((row) => row.code !== '0');
     const relations = {
       sources: {
@@ -119,7 +52,8 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
         ],
       },
     };
-    const evaluation = { weights: null, sourceIssues: [] };
+    evaluation.weights = null;
+    evaluation.sourceIssues = [];
     const expected = window.buildMpsWorkflow(draft, relations, shipment, evaluation);
     let created = 0;
     let terminated = 0;

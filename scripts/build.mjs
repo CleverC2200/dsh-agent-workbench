@@ -3,7 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { replaceBuildDirectory, syncAgentResources } from './build-output.mjs';
 const { values } = parseArgs({ options: { target: { type: 'string' } } });
-if (values.target && values.target !== 'core') throw Error('Unsupported build target');
+const target = values.target === 'core' ? 'plugin' : values.target;
+if (target && target !== 'plugin') throw Error('Unsupported build target');
 (await import('./verify-official-input.mjs')).verifyOfficialInput();
 const { holdBuildAdmission } = await import('../../dsh-gea-plugin/scripts/build-admission.mjs');
 holdBuildAdmission({ operation: 'build' });
@@ -136,7 +137,7 @@ await import('./build-orderworkbench.mjs');
 await import('./build-order-fulfillment.mjs');
 await import('./build-inventory-personal.mjs');
 await import('./build-inventory-qll.mjs');
-if (values.target !== 'core') {
+if (target !== 'plugin') {
   await import('./build-inventory-fc.mjs');
   await import('./build-inventory-aqkc.mjs');
 } else {

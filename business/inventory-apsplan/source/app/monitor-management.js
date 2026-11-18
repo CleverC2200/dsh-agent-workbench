@@ -1,4 +1,5 @@
-import { warningMetricNames } from '../../../shared/warning-metrics.mjs';
+import { renderOwnerDirectory } from './warning-owner-directory.js';
+import { warningMetricNames, warningMetricInfo } from '../../../shared/warning-metrics.mjs';
 import { describeRunResult, showRunContext, showRunResult } from './detection-record-view.js';
 import { call } from '../../../shared/channel.js';
 const monitorScheduleLabel = function (v) {
@@ -31,155 +32,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     existing.querySelector('[data-close]')?.focus();
     return;
   }
-  const catalog = [
-      '当前库存',
-      '可用库存',
-      '占用库存',
-      '基地目标库存',
-      '基地库存差额',
-      '回顾周转天数',
-      '基地展望周转天数',
-      '基地目标周转天数',
-      '平均货龄天数',
-      '基地大日期库存',
-      '基地大日期库存占比',
-      '基地低库存SKU数',
-      '基地高库存SKU数',
-      '当前订单量',
-      '未开订单缺货量',
-      '周转天数差额',
-      '基地大日期SKU个数',
-      '备单量',
-      '基地未来30日日均计划',
-      '分仓月度出货计划',
-      '分仓月度调拨计划',
-      '分仓未来30日计划量',
-      '分仓建议补货量',
-      '预计月末库存',
-      '分仓月度剩余调拨计划',
-      '分仓月度剩余出货计划',
-      '分仓日均月度出货计划',
-      '分仓调拨中量',
-      '调拨在途量',
-      '调拨备单量',
-      '基地月度需求计划',
-      '近30日日均发货量',
-      '入库量',
-      '出库量',
-      '分仓仓储费',
-      '分仓运输费',
-      '分仓过仓量',
-      '分仓交付及时率',
-      '分仓冷链符合率',
-      '分仓准确交付率',
-      '分仓库温符合率',
-      '分仓回单确认及时率',
-      '分仓新鲜度占比',
-      '分仓目标库存',
-      '客户目标库存',
-      '客户目标周转天数',
-      '分仓目标周转天数',
-      '客户库存差额',
-      '分仓库存差额',
-      '基地调拨需求计划',
-      '基地销售需求计划',
-      '分仓展望周转天数',
-      '客户大日期库存',
-      '分仓大日期库存',
-      '客户大日期SKU个数',
-      '分仓大日期SKU个数',
-      '客户当前库存',
-      '客户大日期库存占比',
-      '分仓大日期库存占比',
-      '客户低库存SKU数',
-      '分仓低库存SKU数',
-      '客户高库存SKU数',
-      '分仓高库存SKU数',
-      '公司体系库存',
-      '全链当前库存',
-      '库存结构符合率',
-      '发货金额和数量',
-      'GEA期初计划',
-      'GEA纠偏计划',
-      '客户发货金额',
-      '客户发货数量',
-      '期初提报准确率',
-      '期初提报金额',
-      '期初提报数量',
-      '纠偏提报数量',
-      '纠偏提报金额',
-      '纠偏提报的准确率',
-      '作废率',
-      '改单率',
-      '已开订单缺货量',
-      '订单满足率',
-      '准交率',
-      '基地产品新鲜度',
-      '生产计划达成率',
-      '需求预测准确率',
-      '销售预算达成率',
-      '销售提报准确率',
-      '超时订单数',
-      '预警订单数',
-      '需求预测达成率',
-      '销售提报达成率',
-      '库存量',
-      '月度需求变化量缺货',
-      '生产计划未达成缺货量',
-      '产销进度比',
-      '销售初始需求提报量',
-      '销售纠偏需求提报量',
-      '已开订单需求量',
-      '已开订单发货量',
-      '销售需求计划偏差量',
-      '生产计划量',
-      '生产执行量',
-      '生产偏差量',
-      '实际周转天数',
-      '客户销售目标',
-      '预算额完成进度（含在途）',
-      '前30天日均动销量',
-      '经销商库存量',
-      '经销商平均货龄天数',
-      '预订单',
-      '客户服务频次',
-      '客户月度计划量',
-      '计划量完成进度（含在途）',
-      '经销商标准周转天数',
-      '安全库存',
-      '周转天数同比',
-      '经销商库存周转偏差',
-      '已拉货量（含在途）',
-      '采购在途量',
-      '销售总价',
-      '周转天数环比',
-      '目标金额环比',
-      '目标金额同比',
-      '实际销售金额',
-      '政策可用数量',
-      '政策已用数量',
-      '门店销售数量',
-      '门店销售均价',
-      '门店数量',
-      '价值贡献',
-      '周转库存',
-      '销售计划提报覆盖率',
-      '销售计划审批完成率',
-      '销售计划审批时效',
-      '销售计划退回率',
-      '计划调整幅度',
-      '基地主生产计划量',
-      '主计划版本差异量',
-      '主计划达成率',
-      '主计划可执行率',
-      '主计划发布及时率',
-      '期初库存预测准确率',
-      '产能利用率',
-      '产能缺口量',
-      'AI预测采用率',
-      'AI预测准确率',
-      '年度计划执行率',
-    ],
+  const catalog = warningMetricNames,
     esc = (x) =>
       String(x ?? '').replace(
         /[&<>"']/g,
@@ -192,7 +45,6 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
         return [];
       }
     };
-  catalog.push(...warningMetricNames.filter((name) => !catalog.includes(name)));
   const api = (data) => call('detection', data);
   let monitors = [],
     logs = [],
@@ -205,7 +57,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
   const mask = document.createElement('div');
   mask.className = 'am-mask';
   mask.innerHTML =
-    '<section class="am-panel" role="dialog" aria-modal="true" aria-label="预警管理"><header><div><small>工作台运营</small><h2>预警管理</h2></div><button data-close>×</button></header><div class="am-notice">通过 XXL-JOB 定时执行 GEA 问数；风险规则沿用指标库。缺少规则或数据时记录失败。</div><nav role="tablist" aria-label="预警管理内容"><button role="tab" data-tab="monitors">检测任务</button><button role="tab" data-tab="logs">执行记录</button></nav><main role="tabpanel"></main></section>';
+    '<section class="am-panel" role="dialog" aria-modal="true" aria-label="预警管理"><header><div><small>工作台运营</small><h2>预警管理</h2></div><button data-close>×</button></header><div class="am-notice">通过 XXL-JOB 定时执行 GEA 问数；风险规则沿用指标库。缺少规则或数据时记录失败。</div><nav role="tablist" aria-label="预警管理内容"><button role="tab" data-tab="monitors">检测任务</button><button role="tab" data-tab="logs">执行记录</button><button role="tab" data-tab="owners">通知负责人</button></nav><main role="tabpanel"></main></section>';
   document.body.append(mask);
   const main = mask.querySelector('main');
   const nav = mask.querySelector('nav');
@@ -260,6 +112,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
   }
   const _persist = () => {};
   async function refresh() {
+    if (tab === 'owners') return;
     const before = JSON.stringify([monitors, logs]);
     const state = await api({ op: 'list' });
     if (!mask.isConnected) return;
@@ -311,7 +164,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     runPage = Math.min(runPage, pageCount - 1);
     const pageLogs = logs.slice(runPage * pageSize, (runPage + 1) * pageSize);
     const previousScroll = main.querySelector('.am-table')?.scrollLeft || 0;
-    main.classList.remove('am-editing');
+    main.classList.remove('am-editing', 'am-owner-page');
     mask
       .querySelectorAll('[data-tab]')
       .forEach(
@@ -321,6 +174,10 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
           (b.tabIndex = b.dataset.tab === tab ? 0 : -1)
         ),
       );
+    if (tab === 'owners') {
+      void renderOwnerDirectory(main, api, { canWrite, writeReason });
+      return;
+    }
     main.innerHTML =
       (writeReason
         ? '<div class="am-run-notice" role="status">' + esc(writeReason) + '</div>'
@@ -365,7 +222,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
               esc(m.description) +
               '</td><td>' +
               esc(m.definedBy || '未记录') +
-              '</td><td>沿用指标库<small>执行时读取规则</small></td><td class="am-actions"><button data-edit="' +
+              '</td><td>V0.6 固定口径<small>展示与执行一致</small></td><td class="am-actions"><button data-edit="' +
               m.id +
               '">修改</button><button data-toggle="' +
               m.id +
@@ -909,15 +766,17 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     const requestKey = Array.from(crypto.getRandomValues(new Uint8Array(16)), (x) =>
       x.toString(16).padStart(2, '0'),
     ).join('');
+    const formCatalog =
+      edit?.metric && !catalog.includes(edit.metric) ? [...catalog, edit.metric] : catalog;
     main.classList.add('am-editing');
     main.innerHTML =
       '<h3>' +
       (edit ? '修改检测任务' : '新增检测任务') +
-      '</h3><p class="am-mode-note">选择指标后沿用指标库规则；未维护阈值时，请在任务说明中明确判断规则。新建后按设定时间检测，可勾选保存后立即执行一次；修改仅更新配置，保留原启用状态。</p><form class="am-form"><label style="grid-column:1/-1">选择指标<select name="metric"><option value="">请选择检测指标</option>' +
-      catalog.map((n) => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('') +
+      '</h3><p class="am-mode-note">指标口径已按 V0.6 固定，展示和执行使用同一份配置。新建后按设定时间检测，可勾选保存后立即执行一次；修改仅更新配置，保留原启用状态。</p><form class="am-form"><label style="grid-column:1/-1">选择指标<select name="metric"><option value="">请选择检测指标</option>' +
+      formCatalog.map((n) => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('') +
       '</select><small>共 ' +
       catalog.length +
-      ' 个指标名称；定义与规则在执行时查询。</small></label><section class="am-metric-info" data-metric-info aria-live="polite" style="grid-column:1/-1"><p>选择指标后展示指标库的度量规则与排除逻辑。</p></section><label>检测范围<select name="scope" required><option value="">请选择范围</option><option>品类</option><option>基地</option><option>品类*基地</option><option>大区</option><option>省区</option></select></label><label>执行频次<select name="frequency"><option value="daily">每天</option><option value="workdays">工作日（周一至周五）</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="interval">间隔执行</option></select></label><div class="am-schedule"><div data-time class="am-time-row"><span class="am-field-label">执行时间</span><input name="time" type="hidden" value="09:00"><div class="am-time-fields"><label>小时<select name="timeHour">' +
+      ' 项固定口径（V0.6）；选择后直接展示，执行沿用相同定义。</small></label><section class="am-metric-info" data-metric-info aria-live="polite" style="grid-column:1/-1"><p>选择指标后展示 V0.6 固定的定义、规则与排除逻辑。</p></section><label>检测范围<select name="scope" required><option value="">请选择范围</option><option>品类</option><option>基地</option><option>品类*基地</option><option>大区</option><option>省区</option></select></label><label>执行频次<select name="frequency"><option value="daily">每天</option><option value="workdays">工作日（周一至周五）</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="interval">间隔执行</option></select></label><div class="am-schedule"><div data-time class="am-time-row"><span class="am-field-label">执行时间</span><input name="time" type="hidden" value="09:00"><div class="am-time-fields"><label>小时<select name="timeHour">' +
       Array.from(
         { length: 24 },
         (_, i) =>
@@ -937,7 +796,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
           String(i).padStart(2, '0') +
           '</option>',
       ).join('') +
-      '</select></label><small>上海时间</small></div></div><fieldset data-week hidden><legend>执行星期（可多选）</legend><label><input type="checkbox" name="days" value="1" checked>周一</label><label><input type="checkbox" name="days" value="2" >周二</label><label><input type="checkbox" name="days" value="3" >周三</label><label><input type="checkbox" name="days" value="4" >周四</label><label><input type="checkbox" name="days" value="5" >周五</label><label><input type="checkbox" name="days" value="6" >周六</label><label><input type="checkbox" name="days" value="7" >周日</label></fieldset><label data-month hidden>每月日期<select name="monthday"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option></select><small>仅支持 1—28 日，避免部分月份跳过。</small></label><label data-interval hidden>每隔小时数<input name="interval" type="number" min="1" max="23" step="1" value="2"></label><p data-preview aria-live="polite"></p></div><label style="grid-column:1/-1">任务说明<textarea name="description" required placeholder="描述关注的问题和期望的分析" style="min-height:90px"></textarea></label><label style="grid-column:1/-1">执行数字人<select name="agentPreset" required disabled><option value="">正在读取数字人…</option></select><small data-agent-status aria-live="polite"></small></label><fieldset style="grid-column:1/-1" class="am-people"><legend>消息通知</legend><div class="am-recipient-picker" data-recipient-picker><label for="am-recipient-search">飞书接收人</label><div class="am-recipient-control"><div class="am-recipient-chips" data-people-selected></div><input id="am-recipient-search" data-people-keyword type="search" maxlength="80" placeholder="输入姓名或 GEA 账号，搜索添加"></div><div class="am-recipient-menu" data-people-menu hidden><p data-people-status role="status"></p><div data-people-results></div><button type="button" data-people-more hidden>加载更多</button></div><small>可选择多位接收人，留空不发送通知。</small></div><label>通知频率<select name="notifyMode"><option value="repeat">重复通知</option><option value="once">通知一次</option></select><small>通知一次：首次异常发送。重复通知：异常触发后，每次检测都发送，恢复后也继续，直到手动关闭预警。</small></label></fieldset><p class="am-mode-note">时间按上海时区。统计口径由指标库提供；按指标库口径获取真实统计期间。</p>' +
+      '</select></label><small>上海时间</small></div></div><fieldset data-week hidden><legend>执行星期（可多选）</legend><label><input type="checkbox" name="days" value="1" checked>周一</label><label><input type="checkbox" name="days" value="2" >周二</label><label><input type="checkbox" name="days" value="3" >周三</label><label><input type="checkbox" name="days" value="4" >周四</label><label><input type="checkbox" name="days" value="5" >周五</label><label><input type="checkbox" name="days" value="6" >周六</label><label><input type="checkbox" name="days" value="7" >周日</label></fieldset><label data-month hidden>每月日期<select name="monthday"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option></select><small>仅支持 1—28 日，避免部分月份跳过。</small></label><label data-interval hidden>每隔小时数<input name="interval" type="number" min="1" max="23" step="1" value="2"></label><p data-preview aria-live="polite"></p></div><label style="grid-column:1/-1">任务说明<textarea name="description" required placeholder="描述关注的问题和期望的分析" style="min-height:90px"></textarea></label><label style="grid-column:1/-1">执行数字人<select name="agentPreset" required disabled><option value="">正在读取数字人…</option></select><small data-agent-status aria-live="polite"></small></label><fieldset style="grid-column:1/-1" class="am-people"><legend>消息通知</legend><label for="am-notify-strategy">接收人策略<select id="am-notify-strategy" name="notifyStrategy"><option value="specified">指定接收人</option><option value="automatic">按责任范围自动匹配</option><option value="off">不发送通知</option></select></label><p data-routing-help role="status" hidden>请先在“通知负责人”维护配置。交叉范围专属负责人优先，否则合并品类、基地负责人；同一任务同次检测向每人只发一条汇总。</p><div class="am-recipient-picker" data-recipient-picker><label for="am-recipient-search">飞书接收人</label><div class="am-recipient-control"><div class="am-recipient-chips" data-people-selected></div><input id="am-recipient-search" data-people-keyword type="search" maxlength="80" placeholder="输入姓名或 GEA 账号，搜索添加"></div><div class="am-recipient-menu" data-people-menu hidden><p data-people-status role="status"></p><div data-people-results></div><button type="button" data-people-more hidden>加载更多</button></div><small>可选择多位接收人，留空不发送通知。</small></div><label>通知频率<select name="notifyMode"><option value="repeat">重复通知</option><option value="once">通知一次</option></select><small>通知一次：首次异常发送。重复通知：异常触发后，每次检测都发送，恢复后也继续，直到手动关闭预警。</small></label></fieldset><p class="am-mode-note">时间按上海时区。指标定义、公式、排除规则和统计期间按 V0.6 固定配置执行。</p>' +
       (!edit
         ? '<label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" name="runImmediately" style="width:16px;height:16px;margin:0;flex:none">保存后立即执行一次</label>'
         : '') +
@@ -945,6 +804,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       (edit ? '保存修改' : '保存检测任务') +
       '</button></footer></form>';
     let f = main.querySelector('form');
+    f.elements.notifyStrategy.value = edit?.notifyStrategy || 'specified';
     if (edit) {
       f.elements.notifyMode.value = edit.notifyMode || 'repeat';
       const v = edit.schedule || { frequency: 'daily', time: '09:00' };
@@ -964,6 +824,17 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       enhanceSelect(select, select.name === 'metric'),
     );
     bindPersonnelSearch(f, api, edit);
+    const syncRouting = () => {
+      const specified = f.elements.notifyStrategy.value === 'specified';
+      const picker = f.querySelector('[data-recipient-picker]');
+      picker.hidden = !specified;
+      picker.inert = !specified;
+      f.querySelector('[data-routing-help]').hidden =
+        f.elements.notifyStrategy.value !== 'automatic';
+      f.elements.notifyMode.disabled = f.elements.notifyStrategy.value === 'off';
+    };
+    f.elements.notifyStrategy.addEventListener('change', syncRouting);
+    syncRouting();
     void bindAgentSelect(f, api, edit?.agentPreset);
     const updateSchedule = () => {
       f.elements.time.value = f.elements.timeHour.value + ':' + f.elements.timeMinute.value;
@@ -985,27 +856,26 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     };
     f.addEventListener('change', updateSchedule);
     updateSchedule();
-    let metadataSequence = 0;
-    const loadMetric = async () => {
-      const seq = ++metadataSequence;
+    const loadMetric = () => {
       const metric = f.elements.metric.value;
       const box = f.querySelector('[data-metric-info]');
       if (!metric) {
-        box.innerHTML = '<p>选择指标后展示指标库的度量规则与排除逻辑。</p>';
+        box.innerHTML = '<p>选择指标后展示 V0.6 固定的定义、规则与排除逻辑。</p>';
         return;
       }
-      box.innerHTML = '<p>正在读取指标口径…</p>';
       try {
-        const m = await api({ op: 'metric', metric });
-        if (seq !== metadataSequence || !main.contains(f)) return;
+        const m = warningMetricInfo(metric);
+        if (!main.contains(f)) return;
         if (m.status !== 'available') {
-          box.innerHTML = '<h4>指标口径待核实</h4><p>' + esc(m.message) + '</p>';
+          box.innerHTML = '<h4>V0.6 未登记此指标</h4><p>' + esc(m.message) + '</p>';
           return;
         }
         box.innerHTML =
           '<div class="am-metric-heading"><h4>指标库口径</h4><span>' +
           esc(m.version) +
-          '</span></div><dl><div><dt>业务定义</dt><dd>' +
+          '</span></div><dl><div><dt>适用业务</dt><dd>' +
+          esc(m.module) +
+          '</dd></div><div><dt>业务定义</dt><dd>' +
           esc(m.definition || '未维护') +
           '</dd></div><div><dt>度量规则</dt><dd>' +
           esc(m.measureRules || '指标库未维护').replace(/\n/g, '<br>') +
@@ -1024,21 +894,21 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
           '</dd></div></dl><p class="am-metric-source">来源：' +
           esc(m.source) +
           ' · ' +
-          esc(
-            m.recordId ? '记录 ' + m.recordId : (m.sheet || '') + ' 第 ' + (m.row || '-') + ' 行',
-          ) +
+          esc(m.row ? (m.sheet || '') + ' 第 ' + m.row + ' 行' : '记录 ' + m.recordId) +
           '</p></details>';
       } catch (error) {
-        if (seq === metadataSequence)
-          box.innerHTML = '<p>指标口径读取失败：' + esc(error.message) + '</p>';
+        box.innerHTML = '<p>指标口径显示失败：' + esc(error.message) + '</p>';
       }
     };
     f.elements.metric.addEventListener('change', loadMetric);
-    void loadMetric();
+    loadMetric();
     main.querySelector('[data-cancel]').onclick = render;
     f.onsubmit = async (e) => {
       e.preventDefault();
-      if (f.querySelector('[data-recipient-picker][aria-busy=true]')) {
+      if (
+        f.elements.notifyStrategy.value === 'specified' &&
+        f.querySelector('[data-recipient-picker][aria-busy=true]')
+      ) {
         main.querySelector('.am-validation').textContent = '正在核验飞书接收人，请稍候再保存';
         return;
       }
@@ -1050,7 +920,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       }
       m.days = [...f.querySelectorAll('[name=days]:checked')].map((x) => x.value).join(',');
       Object.keys(m).forEach((k) => (m[k] = m[k].trim()));
-      m.notifyRecipients = data.getAll('notifyRecipients');
+      m.notifyRecipients = m.notifyStrategy === 'specified' ? data.getAll('notifyRecipients') : [];
       m.runImmediately = !edit && f.elements.runImmediately.checked;
       if (!catalog.includes(m.metric)) {
         main.querySelector('.am-validation').textContent = '请从指标清单选择有效指标';
@@ -1151,14 +1021,16 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
   mask.querySelector('nav').onkeydown = (e) => {
     if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
       e.preventDefault();
+      const tabs = [...nav.querySelectorAll('[data-tab]')].map((button) => button.dataset.tab);
+      const index = tabs.indexOf(tab);
       tab =
-        e.key === 'Home'
-          ? 'monitors'
-          : e.key === 'End'
-            ? 'logs'
-            : tab === 'monitors'
-              ? 'logs'
-              : 'monitors';
+        tabs[
+          e.key === 'Home'
+            ? 0
+            : e.key === 'End'
+              ? tabs.length - 1
+              : (index + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length
+        ];
       render();
       mask.querySelector('[data-tab="' + tab + '"]').focus();
     }

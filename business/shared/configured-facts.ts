@@ -460,9 +460,10 @@ export async function readConfiguredFacts(
       ? snapshotResult
       : await read(view.summaryId, subset(view.summaryId));
     if (useSnapshot) requireColumns(aggregate, config.queries[view.summaryId].resultColumns);
-    const total = totalOf({
-      rows: aggregate.rows.map((row: any) => ({ total: row.row_count })),
-    });
+    const total =
+      aggregate.rows.length === 0
+        ? 0
+        : totalOf({ rows: aggregate.rows.map((row: any) => ({ total: row.row_count })) });
     return {
       status: total ? 'available' : 'empty',
       rows: [],
@@ -471,7 +472,7 @@ export async function readConfiguredFacts(
       pageSize,
       viewId,
       summary:
-        total || view.preserveEmptySummary
+        aggregate.rows.length > 0 && (total || view.preserveEmptySummary)
           ? useSnapshot
             ? Object.fromEntries(
                 config.queries[view.summaryId].resultColumns.map((column: string) => [

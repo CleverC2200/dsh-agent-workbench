@@ -1,10 +1,11 @@
+import { seedLeafQuantities } from './helpers/mps-fixtures.mjs';
+import { selectAdjustmentReason } from './helpers/mps-edit.mjs';
 import { expandShipmentBase } from './helpers/mps-shipment.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { mpsPage } from './helpers/mps-page.mjs';
-import { adjustCategory } from './helpers/mps-edit.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 async function setup(t) {
@@ -39,7 +40,8 @@ async function setup(t) {
           configVersion: 'batch-fixture',
         },
   );
-  const { frame } = result;
+  const { page, frame } = result;
+  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-12');
@@ -47,7 +49,7 @@ async function setup(t) {
   await upload(
     frame,
     '选择产品关系CSV或Excel',
-    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n,A,产品甲,汤圆,系列,组,,\n,B,产品乙,汤圆,系列,组,,',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,\n郑州,B,产品乙,汤圆,系列,组,,\n华东,A,产品甲,汤圆,系列,组,,\n华东,B,产品乙,汤圆,系列,组,,',
   );
   await upload(
     frame,
@@ -83,7 +85,7 @@ async function save(view) {
 test('shipment stages multiple hierarchy edits atomically, cancels across pages and preserves source precision', async (t) => {
   const { page, frame } = await setup(t);
   await step(frame, '本月预估发货');
-  await frame.getByLabel('数据截止日').fill('2026-11-22');
+  await frame.getByLabel('数据截止日').fill('2026-11-17');
   await upload(
     frame,
     '选择发货输入CSV',
@@ -99,7 +101,15 @@ test('shipment stages multiple hierarchy edits atomically, cancels across pages 
   await view.getByLabel('郑州 A 整月预估发货', { exact: true }).fill('40');
   assert.deepEqual((await draft(page)).shipment, original);
   await expect(frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' })).toBeDisabled();
+  const switchHint = frame.getByText('请保存或取消当前调整，再切换步骤、月份或版本。', {
+    exact: true,
+  });
+  await expect(switchHint).toBeVisible();
+  await expect(frame.getByLabel('评估月份选择', { exact: true })).toBeDisabled();
+  await expect(frame.getByLabel('评估版本选择', { exact: true })).toBeDisabled();
   await view.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(switchHint).toHaveCount(0);
+  await expect(frame.getByLabel('评估版本选择', { exact: true })).toBeEnabled();
   assert.deepEqual((await draft(page)).shipment, original);
   await begin(view);
   await view.getByLabel('郑州 剩余天数入库', { exact: true }).fill('-1');
@@ -128,51 +138,69 @@ test('shipment stages multiple hierarchy edits atomically, cancels across pages 
   assert.deepEqual((await draft(page)).shipment.remaining, {});
 });
 
-test('processing shares one edit mode for category months and expanded SKUs and saves a single reason', async (t) => {
+test('processing saves multiple base SKU months atomically and keeps other bases unchanged', async (t) => {
   const { page, frame } = await setup(t);
-  await adjustCategory(frame, '汤圆', '2026-12', '100', '验收基线');
-  await adjustCategory(frame, '汤圆', '2027-01', '200', '验收基线');
+  await seedLeafQuantities(
+    frame,
+    ['2026-12', '2027-01'].flatMap((month) =>
+      ['郑州', '华东'].flatMap((base) =>
+        [
+          ['A', 60],
+          ['B', 40],
+        ].map(([code, quantity]) => ({
+          month,
+          base,
+          code,
+          category: '汤圆',
+          group: '组',
+          quantity,
+          systemValue: null,
+        })),
+      ),
+    ),
+  );
   const view = await step(frame, '需求加工与收敛');
-  await expect(view.getByRole('button', { name: /^调整数量/ })).toHaveCount(0);
+  await view.getByLabel('搜索当前步骤').fill('A');
   const original = (await draft(page)).adjustments;
   await begin(view);
-  await expect(view.locator('.mps-batch-input')).toHaveCount(4);
-  await view.getByLabel('汤圆 2026-12 需求数量', { exact: true }).fill('120.75');
-  await view.getByLabel('汤圆 2027-01 需求数量', { exact: true }).fill('220');
-  await view.getByLabel('搜索当前步骤').fill('产品甲');
-  await view.getByLabel('搜索当前步骤').fill('');
-  await view.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
-  await view.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).click();
-  await view.getByRole('button', { name: '郑州 物料组 · 组', exact: true }).click();
-  await expect(view.getByLabel('汤圆 组 A 郑州 2026-12 需求数量', { exact: true })).toBeEditable();
-  await view.getByLabel('汤圆 组 A 郑州 2026-12 需求数量', { exact: true }).fill('50');
+  await expect(
+    view.getByRole('textbox', { name: '汤圆 2026-12 需求数量', exact: true }),
+  ).toHaveCount(0);
+  const first = view.getByLabel('汤圆 组 A 郑州 2026-12 需求数量', { exact: true });
+  const second = view.getByLabel('汤圆 组 A 郑州 2027-01 需求数量', { exact: true });
+  await first.fill('50.75');
+  await second.fill('220');
   await save(view);
   await expect(view.getByRole('alert')).toContainText('调整原因');
   assert.deepEqual((await draft(page)).adjustments, original);
-  await view.getByLabel('批量调整原因', { exact: true }).fill('同批调整三处');
+  await selectAdjustmentReason(view, '同批调整两处');
   await save(view);
   await expect(view.getByRole('alert')).toHaveCount(0);
   await expect
     .poll(
       async () =>
-        (await draft(page)).adjustments?.categoryDemand?.find((row) => row.month === '2026-12')
-          ?.quantity,
+        (await draft(page)).adjustments.quantities.find(
+          (row) => row.base === '郑州' && row.code === 'A' && row.month === '2026-12',
+        ).quantity,
     )
-    .toBe(120.75);
+    .toBe(50.75);
   const changed = (await draft(page)).adjustments;
-  assert.equal(changed.categoryDemand.find((row) => row.month === '2026-12').quantity, 120.75);
-  await expect(view.getByLabel('汤圆 2026-12 需求数量', { exact: true })).toHaveText('121');
-  assert.equal(changed.categoryDemand.find((row) => row.month === '2027-01').quantity, 220);
-  assert.equal(changed.quantities[0].quantity, 50);
-  assert.equal(changed.quantities[0].reason, '同批调整三处');
-  await view.getByRole('button', { name: '基地 · 华东', exact: true }).click();
-  await view.getByRole('button', { name: '华东 大类 · 汤圆', exact: true }).click();
-  await view.getByRole('button', { name: '华东 物料组 · 组', exact: true }).click();
-  await view.getByRole('button', { name: '运算过程 华东 A 2026-12', exact: true }).click();
-  await expect(frame.getByRole('dialog').locator('p').last()).toHaveText('结果：22');
-  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  assert.equal(changed.categoryDemand.length, 0);
+  assert.equal(
+    changed.quantities.find(
+      (row) => row.base === '郑州' && row.code === 'A' && row.month === '2027-01',
+    ).quantity,
+    220,
+  );
+  assert.equal(
+    changed.quantities.find(
+      (row) => row.base === '华东' && row.code === 'A' && row.month === '2026-12',
+    ).quantity,
+    60,
+  );
+  assert.ok(changed.history.every((row) => row.reason === '其他：同批调整两处'));
   await begin(view);
-  await view.getByLabel('汤圆 2026-12 需求数量', { exact: true }).fill('999');
+  await first.fill('999');
   await view.getByRole('button', { name: '取消', exact: true }).click();
   assert.deepEqual((await draft(page)).adjustments, changed);
 });
@@ -185,7 +213,7 @@ test('configuration stages calendar, weights, rules and resources together; inva
   await expect(view.locator('.mps-batch-input')).toHaveCount(0);
   const original = await draft(page);
   await begin(view);
-  await view.getByLabel('郑州 安全天数', { exact: true }).fill('7');
+  await view.getByLabel('郑州 A 补充目标周转天数', { exact: true }).fill('7');
   await view.getByLabel('郑州 2026-12 生产天数', { exact: true }).fill('32');
   await view.getByLabel('郑州 A 件吨系数', { exact: true }).fill('0.123456789');
   await view.getByRole('button', { name: '新增产能资源', exact: true }).click();
@@ -201,11 +229,16 @@ test('configuration stages calendar, weights, rules and resources together; inva
   await expect
     .poll(
       async () =>
-        (await draft(page)).constraints?.safetyDays?.find((row) => row.base === '郑州')?.days,
+        (await draft(page)).constraints?.turnoverDays?.find(
+          (row) => row.base === '郑州' && row.code === 'A',
+        )?.days,
     )
     .toBe(7);
   const saved = await draft(page);
-  assert.equal(saved.constraints.safetyDays.find((row) => row.base === '郑州').days, 7);
+  assert.equal(
+    saved.constraints.turnoverDays.find((row) => row.base === '郑州' && row.code === 'A').days,
+    7,
+  );
   assert.equal(
     saved.productionDays.find((row) => row.base === '郑州' && row.month === '2026-12').days,
     15,
@@ -216,7 +249,7 @@ test('configuration stages calendar, weights, rules and resources together; inva
   );
   assert.equal(saved.resources[0].dailyTons, 8);
   await begin(view);
-  await view.getByLabel('郑州 安全天数', { exact: true }).fill('999');
+  await view.getByLabel('郑州 A 补充目标周转天数', { exact: true }).fill('999');
   await view.getByRole('button', { name: '删除资源1', exact: true }).click();
   await view.getByRole('button', { name: '取消', exact: true }).click();
   assert.deepEqual(await draft(page), saved);
@@ -240,7 +273,7 @@ test('seven pages retain readable compact headers and contained toolbars at desk
       await frame.locator('.ap-page-tab').filter({ hasText: name }).click();
       await expect(frame.getByRole('heading', { name, exact: true }).first()).toBeVisible();
       await expect(frame.getByRole('button', { name: /^下一步[:：]/ })).toHaveCount(0);
-      const toolbar = frame.locator('.wf-toolbar').first();
+      const toolbar = frame.locator('.wf-toolbar:visible').first();
       if (await toolbar.count()) {
         const bounds = await toolbar.boundingBox();
         const container = await frame.locator('.dc-page').boundingBox();

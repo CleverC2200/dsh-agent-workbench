@@ -10,7 +10,7 @@ const output = await build({
   stdin: {
     resolveDir: process.cwd(),
     contents: `import React from 'react';import {createRoot} from 'react-dom/client';
-      import {createWorkflow} from './static/mps/source/workflow-view.js';
+      import {createWorkflow} from './static/mps/source/workflow-view.js'; import {buildMpsWorkflow} from './static/mps/source/workflow-inputs.js';
       import {readRelations} from './static/mps/source/relations.js';
       const Workflow=createWorkflow(React,()=>{},{});
       const root=createRoot(document.getElementById('root'));
@@ -23,7 +23,7 @@ const output = await build({
         const result=await readRelations(config,async(_request,{queryId})=>({rows:queryId.endsWith('.count')?[{total:0}]:[],returnedColumns:config.queries[queryId].columns,rejectedColumns:[],configVersion:'v1'}),draft.month);
         const relations={...result,scopeKey,...(state==='busy'?{busy:true}:state==='error'?{error:'刷新失败'}:state==='scope'?{scopeKey:'old'}:state==='config'?{configSignature:'old'}:state==='incomplete'?{sources:{}}:state==='unversioned'?{configVersion:undefined}:state==='version'?{configVersion:'old'}:{})};
         const input=state==='preparing'?{...draft,reportRead:{periods:{'2027-02':{status:'loading'}}}}:draft;
-        root.render(React.createElement(Workflow,{step:'capacity',draft:input,scopeGeneration:1,relations,update(){},setEvaluation:value=>window.completed.push(value)}));
+        root.render(React.createElement(Workflow,{step:'capacity',result:buildMpsWorkflow(input,relations,null),draft:input,scopeGeneration:1,relations,update(){},setEvaluation:value=>window.completed.push(value)}));
       };`,
   },
   plugins: [await mpsComputePlugin(process.env.MPS_MANAGE_SOURCE)],

@@ -22,9 +22,9 @@ const i18n=i18next.createInstance();
 await i18n.init({lng:'zh-CN',resources:{'zh-CN':{translation:{common:zh}}},interpolation:{escapeValue:false}});
 const rowCount=Number(new URL(location.href).searchParams.get('fixtureRows')??3);
 const rows=Array.from({length:rowCount},(_,index)=>index+1).map(n=>({planId:'p'+n,versionId:'v'+n,seq:1,periodId:'period',planTypeCode:'Y',orderType:'M',dealerCode:'d'+n,orgCode:'org'+n,orgName:'销售组'+n,areaCode:'area'+n,areaName:'大区'+n,provinceCode:'province'+n,provinceName:'省区'+n,baseName:'基地'+n,status:1,updatedAt:'2026-10-'+String(31-n).padStart(2,'0'),currentQty:'20',currentAmount:'200',targetQty:'0',targetAmount:'400',skuCount:1}));
-window.coverageCalls={sku:[],detail:[],draft:0,model:0,write:0};
+window.coverageCalls={sku:[],detail:[],draft:0,draftWrite:0,model:0,write:0};
 window.exportBehavior='normal';
-window.localDrafts={};
+window.localDrafts=JSON.parse(localStorage.getItem('coverage-host-drafts')??'{}');
 window.exportReads=[];
 window.exportReleases=[];
 const sku=(versionId)=>({id:'s'+versionId,versionId,skuCode:'sku'+versionId,productCategName:'汤圆',qty:'20',amt:'200',baseQty:'10',amtBase:'100',price:'10'});
@@ -38,7 +38,7 @@ function App(){
   periods:{invoke:async()=>({records:[{periodId:'period',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
   list:{invoke:async(q)=>{const records=q?.status===undefined||q.status===1?rows:[];return {records,total:records.length,size:q?.pageSize??200,current:q?.pageNo??1,pages:records.length?1:0}}},
   detail:{invoke:async({planId})=>{window.coverageCalls.detail.push(planId);const versionId=rows.find(x=>x.planId===planId).versionId;return {currentVersion:{...rows.find(x=>x.planId===planId),id:versionId,effective:true},skus:[sku(versionId)],versions:[],logs:[]}}},
-  draft:{invoke:async(query)=>{window.coverageCalls.draft++;if(query.draft)window.localDrafts[query.versionId]=query.draft;return {draft:window.localDrafts[query.versionId]??null}}},
+  draft:{invoke:async(query)=>{window.coverageCalls.draft++;if(query.draft){window.coverageCalls.draftWrite++;window.localDrafts[query.versionId]=query.draft;}return {draft:window.localDrafts[query.versionId]??null}}},
   versions:{invoke:async()=>[]},logs:{invoke:async()=>[]},compare:{invoke:async()=>[]},
   versionSkus:{invoke:async({versionId,signal})=>{
    signal?.throwIfAborted();window.coverageCalls.sku.push({versionId,mode});
@@ -127,10 +127,10 @@ test(
       '月计划明细未完整读取',
     );
     const totals = page.getByRole('region', { name: '当前页明细汇总', exact: true });
-    await expect(totals).toContainText('¥600');
+    await expect(totals.locator('strong').nth(1)).toHaveText('—');
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
-    await expect(monthly).toContainText('¥100');
-    await expect(monthly).toContainText('10 件');
+    await expect(monthly).toContainText('¥200');
+    await expect(monthly).toContainText('20 件');
     await expect(page.getByTestId('regional-approval-sku-coverage-error')).toHaveCount(0);
     await page.getByRole('button', { name: '切换到等待中的测试上下文' }).click();
     await expect
@@ -138,7 +138,7 @@ test(
       .toBe(true);
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
     await page.evaluate(() => window.rejectPending());
-    await expect(monthly).toContainText('¥100');
+    await expect(monthly).toContainText('¥200');
     await expect(page.getByTestId('regional-approval-sku-coverage-error')).toHaveCount(0);
     assert.deepEqual(pageErrors, []);
     assert.deepEqual(
@@ -153,6 +153,48 @@ test(
 );
 
 test(
+  'stored monthly draft contributes to collapsed summaries after a fresh mount and refresh without saving',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, pageErrors, externalRequests } = await openWorkbench(t, 3, true);
+    await page.evaluate(() => {
+      localStorage.setItem(
+        'coverage-host-drafts',
+        JSON.stringify({
+          v1: {
+            planId: 'p1',
+            versionId: 'v1',
+            status: 1,
+            role: 'region',
+            sourceSnapshot: 'fixture',
+            adjustments: [{ skuCode: 'skuv1', adjustQty: '1' }],
+            remark: '',
+          },
+        }),
+      );
+    });
+    await page.reload();
+    await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
+    const monthly = page.locator('[data-testid^="regional-approval-month-plan-"]').first();
+    const totals = page.getByRole('region', { name: '当前页明细汇总', exact: true });
+    await expect(monthly).toContainText('¥210');
+    await expect(monthly).toContainText('21 件');
+    await expect(totals.locator('strong').nth(1)).toHaveText('¥610');
+    await expect(page.locator('section[aria-label="SKU 编码 / 物料描述"]')).toHaveCount(0);
+    await page.getByRole('switch', { name: '品类维度' }).click();
+    const category = page.getByRole('button', { name: '汤圆品类', exact: true }).first();
+    await expect(category.locator('xpath=ancestor::tr')).toContainText('¥210');
+    await page.getByRole('button', { name: '刷新数据', exact: true }).click();
+    await expect(monthly).toContainText('¥210');
+    await expect(totals.locator('strong').nth(1)).toHaveText('¥610');
+    assert.equal(await page.evaluate(() => window.coverageCalls.draftWrite), 0);
+    assert.equal(await page.evaluate(() => window.coverageCalls.write), 0);
+    assert.deepEqual(pageErrors, []);
+    assert.equal(externalRequests(), 0);
+  },
+);
+
+test(
   'normal readable detail opens its local draft and viewing or collapsing never saves it',
   { timeout: 30000 },
   async (t) => {
@@ -160,16 +202,18 @@ test(
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
     await expect(
       page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
-    ).toContainText('¥100');
+    ).toContainText('¥200');
     await expect
       .poll(() => page.evaluate(() => window.coverageCalls.detail.includes('p1')))
       .toBe(true);
     const open = page.getByRole('button', { name: /^打开 .* 调整明细$/ }).first();
+    const draftReads = await page.evaluate(() => window.coverageCalls.draft);
+    assert.ok(draftReads >= 3);
     await open.click();
     const detail = page.locator('section[aria-label="SKU 编码 / 物料描述"]');
     await expect(detail).toContainText('skuv1');
     await expect(detail.locator('input[type="number"]')).toHaveCount(1);
-    await expect.poll(() => page.evaluate(() => window.coverageCalls.draft)).toBe(1);
+    await expect.poll(() => page.evaluate(() => window.coverageCalls.draft)).toBe(draftReads + 1);
     await open.click();
     await expect(detail).toHaveCount(0);
     assert.deepEqual(pageErrors, []);
@@ -192,7 +236,7 @@ test(
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
     await expect(
       page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
-    ).toContainText('¥100');
+    ).toContainText('¥200');
     await page.evaluate(() => {
       window.exportBehavior = 'precise';
     });
@@ -253,7 +297,7 @@ test(
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
     await expect(
       page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
-    ).toContainText('¥100');
+    ).toContainText('¥200');
     await page.evaluate(() => {
       window.exportBehavior = 'held';
     });
@@ -272,7 +316,7 @@ test(
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
     await expect(
       page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
-    ).toContainText('¥100');
+    ).toContainText('¥200');
     for (const behavior of ['partial', 'foreign', 'failed']) {
       await page.evaluate((behavior) => {
         window.exportBehavior = behavior;
