@@ -428,20 +428,8 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     openingInventory,
     delistedProducts,
     inventoryMovements: [
-      ...new Map([
-        ...(draft.shipment?.transferPlans ?? []).map((row) => [
-          JSON.stringify([row.month, row.base, row.code]),
-          {
-            month: text(row.month),
-            base: text(row.base),
-            code: text(row.code),
-            productionInbound: null,
-            inTransitInbound: null,
-            transferIn: number(row.inbound),
-            transferOut: number(row.outbound),
-          },
-        ]),
-        ...(draft.inventoryMovements ?? []).map((row) => [
+      ...new Map(
+        (draft.inventoryMovements ?? []).map((row) => [
           JSON.stringify([row.month, row.base, row.code]),
           {
             ...row,
@@ -451,7 +439,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
             transferOut: number(row.transferOut),
           },
         ]),
-      ]).values(),
+      ).values(),
     ].filter((row) => row.month >= draft.month && row.month <= months.at(-1)),
     capacities,
     adjustments: {

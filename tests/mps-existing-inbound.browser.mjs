@@ -1,12 +1,50 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
-import { authorPage } from './helpers/author-page.mjs';
+import { mpsPage } from './helpers/mps-page.mjs';
+import { readFile } from 'node:fs/promises';
 import { workflowExportRows } from './helpers/mps-workflow-export.mjs';
 
 async function open(t) {
-  const page = await authorPage(t);
-  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
+  const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
+  const { page } = await mpsPage(t, config, ({ queryId, parameters }) => ({
+    rows:
+      queryId === 'facts.shipment-latest'
+        ? [{ latest_date: '2026-11-30' }]
+        : queryId.endsWith('.count')
+          ? [{ total: queryId === 'facts.shipment.count' ? 1 : 0 }]
+          : queryId === 'facts.shipment'
+            ? [
+                {
+                  belong_base: '郑州',
+                  material_code: 'A',
+                  material_name: '产品A',
+                  series: '系列',
+                  product_item: '组',
+                  shipped: 1,
+                  prepped: 0,
+                  unprepped: 0,
+                  daily3: 1,
+                  average: 0,
+                  open: 101,
+                  inbound: 0,
+                  source_days: 30,
+                  duplicate_days: 0,
+                  transfer_date: '2026-11-30',
+                  transfer_rows: 1,
+                  transfer_in_plan_v1: null,
+                  transfer_in_plan_adj: null,
+                  transfer_out_plan_v1: null,
+                  transfer_out_plan_adj: null,
+                },
+              ]
+            : [],
+    returnedColumns: config.queries[queryId].columns,
+    configVersion: 'existing-inbound',
+    offset: parameters.offset ?? 0,
+    hasMorePages: false,
+  }));
+  await page.clock.setFixedTime(new Date('2026-11-17T12:00:00+08:00'));
   await page.evaluate(() => window.openAuthor('mps', 1200));
   await expect(page.frameLocator('iframe').getByLabel('评估月份选择')).toBeVisible();
   await page.evaluate(async () => {
@@ -65,27 +103,7 @@ async function open(t) {
           },
         },
         cutoff: '2026-11-30',
-        activeSource: 'local-file',
-        file: '库存.csv',
-        rows: [
-          {
-            month: '2026-11',
-            base: '郑州',
-            code: 'A',
-            name: '产品A',
-            category: '点心',
-            series: '系列',
-            group: '组',
-            shipped: 1,
-            prepped: 0,
-            unprepped: 0,
-            daily3: 1,
-            open: 101,
-            inbound: 0,
-            remaining: 0,
-          },
-        ],
-        transferPlans: [{ month: '2026-11', base: '郑州', code: 'A', inbound: 0, outbound: 0 }],
+        activeSource: 'business',
       },
     });
     await window.openAuthor('mps', 1200, seed);
@@ -141,7 +159,10 @@ test('既有入库确认保存重开后进入计算与真实下载，取消、�
   await expect(frame.getByLabel('郑州 A 2026-12 既有生产入库', { exact: true })).toHaveText('20');
   await expect.poll(async () => (await current(page)).inventoryMovements).toEqual(saved);
   await step(frame, '本月预估发货');
-  await expect(frame.getByText('库存.csv', { exact: false }).first()).toBeVisible();
+  await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  await expect(
+    frame.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('100');
   await step(frame, '需求加工与收敛');
   const rows = await workflowExportRows(frame);
   assert.deepEqual(

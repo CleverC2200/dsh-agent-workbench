@@ -37,27 +37,6 @@ export async function seedLeafQuantities(frame, rows) {
   await expect(frame.getByLabel('评估月份选择', { exact: true })).toBeVisible();
 }
 
-export async function seedNoTransferPlans(frame, rows) {
-  const page = frame.locator('body').page();
-  await expect
-    .poll(() =>
-      page.evaluate((rows) => {
-        const state = window.readView()?.localDrafts;
-        const draft = state?.drafts.find((row) => row.id === state.selected);
-        return rows.every((input) =>
-          draft?.shipment?.rows?.some((row) => row.base === input.base && row.code === input.code),
-        );
-      }, rows),
-    )
-    .toBe(true);
-  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-  await frame.getByRole('button', { name: '调整', exact: true }).press('Enter');
-  await frame
-    .getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true })
-    .press('Enter');
-  await frame.getByRole('button', { name: '保存调整', exact: true }).press('Enter');
-}
-
 export async function seedNoExistingMovements(frame, rows) {
   const page = frame.locator('body').page();
   await page.evaluate(async (rows) => {

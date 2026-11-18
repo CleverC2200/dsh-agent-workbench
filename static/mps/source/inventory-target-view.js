@@ -1,3 +1,4 @@
+import { matchesCategories } from './category-filter.js';
 import { useStepViewField } from './step-view-state.js';
 import { inventoryVersionOrder, selectedInventoryMonth } from './inventory-selection.js';
 
@@ -87,6 +88,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
     draft,
     batch,
     result,
+    selectedCategories = [],
     update,
     sync,
     busy,
@@ -107,11 +109,14 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
       'InventoryTargetPanel.supplementPage',
       0,
     );
+    const scopedRows = result.rows.filter((row) =>
+      matchesCategories(row.category, selectedCategories),
+    );
     const version = draft.constraints?.targetVersion ?? 'auto';
     const sourceMonth = selectedInventoryMonth(draft);
     const sourceVersion = result.rows[0]?.turnoverPolicy.sourceVersion ?? '';
-    const bases = [...new Set(result.rows.map((row) => row.base))].sort();
-    const rows = result.rows.filter(
+    const bases = [...new Set(scopedRows.map((row) => row.base))].sort();
+    const rows = scopedRows.filter(
       (row) =>
         row.month === month &&
         (!base || row.base === base) &&
@@ -123,13 +128,13 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
     };
     const reportRows = rows.map(inventoryTurnoverReport).filter(Boolean);
     const read = draft.inventoryTargetsRead;
-    const missing = result.rows.filter((row) => row.safetyDays === null).length;
+    const missing = scopedRows.filter((row) => row.safetyDays === null).length;
     const supplementKey = (row) => JSON.stringify([row.base, row.code]);
     const supplements = new Map(
       (draft.constraints?.turnoverDays ?? []).map((row) => [supplementKey(row), row]),
     );
     const pending = [
-      ...new Map(result.rows.map((row) => [supplementKey(row), row])).values(),
+      ...new Map(scopedRows.map((row) => [supplementKey(row), row])).values(),
     ].filter(
       (row) =>
         row.turnoverPolicy.sourceDays === null &&
@@ -265,10 +270,15 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
       '安全天数使用状态',
     ];
     const evaluatedKeys = new Set(
-      result.rows.map((row) => JSON.stringify([row.month, row.base, row.code])),
+      scopedRows.map((row) => JSON.stringify([row.month, row.base, row.code])),
     );
-    const sourceRows = (read?.status === 'ready' ? (draft.inventoryTargets ?? []) : []).map(
-      (row) => ({
+    const sourceRows = (read?.status === 'ready' ? (draft.inventoryTargets ?? []) : [])
+      .filter(
+        (row) =>
+          !selectedCategories.length ||
+          scopedRows.some((entry) => entry.base === row.base && entry.code === row.code),
+      )
+      .map((row) => ({
         月份: row.month,
         基地: row.base,
         产品编码: row.code,
@@ -289,8 +299,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
         业务键核对: evaluatedKeys.has(JSON.stringify([row.month, row.base, row.code]))
           ? '月份、基地、SKU匹配；版本按当前规则选择'
           : '月份、基地或SKU不在当前评估明细，未参与计算',
-      }),
-    );
+      }));
     return card(
       '基地与单品目标库存',
       h(
@@ -450,12 +459,12 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
           h(
             'button',
             {
-              disabled: !result.rows.length,
+              disabled: !scopedRows.length,
               onClick: () =>
                 downloadCsv(
                   `${draft.month}-三个月完整目标库存`,
                   ['评估版本', ...fields],
-                  result.rows.map((row) => ({
+                  scopedRows.map((row) => ({
                     评估版本: draft.name,
                     ...exportRow(row),
                   })),
@@ -478,7 +487,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
           ],
           bases.flatMap((base) =>
             result.months.slice(0, 3).map((month) => {
-              const group = result.rows.filter((row) => row.base === base && row.month === month);
+              const group = scopedRows.filter((row) => row.base === base && row.month === month);
               const days = [...new Set(group.map((row) => row.safetyDays))];
               const demand = group.filter((row) => row.nextMonthDemand !== null);
               const targets = group.filter((row) => row.targetInventory !== null);

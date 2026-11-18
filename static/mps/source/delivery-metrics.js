@@ -1,16 +1,31 @@
+import { createDimensionCategoryMatcher } from './category-filter.js';
 import { deliveryColumns } from './source-tables.js';
 
 export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
   const columns = ['月份', ...Object.values(deliveryColumns), '源记录数', '粒度状态'];
-  return function DeliveryMetrics({ draft, update, sync, busy, error, active }) {
+  return function DeliveryMetrics({
+    draft,
+    update,
+    sync,
+    busy,
+    error,
+    active,
+    selectedCategories = [],
+  }) {
     const month = draft.deliveryMonth ?? draft.month;
     const [dimension, setDimension] = react.useState('');
     const [base, setBase] = react.useState('');
     const [page, setPage] = react.useState(0);
     const [pageSize, setPageSize] = react.useState(10);
     const [expanded, setExpanded] = react.useState(false);
-    const records = (draft.delivery ?? []).filter((row) => row['月份'] === month);
+    const matchesDimension = react.useMemo(
+      () => createDimensionCategoryMatcher(draft.products, selectedCategories),
+      [draft.products, selectedCategories],
+    );
+    const records = (draft.delivery ?? []).filter(
+      (row) => row['月份'] === month && matchesDimension(row),
+    );
     const types = [...new Set(records.map((row) => row['维度类型']).filter(Boolean))];
     const bases = [...new Set(records.map((row) => row['基地']).filter(Boolean))];
     const selectedType = types.includes(dimension) ? dimension : '';
@@ -21,7 +36,10 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
         (!selectedBase || row['基地'] === selectedBase),
     );
     const read = draft.deliveryRead?.periods?.[month];
-    react.useEffect(() => setPage(0), [month, dimension, base, draft.delivery, pageSize]);
+    react.useEffect(
+      () => setPage(0),
+      [month, dimension, base, draft.delivery, pageSize, selectedCategories],
+    );
     useMpsPart(
       react,
       'delivery',

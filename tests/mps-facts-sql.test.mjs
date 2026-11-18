@@ -187,6 +187,13 @@ test('shipment SQL sums daily inbound including reversals, preserves missing flo
     null,
     888,
   );
+  for (const field of [
+    'transfer_in_plan_v1',
+    'transfer_in_plan_adj',
+    'transfer_out_plan_v1',
+    'transfer_out_plan_adj',
+  ])
+    db.exec(`ALTER TABLE agents_scm_stock_detail_d ADD COLUMN ${field} REAL`);
   const query = db.prepare(config.queries['facts.shipment'].request.sql);
   const parameters = {
     month: '2026-09-01',

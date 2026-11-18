@@ -28,6 +28,12 @@ function fixture({ queryId, parameters }, latest = '2026-10-31') {
               inbound: 200,
               source_days: Number(parameters.cutoff.slice(8)),
               duplicate_days: 0,
+              transfer_date: parameters.cutoff,
+              transfer_rows: 1,
+              transfer_in_plan_v1: null,
+              transfer_in_plan_adj: null,
+              transfer_out_plan_v1: null,
+              transfer_out_plan_adj: null,
             },
           ]
         : queryId.endsWith('.count')

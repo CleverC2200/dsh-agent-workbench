@@ -282,6 +282,28 @@ export async function readShipmentInputs(cutoff, signal) {
           row[field] === null ? null : number(row[field]),
         ]),
       );
+      const transferDate = row.transfer_date;
+      const transferRows = number(row.transfer_rows);
+      const transferIssue =
+        !validShipmentDate(transferDate) ||
+        transferDate.slice(0, 7) !== month ||
+        transferDate > cutoff
+          ? '调拨计划缺少适用快照日期，来源待核'
+          : transferRows !== 1
+            ? '调拨计划最新快照重复或冲突，未采用计划数量'
+            : '';
+      const transfer = (direction) => {
+        if (transferIssue) return { value: null, source: transferIssue };
+        const adjusted = row[`transfer_${direction}_plan_adj`];
+        const initial = row[`transfer_${direction}_plan_v1`];
+        return adjusted !== null
+          ? { value: number(adjusted), source: `${transferDate} 纠偏计划` }
+          : initial !== null
+            ? { value: number(initial), source: `${transferDate} 初版计划` }
+            : { value: 0, source: `${transferDate} 确认无计划` };
+      };
+      const transferIn = transfer('in');
+      const transferOut = transfer('out');
       return {
         month,
         base: text(row.belong_base),
@@ -291,6 +313,12 @@ export async function readShipmentInputs(cutoff, signal) {
         series: text(row.series),
         group: text(row.product_item),
         ...quantities,
+        transferIn: transferIn.value,
+        transferOut: transferOut.value,
+        transferInSource: transferIn.source,
+        transferOutSource: transferOut.source,
+        transferDate,
+        transferIssue,
         remaining:
           quantities.inbound == null || passed <= 1
             ? null
