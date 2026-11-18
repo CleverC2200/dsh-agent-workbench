@@ -1,4 +1,4 @@
-import { dayOffset, metricNames, metricCalculationVersion } from './metric-model.mjs';
+import { dayOffset, metricNames, metricCalculationVersion, metricPeriodEnd } from './metric-model.mjs';
 import { metricSnapshot } from './metric-components.mjs';
 import { metricContract } from './metric-definitions.mjs';
 import { workbenchEvidence, workbenchMetricDetail } from './live-presentation.mjs';
@@ -18,12 +18,12 @@ export function metricDetailsRequest(facts, key, selection, card = {}) {
           ? '60天及以上货龄占比'
           : key;
   const window = (period) =>
-    !period || period.start >= period.end
+    !period || period.start >= metricPeriodEnd(period, key)
       ? '尚无已结束日期'
-      : `${period.start} 至 ${dayOffset(period.end, -1)}`;
+      : `${period.start} 至 ${dayOffset(metricPeriodEnd(period, key), -1)}`;
   const comparisonPeriod = (period) =>
-    period?.start && period?.end && period.start < period.end
-      ? { start: period.start, endExclusive: period.end }
+    period?.start && metricPeriodEnd(period, key) && period.start < metricPeriodEnd(period, key)
+      ? { start: period.start, endExclusive: metricPeriodEnd(period, key) }
       : null;
   const base = facts.base ?? '';
   const scope = base ? 'base' : 'national';
@@ -37,7 +37,7 @@ export function metricDetailsRequest(facts, key, selection, card = {}) {
   const parameters = {
     metric: key,
     start: facts.periods.month.start,
-    endExclusive: facts.periods.month.end,
+    endExclusive: metricPeriodEnd(facts.periods.month, key),
     base,
     expectedVersion: metricCalculationVersion,
   };
@@ -52,7 +52,7 @@ export function metricDetailsRequest(facts, key, selection, card = {}) {
   const evidence = workbenchEvidence({
     ...facts,
     periods: Object.fromEntries(Object.entries(facts.periods).map(([name, period]) => [
-      name, { ...period, metrics: { [key]: period.metrics[key] } },
+      name, { ...period, end: metricPeriodEnd(period, key), metrics: { [key]: period.metrics[key] } },
     ])),
   });
   evidence.metricContracts = { [key]: contract };
@@ -84,7 +84,7 @@ export function metricDetailsRequest(facts, key, selection, card = {}) {
       };
       return [name, {
         ...groups,
-        start: period.start, endExclusive: period.end,
+        start: period.start, endExclusive: metricPeriodEnd(period, key),
         total: compactMetric(groups.total),
         rows: groups.rows.map(row => ({ ...row, current: compactMetric(row.current) })),
       }];
@@ -187,6 +187,9 @@ export function metricDetailsRequest(facts, key, selection, card = {}) {
     `页面基地分组：${JSON.stringify(inlineGroups)}`,
     '页面基地分组：完整分组保存在metricDetails.baseGroups，按Skill读取后完整回答，不得省略基地或比较期。',
   );
+  request.text += '\n本次卡片从ai_db取数，Agent保留gea_order_kpi并从Cube取数。页面快照和基地分组只作为对账证据，不能替代Cube结果；请按本次queries和comparisonPeriods先读取Cube对应周期及分组，再按原Skill完整回答，并核对分子、分母、待确认数量和周期。不以知识库或Cube旧声明覆盖当前contract。';
+  request.context.metricDetails.agentSource = 'Cube';
+  request.context.metricDetails.cardSource = 'ai_db';
   request.context.metricDetails.agentPrompt = request.text;
   request.displayText = `请生成${base ? base + '基地' : '全国'}${label}指标明细，按原Skill完整展示基地明细、合计及环比同比。\n本期：${window(facts.periods.month)}；本周：${window(facts.periods.week)}。`;
   request.context.metricDetails.displayText = request.displayText;

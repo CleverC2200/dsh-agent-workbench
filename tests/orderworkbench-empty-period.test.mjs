@@ -8,9 +8,9 @@ import {
 } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 import { workbenchEvidence } from '../prototypes/inventory-orderworkbench/live-presentation.mjs';
 
-test('a future selected window is complete without completed dates; current windows include the current day', () => {
+test('future order windows contain no completed dates and current orders stop at T-1', () => {
   const specs = reportPeriods('2026-11-03', '2026-11-10', new Date('2026-11-02T07:25:11Z'));
-  assert.equal(specs.week.start, specs.week.end);
+  assert.ok(specs.week.start >= specs.week.end);
   const period = { ...specs.week, sections: [] };
   period.metrics = computeWorkbenchMetrics(period);
   for (const metric of Object.values(period.metrics)) {
@@ -28,7 +28,7 @@ test('a future selected window is complete without completed dates; current wind
   assert.equal(evidence.complete, true);
   assert.deepEqual(evidence.pendingPeriods, []);
   assert.equal(evidence.periods.week.orderWindow.state, 'no-completed-days');
-  assert.match(evidence.periods.week.orderWindow.basis, /结束边界不含边界日，包含当前日/);
+  assert.match(evidence.periods.week.orderWindow.basis, /T-1.*结束边界不含边界日/);
   const saved = structuredClone(period);
   saved.metrics['作废率'].note = '所选周期及授权范围内无来源数据';
   const restored = workbenchEvidence({
@@ -40,7 +40,8 @@ test('a future selected window is complete without completed dates; current wind
   assert.equal(saved.metrics['作废率'].note, '所选周期及授权范围内无来源数据');
   const next = reportPeriods('2026-11-02', '2026-11-09', new Date('2026-11-03T07:25:11Z'));
   assert.equal(next.week.start, '2026-11-02');
-  assert.equal(next.week.end, '2026-11-04');
+  assert.equal(next.week.end, '2026-11-03');
+  assert.equal(next.week.inventoryEnd, '2026-11-04');
 });
 
 test('unloaded, denied and empty successful reads retain different reasons', () => {

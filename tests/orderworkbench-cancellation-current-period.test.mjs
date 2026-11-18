@@ -97,7 +97,7 @@ test('all thirteen product lines recover independently and a real customer zero 
   }
 });
 
-test('card, independent Agent summary and base groups share quantities, pending and the current-day cutoff', async () => {
+test('card, independent Agent summary and base groups share quantities, pending and the T-1 cutoff', async () => {
   const hourly = [
     cancellationLine('cancel-today', {
       orderstatus: 90,
@@ -178,7 +178,7 @@ test('card, independent Agent summary and base groups share quantities, pending 
           return { rows: executeSql(request.sql, request.parameters), configVersion: 'fixture' };
         },
         undefined,
-        { now: new Date('2026-11-16T05:00:00Z') },
+        { now: new Date('2026-11-17T05:00:00Z') },
       );
       assert.equal(result.period.endExclusive, '2026-11-17');
       for (const field of [
