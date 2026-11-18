@@ -27,6 +27,9 @@ import { REGIONAL_PLAN_EVALUATION_STATUSES } from './salesPlanDomain.ts';
 import type { SalesPlanApprovalRole } from './models/salesPlanAccessModel.ts';
 
 const QUERY_TIMEOUT_MS = 15_000;
+const LIST_PAGE_SIZE = 200;
+const listPageKey = (query: GeaSalesPlanPageQuery) =>
+  JSON.stringify([query.periodId, query.planTypeCode, query.status, query.pageNo]);
 
 export type SalesPlanQueryClient = {
   periods: {
@@ -157,6 +160,7 @@ export const useRegionalApprovalQuery = ({
   const periodsRequest = useRef(0);
   const queueRequest = useRef(0);
   const progressRequest = useRef(0);
+  const queuePages = useRef(new Map<string, Promise<GeaSalesPlanPage<GeaSalesPlanListItem>>>());
   const stableScope = useMemo(
     () => ({
       dealerCode: scope?.dealerCode,
@@ -265,7 +269,13 @@ export const useRegionalApprovalQuery = ({
     const requestedPage = clampSalesPlanPageNumber(page);
     const requestedSize = clampSalesPlanPageNumber(pageSize, 20);
 
-    const serverPageSize = 200;
+    const pages = new Map<string, Promise<GeaSalesPlanPage<GeaSalesPlanListItem>>>();
+    queuePages.current = pages;
+    const readPage = (query: GeaSalesPlanPageQuery) => {
+      const response = client.list.invoke({ ...query, signal: request.signal });
+      pages.set(listPageKey(query), response);
+      return response;
+    };
     const partitions = periodQueries.flatMap(({ period, statuses }) =>
       (statuses ?? [undefined]).map((status) => ({ period, status })),
     );
@@ -286,20 +296,19 @@ export const useRegionalApprovalQuery = ({
                 planTypeCode: period.planTypeCode,
                 status,
                 pageNo: 1,
-                pageSize: serverPageSize,
-                signal: request.signal,
+                pageSize: LIST_PAGE_SIZE,
               };
-              const first = await client.list.invoke(baseQuery);
+              const first = await readPage(baseQuery);
               const pageSizeOfUpstream = Math.max(
                 1,
-                Math.min(serverPageSize, first.size ?? serverPageSize),
+                Math.min(LIST_PAGE_SIZE, first.size ?? LIST_PAGE_SIZE),
               );
               const pageCount = Math.max(1, Math.ceil(first.total / pageSizeOfUpstream));
               const rest =
                 pageCount > 1
                   ? await Promise.all(
                       Array.from({ length: pageCount - 1 }, (_, index) =>
-                        client.list.invoke({ ...baseQuery, pageNo: index + 2 }),
+                        readPage({ ...baseQuery, pageNo: index + 2 }),
                       ),
                     )
                   : [];
@@ -357,7 +366,10 @@ export const useRegionalApprovalQuery = ({
         }
       })
       .finally(request.finish);
-    return request.cancel;
+    return () => {
+      pages.clear();
+      request.cancel();
+    };
   }, [
     periodsState.status,
     client,
@@ -454,6 +466,7 @@ export const useRegionalApprovalQuery = ({
       return;
     }
     const request = beginTimedRequest();
+    const pages = queuePages.current;
     let active = true;
     setAnalysisResult({ status: 'loading' });
     request.signal.addEventListener(
@@ -476,15 +489,16 @@ export const useRegionalApprovalQuery = ({
           for (let pageNo = 1; pageNo <= pageCount; pageNo++) {
             request.signal.throwIfAborted();
 
-            const response = await client.list.invoke({
+            const query = {
               ...stableScope,
               status,
               periodId: period.periodId,
               planTypeCode: period.planTypeCode,
               pageNo,
-              pageSize: 200,
+              pageSize: LIST_PAGE_SIZE,
               signal: request.signal,
-            });
+            };
+            const response = await (pages.get(listPageKey(query)) ?? client.list.invoke(query));
             request.signal.throwIfAborted();
             if (
               response.current !== pageNo ||
