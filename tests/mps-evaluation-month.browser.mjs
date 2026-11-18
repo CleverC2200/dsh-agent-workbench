@@ -347,6 +347,9 @@ test('两个评估月的完整来源驱动系统有效需求，期间切换与�
     ['2026-11', '2026-10', '2026-10-31', 110],
   ]) {
     const before = results.length ? calls.length : 0;
+    await page.clock.setFixedTime(
+      new Date(month === '2027-01' ? '2026-12-31T14:00:00+08:00' : '2026-11-17T12:00:00+08:00'),
+    );
     await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
     await frame.getByLabel('评估月份选择', { exact: true }).selectOption(month);
     await expect(frame.getByRole('region', { name: '计划提报数据', exact: true })).toContainText(

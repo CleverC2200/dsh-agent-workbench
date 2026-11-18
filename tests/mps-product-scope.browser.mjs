@@ -134,3 +134,71 @@ test('三类池外报告页面与下载保留双来源，基地筛选同步，�
       .getByRole('region', { name: '产品范围与池外异常', exact: true }),
   ).toBeVisible();
 });
+
+test('实际提报池外项即使缺占比仍出现在产销存报告和下载', async (t) => {
+  const { page, frame } = await mpsPage(
+    t,
+    config,
+    ({ queryId, parameters }) => {
+      const record = (fields) => ({
+        ...Object.fromEntries(config.queries[queryId].columns.map((column) => [column, null])),
+        ...fields,
+      });
+      const rows =
+        queryId === 'facts.report'
+          ? [
+              record({
+                belong_base: '甲',
+                material_code: 'OUT',
+                sub_category: '点心',
+                plannum_total: 8,
+                allnum_total: 9,
+              }),
+            ]
+          : queryId === 'facts.history-annual'
+            ? [
+                record({
+                  [prefix + 'belong_base']: '甲',
+                  [prefix + 'material_code']: 'OUT',
+                  [prefix + 'product_categ_name']: '点心',
+                  [prefix + 'act_dl_qty_total']: 5,
+                }),
+              ]
+            : queryId.endsWith('.count')
+              ? [{ total: queryId === 'facts.report.count' ? 1 : 0 }]
+              : [];
+      return {
+        rows,
+        returnedColumns: config.queries[queryId].columns,
+        configVersion: 'product-scope-live-source-fixture',
+        totalRowCount: rows.length,
+        offset: parameters.offset ?? 0,
+        hasMorePages: false,
+      };
+    },
+    { time: '2026-11-18T13:30:00+08:00' },
+  );
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n甲,A,产品A,点心,系列,包点,OLD,老品',
+  );
+  await frame.getByRole('button', { name: '读取去年发运占比源值', exact: true }).click();
+  await expect(frame.getByText('全年历史读取中…')).toHaveCount(0);
+  await workflowStep(frame, '产销存报告');
+  const report = frame
+    .getByRole('region', { name: '产销存报告', exact: true })
+    .getByRole('region', { name: '产品范围与池外异常', exact: true });
+  await expect(
+    report.getByRole('button', { name: '历史有发货SKU（1条）', exact: true }),
+  ).toBeVisible();
+  await expect(
+    report.getByRole('button', { name: '销售提报SKU（1条）', exact: true }),
+  ).toBeVisible();
+  const downloaded = await downloadRows(
+    page,
+    report.getByRole('button', { name: '下载当前池外异常明细', exact: true }),
+  );
+  assert.equal(downloaded.length, 1);
+  assert.equal(downloaded[0].来源, '历史发货；销售提报');
+});

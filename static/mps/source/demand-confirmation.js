@@ -3,6 +3,7 @@ import { encodeLocalDrafts, decodeLocalDrafts, changeAdjustment } from './local-
 import { createCategoryDemand } from './category-demand-view.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
+import { mpsBusinessDate } from './business-date.js';
 import {
   hasMpsSource,
   readProducts,
@@ -187,10 +188,7 @@ const amount = new Intl.NumberFormat('zh-CN', {
 }).format;
 const quantity = (rows, column) =>
   rows.reduce((sum, row) => (row[column] === '' ? sum : sum + Number(row[column])), 0);
-const currentMonth = () => {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-};
+const currentMonth = () => mpsBusinessDate().slice(0, 7);
 const blankProduct = () => Object.fromEntries(productColumns.map((column) => [column, '']));
 const makeDraft = (id, month) => ({
   id,

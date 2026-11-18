@@ -231,19 +231,21 @@ const validShipmentDate = (value) =>
   Number.isFinite(Date.parse(value + 'T00:00:00Z')) &&
   new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
 
-export async function readLatestShipmentDate(month, signal) {
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw Error('发货统计月份无效');
-  const [year, monthNumber] = month.split('-').map(Number);
-  const monthEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+export async function readLatestShipmentDate(through, signal) {
+  if (!validShipmentDate(through)) throw Error('发货统计截止日期无效');
+  const month = through.slice(0, 7);
   const result = await readFacts(
     'facts.shipment-latest',
-    { month: month + '-01', month_end: monthEnd },
+    { month: month + '-01', month_end: through },
     signal,
     'shipmentDate',
   );
   if (result.rows.length !== 1) throw Error('最新发货日期来源未返回唯一结果');
   const date = result.rows[0].latest_date;
-  if (date !== null && (!validShipmentDate(date) || !date.startsWith(month + '-')))
+  if (
+    date !== null &&
+    (!validShipmentDate(date) || !date.startsWith(month + '-') || date > through)
+  )
     throw Error('源端最新发货日期无效或不属于当前统计月份');
   return {
     date,
