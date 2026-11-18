@@ -2,14 +2,12 @@ import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { BusinessDateInput } from '../../../../../shared/business-date-input';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPageViewState, usePageViewField } from '../../../../../shared/view-state.js';
 import { reportElements } from '../channel.js';
 import config from '../../../../sql.config.json';
 import { originalDealerView } from '../../../../../shared/original-business-views';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
-import { readConfiguredFacts } from '../../../../../shared/configured-facts';
-import { useQueryIdentity } from '../../../../../shared/use-query-identity';
 import { useConfiguredOverview } from '../../../../../shared/use-configured-overview';
 import { businessDay, completeValue, knownNumber } from '../../../../../shared/configured-overview';
 import { Tabs } from '../dsh-ui/controls';
@@ -32,20 +30,6 @@ const orders = [
   ['suggested-order', '建议订单'],
 ];
 const view = createPageViewState('inventory-dealer');
-type CustomerOption = { code: string; name: string };
-type CustomerSearchResult =
-  | { status: 'ready'; options: CustomerOption[]; hasMore: boolean }
-  | { status: 'failed'; message: string };
-
-function customerOption(row: unknown): CustomerOption | undefined {
-  if (typeof row !== 'object' || !row || !('customer' in row)) return;
-  const code = typeof row.customer === 'string' ? row.customer.trim() : '';
-  if (!code) return;
-  const name =
-    'customer_name' in row && typeof row.customer_name === 'string' ? row.customer_name.trim() : '';
-  return { code, name };
-}
-
 const stockTab = (value: unknown) =>
   ({
     customer: 'customer-stock',
@@ -64,90 +48,13 @@ export default function ConfiguredWorkbench() {
       stockTab,
     ),
     [customer, setCustomer] = usePageViewField(React, view, 'customer', ''),
+    [draft, setDraft] = useState(''),
     [revision, refresh] = useState(0);
   const [page, setPage] = usePageViewField(React, view, 'page', 1);
   const [pageSize, setPageSize] = usePageViewField(React, view, 'pageSize', 10);
+  useEffect(() => setDraft(customer), [customer]);
   const [date, setDate] = useState(businessDay),
     [dateDraft, setDateDraft] = useState(businessDay);
-  const identity = useQueryIdentity();
-  const customerMenu = useRef<HTMLDetailsElement>(null);
-  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [selectedOption, setSelectedOption] = useState<CustomerOption>();
-  const [customerResult, setCustomerResult] = useState<{
-    key: string;
-    result: CustomerSearchResult;
-  }>();
-  const search = customerSearch.trim();
-  const searchKey = JSON.stringify([identity, date, search]);
-  const result = customerResult?.key === searchKey ? customerResult.result : undefined;
-  const customerName =
-    selectedOption && selectedOption.code === customer ? selectedOption.name : '';
-  useEffect(() => {
-    if (!customerSearchOpen) return;
-    const controller = new AbortController();
-    const signal = controller.signal;
-    const timer = setTimeout(
-      () => {
-        void readConfiguredFacts(
-          config,
-          'customer',
-          { asOf: date, pageSize: 20, filters: search ? { search } : {} },
-          { signal, detailsOnly: true },
-        )
-          .then((response) => {
-            if (signal.aborted) return;
-            if (!['available', 'empty'].includes(response.status))
-              throw new Error('当前客户目录不可用');
-            const rows: unknown[] = response.rows;
-            const options = rows
-              .map(customerOption)
-              .filter((option): option is CustomerOption => option !== undefined);
-            if (options.length !== rows.length) throw new Error('客户目录未返回客户编码');
-            setCustomerResult({
-              key: searchKey,
-              result: { status: 'ready', options, hasMore: response.total > options.length },
-            });
-          })
-          .catch((error: unknown) => {
-            if (!signal.aborted)
-              setCustomerResult({
-                key: searchKey,
-                result: {
-                  status: 'failed',
-                  message: error instanceof Error ? error.message : '客户目录读取失败',
-                },
-              });
-          });
-      },
-      search ? 250 : 0,
-    );
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [customerSearchOpen, date, search, searchKey]);
-
-  function selectCustomer(option?: CustomerOption) {
-    const code = option?.code ?? '';
-    setPage(1);
-    setCustomer(code);
-    setSelectedOption(option);
-    setCustomerSearch('');
-    if (option) {
-      setDate(dateDraft);
-      refresh((n) => n + 1);
-    } else {
-      setArea('stock');
-      setTab('customer-stock');
-    }
-    const menu = customerMenu.current;
-    if (menu) {
-      menu.open = false;
-      menu.querySelector('summary')?.focus();
-    }
-  }
-
   const { parts, errors, busy } = useConfiguredOverview(config, date, customer, revision, (v) =>
     updateContext('overview', v),
   );
@@ -187,6 +94,7 @@ export default function ConfiguredWorkbench() {
   const choose = (value: string) => {
     setPage(1);
     setCustomer(value);
+    setDraft(value);
     setArea('order');
     setTab('orders');
   };
@@ -207,6 +115,7 @@ export default function ConfiguredWorkbench() {
           if (args.kind !== 'setValue' || typeof args.value !== 'string' || args.value.length > 100)
             throw Error('INVALID_FILTER');
           setCustomer(args.value.trim());
+          setDraft(args.value.trim());
           setPage(1);
         },
       ),
@@ -243,69 +152,47 @@ export default function ConfiguredWorkbench() {
         className={css.sharedTopbar}
         filters={
           <div className={css.customerPicker}>
-            <details
-              className={css.customerMenu}
-              ref={customerMenu}
-              title={`库存快照：${stock?.snapshotDate ?? '-'}`}
-              onToggle={(event) => {
-                const open = event.currentTarget.open;
-                setCustomerSearchOpen(open);
-                if (!open) setCustomerResult(undefined);
-              }}
-            >
+            <details className={css.customerMenu} title={`库存快照：${stock?.snapshotDate ?? '-'}`}>
               <summary>
-                {customerName || (customer ? `客户 ${customer}` : '全部负责客户')}
+                {customer ? `客户 ${customer}` : '全部负责客户'}
                 <span aria-hidden="true">⌄</span>
               </summary>
               <div className={css.customerOptions}>
                 <LocalQueryForm
                   className={common.controls}
-                  role="search"
-                  aria-label="客户查询"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (!search || result?.status !== 'ready') return;
-                    const exact = result.options.find((option) => option.code === search);
-                    if (exact) selectCustomer(exact);
-                    else if (!result.hasMore && result.options.length === 1)
-                      selectCustomer(result.options[0]);
+                    setPage(1);
+                    setCustomer(draft.trim());
+                    setDate(dateDraft);
+                    refresh((n) => n + 1);
+                    const menu = event.currentTarget.closest('details');
+                    if (menu) menu.open = false;
                   }}
                 >
                   <input
-                    type="search"
-                    aria-label="客户名称或编码"
-                    placeholder="搜索客户名称或编码"
+                    aria-label="客户编码"
+                    placeholder="输入客户编码"
                     maxLength={100}
-                    value={customerSearch}
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    onChange={(event) => setCustomerSearch(event.target.value)}
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
                   />
+                  <button>查询 / 刷新</button>
                 </LocalQueryForm>
-                <button type="button" onClick={() => selectCustomer()}>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    setPage(1);
+                    setArea('stock');
+                    setTab('customer-stock');
+                    setDraft('');
+                    setCustomer('');
+                    const menu = event.currentTarget.closest('details');
+                    if (menu) menu.open = false;
+                  }}
+                >
                   全部负责客户
                 </button>
-                {result?.status === 'ready' ? (
-                  <>
-                    {result.options.map((option) => (
-                      <button
-                        key={option.code}
-                        type="button"
-                        aria-pressed={customer === option.code}
-                        onClick={() => selectCustomer(option)}
-                      >
-                        <span>{option.name || option.code}</span>
-                        {option.name && <small>{option.code}</small>}
-                      </button>
-                    ))}
-                    {!result.options.length && <small role="status">暂无匹配客户</small>}
-                    {result.hasMore && <small role="status">请缩小搜索范围，查看更多匹配</small>}
-                  </>
-                ) : result?.status === 'failed' ? (
-                  <small role="status">{result.message}</small>
-                ) : (
-                  <small role="status">正在查询客户…</small>
-                )}
               </div>
             </details>
           </div>
