@@ -47,9 +47,6 @@ function fixture() {
         calls.push(['create', options]);
         return 'new-business';
       },
-      select: async (...args) => {
-        calls.push(['select', ...args]);
-      },
       open: async (id, skill, signal, beforeOpen, draft) => {
         calls.push(['draft', draft, skill]);
         await beforeOpen?.({
@@ -77,8 +74,7 @@ test('explicit inventory entry copies the question, creates a fresh selected Ses
   assert.deepEqual(f.calls, [
     ['resource', { id: 'gea-html-inventory-aqkc', cwd: '/user/workspace' }],
     ['workspace', '/user/workspace'],
-    ['create', { workspaceId: 'workspace' }],
-    ['select', 'new-business', 'gea-html-inventory-aqkc'],
+    ['create', { workspaceId: 'workspace', agentPreset: 'gea-html-inventory-aqkc' }],
     ['draft', '帮我分析遂平基地的安全库存', undefined],
     [
       'associate',
@@ -100,13 +96,17 @@ test('missing login or page rejects before selecting resources or creating a Ses
 });
 test('identity changes during creation retain the created Session but prevent association and navigation', async () => {
   const f = fixture();
-  f.input.host.select = async () =>
+  const create = f.input.host.create;
+  f.input.host.create = async (options) => {
+    const sessionId = await create(options);
     f.identity({
       state: 'confirmed',
       scope: 'owner-b',
       subject: 'subject-b',
       status: { authenticated: true },
     });
+    return sessionId;
+  };
   await assert.rejects(startInventoryConversation(f.input), /PAGE_IDENTITY_CHANGED/);
   assert.equal(
     f.calls.some((call) => ['native', 'page', 'associate'].includes(call[0])),

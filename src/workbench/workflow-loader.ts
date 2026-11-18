@@ -3,17 +3,32 @@ import {
   type SalesPlanWorkflowRow,
 } from './original/salesPlanWorkflow.ts';
 
-export function createWorkflowLoader(
-  read: (signal?: AbortSignal) => Promise<SalesPlanWorkflowRow[]>,
+export function createWorkflowPeriodLoader(
+  readWorkflow: (signal: AbortSignal, scope?: string) => Promise<SalesPlanWorkflowRow[]>,
 ) {
-  let generation = 0;
+  let active: AbortController | undefined;
   replaceSalesPlanWorkflowRows([]);
-  return async (signal?: AbortSignal) => {
-    const current = ++generation;
+  return async <T>(
+    readPeriods: (signal: AbortSignal) => Promise<T>,
+    caller?: AbortSignal,
+    scope?: string,
+  ) => {
+    const request = new AbortController();
+    const signal = caller ? AbortSignal.any([caller, request.signal]) : request.signal;
+    signal.throwIfAborted();
+    active?.abort();
+    active = request;
     replaceSalesPlanWorkflowRows([]);
-    const rows = await read(signal);
-    signal?.throwIfAborted();
-    if (current !== generation) throw new Error('STALE_SELECTION');
-    replaceSalesPlanWorkflowRows(rows);
+    try {
+      const [rows, periods] = await Promise.all([readWorkflow(signal, scope), readPeriods(signal)]);
+      signal.throwIfAborted();
+      replaceSalesPlanWorkflowRows(rows);
+      return periods;
+    } catch (error) {
+      request.abort();
+      throw error;
+    } finally {
+      if (active === request) active = undefined;
+    }
   };
 }

@@ -29,13 +29,14 @@ export async function openNativeAgentSession(
   );
 }
 
+type ResourceWorkspace = { workspaceId: string; path: string };
+
 export interface NativeResourceSelection {
   fetch: typeof fetch;
   pickDirectory?(): Promise<string | null>;
   workspaceCwd?(signal: AbortSignal): string | undefined | Promise<string | undefined>;
-  workspace(path: string): Promise<{ workspaceId: string; path: string }>;
-  create(options: { workspaceId: string }): Promise<string>;
-  select(sessionId: string, preset: string): Promise<void>;
+  workspace(path: string): Promise<ResourceWorkspace>;
+  create(options: { workspaceId: string; agentPreset?: string }): Promise<string>;
   question?(sessionId: SessionId, signal: AbortSignal): Promise<string | undefined>;
   open(
     sessionId: string,
@@ -89,7 +90,7 @@ export async function selectResource(
   host: NativeResourceSelection,
   id: string,
   signal: AbortSignal,
-  currentCwd?: string,
+  currentWorkspace?: string | ResourceWorkspace,
   beforeOpen?: (selection: {
     sessionId: SessionId;
     preset: string;
@@ -98,7 +99,15 @@ export async function selectResource(
   }) => void | Promise<void>,
   draft?: string,
 ): Promise<{ sessionId: string; preset: string }> {
-  const cwd = await resourceWorkspace(host, signal, currentCwd);
+  const workspace = typeof currentWorkspace === 'object' ? currentWorkspace : undefined;
+  const cwd =
+    workspace?.path ??
+    (await resourceWorkspace(
+      host,
+      signal,
+      typeof currentWorkspace === 'string' ? currentWorkspace : undefined,
+    ));
+  signal.throwIfAborted();
   const response = await host.fetch('/api/agent-manage/resources/select', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -114,11 +123,9 @@ export async function selectResource(
   if (!response.ok || typeof resource.preset !== 'string')
     throw Error(resource.error ?? 'RESOURCE_SELECTION_FAILED');
   signal.throwIfAborted();
-  const { workspaceId, path } = await host.workspace(cwd);
+  const { workspaceId, path } = workspace ?? (await host.workspace(cwd));
   signal.throwIfAborted();
-  const sessionId = await host.create({ workspaceId });
-  signal.throwIfAborted();
-  await host.select(sessionId, resource.preset);
+  const sessionId = await host.create({ workspaceId, agentPreset: resource.preset });
   signal.throwIfAborted();
   await host.open(
     sessionId,
@@ -147,18 +154,25 @@ export function mountNativeResourceSelection(
 ): ReturnType<Context['inject']> {
   let active: NativeResourceSelection | undefined;
   return ctx.inject(
-    ['sessions', 'workspaces', 'remote', 'remote.agentPresets', 'conversation', 'uiWorkspace'],
+    ['sessions', 'workspaces', 'remote', 'remote.session', 'conversation', 'uiWorkspace'],
     (scope) => {
       const host: NativeResourceSelection = {
         fetch: (...args) => fetch(...args),
         pickDirectory: pickDirectory ?? (() => scope.uiWorkspace.pickDirectory()),
         workspaceCwd: async (signal) => (await conversationWorkspace(scope, signal))?.path,
         workspace: (path) => scope.workspaces.create({ path }),
-        create: (options) =>
-          scope.sessions.create({ workspaceId: options.workspaceId as WorkspaceId }),
-        select: async (id, preset) => {
-          const result = await scope.remote.agentPresets.select(id as SessionId, preset);
+        create: async (options) => {
+          const workspaceId = options.workspaceId as WorkspaceId;
+          const { agentPreset } = options;
+          if (agentPreset === undefined) return scope.sessions.create({ workspaceId });
+          const result = await scope.remote.session.create({ workspaceId, agentPreset });
           if (!result.ok) throw Error(result.error.message);
+          const { sessionId } = result.value;
+          if (result.value.agentPreset !== agentPreset)
+            throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
+          if (!scope.sessions.list.getSnapshot().byId[sessionId]?.cwd)
+            await scope.sessions.refresh();
+          return sessionId;
         },
         question: async (id, signal) => {
           const reference = scope.sessions.retain(id, { source: 'agentResourceSelection', signal });

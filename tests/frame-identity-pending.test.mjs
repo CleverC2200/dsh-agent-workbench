@@ -234,7 +234,6 @@ async function fixture(
       return { workspaceId: 'workspace', path };
     },
     create: async () => 'session-' + ++sessions,
-    select: async () => {},
     open: async (id, _skill, signal, beforeOpen) => {
       signal.throwIfAborted();
       const preset = page.resourceId ? 'original' : null;
@@ -294,11 +293,13 @@ async function fixture(
       };
     };
     ctx.remote = {
-      agentPresets: {
-        select: async (id, preset) => {
-          calls.push(['core-select-preset', id, preset]);
-          presets.set(id, preset);
-          return { ok: true, value: preset };
+      session: {
+        create: async (options) => {
+          calls.push(['core-create', options]);
+          const id = await host.create(options);
+          presets.set(id, options.agentPreset);
+          sdkDrafts.set(id, '');
+          return { ok: true, value: { sessionId: id, agentPreset: options.agentPreset } };
         },
       },
     };
@@ -627,8 +628,8 @@ for (const oldPreset of ['agent-resource-skill', null, 'standard', 'original']) 
       'the received page resource is a Manage resource ID, while the old projection remains a Core preset',
     );
     assert.deepEqual(
-      f.calls.filter(([operation]) => operation === 'core-select-preset'),
-      [['core-select-preset', 'session-1', 'original']],
+      f.calls.filter(([operation]) => operation === 'core-create'),
+      [['core-create', { workspaceId: 'workspace', agentPreset: 'original' }]],
     );
     assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '');
     await act(async () => document.querySelector('[aria-label="历史对话"]').click());
@@ -708,8 +709,8 @@ for (const oldPreset of ['agent-resource-skill', null]) {
       undefined,
     );
     assert.deepEqual(
-      f.calls.filter(([operation]) => operation === 'core-select-preset'),
-      [['core-select-preset', 'session-1', 'original']],
+      f.calls.filter(([operation]) => operation === 'core-create'),
+      [['core-create', { workspaceId: 'workspace', agentPreset: 'original' }]],
     );
   });
 }
@@ -726,7 +727,7 @@ test('restoring an unbound resource Document reads Interpreter choices without c
   assert.equal(f.selection(), undefined);
   assert.deepEqual(interpreterChoices(f.dom.window.document), ['original', 'other']);
   assert.equal(
-    f.calls.some(([operation]) => ['core-create', 'core-select-preset'].includes(operation)),
+    f.calls.some(([operation]) => operation === 'core-create'),
     false,
   );
   await f.load();
@@ -1397,8 +1398,8 @@ test('the current public restore interface refuses stale preset/cwd and returns 
   );
   assert.equal(f.association().sessionId, sessionId);
   assert.deepEqual(
-    f.calls.filter((row) => row[0] === 'core-select-preset'),
-    [['core-select-preset', 'session-1', 'original']],
+    f.calls.filter((row) => row[0] === 'core-create'),
+    [['core-create', { workspaceId: 'workspace', agentPreset: 'original' }]],
   );
   const cancelled = new AbortController();
   cancelled.abort();

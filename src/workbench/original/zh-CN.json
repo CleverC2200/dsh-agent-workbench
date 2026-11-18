@@ -1338,6 +1338,8 @@
     "progress": "月达成进度",
     "submissionProgress": "月提报达成",
     "shipmentUnavailable": "发货实绩未取得",
+    "shipmentLoading": "当月发货加载中…",
+    "shipmentActual": "当月发货",
     "noTarget": "未设置有效目标",
     "adjustmentAmount": "纠偏金额",
     "adjustment": "追加/追减",

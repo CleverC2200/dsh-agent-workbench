@@ -94,7 +94,6 @@ for (const mode of ['draft', 'latest-question', 'cancelled'])
         await pending;
         return 'fresh';
       },
-      select: async (id, preset) => calls.push(['select', id, preset]),
       open: async (id, _skill, signal, beforeOpen, draft) => {
         await beforeOpen?.({ sessionId: id, preset: 'gea-html-inventory-aqkc', cwd: '/workspace' });
         signal.throwIfAborted();
@@ -157,7 +156,7 @@ for (const mode of ['draft', 'latest-question', 'cancelled'])
       assert.equal(calls.filter((call) => call[0] === 'question').length, mode === 'draft' ? 0 : 1);
       assert.deepEqual(
         calls.find((call) => call[0] === 'create'),
-        ['create', { workspaceId: 'workspace' }],
+        ['create', { workspaceId: 'workspace', agentPreset: 'gea-html-inventory-aqkc' }],
       );
     }
   });
