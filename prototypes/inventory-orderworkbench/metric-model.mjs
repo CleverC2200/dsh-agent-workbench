@@ -363,8 +363,8 @@ export function computeWorkbenchMetrics(
         });
     }
   }
-  if (period.start && period.end && period.start >= period.end)
-    for (const name of metricNames)
+  for (const name of metricNames)
+    if (period.start && metricPeriodEnd(period, name) && period.start >= metricPeriodEnd(period, name))
       Object.assign(result[name], {
         value: null,
         loading: false,
@@ -378,13 +378,19 @@ export function computeWorkbenchMetrics(
         filter,
         result[name].note,
       );
-      if (period.start >= period.end && !period.sections.length)
+      if (period.start >= metricPeriodEnd(period, name) && !period.sections.length)
         result[name].note = result[name].missingReason;
     }
   return result;
 }
+export function metricPeriodEnd(period, name) {
+  return ['周转天数', '货龄（>60天库存占比）'].includes(name)
+    ? period?.inventoryEnd ?? period?.end
+    : period?.end;
+}
+
 export function workbenchMetricMissingReason(period, name, filter = () => true, note = '') {
-  if (period?.start && period?.end && period.start >= period.end)
+  if (period?.start && metricPeriodEnd(period, name) && period.start >= metricPeriodEnd(period, name))
     return '当前周期尚无已结束日期：按已结束日期统计，暂不计算本周期指标；不是数据仍在加载。';
   const id = ['作废率', '改单率'].includes(name)
     ? 'changes'
@@ -398,7 +404,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
   const part = metricSection(period, id, name);
   if (
     period &&
-    period.start >= period.end &&
+    period.start >= metricPeriodEnd(period, name) &&
     Array.isArray(period.sections) &&
     !period.sections.length
   )
@@ -525,17 +531,16 @@ export function metricCoverageSummary(metric) {
 }
 export function reportPeriods(start, end, now = new Date()) {
   const today = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
-  const tomorrow = dayOffset(today, 1);
-  const limit = end < tomorrow ? end : tomorrow;
+  const limit = end < today ? end : today;
   const monthStart = start.slice(0, 7) + '-01';
   const monthEnd = new Date(Date.UTC(Number(start.slice(0, 4)), Number(start.slice(5, 7)), 1))
     .toISOString()
     .slice(0, 10);
   const monthly = start === monthStart && end === monthEnd;
-  const last = dayOffset(limit, -1);
+  const inventoryEnd = end < dayOffset(today, 1) ? end : dayOffset(today, 1);
+  const last = dayOffset(inventoryEnd, -1);
   const date = new Date(last + 'T00:00:00Z');
   const weekStart = monthly ? dayOffset(last, -((date.getUTCDay() + 6) % 7)) : start;
-  const inventoryEnd = end < dayOffset(today, 1) ? end : dayOffset(today, 1);
   const month = { start: monthStart, end: limit, inventoryEnd, kind: 'month' },
     week = { start: weekStart, end: limit, inventoryEnd, kind: 'week' };
   const monthBack = (period, count) => {
@@ -546,7 +551,11 @@ export function reportPeriods(start, end, now = new Date()) {
       .slice(0, 10);
     const s = d.toISOString().slice(0, 10),
       e = dayOffset(s, Math.round((Date.parse(period.end) - Date.parse(period.start)) / 86400000));
-    return { start: s, end: e < next ? e : next, kind: 'month' };
+    const inventory = dayOffset(
+      s,
+      Math.round((Date.parse(period.inventoryEnd) - Date.parse(period.start)) / 86400000),
+    );
+    return { start: s, end: e < next ? e : next, inventoryEnd: inventory < next ? inventory : next, kind: 'month' };
   };
   return {
     selected: monthly ? 'month' : 'week',
@@ -557,11 +566,13 @@ export function reportPeriods(start, end, now = new Date()) {
     previousWeek: {
       start: dayOffset(week.start, -7),
       end: dayOffset(week.end, -7),
+      inventoryEnd: dayOffset(week.inventoryEnd, -7),
       kind: 'week',
     },
     yearWeek: {
       start: dayOffset(week.start, -364),
       end: dayOffset(week.end, -364),
+      inventoryEnd: dayOffset(week.inventoryEnd, -364),
       kind: 'week',
     },
   };
