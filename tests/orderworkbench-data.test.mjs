@@ -970,17 +970,20 @@ test('current-day comparisons stay within the selected month and equal-length we
     '2026-11-01',
     new Date('2026-10-24T12:00:00+08:00'),
   );
-  assert.equal(periods.month.end, '2026-10-25');
+  assert.equal(periods.month.end, '2026-10-24');
   assert.equal(periods.month.inventoryEnd, '2026-10-25');
   assert.deepEqual(
     [periods.previousMonth.start, periods.previousMonth.end],
-    ['2026-09-01', '2026-09-25'],
+    ['2026-09-01', '2026-09-24'],
   );
-  assert.deepEqual([periods.week.start, periods.week.end], ['2026-10-19', '2026-10-25']);
+  assert.deepEqual([periods.week.start, periods.week.end], ['2026-10-19', '2026-10-24']);
   assert.deepEqual(
     [periods.previousWeek.start, periods.previousWeek.end],
-    ['2026-10-12', '2026-10-18'],
+    ['2026-10-12', '2026-10-17'],
   );
+  assert.equal(periods.previousMonth.inventoryEnd, '2026-09-25');
+  assert.equal(periods.week.inventoryEnd, '2026-10-25');
+  assert.equal(periods.previousWeek.inventoryEnd, '2026-10-18');
 });
 test('presentation fills both period tables, actual categories and shared directors without adding their rows', () => {
   const period = fixturePeriod();

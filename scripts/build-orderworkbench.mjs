@@ -14,8 +14,10 @@ const apsConfig = JSON.parse(
 );
 const sqlConfig = orderWorkbenchSourceConfig(apsConfig);
 const runtimeEntry = resolve(source, 'metric-runtime.mjs');
+const cubeEntry = resolve(root, 'business/inventory-orderworkbench/cube-source.mjs');
 const scan = await build({
-  entryPoints: [runtimeEntry],
+  entryPoints: [runtimeEntry, cubeEntry],
+  outdir: resolve(root, '.runtime/order-metric-scan'),
   bundle: true,
   write: false,
   metafile: true,
@@ -42,12 +44,22 @@ const runtime = await build({
   absWorkingDir: root,
   define: { ORDER_WORKBENCH_METRIC_VERSION: JSON.stringify(metricVersion) },
 });
+const cubeRuntime = await build({
+  entryPoints: [cubeEntry],
+  bundle: true,
+  write: false,
+  format: 'esm',
+  platform: 'node',
+  packages: 'external',
+  absWorkingDir: root,
+});
 sqlConfig.metricRuntime = {
   schemaVersion: 1,
   version: metricVersion,
   revision,
   file: 'metric-runtime.mjs',
   sha256: digest(runtime.outputFiles[0].contents),
+  cubeRuntime: { file: 'cube-runtime.mjs', sha256: digest(cubeRuntime.outputFiles[0].contents) },
 };
 if (digest(theme) !== '51d07dd91c4e2851301c046556a9c34aded00c5fa94525420b949badce9a5497')
   throw Error('ORDER_THEME_RESOURCE_MISMATCH');
@@ -80,6 +92,7 @@ const html = (await readFile(resolve(source, 'index.html'), 'utf8'))
 await mkdir(out, { recursive: true });
 await writeFile(resolve(out, 'sql.config.json'), JSON.stringify(sqlConfig, null, 2) + '\n');
 await writeFile(resolve(out, 'metric-runtime.mjs'), runtime.outputFiles[0].contents);
+await writeFile(resolve(out, 'cube-runtime.mjs'), cubeRuntime.outputFiles[0].contents);
 await writeFile(resolve(out, 'index.html'), html);
 for (const name of ['plugin.json', 'page.json', 'SOURCE.json'])
   await cp(resolve(source, name), resolve(out, name));

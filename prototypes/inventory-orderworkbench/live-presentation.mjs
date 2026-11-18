@@ -697,7 +697,7 @@ export function workbenchEvidence(facts) {
           inventoryEndExclusive: period.inventoryEnd ?? period.end,
           orderWindow: {
             basis:
-              '按用户选择周期累计；结束边界不含边界日，包含当前日已入库数据，比较期保留相同周期长度',
+              '四项订单指标按T-1累计；结束边界不含边界日；库存两项取各自范围内最新业务日快照，比较期保留相同周期长度',
             state: period.start >= period.end ? 'no-completed-days' : 'elapsed-days',
           },
           metrics: Object.fromEntries(
