@@ -45,7 +45,13 @@ const runtime = await build({
   define: { ORDER_WORKBENCH_METRIC_VERSION: JSON.stringify(metricVersion) },
 });
 const cubeRuntime = await build({
-  entryPoints: [cubeEntry], bundle: true, write: false, format: 'esm', platform: 'node', packages: 'external', absWorkingDir: root,
+  entryPoints: [cubeEntry],
+  bundle: true,
+  write: false,
+  format: 'esm',
+  platform: 'node',
+  packages: 'external',
+  absWorkingDir: root,
 });
 sqlConfig.metricRuntime = {
   schemaVersion: 1,

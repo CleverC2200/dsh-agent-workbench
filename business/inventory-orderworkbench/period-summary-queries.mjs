@@ -24,8 +24,6 @@ const orWindows = (predicate) =>
   '(' +
   windows.map((window) => `(${window.enabled}=TRUE AND ${predicate(window)})`).join(' OR ') +
   ')';
-const inWindows = (field) =>
-  orWindows((window) => `${field}>=${window.start} AND ${field}<${window.end}`);
 const compact = (value) => `REPLACE(${value},'-','')`;
 const ageInWindows = (field) =>
   orWindows(

@@ -276,7 +276,10 @@ test('grouped amendment dispatches published groups with explicit scope and pres
 });
 test('built page and independent evaluator carry the automatic fingerprint of their actual code and SQL', async () => {
   const scan = await build({
-    entryPoints: ['prototypes/inventory-orderworkbench/metric-runtime.mjs', 'business/inventory-orderworkbench/cube-source.mjs'],
+    entryPoints: [
+      'prototypes/inventory-orderworkbench/metric-runtime.mjs',
+      'business/inventory-orderworkbench/cube-source.mjs',
+    ],
     outdir: '.runtime/order-metric-test-scan',
     bundle: true,
     write: false,
