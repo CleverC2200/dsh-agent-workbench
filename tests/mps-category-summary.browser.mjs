@@ -64,6 +64,7 @@ test('category monthly totals retain missing inputs and real zero, and filters m
       warnings: [],
     };
   });
+  await page.clock.setFixedTime(new Date('2026-11-22T12:00:00+08:00'));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const creation = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await creation.getByLabel('评估月份', { exact: true }).fill('2026-12');

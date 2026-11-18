@@ -1095,6 +1095,7 @@ test('MPS Host context keeps the latest edited shipment input when an earlier va
   await expect.poll(async () => (await readHost())?.parts?.navigation?.tab).toBe('check');
   const frame = page.frameLocator('iframe');
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await frame.getByLabel('数据截止日', { exact: true }).fill('2026-09-22');
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
     name: 'editable-ship.csv',
     mimeType: 'text/csv',
