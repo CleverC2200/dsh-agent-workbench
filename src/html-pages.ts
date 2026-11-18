@@ -2,7 +2,7 @@ import { readFile, realpath } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { injectPicker } from './page-interaction/inject.ts';
 import { PageRuntime, type BusinessPage, type AuthorizeBusinessPage } from './page-runtime.ts';
-import { presentHtml } from './html-document.ts';
+import { maxHtmlBytes, presentHtml } from './html-document.ts';
 import { injectSqlConfig } from './sql-config-document.ts';
 
 export interface HtmlPage {
@@ -155,7 +155,7 @@ export class HtmlPages extends PageRuntime implements WorkbenchPages {
     const path = await realpath(item.htmlPath);
     if (!path.startsWith(item.directory + sep)) throw Error('INVALID_HTML_PATH');
     let html = await readFile(path, 'utf8');
-    if (Buffer.byteLength(html) > 5_000_000) throw Error('HTML_TOO_LARGE');
+    if (Buffer.byteLength(html) > maxHtmlBytes) throw Error('HTML_TOO_LARGE');
     if (item.manifest.sqlConfig !== undefined) {
       if (item.manifest.sqlConfig !== 'sql.config.json') throw Error('INVALID_SQL_CONFIG_PATH');
       const configPath = await realpath(resolve(item.directory, item.manifest.sqlConfig));
