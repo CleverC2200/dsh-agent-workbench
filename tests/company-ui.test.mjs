@@ -1098,6 +1098,24 @@ test('first main Session adoption leaves a manually opened unbound Document', as
   assert.equal(workbench.getSnapshot().selectedDocument, undefined);
 });
 
+test('late startup Session keeps an opened native business Document visible until a later Session switch', async (t) => {
+  const { workbench, render } = await mountedMainConversation(t);
+  workbench.registerFrame({
+    id: 'gea-proof',
+    kind: 'native',
+    resourceId: 'forecast',
+    src: '/sales-plan',
+  });
+  await render(undefined);
+  await React.act(async () => workbench.open('gea-proof'));
+  await render('session-a');
+  assert.equal(workbench.getSnapshot().selectedDocument?.id, 'gea-proof');
+  assert.equal(workbench.getSnapshot().selection, undefined);
+  assert.ok(!document.querySelector('.gea-workbench-documents').hidden);
+  await render('session-b', 1);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+});
+
 test('explicit page History binds its Session before the initial presentation allowance', async (t) => {
   const restored = [];
   const { workbench, render } = await mountedMainConversation(t, {

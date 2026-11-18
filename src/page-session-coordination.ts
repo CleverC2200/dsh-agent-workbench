@@ -468,12 +468,15 @@ export function createPageSessionNavigation({
       const target = workbench.takeHistoryTarget(sessionId);
       if (!target) {
         const state = workbench.getSnapshot();
+        const keepsPresentationOnStartup =
+          state.restoredWithoutSession ||
+          (state.selectedDocument?.kind === 'native' && state.selectedDocument.resourceId);
         if (
           (state.selection && state.selection.sessionId !== sessionId) ||
           (changed &&
             state.selectedDocument &&
             !state.selection &&
-            !(firstSession && state.restoredWithoutSession))
+            !(firstSession && keepsPresentationOnStartup))
         )
           workbench.leaveDocument();
         return;
