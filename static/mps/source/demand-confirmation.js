@@ -12,7 +12,7 @@ import {
   productRows,
 } from './master-data.js';
 import { createMasterData } from './master-data-view.js';
-import { readFactMonth, readInventoryTargets } from './facts.js';
+import { readFactMonth, readInventoryTargets, readReportAmounts } from './facts.js';
 import { readSourceTable, forecastDimensions } from './source-tables.js';
 import { createDeliveryMetrics } from './delivery-metrics.js';
 import { createWorkflow } from './workflow-view.js';
@@ -403,6 +403,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [page, setPage] = react.useState(0);
     const { period, column, rows } = sourceSelection(draft, type);
     const business = draft[type + 'Source'] === 'business';
+    const reportPeriodStatus = draft.reportRead?.periods?.[period]?.status;
     const visibleColumns =
       type === 'forecast' && business
         ? ['月份', '基地', '产品编码', '产品名称', '物料组', '物料组名称', '大类', '系列']
@@ -447,7 +448,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'p',
           { className: 'dc-muted' },
-          `金额来源 ai_db.agents_scm_dws_scm_cust_plan_exe_di（同步自hive.dw.dws_scm_cust_plan_exe）；${amountRead?.status === 'ready' ? '已读取' + amountRows.length + '条，覆盖当前完整查询范围' : '尚未完成读取'}。`,
+          `金额来源 ai_db.agents_scm_dws_scm_cust_plan_exe_di（同步自hive.dw.dws_scm_cust_plan_exe）；${
+            amountRead?.status === 'ready'
+              ? '已读取' + amountRows.length + '条，覆盖当前完整查询范围'
+              : amountRead?.status === 'loading'
+                ? '正在读取金额'
+                : '尚未完成读取'
+          }。`,
         ),
         amountRows.some((row) => row['缺项原因']) &&
           h(
@@ -704,8 +711,16 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           ),
         ),
         !rows.length &&
-          h('p', { className: 'dc-empty' }, '当前期间无已读取记录，不能判定业务数据为零。'),
-        busy && h('p', { role: 'status' }, '正在读取…'),
+          h(
+            'p',
+            { className: 'dc-empty' },
+            type === 'report' && business && reportPeriodStatus === 'ready'
+              ? '当前期间提报源未返回记录，数量待补。'
+              : '当前期间无已读取记录，不能判定业务数据为零。',
+          ),
+        busy &&
+          (type !== 'report' || reportPeriodStatus === 'loading') &&
+          h('p', { role: 'status' }, '正在读取…'),
         error && h('p', { role: 'alert' }, error),
         !forecastReady &&
           rows.length > 0 &&
@@ -1169,6 +1184,23 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         type,
         requestedPeriods ?? (type === 'report' ? periods : period),
       );
+      const syncAmounts = async (month) => {
+        let amounts;
+        try {
+          amounts = await readReportAmounts(month, signal);
+        } catch (error) {
+          if (!valid()) return;
+          amounts = { period: month, rows: [], status: 'failed', error: error.message };
+        }
+        if (valid())
+          setDrafts((entries) =>
+            entries.map((entry) =>
+              entry.id === id
+                ? { ...entry, reportAmounts: { ...entry.reportAmounts, [month]: amounts } }
+                : entry,
+            ),
+          );
+      };
       for (const readPeriod of periods) {
         if (!valid()) return;
         try {
@@ -1212,7 +1244,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ? {
                           reportAmounts: {
                             ...entry.reportAmounts,
-                            [readPeriod]: result.amounts,
+                            [readPeriod]: { period: readPeriod, rows: [], status: 'loading' },
                           },
                         }
                       : {}),
@@ -1234,6 +1266,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 : entry,
             ),
           );
+          if (type === 'report') void syncAmounts(readPeriod);
           if (type === 'products') resetEditor();
         } catch (failure) {
           if (valid()) {

@@ -256,6 +256,63 @@ test('完整分页金额包含池外及缺基地，缺价显示已知小计，�
   assert.equal(Number(exported[0]['未归属当前范围源金额条数']), 199);
 });
 
+test('跨月提报先显示已确认数量，金额等待独立完成', async (t) => {
+  let releaseAmount;
+  const holdAmount = new Promise((resolve) => {
+    releaseAmount = resolve;
+  });
+  t.after(() => releaseAmount());
+  const { frame, calls } = await mpsPage(
+    t,
+    config,
+    async ({ queryId, parameters }) => {
+      const isDecember = parameters.month === '2026-12-01';
+      const amount = queryId.startsWith('facts.report-amounts');
+      const report = queryId.startsWith('facts.report') && !amount;
+      if (isDecember && queryId === 'facts.report-amounts.count') await holdAmount;
+      const rows =
+        isDecember && (report || amount)
+          ? [
+              {
+                ...Object.fromEntries(
+                  config.queries[queryId].columns.map((column) => [column, null]),
+                ),
+                belong_base: '郑州',
+                material_code: 'A',
+                ...(report
+                  ? { plannum_total: 42, allnum_total: 43 }
+                  : { ycplanamount: '84.00', monthamount: '86.00' }),
+              },
+            ]
+          : [];
+      return {
+        rows: queryId.endsWith('.count') ? [{ total: rows.length }] : rows,
+        returnedColumns: config.queries[queryId].columns,
+        configVersion: 'separate-report-load',
+      };
+    },
+    { time: '2026-11-18T12:00:00+08:00' },
+  );
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-12');
+  const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
+  await expect
+    .poll(() =>
+      calls.some(
+        ({ queryId, parameters }) =>
+          queryId === 'facts.report-amounts.count' && parameters.month === '2026-12-01',
+      ),
+    )
+    .toBe(true);
+  await expect(report).toContainText('数量合计42件');
+  await expect(report.getByRole('button', { name: '预览当前明细', exact: true })).toBeEnabled();
+  await expect(report).toContainText('最终计划总金额：待补');
+  releaseAmount();
+  await expect(report).toContainText('最终计划总金额：86.00元');
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2027-01');
+  await expect(report).toContainText('当前期间提报源未返回记录，数量待补。');
+  await expect(report.getByText('正在读取…', { exact: true })).toHaveCount(0);
+});
+
 test('版本切换后的迟到金额响应不覆盖新版本，切回旧版本重新读取对应月份', async (t) => {
   let releaseOld;
   const oldRead = new Promise((resolve) => {

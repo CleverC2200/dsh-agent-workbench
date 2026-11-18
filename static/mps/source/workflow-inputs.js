@@ -4,7 +4,7 @@ import {
   sourceDimensions,
   sourceProductMappings,
   createSourceProductMatcher,
-  historyDependentCodes,
+  createHistoryDependentLookup,
 } from './source-projections.js';
 import { buildCategoryDemand } from './category-demand.js';
 import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
@@ -99,6 +99,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   const excludedShipmentKeys = new Set(excludedShipments.map(rowKey));
   const mappings = sourceProductMappings(draft.products, draft.productRaw);
   const sourceMatcher = createSourceProductMatcher(mappings);
+  const historyDependents = createHistoryDependentLookup(mappings);
   const excludedCodes = new Set(excludedShipments.map((row) => row.code));
   const participatingCodes = new Set(
     (shipmentSnapshot?.rows ?? [])
@@ -106,11 +107,12 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       .map((row) => row.code),
   );
   const includedSource = (row, history) => {
-    const matched = sourceMatcher(row.code, row.base);
+    if (!excludedShipmentKeys.size) return true;
+    const currentCode = history ? null : sourceMatcher(row.code, row.base).currentCode;
     const codes = history
-      ? historyDependentCodes(mappings, row.code, row.base)
-      : matched.currentCode
-        ? [matched.currentCode]
+      ? historyDependents(row.code, row.base)
+      : currentCode
+        ? [currentCode]
         : mappings
             .filter(
               (product) => (product['老品编码'] || product.replacement_material_code) === row.code,
