@@ -27,7 +27,13 @@ test('调拨计划使用截止日前最新同月快照，各方向保留纠偏�
     ['D', '2026-09-22', 10, 20, 30, 40],
   ])
     insert.run(...row);
-  const query = db.prepare(config.queries['facts.shipment'].request.sql);
+  const { columns, request } = config.queries['facts.shipment'];
+  assert.doesNotMatch(request.sql, /\bSELECT\s+(?:\w+\.)?\*/i);
+  const query = db.prepare(request.sql);
+  assert.deepEqual(
+    query.columns().map(({ name }) => name),
+    columns,
+  );
   const rows = query.all({
     month: '2026-09-01',
     cutoff: '2026-09-22',
