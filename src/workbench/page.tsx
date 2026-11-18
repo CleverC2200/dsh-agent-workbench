@@ -3,7 +3,7 @@ import {
   type SalesPlanSubmissionItem,
   type SalesPlanSubmissionOutcome,
 } from './original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
-import { createWorkflowLoader } from './workflow-loader.ts';
+import { createWorkflowPeriodLoader } from './workflow-loader.ts';
 import '@arco-design/web-react/dist/css/arco.css';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button } from '@arco-design/web-react';
@@ -230,7 +230,9 @@ function query<T>(kind: string, input: { signal?: AbortSignal } = {}): Promise<T
   const { signal, ...fields } = input;
   return rpc<T>('workbench/query', { kind, query: fields }, signal);
 }
-const loadWorkflow = createWorkflowLoader((signal) => rpc('workflow/config', {}, signal));
+const loadWorkflowAndPeriods = createWorkflowPeriodLoader((signal) =>
+  rpc('workflow/config', {}, signal),
+);
 export const workbenchHost: WorkbenchHost = {
   salesPlan: {
     draft: {
@@ -238,10 +240,8 @@ export const workbenchHost: WorkbenchHost = {
         rpc('sales-plan/draft', input, signal, detailLoadId),
     },
     periods: {
-      invoke: async (input) => {
-        await loadWorkflow(input?.signal);
-        return query('periods', input);
-      },
+      invoke: (input) =>
+        loadWorkflowAndPeriods((signal) => query('periods', { ...input, signal }), input?.signal),
     },
     list: { invoke: (input) => query('list', input) },
     detail: { invoke: (input) => query('detail', input) },
