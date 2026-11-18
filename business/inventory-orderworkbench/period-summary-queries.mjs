@@ -249,8 +249,8 @@ export function addPeriodSummaryQuery(config, name, fields, group, columns) {
     }
   };
   if (name === 'orders') {
-    const stock = `SELECT ${windows.map((window) => `MAX(CASE WHEN ${window.enabled}=TRUE AND s.the_date>=${window.start} AND s.the_date<${window.end} THEN s.the_date END) AS stock_${window.index}`).join(',')}
-      FROM agents_scm_stock_detail_d s WHERE ${inWindows('s.the_date')}`;
+    const stock = `SELECT ${windows.map((window) => `MAX(CASE WHEN ${window.enabled}=TRUE AND s.the_date>=${window.start} AND s.the_date<${window.inventoryEnd} THEN s.the_date END) AS stock_${window.index}`).join(',')}
+      FROM agents_scm_stock_detail_d s WHERE ${orWindows((window) => `s.the_date>=${window.start} AND s.the_date<${window.inventoryEnd}`)}`;
     const ageDay = "REPLACE(CAST(b.the_date AS CHAR),'-','')";
     const age = `SELECT ${windows.map((window) => `MAX(CASE WHEN ${window.enabled}=TRUE AND ${ageDay}>=${compact(window.start)} AND ${ageDay}<${compact(window.inventoryEnd)} THEN ${ageDay} END) AS age_${window.index}`).join(',')}
       FROM agents_scm_stock_detail_d b

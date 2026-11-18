@@ -121,7 +121,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     .filter(([name]) => name !== 'selected')
     .map(([, spec]) => spec);
   const needs = (spec, id) =>
-    spec.start < spec.end &&
+    spec.start < (['stock', 'ages'].includes(id) ? spec.inventoryEnd ?? spec.end : spec.end) &&
     !restoredPeriod(spec)?.sections?.some(
       (part) =>
         part.id === id && part.status === 'ready' && !Object.keys(part.metricFailures ?? {}).length,
@@ -694,7 +694,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   const load = async (spec, name) => {
     const values = { start: spec.start, end_exclusive: spec.end };
     const priority = name === 'month' ? 30 : name === 'week' ? 20 : -10;
-    if (spec.start >= spec.end)
+    if (spec.start >= spec.end && spec.start >= (spec.inventoryEnd ?? spec.end))
       return {
         ...spec,
         sections: [],
@@ -723,6 +723,8 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       Promise.all(
         sectionIds.map((id) =>
           (async () => {
+            if (spec.start >= spec.end && !['stock', 'ages'].includes(id))
+              return { id, status: 'ready', rows: [] };
             const cached = pending.find((part) => part.id === id && part.status === 'ready');
             if (cached) return cached;
             if (
