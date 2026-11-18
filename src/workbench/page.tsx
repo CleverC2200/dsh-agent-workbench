@@ -216,10 +216,12 @@ async function rpc<T>(
     detailLoadId,
     onPlanPage,
     startupScope,
+    reusePeriodIndex,
   }: {
     detailLoadId?: string;
     onPlanPage?: (page: T) => void;
     startupScope?: string;
+    reusePeriodIndex?: boolean;
   } = {},
 ): Promise<T> {
   const owned =
@@ -235,6 +237,7 @@ async function rpc<T>(
       ...(onPlanPage ? { Accept: 'application/x-ndjson' } : {}),
       ...(owner ? { 'X-Workbench-Page-Owner': owner } : {}),
       ...(startupScope ? { 'X-GEA-Sales-Plan-Scope': startupScope } : {}),
+      ...(reusePeriodIndex ? { 'X-GEA-Sales-Plan-Period-Index': 'reuse' } : {}),
       ...(detailLoadId ? { 'X-Sales-Plan-Detail-Load': detailLoadId } : {}),
     },
     body: JSON.stringify(payload),
@@ -275,7 +278,7 @@ async function rpc<T>(
 function query<T>(
   kind: string,
   input: { signal?: AbortSignal } = {},
-  options?: { onPlanPage?: (page: T) => void; startupScope?: string },
+  options?: { onPlanPage?: (page: T) => void; startupScope?: string; reusePeriodIndex?: boolean },
 ): Promise<T> {
   const { signal, ...fields } = input;
   return rpc<T>('workbench/query', { kind, query: fields }, signal, options);
@@ -288,10 +291,15 @@ function salesPlanStartupReads(
 ): Pick<WorkbenchHost['salesPlan'], 'periods' | 'list'> {
   return {
     periods: {
-      invoke: (input) =>
+      invoke: ({ forceRefresh, signal, ...input } = {}) =>
         loadWorkflowAndPeriods(
-          (signal) => query('periods', { ...input, signal }, { startupScope }),
-          input?.signal,
+          (signal) =>
+            query(
+              'periods',
+              { ...input, signal },
+              { startupScope, reusePeriodIndex: Boolean(startupScope && !forceRefresh) },
+            ),
+          signal,
           startupScope,
         ),
     },
@@ -408,7 +416,10 @@ export function WorkbenchPage({ t }: { t: Translate }) {
           user: identity.status.user,
         }
       : undefined;
-  const startupScope = status?.authenticated ? (status.pageScope ?? undefined) : undefined;
+  const startupScope =
+    status?.authenticated && status.salesPlanStartupReads
+      ? (status.pageScope ?? undefined)
+      : undefined;
   const salesPlanHost = useMemo(
     () => ({
       ...workbenchHost,

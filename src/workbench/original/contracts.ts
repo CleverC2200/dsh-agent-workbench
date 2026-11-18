@@ -46,6 +46,7 @@ export type GeaSalesPlanPeriod = {
 };
 
 export type GeaSalesPlanPeriodQuery = {
+  forceRefresh?: boolean;
   periodMonth?: string;
   planType?: string;
   pageNo?: number;

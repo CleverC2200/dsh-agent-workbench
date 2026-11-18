@@ -200,7 +200,12 @@ export const useRegionalApprovalQuery = ({
     const request = beginTimedRequest();
     setPeriodsState((current) => ({ status: 'loading', data: current.data }));
     void client.periods
-      .invoke({ pageNo: 1, pageSize: 100, signal: request.signal })
+      .invoke({
+        pageNo: 1,
+        pageSize: 100,
+        signal: request.signal,
+        ...(periodRevision > 0 ? { forceRefresh: true } : {}),
+      })
       .then((response) => {
         if (periodsRequest.current !== requestId || request.signal.aborted) return;
         const records = Array.isArray(response.records) ? response.records : [];

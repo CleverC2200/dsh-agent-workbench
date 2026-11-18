@@ -3,6 +3,7 @@ export interface NativeBusinessStatus {
   environments: string[];
   authenticated: boolean;
   pageScope: string | null;
+  salesPlanStartupReads?: boolean;
   resubmitConnected: boolean;
   resubmitUnavailableReason?: 'signed-out' | 'configuration' | 'tenant' | 'credential';
   loginState: string;
