@@ -1,3 +1,4 @@
+import { createCategoryFilter, matchesCategories } from './category-filter.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { encodeLocalDrafts, decodeLocalDrafts, changeAdjustment } from './local-draft.js';
 import { createCategoryDemand } from './category-demand-view.js';
@@ -21,6 +22,7 @@ import {
   productSourceColumns,
   productSourceRows,
   sourceDimensions,
+  createSourceProductMatcher,
 } from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
 import { productFileText, productReplacementErrors } from './product-file.js';
@@ -269,6 +271,7 @@ function reportAmountSource(draft, period) {
 
 export function createDemandConfirmation(react, useMpsPart, view) {
   const h = react.createElement;
+  const CategoryFilter = createCategoryFilter(react);
   const CategoryDemand = createCategoryDemand(react, {
     table: (...args) => table(...args),
     downloadCsv,
@@ -353,7 +356,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     'td',
                     { key: column },
                     row[column] === '' || row[column] == null
-                      ? '-'
+                      ? column === '新品标记'
+                        ? ''
+                        : '-'
                       : /收入|金额/.test(column) && Number.isFinite(Number(row[column]))
                         ? amount(row[column])
                         : (/数量|合计/.test(column) ||
@@ -397,11 +402,18 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
       ),
     );
-  function Source({ type, draft, read, sync, update, error, busy }) {
+  function Source({ type, draft, read, sync, update, error, busy, selectedCategories = [] }) {
     const definition = sourceDefinitions[type];
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = react.useState(0);
-    const { period, column, rows } = sourceSelection(draft, type);
+    const { period, column, rows: fullRows } = sourceSelection(draft, type);
+    const matchProduct = react.useMemo(
+      () => createSourceProductMatcher(draft.products),
+      [draft.products],
+    );
+    const rows = !selectedCategories.length
+      ? fullRows
+      : fullRows.filter((row) => matchesCategories(row['大类'], selectedCategories));
     const business = draft[type + 'Source'] === 'business';
     const reportRead = draft.reportRead;
     const reportPeriodStatus = reportRead?.periods?.[period]?.status;
@@ -436,9 +448,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           '缺项原因',
         ]
       : [...sourceColumns, column];
-    react.useEffect(() => setPage(0), [draft[type]]);
+    react.useEffect(() => setPage(0), [draft[type], selectedCategories]);
     const amountRead = type === 'report' ? reportAmountSource(draft, period) : null;
-    const amountRows = amountRead?.status === 'ready' ? amountRead.rows : [];
+    const amountRows = (amountRead?.status === 'ready' ? amountRead.rows : []).filter(
+      (row) =>
+        !selectedCategories.length ||
+        matchesCategories(matchProduct(row['产品编码'], row['基地']).category, selectedCategories),
+    );
     const monthlyAmount = sumSourceAmounts(amountRows, '月初计划金额');
     const finalAmount = sumSourceAmounts(amountRows, '最终计划金额');
     const amountText = `月初计划总金额：${monthlyAmount.amount === null ? '待补' : monthlyAmount.amount + '元'}；最终计划总金额：${finalAmount.amount === null ? '待补' : finalAmount.amount + '元'}`;
@@ -705,9 +721,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 downloadSource(
                   `${definition.short}-全部已读.csv`,
                   business ? detailColumns : definition.columns,
-                  type === 'forecast'
+                  (type === 'forecast'
                     ? forecastSourceRows(draft)
-                    : sourceDimensions(draft[type], draft.products),
+                    : sourceDimensions(draft[type], draft.products)
+                  ).filter((row) => matchesCategories(row['大类'], selectedCategories)),
                 ),
             },
             '导出全部已读明细',
@@ -824,11 +841,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     exportAnnual,
     exporting,
     exportError,
+    selectedCategories = [],
   }) {
     const [expanded, setExpanded] = react.useState(false);
     const live = draft.annualSource === 'business';
     const unit = live ? '源数量' : '件';
-    const { bases, base, rows: annual } = annualSelection(draft);
+    const { bases, base, rows: allAnnual } = annualSelection(draft);
+    const annual = allAnnual.filter((row) => matchesCategories(row['大类'], selectedCategories));
     const start = Number(draft.month.slice(0, 4)) - (Number(draft.month.slice(5)) < 7 ? 1 : 0);
     const months = Array.from({ length: 12 }, (_value, index) => monthOffset(`${start}-07`, index));
     const recordsFor = (category, month) =>
@@ -914,21 +933,23 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           .filter(Boolean),
       ),
     ];
-    const rows = displayedCategories.map((category) => ({
-      大类: category || '-',
-      ...Object.fromEntries(
-        months.map((month) => [
-          month,
-          h(
-            'div',
-            { className: 'dc-annual-cell' },
-            absolute(category, month),
-            h('small', {}, '环比增幅 ', ratio(category, month)),
-          ),
-        ]),
-      ),
-      全年合计: annualTotal(category),
-    }));
+    const rows = displayedCategories
+      .filter((category) => matchesCategories(category, selectedCategories))
+      .map((category) => ({
+        大类: category || '-',
+        ...Object.fromEntries(
+          months.map((month) => [
+            month,
+            h(
+              'div',
+              { className: 'dc-annual-cell' },
+              absolute(category, month),
+              h('small', {}, '环比增幅 ', ratio(category, month)),
+            ),
+          ]),
+        ),
+        全年合计: annualTotal(category),
+      }));
     return h(
       react.Fragment,
       {},
@@ -991,7 +1012,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               onClick: () =>
                 live
                   ? exportAnnual(months, base)
-                  : downloadCsvLegacy('年度计划-全部已读.csv', annualColumns, draft.annual),
+                  : downloadCsvLegacy('年度计划-全部已读.csv', annualColumns, annual),
             },
             exporting ? '正在导出…' : live ? '下载年度SKU模板' : '下载',
           ),
@@ -1086,6 +1107,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [helpOpen, setHelpOpen] = react.useState(false);
     const [error, setError] = react.useState('');
     const [search, setSearch] = react.useState('');
+    const [selectedCategories, setSelectedCategories] = react.useState([]);
     const [productPage, setProductPage] = react.useState(0);
     const [productPageSize, setProductPageSize] = react.useState(10);
     const [productsExpanded, setProductsExpanded] = react.useState(true);
@@ -1154,7 +1176,19 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const { signal, valid } = begin('annualExport');
       try {
         const rows = await readAnnualDetails(months, base, signal);
-        const tables = annualWorkbookTables(rows, months, base);
+        const matchProduct = createSourceProductMatcher(draft.products);
+        const tables = annualWorkbookTables(
+          rows.filter((row) =>
+            matchesCategories(
+              row.sub_category ??
+                row['大类'] ??
+                matchProduct(row.material_code ?? row['产品编码']).category,
+              selectedCategories,
+            ),
+          ),
+          months,
+          base,
+        );
         const bytes = await workbookBytes(tables);
         if (valid())
           downloadFile(
@@ -1608,6 +1642,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     );
     const filteredProducts = productViews.filter(
       ({ display, labels, replacementCodes, targetBases, transferTags, sourcePeriods }) =>
+        matchesCategories(display['大类'], selectedCategories) &&
         [
           ...Object.values(display),
           ...labels,
@@ -1618,7 +1653,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ].some((value) => value.includes(search)),
     );
     const selectedProduct = productDetails === null ? null : productViews[productDetails];
-    react.useEffect(() => setProductPage(0), [draft.id, draft.products, productPageSize]);
+    react.useEffect(
+      () => setProductPage(0),
+      [draft.id, draft.products, productPageSize, selectedCategories],
+    );
     const saveProduct = (event) => {
       event.preventDefault();
       const normalized = Object.fromEntries(
@@ -1655,11 +1693,25 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       );
       resetEditor();
     };
+    const sourceCategory = react.useMemo(
+      () => createSourceProductMatcher(draft.products),
+      [draft.products],
+    );
     const sourceSummaries = Object.fromEntries(
       Object.keys(sourceDefinitions).map((type) => {
-        const { period, column, rows } = sourceSelection(draft, type);
+        const { period, column, rows: fullRows } = sourceSelection(draft, type);
+        const rows = !selectedCategories.length
+          ? fullRows
+          : fullRows.filter((row) => matchesCategories(row['大类'], selectedCategories));
         const amountRead = type === 'report' ? reportAmountSource(draft, period) : null;
-        const amountRows = amountRead?.status === 'ready' ? amountRead.rows : [];
+        const amountRows = (amountRead?.status === 'ready' ? amountRead.rows : []).filter(
+          (row) =>
+            !selectedCategories.length ||
+            matchesCategories(
+              sourceCategory(row['产品编码'], row['基地']).category,
+              selectedCategories,
+            ),
+        );
         return [
           type,
           {
@@ -1915,6 +1967,21 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             '请保存或取消当前调整，再切换步骤、月份或版本。',
           ),
       ),
+      !['capacity', 'report'].includes(step) &&
+        h(CategoryFilter, {
+          categories: [
+            ...new Set(
+              [
+                ...draft.products.map((row) => row['大类']),
+                ...categoryComputation.bases.map((row) => row.category),
+                ...(draft.shipment?.rows ?? []).map((row) => row.category),
+              ].filter(Boolean),
+            ),
+          ].sort(),
+          selected: selectedCategories,
+          change: setSelectedCategories,
+          disabled: adjusting,
+        }),
       versionOpen &&
         h(
           Dialog,
@@ -2123,6 +2190,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         'div',
         { hidden: step !== 'ship' },
         h(Shipment, {
+          selectedCategories,
           key: `${draft.id}-${generation.current}`,
           scopeGeneration: generation,
           draft,
@@ -2136,12 +2204,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           onEditingChange: setAdjusting,
         }),
       ),
-      h('div', { hidden: step !== 'masterdata' }, masterData),
+      h(
+        'div',
+        { hidden: step !== 'masterdata' },
+        react.cloneElement(masterData, { selectedCategories, products: draft.products }),
+      ),
       h(
         'div',
         { hidden: !workflowActive },
         workflowStep.current.step &&
           h(Workflow, {
+            selectedCategories,
             key: workflowScope,
             active: workflowActive,
             result: workflowResult,
@@ -2168,6 +2241,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         'div',
         { hidden: step !== 'check' },
         h(CategoryDemand, {
+          selectedCategories,
           result: categoryComputation,
           shipmentSnapshot:
             shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
@@ -2354,7 +2428,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                                   },
                                   display[column],
                                 )
-                              : display[column] || '-',
+                              : column === '新品标记'
+                                ? (display[column] ?? '')
+                                : display[column] || '-',
                         ),
                       ),
                       h(
@@ -2576,6 +2652,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             table(productSourceColumns, selectedProduct.sourceDetails),
           ),
         h(Annual, {
+          selectedCategories,
           draft,
           read,
           sync,
@@ -2591,6 +2668,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           { className: 'dc-source-grid' },
           ...Object.keys(sourceDefinitions).map((type) =>
             h(Source, {
+              selectedCategories,
               key: `${draft.id}-${type}`,
               type,
               draft,
@@ -2604,6 +2682,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
         hasMpsSource() &&
           h(DeliveryMetrics, {
+            selectedCategories,
             key: draft.id,
             draft,
             update,
@@ -2613,6 +2692,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             active: active && step === 'check',
           }),
         h(SourceInputs, {
+          selectedCategories,
           key: draft.id + '-' + scopeGeneration + '-parameters',
           kind: 'parameters',
           draft,
@@ -2632,6 +2712,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h('span', {}, '期初与纠偏按各自三月窗口计算，缺少输入时留空'),
         ),
         h(SourceInputs, {
+          selectedCategories,
           key: draft.id + '-' + scopeGeneration + '-basic-' + draft.pull,
           kind: 'basic',
           draft,

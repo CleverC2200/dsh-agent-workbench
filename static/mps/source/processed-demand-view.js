@@ -102,7 +102,7 @@ export function createProcessedDemand(
         rows
           .map((row) => row.category)
           .concat(
-            Object.values(filters).some(Boolean)
+            Object.values(filters).some((value) => (Array.isArray(value) ? value.length : value))
               ? []
               : result.categoryRows.map((row) => row.category),
           ),
@@ -501,7 +501,11 @@ export function createProcessedDemand(
       );
       return rendered;
     });
-    const scopeLabel = Object.values(filters).some(Boolean) ? '当前范围合计' : '全国合计';
+    const scopeLabel = Object.values(filters).some((value) =>
+      Array.isArray(value) ? value.length : value,
+    )
+      ? '当前范围合计'
+      : '全国合计';
     const total = nodeData();
     detailRows.unshift(
       h(

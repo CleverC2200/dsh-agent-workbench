@@ -1,5 +1,6 @@
 import { useStepViewField } from './step-view-state.js';
-import { sourceDimensions } from './source-projections.js';
+import { matchesCategories } from './category-filter.js';
+import { sourceDimensions, createSourceProductMatcher } from './source-projections.js';
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const key = (base, code) => JSON.stringify([text(base), text(code)]);
 const hasKey = (row) => text(row['基地']) && text(row['产品编码']);
@@ -24,7 +25,7 @@ const columns = [
 
 export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
   const h = react.createElement;
-  return function SourceDiagnostics({ draft, result, table, view }) {
+  return function SourceDiagnostics({ draft, result, table, view, selectedCategories = [] }) {
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = useStepViewField(react, view, 'SourceDiagnostics.page', 0);
     const products = new Map();
@@ -44,6 +45,11 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
       ];
       return { ...row, 产品名称: text(row['产品名称']) || (names.length === 1 ? names[0] : '') };
     };
+    const matchProduct = react.useMemo(
+      () => createSourceProductMatcher(draft.products),
+      [draft.products],
+    );
+    react.useEffect(() => setPage(0), [selectedCategories]);
     const diagnostics = ['report', 'history'].flatMap((source) =>
       result.months.slice(0, 3).map((month) => {
         const fiscal = previousFiscalYear(draft.month);
@@ -72,15 +78,27 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
                 }
               : undefined
             : (draft.reportRead?.periods?.[month] ?? (local ? draft.reportRead : undefined));
-        const records = sales
+        const sourceRecords = sales
           ? (draft.planRates ?? []).filter(
               (row) => row['月份'] === month && row['维度类型'] === '基地+产品',
             )
           : source === 'history'
             ? (annual?.rows ?? []).map((row) => ({ ...row, 月份: month }))
             : (draft.report ?? []).filter((row) => row['月份'] === month);
+        const records = !selectedCategories.length
+          ? sourceRecords
+          : sourceRecords.filter((row) =>
+              matchesCategories(
+                matchProduct(row['产品编码'], row['基地']).category || row['大类'],
+                selectedCategories,
+              ),
+            );
         const pool = new Set(
-          result.rows.filter((row) => row.month === month).map((row) => key(row.base, row.code)),
+          result.rows
+            .filter(
+              (row) => row.month === month && matchesCategories(row.category, selectedCategories),
+            )
+            .map((row) => key(row.base, row.code)),
         );
         const column = sales
           ? '当前维度计划量'
@@ -93,15 +111,15 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
         const matched = (row) => hasKey(row) && pool.has(key(row['基地'], row['产品编码']));
         const ready = ['ready', 'partial'].includes(read?.status);
         const total =
-          sales || (local && source === 'report') ? records.length : read?.metadata?.total;
-        const counted = ready && Number.isSafeInteger(total) && total === records.length;
+          sales || (local && source === 'report') ? sourceRecords.length : read?.metadata?.total;
+        const counted = ready && Number.isSafeInteger(total) && total === sourceRecords.length;
         const partial = read?.metadata?.partial;
-        const complete = counted && (!partial || records.length > 0);
+        const complete = counted && (!partial || sourceRecords.length > 0);
         let readLabel =
           { loading: '读取中', failed: '失败', denied: '失败', error: '失败' }[read?.status] ??
           '未读取';
         if (ready)
-          readLabel = complete ? (records.length ? '成功有记录' : '成功空集') : '读取不完整';
+          readLabel = complete ? (sourceRecords.length ? '成功有记录' : '成功空集') : '读取不完整';
         const groups = new Map();
         for (const row of records.filter(matched)) {
           const id = key(row['基地'], row['产品编码']);

@@ -1,3 +1,4 @@
+import { matchesCategories } from './category-filter.js';
 import { useStepViewField } from './step-view-state.js';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 
@@ -44,6 +45,7 @@ export function createPoolExceptionReport(react, { downloadCsv }) {
         records: row.records.filter(
           (record) =>
             (!filters.category || record.category === filters.category) &&
+            matchesCategories(record.category, filters.categories) &&
             (!filters.month || record.month === filters.month),
         ),
       }))

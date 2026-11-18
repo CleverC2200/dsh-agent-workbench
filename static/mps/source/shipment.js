@@ -1,4 +1,5 @@
 import { deriveShipmentForecast as derive } from './shipment-forecast.js';
+import { matchesCategories } from './category-filter.js';
 import { sourceDimensions } from './source-projections.js';
 import { prototypeShipments } from './prototype-shipments.js';
 import { readLatestShipmentDate, readShipmentInputs } from './facts.js';
@@ -105,6 +106,7 @@ export function createShipment(
     scopeGeneration,
     onSnapshot,
     onEditingChange,
+    selectedCategories = [],
   }) {
     const batch = useBatchEdit({
       scope: `${draft.id}:${draft.month}:${scopeGeneration.current}`,
@@ -258,7 +260,8 @@ export function createShipment(
       () => deriveRows(state),
       [sourceRows, sourceKind, dimensions, month, passed, totalDays, state.values, state.remaining],
     );
-    const visibleRows = rows.filter(
+    const categoryRows = rows.filter((row) => matchesCategories(row.category, selectedCategories));
+    const visibleRows = categoryRows.filter(
       (row) => !skuSearch || [row.code, row.name].some((value) => value?.includes(skuSearch)),
     );
     const issueColumns = [
@@ -377,11 +380,11 @@ export function createShipment(
     };
     const groups = bases.map((base) =>
       aggregate(
-        rows.filter((row) => row.base === base),
+        categoryRows.filter((row) => row.base === base),
         base,
       ),
     );
-    const national = aggregate(rows, '全国合计');
+    const national = aggregate(categoryRows, '全国合计');
     const updateState = (changes) => update({ shipment: { ...stateRef.current, ...changes } });
     const readLatestDate = async () => {
       if (!hasCutoffRange) return;
@@ -585,7 +588,12 @@ export function createShipment(
       if (target === null) {
         if (kind === 'remaining') {
           const remaining = { ...currentState.remaining };
-          delete remaining[who];
+          const keys = new Set(row.children.map(keyOf));
+          const values = Object.fromEntries(
+            Object.entries(remaining[who]?.values ?? {}).filter(([key]) => !keys.has(key)),
+          );
+          if (Object.keys(values).length) remaining[who] = { ...remaining[who], values };
+          else delete remaining[who];
           return { ...currentState, remaining };
         }
         const values = { ...currentState.values };
@@ -604,9 +612,12 @@ export function createShipment(
           remaining: {
             ...currentState.remaining,
             [who]: {
-              values: Object.fromEntries(
-                row.children.map((child, index) => [keyOf(child), allocated[index]]),
-              ),
+              values: {
+                ...currentState.remaining?.[who]?.values,
+                ...Object.fromEntries(
+                  row.children.map((child, index) => [keyOf(child), allocated[index]]),
+                ),
+              },
               source: `${who}基地覆盖${target}件，按原剩余入库权重重摊并补偿舍入残差`,
             },
           },
@@ -671,7 +682,7 @@ export function createShipment(
       let next = stateRef.current;
       for (const entry of [...entries].sort((a, b) => a.meta.level - b.meta.level)) {
         const current = calculate(next);
-        const row =
+        let row =
           entry.meta.level === 0
             ? current.national
             : entry.meta.level === 1
@@ -679,6 +690,11 @@ export function createShipment(
               : current.rows.find(
                   (row) => row.base === entry.meta.base && row.code === entry.meta.code,
                 );
+        if (row?.children && entry.meta.keys)
+          row = aggregate(
+            row.children.filter((child) => entry.meta.keys.includes(keyOf(child))),
+            row.who,
+          );
         if (!row) throw Error(`${entry.label} 已不在当前范围，请取消后重新调整。`);
         try {
           next = changeState(
@@ -687,7 +703,14 @@ export function createShipment(
             entry.meta.kind,
             entry.value,
             entry.meta.who,
-            current.groups,
+            current.groups.map((group) =>
+              entry.meta.keys
+                ? aggregate(
+                    group.children.filter((child) => entry.meta.keys.includes(keyOf(child))),
+                    group.who,
+                  )
+                : group,
+            ),
           );
         } catch (failure) {
           throw Error(`${entry.label}：${failure.message}`);
@@ -924,6 +947,7 @@ export function createShipment(
                 level: who === '全国合计' ? 0 : row.children ? 1 : 2,
                 base: row.base,
                 code: row.code,
+                keys: row.children?.map(keyOf),
               },
               value: row[field],
               integer: true,
@@ -1099,31 +1123,35 @@ export function createShipment(
         ...children
           .slice(page * 25, (page + 1) * 25)
           .map((row) => renderRow(row, `${scope} ${row.code}`, skuLabel(row), 'sp-sku')),
-        h(
-          'tr',
-          { key: `${id}-page` },
-          h(
-            'td',
-            { colSpan: fields.length + 1 },
-            h(
-              'div',
-              { className: 'sp-sku-pages' },
-              h('span', null, `${who} · 共${children.length}个单品 · 第${page + 1}页`),
-              ...[-1, 1].map((direction) =>
+        ...(children.length > 25
+          ? [
+              h(
+                'tr',
+                { key: `${id}-page` },
                 h(
-                  'button',
-                  {
-                    key: direction,
-                    'aria-label': `${who} ${direction < 0 ? '上一页' : '下一页'}单品`,
-                    disabled: direction < 0 ? !page : (page + 1) * 25 >= children.length,
-                    onClick: () => setSkuPages({ ...skuPages, [id]: page + direction }),
-                  },
-                  direction < 0 ? '上一页' : '下一页',
+                  'td',
+                  { colSpan: fields.length + 1 },
+                  h(
+                    'div',
+                    { className: 'sp-sku-pages' },
+                    h('span', null, `${who} · 共${children.length}个单品 · 第${page + 1}页`),
+                    ...[-1, 1].map((direction) =>
+                      h(
+                        'button',
+                        {
+                          key: direction,
+                          'aria-label': `${who} ${direction < 0 ? '上一页' : '下一页'}单品`,
+                          disabled: direction < 0 ? !page : (page + 1) * 25 >= children.length,
+                          onClick: () => setSkuPages({ ...skuPages, [id]: page + direction }),
+                        },
+                        direction < 0 ? '上一页' : '下一页',
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-        ),
+            ]
+          : []),
       ];
     };
     const formulas =

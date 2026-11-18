@@ -1,3 +1,4 @@
+import { matchesCategories } from './category-filter.js';
 import Decimal from 'decimal.js';
 import { sumSourceAmounts } from './source-money.js';
 import { createSourceProductMatcher } from './source-projections.js';
@@ -10,7 +11,11 @@ const knownAmount = (values) => (values.length ? totalAmount(values).toFixed(2) 
 export function reconcileDemandAmounts(draft, result, rows, filters = {}) {
   const month = filters.month || draft.month;
   const filtered = Boolean(
-    filters.base || filters.category || filters.search || filters.onlyMissing,
+    filters.base ||
+    filters.category ||
+    filters.categories?.length ||
+    filters.search ||
+    filters.onlyMissing,
   );
   const selected = rows.filter((row) => row.month === month);
   const selectedKeys = new Set(selected.map((row) => key(row.base, row.code)));
@@ -46,9 +51,14 @@ export function reconcileDemandAmounts(draft, result, rows, filters = {}) {
   const excluded = [];
   const sourceRows = sources.map(classified).filter((row) => {
     if (filters.base && row['基地'] && row['基地'] !== filters.base) return false;
+    if (row.category !== '未归类' && !matchesCategories(row.category, filters.categories))
+      return false;
     if (filters.category && row.category !== '未归类' && row.category !== filters.category)
       return false;
-    if ((filters.base && !row['基地']) || (filters.category && row.category === '未归类')) {
+    if (
+      (filters.base && !row['基地']) ||
+      ((filters.category || filters.categories?.length) && row.category === '未归类')
+    ) {
       excluded.push(row);
       return false;
     }

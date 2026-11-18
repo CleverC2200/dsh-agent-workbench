@@ -5,6 +5,7 @@ import {
 } from './delisted-report.js';
 import { createStepViewState, useStepViewField } from './step-view-state.js';
 import { createBatchEdit } from './batch-edit.js';
+import { matchesCategories } from './category-filter.js';
 import { createShipmentScopeNotice } from './category-demand-view.js';
 import { createProcessedDemand } from './processed-demand-view.js';
 import { createReportPage } from './report-page.js';
@@ -160,6 +161,7 @@ export function createWorkflow(
     shipmentSnapshot,
     onUndoShareAdjustment,
     onEditingChange,
+    selectedCategories = [],
   }) {
     const viewScope = JSON.stringify([savedDraft.id, savedDraft.month, scopeGeneration]);
     const stepViews = react.useRef({ scope: viewScope, views: new Map() });
@@ -410,6 +412,7 @@ export function createWorkflow(
         }
       }
     };
+    const viewCategories = ['process', 'constraints'].includes(step) ? selectedCategories : [];
     const fields = step === 'process' ? processFields : planFields;
     const scopedRows =
       step === 'process' ? [...result.rows, ...(result.referenceRows ?? [])] : result.rows;
@@ -420,7 +423,12 @@ export function createWorkflow(
           ...result.rows,
           ...(draft.products ?? [])
             .filter((row) => row['基地'] && row['产品编码'])
-            .map((row) => ({ base: row['基地'], code: row['产品编码'], name: row['产品名称'] })),
+            .map((row) => ({
+              base: row['基地'],
+              code: row['产品编码'],
+              name: row['产品名称'],
+              category: row['大类'],
+            })),
         ].map((row) => [JSON.stringify([row.base, row.code]), row]),
       ).values(),
     ];
@@ -441,12 +449,16 @@ export function createWorkflow(
       (row) =>
         (!base || row.base === base) &&
         (!category || row.category === category) &&
+        matchesCategories(row.category, viewCategories) &&
         (!month || row.month === month) &&
         (!onlyMissing || reasons(row, fields).length) &&
         (!search || identityColumns.some(([key]) => display(row[key]).includes(search))),
     );
     const categoryRows = scopedCategories.filter(
-      (row) => (!category || row.category === category) && (!month || row.month === month),
+      (row) =>
+        (!category || row.category === category) &&
+        matchesCategories(row.category, viewCategories) &&
+        (!month || row.month === month),
     );
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(filtered.length / 25) - 1));
     const visible = filtered.slice(pageIndex * 25, (pageIndex + 1) * 25);
@@ -466,7 +478,7 @@ export function createWorkflow(
         evaluation: result.context,
         months: result.months,
         shipmentMonth: result.shipmentMonth,
-        filter: { search, base, category, month, onlyMissing },
+        filter: { search, base, category, categories: viewCategories, month, onlyMissing },
         categoryRows,
         categoryComparisons: result.categoryComparisons,
         rows: planning ? [] : visible,
@@ -1023,7 +1035,8 @@ export function createWorkflow(
       { className: 'wf-filters' },
       select('月份筛选', month, result.months, setMonth),
       select('基地筛选', base, bases, setBase),
-      select('大类筛选', category, categories, setCategory),
+      ['capacity', 'report'].includes(step) &&
+        select('大类筛选', category, categories, setCategory),
       h(
         'label',
         null,
@@ -1578,12 +1591,14 @@ export function createWorkflow(
       h(ShipmentScopeNotice, {
         scope: result.categoryComputation.shipmentScope,
         month: draft.month,
+        selectedCategories: viewCategories,
+        cutoff: shipmentSnapshot?.cutoff,
       }),
       ['process', 'report'].includes(step) &&
         h(PoolExceptionReport, {
           draft,
           result,
-          filters: { base, category, month, search },
+          filters: { base, category, categories: viewCategories, month, search },
           table,
           view,
         }),
@@ -1591,7 +1606,7 @@ export function createWorkflow(
         h(DelistedReport, {
           draft,
           result,
-          filters: { base, category, month, search },
+          filters: { base, category, categories: viewCategories, month, search },
           table,
         }),
       step === 'process'
@@ -1603,7 +1618,7 @@ export function createWorkflow(
               draft,
               result,
               rows: filtered,
-              filters: { base, month, category, search, onlyMissing },
+              filters: { base, month, category, categories: viewCategories, search, onlyMissing },
               update,
               relations,
               shipmentSnapshot,
@@ -1680,7 +1695,13 @@ export function createWorkflow(
                       ]),
                     ),
                   ),
-                h(SourceDiagnostics, { draft, result, table, view }),
+                h(SourceDiagnostics, {
+                  draft,
+                  result,
+                  table,
+                  view,
+                  selectedCategories: viewCategories,
+                }),
               ),
             ),
           )
@@ -1697,6 +1718,7 @@ export function createWorkflow(
                 bases,
                 table,
                 card,
+                selectedCategories: viewCategories,
                 previewRules: (local) =>
                   buildMpsWorkflow(
                     {
@@ -1716,6 +1738,7 @@ export function createWorkflow(
                 view,
                 draft,
                 result,
+                selectedCategories: viewCategories,
                 update,
                 sync: syncInventoryTargets,
                 busy: inventoryTargetsBusy,
@@ -1738,9 +1761,11 @@ export function createWorkflow(
                       view,
                       stateKey: 'Workflow.movementsPage',
                       label: '既有库存变动',
-                      rows: configurationPairs.flatMap((pair) =>
-                        result.months.slice(0, 3).map((month) => ({ ...pair, month })),
-                      ),
+                      rows: configurationPairs
+                        .filter((row) => matchesCategories(row.category, viewCategories))
+                        .flatMap((pair) =>
+                          result.months.slice(0, 3).map((month) => ({ ...pair, month })),
+                        ),
                     },
                     (visible) =>
                       table(
@@ -1837,6 +1862,7 @@ export function createWorkflow(
                       rows: configurationPairs.filter(
                         (row) =>
                           (!base || row.base === base) &&
+                          matchesCategories(row.category, viewCategories) &&
                           (!search || `${row.base} ${row.code} ${row.name}`.includes(search)),
                       ),
                     },
@@ -2066,7 +2092,7 @@ export function createWorkflow(
                 preparingInputs,
                 error: evaluationError,
                 onExecute: executeEvaluation,
-                filters: { base, month, category, search, onlyMissing },
+                filters: { base, month, category, categories: viewCategories, search, onlyMissing },
                 table,
                 card,
                 numberText,

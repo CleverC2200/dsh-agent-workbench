@@ -1,3 +1,4 @@
+import { matchesCategories } from './category-filter.js';
 import { ready } from '../../../business/shared/channel.js';
 import { hasMpsSource } from './master-data.js';
 import { readSourceTable } from './source-tables.js';
@@ -16,14 +17,18 @@ export function createPlanRates(react, { Dialog, table, downloadCsv }) {
     '父级计划量',
     '计划占比',
   ];
-  return function PlanRates({ draft, update, active, workflow }) {
+  return function PlanRates({ draft, update, active, workflow, selectedCategories = [] }) {
     const [preview, setPreview] = react.useState(false);
     const [dimension, setDimension] = react.useState('大类+物料组');
     const [page, setPage] = react.useState(0);
     const controller = react.useRef(null);
     const state = draft.planRatesRead;
     const current = state?.status === 'ready' && state.month === draft.month;
-    const rows = current ? planRatePreviewRows(workflow) : [];
+    const rows = current
+      ? planRatePreviewRows(workflow).filter((row) =>
+          matchesCategories(row['大类'], selectedCategories),
+        )
+      : [];
     const selected = rows.filter((row) => row['维度类型'] === dimension);
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(selected.length / 25) - 1));
     const busy = state?.status === 'loading';

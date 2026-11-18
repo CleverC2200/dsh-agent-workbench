@@ -241,9 +241,9 @@ test('完整分页金额包含池外及缺基地，缺价显示已知小计，�
   await expect(amounts).toContainText('1条源金额无法归属当前筛选范围');
   await expect(amounts).toContainText('分别为10.00、10.00元');
   await frame
-    .getByRole('region', { name: '需求加工与收敛', exact: true })
-    .getByLabel('大类筛选', { exact: true })
-    .selectOption('汤圆');
+    .getByRole('group', { name: '大类筛选', exact: true })
+    .getByRole('checkbox', { name: '汤圆', exact: true })
+    .check();
   await expect(amounts).toContainText('199条源金额无法归属当前筛选范围');
   await expect(amounts).toContainText('分别为208.00、208.00元');
   const pending = page.waitForEvent('download');

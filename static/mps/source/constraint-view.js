@@ -1,3 +1,4 @@
+import { matchesCategories } from './category-filter.js';
 import { useStepViewField } from './step-view-state.js';
 const kinds = {
   'inventory-days': ['库存下限', '库存', '安全天数下限'],
@@ -32,6 +33,7 @@ export function createConstraintPanel(react, { Dialog }) {
     previewRules,
     children,
     disabled,
+    selectedCategories = [],
   }) {
     const [hardOnly, setHardOnly] = useStepViewField(
       react,
@@ -55,7 +57,21 @@ export function createConstraintPanel(react, { Dialog }) {
       false,
     );
     const rules = draft.constraints?.rules?.local ?? [];
-    const evaluations = result.ruleEvaluations ?? [];
+    const inCategory = (rule) =>
+      !selectedCategories.length ||
+      (rule.productCategory
+        ? matchesCategories(rule.productCategory, selectedCategories)
+        : !rule.code ||
+          result.rows.some(
+            (row) =>
+              row.code === rule.code &&
+              (!rule.base || rule.base === row.base) &&
+              matchesCategories(row.category, selectedCategories),
+          ));
+    const evaluations = (result.ruleEvaluations ?? []).filter((entry) => {
+      const rule = rules.find((rule, index) => ruleId(rule, index) === entry.ruleId);
+      return !rule || inCategory(rule);
+    });
     const priority = [
       'conflict',
       'draft',
@@ -208,7 +224,7 @@ export function createConstraintPanel(react, { Dialog }) {
             '约束列表',
             ['类别', '约束内容', '作用对象', '强度', '来源', '生效至', '计算状态', '操作'],
             rules.flatMap((rule, index) =>
-              hardOnly && rule.strength !== '硬'
+              !inCategory(rule) || (hardOnly && rule.strength !== '硬')
                 ? []
                 : [
                     [

@@ -29,11 +29,7 @@ export function productSourceRows(rows) {
     ...Object.fromEntries(
       Object.entries(productSourceFields).map(([field, source]) => [field, row[source] ?? '']),
     ),
-    新品标记: !text(row.transfer_tag)
-      ? '待确认'
-      : text(row.transfer_tag) === '新品'
-        ? '新品'
-        : '非新品',
+    新品标记: !text(row.transfer_tag) ? '' : text(row.transfer_tag) === '新品' ? '新品' : '非新品',
   }));
 }
 const numeric = (value) =>
@@ -79,13 +75,15 @@ export function productProjections(products, raw = [], facts = [], prices = []) 
     const display = {
       ...row,
       未税到岸单价: priceByCode.get(row['产品编码']) ?? '',
-      新品标记: newProduct
-        ? transferTags.length === 1 && sourceRecords.every((record) => text(record.transfer_tag))
-          ? '新品'
-          : '部分基地新品'
-        : sourceRecords.length && sourceRecords.every((record) => text(record.transfer_tag))
-          ? '非新品'
-          : '待确认',
+      新品标记: !transferTags.length
+        ? ''
+        : newProduct
+          ? transferTags.length === 1 && sourceRecords.every((record) => text(record.transfer_tag))
+            ? '新品'
+            : '部分基地新品'
+          : sourceRecords.length && sourceRecords.every((record) => text(record.transfer_tag))
+            ? '非新品'
+            : '待确认',
     };
     const inherited = [];
     for (const [field, candidates] of [

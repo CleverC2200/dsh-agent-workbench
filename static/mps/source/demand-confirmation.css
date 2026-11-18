@@ -1009,3 +1009,24 @@
   padding: 4px 16px;
   max-width: none;
 }
+
+.dc-category-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--ap-border, #dce3eb);
+  border-radius: 8px;
+}
+.dc-category-filter legend {
+  padding: 0 4px;
+  font-size: 12px;
+}
+.dc-category-filter label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}

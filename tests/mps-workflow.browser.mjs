@@ -426,7 +426,9 @@ test('MPS processing includes every current product category in its summary, fil
       category,
     );
     await expect(
-      view.getByLabel('大类筛选').getByRole('option', { name: category, exact: true }),
+      frame
+        .getByRole('group', { name: '大类筛选', exact: true })
+        .getByRole('checkbox', { name: category, exact: true }),
     ).toHaveCount(1);
     assert.equal(csv.includes(category), true);
   }

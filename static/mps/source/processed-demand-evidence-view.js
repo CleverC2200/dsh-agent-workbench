@@ -23,7 +23,13 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
       {},
     );
     const [open, setOpen] = useStepViewField(react, view, 'ProcessedDemandEvidence.open', false);
-    const scope = JSON.stringify([draft.id, draft.month, filters.category, filters.month]);
+    const scope = JSON.stringify([
+      draft.id,
+      draft.month,
+      filters.category,
+      filters.categories,
+      filters.month,
+    ]);
     const selectedCategory =
       selection.scope === scope && categories.includes(selection.category)
         ? selection.category
