@@ -1,3 +1,4 @@
+import { deriveShipmentForecast as derive } from './shipment-forecast.js';
 import { sourceDimensions } from './source-projections.js';
 import { prototypeShipments } from './prototype-shipments.js';
 import { readLatestShipmentDate, readShipmentInputs } from './facts.js';
@@ -62,74 +63,7 @@ const knownSum = (rows, field) => {
 };
 const finite = (number) =>
   Number.isFinite(number) && Math.abs(number) <= Number.MAX_SAFE_INTEGER ? number : null;
-function derive(row, passed, total) {
-  const orders =
-    row.prepped == null || row.unprepped == null ? null : finite(row.prepped + row.unprepped);
-  const observedPace =
-    row.daily3 > 0
-      ? row.daily3
-      : row.daily3 === 0 && row.shipped != null
-        ? row.shipped / passed
-        : null;
-  const use30DayPace = observedPace === 0 && row.average > 0;
-  const pace = use30DayPace ? row.average : observedPace;
-  const paceSource =
-    orders === 0
-      ? '无待发订单，无需估算'
-      : use30DayPace
-        ? '近30天日均'
-        : row.daily3 > 0
-          ? '近三天日均'
-          : observedPace > 0
-            ? '本月已发货÷已过天数'
-            : '待定';
-  const shipDays = orders === 0 ? 0 : orders != null && pace > 0 ? finite(orders / pace) : null;
-  const hold = row.shipped == null || orders == null ? null : finite(row.shipped + orders);
-  const forecastAverage =
-    hold != null && shipDays != null ? finite(hold / (passed + shipDays)) : null;
-  const rest = shipDays == null ? null : Math.max(0, total - passed - shipDays);
-  const noShipmentQuantities = row.shipped === 0 && row.prepped === 0 && row.unprepped === 0;
-  const shipmentSourceComplete =
-    row.sourceDays === undefined ||
-    (Number.isFinite(row.sourceDays) && row.sourceDays >= passed && row.duplicateDays === 0);
-  const confirmedNoShipment = noShipmentQuantities && row.average === 0 && shipmentSourceComplete;
-  const prediction =
-    hold === 0
-      ? confirmedNoShipment
-        ? 0
-        : null
-      : forecastAverage == null
-        ? null
-        : finite(Math.round(forecastAverage * rest + hold));
-  return {
-    ...row,
-    average: row.average ?? null,
-    shipDays,
-    hold,
-    forecastAverage,
-    rest,
-    prediction,
-    pace,
-    paceSource,
-    confirmedNoShipment,
-    forecastIssue:
-      prediction == null && noShipmentQuantities
-        ? !shipmentSourceComplete
-          ? '发货来源日期不完整或冲突，不能确认无业务数量，原因待核'
-          : row.average == null
-            ? 'SAP及已备未备数量为0，近30天日均缺失或来源异常，不能确认无业务数量'
-            : row.average > 0
-              ? '近30天有发货数量，本月尚无有效预测日均，预估待补'
-              : '近30天日均无效，不能确认无业务数量，原因待核'
-        : prediction == null && orders > 0 && row.daily3 != null
-          ? row.daily3 < 0
-            ? '近三天日均为负，预估发运天数待确认'
-            : observedPace === 0
-              ? '近三天及本月日均为0，近30天日均无正数，无法估算发运天数'
-              : ''
-          : '',
-  };
-}
+
 function allocate(weights, target) {
   if (weights.some((value) => value == null)) throw Error('存在待定权重，无法重摊，请先补齐输入。');
   const total = weights.reduce((sum, value) => sum + value, 0);
@@ -328,6 +262,10 @@ export function createShipment(
       (row) => !skuSearch || [row.code, row.name].some((value) => value?.includes(skuSearch)),
     );
     const issueColumns = [
+      '评估版本',
+      '评估月份',
+      '统计基月',
+      '截止日',
       '月份',
       '基地',
       '产品编码',
@@ -339,65 +277,76 @@ export function createShipment(
       '来源',
       '原因',
     ];
-    const stockIssues = visibleRows.flatMap((row) => [
-      ...(row.transferIssue
-        ? [
-            {
-              月份: month,
-              基地: row.base,
-              产品编码: row.code,
-              异常类别: '调拨来源异常',
-              指标: '调入计划、调出计划',
-              原始值: row.transferDate ?? '',
-              计算用值: '待补',
-              实际处理: '保留待补，未按无计划置0',
-              来源: 'ai_db.agents_scm_stock_detail_d',
-              原因: row.transferIssue,
-            },
-          ]
-        : []),
-      ...row.inventoryIssues.map((issue) => ({
-        月份: month,
-        基地: row.base,
-        产品编码: row.code,
-        异常类别: '负库存',
-        指标: issue.metric === 'openingInventory' ? '月初库存' : '预测期末库存',
-        原始值: issue.rawValue,
-        计算用值: issue.calculationValue,
-        实际处理: '逐SKU归0后承接汇总，原始值和不足保留',
-        来源:
-          sourceKind === 'business'
-            ? 'ai_db.agents_scm_stock_detail_d / 库存收支'
-            : '本地输入 / 库存收支',
-        原因: issue.reason,
-      })),
-      ...(row.prediction == null
-        ? [
-            {
-              月份: month,
-              基地: row.base,
-              产品编码: row.code,
-              异常类别: '发货输入待补',
-              指标: '本月预估发货',
-              原始值: JSON.stringify({
-                shipped: row.shipped,
-                prepped: row.prepped,
-                unprepped: row.unprepped,
-                average: row.average,
-              }),
-              计算用值: row.fin ?? '待补',
-              实际处理:
-                row.fin == null
-                  ? '保留待补，未按无发货置0'
-                  : '保留人工有效修正，系统预测依据仍待补',
-              来源: sourceKind === 'business' ? 'ai_db.agents_scm_stock_detail_d' : '本地输入',
-              原因:
-                row.forecastIssue ||
-                `缺失或无效发货依据：${row.missingFields.map((field) => names[fields.indexOf(field)]).join('、') || '原因待核'}`,
-            },
-          ]
-        : []),
-    ]);
+    const stockIssues = visibleRows
+      .flatMap((row) => [
+        ...(row.transferIssue
+          ? [
+              {
+                月份: month,
+                基地: row.base,
+                产品编码: row.code,
+                异常类别: '调拨来源异常',
+                指标: '调入计划、调出计划',
+                原始值: row.transferDate ?? '',
+                计算用值: '待补',
+                实际处理: '保留待补，未按无计划置0',
+                来源: 'ai_db.agents_scm_stock_detail_d',
+                原因: row.transferIssue,
+              },
+            ]
+          : []),
+        ...row.inventoryIssues.map((issue) => ({
+          月份: month,
+          基地: row.base,
+          产品编码: row.code,
+          异常类别: '负库存',
+          指标: issue.metric === 'openingInventory' ? '月初库存' : '预测期末库存',
+          原始值: issue.rawValue,
+          计算用值: issue.calculationValue,
+          实际处理: '逐SKU归0后承接汇总，原始值和不足保留',
+          来源:
+            sourceKind === 'business'
+              ? 'ai_db.agents_scm_stock_detail_d / 库存收支'
+              : '本地输入 / 库存收支',
+          原因: issue.reason,
+        })),
+        ...(row.prediction == null
+          ? [
+              {
+                月份: month,
+                基地: row.base,
+                产品编码: row.code,
+                异常类别: '发货输入待补',
+                指标: '本月预估发货',
+                原始值: JSON.stringify({
+                  shipped: row.shipped,
+                  prepped: row.prepped,
+                  unprepped: row.unprepped,
+                  daily3: row.daily3,
+                  average: row.average,
+                  sourceDays: row.sourceDays,
+                  duplicateDays: row.duplicateDays,
+                }),
+                计算用值: row.fin ?? '待补',
+                实际处理:
+                  row.fin == null
+                    ? '保留待补，未按无发货置0'
+                    : '保留人工有效修正，系统预测依据仍待补',
+                来源: sourceKind === 'business' ? 'ai_db.agents_scm_stock_detail_d' : '本地输入',
+                原因:
+                  row.forecastIssue ||
+                  `缺失或无效发货依据：${row.missingFields.map((field) => names[fields.indexOf(field)]).join('、') || '原因待核'}`,
+              },
+            ]
+          : []),
+      ])
+      .map((issue) => ({
+        评估版本: draft.name,
+        评估月份: draft.month,
+        统计基月: month,
+        截止日: cutoff,
+        ...issue,
+      }));
     const aggregate = (children, who) => {
       const inputs = Object.fromEntries(
         inputFields.map((field) => [field, knownSum(children, field)]),
@@ -572,7 +521,7 @@ export function createShipment(
             row.average == null ||
             row.transferIn == null ||
             row.transferOut == null ||
-            row.sourceDays < passed,
+            derive(row, passed, totalDays).sourceDateIssue,
         ).length;
         const duplicateRows = actualRows.filter((row) => row.duplicateDays > 0).length;
         updateState({
@@ -846,6 +795,7 @@ export function createShipment(
         '发运速度来源',
         '发运速度',
         '预估待补原因',
+        '发货来源日期异常',
         '物料组名称',
         '分类待补原因',
       ];
@@ -893,6 +843,7 @@ export function createShipment(
           发运速度来源: row.paceSource,
           发运速度: row.pace,
           预估待补原因: row.forecastIssue,
+          发货来源日期异常: row.sourceDateIssue,
           物料组名称: row.groupName ?? '',
           分类待补原因: row.dimensionIssue ?? '',
         })),
@@ -906,6 +857,7 @@ export function createShipment(
       'pace',
       'paceSource',
       'forecastIssue',
+      'sourceDateIssue',
       'prediction',
       'fin',
       'transferIn',
@@ -1183,13 +1135,15 @@ export function createShipment(
         const raw = (key) => (calculation[key] == null ? '待定' : String(calculation[key]));
         const fallback =
           calculation.paceSource === '近30天日均'
-            ? `近三天及本月日均为0，使用近30天日均：${raw('average')}。`
-            : calculation.daily3 === 0
-              ? `近三天为0，使用本月已发货÷已过天数：${raw('shipped')} ÷ ${passed}。${calculation.forecastIssue}`
-              : '';
+            ? `近三天日均不大于0，使用近30天日均：${raw('average')}。`
+            : calculation.paceSource === '已发已备未备合计'
+              ? '两种日均均无正数且近30天日均有效，预估取本月已发货＋已备＋未备。'
+              : calculation.confirmedNoShipment
+                ? '本月已发货、已备、未备均确认是0，整月预估为0。'
+                : calculation.forecastIssue;
         const expressions = {
           shipDays: [
-            '发运天数 = (已备 + 未备) ÷ 发运速度；优先近三天日均，其次本月日均，两者为0时使用近30天日均；仍无正数时待定，无订单为0',
+            '发运天数 = (已备 + 未备) ÷ 发运速度；近三天日均不大于0时使用正近30天日均；两者无正数时不估算发运天数，无订单为0',
             `${raw('prepped')} + ${raw('unprepped')}；采用速度${raw('pace')}；${fallback}`,
           ],
           average: [
@@ -1680,7 +1634,7 @@ export function createShipment(
           h(
             'p',
             {},
-            '发运天数=(已备+未备)÷发运速度；优先近三天日均，近三天为0时改用本月已发货÷已过天数，两者均为0时使用截止日avg_30d_send；仍无正数速度时待定。预测日均=(已发货+已备+未备)÷(已过天数+发运天数)。本月预测量=预测日均×max(0,总天数−已过天数−发运天数)+已发货+已备+未备，四舍五入。近30天日均发货直接读取截止日avg_30d_send。累计生产入库为月初至截止日produce_in_qty逐日合计，保留负数冲销；重复日或缺值时待定；入库日均=累计生产入库÷(截止日日号−1)，剩余自然天数保持原算法。',
+            '发运天数=(已备+未备)÷发运速度；近三天日均不大于0时使用正的截止日avg_30d_send；两者均无正数且近30天值有效时，本月预估取已发货+已备+未备。三数量均确认是0时预估为0；来源日期缺失、重复或冲突时保留待核。预测日均=(已发货+已备+未备)÷(已过天数+发运天数)。本月预测量=预测日均×max(0,总天数−已过天数−发运天数)+已发货+已备+未备，四舍五入。近30天日均发货直接读取截止日avg_30d_send。累计生产入库为月初至截止日produce_in_qty逐日合计，保留负数冲销；重复日或缺值时待定；入库日均=累计生产入库÷(截止日日号−1)，剩余自然天数保持原算法。',
           ),
         ),
         h(

@@ -101,8 +101,9 @@ test('三项确认无数量才预估0，后续入库和调拨形成115结存，�
   assert.equal(rows[1].end, null);
   assert.equal(rows[2].fin, 0);
   assert.equal(rows[2].end, 100);
-  assert.ok(rows.slice(3).every((row) => row.fin === null && row.end === null));
-  assert.match(rows[3].forecastIssue, /近30天有发货/);
+  assert.equal(rows[3].fin, 0);
+  assert.equal(rows[3].end, 115);
+  assert.ok(rows.slice(4).every((row) => row.fin === null && row.end === null));
   await expect(
     page
       .getByRole('table', { name: '本月预估发货明细' })
@@ -152,5 +153,6 @@ test('来源历史不完整或冲突不能把零数量认定为真实无发货',
   const rows = await page.evaluate(() => window.snapshot);
   assert.ok(rows.every((row) => row.fin === null && row.end === null));
   const detail = await download(page, '下载明细');
-  assert.ok(detail.every((row) => /来源.*不完整|来源.*冲突/.test(row.预估待补原因)));
+  assert.match(detail.find((row) => row.产品编码 === 'INCOMPLETE').预估待补原因, /实际21天，缺1天/);
+  assert.match(detail.find((row) => row.产品编码 === 'CONFLICT').预估待补原因, /来源日期重复1条/);
 });
