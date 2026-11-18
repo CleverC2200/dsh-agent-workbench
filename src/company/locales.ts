@@ -431,7 +431,7 @@ const copy = {
   mpsPlanWorkbench: ['主生产计划(MPS)', 'MPS workbench'],
   apiLog: ['接口日志', 'API logs'],
   inboxNotConnected: ['消息待办接口尚未接入', 'Message inbox service is not connected'],
-  messageInbox: ['消息待办', 'Message inbox'],
+  messageInbox: ['消息中心', 'Message center'],
   agentPanel: ['需求预测', 'Demand forecast'],
   agentPanelModel: ['GEA Personal Model · 只读分析', 'GEA Personal Model · read-only analysis'],
   agentPanelHelp: [

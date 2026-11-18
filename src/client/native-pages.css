@@ -15,6 +15,46 @@
   background: var(--workbench-brand-soft, #fff0f2);
   color: var(--workbench-brand, #df1732);
 }
+.gea-message-center {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+}
+.gea-message-tabs {
+  display: flex;
+  overflow-x: auto;
+  background: var(--workbench-surface);
+  border-bottom: 1px solid var(--workbench-border);
+}
+.gea-message-tabs button {
+  position: relative;
+  flex: none;
+  min-height: 42px;
+  min-width: 100px;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: var(--workbench-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gea-message-tabs button:hover {
+  background: var(--workbench-brand-soft);
+}
+.gea-message-tabs button[aria-selected='true'] {
+  color: var(--workbench-brand);
+}
+.gea-message-tabs button[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  border-bottom: 2px solid currentColor;
+}
+.gea-message-tabs button:focus-visible {
+  outline: 2px solid var(--workbench-brand);
+  outline-offset: -2px;
+}
 .gea-inbox {
   --inbox-brand: var(--workbench-brand);
   --inbox-muted: var(--workbench-muted);
@@ -73,7 +113,7 @@
   opacity: 0.5;
   cursor: default;
 }
-.gea-inbox :is(button, select):focus-visible {
+.gea-inbox :is(button, select, input):focus-visible {
   outline: 2px solid var(--inbox-brand);
   outline-offset: 2px;
 }
@@ -93,6 +133,20 @@
 .gea-inbox-filter select {
   min-width: 120px;
   background: var(--inbox-bg);
+}
+.gea-inbox-filter label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gea-inbox-filter input {
+  font: inherit;
+  color: inherit;
+  background: var(--inbox-panel);
+  border: 1px solid var(--inbox-border);
+  border-radius: 4px;
+  padding: 7px 10px;
+  width: min(220px, 36vw);
 }
 .gea-inbox-hint,
 .gea-inbox-provenance {
@@ -345,6 +399,29 @@
   display: flex;
   justify-content: flex-end;
   border-top: 1px solid var(--inbox-border);
+}
+.gea-inbox .gea-announcement-list {
+  min-width: 460px;
+}
+.gea-inbox .gea-announcement-list th:nth-child(1) {
+  width: 32%;
+}
+.gea-inbox .gea-announcement-list th:nth-child(2) {
+  width: auto;
+}
+.gea-inbox .gea-announcement-list th:nth-child(3) {
+  width: 158px;
+}
+.gea-announcement-list .gea-inbox-kind {
+  margin-inline-start: 8px;
+}
+.gea-announcement-body {
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+  line-height: 1.75;
+}
+.gea-announcement-body pre {
+  white-space: pre-wrap;
 }
 @media (max-width: 600px) {
   .gea-inbox-header,
