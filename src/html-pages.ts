@@ -161,7 +161,8 @@ export class HtmlPages extends PageRuntime implements WorkbenchPages {
       const configPath = await realpath(resolve(item.directory, item.manifest.sqlConfig));
       if (!configPath.startsWith(item.directory + sep)) throw Error('INVALID_SQL_CONFIG_PATH');
       const raw = await readFile(configPath, 'utf8');
-      if (Buffer.byteLength(raw) > 5_000_000) throw Error('SQL_CONFIG_TOO_LARGE');
+      const maxSqlConfigBytes = item.manifest.id === 'inventory-fc' ? 8_000_000 : 5_000_000;
+      if (Buffer.byteLength(raw) > maxSqlConfigBytes) throw Error('SQL_CONFIG_TOO_LARGE');
       const config = JSON.parse(raw);
       if (config.agentId !== item.manifest.id) throw Error('SQL_CONFIG_AGENT_MISMATCH');
       html = injectSqlConfig(html, config);
