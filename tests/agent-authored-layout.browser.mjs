@@ -668,9 +668,18 @@ test('dealer top date refresh preserves the selected customer scope', async (t) 
   const header = frame.locator('[data-business-toolbar]');
   const menu = header.locator('details').first();
   await menu.locator('summary').click();
-  await menu.getByRole('textbox', { name: '客户编码', exact: true }).fill('customer-A');
-  await menu.getByRole('button', { name: '查询 / 刷新', exact: true }).click();
-  await expect(menu.locator('summary')).toContainText('customer-A');
+  const search = menu.getByRole('searchbox', { name: '客户名称或编码', exact: true });
+  await search.fill('tomer-A');
+  await expect(menu.getByRole('button', { name: /客户A.*customer-A/ })).toBeVisible();
+  await search.press('Enter');
+  await expect(menu.locator('summary')).toContainText('客户A');
+  assert.ok(
+    calls.some(
+      (query) =>
+        query.queryId === 'dealer.customers.atomic' &&
+        query.parameters.search_pattern === '%tomer-A%',
+    ),
+  );
   await header.getByLabel('读取时点').fill('2026-10-18');
   const before = calls.length;
   await header
@@ -1179,14 +1188,33 @@ for (const deniedBudget of [false, true])
     assert.deepEqual(errors, []);
   });
 
-test('dealer original customer menu applies the new query scope and closes after selection', async (t) => {
-  const { frame, calls, errors } = await mount(t, 'dealer', 1280);
+test('dealer customer name search selects the authorized code and closes the menu', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'dealer', 1280, (query, result) => {
+    if (
+      query.queryId === 'dealer.customers.atomic' &&
+      query.parameters.search_pattern === '%无匹配%'
+    )
+      Object.assign(result.rows[0], { page_scope_total: 0, page_row_present: null });
+    return result;
+  });
   const menu = frame.locator('header details').first();
   await menu.locator('summary').click();
-  await menu.getByRole('textbox', { name: '客户编码', exact: true }).fill('customer-A');
-  await menu.getByRole('button', { name: '查询 / 刷新', exact: true }).click();
-  await expect(menu.locator('summary')).toContainText('客户 customer-A');
+  const search = menu.getByRole('searchbox', { name: '客户名称或编码', exact: true });
+  await search.fill('无匹配');
+  await expect(menu.getByText('暂无匹配客户')).toBeVisible();
+  await search.press('Enter');
+  await expect(menu.locator('summary')).toContainText('全部负责客户');
+  await search.fill('户A');
+  await menu.getByRole('button', { name: /客户A.*customer-A/ }).click();
+  await expect(menu.locator('summary')).toContainText('客户A');
+  await expect(menu.locator('summary')).toBeFocused();
   assert.equal(await menu.evaluate((el) => el.open), false);
+  assert.ok(
+    calls.some(
+      (query) =>
+        query.queryId === 'dealer.customers.atomic' && query.parameters.search_pattern === '%户A%',
+    ),
+  );
   await expect
     .poll(() =>
       calls.some(
