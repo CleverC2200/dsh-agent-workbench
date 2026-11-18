@@ -118,7 +118,7 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
       },
     },
     remote: {},
-    'remote.agentPresets': {},
+    'remote.session': {},
     workspaces: {
       list: { getSnapshot: () => workspaceCatalogue },
       create: async ({ path }) => {
@@ -170,10 +170,11 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
       openSession: (id) => opened.push(id),
     },
   };
-  ctx.remote.agentPresets = {
-    select: async (sessionId, preset) => {
-      selectedPresets.set(sessionId, preset);
-      return { ok: true };
+  ctx.remote.session = {
+    create: async ({ workspaceId, agentPreset }) => {
+      const sessionId = await ctx.sessions.create({ workspaceId });
+      selectedPresets.set(sessionId, agentPreset);
+      return { ok: true, value: { sessionId, agentPreset } };
     },
   };
   const errors = [],

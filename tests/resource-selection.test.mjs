@@ -51,9 +51,6 @@ test('resource selection creates a new native session in the explicit workspace 
       calls.push(['create', options]);
       return 'new-session';
     },
-    select: async (...args) => {
-      calls.push(['select', ...args]);
-    },
     open: async (id, skill) => {
       if (skill) calls.push(['stage', id, skill]);
       calls.push(['open', id]);
@@ -62,8 +59,7 @@ test('resource selection creates a new native session in the explicit workspace 
   await selectResource(host, 'skill:existing', new AbortController().signal);
   assert.deepEqual(calls, [
     ['workspace', '/isolated/runtime/workspace'],
-    ['create', { workspaceId: 'workspace-owned' }],
-    ['select', 'new-session', 'agent-resource-skill'],
+    ['create', { workspaceId: 'workspace-owned', agentPreset: 'agent-resource-skill' }],
     ['stage', 'new-session', 'existing'],
     ['open', 'new-session'],
   ]);
@@ -84,7 +80,6 @@ test('cancelled resource loading never creates or opens a native session', async
       created = true;
       return 'new';
     },
-    select: async () => {},
     open: async () => {
       throw Error('Unexpected navigation');
     },
@@ -102,7 +97,6 @@ test('a user edit made while the new Session is preparing remains intact and pre
       ),
     workspace: async () => ({ workspaceId: 'workspace-owned', path: '/canonical/workspace' }),
     create: async () => 'new',
-    select: async () => {},
     open: async () => {
       throw Error('RESOURCE_DRAFT_CHANGED');
     },
@@ -123,7 +117,6 @@ test('a page resource action publishes its UI association before native navigati
       ),
     workspace: async () => ({ workspaceId: 'workspace-owned', path: '/canonical/workspace' }),
     create: async () => 'page-session',
-    select: async () => {},
     open: async (id, _skill, signal, beforeOpen) => {
       signal.throwIfAborted();
       beforeOpen?.({ sessionId: id, preset: 'gea-readonly', cwd: '/canonical/workspace' });
@@ -160,7 +153,6 @@ test('resource selection sends the same explicit workspace to Manage and the off
       return { workspaceId: 'project', path: cwd };
     },
     create: async () => 'session',
-    select: async () => {},
     open: async () => {},
   };
   await selectResource(host, 'skill:project', new AbortController().signal);
@@ -176,7 +168,6 @@ test('a changed Core preset cannot be associated using the selected resource met
       ),
     workspace: async () => ({ workspaceId: 'workspace', path: '/isolated/project' }),
     create: async () => 'session',
-    select: async () => {},
     open: async (id, _skill, _signal, beforeOpen) =>
       beforeOpen({ sessionId: id, preset: 'changed-in-Core' }),
   };
@@ -203,7 +194,6 @@ test('resource action uses the official directory picker when neither a current 
       return { workspaceId: 'selected', path };
     },
     create: async () => 'new',
-    select: async () => {},
     open: async () => {},
   };
   await selectResource(host, 'standard', new AbortController().signal);
@@ -222,7 +212,6 @@ test('resource opening rejects a real Session in another workspace before associ
     fetch: async () => Response.json({ preset: 'gea-readonly' }),
     workspace: async () => ({ workspaceId: 'owned', path: '/canonical/project' }),
     create: async () => 'created-session',
-    select: async () => {},
     open: async (sessionId, _skill, _signal, beforeOpen) => {
       await beforeOpen({ sessionId, preset: 'gea-readonly', cwd: '/different/project' });
       calls.push('navigate');
