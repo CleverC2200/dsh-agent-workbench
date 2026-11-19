@@ -21,10 +21,10 @@ const spreadsheetNumber = (value: string | number): string | number => {
 
 export async function downloadSalesPlanMonthlyReport(
   rows: readonly SalesPlanMonthlyReportRow[],
-  { month, signal }: { month: string; signal: AbortSignal },
+  { month, signal }: { month?: string; signal: AbortSignal },
 ): Promise<void> {
   signal.throwIfAborted();
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !rows.length)
+  if ((month !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) || !rows.length)
     throw new SalesPlanMonthlyReportError('EMPTY_OR_INVALID_REPORT');
   const keys = new Set<string>();
   const cells = rows.map((row) => {
@@ -34,7 +34,9 @@ export async function downloadSalesPlanMonthlyReport(
         (value) =>
           typeof value !== 'string' && (typeof value !== 'number' || !Number.isFinite(value)),
       ) ||
-      row[18] !== month
+      typeof row[18] !== 'string' ||
+      !/^\d{4}-(0[1-9]|1[0-2])$/.test(row[18]) ||
+      (month !== undefined && row[18] !== month)
     )
       throw new SalesPlanMonthlyReportError('INCOMPLETE_REPORT_ROW');
     const key = JSON.stringify([row[8], row[14], row[18]]);
@@ -66,7 +68,7 @@ export async function downloadSalesPlanMonthlyReport(
   try {
     const link = document.createElement('a');
     link.href = url;
-    link.download = `月度计划报表${month}.xlsx`;
+    link.download = `月度计划报表${month ?? ''}.xlsx`;
     link.click();
   } finally {
     window.setTimeout(() => URL.revokeObjectURL(url), 0);

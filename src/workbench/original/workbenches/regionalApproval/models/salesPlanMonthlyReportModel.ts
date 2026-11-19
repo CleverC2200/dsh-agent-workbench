@@ -40,6 +40,8 @@ export type SalesPlanMonthlyReportSource = {
   skus: readonly GeaSalesPlanSku[];
 };
 
+export type SalesPlanReportMonthSource = SalesPlanMonthlyReportSource & { month: string };
+
 export type SalesPlanMonthlyReportFacts = {
   grading: string | null;
   inventoryOrganization: string | null;
@@ -126,29 +128,55 @@ const planSnapshot = (plan: GeaSalesPlanListItem | undefined) =>
     plan.orgName,
   ]);
 
+type ReportClient = Pick<WorkbenchHost['salesPlan'], 'periods' | 'list' | 'versionSkus'>;
+
 export async function readSalesPlanMonthlyReportSources(
-  client: Pick<WorkbenchHost['salesPlan'], 'periods' | 'list' | 'versionSkus'>,
+  client: ReportClient,
   { month, signal }: { month: string; signal: AbortSignal },
-): Promise<SalesPlanMonthlyReportSource[]> {
+): Promise<SalesPlanReportMonthSource[]> {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
     throw new SalesPlanMonthlyReportError('INVALID_REPORT_MONTH');
+  return readSalesPlanReportSources(client, { month, signal });
+}
+
+export function readAllSalesPlanMonthlyReportSources(
+  client: ReportClient,
+  { signal }: { signal: AbortSignal },
+): Promise<SalesPlanReportMonthSource[]> {
+  return readSalesPlanReportSources(client, { signal });
+}
+
+async function readSalesPlanReportSources(
+  client: ReportClient,
+  { month, signal }: { month?: string; signal: AbortSignal },
+): Promise<SalesPlanReportMonthSource[]> {
   const cancellation = new AbortController();
   const active = AbortSignal.any([signal, cancellation.signal]);
   const scan = async () => {
     const periods = await readPages(
       (pageNo) =>
-        client.periods.invoke({ periodMonth: month, pageNo, pageSize: 200, signal: active }),
+        client.periods.invoke({
+          ...(month ? { periodMonth: month } : {}),
+          pageNo,
+          pageSize: 200,
+          signal: active,
+        }),
       active,
     );
-    const periodIds = new Set<string>();
+    const periodMonths = new Map<string, string>();
     for (const period of periods) {
-      if (period.periodMonth !== month || !period.periodId || periodIds.has(period.periodId))
+      if (
+        !/^\d{4}-(0[1-9]|1[0-2])$/.test(period.periodMonth) ||
+        (month !== undefined && period.periodMonth !== month) ||
+        !period.periodId ||
+        periodMonths.has(period.periodId)
+      )
         throw new SalesPlanMonthlyReportError('INVALID_REPORT_PERIOD');
-      periodIds.add(period.periodId);
+      periodMonths.set(period.periodId, period.periodMonth);
     }
     const plans = new Map<string, GeaSalesPlanListItem>();
     const versions = new Set<string>();
-    for (const periodId of periodIds) {
+    for (const periodId of periodMonths.keys()) {
       for (const orderType of ['M', 'Z'] as const) {
         const page = await readPages(
           (pageNo) =>
@@ -171,11 +199,11 @@ export async function readSalesPlanMonthlyReportSources(
         }
       }
     }
-    return { periodIds, plans };
+    return { periodMonths, plans };
   };
   const before = await scan();
   const plans = [...before.plans.values()];
-  const sources: SalesPlanMonthlyReportSource[] = [];
+  const sources: SalesPlanReportMonthSource[] = [];
   let next = 0;
   const workers = Array.from({ length: Math.min(4, plans.length) }, async () => {
     while (next < plans.length) {
@@ -194,7 +222,9 @@ export async function readSalesPlanMonthlyReportSources(
         skus.some((sku) => !sku.id || !sku.skuCode || sku.versionId !== plan.versionId)
       )
         throw new SalesPlanMonthlyReportError('INCOMPLETE_REPORT_SKUS');
-      sources[index] = { plan, skus: skus.map((sku) => ({ ...sku })) };
+      const sourceMonth = before.periodMonths.get(plan.periodId);
+      if (!sourceMonth) throw new SalesPlanMonthlyReportError('INVALID_REPORT_PERIOD');
+      sources[index] = { month: sourceMonth, plan, skus: skus.map((sku) => ({ ...sku })) };
     }
   });
   try {
@@ -206,12 +236,40 @@ export async function readSalesPlanMonthlyReportSources(
   }
   const after = await scan();
   if (
-    JSON.stringify([...before.periodIds].sort()) !== JSON.stringify([...after.periodIds].sort()) ||
+    JSON.stringify([...before.periodMonths].sort()) !==
+      JSON.stringify([...after.periodMonths].sort()) ||
     before.plans.size !== after.plans.size ||
     [...before.plans].some(([id, plan]) => planSnapshot(plan) !== planSnapshot(after.plans.get(id)))
   )
     throw new SalesPlanMonthlyReportError('REPORT_VERSION_CHANGED');
   return sources;
+}
+
+export function salesPlanAllMonthlyReportRows(
+  sources: readonly SalesPlanReportMonthSource[],
+  readFacts: (
+    month: string,
+    dealerCode: string,
+    skuCode: string,
+  ) => SalesPlanMonthlyReportFacts | undefined,
+  statusText: (plan: GeaSalesPlanListItem) => string,
+): SalesPlanMonthlyReportRow[] {
+  const byMonth = new Map<string, SalesPlanMonthlyReportSource[]>();
+  for (const source of sources) {
+    const group = byMonth.get(source.month) ?? [];
+    group.push(source);
+    byMonth.set(source.month, group);
+  }
+  return [...byMonth]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([month, items]) =>
+      salesPlanMonthlyReportRows(
+        month,
+        items,
+        (dealerCode, skuCode) => readFacts(month, dealerCode, skuCode),
+        statusText,
+      ),
+    );
 }
 
 const numeric = (value: unknown, column: string, nonnegative = true): string => {
