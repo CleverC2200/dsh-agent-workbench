@@ -104,6 +104,7 @@ test('narrow source table keeps columns, paging and display choices accessible',
   await page.locator('iframe').evaluate((el) => {
     el.style.width = '320px';
   });
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   await expect(frame.locator('table').first()).toBeVisible();
   await expect(frame.getByRole('status', { name: '补货确认加载中' })).toHaveCount(0);
   const tableReads = () =>

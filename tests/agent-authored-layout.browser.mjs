@@ -498,6 +498,7 @@ for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
     const { page, frame, errors } = await mount(t, id, 1280);
     const root = frame.locator(id === 'apsplan' ? '#root' : '#app');
     await expect(root).not.toBeEmpty();
+    if (id === 'fc') await frame.getByRole('button', { name: '操作管理', exact: true }).click();
     const marker = {
       fc: '补货确认',
       qll: '品类结构',
@@ -1328,6 +1329,7 @@ test('FC cycle dialog applies one setting to its card and fresh ten-row pages', 
   await expect(modal).toHaveCount(0);
   await expect(trigger).toContainText('14天');
   await expect(card.locator('.kpi-value')).toHaveText('150件');
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   await expect
     .poll(() =>
       calls
@@ -1341,6 +1343,7 @@ test('FC cycle dialog applies one setting to its card and fresh ten-row pages', 
         ),
     )
     .toBe(true);
+  await frame.getByRole('button', { name: '运营管理', exact: true }).click();
   await trigger.click();
   await modal.getByRole('button', { name: '恢复默认', exact: true }).click();
   await expect(input).toHaveValue('7');
@@ -1638,6 +1641,7 @@ test('FC embedded loading replaces the table without a second rounded border', a
     if (query.queryId === 'replenishment.detail.atomic') return new Promise(() => {});
     return fcWorkflowRows(query, result);
   });
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   const loading = frame.getByRole('status', { name: '补货确认加载中' });
   await expect(loading).toBeVisible();
   await expect(loading).toHaveCSS('border-top-width', '0px');
@@ -1647,6 +1651,7 @@ test('FC embedded loading replaces the table without a second rounded border', a
 
 test('FC restored quantity draft survives server paging and submits a real workbook', async (t) => {
   const { frame, page, calls, errors } = await mount(t, 'fc', 1280, fcWorkflowRows);
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   const list = frame.getByRole('region', { name: '补货确认', exact: true });
   await expect(list.locator('tbody tr')).toHaveCount(10);
   assert.equal(
@@ -1677,8 +1682,7 @@ test('FC restored quantity draft survives server paging and submits a real workb
   await draft.getByRole('button', { name: '取消', exact: true }).click();
   await list.getByRole('button', { name: '提交', exact: true }).click();
   const confirmation = frame.getByRole('dialog', { name: '确认补货订单', exact: true });
-  await expect(confirmation).toContainText('请先选择本次补货的分仓');
-  await confirmation.getByLabel('导出补货分仓').selectOption('001');
+  await expect(confirmation.getByLabel('导出补货分仓')).toHaveValue('001');
   await expect(confirmation).toContainText('21个SKU');
   const fields = confirmation.locator('.fc-dms-fields');
   await expect(fields).toHaveCSS('display', 'grid');
@@ -1703,6 +1707,7 @@ test('FC restored quantity draft survives server paging and submits a real workb
 
 test('FC restores real plan template, validates warehouse scope and applies an import trial', async (t) => {
   const { frame, page, errors, calls } = await mount(t, 'fc', 1280, fcWorkflowRows);
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   await frame.getByRole('button', { name: '分仓计划', exact: true }).click();
   const list = frame.getByRole('region', { name: '分仓计划', exact: true });
   await expect(list.locator('tbody tr')).toHaveCount(10);
@@ -1763,10 +1768,16 @@ test('FC restores real plan template, validates warehouse scope and applies an i
   await expect(preview).toHaveCount(0);
   await expect(list.locator('tbody tr').first()).toContainText('310');
   await expect(list.locator('tbody tr').first()).toContainText('620');
+  const picker = frame.getByRole('button', { name: '选择分仓' });
+  await picker.click();
+  await frame.getByRole('option', { name: /上海分仓/ }).click();
+  await page.keyboard.press('Escape');
+  await frame.getByRole('button', { name: '运营管理', exact: true }).click();
   const card = frame
     .locator('[data-overview-cards="fc"] article')
     .filter({ has: frame.getByText('待补货量', { exact: true }) });
   await expect(card.locator('.kpi-value')).toHaveText('80件');
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   await frame.getByRole('button', { name: '补货确认', exact: true }).click();
   await expect(
     frame.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }),
@@ -1844,6 +1855,7 @@ test('FC refused export reads never download a partial file or retry authorizati
     }
     return fcWorkflowRows(query, result);
   });
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   let downloads = 0;
   page.on('download', () => downloads++);
   const list = frame.getByRole('region', { name: '补货确认', exact: true });
@@ -1858,7 +1870,22 @@ test('FC refused export reads never download a partial file or retry authorizati
 
 test('FC DMS export keeps warehouses separate and preserves another warehouse draft', async (t) => {
   const { frame, page, errors } = await mount(t, 'fc', 1280, (query, result) => {
-    const value = fcWorkflowRows(query, result);
+    if (query.queryId === 'branch-warehouse.directory.count')
+      return { ...result, rows: [{ total: 2 }] };
+    if (query.queryId === 'branch-warehouse.directory')
+      return {
+        ...result,
+        rows: [
+          { warehouse_code: '001', warehouse_name: '上海分仓', base: '华东' },
+          { warehouse_code: '002', warehouse_name: '北京分仓', base: '华东' },
+        ],
+      };
+    const secondWarehouse = query.parameters.warehouse_code === '002';
+    const scopedQuery =
+      secondWarehouse && /^replenishment(?:-confirmation)?\.detail/.test(query.queryId)
+        ? { ...query, parameters: { ...query.parameters, offset: query.parameters.offset + 10 } }
+        : query;
+    const value = fcWorkflowRows(scopedQuery, result);
     if (/^replenishment(?:-confirmation)?\.detail/.test(query.queryId))
       value.rows = value.rows.map((row) => {
         const second = Number(String(row.sku).slice(-3)) >= 10;
@@ -1879,20 +1906,24 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
     }
     return value;
   });
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   const list = frame.getByRole('region', { name: '补货确认', exact: true });
   await expect(list.locator('tbody tr')).toHaveCount(10);
   await list.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }).fill('13');
-  await list.getByRole('button', { name: '下一页', exact: true }).click();
+  const warehouses = frame.getByRole('navigation', { name: '操作分仓' });
+  await warehouses.getByRole('button', { name: /北京分仓/ }).click();
   await list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }).fill('17');
+  await warehouses.getByRole('button', { name: /上海分仓/ }).click();
+  await expect(
+    list.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }),
+  ).toHaveValue('13');
   await list.getByRole('button', { name: '提交', exact: true }).click();
   const confirmation = frame.getByRole('dialog', { name: '确认补货订单', exact: true });
-  await expect(confirmation).toContainText('请先选择本次补货的分仓');
-  await expect(confirmation.getByRole('button', { name: '仅导出Excel', exact: true })).toHaveCount(
-    0,
-  );
-  await confirmation
-    .getByRole('combobox', { name: '导出补货分仓', exact: true })
-    .selectOption('001');
+  await expect(confirmation.getByLabel('导出补货分仓')).toHaveValue('001');
+  await expect(confirmation.getByLabel('导出补货分仓').locator('option')).toHaveText([
+    '请选择分仓',
+    '上海分仓（001）',
+  ]);
   await expect(confirmation).toContainText('10个SKU');
   const downloaded = page.waitForEvent('download');
   await confirmation.getByRole('button', { name: '仅导出Excel', exact: true }).click();
@@ -1904,6 +1935,7 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
   const sheet = new TextDecoder().decode(content.get('xl/worksheets/sheet1.xml'));
   assert.equal((sheet.match(/<row /g) ?? []).length, 11);
   assert.doesNotMatch(sheet, /sku-A-010/);
+  await warehouses.getByRole('button', { name: /北京分仓/ }).click();
   await expect(list.getByRole('button', { name: '草稿（1）', exact: true })).toBeVisible();
   await list.getByRole('button', { name: '草稿（1）', exact: true }).click();
   await expect(
@@ -1914,6 +1946,7 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
 
 test('FC list filters align compact white controls, retain actions and adapt to narrow panes', async (t) => {
   const { page, frame, calls, errors } = await mount(t, 'fc', 1280, fcWorkflowRows);
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   const toolbar = frame.locator('[data-business-filters="fc"]');
   await expect(toolbar).toBeVisible();
   for (const tab of ['补货确认', '分仓计划']) {
@@ -1994,7 +2027,7 @@ test('FC list filters align compact white controls, retain actions and adapt to 
     frame.getByRole('region', { name: '补货确认', exact: true }).locator('tbody tr'),
   ).toHaveCount(10);
   const before = calls.length;
-  await toolbar.getByRole('textbox', { name: '分仓', exact: true }).fill('001');
+  await toolbar.getByRole('searchbox', { name: 'SKU／产品名称', exact: true }).fill('sku-A-000');
   assert.equal(calls.length, before, 'typing does not query');
   await toolbar.getByRole('button', { name: '查询', exact: true }).click();
   await expect
@@ -2002,7 +2035,8 @@ test('FC list filters align compact white controls, retain actions and adapt to 
       calls.some(
         (query) =>
           query.queryId === 'replenishment.detail.atomic' &&
-          query.parameters.warehouse_search_pattern === '%001%',
+          query.parameters.warehouse_code === '001' &&
+          query.parameters.search_pattern === '%sku-A-000%',
       ),
     )
     .toBe(true);
@@ -2129,11 +2163,10 @@ test('FC actual quantity can clear zero, type a replacement and retain decimal d
     if (query.queryId.startsWith('replenishment.'))
       for (const row of result.rows) {
         row.recommended_qty = 0;
-        row.warehouse_code = 'W01';
-        row.warehouse_name = '分仓1';
       }
     return result;
   });
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   const input = frame.getByRole('spinbutton', { name: /实际补货量/ }).first();
   await expect(input).toHaveValue('0');
   await input.focus();
@@ -2183,6 +2216,7 @@ test('FC weighted age stays compact and maximum age is available in details', as
     });
   await expect(card).toContainText('11.02');
   await expect(card).not.toContainText('1,033');
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   await frame.getByRole('button', { name: '货龄结构', exact: true }).click();
   await expect(
     frame.getByRole('columnheader', { name: '最大货龄（天）', exact: true }),
@@ -2603,8 +2637,6 @@ test('FC model insight stays independent of cards, tabs and list paging', async 
         finish = resolve;
       }),
   );
-  const list = frame.getByRole('region', { name: '补货确认', exact: true });
-  await expect(list.locator('tbody tr')).toHaveCount(10);
   const insight = frame.getByRole('region', { name: 'AI 洞察', exact: true });
   await expect(insight).toContainText('AI 洞察生成中');
   await expect.poll(() => typeof finish).toBe('function');
@@ -2613,6 +2645,9 @@ test('FC model insight stays independent of cards, tabs and list paging', async 
   assert.equal(evidence.rankings.complete, false);
   assert.equal(evidence.aging.days91PlusQty, null);
   const before = insightCalls.length;
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
+  const list = frame.getByRole('region', { name: '补货确认', exact: true });
+  await expect(list.locator('tbody tr')).toHaveCount(10);
   await list.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(
     list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }),
@@ -2622,6 +2657,7 @@ test('FC model insight stays independent of cards, tabs and list paging', async 
     frame.getByRole('region', { name: '分仓计划', exact: true }).locator('tbody tr'),
   ).toHaveCount(10);
   assert.equal(insightCalls.length, before);
+  await frame.getByRole('button', { name: '运营管理', exact: true }).click();
   finish({
     answer: '整体库存处于已核实范围。\n当前只确认分仓结构。建议今日复核缺口【待人工确认】。',
   });
@@ -2641,6 +2677,7 @@ test('FC model failure leaves stock cards and ten-row list available', async (t)
     '-',
   );
   await expect(frame.locator('[data-overview-cards="fc"] article')).toHaveCount(5);
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   await expect(
     frame.getByRole('region', { name: '补货确认', exact: true }).locator('tbody tr'),
   ).toHaveCount(10);
@@ -2651,6 +2688,7 @@ test('FC current orders loading stays square within its panel', async (t) => {
   const { frame } = await mount(t, 'fc', 1280, (query, result) =>
     query.queryId === 'branch-current-orders.page' ? new Promise(() => {}) : result,
   );
+  await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   await frame
     .getByRole('navigation', { name: '库存业务页签' })
     .getByRole('button', { name: '当前订单', exact: true })

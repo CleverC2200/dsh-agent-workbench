@@ -245,12 +245,10 @@ test('aging filters apply inside the client restricted frame and keep all-scope 
   await page.getByRole('combobox', { name: '筛选值', exact: true }).selectOption('');
   await page.getByRole('button', { name: '应用', exact: true }).click();
   await expect(footer.locator('[data-column="total_qty"]')).toHaveText('91');
-  const categorySelect = page.getByRole('combobox', {
-    name: '产品大类',
-    exact: true,
-  });
-  await expect(categorySelect.locator('option')).toHaveCount(10);
-  await categorySelect.selectOption('面点');
+  await page.getByRole('button', { name: '产品大类', exact: true }).click();
+  const categoryOptions = page.getByRole('listbox', { name: '产品大类', exact: true });
+  await expect(categoryOptions.getByRole('option')).toHaveCount(10);
+  await categoryOptions.getByRole('option', { name: '面点', exact: true }).click();
   await page.getByRole('button', { name: '查询', exact: true }).click();
   await expect(table.locator('tbody tr')).toHaveCount(1);
   await expect(table.locator('tbody [data-column="material_code"]')).toHaveText('S14');

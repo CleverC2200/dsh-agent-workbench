@@ -473,7 +473,6 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
                 onValuesChange={(values) => {
                   setSelectedWarehouses(values);
                   if (values.length === 1) changeWarehouse(values[0]);
-                  setTrial(null);
                 }}
                 disabled={warehouseLoading}
                 options={[
