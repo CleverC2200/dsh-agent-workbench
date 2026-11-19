@@ -15,6 +15,7 @@ export function branchDashboardEvidence(input: {
   cycleDays: number;
   parts: unknown;
   localPlanTrial: boolean;
+  forecastDays: number | null;
   recommendedQty: number | null;
   missingCalculationCount: number;
   currentOrderShortageQty: number | null;
@@ -53,7 +54,7 @@ export function branchDashboardEvidence(input: {
     '未来7/14日预计新增超龄',
     ...(available === null ? ['当前可用库存'] : []),
     ...(target === null ? ['目标库存'] : []),
-    ...(deviation === null ? ['订单扣减后库存差额'] : []),
+    ...(deviation === null ? ['现存量减目标量的库存差额'] : []),
   ];
   return {
     scope: {
@@ -136,16 +137,16 @@ export function branchDashboardEvidence(input: {
       pendingQty: currentSum('remaining'),
       currentBranchAllocatedQty: currentSum('allocated'),
       coverage:
-        '月度履约取分仓向下游客户供货的已发货订单池；当前订单与缺货取分仓有效未完成客户订单。ASN仅用于上游补货备单与在途，不能替代客户订单。',
+        '月度满足率取考核订单的最终需求和缺货量，包含未发出货的有效考核行。当前订单取分仓有效未完成客户订单。',
     },
     sales: {
       last30DaysQty: number(plan.rolling_ship_positive),
       last30DaysDailyQty: number(plan.rolling_ship_daily),
     },
     turnover: {
-      forecastDays: number(plan.forecast_turnover_days),
+      forecastDays: input.forecastDays,
       basis:
-        '仅库存与展望日均均有效的同一分仓/SKU记录；缺失或异常记录同时排除出分子和分母，不代表全部库存的展望周转。零计划有效，合计日均为零时周转未知。',
+        '可用库存加有效调拨在途量，除以未来30日计划日均出货量。仅纳入三个要素都有效的同一分仓/SKU记录；合计日均为零时周转未知。',
     },
     coverage: {
       kind: complete ? '全范围可比' : '仅已核实可比子集，不能判断整体高低库存',
@@ -171,7 +172,7 @@ export function branchDashboardEvidence(input: {
     },
     definitions: {
       inventoryDeviation:
-        '高低库存判断只比较comparison中的同一SKU交集：订单扣减后可供库存=该交集目标+差额。totals.currentAvailableQty是全仓可用库存，不能与子集目标、差额或偏差率配对比较。可用库存不含在途。',
+        '高低库存判断只比较comparison中的同一SKU交集：现存量=该交集目标+差额。totals.currentAvailableQty是全仓可用库存，不能与子集目标、差额或偏差率配对比较。可用库存不含在途。',
       unknown:
         'null为缺失。异常或缺失记录不参与其指标汇总，其余有效记录继续计算，保留忽略数量；零值有效，不把未知事实当0。',
       ranking: '当前没有全量分仓×品类排名或SKU交集证据，不使用列表当前页排名或解释错配原因。',

@@ -21,6 +21,10 @@ test('weighted metrics use quantities rather than warehouse averages', () => {
       fulfillment_shipped_quantity: 100,
       fulfillment_rate: 1,
       historical_turnover_days: 5,
+      review_turn_inventory: 50,
+      review_turn_daily: 10,
+      forecast_supply_qty: 150,
+      forecast_outbound_daily: 30,
     },
     {
       total_qty: 300,
@@ -30,12 +34,17 @@ test('weighted metrics use quantities rather than warehouse averages', () => {
       fulfillment_shipped_quantity: 150,
       fulfillment_rate: 0.5,
       historical_turnover_days: 20,
+      review_turn_inventory: 60,
+      review_turn_daily: 3,
+      forecast_supply_qty: 400,
+      forecast_outbound_daily: 20,
     },
   ]);
   assert.equal(value.total_qty, 400);
   assert.equal(value.weighted_age, 25);
   assert.equal(value.fulfillment_rate, 0.625);
-  assert.equal(value.historical_turnover_days, null);
+  assert.equal(value.historical_turnover_days, (50 + 60) / (10 + 3));
+  assert.equal(value.forecast_turnover_days, 11);
 });
 test('missing measures and failed or mixed snapshot branches cannot become complete totals', () => {
   assert.equal(mergeFcSummaries([{ total_qty: 100 }, { total_qty: null }]).total_qty, null);

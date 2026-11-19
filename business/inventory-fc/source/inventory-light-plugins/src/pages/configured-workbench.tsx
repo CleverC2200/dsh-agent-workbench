@@ -367,6 +367,19 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
   const missingRecommendations = trialActive
     ? trial.missingCount
     : (knownNumber(plan?.missing_calculation_count) ?? 0);
+  const forecastDays = trialActive
+    ? trial.forwardTurnover
+    : knownNumber(plan?.forecast_turnover_days);
+  const targetTurnQty = knownNumber(plan?.target_turn_qty);
+  const targetTurnDaily = knownNumber(plan?.target_turn_daily);
+  const targetTurnover = trialActive
+    ? trial.targetTurnover
+    : targetTurnQty !== null && targetTurnDaily !== null && targetTurnDaily > 0
+      ? targetTurnQty / targetTurnDaily
+      : null;
+  const reviewTurnover = knownNumber(plan?.historical_turnover_days);
+  const turnoverGap =
+    reviewTurnover !== null && targetTurnover !== null ? reviewTurnover - targetTurnover : null;
   const branchStock = parts['branch-stock']?.summary;
   const insightEvidence = branchDashboardEvidence({
     warehouseCode: overviewScope,
@@ -375,6 +388,7 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
     cycleDays,
     parts,
     localPlanTrial: !!trialActive,
+    forecastDays,
     recommendedQty: recommended,
     missingCalculationCount: missingRecommendations,
     currentOrderShortageQty: currentShortageSum(parts['current-shortage']?.rows, 'shortage'),
@@ -395,19 +409,16 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
   const cards = [
     {
       title: '当前库存',
-      description: multiWarehouseCodes
-        ? '多仓周转缺少同口径分子与分母，暂不展示；选择单仓可查看原指标。'
-        : '周转按同一批有效库存与动销或计划计算。',
+      description:
+        '回顾周转用当前库存除以近30日日均发货量。展望周转用可用库存加调拨在途量，除以未来30日日均计划出货量。按同范围合计后计算。',
       value: knownNumber(branchStock?.total_qty),
       unit: '件',
       color: 'blue',
       details: [
-        ['回顾周转', knownNumber(plan?.historical_turnover_days), '天'],
-        [
-          '展望周转',
-          trialActive ? trial.forwardTurnover : knownNumber(plan?.forecast_turnover_days),
-          '天',
-        ],
+        ['回顾周转', reviewTurnover, '天'],
+        ['展望周转（含在途）', forecastDays, '天'],
+        ['目标周转', targetTurnover, '天'],
+        ['天数差额', turnoverGap, '天'],
       ],
     },
     {
@@ -422,13 +433,13 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
     },
     {
       title: '订单满足率',
-      description: '当月已发货客户订单。',
+      description: '当月考核订单，按同范围最终需求与缺货量统计。',
       value: fulfillmentPercent(order),
       unit: '%',
       color: 'green',
       details: [
-        ['已发订单量', knownNumber(order?.fulfillment_order_quantity), '件'],
-        ['限额发货量', knownNumber(order?.fulfillment_shipped_quantity), '件'],
+        ['考核需求量', knownNumber(order?.fulfillment_order_quantity), '件'],
+        ['满足量', knownNumber(order?.fulfillment_shipped_quantity), '件'],
       ],
     },
     {
@@ -1100,6 +1111,7 @@ function OriginalOperations({
           </article>
         ))}
       </div>
+      {!warehouse && <p>运营考核合计需按同范围分子、分母汇总。当前来源仅有单仓比例。</p>}
       <div className="resource-grid" aria-label="分仓运营考核">
         {(
           [

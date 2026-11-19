@@ -147,10 +147,13 @@ export function categorySummary(category: string, layers: Partial<Record<ChainLa
   const row = (layer: ChainLayer) => layers[layer]?.find((r) => r.node_key === category);
   const value = (layer: ChainLayer, field: string) =>
     layers[layer] === undefined ? null : row(layer) ? treeNumber(row(layer)![field]) : 0;
+  const baseDate = row('base')?.source_date;
+  const branchDate = row('branch')?.source_date;
+  const sameDay = !baseDate || !branchDate || baseDate === branchDate;
   const sum = (field: string) => {
     const base = value('base', field),
       branch = value('branch', field);
-    return base === null || branch === null ? null : base + branch;
+    return !sameDay || base === null || branch === null ? null : base + branch;
   };
   const base = row('base');
   const ranks = Object.values(layers)
@@ -168,7 +171,9 @@ export function categorySummary(category: string, layers: Partial<Record<ChainLa
     customer_inventory: value('customer', 'inventory'),
     age_qty: sum('age_qty'),
     age_sum: sum('age_sum'),
-    overaged: sum('overaged'),
+    base_overaged: value('base', 'overaged'),
+    branch_overaged: value('branch', 'overaged'),
+    structure_fit: base?.structure_fit ?? null,
     gap: base?.gap ?? null,
     turnover_qty: sum('turnover_qty'),
     daily: sum('daily'),

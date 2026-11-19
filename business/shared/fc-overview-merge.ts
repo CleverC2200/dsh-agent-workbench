@@ -31,6 +31,7 @@ export function mergeFcSummaries(rows: Part[]) {
         'month_ship_positive',
         'rolling_ship_daily',
         'calculation_daily',
+        'target_turn_daily',
         'weighted_age_sum',
         'ccfje',
         'ysfje',
@@ -54,6 +55,21 @@ export function mergeFcSummaries(rows: Part[]) {
   result.weighted_age =
     result.age_weight_qty > 0 && result.weighted_age_sum !== null
       ? result.weighted_age_sum / result.age_weight_qty
+      : null;
+  const reviewInventory = sum('review_turn_inventory');
+  const reviewDaily = sum('review_turn_daily');
+  result.review_turn_inventory = reviewInventory;
+  result.review_turn_daily = reviewDaily;
+  result.historical_turnover_days =
+    reviewInventory !== null && reviewDaily !== null && reviewDaily > 0
+      ? reviewInventory / reviewDaily
+      : null;
+  const forecastSupply = number(result.forecast_supply_qty);
+  const forecastDaily = sum('forecast_outbound_daily');
+  result.forecast_outbound_daily = forecastDaily;
+  result.forecast_turnover_days =
+    forecastSupply !== null && forecastDaily !== null && forecastDaily > 0
+      ? forecastSupply / forecastDaily
       : null;
   const ordered = number(result.fulfillment_order_quantity);
   const shipped = number(result.fulfillment_shipped_quantity);

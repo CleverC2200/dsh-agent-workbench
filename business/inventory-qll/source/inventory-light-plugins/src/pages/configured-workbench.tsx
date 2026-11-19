@@ -70,7 +70,7 @@ export default function ConfiguredWorkbench() {
   const customer = parts['channel-overview']?.summary;
   const baseQty = knownNumber(parts.health?.summary?.total_qty),
     branchAvailable = knownNumber(branch?.available_qty);
-  const stockMetrics = chainStockMetrics(parts, channel);
+  const stockMetrics = chainStockMetrics(parts);
   const { company: companyQty, baseTurnover, branchTurnover } = stockMetrics;
   const workspace: any = {
     scope: channel ? 'all-channel' : 'company',
@@ -136,7 +136,7 @@ export default function ConfiguredWorkbench() {
         current: stockMetrics.turnover,
         unit: '天',
         explanation:
-          '按基地计划周转、分仓回顾周转的同范围库存和日均量合并计算；含渠道时纳入匹配的客户在仓和动销。',
+          '按基地计划周转、分仓回顾周转的同范围库存和日均量合并计算。客户库存支撑天数分列。',
       },
       aging: {
         current: companyAverageAge(parts.health, parts['branch-stock']),

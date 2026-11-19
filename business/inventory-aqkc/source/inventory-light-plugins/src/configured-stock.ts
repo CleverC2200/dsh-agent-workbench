@@ -564,6 +564,27 @@ export async function readConfiguredStockSummary(
       fullReady = true;
       return result;
     });
+  const over60Skus = (async () => {
+    if (options.structure || !config.dailySummary) return null;
+    const snapshot = await client.snapshot({ signal: options.signal });
+    if (snapshot.kind !== 'ready' || snapshot.stockDate !== day) return null;
+    const count = await client.read(
+      'snapshot.base-over60-sku-count',
+      {
+        month: scope.targetMonth,
+        inventory_version: scope.versions[0],
+        stock_date: day,
+        bases_enabled: true,
+        bases: selectedBases?.length
+          ? selectedBases
+          : ['华东', '华南', '西南', '遂平', '郑州', '濮阳'],
+        summary_batch_id: snapshot.batchId,
+      },
+      { signal: options.signal, requiredColumns: ['over60_sku_count'] },
+    );
+    if (count.configVersion !== context.configVersion) return null;
+    return knownNumber(count.rows[0]?.over60_sku_count);
+  })().catch(() => null);
   const result = await complete.catch(async (error) => {
     options.signal?.throwIfAborted();
     await inventorySettled;
@@ -582,5 +603,6 @@ export async function readConfiguredStockSummary(
     ),
     scope,
     day,
+    over60Skus: await over60Skus,
   };
 }

@@ -75,7 +75,14 @@ test('confirmation order respects explicit header sorting after an urgent quick 
   assert.equal(rows[0].sku, 'B', 'sorting a preview must not mutate the read cohort');
 });
 test('forecast and month plans retain original calendar rules while incoming orders remain supply', () => {
-  for (const date of ['2026-10-01', '2026-10-26', '2026-10-31', '2024-02-28', '2026-12-31']) {
+  for (const date of [
+    '2026-10-01',
+    '2026-10-20',
+    '2026-10-21',
+    '2026-10-31',
+    '2024-02-28',
+    '2026-12-31',
+  ]) {
     const month = date.slice(0, 7);
     const next = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 1))
       .toISOString()
@@ -129,18 +136,31 @@ test('forecast and month plans retain original calendar rules while incoming ord
       ).replenishments[0];
       const actual = applyFcPlan({ ...source, transferred_qty: 5 }, imports, date, 7);
       assert.equal(actual.current_order_shortage, 40);
+      const asOf = new Date(date + 'T00:00:00Z');
+      const monthDays = new Date(
+        Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth() + 1, 0),
+      ).getUTCDate();
+      const nextMonthDays = new Date(
+        Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth() + 2, 0),
+      ).getUTCDate();
+      const target = 10 * (asOf.getUTCDate() <= 20 ? qty / monthDays : 300 / nextMonthDays);
+      assert.equal(actual.period_current_daily, qty / monthDays);
+      assert.equal(actual.period_next_daily, 300 / nextMonthDays);
+      assert.equal(actual.target_inventory_qty, target);
+      assert.equal(actual.target_gap_qty, target > 0 ? 50 - target : null);
+      assert.equal(actual.recommended_qty, Math.ceil(Math.max(0, Math.max(40, target - 50) - 40)));
+      assert.equal(actual.expected_month_end_qty, 25 + 15 - Math.max(0, qty - 30));
+      const remainingDays = monthDays - asOf.getUTCDate();
+      const expectedDaily =
+        ((remainingDays ? Math.max(0, qty - 30) : 0) +
+          (300 * Math.min(30 - remainingDays, nextMonthDays)) / nextMonthDays) /
+        30;
+      assert.equal(actual.daily_plan, expectedDaily);
+
       for (const [field, old] of [
-        ['period_current_daily', 'plannedDailyShipment'],
-        ['period_next_daily', 'nextDailyOutboundQty'],
-        ['daily_plan', 'forecastDailyShipment'],
-        ['target_inventory_qty', 'targetInventoryQty'],
-        ['recommended_qty', 'recommendedQty'],
         ['order_adjusted_available_qty', 'orderAdjustedAvailableQty'],
-        ['expected_month_end_qty', 'expectedMonthEndInventoryQty'],
         ['period_remaining_out', 'currentRemainingOutboundQty'],
         ['current_remaining_transfer_qty', 'currentRemainingTransferQty'],
-        ['forecast_turnover_days', 'forecastTurnoverDays'],
-        ['target_gap_qty', 'safetyStockGapQty'],
       ])
         assert.equal(actual[field], original[old], `${date}/${qty}/${field}`);
     }
@@ -151,6 +171,7 @@ test('manual-plan quick filters and sorting run before slicing the requested ten
     ...source,
     sku: `S${String(i + 1).padStart(2, '0')}`,
     current_order_remaining: 0,
+    current_order_shortage: 0,
     open_transfer_reported_qty: 0,
     recommended_qty: 0,
   }));
@@ -159,10 +180,10 @@ test('manual-plan quick filters and sorting run before slicing the requested ten
   const filtered = projectFcPlannedRows(
     rows,
     plans,
-    { ...input, filters: { list_mode: 'recommended' } },
+    { ...input, asOf: '2026-10-20', filters: { list_mode: 'recommended' } },
     'replenishment',
   );
-  assert.equal(filtered.length, 23);
+  assert.equal(filtered.length, 20);
   assert.equal(filtered[0].sku, 'S25');
   assert.equal(filtered.slice(10, 20)[0].sku, 'S15');
   const sorted = projectFcPlannedRows(
@@ -170,6 +191,7 @@ test('manual-plan quick filters and sorting run before slicing the requested ten
     plans,
     {
       ...input,
+      asOf: '2026-10-20',
       filters: { list_mode: 'all', sort_field: 'target_inventory_qty', sort_direction: 'asc' },
     },
     'replenishment',
@@ -185,7 +207,7 @@ test('whole-month omission never leaks old source values; another warehouse reta
       { ...source, warehouse_code: '002', recommended_qty: 23 },
     ],
     [plan],
-    input,
+    { ...input, asOf: '2026-10-20' },
     'replenishment',
   );
   assert.equal(rows.find((row) => row.warehouse_code === '001').period_current_out, null);

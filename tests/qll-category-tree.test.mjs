@@ -33,6 +33,16 @@ test('company categories combine quantities and weights without adding channel s
   });
   assert.equal(result.inventory, 1000);
   assert.equal(result.customer_inventory, 500);
+  assert.equal(result.base_overaged, 0);
+  assert.equal(result.branch_overaged, 0);
+  assert.equal(
+    categorySummary('汤圆', {
+      base: [{ ...row(100, 100, 1000), source_date: '2026-11-18' }],
+      branch: [{ ...row(900, 900, 27000), source_date: '2026-11-19' }],
+    }).inventory,
+    null,
+  );
+
   assert.equal(treeRatio(result.age_sum, result.age_qty), 28);
   assert.equal(categorySummary('汤圆', { base: [row(100, 100, 1000)] }).inventory, null);
   assert.equal(categorySummary('汤圆', { base: [row(100, 100, 1000)], branch: [] }).inventory, 100);
