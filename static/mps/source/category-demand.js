@@ -1,8 +1,6 @@
-import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { computeMpsCategoryDemand } from 'dsh-agent-manage/mps-compute/category-demand';
 import {
   createSourceProductMatcher,
-  createHistoryDependentLookup,
   sourceCheckRows,
   sourceDimensions,
   sourceProductMappings,
@@ -59,7 +57,6 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
     ['business', 'local-file'].includes(shipmentSnapshot.sourceKind) &&
     ['ok', 'partial', 'local-file'].includes(shipmentSnapshot.status);
   const productMappings = sourceProductMappings(draft.products, draft.productRaw);
-  const historyDependents = createHistoryDependentLookup(productMappings);
   const matchProduct = createSourceProductMatcher(productMappings);
   const sourceRows = shipmentReady ? (shipmentSnapshot.rows ?? []) : [];
   const excluded = sourceRows.flatMap((row) => {
@@ -84,7 +81,14 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
       : [];
   });
   const sourceChecks = ready(draft.sourceChecksRead, draft.month) ? draft.sourceChecks : null;
-  const fiscal = previousFiscalYear(draft.month);
+  const currentCodes = (matched, sourceCode) =>
+    matched.currentCode
+      ? [matched.currentCode]
+      : productMappings
+          .filter(
+            (product) => (product['老品编码'] || product.replacement_material_code) === sourceCode,
+          )
+          .map((product) => product['产品编码'] || product.material_code);
   const unassigned = [
     ...(sourceChecks?.periods ?? []).flatMap((period) => [
       ...period.history.rows.map((row) => ({
@@ -100,18 +104,6 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
         month: period.month,
       })),
     ]),
-    ...(draft.historyAnnualRead?.status === 'ready'
-      ? (draft.historyAnnual?.periods ?? [])
-          .filter((period) => period.start === fiscal.start && period.end === fiscal.end)
-          .flatMap((period) =>
-            period.rows.map((row) => ({
-              row,
-              field: '数量',
-              source: '上一财年发货',
-              month: period.start + '至' + period.end,
-            })),
-          )
-      : []),
     ...(ready(draft.planRatesRead, draft.month)
       ? (draft.planRates ?? [])
           .filter((row) => row['维度类型'] === '基地+产品' && row['月份'] === draft.month)
@@ -125,18 +117,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
   ].filter(({ row, field }) => !row['基地'] && number(row[field]) !== 0);
   for (const fact of unassigned) {
     const matched = matchProduct(fact.row['产品编码']);
-    const codes =
-      fact.source === '上一财年发货'
-        ? historyDependents(fact.row['产品编码'])
-        : matched.currentCode
-          ? [matched.currentCode]
-          : productMappings
-              .filter(
-                (product) =>
-                  (product['老品编码'] || product.replacement_material_code) ===
-                  fact.row['产品编码'],
-              )
-              .map((product) => product['产品编码'] || product.material_code);
+    const codes = currentCodes(matched, fact.row['产品编码']);
     if (
       ['BI实绩', '计划量'].includes(fact.source) &&
       !codes.some(
@@ -191,18 +172,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
       const code = matched.currentCode || row['产品编码'];
       if (row['基地']) return included(row['基地'], code) ? [row] : [];
       if (number(row[field]) === 0) return [row];
-      const products = productMappings;
-      const possible =
-        source === '上一财年发货'
-          ? historyDependents(row['产品编码'])
-          : matched.currentCode
-            ? [matched.currentCode]
-            : products
-                .filter(
-                  (product) =>
-                    (product['老品编码'] || product.replacement_material_code) === row['产品编码'],
-                )
-                .map((product) => product['产品编码'] || product.material_code);
+      const possible = currentCodes(matched, row['产品编码']);
       const codes = possible.length ? possible : [code];
       if (!codes.some((code) => excludedCodes.has(code))) return [row];
       if (!codes.some((code) => includedCodes.has(code))) return [];
@@ -213,7 +183,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
         ? [matched.category]
         : [
             ...new Set(
-              products
+              productMappings
                 .filter((product) => codes.includes(product['产品编码'] || product.material_code))
                 .map((product) => product['大类'] || product.sub_category)
                 .filter(Boolean),

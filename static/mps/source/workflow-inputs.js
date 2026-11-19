@@ -106,25 +106,21 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       .filter((row) => !excludedShipmentKeys.has(rowKey(row)))
       .map((row) => row.code),
   );
-  const includedSource = (row, history) => {
+  const includedShipment = (row) => {
     if (!excludedShipmentKeys.size) return true;
-    const currentCode = history ? null : sourceMatcher(row.code, row.base).currentCode;
-    const codes = history
-      ? historyDependents(row.code, row.base)
-      : currentCode
-        ? [currentCode]
-        : mappings
-            .filter(
-              (product) => (product['老品编码'] || product.replacement_material_code) === row.code,
-            )
-            .map((product) => product['产品编码'] || product.material_code);
+    const currentCode = sourceMatcher(row.code, row.base).currentCode;
+    const codes = currentCode
+      ? [currentCode]
+      : mappings
+          .filter(
+            (product) => (product['老品编码'] || product.replacement_material_code) === row.code,
+          )
+          .map((product) => product['产品编码'] || product.material_code);
     if (!codes.length) return !excludedShipmentKeys.has(rowKey(row));
     return row.base
       ? codes.some((code) => !excludedShipmentKeys.has(rowKey({ base: row.base, code })))
       : codes.some((code) => !excludedCodes.has(code) || participatingCodes.has(code));
   };
-  const includedShipment = (row) => includedSource(row, false);
-  const includedHistory = (row) => includedSource(row, true);
   const reportColumn = draft.pull === 'monthly' ? '月初数量' : '纠偏数量';
   const readQuantity = (rows, column) =>
     (rows ?? []).map((row) => ({
@@ -210,7 +206,14 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     quantity:
       annualSourceIssues.length || annualData.error || !annualReady ? null : number(row['数量']),
   }));
-  const includedAnnualHistory = annualHistory.filter(includedHistory);
+  const includedAnnualHistory = annualHistory.filter(
+    ({ base, code }) =>
+      base &&
+      code &&
+      historyDependents(code, base).some(
+        (currentCode) => !excludedShipmentKeys.has(rowKey({ base, code: currentCode })),
+      ),
+  );
   const history = months.flatMap((month) =>
     includedAnnualHistory.map((row) => ({ ...row, month })),
   );
