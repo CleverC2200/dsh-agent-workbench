@@ -14,8 +14,8 @@ import {salesPlanAllMonthlyReportRows} from './src/workbench/original/workbenche
 import {downloadSalesPlanMonthlyReport} from './src/workbench/original/workbenches/regionalApproval/models/salesPlanMonthlyReportDownload.ts';
 const p=(orderType,dealerCode,status=5)=>({planId:orderType+dealerCode,versionId:'v-'+orderType+dealerCode,periodId:'p',orderType,dealerCode,dealerName:'客户'+dealerCode,planTypeCode:'Y',baseName:'郑州',areaName:'大区',provinceName:'省区',orgName:'区域',status,skuCount:1});
 const s=(p,fields={})=>({id:'s-'+p.versionId,versionId:p.versionId,skuCode:'010006285',skuName:'汤圆',productCategName:'汤圆',qty:'300',baseQty:'300',price:'115.04',amt:'34512',amtBase:'34512',regionConfirmedQty:null,regionConfirmedAmount:null,provinceConfirmedQty:null,provinceConfirmedAmount:null,areaConfirmedQty:null,areaConfirmedAmount:null,categoryConfirmedQty:null,categoryConfirmedAmount:null,adjAddQty:null,adjCutQty:null,categoryAdjAddQty:null,categoryAdjCutQty:null,...fields});
-const a=p('M','001'),b=p('Z','001'),c=p('M','002',1),d=p('Z','003',7),e=p('Z','004'),f=p('M','005');
-const sources=[{plan:a,skus:[s(a)]},{plan:b,skus:[s(b,{corrBaseQty:'300',adjAddQty:'0',adjCutQty:'200',categoryConfirmedQty:'150',categoryAdjAddQty:'0',categoryAdjCutQty:'150',price:'120'})]},{plan:c,skus:[s(c,{qty:'0',baseQty:'0',price:'295.00',provinceConfirmedQty:'12'})]},{plan:d,skus:[s(d,{qty:'0',baseQty:'0',corrBaseQty:'0',price:'295.00',regionConfirmedQty:'12',adjAddQty:'12',adjCutQty:'0',categoryAdjAddQty:'12',categoryAdjCutQty:'0'})]},{plan:e,skus:[s(e,{qty:'0',baseQty:'0',corrBaseQty:'0',price:'295.00',adjAddQty:'12',adjCutQty:'0',categoryAdjAddQty:'12',categoryAdjCutQty:'0',categoryConfirmedQty:'12'})]},{plan:f,skus:[s(f,{qty:'9007199254740993',price:'0.01'})]}];
+const a=p('M','001'),b=p('Z','001'),c=p('M','002',1),d=p('Z','003',7),e=p('Z','004'),f=p('M','005'),g=p('Z','006');
+const sources=[{plan:a,skus:[s(a)]},{plan:b,skus:[s(b,{corrBaseQty:'300',adjAddQty:'0',adjCutQty:'200',categoryConfirmedQty:'150',categoryAdjAddQty:'0',categoryAdjCutQty:'150',price:'120'})]},{plan:c,skus:[s(c,{qty:'0',baseQty:'0',price:'295.00',provinceConfirmedQty:'12'})]},{plan:d,skus:[s(d,{qty:'0',baseQty:'0',corrBaseQty:'0',price:'295.00',regionConfirmedQty:'12',adjAddQty:'12',adjCutQty:'0',categoryAdjAddQty:'12',categoryAdjCutQty:'0'})]},{plan:e,skus:[s(e,{qty:'0',baseQty:'0',corrBaseQty:'0',price:'295.00',adjAddQty:'12',adjCutQty:'0',categoryAdjAddQty:'12',categoryAdjCutQty:'0',categoryConfirmedQty:'12'})]},{plan:f,skus:[s(f,{qty:'9007199254740993',price:'0.01'})]},{plan:g,skus:[s(g,{corrBaseQty:'300',adjAddQty:'0',adjCutQty:'200',categoryConfirmedQty:'150',price:'120'})]}];
 const prior={...a,planId:'prior',versionId:'prior-version',periodId:'prior-period'};
 const datedSources=[{month:'2026-10',plan:prior,skus:[s(prior)]},...sources.map(source=>({...source,month:'2026-11'}))];
 const facts=()=>({grading:'工厂仓',inventoryOrganization:'郑州总库存组织',customerType:'经销商',customerGroup:'三级',materialGroupCode:'102121',materialGroupName:'思念312g元宝汤圆'});
@@ -101,11 +101,12 @@ test('complete verified report facts download one XLSX across months with the co
     '月初计划额',
     '纠偏后计划额',
   ]);
-  assert.equal(rows.length, 7);
+  assert.equal(rows.length, 8);
   assert.equal(rows[1][8], '001');
   assert.equal(rows[1][13], '010006285');
   assert.deepEqual(rows.map((row) => row[17]).slice(1), [
     '2026-10',
+    '2026-11',
     '2026-11',
     '2026-11',
     '2026-11',
@@ -125,6 +126,10 @@ test('complete verified report facts download one XLSX across months with the co
     '90071992547409.93',
     '90071992547409.93',
   ]);
+  assert.equal(rows[7][8], '006');
+  assert.deepEqual(rows[7].slice(18), [0, -200, -150, -150, 0, -18000]);
+  assert.equal(workbook.Sheets['月度计划'].V8.t, 'n');
+  assert.equal(workbook.Sheets['月度计划'].X8.t, 'n');
   if (process.env.SALES_PLAN_REPORT_EVIDENCE)
     await download.saveAs(process.env.SALES_PLAN_REPORT_EVIDENCE);
 });
