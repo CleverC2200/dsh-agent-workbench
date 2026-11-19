@@ -39,6 +39,7 @@ export type BatchActionItem = {
   access?: SalesPlanAccess;
 
   skipReason?: string;
+  pendingAddedSkus?: GeaSalesPlanActionRequest['addedSkus'];
 };
 
 export type BatchActionOutcome = {
@@ -244,6 +245,12 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           approvalRole: item.access.approvalRole,
         });
         if (stored?.stale) throw new SubmissionSourceError('draftStale');
+        const additions =
+          item.pendingAddedSkus ??
+          (stored?.draft?.role && stored.draft.role !== item.access.approvalRole
+            ? undefined
+            : stored?.draft?.addedSkus);
+        if (additions?.length) request.addedSkus = additions;
         if (kind === 'REJECT') {
           preparingReturn = true;
           if (!item.detail)

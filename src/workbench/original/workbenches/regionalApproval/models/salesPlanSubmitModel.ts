@@ -1,6 +1,9 @@
 import { salesPlanConflictErrorKind } from './salesPlanActionModel.ts';
 import {
+  correctionConfirmedQuantity,
   correctionDecision,
+  salesPlanZeroBaselineSku,
+  verifySalesPlanAddedSkus,
   correctionLine,
   correctionDecimal,
 } from './salesPlanCorrectionModel.ts';
@@ -9,9 +12,11 @@ import { salesPlanWorkflow, type SalesPlanWorkflowRow } from '../../../salesPlan
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 import { isBackendHttpError } from '../../../http-error.ts';
 import type {
+  GeaSalesPlanAddedSku,
   GeaSalesPlanDetail,
   GeaSalesPlanPeriod,
   GeaSalesPlanSku,
+  GeaSalesPlanSubmitItem,
   GeaSalesPlanSubmitParams,
   GeaSalesPlanSubmitReceipt,
   GeaSalesPlanSubmitRequest,
@@ -28,7 +33,14 @@ export type SalesPlanSubmitClient = {
     invoke: (query: { versionId: string; signal?: AbortSignal }) => Promise<GeaSalesPlanSku[]>;
   };
   currentUser: { invoke: () => Promise<SalesPlanCurrentUser> };
-  submit: { invoke: (params: GeaSalesPlanSubmitParams) => Promise<GeaSalesPlanSubmitReceipt> };
+  submit: {
+    invoke: (params: GeaSalesPlanSubmitParams) => Promise<GeaSalesPlanSubmitReceipt>;
+  };
+};
+
+export type SalesPlanQuotedAddition = GeaSalesPlanAddedSku & {
+  productCategName: string;
+  price: string;
 };
 
 export type SalesPlanResubmitSource = {
@@ -39,6 +51,8 @@ export type SalesPlanResubmitSource = {
   skus: GeaSalesPlanSku[];
   currentUser: SalesPlanCurrentUser;
   channelCode?: string;
+  addedSkus?: readonly SalesPlanQuotedAddition[];
+  confirmedQuantities?: Record<string, string>;
 };
 
 export type SalesPlanSubmitInput = {
@@ -202,7 +216,7 @@ export const prepareSalesPlanResubmit = (
     version.status > 9 ||
     !['M', 'Z'].includes(version.orderType ?? '') ||
     source.skus.length < 1 ||
-    source.skus.length > 5000
+    source.skus.length + (source.addedSkus?.length ?? 0) > 5000
   ) {
     return fail('sourceMismatch');
   }
@@ -230,7 +244,7 @@ export const prepareSalesPlanResubmit = (
   const skuCodes = new Set<string>();
   let totalQty = BigInt(0);
   let totalAmount = BigInt(0);
-  const items = source.skus.map((sku) => {
+  const items: GeaSalesPlanSubmitItem[] = source.skus.map((sku) => {
     if (sku.versionId !== version.id || skuCodes.has(sku.skuCode)) return fail('sourceMismatch');
     skuCodes.add(sku.skuCode);
     const validated = validateSku(sku);
@@ -239,15 +253,58 @@ export const prepareSalesPlanResubmit = (
         sku,
         correctionDecision(sku, 0, version.planTypeCode, true, rows),
       );
-      totalQty += parseUnsignedDecimal(line.qty, 15, 3, 3).scaled;
-      totalAmount += parseUnsignedDecimal(line.amount, 16, 2, 2).scaled;
-      return { ...validated.item, adjAddQty: line.addQty, adjCutQty: line.cutQty };
+      const confirmed = source.confirmedQuantities?.[sku.skuCode];
+      const confirmedQty =
+        confirmed === undefined ? undefined : parseUnsignedDecimal(confirmed, 15, 3, 3).canonical;
+      if (confirmed !== undefined && (version.status === 6 || !salesPlanZeroBaselineSku(sku)))
+        return fail();
+      const quantity =
+        confirmedQty ??
+        (salesPlanZeroBaselineSku(sku) && version.status > 6
+          ? correctionConfirmedQuantity(sku, version.status, version.planTypeCode)
+          : line.qty);
+      totalQty += parseUnsignedDecimal(quantity, 15, 3, 3).scaled;
+      totalAmount += parseUnsignedDecimal(
+        correctionDecimal(quantity).mul(sku.price).toFixed(2),
+        16,
+        2,
+        2,
+      ).scaled;
+      return {
+        ...validated.item,
+        adjAddQty: line.addQty,
+        adjCutQty: line.cutQty,
+        ...(confirmedQty === undefined ? {} : { confirmedQty }),
+      };
     }
     totalQty += validated.qty;
     totalAmount += validated.roundedAmount;
     return validated.item;
   });
 
+  for (const addition of source.addedSkus ?? []) {
+    const skuCode = validatePositiveLong(addition.skuCode);
+    if (skuCodes.has(skuCode)) return fail('sourceMismatch');
+    skuCodes.add(skuCode);
+    const qty = parseUnsignedDecimal(addition.qty, 15, 3, 3);
+    const price = parseUnsignedDecimal(addition.price, 14, 4, 4);
+    if (price.scaled <= 0) return fail();
+    items.push({
+      skuCode,
+      productCategName: validateText(addition.productCategName, 128),
+      price: price.canonical,
+      baseQty: '0.000',
+      qty: correction ? '0.000' : qty.canonical,
+      useLatestSkuPrice: true,
+      ...(correction
+        ? version.status === 6
+          ? { adjAddQty: qty.canonical, adjCutQty: '0' }
+          : { adjAddQty: '0', adjCutQty: '0', confirmedQty: qty.canonical }
+        : {}),
+    });
+    totalQty += qty.scaled;
+    totalAmount += (qty.scaled * price.scaled + 50_000n) / 100_000n;
+  }
   const versionQty = parseUnsignedDecimal(version.targetQty, 15, 3, 3).canonical;
   const versionAmount = parseUnsignedDecimal(version.targetAmount, 16, 2, 2).canonical;
 
@@ -553,7 +610,9 @@ export const salesPlanResubmitReadbackMatches = (
     const matches = request.items.every((item) => {
       const sku = detail.skus.find((row) => row.skuCode === item.skuCode);
       const source = sourceSkus.find((row) => row.skuCode === item.skuCode);
-      if (!sku || !source || sku.versionId !== receipt.versionId) return false;
+      if (!sku || sku.versionId !== receipt.versionId) return false;
+      if (item.useLatestSkuPrice) return verifySalesPlanAddedSkus(detail, [item], request.status);
+      if (!source) return false;
       try {
         if (
           !(['qty', 'price', 'baseQty'] as const).every((field) =>
@@ -594,6 +653,27 @@ export const salesPlanResubmitReadbackMatches = (
         (s) => s.skuCode === item.skuCode && s.versionId === receipt.versionId,
       );
       if (!sku) return false;
+      const source = sourceSkus?.find((row) => row.skuCode === item.skuCode);
+      if (!item.useLatestSkuPrice && item.confirmedQty !== undefined) {
+        try {
+          if (!source || !correctionDecimal(sku.price).eq(correctionDecimal(source.price)))
+            return false;
+        } catch {
+          return false;
+        }
+      }
+      if (item.useLatestSkuPrice || item.confirmedQty !== undefined) {
+        const qty = request.status === 1 ? item.adjAddQty : item.confirmedQty;
+        return (
+          qty !== undefined &&
+          verifySalesPlanAddedSkus(
+            detail,
+            [{ skuCode: item.skuCode, qty }],
+            request.status,
+            item.useLatestSkuPrice ? 'new' : 'existing',
+          )
+        );
+      }
       try {
         if (
           !['qty', 'price', 'baseQty', 'adjAddQty', 'adjCutQty'].every((field) =>
@@ -606,10 +686,14 @@ export const salesPlanResubmitReadbackMatches = (
       } catch {
         return false;
       }
-      return ['region', 'province', 'area', 'category'].every((role) =>
-        ['AdjAddQty', 'AdjCutQty', 'ConfirmedQty', 'ConfirmedAmount'].every(
-          (suffix) => sku[(role + suffix) as keyof GeaSalesPlanSku] == null,
-        ),
+      return (['region', 'province', 'area', 'category'] as const).every((role, index) =>
+        (['AdjAddQty', 'AdjCutQty', 'ConfirmedQty', 'ConfirmedAmount'] as const).every((suffix) => {
+          const field = `${role}${suffix}` as const;
+          const expected = index < request.status - 1 ? source?.[field] : null;
+          return expected == null
+            ? sku[field] == null
+            : sku[field] != null && correctionDecimal(sku[field]).eq(expected);
+        }),
       );
     });
     if (!matches) return false;

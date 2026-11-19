@@ -8,12 +8,22 @@ import type {
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 import { SALES_PLAN_ROLES } from '../../../salesPlanWorkflow.ts';
 import { addExactDecimals, subtractExactDecimals } from '../regionalApprovalQueryModel.ts';
-import { salesPlanEditableQuantity, roundPlanQuantity } from './salesPlanQuantityModel.ts';
-import { correctionDecimal } from './salesPlanCorrectionModel.ts';
+import {
+  salesPlanEditableQuantity,
+  roundPlanQuantity,
+  salesPlanSubmittedQuantity,
+  salesPlanZeroBaselineSku,
+} from './salesPlanQuantityModel.ts';
+import { correctionDecimal, verifySalesPlanAddedSkus } from './salesPlanCorrectionModel.ts';
 
 const quantity = /^\d{1,15}(?:\.\d{1,3})?$/;
 const receiverQuantity = (sku: GeaSalesPlanDetail['skus'][number], stage: number) => {
-  const values = [sku.qty, sku.regionConfirmedQty, sku.provinceConfirmedQty, sku.areaConfirmedQty];
+  const values = [
+    salesPlanSubmittedQuantity(sku),
+    sku.regionConfirmedQty,
+    sku.provinceConfirmedQty,
+    sku.areaConfirmedQty,
+  ];
   for (let index = stage - 1; index >= 0; index--)
     if (values[index] != null) return String(values[index]);
   throw new Error('接收节点缺少确认数量，请刷新后核对');
@@ -146,7 +156,7 @@ export function verifyReturnedSalesPlan(
     after.currentVersion.planId !== receipt.planId ||
     after.currentVersion.status !== receipt.toStatus ||
     !after.currentVersion.effective ||
-    after.skus.length !== before.skus.length ||
+    after.skus.length !== before.skus.length + (request.addedSkus?.length ?? 0) ||
     new Set(after.skus.map((sku) => sku.skuCode)).size !== after.skus.length
   )
     return false;
@@ -166,6 +176,8 @@ export function verifyReturnedSalesPlan(
       'categoryAdjCutQty',
     ],
   } as const;
+  if (request.addedSkus?.length && !verifySalesPlanAddedSkus(after, request.addedSkus, target))
+    return false;
   try {
     return before.skus.every((sku) => {
       const actual = after.skus.find(
@@ -175,6 +187,13 @@ export function verifyReturnedSalesPlan(
       const adjustment = request.adjustments?.find((item) => item.skuCode === sku.skuCode);
       if (!adjustment) return true;
       const expected = correctionDecimal(receiverQuantity(sku, target)).plus(adjustment.adjustQty);
+      if (salesPlanZeroBaselineSku(actual))
+        return verifySalesPlanAddedSkus(
+          after,
+          [{ skuCode: sku.skuCode, qty: expected.toFixed() }],
+          target,
+          'existing',
+        );
       const received = [
         actual.qty,
         actual.regionConfirmedQty,

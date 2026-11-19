@@ -44,6 +44,7 @@ const client={
  versions:{invoke:async(q)=>[details.get(q.planId).currentVersion]},
  versionSkus:{invoke:async(q)=>structuredClone([...details.values()].find(d=>d.currentVersion.id===q.versionId).skus)},
  logs:{invoke:async(q)=>structuredClone(details.get(q.planId).logs)},compare:{invoke:async()=>[]},
+ skuQuotes:{invoke:async(q)=>q.skuCodes.filter(code=>code!=='9999').map(skuCode=>({skuCode,skuName:'新增水饺',productCategName:'水饺',price:skuCode==='8888'?null:String(window.quotePrice??295),priceDate:'2026-11-16'}))},
  draft:{invoke:async(q)=>{window.draftRequests.push(structuredClone({...q,signal:undefined}));if(q.draft)drafts.set(q.versionId,structuredClone(q.draft));return {draft:structuredClone(drafts.get(q.versionId)??null),stale:false};}},
  action:{invoke:async(p)=>{window.actions.push(p);const source=details.get(p.planId);const fromStatus=source.currentVersion.status;const toStatus=p.request.action==='REJECT'?6:2;source.currentVersion.status=toStatus;plans.find(row=>row.planId===p.planId).status=toStatus;return {planId:p.planId,versionId:p.versionId,fromStatus,toStatus,replayed:false,requestId:p.requestId,traceId:'trace-'+p.planId,auditId:'audit-'+p.planId};}},
 };
@@ -185,8 +186,8 @@ test('月初提报达成使用确认数量乘单价，纠偏保留发货达成�
     await expect(cell.locator('strong')).toHaveText(mode === '月初' ? '6.0%' : '—');
     if (mode === '月初') {
       await expect(cell).toContainText('¥12.13万 / ¥200.81万');
-      const shipment = cell.locator('[data-sales-plan-shipment="unavailable"]');
-      await expect(shipment).toHaveText('当月发货 — / —');
+      await expect(cell.locator('[data-sales-plan-shipment]')).toHaveCount(0);
+      await expect(cell.getByText('发货实绩未取得', { exact: true })).toHaveCount(0);
     } else {
       await expect(cell).toContainText('发货实绩未取得');
     }
@@ -347,7 +348,10 @@ test('纠偏复用品类维度、筛选汇总和分页控件', { timeout: 30000 
   await page.getByRole('button', { name: '重置', exact: true }).click();
   const north = page.getByRole('row').filter({ hasText: '华北客户' });
   await expect(north).toBeVisible();
-  await expect(north.getByRole('button')).toHaveCount(0);
+  await expect(
+    north.getByRole('button', { name: '打开 华北客户 调整明细', exact: true }),
+  ).toHaveCount(0);
+  await expect(north.getByRole('button', { name: '新增 SKU', exact: true })).toHaveCount(1);
   await page.getByTestId('regional-approval-category-row-p2-水饺').getByRole('button').click();
   await expect(page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true })).toHaveValue(
     '47',
@@ -548,3 +552,144 @@ test('纠偏确认计划量取整，客户和区域明细同步展示调整数�
     });
   assert.deepEqual(await page.evaluate(() => window.actions), []);
 });
+
+test('客户行添加入口定位已有 SKU 并沿原行修改数量', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t);
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  const customer = page.getByRole('row').filter({ hasText: '华南经销客户' }).first();
+  await customer.getByRole('button', { name: '新增 SKU', exact: true }).click();
+  const editor = page.getByRole('region', { name: '新增 SKU', exact: true });
+  await expect(editor.getByLabel('SKU 编码', { exact: true })).toBeFocused();
+  await editor.getByLabel('SKU 编码', { exact: true }).fill('1001');
+  await editor.getByLabel('确认数量', { exact: true }).fill('12');
+  await editor.getByRole('button', { name: '新增 SKU', exact: true }).click();
+  const original = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await expect(original).toBeFocused();
+  await expect(original).toHaveValue('100');
+  await original.fill('12');
+  await page.clock.runFor(700);
+  assert.deepEqual(
+    await page.evaluate(() => window.draftRequests.filter((q) => q.draft).at(-1).draft.adjustments),
+    [{ skuCode: '1001', adjustQty: '-88' }],
+  );
+  assert.deepEqual(
+    await page.evaluate(
+      () => window.draftRequests.filter((q) => q.draft).at(-1).draft.addedSkus ?? [],
+    ),
+    [],
+  );
+});
+
+test('新增 SKU 校验可售和价格，草稿重开读取最新价格且不重复添加', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t);
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  const customer = page.getByRole('row').filter({ hasText: '华南经销客户' }).first();
+  const add = customer.getByRole('button', { name: '新增 SKU', exact: true });
+  await add.click();
+  const editor = page.getByRole('region', { name: '新增 SKU', exact: true });
+  const code = editor.getByLabel('SKU 编码', { exact: true });
+  const quantity = editor.getByLabel('确认数量', { exact: true });
+  await code.fill('9999');
+  await quantity.fill('12');
+  await editor.getByRole('button', { name: '新增 SKU', exact: true }).click();
+  await expect(editor.getByRole('alert')).toHaveText('该 SKU 不在当前客户的可售清单内');
+  await code.fill('8888');
+  await editor.getByRole('button', { name: '新增 SKU', exact: true }).click();
+  await expect(editor.getByRole('alert')).toHaveText('最新价格不可用');
+  await code.fill('10004778');
+  await editor.getByRole('button', { name: '新增 SKU', exact: true }).click();
+  await expect(editor.getByRole('listitem')).toContainText('295');
+  await page.clock.runFor(700);
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.draftRequests.filter((q) => q.draft).at(-1)?.draft.addedSkus),
+    )
+    .toEqual([{ skuCode: '10004778', qty: '12' }]);
+  await page.getByRole('button', { name: '打开 华南经销客户 调整明细', exact: true }).click();
+  await page.evaluate(() => {
+    window.quotePrice = 300;
+  });
+  await add.click();
+  await expect(editor.getByRole('listitem')).toContainText('300');
+  await editor.getByRole('button', { name: '修改', exact: true }).click();
+  await quantity.fill('10');
+  await editor.getByRole('button', { name: '新增 SKU', exact: true }).click();
+  await expect(editor.getByRole('listitem')).toHaveCount(1);
+  await expect(editor.getByRole('listitem')).toContainText('确认数量 10');
+});
+
+test('客户按品类对比时新增入口仍打开完整 SKU 编辑', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t);
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  await page.getByRole('switch', { name: '品类维度', exact: true }).click();
+  const customer = page.getByRole('row').filter({ hasText: '华南经销客户' }).first();
+  await customer.getByRole('button', { name: '新增 SKU', exact: true }).click();
+  await expect(
+    page
+      .getByRole('region', { name: '新增 SKU', exact: true })
+      .getByLabel('SKU 编码', { exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }),
+  ).toBeVisible();
+});
+
+for (const batch of [false, true])
+  for (const action of ['APPROVE', 'REJECT'])
+    test(
+      `${batch ? '批量' : '单笔'}${action}沿现有动作携带新增 SKU 草稿`,
+      { timeout: 30000 },
+      async (t) => {
+        const page = await openWorkbench(t, batch ? 'batch' : 'default');
+        await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+        await page.getByRole('tab', { name: '按客户', exact: true }).click();
+        const customer = page.getByRole('row').filter({ hasText: '华南经销客户' }).first();
+        await customer.getByRole('button', { name: '新增 SKU', exact: true }).click();
+        const editor = page.getByRole('region', { name: '新增 SKU', exact: true });
+        await editor.getByLabel('SKU 编码', { exact: true }).fill('10004778');
+        await editor.getByLabel('确认数量', { exact: true }).fill('12');
+        await editor.getByRole('button', { name: '新增 SKU', exact: true }).click();
+        await expect(editor.getByRole('listitem')).toHaveCount(1);
+        await page.clock.runFor(700);
+        for (const name of batch ? ['华南经销客户', '华北客户'] : ['华南经销客户'])
+          await page
+            .getByRole('row')
+            .filter({ hasText: name })
+            .first()
+            .getByRole('checkbox')
+            .locator('..')
+            .click();
+        await page
+          .getByRole('button', { name: action === 'APPROVE' ? '通过' : '退回', exact: true })
+          .click();
+        const dialog = page.getByRole('dialog');
+        if (action === 'REJECT') await dialog.getByRole('textbox').fill('核对新增商品');
+        if (batch || action === 'REJECT')
+          await dialog
+            .getByRole('button', {
+              name: batch
+                ? action === 'APPROVE'
+                  ? '确认批量通过'
+                  : '确认批量退回'
+                : action === 'APPROVE'
+                  ? '确认通过'
+                  : '确认退回',
+              exact: true,
+            })
+            .click();
+        await expect.poll(() => page.evaluate(() => window.actions.length)).toBe(batch ? 2 : 1);
+        assert.deepEqual(
+          await page.evaluate(
+            () => window.actions.find((p) => p.planId === 'p1').request.addedSkus,
+          ),
+          [{ skuCode: '10004778', qty: '12' }],
+        );
+        if (batch)
+          assert.equal(
+            await page.evaluate(
+              () => window.actions.find((p) => p.planId === 'p2').request.addedSkus,
+            ),
+            undefined,
+          );
+      },
+    );

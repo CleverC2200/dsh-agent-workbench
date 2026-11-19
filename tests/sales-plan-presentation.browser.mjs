@@ -114,20 +114,23 @@ const continued = {
   'return-continued-skipped': [9, 'area', 2],
 }[comparison];
 const approvalRole = comparison?.startsWith('single-') ? 'category' : continued?.[1] ?? (comparison === 'return-unavailable' ? 'province' : 'region');
-if(comparison==='history-correction')for(const plan of sourcePlans)plan.orderType='Z';
+if(['history-correction','overview-correction','overview-correction-pagination'].includes(comparison))for(const plan of sourcePlans)plan.orderType='Z';
 if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50';
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 if(comparison?.startsWith('sku-review')||comparison==='category-allocation') for(const plan of sourcePlans) plan.skuCount=comparison==='sku-review-scroll'?40:2;
 if(comparison==='mixed-terminal')sourcePlans[1].status=5;
 if(comparison==='header-selection')sourcePlans[2].status=5;
-if(comparison==='header-pagination')for(let n=4;n<=12;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
+if(['header-pagination','overview-correction-pagination'].includes(comparison))for(let n=4;n<=12;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
 if(comparison==='performance')for(let n=4;n<=12;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
 if(comparison==='sku-review-scheduling')for(let n=4;n<=6;n++)sourcePlans.push({...sourcePlans[2],planId:'p'+n,versionId:'v'+n,dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org-'+n,orgName:'经销组'+n});
 const plans=continued?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1).map(plan=>({...plan,status:continued[0]})):['returned','return-unavailable'].includes(comparison)?(comparison==='return-unavailable'?sourcePlans.slice(0,new URL(location.href).searchParams.has('grouped')?2:1):sourcePlans).map(plan=>({...plan,status:comparison==='return-unavailable'?8:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 if(comparison?.startsWith('single-'))for(const plan of plans)plan.status=4;
+window.advanceOverviewVersion=()=>{plans[0].versionId='v1-next';};
 window.sentDirect=[];window.completePlan=()=>{plans[0].status=10;};window.returnConfirmed=false;
 const skuFor=(versionId)=>{
   const base=baseSkuFor(versionId);
+  if(versionId==='v1-next')return {...base,qty:'7',price:'30',amt:'999'};
+  if(comparison?.startsWith('overview-correction'))return {...base,adjAddQty:'5',adjCutQty:'1'};
   if(continued) return {...base,regionConfirmedQty:'10',regionConfirmedAmount:'100',provinceConfirmedQty:'15',provinceConfirmedAmount:'150',areaConfirmedQty:'25',areaConfirmedAmount:'250'};
   if(comparison==='integer')return {...base,qty:'501.600',amt:'5016.00'};
   if(comparison==='single-integer-category')return {...base,baseQty:'2480.000',amtBase:'24800.00',qty:'7000.000',amt:'70000.00'};
@@ -154,9 +157,10 @@ const versionsFor=(plan)=>['history','history-correction','inline','missing'].in
   : [{...plan,id:plan.versionId,effective:true}];
 const forbidden=async()=>{writes.push('write');throw Error('LOCAL_RENDER_ACTION_FORBIDDEN')};
 const drafts=new Map();
+if(comparison==='overview-draft')drafts.set('p1:v1',{role:'region',adjustments:[{skuCode:'1001',adjustQty:'5'}]});
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
-  list:{invoke:async(q)=>{window.performanceReads.lists.push({status:q?.status,pageSize:q?.pageSize});if(comparison==='sku-review-performance'&&q?.pageSize===1)await new Promise(resolve=>setTimeout(resolve,80));if(comparison==='loading'||comparison==='quick-loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1,...(comparison==='confirmed-monthly'?{summary:{planAmount:'689800',planQty:'8586',targetAmount:'714400'}}:{})}}},
+  list:{invoke:async(q)=>{window.performanceReads.lists.push({status:q?.status,pageSize:q?.pageSize});if(comparison==='sku-review-performance'&&q?.pageSize===1)await new Promise(resolve=>setTimeout(resolve,80));if(comparison==='loading'||comparison==='quick-loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=(comparison?.startsWith('single-')?(q?.status===undefined||q.status===4):(continued||comparison==='return-unavailable'||q?.status===undefined||q.status===1))?plans:[];return {records:window.queueGone?[]:records,total:window.queueGone?0:records.length,size:200,current:1,pages:1,...(comparison==='confirmed-monthly'?{summary:{planAmount:'689800',planQty:'8586',targetAmount:'714400'}}:comparison?.startsWith('overview-correction')?{summary:{planAmount:'600',planQty:'60',targetAmount:'1200'}}:{})}}},
   detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true,...(window.autoBlock==='version'?{id:'new-version'}:{}),...(window.autoBlock==='status'?{status:2}:{}),...(window.returnConfirmed?{status:6}:{}),...(window.autoBlock==='period'?{periodId:'new-period'}:{})},skus:window.autoBlock==='sku'?skusFor(plan.versionId).map(s=>({...s,price:'11'})):skusFor(plan.versionId),versions:versionsFor(plan),logs:window.returnConfirmed?window.sentReturns.filter(c=>c.planId===planId).map(c=>({planId,versionId:c.versionId,actionCode:'REJECT',fromStatus:c.request.expectedStatus,toStatus:6,requestId:c.requestId})):continued?[{planId,versionId:plan.versionId,actionCode:'APPROVE',fromStatus:continued[2],toStatus:continued[0]-5}]:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:comparison?.startsWith('single-')?4:2,allowedActions:window.autoBlock==='role'?[]:continued||['returned','return-unavailable'].includes(comparison)?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{readCalls.push({history:planId});const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
   skuReview:{invoke:async({planId,versionId,signal})=>{
@@ -186,6 +190,22 @@ const host={salesPlan:{
     return [{skuCode:'1001',changeType:'UPDATED',before:{...skuFor(fromVersionId),qty:'10',amt:'100'},after:skuFor(toVersionId),qtyDelta:'10',amountDelta:'100'}];
   }},action:{invoke:async(command)=>{if(comparison?.startsWith('single-')){window.sentDirect.push(command);const status=comparison==='single-permission'?403:comparison==='single-conflict'?409:502;const error=comparison.startsWith('single-dms')?'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报':comparison==='single-permission'?'当前用户没有品类审批权限':comparison==='single-conflict'?'计划版本已变化，请刷新后重试':'GEA_HTTP_502';throw new BackendHttpError({method:'POST',path:'/sales-plan/plans/versions/'+command.versionId+'/actions',status,body:{error:window.directRejection??error,details:{...(comparison.startsWith('single-dms')?{retryable:false,upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED'}:{}),requestId:'hidden-error-reference',traceId:'hidden-trace-reference'}}});}if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);if(window.returnUnknown && command.planId==='p1')throw new TypeError('offline');return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
 },modelInference:{invoke:forbidden}};
+window.reportFactRequests=0;
+if(['sku-review','report-unpublished','report-cancel'].includes(comparison))for(const plan of plans)plan.baseName='郑州';
+host.salesPlan.reportFacts={invoke:async({planId,versionId,signal})=>{
+ window.reportFactRequests++;
+ if(comparison==='report-unpublished')throw Error('FIELD_NOT_PUBLISHED');
+ if(comparison==='report-cancel')await new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));
+ return {planId,versionId,month:'2026-10',rows:skusFor(versionId).map(sku=>({skuCode:sku.skuCode,grading:'FACTORY_WH',inventoryOrganization:'郑州总库存组织',customerType:'经销商',customerGroup:'客户组',materialGroupCode:'100',materialGroupName:'物料组'}))};
+}};
+if(['sku-review','report-unpublished','report-cancel'].includes(comparison)){
+ const list=host.salesPlan.list.invoke;
+ host.salesPlan.list.invoke=async(query)=>{
+  const page=await list(query);
+  const records=query.orderType==='Z'?[]:page.records;
+  return {...page,records,total:records.length};
+ };
+}
 if(comparison?.startsWith('progressive-shipment')||comparison==='sku-review-preempts-prefetch'){
  const list=host.salesPlan.list.invoke;
  host.salesPlan.list.invoke=async(query,onPlanPage)=>{
@@ -211,7 +231,9 @@ function QuickQuestionFixture(){
  const observe=React.useCallback(context=>{window.quickQuestionSnapshot=context.quickQuestions;setSnapshot(context.quickQuestions)},[]);
  return <WorkbenchHostProvider value={host}><div style={{display:'flex',height:'100%'}}><div className="gea-original-workbench" style={{width:'75%',height:'100%'}}><Workbench stateScope="local-render" t={translate} onContextChange={observe} approvalStages={[approvalRole]} liveActionsEnabled/></div><aside style={{width:'25%',padding:12,boxSizing:'border-box'}}><QuickQuestionsContext.Provider value={snapshot}><QuickQuestions onFill={setDraft}/></QuickQuestionsContext.Provider><textarea aria-label="Agent输入框" value={draft} onChange={event=>setDraft(event.target.value)}/></aside></div></WorkbenchHostProvider>;
 }
-root.render(comparison?.startsWith('quick-') ? <QuickQuestionFixture/> : <WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={translate} onContextChange={context=>{window.approvalContext=context}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} automaticAnalysisEnabled={comparison==='shared-list-analysis'} liveActionsEnabled/></div></WorkbenchHostProvider>);
+const renderWorkbench=toolCall=>root.render(comparison?.startsWith('quick-') ? <QuickQuestionFixture/> : <WorkbenchHostProvider value={host}><div className="gea-original-workbench"><Workbench stateScope="local-render" t={translate} onContextChange={context=>{window.approvalContext=context}} approvalStages={[approvalRole]} onSubmitBatch={(items)=>{window.approvalItems=items}} toolCall={toolCall} automaticAnalysisEnabled={comparison==='shared-list-analysis'} liveActionsEnabled/></div></WorkbenchHostProvider>);
+window.selectOverviewRows=targets=>renderWorkbench({toolCallId:crypto.randomUUID(),command:{kind:'select',targets}});
+renderWorkbench();
 `,
   },
   outfile: '/fixture/app.js',
@@ -327,25 +349,15 @@ for (const fails of [false, true]) {
       false,
       fails ? 'progressive-shipment-error' : 'progressive-shipment',
     );
-    const shipment = page.locator('[data-sales-plan-shipment]').first();
-    await expect(shipment).toBeVisible();
-    await expect(shipment).toHaveText('当月发货加载中…');
-    await expect(shipment).toHaveAttribute('aria-busy', 'true');
+    await expect(page.locator('[data-sales-plan-shipment]')).toHaveCount(0);
+    await expect(page.getByText('当月发货加载中…')).toHaveCount(0);
     const reads = () =>
       page.evaluate(() => window.readCalls.filter((call) => call.versionId).length);
     await expect.poll(reads).toBeGreaterThan(0);
     const detailReads = await reads();
     await page.evaluate(() => window.finishShipments());
-    await expect(shipment).toHaveAttribute(
-      'data-sales-plan-shipment',
-      fails ? 'unavailable' : 'ready',
-    );
-    if (fails) {
-      await expect(shipment).toContainText('— / —');
-      await expect(page.getByText('发货实绩未取得', { exact: true }).first()).toBeVisible();
-    } else {
-      await expect(shipment).toContainText('¥456 / 123 件');
-    }
+    await expect(page.locator('[data-sales-plan-shipment]')).toHaveCount(0);
+    await expect(page.getByText('发货实绩未取得', { exact: true })).toHaveCount(0);
     assert.equal(await reads(), detailReads);
     assert.deepEqual(await page.evaluate(() => window.writes), []);
   });
@@ -482,7 +494,7 @@ test(
           ),
       )
       .toBe(true);
-    for (const name of ['查看提报进度', '刷新数据', '导出当前页']) {
+    for (const name of ['查看提报进度', '刷新数据', '导出月度计划报表']) {
       const offset = await toolbar.getByRole('button', { name, exact: true }).evaluate((button) => {
         const outer = button.getBoundingClientRect();
         const icon = button.querySelector('svg').getBoundingClientRect();
@@ -1243,9 +1255,10 @@ test('展开 SKU 表在宽屏保持紧凑，长描述换行且窄屏可用键盘
     });
 });
 
-test('发货实绩缺失时显示状态并保留期间原因', { timeout: 30000 }, async (t) => {
+test('月初隐藏发货实绩，纠偏保留缺失状态及期间原因', { timeout: 30000 }, async (t) => {
   const { page } = await openWorkbench(t, false, 'shipment-missing');
-  await expect(page.getByText('发货实绩未取得', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-sales-plan-shipment]')).toHaveCount(0);
+  await expect(page.getByText('发货实绩未取得', { exact: true })).toHaveCount(0);
   await page.getByRole('tab', { name: '纠偏', exact: true }).click();
   const status = page.getByText('发货实绩未取得', { exact: true });
   await expect(status).toBeVisible();
@@ -1361,7 +1374,7 @@ test(
 );
 
 test(
-  'monthly XLSX exports match confirmed page totals before expansion and after a collapsed edit',
+  'unified monthly XLSX exports saved customer SKU rows and ignores collapsed local edits',
   { timeout: 30000 },
   async (t) => {
     const { page } = await openWorkbench(t, false, 'sku-review');
@@ -1376,34 +1389,33 @@ test(
     };
     const plan = page.getByTestId('regional-approval-month-plan-p1');
     await expect(plan).toContainText('¥250');
-    let rows = await exported(page.getByRole('button', { name: '导出当前页', exact: true }));
-    assert.equal(rows[0]['月计划数量'], 25);
-    assert.equal(rows[0]['月计划金额'], 250);
+    let rows = await exported(page.getByRole('button', { name: '导出月度计划报表', exact: true }));
+    assert.equal(Object.keys(rows[0]).length, 24);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0]['月初计划'], 20);
+    assert.equal(rows[0]['月初计划额'], 200);
     const expand = page.getByRole('button', { name: /宝阳销售组/ }).first();
     await expand.click();
     await page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).fill('21');
     await page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).blur();
     await expand.click();
     await expect(plan).toContainText('¥260');
-    rows = await exported(page.getByRole('button', { name: '导出当前页', exact: true }));
-    assert.equal(rows[0]['月计划数量'], 26);
-    assert.equal(rows[0]['月计划金额'], 260);
+    rows = await exported(page.getByRole('button', { name: '导出月度计划报表', exact: true }));
+    assert.equal(rows[0]['月初计划'], 20);
+    assert.equal(rows[0]['月初计划额'], 200);
     await page.getByRole('tab', { name: '按大类 / SKU' }).click();
     const review = page.getByRole('region', { name: '按大类 / SKU', exact: true }).first();
     await expect(review.getByRole('rowheader', { name: /1001/ })).toBeVisible();
-    rows = await exported(review.getByRole('button', { name: '导出汇总', exact: true }));
-    for (const row of rows) {
-      assert.equal(row['月计划量（件）'], row['确认计划量（件）']);
-      assert.equal(row['月计划金额（元）'], row['确认计划金额（元）']);
-    }
-    assert.equal(rows.at(-1)['月计划金额（元）'], 260);
+    await expect(review.getByRole('button', { name: '导出汇总', exact: true })).toHaveCount(0);
+    rows = await exported(page.getByRole('button', { name: '导出月度计划报表', exact: true }));
+    assert.equal(rows.length, 2);
     assert.deepEqual(await page.evaluate(() => window.sentDirect), []);
     assert.deepEqual(await page.evaluate(() => window.sentReturns), []);
   },
 );
 
 test(
-  'regional SKU review filters, collapses and exports the complete customer scope without writes',
+  'regional SKU review filters and collapses the complete customer scope with one unified export entry',
   { timeout: 30000 },
   async (t) => {
     const { page } = await openWorkbench(t, true, 'sku-review');
@@ -1435,17 +1447,8 @@ test(
     await expect(review.getByRole('rowheader', { name: /2002/ })).toHaveCount(0);
     await review.getByRole('combobox', { name: 'SKU 编码 / 物料名称', exact: true }).click();
     await page.getByRole('option', { name: /1001/ }).click();
-    const downloadPromise = page.waitForEvent('download');
-    await review.getByRole('button', { name: '导出汇总', exact: true }).click();
-    const download = await downloadPromise;
-    assert.equal(download.suggestedFilename(), '2026-10-SKU.xlsx');
-    const { readFile } = await import('node:fs/promises');
-    const xlsx = await import('xlsx-republish');
-    const workbook = xlsx.read(await readFile(await download.path()), { type: 'buffer' });
-    const rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
-    assert.equal(rows.length, 4);
-    assert.equal(rows[2][2], 4.5);
-    assert.equal(rows[2][5], 300.3);
+    await expect(review.getByRole('button', { name: '导出汇总', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '导出月度计划报表', exact: true })).toBeVisible();
     assert.deepEqual(await page.evaluate(() => window.writes), []);
     if (process.env.DSH_REVIEW_EVIDENCE)
       await page.screenshot({
@@ -1453,7 +1456,7 @@ test(
         fullPage: true,
       });
     await page.setViewportSize({ width: 820, height: 900 });
-    await expect(review.getByRole('button', { name: '导出汇总', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '导出月度计划报表', exact: true })).toBeVisible();
     if (process.env.DSH_REVIEW_EVIDENCE)
       await page.screenshot({
         path: process.env.DSH_REVIEW_EVIDENCE + '/regional-sku-review-narrow.png',
@@ -1510,7 +1513,8 @@ test(
     const { page } = await openWorkbench(t, true, 'sku-review-failure');
     await page.getByRole('tab', { name: '按大类 / SKU' }).click();
     await expect(page.getByText('提报数据未完整取得，请重试。', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: '导出汇总', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: '导出汇总', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '导出月度计划报表', exact: true })).toBeEnabled();
     assert.deepEqual(await page.evaluate(() => window.writes), []);
   },
 );
@@ -2143,6 +2147,7 @@ test('header select all only selects plans on the current page', async (t) => {
       page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
     )
     .toEqual(visibleIds);
+  await expect(totals.locator('strong')).toHaveText(['¥4,400', '¥2,200', '−¥2,200', '220 件']);
   await page.locator('.arco-pagination-item-next:visible').click();
   await expect.poll(() => page.evaluate(() => window.approvalContext?.pagination.page)).toBe(2);
   await expect(totals).toContainText('¥2,400');
@@ -2163,9 +2168,149 @@ test('header select all only selects plans on the current page', async (t) => {
       page.evaluate(() => window.approvalContext?.selectedEntities.map((row) => row.id).sort()),
     )
     .toEqual(nextPageIds);
+  await expect(totals.locator('strong')).toHaveText(['¥400', '¥200', '−¥200', '20 件']);
   await header.uncheck();
   await expect
     .poll(() => page.evaluate(() => window.approvalContext?.selectedEntities.length))
     .toBe(0);
   assert.deepEqual(await page.evaluate(() => window.writes), []);
 });
+
+test('overview follows a customer selection and restores the full query after clearing', async (t) => {
+  const { page } = await openWorkbench(t, true);
+  const totals = page
+    .getByRole('region', { name: '当前页明细汇总', exact: true })
+    .locator('strong');
+  await expect(totals).toHaveText(['¥1,200', '¥600', '−¥600', '60 件']);
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  const customer = page.locator('tbody label.arco-checkbox:has(input[value="p1"])');
+  await customer.check();
+  await expect(totals).toHaveText(['¥400', '¥200', '−¥200', '20 件']);
+  await customer.uncheck();
+  await expect(totals).toHaveText(['¥1,200', '¥600', '−¥600', '60 件']);
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+test('overview deduplicates organization and customer targets from the page action', async (t) => {
+  const { page, groupBox } = await openWorkbench(t, true);
+  const totals = page
+    .getByRole('region', { name: '当前页明细汇总', exact: true })
+    .locator('strong');
+  await expect(totals).toHaveText(['¥1,200', '¥600', '−¥600', '60 件']);
+  await groupBox.check();
+  await expect(totals).toHaveText(['¥800', '¥400', '−¥400', '40 件']);
+  const groupId = await groupBox.locator('input').inputValue();
+  await page.evaluate(
+    (id) => window.selectOverviewRows(['row:' + id, 'row:p1', 'row:p2']),
+    groupId,
+  );
+  await expect(totals).toHaveText(['¥800', '¥400', '−¥400', '40 件']);
+  await page.evaluate(() => window.selectOverviewRows([]));
+  await expect(totals).toHaveText(['¥1,200', '¥600', '−¥600', '60 件']);
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+test('overview reads the current version and its SKU price for a retained selection', async (t) => {
+  const { page } = await openWorkbench(t, true);
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  const totals = page
+    .getByRole('region', { name: '当前页明细汇总', exact: true })
+    .locator('strong');
+  await page.locator('tbody label.arco-checkbox:has(input[value="p1"])').check();
+  await expect(totals).toHaveText(['¥400', '¥200', '−¥200', '20 件']);
+  await page.evaluate(() => window.advanceOverviewVersion());
+  await page.getByRole('button', { name: '刷新数据', exact: true }).click();
+  await expect(totals).toHaveText(['¥400', '¥210', '−¥190', '7 件']);
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+test('overview uses restored monthly drafts and subsequent inline edits in the selected scope', async (t) => {
+  const { page } = await openWorkbench(t, true, 'overview-draft');
+  const totals = page
+    .getByRole('region', { name: '当前页明细汇总', exact: true })
+    .locator('strong');
+  await expect(totals).toHaveText(['¥1,200', '¥650', '−¥550', '65 件']);
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  await page.locator('tbody label.arco-checkbox:has(input[value="p1"])').check();
+  await expect(totals).toHaveText(['¥400', '¥250', '−¥150', '25 件']);
+  await page
+    .getByRole('button', { name: /客户1/ })
+    .first()
+    .click();
+  const quantity = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await expect(quantity).toHaveValue('25');
+  await quantity.fill('27');
+  await quantity.blur();
+  await expect(totals).toHaveText(['¥400', '¥270', '−¥130', '27 件']);
+  assert.deepEqual(await page.evaluate(() => window.sentDirect), []);
+});
+
+test('overview uses the correction model quantity and amount for selected plans', async (t) => {
+  const { page } = await openWorkbench(t, true, 'overview-correction');
+  await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  await page.locator('tbody label.arco-checkbox:has(input[value="p1"])').check();
+  const totals = page
+    .getByRole('region', { name: '当前页明细汇总', exact: true })
+    .locator('strong');
+  await expect(totals).toHaveText(['¥400', '¥240', '−¥160', '24 件']);
+  await page
+    .getByRole('button', { name: /客户1/ })
+    .first()
+    .click();
+  const quantity = page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await quantity.fill('27');
+  await quantity.blur();
+  await expect(totals).toHaveText(['¥400', '¥270', '−¥130', '27 件']);
+  await page.locator('tbody label.arco-checkbox:has(input[value="p1"])').uncheck();
+  await expect(totals).toHaveText(['¥1,200', '¥750', '−¥450', '75 件']);
+  assert.deepEqual(await page.evaluate(() => window.sentDirect), []);
+});
+
+test('overview keeps the full correction query when selection is cleared across pages', async (t) => {
+  const { page } = await openWorkbench(t, true, 'overview-correction-pagination');
+  await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+  const totals = page
+    .getByRole('region', { name: '当前页明细汇总', exact: true })
+    .locator('strong');
+  await expect(totals).toHaveText(['¥4,800', '¥2,880', '−¥1,920', '288 件']);
+  await page.getByRole('combobox', { name: '每页条数' }).click();
+  await page.getByRole('option', { name: '10 条/页', exact: true }).click();
+  await page.locator('thead label.arco-checkbox:visible').first().check();
+  await expect(totals).toHaveText(['¥4,400', '¥2,640', '−¥1,760', '264 件']);
+  await page.locator('.arco-pagination-item-next:visible').click();
+  await expect(totals).toHaveText(['¥4,800', '¥2,880', '−¥1,920', '288 件']);
+  await page.locator('thead label.arco-checkbox:visible').first().check();
+  await expect(totals).toHaveText(['¥400', '¥240', '−¥160', '24 件']);
+  await page.locator('thead label.arco-checkbox:visible').first().uncheck();
+  await expect(totals).toHaveText(['¥4,800', '¥2,880', '−¥1,920', '288 件']);
+  assert.deepEqual(await page.evaluate(() => window.writes), []);
+});
+
+for (const mode of ['report-unpublished', 'report-cancel']) {
+  test(`unified monthly report does not download for ${mode}`, async (t) => {
+    const { page } = await openWorkbench(t, false, mode);
+    let downloads = 0;
+    page.on('download', () => downloads++);
+    await page.getByRole('button', { name: '导出月度计划报表', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.reportFactRequests)).toBeGreaterThan(0);
+    if (mode === 'report-unpublished') {
+      await expect(
+        page.getByText('报表所需字段尚未开放读取，请联系数据管理员发布后重试；未产生文件。', {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: '导出月度计划报表', exact: true }),
+      ).toBeEnabled();
+    } else {
+      await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+      await expect(page.getByRole('tab', { name: '纠偏', exact: true })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+    }
+    assert.equal(downloads, 0);
+    assert.deepEqual(await page.evaluate(() => window.writes), []);
+  });
+}

@@ -139,6 +139,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   approvalStages?: readonly ApprovalStageId[];
 
   pendingValues?: Record<string, string>;
+  pendingAddedSkus?: (role: ApprovalStageId) => GeaSalesPlanActionRequest['addedSkus'];
   onPermissionDenied: (versionId: string) => void;
   onSucceeded: (
     receipt: GeaSalesPlanActionReceipt,
@@ -166,6 +167,7 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   evidence,
   approvalStages,
   pendingValues,
+  pendingAddedSkus,
   onPermissionDenied,
   onSucceeded,
   onRefresh,
@@ -661,6 +663,12 @@ const RegionalApprovalLiveActionDialog: React.FC<{
             ? { adjustments: freshAdjustments }
             : {}),
       };
+      const additions =
+        pendingAddedSkus?.(selectedRole) ??
+        (stored.draft?.role && stored.draft.role !== selectedRole
+          ? undefined
+          : stored.draft?.addedSkus);
+      if (kind !== 'SAVE' && additions?.length) request.addedSkus = additions;
       submittedRequest.current = request;
       await complete(
         action.execute({

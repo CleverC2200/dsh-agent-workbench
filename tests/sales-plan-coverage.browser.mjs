@@ -23,14 +23,15 @@ const i18n=i18next.createInstance();
 await i18n.init({lng:'zh-CN',resources:{'zh-CN':{translation:{common:zh}}},interpolation:{escapeValue:false}});
 const rowCount=Number(new URL(location.href).searchParams.get('fixtureRows')??3);
 const batchRoles=new URL(location.href).searchParams.has('batchRoles');
-const rows=Array.from({length:rowCount},(_,index)=>index+1).map(n=>({planId:'p'+n,versionId:'v'+n,seq:1,periodId:'period',planTypeCode:'Y',orderType:'M',dealerCode:'d'+n,orgCode:'org'+n,orgName:'销售组'+n,areaCode:'area'+n,areaName:'大区'+n,provinceCode:'province'+n,provinceName:'省区'+n,baseName:'基地'+n,status:batchRoles?[1,4,3][n-1]:1,updatedAt:'2026-10-'+String(31-n).padStart(2,'0'),currentQty:'20',currentAmount:'200',targetQty:'0',targetAmount:'400',skuCount:1}));
+const rows=Array.from({length:rowCount},(_,index)=>index+1).map(n=>({planId:'p'+n,versionId:'v'+n,seq:1,periodId:'period',planTypeCode:'Y',orderType:'M',dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org'+n,orgName:'销售组'+n,areaCode:'area'+n,areaName:'大区'+n,provinceCode:'province'+n,provinceName:'省区'+n,baseName:'基地'+n,status:batchRoles?[1,4,3][n-1]:1,updatedAt:'2026-10-'+String(31-n).padStart(2,'0'),currentQty:'20',currentAmount:'200',targetQty:'0',targetAmount:'400',skuCount:1}));
 window.coverageCalls={sku:[],detail:[],draft:0,draftWrite:0,model:0,write:0};
 window.batchActions=[];
 window.exportBehavior='normal';
+window.fixtureRows=rows;
 window.localDrafts=JSON.parse(localStorage.getItem('coverage-host-drafts')??'{}');
 window.exportReads=[];
 window.exportReleases=[];
-const sku=(versionId)=>({id:'s'+versionId,versionId,skuCode:'sku'+versionId,productCategName:'汤圆',qty:'20',amt:'200',baseQty:'10',amtBase:'100',price:'10'});
+const sku=(versionId)=>({id:'s'+versionId,versionId,skuCode:'sku'+versionId,productCategName:'汤圆',skuName:'汤圆',qty:'20',amt:'200',baseQty:'10',amtBase:'100',price:'10',regionConfirmedQty:null,regionConfirmedAmount:null,provinceConfirmedQty:null,provinceConfirmedAmount:null,areaConfirmedQty:null,areaConfirmedAmount:null,categoryConfirmedQty:null,categoryConfirmedAmount:null});
 const detailFor=row=>({currentVersion:{...row,id:row.versionId,effective:true},skus:[sku(row.versionId)],versions:[],logs:[]});
 if(batchRoles){
  const row=rows[1];
@@ -44,10 +45,12 @@ function App(){
  const [submissionRefreshRequest,setSubmissionRefreshRequest]=useState();
  const salesPlan=useMemo(()=>({
   periods:{invoke:async()=>({records:[{periodId:'period',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
-  list:{invoke:async(q)=>{const records=q?.status===undefined?rows:rows.filter(row=>row.status===q.status);return {records,total:records.length,size:q?.pageSize??200,current:q?.pageNo??1,pages:records.length?1:0}}},
+  list:{invoke:async(q)=>{const records=q?.orderType==='Z'?[]:q?.status===undefined?rows:rows.filter(row=>row.status===q.status);return {records,total:records.length,size:q?.pageSize??200,current:q?.pageNo??1,pages:records.length?1:0}}},
   detail:{invoke:async({planId})=>{window.coverageCalls.detail.push(planId);return detailFor(rows.find(row=>row.planId===planId));}},
   draft:{invoke:async(query)=>{window.coverageCalls.draft++;if(query.draft){window.coverageCalls.draftWrite++;window.localDrafts[query.versionId]=query.draft;}return {draft:window.localDrafts[query.versionId]??null}}},
   versions:{invoke:async()=>[]},logs:{invoke:async()=>[]},compare:{invoke:async()=>[]},
+  skuQuotes:{invoke:async({skuCodes})=>skuCodes.filter(code=>code==='10004778').map(skuCode=>({skuCode,skuName:'新增测试商品',productCategName:'汤圆',price:localStorage.getItem('coverage-latest-price')??'295.00'}))},
+  reportFacts:{invoke:async({planId,versionId})=>({planId,versionId,month:'2026-10',rows:window.exportBehavior==='unread-facts'?[]:[sku(versionId).skuCode,...(window.exportBehavior==='added-at-province'?['10004778']:[])].map(skuCode=>({skuCode,grading:'FACTORY_WH',inventoryOrganization:'总部库存',customerType:'经销商',customerGroup:'组',materialGroupCode:'0001',materialGroupName:'组'}))})},
   versionSkus:{invoke:async({versionId,signal})=>{
    signal?.throwIfAborted();window.coverageCalls.sku.push({versionId,mode});
    const behavior=window.exportBehavior;
@@ -58,6 +61,7 @@ function App(){
     if(behavior==='partial'&&versionId==='v3')return [];
     if(behavior==='foreign'&&versionId==='v3')return [sku('foreign-version')];
     if(behavior==='failed'&&versionId==='v3')throw Error('fixture detail request failed');
+    if(behavior==='added-at-province')return [{...sku(versionId),regionConfirmedQty:'20',regionConfirmedAmount:'200',provinceConfirmedQty:'20',provinceConfirmedAmount:'200'},{...sku(versionId),id:'added-'+versionId,skuCode:'10004778',baseQty:'0',corrBaseQty:null,qty:'0',amtBase:'0',amt:'0',price:'295.00',provinceConfirmedQty:'12',provinceConfirmedAmount:'3540.00'}];
     if(behavior==='precise')return [{...sku(versionId),qty:'9007199254740993.125',amt:'123456789012345.6789'}];
    }
    if(mode==='pending')return new Promise((resolve,reject)=>{window.rejectPending=()=>reject(Error('late cancelled read failure'))});
@@ -272,7 +276,7 @@ test(
 );
 
 test(
-  'actual current-page XLSX download preserves exact decimals and reports its scope',
+  'unified XLSX downloads all 23 readable plans and retains exact large values',
   { timeout: 30000 },
   async (t) => {
     const { page, pageErrors, externalRequests } = await openWorkbench(t, 23);
@@ -284,39 +288,42 @@ test(
       window.exportBehavior = 'precise';
     });
     const downloaded = page.waitForEvent('download');
-    await page.getByRole('button', { name: '导出当前页', exact: true }).click();
+    await page.getByRole('button', { name: '导出月度计划报表', exact: true }).click();
     const download = await downloaded;
-    assert.match(download.suggestedFilename(), /^sales-plan-approval-2026-10-.*-page-1.xlsx$/);
+    assert.equal(download.suggestedFilename(), '月度计划报表.xlsx');
     const workbook = XLSX.read(await readFile(await download.path()), { type: 'buffer' });
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets['当前页计划'], {
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets['月度计划'], {
       header: 1,
       defval: null,
     });
-    assert.equal(rows.length, 21);
-    const exportedIds = Array.from({ length: 20 }, (_, index) => 'p' + (index + 1));
+    assert.equal(rows.length, 24);
+    assert.equal(rows[0].length, 24);
+    assert.deepEqual(workbook.SheetNames, ['月度计划']);
+    const exportedIds = Array.from({ length: 23 }, (_, index) => 'd' + (index + 1));
     assert.deepEqual(
-      rows.slice(1).map((row) => row[0]),
-      exportedIds,
+      rows
+        .slice(1)
+        .map((row) => row[8])
+        .sort(),
+      [...exportedIds].sort(),
     );
     for (const row of rows.slice(1)) {
-      assert.equal(row[17], '9007199254740993.125');
-      assert.equal(row[18], '123456789012345.6789');
-      assert.deepEqual(row.slice(19, 27), Array(8).fill(null));
+      assert.equal(row[17], '2026-10');
+      assert.deepEqual(row.slice(18), [
+        '9007199254740993',
+        0,
+        0,
+        '9007199254740993',
+        '90071992547409930.00',
+        '90071992547409930.00',
+      ]);
     }
-    const scope = Object.fromEntries(
-      XLSX.utils.sheet_to_json(workbook.Sheets['导出说明'], { header: 1 }),
-    );
-    assert.equal(scope['导出范围'], '仅当前页');
-    assert.equal(scope['计划月份'], '2026-10');
-    assert.equal(scope['数据版本'], '当前有效版本');
-    assert.equal(scope['页码'], 1);
-    assert.equal(scope['每页条数'], 20);
-    assert.equal(scope['导出条数'], 20);
-    assert.equal(scope['筛选结果总条数'], 23);
-    await expect(page.getByText('已导出当前页 20 条 GEA 队列数据', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText('已导出全部可读月份，共 23 条客户商品计划。', { exact: true }),
+    ).toBeVisible();
     assert.deepEqual(
-      await page.evaluate(() => window.exportReads.map((x) => x.versionId)),
-      exportedIds.map((id) => id.replace('p', 'v')),
+      (await page.evaluate(() => window.exportReads.map((x) => x.versionId))).sort(),
+      exportedIds.map((id) => id.replace('d', 'v')).sort(),
     );
     assert.deepEqual(pageErrors, []);
     assert.equal(externalRequests(), 0);
@@ -327,6 +334,40 @@ test(
       })),
       { model: 0, write: 0 },
     );
+  },
+);
+
+test(
+  'actual XLSX download includes an added SKU without prior node amounts',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, pageErrors, externalRequests } = await openWorkbench(t);
+    await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).waitFor();
+    await page.evaluate(() => {
+      window.exportBehavior = 'added-at-province';
+      window.fixtureRows.forEach((row) => {
+        row.skuCount = 2;
+      });
+    });
+    await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
+    await expect(
+      page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
+    ).toContainText('¥200');
+    const downloaded = page.waitForEvent('download', { timeout: 5000 });
+    await page.getByRole('button', { name: '导出月度计划报表', exact: true }).click();
+    const download = await downloaded;
+    const workbook = XLSX.read(await readFile(await download.path()), { type: 'buffer' });
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets['月度计划'], {
+      header: 1,
+      defval: null,
+    });
+    assert.equal(rows.length, 7);
+    const added = rows.slice(1).filter((row) => row[13] === '10004778');
+    assert.equal(added.length, 3);
+    for (const row of added) assert.deepEqual(row.slice(18), [12, 0, 0, 12, 3540, 3540]);
+    assert.deepEqual(pageErrors, []);
+    assert.equal(externalRequests(), 0);
+    assert.equal(await page.evaluate(() => window.coverageCalls.write), 0);
   },
 );
 
@@ -344,7 +385,7 @@ test(
     await page.evaluate(() => {
       window.exportBehavior = 'held';
     });
-    await page.getByRole('button', { name: '导出当前页', exact: true }).click();
+    await page.getByRole('button', { name: '导出月度计划报表', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.exportReads.length)).toBe(3);
     await page.evaluate(() => {
       window.exportBehavior = 'normal';
@@ -354,21 +395,25 @@ test(
       .poll(() => page.evaluate(() => window.exportReads.every((x) => x.aborted)))
       .toBe(true);
     await page.evaluate(() => window.exportReleases.forEach((release) => release()));
-    await expect(page.getByRole('button', { name: '导出当前页', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: '导出月度计划报表', exact: true })).toBeEnabled();
     assert.deepEqual(downloads, []);
     await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
     await expect(
       page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
     ).toContainText('¥200');
-    for (const behavior of ['partial', 'foreign', 'failed']) {
+    for (const behavior of ['partial', 'foreign', 'failed', 'unread-facts']) {
       await page.evaluate((behavior) => {
         window.exportBehavior = behavior;
       }, behavior);
-      await page.getByRole('button', { name: '导出当前页', exact: true }).click();
+      await page.getByRole('button', { name: '导出月度计划报表', exact: true }).click();
       await expect(
-        page.getByText('版本明细读取失败或数据不完整，请刷新后重试；未产生文件。', { exact: true }),
+        page.getByText('月度计划报表读取失败、数据不完整或版本已变化，请重试；未产生文件。', {
+          exact: true,
+        }),
       ).toBeVisible();
-      await expect(page.getByRole('button', { name: '导出当前页', exact: true })).toBeEnabled();
+      await expect(
+        page.getByRole('button', { name: '导出月度计划报表', exact: true }),
+      ).toBeEnabled();
       await expect
         .poll(() =>
           page.evaluate(
@@ -464,6 +509,41 @@ test(
     await expect(detail.locator('input[type="number"]').first()).toHaveValue('20');
     assert.deepEqual(await page.evaluate(() => window.localDrafts.v1), savedDraft);
     assert.equal(await page.evaluate(() => window.coverageCalls.write), 0);
+    assert.deepEqual(pageErrors, []);
+  },
+);
+
+test(
+  'customer detail looks up a sellable SKU and saves its quantity in the approval draft',
+  { timeout: 40000 },
+  async (t) => {
+    const { page, pageErrors, externalRequests } = await openWorkbench(t, 3, true);
+    await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
+    await page.getByRole('tab', { name: '按客户', exact: true }).click();
+    await page
+      .getByRole('button', { name: /打开 客户1/ })
+      .first()
+      .click();
+    const editor = page.getByRole('region', { name: '新增 SKU' });
+    await editor.getByLabel('SKU 编码').fill('10004778');
+    await editor.getByLabel('确认数量').fill('12');
+    await editor.getByRole('button', { name: '新增 SKU' }).click();
+    await expect(editor.getByText('10004778 新增测试商品')).toBeVisible();
+    await expect(editor.getByText('295.00', { exact: true })).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => window.localDrafts.v1?.addedSkus))
+      .toEqual([{ skuCode: '10004778', qty: '12' }]);
+    await expect(page.getByTestId('regional-approval-month-plan-p1')).toContainText('¥3,740');
+    await page.evaluate(() => {
+      localStorage.setItem('coverage-host-drafts', JSON.stringify(window.localDrafts));
+      localStorage.setItem('coverage-latest-price', '300.00');
+    });
+    await page.reload();
+    await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
+    await page.getByRole('tab', { name: '按客户', exact: true }).click();
+    await expect(page.getByTestId('regional-approval-month-plan-p1')).toContainText('¥3,800');
+    assert.equal(await page.evaluate(() => window.coverageCalls.write), 0);
+    assert.equal(externalRequests(), 0);
     assert.deepEqual(pageErrors, []);
   },
 );

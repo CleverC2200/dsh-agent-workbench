@@ -55,7 +55,19 @@ export interface WorkbenchHost {
         signal?: AbortSignal;
       }): Promise<Api.GeaSalesPlanSkuReview>;
     };
-    compare: { invoke(query: Api.GeaSalesPlanCompareQuery): Promise<Api.GeaSalesPlanSkuDiff[]> };
+    skuQuotes?: {
+      invoke(query: Api.GeaSalesPlanSkuQuoteQuery): Promise<Api.GeaSalesPlanSkuQuote[]>;
+    };
+    reportFacts?: {
+      invoke(query: {
+        planId: string;
+        versionId: string;
+        signal?: AbortSignal;
+      }): Promise<Api.GeaSalesPlanReportFacts>;
+    };
+    compare: {
+      invoke(query: Api.GeaSalesPlanCompareQuery): Promise<Api.GeaSalesPlanSkuDiff[]>;
+    };
     action: {
       invoke(params: Api.GeaSalesPlanActionParams): Promise<Api.GeaSalesPlanActionReceipt>;
     };

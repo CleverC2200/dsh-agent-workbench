@@ -1,6 +1,19 @@
 import { SALES_PLAN_ROLES, salesPlanWorkflow } from '../../../salesPlanWorkflow.ts';
 import type { GeaSalesPlanSku } from '../../../bridge.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
+import { addExactDecimals } from '../regionalApprovalQueryModel.ts';
+
+export const salesPlanZeroBaselineSku = (
+  sku: Pick<GeaSalesPlanSku, 'baseQty' | 'qty' | 'corrBaseQty'>,
+): boolean =>
+  salesPlanDecimalValue(sku.corrBaseQty) === '0' &&
+  salesPlanDecimalValue(sku.baseQty) === '0' &&
+  salesPlanDecimalValue(sku.qty) === '0';
+
+export const salesPlanSubmittedQuantity = (sku: GeaSalesPlanSku): string =>
+  salesPlanZeroBaselineSku(sku)
+    ? addExactDecimals([sku.adjAddQty ?? '0', `-${sku.adjCutQty ?? '0'}`])
+    : String(sku.qty);
 
 export const salesPlanEditableQuantity = (
   sku: GeaSalesPlanSku,
@@ -22,7 +35,10 @@ export const salesPlanEditableQuantity = (
         .filter((r) => r === role || flow.pending(r) !== undefined)
     : flow.confirmationRoles(status);
   for (const candidate of roles) {
-    const value = sku[fields[candidate]];
+    const value =
+      candidate === 'customer' && salesPlanZeroBaselineSku(sku)
+        ? salesPlanSubmittedQuantity(sku)
+        : sku[fields[candidate]];
     if (value !== null && value !== undefined) return String(value);
   }
   return undefined;
