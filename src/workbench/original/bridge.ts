@@ -58,6 +58,13 @@ export interface WorkbenchHost {
     skuQuotes?: {
       invoke(query: Api.GeaSalesPlanSkuQuoteQuery): Promise<Api.GeaSalesPlanSkuQuote[]>;
     };
+    reportFacts?: {
+      invoke(query: {
+        planId: string;
+        versionId: string;
+        signal?: AbortSignal;
+      }): Promise<Api.GeaSalesPlanReportFacts>;
+    };
     compare: {
       invoke(query: Api.GeaSalesPlanCompareQuery): Promise<Api.GeaSalesPlanSkuDiff[]>;
     };

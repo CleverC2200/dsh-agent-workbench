@@ -89,6 +89,109 @@ const sources = () => {
   ];
 };
 
+function reportClient(readFacts) {
+  const inputs = sources();
+  return {
+    inputs,
+    periods: {
+      invoke: async () => ({
+        records: [{ periodId: 'period', periodMonth: '2026-11' }],
+        total: 1,
+        current: 1,
+        size: 200,
+        pages: 1,
+      }),
+    },
+    list: {
+      invoke: async (query) => {
+        const records = inputs
+          .filter((source) => source.plan.orderType === query.orderType)
+          .map((source) => ({ ...source.plan }));
+        return {
+          records,
+          total: records.length,
+          current: 1,
+          size: 200,
+          pages: records.length ? 1 : 0,
+        };
+      },
+    },
+    versionSkus: {
+      invoke: async ({ versionId }) =>
+        inputs.find((source) => source.plan.versionId === versionId).skus,
+    },
+    reportFacts: {
+      invoke: async (query) => {
+        await readFacts?.(query, inputs);
+        return {
+          planId: query.planId,
+          versionId: query.versionId,
+          month: '2026-11',
+          rows: [
+            {
+              skuCode: '10006285',
+              ...dimensions,
+              grading: query.planId.startsWith('M') ? 'monthly' : 'correction',
+            },
+          ],
+        };
+      },
+    },
+  };
+}
+
+test('unified report reads authorized version facts before final scope verification and prefers monthly dimensions', async () => {
+  const calls = [];
+  const client = reportClient(async (query) => calls.push(query));
+  const rows = await m.readAllSalesPlanMonthlyReport(client, {
+    signal: new AbortController().signal,
+    statusText: () => '审批完成',
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(rows[0][0], 'monthly');
+  assert.deepEqual(rows[0].slice(18).map(Number), [300, -200, -150, 150, 34512, 17256]);
+  assert(calls.every((query) => query.signal instanceof AbortSignal && !('dealerCode' in query)));
+});
+
+test('version changes during report enrichment fail the final scope check', async () => {
+  const client = reportClient(async (query, inputs) => {
+    if (query.planId.startsWith('M')) inputs[0].plan.versionId = 'new-version';
+  });
+  await assert.rejects(
+    m.readAllSalesPlanMonthlyReport(client, {
+      signal: new AbortController().signal,
+      statusText: () => '',
+    }),
+    { code: 'REPORT_VERSION_CHANGED' },
+  );
+});
+
+test('missing, denied or incomplete report facts cannot become a report of zeros', async () => {
+  const client = reportClient();
+  delete client.reportFacts;
+  await assert.rejects(
+    m.readAllSalesPlanMonthlyReport(client, {
+      signal: new AbortController().signal,
+      statusText: () => '',
+    }),
+    { code: 'REPORT_HOST_UPDATE_REQUIRED' },
+  );
+  for (const invoke of [
+    async () => {
+      throw Error('FIELD_NOT_PUBLISHED');
+    },
+    async () => ({ planId: 'wrong', versionId: 'wrong', month: '2026-11', rows: [] }),
+  ]) {
+    client.reportFacts = { invoke };
+    await assert.rejects(
+      m.readAllSalesPlanMonthlyReport(client, {
+        signal: new AbortController().signal,
+        statusText: () => '',
+      }),
+    );
+  }
+});
+
 test('monthly report merges customer SKU rows and preserves the confirmed 24 columns', () => {
   const rows = m.salesPlanMonthlyReportRows(
     '2026-11',

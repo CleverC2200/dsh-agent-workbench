@@ -488,7 +488,8 @@
         "progress": "查看提报进度",
         "refreshData": "刷新数据",
         "export": "导出当前范围",
-        "exportPage": "导出当前页"
+        "exportPage": "导出当前页",
+        "exportAll": "导出月度计划报表"
       },
       "exportFeedback": {
         "detailsFailed": "版本明细读取失败或数据不完整，请刷新后重试；未产生文件。",
@@ -496,7 +497,11 @@
         "successLive": "已导出当前页 {{count}} 条 GEA 队列数据",
         "empty": "当前版本和已应用筛选范围没有可导出数据。",
         "failed": "导出失败，请重试；未产生文件。",
-        "missingData": "当前页缺少有效编码或数量金额数据，请刷新后重试。"
+        "missingData": "当前页缺少有效编码或数量金额数据，请刷新后重试。",
+        "emptyAll": "当前账号没有可导出的月度计划。",
+        "successAll": "已导出全部可读月份，共 {{count}} 条客户商品计划。",
+        "unpublished": "报表所需字段尚未开放读取，请联系数据管理员发布后重试；未产生文件。",
+        "failedAll": "月度计划报表读取失败、数据不完整或版本已变化，请重试；未产生文件。"
       },
       "pagination": {
         "pageSize": "每页条数",

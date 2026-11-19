@@ -190,6 +190,22 @@ const host={salesPlan:{
     return [{skuCode:'1001',changeType:'UPDATED',before:{...skuFor(fromVersionId),qty:'10',amt:'100'},after:skuFor(toVersionId),qtyDelta:'10',amountDelta:'100'}];
   }},action:{invoke:async(command)=>{if(comparison?.startsWith('single-')){window.sentDirect.push(command);const status=comparison==='single-permission'?403:comparison==='single-conflict'?409:502;const error=comparison.startsWith('single-dms')?'DMS回写失败[ITEM_DISABLED]：产品编码TEST-ITEM已停用,不能填报':comparison==='single-permission'?'当前用户没有品类审批权限':comparison==='single-conflict'?'计划版本已变化，请刷新后重试':'GEA_HTTP_502';throw new BackendHttpError({method:'POST',path:'/sales-plan/plans/versions/'+command.versionId+'/actions',status,body:{error:window.directRejection??error,details:{...(comparison.startsWith('single-dms')?{retryable:false,upstreamCode:'SALES_PLAN_DMS_WRITEBACK_FAILED'}:{}),requestId:'hidden-error-reference',traceId:'hidden-trace-reference'}}});}if(comparison!=='return-edits'&&!continued)return forbidden();window.sentReturns.push(command);if(window.returnUnknown && command.planId==='p1')throw new TypeError('offline');return {planId:command.planId,versionId:command.versionId,fromStatus:command.request.expectedStatus,toStatus:continued?continued[2]+5:6,replayed:false,requestId:command.requestId,traceId:'fixture'};}},submit:{invoke:forbidden}
 },modelInference:{invoke:forbidden}};
+window.reportFactRequests=0;
+if(['sku-review','report-unpublished','report-cancel'].includes(comparison))for(const plan of plans)plan.baseName='郑州';
+host.salesPlan.reportFacts={invoke:async({planId,versionId,signal})=>{
+ window.reportFactRequests++;
+ if(comparison==='report-unpublished')throw Error('FIELD_NOT_PUBLISHED');
+ if(comparison==='report-cancel')await new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));
+ return {planId,versionId,month:'2026-10',rows:skusFor(versionId).map(sku=>({skuCode:sku.skuCode,grading:'FACTORY_WH',inventoryOrganization:'郑州总库存组织',customerType:'经销商',customerGroup:'客户组',materialGroupCode:'100',materialGroupName:'物料组'}))};
+}};
+if(['sku-review','report-unpublished','report-cancel'].includes(comparison)){
+ const list=host.salesPlan.list.invoke;
+ host.salesPlan.list.invoke=async(query)=>{
+  const page=await list(query);
+  const records=query.orderType==='Z'?[]:page.records;
+  return {...page,records,total:records.length};
+ };
+}
 if(comparison?.startsWith('progressive-shipment')||comparison==='sku-review-preempts-prefetch'){
  const list=host.salesPlan.list.invoke;
  host.salesPlan.list.invoke=async(query,onPlanPage)=>{
@@ -333,25 +349,15 @@ for (const fails of [false, true]) {
       false,
       fails ? 'progressive-shipment-error' : 'progressive-shipment',
     );
-    const shipment = page.locator('[data-sales-plan-shipment]').first();
-    await expect(shipment).toBeVisible();
-    await expect(shipment).toHaveText('当月发货加载中…');
-    await expect(shipment).toHaveAttribute('aria-busy', 'true');
+    await expect(page.locator('[data-sales-plan-shipment]')).toHaveCount(0);
+    await expect(page.getByText('当月发货加载中…')).toHaveCount(0);
     const reads = () =>
       page.evaluate(() => window.readCalls.filter((call) => call.versionId).length);
     await expect.poll(reads).toBeGreaterThan(0);
     const detailReads = await reads();
     await page.evaluate(() => window.finishShipments());
-    await expect(shipment).toHaveAttribute(
-      'data-sales-plan-shipment',
-      fails ? 'unavailable' : 'ready',
-    );
-    if (fails) {
-      await expect(shipment).toContainText('— / —');
-      await expect(page.getByText('发货实绩未取得', { exact: true }).first()).toBeVisible();
-    } else {
-      await expect(shipment).toContainText('¥456 / 123 件');
-    }
+    await expect(page.locator('[data-sales-plan-shipment]')).toHaveCount(0);
+    await expect(page.getByText('发货实绩未取得', { exact: true })).toHaveCount(0);
     assert.equal(await reads(), detailReads);
     assert.deepEqual(await page.evaluate(() => window.writes), []);
   });
@@ -488,7 +494,7 @@ test(
           ),
       )
       .toBe(true);
-    for (const name of ['查看提报进度', '刷新数据', '导出当前页']) {
+    for (const name of ['查看提报进度', '刷新数据', '导出月度计划报表']) {
       const offset = await toolbar.getByRole('button', { name, exact: true }).evaluate((button) => {
         const outer = button.getBoundingClientRect();
         const icon = button.querySelector('svg').getBoundingClientRect();
@@ -1249,9 +1255,10 @@ test('展开 SKU 表在宽屏保持紧凑，长描述换行且窄屏可用键盘
     });
 });
 
-test('发货实绩缺失时显示状态并保留期间原因', { timeout: 30000 }, async (t) => {
+test('月初隐藏发货实绩，纠偏保留缺失状态及期间原因', { timeout: 30000 }, async (t) => {
   const { page } = await openWorkbench(t, false, 'shipment-missing');
-  await expect(page.getByText('发货实绩未取得', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-sales-plan-shipment]')).toHaveCount(0);
+  await expect(page.getByText('发货实绩未取得', { exact: true })).toHaveCount(0);
   await page.getByRole('tab', { name: '纠偏', exact: true }).click();
   const status = page.getByText('发货实绩未取得', { exact: true });
   await expect(status).toBeVisible();
@@ -1367,7 +1374,7 @@ test(
 );
 
 test(
-  'monthly XLSX exports match confirmed page totals before expansion and after a collapsed edit',
+  'unified monthly XLSX exports saved customer SKU rows and ignores collapsed local edits',
   { timeout: 30000 },
   async (t) => {
     const { page } = await openWorkbench(t, false, 'sku-review');
@@ -1382,27 +1389,26 @@ test(
     };
     const plan = page.getByTestId('regional-approval-month-plan-p1');
     await expect(plan).toContainText('¥250');
-    let rows = await exported(page.getByRole('button', { name: '导出当前页', exact: true }));
-    assert.equal(rows[0]['月计划数量'], 25);
-    assert.equal(rows[0]['月计划金额'], 250);
+    let rows = await exported(page.getByRole('button', { name: '导出月度计划报表', exact: true }));
+    assert.equal(Object.keys(rows[0]).length, 24);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0]['月初计划'], 20);
+    assert.equal(rows[0]['月初计划额'], 200);
     const expand = page.getByRole('button', { name: /宝阳销售组/ }).first();
     await expand.click();
     await page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).fill('21');
     await page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).blur();
     await expand.click();
     await expect(plan).toContainText('¥260');
-    rows = await exported(page.getByRole('button', { name: '导出当前页', exact: true }));
-    assert.equal(rows[0]['月计划数量'], 26);
-    assert.equal(rows[0]['月计划金额'], 260);
+    rows = await exported(page.getByRole('button', { name: '导出月度计划报表', exact: true }));
+    assert.equal(rows[0]['月初计划'], 20);
+    assert.equal(rows[0]['月初计划额'], 200);
     await page.getByRole('tab', { name: '按大类 / SKU' }).click();
     const review = page.getByRole('region', { name: '按大类 / SKU', exact: true }).first();
     await expect(review.getByRole('rowheader', { name: /1001/ })).toBeVisible();
-    rows = await exported(review.getByRole('button', { name: '导出汇总', exact: true }));
-    for (const row of rows) {
-      assert.equal(row['月计划量（件）'], row['确认计划量（件）']);
-      assert.equal(row['月计划金额（元）'], row['确认计划金额（元）']);
-    }
-    assert.equal(rows.at(-1)['月计划金额（元）'], 260);
+    await expect(review.getByRole('button', { name: '导出汇总', exact: true })).toHaveCount(0);
+    rows = await exported(page.getByRole('button', { name: '导出月度计划报表', exact: true }));
+    assert.equal(rows.length, 2);
     assert.deepEqual(await page.evaluate(() => window.sentDirect), []);
     assert.deepEqual(await page.evaluate(() => window.sentReturns), []);
   },
@@ -1441,17 +1447,8 @@ test(
     await expect(review.getByRole('rowheader', { name: /2002/ })).toHaveCount(0);
     await review.getByRole('combobox', { name: 'SKU 编码 / 物料名称', exact: true }).click();
     await page.getByRole('option', { name: /1001/ }).click();
-    const downloadPromise = page.waitForEvent('download');
-    await review.getByRole('button', { name: '导出汇总', exact: true }).click();
-    const download = await downloadPromise;
-    assert.equal(download.suggestedFilename(), '2026-10-SKU.xlsx');
-    const { readFile } = await import('node:fs/promises');
-    const xlsx = await import('xlsx-republish');
-    const workbook = xlsx.read(await readFile(await download.path()), { type: 'buffer' });
-    const rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
-    assert.equal(rows.length, 4);
-    assert.equal(rows[2][2], 4.5);
-    assert.equal(rows[2][5], 300.3);
+    await expect(review.getByRole('button', { name: '导出汇总', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '导出月度计划报表', exact: true })).toBeVisible();
     assert.deepEqual(await page.evaluate(() => window.writes), []);
     if (process.env.DSH_REVIEW_EVIDENCE)
       await page.screenshot({
@@ -1459,7 +1456,7 @@ test(
         fullPage: true,
       });
     await page.setViewportSize({ width: 820, height: 900 });
-    await expect(review.getByRole('button', { name: '导出汇总', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '导出月度计划报表', exact: true })).toBeVisible();
     if (process.env.DSH_REVIEW_EVIDENCE)
       await page.screenshot({
         path: process.env.DSH_REVIEW_EVIDENCE + '/regional-sku-review-narrow.png',
@@ -2288,3 +2285,31 @@ test('overview keeps the full correction query when selection is cleared across 
   await expect(totals).toHaveText(['¥4,800', '¥2,880', '−¥1,920', '288 件']);
   assert.deepEqual(await page.evaluate(() => window.writes), []);
 });
+
+for (const mode of ['report-unpublished', 'report-cancel']) {
+  test(`unified monthly report does not download for ${mode}`, async (t) => {
+    const { page } = await openWorkbench(t, false, mode);
+    let downloads = 0;
+    page.on('download', () => downloads++);
+    await page.getByRole('button', { name: '导出月度计划报表', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.reportFactRequests)).toBeGreaterThan(0);
+    if (mode === 'report-unpublished') {
+      await expect(
+        page.getByText('报表所需字段尚未开放读取，请联系数据管理员发布后重试；未产生文件。', {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: '导出月度计划报表', exact: true }),
+      ).toBeEnabled();
+    } else {
+      await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+      await expect(page.getByRole('tab', { name: '纠偏', exact: true })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+    }
+    assert.equal(downloads, 0);
+    assert.deepEqual(await page.evaluate(() => window.writes), []);
+  });
+}

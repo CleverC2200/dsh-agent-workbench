@@ -291,6 +291,21 @@ export type GeaSalesPlanSkuQuoteQuery = {
   signal?: AbortSignal;
 };
 
+export type GeaSalesPlanReportFacts = {
+  planId: string;
+  versionId: string;
+  month: string;
+  rows: Array<{
+    skuCode: string;
+    grading: string | null;
+    inventoryOrganization: string | null;
+    customerType: string | null;
+    customerGroup: string | null;
+    materialGroupCode: string | null;
+    materialGroupName: string | null;
+  }>;
+};
+
 export type GeaSalesPlanSubmitItem = {
   useLatestSkuPrice?: true;
   confirmedQty?: GeaSalesPlanDecimal;

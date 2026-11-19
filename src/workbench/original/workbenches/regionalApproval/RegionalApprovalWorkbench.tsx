@@ -18,11 +18,8 @@ import type {
 
 import { salesPlanQueueStatusText, salesPlanStatusText } from './regionalApprovalQueryModel.ts';
 import { SALES_PLAN_RETURN_CODES } from '../../salesPlanWorkflow.ts';
-import {
-  aggregateSalesPlanExportAmounts,
-  SALES_PLAN_EXPORT_AMOUNT_PAIRS,
-  type SalesPlanExportAmounts,
-} from './models/salesPlanExportModel.ts';
+import { readAllSalesPlanMonthlyReport } from './models/salesPlanMonthlyReportModel.ts';
+import { downloadSalesPlanMonthlyReport } from './models/salesPlanMonthlyReportDownload.ts';
 import { useSalesPlanAccess } from './hooks/useSalesPlanAccess.ts';
 import {
   salesPlanVersionEvidenceStale,
@@ -236,7 +233,6 @@ const exactSignedMoney = (value: string) => {
   const formatted = formatExactDecimal(value);
   return formatted.startsWith('-') ? `−¥${formatted.slice(1)}` : `¥${formatted}`;
 };
-const isExactZero = (value: string) => /^-?0(?:\.0+)?$/.test(value);
 const formattedProgress = (value: number | undefined) =>
   value === undefined ? '—' : `${value.toFixed(1)}%`;
 const projectLiveContextEntity = (
@@ -369,6 +365,7 @@ const livePriority = (row: RegionalApprovalLiveRow) => {
 
 const RegionalApprovalWorkbench: React.FC<{
   headerControls?: React.ReactNode;
+  reportClient?: ReturnType<typeof useWorkbenchHost>['salesPlan'];
   orderType?: 'M' | 'Z';
   stateScope: string;
   t: TFunction;
@@ -392,6 +389,7 @@ const RegionalApprovalWorkbench: React.FC<{
   onCatalogChange?: (elements: PageElement[]) => void;
 }> = ({
   headerControls,
+  reportClient,
   orderType = 'M',
   stateScope,
   t,
@@ -2302,257 +2300,64 @@ const RegionalApprovalWorkbench: React.FC<{
     })();
   }, [toolCall]);
 
-  const exportScope = JSON.stringify([
-    scopedState,
-    liveQueryScope,
-    liveQuery.selectedPeriodMonth,
-    liveStageFilter,
-    page,
-    pageSize,
-  ]);
-  const exportScopeRef = useRef(exportScope);
-  const exportRowsRef = useRef(draftedLiveRows);
-  const exportMountedRef = useRef(true);
   const exportRequestRef = useRef<AbortController | null>(null);
   const [exporting, setExporting] = useState(false);
-  useEffect(() => () => exportRequestRef.current?.abort(), [exportScope, draftedLiveRows]);
-  exportScopeRef.current = exportScope;
-  exportRowsRef.current = draftedLiveRows;
+  const exportMountedRef = useRef(true);
   useEffect(() => {
     exportMountedRef.current = true;
     return () => {
       exportMountedRef.current = false;
+      exportRequestRef.current?.abort();
     };
-  }, []);
+  }, [scopedState, currentUserId, reportClient]);
   const exportQueue = async () => {
     if (exportRequestRef.current) return;
-
-    if (liveQuery.queueState.status !== 'success' || liveRows.length === 0) {
-      setExportFeedback({
-        type: 'warning',
-        message: t('common.assistantSurface.regionalApproval.exportFeedback.empty'),
-      });
-      return;
-    }
     const request = new AbortController();
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(120_000)]);
     exportRequestRef.current = request;
     setExporting(true);
-    const timeout = window.setTimeout(() => request.abort(), 30_000);
-    let readingDetails = false;
-    const scopeChanged = () =>
-      !exportMountedRef.current ||
-      exportScopeRef.current !== exportScope ||
-      exportRowsRef.current !== draftedLiveRows;
+    setExportFeedback(undefined);
     try {
-      const XLSX = await import('xlsx-republish');
-      if (
-        !exportMountedRef.current ||
-        exportScopeRef.current !== exportScope ||
-        exportRowsRef.current !== draftedLiveRows
-      )
-        return;
-      if (
-        draftedLiveRows.some(
-          (row) =>
-            [row.planId, row.versionId, row.periodId, row.dealerCode].some(
-              (value) => !String(value ?? '').trim(),
-            ) ||
-            [
-              row.targetQty,
-              row.targetAmount,
-              ...(orderType === 'M' ? [row.mPlanQty, row.mPlanAmount] : []),
-            ].some((value) => !/^-?\d+(?:\.\d+)?$/.test(value ?? '')),
-        )
-      ) {
+      const rows = await readAllSalesPlanMonthlyReport(reportClient ?? salesPlan, {
+        signal,
+        statusText: (plan) => salesPlanStatusText(plan.status, plan.planTypeCode, t),
+      });
+      signal.throwIfAborted();
+      if (!rows.length) {
         setExportFeedback({
-          type: 'error',
-          message: t('common.assistantSurface.regionalApproval.exportFeedback.missingData'),
+          type: 'warning',
+          message: t('common.assistantSurface.regionalApproval.exportFeedback.emptyAll'),
         });
         return;
       }
-      readingDetails = true;
-      const amounts: SalesPlanExportAmounts[] = [];
-      let nextRow = 0;
-      await Promise.all(
-        Array.from({ length: Math.min(4, liveRows.length) }, async () => {
-          while (nextRow < liveRows.length) {
-            request.signal.throwIfAborted();
-            const index = nextRow++;
-            const row = liveRows[index];
-
-            const skus = await (detailClient ?? salesPlan).versionSkus.invoke({
-              versionId: row.versionId,
-              signal: request.signal,
-            });
-            amounts[index] = aggregateSalesPlanExportAmounts(row, skus);
-          }
-        }),
-      );
-      request.signal.throwIfAborted();
-      if (scopeChanged()) return;
-      readingDetails = false;
-      const numericValue = (value: string) => {
-        const numeric = Number(value);
-        return Number.isFinite(numeric) &&
-          Math.abs(numeric) <= Number.MAX_SAFE_INTEGER &&
-          value.replace(/[-.]/g, '').replace(/^0+/, '').replace(/0+$/, '').length <= 15 &&
-          !String(numeric).includes('e') &&
-          isExactZero(subtractExactDecimals(String(numeric), value))
-          ? numeric
-          : value;
-      };
-      const headers = [
-        'planId',
-        'versionId',
-        'periodId',
-        'dealerCode',
-        'status',
-        'seq',
-        'areaCode',
-        'areaName',
-        'provinceCode',
-        'provinceName',
-        'orgCode',
-        'orgName',
-        'baseName',
-        'dealerName',
-        'skuCount',
-        'targetQty',
-        'targetAmount',
-        'qty',
-        'amt',
-        'regionConfirmedQty',
-        'regionConfirmedAmount',
-        'provinceConfirmedQty',
-        'provinceConfirmedAmount',
-        'areaConfirmedQty',
-        'areaConfirmedAmount',
-        'categoryConfirmedQty',
-        'categoryConfirmedAmount',
-        'submitter',
-        'submitTime',
-        'finishedAt',
-        'updatedAt',
-        'returnReason',
-        'statusCode',
-        ...(orderType === 'M' ? (['mPlanQty', 'mPlanAmount'] as const) : []),
-      ] as const;
-      const sheet = XLSX.utils.aoa_to_sheet([
-        headers.map((field) =>
-          t(`common.assistantSurface.regionalApproval.exportColumns.${field}`),
-        ),
-        ...draftedLiveRows.map((row, index) => [
-          row.planId,
-          row.versionId,
-          row.periodId,
-          row.dealerCode,
-          salesPlanStatusText(row.status, row.planTypeCode, t),
-          row.seq,
-          row.areaCode ?? '',
-          row.areaName ?? row.regionName ?? '',
-          row.provinceCode ?? '',
-          row.provinceName ?? row.provinceRegionName ?? '',
-          row.orgCode ?? '',
-          row.orgName ?? row.salesGroupName ?? '',
-          row.baseName ?? '',
-          row.dealerName ?? '',
-          row.skuCount,
-          numericValue(row.targetQty),
-          numericValue(row.targetAmount),
-          ...SALES_PLAN_EXPORT_AMOUNT_PAIRS.flatMap((fields) =>
-            fields.map((field) =>
-              amounts[index][field] == null ? null : numericValue(amounts[index][field]),
-            ),
-          ),
-          row.submitter ?? '',
-          row.submitTime ?? '',
-          row.finishedAt ?? '',
-          row.updatedAt ?? '',
-          row.returnReason ?? '',
-          row.status,
-          ...(orderType === 'M'
-            ? [numericValue(row.mPlanQty ?? ''), numericValue(row.mPlanAmount ?? '')]
-            : []),
-        ]),
-      ]);
-      sheet['!cols'] = headers.map(() => ({ wch: 24 }));
-      for (let row = 2; row <= liveRows.length + 1; row++) {
-        for (const field of [
-          'targetAmount',
-          ...(orderType === 'M' ? (['mPlanAmount'] as const) : []),
-          ...SALES_PLAN_EXPORT_AMOUNT_PAIRS.map((pair) => pair[1]),
-        ] as const) {
-          const column = XLSX.utils.encode_col(headers.findIndex((header) => header === field));
-          if (sheet[`${column}${row}`]?.t === 'n') sheet[`${column}${row}`].z = '#,##0.00';
-        }
-      }
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(
-        workbook,
-        sheet,
-        t('common.assistantSurface.regionalApproval.exportColumns.sheet'),
-      );
-      const exportLabel = (key: string) =>
-        t(`common.assistantSurface.regionalApproval.exportScope.${key}`);
-      const metadata = [
-        [exportLabel('scope'), exportLabel('currentPage')],
-        [exportLabel('month'), liveQuery.selectedPeriodMonth ?? '—'],
-        [exportLabel('version'), exportLabel('currentVersion')],
-        ...(orderType === 'M'
-          ? [[exportLabel('monthlyBasis'), exportLabel('confirmedMonthlyBasis')]]
-          : []),
-        [exportLabel('page'), liveCurrentPage],
-        [exportLabel('pageSize'), pageSize],
-        [exportLabel('exported'), liveRows.length],
-        [exportLabel('total'), liveOuterRows.length],
-        [
-          exportLabel('stage'),
-          t(`common.assistantSurface.regionalApproval.stages.${liveStageFilter ?? 'all'}`),
-        ],
-        ...(['areaCode', 'provinceCode', 'orgCode', 'dealerCode', 'status'] as const).map(
-          (field) => [exportLabel(field), String(liveQueryScope[field] ?? exportLabel('all'))],
-        ),
-      ];
-      const scopeSheet = XLSX.utils.aoa_to_sheet(metadata);
-      scopeSheet['!cols'] = [{ wch: 20 }, { wch: 42 }];
-      XLSX.utils.book_append_sheet(workbook, scopeSheet, exportLabel('sheet'));
-      const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
-      const url = URL.createObjectURL(
-        new Blob([data], {
-          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        }),
-      );
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `sales-plan-approval-${liveQuery.selectedPeriodMonth ?? 'period'}-${liveStageFilter ?? 'all'}-page-${liveCurrentPage}.xlsx`;
-      link.click();
-      URL.revokeObjectURL(url);
+      await downloadSalesPlanMonthlyReport(rows, { signal });
       setExportFeedback({
         type: 'success',
-        message: t('common.assistantSurface.regionalApproval.exportFeedback.successLive', {
-          count: liveRows.length,
+        message: t('common.assistantSurface.regionalApproval.exportFeedback.successAll', {
+          count: rows.length,
         }),
       });
-    } catch {
-      request.abort();
-      if (!scopeChanged()) {
+    } catch (error) {
+      if (!request.signal.aborted) {
+        const message = error instanceof Error ? error.message : '';
+        const unpublished =
+          /FIELD_NOT_PUBLISHED|RESOURCE_NOT_PUBLISHED|NO_RETURN_COLUMN_ALLOWED/.test(message);
         setExportFeedback({
           type: 'error',
           message: t(
-            readingDetails
-              ? 'common.assistantSurface.regionalApproval.exportFeedback.detailsFailed'
-              : 'common.assistantSurface.regionalApproval.exportFeedback.failed',
+            unpublished
+              ? 'common.assistantSurface.regionalApproval.exportFeedback.unpublished'
+              : 'common.assistantSurface.regionalApproval.exportFeedback.failedAll',
           ),
         });
       }
+      request.abort();
     } finally {
-      window.clearTimeout(timeout);
       if (exportRequestRef.current === request) {
         exportRequestRef.current = null;
         if (exportMountedRef.current) setExporting(false);
       }
     }
-    return;
   };
 
   const stageAuthorized = (id: ApprovalStageId) =>
@@ -2876,40 +2681,43 @@ const RegionalApprovalWorkbench: React.FC<{
                   {exactMoney(tableRow.plan.targetAmount)}
                 </small>
               )}
-              <small
-                data-sales-plan-shipment={
-                  tableRow.plan.shipmentPending
-                    ? 'loading'
-                    : tableRow.plan.shipmentError
-                      ? 'unavailable'
-                      : 'ready'
-                }
-                aria-busy={tableRow.plan.shipmentPending || undefined}
-                title={tableRow.plan.shipmentError ?? undefined}
-              >
-                {tableRow.plan.shipmentPending ? (
-                  t('common.correction.shipmentLoading')
-                ) : (
-                  <>
-                    {orderType === 'M' ? `${t('common.correction.shipmentActual')} ` : ''}
-                    {tableRow.plan.shipAmount == null
-                      ? '—'
-                      : exactMoney(tableRow.plan.shipAmount)}{' '}
-                    /{' '}
-                    {tableRow.plan.shipQty == null ? (
-                      '—'
+              {orderType === 'Z' && (
+                <>
+                  <small
+                    data-sales-plan-shipment={
+                      tableRow.plan.shipmentPending
+                        ? 'loading'
+                        : tableRow.plan.shipmentError
+                          ? 'unavailable'
+                          : 'ready'
+                    }
+                    aria-busy={tableRow.plan.shipmentPending || undefined}
+                    title={tableRow.plan.shipmentError ?? undefined}
+                  >
+                    {tableRow.plan.shipmentPending ? (
+                      t('common.correction.shipmentLoading')
                     ) : (
-                      <span title={correctionDisplay(tableRow.plan.shipQty, 'quantity').exact}>
-                        {`${quantityText(tableRow.plan.shipQty)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`}
-                      </span>
+                      <>
+                        {tableRow.plan.shipAmount == null
+                          ? '—'
+                          : exactMoney(tableRow.plan.shipAmount)}{' '}
+                        /{' '}
+                        {tableRow.plan.shipQty == null ? (
+                          '—'
+                        ) : (
+                          <span title={correctionDisplay(tableRow.plan.shipQty, 'quantity').exact}>
+                            {`${quantityText(tableRow.plan.shipQty)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`}
+                          </span>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-              </small>
-              {!tableRow.plan.shipmentPending && tableRow.plan.shipmentError && (
-                <small title={tableRow.plan.shipmentError}>
-                  {t('common.correction.shipmentUnavailable')}
-                </small>
+                  </small>
+                  {!tableRow.plan.shipmentPending && tableRow.plan.shipmentError && (
+                    <small title={tableRow.plan.shipmentError}>
+                      {t('common.correction.shipmentUnavailable')}
+                    </small>
+                  )}
+                </>
               )}
             </div>
           );
@@ -3825,11 +3633,10 @@ const RegionalApprovalWorkbench: React.FC<{
                 <Button
                   size="small"
                   icon={<Download size={14} />}
-                  disabled={skuReviewOpen || liveQuery.queueState.status !== 'success'}
                   onClick={() => void exportQueue()}
                   loading={exporting}
-                  aria-label={t('common.assistantSurface.regionalApproval.toolbar.exportPage')}
-                  title={t('common.assistantSurface.regionalApproval.toolbar.exportPage')}
+                  aria-label={t('common.assistantSurface.regionalApproval.toolbar.exportAll')}
+                  title={t('common.assistantSurface.regionalApproval.toolbar.exportAll')}
                 />
                 {!skuReviewOpen ? (
                   <div className={styles.approvalToolbarActions}>{approvalActionButtons}</div>
@@ -4466,6 +4273,7 @@ const SalesPlanWorkbench: React.FC<React.ComponentProps<typeof RegionalApprovalW
     <WorkbenchHostProvider value={orderHost}>
       <RegionalApprovalWorkbench
         {...props}
+        reportClient={host.salesPlan}
         key={orderType}
         orderType={orderType}
         stateScope={orderType === 'M' ? props.stateScope : `${props.stateScope}:correction`}

@@ -2,6 +2,7 @@ import type {
   GeaSalesPlanListItem,
   GeaSalesPlanPage,
   GeaSalesPlanSku,
+  GeaSalesPlanReportFacts,
 } from '../../../contracts.ts';
 import type { WorkbenchHost } from '../../../bridge.ts';
 import {
@@ -45,14 +46,7 @@ export type SalesPlanMonthlyReportSource = {
 
 export type SalesPlanReportMonthSource = SalesPlanMonthlyReportSource & { month: string };
 
-export type SalesPlanMonthlyReportFacts = {
-  grading: string | null;
-  inventoryOrganization: string | null;
-  customerType: string | null;
-  customerGroup: string | null;
-  materialGroupCode: string | null;
-  materialGroupName: string | null;
-};
+export type SalesPlanMonthlyReportFacts = Omit<GeaSalesPlanReportFacts['rows'][number], 'skuCode'>;
 
 export type SalesPlanMonthlyReportRow = readonly (string | number)[];
 export type SalesPlanMonthlyReportFactsReader = (
@@ -129,6 +123,49 @@ const planSnapshot = (plan: GeaSalesPlanListItem | undefined) =>
 
 type ReportClient = Pick<WorkbenchHost['salesPlan'], 'periods' | 'list' | 'versionSkus'>;
 
+export async function readAllSalesPlanMonthlyReport(
+  client: ReportClient & Pick<WorkbenchHost['salesPlan'], 'reportFacts'>,
+  {
+    signal,
+    statusText,
+  }: { signal: AbortSignal; statusText: (plan: GeaSalesPlanListItem) => string },
+): Promise<SalesPlanMonthlyReportRow[]> {
+  const reader = client.reportFacts;
+  if (!reader) throw new SalesPlanMonthlyReportError('REPORT_HOST_UPDATE_REQUIRED');
+  const facts = new Map<string, { monthly: boolean; value: SalesPlanMonthlyReportFacts }>();
+  const sources = await readSalesPlanReportSources(client, {
+    signal,
+    collectFacts: async (source, active) => {
+      const result = await reader.invoke({
+        planId: source.plan.planId,
+        versionId: source.plan.versionId,
+        signal: active,
+      });
+      active.throwIfAborted();
+      if (
+        result.planId !== source.plan.planId ||
+        result.versionId !== source.plan.versionId ||
+        result.month !== source.month ||
+        !Array.isArray(result.rows) ||
+        result.rows.length !== source.skus.length ||
+        new Set(result.rows.map((row) => row.skuCode)).size !== source.skus.length ||
+        result.rows.some((row) => !source.skus.some((sku) => sku.skuCode === row.skuCode))
+      )
+        throw new SalesPlanMonthlyReportError('INCOMPLETE_REPORT_FACTS');
+      for (const row of result.rows) {
+        const key = JSON.stringify([source.month, source.plan.dealerCode, row.skuCode]);
+        const monthly = source.plan.orderType === 'M';
+        if (!facts.get(key)?.monthly) facts.set(key, { monthly, value: row });
+      }
+    },
+  });
+  return salesPlanAllMonthlyReportRows(
+    sources,
+    (month, customer, sku) => facts.get(JSON.stringify([month, customer, sku]))?.value,
+    statusText,
+  );
+}
+
 export async function readSalesPlanMonthlyReportSources(
   client: ReportClient,
   { month, signal }: { month: string; signal: AbortSignal },
@@ -147,7 +184,15 @@ export function readAllSalesPlanMonthlyReportSources(
 
 async function readSalesPlanReportSources(
   client: ReportClient,
-  { month, signal }: { month?: string; signal: AbortSignal },
+  {
+    month,
+    signal,
+    collectFacts,
+  }: {
+    month?: string;
+    signal: AbortSignal;
+    collectFacts?: (source: SalesPlanReportMonthSource, signal: AbortSignal) => Promise<void>;
+  },
 ): Promise<SalesPlanReportMonthSource[]> {
   const cancellation = new AbortController();
   const active = AbortSignal.any([signal, cancellation.signal]);
@@ -224,6 +269,7 @@ async function readSalesPlanReportSources(
       const sourceMonth = before.periodMonths.get(plan.periodId);
       if (!sourceMonth) throw new SalesPlanMonthlyReportError('INVALID_REPORT_PERIOD');
       sources[index] = { month: sourceMonth, plan, skus: skus.map((sku) => ({ ...sku })) };
+      await collectFacts?.(sources[index], active);
     }
   });
   try {

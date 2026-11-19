@@ -331,6 +331,7 @@ export const workbenchHost: WorkbenchHost = {
       invoke: ({ signal, ...query }) =>
         rpc('workbench/query', { kind: 'skuQuotes', query }, signal),
     },
+    reportFacts: { invoke: (input) => query('reportFacts', input) },
     compare: { invoke: (input) => query('compare', input) },
     action: { invoke: (input) => rpc('sales-plan/action', input) },
     submit: { invoke: (input) => rpc('sales-plan/submit', input) },
