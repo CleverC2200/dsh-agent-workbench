@@ -488,6 +488,7 @@ const RegionalApprovalWorkbench: React.FC<{
   >({});
   const [currentSkusByPlan, setCurrentSkusByPlan] = useState<Record<string, GeaSalesPlanSku[]>>({});
   const [inlinePlanId, setInlinePlanId] = useState<string>();
+  const [skuAdditionFocus, setSkuAdditionFocus] = useState<{ planId: string; request: number }>();
   const [draftLiveFilters, setDraftLiveFilters] = useState<LiveApprovalFilters>(
     initialState.draftLiveFilters,
   );
@@ -3061,6 +3062,33 @@ const RegionalApprovalWorkbench: React.FC<{
     },
   });
 
+  if (dimension === 'customer' && detailClient.skuQuotes)
+    liveColumns.push({
+      title: t('common.assistantSurface.regionalApproval.addSku.title'),
+      width: 116,
+      render: (_, record) =>
+        record.kind === 'plan' &&
+        !record.members &&
+        !sourceTypeReadOnly(record.plan) &&
+        inlineSkuAccess(record.plan).canAdd ? (
+          <Button
+            size="small"
+            onClick={() => {
+              setCategoryComparison(false);
+              selectLivePlanContext(record.plan);
+              setFocusedLivePlanId(record.plan.planId);
+              setInlinePlanId(record.plan.planId);
+              setSkuAdditionFocus((current) => ({
+                planId: record.plan.planId,
+                request: (current?.request ?? 0) + 1,
+              }));
+            }}
+          >
+            {t('common.assistantSurface.regionalApproval.addSku.title')}
+          </Button>
+        ) : null,
+    });
+
   const hasReturnedSelection = selectedLiveRows.some((row) => row.status >= 6 && row.status <= 9);
   const submissionItems = (): SalesPlanSubmissionItem[] =>
     selectedLiveRows.flatMap((row): SalesPlanSubmissionItem[] => {
@@ -3311,7 +3339,9 @@ const RegionalApprovalWorkbench: React.FC<{
         }
         onCompleted={async (outcomes: readonly BatchActionOutcome[]) => {
           const succeeded = new Set(
-            outcomes.filter((outcome) => outcome.status === 'success').map((outcome) => outcome.planId),
+            outcomes
+              .filter((outcome) => outcome.status === 'success')
+              .map((outcome) => outcome.planId),
           );
           if (succeeded.size) {
             for (const { row } of batchAction.items) {
@@ -4112,6 +4142,11 @@ const RegionalApprovalWorkbench: React.FC<{
                           const additionKey = skuAdditionKey(inlineRow, access.role);
                           return (
                             <InlineSkuDetails
+                              additionFocusRequest={
+                                skuAdditionFocus?.planId === record.plan.planId
+                                  ? skuAdditionFocus.request
+                                  : undefined
+                              }
                               initialAdditions={pendingSkuAdditions.current.get(additionKey)}
                               onAdditionsChange={(items) =>
                                 pendingSkuAdditions.current.set(additionKey, items)
