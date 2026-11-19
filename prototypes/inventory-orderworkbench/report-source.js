@@ -941,7 +941,7 @@ export async function loadWorkbenchProvinceCancellationReasons(start, end, signa
   if (!config) throw Error('ORDER_METRIC_CONFIG_REQUIRED');
   if (start >= end) return { status: 'ready', rows: [] };
   const client = createAgentQueries(config, options.execute);
-  const result = await client.readAll('workbench.province.cancellation.reasons', {
+  const result = await readWithTransientRetry(() => client.readAll('workbench.province.cancellation.reasons', {
     start,
     end_exclusive: end,
     report_base: normalizeWorkbenchBase(base),
@@ -953,7 +953,7 @@ export async function loadWorkbenchProvinceCancellationReasons(start, end, signa
     keyFields: ['region', 'province', 'reason'],
     requiredColumns: ['region', 'province', 'reason', 'cancel_qty'],
     singlePageFirst: true,
-  });
+  }), signal);
   if (result.rows.some(row => !Number.isFinite(Number(row.cancel_qty)) || Number(row.cancel_qty) < 0 || row.cancel_qty === null)) throw Error('INVALID_PROVINCE_REASON_QUANTITY');
   return { status: 'ready', rows: result.rows, start, end, configVersion: result.configVersion };
 }

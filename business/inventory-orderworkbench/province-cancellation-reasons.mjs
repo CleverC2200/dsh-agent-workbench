@@ -1,4 +1,4 @@
-import { cancellationEvents } from './document-queries.mjs';
+import { cancellationReasonEvents } from './document-queries.mjs';
 
 export function provinceCancellationReasonsSql() {
   const keys = [
@@ -25,7 +25,7 @@ export function provinceCancellationReasonsSql() {
     .join(' UNION ALL ');
   const same = keys.map((key) => `e.${key}=r.${key}`).join(' AND ');
   return `SELECT e.region,e.province,COALESCE(r.reason,'未明确') AS reason,SUM(e.cancel_numerator) AS cancel_qty
-    FROM (${cancellationEvents}) e LEFT JOIN (
+    FROM (${cancellationReasonEvents}) e LEFT JOIN (
       SELECT ${keys.join(',')},CASE WHEN COUNT(DISTINCT category)=1 THEN MAX(category) ELSE '未明确' END AS reason
       FROM (${reasons}) reason_rows GROUP BY ${keys.join(',')}
     ) r ON ${same}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { chromium, expect } from '@playwright/test';
 
-test('province tab renders all three document tables and lazily caches distinct order counts', async (t) => {
+async function provinceRecovery(t, reasonFailures) {
   const browser = await chromium.launch({
     headless: true,
     ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
@@ -34,10 +34,11 @@ test('province tab renders all three document tables and lazily caches distinct 
   );
   await page.goto('https://province.workbench.test/');
   await page.evaluate(
-    ({ config }) => {
+    ({ config, reasonFailures }) => {
       const channel = new MessageChannel();
       window.provinceReads = 0;
       window.reasonReads = 0;
+      window.reasonFailuresRemaining = reasonFailures;
       window.savedWrites = 0;
       window.countFailure = true;
       window.fixtureEdits = {
@@ -96,6 +97,20 @@ test('province tab renders all three document tables and lazily caches distinct 
           else if (id.endsWith('.count')) rows = [{ total: 0 }];
           else if (id === 'workbench.province.cancellation.reasons') {
             window.reasonReads++;
+            if (window.reasonFailuresRemaining-- > 0) {
+              channel.port1.postMessage({
+                type: 'response',
+                id: data.id,
+                result: {
+                  success: false,
+                  failure: {
+                    reasonCode: 'GEA_SQL_UNAVAILABLE',
+                    message: 'transient reason failure',
+                  },
+                },
+              });
+              return;
+            }
             rows = ['河南', '湖南', ...Array.from({ length: 18 }, (_, i) => '测试省区' + i)].map(
               (province) => ({
                 province,
@@ -186,7 +201,7 @@ test('province tab renders all three document tables and lazily caches distinct 
         [channel.port2],
       );
     },
-    { config },
+    { config, reasonFailures },
   );
   await expect
     .poll(() =>
@@ -205,6 +220,10 @@ test('province tab renders all three document tables and lazily caches distinct 
   await expect(panel.getByRole('heading', { name: '省区改单率' })).toBeVisible();
   await expect(panel.getByRole('heading', { name: '省区改单和作废综合排名' })).toBeVisible();
   await expect(panel.locator('table').nth(0).locator('tbody tr')).toHaveCount(20);
+  if (reasonFailures === 2) {
+    await expect(panel.getByRole('button', { name: '重新读取作废原因' })).toBeVisible();
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  }
   await expect(
     panel.locator('table').nth(0).locator('tbody tr').filter({ hasText: '河南' }).first(),
   ).toContainText('10.00%');
@@ -221,6 +240,8 @@ test('province tab renders all three document tables and lazily caches distinct 
       .locator('td')
       .nth(7),
   ).toHaveText('100.00%');
+  assert.equal(await page.evaluate(() => window.reasonReads), reasonFailures + 1);
+  await expect(panel.getByRole('button', { name: '重新读取作废原因' })).toHaveCount(0);
   await expect(panel.locator('.wb-province-scroll')).toHaveCount(0);
   for (const wrap of await panel.locator('.wb-performance-table-wrap').all()) {
     assert.ok(await wrap.evaluate((element) => element.scrollHeight <= element.clientHeight + 1));
@@ -325,4 +346,8 @@ test('province tab renders all three document tables and lazily caches distinct 
     await panel.scrollIntoViewIfNeeded();
     await panel.screenshot({ path: process.env.PROVINCE_PREVIEW_SCREENSHOT });
   }
-});
+}
+
+for (const failures of [1, 2])
+  test(`province tab recovers ${failures} transient failures and retains table behavior`, (t) =>
+    provinceRecovery(t, failures));

@@ -2999,6 +2999,11 @@ workbenchView.addEventListener('click', (event) => {
   activePeriodReport.provinceOrders = undefined;
   void ensureProvinceOrderCounts();
 });
+window.addEventListener('online', () => {
+  if (!/^(GEA_SQL_UNAVAILABLE|GEA_SQL_QUERY_TIMEOUT)$/.test(activePeriodReport?.provinceReasons?.code || '')) return;
+  activePeriodReport.provinceReasons = undefined;
+  void ensureProvinceReasons();
+});
 function refreshWorkbenchDimension() {
   if (liveFacts) applyLiveFacts(liveFacts, undefined, { dimensionOnly: true });
   else renderWorkbenchDimensions();
@@ -3007,6 +3012,7 @@ wbDimensionTabButtons.forEach((button) => {
   button.addEventListener('click', () => {
     if (dimensionTab === button.dataset.wbDimensionTab) return;
     dimensionTab = button.dataset.wbDimensionTab;
+    if (dimensionTab === 'province-performance' && activePeriodReport?.provinceReasons?.status === 'error') activePeriodReport.provinceReasons = undefined;
     refreshWorkbenchDimension();
   });
 });

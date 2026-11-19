@@ -1,3 +1,7 @@
+import {
+  cancellationEvents,
+  cancellationReasonEvents,
+} from '../business/inventory-orderworkbench/document-queries.mjs';
 import { provinceCancellationReasonsSql } from '../business/inventory-orderworkbench/province-cancellation-reasons.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -357,4 +361,115 @@ test('province reason reader scopes the month/base and rejects unknown quantitie
       .slice(5, 10)
       .every((cell) => cell.text === '—' && cell.title.includes('REASON_FAILED')),
   );
+});
+
+test('reason-only pruning keeps exactly the valid positive cancellation events', () => {
+  const lines = [
+    cancellationLine('valid', {
+      orderstatus: 90,
+      detailstatus: 20,
+      canceltime: '2026-10-20',
+      need_qty_origin: 12,
+    }),
+    cancellationLine('early', {
+      orderstatus: 90,
+      detailstatus: 20,
+      header_addtime: '2026-10-20',
+      canceltime: '2026-10-20 01:00:00',
+    }),
+    cancellationLine('no-departure', {
+      orderstatus: 90,
+      canceltime: '2026-10-20',
+      latestsendcardate: null,
+    }),
+    cancellationLine('no-quantity', {
+      orderstatus: 90,
+      canceltime: '2026-10-20',
+      need_qty_origin: null,
+    }),
+    cancellationLine('conflict', { orderstatus: 90, canceltime: '2026-10-20' }),
+    cancellationLine('conflict', { orderstatus: 10, canceltime: '2026-10-20' }),
+    cancellationLine('no-cancel-time', {
+      orderstatus: 90,
+      header_addtime: '2026-09-01',
+      canceltime: null,
+    }),
+    cancellationLine('valid-order'),
+  ];
+  const db = cancellationDb({
+    daily: lines,
+    trace: [{ executeorderno: 'E-no-cancel-time', cust_code: 'C', lastshipmenttime: '2026-10-20' }],
+  });
+  try {
+    const select = (sql) =>
+      db
+        .prepare(
+          sqliteCancellationSql(
+            'SELECT cust_order_no,executeorderlineno,material_code,cancel_numerator FROM (' +
+              sql +
+              ') events WHERE invalid_cancel=0 AND cancel_numerator>0 ORDER BY cust_order_no',
+          ),
+        )
+        .all(octoberCancellationParameters)
+        .map((row) => ({ ...row }));
+    const expected = select(cancellationEvents);
+    assert.deepEqual(select(cancellationReasonEvents), expected);
+    assert.deepEqual(
+      expected.map((row) => row.cust_order_no),
+      ['valid'],
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test('province reasons recover a transient failure and do not retry denied or persistent reads forever', async () => {
+  const config = orderWorkbenchSourceConfig(
+    JSON.parse(readFileSync('business/inventory-apsplan/sql.config.json')),
+  );
+  const built = await build({
+    stdin: {
+      contents:
+        "export {loadWorkbenchProvinceCancellationReasons} from './prototypes/inventory-orderworkbench/report-source.js';",
+      resolveDir: process.cwd(),
+    },
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    write: false,
+  });
+  const { loadWorkbenchProvinceCancellationReasons: read } = await import(
+    'data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64')
+  );
+  let calls = 0;
+  const result = await read('2026-11-01', '2026-11-16', undefined, '', {
+    config,
+    execute: async (_query, { queryId }) => {
+      if (++calls === 1) throw Object.assign(Error('temporary'), { code: 'GEA_SQL_UNAVAILABLE' });
+      return {
+        rows: [{ province: '河南', region: '华中', reason: '客户取消', cancel_qty: 10 }],
+        returnedColumns: config.queries[queryId].resultColumns,
+        rejectedColumns: [],
+      };
+    },
+  });
+  assert.equal(calls, 2);
+  assert.equal(result.rows[0].cancel_qty, 10);
+  for (const [code, expected] of [
+    ['GEA_SQL_UNAVAILABLE', 2],
+    ['DATA_PERMISSION_DENIED', 1],
+    ['SESSION_EXPIRED', 1],
+  ]) {
+    calls = 0;
+    await assert.rejects(
+      read('2026-11-01', '2026-11-16', undefined, '', {
+        config,
+        execute: async () => {
+          calls++;
+          throw Object.assign(Error(code), { code });
+        },
+      }),
+    );
+    assert.equal(calls, expected);
+  }
 });

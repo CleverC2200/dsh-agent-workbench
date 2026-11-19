@@ -42,6 +42,12 @@ export const cancellationEvents = cancellationEventsSql({
   dailyOnly,
 });
 
+export const cancellationReasonEvents = cancellationEventsSql({
+  dailySource,
+  dailyOnly,
+  positiveCancellations: true,
+});
+
 export const amendmentEventsSql = skuAmendmentEventsSql({});
 export const amendmentDimensionEventsSql = skuAmendmentEventsSql({ dimensions: true });
 export const cancellationDimensionEventsSql = cancellationEventsSql({
