@@ -823,7 +823,8 @@
           "skipped": "Skipped"
         },
         "skippedTag": "Skipped",
-        "terminalSkipped": "This plan has completed approval or writeback and is skipped."
+        "terminalSkipped": "This plan has completed approval or writeback and is skipped.",
+        "permissionSkipped": "Your account does not have permission for {{stage}}. This plan is skipped."
       },
       "liveAction": {
         "saveChecksumTitle": "Save review",
@@ -914,6 +915,7 @@
         "disabled": {
           "completed": "This version already has a server receipt, so duplicate actions are blocked.",
           "permission": "The server denied this user. This version is disabled for the current round.",
+          "currentStagePermission": "Your account cannot approve this plan at its current stage.",
           "returnedNeedsResubmit": "A returned plan cannot be approved or rejected directly. Use Resubmit returned plan, which creates a new version.",
           "returnedCannotReject": "This plan has reached the customer submission step and cannot be returned further. The customer must revise and resubmit it.",
           "returnedCannotApprove": "A returned version cannot be approved directly. Use Resubmit returned plan to create a new version.",
@@ -945,7 +947,7 @@
         },
         "approvalRole": "Approval role",
         "selectRole": "Choose the role for this action",
-        "roleContractUnavailable": "You have this role, but GEA does not yet support writing for the selected role. Update the service before submitting.",
+        "roleContractUnavailable": "The selected role does not match the plan's current approval stage. Submit using the role for that stage.",
         "resultTitle": "Action result",
         "resume": "Check submission result",
         "roleMissing": "No available approval role was found. Refresh the list and select the plan again.",
