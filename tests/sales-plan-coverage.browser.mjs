@@ -18,16 +18,24 @@ import zh from './src/workbench/original/zh-CN.json';
 import {RegionalApprovalResubmitDialog} from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
 import Workbench from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalWorkbench.tsx';
 import {WorkbenchHostProvider} from './src/workbench/original/bridge.ts';
+import {salesPlanDraftSnapshot} from './src/workbench/original/workbenches/regionalApproval/models/salesPlanLocalDraftModel.ts';
 const i18n=i18next.createInstance();
 await i18n.init({lng:'zh-CN',resources:{'zh-CN':{translation:{common:zh}}},interpolation:{escapeValue:false}});
 const rowCount=Number(new URL(location.href).searchParams.get('fixtureRows')??3);
-const rows=Array.from({length:rowCount},(_,index)=>index+1).map(n=>({planId:'p'+n,versionId:'v'+n,seq:1,periodId:'period',planTypeCode:'Y',orderType:'M',dealerCode:'d'+n,orgCode:'org'+n,orgName:'销售组'+n,areaCode:'area'+n,areaName:'大区'+n,provinceCode:'province'+n,provinceName:'省区'+n,baseName:'基地'+n,status:1,updatedAt:'2026-10-'+String(31-n).padStart(2,'0'),currentQty:'20',currentAmount:'200',targetQty:'0',targetAmount:'400',skuCount:1}));
+const batchRoles=new URL(location.href).searchParams.has('batchRoles');
+const rows=Array.from({length:rowCount},(_,index)=>index+1).map(n=>({planId:'p'+n,versionId:'v'+n,seq:1,periodId:'period',planTypeCode:'Y',orderType:'M',dealerCode:'d'+n,orgCode:'org'+n,orgName:'销售组'+n,areaCode:'area'+n,areaName:'大区'+n,provinceCode:'province'+n,provinceName:'省区'+n,baseName:'基地'+n,status:batchRoles?[1,4,3][n-1]:1,updatedAt:'2026-10-'+String(31-n).padStart(2,'0'),currentQty:'20',currentAmount:'200',targetQty:'0',targetAmount:'400',skuCount:1}));
 window.coverageCalls={sku:[],detail:[],draft:0,draftWrite:0,model:0,write:0};
+window.batchActions=[];
 window.exportBehavior='normal';
 window.localDrafts=JSON.parse(localStorage.getItem('coverage-host-drafts')??'{}');
 window.exportReads=[];
 window.exportReleases=[];
 const sku=(versionId)=>({id:'s'+versionId,versionId,skuCode:'sku'+versionId,productCategName:'汤圆',qty:'20',amt:'200',baseQty:'10',amtBase:'100',price:'10'});
+const detailFor=row=>({currentVersion:{...row,id:row.versionId,effective:true},skus:[sku(row.versionId)],versions:[],logs:[]});
+if(batchRoles){
+ const row=rows[1];
+ window.localDrafts[row.versionId]={planId:row.planId,versionId:row.versionId,status:row.status,role:'region',sourceSnapshot:salesPlanDraftSnapshot(row,detailFor(row)),adjustments:[{skuCode:'skuv2',adjustQty:'6'}],remark:''};
+}
 const forbid=async()=>{window.coverageCalls.write++;throw Error('fixture write forbidden')};
 const noop=()=>{};
 function App(){
@@ -36,8 +44,8 @@ function App(){
  const [submissionRefreshRequest,setSubmissionRefreshRequest]=useState();
  const salesPlan=useMemo(()=>({
   periods:{invoke:async()=>({records:[{periodId:'period',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
-  list:{invoke:async(q)=>{const records=q?.status===undefined||q.status===1?rows:[];return {records,total:records.length,size:q?.pageSize??200,current:q?.pageNo??1,pages:records.length?1:0}}},
-  detail:{invoke:async({planId})=>{window.coverageCalls.detail.push(planId);const versionId=rows.find(x=>x.planId===planId).versionId;return {currentVersion:{...rows.find(x=>x.planId===planId),id:versionId,effective:true},skus:[sku(versionId)],versions:[],logs:[]}}},
+  list:{invoke:async(q)=>{const records=q?.status===undefined?rows:rows.filter(row=>row.status===q.status);return {records,total:records.length,size:q?.pageSize??200,current:q?.pageNo??1,pages:records.length?1:0}}},
+  detail:{invoke:async({planId})=>{window.coverageCalls.detail.push(planId);return detailFor(rows.find(row=>row.planId===planId));}},
   draft:{invoke:async(query)=>{window.coverageCalls.draft++;if(query.draft){window.coverageCalls.draftWrite++;window.localDrafts[query.versionId]=query.draft;}return {draft:window.localDrafts[query.versionId]??null}}},
   versions:{invoke:async()=>[]},logs:{invoke:async()=>[]},compare:{invoke:async()=>[]},
   versionSkus:{invoke:async({versionId,signal})=>{
@@ -56,10 +64,10 @@ function App(){
    if(mode==='limited'&&versionId==='v3')throw Object.assign(Error('本次销售只读额度已用完，未发出额外请求'),{code:'GEA_SALES_READONLY_LIMIT'});
    return [sku(versionId)];
   }},
-  action:{invoke:forbid},submit:{invoke:forbid}
+  action:{invoke:batchRoles?async(command)=>{window.batchActions.push(command);throw Error('fixture action recorded');}:forbid},submit:{invoke:forbid}
  }),[mode]);
  const host=useMemo(()=>({salesPlan,modelInference:{invoke:async()=>{window.coverageCalls.model++;throw Error('fixture model forbidden')}}}),[salesPlan]);
- return <><button onClick={()=>setMode('complete')}>切换到完整读取的测试上下文</button><button onClick={()=>setMode('pending')}>切换到等待中的测试上下文</button><button onClick={()=>{rows[0].versionId='v1-new'}}>模拟后台计划换版</button><WorkbenchHostProvider value={host}><Workbench submissionRefreshRequest={submissionRefreshRequest} onSubmitBatch={setSubmissionItems} stateScope="coverage-test" t={i18n.t.bind(i18n)} onContextChange={noop} approvalStages={['region']} liveActionsEnabled={new URL(location.href).searchParams.has('fixtureAccess')}/></WorkbenchHostProvider>{submissionItems&&<RegionalApprovalResubmitDialog items={submissionItems} client={{...salesPlan,currentUser:{invoke:async()=>({id:'test',username:'test'})}}} connected t={i18n.t.bind(i18n)} onClose={()=>setSubmissionItems(undefined)} onRefresh={ids=>{setSubmissionItems(undefined);setSubmissionRefreshRequest(ids)}}/>}</>;
+ return <><button onClick={()=>setMode('complete')}>切换到完整读取的测试上下文</button><button onClick={()=>setMode('pending')}>切换到等待中的测试上下文</button><button onClick={()=>{rows[0].versionId='v1-new'}}>模拟后台计划换版</button><WorkbenchHostProvider value={host}><Workbench submissionRefreshRequest={submissionRefreshRequest} onSubmitBatch={setSubmissionItems} stateScope="coverage-test" t={i18n.t.bind(i18n)} onContextChange={noop} approvalStages={batchRoles?['region','category']:['region']} liveActionsEnabled={new URL(location.href).searchParams.has('fixtureAccess')}/></WorkbenchHostProvider>{submissionItems&&<RegionalApprovalResubmitDialog items={submissionItems} client={{...salesPlan,currentUser:{invoke:async()=>({id:'test',username:'test'})}}} connected t={i18n.t.bind(i18n)} onClose={()=>setSubmissionItems(undefined)} onRefresh={ids=>{setSubmissionItems(undefined);setSubmissionRefreshRequest(ids)}}/>}</>;
 }
 createRoot(document.getElementById('root')).render(<App/>);
 `,
@@ -74,7 +82,7 @@ createRoot(document.getElementById('root')).render(<App/>);
   loader: { '.svg': 'dataurl', '.png': 'dataurl' },
 });
 
-async function openWorkbench(t, fixtureRows = 3, fixtureAccess = false) {
+async function openWorkbench(t, fixtureRows = 3, fixtureAccess = false, batchRoles = false) {
   const assets = new Map(bundle.outputFiles.map((x) => [x.path.split(/[\\/]/).at(-1), x.text]));
   const server = createServer((req, res) => {
     const name = req.url.slice(1);
@@ -110,10 +118,45 @@ async function openWorkbench(t, fixtureRows = 3, fixtureAccess = false) {
     return route.continue();
   });
   await page.goto(
-    `http://127.0.0.1:${server.address().port}?fixtureRows=${fixtureRows}${fixtureAccess ? '&fixtureAccess=1' : ''}`,
+    `http://127.0.0.1:${server.address().port}?fixtureRows=${fixtureRows}${fixtureAccess ? '&fixtureAccess=1' : ''}${batchRoles ? '&batchRoles=1' : ''}`,
   );
   return { page, pageErrors, externalRequests: () => externalRequests };
 }
+
+test(
+  'batch approval uses each current node and identifies unauthorized plans before confirmation',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t, 3, true, true);
+    await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
+    await page.getByTestId('regional-approval-flow-toggle').click();
+    const region = page.getByTestId('regional-approval-stage-region');
+    await expect(region).toHaveAttribute('aria-pressed', 'true');
+    await region.click();
+    const checks = page.locator('tbody input[type="checkbox"]:not(:disabled)');
+    await expect(checks).toHaveCount(3);
+    for (const checkbox of await checks.all()) await checkbox.check();
+    await page.getByRole('button', { name: '通过', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(
+      dialog.getByRole('alert').filter({ hasText: '当前账号没有大区审批权限' }),
+    ).toBeVisible();
+    assert.deepEqual(await page.evaluate(() => window.batchActions), []);
+    await dialog.getByRole('button', { name: '确认提交', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.batchActions.length)).toBe(2);
+    const actions = await page.evaluate(() =>
+      window.batchActions.map(({ planId, request }) => ({
+        planId,
+        role: request.approvalRole,
+        adjustments: request.adjustments,
+      })),
+    );
+    assert.deepEqual(actions, [
+      { planId: 'p1', role: 'region', adjustments: undefined },
+      { planId: 'p2', role: 'category', adjustments: undefined },
+    ]);
+  },
+);
 
 test(
   'incomplete automatic SKU reads remain unknown, show a failure and recover in a new context',

@@ -830,7 +830,8 @@
           "skipped": "跳过"
         },
         "skippedTag": "跳过",
-        "terminalSkipped": "计划已完成审批或回写，本次跳过。"
+        "terminalSkipped": "计划已完成审批或回写，本次跳过。",
+        "permissionSkipped": "当前账号没有{{stage}}权限，本笔跳过。"
       },
       "liveAction": {
         "saveChecksumTitle": "保存核对摘要",
@@ -921,6 +922,7 @@
         "disabled": {
           "completed": "该版本已收到服务端回执，已阻止重复操作。",
           "permission": "服务端已拒绝当前用户权限；该版本在本轮已禁用。",
+          "currentStagePermission": "当前账号没有此计划当前节点的审批权限。",
           "returnedNeedsResubmit": "退回的单子不能直接通过或退回：请用「退回重提」重新提交（会生成新版本）。",
           "returnedCannotReject": "已退回客户提报端，不能再向前退回；请由客户修改后重提。",
           "returnedCannotApprove": "退回版本不能直接通过，请使用「退回重提」生成新版本。",
@@ -952,7 +954,7 @@
         },
         "approvalRole": "本次审批角色",
         "selectRole": "请选择本次审批角色",
-        "roleContractUnavailable": "你有此角色的审批权限，但当前 GEA 服务尚未支持按所选角色写入。暂不能提交，请先升级服务端。",
+        "roleContractUnavailable": "所选角色与计划当前审批节点不匹配，请使用当前节点对应的审批角色提交。",
         "resultTitle": "处理结果",
         "resume": "核对提交结果",
         "roleMissing": "未取得可用的审批角色，请刷新列表并重新选择。",
