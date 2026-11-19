@@ -1415,7 +1415,7 @@ test(
 );
 
 test(
-  'regional SKU review filters, collapses and exports the complete customer scope without writes',
+  'regional SKU review filters and collapses the complete customer scope with one unified export entry',
   { timeout: 30000 },
   async (t) => {
     const { page } = await openWorkbench(t, true, 'sku-review');
@@ -1513,7 +1513,8 @@ test(
     const { page } = await openWorkbench(t, true, 'sku-review-failure');
     await page.getByRole('tab', { name: '按大类 / SKU' }).click();
     await expect(page.getByText('提报数据未完整取得，请重试。', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: '导出汇总', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: '导出汇总', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '导出月度计划报表', exact: true })).toBeEnabled();
     assert.deepEqual(await page.evaluate(() => window.writes), []);
   },
 );
