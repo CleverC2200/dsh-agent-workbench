@@ -284,6 +284,8 @@ test('FC renders downstream customer fulfillment and open orders independently o
   await expect(cards.filter({ hasText: '待补货量' })).toContainText('1,644');
   await page.getByRole('button', { name: '选择分仓' }).click();
   await page.locator('[role=option][data-value="A230"]').click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   await expect(page.locator('table')).toContainText('CUSTOMER-ORDER-1');
   await expect(page.locator('table')).toContainText('测试经销商');
@@ -302,7 +304,8 @@ test('FC renders downstream customer fulfillment and open orders independently o
         c.parameters.customer_code === 'CUSTOMER-1',
     ),
   );
-  await page.getByLabel('订单状态', { exact: true }).selectOption('缺口');
+  await page.getByRole('button', { name: '订单状态', exact: true }).click();
+  await page.getByRole('option', { name: '缺口', exact: true }).click();
   await expect
     .poll(() =>
       calls.some(
@@ -329,6 +332,7 @@ test('FC renders downstream customer fulfillment and open orders independently o
 });
 test('three FC lists show whole-filter totals across pages and recompute after filtering', async (t) => {
   const { page } = await openFixture(t, false, false, true);
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await mkdir('.scratch/fc-list-totals', { recursive: true });
   for (const [tab, field] of [
     ['补货确认', 'inventory_qty'],
@@ -346,7 +350,7 @@ test('three FC lists show whole-filter totals across pages and recompute after f
     await page.getByRole('button', { name: '下一页', exact: true }).click();
     await expect(page.locator('table:has(tfoot) > tbody > tr')).toHaveCount(3);
     await expect(footer.locator(`[data-column="${field}"]`)).toHaveText('91');
-    await page.getByRole('textbox', { name: 'SKU／产品名称', exact: true }).fill('SKU13');
+    await page.getByRole('searchbox', { name: 'SKU／产品名称', exact: true }).fill('SKU13');
     await page.getByRole('button', { name: '查询', exact: true }).click();
     await expect(page.locator('table:has(tfoot) > tbody > tr')).toHaveCount(1);
     await expect(footer.locator(`[data-column="${field}"]`)).toHaveText('13');
@@ -392,8 +396,9 @@ test('FC exposes denied domains and preserves ready inventory without fabricatin
 
 test('FC base resources keeps an authorization failure distinct from a successful empty query', async (t) => {
   const { page, calls } = await openFixture(t, false, true);
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await page.getByRole('button', { name: '基地资源', exact: true }).click();
-  const sku = page.getByLabel('SKU', { exact: true });
+  const sku = page.getByRole('searchbox', { name: 'SKU', exact: true });
   await sku.fill('SKU1');
   await page.getByRole('button', { name: '查询', exact: true }).click();
   await expect
@@ -408,6 +413,7 @@ test('FC base resources keeps an authorization failure distinct from a successfu
 
 test('current orders supports column dragging, batch selection and complete Excel detail export', async (t) => {
   const { page, calls } = await openFixture(t, false, false, false, true);
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   const selectPage = page.getByRole('checkbox', { name: '全选本页订单' });
   await expect(page.getByRole('checkbox', { name: /^选择订单/ })).toHaveCount(6);
@@ -482,6 +488,7 @@ test('current orders supports column dragging, batch selection and complete Exce
 
 test('order selection persists across pages, clears with filters and cannot export denied details', async (t) => {
   const { page } = await openFixture(t, false, false, true);
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   await page.getByRole('checkbox', { name: '选择订单CUSTOMER-ORDER-1', exact: true }).check();
   await page.getByRole('button', { name: '下一页', exact: true }).click();
@@ -495,7 +502,8 @@ test('order selection persists across pages, clears with filters and cannot expo
   await expect(
     page.getByRole('checkbox', { name: '选择订单CUSTOMER-ORDER-1', exact: true }),
   ).toBeChecked();
-  await page.getByLabel('订单状态', { exact: true }).selectOption('缺口');
+  await page.getByRole('button', { name: '订单状态', exact: true }).click();
+  await page.getByRole('option', { name: '缺口', exact: true }).click();
   await expect(page.locator('[class*=exportToolbar]')).toContainText('已选 0 个订单');
   let downloads = 0;
   page.on('download', () => downloads++);

@@ -114,14 +114,17 @@ test('current FC page stays populated on an older complete batch and refresh adv
       },
     });
   });
+  const actions = page.getByRole('button', { name: '操作管理', exact: true });
+  const replenishment = page.getByRole('region', { name: '补货确认', exact: true });
   for (let entry = 0; entry < 2; entry++) {
     await page.goto('http://fc-clock.test/');
     const card = page.locator('.kpi-card').filter({ hasText: '待补货量' });
     await expect(card.locator('.kpi-value')).toHaveText('32件');
     await expect(card).toContainText('12件');
     await expect(card).toContainText('27件');
-    await expect(page.locator('table')).toContainText('测试产品');
     await expect(page.locator('body')).toContainText('汇总日期：2026-11-05');
+    await actions.click();
+    await expect(replenishment.locator('table')).toContainText('测试产品');
   }
   const selected = calls.filter((c) => c.id.startsWith('snapshot-default.replenishment'));
   assert.ok(selected.length > 0);
@@ -148,7 +151,8 @@ test('current FC page stays populated on an older complete batch and refresh adv
     )
     .toBe(true);
   await expect(page.locator('body')).not.toContainText('汇总日期：2026-11-05');
-  await expect(page.locator('table')).toContainText('测试产品');
+  await actions.click();
+  await expect(replenishment.locator('table')).toContainText('测试产品');
   await mkdir('.scratch/fc-data-day', { recursive: true });
   await page.screenshot({ path: '.scratch/fc-data-day/restored.png', fullPage: true });
   assert.deepEqual(errors, []);

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 
 export function WarehouseSelect({
   value,
+  values,
+  onValuesChange,
   options,
   disabled,
   onChange,
@@ -10,6 +12,8 @@ export function WarehouseSelect({
   compact = false,
 }: {
   value: string;
+  values?: string[];
+  onValuesChange?: (values: string[]) => void;
   options: { id: string; name: string; status?: string }[];
   disabled: boolean;
   onChange: (value: string) => void;
@@ -22,7 +26,10 @@ export function WarehouseSelect({
   const [open, setOpen] = useState(false),
     [active, setActive] = useState(0);
   const [position, setPosition] = useState({ left: 0, top: 0, width: 180, maxHeight: 280 });
-  const selected = options.find((option) => option.id === value);
+  const isSelected = (id: string) =>
+    values ? (id ? values.includes(id) : values.length === 0) : id === value;
+  const visibleValue = values?.length === 1 ? values[0] : value;
+  const selected = options.find((option) => option.id === visibleValue);
   const close = () => {
     setOpen(false);
     trigger.current?.focus();
@@ -31,7 +38,7 @@ export function WarehouseSelect({
     setActive(
       Math.max(
         0,
-        options.findIndex((o) => o.id === value),
+        options.findIndex((o) => isSelected(o.id)),
       ),
     );
     setOpen(true);
@@ -83,8 +90,20 @@ export function WarehouseSelect({
   }, [open, active]);
   const choose = (index: number) => {
     const option = options[index];
-    if (option) onChange(option.id);
-    close();
+    if (!option) return;
+    if (values && onValuesChange) {
+      const next =
+        option.id === ''
+          ? []
+          : isSelected(option.id)
+            ? values.filter((id) => id !== option.id)
+            : [...values, option.id];
+      if (option.id && next.length === 0) return;
+      onValuesChange(next);
+    } else {
+      onChange(option.id);
+      close();
+    }
   };
   return (
     <>
@@ -106,7 +125,11 @@ export function WarehouseSelect({
         }}
       >
         <span className="warehouse-select-label">
-          <span className="warehouse-select-name">{selected?.name ?? '选择分仓'}</span>
+          <span className="warehouse-select-name">
+            {(values?.length ?? 0) > 1
+              ? `已选 ${values?.length} 个分仓`
+              : (selected?.name ?? label)}
+          </span>
           {selected?.status && <span className="warehouse-select-status">{selected.status}</span>}
         </span>
         <svg
@@ -130,6 +153,7 @@ export function WarehouseSelect({
             ref={list}
             id={id}
             role="listbox"
+            aria-multiselectable={values ? true : undefined}
             tabIndex={-1}
             aria-label={label}
             aria-activedescendant={`${id}-${active}`}
@@ -164,7 +188,8 @@ export function WarehouseSelect({
                 key={o.id}
                 id={`${id}-${i}`}
                 role="option"
-                aria-selected={o.id === value}
+                aria-selected={isSelected(o.id)}
+                aria-disabled={values?.length === 1 && o.id === values[0] ? true : undefined}
                 data-value={o.id}
                 data-active={active === i}
                 onMouseMove={() => setActive(i)}
@@ -174,7 +199,7 @@ export function WarehouseSelect({
                   <span className="warehouse-select-name">{o.name}</span>
                   {o.status && <span className="warehouse-select-status">{o.status}</span>}
                 </span>
-                <span aria-hidden="true">{o.id === value ? '✓' : ''}</span>
+                <span aria-hidden="true">{isSelected(o.id) ? '✓' : ''}</span>
               </div>
             ))}
           </div>,

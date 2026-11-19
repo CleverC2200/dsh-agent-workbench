@@ -158,6 +158,8 @@ export async function configuredWire(id) {
         available_qty: location_type === '分仓' ? 0 : 5500,
       }));
     }
+    if (id === 'fc' && payload.queryId === 'branch-warehouse.directory')
+      rows = [{ warehouse_code: '001', warehouse_name: '上海分仓', base: '华东' }];
     if (payload.queryId.startsWith('current-shortage.')) {
       const types = ['qll', 'apsplan'].includes(id)
         ? ['基地', '分仓']
