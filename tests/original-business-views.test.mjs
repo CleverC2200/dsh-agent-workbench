@@ -32,6 +32,8 @@ test('FC replenishment prioritizes requested stock and order columns while retai
         本月调拨未发: '当前调拨备单',
         本月调拨在途: '当前调拨在途',
         安全库存天数: '目标覆盖天数',
+        展望周转天数: '展望周转天数（含在途）',
+        安全库存差异量: '库存差额',
         计划来源: '取数来源',
       })[label] ?? label,
   );

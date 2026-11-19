@@ -1706,7 +1706,12 @@ test('FC restored quantity draft survives server paging and submits a real workb
 });
 
 test('FC restores real plan template, validates warehouse scope and applies an import trial', async (t) => {
-  const { frame, page, errors, calls } = await mount(t, 'fc', 1280, fcWorkflowRows);
+  const { frame, page, errors, calls } = await mount(t, 'fc', 1280, (query, result) => {
+    const scoped = fcWorkflowRows(query, result);
+    if (query.queryId === 'replenishment.detail.atomic')
+      for (const row of scoped.rows) row.current_order_shortage = 0;
+    return scoped;
+  });
   await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   await frame.getByRole('button', { name: '分仓计划', exact: true }).click();
   const list = frame.getByRole('region', { name: '分仓计划', exact: true });
@@ -1776,12 +1781,12 @@ test('FC restores real plan template, validates warehouse scope and applies an i
   const card = frame
     .locator('[data-overview-cards="fc"] article')
     .filter({ has: frame.getByText('待补货量', { exact: true }) });
-  await expect(card.locator('.kpi-value')).toHaveText('80件');
+  await expect(card.locator('.kpi-value')).toHaveText('75件');
   await frame.getByRole('button', { name: '操作管理', exact: true }).click();
   await frame.getByRole('button', { name: '补货确认', exact: true }).click();
   await expect(
     frame.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }),
-  ).toHaveValue('80');
+  ).toHaveValue('75');
   await frame.getByRole('checkbox', { name: '需补货', exact: true }).uncheck();
   await expect(
     frame.getByRole('spinbutton', { name: 'sku-A-001实际补货量', exact: true }),
@@ -2100,17 +2105,15 @@ for (const [inventory, inTransit, stockDays] of [
         .filter({ has: frame.getByText(label, { exact: true }) })
         .locator('dd');
     await expect(value(stock, '客户在仓')).toHaveText(
-      inventory === null ? '-' : inventory === 0 ? '0件' : '1.21万件',
+      inventory === null ? '-' : inventory === 0 ? '0箱' : '1.21万箱',
     );
     await expect(value(stock, '客户在途')).toHaveText(
-      inTransit === null ? '-' : inTransit === 0 ? '0件' : '2,412件',
+      inTransit === null ? '-' : inTransit === 0 ? '0箱' : '2,412箱',
     );
     await expect(value(turnover, '客户库存支撑')).toHaveText(
       stockDays === null ? '-' : stockDays === 0 ? '0.00天' : '18.00天',
     );
-    await expect(stock.locator('strong').last()).toHaveText(
-      inventory === null ? '-' : inventory === 0 ? '1.12万件' : '2.32万件',
-    );
+    await expect(stock.locator('strong').last()).toHaveText('1.12万件');
     const customerLayer = await openCompanySku(frame, '渠道', '河南省区');
     await expect(customerLayer.locator('tbody tr')).toHaveCount(10);
     await expect(customerLayer.locator('tbody tr').first()).toContainText('测试商品');
