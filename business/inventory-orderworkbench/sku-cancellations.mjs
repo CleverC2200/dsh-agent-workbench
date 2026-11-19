@@ -105,6 +105,7 @@ export function cancellationEventsSql({
   dailyOnly,
   periods = false,
   dimensions = false,
+  positiveCancellations = false,
 }) {
   const dailyQuantities = `SELECT ${lineKeys.join(',')},
     ${quantityFields
@@ -196,7 +197,7 @@ export function cancellationEventsSql({
       AND (${effectiveQuantity})>0
       AND t.executeorderno=s.executeorderno AND t.fromorderno=s.cust_order_no AND t.receive_wh=s.receive_wh
     LEFT JOIN (${cancellationWarehousesSql}) f ON f.warehouseid=COALESCE(t.deliver_wh,s.warehouseid)
-      LEFT JOIN (${cancellationWarehousesSql}) r ON r.warehouseid=s.receive_wh`;
+      LEFT JOIN (${cancellationWarehousesSql}) r ON r.warehouseid=s.receive_wh${positiveCancellations ? ' WHERE s.source_rows=1 AND s.orderstatus=90' : ''}`;
   const inPeriod = (start, end) => `(q.business_time>=${start} AND q.business_time<${end})
     OR (q.source_rows>1 AND q.first_business_time<${end} AND q.last_business_time>=${start})
     `;
@@ -241,11 +242,35 @@ export function cancellationEventsSql({
     '), classified_cancellations AS (' +
     classified.replace('FROM (' + cohort + ') cancellation_cohort', 'FROM cancellation_cohort') +
     ') ';
-  return `${prefix}SELECT ${periods ? 'period_index,' : ''}base,cust_code,cust_order_no,executeorderno,executeorderlineno,
+  const sql =
+    `${prefix}SELECT ${periods ? 'period_index,' : ''}base,cust_code,cust_order_no,executeorderno,executeorderlineno,
     material_code,name,region,province,cancel_numerator,effective_qty AS cancel_denominator,invalid_cancel
     FROM classified_cancellations`
-    .replace(/\s+/g, ' ')
-    .trim();
+      .replace(/\s+/g, ' ')
+      .trim();
+  if (!positiveCancellations) return sql;
+  const candidates = ['agents_scm_execute_detail_hourly_d', 'agents_scm_execute_detail_d']
+    .map(
+      (table) =>
+        `SELECT cust_code,executeorderno FROM ${table} WHERE orderstatus=90 AND (NULLIF(TRIM(canceltime),'') IS NULL OR (canceltime>=:gea_p1 AND canceltime<:gea_p2))`,
+    )
+    .join(' UNION ALL ');
+  const sources = [
+    ['agents_scm_execute_detail_hourly_d', 'reason_hourly_source'],
+    ['agents_scm_execute_detail_d', 'reason_daily_source'],
+    ['agents_scm_order_trace_final_di', 'reason_trace_source'],
+  ];
+  const scopes = sources
+    .map(
+      ([table, alias]) =>
+        `${alias} AS (SELECT s.* FROM ${table} s INNER JOIN reason_executions e ON e.cust_code=s.cust_code AND e.executeorderno=s.executeorderno)`,
+    )
+    .join(',');
+  const scoped = sources.reduce((value, [table, alias]) => value.replaceAll(table, alias), sql);
+  return scoped.replace(
+    'WITH cancellation_source AS',
+    `WITH reason_executions AS (SELECT cust_code,executeorderno FROM (${candidates}) reason_candidates GROUP BY cust_code,executeorderno),${scopes},cancellation_source AS`,
+  );
 }
 
 export function aggregateCancellationSql(
