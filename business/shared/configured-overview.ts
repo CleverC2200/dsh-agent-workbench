@@ -1,3 +1,4 @@
+import { mergeFcOverviews } from './fc-overview-merge';
 import { createAgentQueries } from './agent-query';
 import type { FcCycleRule } from './fc-cycle-rules';
 import { readConfiguredFacts, type FactInput } from './configured-facts';
@@ -41,11 +42,28 @@ export async function readConfiguredOverview(
     cycleDays?: number;
     fcCycleRules?: FcCycleRule[];
     warehouseCode?: string;
+    warehouseCodes?: string[];
     fcCycleWarehouse?: string;
     execute?: any;
     onProgress?: (parts: Record<string, any>) => void;
   } = {},
-) {
+): Promise<Record<string, any>> {
+  if (options.warehouseCodes?.length) {
+    const groups = await Promise.all(
+      [...new Set(options.warehouseCodes)].map((warehouseCode) =>
+        readConfiguredOverview(config, asOf, customer, {
+          ...options,
+          warehouseCodes: undefined,
+          warehouseCode,
+          onProgress: undefined,
+        }),
+      ),
+    );
+    options.signal?.throwIfAborted();
+    const merged = mergeFcOverviews(groups);
+    options.onProgress?.(merged);
+    return merged;
+  }
   config = agentSqlConfig(config);
   const requestedAsOf = asOf;
   let publicationError: unknown;

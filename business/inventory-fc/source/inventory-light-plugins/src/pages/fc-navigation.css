@@ -1,0 +1,181 @@
+.agent-root.fc-redesign .fc-overview-panel,
+.agent-root.fc-redesign .fc-overview-panel > .business-panel {
+  border: 0;
+  box-shadow: none;
+}
+.agent-root.fc-redesign .fc-overview-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 0;
+}
+.agent-root.fc-redesign .fc-overview-filters > label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.agent-root.fc-redesign .fc-overview-filters input {
+  width: 260px;
+  max-width: 100%;
+  margin: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #d9dfe7;
+  border-radius: 6px;
+  background: #fff;
+  color: #394252;
+  outline: none;
+  box-shadow: none;
+}
+.agent-root.fc-redesign .fc-overview-filters input:hover {
+  border-color: #aeb8c6;
+}
+.agent-root.fc-redesign .fc-overview-filters input:focus,
+.agent-root.fc-redesign .fc-overview-filters input:focus-visible {
+  border-color: #df1732;
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(223 23 50 / 8%);
+}
+.agent-root.fc-redesign .panel-actions .warehouse-select-trigger {
+  min-width: 112px;
+  height: 36px;
+  font-weight: 400;
+  background: #fff;
+}
+.agent-root.fc-redesign [data-business-toolbar-navigation] {
+  padding: 10px 16px 12px;
+  border-top: 0;
+  background: #f6f7f9;
+}
+.agent-root.fc-redesign [data-business-toolbar-navigation] > .fc-navigation-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  overflow: visible;
+}
+.agent-root.fc-redesign .fc-management-switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #eef0f3;
+}
+.agent-root.fc-redesign .fc-management-switch button {
+  height: 34px;
+  min-height: 34px;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #596273;
+  cursor: pointer;
+}
+.agent-root.fc-redesign .fc-management-switch button.active {
+  background: #fff;
+  color: var(--ui-accent, #e61435);
+  box-shadow: 0 1px 4px #17243a16;
+}
+.agent-root.fc-redesign .fc-warehouse-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #eef0f3;
+}
+.agent-root.fc-redesign .fc-warehouse-caption {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 600;
+  color: #394252;
+}
+.agent-root.fc-redesign .fc-warehouse-caption small {
+  font-size: 11px;
+  font-weight: 400;
+  color: #737e8e;
+}
+.agent-root.fc-redesign .fc-warehouse-chips {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  padding: 3px;
+}
+.agent-root.fc-redesign .fc-warehouse-chips button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d9dfe7;
+  border-radius: 6px;
+  background: #fff;
+  color: #465164;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.agent-root.fc-redesign .fc-warehouse-chips button[aria-current='page'] {
+  border-color: #f19baa;
+  background: #fff0f3;
+  color: #df1732;
+}
+.agent-root.fc-redesign .fc-warehouse-scroll {
+  flex: none;
+  height: 28px;
+  min-height: 28px;
+  width: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: #fff;
+  color: #596273;
+  font-size: 20px;
+  cursor: pointer;
+}
+.agent-root.fc-redesign .fc-warehouse-scroll:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.agent-root.fc-redesign .fc-navigation-stack button:focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: 1px;
+}
+.agent-root.fc-redesign .workspace {
+  padding-top: 12px;
+  background: #f6f7f9;
+}
+.agent-root.fc-redesign .fc-list-panel > .tabs.dealer-style-tabs button {
+  min-height: 44px;
+  height: 44px;
+  padding: 0 20px;
+}
+@media (max-width: 640px) {
+  .agent-root.fc-redesign [data-business-toolbar-navigation] {
+    padding: 8px;
+  }
+  .agent-root.fc-redesign .fc-warehouse-caption {
+    flex-direction: column;
+    gap: 0;
+    font-size: 11px;
+  }
+  .agent-root.fc-redesign .fc-warehouse-row {
+    gap: 4px;
+  }
+}

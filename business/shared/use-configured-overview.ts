@@ -15,6 +15,7 @@ export function useConfiguredOverview(
   fcCycleRules?: FcCycleRule[],
   warehouseCode?: string,
   fcCycleWarehouse?: string,
+  warehouseCodes?: string[],
 ) {
   const identity = useQueryIdentity();
   const previousRevision = useRef(revision);
@@ -31,6 +32,7 @@ export function useConfiguredOverview(
     cycleDays,
     fcCycleRules,
     warehouseCode,
+    JSON.stringify(warehouseCodes),
     fcCycleWarehouse,
   ]);
   const [state, setState] = useState<any>({ key: scopeKey, parts: {}, busy: true, errors: [] });
@@ -47,6 +49,7 @@ export function useConfiguredOverview(
       cycleDays,
       fcCycleRules,
       warehouseCode,
+      warehouseCodes,
       fcCycleWarehouse,
       viewIds,
       onProgress: (parts) => {
@@ -75,6 +78,7 @@ export function useConfiguredOverview(
           date,
           customer,
           warehouseCode,
+          warehouseCodes,
           overview: parts,
           cycleDays,
           coverage: '各来源独立统计；基地库存不等于全链库存，累计订单不等于当前待发',
@@ -102,6 +106,7 @@ export function useConfiguredOverview(
     cycleDays,
     JSON.stringify(fcCycleRules),
     warehouseCode,
+    JSON.stringify(warehouseCodes),
     fcCycleWarehouse,
   ]);
   return state.key === scopeKey ? state : { parts: {}, busy: true, errors: [] };
