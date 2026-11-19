@@ -13,6 +13,8 @@ export function SalesPlanSkuAdditionEditor({
   additions,
   quotes,
   existing,
+  focusRequest,
+  onLocateExisting,
   onChange,
   onQuote,
   t,
@@ -23,11 +25,17 @@ export function SalesPlanSkuAdditionEditor({
   additions: GeaSalesPlanAddedSku[];
   quotes: Readonly<Record<string, GeaSalesPlanSkuQuote>>;
   existing: ReadonlySet<string>;
+  focusRequest?: number;
+  onLocateExisting: (skuCode: string) => void;
   onChange: (items: GeaSalesPlanAddedSku[]) => void;
   onQuote: (quote: GeaSalesPlanSkuQuote) => void;
   t: TFunction;
 }) {
   const id = useId();
+  const codeInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focusRequest !== undefined) codeInput.current?.focus();
+  }, [focusRequest]);
   const [code, setCode] = useState('');
   const [qty, setQty] = useState('');
   const [busy, setBusy] = useState(false);
@@ -44,7 +52,8 @@ export function SalesPlanSkuAdditionEditor({
       return;
     }
     if (existing.has(skuCode)) {
-      setError('duplicate');
+      setError('');
+      onLocateExisting(skuCode);
       return;
     }
     const controller = new AbortController();
@@ -86,6 +95,7 @@ export function SalesPlanSkuAdditionEditor({
         <label htmlFor={id + '-sku'}>
           {label('code')}
           <input
+            ref={codeInput}
             id={id + '-sku'}
             name="skuCode"
             type="text"

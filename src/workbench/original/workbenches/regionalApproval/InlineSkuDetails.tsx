@@ -42,6 +42,7 @@ export function InlineSkuDetails({
   detail,
   canEdit,
   canAdd,
+  additionFocusRequest,
   approvalRole,
   categoryName,
   onMetricsChange,
@@ -66,6 +67,7 @@ export function InlineSkuDetails({
   detail?: GeaSalesPlanDetail;
   canEdit?: boolean;
   canAdd?: boolean;
+  additionFocusRequest?: number;
   approvalRole?: ApprovalStageId;
   categoryName?: string;
   onMetricsChange?: (metrics?: { quantity: string; amount: string }) => void;
@@ -86,6 +88,7 @@ export function InlineSkuDetails({
   ) => void;
 }) {
   const { salesPlan } = useWorkbenchHost();
+  const skuRows = useRef(new Map<string, HTMLTableRowElement>());
   const [skus, setSkus] = useState<GeaSalesPlanSku[]>();
   const [failed, setFailed] = useState(false);
   const displayedSkus = useMemo(() => {
@@ -507,7 +510,13 @@ export function InlineSkuDetails({
           }
           additions={addedSkus}
           quotes={quotes}
+          focusRequest={additionFocusRequest}
           existing={new Set(skus.map((sku) => String(sku.skuCode)))}
+          onLocateExisting={(code) => {
+            const row = skuRows.current.get(code);
+            row?.scrollIntoView({ block: 'nearest' });
+            row?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
+          }}
           onChange={(items) => {
             userEdited.current = true;
             setAddedSkus(items);
@@ -572,7 +581,14 @@ export function InlineSkuDetails({
                   );
                   const confirmedAmount = multiplyExactDecimals(confirmed, String(sku.price));
                   return (
-                    <tr key={code + ':' + index} className={changed ? styles.changed : undefined}>
+                    <tr
+                      key={code + ':' + index}
+                      ref={(element) => {
+                        if (element) skuRows.current.set(code, element);
+                        else skuRows.current.delete(code);
+                      }}
+                      className={changed ? styles.changed : undefined}
+                    >
                       <td>
                         <span className={styles.sku}>{code}</span>
                         <span className={styles.description}>

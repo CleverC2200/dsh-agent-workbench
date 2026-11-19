@@ -488,6 +488,7 @@ const RegionalApprovalWorkbench: React.FC<{
   >({});
   const [currentSkusByPlan, setCurrentSkusByPlan] = useState<Record<string, GeaSalesPlanSku[]>>({});
   const [inlinePlanId, setInlinePlanId] = useState<string>();
+  const [skuAdditionFocus, setSkuAdditionFocus] = useState<{ planId: string; request: number }>();
   const [draftLiveFilters, setDraftLiveFilters] = useState<LiveApprovalFilters>(
     initialState.draftLiveFilters,
   );
@@ -1203,7 +1204,7 @@ const RegionalApprovalWorkbench: React.FC<{
   );
 
   const focusedLiveRow = liveRows.find((row) => row.planId === focusedLivePlanId) ?? liveRows[0];
-  const metricRows = orderType === 'M' ? allLiveRows : liveRows;
+  const metricRows = allLiveRows;
   const skuReviewLoading = skuReviewOpen && !skuReviewSnapshot;
   const completedListDetails = useRef<{ loadId: string; rows: typeof metricRows }>();
   const detailLoadId = useMemo(
@@ -1610,51 +1611,25 @@ const RegionalApprovalWorkbench: React.FC<{
         savedAdjustmentCount: 0,
         localApprovalResultCount: 0,
       };
-    const detailMetrics = liveRows.map((row) => versionMetrics[row.planId]);
-    const hasCompleteDetailMetrics =
-      detailMetrics.length === liveRows.length &&
-      detailMetrics.length > 0 &&
-      detailMetrics.every(
-        (detail) =>
-          detail &&
-          /^-?\d+(?:\.\d+)?$/.test(detail.baseQty) &&
-          /^-?\d+(?:\.\d+)?$/.test(detail.baseAmount),
-      );
-    const serverSummary = liveQuery.queueState.data?.summary;
+    const overviewRows = selectedLiveRows.length
+      ? selectedLiveRows.map((row) => draftedRowsByPlanId.get(String(row.planId)) ?? row)
+      : draftedAllLiveRows;
     return {
       visibleCount: liveRows.length,
       pendingCount: liveRows.filter((row) => row.approvalState === 'pending').length,
       warningCount: liveRows.filter((row) => row.approvalState === 'returned').length,
 
-      quantity:
-        orderType === 'M'
-          ? addExactDecimals(draftedAllLiveRows.map((row) => row.currentQty))
-          : serverSummary
-            ? (serverSummary.planQty ?? '—')
-            : draftedLiveRows.length === 0
-              ? '0'
-              : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentQty))
-                ? addExactDecimals(draftedLiveRows.map((row) => row.currentQty))
-                : hasCompleteDetailMetrics
-                  ? addExactDecimals(detailMetrics.map((detail) => detail!.baseQty))
-                  : '—',
-      amount:
-        orderType === 'M'
-          ? addExactDecimals(draftedAllLiveRows.map((row) => row.currentAmount))
-          : serverSummary
-            ? (serverSummary.planAmount ?? '—')
-            : draftedLiveRows.length === 0
-              ? '0'
-              : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentAmount))
-                ? addExactDecimals(draftedLiveRows.map((row) => row.currentAmount))
-                : hasCompleteDetailMetrics
-                  ? addExactDecimals(detailMetrics.map((detail) => detail!.baseAmount))
-                  : '—',
-      targetAmount:
-        serverSummary?.targetAmount ??
-        addExactDecimals(
-          (orderType === 'M' ? draftedAllLiveRows : draftedLiveRows).map((row) => row.targetAmount),
+      quantity: addExactDecimals(
+        overviewRows.map((row) =>
+          orderType === 'Z' ? (row.corrPlanQty ?? row.currentQty) : row.currentQty,
         ),
+      ),
+      amount: addExactDecimals(
+        overviewRows.map((row) =>
+          orderType === 'Z' ? (row.corrPlanAmount ?? row.currentAmount) : row.currentAmount,
+        ),
+      ),
+      targetAmount: addExactDecimals(overviewRows.map((row) => row.targetAmount)),
       savedAdjustmentCount: 0,
       localApprovalResultCount: 0,
     };
@@ -1662,13 +1637,11 @@ const RegionalApprovalWorkbench: React.FC<{
     skuReviewOpen,
     skuReviewTotals,
     allLiveRows,
-    scopeSummary,
-    draftedLiveRows,
     draftedAllLiveRows,
+    draftedRowsByPlanId,
+    selectedLiveRows,
     orderType,
     liveRows,
-    versionMetrics,
-    liveQuery.queueState.data?.summary,
   ]);
   const dashboardReady =
     liveQuery.queueState.status === 'success' &&
@@ -3061,6 +3034,33 @@ const RegionalApprovalWorkbench: React.FC<{
     },
   });
 
+  if (dimension === 'customer' && detailClient.skuQuotes)
+    liveColumns.push({
+      title: t('common.assistantSurface.regionalApproval.addSku.title'),
+      width: 116,
+      render: (_, record) =>
+        record.kind === 'plan' &&
+        !record.members &&
+        !sourceTypeReadOnly(record.plan) &&
+        inlineSkuAccess(record.plan).canAdd ? (
+          <Button
+            size="small"
+            onClick={() => {
+              setCategoryComparison(false);
+              selectLivePlanContext(record.plan);
+              setFocusedLivePlanId(record.plan.planId);
+              setInlinePlanId(record.plan.planId);
+              setSkuAdditionFocus((current) => ({
+                planId: record.plan.planId,
+                request: (current?.request ?? 0) + 1,
+              }));
+            }}
+          >
+            {t('common.assistantSurface.regionalApproval.addSku.title')}
+          </Button>
+        ) : null,
+    });
+
   const hasReturnedSelection = selectedLiveRows.some((row) => row.status >= 6 && row.status <= 9);
   const submissionItems = (): SalesPlanSubmissionItem[] =>
     selectedLiveRows.flatMap((row): SalesPlanSubmissionItem[] => {
@@ -3311,7 +3311,9 @@ const RegionalApprovalWorkbench: React.FC<{
         }
         onCompleted={async (outcomes: readonly BatchActionOutcome[]) => {
           const succeeded = new Set(
-            outcomes.filter((outcome) => outcome.status === 'success').map((outcome) => outcome.planId),
+            outcomes
+              .filter((outcome) => outcome.status === 'success')
+              .map((outcome) => outcome.planId),
           );
           if (succeeded.size) {
             for (const { row } of batchAction.items) {
@@ -4112,6 +4114,11 @@ const RegionalApprovalWorkbench: React.FC<{
                           const additionKey = skuAdditionKey(inlineRow, access.role);
                           return (
                             <InlineSkuDetails
+                              additionFocusRequest={
+                                skuAdditionFocus?.planId === record.plan.planId
+                                  ? skuAdditionFocus.request
+                                  : undefined
+                              }
                               initialAdditions={pendingSkuAdditions.current.get(additionKey)}
                               onAdditionsChange={(items) =>
                                 pendingSkuAdditions.current.set(additionKey, items)
