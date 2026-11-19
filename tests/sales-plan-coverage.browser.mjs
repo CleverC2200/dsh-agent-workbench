@@ -24,10 +24,11 @@ const rowCount=Number(new URL(location.href).searchParams.get('fixtureRows')??3)
 const rows=Array.from({length:rowCount},(_,index)=>index+1).map(n=>({planId:'p'+n,versionId:'v'+n,seq:1,periodId:'period',planTypeCode:'Y',orderType:'M',dealerCode:'d'+n,dealerName:'客户'+n,orgCode:'org'+n,orgName:'销售组'+n,areaCode:'area'+n,areaName:'大区'+n,provinceCode:'province'+n,provinceName:'省区'+n,baseName:'基地'+n,status:1,updatedAt:'2026-10-'+String(31-n).padStart(2,'0'),currentQty:'20',currentAmount:'200',targetQty:'0',targetAmount:'400',skuCount:1}));
 window.coverageCalls={sku:[],detail:[],draft:0,draftWrite:0,model:0,write:0};
 window.exportBehavior='normal';
+window.fixtureRows=rows;
 window.localDrafts=JSON.parse(localStorage.getItem('coverage-host-drafts')??'{}');
 window.exportReads=[];
 window.exportReleases=[];
-const sku=(versionId)=>({id:'s'+versionId,versionId,skuCode:'sku'+versionId,productCategName:'汤圆',qty:'20',amt:'200',baseQty:'10',amtBase:'100',price:'10'});
+const sku=(versionId)=>({id:'s'+versionId,versionId,skuCode:'sku'+versionId,productCategName:'汤圆',qty:'20',amt:'200',baseQty:'10',amtBase:'100',price:'10',regionConfirmedQty:null,regionConfirmedAmount:null,provinceConfirmedQty:null,provinceConfirmedAmount:null,areaConfirmedQty:null,areaConfirmedAmount:null,categoryConfirmedQty:null,categoryConfirmedAmount:null});
 const forbid=async()=>{window.coverageCalls.write++;throw Error('fixture write forbidden')};
 const noop=()=>{};
 function App(){
@@ -51,6 +52,8 @@ function App(){
     if(behavior==='partial'&&versionId==='v3')return [];
     if(behavior==='foreign'&&versionId==='v3')return [sku('foreign-version')];
     if(behavior==='failed'&&versionId==='v3')throw Error('fixture detail request failed');
+    if(behavior==='added-at-province')return [{...sku(versionId),regionConfirmedQty:'20',regionConfirmedAmount:'200',provinceConfirmedQty:'20',provinceConfirmedAmount:'200'},{...sku(versionId),id:'added-'+versionId,skuCode:'10004778',baseQty:'0',corrBaseQty:null,qty:'0',amtBase:'0',amt:'0',price:'295.00',provinceConfirmedQty:'12',provinceConfirmedAmount:'3540.00'}];
+    if(behavior==='unread-node')return [{...sku(versionId),categoryConfirmedQty:undefined,categoryConfirmedAmount:undefined}];
     if(behavior==='precise')return [{...sku(versionId),qty:'9007199254740993.125',amt:'123456789012345.6789'}];
    }
    if(mode==='pending')return new Promise((resolve,reject)=>{window.rejectPending=()=>reject(Error('late cancelled read failure'))});
@@ -289,6 +292,40 @@ test(
 );
 
 test(
+  'actual XLSX download includes an added SKU without prior node amounts',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, pageErrors, externalRequests } = await openWorkbench(t);
+    await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).waitFor();
+    await page.evaluate(() => {
+      window.exportBehavior = 'added-at-province';
+      window.fixtureRows.forEach((row) => {
+        row.skuCount = 2;
+      });
+    });
+    await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
+    await expect(
+      page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
+    ).toContainText('¥200');
+    const downloaded = page.waitForEvent('download', { timeout: 5000 });
+    await page.getByRole('button', { name: '导出当前页', exact: true }).click();
+    const download = await downloaded;
+    const workbook = XLSX.read(await readFile(await download.path()), { type: 'buffer' });
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets['当前页计划'], {
+      header: 1,
+      defval: null,
+    });
+    assert.equal(rows.length, 4);
+    for (const row of rows.slice(1)) {
+      assert.deepEqual(row.slice(17, 27), [20, 200, 20, 200, 32, 3740, null, null, null, null]);
+    }
+    assert.deepEqual(pageErrors, []);
+    assert.equal(externalRequests(), 0);
+    assert.equal(await page.evaluate(() => window.coverageCalls.write), 0);
+  },
+);
+
+test(
   'context cancellation and incomplete or foreign-version SKU reads produce no XLSX file',
   { timeout: 30000 },
   async (t) => {
@@ -318,7 +355,7 @@ test(
     await expect(
       page.locator('[data-testid^="regional-approval-month-plan-"]').first(),
     ).toContainText('¥200');
-    for (const behavior of ['partial', 'foreign', 'failed']) {
+    for (const behavior of ['partial', 'foreign', 'failed', 'unread-node']) {
       await page.evaluate((behavior) => {
         window.exportBehavior = behavior;
       }, behavior);
