@@ -1335,15 +1335,14 @@ test('MPS S2 publishes actual local inputs and carry output within the Host cont
     ),
   });
   await expect.poll(async () => (await readHost())?.parts?.ship?.rowCount).toBe(1);
-  await frame.getByRole('button', { name: '调整', exact: true }).click();
-  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
-  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
   await expect.poll(async () => (await readHost())?.parts?.ship?.totals?.fin).toBe(300);
-  await expect.poll(async () => (await readHost())?.parts?.ship?.totals?.end).toBe(80);
+  await expect.poll(async () => (await readHost())?.parts?.ship?.totals?.end).toBe(null);
   const data = (await readHost()).parts.ship;
-  assert.equal(data.totals.end, 80);
+  assert.equal(data.totals.end, null);
   assert.equal(data.rows[0][data.rowFields.indexOf('shipped')], 220);
-  assert.equal(data.rows[0][data.rowFields.indexOf('end')], 80);
+  assert.equal(data.rows[0][data.rowFields.indexOf('transferIn')], null);
+  assert.equal(data.rows[0][data.rowFields.indexOf('transferOut')], null);
+  assert.equal(data.rows[0][data.rowFields.indexOf('end')], null);
   assert.equal(data.carryToMonth, '2026-10');
   assert.equal(data.nextStage, 'shared-snapshot');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工' }).click();
