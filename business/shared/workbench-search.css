@@ -10,9 +10,9 @@
   width: 176px;
   height: 36px;
   padding: 0 9px;
-  border: 1px solid #c9ced7;
+  border: 1px solid var(--ui-border-strong, #c9ced7);
   border-radius: 10px;
-  background: #fff;
+  background: var(--ui-surface, #fff);
   box-shadow: 0 1px 2px #1822300a;
   transition:
     border-color 160ms ease,
@@ -20,13 +20,13 @@
     box-shadow 160ms ease;
 }
 .agent-root.fc-redesign .panel-actions .fc-search-control:hover {
-  border-color: #e8a4ae;
-  background: #fff7f8;
+  border-color: var(--ui-accent-line, #e8a4ae);
+  background: var(--ui-hover, #fff7f8);
   box-shadow: 0 2px 8px #df173214;
 }
 .agent-root.fc-redesign .panel-actions .fc-search-control:focus-within {
-  border-color: #e59ca8;
-  background: #fff;
+  border-color: var(--fc-search-focus, #e59ca8);
+  background: var(--ui-surface, #fff);
   box-shadow: 0 0 0 3px #df17321a;
 }
 .agent-root.fc-redesign .panel-actions .fc-search-control > svg {
@@ -34,10 +34,10 @@
   width: 14px;
   height: 14px;
   margin-right: 7px;
-  color: #697386;
+  color: var(--ui-muted, #697386);
 }
 .agent-root.fc-redesign .panel-actions .fc-search-control:focus-within > svg {
-  color: #c91029;
+  color: var(--ui-accent-hover, #c91029);
 }
 .agent-root.fc-redesign .panel-actions .fc-search-control input[type='search'] {
   flex: 1;
@@ -59,11 +59,11 @@
     Arial,
     sans-serif;
   letter-spacing: normal;
-  color: #343b46;
+  color: var(--ui-ink, #343b46);
 }
 .agent-root.fc-redesign .panel-actions .fc-search-control input::placeholder {
   font-weight: 600;
-  color: #98a0ab;
+  color: var(--workbench-muted, #98a0ab);
 }
 .fc-search-control input::-webkit-search-cancel-button {
   display: none;
@@ -78,20 +78,34 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #697386;
+  color: var(--ui-muted, #697386);
 }
 .agent-root.fc-redesign .panel-actions .fc-search-control > button:hover,
 .agent-root.fc-redesign .panel-actions .fc-search-control > button:focus-visible {
-  background: #ffedf0;
-  color: #c91029;
+  background: var(--ui-accent-soft, #ffedf0);
+  color: var(--ui-accent-hover, #c91029);
 }
 .agent-root.fc-redesign .panel-actions .fc-search-control > button:focus-visible {
-  outline: 2px solid #df1732;
+  outline: 2px solid var(--ui-accent, #df1732);
   outline-offset: 2px;
 }
 @media (max-width: 720px) {
   .agent-root.fc-redesign .panel-actions .fc-search-control {
     width: 160px;
     flex-basis: 160px;
+  }
+}
+
+body[data-ds-dark-theme] .fc-search-control {
+  --fc-search-focus: var(--ui-accent);
+}
+.agent-root.fc-redesign .panel-actions .fc-search-control:has(input:focus-visible) {
+  outline: 2px solid var(--ui-accent, #df1732);
+  outline-offset: 1px;
+}
+@media (forced-colors: active) {
+  .agent-root.fc-redesign .panel-actions .fc-search-control:focus-within {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
   }
 }

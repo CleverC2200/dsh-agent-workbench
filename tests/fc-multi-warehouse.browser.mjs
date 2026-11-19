@@ -141,6 +141,17 @@ test('multi selection separates aggregate metrics and per warehouse actions', as
   await expect(search).toHaveValue('');
   await expect(search).toBeFocused();
   await expect(page.getByRole('button', { name: '清空运营观察搜索', exact: true })).toHaveCount(0);
+  await page.addStyleTag({ path: 'theme/tokens.css' });
+  await page.addStyleTag({ path: 'business/inventory-fc/theme.css' });
+  await page.evaluate(() => document.body.setAttribute('data-ds-dark-theme', ''));
+  await expect(searchBox).toHaveCSS('background-color', 'rgb(36, 38, 43)');
+  await expect(search).toHaveCSS('color', 'rgb(237, 240, 245)');
+  await page.emulateMedia({ forcedColors: 'active' });
+  await expect(searchBox).toHaveCSS('outline-style', 'solid');
+  await expect(searchBox).toHaveCSS('outline-width', '2px');
+  await page.emulateMedia({ forcedColors: 'none' });
+  await page.evaluate(() => document.body.removeAttribute('data-ds-dark-theme'));
+
   await search.fill('escape');
   await search.press('Escape');
   await expect(search).toHaveValue('');

@@ -18,38 +18,16 @@
   gap: 12px;
   min-width: 0;
 }
-.agent-root.fc-redesign .fc-overview-filters input {
-  width: 260px;
-  max-width: 100%;
-  margin: 0;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid #d9dfe7;
-  border-radius: 6px;
-  background: #fff;
-  color: #394252;
-  outline: none;
-  box-shadow: none;
-}
-.agent-root.fc-redesign .fc-overview-filters input:hover {
-  border-color: #aeb8c6;
-}
-.agent-root.fc-redesign .fc-overview-filters input:focus,
-.agent-root.fc-redesign .fc-overview-filters input:focus-visible {
-  border-color: #df1732;
-  outline: none;
-  box-shadow: 0 0 0 2px rgb(223 23 50 / 8%);
-}
 .agent-root.fc-redesign .panel-actions .warehouse-select-trigger {
   min-width: 112px;
   height: 36px;
   font-weight: 400;
-  background: #fff;
+  background: var(--ui-surface, #fff);
 }
 .agent-root.fc-redesign [data-business-toolbar-navigation] {
   padding: 10px 16px 12px;
   border-top: 0;
-  background: #f6f7f9;
+  background: var(--ui-canvas, #f6f7f9);
 }
 .agent-root.fc-redesign [data-business-toolbar-navigation] > .fc-navigation-stack {
   display: flex;
@@ -65,7 +43,7 @@
   min-height: 44px;
   padding: 4px 8px;
   border-radius: 8px;
-  background: #eef0f3;
+  background: var(--ui-soft, #eef0f3);
 }
 .agent-root.fc-redesign .fc-management-switch button {
   height: 34px;
@@ -74,11 +52,12 @@
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: #596273;
+  color: var(--ui-secondary, #596273);
   cursor: pointer;
 }
 .agent-root.fc-redesign .fc-management-switch button.active {
-  background: #fff;
+  background: var(--ui-surface, #fff);
+  border-block-end-color: var(--ui-accent, #df1732);
   color: var(--ui-accent, #e61435);
   box-shadow: 0 1px 4px #17243a16;
 }
@@ -90,7 +69,7 @@
   min-height: 44px;
   padding: 4px 8px;
   border-radius: 8px;
-  background: #eef0f3;
+  background: var(--ui-soft, #eef0f3);
 }
 .agent-root.fc-redesign .fc-warehouse-caption {
   flex: none;
@@ -98,12 +77,12 @@
   gap: 8px;
   align-items: center;
   font-weight: 600;
-  color: #394252;
+  color: var(--ui-ink, #394252);
 }
 .agent-root.fc-redesign .fc-warehouse-caption small {
   font-size: 11px;
   font-weight: 400;
-  color: #737e8e;
+  color: var(--ui-muted, #737e8e);
 }
 .agent-root.fc-redesign .fc-warehouse-chips {
   display: flex;
@@ -124,17 +103,17 @@
   height: 32px;
   min-height: 32px;
   padding: 0 12px;
-  border: 1px solid #d9dfe7;
+  border: 1px solid var(--ui-border-strong, #d9dfe7);
   border-radius: 6px;
-  background: #fff;
-  color: #465164;
+  background: var(--ui-surface, #fff);
+  color: var(--ui-secondary, #465164);
   white-space: nowrap;
   cursor: pointer;
 }
 .agent-root.fc-redesign .fc-warehouse-chips button[aria-current='page'] {
-  border-color: #f19baa;
-  background: #fff0f3;
-  color: #df1732;
+  border-color: var(--ui-accent-line, #f19baa);
+  background: var(--ui-accent-soft, #fff0f3);
+  color: var(--ui-accent, #df1732);
 }
 .agent-root.fc-redesign .fc-warehouse-scroll {
   flex: none;
@@ -144,8 +123,8 @@
   padding: 0;
   border: 0;
   border-radius: 4px;
-  background: #fff;
-  color: #596273;
+  background: var(--ui-surface, #fff);
+  color: var(--ui-secondary, #596273);
   font-size: 20px;
   cursor: pointer;
 }
@@ -154,12 +133,12 @@
   cursor: default;
 }
 .agent-root.fc-redesign .fc-navigation-stack button:focus-visible {
-  outline: 2px solid #df1732;
+  outline: 2px solid var(--ui-accent, #df1732);
   outline-offset: 1px;
 }
 .agent-root.fc-redesign .workspace {
   padding-top: 12px;
-  background: #f6f7f9;
+  background: var(--ui-canvas, #f6f7f9);
 }
 .agent-root.fc-redesign .fc-list-panel > .tabs.dealer-style-tabs button {
   min-height: 44px;
@@ -177,5 +156,14 @@
   }
   .agent-root.fc-redesign .fc-warehouse-row {
     gap: 4px;
+  }
+}
+
+@media (forced-colors: active) {
+  .agent-root.fc-redesign .fc-navigation-stack button[aria-current='page'] {
+    border-color: Highlight;
+  }
+  .agent-root.fc-redesign .fc-navigation-stack button:focus-visible {
+    outline-color: Highlight;
   }
 }
