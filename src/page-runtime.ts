@@ -21,7 +21,8 @@ function compressPageContext(
 ): unknown {
   if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
   const value = result as Record<string, unknown>;
-  const contextBudget = options.pageId === 'inventory-orderworkbench' ? 32000 : MODEL_PAYLOAD_BUDGET;
+  const contextBudget =
+    options.pageId === 'inventory-orderworkbench' ? 32000 : MODEL_PAYLOAD_BUDGET;
   const source = value.context as
     | (Record<string, unknown> & { parts?: Record<string, unknown> })
     | null;
@@ -65,10 +66,7 @@ function compressPageContext(
         ...(source?.metricSemantics ? { metricSemantics: source.metricSemantics } : {}),
       }
     : undefined;
-  if (
-    cardFacts &&
-    Buffer.byteLength(JSON.stringify(cardFacts), 'utf8') > contextBudget - 1000
-  )
+  if (cardFacts && Buffer.byteLength(JSON.stringify(cardFacts), 'utf8') > contextBudget - 1000)
     throw Error('PAGE_METRIC_CONTEXT_TOO_LARGE');
 
   const controls =
