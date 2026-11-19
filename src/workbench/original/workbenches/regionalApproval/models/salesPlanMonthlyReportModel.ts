@@ -5,6 +5,7 @@ import type {
 } from '../../../contracts.ts';
 import type { WorkbenchHost } from '../../../bridge.ts';
 import { multiplyExactDecimals } from '../regionalApprovalQueryModel.ts';
+import { roundPlanQuantity } from './salesPlanQuantityModel.ts';
 
 export const SALES_PLAN_MONTHLY_REPORT_HEADERS = [
   '分级',
@@ -242,7 +243,7 @@ const quantity = (sku: GeaSalesPlanSku): string => {
     sku.provinceConfirmedQty ??
     sku.regionConfirmedQty ??
     sku.qty;
-  return numeric(value, '月初计划');
+  return roundPlanQuantity(numeric(value, '月初计划'));
 };
 
 const amount = (qty: string, sku: GeaSalesPlanSku): string => {

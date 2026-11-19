@@ -126,6 +126,41 @@ test('monthly report merges customer SKU rows and preserves the sample 25 column
   assert.deepEqual(rows[0].slice(0, 3), ['工厂仓', '郑州', '郑州总库存组织']);
 });
 
+test('monthly report uses the existing whole-piece confirmation before computing line amounts', () => {
+  const p = plan('M', '1', 1);
+  const [row] = m.salesPlanMonthlyReportRows(
+    '2026-11',
+    [
+      {
+        plan: p,
+        skus: [sku(p, { qty: '8420.4', price: '75' })],
+      },
+    ],
+    () => dimensions,
+    () => '待审批',
+  );
+  assert.equal(Number(row[19]), 8420);
+  assert.equal(Number(row[23]), 631500);
+  assert.equal(Number(row[24]), 631500);
+});
+
+test('an approved monthly plan rounds its saved category confirmation rather than the original submitted quantity', () => {
+  const p = plan('M', '1', 5);
+  const [row] = m.salesPlanMonthlyReportRows(
+    '2026-11',
+    [
+      {
+        plan: p,
+        skus: [sku(p, { qty: '99', price: '75', categoryConfirmedQty: '10.6' })],
+      },
+    ],
+    () => dimensions,
+    () => '审批完成',
+  );
+  assert.equal(Number(row[19]), 11);
+  assert.equal(Number(row[23]), 825);
+});
+
 test('report collection reads both plan types across every API page without node or selection filters', async () => {
   const calls = [];
   const all = [plan('M', '1', 1), plan('M', '2', 8), plan('Z', '1', 4)];
