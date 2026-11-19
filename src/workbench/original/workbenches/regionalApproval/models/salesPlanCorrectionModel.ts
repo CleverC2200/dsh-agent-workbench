@@ -109,6 +109,7 @@ export function verifySalesPlanAddedSkus(
   detail: GeaSalesPlanDetail,
   additions: readonly GeaSalesPlanAddedSku[],
   node: number,
+  rowKind: 'new' | 'existing' = 'new',
 ): boolean {
   const role = SALES_PLAN_ROLES[node - 1];
   if (!role) return false;
@@ -123,7 +124,39 @@ export function verifySalesPlanAddedSkus(
       const amount = price.mul(quantity).toDecimalPlaces(2);
       if (!price.gt(0) || !correctionDecimal(sku.baseQty).isZero()) return false;
       if (correction) {
-        if (!salesPlanZeroBaselineSku(sku)) return false;
+        if (
+          !salesPlanZeroBaselineSku(sku) ||
+          !correctionDecimal(sku.amtBase).isZero() ||
+          !correctionDecimal(sku.amt).isZero()
+        )
+          return false;
+        if (rowKind === 'new') {
+          if (
+            role !== 'customer' &&
+            !(['adjAddQty', 'adjCutQty', 'adjAddAmount', 'adjCutAmount'] as const).every((field) =>
+              correctionDecimal(sku[field]).isZero(),
+            )
+          )
+            return false;
+          if (
+            SALES_PLAN_ROLES.some(
+              (other) =>
+                other !== 'customer' &&
+                other !== role &&
+                (
+                  [
+                    'AdjAddQty',
+                    'AdjCutQty',
+                    'AdjAddAmount',
+                    'AdjCutAmount',
+                    'ConfirmedQty',
+                    'ConfirmedAmount',
+                  ] as const
+                ).some((suffix) => sku[`${other}${suffix}`] != null),
+            )
+          )
+            return false;
+        }
         const addQty = role === 'customer' ? sku.adjAddQty : sku[`${role}AdjAddQty`];
         const cutQty = role === 'customer' ? sku.adjCutQty : sku[`${role}AdjCutQty`];
         const addAmount = role === 'customer' ? sku.adjAddAmount : sku[`${role}AdjAddAmount`];

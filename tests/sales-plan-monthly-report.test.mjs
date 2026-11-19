@@ -383,3 +383,25 @@ test('unrelated shipment enrichment changes do not invalidate a stable report ve
     1,
   );
 });
+
+test('known null and blank report text are zero while an unread field still fails', () => {
+  for (const grading of [null, '', '  ']) {
+    const [row] = m.salesPlanMonthlyReportRows(
+      '2026-11',
+      sources(),
+      () => ({ ...dimensions, grading }),
+      () => '审批完成',
+    );
+    assert.equal(row[0], 0);
+  }
+  assert.throws(
+    () =>
+      m.salesPlanMonthlyReportRows(
+        '2026-11',
+        sources(),
+        () => ({ ...dimensions, grading: undefined }),
+        () => '审批完成',
+      ),
+    /UNCONFIRMED_REPORT_FIELDS.*分级/,
+  );
+});

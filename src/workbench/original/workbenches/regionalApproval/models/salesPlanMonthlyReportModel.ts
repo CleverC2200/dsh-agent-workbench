@@ -233,7 +233,7 @@ const text = (value: unknown, column: string): string | 0 => {
   if (value === null) return 0;
   if (typeof value !== 'string')
     throw new SalesPlanMonthlyReportError('UNCONFIRMED_REPORT_FIELDS', [column]);
-  return value;
+  return value.trim() ? value : 0;
 };
 
 const quantity = (sku: GeaSalesPlanSku): string => {
