@@ -54,6 +54,10 @@ const sku = (p, fields = {}) => ({
   areaConfirmedAmount: null,
   categoryConfirmedQty: null,
   categoryConfirmedAmount: null,
+  adjAddQty: null,
+  adjCutQty: null,
+  categoryAdjAddQty: null,
+  categoryAdjCutQty: null,
   ...fields,
 });
 const dimensions = {
@@ -61,12 +65,8 @@ const dimensions = {
   inventoryOrganization: '郑州总库存组织',
   customerType: '经销商',
   customerGroup: '三级',
-  productGrade: '中端',
   materialGroupCode: '102121',
   materialGroupName: '思念312g元宝汤圆',
-  correctionPlanQty: '-200',
-  consensusPlanQty: '-200',
-  correctedPlanQty: '100',
 };
 const sources = () => {
   const monthly = plan('M', '10010698');
@@ -80,14 +80,16 @@ const sources = () => {
           corrBaseQty: '300',
           adjAddQty: '0',
           adjCutQty: '200',
-          categoryConfirmedQty: '100',
+          categoryAdjAddQty: '0',
+          categoryAdjCutQty: '150',
+          categoryConfirmedQty: '150',
         }),
       ],
     },
   ];
 };
 
-test('monthly report merges customer SKU rows and preserves the sample 25 columns', () => {
+test('monthly report merges customer SKU rows and preserves the confirmed 24 columns', () => {
   const rows = m.salesPlanMonthlyReportRows(
     '2026-11',
     sources(),
@@ -106,7 +108,6 @@ test('monthly report merges customer SKU rows and preserves the sample 25 column
     '客户编码',
     '客户名称',
     '产品大类',
-    '产品档次',
     '物料组编码',
     '物料组名称',
     '产品编码',
@@ -115,14 +116,14 @@ test('monthly report merges customer SKU rows and preserves the sample 25 column
     '纠偏状态',
     '月份',
     '月初计划',
-    '纠偏计划',
-    '共识计划',
+    '纠偏计划（客户）',
+    '纠偏计划（品类）',
     '纠偏后计划',
     '月初计划额',
     '纠偏后计划额',
   ]);
   assert.equal(rows.length, 1);
-  assert.deepEqual(rows[0].slice(19).map(Number), [300, -200, -200, 100, 34512, 11504]);
+  assert.deepEqual(rows[0].slice(18).map(Number), [300, -200, -150, 150, 34512, 17256]);
   assert.deepEqual(rows[0].slice(0, 3), ['工厂仓', '郑州', '郑州总库存组织']);
 });
 
@@ -139,9 +140,9 @@ test('monthly report uses the existing whole-piece confirmation before computing
     () => dimensions,
     () => '待审批',
   );
-  assert.equal(Number(row[19]), 8420);
+  assert.equal(Number(row[18]), 8420);
+  assert.equal(Number(row[22]), 631500);
   assert.equal(Number(row[23]), 631500);
-  assert.equal(Number(row[24]), 631500);
 });
 
 test('an approved monthly plan rounds its saved category confirmation rather than the original submitted quantity', () => {
@@ -157,8 +158,8 @@ test('an approved monthly plan rounds its saved category confirmation rather tha
     () => dimensions,
     () => '审批完成',
   );
-  assert.equal(Number(row[19]), 11);
-  assert.equal(Number(row[23]), 825);
+  assert.equal(Number(row[18]), 11);
+  assert.equal(Number(row[22]), 825);
 });
 
 test('report collection reads both plan types across every API page without node or selection filters', async () => {
@@ -252,21 +253,18 @@ test('all readable months retain separate customer SKU rows across period and pl
   );
   const rows = m.salesPlanAllMonthlyReportRows(
     sources,
-    (month) => ({
-      ...dimensions,
-      correctedPlanQty: month === '2026-10' ? '100' : '300',
-    }),
+    () => dimensions,
     () => '审批完成',
   );
   assert.deepEqual(
-    rows.map((row) => [row[18], row[8]]),
+    rows.map((row) => [row[17], row[8]]),
     [
       ['2026-10', '1'],
       ['2026-10', '2'],
       ['2026-11', '1'],
     ],
   );
-  assert.equal(rows[2][19], '300');
+  assert.equal(rows[2][18], '300');
   assert.ok(
     calls
       .filter(([kind]) => kind === 'periods')
@@ -302,7 +300,7 @@ test('all readable months retain separate customer SKU rows across period and pl
 
 test('new SKUs with two empty predecessor fields use the saved confirmation and the corresponding price', () => {
   const monthly = plan('M', '1', 2);
-  const correction = plan('Z', '2', 7);
+  const correction = plan('Z', '2', 5);
   const rows = m.salesPlanMonthlyReportRows(
     '2026-11',
     [
@@ -321,22 +319,22 @@ test('new SKUs with two empty predecessor fields use the saved confirmation and 
             corrBaseQty: '0',
             price: '295.00',
             regionConfirmedQty: '12',
+            categoryConfirmedQty: '12',
+            adjAddQty: '12',
+            adjCutQty: '0',
+            categoryAdjAddQty: '12',
+            categoryAdjCutQty: '0',
           }),
         ],
       },
     ],
-    () => ({
-      ...dimensions,
-      correctionPlanQty: '12',
-      consensusPlanQty: '12',
-      correctedPlanQty: '12',
-    }),
+    () => dimensions,
     () => '待审批',
   );
-  assert.deepEqual(rows[0].slice(19).map(Number), [12, 0, 0, 12, 3540, 3540]);
-  assert.deepEqual(rows[1].slice(19).map(Number), [0, 12, 12, 12, 0, 3540]);
-  assert.equal(rows[1][16], 0);
-  assert.equal(rows[0][17], 0);
+  assert.deepEqual(rows[0].slice(18).map(Number), [12, 0, 0, 12, 3540, 3540]);
+  assert.deepEqual(rows[1].slice(18).map(Number), [0, 12, 12, 12, 0, 3540]);
+  assert.equal(rows[1][15], 0);
+  assert.equal(rows[0][16], 0);
 });
 
 test('real null facts are zero while unavailable fields are explicit failures', () => {
@@ -348,7 +346,7 @@ test('real null facts are zero while unavailable fields are explicit failures', 
     () => '审批完成',
   );
   assert.equal(row[0], 0);
-  assert.deepEqual(row.slice(20, 23).map(Number), [0, 0, 0]);
+  assert.deepEqual(row.slice(19, 22).map(Number), [-200, -150, 150]);
   assert.throws(
     () =>
       m.salesPlanMonthlyReportRows(
@@ -357,17 +355,17 @@ test('real null facts are zero while unavailable fields are explicit failures', 
         () => undefined,
         () => '',
       ),
-    /UNCONFIRMED_REPORT_FIELDS.*共识计划/,
+    /UNCONFIRMED_REPORT_FIELDS.*客户类型/,
   );
   assert.throws(
     () =>
       m.salesPlanMonthlyReportRows(
         '2026-11',
         sources(),
-        () => ({ ...dimensions, consensusPlanQty: undefined }),
+        () => ({ ...dimensions, customerType: undefined }),
         () => '',
       ),
-    /UNCONFIRMED_REPORT_FIELDS.*共识计划/,
+    /UNCONFIRMED_REPORT_FIELDS.*客户类型/,
   );
 });
 
@@ -511,4 +509,145 @@ test('known null and blank report text are zero while an unread field still fail
       ),
     /UNCONFIRMED_REPORT_FIELDS.*分级/,
   );
+});
+
+test('category saved values remain excluded until category approval completes', () => {
+  for (const status of [0, 1, 2, 3, 4, 6, 7, 8, 9]) {
+    const input = sources();
+    input[1].plan.status = status;
+    const [row] = m.salesPlanMonthlyReportRows(
+      '2026-11',
+      input,
+      () => dimensions,
+      () => '待审批',
+    );
+    assert.deepEqual(row.slice(18).map(Number), [300, -200, 0, 300, 34512, 34512]);
+  }
+});
+
+test('zero adjustment values are business zero and unread or malformed source fields fail', () => {
+  const input = sources();
+  for (const field of ['adjAddQty', 'adjCutQty']) {
+    for (const value of [undefined, '', 'bad', '-1', 0]) {
+      const changed = structuredClone(input);
+      changed[1].skus[0][field] = value;
+      assert.throws(
+        () =>
+          m.salesPlanMonthlyReportRows(
+            '2026-11',
+            changed,
+            () => dimensions,
+            () => '',
+          ),
+        { code: value === undefined ? 'UNCONFIRMED_REPORT_FIELDS' : 'INVALID_REPORT_FIELD' },
+      );
+    }
+  }
+  for (const value of [null, '0', '0.000']) {
+    const changed = structuredClone(input);
+    Object.assign(changed[1].skus[0], {
+      adjAddQty: value,
+      adjCutQty: value,
+      categoryConfirmedQty: '300',
+    });
+    const [row] = m.salesPlanMonthlyReportRows(
+      '2026-11',
+      changed,
+      () => dimensions,
+      () => '',
+    );
+    assert.deepEqual(row.slice(18).map(Number), [300, 0, 0, 300, 34512, 34512]);
+  }
+});
+
+test('signed decimal adjustments and each effective version price keep their exact values', () => {
+  const input = sources();
+  Object.assign(input[0].skus[0], { qty: '9007199254740993', price: '0.01' });
+  Object.assign(input[1].skus[0], {
+    adjAddQty: '0.1',
+    adjCutQty: '0.3',
+    corrBaseQty: '300',
+    categoryConfirmedQty: '300.1',
+    price: '0.02',
+  });
+  const [row] = m.salesPlanMonthlyReportRows(
+    '2026-11',
+    input,
+    () => dimensions,
+    () => '',
+  );
+  assert.deepEqual(row.slice(18), [
+    '9007199254740993',
+    '-0.2',
+    '0.1',
+    '9007199254740993.1',
+    '90071992547409.93',
+    '180143985094819.86',
+  ]);
+});
+
+test('DMS synchronized completion retains the approved category correction', () => {
+  const input = sources();
+  input[1].plan.status = 10;
+  const [row] = m.salesPlanMonthlyReportRows(
+    '2026-11',
+    input,
+    () => dimensions,
+    () => '已完成',
+  );
+  assert.deepEqual(row.slice(18).map(Number), [300, -200, -150, 150, 34512, 17256]);
+});
+
+test('approved ordinary correction derives category change from confirmed quantity and fixed baseline', () => {
+  for (const fields of [
+    { categoryAdjAddQty: null, categoryAdjCutQty: null },
+    { categoryAdjAddQty: '77', categoryAdjCutQty: '0' },
+  ]) {
+    const input = sources();
+    Object.assign(input[1].skus[0], fields);
+    const [row] = m.salesPlanMonthlyReportRows(
+      '2026-11',
+      input,
+      () => dimensions,
+      () => '',
+    );
+    assert.deepEqual(row.slice(18).map(Number), [300, -200, -150, 150, 34512, 17256]);
+  }
+});
+
+test('completed correction requires read category confirmation and baseline while pending nodes do not', () => {
+  for (const status of [5, 10]) {
+    for (const field of ['categoryConfirmedQty', 'corrBaseQty']) {
+      for (const value of [undefined, null, '', 'bad', '-1', 0]) {
+        const input = sources();
+        input[1].plan.status = status;
+        input[1].skus[0][field] = value;
+        assert.throws(
+          () =>
+            m.salesPlanMonthlyReportRows(
+              '2026-11',
+              input,
+              () => dimensions,
+              () => '',
+            ),
+          { code: value === undefined ? 'UNCONFIRMED_REPORT_FIELDS' : 'INVALID_REPORT_FIELD' },
+        );
+      }
+    }
+  }
+  const input = sources();
+  input[1].plan.status = 4;
+  Object.assign(input[1].skus[0], {
+    categoryConfirmedQty: undefined,
+    corrBaseQty: undefined,
+    categoryAdjAddQty: undefined,
+    categoryAdjCutQty: undefined,
+  });
+  const [row] = m.salesPlanMonthlyReportRows(
+    '2026-11',
+    input,
+    () => dimensions,
+    () => '',
+  );
+  assert.deepEqual(row.slice(18).map(Number), [300, -200, 0, 300, 34512, 34512]);
 });

@@ -4,7 +4,11 @@ import type {
   GeaSalesPlanSku,
 } from '../../../contracts.ts';
 import type { WorkbenchHost } from '../../../bridge.ts';
-import { multiplyExactDecimals } from '../regionalApprovalQueryModel.ts';
+import {
+  addExactDecimals,
+  multiplyExactDecimals,
+  subtractExactDecimals,
+} from '../regionalApprovalQueryModel.ts';
 import { roundPlanQuantity } from './salesPlanQuantityModel.ts';
 
 export const SALES_PLAN_MONTHLY_REPORT_HEADERS = [
@@ -19,7 +23,6 @@ export const SALES_PLAN_MONTHLY_REPORT_HEADERS = [
   '客户编码',
   '客户名称',
   '产品大类',
-  '产品档次',
   '物料组编码',
   '物料组名称',
   '产品编码',
@@ -28,8 +31,8 @@ export const SALES_PLAN_MONTHLY_REPORT_HEADERS = [
   '纠偏状态',
   '月份',
   '月初计划',
-  '纠偏计划',
-  '共识计划',
+  '纠偏计划（客户）',
+  '纠偏计划（品类）',
   '纠偏后计划',
   '月初计划额',
   '纠偏后计划额',
@@ -47,12 +50,8 @@ export type SalesPlanMonthlyReportFacts = {
   inventoryOrganization: string | null;
   customerType: string | null;
   customerGroup: string | null;
-  productGrade: string | null;
   materialGroupCode: string | null;
   materialGroupName: string | null;
-  correctionPlanQty?: string | null;
-  consensusPlanQty?: string | null;
-  correctedPlanQty?: string | null;
 };
 
 export type SalesPlanMonthlyReportRow = readonly (string | number)[];
@@ -272,20 +271,23 @@ export function salesPlanAllMonthlyReportRows(
     );
 }
 
-const numeric = (value: unknown, column: string, nonnegative = true): string => {
+const numeric = (value: unknown, column: string): string => {
   if (value === undefined)
     throw new SalesPlanMonthlyReportError('UNCONFIRMED_REPORT_FIELDS', [column]);
   if (
     typeof value !== 'string' ||
     !/^-?\d+(?:\.\d+)?$/.test(value) ||
-    (nonnegative && value.startsWith('-') && !/^-0(?:\.0+)?$/.test(value))
+    (value.startsWith('-') && !/^-0(?:\.0+)?$/.test(value))
   )
     throw new SalesPlanMonthlyReportError('INVALID_REPORT_FIELD', [column]);
   return value;
 };
 
-const factQuantity = (value: string | null | undefined, column: string, nonnegative = true) =>
-  numeric(value === null ? '0' : value, column, nonnegative);
+const adjustment = (add: unknown, cut: unknown, column: string): string =>
+  subtractExactDecimals(
+    numeric(add === null ? '0' : add, column),
+    numeric(cut === null ? '0' : cut, column),
+  );
 
 const text = (value: unknown, column: string): string | 0 => {
   if (value === null) return 0;
@@ -358,21 +360,21 @@ export function salesPlanMonthlyReportRows(
           '库存组织',
           '客户类型',
           '客户组名称',
-          '产品档次',
           '物料组编码',
           '物料组名称',
-          ...(correction ? ['纠偏计划', '共识计划', '纠偏后计划'] : []),
         ]);
       const monthlyQty = monthly ? quantity(monthly.sku) : '0';
       const correctionQty = correction
-        ? factQuantity(facts.correctionPlanQty, '纠偏计划', false)
+        ? adjustment(correction.sku.adjAddQty, correction.sku.adjCutQty, '纠偏计划（客户）')
         : '0';
-      const consensusQty = correction
-        ? factQuantity(facts.consensusPlanQty, '共识计划', false)
-        : '0';
-      const correctedQty = correction
-        ? factQuantity(facts.correctedPlanQty, '纠偏后计划')
-        : monthlyQty;
+      const consensusQty =
+        correction && [5, 10].includes(correction.plan.status)
+          ? subtractExactDecimals(
+              numeric(correction.sku.categoryConfirmedQty, '纠偏计划（品类）'),
+              numeric(correction.sku.corrBaseQty, '纠偏基准数量'),
+            )
+          : '0';
+      const correctedQty = numeric(addExactDecimals([monthlyQty, consensusQty]), '纠偏后计划');
       return [
         text(facts.grading, '分级'),
         text(plan.baseName, '所属基地'),
@@ -385,7 +387,6 @@ export function salesPlanMonthlyReportRows(
         plan.dealerCode!,
         text(plan.dealerName, '客户名称'),
         text(sku.productCategName, '产品大类'),
-        text(facts.productGrade, '产品档次'),
         text(facts.materialGroupCode, '物料组编码'),
         text(facts.materialGroupName, '物料组名称'),
         sku.skuCode,
@@ -403,6 +404,6 @@ export function salesPlanMonthlyReportRows(
     })
     .toSorted(
       (a, b) =>
-        String(a[8]).localeCompare(String(b[8])) || String(a[14]).localeCompare(String(b[14])),
+        String(a[8]).localeCompare(String(b[8])) || String(a[13]).localeCompare(String(b[13])),
     );
 }

@@ -13,12 +13,12 @@ const bundle = await build({
 import {salesPlanAllMonthlyReportRows} from './src/workbench/original/workbenches/regionalApproval/models/salesPlanMonthlyReportModel.ts';
 import {downloadSalesPlanMonthlyReport} from './src/workbench/original/workbenches/regionalApproval/models/salesPlanMonthlyReportDownload.ts';
 const p=(orderType,dealerCode,status=5)=>({planId:orderType+dealerCode,versionId:'v-'+orderType+dealerCode,periodId:'p',orderType,dealerCode,dealerName:'客户'+dealerCode,planTypeCode:'Y',baseName:'郑州',areaName:'大区',provinceName:'省区',orgName:'区域',status,skuCount:1});
-const s=(p,fields={})=>({id:'s-'+p.versionId,versionId:p.versionId,skuCode:'010006285',skuName:'汤圆',productCategName:'汤圆',qty:'300',baseQty:'300',price:'115.04',amt:'34512',amtBase:'34512',regionConfirmedQty:null,regionConfirmedAmount:null,provinceConfirmedQty:null,provinceConfirmedAmount:null,areaConfirmedQty:null,areaConfirmedAmount:null,categoryConfirmedQty:null,categoryConfirmedAmount:null,...fields});
-const a=p('M','001'),b=p('Z','001'),c=p('M','002',1),d=p('Z','003',7);
-const sources=[{plan:a,skus:[s(a)]},{plan:b,skus:[s(b,{corrBaseQty:'300',adjAddQty:'0',adjCutQty:'200',categoryConfirmedQty:'100',price:'120'})]},{plan:c,skus:[s(c,{qty:'0',baseQty:'0',price:'295.00',provinceConfirmedQty:'12'})]},{plan:d,skus:[s(d,{qty:'0',baseQty:'0',corrBaseQty:'0',price:'295.00',regionConfirmedQty:'12'})]}];
+const s=(p,fields={})=>({id:'s-'+p.versionId,versionId:p.versionId,skuCode:'010006285',skuName:'汤圆',productCategName:'汤圆',qty:'300',baseQty:'300',price:'115.04',amt:'34512',amtBase:'34512',regionConfirmedQty:null,regionConfirmedAmount:null,provinceConfirmedQty:null,provinceConfirmedAmount:null,areaConfirmedQty:null,areaConfirmedAmount:null,categoryConfirmedQty:null,categoryConfirmedAmount:null,adjAddQty:null,adjCutQty:null,categoryAdjAddQty:null,categoryAdjCutQty:null,...fields});
+const a=p('M','001'),b=p('Z','001'),c=p('M','002',1),d=p('Z','003',7),e=p('Z','004'),f=p('M','005');
+const sources=[{plan:a,skus:[s(a)]},{plan:b,skus:[s(b,{corrBaseQty:'300',adjAddQty:'0',adjCutQty:'200',categoryConfirmedQty:'150',categoryAdjAddQty:'0',categoryAdjCutQty:'150',price:'120'})]},{plan:c,skus:[s(c,{qty:'0',baseQty:'0',price:'295.00',provinceConfirmedQty:'12'})]},{plan:d,skus:[s(d,{qty:'0',baseQty:'0',corrBaseQty:'0',price:'295.00',regionConfirmedQty:'12',adjAddQty:'12',adjCutQty:'0',categoryAdjAddQty:'12',categoryAdjCutQty:'0'})]},{plan:e,skus:[s(e,{qty:'0',baseQty:'0',corrBaseQty:'0',price:'295.00',adjAddQty:'12',adjCutQty:'0',categoryAdjAddQty:'12',categoryAdjCutQty:'0',categoryConfirmedQty:'12'})]},{plan:f,skus:[s(f,{qty:'9007199254740993',price:'0.01'})]}];
 const prior={...a,planId:'prior',versionId:'prior-version',periodId:'prior-period'};
 const datedSources=[{month:'2026-10',plan:prior,skus:[s(prior)]},...sources.map(source=>({...source,month:'2026-11'}))];
-const facts=(dealerCode)=>({grading:'工厂仓',inventoryOrganization:'郑州总库存组织',customerType:'经销商',customerGroup:'三级',productGrade:null,materialGroupCode:'102121',materialGroupName:'思念312g元宝汤圆',correctionPlanQty:dealerCode==='003'?'12':'-200',consensusPlanQty:dealerCode==='003'?'12':'-200',correctedPlanQty:dealerCode==='003'?'12':'100'});
+const facts=()=>({grading:'工厂仓',inventoryOrganization:'郑州总库存组织',customerType:'经销商',customerGroup:'三级',materialGroupCode:'102121',materialGroupName:'思念312g元宝汤圆'});
 window.reportMode='ready';
 document.querySelector('#download').onclick=async()=>{
  document.querySelector('#result').textContent='reading';
@@ -65,7 +65,7 @@ async function openReport(t) {
   return page;
 }
 
-test('complete verified report facts download one XLSX across months with all 25 sample columns', async (t) => {
+test('complete verified report facts download one XLSX across months with the confirmed 24 columns', async (t) => {
   const page = await openReport(t);
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: '下载月度报表' }).click();
@@ -74,7 +74,7 @@ test('complete verified report facts download one XLSX across months with all 25
   const workbook = XLSX.read(await readFile(await download.path()), { type: 'buffer' });
   assert.deepEqual(workbook.SheetNames, ['月度计划']);
   const rows = XLSX.utils.sheet_to_json(workbook.Sheets['月度计划'], { header: 1 });
-  assert.equal(rows[0].length, 25);
+  assert.equal(rows[0].length, 24);
   assert.deepEqual(rows[0], [
     '分级',
     '所属基地',
@@ -87,7 +87,6 @@ test('complete verified report facts download one XLSX across months with all 25
     '客户编码',
     '客户名称',
     '产品大类',
-    '产品档次',
     '物料组编码',
     '物料组名称',
     '产品编码',
@@ -96,26 +95,36 @@ test('complete verified report facts download one XLSX across months with all 25
     '纠偏状态',
     '月份',
     '月初计划',
-    '纠偏计划',
-    '共识计划',
+    '纠偏计划（客户）',
+    '纠偏计划（品类）',
     '纠偏后计划',
     '月初计划额',
     '纠偏后计划额',
   ]);
-  assert.equal(rows.length, 5);
+  assert.equal(rows.length, 7);
   assert.equal(rows[1][8], '001');
-  assert.equal(rows[1][14], '010006285');
-  assert.equal(rows[1][11], 0);
-  assert.deepEqual(rows.map((row) => row[18]).slice(1), [
+  assert.equal(rows[1][13], '010006285');
+  assert.deepEqual(rows.map((row) => row[17]).slice(1), [
     '2026-10',
     '2026-11',
     '2026-11',
     '2026-11',
+    '2026-11',
+    '2026-11',
   ]);
-  assert.deepEqual(rows[1].slice(19), [300, 0, 0, 300, 34512, 34512]);
-  assert.deepEqual(rows[2].slice(19), [300, -200, -200, 100, 34512, 12000]);
-  assert.deepEqual(rows[3].slice(19), [12, 0, 0, 12, 3540, 3540]);
-  assert.deepEqual(rows[4].slice(19), [0, 12, 12, 12, 0, 3540]);
+  assert.deepEqual(rows[1].slice(18), [300, 0, 0, 300, 34512, 34512]);
+  assert.deepEqual(rows[2].slice(18), [300, -200, -150, 150, 34512, 18000]);
+  assert.deepEqual(rows[3].slice(18), [12, 0, 0, 12, 3540, 3540]);
+  assert.deepEqual(rows[4].slice(18), [0, 12, 0, 0, 0, 0]);
+  assert.deepEqual(rows[5].slice(18), [0, 12, 12, 12, 0, 3540]);
+  assert.deepEqual(rows[6].slice(18), [
+    '9007199254740993',
+    0,
+    0,
+    '9007199254740993',
+    '90071992547409.93',
+    '90071992547409.93',
+  ]);
   if (process.env.SALES_PLAN_REPORT_EVIDENCE)
     await download.saveAs(process.env.SALES_PLAN_REPORT_EVIDENCE);
 });

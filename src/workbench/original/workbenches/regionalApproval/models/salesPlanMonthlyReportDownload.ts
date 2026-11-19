@@ -34,24 +34,24 @@ export async function downloadSalesPlanMonthlyReport(
         (value) =>
           typeof value !== 'string' && (typeof value !== 'number' || !Number.isFinite(value)),
       ) ||
-      typeof row[18] !== 'string' ||
-      !/^\d{4}-(0[1-9]|1[0-2])$/.test(row[18]) ||
-      (month !== undefined && row[18] !== month)
+      typeof row[17] !== 'string' ||
+      !/^\d{4}-(0[1-9]|1[0-2])$/.test(row[17]) ||
+      (month !== undefined && row[17] !== month)
     )
       throw new SalesPlanMonthlyReportError('INCOMPLETE_REPORT_ROW');
-    const key = JSON.stringify([row[8], row[14], row[18]]);
+    const key = JSON.stringify([row[8], row[13], row[17]]);
     if (keys.has(key)) throw new SalesPlanMonthlyReportError('DUPLICATE_REPORT_ROW');
     keys.add(key);
-    return row.map((value, index) => (index >= 19 ? spreadsheetNumber(value) : value));
+    return row.map((value, index) => (index >= 18 ? spreadsheetNumber(value) : value));
   });
   const xlsx = await import('xlsx-republish');
   signal.throwIfAborted();
   const sheet = xlsx.utils.aoa_to_sheet([[...SALES_PLAN_MONTHLY_REPORT_HEADERS], ...cells]);
   sheet['!cols'] = SALES_PLAN_MONTHLY_REPORT_HEADERS.map((_, index) => ({
-    wch: index === 9 || index === 15 ? 36 : 18,
+    wch: index === 9 || index === 14 ? 36 : 18,
   }));
   for (let row = 2; row <= cells.length + 1; row++) {
-    for (const column of ['X', 'Y']) {
+    for (const column of ['W', 'X']) {
       const cell = sheet[`${column}${row}`];
       if (cell?.t === 'n') cell.z = '#,##0.00';
     }
