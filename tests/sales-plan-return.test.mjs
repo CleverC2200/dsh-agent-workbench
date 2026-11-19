@@ -396,7 +396,7 @@ test('invalid pending confirmed quantity keeps its preflight reason', () => {
   );
 });
 
-test('Z return verifies the added SKU quantity, current sale price and receiver fields', () => {
+const zAddedReturnFixture = () => {
   const added = { skuCode: '10004778', qty: '12' };
   const request = {
     action: 'REJECT',
@@ -411,12 +411,17 @@ test('Z return verifies the added SKU quantity, current sale price and receiver 
     skus: [
       { ...sku, provinceConfirmedQty: null, provinceConfirmedAmount: null },
       {
-        ...sku,
+        versionId: 'v',
         skuCode: added.skuCode,
         baseQty: '0',
         corrBaseQty: '0',
         qty: '0',
         amt: '0',
+        amtBase: '0',
+        adjAddQty: '0',
+        adjCutQty: '0',
+        adjAddAmount: '0',
+        adjCutAmount: '0',
         price: '295.00',
         regionAdjAddQty: '12',
         regionAdjCutQty: '0',
@@ -428,6 +433,11 @@ test('Z return verifies the added SKU quantity, current sale price and receiver 
     ],
   };
   const receipt = { planId: 'p', versionId: 'v', fromStatus: 2, toStatus: 7 };
+  return { added, request, returned, receipt };
+};
+
+test('Z return verifies the added SKU quantity, current sale price and receiver fields', () => {
+  const { added, request, returned, receipt } = zAddedReturnFixture();
   assert.equal(m.verifyReturnedSalesPlan(detail, returned, request, receipt), true);
   assert.equal(
     m.verifyReturnedSalesPlan(detail, { ...returned, skus: [returned.skus[0]] }, request, receipt),
@@ -457,7 +467,7 @@ test('Z return verifies the added SKU quantity, current sale price and receiver 
   );
 });
 
-test('Z resubmit sends the node quantity while the newly added row uses the server price', () => {
+const zResubmitFixture = (sourcePatch = {}) => {
   const planId = 'p-jxs-2026-12-00001';
   const owner = { id: 'user', username: 'user' };
   const period = { periodId: '6000', periodMonth: '2026-12', planTypeCode: 'Y' };
@@ -485,11 +495,14 @@ test('Z resubmit sends the node quantity while the newly added row uses the serv
     amtBase: '0',
     adjAddQty: '0',
     adjCutQty: '0',
+    adjAddAmount: '0',
+    adjCutAmount: '0',
     productCategName: '品类',
     regionConfirmedQty: '12',
     regionConfirmedAmount: '3540',
     regionAdjAddQty: '12',
     regionAdjCutQty: '0',
+    ...sourcePatch,
   };
   const input = m.prepareSalesPlanResubmit({
     planId,
@@ -530,14 +543,127 @@ test('Z resubmit sends the node quantity while the newly added row uses the serv
     currentVersion: { ...previous, id: 'v2', seq: 2, status: 2 },
     skus: [
       actual(zero, '10', '295', '2950'),
-      actual({ ...zero, skuCode: '10004779' }, '5', '21', '105'),
+      actual({ ...zero, skuCode: '10004779', adjAddQty: '0', adjAddAmount: '0' }, '5', '21', '105'),
     ],
     versions: [{ ...previous, effective: false }],
     logs: [{ planId, versionId: 'v2', requestId: 'r', actionCode: 'RESUBMIT' }],
   };
+  return { input, zero, receipt, after };
+};
+
+test('Z resubmit sends the node quantity while the newly added row uses the server price', () => {
+  const { input, zero, receipt, after } = zResubmitFixture();
   assert.equal(
     m.salesPlanResubmitReadbackMatches('v', receipt, after, input.request, [zero]),
     true,
   );
   assert.equal(m.salesPlanEditableQuantity({ ...zero, adjAddQty: '12' }, 1, 'Y', 'region'), '12');
+});
+
+test('Z added return rejects a nonzero baseline amount', () => {
+  const { request, returned, receipt } = zAddedReturnFixture();
+  for (const field of ['amtBase', 'amt']) {
+    const after = {
+      ...returned,
+      skus: [returned.skus[0], { ...returned.skus[1], [field]: '3540.00' }],
+    };
+    assert.equal(m.verifyReturnedSalesPlan(detail, after, request, receipt), false, field);
+  }
+});
+
+test('Z newly added return clears sender and all other unconfirmed nodes', () => {
+  const { request, returned, receipt } = zAddedReturnFixture();
+  const cleared = {
+    adjAddQty: '0',
+    adjCutQty: '0',
+    adjAddAmount: '0',
+    adjCutAmount: '0',
+  };
+  for (const role of ['province', 'area', 'category'])
+    for (const suffix of [
+      'AdjAddQty',
+      'AdjCutQty',
+      'AdjAddAmount',
+      'AdjCutAmount',
+      'ConfirmedQty',
+      'ConfirmedAmount',
+    ])
+      cleared[role + suffix] = null;
+  const after = {
+    ...returned,
+    skus: [returned.skus[0], { ...returned.skus[1], ...cleared }],
+  };
+  assert.equal(m.verifyReturnedSalesPlan(detail, after, request, receipt), true);
+  for (const field of Object.keys(cleared)) {
+    assert.equal(
+      m.verifyReturnedSalesPlan(
+        detail,
+        {
+          ...after,
+          skus: [after.skus[0], { ...after.skus[1], [field]: '120' }],
+        },
+        request,
+        receipt,
+      ),
+      false,
+      field,
+    );
+  }
+});
+
+test('Z resubmit changed confirmed quantity keeps the saved price of an existing row', () => {
+  const { input, zero, receipt, after } = zResubmitFixture();
+  const changedPrice = {
+    ...after,
+    skus: [
+      {
+        ...after.skus[0],
+        price: '300',
+        regionAdjAddAmount: '3000',
+        regionConfirmedAmount: '3000',
+      },
+      after.skus[1],
+    ],
+  };
+  assert.equal(
+    m.salesPlanResubmitReadbackMatches('v', receipt, changedPrice, input.request, [zero]),
+    false,
+  );
+});
+
+test('Z existing zero-baseline resubmit preserves earlier valid correction history', () => {
+  const { input, zero, receipt, after } = zResubmitFixture({
+    adjAddQty: '4',
+    adjAddAmount: '1180',
+  });
+  assert.equal(
+    m.salesPlanResubmitReadbackMatches('v', receipt, after, input.request, [zero]),
+    true,
+  );
+});
+
+test('Z newly added resubmit rejects baseline amounts and uncleared later nodes', () => {
+  const { input, zero, receipt, after } = zResubmitFixture();
+  for (const patch of [
+    { amtBase: '105' },
+    { amt: '105' },
+    { adjAddQty: '5' },
+    { provinceConfirmedQty: '5', provinceConfirmedAmount: '105' },
+    { provinceAdjAddAmount: '105' },
+  ]) {
+    assert.equal(
+      m.salesPlanResubmitReadbackMatches(
+        'v',
+        receipt,
+        {
+          ...after,
+          skus: [after.skus[0], { ...after.skus[1], ...patch }],
+        },
+        input.request,
+        [zero],
+      ),
+      false,
+      JSON.stringify(patch),
+    );
+  }
 });
