@@ -149,39 +149,6 @@ export function RegionalSkuReview({
       </td>
     </>
   );
-  const exportRows = async () => {
-    const xlsx = await import('xlsx-republish');
-    const values = (row: SkuReviewTotals) =>
-      [
-        ...row.shipments,
-        row.budgetAmount,
-        row.planQty,
-        row.planAmount,
-        row.confirmedQty,
-        row.confirmedAmount,
-      ].map((value) => (value === null ? null : Number(value)));
-    const data: (string | number | null)[][] = [
-      [
-        text('category'),
-        text('sku'),
-        ...months.map((value) => `${value} ${text('shipped')}`),
-        text('budget'),
-        text('planQty'),
-        text('planAmount'),
-        text('confirmedQty'),
-        text('confirmedAmount'),
-      ],
-    ];
-    for (const [name, items] of grouped) {
-      data.push([name, text('subtotal'), ...values(skuReviewTotal(items))]);
-      for (const row of items)
-        data.push([name, `${row.skuCode} ${row.description}`, ...values(row)]);
-    }
-    if (totals) data.push([text('total'), '', ...values(totals)]);
-    const workbook = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(workbook, xlsx.utils.aoa_to_sheet(data), text('sheet'));
-    xlsx.writeFile(workbook, `${month}-SKU.xlsx`);
-  };
   return (
     <section
       className={styles.root}
@@ -232,9 +199,6 @@ export function RegionalSkuReview({
           }}
         >
           {text('reset')}
-        </Button>
-        <Button disabled={!totals || !filtered.length} onClick={() => void exportRows()}>
-          {text('export')}
         </Button>
       </div>
       <p className={styles.scope}>{text('scope')}</p>

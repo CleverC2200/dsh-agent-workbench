@@ -66,6 +66,109 @@ test('copied workbench exports exact amounts beyond JavaScript integer precision
   );
 });
 
+const addedSku = (overrides = {}) =>
+  sku('10004778', {
+    baseQty: '0',
+    corrBaseQty: '0',
+    qty: '0',
+    amtBase: '0',
+    amt: '0',
+    price: '295.00',
+    regionConfirmedQty: null,
+    regionConfirmedAmount: null,
+    provinceConfirmedQty: '12',
+    provinceConfirmedAmount: '3540.00',
+    areaConfirmedQty: null,
+    areaConfirmedAmount: null,
+    categoryConfirmedQty: null,
+    categoryConfirmedAmount: null,
+    ...overrides,
+  });
+
+test('copied workbench exports an added SKU with no prior node confirmation', () => {
+  const existing = sku('01', {
+    areaConfirmedQty: null,
+    areaConfirmedAmount: null,
+    categoryConfirmedQty: null,
+    categoryConfirmedAmount: null,
+  });
+  assert.deepEqual(
+    aggregateSalesPlanExportAmounts({ versionId: 'version-1', skuCount: 2, orderType: 'Z' }, [
+      existing,
+      addedSku(),
+    ]),
+    {
+      qty: '0.1',
+      amt: '1.01',
+      regionConfirmedQty: '2.125',
+      regionConfirmedAmount: '21.25',
+      provinceConfirmedQty: '15.125',
+      provinceConfirmedAmount: '3571.25',
+      areaConfirmedQty: null,
+      areaConfirmedAmount: null,
+      categoryConfirmedQty: null,
+      categoryConfirmedAmount: null,
+    },
+  );
+});
+
+test('copied workbench exports monthly added SKUs without a correction baseline', () => {
+  for (const corrBaseQty of [null, undefined]) {
+    const result = aggregateSalesPlanExportAmounts(
+      { versionId: 'version-1', skuCount: 2, orderType: 'M' },
+      [sku('01'), addedSku({ corrBaseQty })],
+    );
+    assert.equal(result.regionConfirmedQty, '2.125');
+    assert.equal(result.regionConfirmedAmount, '21.25');
+    assert.equal(result.provinceConfirmedQty, '15.125');
+    assert.equal(result.provinceConfirmedAmount, '3571.25');
+  }
+  for (const orderType of [undefined, 'unknown']) {
+    assert.throws(
+      () =>
+        aggregateSalesPlanExportAmounts({ versionId: 'version-1', skuCount: 2, orderType }, [
+          sku('01'),
+          addedSku(),
+        ]),
+      /Incomplete or invalid sales-plan node amounts/,
+    );
+  }
+});
+
+test('copied workbench rejects unread node fields and unproven empty contributions', () => {
+  const row = { versionId: 'version-1', skuCount: 1, orderType: 'Z' };
+  for (const overrides of [
+    { categoryConfirmedQty: undefined },
+    { categoryConfirmedAmount: undefined },
+    { categoryConfirmedQty: undefined, categoryConfirmedAmount: undefined },
+    { provinceConfirmedQty: null },
+    { provinceConfirmedAmount: null },
+    { provinceConfirmedQty: 'NaN' },
+    { provinceConfirmedAmount: '1e3' },
+    { provinceConfirmedAmount: '' },
+  ]) {
+    assert.throws(
+      () => aggregateSalesPlanExportAmounts(row, [addedSku(overrides)]),
+      /Incomplete or invalid sales-plan node amounts/,
+    );
+  }
+  for (const overrides of [
+    { baseQty: '1' },
+    { corrBaseQty: '1' },
+    { corrBaseQty: undefined },
+    { qty: '1' },
+    { amtBase: '1' },
+    { amt: '1' },
+    { baseQty: undefined },
+  ]) {
+    assert.throws(
+      () =>
+        aggregateSalesPlanExportAmounts({ ...row, skuCount: 2 }, [sku('01'), addedSku(overrides)]),
+      /Incomplete or invalid sales-plan node amounts/,
+    );
+  }
+});
+
 test('copied workbench preserves zero confirmation and rejects incomplete or mismatched export rows', () => {
   const row = { versionId: 'version-1', skuCount: 2 };
   const result = aggregateSalesPlanExportAmounts(

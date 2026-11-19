@@ -1,5 +1,6 @@
 import type {
   GeaSalesPlanDetail,
+  GeaSalesPlanAddedSku,
   GeaSalesPlanListItem,
   GeaSalesPlanSkuAdjustment,
   GeaSalesPlanSku,
@@ -10,6 +11,7 @@ import {
   subtractExactDecimals,
 } from '../regionalApprovalQueryModel.ts';
 import { salesPlanEditableQuantity } from './salesPlanAccessModel.ts';
+import { salesPlanAddedSkusValid } from './salesPlanActionModel.ts';
 import { roundPlanQuantity, salesPlanDecimalValue } from './salesPlanQuantityModel.ts';
 import { salesPlanSkusMatchVersion } from './salesPlanDetailModel.ts';
 import { SubmissionSourceError } from './salesPlanPreflightModel.ts';
@@ -21,6 +23,7 @@ export type SalesPlanLocalDraft = {
   status: number;
   sourceSnapshot: string;
   adjustments: GeaSalesPlanSkuAdjustment[];
+  addedSkus?: GeaSalesPlanAddedSku[];
   remark: string;
 
   role?: ApprovalStageId;
@@ -165,6 +168,15 @@ export const salesPlanDraftMatches = (
   const codes = new Set<string>();
   if (draft.role !== undefined && !['region', 'province', 'area', 'category'].includes(draft.role))
     return false;
+  if (
+    draft.addedSkus !== undefined &&
+    (!salesPlanAddedSkusValid(draft.addedSkus) ||
+      detail.skus.length + draft.addedSkus.length > 5000 ||
+      draft.addedSkus.some(({ skuCode }) =>
+        detail.skus.some((sku) => String(sku.skuCode) === skuCode),
+      ))
+  )
+    return false;
   const baselineRole = role ?? draft.role;
   return draft.adjustments.every((adjustment) => {
     if (
@@ -204,7 +216,8 @@ export const salesPlanLocalDraftValid = (
   if (
     typeof value.remark !== 'string' ||
     Array.from(value.remark).length > 1000 ||
-    !Array.isArray(value.adjustments)
+    !Array.isArray(value.adjustments) ||
+    (value.addedSkus !== undefined && !salesPlanAddedSkusValid(value.addedSkus))
   )
     return false;
   const codes = new Set<string>();

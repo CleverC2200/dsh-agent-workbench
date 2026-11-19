@@ -18,11 +18,13 @@ import {
   correctionDecision,
   correctionLine,
   correctionDecimal,
+  salesPlanZeroBaselineSku,
 } from './models/salesPlanCorrectionModel.ts';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Input, Modal, Spin } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import type {
+  GeaSalesPlanAddedSku,
   GeaSalesPlanDetail,
   GeaSalesPlanPeriod,
   GeaSalesPlanActionReceipt,
@@ -60,6 +62,7 @@ export type SalesPlanSubmissionItem = {
   label: string;
   period: GeaSalesPlanPeriod;
   pendingValues?: Record<string, string>;
+  pendingAddedSkus?: GeaSalesPlanAddedSku[];
 } & (
   | { kind: 'skip'; row: RegionalApprovalLiveRow; reason: string; approvalRole?: undefined }
   | { kind: 'resubmit'; row: RegionalApprovalLiveRow; approvalRole?: ApprovalStageId }
@@ -79,7 +82,7 @@ export type SalesPlanSubmissionOutcome = {
 };
 
 type SubmissionClient = SalesPlanSubmitClient &
-  Pick<WorkbenchHost['salesPlan'], 'action' | 'draft'>;
+  Pick<WorkbenchHost['salesPlan'], 'action' | 'draft' | 'skuQuotes'>;
 type SubmissionRow = {
   item: SalesPlanSubmissionItem;
   source?: SalesPlanResubmitSource;
@@ -97,17 +100,30 @@ type SubmissionRow = {
   draftIntent?: string;
 };
 
-const draftIntent = (values: Record<string, string>) =>
-  JSON.stringify(
+const draftIntent = (values: Record<string, string>, additions: GeaSalesPlanAddedSku[] = []) =>
+  JSON.stringify([
     Object.entries(values)
       .map(([code, value]) => [code, salesPlanDecimalValue(value)])
       .toSorted(([a], [b]) => String(a).localeCompare(String(b))),
-  );
+    additions
+      .map(({ skuCode, qty }) => [skuCode, salesPlanDecimalValue(qty)])
+      .toSorted(([a], [b]) => String(a).localeCompare(String(b))),
+  ]);
+
+const submissionRole = (item: SalesPlanSubmissionItem): ApprovalStageId | undefined => {
+  if (item.kind === 'approve') return item.access.approvalRole;
+  if (item.kind !== 'resubmit') return undefined;
+  return item.row.status === 7
+    ? 'region'
+    : item.row.status === 8
+      ? 'province'
+      : item.row.status === 9
+        ? 'area'
+        : undefined;
+};
 
 const draftForSubmission = (item: SalesPlanSubmissionItem, draft?: SalesPlanLocalDraft | null) =>
-  item.kind === 'approve' && draft?.role && draft.role !== item.access.approvalRole
-    ? undefined
-    : (draft ?? undefined);
+  draft?.role && draft.role !== submissionRole(item) ? undefined : (draft ?? undefined);
 
 const approvalAccessForSubmission = (
   item: Extract<SalesPlanSubmissionItem, { kind: 'approve' }>,
@@ -217,7 +233,7 @@ export function RegionalApprovalResubmitDialog({
             });
             const period = item.period;
             checkSubmissionSkus(item.versionId, detail.skus, skus);
-            const source = {
+            const source: SalesPlanResubmitSource = {
               planId: item.planId,
               versionId: item.versionId,
               period,
@@ -225,7 +241,7 @@ export function RegionalApprovalResubmitDialog({
               currentUser,
               skus,
             };
-            const role = item.kind === 'approve' ? item.access.approvalRole : item.approvalRole;
+            const role = submissionRole(item);
             if (!client.draft) throw new Error('sourceLoad');
             const ignoredDraft = ignoredDrafts.has(item.versionId);
             const draft = ignoredDraft
@@ -242,6 +258,30 @@ export function RegionalApprovalResubmitDialog({
               (storedDraft && !salesPlanDraftMatches(storedDraft, item.row, detail, role))
             )
               throw new SubmissionSourceError('draftStale');
+            const additions = ignoredDraft
+              ? []
+              : (item.pendingAddedSkus ?? storedDraft?.addedSkus ?? []);
+            if (additions.length) {
+              if (!client.skuQuotes) throw new Error('sourceLoad');
+              const quotes = await client.skuQuotes.invoke({
+                planId: item.planId,
+                versionId: item.versionId,
+                skuCodes: additions.map(({ skuCode }) => skuCode),
+                signal: controller.signal,
+              });
+              source.addedSkus = additions.map((addition) => {
+                const quote = quotes.find((item) => item.skuCode === addition.skuCode);
+                if (quote?.price == null)
+                  throw new SubmissionSourceError('addedSkuPrice', {
+                    skuCode: addition.skuCode,
+                  });
+                return {
+                  ...addition,
+                  productCategName: quote.productCategName,
+                  price: quote.price,
+                };
+              });
+            }
             const adjustments = salesPlanApprovalDraftValues(
               { ...detail, skus },
               item.row,
@@ -265,13 +305,17 @@ export function RegionalApprovalResubmitDialog({
               changes,
               status: 'ready',
               ignoredDraft,
-              draftIntent: draftIntent(adjustments),
+              draftIntent: draftIntent(adjustments, additions),
             };
             if (item.kind === 'resubmit') {
               state.skus = skus.map((sku) => {
                 const change = changes.find((value) => value.sku.skuCode === sku.skuCode);
                 if (!change) return sku;
                 if (detail.currentVersion.orderType === 'M') return { ...sku, qty: change.after };
+                if (role && salesPlanZeroBaselineSku(sku)) {
+                  (source.confirmedQuantities ??= {})[sku.skuCode] = change.after;
+                  return sku;
+                }
                 const line = correctionLine(
                   sku,
                   correctionDecimal(change.after).minus(correctionDecimal(sku.qty)).toFixed(),
@@ -293,6 +337,7 @@ export function RegionalApprovalResubmitDialog({
                   approvalRole: access.approvalRole,
                   ...(access.roleContractSupported ? { approvalPolicy: 'role-visible-v1' } : {}),
                   ...(access.snapshotHash ? { expectedSnapshot: access.snapshotHash } : {}),
+                  ...(additions.length ? { addedSkus: additions } : {}),
                   ...(Object.keys(adjustments).length
                     ? {
                         adjustments: Object.entries(adjustments).map(([skuCode, adjustQty]) => ({
@@ -449,8 +494,7 @@ export function RegionalApprovalResubmitDialog({
             const freshSkus = await client.versionSkus.invoke({ versionId: row.item.versionId });
             checkSubmissionSkus(row.item.versionId, fresh.skus, freshSkus);
             if (!row.ignoredDraft) {
-              const role =
-                row.item.kind === 'approve' ? row.item.access.approvalRole : row.item.approvalRole;
+              const role = submissionRole(row.item);
               const stored = await client.draft!.invoke({
                 planId: row.item.planId,
                 versionId: row.item.versionId,
@@ -470,7 +514,8 @@ export function RegionalApprovalResubmitDialog({
                 row.item.pendingValues,
                 row.item.kind === 'approve',
               );
-              if (row.draftIntent !== draftIntent(latest))
+              const additions = row.item.pendingAddedSkus ?? storedDraft?.addedSkus;
+              if (row.draftIntent !== draftIntent(latest, additions))
                 throw new SubmissionSourceError('draftStale');
             }
             if (row.item.kind === 'approve') approvalAccessForSubmission(row.item, fresh);
@@ -610,13 +655,32 @@ export function RegionalApprovalResubmitDialog({
               ),
             );
         } else if (row.source.detail.currentVersion.orderType === 'Z') {
-          quantity = correctionDecimal(
-            correctionLine(sku, correctionDecision(sku, 0, row.source.period.planTypeCode)).qty,
-          );
+          const role = submissionRole(row.item);
+          if (role && role !== 'customer' && salesPlanZeroBaselineSku(sku)) {
+            quantity = correctionDecimal(
+              (original ? undefined : row.source.confirmedQuantities?.[sku.skuCode]) ??
+                salesPlanEditableQuantity(
+                  sku,
+                  row.item.row.status,
+                  row.source.period.planTypeCode,
+                  role,
+                ) ??
+                sku.qty,
+            );
+          } else
+            quantity = correctionDecimal(
+              correctionLine(sku, correctionDecision(sku, 0, row.source.period.planTypeCode)).qty,
+            );
         }
         qty = qty.plus(quantity);
         amount = amount.plus(quantity.mul(correctionDecimal(sku.price)).toDecimalPlaces(2));
       }
+      if (!original)
+        for (const item of row.source.addedSkus ?? []) {
+          const quantity = correctionDecimal(item.qty);
+          qty = qty.plus(quantity);
+          amount = amount.plus(quantity.mul(correctionDecimal(item.price)).toDecimalPlaces(2));
+        }
       return `${qty.toFixed()} 件 · ¥${amount.toFixed(2)}`;
     } catch {
       return '—';
