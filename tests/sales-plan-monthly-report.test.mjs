@@ -127,6 +127,21 @@ test('monthly report merges customer SKU rows and preserves the confirmed 24 col
   assert.deepEqual(rows[0].slice(0, 3), ['工厂仓', '郑州', '郑州总库存组织']);
 });
 
+test('approved correction-only reductions retain negative corrected quantity and effective version amount', () => {
+  for (const status of [5, 10]) {
+    const correction = sources()[1];
+    correction.plan.status = status;
+    correction.skus[0].price = '120';
+    const [row] = m.salesPlanMonthlyReportRows(
+      '2026-11',
+      [correction],
+      () => dimensions,
+      () => '审批完成',
+    );
+    assert.deepEqual(row.slice(18), ['0', '-200', '-150', '-150', '0', '-18000.00']);
+  }
+});
+
 test('monthly report uses the existing whole-piece confirmation before computing line amounts', () => {
   const p = plan('M', '1', 1);
   const [row] = m.salesPlanMonthlyReportRows(

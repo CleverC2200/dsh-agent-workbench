@@ -374,7 +374,7 @@ export function salesPlanMonthlyReportRows(
               numeric(correction.sku.corrBaseQty, '纠偏基准数量'),
             )
           : '0';
-      const correctedQty = numeric(addExactDecimals([monthlyQty, consensusQty]), '纠偏后计划');
+      const correctedQty = addExactDecimals([monthlyQty, consensusQty]);
       return [
         text(facts.grading, '分级'),
         text(plan.baseName, '所属基地'),
