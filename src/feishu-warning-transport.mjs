@@ -94,7 +94,16 @@ function lookupFeishuRecipient(username, credentialProfile) {
 }
 const text = (v) =>
   String(v ?? '—').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+const notificationNumber = new Intl.NumberFormat('zh-CN', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+  useGrouping: false,
+});
 export function warningCard(e, kind, senderName = '未记录', runNote = '') {
+  const metric =
+    e.metricName && Number.isFinite(e.value)
+      ? `${e.metricName} ${notificationNumber.format(e.value)}${e.unit ?? ''}`
+      : e.metric;
   return {
     config: { wide_screen_mode: true },
     header: {
@@ -114,7 +123,7 @@ export function warningCard(e, kind, senderName = '未记录', runNote = '') {
         tag: 'div',
         fields: [
           ['预警设置人', senderName],
-          ['当前指标', e.metric],
+          ['当前指标', metric],
           ['风险 / 状态', e.level + ' / ' + e.eventStatus],
           ['检测范围', e.scopeType],
           ['统计期间', e.period],
@@ -286,19 +295,43 @@ function deliveryGroup(event, job) {
 }
 export function notificationDigest(entries) {
   const counts = { severe: 0, warning: 0, recovered: 0 };
-  for (const { job } of entries) {
+  const rows = entries.map(({ job }) => {
     const template = job.card.header?.template;
     counts[template === 'green' ? 'recovered' : template === 'red' ? 'severe' : 'warning']++;
-  }
-  const lines = entries.map(({ job }, index) => {
-    const title = String(job.card.header?.title?.content || '指标预警').slice(0, 180);
-    const fields = job.card.elements?.[0]?.fields || [];
+    return {
+      title: String(job.card.header?.title?.content || '指标预警'),
+      fields: (job.card.elements?.[0]?.fields || [])
+        .slice(0, 5)
+        .map((field) => String(field.text?.content || '')),
+    };
+  });
+  const commonFields = rows[0].fields.filter(
+    (field) =>
+      /^\*\*(预警设置人|检测范围|统计期间)\*\*\n/.test(field) &&
+      rows.every((row) => row.fields.includes(field)),
+  );
+  const metricName = entries[0].event?.metricName;
+  const metricSuffix = ` · ${metricName}`;
+  const metricPrefix = `**当前指标**\n${text(metricName)} `;
+  const sharedMetric =
+    metricName &&
+    rows.every(
+      ({ title, fields }) =>
+        title.endsWith(metricSuffix) && fields.some((field) => field.startsWith(metricPrefix)),
+    );
+  const lines = rows.map(({ title, fields }, index) => {
+    const objectTitle = sharedMetric ? title.slice(0, -metricSuffix.length) : title;
     const details = fields
-      .slice(0, 5)
-      .map((field) => String(field.text?.content || '').slice(0, 200))
+      .filter((field) => !commonFields.includes(field))
+      .map((field) =>
+        (sharedMetric && field.startsWith(metricPrefix)
+          ? `**当前值**\n${field.slice(metricPrefix.length)}`
+          : field
+        ).slice(0, 200),
+      )
       .join('；')
       .replaceAll('\n', ' ');
-    return `${index + 1}. ${title}\n${details}`;
+    return `${index + 1}. ${objectTitle.slice(0, 180)}\n${details}`;
   });
   const card = {
     config: { wide_screen_mode: true },
@@ -319,7 +352,11 @@ export function notificationDigest(entries) {
       },
     ],
   };
-  const summary = `严重 ${counts.severe} 项 · 预警 ${counts.warning} 项 · 已恢复 ${counts.recovered} 项`;
+  const summary = [
+    `严重 ${counts.severe} 项 · 预警 ${counts.warning} 项 · 已恢复 ${counts.recovered} 项`,
+    ...(sharedMetric ? [`**指标** ${text(metricName).slice(0, 180)}`] : []),
+    ...commonFields.map((field) => field.slice(0, 200).replaceAll('\n', ' ')),
+  ].join('\n');
   const shown = [];
   for (const line of lines) {
     if (shown.length >= 30) break;

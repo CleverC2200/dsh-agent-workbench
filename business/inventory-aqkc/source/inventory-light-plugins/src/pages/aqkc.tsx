@@ -1384,6 +1384,33 @@ function Kpi({
   );
 }
 
+function boardWarningTone(label: string | undefined, rowTone: string) {
+  switch (label) {
+    case '缺货':
+    case '红色':
+      return 'red';
+    case '库存偏低':
+    case '库存偏高':
+    case '库存低于目标':
+    case '库存高于目标':
+    case '滞库':
+    case '预警':
+    case '橙色':
+      return 'amber';
+    case '无目标':
+    case '缺失目标':
+      return 'gray';
+    case '正常':
+    case '绿色':
+      return 'green';
+    default:
+      if (rowTone === 'red') return 'red';
+      if (rowTone === 'amber' || rowTone === 'orange' || label?.startsWith('数据缺失'))
+        return 'amber';
+      return 'gray';
+  }
+}
+
 function BoardRow({
   row,
   tone: rowTone,
@@ -1393,15 +1420,7 @@ function BoardRow({
   tone: string;
   onSelect?: () => void;
 }) {
-  const tone =
-    rowTone === 'red' || row[1] === '红色'
-      ? 'red'
-      : rowTone === 'amber' ||
-          rowTone === 'orange' ||
-          row[1] === '橙色' ||
-          row[1]?.startsWith('数据缺失')
-        ? 'amber'
-        : 'green';
+  const tone = boardWarningTone(row[1], rowTone);
   return (
     <tr className={onSelect ? styles.dataRow : undefined} onClick={onSelect}>
       {row.map((value, index) => (
@@ -1435,7 +1454,7 @@ function BoardRow({
             )
           ) : index === 1 ? (
             <>
-              {value !== '-' && (
+              {value && value !== '-' && (
                 <span className={`${styles.dot} ${styles[tone]}`} aria-hidden="true" />
               )}
               {value}
