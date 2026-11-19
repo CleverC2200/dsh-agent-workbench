@@ -13,7 +13,7 @@ type AmountField = (typeof SALES_PLAN_EXPORT_AMOUNT_PAIRS)[number][number];
 export type SalesPlanExportAmounts = Record<AmountField, string | null>;
 
 export const aggregateSalesPlanExportAmounts = (
-  row: Pick<GeaSalesPlanListItem, 'versionId' | 'skuCount'>,
+  row: Pick<GeaSalesPlanListItem, 'versionId' | 'skuCount' | 'orderType'>,
   skus: readonly GeaSalesPlanSku[],
 ): SalesPlanExportAmounts => {
   if (
@@ -28,15 +28,31 @@ export const aggregateSalesPlanExportAmounts = (
   ) {
     throw new Error('Incomplete or mismatched sales-plan export SKUs');
   }
+  const zeroBaselineFields =
+    row.orderType === 'Z'
+      ? (['baseQty', 'corrBaseQty', 'qty', 'amtBase', 'amt'] as const)
+      : (['baseQty', 'qty', 'amtBase', 'amt'] as const);
   const totals = {} as SalesPlanExportAmounts;
   for (const [quantity, amount] of SALES_PLAN_EXPORT_AMOUNT_PAIRS) {
-    if (quantity !== 'qty' && skus.every((sku) => sku[quantity] == null && sku[amount] == null)) {
+    if (quantity !== 'qty' && skus.every((sku) => sku[quantity] === null && sku[amount] === null)) {
       totals[quantity] = null;
       totals[amount] = null;
       continue;
     }
+    const confirmedSkus = skus.filter(
+      (sku) =>
+        !(
+          quantity !== 'qty' &&
+          (row.orderType === 'M' || row.orderType === 'Z') &&
+          sku[quantity] === null &&
+          sku[amount] === null &&
+          zeroBaselineFields.every(
+            (field) => typeof sku[field] === 'string' && /^-?0+(?:\.0+)?$/.test(sku[field]),
+          )
+        ),
+    );
     if (
-      skus.some((sku) =>
+      confirmedSkus.some((sku) =>
         [quantity, amount].some(
           (field) => typeof sku[field] !== 'string' || !/^-?\d+(?:\.\d+)?$/.test(sku[field]),
         ),
@@ -44,8 +60,8 @@ export const aggregateSalesPlanExportAmounts = (
     ) {
       throw new Error('Incomplete or invalid sales-plan node amounts');
     }
-    totals[quantity] = addExactDecimals(skus.map((sku) => sku[quantity]!));
-    totals[amount] = addExactDecimals(skus.map((sku) => sku[amount]!));
+    totals[quantity] = addExactDecimals(confirmedSkus.map((sku) => sku[quantity]!));
+    totals[amount] = addExactDecimals(confirmedSkus.map((sku) => sku[amount]!));
   }
   return totals;
 };
