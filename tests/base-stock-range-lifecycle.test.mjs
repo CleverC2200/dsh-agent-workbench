@@ -29,10 +29,18 @@ test('base changes and closed details cannot retain or publish obsolete query re
   const table = (base) => ({
     columns: [
       { key: 'category', label: '品类' },
+      { key: 'warning', label: '预警标志' },
       { key: 'current', label: '库存' },
       { key: 'scope', label: '范围' },
     ],
-    rows: [{ category: '汤圆', current: base === '华东' ? 100 : 200, scope: `${base}品类` }],
+    rows: [
+      {
+        category: '汤圆',
+        warning: '缺货',
+        current: base === '华东' ? 100 : 200,
+        scope: `${base}品类`,
+      },
+    ],
   });
   const workspace = (bases) => ({
     title: '基地库存',
@@ -52,11 +60,13 @@ test('base changes and closed details cannot retain or publish obsolete query re
     table: {
       columns: [
         { key: 'base', label: '基地' },
+        { key: 'warning', label: '预警标志' },
         { key: 'current', label: '库存' },
       ],
       rows: (bases ?? ['华东', '华南']).map((base) => ({
         base,
         level: base,
+        warning: base === '华东' ? '正常' : '库存偏低',
         current: base === '华东' ? 100 : 200,
       })),
     },
@@ -80,14 +90,35 @@ test('base changes and closed details cannot retain or publish obsolete query re
       return workspace(bases);
     },
     tabs: (_ref, base, category, tab, _op, signal) => {
+      const { columns, rows } = table(base);
       const result = {
-        [tab]: {
-          ...table(base),
-          rows: table(base).rows.map((row) => ({ ...row, level: category ? 'SKU-1' : '汤圆' })),
-        },
+        [tab]:
+          tab === '货龄结构'
+            ? {
+                columns: [{ key: 'level', label: '基地' }, ...columns.slice(1)],
+                rows: [
+                  { level: '华东', warning: '滞库', current: 100 },
+                  { level: '华南', warning: '正常', current: 200 },
+                ],
+              }
+            : {
+                columns,
+                rows: category
+                  ? rows.map((row) => ({ ...row, level: 'SKU-1' }))
+                  : [
+                      ...rows.map((row) => ({ ...row, level: row.category })),
+                      { category: '粽子', level: '粽子', warning: '库存偏高', current: 5 },
+                      { category: '未分类', level: '未分类', warning: '无目标', current: 1 },
+                      { category: '其他', level: '其他', warning: '-', current: 2 },
+                    ],
+              },
       };
       stockRangeTest.queries.push({ base, category, tab, signal });
-      if (stockRangeTest.hold?.base === base && Boolean(category) === stockRangeTest.hold.detail)
+      if (
+        stockRangeTest.hold &&
+        stockRangeTest.hold.base === base &&
+        Boolean(category) === stockRangeTest.hold.detail
+      )
         return new Promise((done) => stockRangeTest.deferred.push(() => done(result)));
       return Promise.resolve(result);
     },
@@ -114,7 +145,7 @@ test('base changes and closed details cannot retain or publish obsolete query re
     format: 'esm',
     platform: 'node',
     jsx: 'automatic',
-    loader: { '.css': 'empty', '.module.css': 'empty' },
+    loader: { '.css': 'empty', '.module.css': 'local-css' },
     define: { PLUGIN_ID: '"aqkc"' },
     plugins: [
       {
@@ -150,7 +181,10 @@ test('base changes and closed details cannot retain or publish obsolete query re
     ],
   });
   page = await import(
-    'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
+    'data:text/javascript;base64,' +
+      Buffer.from(bundle.outputFiles.find((file) => file.path.endsWith('.mjs')).text).toString(
+        'base64',
+      )
   );
   root = createRoot(container);
   const settle = () =>
@@ -162,6 +196,17 @@ test('base changes and closed details cannot retain or publish obsolete query re
       await stockRangeTest.handlers.filter(args);
     });
     await settle();
+  };
+  const assertWarning = (name, label, tone) => {
+    const row = [...container.querySelectorAll('#inventory-table-content tbody tr')].find(
+      (row) => row.cells[0]?.textContent === name,
+    );
+    assert.ok(row, name);
+    const cell = row.cells[1];
+    assert.equal(cell.textContent, label);
+    const dot = cell.querySelector('span[aria-hidden="true"]');
+    if (tone) assert.match(dot?.className ?? '', new RegExp(`(?:^|_)${tone}(?:\\s|$)`));
+    else assert.equal(dot, null);
   };
   {
     await page.mountBusinessFetch();
@@ -175,7 +220,16 @@ test('base changes and closed details cannot retain or publish obsolete query re
     assert.equal(scope.title, '固定10月样本');
     assert.match(scope.textContent, /目标月份：2026-10/);
     assert.match(scope.textContent, /版本：10月滚动版/);
+    assertWarning('华东', '正常', 'green');
+    assertWarning('华南', '库存偏低', 'amber');
+    await filter({ tab: '货龄结构' });
+    assertWarning('华东', '滞库', 'amber');
+    assertWarning('华南', '正常', 'green');
     await filter({ bases: ['华东基地'], tab: '品类结构' });
+    assertWarning('汤圆', '缺货', 'red');
+    assertWarning('粽子', '库存偏高', 'amber');
+    assertWarning('未分类', '无目标', 'gray');
+    assertWarning('其他', '-', null);
     assert.ok(container.textContent.includes('华东品类'));
     await filter({ bases: ['华南基地'] });
     assert.ok(container.textContent.includes('华南品类'));

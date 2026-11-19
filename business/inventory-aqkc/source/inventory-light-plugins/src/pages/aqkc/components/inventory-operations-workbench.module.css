@@ -618,13 +618,16 @@
   border-radius: 50%;
 }
 .dot.red {
-  background: var(--red);
+  background: var(--ui-risk);
 }
 .dot.amber {
-  background: var(--amber);
+  background: var(--ui-warning);
 }
 .dot.green {
-  background: var(--green);
+  background: var(--ui-success);
+}
+.dot.gray {
+  background: var(--workbench-muted);
 }
 .negative {
   color: var(--red-deep) !important;
