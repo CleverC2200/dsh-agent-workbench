@@ -1,4 +1,9 @@
-import { seedNoTransferPlans } from './helpers/mps-fixtures.mjs';
+import { mpsPage } from './helpers/mps-page.mjs';
+import {
+  shipmentSourceRow,
+  shipmentSourceResponse,
+  syncShipmentSource,
+} from './helpers/mps-shipment-source.mjs';
 import { selectAdjustmentReason } from './helpers/mps-edit.mjs';
 import { expandShipmentBase } from './helpers/mps-shipment.mjs';
 import { expectWorkflowExportValue } from './helpers/mps-workflow-export.mjs';
@@ -77,9 +82,31 @@ async function monthlyScope(frame) {
 }
 
 test('MPS shipment closing inventory feeds the same-version assessment and report and is revoked on scope change', async (t) => {
-  const page = await authorPage(t);
-  await page.evaluate(() => window.openAuthor('mps', 1200));
-  const frame = page.frameLocator('iframe');
+  const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
+  const { page, frame } = await mpsPage(
+    t,
+    config,
+    (query) =>
+      shipmentSourceResponse(
+        config,
+        query,
+        [
+          shipmentSourceRow({
+            shipped: 220,
+            daily3: 10,
+            average: 10,
+            open: 1010,
+            inbound: 210,
+            product_item: '物料组甲',
+          }),
+        ],
+        '2026-09-22',
+      ) ?? {
+        rows: query.queryId.endsWith('.count') ? [{ total: 0 }] : [],
+        returnedColumns: config.queries[query.queryId].columns,
+        configVersion: 'seven-step-source',
+      },
+  );
   await frame.locator('body').page().clock.setFixedTime(new Date('2026-10-15T12:00:00+08:00'));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本' });
@@ -94,15 +121,7 @@ test('MPS shipment closing inventory feeds the same-version assessment and repor
   });
   await monthlyScope(frame);
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-  await frame.getByLabel('数据截止日').fill('2026-09-22');
-  await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
-    name: '发货核对.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(
-      '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-09,郑州,A,产品甲,汤圆,系列甲,物料组甲,220,0,0,10,1000,200,100',
-    ),
-  });
-  await seedNoTransferPlans(frame, [{ month: '2026-09', base: '郑州', code: 'A' }]);
+  await syncShipmentSource(frame, '2026-09-22');
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   await expectWorkflowExportValue(frame, '郑州 A 2026-10 期初库存 计算过程', '1,000');
   await expectWorkflowExportValue(frame, '郑州 A 2026-11 期初库存 计算过程', '—');

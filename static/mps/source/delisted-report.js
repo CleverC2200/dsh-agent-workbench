@@ -1,3 +1,4 @@
+import { matchesCategories } from './category-filter.js';
 export function delistedReportIssues(rows, context) {
   return rows
     .filter((row) => row.delisted)
@@ -108,6 +109,7 @@ export function createDelistedReport(react, { downloadCsv }) {
         (!filters.base || row.base === filters.base) &&
         (!filters.month || row.month === filters.month) &&
         (!filters.category || row.productCategory === filters.category) &&
+        matchesCategories(row.productCategory, filters.categories) &&
         (!filters.search ||
           [row.base, row.code, row.name, row.group].some((value) =>
             String(value ?? '').includes(filters.search),

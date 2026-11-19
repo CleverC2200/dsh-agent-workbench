@@ -162,7 +162,7 @@ export function orderMetricGroups(
       if (row[1].state !== 'warning') return;
       rows[index].presentation = {
         highestAge: true,
-        meaning: '当前分组中的货龄占比最高提示，不代表超过未发布的目标阈值。',
+        meaning: '当前分组中的货龄占比最高提示；是否达标以当前指标目标和状态为准。',
       };
       highlights.push({
         ...Object.fromEntries(dimensions.map((key) => [key, rows[index][key]])),

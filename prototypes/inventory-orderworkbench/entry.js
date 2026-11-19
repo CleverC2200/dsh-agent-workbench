@@ -13,7 +13,7 @@ import { startDashboardTiming } from '../../business/shared/dashboard-timing.js'
 import { startWorkbenchStagedRead } from './staged-facts.mjs';
 import { workbenchPresentation, workbenchBaseIncluded } from './live-presentation.mjs';
 import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache, createWorkbenchPeriodCacheLifecycle, createWorkbenchScopedFactsCache } from './presentation-cache.mjs';
-import { shippableDaysTarget, performanceStyleVersion, metricTarget } from './performance-rules.mjs';
+import { shippableDaysTarget, performanceStyleVersion, metricTarget, workbenchMetricState } from './performance-rules.mjs';
 import { reusableWorkbenchFacts, compatibleWorkbenchFacts, retainableWorkbenchFacts } from './metric-model.mjs';
 import { publishReport } from './publication.js';
 import { mountReportImport } from './report-import.mjs';
@@ -2296,8 +2296,8 @@ const topMetricCards = [
     label: '60天及以上货龄占比',
     value: '2.05',
     unit: '%',
-    target: '越低越好',
-    status: '达标',
+    target: metricTarget('货龄（>60天库存占比）'),
+    status: workbenchMetricState('货龄（>60天库存占比）', 2.05),
     footer: '本周货龄占比 1.90%',
   },
   {
@@ -2999,6 +2999,11 @@ workbenchView.addEventListener('click', (event) => {
   activePeriodReport.provinceOrders = undefined;
   void ensureProvinceOrderCounts();
 });
+window.addEventListener('online', () => {
+  if (!/^(GEA_SQL_UNAVAILABLE|GEA_SQL_QUERY_TIMEOUT)$/.test(activePeriodReport?.provinceReasons?.code || '')) return;
+  activePeriodReport.provinceReasons = undefined;
+  void ensureProvinceReasons();
+});
 function refreshWorkbenchDimension() {
   if (liveFacts) applyLiveFacts(liveFacts, undefined, { dimensionOnly: true });
   else renderWorkbenchDimensions();
@@ -3007,6 +3012,7 @@ wbDimensionTabButtons.forEach((button) => {
   button.addEventListener('click', () => {
     if (dimensionTab === button.dataset.wbDimensionTab) return;
     dimensionTab = button.dataset.wbDimensionTab;
+    if (dimensionTab === 'province-performance' && activePeriodReport?.provinceReasons?.status === 'error') activePeriodReport.provinceReasons = undefined;
     refreshWorkbenchDimension();
   });
 });

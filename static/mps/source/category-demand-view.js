@@ -1,9 +1,18 @@
+import { matchesCategories } from './category-filter.js';
 import { categoryDemandMissing } from './category-demand.js';
 import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
 
 export function createShipmentScopeNotice(react, { downloadCsv }) {
   const h = react.createElement;
-  return function ShipmentScopeNotice({ scope, month }) {
+  return function ShipmentScopeNotice({ scope, month, cutoff, selectedCategories = [] }) {
+    scope = scope && {
+      ...scope,
+      excluded: scope.excluded.filter((row) => matchesCategories(row.category, selectedCategories)),
+      issues: (scope.issues ?? []).filter((row) =>
+        matchesCategories(row.category, selectedCategories),
+      ),
+      coverage: scope.coverage.filter((row) => matchesCategories(row.category, selectedCategories)),
+    };
     if (!scope?.excluded.length) return null;
     const fields = {
       shipped: '本月已发货',
@@ -19,6 +28,7 @@ export function createShipmentScopeNotice(react, { downloadCsv }) {
     const rows = [...scope.excluded, ...(scope.issues ?? [])].map((row) => ({
       评估月份: month,
       统计基月: row.month,
+      发货截止日: row.month && row.month === cutoff?.slice(0, 7) ? cutoff : '',
       基地: row.base,
       产品编码: row.code,
       产品名称: row.name,
@@ -26,7 +36,7 @@ export function createShipmentScopeNotice(react, { downloadCsv }) {
       缺项: row.missing.join('；'),
       需要补齐的数据: row.missingFields.length
         ? row.missingFields.map((field) => fields[field] ?? field).join('；')
-        : '有效发货速度或人工整月预估；分类缺失时补齐产品关系',
+        : '按缺项说明核对发货来源、日期或产品关系',
       处理说明: '核对源数据后重新同步，或在本地调整中填写已确认值。未补齐前不参与本次大类需求和后续拆分，未补零。',
       来源: row.source || '本月预估发货的同版输入',
     }));
@@ -139,16 +149,12 @@ export function createCategoryDemand(
     draft,
     update,
     active,
-
+    selectedCategories = [],
+    shipmentSnapshot,
     result,
   }) {
-    const [category, setCategory] = react.useState('');
-    const categoryFilterId = react.useId();
-    const selectedCategory = result.bases.some((basis) => basis.category === category)
-      ? category
-      : '';
-    const selectedRows = result.rows.filter(
-      (row) => !selectedCategory || row.category === selectedCategory,
+    const selectedRows = result.rows.filter((row) =>
+      matchesCategories(row.category, selectedCategories),
     );
     const rows = result.rows.map((row, index) => {
       const missing = categoryDemandMissing(result, row);
@@ -200,9 +206,9 @@ export function createCategoryDemand(
         ),
       };
     });
-    const visibleRows = rows.filter((row) => !selectedCategory || row['大类'] === selectedCategory);
+    const visibleRows = rows.filter((row) => matchesCategories(row['大类'], selectedCategories));
     const summary = result.bases
-      .filter((basis) => !selectedCategory || basis.category === selectedCategory)
+      .filter((basis) => matchesCategories(basis.category, selectedCategories))
       .map((basis) => ({
         大类: basis.category,
         ...Object.fromEntries(
@@ -216,7 +222,7 @@ export function createCategoryDemand(
       }));
     if (summary.length)
       summary.push({
-        大类: selectedCategory ? '当前范围合计' : '合计',
+        大类: selectedCategories.length ? '当前范围合计' : '合计',
         ...Object.fromEntries(
           [...new Set(result.rows.map((row) => row.month))].map((month, index) => {
             const entries = selectedRows.filter((row) => row.month === month);
@@ -283,7 +289,12 @@ export function createCategoryDemand(
     return h(
       react.Fragment,
       {},
-      h(ShipmentScopeNotice, { scope: result.shipmentScope, month: draft.month }),
+      h(ShipmentScopeNotice, {
+        scope: result.shipmentScope,
+        month: draft.month,
+        cutoff: shipmentSnapshot?.cutoff,
+        selectedCategories,
+      }),
       h(
         'section',
         {
@@ -295,23 +306,6 @@ export function createCategoryDemand(
           { className: 'dc-card-head dc-demand-edit-bar' },
           h('h3', {}, '大类预估需求数量'),
           h('span', { className: 'dc-card-note' }, '单位：件'),
-          h(
-            react.Fragment,
-            {},
-            h('label', { htmlFor: categoryFilterId }, '大类筛选'),
-            h(
-              'select',
-              {
-                id: categoryFilterId,
-                value: selectedCategory,
-                onChange: (event) => setCategory(event.target.value),
-              },
-              h('option', { value: '' }, '全部大类'),
-              result.bases.map((basis) =>
-                h('option', { key: basis.category, value: basis.category }, basis.category),
-              ),
-            ),
-          ),
           h(
             'span',
             { className: 'dc-card-note' },

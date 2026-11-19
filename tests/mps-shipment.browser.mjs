@@ -1,10 +1,9 @@
 import { expandShipmentBase } from './helpers/mps-shipment.mjs';
-import { workflowExportRows } from './helpers/mps-workflow-export.mjs';
 import { beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { mpsPage } from './helpers/mps-page.mjs';
 import { authorPage } from './helpers/author-page.mjs';
 
@@ -66,9 +65,9 @@ async function edit(table, label, value) {
   await input.fill(String(value));
   await saveAdjustment(frame);
 }
-async function exported(page, frame) {
+async function exported(page, frame, name = '下载明细') {
   const waiting = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载明细', exact: true }).press('Enter');
+  await frame.getByRole('button', { name, exact: true }).press('Enter');
   const chunks = [];
   for await (const chunk of await (await waiting).createReadStream()) chunks.push(chunk);
   return Buffer.concat(chunks).toString('utf8');
@@ -81,9 +80,6 @@ test('MPS shipment summarizes available values and marks missing SKUs without fi
     '2026-09,华东,C,全缺产品,汤圆,系列,组,,,,,,,',
     '2026-09,西南,Z,真实零,汤圆,系列,组,0,0,0,0,0,0,0,0',
   ]);
-  await beginAdjustment(frame);
-  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
-  await saveAdjustment(frame);
   for (const [field, value] of [
     ['本月已发货', '330'],
     ['已备', '10'],
@@ -91,7 +87,7 @@ test('MPS shipment summarizes available values and marks missing SKUs without fi
     ['近三天日均发货量', '20'],
     ['月初库存', '100'],
     ['本月生产入库', '220'],
-    ['预计月末结存', '80'],
+    ['预计月末结存', '待定'],
   ])
     await expect(
       table.getByRole('button', { name: `郑州 ${field} 计算过程`, exact: true }),
@@ -106,13 +102,16 @@ test('MPS shipment summarizes available values and marks missing SKUs without fi
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText(
-    '1个可计算单品结存求和 = 80',
+    '0个可计算单品结存求和 = 待定',
   );
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await expandShipmentBase(frame, '郑州');
   const missing = table.getByRole('row').filter({ hasText: '缺项产品' });
   await expect(missing).toContainText('缺项');
-  await expect(missing.locator('.sp-coverage')).toHaveAttribute('title', '缺失：已备、月初库存');
+  await expect(missing.locator('.sp-coverage')).toHaveAttribute(
+    'title',
+    '缺失：已备、月初库存、调入计划、调出计划',
+  );
   await expect(table.getByRole('button', { name: '郑州 B 已备 计算过程', exact: true })).toHaveText(
     '待定',
   );
@@ -129,9 +128,6 @@ test('MPS shipment applies SKU, base and national adjustments to current effecti
     '2026-09,华东,C,产品C,汤圆,系列,组,110,0,0,0,10,20,8',
     '2026-09,濮阳,D,不计入全国,汤圆,系列,组,999,0,0,1,0,0,0',
   ]);
-  await beginAdjustment(frame);
-  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
-  await saveAdjustment(frame);
   await expandShipmentBase(frame, '郑州');
   await edit(table, '郑州 A 整月预估发货', 301);
   await expectShipment(table, '郑州 B 整月预估发货', '150');
@@ -156,7 +152,7 @@ test('MPS shipment applies SKU, base and national adjustments to current effecti
   await edit(table, '华东 整月预估发货', 1000);
   await expect(
     table.getByRole('button', { name: '华东 预计月末结存 计算过程', exact: true }),
-  ).toHaveText('0');
+  ).toHaveText('待定');
   await table.getByRole('button', { name: '郑州 B 整月预估发货 计算过程', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText('全国合计覆盖101件');
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
@@ -166,7 +162,7 @@ test('MPS shipment applies SKU, base and national adjustments to current effecti
   assert.match(csv, /'=1\+1/);
   assert.match(csv, /,-3,/);
   assert.match(csv, /原始预计月末结存/);
-  assert.match(csv, /,-962,/);
+  assert.match(csv, /调入计划、调出计划/);
   assert.doesNotMatch(csv, /不计入全国/);
   await beginAdjustment(frame);
   await frame.getByRole('button', { name: '重置', exact: true }).click();
@@ -206,15 +202,16 @@ test('MPS shipment keeps positive equal-weight residuals nonnegative and allocat
   await expectShipment(table, '全国合计 整月预估发货', '-2');
 });
 
-test('MPS shipment distinguishes missing input from zero, uses the monthly fallback and keeps orders beyond month end without fabricated data', async (t) => {
+test('MPS shipment distinguishes missing input from zero, uses the recent30 fallback and keeps orders beyond month end without fabricated data', async (t) => {
   const { frame, table } = await shipment(t);
   await upload(frame, [
     '2026-09,西南,Z,零输入,汤圆,系列,组,0,0,0,0,0,0,0,0',
-    '2026-09,郑州,F,回退日均,汤圆,系列,组,220,10,10,0,0,0,0',
+    '2026-09,郑州,F,回退日均,汤圆,系列,组,220,10,10,0,0,0,0,10',
     '2026-09,郑州,U,无可用日均,汤圆,系列,组,0,1,1,0,0,0,0',
     '2026-09,郑州,M,缺已备,汤圆,系列,组,220,,0,1,0,0,0',
     '2026-09,郑州,L,订单覆盖月底,汤圆,系列,组,22,100,0,1,0,0,0',
   ]);
+  await expectShipment(table, '郑州 整月预估发货', '422');
   await expandShipmentBase(frame, '郑州');
   await expectShipment(table, '郑州 F 整月预估发货', '300');
   await expectShipment(table, '郑州 U 整月预估发货', '');
@@ -236,7 +233,7 @@ test('MPS shipment distinguishes missing input from zero, uses the monthly fallb
     .getByRole('button', { name: '郑州 F 已备未备预估发运天数 计算过程', exact: true })
     .click();
   await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText(
-    '近三天为0，使用本月已发货÷已过天数',
+    '近三天日均不大于0，使用近30天日均：10',
   );
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await upload(frame, ['2026-09,郑州,BAD,无效替换,汤圆,系列,组,NaN,0,0,1,0,0,0']);
@@ -320,6 +317,12 @@ function shipmentFacts(query) {
             inbound: 200,
             source_days: Number(query.parameters.cutoff.slice(8)),
             duplicate_days: 0,
+            transfer_date: query.parameters.cutoff,
+            transfer_rows: 1,
+            transfer_in_plan_v1: null,
+            transfer_in_plan_adj: null,
+            transfer_out_plan_v1: null,
+            transfer_out_plan_adj: null,
           },
         ]
       : query.queryId.endsWith('.count')
@@ -364,9 +367,6 @@ test('MPS shipment finishes the current sync after moving to processing', async 
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   release();
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-  await beginAdjustment(frame);
-  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
-  await saveAdjustment(frame);
   await expect(
     table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
   ).toHaveText('76');
@@ -388,9 +388,6 @@ test('MPS shipment loads every warehouse input from the stock table and derives 
     ).toHaveText(value);
   await expectShipment(table, '郑州 整月预估发货', '300');
   await expectShipment(table, '郑州 剩余天数入库', '76');
-  await beginAdjustment(frame);
-  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
-  await saveAdjustment(frame);
   await expect(
     table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
   ).toHaveText('76');
@@ -416,7 +413,7 @@ test('MPS shipment loads every warehouse input from the stock table and derives 
     await page.screenshot({ path: process.env.MPS_SHIPMENT_SCREENSHOT, fullPage: true });
 });
 
-test('零三天及本月发货时用近30天日均估算，零或缺失仍待定并保留来源', async (t) => {
+test('零三天及本月发货时用近30天日均估算，零日均取订单合计，缺失仍待定', async (t) => {
   let average = 5;
   const { page, frame, table } = await businessShipment(t, (query) => {
     const result = shipmentFacts(query);
@@ -441,9 +438,68 @@ test('零三天及本月发货时用近30天日均估算，零或缺失仍待定
     await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
     await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
     await expandShipmentBase(frame, '郑州');
-    await expectShipment(table, '郑州 A 整月预估发货', '');
+    await expectShipment(table, '郑州 A 整月预估发货', average === 0 ? '20' : '');
   }
 });
+test('V2发货回退、真实零及日期待核在页面和下载保持一致', async (t) => {
+  const cases = [
+    { material_code: 'NEG', shipped: 100, prepped: 10, unprepped: 10, daily3: -3, average: 5 },
+    { material_code: 'HOLD', shipped: 46, prepped: 0, unprepped: 24, daily3: 0, average: 0 },
+    { material_code: 'ZERO', shipped: 0, prepped: 0, unprepped: 0, daily3: 0, average: 39 },
+    { material_code: 'GAP', source_days: 20 },
+    { material_code: 'DUP', duplicate_days: 1 },
+    { material_code: 'MISSING', prepped: null },
+  ];
+  const { page, frame, table } = await businessShipment(t, (query) => {
+    const result = shipmentFacts(query);
+    if (query.queryId === 'facts.shipment')
+      result.rows = cases.map((row) => ({ ...result.rows[0], ...row }));
+    if (query.queryId === 'facts.shipment.count') result.rows[0].total = cases.length;
+    return result;
+  });
+  await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
+  await expandShipmentBase(frame, '郑州');
+  for (const [code, forecast] of [
+    ['NEG', '138'],
+    ['HOLD', '70'],
+    ['ZERO', '0'],
+    ['GAP', ''],
+    ['DUP', ''],
+    ['MISSING', ''],
+  ])
+    await expectShipment(table, `郑州 ${code} 整月预估发货`, forecast);
+  const { read, utils } = await import('xlsx-republish');
+  const records = utils.sheet_to_json(
+    read(await exported(page, frame), { type: 'string', raw: true }).Sheets.Sheet1,
+    { defval: '' },
+  );
+  const byCode = new Map(records.map((row) => [row['产品编码'], row]));
+  assert.equal(byCode.get('ZERO')['本月预测量'], '0');
+  assert.equal(byCode.get('HOLD')['本月预测量'], '70');
+  assert.match(byCode.get('GAP')['预估待补原因'], /2026-09-01.*2026-09-22.*缺2天/);
+  assert.match(byCode.get('DUP')['预估待补原因'], /重复1条/);
+  assert.match(byCode.get('MISSING')['预估待补原因'], /已备/);
+  assert.equal(byCode.get('NEG')['发运速度来源'], '近30天日均');
+  await frame.locator('summary').filter({ hasText: '发货与库存异常报告' }).click();
+  const issues = utils.sheet_to_json(
+    read(await exported(page, frame, '下载发货与库存异常'), { type: 'string', raw: true }).Sheets
+      .Sheet1,
+    { defval: '' },
+  );
+  assert.equal(issues.length, 3);
+  for (const issue of issues) {
+    assert.equal(issue['评估月份'], '2026-10');
+    assert.equal(issue['统计基月'], '2026-09');
+    assert.equal(issue['截止日'], '2026-09-22');
+    assert.equal(issue['基地'], '郑州');
+  }
+  assert.equal(
+    issues.find((row) => row['产品编码'] === 'MISSING')['原因'],
+    '缺失或无效发货依据：已备',
+  );
+});
+
 test('MPS cutoff average keeps four source decimal places in summaries, SKU details, formula and download', async (t) => {
   const { page, frame, table } = await businessShipment(t, (query) => {
     const result = shipmentFacts(query);
@@ -594,6 +650,12 @@ test('MPS stock inputs preserve paging, zero, NULL and incomplete source status'
       inbound: 0,
       source_days: 22,
       duplicate_days: 0,
+      transfer_date: '2026-09-22',
+      transfer_rows: 1,
+      transfer_in_plan_v1: null,
+      transfer_in_plan_adj: null,
+      transfer_out_plan_v1: null,
+      transfer_out_plan_adj: null,
     }));
     return {
       ...shipmentFacts(query),
@@ -771,7 +833,7 @@ test('shipment requires an explicit save and paginates SKU display without chang
 
 async function expectShipment(table, label, value) {
   const text =
-    value === ''
+    value === '' || value === '待定'
       ? '待定'
       : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format(Number(value));
   await expect(table.getByRole('button', { name: `${label} 计算过程`, exact: true })).toHaveText(
@@ -970,172 +1032,96 @@ test('shipment national SKU preserves base adjustment sources, aggregate days an
   }
 });
 
-test('shipment transfer plans keep blanks and zeros distinct and save leaf inventory into downloads and restored versions', async (t) => {
-  const { page, frame, table } = await shipment(t);
-  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
-  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
-    name: '产品.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(
-      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品A,汤圆,系列,组,,\n郑州,B,产品B,汤圆,系列,组,,',
-    ),
+test('数仓调拨各方向独立回退并参与逐SKU结存，历史手填值保留但不生效', async (t) => {
+  const { page, frame, table } = await businessShipment(t, (query) => {
+    const result = shipmentFacts(query);
+    if (query.queryId === 'facts.shipment')
+      Object.assign(result.rows[0], {
+        transfer_date: '2026-09-21',
+        transfer_rows: 1,
+        transfer_in_plan_v1: 50,
+        transfer_in_plan_adj: 0,
+        transfer_out_plan_v1: 20,
+        transfer_out_plan_adj: null,
+      });
+    return result;
   });
-  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
-    name: '提报.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(
-      '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,产品A,汤圆,系列,组,100,100\n2026-10,郑州,B,产品B,汤圆,系列,组,100,100',
-    ),
-  });
-  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-
-  await upload(frame, [
-    '2026-09,郑州,A,产品A,汤圆,系列,组,220,10,10,10,100,200,80',
-    '2026-09,郑州,B,产品B,汤圆,系列,组,110,0,0,0,10,20,8',
-  ]);
-  await expect(
-    table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
-  ).toHaveText('待定');
-  await expectShipment(table, '郑州 本月已发货', '330');
+  await expectShipment(table, '全国合计 调入计划', '0');
+  await expectShipment(table, '全国合计 调出计划', '20');
+  await expectShipment(table, '全国合计 预计月末结存', '56');
   await expandShipmentBase(frame, '郑州');
   await beginAdjustment(frame);
-  await table.getByLabel('郑州 A 调入计划', { exact: true }).fill('50');
-  await table.getByLabel('郑州 A 调出计划', { exact: true }).fill('20');
+  await expect(table.getByLabel('郑州 A 调入计划', { exact: true })).toHaveCount(0);
+  await expect(
+    frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }),
+  ).toHaveCount(0);
   await frame.getByRole('button', { name: '取消', exact: true }).click();
-  await expect(
-    table.getByRole('button', { name: '郑州 A 调入计划 计算过程', exact: true }),
-  ).toHaveText('待定');
-  await beginAdjustment(frame);
-  await table.getByLabel('郑州 A 调入计划', { exact: true }).fill('50');
-  await table.getByLabel('郑州 A 调出计划', { exact: true }).fill('20');
-  await table.getByLabel('郑州 B 调入计划', { exact: true }).fill('0');
-  await table.getByLabel('郑州 B 调出计划', { exact: true }).fill('0');
-  await saveAdjustment(frame);
-  await expect(
-    table.getByRole('button', { name: '郑州 A 预计月末结存 计算过程', exact: true }),
-  ).toHaveText('110');
-  await expect(
-    table.getByRole('button', { name: '郑州 B 预计月末结存 计算过程', exact: true }),
-  ).toHaveText('0');
-  await expect(
-    table.getByRole('button', { name: '全国合计 预计月末结存 计算过程', exact: true }),
-  ).toHaveText('110');
-  const csv = await exported(page, frame);
-  const { read, utils } = await import('xlsx-republish');
-  const records = utils.sheet_to_json(read(csv, { type: 'string', raw: true }).Sheets.Sheet1);
-  assert.deepEqual(
-    records.map((row) => [row['调入计划'], row['调出计划'], row['预计月末结存']]),
-    [
-      ['50', '20', '110'],
-      ['0', '0', '0'],
-    ],
-  );
-  assert.equal(records.find((row) => row['产品编码'] === 'B')['原始预计月末结存'], '-112');
-  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
-  const downstream = await workflowExportRows(frame);
-  assert.deepEqual(
-    downstream
-      .filter((row) => row['月份'] === '2026-10' && row['产品编码'])
-      .map((row) => [row['产品编码'], row['期初库存']]),
-    [
-      ['A', '110'],
-      ['B', '0'],
-    ],
-  );
-  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   const saved = await page.evaluate(() => window.readView());
-  if (process.env.MPS_TRANSFER_EVIDENCE_DIR) {
-    await writeFile(`${process.env.MPS_TRANSFER_EVIDENCE_DIR}/shipment.csv`, csv);
-    await writeFile(
-      `${process.env.MPS_TRANSFER_EVIDENCE_DIR}/downstream.json`,
-      JSON.stringify(downstream, null, 2),
-    );
-    await writeFile(
-      `${process.env.MPS_TRANSFER_EVIDENCE_DIR}/restore.json`,
-      JSON.stringify(saved, null, 2),
-    );
-    await page.screenshot({
-      path: `${process.env.MPS_TRANSFER_EVIDENCE_DIR}/shipment.png`,
-      fullPage: true,
-    });
-  }
-  const otherMonth = structuredClone(saved);
-  otherMonth.localDrafts.drafts
-    .find((row) => row.id === otherMonth.localDrafts.selected)
-    .shipment.transferPlans.forEach((plan) => {
-      plan.month = '2026-08';
-    });
-  await page.evaluate((seed) => window.openAuthor('mps', 1200, seed), otherMonth);
-  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-  await expect(
-    table.getByRole('button', { name: '全国合计 预计月末结存 计算过程', exact: true }),
-  ).toHaveText('待定');
+  const selected = saved.localDrafts.drafts.find((row) => row.id === saved.localDrafts.selected);
+  selected.shipment.transferPlans = [
+    { month: '2026-09', base: '郑州', code: 'A', inbound: 999, outbound: 999 },
+  ];
   await page.evaluate((seed) => window.openAuthor('mps', 1200, seed), saved);
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-  await expect(
-    frame
-      .getByRole('table', { name: '本月预估发货明细' })
-      .getByRole('button', { name: '全国合计 预计月末结存 计算过程', exact: true }),
-  ).toHaveText('110');
-  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
-  const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
-  await dialog.getByLabel('评估月份', { exact: true }).fill('2026-10');
-  await dialog.getByLabel('参考版本', { exact: true }).selectOption(saved.localDrafts.selected);
-  await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
-  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-  await frame.getByLabel('数据截止日').fill('2026-09-22');
-  await upload(frame, ['2026-09,郑州,A,产品A,汤圆,系列,组,220,10,10,10,100,200,80']);
-  await expect(
-    table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }),
-  ).toHaveText('待定');
+  await expectShipment(table, '全国合计 调入计划', '0');
+  await expectShipment(table, '全国合计 预计月末结存', '56');
+  const restored = await page.evaluate(() => window.readView());
+  assert.deepEqual(
+    restored.localDrafts.drafts.find((row) => row.id === restored.localDrafts.selected).shipment
+      .transferPlans,
+    selected.shipment.transferPlans,
+  );
+  assert.match(await exported(page, frame), /纠偏.*初版/);
 });
 
-test('shipment transfer bulk confirmation validates before saving and leaves cleared plans unknown', async (t) => {
-  const { page, frame, table } = await shipment(t);
-  await upload(frame, [
-    '2026-09,郑州,A,产品A,汤圆,系列,组,220,10,10,10,100,200,80',
-    '2026-09,郑州,B,产品B,汤圆,系列,组,110,0,0,0,10,20,8',
-  ]);
-  for (const who of ['郑州', '郑州 汤圆', '郑州 汤圆 组'])
-    await table.getByRole('button', { name: `展开 ${who}`, exact: true }).press('Enter');
-  await frame.getByLabel('搜索发货单品', { exact: true }).fill('A');
-  await beginAdjustment(frame);
-  await frame.getByRole('button', { name: '确认当前月份全部明细无调拨', exact: true }).click();
-  await table.getByLabel('郑州 A 调入计划', { exact: true }).fill('-1');
-  await saveAdjustment(frame);
-  await expect(frame.getByRole('alert')).toContainText('不能小于0');
-  await table.getByLabel('郑州 A 调入计划', { exact: true }).fill('0');
-  await saveAdjustment(frame);
-  await expect(
-    table.getByRole('button', { name: '全国合计 调入计划 计算过程', exact: true }),
-  ).toHaveText('0');
-  await expect(
-    table.getByRole('button', { name: '全国合计 预计月末结存 计算过程', exact: true }),
-  ).toHaveText('80');
-  await beginAdjustment(frame);
-  await expect(table.getByLabel('全国合计 调入计划', { exact: true })).toHaveCount(0);
-  await frame.getByLabel('搜索发货单品', { exact: true }).fill('');
-  await table.getByLabel('郑州 B 调出计划', { exact: true }).fill('');
-  await saveAdjustment(frame);
-  await expect(
-    table.getByRole('button', { name: '郑州 B 调出计划 计算过程', exact: true }),
-  ).toHaveText('待定');
-  await expect(
-    table.getByRole('button', { name: '全国合计 预计月末结存 计算过程', exact: true }),
-  ).toHaveText('80');
-  await expect(table.locator('tr.sp-total')).toContainText('部分汇总');
-  const csv = await exported(page, frame);
-  const { read, utils } = await import('xlsx-republish');
-  const records = utils.sheet_to_json(read(csv, { type: 'string', raw: true }).Sheets.Sheet1, {
-    defval: '',
+test('数仓调拨确认无计划取零，最新快照重复待核，已知调拨逐级汇总且失败不回填零', async (t) => {
+  let fail = false;
+  const { page, frame, table } = await businessShipment(t, (query) => {
+    if (query.queryId === 'facts.shipment' && fail) throw Error('TRANSFER_SOURCE_UNAVAILABLE');
+    const result = shipmentFacts(query);
+    if (query.queryId === 'facts.shipment.count') result.rows = [{ total: 4 }];
+    if (query.queryId === 'facts.shipment') {
+      const base = result.rows[0];
+      result.rows = [
+        {
+          ...base,
+          material_code: 'A',
+          transfer_in_plan_v1: 50,
+          transfer_in_plan_adj: 0,
+          transfer_out_plan_v1: 20,
+        },
+        {
+          ...base,
+          material_code: 'B',
+          transfer_in_plan_v1: 30,
+          transfer_out_plan_v1: 40,
+          transfer_out_plan_adj: 5,
+        },
+        { ...base, material_code: 'C' },
+        { ...base, material_code: 'D', transfer_rows: 2 },
+      ];
+      result.totalRowCount = 4;
+    }
+    return result;
   });
-  assert.equal(records.find((row) => row['产品编码'] === 'B')['调出计划'], '');
-  assert.equal(records.find((row) => row['产品编码'] === 'B')['预计月末结存'], '');
-  assert.match(records.find((row) => row['产品编码'] === 'B')['缺失输入'], /调出计划/);
-  await frame.getByLabel('搜索发货单品', { exact: true }).fill('A');
-  const filtered = utils.sheet_to_json(
-    read(await exported(page, frame), { type: 'string', raw: true }).Sheets.Sheet1,
+  await expectShipment(table, '全国合计 调入计划', '30');
+  await expectShipment(table, '全国合计 调出计划', '25');
+  await expectShipment(table, '全国合计 预计月末结存', '233');
+  await expandShipmentBase(frame, '郑州');
+  await expectShipment(table, '郑州 C 调入计划', '0');
+  await expectShipment(table, '郑州 C 调出计划', '0');
+  await expectShipment(table, '郑州 D 调入计划', '待定');
+  await expectShipment(table, '郑州 D 预计月末结存', '待定');
+  await frame.getByText('发货与库存异常报告', { exact: true }).click();
+  await expect(frame.getByRole('table', { name: '发货与库存异常报告' })).toContainText(
+    '调拨计划最新快照重复或冲突',
   );
-  assert.equal(filtered.length, 1);
-  assert.equal(filtered[0]['产品编码'], 'A');
+  const csv = await exported(page, frame);
+  assert.match(csv, /确认无计划/);
+  assert.match(csv, /重复或冲突/);
+  fail = true;
+  await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  await expect(frame.getByRole('alert')).toContainText('数据读取失败');
+  await expectShipment(table, '全国合计 调入计划', '待定');
+  await expectShipment(table, '全国合计 预计月末结存', '待定');
 });

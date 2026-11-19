@@ -1,3 +1,4 @@
+import { matchesCategories, createDimensionCategoryMatcher } from './category-filter.js';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { buildCategoryDemand } from './category-demand.js';
 import { ready } from '../../../business/shared/channel.js';
@@ -27,7 +28,15 @@ const percent = (value) =>
 export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
   const PlanRates = createPlanRates(react, { Dialog, table, downloadCsv });
-  return function SourceInputs({ kind, draft, update, relations, active, contextActive = active }) {
+  return function SourceInputs({
+    kind,
+    draft,
+    update,
+    relations,
+    active,
+    contextActive = active,
+    selectedCategories = [],
+  }) {
     const calculated = react.useMemo(() => buildCategoryDemand(draft), [draft]);
     const endMonth = calculated.endMonth;
     const [preview, setPreview] = react.useState(null);
@@ -181,8 +190,14 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       return () => (result ??= buildMpsWorkflow(draft, relations, null));
     }, [draft, relations]);
     const workflow = kind === 'parameters' && contextActive ? readParameterWorkflow() : null;
-    const shares = workflow?.rows.filter((row) => row.month === draft.month && row.code) ?? [];
-    const checks = react.useMemo(
+    const shares =
+      workflow?.rows.filter(
+        (row) =>
+          row.month === draft.month &&
+          row.code &&
+          matchesCategories(row.category, selectedCategories),
+      ) ?? [];
+    const fullChecks = react.useMemo(
       () =>
         sourceCheckRows(
           current && kind === 'basic' ? draft.sourceChecks : null,
@@ -200,6 +215,22 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         kind,
       ],
     );
+    const checks = {
+      ...fullChecks,
+      rows: fullChecks.rows.filter((row) => matchesCategories(row.category, selectedCategories)),
+      categories: fullChecks.categories.filter((category) =>
+        matchesCategories(category, selectedCategories),
+      ),
+      details: fullChecks.details.filter(
+        (row) =>
+          (!row['产品编码'] && (row['原因'] || '').startsWith('读取失败：')) ||
+          matchesCategories(row['大类'] || row['源分类'] || row['源大类'], selectedCategories),
+      ),
+      excluded: fullChecks.excluded.filter((row) =>
+        matchesCategories(row['大类'] || row['源大类'], selectedCategories),
+      ),
+    };
+    react.useEffect(() => setPage(0), [selectedCategories]);
     const basicAnomalies = checks.details.filter((row) => row['原因'] || row['缺项原因']);
     const basicDetails = [
       ...basicAnomalies,
@@ -209,8 +240,15 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       current && kind === 'parameters'
         ? draft.historicalIndicators.periods.flatMap((period) => period.rows)
         : [];
+    const matchesDimension = react.useMemo(
+      () => createDimensionCategoryMatcher(draft.products, selectedCategories),
+      [draft.products, selectedCategories],
+    );
     const historicalRows = historical.filter(
-      (row) => (!dimension || row['维度类型'] === dimension) && (!base || row['基地'] === base),
+      (row) =>
+        (!dimension || row['维度类型'] === dimension) &&
+        (!base || row['基地'] === base) &&
+        matchesDimension(row),
     );
     const metric =
       preview === '三年环比'
@@ -266,7 +304,10 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       '参与平均',
       '排除原因',
     ];
-    const comparisonRows = scoped.historical.flatMap((row) =>
+    const visibleHistorical = scoped.historical.filter((row) =>
+      matchesCategories(row.category, selectedCategories),
+    );
+    const comparisonRows = visibleHistorical.flatMap((row) =>
       (row.years ?? []).map((year) => {
         const denominator = year[metric.denominator];
         const ratio =
@@ -326,7 +367,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       metric.field === 'yoy' ? '同比有效年份' : '有效年份',
       '有效组数',
     ];
-    const summaryRows = scoped.historical.map((row) => {
+    const summaryRows = visibleHistorical.map((row) => {
       const valid = comparisonRows.filter(
         (year) =>
           year.大类 === row.category && year.目标月份 === row.month && year.参与平均 === '是',
@@ -410,7 +451,9 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       '核对状态',
     ];
     const excludedRows = (isShare && showExcluded ? (workflow?.excludedSources ?? []) : [])
-      .filter((row) => row.month === draft.month)
+      .filter(
+        (row) => row.month === draft.month && matchesCategories(row.category, selectedCategories),
+      )
       .map((row) => ({
         来源: row.source === 'report' ? '销售提报' : '上一财年发货',
         基地: row.base,
@@ -737,7 +780,15 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         { className: 'dc-parameter-grid', role: 'region', 'aria-label': '系统派生口径参数' },
         ...['三年同比', '三年环比', '三年该月占比', '去年发运占比', '销售提报占比'].map(
           (name, index) => {
-            if (index === 4) return h(PlanRates, { key: name, draft, update, active, workflow });
+            if (index === 4)
+              return h(PlanRates, {
+                key: name,
+                draft,
+                update,
+                active,
+                workflow,
+                selectedCategories,
+              });
             const field = index === 3 ? 'historyShare' : 'reportShare';
             const available = shares.filter((row) => row[field] !== null).length;
             return h(

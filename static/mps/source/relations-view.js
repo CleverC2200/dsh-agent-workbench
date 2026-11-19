@@ -1,3 +1,4 @@
+import { matchesCategories } from './category-filter.js';
 import { call, ready } from '../../../business/shared/channel.js';
 import { readRelations } from './relations.js';
 
@@ -124,7 +125,14 @@ function cells(kind, row) {
 }
 export function createRelations(react, useMpsPart, { downloadCsv }) {
   const h = react.createElement;
-  return function Relations({ scope, onResult, active = true, enabled = true }) {
+  return function Relations({
+    scope,
+    onResult,
+    active = true,
+    enabled = true,
+    selectedCategories = [],
+    products = [],
+  }) {
     const [kind, setKind] = react.useState('sku');
     const [search, setSearch] = react.useState('');
     const [onlyMissing, setOnlyMissing] = react.useState(false);
@@ -178,7 +186,33 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
         events.forEach((event) => window.removeEventListener(event, invalidate));
       };
     }, [scopeKey, attempt, enabled]);
-    const records = state.records?.[kind] ?? [];
+    const codes = new Set(
+      products
+        .filter((row) => matchesCategories(row['大类'], selectedCategories))
+        .map((row) => row['产品编码']),
+    );
+    const selectedSkus = (state.records?.sku ?? []).filter(
+      (row) =>
+        matchesCategories(row.product?.sub_category, selectedCategories) ||
+        codes.has(row.product?.material_code),
+    );
+    const lineKeys = new Set(
+      selectedSkus.map((row) => row.tunnelMatch?.resourceKey).filter(Boolean),
+    );
+    const inCategory = (row, group) =>
+      !selectedCategories.length ||
+      (group === 'sku'
+        ? selectedSkus.includes(row)
+        : group === 'transfers'
+          ? codes.has(row.source?.material_code)
+          : lineKeys.has(row.tunnelMatch?.resourceKey) ||
+            selectedSkus.some(
+              (sku) =>
+                sku.capacity?.belong_base === row.source?.belong_base &&
+                sku.capacity?.workshop === row.source?.production_unit &&
+                sku.capacity?.tunnel_no === row.source?.tunnel_no,
+            ));
+    const records = (state.records?.[kind] ?? []).filter((row) => inCategory(row, kind));
     const filtered = react.useMemo(
       () =>
         records.filter(
@@ -220,7 +254,7 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
         'div',
         { className: 'ap-grid-3 mps-relation-groups', role: 'tablist', 'aria-label': '关系分组' },
         groups.map((group) => {
-          const rows = state.records?.[group.key];
+          const rows = state.records?.[group.key]?.filter((row) => inCategory(row, group.key));
           const missing = rows?.filter((row) => row.missing.length || row.pending?.length).length;
           return h(
             'button',
@@ -274,7 +308,7 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
                 downloadCsv(
                   `${scope.month}-${selected.name}-完整来源.csv`,
                   ['评估版本', ...columns[kind]],
-                  records.map((row) => ({
+                  filtered.map((row) => ({
                     评估版本: scope.name,
                     ...Object.fromEntries(
                       columns[kind].map((column, index) => [column, cells(kind, row)[index]]),

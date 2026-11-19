@@ -111,7 +111,10 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   await openCategoryCalculation(frame);
   const calculation = frame.getByRole('region', { name: '逐月测算', exact: true });
   await expect(calculation.locator('tbody tr')).toHaveCount(12);
-  await matrix.getByLabel('大类筛选', { exact: true }).selectOption('乙类');
+  await frame
+    .getByRole('group', { name: '大类筛选', exact: true })
+    .getByRole('checkbox', { name: '乙类', exact: true })
+    .check();
   await expect(total().locator('.dc-demand-amount')).toHaveText(['0', '0', '待补', '待补']);
   await expect(total().getByRole('cell').nth(1)).not.toContainText('待补');
   await expect(calculation.locator('tbody tr')).toHaveCount(4);
@@ -127,7 +130,10 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   const csv = await mpsDownloadText(await (await downloading).path());
   assert.match(csv, /乙类/);
   assert.doesNotMatch(csv, /甲类|丙类/);
-  await matrix.getByLabel('大类筛选', { exact: true }).selectOption('');
+  await frame
+    .getByRole('group', { name: '大类筛选', exact: true })
+    .getByRole('button', { name: '清空筛选', exact: true })
+    .click();
   await expect(total().locator('.dc-demand-amount').first()).toHaveText('100');
   await expect(calculation.locator('tbody tr')).toHaveCount(12);
   if (process.env.MPS03_EVIDENCE_DIR)

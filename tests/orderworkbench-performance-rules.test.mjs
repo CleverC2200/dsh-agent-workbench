@@ -4,7 +4,11 @@ import {
   shippableDaysState,
   performanceCurrentCell,
   highlightAgePeak,
+  metricTarget,
+  metricGroupTarget,
+  workbenchMetricState,
 } from '../prototypes/inventory-orderworkbench/performance-rules.mjs';
+import { metricSnapshot } from '../prototypes/inventory-orderworkbench/metric-components.mjs';
 import { workbenchPresentation } from '../prototypes/inventory-orderworkbench/live-presentation.mjs';
 import { computeWorkbenchMetrics } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 
@@ -36,14 +40,49 @@ test('red status uses unrounded current values and leaves unknown inputs unmarke
   assert.equal(performanceCurrentCell('作废率', 5.999, '6.00%').state, 'good');
   assert.equal(performanceCurrentCell('作废率', 6, '6.00%').state, 'bad');
 });
+
+test('age target is strictly below two percent for cards and Agent summaries and groups', () => {
+  const name = '货龄（>60天库存占比）';
+  assert.equal(metricTarget(name), '<2%');
+  for (const dimensions of [['base'], ['item'], ['base', 'item']])
+    assert.equal(metricGroupTarget(name, '郑州', dimensions), '<2%');
+  for (const [value, state] of [
+    [0, '健康'],
+    [1.999, '健康'],
+    [2, '预警'],
+    [2.3, '预警'],
+    [null, '数据不足'],
+  ]) {
+    assert.equal(workbenchMetricState(name, value), state);
+    const period = {
+      sections: [
+        {
+          id: 'ages',
+          status: 'ready',
+          rows: value === null ? [] : [{ stock_qty: 1000, aged_qty: value * 10, invalid: 0 }],
+        },
+      ],
+    };
+    period.metrics = computeWorkbenchMetrics(period);
+    const current = metricSnapshot(period, name);
+    assert.equal(current.target, '<2%');
+    if (value !== null) {
+      assert.equal(current.status, state);
+      assert.equal(current.numerator, value * 10);
+      assert.equal(current.denominator, 1000);
+    }
+  }
+  assert.equal(performanceCurrentCell(name, 1.999, '2.00%').state, 'good');
+  assert.equal(performanceCurrentCell(name, 2, '2.00%').state, 'bad');
+});
 test('highest age excludes totals and unknowns, preserves ties and never colors comparisons', () => {
   const age = (v) => performanceCurrentCell('货龄（>60天库存占比）', v, `${v}%`);
   const rows = [
-    ['甲', age(8), '+30%'],
-    ['乙', age(8), '-1%'],
-    ['丙', age(3), '+100%'],
+    ['甲', age(1.8), '+30%'],
+    ['乙', age(1.8), '-1%'],
+    ['丙', age(1.3), '+100%'],
     ['丁', '—', '—'],
-    ['合计', age(90), '+2%'],
+    ['合计', age(1.9), '+2%'],
   ];
   highlightAgePeak(rows, 1);
   assert.deepEqual(
@@ -158,10 +197,16 @@ test('all six live tables carry current-value states and separate monthly and we
     ['item-performance', 7, 6],
   ]) {
     const tables = v.performance[dimension];
-    assert.equal(tables.month.filter((r) => r[ageMonth]?.state === 'warning').length, 1);
-    assert.equal(tables.week.filter((r) => r[ageWeek]?.state === 'warning').length, 1);
     assert.equal(
-      tables.month.find((r) => r[ageMonth]?.state === 'warning')[0],
+      tables.month.filter((r) => r[0] !== '合计' && r[ageMonth]?.state === 'bad').length,
+      1,
+    );
+    assert.equal(
+      tables.week.filter((r) => r[0] !== '合计' && r[ageWeek]?.state === 'bad').length,
+      1,
+    );
+    assert.equal(
+      tables.month.find((r) => r[ageMonth]?.state === 'bad')[0],
       dimension === 'base-performance'
         ? '郑州'
         : dimension === 'director-performance'
@@ -169,7 +214,7 @@ test('all six live tables carry current-value states and separate monthly and we
           : '甲',
     );
     assert.equal(
-      tables.week.find((r) => r[ageWeek]?.state === 'warning')[0],
+      tables.week.find((r) => r[ageWeek]?.state === 'bad')[0],
       dimension === 'base-performance'
         ? '华东'
         : dimension === 'director-performance'
