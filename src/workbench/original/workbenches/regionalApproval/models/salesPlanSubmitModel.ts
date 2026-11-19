@@ -653,11 +653,25 @@ export const salesPlanResubmitReadbackMatches = (
         (s) => s.skuCode === item.skuCode && s.versionId === receipt.versionId,
       );
       if (!sku) return false;
+      const source = sourceSkus?.find((row) => row.skuCode === item.skuCode);
+      if (!item.useLatestSkuPrice && item.confirmedQty !== undefined) {
+        try {
+          if (!source || !correctionDecimal(sku.price).eq(correctionDecimal(source.price)))
+            return false;
+        } catch {
+          return false;
+        }
+      }
       if (item.useLatestSkuPrice || item.confirmedQty !== undefined) {
         const qty = request.status === 1 ? item.adjAddQty : item.confirmedQty;
         return (
           qty !== undefined &&
-          verifySalesPlanAddedSkus(detail, [{ skuCode: item.skuCode, qty }], request.status)
+          verifySalesPlanAddedSkus(
+            detail,
+            [{ skuCode: item.skuCode, qty }],
+            request.status,
+            item.useLatestSkuPrice ? 'new' : 'existing',
+          )
         );
       }
       try {
@@ -672,7 +686,6 @@ export const salesPlanResubmitReadbackMatches = (
       } catch {
         return false;
       }
-      const source = sourceSkus?.find((row) => row.skuCode === item.skuCode);
       return (['region', 'province', 'area', 'category'] as const).every((role, index) =>
         (['AdjAddQty', 'AdjCutQty', 'ConfirmedQty', 'ConfirmedAmount'] as const).every((suffix) => {
           const field = `${role}${suffix}` as const;

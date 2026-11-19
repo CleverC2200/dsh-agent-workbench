@@ -192,6 +192,7 @@ export function verifyReturnedSalesPlan(
           after,
           [{ skuCode: sku.skuCode, qty: expected.toFixed() }],
           target,
+          'existing',
         );
       const received = [
         actual.qty,
