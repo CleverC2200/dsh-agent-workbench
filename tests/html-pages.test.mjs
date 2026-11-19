@@ -233,7 +233,7 @@ test('serves the published branch inventory SQL configuration through the page h
 test('keeps the SQL configuration limit scoped to the branch inventory host page', async (t) => {
   const pages = new HtmlPages(context(t), '', async () => '');
   for (const [id, contentBytes] of [
-    ['inventory-fc', 8_000_000],
+    ['inventory-fc', 9_000_000],
     ['inventory-dealer', 5_000_000],
   ]) {
     const root = await mkdtemp(join(tmpdir(), 'workbench-sql-limit-'));
