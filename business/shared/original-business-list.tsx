@@ -17,6 +17,8 @@ import chain from '../inventory-qll/source/inventory-light-plugins/src/pages/qll
 import base from '../inventory-aqkc/source/inventory-light-plugins/src/pages/aqkc/components/inventory-operations-workbench.module.css';
 import css from './original-business-list.module.css';
 import { ColumnFilterControl, ColumnResizeHandle } from './table-column-controls';
+import { WarehouseSelect } from '../inventory-fc/source/inventory-light-plugins/src/pages/fc/components/warehouse-select';
+import { WorkbenchSearch } from './workbench-search';
 
 const optionalLabelNames: Record<string, string> = {
   material_name: '产品名称',
@@ -459,7 +461,19 @@ export function OriginalBusinessList({
             .map((f: any) => (
               <label key={f.name} className={fc ? css.filterField : undefined}>
                 <span>{f.label}</span>
-                {f.selectOptions ? (
+                {f.selectOptions && fc ? (
+                  <WarehouseSelect
+                    label={f.label}
+                    compact
+                    disabled={false}
+                    value={filters[f.name] ?? ''}
+                    options={[
+                      { id: '', name: '全部' },
+                      ...f.selectOptions.map((value: string) => ({ id: value, name: value })),
+                    ]}
+                    onChange={(value) => onFilter(f.name, value)}
+                  />
+                ) : f.selectOptions ? (
                   <select
                     aria-label={f.label}
                     value={filters[f.name] ?? ''}
@@ -470,6 +484,13 @@ export function OriginalBusinessList({
                       <option key={value}>{value}</option>
                     ))}
                   </select>
+                ) : fc ? (
+                  <WorkbenchSearch
+                    label={f.label}
+                    value={filters[f.name] ?? ''}
+                    placeholder={f.placeholder ?? `搜索${f.label}`}
+                    onChange={(value) => onFilter(f.name, value)}
+                  />
                 ) : (
                   <Input
                     aria-label={f.label}

@@ -1,0 +1,97 @@
+.agent-root.fc-redesign .panel-actions > label:has(.fc-search-control) {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+.agent-root.fc-redesign .panel-actions .fc-search-control {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 176px;
+  align-items: center;
+  width: 176px;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid #c9ced7;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px #1822300a;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+.agent-root.fc-redesign .panel-actions .fc-search-control:hover {
+  border-color: #e8a4ae;
+  background: #fff7f8;
+  box-shadow: 0 2px 8px #df173214;
+}
+.agent-root.fc-redesign .panel-actions .fc-search-control:focus-within {
+  border-color: #e59ca8;
+  background: #fff;
+  box-shadow: 0 0 0 3px #df17321a;
+}
+.agent-root.fc-redesign .panel-actions .fc-search-control > svg {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  margin-right: 7px;
+  color: #697386;
+}
+.agent-root.fc-redesign .panel-actions .fc-search-control:focus-within > svg {
+  color: #c91029;
+}
+.agent-root.fc-redesign .panel-actions .fc-search-control input[type='search'] {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  font:
+    700 12px/18px 'Microsoft YaHei UI',
+    'PingFang SC',
+    'Noto Sans CJK SC',
+    Arial,
+    sans-serif;
+  letter-spacing: normal;
+  color: #343b46;
+}
+.agent-root.fc-redesign .panel-actions .fc-search-control input::placeholder {
+  font-weight: 600;
+  color: #98a0ab;
+}
+.fc-search-control input::-webkit-search-cancel-button {
+  display: none;
+}
+.agent-root.fc-redesign .panel-actions .fc-search-control > button {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  margin: 0 0 0 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #697386;
+}
+.agent-root.fc-redesign .panel-actions .fc-search-control > button:hover,
+.agent-root.fc-redesign .panel-actions .fc-search-control > button:focus-visible {
+  background: #ffedf0;
+  color: #c91029;
+}
+.agent-root.fc-redesign .panel-actions .fc-search-control > button:focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: 2px;
+}
+@media (max-width: 720px) {
+  .agent-root.fc-redesign .panel-actions .fc-search-control {
+    width: 160px;
+    flex-basis: 160px;
+  }
+}

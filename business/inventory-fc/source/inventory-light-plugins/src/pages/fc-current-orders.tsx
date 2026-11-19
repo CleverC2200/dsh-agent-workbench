@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AgentSqlConfig } from '../../../../../shared/sql-config';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
+import { WarehouseSelect } from './fc/components/warehouse-select';
+import { WorkbenchSearch } from '../../../../../shared/workbench-search';
 import { currentOrderStatus, ORDER_STATUSES } from '../../../fc/src/lib/current-orders';
 import { useFcWorkflow } from './configured-fc-list';
 import { fcWarehouseStatus } from './fc-warehouse-presentation';
@@ -338,23 +340,23 @@ export function FcCurrentOrders({
         {!warehouseCode && (
           <label>
             分仓
-            <input
-              aria-label="分仓"
+            <WorkbenchSearch
+              label="分仓"
               placeholder="请输入分仓名称或编码"
               value={draft.warehouse}
-              onChange={(event) => setDraft({ ...draft, warehouse: event.target.value })}
+              onChange={(value) => setDraft({ ...draft, warehouse: value })}
             />
           </label>
         )}
         <label>
           客户订单号／下游客户／SKU
-          <input
-            aria-label="客户订单号或下游客户"
+          <WorkbenchSearch
+            label="客户订单号或下游客户"
             placeholder="客户订单号／下游客户／SKU／产品名称"
             value={draft.search}
-            onChange={(event) => {
-              setListSearch(event.target.value);
-              setDraft({ ...draft, search: event.target.value });
+            onChange={(value) => {
+              setListSearch(value);
+              setDraft({ ...draft, search: value });
             }}
           />
         </label>
@@ -363,20 +365,19 @@ export function FcCurrentOrders({
         </button>
         <label>
           状态
-          <select
-            aria-label="订单状态"
+          <WarehouseSelect
+            label="订单状态"
+            compact
+            disabled={false}
             value={draft.shortageOnly ? '缺口' : '全部'}
-            onChange={(event) => {
-              const next = { ...draft, shortageOnly: event.target.value === '缺口' };
+            options={ORDER_STATUSES.map((status) => ({ id: status, name: status }))}
+            onChange={(value) => {
+              const next = { ...draft, shortageOnly: value === '缺口' };
               setDraft(next);
               setFilters(next);
               setPage(1);
             }}
-          >
-            {ORDER_STATUSES.map((status) => (
-              <option key={status}>{status}</option>
-            ))}
-          </select>
+          />
         </label>
         <button
           type="button"
