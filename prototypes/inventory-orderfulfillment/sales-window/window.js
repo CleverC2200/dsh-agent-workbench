@@ -3,7 +3,7 @@ const element = (id) => document.getElementById(id);
 const navigation = new URLSearchParams(location.search);
 const requestedMode = navigation.get('view') ?? navigation.get('mode');
 
-const mode = ['confirm', 'defer', 'details', 'list', 'edit', 'process', 'credit'].includes(
+let mode = ['confirm', 'defer', 'details', 'list', 'edit', 'process', 'credit', 'price'].includes(
   requestedMode,
 )
   ? requestedMode
@@ -13,7 +13,10 @@ const nonce = crypto.randomUUID();
 let state,
   inflight = false,
   submitted,
-  pageNo = 1;
+  pageNo = 1,
+  refreshTimer,
+  refreshChecks = 0;
+window.addEventListener('pagehide', () => clearTimeout(refreshTimer));
 
 const knownNumber = (value) =>
   (typeof value === 'number' || typeof value === 'string') &&
@@ -56,8 +59,11 @@ async function request(path, options = {}) {
     ...options,
   });
   const data = await response.json();
-  if (!response.ok || data.success === false)
-    throw Error(data.message || '会话已过期，请从飞书卡片重新打开');
+  if (!response.ok || data.success === false) {
+    const error = Error(data.message || '会话已过期，请从飞书卡片重新打开');
+    error.code = data.code;
+    throw error;
+  }
   return data;
 }
 function status() {
@@ -87,16 +93,82 @@ function status() {
   }
 }
 async function load() {
+  clearTimeout(refreshTimer);
   state = await request('/data?includeRelated=' + (mode === 'list') + '&pageNo=' + pageNo);
+  if (
+    state.permissions?.canAct === true &&
+    state.status === 'pending' &&
+    state.editor?.vehicleRulesAvailable === true
+  ) {
+    try {
+      const options = await request('/options?kind=vehicles');
+      state.editor.vehicleOptions = options.vehicles;
+    } catch (error) {
+      state.editor.vehicleOptions = [];
+      state.editor.vehicleNotice = error.message;
+    }
+  }
+  if (
+    state.previewOnly !== true &&
+    state.orderRefresh?.status === 'waiting' &&
+    state.editor?.modificationState === 'succeeded' &&
+    refreshChecks < 10
+  ) {
+    refreshChecks++;
+    refreshTimer = setTimeout(() => load().catch(() => {}), 3000);
+  }
 
   if (mode !== 'list' && (mode !== 'defer' || state.permissions?.canAct !== true)) {
     window.OrderShortageEditor.mount(document, {
       ...state,
+      onInventoryRecalculate: async (draft) => {
+        if (
+          state.previewOnly === true ||
+          state.permissions?.canAct !== true ||
+          state.status !== 'pending'
+        )
+          throw Error('当前不能核算库存');
+        return request('/inventory-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf },
+          body: JSON.stringify({ expectedVersion: state.version, draft }),
+        });
+      },
+      onLookupProducts: async (query) => {
+        if (
+          state.permissions?.canAct !== true ||
+          state.status !== 'pending' ||
+          state.editor?.catalogAvailable !== true
+        )
+          throw Error('当前不能查询商品目录');
+        const options = await request('/options?kind=products&query=' + encodeURIComponent(query));
+        return options.products;
+      },
+      onRefreshOrder: async () => {
+        refreshChecks = 0;
+        await load();
+      },
+      onOpenLatest: () => {
+        if (state.orderRefresh?.status !== 'ready' || !state.orderRefresh.entryUrl) return;
+        const url = new URL(state.orderRefresh.entryUrl, location.href);
+        if (
+          url.origin !== location.origin ||
+          url.pathname !== location.pathname.split('/window/')[0] + '/entry' ||
+          url.username ||
+          url.password ||
+          url.hash
+        )
+          throw Error('最新订单入口无效，请重新打开飞书卡片。');
+        url.searchParams.set('view', 'process');
+        location.assign(url.href);
+      },
       view:
-        mode === 'details' || state.permissions?.canAct !== true || state.status !== 'pending'
-          ? 'details'
-          : 'process',
-      onConfirm: async () => {
+        mode === 'price' && state.permissions?.canAct === true && state.status === 'pending'
+          ? 'price'
+          : mode === 'details' || state.permissions?.canAct !== true || state.status !== 'pending'
+            ? 'details'
+            : 'process',
+      onPriceRecheck: async () => {
         if (
           inflight ||
           state.previewOnly === true ||
@@ -105,21 +177,61 @@ async function load() {
         )
           return;
         inflight = true;
-        submitted ??= {
-          actionId: 'confirm_shipment',
-          expectedVersion: state.version,
-          nonce,
-          input: {},
-        };
         try {
-          const receipt = await request('/action', {
+          const receipt = await request('/price-recheck', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf },
+            body: JSON.stringify({ expectedVersion: state.version }),
+          });
+          if (receipt.version) state.version = receipt.version;
+          if (receipt.ready !== true)
+            throw Error(receipt.message || '价格仍有异常，请核对后重试。');
+          navigation.set('view', 'process');
+          history.replaceState(null, '', '?' + navigation.toString());
+          mode = 'process';
+          await load();
+        } finally {
+          inflight = false;
+        }
+      },
+      onConfirm: async (draft) => {
+        if (
+          inflight ||
+          state.previewOnly === true ||
+          state.permissions?.canAct !== true ||
+          state.status !== 'pending'
+        )
+          return;
+        inflight = true;
+        const modifying = state.editor?.omsModificationAvailable === true;
+        submitted ??= modifying
+          ? { expectedVersion: state.version, draft }
+          : {
+              actionId: 'confirm_shipment',
+              expectedVersion: state.version,
+              nonce,
+              input: {},
+            };
+        try {
+          const receipt = await request(modifying ? '/modify' : '/action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf },
             body: JSON.stringify(submitted),
           });
-          if (!['accepted', 'already_resolved'].includes(receipt.status))
-            throw Error('处理状态：' + receipt.status + '，请重新核对后操作');
+          if (!['accepted', 'already_resolved'].includes(receipt.status)) {
+            if (modifying) await load();
+            throw Error(receipt.message || '处理状态：' + receipt.status + '，请重新核对后操作');
+          }
           await load();
+        } catch (error) {
+          if (
+            [
+              'ORDER_CONFIRMATION_OMS_MODIFICATION_INVENTORY_CHANGED',
+              'ORDER_CONFIRMATION_OMS_MODIFICATION_INVENTORY_UNAVAILABLE',
+            ].includes(error.code)
+          )
+            submitted = undefined;
+          throw error;
         } finally {
           inflight = false;
         }

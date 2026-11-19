@@ -132,10 +132,18 @@ export const salesCardTemplate = {
                           button('额度已补充', 'Process', 'primary'),
                           secondary('订单处理（额度待核验）'),
                         ],
-                        [
-                          button('订单处理', 'Process', 'primary'),
-                          button('暂缓发货', 'Defer', 'text'),
-                        ],
+                        conditional(
+                          'section.priceIssue',
+                          [
+                            button('价格已维护', 'Price', 'primary'),
+                            button('暂缓发货', 'Defer', 'text'),
+                            button('订单处理', 'Process', 'text'),
+                          ],
+                          [
+                            button('订单处理', 'Process', 'primary'),
+                            button('暂缓发货', 'Defer', 'text'),
+                          ],
+                        ),
                       ),
                     ],
                     {

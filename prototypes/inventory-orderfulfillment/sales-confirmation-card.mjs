@@ -57,6 +57,10 @@ export function salesConfirmationCard(input, options = {}) {
       Number.isFinite(line.rawShortage) &&
       line.rawShortage > 0,
   );
+  const missingPrices = (draft.lines || []).filter((line) => line.priceStatus === 'PRICE_MISSING');
+  const priceIssue =
+    Boolean(draft.priceStatus && draft.priceStatus !== 'READY') ||
+    (draft.omsEventType === 'PRICE_CHECK_FAILED' && draft.priceStatus !== 'READY');
   const section = {
     hasEntry: Boolean(options.entryUrl),
     entryUrl: options.entryUrl ? windowUrl(options.entryUrl) : '',
@@ -68,14 +72,23 @@ export function salesConfirmationCard(input, options = {}) {
     deliveryDate: escape(draft.deliveryDate),
     hasInstruction: true,
     instruction:
-      draft.scenario === 'credit'
-        ? `信用额度不足${Number.isFinite(draft.credit?.shortfall) ? '：' + draft.credit.shortfall + '元' : ''}，补充后请核验。`
-        : draft.scenario === 'ready'
-          ? '订单满足率达到90%，请核对并处理订单。'
-          : draft.scenario === 'shortage'
-            ? '订单满足率未达到90%，请先调整商品。'
-            : '订单满足率暂未完整提供，请核对后处理。',
+      typeof draft.notice === 'string' && draft.notice.trim()
+        ? draft.notice
+        : draft.scenario === 'credit'
+          ? Number.isFinite(draft.credit?.shortfall) && draft.credit.shortfall > 0
+            ? `信用额度校验未通过，缺口：${draft.credit.shortfall}元，请联系业务核实补充情况。`
+            : draft.credit?.shortfall == null
+              ? '信用额度校验未通过，具体缺口金额未提供，请联系业务核实。'
+              : '信用额度校验结果与缺口金额需核实，请联系业务确认。'
+          : draft.priceStatus && draft.priceStatus !== 'READY'
+            ? '商品价格核验未完成，请核对后处理订单。'
+            : draft.scenario === 'ready'
+              ? `订单满足率 ${draft.rate.toFixed(1)}%${missing.length ? '，仍有部分商品缺货' : ''}，请核对订单后处理。`
+              : draft.scenario === 'shortage'
+                ? `订单满足率 ${draft.rate.toFixed(1)}%，未达到90%，请核对库存及商品数量。`
+                : '订单满足率未提供，暂无法判断库存满足情况，请核对后处理订单。',
     creditInsufficient: draft.scenario === 'credit',
+    priceIssue,
     customer: escape(draft.customer),
     quantity: String(draft.quantity ?? '—'),
     rate: draft.rate === null ? '—' : draft.rate.toFixed(1) + '%',
@@ -91,6 +104,15 @@ export function salesConfirmationCard(input, options = {}) {
     hasDetails: Boolean(urls.details),
     detailsUrl: urls.details ? windowUrl(urls.details) : '',
   };
+  if (priceIssue && draft.scenario !== 'credit' && missingPrices.length)
+    section.instruction =
+      (draft.notice?.trim() || '订单中部分商品没有价格，请维护价格') +
+      '\n' +
+      missingPrices
+        .slice(0, 5)
+        .map((line) => `SKU：${String(line.sku ?? '—')} 没价格`)
+        .join('\n') +
+      (missingPrices.length > 5 ? '\n其余缺价商品请在订单处理中查看。' : '');
   for (const [name, key] of [
     ['Confirm', 'confirm'],
     ['Defer', 'defer'],
@@ -106,6 +128,9 @@ export function salesConfirmationCard(input, options = {}) {
     url.searchParams.set('view', 'process');
     url.searchParams.delete('mode');
     section.ProcessUrl = windowUrl(url.href);
+    url.searchParams.set('view', 'price');
+    section.hasPrice = true;
+    section.PriceUrl = windowUrl(url.href);
   }
   return renderSalesCardTemplate(salesCardTemplate, {
     mentions: options.mentionOpenId ? '<at id=' + options.mentionOpenId + '></at> ' : '',
