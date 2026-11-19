@@ -1522,8 +1522,8 @@ test('warehouse type tabs separate three base warehouses and preserve branch sel
   });
   await page.goto('http://127.0.0.1:19503/');
   const typeTabs = page.getByRole('tablist', { name: '仓库类型' });
-  const branch = typeTabs.getByRole('tab', { name: '分仓', exact: true });
-  const base = typeTabs.getByRole('tab', { name: '基地仓', exact: true });
+  const branch = typeTabs.getByRole('tab', { name: '分仓属性', exact: true });
+  const base = typeTabs.getByRole('tab', { name: '基地仓属性', exact: true });
   await expect(branch).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('button', { name: '选择分仓', exact: true }).click();
   await expect(page.getByRole('option')).toHaveText([/全部分仓/, /南京分仓（A160）/]);

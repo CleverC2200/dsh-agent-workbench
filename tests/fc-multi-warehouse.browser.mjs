@@ -128,7 +128,18 @@ test('multi selection separates aggregate metrics and per warehouse actions', as
     });
   });
   await page.goto('http://127.0.0.1:19496/');
-  await expect(page.getByRole('button', { name: '运营管理', exact: true })).toBeVisible();
+  const modes = page.getByRole('navigation', { name: '管理视图' });
+  const overviewMode = modes.getByRole('button', { name: '运营管理', exact: true });
+  const actionsMode = modes.getByRole('button', { name: '操作管理', exact: true });
+  await expect(overviewMode).toBeVisible();
+  await expect(overviewMode).toHaveAttribute('aria-current', 'page');
+  await expect(overviewMode).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(overviewMode).toHaveCSS('border-bottom-width', '0px');
+  await expect(overviewMode).toHaveCSS('box-shadow', 'none');
+  assert.equal(
+    await overviewMode.evaluate((button) => getComputedStyle(button, '::after').borderBottomWidth),
+    '2px',
+  );
   await expect(page.locator('[data-overview-cards="fc"]')).toBeVisible();
   const search = page.getByRole('searchbox', { name: '运营观察搜索', exact: true });
   const searchBox = search.locator('..');
@@ -231,7 +242,9 @@ test('multi selection separates aggregate metrics and per warehouse actions', as
   await page.keyboard.press('Escape');
   await expect(nav.getByRole('button')).toHaveCount(23);
   await page.setViewportSize({ width: 800, height: 900 });
-  const modes = page.getByRole('navigation', { name: '管理视图' });
+  await expect(actionsMode).toHaveAttribute('aria-current', 'page');
+  await expect(actionsMode).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(actionsMode).toHaveCSS('border-bottom-width', '0px');
   const m = await modes.boundingBox(),
     w = await nav.boundingBox();
   assert.ok(w.y >= m.y + m.height, 'warehouse tabs are on a separate second row');
