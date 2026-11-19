@@ -199,6 +199,107 @@ test('report collection reads both plan types across every API page without node
   );
 });
 
+test('all readable months retain separate customer SKU rows across period and plan pages', async () => {
+  const calls = [];
+  const periods = [
+    { periodId: 'october', periodMonth: '2026-10' },
+    { periodId: 'november', periodMonth: '2026-11' },
+  ];
+  const all = [
+    { ...plan('M', '1', 1), periodId: 'october' },
+    { ...plan('M', '2', 8), periodId: 'october' },
+    { ...plan('Z', '1', 4), periodId: 'october' },
+    { ...plan('M', '1', 5), planId: 'nov-M1', versionId: 'nov-v1', periodId: 'november' },
+  ];
+  const page = (records, q) => ({
+    records: records.slice(q.pageNo - 1, q.pageNo),
+    total: records.length,
+    current: q.pageNo,
+    size: 1,
+    pages: records.length,
+  });
+  const client = {
+    periods: {
+      invoke: async (q) => {
+        calls.push(['periods', q]);
+        return page(periods, q);
+      },
+    },
+    list: {
+      invoke: async (q) => {
+        calls.push(['list', q]);
+        return page(
+          all.filter((p) => p.periodId === q.periodId && p.orderType === q.orderType),
+          q,
+        );
+      },
+    },
+    versionSkus: {
+      invoke: async ({ versionId }) => [sku(all.find((p) => p.versionId === versionId))],
+    },
+  };
+  const sources = await m.readAllSalesPlanMonthlyReportSources(client, {
+    signal: new AbortController().signal,
+  });
+  assert.deepEqual(
+    sources.map((source) => [source.month, source.plan.planId]),
+    [
+      ['2026-10', 'M1'],
+      ['2026-10', 'M2'],
+      ['2026-10', 'Z1'],
+      ['2026-11', 'nov-M1'],
+    ],
+  );
+  const rows = m.salesPlanAllMonthlyReportRows(
+    sources,
+    (month) => ({
+      ...dimensions,
+      correctedPlanQty: month === '2026-10' ? '100' : '300',
+    }),
+    () => '审批完成',
+  );
+  assert.deepEqual(
+    rows.map((row) => [row[18], row[8]]),
+    [
+      ['2026-10', '1'],
+      ['2026-10', '2'],
+      ['2026-11', '1'],
+    ],
+  );
+  assert.equal(rows[2][19], '300');
+  assert.ok(
+    calls
+      .filter(([kind]) => kind === 'periods')
+      .every(([, query]) => !Object.hasOwn(query, 'periodMonth')),
+  );
+  assert.equal(calls.filter(([kind, q]) => kind === 'periods' && q.pageNo === 2).length, 2);
+  assert.equal(
+    calls.filter(
+      ([kind, q]) =>
+        kind === 'list' && q.periodId === 'october' && q.orderType === 'M' && q.pageNo === 2,
+    ).length,
+    2,
+  );
+  assert.ok(
+    calls.every(
+      ([, q]) =>
+        q.status === undefined && q.approvalRole === undefined && q.versionIds === undefined,
+    ),
+  );
+  const readSkus = client.versionSkus.invoke;
+  client.versionSkus.invoke = async (query) => {
+    const skus = await readSkus(query);
+    if (query.versionId === 'nov-v1') periods[0].periodMonth = '2026-09';
+    return skus;
+  };
+  await assert.rejects(
+    m.readAllSalesPlanMonthlyReportSources(client, {
+      signal: new AbortController().signal,
+    }),
+    { code: 'REPORT_VERSION_CHANGED' },
+  );
+});
+
 test('new SKUs with two empty predecessor fields use the saved confirmation and the corresponding price', () => {
   const monthly = plan('M', '1', 2);
   const correction = plan('Z', '2', 7);
@@ -314,46 +415,52 @@ test('collector fails on missing pages, wrong identities, permission denial and 
     versionSkus: { invoke: async () => [sku(p)] },
     ...overrides,
   });
-  const read = (c, signal = new AbortController().signal) =>
-    m.readSalesPlanMonthlyReportSources(c, { month: '2026-11', signal });
-  await assert.rejects(
-    read(client({ list: { invoke: async () => ({ ...page([p]), size: 1, pages: 2, total: 2 }) } })),
-    { code: 'INCOMPLETE_REPORT_PAGE' },
-  );
-  await assert.rejects(read(client({ versionSkus: { invoke: async () => [] } })), {
-    code: 'INCOMPLETE_REPORT_SKUS',
-  });
-  await assert.rejects(
-    read(client({ versionSkus: { invoke: async () => [{ ...sku(p), versionId: 'foreign' }] } })),
-    { code: 'INCOMPLETE_REPORT_SKUS' },
-  );
-  await assert.rejects(
-    read(
-      client({
-        list: {
-          invoke: async () => {
-            throw new Error('PERMISSION_DENIED');
+  for (const collect of [
+    (c, signal) => m.readSalesPlanMonthlyReportSources(c, { month: '2026-11', signal }),
+    (c, signal) => m.readAllSalesPlanMonthlyReportSources(c, { signal }),
+  ]) {
+    const read = (c, signal = new AbortController().signal) => collect(c, signal);
+    await assert.rejects(
+      read(
+        client({ list: { invoke: async () => ({ ...page([p]), size: 1, pages: 2, total: 2 }) } }),
+      ),
+      { code: 'INCOMPLETE_REPORT_PAGE' },
+    );
+    await assert.rejects(read(client({ versionSkus: { invoke: async () => [] } })), {
+      code: 'INCOMPLETE_REPORT_SKUS',
+    });
+    await assert.rejects(
+      read(client({ versionSkus: { invoke: async () => [{ ...sku(p), versionId: 'foreign' }] } })),
+      { code: 'INCOMPLETE_REPORT_SKUS' },
+    );
+    await assert.rejects(
+      read(
+        client({
+          list: {
+            invoke: async () => {
+              throw new Error('PERMISSION_DENIED');
+            },
           },
-        },
-      }),
-    ),
-    /PERMISSION_DENIED/,
-  );
-  const controller = new AbortController();
-  await assert.rejects(
-    read(
-      client({
-        versionSkus: {
-          invoke: async () => {
-            controller.abort();
-            return [sku(p)];
+        }),
+      ),
+      /PERMISSION_DENIED/,
+    );
+    const controller = new AbortController();
+    await assert.rejects(
+      read(
+        client({
+          versionSkus: {
+            invoke: async () => {
+              controller.abort();
+              return [sku(p)];
+            },
           },
-        },
-      }),
-      controller.signal,
-    ),
-    { name: 'AbortError' },
-  );
+        }),
+        controller.signal,
+      ),
+      { name: 'AbortError' },
+    );
+  }
 });
 
 test('unrelated shipment enrichment changes do not invalidate a stable report version', async () => {
