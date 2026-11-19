@@ -7,7 +7,7 @@ const recipient = {
   receiveIdType: 'gea',
   recipientName: '测试负责人',
 };
-function fixture(count = 40, taskId = 'task', runId = 'run') {
+function fixture(count = 40, taskId = 'task', runId = 'run', overrides = []) {
   const state = {
     events: Array.from({ length: count }, (_, i) => ({
       id: taskId + '-' + i,
@@ -17,12 +17,19 @@ function fixture(count = 40, taskId = 'task', runId = 'run') {
       eventStatus: '活跃',
       metricName: '指标',
       level: i % 2 ? '预警' : '严重',
-      metric: '94%',
+      metric: '指标 94%',
+      value: 94,
+      unit: '%',
       scopeType: '品类',
+      period: '2026-11',
       history: [{ runId, status: '预警' }],
+      ...overrides[i],
     })),
   };
-  enqueueChanges(state, new Map(), { id: runId, taskId }, recipient, { notifyMode: 'repeat' });
+  enqueueChanges(state, new Map(), { id: runId, taskId }, recipient, {
+    notifyMode: 'repeat',
+    definedBy: '测试设置人',
+  });
   let serial = Promise.resolve();
   const locked = (fn) => {
     const next = serial.then(fn);
@@ -31,6 +38,45 @@ function fixture(count = 40, taskId = 'task', runId = 'run') {
   };
   return { state, locked, save: async () => {} };
 }
+test('digest shows shared fields above the list and keeps each value and risk with its object', async () => {
+  const options = fixture(3, 'task', 'run', [
+    { scope: '遂平基地', value: 13.7841, unit: '天' },
+    { scope: '郑州基地', value: 12.8994, unit: '天' },
+    { scope: '西南基地', value: 19.2029, unit: '天' },
+  ]);
+  let content;
+  options.send = async ({ card }) => {
+    content = card.elements[0].text.content;
+    return { messageId: 'om_digest' };
+  };
+  await drainNotifications(options);
+  const [summary, ...objects] = content.split('\n\n');
+  assert.match(summary, /\*\*指标\*\* 指标\n\*\*预警设置人\*\* 测试设置人/);
+  assert.match(summary, /\*\*检测范围\*\* 品类\n\*\*统计期间\*\* 2026-11/);
+  assert.equal(objects.length, 3);
+  assert.match(objects[0], /遂平基地\n\*\*当前值\*\* 13\.8天；\*\*风险 \/ 状态\*\* 严重 \/ 活跃/);
+  assert.match(objects[1], /郑州基地\n\*\*当前值\*\* 12\.9天；\*\*风险 \/ 状态\*\* 预警 \/ 活跃/);
+  assert.match(objects[2], /西南基地\n\*\*当前值\*\* 19\.2天/);
+  assert.doesNotMatch(objects.join('\n'), /预警设置人|检测范围|统计期间| · 指标/);
+});
+test('values and periods that differ remain with their own object, even if a subset matches', async () => {
+  const options = fixture(3, 'task', 'run', [
+    {},
+    {},
+    { period: '2026-12', scopeType: '基地', metricName: '可发货天数', value: 4, unit: '天' },
+  ]);
+  let content;
+  options.send = async ({ card }) => {
+    content = card.elements[0].text.content;
+    return { messageId: 'om_digest' };
+  };
+  await drainNotifications(options);
+  const [summary, ...objects] = content.split('\n\n');
+  assert.doesNotMatch(summary, /统计期间|检测范围|\*\*指标\*\*/);
+  assert.match(objects[0], /指标 94\.0%.*品类.*2026-11/);
+  assert.match(objects[1], /指标 94\.0%.*品类.*2026-11/);
+  assert.match(objects[2], /可发货天数 4\.0天.*基地.*2026-12/);
+});
 test('forty warning objects for one recipient produce exactly one bounded digest and share the receipt', async () => {
   const options = fixture();
   const sent = [];
