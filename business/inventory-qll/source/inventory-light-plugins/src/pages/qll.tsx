@@ -65,7 +65,7 @@ const KPI_COPY: Record<
 > = {
   inventoryLevel: {
     title: '当前库存',
-    definition: '当前库存＝基地库存＋分仓库存；含渠道时加上客户在仓库存。',
+    definition: '公司体系库存＝同一快照日的基地库存＋分仓库存（件）。客户库存分列（箱）。',
     eyebrow: '公司系统 / 全渠道观察',
     target: '目标库存',
   },
@@ -73,7 +73,7 @@ const KPI_COPY: Record<
     title: '库存周转',
     eyebrow: '近30日动销',
     target: '参考口径',
-    definition: '同范围库存合计÷近30日日均动销合计；含渠道时纳入客户在仓和匹配动销。',
+    definition: '同范围库存合计÷同范围日均需求或动销量。客户库存支撑天数分列。',
   },
   aging: {
     title: '平均货龄',
@@ -83,7 +83,7 @@ const KPI_COPY: Record<
   },
   fulfillment: {
     title: '订单满足率',
-    definition: '当月基地与分仓已发货客户订单：逐行限额发货量合计÷同池订货量合计。',
+    definition: '本月已下单的考核订单，满足率＝1−同范围缺货量合计÷最终需求量合计。',
     eyebrow: '本自然月',
     target: '目标满足率',
   },
@@ -134,9 +134,9 @@ export function KpiCard({
   const primaryValue =
     metricKey === 'orderGap'
       ? (workspace.orderExecution?.currentOrderQty ?? null)
-      : workspace.scope === 'all-channel'
-        ? metric.current
-        : (inventoryMetric?.companyCurrent ?? metric.current);
+      : inventoryMetric
+        ? inventoryMetric.companyCurrent
+        : metric.current;
   const cardValue = (value: number | null, unit: MetricValue['unit']) =>
     value == null ? '-' : formatMetric(value, unit, true).replace(/\s+/g, '');
   const splitValues =
@@ -210,13 +210,15 @@ export function KpiCard({
     workspace.scope === 'all-channel' && channelSnapshot ? (
       metricKey === 'inventoryLevel' ? (
         <>
-          <div title={channelSnapshot.date ? `客户库存快照：${channelSnapshot.date}` : undefined}>
+          <div
+            title={`来源：经销商库存。快照：${channelSnapshot.date ?? '未知'}。覆盖率：未提供。`}
+          >
             <dt>{'客户在仓'}</dt>
-            <dd>{cardValue(channelSnapshot.inventory, '件')}</dd>
+            <dd>{cardValue(channelSnapshot.inventory, '箱')}</dd>
           </div>
           <div>
             <dt>{'客户在途'}</dt>
-            <dd>{cardValue(channelSnapshot.inTransit, '件')}</dd>
+            <dd>{cardValue(channelSnapshot.inTransit, '箱')}</dd>
           </div>
         </>
       ) : metricKey === 'turnover' ? (

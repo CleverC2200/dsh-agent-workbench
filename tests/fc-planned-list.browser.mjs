@@ -35,7 +35,7 @@ const bundle = await build({
 });
 const js = bundle.outputFiles.find((file) => file.path.endsWith('.js')).text;
 const css = bundle.outputFiles.find((file) => file.path.endsWith('.css')).text;
-test('manual plan results, ten-row pagination and CSV all use the same recalculated order', async (t) => {
+test('late-month preview, ten-row pagination and CSV rank by the same next-month target', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({
@@ -55,6 +55,7 @@ test('manual plan results, ten-row pagination and CSV all use the same recalcula
     inventory_qty: 50,
     available_qty: 25,
     current_order_demand: 0,
+    current_order_shortage: 0,
     current_order_remaining: 0,
     calculation_order_remaining: 0,
     open_transfer_reported_qty: 0,
@@ -120,34 +121,34 @@ test('manual plan results, ten-row pagination and CSV all use the same recalcula
       warehouseName: '测试分仓',
       sku: row.sku,
       productName: row.material_name,
-      month: '2026-10',
+      month: '2026-11',
       category: '汤圆',
       materialGroup: '测试组',
-      outboundQty: (i + 1) * 31,
+      outboundQty: (i + 1) * 30,
       transferQty: 0,
     })),
   );
   await expect(list.getByRole('button', { name: 'S25', exact: true })).toBeVisible();
   await expect(list.locator('tbody > tr')).toHaveCount(10);
-  await expect(list.getByRole('spinbutton', { name: 'S25实际补货量' })).toHaveValue('225');
-  await expect(list.locator('tfoot [data-column="recommended_qty"]')).toHaveText('2,645');
+  await expect(list.getByRole('spinbutton', { name: 'S25实际补货量' })).toHaveValue('200');
+  await expect(list.locator('tfoot [data-column="recommended_qty"]')).toHaveText('2,100');
   await list
     .getByRole('group', { name: '补货筛选' })
     .getByRole('button', { name: '低于建议', exact: true })
     .click();
-  await expect(list).toContainText('共 23 条');
+  await expect(list).toContainText('共 20 条');
   await list.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(list.getByRole('button', { name: 'S15', exact: true })).toBeVisible();
   await expect(list.getByRole('button', { name: 'S25', exact: true })).toHaveCount(0);
-  await expect(list.locator('tfoot [data-column="recommended_qty"]')).toHaveText('2,645');
+  await expect(list.locator('tfoot [data-column="recommended_qty"]')).toHaveText('2,100');
   const downloadPromise = page.waitForEvent('download');
   await list.getByRole('button', { name: 'CSV', exact: true }).click();
   const download = await downloadPromise;
   const csv = await readFile(await download.path(), 'utf8');
   const records = csv.trim().split('\r\n');
-  assert.equal(records.length, 24);
+  assert.equal(records.length, 21);
   assert.match(records[1], /S25/);
-  assert.match(records.at(-1), /S03/);
+  assert.match(records.at(-1), /S06/);
   assert.equal(
     calls
       .filter((call) => call.queryId === 'replenishment.detail.atomic')

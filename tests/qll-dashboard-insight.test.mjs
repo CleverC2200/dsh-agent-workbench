@@ -31,10 +31,10 @@ test('company insight uses physical stock and retains channel signal with switch
   assert.equal(off.totals.companyInventory, 150);
   assert.equal(on.totals.companyInventory, 150);
   assert.equal(off.totals.displayedInventory, 150);
-  assert.equal(on.totals.displayedInventory, 170);
-  assert.match(on.channel.usage, /计入主值/);
+  assert.equal(on.totals.displayedInventory, 150);
+  assert.match(on.channel.usage, /分列/);
   assert.equal(off.channel.inventory, 20);
-  assert.match(off.channel.usage, /未计入主值/);
+  assert.match(off.channel.usage, /未启用/);
   assert.equal(off.rankings, null);
   assert.equal(off.totals.currentOrderShortage, null);
   assert.equal(
@@ -56,7 +56,7 @@ test('different inventory dates do not become one company total', () => {
   assert.match(evidence.coverage.missing.join(' '), /快照不同日/);
 });
 
-test('chain turnover divides summed stock by summed daily movement and includes matched channel rows', () => {
+test('chain turnover divides summed stock by summed daily movement and keeps channel separate', () => {
   const parts = {
     health: { summary: { total_qty: 100 }, snapshotDate: '2026-11-02' },
     'branch-stock': { summary: { total_qty: 50 }, snapshotDate: '2026-11-02' },
@@ -88,15 +88,12 @@ test('chain turnover divides summed stock by summed daily movement and includes 
   assert.equal(off.baseTurnover, 10);
   assert.equal(off.branchTurnover, 2.5);
   assert.equal(off.turnover, 5);
-  assert.equal(on.inventory, 270);
-  assert.equal(on.turnoverInventory, 240);
-  assert.equal(on.turnoverDaily, 60);
-  assert.equal(on.turnover, 4);
-  assert.equal(
-    chainStockMetrics({ ...parts, 'channel-overview': undefined }, true).inventory,
-    null,
-  );
-  assert.equal(chainStockMetrics({ ...parts, 'channel-overview': undefined }, true).turnover, null);
+  assert.equal(on.inventory, 150);
+  assert.equal(on.turnoverInventory, 150);
+  assert.equal(on.turnoverDaily, 30);
+  assert.equal(on.turnover, 5);
+  assert.equal(chainStockMetrics({ ...parts, 'channel-overview': undefined }, true).inventory, 150);
+  assert.equal(chainStockMetrics({ ...parts, 'channel-overview': undefined }, true).turnover, 5);
   const zero = {
     ...parts,
     'channel-overview': {

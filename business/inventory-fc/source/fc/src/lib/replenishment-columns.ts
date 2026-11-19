@@ -54,7 +54,7 @@ export const REPLENISHMENT_COLUMN_HINTS: Record<string, string> = {
   transferredQty: '本月调拨入库 + 本月下单未发 + 本月发货未收；各阶段去重，任一未核实则合计待核实',
   inTransitQty: '未发调拨订单量 + 已发未收调拨量；按入库分仓归属，跨月份统计全部未完成量',
   historicalTurnoverDays: '可用库存 ÷ 近30日日均出库量；当前缺少经核实的 SKU 级近30日出库数据',
-  forecastTurnoverDays: '现库存 ÷ 展望30日日均出货；分母为0显示—',
+  forecastTurnoverDays: '（可用库存＋调拨在途量）÷ 展望30日日均出货，分母为0时显示—',
   currentTransferQty: '人工计划优先；否则 max(0, 安全天数×本月计划日均 - 可用库存 + 本月出货计划)',
   nextTransferQty: '人工计划优先；否则 max(0, 安全天数×次月计划日均 - 预计月末库存 + 次月出货计划)',
   safetyDays: '补货周期 + 3天备货期',

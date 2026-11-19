@@ -13,7 +13,7 @@ import { startDashboardTiming } from '../../business/shared/dashboard-timing.js'
 import { startWorkbenchStagedRead } from './staged-facts.mjs';
 import { workbenchPresentation, workbenchBaseIncluded } from './live-presentation.mjs';
 import { createWorkbenchPresentationCache, createWorkbenchEvidenceCache, createWorkbenchPeriodCacheLifecycle, createWorkbenchScopedFactsCache } from './presentation-cache.mjs';
-import { shippableDaysTarget, performanceStyleVersion, metricTarget } from './performance-rules.mjs';
+import { shippableDaysTarget, performanceStyleVersion, metricTarget, workbenchMetricState } from './performance-rules.mjs';
 import { reusableWorkbenchFacts, compatibleWorkbenchFacts, retainableWorkbenchFacts } from './metric-model.mjs';
 import { publishReport } from './publication.js';
 import { mountReportImport } from './report-import.mjs';
@@ -2296,8 +2296,8 @@ const topMetricCards = [
     label: '60天及以上货龄占比',
     value: '2.05',
     unit: '%',
-    target: '越低越好',
-    status: '达标',
+    target: metricTarget('货龄（>60天库存占比）'),
+    status: workbenchMetricState('货龄（>60天库存占比）', 2.05),
     footer: '本周货龄占比 1.90%',
   },
   {

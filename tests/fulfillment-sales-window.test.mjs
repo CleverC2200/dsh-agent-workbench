@@ -495,7 +495,7 @@ test('shared recipients see read-only details and return without submitting or e
       assert.equal(dom.window.document.getElementById('submit').hidden, true);
       assert.equal(dom.window.document.getElementById('orderEditor').dataset.page, 'details');
       assert.equal(dom.window.document.getElementById('cancel').textContent, '返回');
-      assert.match(dom.window.document.getElementById('orderEditor').textContent, /指定销售/);
+      assert.match(dom.window.document.getElementById('orderEditor').textContent, /指定人员/);
       dom.window.document.getElementById('submit').click();
       assert.equal(requests.length, 1);
     } finally {

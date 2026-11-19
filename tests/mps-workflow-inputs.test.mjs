@@ -1417,10 +1417,15 @@ test('新版产品源缺目标基地或只有另一基地系数时，不能落�
   }
 });
 
-test('缺基地历史SKU单列后其它SKU继续，合法全国基数和源记录保留', () => {
+test('缺基地历史不参与拆分，合法全国实绩和原始发货记录保留', () => {
   const { source, snapshot } = partialDemandFixture();
   source.historyAnnualRead = { status: 'ready' };
-  source.historyAnnual.periods[0].rows.push({ 基地: '', 产品编码: 'B', 数量: 50 });
+  source.historyAnnual.periods[0].rows.push(
+    { 基地: '', 产品编码: 'B', 大类: '数仓点心', 数量: 50 },
+    { 基地: '', 产品编码: 'B', 大类: '数仓点心', 数量: 0 },
+    { 基地: '', 产品编码: 'A', 大类: '数仓点心', 数量: null },
+    { 基地: '', 产品编码: 'A', 大类: '数仓面食', 数量: 20 },
+  );
   for (const period of source.sourceChecks.periods) period.history.rows[0]['基地'] = '';
   const before = structuredClone(source);
   const result = buildMpsWorkflow(source, null, snapshot);
@@ -1431,10 +1436,13 @@ test('缺基地历史SKU单列后其它SKU继续，合法全国基数和源记�
       .filter((row) => row.month === source.month)
       .every((row) => row.code === 'A' && row.demand !== null),
   );
-  assert.ok(
-    result.excludedShipments
-      .find((row) => row.code === 'B')
-      .missing.some((reason) => reason.includes('上一财年发货')),
+  assert.equal(result.excludedShipments.length, 1);
+  assert.equal(result.excludedShipments[0].code, 'B');
+  assert.deepEqual(
+    result.poolExceptions.other
+      .filter((row) => row.source === 'history' && !row.base)
+      .map((row) => row.quantity),
+    [50, 0, null, 20],
   );
   assert.equal(result.excludedSources.filter((row) => row.code === 'B').length, 0);
 });
@@ -1557,22 +1565,36 @@ test('只配置成型机时保留真实隧道，成型机不会成为替代隧�
   assert.ok(input.resourceLoads.some((row) => row.resourceId === 'F'));
 });
 
-test('老品历史缺基地时隔离全部直接引用新品，其他有效单品继续且源值不改', () => {
+test('历史占比使用同基地的当前或替换编码，池外编码仅保留来源明细', () => {
   const { source, snapshot } = partialDemandFixture();
   source.products.push({ ...source.products[0], 产品编码: 'NEW', 产品名称: '新品', 老品编码: 'A' });
   source.report.push({ 月份: source.month, 基地: '甲', 产品编码: 'NEW', 月初数量: 50 });
-  source.historyAnnual.periods[0].rows.push({ 基地: '', 产品编码: 'A', 数量: 50 });
+  source.historyAnnual.periods[0].rows.push(
+    { 基地: '', 产品编码: 'A', 大类: '数仓点心', 数量: 50 },
+    { 基地: '甲', 产品编码: 'OUTSIDE', 大类: '点心', 数量: 999 },
+    { 基地: '甲', 产品编码: 'OLD', 大类: '点心', 数量: 20 },
+  );
+  source.products.find((row) => row['产品编码'] === 'NEW')['老品编码'] = 'OLD';
   snapshot.rows[1] = { ...snapshot.rows[1], fin: 200, end: 0, missingFields: [] };
   snapshot.rows.push({ base: '甲', code: 'NEW', category: '点心', fin: 50, end: 0 });
   const before = structuredClone({ source, snapshot });
   const result = buildMpsWorkflow(source, null, snapshot);
-  assert.ok(
-    result.excludedShipments
-      .find((row) => row.code === 'NEW')
-      ?.missing.some((reason) => reason.includes('A') && reason.includes('缺基地')),
+  const currentRows = result.rows.filter((row) => row.month === source.month);
+  assert.equal(result.excludedShipments.length, 0);
+  assert.deepEqual(
+    currentRows.map((row) => [row.code, row.historyQuantity, row.historyShare]),
+    [
+      ['A', 60, 60 / 120],
+      ['B', 40, 40 / 120],
+      ['NEW', 20, 20 / 120],
+    ],
   );
-  assert.ok(result.rows.length > 0 && result.rows.every((row) => row.code === 'B'));
-  assert.equal(result.categoryComputation.bases[0].actual, 3000);
+  assert.ok(currentRows.every((row) => row.demand !== null));
+  assert.deepEqual(
+    result.poolExceptions.history.map(({ code, quantity }) => [code, quantity]),
+    [['OUTSIDE', 999]],
+  );
+  assert.equal(result.categoryComputation.bases[0].actual, 3300);
   assert.deepEqual({ source, snapshot }, before);
 });
 

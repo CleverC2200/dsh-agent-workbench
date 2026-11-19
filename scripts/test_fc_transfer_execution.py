@@ -51,7 +51,7 @@ class CurrentTransferStatus(unittest.TestCase):
         self.f.db.execute("UPDATE agents_scm_warehouse_transfer_plan_data_d SET transfer_onway_qty=5,transfer_prepare_qty=2")
         r = self.sku()
         self.assertEqual(r['open_transfer_reported_qty'], 7)
-        self.assertEqual(r['recommended_qty'], 68)
+        self.assertEqual(r['recommended_qty'], 43)
 
 
 if __name__ == '__main__':

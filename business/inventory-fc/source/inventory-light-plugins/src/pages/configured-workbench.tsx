@@ -1,3 +1,6 @@
+import { FcWarehouseTabs } from './fc-warehouse-tabs';
+import './fc-navigation.css';
+import { mergeFcSummaries } from '../../../../../shared/fc-overview-merge';
 import { inventoryCacheTtl } from '../../../../../shared/inventory-cache-policy';
 import { resolveFcDataDay } from '../../../../../shared/fc-data-day';
 import { useQueryIdentity } from '../../../../../shared/use-query-identity';
@@ -31,10 +34,11 @@ import {
 import { configuredCycleState } from '../native/memory-storage';
 import { Modal } from '../dsh-ui/controls';
 import { WarehouseSelect } from './fc/components/warehouse-select';
+import { WorkbenchSearch } from '../../../../../shared/workbench-search';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
-import { Fragment, useState, useEffect, useRef, useMemo, useId } from 'react';
+import { useState, useEffect, useRef, useMemo, useId } from 'react';
 import config from '../../../../sql.config.json';
 import { readConfiguredFacts } from '../../../../../shared/configured-facts';
 import { fcCurrentMetric } from '../../../../../shared/fc-current-metrics';
@@ -153,10 +157,14 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
     base: fcBaseWarehouses[0].code,
   });
   const [warehouse, setWarehouse] = useState('');
+  const [selectedWarehouses, setSelectedWarehouses] = useState<string[]>([]);
+  const [management, setManagement] = useState<'overview' | 'actions'>('overview');
+  const [operationSearch, setOperationSearch] = useState('');
   const listStates = useRef<Record<string, ConfiguredListState>>({});
   const orderStates = useRef<Record<string, { warehouse: string; shortageOnly: boolean }>>({});
   const searches = useRef<Record<string, string>>({});
   const changeWarehouse = (next: string) => {
+    if (warehouse === next) return;
     searches.current[warehouse] = listSearch;
     setListSearch(searches.current[next] ?? '');
     groupWarehouses.current[warehouseGroup] = next;
@@ -168,7 +176,9 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
     const selected = groupWarehouses.current[next];
     setListSearch(searches.current[selected] ?? '');
     setWarehouse(selected);
+    setWarehouseLoading(true);
     setWarehouseGroup(next);
+    setOperationSearch('');
     setTrial(null);
   };
   const [warehouses, setWarehouses] = useState<FcWarehouse[]>([]);
@@ -198,7 +208,7 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
     const plans = planningPlans;
     setTrial(null);
     setPlanningError('');
-    if (!plans?.length) return;
+    if (!plans?.length || !warehouse) return;
     const controller = new AbortController();
     void readFcActionRows(
       {
@@ -292,6 +302,8 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
       setWarehouse('');
       setWarehouseGroup('branch');
       groupWarehouses.current = { branch: '', base: fcBaseWarehouses[0].code };
+      setSelectedWarehouses([]);
+      setOperationSearch('');
       listStates.current = {};
       orderStates.current = {};
       searches.current = {};
@@ -301,6 +313,34 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
     window.addEventListener('gea-identity-changed', clear);
     return () => window.removeEventListener('gea-identity-changed', clear);
   }, []);
+  const selectedDirectory = scopedWarehouses.filter((item) =>
+    warehouseGroup === 'base'
+      ? item.warehouse_code === warehouse
+      : !selectedWarehouses.length || selectedWarehouses.includes(item.warehouse_code),
+  );
+  useEffect(() => {
+    if (
+      warehouseGroup === 'branch' &&
+      management === 'actions' &&
+      !warehouseLoading &&
+      !selectedDirectory.some((item) => item.warehouse_code === warehouse)
+    ) {
+      changeWarehouse(selectedDirectory[0]?.warehouse_code ?? '');
+    }
+  }, [warehouseGroup, management, warehouseLoading, selectedDirectory, warehouse]);
+  const multiWarehouseCodes =
+    warehouseGroup === 'branch' && selectedWarehouses.length > 1 ? selectedWarehouses : undefined;
+  const overviewWarehouse =
+    warehouseGroup === 'base'
+      ? warehouse
+      : selectedWarehouses.length === 1
+        ? selectedWarehouses[0]
+        : '';
+  const overviewScope = multiWarehouseCodes?.join(',') || overviewWarehouse;
+  const overviewName = overviewScope
+    ? selectedDirectory.map((item) => item.warehouse_name ?? item.warehouse_code).join('、') ||
+      overviewScope
+    : '全部分仓';
   const scopeFilters: Record<string, string> = warehouse ? { warehouse_code: warehouse } : {};
   const { parts, errors, busy } = useConfiguredOverview(
     config,
@@ -313,28 +353,42 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
       (id) => !['shipments', 'branch-supply', 'branch-supply-current'].includes(id),
     ),
     cycleRules,
-    warehouse,
+    overviewWarehouse,
     cycleWarehouse,
+    multiWarehouseCodes,
   );
   const order = parts.orders?.summary,
     plan = parts.replenishment?.summary;
-  const trialActive = trial?.scope === fcTrialScope(date, cycleDays, warehouse);
+  const trialActive =
+    !!overviewWarehouse && trial?.scope === fcTrialScope(date, cycleDays, overviewWarehouse);
   const recommended = trialActive
     ? trial.recommended
     : (knownNumber(plan?.recommended_qty) ?? knownNumber(plan?.known_recommended_qty));
   const missingRecommendations = trialActive
     ? trial.missingCount
     : (knownNumber(plan?.missing_calculation_count) ?? 0);
+  const forecastDays = trialActive
+    ? trial.forwardTurnover
+    : knownNumber(plan?.forecast_turnover_days);
+  const targetTurnQty = knownNumber(plan?.target_turn_qty);
+  const targetTurnDaily = knownNumber(plan?.target_turn_daily);
+  const targetTurnover = trialActive
+    ? trial.targetTurnover
+    : targetTurnQty !== null && targetTurnDaily !== null && targetTurnDaily > 0
+      ? targetTurnQty / targetTurnDaily
+      : null;
+  const reviewTurnover = knownNumber(plan?.historical_turnover_days);
+  const turnoverGap =
+    reviewTurnover !== null && targetTurnover !== null ? reviewTurnover - targetTurnover : null;
   const branchStock = parts['branch-stock']?.summary;
   const insightEvidence = branchDashboardEvidence({
-    warehouseCode: warehouse,
-    warehouseName:
-      scopedWarehouses.find((item) => item.warehouse_code === warehouse)?.warehouse_name ||
-      '全部分仓',
+    warehouseCode: overviewScope,
+    warehouseName: overviewName,
     asOf: date,
     cycleDays,
     parts,
     localPlanTrial: !!trialActive,
+    forecastDays,
     recommendedQty: recommended,
     missingCalculationCount: missingRecommendations,
     currentOrderShortageQty: currentShortageSum(parts['current-shortage']?.rows, 'shortage'),
@@ -343,31 +397,28 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
   const insightAnswer = modelInsight.status === 'ready' ? modelInsight.answer : undefined;
   useEffect(() => {
     updateContext('dashboardAIInsight', {
-      scope: warehouse || '全部分仓',
+      scope: overviewScope || '全部分仓',
       status: modelInsight.status,
       source: 'model',
       text: modelInsight.status === 'ready' ? modelInsight.answer : undefined,
     });
-  }, [warehouse, modelInsight.status, insightAnswer]);
+  }, [overviewScope, modelInsight.status, insightAnswer]);
   const currentDemand = fcCurrentMetric(parts['current-shortage']?.rows, 'demand');
   const currentAllocated = fcCurrentMetric(parts['current-shortage']?.rows, 'allocated');
   const currentGap = fcCurrentMetric(parts['current-shortage']?.rows, 'shortage');
   const cards = [
     {
       title: '当前库存',
-      description: '周转按同一批有效库存与动销或计划计算。',
+      description:
+        '回顾周转用当前库存除以近30日日均发货量。展望周转用可用库存加调拨在途量，除以未来30日日均计划出货量。按同范围合计后计算。',
       value: knownNumber(branchStock?.total_qty),
       unit: '件',
       color: 'blue',
       details: [
-        ['回顾周转', knownNumber(plan?.historical_turnover_days), '天'],
-        [
-          '展望周转',
-          trial?.scope === fcTrialScope(date, cycleDays, warehouse)
-            ? trial.forwardTurnover
-            : knownNumber(plan?.forecast_turnover_days),
-          '天',
-        ],
+        ['回顾周转', reviewTurnover, '天'],
+        ['展望周转（含在途）', forecastDays, '天'],
+        ['目标周转', targetTurnover, '天'],
+        ['天数差额', turnoverGap, '天'],
       ],
     },
     {
@@ -382,13 +433,13 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
     },
     {
       title: '订单满足率',
-      description: '当月已发货客户订单。',
+      description: '当月考核订单，按同范围最终需求与缺货量统计。',
       value: fulfillmentPercent(order),
       unit: '%',
       color: 'green',
       details: [
-        ['已发订单量', knownNumber(order?.fulfillment_order_quantity), '件'],
-        ['限额发货量', knownNumber(order?.fulfillment_shipped_quantity), '件'],
+        ['考核需求量', knownNumber(order?.fulfillment_order_quantity), '件'],
+        ['满足量', knownNumber(order?.fulfillment_shipped_quantity), '件'],
       ],
     },
     {
@@ -415,7 +466,7 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
     },
   ];
   return (
-    <main className={`agent-root ${common.root}`}>
+    <main className={`agent-root fc-redesign ${common.root}`}>
       <div className="agent-shell">
         <BusinessToolbar
           filters={
@@ -426,14 +477,21 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
                 id={warehouseGroupId}
               />
               <WarehouseSelect
+                key={warehouseGroup}
                 label={warehouseGroup === 'base' ? '选择基地仓' : '选择分仓'}
-                value={warehouse}
+                value={warehouseGroup === 'base' ? warehouse : ''}
+                values={warehouseGroup === 'branch' ? selectedWarehouses : undefined}
+                onValuesChange={(values) => {
+                  setSelectedWarehouses(values);
+                  if (values.length === 1) changeWarehouse(values[0]);
+                }}
                 disabled={warehouseLoading}
                 options={[
                   ...(warehouseGroup === 'branch'
                     ? [{ id: '', name: warehouseLoading ? '分仓加载中…' : '全部分仓' }]
                     : []),
-                  ...(warehouse &&
+                  ...(warehouseGroup === 'base' &&
+                  warehouse &&
                   !scopedWarehouses.some((item) => item.warehouse_code === warehouse)
                     ? [fcWarehouseOption({ warehouse_code: warehouse })]
                     : []),
@@ -481,22 +539,34 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
             </LocalQueryForm>
           }
           navigation={
-            <div className="steps" aria-label="运营步骤">
-              {['监控指标', '缺货订单', '补货下单', '滞库消化', '大日期处理'].map((s, i) => (
-                <Fragment key={s}>
+            <div className="fc-navigation-stack">
+              <nav className="fc-management-switch" aria-label="管理视图">
+                {(
+                  [
+                    ['overview', '运营管理'],
+                    ['actions', '操作管理'],
+                  ] as const
+                ).map(([id, label]) => (
                   <button
-                    className={i === 0 ? 'active' : ''}
-                    onClick={() => {
-                      if (i === 1) setTab('orders');
-                      if (i >= 2) setTab('replenishment');
-                    }}
+                    key={id}
+                    type="button"
+                    className={management === id ? 'active' : ''}
+                    aria-current={management === id ? 'page' : undefined}
+                    onClick={() => setManagement(id)}
                   >
-                    <i>{i + 1}</i>
-                    <span>{s}</span>
+                    {label}
                   </button>
-                  {i < 4 && <b aria-hidden="true">→</b>}
-                </Fragment>
-              ))}
+                ))}
+              </nav>
+              {management === 'actions' && warehouseGroup === 'branch' && (
+                <FcWarehouseTabs
+                  rows={selectedDirectory}
+                  value={warehouse}
+                  onChange={changeWarehouse}
+                  loading={warehouseLoading}
+                  all={selectedWarehouses.length === 0}
+                />
+              )}
             </div>
           }
         />
@@ -530,170 +600,188 @@ function WorkbenchBody({ dataDay, onDataRefresh }: { dataDay: string; onDataRefr
               }}
             />
 
-            <div
-              className={`kpi-grid safety-stock-kpis fc-compact-kpis ${common.kpis}`}
-              data-overview-cards="fc"
-              aria-busy={busy}
-            >
-              {cards.map((c) => (
-                <article
-                  key={c.title}
-                  className={`kpi-card ${c.color}`}
-                  title={[
-                    c.title === '平均货龄'
-                      ? '按有效批次库存数量加权；批次货龄为库存快照日减生产日。最大货龄见货龄结构明细。'
-                      : c.description,
-                    c.title === '待补货量' && missingRecommendations > 0
-                      ? `已忽略 ${missingRecommendations} 项异常或缺失记录。`
-                      : null,
-                    c.title === '当前订单' && c.partial
-                      ? '按有效记录计算，明细中缺失项显示 -。'
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
+            {management === 'overview' && (
+              <>
+                <div
+                  className={`kpi-grid safety-stock-kpis fc-compact-kpis ${common.kpis}`}
+                  data-overview-cards="fc"
+                  aria-busy={busy}
                 >
-                  <div className="kpi-title">
-                    <span>{c.title}</span>
-                  </div>
-                  <div className={`kpi-value ${c.color}`}>
-                    {formatChainValueParts(c.value, c.unit).value}
-                    {formatChainValueParts(c.value, c.unit).unit && (
-                      <small>{formatChainValueParts(c.value, c.unit).unit}</small>
-                    )}
-                  </div>
-                  <dl>
-                    {c.details.map(([label, value, unit]) => (
-                      <div key={String(label)}>
-                        <dt>{label}</dt>
-                        <dd>{show(value as number | null, String(unit))}</dd>
+                  {cards.map((c) => (
+                    <article
+                      key={c.title}
+                      className={`kpi-card ${c.color}`}
+                      title={[
+                        c.title === '平均货龄'
+                          ? '按有效批次库存数量加权；批次货龄为库存快照日减生产日。最大货龄见货龄结构明细。'
+                          : c.description,
+                        c.title === '待补货量' && missingRecommendations > 0
+                          ? `已忽略 ${missingRecommendations} 项异常或缺失记录。`
+                          : null,
+                        c.title === '当前订单' && c.partial
+                          ? '按有效记录计算，明细中缺失项显示 -。'
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                    >
+                      <div className="kpi-title">
+                        <span>{c.title}</span>
                       </div>
-                    ))}
-                  </dl>
-                </article>
-              ))}
-            </div>
-            <section
-              className="priority-analysis fc-dashboard-insight"
-              aria-label="AI 洞察"
-              aria-busy={modelInsight.status === 'loading'}
-            >
-              <h3>
-                <span className="analysis-label">AI 洞察</span>
-              </h3>
-              <p role={modelInsight.status === 'error' ? 'status' : undefined}>
-                {modelInsight.status === 'ready'
-                  ? modelInsight.answer?.replace(/\s*\n+\s*/g, ' ')
-                  : modelInsight.status === 'error'
-                    ? '-'
-                    : 'AI 洞察生成中…'}
-              </p>
-            </section>
-            <section className="fc-list-panel" aria-label="库存业务列表">
-              <nav className="tabs dealer-style-tabs" aria-label="库存业务页签">
-                {tabs.map(([id, label]) => (
-                  <button
-                    key={id}
-                    className={tab === id ? 'active' : ''}
-                    aria-current={tab === id ? 'page' : undefined}
-                    onClick={() => setTab(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </nav>
-              <div className="business-panel">
-                {tab === 'orders' ? (
-                  <FcCurrentOrders
-                    key={warehouse}
-                    warehouseCode={warehouse}
-                    initialFilter={orderStates.current[warehouse]}
-                    rememberFilter={(filter) => {
-                      orderStates.current[warehouse] = filter;
-                    }}
-                    config={config}
-                    revision={revision}
-                    onRead={(value) => updateContext('data', value)}
-                  />
-                ) : tab === 'operations' ? (
-                  <OriginalOperations
-                    warehouse={warehouse}
-                    config={config}
-                    date={date}
-                    revision={revision}
-                    search={listSearch}
-                    onSearch={setListSearch}
-                    observations={[
-                      {
-                        severity: missingRecommendations > 0 ? '中' : '高',
-                        title: '按有效周期与计划联动补货',
-                        detail: `建议补货 ${show(cards.find((card) => card.title === '待补货量')?.value ?? null, '件')}；待核实 ${missingRecommendations} 项。`,
-                        suggestedAction: '核对计划来源、实际补货量和调减原因后确认。',
-                      },
-                      {
-                        severity:
-                          (currentShortageSum(parts['current-shortage']?.rows, 'shortage') ?? 0) > 0
-                            ? '高'
-                            : '低',
-                        title: '客户订单缺货',
-                        detail: `当前客户订单缺货 ${show(currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '件')}。`,
-                        suggestedAction: '核对分仓配货及补货。',
-                      },
-                    ]}
-                  />
-                ) : (
-                  <FcConfirmationDirectory.Provider
-                    value={{
-                      rows: warehouses,
-                      loading: warehouseLoading,
-                      error: warehouseError,
-                      retry: () => {
-                        directoryCache.current.clear();
-                        refreshConfiguredQueries();
-                        reloadWarehouses((value) => value + 1);
-                      },
-                    }}
-                  >
-                    <ConfiguredFactsPage
-                      key={[
-                        tab,
-                        date,
-                        warehouse,
-                        revision,
-                        cycleDays,
-                        JSON.stringify(cycleRules),
-                        cycleWarehouse,
-                      ].join(':')}
-                      config={config}
-                      embedded
-                      scopeFilters={tab === 'base' ? {} : scopeFilters}
-                      initialState={
-                        tab === 'base'
-                          ? undefined
-                          : listStates.current[JSON.stringify([warehouse, tab])]
-                      }
-                      rememberState={
-                        tab === 'base'
-                          ? undefined
-                          : (state) => {
-                              listStates.current[JSON.stringify([warehouse, tab])] = state;
-                            }
-                      }
-                      initialFilters={tab === 'base' ? {} : { search: listSearch }}
-                      presentation={originalFcView(config, tab, date)}
-                      businessList={FcConfiguredList}
-                      readFacts={readPlannedFacts}
-                      viewIds={views[tab]}
-                      date={date}
-                      cycleDays={cycleDays}
-                      fcCycleRules={cycleRules}
-                      fcCycleWarehouse={cycleWarehouse}
-                      onRead={(v) => updateContext('data', v)}
-                    />
-                  </FcConfirmationDirectory.Provider>
+                      <div className={`kpi-value ${c.color}`}>
+                        {formatChainValueParts(c.value, c.unit).value}
+                        {formatChainValueParts(c.value, c.unit).unit && (
+                          <small>{formatChainValueParts(c.value, c.unit).unit}</small>
+                        )}
+                      </div>
+                      <dl>
+                        {c.details.map(([label, value, unit]) => (
+                          <div key={String(label)}>
+                            <dt>{label}</dt>
+                            <dd>{show(value as number | null, String(unit))}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+                <section
+                  className="priority-analysis fc-dashboard-insight"
+                  aria-label="AI 洞察"
+                  aria-busy={modelInsight.status === 'loading'}
+                >
+                  <h3>
+                    <span className="analysis-label">AI 洞察</span>
+                  </h3>
+                  <p role={modelInsight.status === 'error' ? 'status' : undefined}>
+                    {modelInsight.status === 'ready'
+                      ? modelInsight.answer?.replace(/\s*\n+\s*/g, ' ')
+                      : modelInsight.status === 'error'
+                        ? '-'
+                        : 'AI 洞察生成中…'}
+                  </p>
+                </section>
+              </>
+            )}
+            {(management === 'overview' ||
+              (!!warehouse &&
+                selectedDirectory.some((item) => item.warehouse_code === warehouse))) && (
+              <section
+                className={`fc-list-panel${management === 'overview' ? ' fc-overview-panel' : ''}`}
+                aria-label="库存业务列表"
+              >
+                {management === 'actions' && (
+                  <nav className="tabs dealer-style-tabs" aria-label="库存业务页签">
+                    {tabs
+                      .filter(([id]) => id !== 'operations')
+                      .map(([id, label]) => (
+                        <button
+                          key={id}
+                          className={tab === id ? 'active' : ''}
+                          aria-current={tab === id ? 'page' : undefined}
+                          onClick={() => setTab(id)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                  </nav>
                 )}
-              </div>
-            </section>
+                <div className="business-panel">
+                  {management === 'overview' ? (
+                    <OriginalOperations
+                      key={overviewScope}
+                      warehouse={overviewWarehouse}
+                      warehouseCodes={multiWarehouseCodes}
+                      config={config}
+                      date={date}
+                      revision={revision}
+                      search={operationSearch}
+                      onSearch={setOperationSearch}
+                      observations={[
+                        {
+                          severity: missingRecommendations > 0 ? '中' : '高',
+                          title: '按有效周期与计划联动补货',
+                          detail: `建议补货 ${show(cards.find((card) => card.title === '待补货量')?.value ?? null, '件')}；待核实 ${missingRecommendations} 项。`,
+                          suggestedAction: '核对计划来源、实际补货量和调减原因后确认。',
+                        },
+                        {
+                          severity:
+                            (currentShortageSum(parts['current-shortage']?.rows, 'shortage') ?? 0) >
+                            0
+                              ? '高'
+                              : '低',
+                          title: '客户订单缺货',
+                          detail: `当前客户订单缺货 ${show(currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '件')}。`,
+                          suggestedAction: '核对分仓配货及补货。',
+                        },
+                      ]}
+                    />
+                  ) : tab === 'orders' ? (
+                    <FcCurrentOrders
+                      key={warehouse}
+                      warehouseCode={warehouse}
+                      initialFilter={orderStates.current[warehouse]}
+                      rememberFilter={(filter) => {
+                        orderStates.current[warehouse] = filter;
+                      }}
+                      config={config}
+                      revision={revision}
+                      onRead={(value) => updateContext('data', value)}
+                    />
+                  ) : (
+                    <FcConfirmationDirectory.Provider
+                      value={{
+                        rows: warehouses,
+                        loading: warehouseLoading,
+                        error: warehouseError,
+                        retry: () => {
+                          directoryCache.current.clear();
+                          refreshConfiguredQueries();
+                          reloadWarehouses((value) => value + 1);
+                        },
+                      }}
+                    >
+                      <ConfiguredFactsPage
+                        key={[
+                          tab,
+                          date,
+                          warehouse,
+                          revision,
+                          cycleDays,
+                          JSON.stringify(cycleRules),
+                          cycleWarehouse,
+                        ].join(':')}
+                        config={config}
+                        embedded
+                        scopeFilters={tab === 'base' ? {} : scopeFilters}
+                        initialState={
+                          tab === 'base'
+                            ? undefined
+                            : listStates.current[JSON.stringify([warehouse, tab])]
+                        }
+                        rememberState={
+                          tab === 'base'
+                            ? undefined
+                            : (state) => {
+                                listStates.current[JSON.stringify([warehouse, tab])] = state;
+                              }
+                        }
+                        initialFilters={tab === 'base' ? {} : { search: listSearch }}
+                        presentation={originalFcView(config, tab, date)}
+                        businessList={FcConfiguredList}
+                        readFacts={readPlannedFacts}
+                        viewIds={views[tab]}
+                        date={date}
+                        cycleDays={cycleDays}
+                        fcCycleRules={cycleRules}
+                        fcCycleWarehouse={cycleWarehouse}
+                        onRead={(v) => updateContext('data', v)}
+                      />
+                    </FcConfirmationDirectory.Provider>
+                  )}
+                </div>
+              </section>
+            )}
           </section>
         </div>
       </div>
@@ -880,6 +968,7 @@ function OriginalOperations({
   revision,
   observations,
   warehouse,
+  warehouseCodes,
   search,
   onSearch,
 }: any) {
@@ -890,21 +979,30 @@ function OriginalOperations({
     void Promise.all(
       ['branch-operations', 'warehouse-outbound'].map(async (id) => {
         try {
-          const result = await readConfiguredFacts(
-            config,
-            id,
-            {
-              asOf: date,
-              filters: warehouse
-                ? id === 'branch-operations'
-                  ? { warehouse_id: warehouse }
-                  : { warehouse_code: warehouse }
-                : {},
-            },
-            { signal: task.signal, summaryOnly: true },
+          const results = await Promise.all(
+            (warehouseCodes?.length ? warehouseCodes : [warehouse]).map(async (code: string) => {
+              const result = await readConfiguredFacts(
+                config,
+                id,
+                {
+                  asOf: date,
+                  filters: code
+                    ? id === 'branch-operations'
+                      ? { warehouse_id: code }
+                      : { warehouse_code: code }
+                    : {},
+                },
+                { signal: task.signal, summaryOnly: true },
+              );
+              if (result.summaryError)
+                throw Object.assign(Error(result.summaryError.message), result.summaryError);
+              return result;
+            }),
           );
-          if (result.summaryError)
-            throw Object.assign(Error(result.summaryError.message), result.summaryError);
+          const result =
+            results.length === 1
+              ? results[0]
+              : { summary: mergeFcSummaries(results.map((result) => result.summary ?? {})) };
           if (!task.signal.aborted)
             setState((old: any) => ({ ...old, parts: { ...old.parts, [id]: result } }));
         } catch (error) {
@@ -914,11 +1012,11 @@ function OriginalOperations({
       }),
     );
     return () => task.abort();
-  }, [date, revision, warehouse]);
+  }, [date, revision, warehouse, JSON.stringify(warehouseCodes)]);
   const cost = parts['branch-operations']?.summary;
   useEffect(() => {
     updateContext('branchOperations', {
-      scope: { warehouseCode: warehouse || '全部分仓', asOf: date },
+      scope: { warehouseCode: warehouseCodes?.join(',') || warehouse || '全部分仓', asOf: date },
       inbound: parts['warehouse-outbound']?.summary?.incoming_qty ?? null,
       outbound: parts['warehouse-outbound']?.summary?.outgoing_qty ?? null,
       cost: cost ?? null,
@@ -926,7 +1024,7 @@ function OriginalOperations({
       definitions:
         '入出库按实际仓库与业务日期，出库为WMS关单delivery_qty件；费用独立，不以源缺失代零。',
     });
-  }, [warehouse, date, parts, errors]);
+  }, [warehouse, JSON.stringify(warehouseCodes), date, parts, errors]);
   const entries = [
     ...observations,
     {
@@ -962,14 +1060,17 @@ function OriginalOperations({
   return (
     <>
       <QueryErrors errors={errors} scope="inventory-fc-resources" />
-      <LocalQueryForm className="panel-actions" onSubmit={(event) => event.preventDefault()}>
+      <LocalQueryForm
+        className="panel-actions fc-overview-filters"
+        onSubmit={(event) => event.preventDefault()}
+      >
         <label>
           SKU／产品名称
-          <input
-            aria-label="运营观察搜索"
+          <WorkbenchSearch
+            label="运营观察搜索"
             placeholder="搜索 SKU／产品名称"
             value={search ?? ''}
-            onChange={(event) => onSearch(event.target.value)}
+            onChange={onSearch}
           />
         </label>
         <button type="button" className="secondary-button" onClick={() => onSearch('')}>
@@ -1010,6 +1111,7 @@ function OriginalOperations({
           </article>
         ))}
       </div>
+      {!warehouse && <p>运营考核合计需按同范围分子、分母汇总。当前来源仅有单仓比例。</p>}
       <div className="resource-grid" aria-label="分仓运营考核">
         {(
           [

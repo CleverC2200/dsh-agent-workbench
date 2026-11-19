@@ -37,7 +37,7 @@ async function setup(t, { directoryError = false } = {}) {
     objectKey: objectName,
     objectName,
     status: '预警',
-    value: 94,
+    value: 94.9871,
     unit: '%',
     period: '2026-11',
     cutoff: '2026-11-16',
@@ -60,7 +60,7 @@ async function setup(t, { directoryError = false } = {}) {
     },
     sessionController: {
       create: async () => ({ sessionId: 'fixture-session' }),
-      prompt: async () => {},
+      prompt: async ({ content }) => calls.push({ path: 'detection-prompt', body: content[0] }),
       async *follow() {
         yield {
           type: 'event',
@@ -145,18 +145,24 @@ test('actual detection orchestration matches configured owners, queues one diges
   );
   assert.equal(f.calls.filter((call) => call.body.operation === 'feishu-recipient').length, 1);
   assert.ok(f.calls.every((call) => call.body.username !== 'self'));
+  const prompt = f.calls.find((call) => call.path === 'detection-prompt').body.text;
+  assert.match(prompt, /四舍五入保留 1 位小数/);
+  assert.match(prompt, /结构化 value、规则阈值和风险判断使用原始精度/);
   const persisted = f.state();
-  let sent = 0;
+  assert.ok(persisted.events.every((event) => event.value === 94.9871 && event.level === '预警'));
+  const sent = [];
   await drainNotifications({
     state: persisted,
     save: async () => {},
     locked: (fn) => fn(),
-    send: async () => {
-      sent++;
+    send: async ({ card }) => {
+      sent.push(card);
       return { messageId: 'om_fixture' };
     },
   });
-  assert.equal(sent, 1);
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].elements[0].text.content, /当前值\*\* 95\.0%.*预警 \/ 活跃/);
+  assert.ok(persisted.events.every((event) => event.notifications[0].status === '已发送'));
   assert.equal((await f.service.runTask('task', 'fixture-run')).id, result.id);
   assert.equal(f.state().runs.length, 1);
 });

@@ -89,10 +89,12 @@ test('confirmation keeps the replenishment list order and quantities for the sam
     });
   });
   await page.goto('http://127.0.0.1:19495/');
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await expect(page.getByRole('button', { name: '有业务', exact: true })).toHaveCount(0);
   await expect(page.getByRole('checkbox', { name: '有业务', exact: true })).toHaveCount(1);
   await page.getByRole('button', { name: '选择分仓', exact: true }).click();
   await page.locator('[role=option][data-value="A110"]').click();
+  await page.keyboard.press('Escape');
   await page.getByRole('checkbox', { name: '需补货', exact: true }).check();
   const list = page.locator('table.replenishment-table');
   await expect(list.getByRole('spinbutton').first()).toHaveValue('80');
@@ -296,6 +298,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(replenishmentCard).toContainText('110.36万件');
   await expect(replenishmentCard).not.toContainText('已忽略');
   await expect(replenishmentCard).toHaveAttribute('title', /已忽略 2 项异常或缺失记录/);
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   const toolbar = page.locator('form[data-business-filters="fc"]');
   for (const width of [1280, 900, 640]) {
     await page.setViewportSize({ width, height: 900 });
@@ -320,7 +323,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await mkdir('.scratch', { recursive: true });
   await toolbar.screenshot({ path: '.scratch/fc-toolbar-inline.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
-  const warehouseSearch = toolbar.getByRole('textbox', { name: '分仓', exact: true });
+  const warehouseSearch = toolbar.getByRole('searchbox', { name: '分仓', exact: true });
   await expect(warehouseSearch).toHaveAttribute('placeholder', '请输入分仓名称或编码');
   for (const term of ['长沙', 'a02']) {
     await warehouseSearch.fill(term);
@@ -331,7 +334,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
           (call) =>
             call.id === 'replenishment.detail.atomic' &&
             call.values.warehouse_search_pattern === '%' + term + '%' &&
-            call.values.warehouse_code_mode === 'all',
+            call.values.warehouse_code === 'A170',
         ),
       )
       .toBe(true);
@@ -341,6 +344,9 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   const freshAfter = await page.evaluate(() => window.queryFreshAfter());
   await picker.click();
   await page.locator('[role=option][data-value="A170"]').click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '运营管理', exact: true }).click();
+
   await expect(firstCard).toContainText('123');
   const ageCard = page
     .locator('[data-overview-cards="fc"] article')
@@ -366,6 +372,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
       ),
     )
     .toBe(true);
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   await expect
     .poll(() =>
@@ -378,12 +385,14 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(picker).toContainText('A170');
   const orderCalls = calls.filter((c) => c.id === 'branch-current-orders.page');
   assert.ok(orderCalls.every((c) => c.values.warehouse_code === 'A170'));
-  await page.getByRole('button', { name: '运营观察', exact: true }).click();
+  await page.getByRole('button', { name: '运营管理', exact: true }).click();
+
   const outboundCard = page.locator('.resource-card').filter({ hasText: '本月出库' });
   await expect(outboundCard).toContainText('4.47万件');
   assert.ok(
     calls.some((c) => c.id === 'warehouse-outbound.summary' && c.values.warehouse_code === 'A170'),
   );
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await page.getByRole('button', { name: '分仓计划', exact: true }).click();
   await expect
     .poll(() =>
@@ -394,6 +403,9 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await page.screenshot({ path: '.scratch/fc-warehouse-selector.png' });
   await picker.click();
   await page.locator('[role=option][data-value=""]').click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '运营管理', exact: true }).click();
+
   await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
   assert.equal(
     calls.filter((c) => c.id === 'branch-warehouse.directory').length,
@@ -413,6 +425,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(picker).toBeVisible();
   await picker.click();
   await page.locator('[role=option][data-value="N417"]').click();
+  await page.keyboard.press('Escape');
   await expect(firstCard).toContainText('123');
   await page.evaluate(() => {
     const now = Date.now();
@@ -429,17 +442,15 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     .toBe(initialDirectoryReads + 2);
   await expect(picker).toContainText('全部分仓');
   await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: '操作分仓' })
+    .getByRole('button', { name: '郑州配送中心', exact: true })
+    .click();
   await page.getByRole('button', { name: '补货确认', exact: true }).click();
   await page.getByRole('button', { name: '提交', exact: true }).click();
   const confirmation = page.getByRole('dialog');
   await expect(confirmation).toBeVisible();
-  await expect(confirmation).toContainText('请先选择本次补货的分仓');
-  assert.equal(
-    releaseConfirmation,
-    undefined,
-    'opening all-warehouse confirmation must not scan every warehouse',
-  );
-  await confirmation.getByLabel('导出补货分仓').selectOption('N417');
   await expect(confirmation).toContainText('正在读取补货清单，请稍候');
   await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toHaveCount(0);
   await expect.poll(() => typeof releaseConfirmation).toBe('function');
@@ -491,28 +502,29 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     )
     .toBe(true);
 
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await page.getByRole('button', { name: '分仓计划', exact: true }).click();
   const planPanel = page.getByRole('region', { name: '分仓计划', exact: true });
-  await planPanel.getByRole('textbox', { name: 'SKU／产品名称', exact: true }).fill('SHARED-SKU');
+  await planPanel.getByRole('searchbox', { name: 'SKU／产品名称', exact: true }).fill('SHARED-SKU');
   await planPanel.getByRole('button', { name: '查询', exact: true }).click();
   await page.getByRole('button', { name: '货龄结构', exact: true }).click();
   const agePanel = page.getByRole('region', { name: '货龄结构', exact: true });
-  await expect(agePanel.getByRole('textbox', { name: 'SKU／产品名称', exact: true })).toHaveValue(
+  await expect(agePanel.getByRole('searchbox', { name: 'SKU／产品名称', exact: true })).toHaveValue(
     'SHARED-SKU',
   );
   await agePanel.getByRole('button', { name: '清空筛选', exact: true }).click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   const orderPanel = page.getByRole('region', { name: '当前订单', exact: true });
   await expect(
-    orderPanel.getByRole('textbox', { name: '客户订单号或下游客户', exact: true }),
+    orderPanel.getByRole('searchbox', { name: '客户订单号或下游客户', exact: true }),
   ).toHaveValue('');
   await orderPanel
-    .getByRole('textbox', { name: '客户订单号或下游客户', exact: true })
+    .getByRole('searchbox', { name: '客户订单号或下游客户', exact: true })
     .fill('CE-SHARED');
   await page.getByRole('button', { name: '补货确认', exact: true }).click();
   const replenishmentPanel = page.getByRole('region', { name: '补货确认', exact: true });
   await expect(
-    replenishmentPanel.getByRole('textbox', { name: 'SKU／产品名称', exact: true }),
+    replenishmentPanel.getByRole('searchbox', { name: 'SKU／产品名称', exact: true }),
   ).toHaveValue('CE-SHARED');
   await replenishmentPanel.getByRole('button', { name: '清空筛选', exact: true }).click();
   await replenishmentPanel.getByLabel('列设置', { exact: true }).click();
@@ -527,7 +539,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   ).toBeChecked();
   await replenishmentPanel.getByRole('button', { name: '恢复默认顺序', exact: true }).click();
 
-  await page.getByRole('button', { name: '运营观察', exact: true }).click();
+  await page.getByRole('button', { name: '运营管理', exact: true }).click();
+
   await expect(page.locator('[aria-label="分仓运营考核"] .resource-card')).toHaveCount(6);
   const operationsDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'CSV', exact: true }).click();
@@ -592,7 +605,8 @@ test('FC aging exposes immediate risk filters, leading risk column and ten-row s
     else if (id.includes('atomic') || id === 'current-shortage.detail')
       rows = [{ page_scope_total: 0, page_row_present: null }];
     else if (id.endsWith('.count') || id.endsWith('_count')) rows = [{ total: 0 }];
-    else if (id === 'branch-warehouse.directory') rows = [];
+    else if (id === 'branch-warehouse.directory')
+      rows = [{ warehouse_code: 'A020', warehouse_name: '遂平分仓', base: '遂平' }];
     else rows = [{ ...Object.fromEntries(q.resultColumns.map((k) => [k, null])), row_count: 0 }];
     await route.fulfill({
       json: {
@@ -604,6 +618,7 @@ test('FC aging exposes immediate risk filters, leading risk column and ten-row s
     });
   });
   await page.goto('http://127.0.0.1:19486/');
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await page.getByRole('button', { name: '货龄结构', exact: true }).click();
   const list = page.getByRole('region', { name: '货龄结构', exact: true });
   const quick = list.getByRole('group', { name: '风险快捷查询' });
@@ -723,7 +738,8 @@ test('FC shows system plans before import and downloads every authorized row thr
     } else if (id.includes('atomic') || id === 'current-shortage.detail')
       rows = [{ page_scope_total: 0, page_row_present: null }];
     else if (id.endsWith('.count') || id.endsWith('_count')) rows = [{ total: 0 }];
-    else if (id === 'branch-warehouse.directory') rows = [];
+    else if (id === 'branch-warehouse.directory')
+      rows = [{ warehouse_code: 'A020', warehouse_name: '遂平分仓', base: '遂平' }];
     else
       rows = [
         { ...Object.fromEntries(query.resultColumns.map((key) => [key, null])), row_count: 0 },
@@ -738,6 +754,7 @@ test('FC shows system plans before import and downloads every authorized row thr
     });
   });
   await page.goto('http://127.0.0.1:19486/');
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await page.getByRole('button', { name: '分仓计划', exact: true }).click();
   const list = page.getByRole('region', { name: '分仓计划', exact: true });
   await expect(list.locator('table').first().locator('tbody tr')).toHaveCount(10);
@@ -865,6 +882,9 @@ test('FC downstream customer orders show dealers, exact SKUs and preserve shippi
   await expect(picker).toBeEnabled();
   await picker.click();
   await page.locator('[role=option][data-value="A020"]').click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
+
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   const list = page.getByRole('region', { name: '当前订单', exact: true });
   await expect(list.getByText('遂平', { exact: true })).toBeVisible();
@@ -882,7 +902,8 @@ test('FC downstream customer orders show dealers, exact SKUs and preserve shippi
     '状态',
   ]);
   await expect(list.getByText('正常', { exact: true })).toBeVisible();
-  await list.getByRole('combobox', { name: '订单状态' }).selectOption('缺口');
+  await list.getByRole('button', { name: '订单状态' }).click();
+  await page.getByRole('option', { name: '缺口', exact: true }).click();
   await expect
     .poll(
       () =>
@@ -892,8 +913,9 @@ test('FC downstream customer orders show dealers, exact SKUs and preserve shippi
     .toBe(true);
   await page.getByRole('button', { name: '货龄结构', exact: true }).click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
-  await expect(list.getByRole('combobox', { name: '订单状态' })).toHaveValue('缺口');
-  await list.getByRole('combobox', { name: '订单状态' }).selectOption('全部');
+  await expect(list.getByRole('button', { name: '订单状态' })).toContainText('缺口');
+  await list.getByRole('button', { name: '订单状态' }).click();
+  await page.getByRole('option', { name: '全部', exact: true }).click();
   await expect
     .poll(
       () =>
@@ -913,7 +935,7 @@ test('FC downstream customer orders show dealers, exact SKUs and preserve shippi
   assert.equal(detailCall.values.customer_code, 'C1');
   assert.ok(!calls.some((call) => call.id === 'current-shortage.detail'));
   await list
-    .getByRole('textbox', { name: '客户订单号或下游客户', exact: true })
+    .getByRole('searchbox', { name: '客户订单号或下游客户', exact: true })
     .fill('CE2600000190');
   await list.getByRole('button', { name: '查询', exact: true }).click();
   await expect
@@ -1023,6 +1045,7 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
     });
   });
   await page.goto('http://127.0.0.1:19487/');
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await expect(page.getByRole('button', { name: '10000034', exact: true })).toBeVisible();
   const actual = page.getByRole('spinbutton', { name: '10000034实际补货量', exact: true });
   await expect(actual).toBeEnabled();
@@ -1100,6 +1123,7 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
   await expect(page.getByRole('button', { name: '10000034', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '选择分仓', exact: true }).click();
   await page.locator('[role=option][data-value="A160"]').click();
+  await page.keyboard.press('Escape');
   await expect(
     page.getByRole('spinbutton', { name: '10000034实际补货量', exact: true }),
   ).toBeEnabled();
@@ -1239,6 +1263,7 @@ test('replenishment quick filters use server scope, product links expand inline 
     });
   });
   await page.goto('http://127.0.0.1:19488/');
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   const needed = page.getByRole('checkbox', { name: '需补货', exact: true });
   await expect(needed).not.toBeChecked();
   await expect(page.getByRole('button', { name: '全部', exact: true })).toHaveAttribute(
@@ -1342,12 +1367,13 @@ test('identity changes reload cards and lists even when both accounts select all
       rows = [
         { ...row, day: '2026-11-02', row_count: 1, total_qty: identity === 'full' ? 1000 : 10 },
       ];
-      if (identity === 'scoped')
+      if (identity === 'scoped' && !resumeInventory)
         await new Promise((resolve) => {
           resumeInventory = resolve;
         });
     } else if (id.startsWith('source.')) rows = [{ day: '2026-11-02' }];
-    else if (id === 'branch-warehouse.directory') rows = [];
+    else if (id === 'branch-warehouse.directory')
+      rows = [{ warehouse_code: 'A020', warehouse_name: '遂平分仓', base: '遂平' }];
     else if (id.includes('atomic')) {
       rows = [
         {
@@ -1374,7 +1400,7 @@ test('identity changes reload cards and lists even when both accounts select all
           invalid: 0,
         },
       ];
-      if (id === 'health.inventory' && identity === 'scoped')
+      if (id === 'health.inventory' && identity === 'scoped' && !resumeInventory)
         await new Promise((resolve) => {
           resumeInventory = resolve;
         });
@@ -1393,14 +1419,18 @@ test('identity changes reload cards and lists even when both accounts select all
   await page.goto('http://127.0.0.1:19491/');
   const card = page.locator('[data-overview-cards="fc"] article').first();
   await expect(card.locator('.kpi-value')).toHaveText('1,000件');
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await expect(page.getByRole('button', { name: 'FULL-SKU', exact: true })).toBeVisible();
   account = 'scoped';
   await page.evaluate(() => window.dispatchEvent(new Event('gea-identity-changed')));
-  await expect(card.locator('.kpi-value')).not.toHaveText('1,000件');
+  await expect(card.locator('.kpi-value')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'FULL-SKU', exact: true })).toHaveCount(0);
   await expect.poll(() => Boolean(resumeInventory)).toBe(true);
   resumeInventory();
+  await page.getByRole('button', { name: '运营管理', exact: true }).click();
   await expect(card.locator('.kpi-value')).toHaveText('10件');
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
+
   await expect(page.getByRole('button', { name: 'SCOPED-SKU', exact: true })).toBeVisible();
   await expect(page.getByText(/当前账号部分展示字段未获返回权限/)).toBeVisible();
   assert.ok(calls.some((c) => c.id === 'source.branch-stock-date' && c.identity === 'scoped'));
@@ -1498,6 +1528,9 @@ test('warehouse type tabs separate three base warehouses and preserve branch sel
   await page.getByRole('button', { name: '选择分仓', exact: true }).click();
   await expect(page.getByRole('option')).toHaveText([/全部分仓/, /南京分仓（A160）/]);
   await page.locator('[role=option][data-value="A160"]').click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
+
   await expect
     .poll(
       () =>
@@ -1537,9 +1570,11 @@ test('warehouse type tabs separate three base warehouses and preserve branch sel
           .warehouse_code,
     )
     .toBe('N436');
+  await page.getByRole('button', { name: '运营管理', exact: true }).click();
   await expect(
     page.locator('.kpi-card').filter({ hasText: '当前库存' }).locator('.kpi-value'),
   ).toContainText('6.35');
+  await page.getByRole('button', { name: '操作管理', exact: true }).click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   await expect
     .poll(

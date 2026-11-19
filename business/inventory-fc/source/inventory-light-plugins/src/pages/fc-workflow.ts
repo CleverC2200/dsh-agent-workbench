@@ -204,6 +204,14 @@ export function validateFcImport(rows: Record<string, string | number>[], source
   return { plans, errors };
 }
 
+function forecastSupply(row: FcRow) {
+  const available = knownNumber(row.available_qty);
+  const inTransit = knownNumber(row.in_transit);
+  return available !== null && available >= 0 && inTransit !== null && inTransit >= 0
+    ? available + inTransit
+    : null;
+}
+
 export function applyFcPlan(row: FcRow, plans: ImportedPlan[], asOf: string, cycleDays: number) {
   const month = asOf.slice(0, 7);
   const [year, monthNumber] = month.split('-').map(Number);
@@ -236,35 +244,52 @@ export function applyFcPlan(row: FcRow, plans: ImportedPlan[], asOf: string, cyc
   const nextTransfer = monthly(next, 'transferQty', known(row.period_next_transfer));
   const days = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
   const nextDays = new Date(Date.UTC(year, monthNumber + 1, 0)).getUTCDate();
-  const daily = outbound === null ? null : Math.ceil(outbound / days);
-  const nextDaily = nextOutbound === null ? null : Math.ceil(nextOutbound / nextDays);
-  const remainingDays = Math.min(30, days - Number(asOf.slice(8, 10)));
+  const daily = outbound === null ? null : outbound / days;
+  const nextDaily = nextOutbound === null ? null : nextOutbound / nextDays;
+  const businessDay = Number(asOf.slice(8, 10));
+  const remainingDays = days - businessDay;
   const forecastDays = 30 - remainingDays;
-  const forecast =
-    (remainingDays > 0 && daily === null) || (forecastDays > 0 && nextDaily === null)
-      ? null
-      : Math.ceil(((daily ?? 0) * remainingDays + (nextDaily ?? 0) * forecastDays) / 30);
-  const available = knownNumber(row.available_qty),
-    transfer = known(row.open_transfer_reported_qty);
-
+  const available = known(row.available_qty);
+  const inventory = known(row.inventory_qty);
+  const transfer = known(row.open_transfer_reported_qty);
+  const shortage = known(row.current_order_shortage);
   const remainingOrders = known(row.calculation_order_remaining);
   const net = available === null || remainingOrders === null ? null : available - remainingOrders;
   const cycle = known(row.cycle_days) ?? cycleDays;
-  const target = daily === null ? null : daily * (cycle + 3);
-  const gap = net === null ? null : Math.max(0, -net);
-  const targetGap = net === null || target === null ? null : Math.max(0, target - net);
+  const targetDaily = businessDay <= 20 ? daily : nextDaily;
+  const target = targetDaily === null ? null : targetDaily * (cycle + 3);
+  const targetGap =
+    inventory === null || target === null || target <= 0 ? null : inventory - target;
   const recommended =
-    gap === null || targetGap === null || transfer === null
+    remainingOrders === null ||
+    shortage === null ||
+    target === null ||
+    inventory === null ||
+    transfer === null
       ? null
-      : Math.ceil(Math.max(0, Math.max(gap, targetGap) - transfer));
-  const shipped = known(row.month_ship_positive),
-    inventory = knownNumber(row.inventory_qty);
+      : Math.ceil(Math.max(0, Math.max(shortage, target - inventory) - transfer));
+  const shipped = known(row.month_ship_positive);
   const remaining =
     outbound === 0
       ? 0
       : outbound === null || shipped === null
         ? null
         : Math.max(0, outbound - shipped);
+  const transferred = known(row.transferred_qty);
+  const remainingTransfer =
+    monthTransfer === 0
+      ? 0
+      : monthTransfer === null || transferred === null
+        ? null
+        : Math.max(0, monthTransfer - transferred);
+  const nextPlanDays = Math.min(forecastDays, nextDays);
+  const forecastOutboundDaily =
+    (nextPlanDays > 0 && nextOutbound === null) || (remainingDays > 0 && remaining === null)
+      ? null
+      : ((remainingDays > 0 ? (remaining ?? 0) : 0) +
+          ((nextOutbound ?? 0) * nextPlanDays) / nextDays) /
+        30;
+  const stockWithTransit = forecastSupply(row);
   const source = (period: string) => {
     if (warehousePlans.some((plan) => plan.month === period))
       return warehousePlans.some((plan) => plan.month === period && plan.sku === row.sku)
@@ -287,44 +312,38 @@ export function applyFcPlan(row: FcRow, plans: ImportedPlan[], asOf: string, cyc
     period_next_source: source(next),
     planned_daily_shipment: daily,
     period_current_daily: daily,
-    calculation_daily: daily,
+    calculation_daily: targetDaily,
     period_next_daily: nextDaily,
-    daily_plan: forecast,
+    daily_plan: forecastOutboundDaily,
     target_inventory_qty: target,
     remaining_outbound_qty: remaining,
     period_remaining_out: remaining,
     recommended_qty: recommended,
-    urgent: gap === null ? null : Number(gap > 0),
+    urgent: shortage === null ? null : Number(shortage > 0),
     forecast_turnover_days:
-      forecast !== null && forecast > 0 && inventory !== null ? inventory / forecast : null,
-    target_gap_qty:
-      forecast === null || available === null
-        ? null
-        : Math.max(0, (cycle + 3) * forecast - available),
-    current_remaining_transfer_qty:
-      monthTransfer === 0
-        ? 0
-        : monthTransfer === null || known(row.transferred_qty) === null
-          ? null
-          : Math.max(0, monthTransfer - (known(row.transferred_qty) ?? 0)),
+      forecastOutboundDaily !== null && forecastOutboundDaily > 0 && stockWithTransit !== null
+        ? stockWithTransit / forecastOutboundDaily
+        : null,
+    target_gap_qty: targetGap,
+    current_remaining_transfer_qty: remainingTransfer,
     expected_month_end_qty:
-      available === null || monthTransfer === null || outbound === null
+      available === null || remainingTransfer === null || remaining === null
         ? null
-        : available + monthTransfer - outbound,
+        : available + remainingTransfer - remaining,
     order_adjusted_available_qty: net,
     plan_source: '人工导入试算',
     cycle_days: cycle,
     safety_days: cycle + 3,
     plan_calculable: Number(outbound !== null),
     calculation_status: [
-      outbound === null ? '本月出货计划' : '',
+      targetDaily === null ? (businessDay <= 20 ? '本月出货计划' : '次月出货计划') : '',
       available === null ? '可用库存' : '',
       remainingOrders === null ? '备单中需求或已占用量' : '',
       transfer === null ? '调拨中量' : '',
     ].filter(Boolean).length
       ? '缺少：' +
         [
-          outbound === null ? '本月出货计划' : '',
+          targetDaily === null ? (businessDay <= 20 ? '本月出货计划' : '次月出货计划') : '',
           available === null ? '可用库存' : '',
           remainingOrders === null ? '备单中需求或已占用量' : '',
           transfer === null ? '调拨中量' : '',
@@ -344,16 +363,23 @@ export function summarizeFcRows(rows: FcRow[]) {
     typeof value === 'number' && Number.isFinite(value) && value >= 0;
   const recommendations = rows.map((row) => knownNumber(row.recommended_qty)).filter(valid);
   const pairs = rows
-    .map((row) => [knownNumber(row.daily_plan), knownNumber(row.inventory_qty)])
+    .map((row) => [knownNumber(row.daily_plan), forecastSupply(row)])
     .filter((pair): pair is [number, number] => pair.every(valid));
   const demand = pairs.reduce((sum, [value]) => sum + value, 0);
   const stock = pairs.reduce((sum, [, value]) => sum + value, 0);
+  const targets = rows
+    .map((row) => [knownNumber(row.daily_plan), knownNumber(row.target_inventory_qty)])
+    .filter((pair): pair is [number, number] => pair.every(valid) && (pair[1] ?? 0) > 0);
+  const targetDaily = targets.reduce((sum, [value]) => sum + value, 0);
+
   return {
     recommended: recommendations.length
       ? recommendations.reduce((sum, value) => sum + value, 0)
       : null,
     missingCount: rows.length - recommendations.length,
     forwardTurnover: pairs.length && demand > 0 ? stock / demand : null,
+    targetTurnover:
+      targetDaily > 0 ? targets.reduce((sum, [, value]) => sum + value, 0) / targetDaily : null,
   };
 }
 

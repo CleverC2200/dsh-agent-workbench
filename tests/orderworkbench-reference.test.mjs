@@ -35,6 +35,8 @@ import {
 import {
   shippableDaysTarget,
   performanceStyleVersion,
+  metricTarget,
+  workbenchMetricState,
 } from '../prototypes/inventory-orderworkbench/performance-rules.mjs';
 
 test('order workbench reference interactions', async () => {
@@ -131,6 +133,8 @@ test('order workbench reference interactions', async () => {
   };
   window.shippableDaysTarget = shippableDaysTarget;
   window.performanceStyleVersion = performanceStyleVersion;
+  window.metricTarget = metricTarget;
+  window.workbenchMetricState = workbenchMetricState;
   window.metricCalculationVersion = metricCalculationVersion;
   window.reusableWorkbenchFacts = reusableWorkbenchFacts;
   window.compatibleWorkbenchFacts = compatibleWorkbenchFacts;

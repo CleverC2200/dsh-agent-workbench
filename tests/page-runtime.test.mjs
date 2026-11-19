@@ -268,6 +268,66 @@ test('page card facts keep their complete order and units even when detail compr
   }
 });
 
+test('order evidence retains the latest period and all numerical components through compression', async (t) => {
+  const h = await mount(t);
+  h.pages.registerBusinessPage(
+    {
+      id: 'inventory-orderworkbench',
+      pluginId: 'inventory-orderworkbench',
+      label: '订单工作台',
+      kind: 'html',
+      resourceId: 'test-resource',
+      catalog: {
+        surface: 'gea-html-inventory-orderworkbench',
+        tool: 'gea_plugin_page_apply',
+      },
+    },
+    async () => h.grant,
+  );
+  const {
+    value: { owner },
+  } = await h.open({ pageId: 'inventory-orderworkbench' });
+  for (const start of ['2026-11-16', '2026-11-09']) {
+    const current = {
+      value: 3.81,
+      numerator: 161453,
+      denominator: 4232553,
+      pending: 3046,
+      pendingUnit: '条候选商品明细',
+      scope: '可判定样本，非全量',
+    };
+    await h.call('context', {
+      owner,
+      parameters: {
+        period: { week: start },
+        metrics: [{ key: '作废率', value: '3.81%' }],
+        evidence: {
+          selected: 'week',
+          readAt: start,
+          periods: {
+            week: {
+              start,
+              endExclusive: start === '2026-11-09' ? '2026-11-16' : '2026-11-19',
+              metrics: {
+                作废率: current,
+                周转天数: { value: 14.6, pending: null },
+              },
+            },
+          },
+        },
+        rows: Array.from({ length: 200 }, () => ({ text: 'x'.repeat(300) })),
+      },
+    });
+    const result = JSON.parse(
+      (await h.execute('gea_page', { action: 'context', focus: '卡片' })).value,
+    );
+    assert.equal(result.context.period.week, start);
+    assert.equal(result.context.evidence.periods.week.start, start);
+    assert.deepEqual(result.context.evidence.periods.week.metrics.作废率, current);
+    assert.equal(result.context.evidence.periods.week.metrics.周转天数.pending, null);
+  }
+});
+
 async function authorCatalog(t, id) {
   const dom = new JSDOM(
     id === 'personal' ? await personalFixtureHtml() : await configuredPageHtml(id),

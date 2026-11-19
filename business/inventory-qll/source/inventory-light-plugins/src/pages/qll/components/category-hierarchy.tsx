@@ -20,11 +20,11 @@ type Page = { rows: TreeRow[]; hasNext: boolean; snapshot?: string };
 type Read = ReturnType<typeof categoryTreeReader>;
 const show = (value: unknown) =>
   treeNumber(value)?.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) ?? '-';
-function Quantity({ value }: { value: unknown }) {
+function Quantity({ value, unit = '件' }: { value: unknown; unit?: '件' | '箱' }) {
   const n = treeNumber(value);
   return (
-    <td title={n === null ? undefined : formatFactValue(value, 'decimal') + '件'}>
-      {formatChainValue(n, '件')}
+    <td title={n === null ? undefined : formatFactValue(value, 'decimal') + unit}>
+      {unit === '箱' ? (n === null ? '-' : show(n) + '箱') : formatChainValue(n, '件')}
     </td>
   );
 }
@@ -44,13 +44,20 @@ function Values({ row, layer, channel }: { row: TreeRow; layer?: ChainLayer; cha
       <Quantity value={layer ? (layer === 'branch' ? row.inventory : 0) : row.branch_inventory} />
       {channel && (
         <Quantity
-          value={layer ? (layer === 'customer' ? row.inventory : 0) : row.customer_inventory}
+          unit="箱"
+          value={layer ? (layer === 'customer' ? row.inventory : null) : row.customer_inventory}
         />
       )}
       <Quantity value={layer === 'customer' ? null : row.gap} />
       <td>{show(treeRatio(row.turnover_qty, row.daily))}</td>
       <td>{show(treeRatio(row.age_sum, row.age_qty))}</td>
-      <Quantity value={row.overaged} />
+      <Quantity value={layer ? (layer === 'base' ? row.overaged : null) : row.base_overaged} />
+      <Quantity value={layer ? (layer === 'branch' ? row.overaged : null) : row.branch_overaged} />
+      <td>
+        {(layer && layer !== 'base') || treeNumber(row.structure_fit) === null
+          ? '-'
+          : show(Number(row.structure_fit) * 100) + '%'}
+      </td>
       <td>{show(treeRatio(row.target_turnover_qty, row.target_daily))}</td>
       <td>{date}</td>
     </>
@@ -92,15 +99,19 @@ function Table({ channel, children }: { channel: boolean; children: React.ReactN
               '公司实物库存（件）',
               '基地库存（件）',
               '分仓库存（件）',
-              ...(channel ? ['渠道库存（件）'] : []),
+              ...(channel ? ['渠道库存（箱）'] : []),
               '公司目标差额（件）',
               '周转（天）',
               '平均货龄（天）',
-              '大日期库存（件）',
+              '基地大日期库存（>60天）',
+              '分仓大日期库存（>90天）',
+              '基地库存结构符合率',
               '目标周转（天）',
               '数据日期',
             ].map((label) => (
-              <th key={label}>{label}</th>
+              <th key={label} scope="col">
+                {label}
+              </th>
             ))}
           </tr>
         </thead>
@@ -136,7 +147,7 @@ function ExpandRow({
       </tr>
       {open && (
         <tr>
-          <td className={css.child} colSpan={channel ? 12 : 11}>
+          <td className={css.child} colSpan={channel ? 14 : 13}>
             {children}
           </td>
         </tr>
@@ -444,7 +455,7 @@ export function CategoryHierarchy({ date, channel }: { date: string; channel: bo
                     ) : (
                       <tr key={layer}>
                         <td>{layerLabels[layer]}</td>
-                        <td colSpan={channel ? 11 : 10}>
+                        <td colSpan={channel ? 13 : 12}>
                           {catalog[layer] ? '该品类无数据' : '该层数据尚未取得'}
                         </td>
                       </tr>
