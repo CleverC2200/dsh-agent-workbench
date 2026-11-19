@@ -79,10 +79,10 @@ test('five main cards expose keyboard and hover definitions; branch helper uses 
   await expect(inventory).toContainText('分仓当前库存100件');
   await expect(inventory).not.toContainText('分仓可用');
   const definitions = [
-    '当前库存＝基地库存＋分仓库存；含渠道时加上客户在仓库存。',
+    '公司体系库存＝同一快照日的基地库存＋分仓库存（件）。客户库存分列（箱）。',
     workspace.kpis.turnover.explanation,
     '当前货龄＝按批次库存加权的平均货龄：Σ(批次库存×批次货龄)÷Σ批次库存。',
-    '当月基地与分仓已发货客户订单：逐行限额发货量合计÷同池订货量合计。',
+    '本月已下单的考核订单，满足率＝1−同范围缺货量合计÷最终需求量合计。',
     '基地与分仓当前未完成客户订单。',
   ];
   for (const width of [1280, 560]) {

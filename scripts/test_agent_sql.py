@@ -3,6 +3,7 @@ import unittest
 import sqlite3
 import re
 import sqlglot
+from sqlglot.optimizer.qualify import qualify
 from test_current_shortage_source import SourceFormula
 from test_fc_aging_source import BranchAgingSource
 from test_fc_import_query_depth import FcImportQueryShape
@@ -11,6 +12,35 @@ from test_batch_age_lists import BatchAgeLists
 from test_qll_structure import QllStructureAgeTests
 from unittest.mock import patch
 from agent_sql import ContractError, bind, inspect, validate_parameters, Executor, direct_preview_document, config_for
+
+class BaseInventoryTurnoverQueryTests(unittest.TestCase):
+    def test_first_screen_and_filtered_lists_resolve_plan_fields(self):
+        config = config_for('aqkc')
+        for query_id in ('summary.bootstrap', 'summary.first-screen',
+                         'snapshot.page.dashboard-groups', 'snapshot.page.structure-groups'):
+            with self.subTest(query=query_id):
+                query = sqlglot.parse_one(config['queries'][query_id]['request']['sql'], read='postgres')
+                qualify(query, dialect='postgres')
+
+    def test_order_support_uses_assessed_demand_even_when_nothing_shipped(self):
+        config = config_for('aqkc')
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE TABLE fact (ordered REAL, demand REAL, shortage REAL, shipped REAL, shipped_order_quantity REAL, invalid INTEGER)')
+            db.executemany('INSERT INTO fact VALUES (?, ?, ?, ?, ?, ?)', [
+                (100, 100, 25, 140, 100, 0),
+                (50, 50, 5, 0, 0, 0),
+            ])
+            for query_id in ('page.workbench-support-by-base', 'snapshot.page.workbench-support-by-base',
+                             'summary.bootstrap', 'summary.first-screen'):
+                with self.subTest(query=query_id):
+                    tree = sqlglot.parse_one(config['queries'][query_id]['request']['sql'], read='postgres')
+                    order = next(select for select in tree.find_all(sqlglot.exp.Select)
+                                 if any(item.alias == 'domain' and item.this.name == 'order'
+                                        for item in select.expressions))
+                    measures = [item.sql(dialect='sqlite') for item in order.expressions
+                                if item.alias in ('need', 'shortage', 'shipped_order_quantity', 'shipped_quantity')]
+                    self.assertEqual(db.execute('SELECT ' + ', '.join(measures) + ' FROM fact').fetchone(),
+                                     (150, 30, 100, 140))
 
 class StockObservationRollupTests(unittest.TestCase):
     """An empty matched cohort must not erase sibling cohorts; missing matched values still fail closed."""
@@ -185,12 +215,12 @@ class BranchOrderCountTests(unittest.TestCase):
     def setUp(self):
         self.db = sqlite3.connect(':memory:'); self.db.row_factory = sqlite3.Row
         self.addCleanup(self.db.close)
-        self.db.execute('CREATE TABLE filtered (from_order TEXT, sku TEXT, shortage REAL, ordered REAL, demand REAL, shipped REAL, shipped_order_quantity REAL, invalid INTEGER, source_occupied REAL)')
+        self.db.execute('CREATE TABLE filtered (from_order TEXT, sku TEXT, category TEXT, shortage REAL, ordered REAL, demand REAL, shipped REAL, shipped_order_quantity REAL, invalid INTEGER, source_occupied REAL)')
         query = config_for('fc')['queries']['orders.summary']['request']['sql']
         self.sql = 'SELECT ' + query.rsplit(' SELECT ', 1)[1]
 
-    def insert(self, order, sku, shortage, invalid=0):
-        self.db.execute('INSERT INTO filtered VALUES (?,?,?,?,?,?,?,?,?)', (order, sku, shortage, 10, 10, 10, 10, invalid, 10))
+    def insert(self, order, sku, shortage, invalid=0, shipped=10, category=None):
+        self.db.execute('INSERT INTO filtered VALUES (?,?,?,?,?,?,?,?,?,?)', (order, sku, category, shortage, 10, 10, shipped, 10, invalid, 10))
 
     def result(self):
         return dict(self.db.execute(self.sql).fetchone())
@@ -199,6 +229,15 @@ class BranchOrderCountTests(unittest.TestCase):
         self.insert(' A ', 'S1', 1); self.insert('A', 'S1', 2); self.insert('B', 'S2', 0); self.insert('C', 'S3', 3)
         row = self.result()
         self.assertEqual((row['row_count'], row['from_order_count'], row['affected_from_order_count'], row['shortage_sku_count']), (4,3,2,2))
+
+    def test_fulfillment_includes_zero_shipments_and_does_not_credit_overshipment(self):
+        self.insert('A', 'S1', 0, shipped=20)
+        self.insert('B', 'S2', 10, shipped=0)
+        self.insert('C', 'S3', 10, shipped=0, category='饺鲜说')
+        row = self.result()
+        self.assertEqual((row['fulfillment_order_quantity'],row['fulfillment_shipped_quantity'],row['fulfillment_rate']),(20,10,0.5))
+        self.insert('D', 'S4', None)
+        self.assertIsNone(self.result()['fulfillment_rate'])
 
     def test_missing_identity_or_invalid_shortage_never_becomes_zero_skus(self):
         for sku, shortage, invalid in [(' ', 2, 0), ('S1', None, 0), ('S1', -1, 1), ('S1', 20, 1)]:
@@ -394,7 +433,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
 
     def test_suggestion_pages_filter_before_count_and_rank_without_scanning_zero_rows(self):
         first = self.read('replenishment-suggestions.detail.atomic',page_size=1,offset=0)
-        self.assertEqual((first[0]['sku'],first[0]['recommended_qty'],first[0]['page_scope_total']),('S1',75,1))
+        self.assertEqual((first[0]['sku'],first[0]['recommended_qty'],first[0]['page_scope_total']),('S1',50,1))
         empty = self.read('replenishment-suggestions.detail.atomic',page_size=1,offset=1)
         self.assertEqual((empty[0]['page_scope_total'],empty[0]['page_row_present']),(1,0))
         self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=0,live_qty=0 WHERE material_code='S2'")
@@ -402,7 +441,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         page1=self.read('replenishment-suggestions.detail.atomic',page_size=1,offset=0)
         page2=self.read('replenishment-suggestions.detail.atomic',page_size=1,offset=1)
         self.assertEqual([page1[0]['sku'],page2[0]['sku']],['S1','S2'])
-        self.assertEqual([page1[0]['recommended_qty'],page2[0]['recommended_qty']],[75,20])
+        self.assertEqual([page1[0]['recommended_qty'],page2[0]['recommended_qty']],[50,20])
         self.assertEqual([page1[0]['page_scope_total'],page2[0]['page_scope_total']],[2,2])
         self.assertEqual(self.read('replenishment-suggestions.count'),[{'total':2}])
 
@@ -640,32 +679,34 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.insert('agents_scm_execute_detail_d',cust_order_no='NET',material_code='S1',pickup_point='P1',bizflowstatus='创建',adjust_order_qty=100,qtyallocated=20)
         row=self.read('replenishment.detail')[0]
         self.assertEqual(row['current_order_remaining'],80)
-        self.assertEqual(row['recommended_qty'],155)
+        self.assertEqual(row['recommended_qty'],55)
         self.assertEqual(row['target_inventory_qty'],100)
 
     def test_cycle_override_and_expired_rule(self):
         params=dict(fc_cycle_0_level='sku',fc_cycle_0_object='S1',fc_cycle_0_days=14,fc_cycle_0_from='2026-10-01',fc_cycle_0_to='2026-10-31')
         row=self.read('replenishment.detail',**params)[0]
-        self.assertEqual((row['cycle_days'],row['recommended_qty']),(14,145))
+        self.assertEqual((row['cycle_days'],row['recommended_qty']),(14,120))
         params['fc_cycle_0_to']='2026-10-19'
-        self.assertEqual(self.read('replenishment.detail',**params)[0]['recommended_qty'],75)
+        self.assertEqual(self.read('replenishment.detail',**params)[0]['recommended_qty'],50)
 
     def test_saved_cycle_scope_does_not_apply_to_another_warehouse(self):
         params=dict(fc_cycle_warehouse='OTHER',fc_cycle_0_level='sku',fc_cycle_0_object='S1',fc_cycle_0_days=14,cycle_days=21)
         row=self.read('replenishment.detail',**params)[0]
-        self.assertEqual((row['cycle_days'],row['recommended_qty']),(7,75))
+        self.assertEqual((row['cycle_days'],row['recommended_qty']),(7,50))
         params['fc_cycle_warehouse']='WH1'
         self.assertEqual(self.read('replenishment.detail',**params)[0]['cycle_days'],14)
 
-    def test_forecast_ceil_and_month_end_without_current_plan(self):
+    def test_forecast_includes_transit_and_keeps_fractional_daily_plan(self):
         self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET warehouse_month_out_plan=32')
+        self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET transfer_onway_qty=10')
         row=self.read('replenishment.detail',days_remaining_in_month=5)[0]
-        self.assertEqual(row['period_current_daily'],2)
-        self.assertEqual(row['daily_plan'],9)
+        self.assertAlmostEqual(row['period_current_daily'],32/31)
+        self.assertAlmostEqual(row['daily_plan'],8.4)
+        self.assertAlmostEqual(row['forecast_turnover_days'],(row['available_qty']+10)/8.4,places=5)
         self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET warehouse_month_out_plan=NULL')
         row=self.read('replenishment.detail',days_remaining_in_month=0)[0]
         self.assertEqual(row['daily_plan'],10)
-        self.assertIsNone(row['recommended_qty'])
+        self.assertEqual(row['recommended_qty'],40)
 
     def test_stock_only_sku_and_its_names_are_not_lost_to_plan_scope(self):
         self.insert('agents_scm_material_in_out_summary_d',warehouseid='WH1',material_code='S2',material_name='商品S2',material_group_name='物料组')
@@ -674,18 +715,18 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertEqual(rows[1]['inventory_qty'],80)
         self.assertEqual(rows[1]['plan_present'],0)
         self.assertEqual(rows[1]['rolling_ship_daily'],2)
-        self.assertEqual(rows[1]['historical_turnover_days'],30)
+        self.assertEqual(rows[1]['historical_turnover_days'],40)
         self.assertEqual(self.read('replenishment.count'),[{'total':2}])
         total = self.read('replenishment.summary')[0]
         self.assertEqual((total['row_count'],total['stock_only_count'],total['inventory_qty']),(2,1,130))
-        self.assertEqual(total['recommended_qty'],75)
+        self.assertEqual(total['recommended_qty'],50)
         self.assertEqual(total['missing_calculation_count'],1)
         self.assertEqual(total['plan_calculable_count'],1)
 
     def test_valid_plan_does_not_require_reserved_unit_version_or_snapshot(self):
         total = self.read('replenishment.summary')[0]
         self.assertEqual((total['inventory_qty'],total['available_qty'],total['rolling_ship_daily']),(130,85,3))
-        self.assertEqual((total['plan_calculable_count'],total['recommended_qty'],total['replenishment_sku_count']),(1,75,1))
+        self.assertEqual((total['plan_calculable_count'],total['recommended_qty'],total['replenishment_sku_count']),(1,50,1))
 
     def test_stock_only_sku_does_not_use_historical_shipments_as_plan(self):
         self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=0,live_qty=0 WHERE material_code='S2'")
@@ -693,7 +734,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertEqual((row['target_inventory_qty'],row['recommended_qty'],row['urgent']),(None,None,0))
         self.assertEqual(row['calculation_status'],'本月计划待核实')
         total = self.read('replenishment.summary')[0]
-        self.assertEqual((total['recommended_qty'],total['replenishment_sku_count']),(75,1))
+        self.assertEqual((total['recommended_qty'],total['replenishment_sku_count']),(50,1))
         self.assertEqual(total['historical_basis_count'],1)
 
     def test_plan_selects_stat_month_independently_of_stock_snapshot(self):
@@ -706,8 +747,10 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
 
     def test_valid_zero_plan_is_not_replaced_by_historical_demand(self):
         self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET warehouse_month_out_plan=0')
-        row = self.read('replenishment.detail')[0]
-        self.assertEqual((row['plan_calculable'],row['target_inventory_qty'],row['recommended_qty']),(1,0,0))
+        day20 = self.read('replenishment.detail',days_remaining_in_month=11)[0]
+        self.assertEqual((day20['plan_calculable'],day20['target_inventory_qty'],day20['recommended_qty']),(1,0,0))
+        row = self.read('replenishment.detail',days_remaining_in_month=10)[0]
+        self.assertEqual((row['target_inventory_qty'],row['recommended_qty']),(100,50))
         self.assertEqual(row['calculation_status'],'原版净需求补货')
 
     def test_duplicate_plan_never_multiplies_stock_and_ambiguous_plan_is_not_used(self):

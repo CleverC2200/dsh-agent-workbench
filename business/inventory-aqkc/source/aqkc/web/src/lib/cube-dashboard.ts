@@ -40,6 +40,41 @@ const coveredComparison = (rows: CubeRow[]) =>
 const coveredDays = (days: number | null, partial: boolean) =>
   days === null ? '-' : partialTargetDisplay(`${days.toFixed(1)}天`, partial);
 
+function eligiblePlanMonth(scope: { targetMonth: string; requestedTargetMonth?: string }) {
+  return !scope.requestedTargetMonth || scope.targetMonth === scope.requestedTargetMonth
+    ? scope.targetMonth
+    : '';
+}
+
+function plannedTurnover(rows: Record<string, unknown>[], month: string, includeTransfer: boolean) {
+  const sum = (field: string) => rows.reduce((total, row) => total + (numeric(row[field]) ?? 0), 0);
+  const calendar = /^(20\d{2})-(0[1-9]|1[0-2])(?:-01)?$/.exec(month);
+  const days = calendar
+    ? new Date(Date.UTC(Number(calendar[1]), Number(calendar[2]), 0)).getUTCDate()
+    : 0;
+  const planned = sum('forecast_plan_count');
+  const salesCovered = sum('sales_plan_count');
+  const transferCovered = sum('transfer_plan_count');
+  const planReady =
+    planned > 0 && salesCovered === planned && (!includeTransfer || transferCovered === planned);
+  const demand =
+    planReady && days > 0
+      ? (sum('sales_plan_qty') + (includeTransfer ? 0.5 * sum('transfer_out_plan_qty') : 0)) / days
+      : null;
+  const inventory = sum('forecast_stock_qty');
+  const targetPlan = sum('planned_target_quantity');
+  return {
+    demand,
+    turn:
+      demand !== null && demand > 0 && sum('forecast_stock_count') > 0 && inventory >= 0
+        ? inventory / demand
+        : null,
+    target: days > 0 && targetPlan > 0 ? sum('planned_target_stock') / (targetPlan / days) : null,
+    covered: includeTransfer ? Math.min(salesCovered, transferCovered) : salesCovered,
+    planned,
+  };
+}
+
 export function alignAgeInventory(targetRows: CubeRow[], ageRows: CubeRow[]): CubeRow[] {
   if (usesConfiguredSql()) return targetRows.map((row) => ({ ...row }));
   const keyOf = (row: CubeRow, prefix: string) =>
@@ -1189,7 +1224,7 @@ export async function loadInventoryDashboardTabs(
     !(selectedBase && normalizedCategory && categoryLevel !== 'base')
   ) {
     const groupBy = normalizedCategory ? 'base' : 'category';
-    const [{ groups }, orderRows, pendingRows] = await Promise.all([
+    const [{ groups, scope }, orderRows, pendingRows] = await Promise.all([
       readConfiguredStockSummary(selectedBases, {
         signal,
         structure: { groupBy, category: normalizedCategory },
@@ -1240,6 +1275,7 @@ export async function loadInventoryDashboardTabs(
           orders?.reduce((v, o) => v + numberOf(o['workbench.shortage_quantity']), 0) ?? 0;
         const show = (f: string) => (r[f + '_count'] > 0 ? displayNumber(r[f]) : '-');
         const risk = stockGroupRisk([r], currentShortageSum(pending, 'shortage'));
+        const plan = plannedTurnover([r], eligiblePlanMonth(scope), groupBy === 'base');
         return {
           level: r.level,
           risk,
@@ -1247,18 +1283,10 @@ export async function loadInventoryDashboardTabs(
           current: show('inventory'),
           target: show('target'),
           gap: r.gap_count ? displayNumber(r.gap) : '-',
-          currentTurnover: coveredDays(
-            r.turn_demand > 0 ? r.turn_inventory / r.turn_demand : null,
-            false,
-          ),
-          targetTurnover: coveredDays(
-            r.turn_demand > 0 ? r.turn_target / r.turn_demand : null,
-            false,
-          ),
-          dailyDemand: show('daily_demand'),
-          last30d: r.stock_avg_30d_sale_valid_count
-            ? displayDailyMovement(r.stock_avg_30d_sale_valid)
-            : '-',
+          currentTurnover: coveredDays(plan.turn, false),
+          targetTurnover: coveredDays(plan.target, false),
+          dailyDemand: plan.demand === null ? '-' : displayDailyMovement(plan.demand),
+          last30d: r.review_turn_daily == null ? '-' : displayDailyMovement(r.review_turn_daily),
           age: (() => {
             const age = weightedStockAge([r]);
             return age == null ? '-' : `${age.toFixed(1)}天`;
@@ -2415,7 +2443,7 @@ async function loadConfiguredSummaryDashboard(
   selectedBases?: string[],
   onProgress?: (workspace: WorkspaceState) => void,
 ): Promise<WorkspaceState> {
-  let stock: Awaited<ReturnType<typeof readConfiguredStockSummary>> | undefined;
+  let stock: Parameters<typeof configuredSummaryWorkspace>[0];
   let support: CubeRow[] = [];
   let health: any = { rows: [], summary: null };
   let current: any = { rows: undefined };
@@ -2490,7 +2518,11 @@ async function loadConfiguredSummaryDashboard(
 }
 
 function configuredSummaryWorkspace(
-  stock: Awaited<ReturnType<typeof readConfiguredStockSummary>> | undefined,
+  stock:
+    | (Omit<Awaited<ReturnType<typeof readConfiguredStockSummary>>, 'over60Skus'> & {
+        over60Skus?: number | null;
+      })
+    | undefined,
   support: CubeRow[],
   health: any,
   current: any,
@@ -2517,40 +2549,30 @@ function configuredSummaryWorkspace(
         (!selectedBases?.length || selectedBases.includes(String(r.base))),
     )
     .map((r: any) => ({ ...r, category: categoryName(r.category) }));
-  const stats = (rs: any[]) => {
+  const stats = (rs: Record<string, unknown>[], includeTransfer: boolean) => {
     const sum = (key: string) => rs.reduce((n, r) => n + (numeric(r[key]) ?? 0), 0);
-    const n = sum('row_count'),
-      gapCount = sum('gap_count'),
-      turnCount = sum('turn_count'),
-      den = sum('turn_demand'),
-      targetDen = rs.some((r) => Object.hasOwn(r, 'target_turn_demand'))
-        ? sum('target_turn_demand')
-        : den;
-    const turn = den > 0 ? sum('turn_inventory') / den : null;
-    const targetTurn = targetDen > 0 ? sum('turn_target') / targetDen : null;
-    const hasTurnGap = rs.every((r) => Object.hasOwn(r, 'turn_gap'));
-    const sameTurnoverScope =
-      !rs.some((r) => Object.hasOwn(r, 'target_turn_count')) ||
-      sum('target_turn_count') === turnCount;
-    const turnGap = hasTurnGap
-      ? targetDen > 0 && rs.some((r) => numeric(r.turn_gap) !== null)
-        ? sum('turn_gap') / targetDen
-        : null
-      : sameTurnoverScope && turn !== null && targetTurn !== null
-        ? turn - targetTurn
-        : null;
+    const n = sum('row_count');
+    const gapCount = sum('gap_count');
+    const plan = plannedTurnover(rs, eligiblePlanMonth(scope), includeTransfer);
+    const reviewDaily = sum('review_turn_daily');
+    const reviewInventory = sum('review_turn_inventory');
+    const hasReviewInventory = rs.some((r) => numeric(r.review_turn_inventory) !== null);
+    const reviewTurn = hasReviewInventory && reviewDaily > 0 ? reviewInventory / reviewDaily : null;
+    const turnGap = reviewTurn !== null && plan.target !== null ? reviewTurn - plan.target : null;
     return {
       sum,
       n,
       gapCount,
-      turnCount,
       gap: gapCount ? sum('gap') : null,
-      turn,
-      targetTurn,
+      turn: plan.turn,
+      targetTurn: plan.target,
+      plan,
+      reviewDaily,
+      reviewTurn,
       turnGap,
     };
   };
-  const all = stats(groups),
+  const all = stats(groups, selectedBases?.length === 1),
     bases = [
       ...new Set([
         ...groups.map((r: any) => String(r.base)),
@@ -2564,6 +2586,7 @@ function configuredSummaryWorkspace(
   const business = workbenchBusinessSummaryFromRows(
     support.filter((r) => bases.includes(String(r['workbench.base']))),
   );
+  const orderCoverage = bases.filter((base) => business.orderByBase[base]?.rate != null).length;
   const helpers = shippedOrderMetricHelpers(
     support.filter((r) => bases.includes(String(r['workbench.base']))),
   );
@@ -2580,7 +2603,10 @@ function configuredSummaryWorkspace(
       ? `健康表 ${health.snapshotDate} · ${health.summary.age_valid_count}/${health.summary.row_count} 条记录，平均货龄按有效批次库存数量加权`
       : '当前无仓库货龄快照';
   const baseRows = bases.map((base) => {
-    const s = stats(groups.filter((r: any) => r.base === base));
+    const s = stats(
+      groups.filter((r: any) => r.base === base),
+      true,
+    );
     const baseGroups = groups.filter((r: any) => r.base === base);
     const warning = stockGroupRisk(
       baseGroups,
@@ -2599,10 +2625,8 @@ function configuredSummaryWorkspace(
       gap: s.gap === null ? '-' : displayNumber(s.gap),
       currentTurnover: days(s.turn),
       targetTurnover: days(s.targetTurn),
-      dailyDemand: show(s, 'daily_demand'),
-      last30d: s.sum('stock_avg_30d_sale_valid_count')
-        ? displayDailyMovement(s.sum('stock_avg_30d_sale_valid'))
-        : '-',
+      dailyDemand: s.plan.demand === null ? '-' : displayDailyMovement(s.plan.demand),
+      last30d: s.reviewDaily > 0 ? displayDailyMovement(s.reviewDaily) : '-',
       age: days(
         weightedStockAge(baseGroups) ??
           health.rows?.find((row: BatchAgeRow) => row.level === base)?.average_age ??
@@ -2654,7 +2678,7 @@ function configuredSummaryWorkspace(
   });
   const overall = insight.text.replace(
     '数据边界：',
-    `数据边界：库存快照${day}，目标月份${scope.targetMonthLabel}、版本${scope.versionLabel}；差额覆盖${all.gapCount}/${all.n}个基地SKU，周转覆盖${all.turnCount}/${all.n}个基地SKU，均只比较同一匹配范围；`,
+    `数据边界：库存快照${day}，目标月份${scope.targetMonthLabel}、版本${scope.versionLabel}；差额覆盖${all.gapCount}/${all.n}个基地SKU，展望计划覆盖${all.plan.covered}/${all.plan.planned}个基地SKU，库存与计划按同一业务范围独立汇总；`,
   );
 
   const orderCard = {
@@ -2686,8 +2710,9 @@ function configuredSummaryWorkspace(
     {
       title: '周转天数',
       value: days(all.turn),
-      coverage: `同范围 ${all.turnCount}/${all.n} 个基地SKU · ${scope.versionLabel}需求`,
+      coverage: `展望按${selectedBases?.length === 1 ? '销售计划加50%调拨计划' : '销售计划'}计算，计划覆盖 ${all.plan.covered}/${all.plan.planned} 个基地SKU。天数差额按回顾周转减目标周转。`,
       helpers: [
+        { label: '回顾周转天数', value: days(all.reviewTurn) },
         { label: '目标周转天数', value: days(all.targetTurn) },
         {
           label: '天数差额',
@@ -2703,7 +2728,7 @@ function configuredSummaryWorkspace(
       helpers: [
         {
           label: '超龄SKU',
-          value: all.sum('over60_valid_count') ? displayNumber(all.sum('over60_skus')) : '-',
+          value: stock?.over60Skus == null ? '-' : displayNumber(stock.over60Skus),
         },
         { label: '超龄库存', value: show(all, 'over60', true) },
       ],
@@ -2712,7 +2737,7 @@ function configuredSummaryWorkspace(
     {
       title: '订单满足率',
       value: business.order.rate === null ? '-' : `${(business.order.rate * 100).toFixed(1)}%`,
-      coverage: '本月基地履约 · 非当前待发',
+      coverage: `本月考核订单 · 有效数据覆盖 ${orderCoverage}/${bases.length} 个基地 · 按最终需求和缺货量计算`,
       helpers,
       tone: 'neutral',
     },
@@ -2742,7 +2767,10 @@ function configuredSummaryWorkspace(
       tone: 'neutral',
     })),
     chartData: bases.flatMap((base) => {
-      const s = stats(groups.filter((r: any) => r.base === base));
+      const s = stats(
+        groups.filter((r: any) => r.base === base),
+        true,
+      );
       return s.sum('target_count') ? [{ label: base, value: s.sum('target') }] : [];
     }),
     insights: [overall],

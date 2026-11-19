@@ -226,9 +226,7 @@ function install(t) {
       ];
     throw Object.assign(Error('not available'), { code: 'SOURCE_NOT_AVAILABLE' });
   };
-  const month =
-    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()).slice(0, 7) +
-    '-01';
+  const month = '2026-10-01';
   stockFixture.invalidOrders = 0;
   globalThis.__healthSummary = undefined;
   globalThis.__batchAge = async () => ({ rows: [], total: 0 });
@@ -280,6 +278,17 @@ function install(t) {
           turn_inventory: present ? 100 : null,
           turn_target: present ? 80 : null,
           turn_demand: present ? 10 : null,
+          forecast_stock_qty: present ? 100 : null,
+          forecast_stock_count: present ? 1 : 0,
+          forecast_plan_count: 1,
+          sales_plan_count: 1,
+          transfer_plan_count: 1,
+          sales_plan_qty: 310,
+          transfer_out_plan_qty: 310,
+          planned_target_quantity: 310,
+          planned_target_stock: 80,
+          review_turn_inventory: present ? 100 : null,
+          review_turn_daily: present ? 3 : null,
           stock_avg_30d_sale_valid: 3,
           stock_avg_30d_sale_valid_count: 1,
           over60_valid: 8,
@@ -305,6 +314,13 @@ function install(t) {
           turn_inventory: null,
           turn_target: null,
           turn_demand: null,
+          forecast_stock_qty: present ? 50 : null,
+          forecast_stock_count: present ? 1 : 0,
+          forecast_plan_count: 0,
+          sales_plan_count: 0,
+          transfer_plan_count: 0,
+          review_turn_inventory: present ? 50 : null,
+          review_turn_daily: present ? 2 : null,
           stock_avg_30d_sale_valid: 2,
           stock_avg_30d_sale_valid_count: 1,
           over60_valid: 2,
@@ -373,9 +389,11 @@ test('matched stock comparisons remain visible with explicit partial coverage in
   const w = await cube.loadInitialDashboard();
   assert.equal(w.workbench.cards[0].value, '150');
   assert.equal(w.workbench.cards[0].helpers[1].value, '20');
-  assert.equal(w.workbench.cards[1].value, '10.0天');
-  assert.equal(w.workbench.cards[1].helpers[0].value, '8.0天');
-  assert.equal(w.workbench.cards[1].helpers[1].value, '2.0天');
+  assert.equal(w.workbench.cards[1].value, '15.0天');
+  assert.equal(w.table.rows[0].currentTurnover, '10.0天');
+  assert.equal(w.workbench.cards[1].helpers[0].value, '30.0天');
+  assert.equal(w.workbench.cards[1].helpers[1].value, '8.0天');
+  assert.equal(w.workbench.cards[1].helpers[2].value, '22.0天');
   assert.equal(w.workbench.cards[3].value, '80.0%');
   assert.equal(w.record.riskLevel, 'unknown');
   assert.equal(w.table.rows[0].last30d, '5');
@@ -824,7 +842,7 @@ test('SKU detail keeps classified current shortage and batch weighted age from t
   assert.equal(row.age, '65.0天');
 });
 
-test('current turnover and target turnover use their own valid cohorts', async (t) => {
+test('forecast, historical and target turnover use their own valid cohorts', async (t) => {
   install(t);
   const read = globalThis.__stockSummary;
   globalThis.__stockSummary = async (...args) => {
@@ -841,13 +859,24 @@ test('current turnover and target turnover use their own valid cohorts', async (
           turn_target: 20,
           target_turn_demand: 5,
           target_turn_count: 1,
-          turn_gap: 80,
+          forecast_stock_qty: 150,
+          forecast_stock_count: 2,
+          forecast_plan_count: 1,
+          sales_plan_count: 1,
+          transfer_plan_count: 1,
+          sales_plan_qty: 775,
+          transfer_out_plan_qty: 0,
+          planned_target_quantity: 155,
+          planned_target_stock: 20,
+          review_turn_inventory: 150,
+          review_turn_daily: 30,
         },
       ],
     };
   };
   const w = await cube.loadInitialDashboard();
   assert.equal(w.workbench.cards[1].value, '6.0天');
-  assert.equal(w.workbench.cards[1].helpers[0].value, '4.0天');
-  assert.equal(w.workbench.cards[1].helpers[1].value, '16.0天');
+  assert.equal(w.workbench.cards[1].helpers[0].value, '5.0天');
+  assert.equal(w.workbench.cards[1].helpers[1].value, '4.0天');
+  assert.equal(w.workbench.cards[1].helpers[2].value, '1.0天');
 });

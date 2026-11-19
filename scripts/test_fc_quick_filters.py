@@ -9,7 +9,7 @@ class QuickFilters(unittest.TestCase):
         self.addCleanup(self.f.doCleanups)
 
     def test_positive_actual_brings_zero_recommendation_into_complete_scope(self):
-        self.f.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=10000 WHERE material_code='S1'")
+        self.f.db.execute("UPDATE agents_scm_inventory_sku_data_d SET live_qty=10000, available_qty=10000 WHERE material_code='S1'")
         rows = self.f.read('replenishment.detail', needed_only=True)
         self.assertNotIn('S1', [row['sku'] for row in rows])
         rows = self.f.read('replenishment.detail', needed_only=True, positive_actual_keys=['3:WH1S1'])
@@ -31,7 +31,7 @@ class QuickFilters(unittest.TestCase):
     def test_manual_plan_zero_and_positive_results_replace_source_suggestions(self):
         self.assertEqual([row['sku'] for row in self.f.read('replenishment.detail', needed_only=True)], ['S1'])
         self.assertEqual(self.f.read('replenishment.count', needed_only=True, zero_plan_keys=['3:WH1S1']), [{'total': 0}])
-        self.f.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=10000 WHERE material_code='S1'")
+        self.f.db.execute("UPDATE agents_scm_inventory_sku_data_d SET live_qty=10000, available_qty=10000 WHERE material_code='S1'")
         self.assertEqual([row['sku'] for row in self.f.read('replenishment.detail', needed_only=True, positive_plan_keys=['3:WH1S1'])], ['S1'])
 
 

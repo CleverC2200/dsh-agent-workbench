@@ -18,6 +18,7 @@ const input = () => ({
   asOf: '2026-10-29',
   cycleDays: 7,
   localPlanTrial: false,
+  forecastDays: null,
   recommendedQty: 30,
   missingCalculationCount: 1,
   currentOrderShortageQty: 10,

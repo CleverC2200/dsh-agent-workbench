@@ -21,11 +21,14 @@ class Summary(unittest.TestCase):
         for table in ['agents_inv_branch_sku_day', 'agents_inv_order_summary_day']:
             self.db.execute('CREATE TABLE '+table+' ('+', '.join(columns)+')')
         for warehouse, sku, qty, stock, available, daily in [
-            ('A110','yes',10,100,60,10), ('A110','zero',0,40,40,0),
+            ('A110','yes',10,100,60,10.5), ('A110','zero',0,40,40,0),
             ('A110','unknown',None,20,-1,20), ('A120','other',999,999,999,99),
         ]:
-            self.db.execute('INSERT INTO agents_inv_branch_sku_day (inv_batch_id,inv_variant_id,warehouseid,sku,warehouse_name,recommended_qty,inventory_qty,available_qty,rolling_ship_daily,calculation_order_remaining) VALUES (?,?,?,?,?,?,?,?,?,?)',
-                            ('batch','BRANCH_DEFAULT',warehouse,sku,'沈阳分仓',qty,stock,available,daily,5))
+            self.add_stock(warehouse,sku,qty,stock,available,daily)
+
+    def add_stock(self, warehouse, sku, shortage, stock, available, daily):
+        self.db.execute('INSERT INTO agents_inv_branch_sku_day (inv_batch_id,inv_variant_id,warehouseid,sku,warehouse_name,inv_business_date,month_out_plan,cycle_days,inventory_qty,available_qty,rolling_ship_daily,current_order_shortage,open_transfer_reported_qty,calculation_order_remaining) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                        ('batch','BRANCH_DEFAULT',warehouse,sku,'沈阳分仓','2026-10-19',0,7,stock,available,daily,shortage,0,5))
 
     def read(self, **overrides):
         values = {**{s['name']: QUERY['request']['parameters'].get(k) for k,s in QUERY['parameterSpec'].items()},
@@ -45,7 +48,7 @@ class Summary(unittest.TestCase):
     def test_same_branch_pool_and_unknowns(self):
         r = self.read()
         self.assertEqual((r['row_count'],r['inventory_qty'],r['recommended_qty']), (3,160,10))
-        self.assertEqual(r['historical_turnover_days'],6)
+        self.assertAlmostEqual(r['historical_turnover_days'],160 / 30.5)
         self.assertEqual(r['missing_calculation_count'],1)
         self.assertEqual(r['order_adjusted_available_qty'],90)
 
@@ -61,8 +64,7 @@ class Summary(unittest.TestCase):
 
     def test_all_scope_excludes_virtual_warehouse_but_keeps_closed_warehouse(self):
         for warehouse, quantity in [('A540', 99999), ('A052', 25)]:
-            self.db.execute('INSERT INTO agents_inv_branch_sku_day (inv_batch_id,inv_variant_id,warehouseid,sku,warehouse_name,recommended_qty,inventory_qty,available_qty,rolling_ship_daily,calculation_order_remaining) VALUES (?,?,?,?,?,?,?,?,?,?)',
-                            ('batch','BRANCH_DEFAULT',warehouse,'extra',warehouse,quantity,quantity,quantity,10,5))
+            self.add_stock(warehouse,'extra',quantity,quantity,quantity,10)
         row = self.read(warehouse_code_mode='all', warehouse_code=None)
         self.assertEqual(row['inventory_qty'], 160 + 999 + 25)
         self.assertEqual(row['recommended_qty'], 10 + 999 + 25)

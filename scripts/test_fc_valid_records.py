@@ -21,8 +21,8 @@ class ValidRecordAggregation(unittest.TestCase):
                 tested.add(name)
                 sql = 'SELECT ' + ', '.join(fields[k].sql() for k in ['forecast_turnover_days', 'recommended_qty', 'missing_calculation_count']) + ' FROM inputs AS r'
                 with sqlite3.connect(':memory:') as db:
-                    db.execute('CREATE TABLE inputs (inventory_qty REAL, daily_plan REAL, recommended_qty REAL)')
-                    db.executemany('INSERT INTO inputs VALUES (?,?,?)', [(100,10,5),(20,0,0),(900,None,None),(None,500,-3),(-20,4,None)])
+                    db.execute('CREATE TABLE inputs (forecast_supply REAL, forecast_daily REAL, recommended_qty REAL)')
+                    db.executemany('INSERT INTO inputs VALUES (?,?,?)', [(100,10,5),(20,0,0),(900,None,None),(None,500,-3),(None,None,None)])
                     self.assertEqual(db.execute(sql).fetchone(), (12,5,3), name)
                     db.execute('DELETE FROM inputs')
                     db.execute('INSERT INTO inputs VALUES (20,0,0)')

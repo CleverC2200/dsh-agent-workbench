@@ -86,6 +86,8 @@ test('a 92-row import retains every valid row and reports all invalid rows with 
     warehouse_name: '南京分仓',
     sku: String(10000000 + index),
     available_qty: 0,
+    inventory_qty: 0,
+    current_order_shortage: 0,
     calculation_order_remaining: 0,
     open_transfer_reported_qty: 0,
     cycle_days: 5,
@@ -110,7 +112,7 @@ test('a 92-row import retains every valid row and reports all invalid rows with 
   for (const [index, row] of calculated.entries()) {
     assert.equal(row.month_out_plan, 90 + index);
     assert.equal(row.warehouse_month_transfer_plan, 100 + index);
-    assert.equal(row.recommended_qty, Math.ceil((90 + index) / daysInMonth) * 8);
+    assert.equal(row.recommended_qty, Math.ceil(((90 + index) / daysInMonth) * 8));
   }
   const invalid = rows.map((row) => ({ ...row }));
   invalid[2].本月出货计划 = '不是数字';

@@ -112,6 +112,8 @@ test('multi selection separates aggregate metrics and per warehouse actions', as
               fulfillment_order_quantity: quantity,
               fulfillment_shipped_quantity: quantity / 2,
               fulfillment_rate: 0.5,
+              forecast_supply_qty: quantity + 50,
+              forecast_outbound_daily: values.warehouse_code === 'A110' ? 30 : 20,
             }[k] ?? 0,
           ]),
         ),
@@ -168,6 +170,12 @@ test('multi selection separates aggregate metrics and per warehouse actions', as
   await page.keyboard.press('Escape');
   await expect(page.locator('[data-overview-cards="fc"] .kpi-card').first()).toContainText('400');
   await expect(page.locator('[data-overview-cards="fc"] .kpi-card').nth(1)).toContainText('25');
+  const forecast = page.locator('[data-overview-cards="fc"] .kpi-card').first();
+  await expect(forecast).toContainText('展望周转（含在途）');
+  await expect(forecast.locator('dl div').filter({ hasText: '展望周转' }).locator('dd')).toHaveText(
+    '10天',
+  );
+
   await page.screenshot({ path: '.scratch/fc-multi-overview.png' });
   await page.getByRole('button', { name: '操作管理', exact: true }).click();
   const nav = page.getByRole('navigation', { name: '操作分仓' });

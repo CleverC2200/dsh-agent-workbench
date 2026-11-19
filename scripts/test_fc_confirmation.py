@@ -13,7 +13,7 @@ class Confirmation(unittest.TestCase):
   columns=sorted({c.name for c in tree.find_all(exp.Column) if c.table=='m'})
   self.db.execute('CREATE TABLE agents_inv_branch_sku_day ('+', '.join(columns)+')')
   for warehouse,sku,qty in [('A020','POS',10),('A020','ZERO',0),('A020','UNKNOWN',None),('A100','OTHER',20)]:
-   self.db.execute('INSERT INTO agents_inv_branch_sku_day (inv_batch_id,inv_variant_id,warehouseid,sku,warehouse_name,recommended_qty) VALUES (?,?,?,?,?,?)',('batch','BRANCH_DEFAULT',warehouse,sku,'长沙' if warehouse=='A020' else '另一仓',qty))
+   self.db.execute('INSERT INTO agents_inv_branch_sku_day (inv_batch_id,inv_variant_id,warehouseid,sku,warehouse_name,inv_business_date,month_out_plan,cycle_days,inventory_qty,current_order_shortage,open_transfer_reported_qty,calculation_order_remaining) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',('batch','BRANCH_DEFAULT',warehouse,sku,'长沙' if warehouse=='A020' else '另一仓','2026-10-19',0,7,10,qty,0,0))
  def read(self,**overrides):
   values={**{spec['name']:QUERY['request']['parameters'].get(key) for key,spec in QUERY['parameterSpec'].items()},'summary_batch_id':'batch','warehouse_code_mode':'equal','warehouse_code':'A020','sku_mode':'all','sku':None,'category_mode':'all','category':None,'search_pattern':None,'warehouse_search_pattern':None,'needed_only':True,'positive_actual_keys':[''],'positive_plan_keys':[''],'zero_plan_keys':[''],'page_size':200,'offset':0,**overrides}
   def literal(v):
