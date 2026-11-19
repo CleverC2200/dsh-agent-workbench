@@ -1204,7 +1204,7 @@ const RegionalApprovalWorkbench: React.FC<{
   );
 
   const focusedLiveRow = liveRows.find((row) => row.planId === focusedLivePlanId) ?? liveRows[0];
-  const metricRows = orderType === 'M' ? allLiveRows : liveRows;
+  const metricRows = allLiveRows;
   const skuReviewLoading = skuReviewOpen && !skuReviewSnapshot;
   const completedListDetails = useRef<{ loadId: string; rows: typeof metricRows }>();
   const detailLoadId = useMemo(
@@ -1611,51 +1611,25 @@ const RegionalApprovalWorkbench: React.FC<{
         savedAdjustmentCount: 0,
         localApprovalResultCount: 0,
       };
-    const detailMetrics = liveRows.map((row) => versionMetrics[row.planId]);
-    const hasCompleteDetailMetrics =
-      detailMetrics.length === liveRows.length &&
-      detailMetrics.length > 0 &&
-      detailMetrics.every(
-        (detail) =>
-          detail &&
-          /^-?\d+(?:\.\d+)?$/.test(detail.baseQty) &&
-          /^-?\d+(?:\.\d+)?$/.test(detail.baseAmount),
-      );
-    const serverSummary = liveQuery.queueState.data?.summary;
+    const overviewRows = selectedLiveRows.length
+      ? selectedLiveRows.map((row) => draftedRowsByPlanId.get(String(row.planId)) ?? row)
+      : draftedAllLiveRows;
     return {
       visibleCount: liveRows.length,
       pendingCount: liveRows.filter((row) => row.approvalState === 'pending').length,
       warningCount: liveRows.filter((row) => row.approvalState === 'returned').length,
 
-      quantity:
-        orderType === 'M'
-          ? addExactDecimals(draftedAllLiveRows.map((row) => row.currentQty))
-          : serverSummary
-            ? (serverSummary.planQty ?? '—')
-            : draftedLiveRows.length === 0
-              ? '0'
-              : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentQty))
-                ? addExactDecimals(draftedLiveRows.map((row) => row.currentQty))
-                : hasCompleteDetailMetrics
-                  ? addExactDecimals(detailMetrics.map((detail) => detail!.baseQty))
-                  : '—',
-      amount:
-        orderType === 'M'
-          ? addExactDecimals(draftedAllLiveRows.map((row) => row.currentAmount))
-          : serverSummary
-            ? (serverSummary.planAmount ?? '—')
-            : draftedLiveRows.length === 0
-              ? '0'
-              : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentAmount))
-                ? addExactDecimals(draftedLiveRows.map((row) => row.currentAmount))
-                : hasCompleteDetailMetrics
-                  ? addExactDecimals(detailMetrics.map((detail) => detail!.baseAmount))
-                  : '—',
-      targetAmount:
-        serverSummary?.targetAmount ??
-        addExactDecimals(
-          (orderType === 'M' ? draftedAllLiveRows : draftedLiveRows).map((row) => row.targetAmount),
+      quantity: addExactDecimals(
+        overviewRows.map((row) =>
+          orderType === 'Z' ? (row.corrPlanQty ?? row.currentQty) : row.currentQty,
         ),
+      ),
+      amount: addExactDecimals(
+        overviewRows.map((row) =>
+          orderType === 'Z' ? (row.corrPlanAmount ?? row.currentAmount) : row.currentAmount,
+        ),
+      ),
+      targetAmount: addExactDecimals(overviewRows.map((row) => row.targetAmount)),
       savedAdjustmentCount: 0,
       localApprovalResultCount: 0,
     };
@@ -1663,13 +1637,11 @@ const RegionalApprovalWorkbench: React.FC<{
     skuReviewOpen,
     skuReviewTotals,
     allLiveRows,
-    scopeSummary,
-    draftedLiveRows,
     draftedAllLiveRows,
+    draftedRowsByPlanId,
+    selectedLiveRows,
     orderType,
     liveRows,
-    versionMetrics,
-    liveQuery.queueState.data?.summary,
   ]);
   const dashboardReady =
     liveQuery.queueState.status === 'success' &&
