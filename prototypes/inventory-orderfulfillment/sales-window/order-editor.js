@@ -13,6 +13,12 @@ window.OrderShortageEditor = (() => {
       ? '—'
       : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 6 }).format(Number(value));
   const quantityText = (value) => (number(value) === null ? '—' : display(value) + ' 箱');
+  const rateText = (value) =>
+    number(value) === null
+      ? '待核实'
+      : number(value) > 100
+        ? '数据异常'
+        : number(value).toFixed(1) + '%';
   const specificationText = (value) => {
     const raw = typeof value === 'string' ? value.trim() : '';
     if (!raw) return '规格未提供';
@@ -36,6 +42,8 @@ window.OrderShortageEditor = (() => {
     const root = document.getElementById('orderEditor'),
       snapshot = state.snapshot || {},
       capabilities = state.editor || {};
+    const mountOwner = {};
+    root.__fulfillmentEditorOwner = mountOwner;
     const original = Array.isArray(snapshot.lines) ? snapshot.lines : [];
     if (
       original.length > 200 ||
@@ -53,6 +61,17 @@ window.OrderShortageEditor = (() => {
       state.status === 'pending' &&
       capabilities.editable === true &&
       state.permissions?.canAct === true;
+    const inventoryEnabled =
+      editable &&
+      state.previewOnly !== true &&
+      capabilities.inventoryRecalculationAvailable === true &&
+      typeof state.onInventoryRecalculate === 'function';
+    let inventoryResult,
+      inventoryPhase = 'idle',
+      inventoryError = '',
+      inventoryKey = '',
+      inventoryTimer,
+      inventoryGeneration = 0;
     const supplied =
       capabilities.recommendationsAvailable === true && Array.isArray(capabilities.recommendations)
         ? capabilities.recommendations
@@ -62,17 +81,33 @@ window.OrderShortageEditor = (() => {
         (line, index) => line?.sku && supplied.findIndex((item) => item.sku === line.sku) === index,
       )
       .slice(0, 50);
+    function packagingError(line) {
+      if (
+        capabilities.packagingValidationAvailable !== true ||
+        original.some((item) => item.sku === line.sku)
+      )
+        return '';
+      return line.packagingStatus === 'READY' &&
+        typeof line.unit === 'string' &&
+        line.unit.length > 0 &&
+        number(line.unitsPerCase) > 0
+        ? ''
+        : line.packagingMessage || `商品${line.sku}缺少可核实的包装单位或折箱关系，暂不能选用。`;
+    }
     const recommendationDrafts = recommendations.map((line) => ({
       ...line,
       sku: String(line.sku),
       originalQuantity: 0,
       draftQuantity: 0,
     }));
-    let page = state.view === 'details' ? 'details' : route(snapshot),
+    let page =
+        state.view === 'details' ? 'details' : state.view === 'price' ? 'price' : route(snapshot),
       search = '',
       category = '全部',
       subCategory = '全部';
     let deliveryDate = snapshot.deliveryDate || '',
+      vehicleType = snapshot.vehicleType || '',
+      loadingProducts = false,
       modal = false,
       saving = false,
       notice = '';
@@ -100,7 +135,104 @@ window.OrderShortageEditor = (() => {
         : selected().reduce((sum, line) => sum + line.draftQuantity, 0);
     const changed = () =>
       lines.some((line) => line.draftQuantity !== line.originalQuantity) ||
-      deliveryDate !== (snapshot.deliveryDate || '');
+      deliveryDate !== (snapshot.deliveryDate || '') ||
+      vehicleType !== (snapshot.vehicleType || '');
+    const inventoryLines = () =>
+      lines
+        .filter((line) => line.draftQuantity > 0)
+        .map((line) => ({ sku: line.sku, quantity: line.draftQuantity }));
+    const inventoryDraftKey = () => JSON.stringify(inventoryLines());
+    const currentRate = () =>
+      inventoryEnabled
+        ? inventoryPhase === 'ready'
+          ? number(inventoryResult?.satisfactionRate)
+          : null
+        : number(snapshot.satisfactionRate);
+    function queueInventory() {
+      if (!inventoryEnabled || root.__fulfillmentEditorOwner !== mountOwner) return;
+      const draftLines = inventoryLines();
+      if (
+        !draftLines.length ||
+        draftLines.length > 50 ||
+        lines.some((line) => line.draftQuantity === null) ||
+        root.querySelector('input[aria-invalid="true"]')
+      ) {
+        clearTimeout(inventoryTimer);
+        inventoryGeneration++;
+        inventoryKey = '';
+        inventoryPhase = 'invalid';
+        inventoryResult = undefined;
+        return;
+      }
+      const key = inventoryDraftKey();
+      if (key === inventoryKey && ['loading', 'ready', 'error'].includes(inventoryPhase)) return;
+      clearTimeout(inventoryTimer);
+      inventoryKey = key;
+      inventoryPhase = 'loading';
+      inventoryResult = undefined;
+      inventoryError = '';
+      const generation = ++inventoryGeneration;
+      inventoryTimer = setTimeout(async () => {
+        if (root.__fulfillmentEditorOwner !== mountOwner || generation !== inventoryGeneration)
+          return;
+        try {
+          const result = await state.onInventoryRecalculate({
+            deliveryDate,
+            ...(vehicleType !== (snapshot.vehicleType || '') ? { vehicleType } : {}),
+            lines: draftLines,
+          });
+          if (
+            root.__fulfillmentEditorOwner !== mountOwner ||
+            generation !== inventoryGeneration ||
+            key !== inventoryDraftKey()
+          )
+            return;
+          if (
+            !result ||
+            number(result.satisfactionRate) === null ||
+            Number(result.satisfactionRate) > 100 ||
+            !/^[a-f0-9]{64}$/.test(result.inventoryHash || '') ||
+            !Array.isArray(result.lines) ||
+            result.lines.length !== draftLines.length ||
+            new Set(result.lines.map((line) => line.sku)).size !== draftLines.length ||
+            draftLines.some(
+              (line) =>
+                !result.lines.some(
+                  (fresh) =>
+                    fresh.sku === line.sku &&
+                    number(fresh.quantity) === line.quantity &&
+                    number(fresh.availableQuantity) !== null &&
+                    number(fresh.shortage) !== null &&
+                    Math.abs(
+                      Number(fresh.shortage) -
+                        Math.max(0, line.quantity - Number(fresh.availableQuantity)),
+                    ) < 1e-7,
+                ),
+            )
+          )
+            throw Error('库存核算结果不完整，请重新核算');
+          const total = result.lines.reduce((sum, line) => sum + Number(line.quantity), 0);
+          const missing = result.lines.reduce((sum, line) => sum + Number(line.shortage), 0);
+          const computedRate = (100 * (total - missing)) / total;
+          if (!(total > 0) || Math.abs(computedRate - Number(result.satisfactionRate)) > 1e-6)
+            throw Error('库存满足率与商品明细不一致，请重新核算');
+          inventoryResult = { ...result, satisfactionRate: computedRate };
+          inventoryPhase = 'ready';
+          for (const fresh of result.lines) {
+            const line = lines.find((item) => item.sku === fresh.sku);
+            line.shortage = Number(fresh.shortage);
+            line.availableQuantity = Number(fresh.availableQuantity);
+          }
+        } catch (error) {
+          if (root.__fulfillmentEditorOwner !== mountOwner || generation !== inventoryGeneration)
+            return;
+          inventoryPhase = 'error';
+          inventoryResult = undefined;
+          inventoryError = error.message || '库存查询失败，请重新核算';
+        }
+        updateTotals();
+      }, 300);
+    }
     const amount = () =>
       selected().some((line) => number(line.unitPrice) === null || line.draftQuantity === null)
         ? '—'
@@ -111,8 +243,7 @@ window.OrderShortageEditor = (() => {
       const minimum = number(line.minimumOrderQuantity),
         pallet = number(line.orderMultiple);
       if (quantity === null) return '请输入非负有效数量';
-      if (quantity > 0 && !(pallet > 0))
-        return '每托箱数未提供，暂时无法校验整托数量。';
+      if (quantity > 0 && !(pallet > 0)) return '每托箱数未提供，暂时无法校验整托数量。';
       if (quantity > 0 && minimum !== null && quantity < minimum)
         return `起订量为 ${display(minimum)} 箱`;
       if (
@@ -123,23 +254,85 @@ window.OrderShortageEditor = (() => {
         return `请按整托订购，数量须为 ${display(pallet)} 箱的整数倍。`;
       return '';
     }
+    function taskNotice() {
+      if (capabilities.modificationState && capabilities.reason) return capabilities.reason;
+      if (state.status === 'processing') return '任务正在处理，请稍后刷新查看结果。';
+      if (state.status === 'expired') return '本次确认任务已失效，请重新获取最新任务。';
+      if (state.status === 'resolved' || state.status === 'deferred') {
+        const decision = state.decisions?.[0];
+        if (decision?.action_id === 'defer_shipment')
+          return decision.deferred_until
+            ? '已记录暂缓决定，预计交货日期：' + decision.deferred_until
+            : '已记录暂缓决定，交货日期请联系业务核实。';
+        return decision?.action_id === 'confirm_shipment'
+          ? '已记录销售确认决定，可查看订单明细。'
+          : '已记录处理结果，可查看订单明细。';
+      }
+      if (state.status !== 'pending') return '当前任务状态待核实，请刷新后查看最新结果。';
+      return state.permissions?.canAct !== true
+        ? '你可以查看此订单，处理操作需由指定人员完成。'
+        : '当前无法在此处理，请联系业务核实。';
+    }
     function reason() {
-      if (!editable) return '此任务已结束或仅有查看权限。';
+      if (!editable) return capabilities.reason || taskNotice();
       if (snapshot.credit?.status === 'insufficient') return '信用额度不足，需先补充并经后台核验。';
-      if (route(snapshot) !== 'order') return '订单满足率未达到90%或未完整提供，请先处理商品。';
+      if (
+        (snapshot.priceStatus && snapshot.priceStatus !== 'READY') ||
+        (snapshot.omsEventType === 'PRICE_CHECK_FAILED' && snapshot.priceStatus !== 'READY')
+      )
+        return state.notice || '商品价格核验未通过，请先点击“价格已维护”重新查价。';
+      if (route(snapshot) !== 'order' && capabilities.omsModificationAvailable !== true) {
+        const rate = number(snapshot.satisfactionRate);
+        return rate === null
+          ? '订单满足率未提供，请先核实库存满足情况。'
+          : rate > 100
+            ? '订单满足率超出有效范围，请先核实数据。'
+            : `订单满足率为 ${display(rate)}%，未达到90%，请先核对库存及商品数量。`;
+      }
       if (!selected().length) return '尚未选择商品，请先核对订单商品。';
       if (selected().some((line) => line.draftQuantity === null)) return '商品数量尚未完整提供。';
       const invalidInput = root.querySelector('input[aria-invalid="true"]');
       if (invalidInput) return invalidInput.validationMessage;
       const invalidQuantity = selected()
-        .map((line) => quantityError(line, line.draftQuantity))
+        .map((line) => line.inputError || quantityError(line, line.draftQuantity))
         .find(Boolean);
       if (invalidQuantity) return invalidQuantity;
-      if (changed()) return '订单信息已调整，请重新核对后提交。';
-      if (typeof state.onConfirm !== 'function') return '暂时无法提交，请稍后重试。';
+      if (capabilities.omsModificationAvailable === true) {
+        if (capabilities.canSubmit !== true) return capabilities.reason || '当前不能提交订单修改。';
+        if (
+          capabilities.catalogAvailable !== true &&
+          (lines.length !== original.length || lines.some((line) => !(line.draftQuantity > 0)))
+        )
+          return '当前支持调整原单商品数量，新增或删除商品请联系业务处理。';
+        if (selected().length > 50) return '一次最多提交50种商品，请减少商品数量。';
+        const packaging = selected().map(packagingError).find(Boolean);
+        if (packaging) return packaging;
+        if (
+          vehicleType !== (snapshot.vehicleType || '') &&
+          !capabilities.vehicleOptions?.some((option) => option.value === vehicleType)
+        )
+          return '请选择当前提货点可用的车型。';
+        if (
+          selected().some(
+            (line) =>
+              !original.some((item) => item.sku === line.sku) &&
+              (line.priceStatus !== 'READY' || number(line.unitPrice) === null),
+          )
+        )
+          return '新增商品价格核验未通过，请重新查询商品。';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) return '请选择有效的预计交货日期。';
+        if (inventoryEnabled && inventoryPhase === 'error') return inventoryError;
+        if (
+          inventoryEnabled &&
+          (inventoryPhase !== 'ready' || inventoryKey !== inventoryDraftKey())
+        )
+          return '正在核算最新库存，请稍候。';
+      } else if (changed()) return '调整内容尚未通过重新核验，暂不能提交。';
+      if (typeof state.onConfirm !== 'function') return '当前无法在此提交，请联系业务处理。';
       return '';
     }
     function updateTotals() {
+      queueInventory();
       root.querySelectorAll('[data-editor-count]').forEach((item) => {
         item.textContent =
           item.dataset.editorCount === 'cart'
@@ -155,9 +348,44 @@ window.OrderShortageEditor = (() => {
       }
       const rate = root.querySelector('.editor-rate');
       if (rate)
-        rate.textContent = changed()
-          ? '调整后满足率：待重新核算'
-          : `订单满足率：${display(snapshot.satisfactionRate)}%`;
+        rate.textContent = inventoryEnabled
+          ? inventoryPhase === 'ready'
+            ? `订单满足率：${rateText(currentRate())}`
+            : inventoryPhase === 'error'
+              ? '订单满足率：核算失败'
+              : '订单满足率：待核算'
+          : changed()
+            ? '调整后满足率：待重新核算'
+            : number(snapshot.satisfactionRate) === null
+              ? '订单满足率：待核实'
+              : number(snapshot.satisfactionRate) > 100
+                ? '订单满足率：数据异常'
+                : `订单满足率：${rateText(snapshot.satisfactionRate)}`;
+      root.querySelectorAll('[data-editor-rate]').forEach((item) => {
+        item.textContent = rateText(currentRate());
+      });
+      root.querySelectorAll('[data-editor-stock]').forEach((item) => {
+        const line = lines.find((line) => line.sku === item.dataset.editorStock);
+        if (!inventoryEnabled || !line || !(line.draftQuantity > 0)) return;
+        item.textContent =
+          inventoryPhase === 'ready'
+            ? line.shortage > 0
+              ? `库存不足：当前缺货 ${display(line.shortage)} 箱`
+              : ''
+            : inventoryPhase === 'error'
+              ? '库存核算失败，请重新核算'
+              : '正在核算最新库存';
+        item.hidden = !item.textContent;
+      });
+      const retry = root.querySelector('[data-editor-inventory-retry]');
+      if (retry) retry.disabled = inventoryPhase === 'loading';
+      const confirm = root.querySelector('[data-editor-confirm]');
+      if (confirm) confirm.disabled = Boolean(reason()) || saving;
+      const dialogReason = root.querySelector('[data-editor-dialog-reason]');
+      if (dialogReason) {
+        dialogReason.textContent = reason();
+        dialogReason.hidden = !reason();
+      }
     }
     function renderLine(line, readOnly = false) {
       const article = node('article');
@@ -203,15 +431,25 @@ window.OrderShortageEditor = (() => {
         input.placeholder = '—';
         input.setAttribute('aria-label', `${line.sku} 数量`);
         input.disabled =
-          !editable || line.originalQuantity === null || !(number(line.orderMultiple) > 0);
+          !editable ||
+          line.originalQuantity === null ||
+          !(number(line.orderMultiple) > 0) ||
+          Boolean(packagingError(line));
         const multiple = number(line.orderMultiple),
           minimum = number(line.minimumOrderQuantity),
           error = node('small', '', 'editor-quantity-error');
         error.setAttribute('role', 'status');
         function apply(value, restoreInvalid = true) {
-          if (!editable || line.originalQuantity === null || !(multiple > 0)) return;
+          if (
+            !editable ||
+            line.originalQuantity === null ||
+            !(multiple > 0) ||
+            packagingError(line)
+          )
+            return;
           const quantity = number(value);
           const invalid = quantityError(line, quantity);
+          line.inputError = invalid;
           input.setCustomValidity(invalid);
           input.setAttribute('aria-invalid', String(Boolean(invalid)));
           error.textContent = invalid;
@@ -247,27 +485,52 @@ window.OrderShortageEditor = (() => {
                 minimum > 0 ? Math.ceil(minimum / step) * step : step,
               ),
             ),
-          !editable || line.draftQuantity === null || !(multiple > 0),
+          !editable ||
+            line.draftQuantity === null ||
+            !(multiple > 0) ||
+            Boolean(packagingError(line)),
         );
         plus.setAttribute('aria-label', `${line.sku} 增加`);
         input.addEventListener('input', () => apply(input.value, false));
         input.addEventListener('change', () => apply(input.value));
         const initialError =
-          line.draftQuantity === null ? '' : quantityError(line, line.draftQuantity);
+          line.inputError ||
+          (line.draftQuantity === null ? '' : quantityError(line, line.draftQuantity));
         input.setCustomValidity(initialError);
         input.setAttribute('aria-invalid', String(Boolean(initialError)));
         error.textContent = initialError;
         controls.append(minus, input, plus, node('span', '箱'));
         trading.append(controls);
+        if (capabilities.catalogAvailable === true && editable && line.draftQuantity > 0)
+          trading.append(
+            button(
+              '删除',
+              () => {
+                line.draftQuantity = 0;
+                line.inputError = '';
+                render();
+              },
+              false,
+              'editor-add',
+            ),
+          );
         info.append(error);
       }
       info.append(trading);
-      if (number(line.shortage) > 0)
-        info.append(
-          node('p', `库存不足：原订单缺货 ${display(line.shortage)} 箱`, 'editor-stock-warning'),
-        );
-      else if (number(line.shortage) === null)
-        info.append(node('p', '缺货数据未完整提供', 'editor-stock-warning'));
+      const packaging = packagingError(line);
+      if (packaging) info.append(node('p', packaging, 'editor-stock-warning'));
+      const stock = node(
+        'p',
+        number(line.shortage) > 0
+          ? `库存不足：原订单缺货 ${display(line.shortage)} 箱`
+          : number(line.shortage) === null
+            ? '缺货数据未完整提供'
+            : '',
+        'editor-stock-warning',
+      );
+      stock.dataset.editorStock = line.sku;
+      stock.hidden = !stock.textContent;
+      info.append(stock);
       article.append(image, info);
       return article;
     }
@@ -283,20 +546,21 @@ window.OrderShortageEditor = (() => {
           ? [
               ['车型', snapshot.vehicleType || '—'],
               ['总数量', quantityText(total())],
-              [
-                '订单满足率',
-                `${display(snapshot.satisfactionRate)}${number(snapshot.satisfactionRate) === null ? '' : '%'}`,
-              ],
+              ['订单满足率', rateText(currentRate())],
             ]
           : []),
         ['DMS订单号', ids.dms],
         ['订单交货日期', snapshot.deliveryDate || '—'],
-      ])
-        fields.append(node('dt', label), node('dd', value));
+      ]) {
+        const valueNode = node('dd', value);
+        if (label === '订单满足率') valueNode.dataset.editorRate = '';
+        fields.append(node('dt', label), valueNode);
+      }
       info.append(fields);
       return info;
     }
     function render() {
+      if (root.__fulfillmentEditorOwner !== mountOwner) return;
       root.replaceChildren();
       root.dataset.page = page;
       const title = {
@@ -305,6 +569,7 @@ window.OrderShortageEditor = (() => {
         catalog: '商品增减',
         recommendations: '商品推荐',
         credit: '确认额度已补充',
+        price: '确认',
       }[page];
       document.title = title;
       const header = node('header');
@@ -327,23 +592,117 @@ window.OrderShortageEditor = (() => {
         node('span'),
       );
       const body = node('section', undefined, 'editor-body');
-      if (state.permissions?.canAct !== true)
-        body.append(node('p', '你可以查看此订单；处理操作由指定销售执行。', 'editor-warning'));
-      if (state.status !== 'pending')
-        body.append(
-          node(
-            'p',
-            state.decisions?.[0]?.action_id === 'defer_shipment'
-              ? '已暂缓，预计交货截止：' + state.decisions[0].deferred_until
-              : '该订单任务已处理，仅展示明细。',
-            'editor-warning',
+      if (state.orderRefresh && state.permissions?.canAct === true) {
+        const panel = node('section', undefined, 'editor-refresh-panel');
+        panel.append(node('p', state.orderRefresh.message || '请刷新最新订单后继续修改。'));
+        const submitted = capabilities.submittedOrder;
+        if (submitted?.lines?.length) {
+          const total = submitted.lines.reduce((sum, line) => sum + Number(line.quantity), 0);
+          panel.append(
+            node('p', `已提交OMS：${display(total)} 箱，预计交货日期：${submitted.deliveryDate}`),
+          );
+          if (submitted.vehicleType)
+            panel.append(
+              node(
+                'p',
+                `已提交车型：${submitted.vehicleType}，商品：${submitted.lines.map((line) => line.sku).join('、')}`,
+              ),
+            );
+        }
+        if (state.orderRefresh.latestOrder) {
+          const latest = state.orderRefresh.latestOrder;
+          panel.append(
+            node(
+              'p',
+              `OMS最新订单：${quantityText(latest.quantity)}，预计交货日期：${latest.deliveryDate || '—'}`,
+            ),
+          );
+        }
+        if (typeof state.onRefreshOrder === 'function')
+          panel.append(
+            button(
+              saving ? '刷新中…' : '刷新最新订单',
+              async () => {
+                if (saving || state.previewOnly === true) return;
+                saving = true;
+                render();
+                try {
+                  await state.onRefreshOrder();
+                } catch (error) {
+                  saving = false;
+                  notice = error.message;
+                  render();
+                }
+              },
+              saving || state.previewOnly === true,
+            ),
+          );
+        if (state.orderRefresh.status === 'ready' && typeof state.onOpenLatest === 'function')
+          panel.append(
+            button(
+              '继续修改数量和交期',
+              () => state.onOpenLatest(),
+              state.previewOnly === true,
+              'editor-primary',
+            ),
+          );
+        body.append(panel);
+      }
+      if (state.permissions?.canAct !== true || state.status !== 'pending')
+        body.append(node('p', taskNotice(), 'editor-warning'));
+      if (state.status === 'pending' && typeof state.notice === 'string' && state.notice.trim()) {
+        const message = node('p', state.notice, 'editor-warning');
+        message.style.whiteSpace = 'pre-line';
+        body.append(message);
+      }
+      if (page === 'price') {
+        const panel = node('section', undefined, 'editor-credit-panel');
+        panel.append(node('h2', '确认价格已维护？'));
+        if (notice) panel.append(node('p', notice, 'editor-warning'));
+        const allowed =
+          state.status === 'pending' &&
+          state.permissions?.canAct === true &&
+          state.previewOnly !== true &&
+          typeof state.onPriceRecheck === 'function';
+        panel.append(
+          button(
+            saving ? '查价中…' : '确认',
+            async () => {
+              if (!allowed || saving) return;
+              saving = true;
+              notice = '';
+              render();
+              try {
+                await state.onPriceRecheck();
+              } catch (error) {
+                notice = error.message;
+              } finally {
+                saving = false;
+                if (root.dataset.page === 'price') render();
+              }
+            },
+            !allowed || saving,
+            'editor-primary',
           ),
+          button('返回', () => window.close(), saving),
         );
+        body.append(panel);
+        root.append(header, body);
+        return;
+      }
       if (page === 'credit') {
         const panel = node('section', undefined, 'editor-credit-panel');
         panel.append(
           node('h2', '确认额度已补充？'),
-          node('p', `信用额度不足：${display(snapshot.credit?.shortfall)} 元`),
+          node(
+            'p',
+            number(snapshot.credit?.shortfall) > 0
+              ? `信用额度校验未通过，缺口：${display(snapshot.credit.shortfall)} 元`
+              : snapshot.credit?.shortfall == null
+                ? '信用额度校验未通过，具体缺口金额未提供。'
+                : '信用额度校验结果与缺口金额需核实，请联系业务确认。',
+          ),
+          node('p', '请联系业务核实额度补充结果，以后台核验为准。'),
         );
         panel.append(
           button('确认', () => {}, true, 'editor-primary'),
@@ -358,8 +717,24 @@ window.OrderShortageEditor = (() => {
         const toolbar = node('div', undefined, 'editor-toolbar'),
           vehicle = node('select');
         vehicle.setAttribute('aria-label', '选择车型');
-        vehicle.disabled = true;
-        vehicle.append(node('option', '选择车型'));
+        const cars =
+          capabilities.vehicleRulesAvailable === true && Array.isArray(capabilities.vehicleOptions)
+            ? capabilities.vehicleOptions
+            : [];
+        vehicle.disabled = !editable || !cars.length;
+        const current = node('option', vehicleType || '选择车型');
+        current.value = vehicleType;
+        vehicle.append(current);
+        for (const item of cars.filter((item) => item.value && item.value !== vehicleType)) {
+          const option = node('option', item.label || item.value);
+          option.value = item.value;
+          vehicle.append(option);
+        }
+        vehicle.value = vehicleType;
+        vehicle.addEventListener('change', () => {
+          vehicleType = vehicle.value;
+          updateTotals();
+        });
         const date = node('input');
         date.type = 'date';
         date.value = /^\d{4}-\d{2}-\d{2}$/.test(deliveryDate) ? deliveryDate : '';
@@ -396,6 +771,41 @@ window.OrderShortageEditor = (() => {
         searchBar.append(
           node('span', '⌕', 'editor-search-icon'),
           input,
+          ...(capabilities.catalogAvailable === true && typeof state.onLookupProducts === 'function'
+            ? [
+                button(
+                  loadingProducts ? '查询中…' : '查找商品',
+                  async () => {
+                    if (loadingProducts || !editable) return;
+                    loadingProducts = true;
+                    render();
+                    try {
+                      const found = await state.onLookupProducts(search.trim());
+                      if (!Array.isArray(found) || found.length > 20)
+                        throw Error('商品目录返回异常，请重试');
+                      for (const item of found) {
+                        if (!item?.sku || lines.some((line) => line.sku === item.sku)) continue;
+                        if (lines.length >= 200) break;
+                        lines.push({
+                          ...item,
+                          sku: String(item.sku),
+                          originalQuantity: 0,
+                          draftQuantity: 0,
+                        });
+                      }
+                      notice = found.length ? '' : '当前提货点没有匹配的可用商品';
+                    } catch (error) {
+                      notice = error.message;
+                    } finally {
+                      loadingProducts = false;
+                      render();
+                    }
+                  },
+                  loadingProducts || !editable,
+                  'editor-add',
+                ),
+              ]
+            : []),
           button(
             '推荐',
             () => {
@@ -502,6 +912,20 @@ window.OrderShortageEditor = (() => {
         count = node('strong');
       count.dataset.editorCount = '';
       summary.append(count, node('p', '', 'editor-rate'));
+      if (inventoryEnabled) {
+        const retry = button(
+          '重新核算库存',
+          () => {
+            inventoryKey = '';
+            inventoryPhase = 'idle';
+            updateTotals();
+          },
+          false,
+          'editor-add',
+        );
+        retry.dataset.editorInventoryRetry = '';
+        summary.append(retry);
+      }
       const checkout = node('div', undefined, 'editor-checkout');
       if (page === 'order') {
         const price = node('span', '', 'editor-amount');
@@ -571,7 +995,10 @@ window.OrderShortageEditor = (() => {
         dialog.setAttribute('aria-modal', 'true');
         dialog.setAttribute('aria-label', '确认提交');
         dialog.append(node('h2', '确认提交？'));
-        if (reason()) dialog.append(node('p', reason()));
+        const dialogReason = node('p', reason());
+        dialogReason.dataset.editorDialogReason = '';
+        dialogReason.hidden = !reason();
+        dialog.append(dialogReason);
         dialog.append(
           button(
             saving ? '保存中…' : '确认',
@@ -580,10 +1007,29 @@ window.OrderShortageEditor = (() => {
               saving = true;
               render();
               try {
-                await state.onConfirm();
+                await state.onConfirm({
+                  deliveryDate,
+                  ...(vehicleType !== (snapshot.vehicleType || '') ? { vehicleType } : {}),
+                  ...(inventoryEnabled ? { inventoryHash: inventoryResult.inventoryHash } : {}),
+                  lines: (capabilities.catalogAvailable === true
+                    ? lines.filter((line) => line.draftQuantity > 0)
+                    : lines
+                  ).map((line) => ({ sku: line.sku, quantity: line.draftQuantity })),
+                });
                 modal = false;
               } catch (error) {
                 notice = error.message;
+                if (
+                  [
+                    'ORDER_CONFIRMATION_OMS_MODIFICATION_INVENTORY_CHANGED',
+                    'ORDER_CONFIRMATION_OMS_MODIFICATION_INVENTORY_UNAVAILABLE',
+                  ].includes(error.code)
+                ) {
+                  inventoryKey = '';
+                  inventoryPhase = 'error';
+                  inventoryError = error.message;
+                  inventoryResult = undefined;
+                }
                 modal = false;
               } finally {
                 saving = false;
@@ -602,6 +1048,7 @@ window.OrderShortageEditor = (() => {
             saving,
           ),
         );
+        dialog.querySelector('button').dataset.editorConfirm = '';
         overlay.append(dialog);
         root.append(overlay);
       }
