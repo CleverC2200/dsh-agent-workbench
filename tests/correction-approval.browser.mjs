@@ -186,8 +186,8 @@ test('月初提报达成使用确认数量乘单价，纠偏保留发货达成�
     await expect(cell.locator('strong')).toHaveText(mode === '月初' ? '6.0%' : '—');
     if (mode === '月初') {
       await expect(cell).toContainText('¥12.13万 / ¥200.81万');
-      const shipment = cell.locator('[data-sales-plan-shipment="unavailable"]');
-      await expect(shipment).toHaveText('当月发货 — / —');
+      await expect(cell.locator('[data-sales-plan-shipment]')).toHaveCount(0);
+      await expect(cell.getByText('发货实绩未取得', { exact: true })).toHaveCount(0);
     } else {
       await expect(cell).toContainText('发货实绩未取得');
     }

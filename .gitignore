@@ -7,3 +7,4 @@ __pycache__/
 
 /lib/configured-facts.mjs
 /lib/configured-facts.d.mts
+/lib/business/inventory-orderworkbench/cube-runtime.mjs
