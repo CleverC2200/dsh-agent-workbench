@@ -5,10 +5,11 @@ export const metricLimits = {
   改单率: { healthy: 2, warning: 5, direction: 'lower' },
   订单满足率: { healthy: 95, warning: 90, direction: 'higher' },
   准交率: { healthy: 98.5, warning: 94, direction: 'higher' },
+  '货龄（>60天库存占比）': { healthy: 2, direction: 'lower' },
 };
 const stockLimits = { national: 12.5, 郑州: 12.5, other: 11 };
 export const shippableDaysTarget = `全国<${stockLimits.national}天（郑州≤${stockLimits.郑州}天，其他基地<${stockLimits.other}天）`;
-export const performanceStyleVersion = 16;
+export const performanceStyleVersion = 17;
 
 export function shippableDaysState(value, base = '') {
   base = normalizeWorkbenchBase(base);
@@ -31,7 +32,7 @@ export function metricTarget(name, base = '') {
       : base && base !== '合计'
         ? `<${stockLimits.other}天`
         : shippableDaysTarget;
-  return name === '货龄（>60天库存占比）' ? '越低越好' : null;
+  return null;
 }
 
 export function metricGroupTarget(name, base, dimensions) {
@@ -47,7 +48,7 @@ export function workbenchMetricState(name, value, base = '') {
     return limit.direction === 'lower'
       ? value < limit.healthy
         ? '健康'
-        : value <= limit.warning
+        : limit.warning === undefined || value <= limit.warning
           ? '预警'
           : '严重'
       : value > limit.healthy
@@ -56,7 +57,7 @@ export function workbenchMetricState(name, value, base = '') {
           ? '预警'
           : '严重';
   if (name === '周转天数') return shippableDaysState(value, base);
-  return name === '货龄（>60天库存占比）' ? '当前范围' : '判定标准未定义';
+  return '判定标准未定义';
 }
 
 export function performanceCurrentCell(name, value, text, base = '') {
@@ -66,7 +67,7 @@ export function performanceCurrentCell(name, value, text, base = '') {
       ? value <= metricLimits.订单满足率.healthy
       : name === '准交率'
         ? value <= metricLimits.准交率.healthy
-        : name === '改单率' || name === '作废率'
+        : name === '改单率' || name === '作废率' || name === '货龄（>60天库存占比）'
           ? value >= metricLimits[name].healthy
           : name === '周转天数'
             ? shippableDaysState(value, base) === '严重'
@@ -78,6 +79,8 @@ export function highlightAgePeak(rows, ageIndex) {
   const candidates = rows.filter((row) => row[0] !== '合计' && Number.isFinite(row[ageIndex]?.raw));
   if (!candidates.length) return rows;
   const peak = Math.max(...candidates.map((row) => row[ageIndex].raw));
-  for (const row of candidates) if (row[ageIndex].raw === peak) row[ageIndex].state = 'warning';
+  for (const row of candidates)
+    if (row[ageIndex].raw === peak && row[ageIndex].state !== 'bad')
+      row[ageIndex].state = 'warning';
   return rows;
 }
