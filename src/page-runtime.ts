@@ -21,6 +21,7 @@ function compressPageContext(
 ): unknown {
   if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
   const value = result as Record<string, unknown>;
+  const contextBudget = options.pageId === 'inventory-orderworkbench' ? 32000 : MODEL_PAYLOAD_BUDGET;
   const source = value.context as
     | (Record<string, unknown> & { parts?: Record<string, unknown> })
     | null;
@@ -57,13 +58,16 @@ function compressPageContext(
   const cardFacts = metrics
     ? {
         metrics,
+        ...(options.pageId === 'inventory-orderworkbench' && source?.evidence
+          ? { period: source.period, evidence: orderMetricEvidence(source.evidence) }
+          : {}),
         ...(source?.metricContract ? { metricContract: source.metricContract } : {}),
         ...(source?.metricSemantics ? { metricSemantics: source.metricSemantics } : {}),
       }
     : undefined;
   if (
     cardFacts &&
-    Buffer.byteLength(JSON.stringify(cardFacts), 'utf8') > MODEL_PAYLOAD_BUDGET - 1000
+    Buffer.byteLength(JSON.stringify(cardFacts), 'utf8') > contextBudget - 1000
   )
     throw Error('PAGE_METRIC_CONTEXT_TOO_LARGE');
 
@@ -107,7 +111,7 @@ function compressPageContext(
     cardFacts ? Buffer.byteLength(JSON.stringify(cardFacts), 'utf8') + 100 : 0,
   );
   const compressed = compressForModel(payload, {
-    budgetBytes: MODEL_PAYLOAD_BUDGET - metadataBytes,
+    budgetBytes: contextBudget - metadataBytes,
     ...(options.focus === undefined ? {} : { focus: options.focus }),
   });
   let context: unknown = value.context ?? null;
@@ -147,6 +151,67 @@ function compressPageContext(
           contextOmitted: compressed.omitted + (controls?.omitted ?? 0) + (riskFacts?.omitted ?? 0),
         }
       : {}),
+  };
+}
+
+function orderMetricEvidence(value: any) {
+  const keys = [
+    'value',
+    'numerator',
+    'denominator',
+    'pending',
+    'unit',
+    'quantityUnit',
+    'pendingUnit',
+    'scope',
+    'sample',
+    'missingReason',
+    'countMeaning',
+  ];
+  return {
+    source: value.source,
+    readAt: value.readAt,
+    selected: value.selected,
+    metricCalculationVersion: value.metricCalculationVersion,
+    base: value.base,
+    complete: value.complete,
+    periods: Object.fromEntries(
+      Object.entries(value.periods ?? {}).map(([name, raw]) => {
+        const period = raw as any;
+        return [
+          name,
+          {
+            start: period.start,
+            endExclusive: period.endExclusive,
+            inventoryEndExclusive: period.inventoryEndExclusive,
+            sourceDates: period.sourceDates,
+            metrics: Object.fromEntries(
+              Object.entries(period.metrics ?? {}).map(([metric, raw]) => {
+                const current = raw as any;
+                return [
+                  metric,
+                  Object.fromEntries(
+                    keys
+                      .filter((key) => current[key] !== undefined)
+                      .map((key) => [
+                        key,
+                        key === 'sample' && current.sample
+                          ? {
+                              known: current.sample.known,
+                              total: current.sample.total,
+                              unit: current.sample.unit,
+                              coverage: current.sample.coverage,
+                            }
+                          : current[key],
+                      ]),
+                  ),
+                ];
+              }),
+            ),
+          },
+        ];
+      }),
+    ),
   };
 }
 
