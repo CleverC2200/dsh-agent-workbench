@@ -94,6 +94,7 @@ import { liveInputKey, type SalesPlanViewState } from './models/salesPlanViewSta
 import {
   aggregateRegionalApprovalLiveCategories,
   addExactDecimals,
+  approvalStageForSalesPlanStatus,
   clampSalesPlanPageNumber,
   formatExactDecimal,
   multiplyExactDecimals,
@@ -1511,10 +1512,7 @@ const RegionalApprovalWorkbench: React.FC<{
 
   const liveActionRolesFor = (): readonly ApprovalStageId[] =>
     liveStageFilter ? [liveStageFilter] : roleStages;
-  const liveActionDisabledReason = (
-    row: RegionalApprovalLiveRow,
-    kind: LiveActionKind = 'APPROVE',
-  ) => {
+  const liveActionBlocker = (row: RegionalApprovalLiveRow, kind: LiveActionKind) => {
     if (sourceTypeReadOnly(row)) return 'readOnly';
     if (
       kind === 'APPROVE' &&
@@ -1526,16 +1524,7 @@ const RegionalApprovalWorkbench: React.FC<{
     if (permissionDeniedVersions.has(row.versionId)) return 'permission';
     if (liveQuery.queueState.status !== 'success') return 'queueNotFresh';
     if (liveAccess.failedVersions.has(row.versionId)) return 'detailUnavailable';
-    const detail = liveAccess.entries[row.versionId];
-    if (
-      !detail ||
-      !liveActionRolesFor().some((role) =>
-        salesPlanAccessForRow(row, detail, roleStages, role)?.allowedActions.includes(kind),
-      )
-    )
-      return 'missingAuthority';
-    if (kind === 'SAVE') return undefined;
-
+    if (!liveAccess.entries[row.versionId]) return 'missingAuthority';
     return undefined;
   };
 
@@ -1549,11 +1538,40 @@ const RegionalApprovalWorkbench: React.FC<{
     }
     return undefined;
   };
+  const liveActionDisabledReason = (
+    row: RegionalApprovalLiveRow,
+    kind: LiveActionKind = 'APPROVE',
+  ) =>
+    liveActionBlocker(row, kind) ??
+    (liveActionAccessFor(row, kind) ? undefined : 'missingAuthority');
+
+  const batchApprovalFor = (row: RegionalApprovalLiveRow) => {
+    const blocker = liveActionBlocker(row, 'APPROVE');
+    if (blocker && blocker !== 'permission') return { skipReason: blocker };
+    const role = approvalStageForSalesPlanStatus(row.status, row.planTypeCode);
+    const detail = liveAccess.entries[row.versionId];
+    if (!role || role === 'customer' || !detail || salesPlanVersionEvidenceStale(detail, row))
+      return { skipReason: 'missingAuthority' };
+    if (blocker === 'permission' || !roleStages.includes(role))
+      return { skipReason: 'currentStagePermission', deniedRole: role };
+    const access = salesPlanAccessForRow(row, detail, roleStages, role);
+    if (!access) return { skipReason: 'missingAuthority' };
+    if (!access.allowedActions.includes('APPROVE'))
+      return { skipReason: 'currentStagePermission', deniedRole: role };
+    return {
+      access,
+      detail,
+      pendingAddedSkus: pendingAdditions(row, role),
+      pendingValues:
+        role === (liveStageFilter ?? roleStages[0]) ? livePendingValues[row.planId] : undefined,
+    };
+  };
   const batchItemsFor = (
     rows: readonly RegionalApprovalLiveRow[],
     kind: LiveActionKind,
   ): BatchActionItem[] =>
     rows.map((row) => {
+      if (kind === 'APPROVE') return { row, ...batchApprovalFor(row) };
       const access = liveActionAccessFor(row, kind);
       return access
         ? {
@@ -1594,6 +1612,10 @@ const RegionalApprovalWorkbench: React.FC<{
   const batchDisabledReason = (kind: LiveActionKind) => {
     if (!selectedLiveRows.length || liveActionPlanId !== undefined) return undefined;
     if (!selectedPendingActionRows.length) return 'missingAuthority';
+    if (kind === 'APPROVE' && selectedLiveRows.length > 1)
+      return selectedPendingActionRows
+        .map(batchApprovalFor)
+        .find((item) => item.skipReason && !item.deniedRole)?.skipReason;
     const reasons = selectedPendingActionRows.map((row) => liveActionDisabledReason(row, kind));
     return reasons.find(Boolean);
   };
@@ -2907,8 +2929,22 @@ const RegionalApprovalWorkbench: React.FC<{
             ]
           : [];
       }
-      const access = liveActionAccessFor(row, 'APPROVE');
-      return access && !liveActionDisabledReason(row, 'APPROVE')
+      const approval = batchApprovalFor(row);
+      if (approval.deniedRole)
+        return [
+          {
+            kind: 'skip',
+            planId: row.planId,
+            versionId: row.versionId,
+            row,
+            label,
+            period,
+            reason: t('common.assistantSurface.regionalApproval.liveSubmit.permissionSkipped', {
+              stage: t(stageLabelKey(approval.deniedRole)),
+            }),
+          },
+        ];
+      return approval.access
         ? [
             {
               kind: 'approve',
@@ -2917,26 +2953,25 @@ const RegionalApprovalWorkbench: React.FC<{
               label,
               row,
               period,
-              access,
-              pendingValues: livePendingValues[row.planId],
-              pendingAddedSkus: pendingAdditions(row, access.approvalRole),
+              access: approval.access,
+              pendingValues: approval.pendingValues,
+              pendingAddedSkus: approval.pendingAddedSkus,
             },
           ]
         : [];
     });
   const selectedSubmissionItems = submissionItems();
+  const hasCompleteSubmissionSelection =
+    selectedSubmissionItems.filter((item) => item.row.status !== 5 && item.row.status !== 10)
+      .length === selectedPendingActionRows.length;
   const resubmitDisabledReason = !onSubmitBatch
     ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.entryUnavailable')
-    : selectedSubmissionItems.filter((item) => item.kind !== 'skip').length !==
-        selectedPendingActionRows.length
+    : !hasCompleteSubmissionSelection
       ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.sourceAuthority')
       : undefined;
   const primaryActionDisabledReason =
     batchDisabledReason('APPROVE') ??
-    (onSubmitBatch &&
-    selectedLiveRows.length > 1 &&
-    selectedSubmissionItems.filter((item) => item.kind !== 'skip').length !==
-      selectedPendingActionRows.length
+    (onSubmitBatch && selectedLiveRows.length > 1 && !hasCompleteSubmissionSelection
       ? 'missingAuthority'
       : undefined);
   const approvalActionButtons = (

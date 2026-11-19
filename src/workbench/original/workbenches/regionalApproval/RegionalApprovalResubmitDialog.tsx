@@ -25,6 +25,7 @@ import { Alert, Button, Input, Modal, Spin } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import type {
   GeaSalesPlanAddedSku,
+  GeaSalesPlanDetail,
   GeaSalesPlanPeriod,
   GeaSalesPlanActionReceipt,
   GeaSalesPlanSku,
@@ -45,10 +46,11 @@ import {
   salesPlanEditableQuantity,
   type SalesPlanAccess,
 } from './models/salesPlanAccessModel.ts';
-import { addExactDecimals } from './regionalApprovalQueryModel.ts';
+import { addExactDecimals, approvalStageForSalesPlanStatus } from './regionalApprovalQueryModel.ts';
 import {
   salesPlanApprovalDraftValues,
   salesPlanDraftMatches,
+  type SalesPlanLocalDraft,
 } from './models/salesPlanLocalDraftModel.ts';
 import type { ApprovalStageId } from './salesPlanDomain.ts';
 import type { RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
@@ -118,6 +120,23 @@ const submissionRole = (item: SalesPlanSubmissionItem): ApprovalStageId | undefi
       : item.row.status === 9
         ? 'area'
         : undefined;
+};
+
+const draftForSubmission = (item: SalesPlanSubmissionItem, draft?: SalesPlanLocalDraft | null) =>
+  draft?.role && draft.role !== submissionRole(item) ? undefined : (draft ?? undefined);
+
+const approvalAccessForSubmission = (
+  item: Extract<SalesPlanSubmissionItem, { kind: 'approve' }>,
+  detail: GeaSalesPlanDetail,
+) => {
+  const role = item.access.approvalRole;
+  const access = salesPlanAccessForRow(item.row, detail, [role], role);
+  if (
+    approvalStageForSalesPlanStatus(item.row.status, item.row.planTypeCode) !== role ||
+    !access?.allowedActions.includes('APPROVE')
+  )
+    throw new SubmissionSourceError('accessChanged');
+  return access;
 };
 
 const preparedSubmission = (row: SubmissionRow) => {
@@ -233,16 +252,15 @@ export function RegionalApprovalResubmitDialog({
                   approvalRole: role,
                   signal: controller.signal,
                 });
+            const storedDraft = draftForSubmission(item, draft?.draft);
             if (
               draft?.stale ||
-              (draft?.draft && !salesPlanDraftMatches(draft.draft, item.row, detail, role))
+              (storedDraft && !salesPlanDraftMatches(storedDraft, item.row, detail, role))
             )
               throw new SubmissionSourceError('draftStale');
-            const matchingDraft =
-              draft?.draft?.role && draft.draft.role !== role ? undefined : draft?.draft;
             const additions = ignoredDraft
               ? []
-              : (item.pendingAddedSkus ?? matchingDraft?.addedSkus ?? []);
+              : (item.pendingAddedSkus ?? storedDraft?.addedSkus ?? []);
             if (additions.length) {
               if (!client.skuQuotes) throw new Error('sourceLoad');
               const quotes = await client.skuQuotes.invoke({
@@ -268,7 +286,7 @@ export function RegionalApprovalResubmitDialog({
               { ...detail, skus },
               item.row,
               role,
-              matchingDraft?.adjustments ?? [],
+              storedDraft?.adjustments ?? [],
               ignoredDraft ? undefined : item.pendingValues,
               item.kind === 'approve',
             );
@@ -306,14 +324,7 @@ export function RegionalApprovalResubmitDialog({
               });
             }
             if (item.kind === 'approve') {
-              const access = salesPlanAccessForRow(
-                item.row,
-                detail,
-                [item.access.approvalRole],
-                item.access.approvalRole,
-              );
-              if (!access?.allowedActions.includes('APPROVE'))
-                throw new SubmissionSourceError('accessChanged');
+              const access = approvalAccessForSubmission(item, detail);
               state.actionInput = {
                 planId: item.planId,
                 versionId: item.versionId,
@@ -489,37 +500,25 @@ export function RegionalApprovalResubmitDialog({
                 versionId: row.item.versionId,
                 approvalRole: role,
               });
+              const storedDraft = draftForSubmission(row.item, stored.draft);
               if (
                 stored.stale ||
-                (stored.draft && !salesPlanDraftMatches(stored.draft, row.item.row, fresh, role))
+                (storedDraft && !salesPlanDraftMatches(storedDraft, row.item.row, fresh, role))
               )
                 throw new SubmissionSourceError('draftStale');
               const latest = salesPlanApprovalDraftValues(
                 fresh,
                 row.item.row,
                 role,
-                stored.draft?.adjustments ?? [],
+                storedDraft?.adjustments ?? [],
                 row.item.pendingValues,
                 row.item.kind === 'approve',
               );
-              const additions =
-                row.item.pendingAddedSkus ??
-                (stored.draft?.role && stored.draft.role !== role
-                  ? undefined
-                  : stored.draft?.addedSkus);
+              const additions = row.item.pendingAddedSkus ?? storedDraft?.addedSkus;
               if (row.draftIntent !== draftIntent(latest, additions))
                 throw new SubmissionSourceError('draftStale');
             }
-            if (
-              row.item.kind === 'approve' &&
-              !salesPlanAccessForRow(
-                row.item.row,
-                fresh,
-                [row.item.access.approvalRole],
-                row.item.access.approvalRole,
-              )?.allowedActions.includes('APPROVE')
-            )
-              throw new SubmissionSourceError('accessChanged');
+            if (row.item.kind === 'approve') approvalAccessForSubmission(row.item, fresh);
           }
           if (!mounted.current) break;
           if (row.item.kind === 'resubmit') {
