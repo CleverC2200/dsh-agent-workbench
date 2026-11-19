@@ -423,10 +423,15 @@ export const regionalApprovalLiveProgress = (row: RegionalApprovalLiveRow) => ({
   quantity: decimalRatio(row.currentQty, row.targetQty),
 });
 
+type SalesPlanCategoryLine = Pick<
+  GeaSalesPlanSku,
+  'productCategName' | 'qty' | 'amt' | 'baseQty' | 'amtBase'
+>;
+
 export const aggregateRegionalApprovalLiveCategories = (
-  skus: readonly GeaSalesPlanSku[],
+  skus: readonly SalesPlanCategoryLine[],
 ): RegionalApprovalLiveCategorySummary[] => {
-  const categorySkus = new Map<string, GeaSalesPlanSku[]>();
+  const categorySkus = new Map<string, SalesPlanCategoryLine[]>();
   skus.forEach((sku) => {
     const categoryName = sku.productCategName.trim() || '其他';
     const current = categorySkus.get(categoryName) ?? [];

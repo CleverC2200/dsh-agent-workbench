@@ -5,9 +5,15 @@ import {
   type SalesPlanWorkflowRow,
   type SalesPlanRole,
 } from '../../../salesPlanWorkflow.ts';
-import type { GeaSalesPlanDetail, GeaSalesPlanSku } from '../../../contracts.ts';
+import type {
+  GeaSalesPlanAddedSku,
+  GeaSalesPlanDetail,
+  GeaSalesPlanSku,
+} from '../../../contracts.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
 import { salesPlanAccessForRow } from './salesPlanAccessModel.ts';
+import { salesPlanZeroBaselineSku } from './salesPlanQuantityModel.ts';
+export { salesPlanZeroBaselineSku } from './salesPlanQuantityModel.ts';
 
 const Exact = Decimal.clone({ precision: 60, rounding: Decimal.ROUND_HALF_UP });
 
@@ -99,6 +105,50 @@ export function correctionConfirmedQuantity(
     .plus(correctionDecision(sku, status, typeCode, true, undefined, selectedRole))
     .toFixed();
 }
+export function verifySalesPlanAddedSkus(
+  detail: GeaSalesPlanDetail,
+  additions: readonly GeaSalesPlanAddedSku[],
+  node: number,
+): boolean {
+  const role = SALES_PLAN_ROLES[node - 1];
+  if (!role) return false;
+  const byCode = new Map(detail.skus.map((sku) => [sku.skuCode, sku]));
+  const correction = detail.currentVersion.orderType === 'Z';
+  try {
+    return additions.every(({ skuCode, qty }) => {
+      const sku = byCode.get(skuCode);
+      if (!sku || sku.versionId !== detail.currentVersion.id) return false;
+      const price = correctionDecimal(sku.price);
+      const quantity = correctionDecimal(qty);
+      const amount = price.mul(quantity).toDecimalPlaces(2);
+      if (!price.gt(0) || !correctionDecimal(sku.baseQty).isZero()) return false;
+      if (correction) {
+        if (!salesPlanZeroBaselineSku(sku)) return false;
+        const addQty = role === 'customer' ? sku.adjAddQty : sku[`${role}AdjAddQty`];
+        const cutQty = role === 'customer' ? sku.adjCutQty : sku[`${role}AdjCutQty`];
+        const addAmount = role === 'customer' ? sku.adjAddAmount : sku[`${role}AdjAddAmount`];
+        const cutAmount = role === 'customer' ? sku.adjCutAmount : sku[`${role}AdjCutAmount`];
+        if (
+          !quantity.eq(correctionDecimal(addQty)) ||
+          !correctionDecimal(cutQty).isZero() ||
+          !amount.eq(correctionDecimal(addAmount)) ||
+          !correctionDecimal(cutAmount).isZero()
+        )
+          return false;
+        if (role === 'customer') return correctionDecimal(sku.amt).isZero();
+      }
+      const confirmedQty = role === 'customer' ? sku.qty : sku[`${role}ConfirmedQty`];
+      const confirmedAmount = role === 'customer' ? sku.amt : sku[`${role}ConfirmedAmount`];
+      return (
+        quantity.eq(correctionDecimal(confirmedQty)) &&
+        amount.eq(correctionDecimal(confirmedAmount))
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
 export function correctionLine(
   sku: Pick<GeaSalesPlanSku, 'qty' | 'price' | 'amt' | 'corrBaseQty'>,
   input: string,

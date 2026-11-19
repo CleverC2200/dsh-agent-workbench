@@ -6,6 +6,7 @@ import {
 import { isBackendHttpError } from '../../../http-error.ts';
 import type {
   GeaSalesPlanActionParams,
+  GeaSalesPlanAddedSku,
   GeaSalesPlanActionReceipt,
   GeaSalesPlanActionRequest,
   GeaSalesPlanDetail,
@@ -82,6 +83,34 @@ const isValidAdjustment = (adjustment: GeaSalesPlanSkuAdjustment): boolean => {
   );
 };
 
+export const isSalesPlanSkuCode = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  value.length <= 19 &&
+  POSITIVE_LONG_PATTERN.test(value) &&
+  BigInt(value) <= MAX_SIGNED_LONG;
+
+export const isSalesPlanAddedSkuQuantity = (value: unknown): value is string =>
+  typeof value === 'string' && /^\d{1,15}(?:\.\d{1,3})?$/.test(value);
+
+export const salesPlanAddedSkusValid = (value: unknown): value is GeaSalesPlanAddedSku[] => {
+  if (!Array.isArray(value) || value.length > 5000) return false;
+  const codes = new Set<string>();
+  return value.every((item: unknown) => {
+    if (
+      !item ||
+      typeof item !== 'object' ||
+      !('skuCode' in item) ||
+      !('qty' in item) ||
+      !isSalesPlanSkuCode(item.skuCode) ||
+      !isSalesPlanAddedSkuQuantity(item.qty) ||
+      codes.has(item.skuCode)
+    )
+      return false;
+    codes.add(item.skuCode);
+    return true;
+  });
+};
+
 export const validateSalesPlanActionInput = (
   input: SalesPlanActionInput,
   workflowRows?: readonly SalesPlanWorkflowRow[],
@@ -142,6 +171,13 @@ export const validateSalesPlanActionInput = (
     }
     skuCodes.add(adjustment.skuCode);
   }
+  if (
+    request.addedSkus !== undefined &&
+    (!salesPlanAddedSkusValid(request.addedSkus) ||
+      (request.addedSkus.length > 0 && request.action === 'SAVE') ||
+      request.addedSkus.some((sku) => skuCodes.has(sku.skuCode)))
+  )
+    throw new SalesPlanActionError('validation', false);
 };
 
 const retryAfterMsFromDetails = (details: unknown): number | undefined => {
@@ -419,6 +455,15 @@ export class SalesPlanActionAttempt {
       currentVersion.planId !== input.planId ||
       currentVersion.id !== input.versionId ||
       !currentVersion.effective
+    )
+      return false;
+    if (
+      input.request.addedSkus?.some(
+        (item) =>
+          !detail.skus.some(
+            (sku) => sku.skuCode === item.skuCode && sku.versionId === input.versionId,
+          ),
+      )
     )
       return false;
     if (this.receipt) return salesPlanActionReadbackMatches(this.receipt, detail);

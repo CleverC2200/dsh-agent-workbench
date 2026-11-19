@@ -272,7 +272,28 @@ export type GeaSalesPlanCompareQuery = {
   signal?: AbortSignal;
 };
 
+export type GeaSalesPlanAddedSku = {
+  skuCode: GeaSalesPlanId;
+  qty: GeaSalesPlanDecimal;
+};
+
+export type GeaSalesPlanSkuQuote = {
+  skuCode: GeaSalesPlanId;
+  skuName: string;
+  productCategName: string;
+  price: GeaSalesPlanDecimal | null;
+};
+
+export type GeaSalesPlanSkuQuoteQuery = {
+  planId: string;
+  versionId: string;
+  skuCodes: GeaSalesPlanId[];
+  signal?: AbortSignal;
+};
+
 export type GeaSalesPlanSubmitItem = {
+  useLatestSkuPrice?: true;
+  confirmedQty?: GeaSalesPlanDecimal;
   adjAddQty?: string;
   adjCutQty?: string;
   skuCode: GeaSalesPlanId;
@@ -283,6 +304,7 @@ export type GeaSalesPlanSubmitItem = {
 };
 
 export type GeaSalesPlanSubmitRequest = {
+  sourceVersionId?: GeaSalesPlanId;
   adjustmentMode?: 'ABSOLUTE_NET';
   orderType: 'M' | 'Z';
   status: number;
@@ -329,6 +351,7 @@ export type GeaSalesPlanSkuAdjustment = {
 };
 
 export type GeaSalesPlanActionRequest = {
+  addedSkus?: GeaSalesPlanAddedSku[];
   expectedReturnTargetStage?: number;
   approvalPolicy?: 'role-visible-v1';
   approvalRole?: GeaSalesPlanApprovalRole;

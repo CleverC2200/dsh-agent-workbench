@@ -146,3 +146,33 @@
 .viewport > .correctionTable {
   min-width: 720px;
 }
+
+.additionEditor {
+  padding: 8px 12px;
+}
+
+.additionForm,
+.additionRows li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+
+.additionForm label {
+  display: grid;
+  gap: 4px;
+}
+
+.additionForm input {
+  max-width: 14em;
+  font: inherit;
+}
+
+.additionRows {
+  display: grid;
+  gap: 4px;
+  margin-block: 8px 0;
+  padding-inline-start: 0;
+  list-style: none;
+}

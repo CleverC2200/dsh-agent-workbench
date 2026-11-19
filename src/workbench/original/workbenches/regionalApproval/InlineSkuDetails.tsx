@@ -1,11 +1,18 @@
 import { roundPlanQuantity, salesPlanConfirmedQuantity } from './models/salesPlanQuantityModel.ts';
 import { correctionConfirmedQuantity } from './models/salesPlanCorrectionModel.ts';
 import { SkuQuantityAmount } from './SkuQuantityAmount.tsx';
+import { SalesPlanSkuAdditionEditor } from './SalesPlanSkuAdditionEditor.tsx';
 import styles from './InlineSkuDetails.module.css';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Input, Spin } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
-import { useWorkbenchHost, type GeaSalesPlanDetail, type GeaSalesPlanSku } from '../../bridge.ts';
+import {
+  useWorkbenchHost,
+  type GeaSalesPlanAddedSku,
+  type GeaSalesPlanDetail,
+  type GeaSalesPlanSku,
+  type GeaSalesPlanSkuQuote,
+} from '../../bridge.ts';
 import {
   addExactDecimals,
   formatExactDecimal,
@@ -20,6 +27,7 @@ import {
 } from './models/salesPlanLocalDraftModel.ts';
 import { salesPlanEditableQuantity } from './models/salesPlanAccessModel.ts';
 import type { ApprovalStageId } from './salesPlanDomain.ts';
+import type { SalesPlanQuotedAddition } from './models/salesPlanSubmitModel.ts';
 
 const DECIMAL = /^[+-]?\d{1,15}(?:\.\d{1,3})?$/;
 const quantityText = (value: string) => formatExactDecimal(value).replace(/\.0+$/, '');
@@ -33,6 +41,7 @@ export function InlineSkuDetails({
   t,
   detail,
   canEdit,
+  canAdd,
   approvalRole,
   categoryName,
   onMetricsChange,
@@ -41,6 +50,9 @@ export function InlineSkuDetails({
   onElementsChange,
   initialInputValues,
   onInputChange,
+  initialAdditions,
+  onAdditionsChange,
+  onPricedAdditionsChange,
   selectedSkus,
   unavailable = false,
   loading = false,
@@ -53,6 +65,7 @@ export function InlineSkuDetails({
   t: TFunction;
   detail?: GeaSalesPlanDetail;
   canEdit?: boolean;
+  canAdd?: boolean;
   approvalRole?: ApprovalStageId;
   categoryName?: string;
   onMetricsChange?: (metrics?: { quantity: string; amount: string }) => void;
@@ -61,6 +74,9 @@ export function InlineSkuDetails({
   initialInputValues?: Record<string, string>;
 
   onInputChange?: (changes: Record<string, string>) => void;
+  initialAdditions?: GeaSalesPlanAddedSku[];
+  onAdditionsChange?: (items: GeaSalesPlanAddedSku[]) => void;
+  onPricedAdditionsChange?: (items: SalesPlanQuotedAddition[]) => void;
 
   draftPatch?: { at: number; quantity: string; skuCodes?: string[] };
 
@@ -94,6 +110,33 @@ export function InlineSkuDetails({
 
   const [savedDraft, setSavedDraft] = useState('');
   const appliedPatch = useRef<number>();
+  const initialAddedSkus = useRef(initialAdditions);
+  const [addedSkus, setAddedSkus] = useState<GeaSalesPlanAddedSku[]>(initialAdditions ?? []);
+  const [savedAdditions, setSavedAdditions] = useState('[]');
+  const [quotes, setQuotes] = useState<Record<string, GeaSalesPlanSkuQuote>>({});
+  const additionCodes = addedSkus
+    .map((item) => item.skuCode)
+    .sort()
+    .join(',');
+  useEffect(() => {
+    if (!canEdit || !salesPlan.skuQuotes || !additionCodes) return;
+    const controller = new AbortController();
+    void salesPlan.skuQuotes
+      .invoke({
+        planId: row.planId,
+        versionId: row.versionId,
+        skuCodes: additionCodes.split(','),
+        signal: controller.signal,
+      })
+      .then((rows) => {
+        if (!controller.signal.aborted)
+          setQuotes(Object.fromEntries(rows.map((quote) => [quote.skuCode, quote])));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setQuotes({});
+      });
+    return () => controller.abort();
+  }, [additionCodes, canEdit, row.planId, row.versionId, salesPlan.skuQuotes]);
 
   useEffect(() => {
     if (!draftPatch || !canEdit || !skus || skus.length === 0) return;
@@ -157,6 +200,9 @@ export function InlineSkuDetails({
         }
         const next = salesPlanDraftInputValues(detail.skus, row, result.draft, approvalRole);
         setSavedDraft(JSON.stringify(next));
+        const restored = result.draft?.addedSkus ?? [];
+        setSavedAdditions(JSON.stringify(restored));
+        if (initialAddedSkus.current === undefined) setAddedSkus(restored);
 
         setConfirmedValues((current) => ({ ...next, ...current }));
         setDraftState('saved');
@@ -205,6 +251,19 @@ export function InlineSkuDetails({
       ),
     [skus, confirmedValues, row.status, row.planTypeCode, approvalRole, orderType],
   );
+  const pricedAdditions = useMemo(
+    () =>
+      addedSkus.flatMap((item) => {
+        const quote = quotes[item.skuCode];
+        return quote?.price == null
+          ? []
+          : [{ ...item, price: quote.price, productCategName: quote.productCategName }];
+      }),
+    [addedSkus, quotes],
+  );
+  useEffect(() => {
+    onPricedAdditionsChange?.(pricedAdditions);
+  }, [pricedAdditions, onPricedAdditionsChange]);
   const confirmedMetrics = useMemo(() => {
     if (!skus || skus.length === 0) return undefined;
     const quantities = skus.map((sku) => effectiveValues[String(sku.skuCode)]);
@@ -336,7 +395,8 @@ export function InlineSkuDetails({
     )
       return;
     const serialized = JSON.stringify(confirmedValues);
-    if (serialized === savedDraft) return;
+    const serializedAdditions = JSON.stringify(addedSkus);
+    if (serialized === savedDraft && serializedAdditions === savedAdditions) return;
     const invalidValues = Object.values(confirmedValues).filter(
       (value) => value.trim() && !DECIMAL.test(value),
     );
@@ -370,6 +430,7 @@ export function InlineSkuDetails({
         sourceSnapshot: snapshot,
         remark: '',
         adjustments: draftAdjustments,
+        ...(addedSkus.length ? { addedSkus } : {}),
         ...(approvalRole ? { role: approvalRole } : {}),
       };
       void salesPlan
@@ -383,6 +444,7 @@ export function InlineSkuDetails({
         .then(() => {
           if (!controller.signal.aborted) {
             setSavedDraft(serialized);
+            setSavedAdditions(serializedAdditions);
             setDraftState('saved');
           }
         })
@@ -398,6 +460,7 @@ export function InlineSkuDetails({
       controller.abort();
     };
   }, [
+    addedSkus,
     approvalRole,
     canEdit,
     confirmedValues,
@@ -407,6 +470,7 @@ export function InlineSkuDetails({
     row.status,
     row.versionId,
     saveRetry,
+    savedAdditions,
     savedDraft,
     skus,
   ]);
@@ -432,6 +496,27 @@ export function InlineSkuDetails({
 
   return (
     <section className={styles.root} aria-label={tr('columns.sku')}>
+      {canAdd && detail && skus && salesPlan.skuQuotes ? (
+        <SalesPlanSkuAdditionEditor
+          query={(input) =>
+            salesPlan.skuQuotes!.invoke({
+              ...input,
+              planId: row.planId,
+              versionId: row.versionId,
+            })
+          }
+          additions={addedSkus}
+          quotes={quotes}
+          existing={new Set(skus.map((sku) => String(sku.skuCode)))}
+          onChange={(items) => {
+            userEdited.current = true;
+            setAddedSkus(items);
+            onAdditionsChange?.(items);
+          }}
+          onQuote={(quote) => setQuotes((current) => ({ ...current, [quote.skuCode]: quote }))}
+          t={t}
+        />
+      ) : null}
       {loading ? (
         <Spin />
       ) : unavailable ? (
