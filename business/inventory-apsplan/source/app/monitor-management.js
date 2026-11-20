@@ -57,6 +57,9 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     runPending = null,
     runNotice = '',
     runPage = 0;
+  let deleteTarget = null;
+  let deletePending = null;
+  let deleteError = '';
   let stateVersion = 0;
   events = [...events];
   const mask = document.createElement('div');
@@ -66,6 +69,22 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
   document.body.append(mask);
   const main = mask.querySelector('main');
   const nav = mask.querySelector('nav');
+  const deleteDialog = document.createElement('dialog');
+  deleteDialog.className = 'am-delete-dialog';
+  deleteDialog.setAttribute('aria-labelledby', 'am-delete-title');
+  deleteDialog.setAttribute('aria-describedby', 'am-delete-detail');
+  deleteDialog.innerHTML =
+    '<h2 id="am-delete-title">删除检测任务</h2><p id="am-delete-detail">确认删除“<strong data-delete-name></strong>”？删除后停止后续检测，保留历史预警和执行记录。</p><footer><button type="button" data-delete-cancel autofocus>取消</button><button type="button" data-delete-confirm class="am-primary">确认删除</button></footer>';
+  main.after(deleteDialog);
+  deleteDialog.querySelector('[data-delete-cancel]').onclick = () => deleteDialog.close();
+  deleteDialog.querySelector('[data-delete-confirm]').onclick = () => deleteDialog.close('delete');
+  deleteDialog.onclose = () => {
+    const target = deleteTarget;
+    const confirmed = deleteDialog.returnValue === 'delete';
+    deleteTarget = null;
+    deleteDialog.returnValue = '';
+    if (confirmed && mask.isConnected) void removeTask(target);
+  };
   let poll;
   let loading = false;
   let canWrite = false;
@@ -118,7 +137,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     const version = stateVersion;
     const before = JSON.stringify([monitors, logs]);
     const state = await api({ op: 'list' });
-    if (!mask.isConnected || version !== stateVersion) return;
+    if (!mask.isConnected || version !== stateVersion || deleteDialog.open) return;
     monitors = state.tasks;
     runEvents = state.events || [];
     logs = state.runs.map(runLog);
@@ -148,6 +167,34 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       if (mask.isConnected && !main.classList.contains('am-editing')) render();
     }
     void refresh().catch(() => {});
+  }
+  async function removeTask(task) {
+    if (!task || deletePending || !canWrite) return;
+    deletePending = task.id;
+    deleteError = '';
+    runNotice = '';
+    render();
+    try {
+      await api({ op: 'delete', id: task.id });
+      stateVersion++;
+      monitors = monitors.filter((m) => m.id !== task.id);
+      runNotice = '检测任务已删除，后续调度已停止；历史预警和执行记录已保留。';
+      window.dispatchEvent(new Event('gea-detection-updated'));
+    } catch (error) {
+      deleteError = '删除检测任务失败：' + (error instanceof Error ? error.message : String(error));
+    } finally {
+      deletePending = null;
+      if (mask.isConnected && !main.classList.contains('am-editing')) {
+        render();
+        if (tab === 'monitors') {
+          const focusTarget = deleteError
+            ? [...main.querySelectorAll('[data-delete]')].find((b) => b.dataset.delete === task.id)
+            : main.querySelector('[data-new]');
+          focusTarget?.focus();
+        }
+      }
+    }
+    if (!deleteError && mask.isConnected) void refresh().catch(() => {});
   }
   function renderActualModel(model) {
     if (!model?.model) return '未获取';
@@ -182,12 +229,18 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       void renderOwnerDirectory(main, api, { canWrite, writeReason });
       return;
     }
+    const actionNotice = deletePending ? '正在删除检测任务…' : runNotice;
     main.innerHTML =
       (writeReason
         ? '<div class="am-run-notice" role="status">' + esc(writeReason) + '</div>'
         : '') +
-      (runNotice
-        ? '<div class="am-run-notice" role="status" aria-live="polite">' + esc(runNotice) + '</div>'
+      (actionNotice
+        ? '<div class="am-run-notice" role="status" aria-live="polite">' +
+          esc(actionNotice) +
+          '</div>'
+        : '') +
+      (deleteError
+        ? '<div class="am-connection-error" role="alert"><p>' + esc(deleteError) + '</p></div>'
         : '') +
       '<div class="am-toolbar"><span>' +
       (tab === 'monitors'
@@ -238,9 +291,13 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
               (!m.enabled || runPending ? 'disabled' : '') +
               '>' +
               (runPending === m.id ? '提交中…' : '立即执行') +
-              '</button><button data-delete="' +
-              m.id +
-              '">删除</button></td></tr>',
+              '</button><button type="button" data-delete="' +
+              esc(m.id) +
+              '" ' +
+              (deletePending ? 'disabled' : '') +
+              '>' +
+              (deletePending === m.id ? '正在删除…' : '删除') +
+              '</button></td></tr>',
           )
           .join('') +
         '</tbody></table>';
@@ -384,28 +441,13 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       .forEach((b) => (b.onclick = () => run(monitors.find((m) => m.id === b.dataset.run))));
     main.querySelectorAll('[data-delete]').forEach(
       (b) =>
-        (b.onclick = async () => {
-          const m = monitors.find((x) => x.id === b.dataset.delete);
-          if (
-            !confirm(
-              '确认删除“' +
-                m.metric +
-                ' · ' +
-                m.scope +
-                '”检测任务？删除后停止后续检测，历史预警和执行记录保留。',
-            )
-          )
-            return;
-          b.disabled = true;
-          try {
-            await api({ op: 'delete', id: m.id });
-            runNotice = '检测任务已删除，后续调度已停止；历史预警和执行记录已保留。';
-            await refresh();
-            render();
-          } catch (e) {
-            alert(e.message);
-            b.disabled = false;
-          }
+        (b.onclick = () => {
+          const task = monitors.find((m) => m.id === b.dataset.delete);
+          if (!task || deletePending || deleteTarget || !canWrite) return;
+          deleteTarget = task;
+          deleteDialog.querySelector('[data-delete-name]').textContent =
+            task.metric + ' · ' + task.scope;
+          deleteDialog.showModal();
         }),
     );
     main.querySelectorAll('[data-toggle]').forEach(
@@ -1011,7 +1053,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     document.removeEventListener('keydown', key);
   }
   function key(e) {
-    if (document.querySelector('.audit-mask')) return;
+    if (deleteDialog.open || document.querySelector('.audit-mask')) return;
     if (e.key === 'Escape' && !e.defaultPrevented) close();
     if (e.key === 'Tab') {
       const nodes = [...mask.querySelectorAll('button,input,select,textarea')].filter(

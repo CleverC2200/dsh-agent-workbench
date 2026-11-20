@@ -41,6 +41,13 @@ const output = await build({
           window.warningTasks=[saved];
           return saved;
         }
+        if(input.op==='delete'){
+          await new Promise(resolve=>window.finishDelete=resolve);
+          if(window.deleteError)throw Error(window.deleteError);
+          const deleted=window.warningTasks.find(task=>task.id===input.id);
+          window.warningTasks=window.warningTasks.filter(task=>task.id!==input.id);
+          return deleted;
+        }
         if(input.op==='run'){
           const task=window.warningTasks.find(task=>task.id===input.id);
           const run={id:'run-manual',taskId:task.id,name:task.metric+'检测',at:new Date().toISOString(),status:'执行中'};
@@ -89,6 +96,83 @@ async function warningPage(t, tasks = [], { sandboxed = false } = {}) {
   });
   return page;
 }
+
+test('sandboxed task deletion confirms safely and reports the backend outcome', async (t) => {
+  const frame = await warningPage(
+    t,
+    [
+      {
+        id: 'scheduled-delete',
+        metric: '当前库存',
+        scope: '品类',
+        description: '检查库存',
+        enabled: true,
+        frequency: '每天 09:00',
+      },
+    ],
+    { sandboxed: true },
+  );
+  await frame.page().setViewportSize({ width: 540, height: 900 });
+  await frame.evaluate(() => {
+    window.warningRuns = [
+      {
+        id: 'previous-run',
+        taskId: 'scheduled-delete',
+        name: '历史库存检测',
+        at: '2026-11-20T01:00:00Z',
+        status: '成功',
+      },
+    ];
+    return window.openWarning(false);
+  });
+  const deletes = () =>
+    frame.evaluate(() =>
+      window.calls.filter(({ input }) => input.op === 'delete').map(({ input }) => input.id),
+    );
+  const button = frame.getByRole('button', { name: '删除', exact: true });
+  const dialog = frame.getByRole('dialog', { name: '删除检测任务' });
+  const confirm = dialog.getByRole('button', { name: '确认删除' });
+  const cancel = dialog.getByRole('button', { name: '取消' });
+
+  await button.click();
+  await expect(dialog).toBeVisible({ timeout: 3000 });
+  await expect(dialog).toContainText('当前库存 · 品类');
+  await expect(cancel).toBeFocused();
+  await frame.page().keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(button).toBeFocused();
+  assert.deepEqual(await deletes(), []);
+
+  await button.click();
+  await cancel.click();
+  await expect(dialog).toBeHidden();
+  assert.deepEqual(await deletes(), []);
+
+  await frame.evaluate(() => {
+    window.deleteError = '检测正在执行，请执行结束后再删除';
+  });
+  await button.click();
+  await confirm.click();
+  await expect(frame.getByRole('button', { name: '正在删除…', exact: true })).toBeDisabled();
+  await frame.evaluate(() => window.finishDelete());
+  await expect(frame.getByRole('alert')).toContainText('检测正在执行，请执行结束后再删除');
+  await expect(button).toBeEnabled();
+  assert.deepEqual(await deletes(), ['scheduled-delete']);
+
+  await frame.evaluate(() => {
+    window.deleteError = '';
+    window.failRefresh = true;
+  });
+  await button.click();
+  await confirm.click();
+  await expect(frame.getByRole('button', { name: '正在删除…', exact: true })).toBeDisabled();
+  await frame.evaluate(() => window.finishDelete());
+  await expect(frame.getByRole('status')).toContainText('检测任务已删除');
+  await expect(button).toHaveCount(0);
+  assert.deepEqual(await deletes(), ['scheduled-delete', 'scheduled-delete']);
+  await frame.getByRole('tab', { name: '执行记录' }).click();
+  await expect(frame.getByText('历史库存检测', { exact: true })).toBeVisible();
+});
 
 test('scheduled task edits report progress, retain inputs on error, and acknowledge a saved change without a list refresh', async (t) => {
   const page = await warningPage(

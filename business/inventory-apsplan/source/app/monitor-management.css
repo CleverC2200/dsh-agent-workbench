@@ -3199,6 +3199,35 @@
 .am-connection-error p + p {
   margin-top: 8px;
 }
+.am-delete-dialog {
+  box-sizing: border-box;
+  width: min(440px, calc(100% - 32px));
+  padding: 16px;
+  font: inherit;
+  color: #555d68;
+  background: #fff;
+  border: 1px solid #e3e6ea;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px #1d20281a;
+}
+.am-delete-dialog:modal {
+  overscroll-behavior: contain;
+}
+.am-delete-dialog::backdrop {
+  background: #171a216b;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+.am-delete-dialog p {
+  margin: 12px 0 16px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.am-delete-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .am-panel button:focus-visible {
   outline: 2px solid #df1732;
   outline-offset: 2px;
