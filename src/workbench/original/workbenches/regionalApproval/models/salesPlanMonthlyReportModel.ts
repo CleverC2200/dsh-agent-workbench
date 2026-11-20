@@ -46,7 +46,8 @@ export type SalesPlanMonthlyReportSource = {
 
 export type SalesPlanReportMonthSource = SalesPlanMonthlyReportSource & { month: string };
 
-export type SalesPlanMonthlyReportFacts = Omit<GeaSalesPlanReportFacts['rows'][number], 'skuCode'>;
+export type SalesPlanMonthlyReportFacts = Omit<GeaSalesPlanReportFacts['rows'][number], 'skuCode'> &
+  Pick<GeaSalesPlanReportFacts, 'fallbackAreaName'>;
 
 export type SalesPlanMonthlyReportRow = readonly (string | number)[];
 export type SalesPlanMonthlyReportFactsReader = (
@@ -136,9 +137,11 @@ export async function readAllSalesPlanMonthlyReport(
   const sources = await readSalesPlanReportSources(client, {
     signal,
     collectFacts: async (source, active) => {
+      const resolveAreaName = !source.plan.areaName?.trim();
       const result = await reader.invoke({
         planId: source.plan.planId,
         versionId: source.plan.versionId,
+        ...(resolveAreaName ? { resolveAreaName: true } : {}),
         signal: active,
       });
       active.throwIfAborted();
@@ -146,6 +149,9 @@ export async function readAllSalesPlanMonthlyReport(
         result.planId !== source.plan.planId ||
         result.versionId !== source.plan.versionId ||
         result.month !== source.month ||
+        (resolveAreaName &&
+          result.fallbackAreaName !== null &&
+          typeof result.fallbackAreaName !== 'string') ||
         !Array.isArray(result.rows) ||
         result.rows.length !== source.skus.length ||
         new Set(result.rows.map((row) => row.skuCode)).size !== source.skus.length ||
@@ -155,7 +161,8 @@ export async function readAllSalesPlanMonthlyReport(
       for (const row of result.rows) {
         const key = JSON.stringify([source.month, source.plan.dealerCode, row.skuCode]);
         const monthly = source.plan.orderType === 'M';
-        if (!facts.get(key)?.monthly) facts.set(key, { monthly, value: row });
+        if (!facts.get(key)?.monthly)
+          facts.set(key, { monthly, value: { ...row, fallbackAreaName: result.fallbackAreaName } });
       }
     },
   });
@@ -335,11 +342,24 @@ const adjustment = (add: unknown, cut: unknown, column: string): string =>
     numeric(cut === null ? '0' : cut, column),
   );
 
-const text = (value: unknown, column: string): string | 0 => {
-  if (value === null) return 0;
+const text = (value: unknown, column: string): string => {
+  if (value === null) return '';
   if (typeof value !== 'string')
     throw new SalesPlanMonthlyReportError('UNCONFIRMED_REPORT_FIELDS', [column]);
-  return value.trim() ? value : 0;
+  return value.trim() ? value : '';
+};
+
+const gradingLabel = (value: unknown): string => {
+  switch (text(value, '分级').trim()) {
+    case 'FACTORY_WH':
+      return '工厂级';
+    case 'BRANCH_WH':
+      return '分仓';
+    case '':
+      return '';
+    default:
+      throw new SalesPlanMonthlyReportError('INVALID_REPORT_FIELD', ['分级']);
+  }
 };
 
 const quantity = (sku: GeaSalesPlanSku): string => {
@@ -422,21 +442,21 @@ export function salesPlanMonthlyReportRows(
           : '0';
       const correctedQty = addExactDecimals([monthlyQty, consensusQty]);
       return [
-        text(facts.grading, '分级'),
+        gradingLabel(facts.grading),
         text(plan.baseName, '所属基地'),
         text(facts.inventoryOrganization, '库存组织'),
-        text(plan.areaName, '大区'),
+        text(plan.areaName ?? null, '大区') || text(facts.fallbackAreaName ?? null, '大区'),
         text(plan.provinceName, '省区'),
         text(plan.orgName, '区域名称'),
-        text(facts.customerType, '客户类型'),
-        text(facts.customerGroup, '客户组名称'),
+        text(facts.customerType, '客户类型') || 0,
+        text(facts.customerGroup, '客户组名称') || 0,
         plan.dealerCode!,
-        text(plan.dealerName, '客户名称'),
-        text(sku.productCategName, '产品大类'),
-        text(facts.materialGroupCode, '物料组编码'),
-        text(facts.materialGroupName, '物料组名称'),
+        text(plan.dealerName, '客户名称') || 0,
+        text(sku.productCategName, '产品大类') || 0,
+        text(facts.materialGroupCode, '物料组编码') || 0,
+        text(facts.materialGroupName, '物料组名称') || 0,
         sku.skuCode,
-        text(sku.materialDescription ?? sku.skuName, '产品名称'),
+        text(sku.materialDescription ?? sku.skuName, '产品名称') || 0,
         monthly ? statusText(monthly.plan) : 0,
         correction ? statusText(correction.plan) : 0,
         month,

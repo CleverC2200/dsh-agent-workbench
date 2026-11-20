@@ -62,6 +62,7 @@ export interface WorkbenchHost {
       invoke(query: {
         planId: string;
         versionId: string;
+        resolveAreaName?: true;
         signal?: AbortSignal;
       }): Promise<Api.GeaSalesPlanReportFacts>;
     };

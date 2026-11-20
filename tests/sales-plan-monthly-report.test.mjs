@@ -61,7 +61,7 @@ const sku = (p, fields = {}) => ({
   ...fields,
 });
 const dimensions = {
-  grading: '工厂仓',
+  grading: 'FACTORY_WH',
   inventoryOrganization: '郑州总库存组织',
   customerType: '经销商',
   customerGroup: '三级',
@@ -131,7 +131,7 @@ function reportClient(readFacts) {
             {
               skuCode: '10006285',
               ...dimensions,
-              grading: query.planId.startsWith('M') ? 'monthly' : 'correction',
+              grading: query.planId.startsWith('M') ? 'FACTORY_WH' : 'BRANCH_WH',
             },
           ],
         };
@@ -148,9 +148,39 @@ test('unified report reads authorized version facts before final scope verificat
     statusText: () => '审批完成',
   });
   assert.equal(calls.length, 2);
-  assert.equal(rows[0][0], 'monthly');
+  assert.equal(rows[0][0], '工厂级');
   assert.deepEqual(rows[0].slice(18).map(Number), [300, -200, -150, 150, 34512, 17256]);
   assert(calls.every((query) => query.signal instanceof AbortSignal && !('dealerCode' in query)));
+});
+
+test('unified report requests a fallback area only for an unnamed plan and preserves existing names', async () => {
+  const calls = [];
+  const client = reportClient(async (query) => calls.push(query));
+  const readFacts = client.reportFacts.invoke;
+  client.reportFacts.invoke = async (query) => ({
+    ...(await readFacts(query)),
+    fallbackAreaName: query.planId.startsWith('M') ? '华南经销大区' : '华东经销大区',
+  });
+  const read = () =>
+    m.readAllSalesPlanMonthlyReport(client, {
+      signal: new AbortController().signal,
+      statusText: () => '审批完成',
+    });
+  assert.equal((await read())[0][3], '大区');
+  assert.equal(
+    calls.some((query) => query.resolveAreaName),
+    false,
+  );
+  calls.length = 0;
+  client.inputs[0].plan.areaName = ' ';
+  assert.equal((await read())[0][3], '华南经销大区');
+  assert.deepEqual(
+    calls.filter((query) => query.resolveAreaName).map((query) => query.planId),
+    [client.inputs[0].plan.planId],
+  );
+  assert(calls.every((query) => !('dealerCode' in query) && !('provinceCode' in query)));
+  client.reportFacts.invoke = readFacts;
+  await assert.rejects(read(), { code: 'INCOMPLETE_REPORT_FACTS' });
 });
 
 test('version changes during report enrichment fail the final scope check', async () => {
@@ -227,7 +257,7 @@ test('monthly report merges customer SKU rows and preserves the confirmed 24 col
   ]);
   assert.equal(rows.length, 1);
   assert.deepEqual(rows[0].slice(18).map(Number), [300, -200, -150, 150, 34512, 17256]);
-  assert.deepEqual(rows[0].slice(0, 3), ['工厂仓', '郑州', '郑州总库存组织']);
+  assert.deepEqual(rows[0].slice(0, 3), ['工厂级', '郑州', '郑州总库存组织']);
 });
 
 test('approved correction-only reductions retain negative corrected quantity and effective version amount', () => {
@@ -455,7 +485,7 @@ test('new SKUs with two empty predecessor fields use the saved confirmation and 
   assert.equal(rows[0][16], 0);
 });
 
-test('real null facts are zero while unavailable fields are explicit failures', () => {
+test('missing classification and inventory organization are blank while unavailable fields fail', () => {
   const nullFacts = Object.fromEntries(Object.keys(dimensions).map((key) => [key, null]));
   const [row] = m.salesPlanMonthlyReportRows(
     '2026-11',
@@ -463,7 +493,9 @@ test('real null facts are zero while unavailable fields are explicit failures', 
     () => nullFacts,
     () => '审批完成',
   );
-  assert.equal(row[0], 0);
+  assert.equal(row[0], '');
+  assert.equal(row[2], '');
+  assert.equal(row[6], 0);
   assert.deepEqual(row.slice(19, 22).map(Number), [-200, -150, 150]);
   assert.throws(
     () =>
@@ -607,15 +639,27 @@ test('unrelated shipment enrichment changes do not invalidate a stable report ve
   );
 });
 
-test('known null and blank report text are zero while an unread field still fails', () => {
-  for (const grading of [null, '', '  ']) {
+test('report translates grading codes and leaves empty organization values blank', () => {
+  const input = sources();
+  Object.assign(input[0].plan, {
+    baseName: '',
+    areaName: null,
+    provinceName: '  ',
+    orgName: null,
+  });
+  for (const [grading, label] of [
+    ['BRANCH_WH', '分仓'],
+    [null, ''],
+    ['', ''],
+    ['  ', ''],
+  ]) {
     const [row] = m.salesPlanMonthlyReportRows(
       '2026-11',
-      sources(),
-      () => ({ ...dimensions, grading }),
+      input,
+      () => ({ ...dimensions, grading, inventoryOrganization: '' }),
       () => '审批完成',
     );
-    assert.equal(row[0], 0);
+    assert.deepEqual(row.slice(0, 6), [label, '', '', '', '', '']);
   }
   assert.throws(
     () =>
@@ -626,6 +670,16 @@ test('known null and blank report text are zero while an unread field still fail
         () => '审批完成',
       ),
     /UNCONFIRMED_REPORT_FIELDS.*分级/,
+  );
+  assert.throws(
+    () =>
+      m.salesPlanMonthlyReportRows(
+        '2026-11',
+        input,
+        () => ({ ...dimensions, grading: 'UNKNOWN_WH' }),
+        () => '审批完成',
+      ),
+    { code: 'INVALID_REPORT_FIELD', columns: ['分级'] },
   );
 });
 

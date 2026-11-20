@@ -1777,6 +1777,7 @@ test('single uncertain approval keeps its original intent and does not create an
   await page.getByRole('button', { name: '通过', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText(/尚未查到/)).toBeVisible();
+  assert.equal(await page.evaluate(() => window.sentDirect[0].request.remark), '同意');
   await expect(dialog.getByRole('button', { name: '关闭', exact: true })).toBeEnabled();
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   await expect(
@@ -1894,6 +1895,7 @@ test('batch return retains an unknown attempt while successful plans are not sen
   await groupBox.check();
   await page.getByRole('button', { name: '退回', exact: true }).click();
   const dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('批量审批备注')).toHaveValue('');
   await dialog.getByLabel('批量审批备注').fill('请核对');
   await dialog.getByRole('button', { name: '确认批量退回', exact: true }).click();
   await expect(dialog).toContainText('待核对 1 笔');
