@@ -7,7 +7,6 @@
   background: var(--workbench-page);
   color: var(--workbench-text);
   font: var(--workbench-font-size) / 1.5 var(--workbench-font-family);
-  --workbench-ai-width: var(--workbench-ai-preferred-width, 520px);
 }
 .agent-workbench-document-chrome {
   display: grid;
@@ -121,21 +120,8 @@ html[data-platform='darwin'] .agent-workbench-document-chrome {
   overflow: hidden;
 }
 @media (max-width: 1200px) {
-  .agent-workbench-document {
-    --workbench-ai-width: 440px;
-  }
   .agent-workbench-column-handle {
     display: none;
-  }
-}
-@media (max-width: 1024px) {
-  .agent-workbench-document {
-    --workbench-ai-width: 360px;
-  }
-}
-@media (max-width: 860px) {
-  .agent-workbench-document {
-    --workbench-ai-width: 320px;
   }
 }
 

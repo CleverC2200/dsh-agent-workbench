@@ -9,6 +9,7 @@ import React, {
   useSyncExternalStore,
 } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store';
 import type { SessionReference } from '@deepseek-ai/dsh-api-session-controller/client';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import type {
@@ -171,6 +172,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     };
   }
 }
+const MIN_SPLIT_CONVERSATION_WIDTH = 300;
 const noSubscribe = () => () => {};
 const emptyGuide: readonly import('@deepseek-ai/dsh-client-ui-sidebar-right/client').SidebarRightGuideBox[] =
   [];
@@ -216,7 +218,7 @@ export function mountFramePresentation(
     return () => style.remove();
   });
 
-  let rememberedConversationWidth: number | undefined;
+  const splitWidth = createSnapshotStore<number>(MIN_SPLIT_CONVERSATION_WIDTH);
   let execution: WorkbenchPageExecution | undefined;
   const backendListeners = new Set<() => void>();
   ctx.inject(
@@ -294,15 +296,20 @@ export function mountFramePresentation(
       window.addEventListener('message', receiveModalState);
       return () => window.removeEventListener('message', receiveModalState);
     }, [page.id]);
-    const [preferredWidth, setPreferredWidth] = useState(() => rememberedConversationWidth ?? 520);
+    const preferredWidth = useSyncExternalStore(splitWidth.subscribe, splitWidth.getSnapshot);
     const [space, setSpace] = useState({ viewport: window.innerWidth, document: 0 });
     const maximumWidth = Math.max(
-      300,
+      MIN_SPLIT_CONVERSATION_WIDTH,
       Math.min(space.viewport * 0.7, space.document ? space.document - 400 : Infinity),
     );
-    const conversationWidth = Math.min(maximumWidth, Math.max(300, Math.round(preferredWidth)));
+    const clampConversationWidth = (width: number) =>
+      Math.min(maximumWidth, Math.max(MIN_SPLIT_CONVERSATION_WIDTH, Math.round(width)));
+    const conversationWidth = clampConversationWidth(preferredWidth);
     const drag = useRef<{ pointer: number; x: number; width: number }>();
     const syncToolPresentation = useRef<() => void>();
+    useLayoutEffect(() => {
+      if (!active) drag.current = undefined;
+    }, [active]);
     useLayoutEffect(() => {
       const target = documentElement.current!;
       const measure = () => {
@@ -323,12 +330,7 @@ export function mountFramePresentation(
     const resizeConversation = (x: number) => {
       const current = drag.current;
       if (!current) return;
-      const width = Math.min(
-        maximumWidth,
-        Math.max(300, Math.round(current.width + current.x - x)),
-      );
-      rememberedConversationWidth = width;
-      setPreferredWidth(width);
+      splitWidth.set(clampConversationWidth(current.width + current.x - x));
     };
     const [loaded, setLoaded] = useState(0);
     const [connectionAttempt, setConnectionAttempt] = useState(0);
@@ -867,9 +869,7 @@ export function mountFramePresentation(
       <section
         ref={documentElement}
         className="agent-workbench-document"
-        style={
-          { '--workbench-ai-preferred-width': conversationWidth + 'px' } as React.CSSProperties
-        }
+        style={{ '--workbench-ai-width': conversationWidth + 'px' } as React.CSSProperties}
       >
         {(!titleless || view === 'center') && chrome}
         {page.resourceId && identity.error !== undefined && (
