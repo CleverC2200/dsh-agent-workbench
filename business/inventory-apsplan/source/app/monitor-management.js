@@ -46,6 +46,10 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       }
     };
   const api = (data) => call('detection', data);
+  const runLog = (run) => ({
+    ...run,
+    value: run.response?.results?.length ? '检测 ' + run.response.results.length + ' 个对象' : '—',
+  });
   let monitors = [],
     logs = [],
     runEvents = [],
@@ -53,6 +57,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     runPending = null,
     runNotice = '',
     runPage = 0;
+  let stateVersion = 0;
   events = [...events];
   const mask = document.createElement('div');
   mask.className = 'am-mask';
@@ -76,10 +81,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       if (!mask.isConnected) return;
       monitors = state.tasks;
       runEvents = state.events || [];
-      logs = state.runs.map((r) => ({
-        ...r,
-        value: r.response?.results?.length ? '检测 ' + r.response.results.length + ' 个对象' : '—',
-      }));
+      logs = state.runs.map(runLog);
       canWrite = state.capabilities?.write !== false;
       writeReason = canWrite ? '' : state.capabilities.reason;
       nav.hidden = false;
@@ -113,37 +115,39 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
   const _persist = () => {};
   async function refresh() {
     if (tab === 'owners') return;
+    const version = stateVersion;
     const before = JSON.stringify([monitors, logs]);
     const state = await api({ op: 'list' });
-    if (!mask.isConnected) return;
+    if (!mask.isConnected || version !== stateVersion) return;
     monitors = state.tasks;
     runEvents = state.events || [];
-    logs = state.runs.map((r) => ({
-      ...r,
-      value: r.response?.results?.length ? '检测 ' + r.response.results.length + ' 个对象' : '—',
-    }));
+    logs = state.runs.map(runLog);
     window.dispatchEvent(new Event('gea-detection-updated'));
     if (!main.classList.contains('am-editing') && before !== JSON.stringify([monitors, logs]))
       render();
   }
+  function showNewRun(run) {
+    if (run) logs = [runLog(run), ...logs.filter((entry) => entry.id !== run.id)];
+    tab = 'logs';
+    runPage = 0;
+  }
   async function run(m) {
     if (!m || runPending) return;
     runPending = m.id;
-    runNotice = '正在提交执行请求…';
+    runNotice = '正在启动检测…';
     render();
     try {
-      await api({ op: 'run', id: m.id });
-      runNotice = '执行请求已提交，正在等待执行记录；最终结果请以记录状态为准。';
-      tab = 'logs';
-      render();
-      await refresh();
+      const result = await api({ op: 'run', id: m.id });
+      stateVersion++;
+      showNewRun(result.run);
+      runNotice = result.run ? '本次检测已启动，执行结果见下方记录。' : '执行请求已提交。';
     } catch (e) {
-      runNotice = '执行请求未确认：' + e.message + '。请先查看执行记录，再决定是否重试。';
-      render();
+      runNotice = '启动检测时收到提示：' + e.message + '。可在执行记录中核对。';
     } finally {
       runPending = null;
-      if (mask.isConnected) render();
+      if (mask.isConnected && !main.classList.contains('am-editing')) render();
     }
+    void refresh().catch(() => {});
   }
   function renderActualModel(model) {
     if (!model?.model) return '未获取';
@@ -903,36 +907,41 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     f.elements.metric.addEventListener('change', loadMetric);
     loadMetric();
     main.querySelector('[data-cancel]').onclick = render;
-    f.onsubmit = async (e) => {
+    f.noValidate = true;
+    const submit = f.querySelector('button[type=submit]');
+    const feedback = f.querySelector('.am-validation');
+    feedback.tabIndex = -1;
+    const showError = (message) => {
+      feedback.textContent = message;
+      feedback.focus();
+    };
+    const saveTask = async (e) => {
       e.preventDefault();
+      if (submit.disabled) return;
       if (
         f.elements.notifyStrategy.value === 'specified' &&
         f.querySelector('[data-recipient-picker][aria-busy=true]')
       ) {
-        main.querySelector('.am-validation').textContent = '正在核验飞书接收人，请稍候再保存';
-        return;
+        return showError('正在核验飞书接收人，请稍候再保存');
       }
       const data = new FormData(f);
       let m = Object.fromEntries(data);
       if (!m.agentPreset) {
-        main.querySelector('.am-validation').textContent = '请选择可用的执行数字人';
-        return;
+        return showError('请选择可用的执行数字人');
       }
       m.days = [...f.querySelectorAll('[name=days]:checked')].map((x) => x.value).join(',');
       Object.keys(m).forEach((k) => (m[k] = m[k].trim()));
       m.notifyRecipients = m.notifyStrategy === 'specified' ? data.getAll('notifyRecipients') : [];
       m.runImmediately = !edit && f.elements.runImmediately.checked;
-      if (!catalog.includes(m.metric)) {
-        main.querySelector('.am-validation').textContent = '请从指标清单选择有效指标';
-        return;
-      }
+      if (!formCatalog.includes(m.metric)) return showError('请从指标清单选择有效指标');
       if (!m.scope || !m.description) {
-        main.querySelector('.am-validation').textContent = '请选择检测范围并填写任务说明';
-        return;
+        return showError('请选择检测范围并填写任务说明');
       }
       if (m.frequency === 'weekly' && !m.days) {
-        main.querySelector('.am-validation').textContent = '请至少选择一个执行星期';
-        return;
+        return showError('请至少选择一个执行星期');
+      }
+      if (m.frequency === 'interval' && (!m.interval || !f.elements.interval.validity.valid)) {
+        return showError('请输入 1 至 23 的整数间隔小时数');
       }
       m.schedule = {
         frequency: m.frequency,
@@ -948,34 +957,48 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
           (x) => x.id !== edit?.id && x.metric === m.metric && x.scope === m.scope && x.enabled,
         )
       ) {
-        main.querySelector('.am-validation').textContent =
-          '此指标和范围已有启用的检测任务，请在列表查看，避免重复检测。';
+        return showError('此指标和范围已有启用的检测任务，请在列表查看，避免重复检测。');
+      }
+      const label = submit.textContent;
+      feedback.textContent = '';
+      submit.disabled = true;
+      submit.textContent = '正在保存…';
+      let saved;
+      try {
+        saved = await api({ op: 'save', task: { ...m, id: edit?.id, requestKey } });
+      } catch (error) {
+        if (f.isConnected) {
+          submit.disabled = false;
+          submit.textContent = label;
+          showError(error.message);
+        }
         return;
       }
-      try {
-        const button =
-          f.querySelector('button[type=submit]') || f.querySelector('footer button:last-child');
-        button.disabled = true;
-        await api({ op: 'save', task: { ...m, id: edit?.id, requestKey } });
-        tab = !edit && m.runImmediately ? 'logs' : 'monitors';
+      if (!mask.isConnected) return;
+      stateVersion++;
+      monitors = edit
+        ? monitors.map((task) => (task.id === saved.id ? saved : task))
+        : [saved, ...monitors.filter((task) => task.id !== saved.id)];
+      if (f.isConnected) {
+        tab = 'monitors';
+        if (m.runImmediately && !saved.immediateRunError) showNewRun(saved.immediateRun);
         runNotice = edit
           ? '检测任务已更新。'
-          : m.runImmediately
-            ? '检测任务已保存，已提交立即执行。'
-            : '检测任务已保存，将按设定时间执行。';
-        main.classList.remove('am-editing');
-        await refresh();
+          : saved.immediateRunError
+            ? '检测任务已保存，本次立即执行未启动：' + saved.immediateRunError
+            : m.runImmediately
+              ? '检测任务已保存，本次检测已启动。'
+              : '检测任务已保存，将按设定时间执行。';
         render();
-      } catch (error) {
-        main.querySelector('.am-validation').textContent = error.message;
-        f.querySelectorAll('footer button').forEach((b) => (b.disabled = false));
+        main.querySelector('[data-new]')?.focus();
       }
+      window.dispatchEvent(new Event('gea-detection-updated'));
+      void refresh().catch(() => {});
     };
-    const submit = f.querySelector('footer button:last-child');
-    submit.type = 'button';
-    submit.onclick = (e) => f.onsubmit(e);
+    f.onsubmit = saveTask;
+    submit.onclick = saveTask;
     f.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+      if (e.key === 'Enter' && !e.isComposing && e.target === f.elements.interval) {
         e.preventDefault();
         submit.click();
       }

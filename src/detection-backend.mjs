@@ -138,6 +138,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 const ROOT = process.env.GEA_WARNING_HOME || join(homedir(), '.dsh', 'warning');
+const DETECTION_TIMEOUT_MS = 9 * 60_000;
 
 const scopes = ['品类', '基地', '品类*基地', '大区', '省区'];
 export function cron(s) {
@@ -177,6 +178,7 @@ export function validate(result, task) {
   if (result.complete !== true || !Array.isArray(result.results) || !result.results.length)
     throw Error(result.error || '问数结果不完整，不能判定恢复');
   const seen = new Set();
+  const nullPolicyText = detectionNullPolicy(task);
   for (const x of result.results) {
     x.scope = normalizeDetectionScope(x.scope);
     if (
@@ -197,7 +199,7 @@ export function validate(result, task) {
     if (x.rule?.sourceType === 'task') {
       if (!x.unit || !x.objectName || !x.period || !x.cutoff || !x.evidence)
         throw Error('任务检测缺少对象、期间、截止时间或取数证据');
-      if (validateTaskRule(x, task)) continue;
+      if (validateTaskRule(x, task, nullPolicyText)) continue;
     }
     if (
       !x.unit ||
@@ -336,7 +338,7 @@ export function merge(state, task, results, run) {
       value: x.value,
       unit: x.unit,
       period: x.period,
-      source: 'XXL-JOB · GEA问数',
+      source: run.runKey?.startsWith('manual-') ? '手动执行 · GEA问数' : 'XXL-JOB · GEA问数',
       range: displayRule(x.rule, x.unit),
       target:
         x.rule.kind === 'range'
@@ -383,8 +385,8 @@ export async function installDetection(ctx) {
     void store.close();
   });
   let writes = Promise.resolve();
-  const save = () => {
-    const snapshot = JSON.stringify(state, null, 2);
+  const save = (nextState = state) => {
+    const snapshot = JSON.stringify(nextState);
     const next = writes.then(async () => {
       await store.save(JSON.parse(snapshot));
     });
@@ -393,7 +395,7 @@ export async function installDetection(ctx) {
   };
   let serial = Promise.resolve();
   const locked = (fn) => {
-    const p = serial.then(fn);
+    const p = serial.then(() => fn());
     serial = p.catch(() => {});
     return p;
   };
@@ -453,10 +455,7 @@ export async function installDetection(ctx) {
       });
     return result;
   }
-  const xxl = async (path, data) => {
-    if (path === '/jobinfo/trigger') await scheduler({ operation: 'poll', busy: true });
-    return scheduler({ operation: 'xxl', path, data });
-  };
+  const xxl = (path, data) => scheduler({ operation: 'xxl', path, data });
   async function configure(t, edit = false) {
     const body = {
       jobGroup: '1',
@@ -517,7 +516,7 @@ export async function installDetection(ctx) {
         id: created.agentPreset,
         name: agents.find((x) => x.id === created.agentPreset)?.name || created.agentPreset,
       };
-    await save();
+    await locked(save);
     const metric = await metricInfo(t.metric);
 
     if (metric.status !== 'available')
@@ -536,11 +535,11 @@ export async function installDetection(ctx) {
 
 面向用户的说明（如 analysis）中，指标值、比率、差值等数字按原单位四舍五入保留 1 位小数，例如 13.7841 天写为 13.8 天，12 天写为 12.0 天。业务日期、统计期间、编号以及引用的规则原文保持原样。结构化 value、规则阈值和风险判断使用原始精度。
 
-仅返回 JSON，格式如下；字段值必须依据实际查询，不得照抄示例或编造。每个对象必须具有唯一且稳定的 objectKey；优先使用来源系统稳定编码，若只能用名称，直接用 objectName，不拼接检测范围。value 为数值，百分比用 0 至 100 的数值；仅在成功查询返回空值且任务明确允许空值正常时，value 返回 null，dataStatus 返回 queried-null，status 返回健康，analysis 注明空值按任务规则视为正常，不得伪造为0。scope 必须与检测范围一致，period 为实际统计期间，cutoff 为业务数据截止时间。rule 的健康线比较符 healthyOperator 只能为 gt、gte、lt、lte，direction 只能为 higher 或 lower。status 按规则返回健康、预警或严重。规则编号或版本未登记时请明确标注，不得编造。任务自定义规则使用 sourceType:"task"、taskQuote（完整引用任务中规则和空值条款原文）、nullPolicy:"healthy"（仅明确授权空值正常时）；id和version由系统记录任务执行来源。没有严重阈值时 severe:null，异常只判预警。双侧区间使用 kind:"range"、min、max（含边界为正常）；例如偏离目标超过±20%，min=目标×0.8，max=目标×1.2，计算须有工具证据，保留原指标值和单位。不要硬套单侧阈值结构。
+最终回复只输出一个完整的 JSON 对象。使用以下格式；字段值必须依据实际查询，不得照抄示例或编造。每个对象必须具有唯一且稳定的 objectKey；优先使用来源系统稳定编码，若只能用名称，直接用 objectName，不拼接检测范围。value 为数值，百分比用 0 至 100 的数值；仅在成功查询返回空值且任务明确允许空值正常时，value 返回 null，dataStatus 返回 queried-null，status 返回健康，analysis 注明空值按任务规则视为正常，不得伪造为0。scope 必须与检测范围一致，period 为实际统计期间，cutoff 为业务数据截止时间。rule 的健康线比较符 healthyOperator 只能为 gt、gte、lt、lte，direction 只能为 higher 或 lower。status 按规则返回健康、预警或严重。规则编号或版本未登记时请明确标注，不得编造。任务自定义规则使用 sourceType:"task"；taskQuote 逐字引用“任务说明”中的原文，包含其中实际写明的阈值和空值条款，不添加标题或系统的“空值处理补充”。仅当任务原文明示空值正常时使用 nullPolicy:"healthy"；id 和 version 由系统记录。没有严重阈值时 severe:null，异常只判预警。双侧区间使用 kind:"range"、min、max（含边界为正常）；例如偏离目标超过±20%，min=目标×0.8，max=目标×1.2，计算须有工具证据，保留原指标值和单位。不要硬套单侧阈值结构。
 {"complete":true,"results":[{"scope":"检测范围","objectKey":"稳定对象编码或名称","objectName":"对象名称","value":0,"unit":"单位","period":"统计期间","cutoff":"业务数据截止时间","status":"健康或预警或严重","evidence":"取数及规则依据","analysis":"事实及待核查原因","rule":{"id":"规则编号或未登记","version":"规则版本或未登记","source":"规则来源","direction":"higher或lower","healthy":0,"healthyOperator":"gt或gte或lt或lte","severe":0}}]}
 无法完整可靠检测时返回 {"complete":false,"error":"具体原因"}。`;
     run.prompt = prompt;
-    await save();
+    await locked(save);
     await ctx.sessionController.prompt(
       {
         requestId: 'request-' + randomUUID(),
@@ -599,7 +598,7 @@ export async function installDetection(ctx) {
                   ? { reasoningEffort: String(config.reasoningEffort) }
                   : {}),
               };
-              await save();
+              await locked(save);
             }
           }
           if (e.type === 'assistant/message') {
@@ -640,34 +639,95 @@ export async function installDetection(ctx) {
     );
   }
 
+  async function startTask(id, runKey) {
+    const owner = await currentOwner();
+    return locked(async () => {
+      const t = state.tasks.find((t) => t.id === id);
+      if (!t || !t.enabled || t.deletedAt) throw Error('检测任务不存在或已停用');
+      if (!ownsWarningTask(t, owner)) throw Error('请使用预警设置人的账号执行检测');
+      const previous = state.runs.find((r) => r.runKey === runKey);
+      if (previous) {
+        if (previous.status === '执行中') throw Error('上次执行状态仍待核实，请勿重复执行');
+        return { run: previous, completion: Promise.resolve(previous) };
+      }
+      if (running.has(id)) throw Error('上一次检测仍在执行');
+      running.add(id);
+      const run = {
+        id: 'run-' + randomUUID(),
+        runKey,
+        taskId: id,
+        name: t.name,
+        at: new Date().toISOString(),
+        status: '执行中',
+        created: 0,
+        updated: 0,
+        recovered: 0,
+      };
+      state.runs.unshift(run);
+      try {
+        await save();
+      } catch (error) {
+        state.runs = state.runs.filter((entry) => entry !== run);
+        running.delete(id);
+        throw error;
+      }
+      return { run, completion: executeTask(t, run) };
+    });
+  }
+
   async function runTask(id, runKey) {
-    const t = state.tasks.find((t) => t.id === id);
-    if (!t || !t.enabled || t.deletedAt) throw Error('检测任务不存在或已停用');
-    if (!ownsWarningTask(t, await currentOwner())) throw Error('请使用预警设置人的账号执行检测');
-    if (!t.enabled || t.deletedAt) throw Error('检测任务已停用或删除');
-    const previous = state.runs.find((r) => r.runKey === runKey);
-    if (previous) {
-      if (previous.status === '执行中') throw Error('上次执行状态仍待核实，请勿重复执行');
-      return previous;
+    return (await startTask(id, runKey)).completion;
+  }
+
+  async function startManualRun(id) {
+    const { run, completion } = await startTask(id, 'manual-' + randomUUID());
+    void completion.catch(() => {});
+    return run;
+  }
+
+  async function persistFailedRun(task, run, result) {
+    const completedAt = new Date().toISOString();
+    for (let attempt = 0; ; attempt++) {
+      const latest = await store.load();
+      if (
+        !ownsWarningTask(
+          latest.tasks.find((entry) => entry.id === task.id),
+          task.owner,
+        )
+      )
+        throw Error('登录身份已变化，检测回执待核实');
+      const stored = latest.runs.find((entry) => entry.id === run.id && entry.taskId === task.id);
+      if (!stored) throw Error('无法核对原执行记录');
+      const failed = { ...stored, ...run, status: '失败', completedAt, result };
+      try {
+        if (stored.status === '执行中') {
+          latest.runs = latest.runs.map((entry) => (entry === stored ? failed : entry));
+          await save(latest);
+        }
+      } catch (error) {
+        if (attempt === 0 && error.code === 'WARNING_WRITE_CONFLICT') continue;
+        throw error;
+      }
+      const active = new Map(
+        state.runs
+          .filter(
+            (entry) =>
+              entry.id !== run.id && running.has(entry.taskId) && entry.status === '执行中',
+          )
+          .map((entry) => [entry.id, entry]),
+      );
+      latest.runs = latest.runs.map((entry) =>
+        entry.status === '执行中' ? (active.get(entry.id) ?? entry) : entry,
+      );
+      Object.assign(state, latest);
+      return stored.status === '执行中' ? failed : stored;
     }
-    if (running.has(id)) throw Error('上一次检测仍在执行');
-    running.add(id);
-    const run = {
-      id: 'run-' + randomUUID(),
-      runKey,
-      taskId: id,
-      name: t.name,
-      at: new Date().toISOString(),
-      status: '执行中',
-      created: 0,
-      updated: 0,
-      recovered: 0,
-    };
-    state.runs.unshift(run);
+  }
+
+  async function executeTask(t, run) {
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 540000);
+    const timer = setTimeout(() => ac.abort(), DETECTION_TIMEOUT_MS);
     try {
-      await locked(save);
       const result = await ai(t, run, ac.signal);
       run.response = result;
       await locked(save);
@@ -717,18 +777,20 @@ export async function installDetection(ctx) {
         run.completedAt = new Date().toISOString();
         run.result = `新增${run.created}，更新${run.updated}，恢复${run.recovered}，数据未更新${run.unchanged || 0}`;
         if (run.notificationIssue) run.result += '；通知待处理：' + run.notificationIssue;
-        t.lastRun = run.at;
+        const task = state.tasks.find((entry) => entry.id === t.id);
+        if (task) task.lastRun = run.at;
         await save();
       });
     } catch (e) {
-      run.status = '失败';
-      run.completedAt = new Date().toISOString();
-      run.result = ac.signal.aborted ? '检测超过9分钟未完成，请检查问数及工具授权状态' : e.message;
-      await locked(save);
-      throw e;
+      const result = ac.signal.aborted
+        ? '检测超过9分钟未完成，请检查问数及工具授权状态'
+        : e.message;
+      const receipt = await locked(() => persistFailedRun(t, run, result));
+      if (receipt.status === '成功') return receipt;
+      throw Error(receipt.result || result, { cause: e });
     } finally {
       clearTimeout(timer);
-      running.delete(id);
+      running.delete(t.id);
     }
     return run;
   }
@@ -805,8 +867,8 @@ export async function installDetection(ctx) {
             task: state.tasks.find((t) => t.id === e.monitorId) || e.task,
           })),
         };
-      case 'save':
-        return locked(async () => {
+      case 'save': {
+        const { task, runImmediately } = await locked(async () => {
           const v = input.task;
           if (!v || !scopes.includes(v.scope) || !v.metric?.trim() || !v.description?.trim())
             throw Error('指标、范围或任务说明无效');
@@ -883,19 +945,22 @@ export async function installDetection(ctx) {
             )
           )
             throw Error('已有相同指标与检测范围的启用任务');
-          await configure(t, !!old);
-          if (old) Object.assign(old, t);
-          else state.tasks.unshift(t);
-          await save();
-          await xxl(t.enabled ? '/jobinfo/start' : '/jobinfo/stop', { id: String(t.jobId) });
-          if (!old && v.runImmediately === true)
-            await xxl('/jobinfo/trigger', {
-              id: String(t.jobId),
-              executorParam: JSON.stringify({ taskId: t.id }),
-              addressList: '',
-            });
-          return t;
+          await configure(t, Boolean(old));
+          const tasks = old
+            ? state.tasks.map((entry) => (entry === old ? t : entry))
+            : [t, ...state.tasks];
+          await save({ ...state, tasks });
+          state.tasks = tasks;
+          if (!old) await xxl('/jobinfo/start', { id: String(t.jobId) });
+          return { task: t, runImmediately: !old && v.runImmediately === true };
         });
+        if (!runImmediately) return task;
+        try {
+          return { ...task, immediateRun: await startManualRun(task.id) };
+        } catch (error) {
+          return { ...task, immediateRunError: error.message };
+        }
+      }
       case 'delete':
         return locked(() =>
           deleteDetectionTask({
@@ -915,16 +980,8 @@ export async function installDetection(ctx) {
           await save();
           return t;
         });
-      case 'run': {
-        const t = state.tasks.find((t) => t.id === input.id);
-        if (!t?.enabled || t.deletedAt) throw Error('任务未启用或已删除');
-        await xxl('/jobinfo/trigger', {
-          id: String(t.jobId),
-          executorParam: JSON.stringify({ taskId: t.id }),
-          addressList: '',
-        });
-        return { accepted: true };
-      }
+      case 'run':
+        return { accepted: true, run: await startManualRun(input.id) };
       default:
         throw Error('未知检测操作');
     }
@@ -934,7 +991,17 @@ export async function installDetection(ctx) {
   const scopedApi = (input) => {
     const pending = requests.then(async () => {
       if (!running.size) Object.assign(state, await store.load());
-      return ownedApi(input);
+      const result = await ownedApi(input);
+      if (input.op !== 'list') return result;
+      const cutoff = Date.now() - DETECTION_TIMEOUT_MS;
+      return {
+        ...result,
+        runs: result.runs.map((run) =>
+          run.status === '执行中' && Date.parse(run.at) <= cutoff
+            ? { ...run, status: '待核实', result: '检测已超过9分钟，尚未收到最终回执。' }
+            : run,
+        ),
+      };
     });
     requests = pending.catch(() => {});
     return pending;

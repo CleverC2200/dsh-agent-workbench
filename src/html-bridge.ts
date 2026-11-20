@@ -194,30 +194,8 @@ export function connectHtmlFrame(
           result = { sent: true };
         } else if (message.method === 'detection') {
           if (connection.page.id !== 'inventory-apsplan') throw Error('DETECTION_PAGE_NOT_ALLOWED');
-          const parameters = message.parameters as
-            | { op?: string; task?: Record<string, unknown> }
-            | undefined;
-          const op = parameters?.op;
-          let body = message.parameters;
-          if (op === 'save') {
-            const login = await fetch('/api/gea-proof/status', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: '{}',
-              signal: task.signal,
-            });
-            const status = await login.json();
-            const name = status.value?.user?.name;
-            if (
-              !login.ok ||
-              !status.ok ||
-              !status.value?.authenticated ||
-              typeof name !== 'string' ||
-              !name.trim()
-            )
-              throw Error('无法读取当前 GEA 登录姓名，请重新登录后保存预警');
-            body = { ...parameters, task: { ...parameters?.task, definedBy: name.trim() } };
-          }
+          const body = message.parameters;
+          const op = body?.op;
           if (op === 'people') {
             result = await searchWarningPeople(body, task.signal);
           } else {
