@@ -21,9 +21,6 @@
 .gea-sidebar-brand-row {
   position: relative;
 }
-html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
-  right: 0;
-}
 .gea-sidebar-brand {
   flex: 1;
 }
@@ -36,14 +33,105 @@ html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
   align-items: stretch;
   flex: none;
 }
-.gea-sidebar-updates {
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 4px;
+.gea-sidebar-message-card {
+  min-inline-size: 0;
+  margin-bottom: 6px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 14px;
+  background: var(--workbench-surface);
 }
-.gea-sidebar-owned[data-gea-narrow] .gea-sidebar-updates {
+.gea-sidebar-message-card:not(:has(.gea-sidebar-reminder)) {
+  display: none;
+}
+.gea-sidebar-message-track {
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.gea-sidebar-message-track .gea-sidebar-reminder {
+  flex: 0 0 100%;
+  min-inline-size: 0;
+  box-sizing: border-box;
+  scroll-snap-align: start;
+}
+.gea-sidebar-reminder {
+  position: relative;
+  min-inline-size: 0;
+  padding: 10px 38px 10px 12px;
+}
+.gea-sidebar-reminder-close,
+.gea-sidebar-message-navigation button {
+  display: grid;
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.gea-sidebar-reminder-close {
+  position: absolute;
+  inset-block-start: 5px;
+  inset-inline-end: 7px;
+}
+.gea-sidebar-reminder-close:hover,
+.gea-sidebar-message-navigation button:hover {
+  background: var(--workbench-subtle);
+}
+.gea-sidebar-message-navigation {
+  display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 5px;
+  padding-block-end: 3px;
+  color: var(--workbench-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.gea-sidebar-message-open {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.gea-sidebar-message-open:disabled {
+  cursor: default;
+}
+.gea-sidebar-message-open:enabled:hover strong {
+  text-decoration: underline;
+}
+.gea-sidebar-message-open:focus-visible {
+  outline: 2px solid var(--workbench-brand);
+  outline-offset: 2px;
+}
+.gea-sidebar-message-open > svg {
+  flex: none;
+  margin-top: 2px;
+}
+.gea-sidebar-message-copy {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.gea-sidebar-message-copy > span {
+  overflow: clip;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--workbench-muted);
 }
 .gea-sidebar-account {
   flex: 1;

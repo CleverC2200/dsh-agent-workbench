@@ -11,7 +11,11 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { verifyOfficialCore } from '../scripts/verify-official-input.mjs';
 const corePath = resolve(process.env.DSH_TEST_CORE ?? '../../official-latest-standard');
-verifyOfficialCore(corePath);
+verifyOfficialCore(
+  corePath,
+  process.env.GEA_TEST_SOURCE &&
+    resolve(process.env.GEA_TEST_SOURCE, 'scripts/supported-cores.json'),
+);
 const { SlotCore } = await import(
   pathToFileURL(resolve(corePath, 'packages/client/ui-slots/lib/index.js')).href
 );
@@ -118,7 +122,13 @@ function fixture(
         Array.isArray(panels) ? () => {} : panels.subscribe(name, listener),
       inject: (_name, fn) => fn(),
       register: (options, component) => {
-        entries.push({ options, component });
+        entries.push({
+          options,
+          component:
+            options.name === 'settings.launcher'
+              ? (props) => React.createElement(component, { renderSlot: () => null, ...props })
+              : component,
+        });
         return slotCore ? slotCore.register(options, component) : () => {};
       },
     },
@@ -357,7 +367,7 @@ test('formal account contribution renders the GEA read-only avatar and pending l
   assert.ok(markup.includes('gea-user-avatar'));
   assert.ok(!markup.includes('workbench-avatar'));
 });
-test('actual owned anchors constrain the bell and keep one workspace heading inside the browser', (t) => {
+test('the sidebar keeps the notification rail by the account and one workspace heading inside the browser', (t) => {
   const { entries, renderSlot } = fixture();
   const entry = entries.find((row) => row.options.name === 'sidebar');
   const markup = renderToStaticMarkup(
@@ -373,15 +383,10 @@ test('actual owned anchors constrain the bell and keep one workspace heading ins
   );
   t.after(() => dom.window.close());
   const document = dom.window.document,
-    row = document.querySelector('.gea-sidebar-brand-row'),
-    bell = document.querySelector('[aria-label="消息中心"]'),
+    reminders = document.querySelector('.gea-sidebar-message-card'),
     browser = document.querySelector('.gea-workspace-owned');
-  assert.equal(bell.parentElement, row);
-  assert.equal(
-    dom.window.getComputedStyle(row).position,
-    'relative',
-    'the original absolute bell anchors to the brand row',
-  );
+  assert.equal(reminders.parentElement, document.querySelector('.gea-sidebar-footer'));
+  assert.equal(reminders.querySelectorAll('.gea-sidebar-reminder').length, 0);
   assert.equal(
     dom.window.getComputedStyle(browser).order,
     '4',
