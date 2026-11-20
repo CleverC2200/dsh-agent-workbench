@@ -2190,7 +2190,7 @@ test('desktop groups, original icons and short titles retain all confirmed page 
     [
       'order',
       'inventory-orderworkbench',
-      '订单工作台(开发中)',
+      '订单工作台',
       'prototypes/inventory-orderworkbench/page.json',
     ],
     [

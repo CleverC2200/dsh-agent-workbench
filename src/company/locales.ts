@@ -71,7 +71,7 @@ const copy = {
   menuCustomerInventoryPage: ['客户库存(开发中)', 'Customer inventory (in development)'],
   menuDealerAssistantPage: ['经销商经营助手(开发中)', 'Dealer assistant (in development)'],
   menuDealerReplenishmentPage: ['经销商补货', 'Dealer replenishment'],
-  menuOrderPage: ['订单工作台(开发中)', 'Order workbench (in development)'],
+  menuOrderPage: ['订单工作台', 'Order workbench'],
   menuFulfillmentPage: ['订单履约(开发中)', 'Order fulfillment (in development)'],
   businessCatalogEmpty: [
     '暂未获取到可用应用，可刷新或联系管理员。原因暂无法确定。',
