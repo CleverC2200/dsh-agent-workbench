@@ -93,8 +93,13 @@ const sourceIssues = (draft, source, month) => {
 };
 
 export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation) {
-  const context = { id: draft.id, name: draft.name, month: draft.month };
   const categoryComputation = buildCategoryDemand(draft, shipmentSnapshot);
+  const context = {
+    id: draft.id,
+    name: draft.name,
+    month: draft.month,
+    ...(categoryComputation.festival ? { festival: categoryComputation.festival } : {}),
+  };
   const excludedShipments = categoryComputation.shipmentScope.excluded;
   const excludedShipmentKeys = new Set(excludedShipments.map(rowKey));
   const mappings = sourceProductMappings(draft.products, draft.productRaw);
@@ -299,17 +304,21 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   }
   const reportRatios = [];
   if (draft.reportSource === 'business' && !reportIssues().length) {
+    const productsByCategory = Map.groupBy(draft.products ?? [], (product) => product['大类']);
+    const productsByCode = Map.groupBy(draft.products ?? [], (product) => product['产品编码']);
     for (const row of draft.planRates ?? []) {
       if (row['月份'] !== draft.month) continue;
       if (!Object.hasOwn(row, '计划占比')) continue;
-      const matches = (draft.products ?? []).filter((product) =>
-        row['维度类型'] === '大类+物料组'
-          ? product['大类'] === row['大类'] &&
-            [product['物料组'], product['物料组名称']].includes(row['物料组名称'])
-          : product['产品编码'] === row['产品编码'] &&
-            (row['维度类型'] !== '物料组+产品' ||
-              [product['物料组'], product['物料组名称']].includes(row['物料组名称'])),
-      );
+      const byCategory = row['维度类型'] === '大类+物料组';
+      const candidates = byCategory
+        ? productsByCategory.get(row['大类'])
+        : productsByCode.get(row['产品编码']);
+      const matches =
+        byCategory || row['维度类型'] === '物料组+产品'
+          ? (candidates ?? []).filter((product) =>
+              [product['物料组'], product['物料组名称']].includes(row['物料组名称']),
+            )
+          : (candidates ?? []);
       const scopes = [
         ...new Map(
           matches.map((product) => [
@@ -337,6 +346,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     latestTransferSnapshot(relations?.sources?.transfers ?? []).rows,
     (row) => JSON.stringify([canonicalBaseName(row.target_base), text(row.material_code)]),
   );
+  const stockBySku = validShipment ? Map.groupBy(shipmentSnapshot.rows ?? [], rowKey) : null;
   const delistedProducts = products.flatMap((product) => {
     const tags = [
       ...new Set(
@@ -346,7 +356,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       ),
     ];
     if (tags.length !== 1 || tags[0] !== '下市品') return [];
-    const stock = (shipmentSnapshot?.rows ?? []).find((row) => rowKey(row) === rowKey(product));
+    const stock = stockBySku?.get(rowKey(product))?.[0];
     const average = validShipment ? number(stock?.average) : null;
     const issue = !validShipment
       ? `库存日报读取状态${shipmentSnapshot?.status ?? 'unread'}；${shipmentSnapshot?.error ?? '同版本库存快照尚未就绪'}`
@@ -382,7 +392,10 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     products,
     productMonths: [...productMonths.values()].filter(includedShipment),
     scopeCoverage: 'in-scope',
-    categoryDemand: (draft.categoryDemand ?? categoryComputation.rows).map((row) => ({
+    categoryDemand: (draft.festivalBasis
+      ? categoryComputation.rows
+      : (draft.categoryDemand ?? categoryComputation.rows)
+    ).map((row) => ({
       month: text(row.month),
       category: text(row.category),
       quantity: number(row.quantity),
@@ -454,9 +467,9 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
           kind,
           month,
           category,
-          group,
-          ...(kind !== 'group' ? { code } : {}),
-          ...(kind === 'base-sku' ? { base } : {}),
+          ...(group === undefined ? {} : { group }),
+          ...(code === undefined ? {} : { code }),
+          ...(base === undefined ? {} : { base }),
           quantity,
         }),
       ),

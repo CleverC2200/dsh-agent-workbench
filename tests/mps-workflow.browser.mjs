@@ -21,7 +21,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPage, openMpsCategoryFilter } from './helpers/mps-page.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const emptySource = ({ queryId }) => ({
@@ -185,6 +185,10 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
   await expect(view.locator('.mps-batch-input')).toHaveCount(0);
   const detail = view.getByRole('table', { name: '加工后的需求明细', exact: true });
   await expect(
+    detail.getByRole('columnheader', { name: '全国 / 基地 / 大类 / 物料组 / SKU', exact: true }),
+  ).toBeVisible();
+  await view.getByLabel('需求层级视角').selectOption('base');
+  await expect(
     detail.getByRole('columnheader', { name: '基地 / 大类 / 物料组 / SKU', exact: true }),
   ).toBeVisible();
   await expect(detail.locator('tbody tr')).toHaveCount(3);
@@ -249,6 +253,30 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
         (row) => row['月份'] === '2026-12' && row['基地'] === base && row['产品编码'] === code,
       )['需求数量'],
       quantity,
+    );
+  }
+  for (const name of ['基地 · 郑州', '郑州 大类 · 汤圆', '郑州 物料组 · 组']) {
+    const branch = detail.getByRole('button', { name, exact: true });
+    if ((await branch.getAttribute('aria-expanded')) === 'false') await branch.press('Enter');
+  }
+  const effective = async () =>
+    (await workflowExportRows(frame))
+      .filter((row) => row['月份'] === '2026-12' && row['产品编码'])
+      .map((row) => [row['基地'], row['产品编码'], Number(row['需求数量'])])
+      .sort();
+  for (const [label, value, expected] of [
+    ['汤圆 2026-12 需求数量', '240', [48, 96, 72, 24]],
+    ['汤圆 组 郑州 2026-12 需求数量', '120', [48, 96, 90, 30]],
+    ['汤圆 组 A 郑州 2026-12 需求数量', '100', [48, 96, 100, 30]],
+  ]) {
+    await beginAdjustment(view);
+    await view.getByLabel(label, { exact: true }).fill(value);
+    await selectAdjustmentReason(view, '层级需求联动核对');
+    await saveAdjustment(view);
+    await expect(view.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
+    assert.deepEqual(
+      (await effective()).map((row) => row[2]),
+      expected,
     );
   }
 });
@@ -434,17 +462,15 @@ test('MPS processing includes every current product category in its summary, fil
     await expect(view.getByRole('table', { name: '大类需求总表', exact: true })).toContainText(
       category,
     );
-    await expect(
-      frame
-        .getByRole('group', { name: '大类筛选', exact: true })
-        .getByRole('checkbox', { name: category, exact: true }),
-    ).toHaveCount(1);
     assert.equal(csv.includes(category), true);
   }
   assert.match(csv, /汤圆/);
   await workflowStep(frame, '产销存报告');
   await expect(frame.locator('section[aria-label="产销存报告"]')).toContainText('饺子');
   await workflowStep(frame, '需求确认');
+  const filter = await openMpsCategoryFilter(frame);
+  for (const category of ['饺子', '调理肉制品', '饼类'])
+    await expect(filter.getByRole('checkbox', { name: category, exact: true })).toHaveCount(1);
   await expect(
     frame.getByRole('region', { name: '产品明细', exact: true }).locator('tbody tr'),
   ).toHaveCount(4);
@@ -1137,6 +1163,20 @@ test('MPS explicit leaf quantities and share history drive the same inventory an
     .toBe(reportScroll);
   const actualReportCsv = await download(page, report, '导出产销存结果');
   assert.equal(actualReportCsv, solvedCsv);
+  const layeredCsv = await download(page, report, '下载产销存分层汇总及明细');
+  const layeredBook = XLSX.read(layeredCsv, { type: 'string', raw: true });
+  const layered = XLSX.utils.sheet_to_json(layeredBook.Sheets[layeredBook.SheetNames[0]]);
+  assert.equal(layered[0]['基地'], '全国');
+  assert.deepEqual(
+    [
+      ...new Set(
+        layered
+          .filter((row) => row['基地'] === '全国' && row['月份'] === layered[0]['月份'])
+          .map((row) => row['粒度']),
+      ),
+    ],
+    ['合计', '大类', '物料组', 'SKU'],
+  );
   assert.equal(
     await download(
       page,

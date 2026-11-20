@@ -100,7 +100,7 @@ test('搜索单品直接展开各基地SKU，下载仅含当前范围，清空�
   await expect(table.getByText('SKU · A 产品甲', { exact: true })).toHaveCount(0);
   const search = frame.getByLabel('搜索当前步骤', { exact: true });
   await search.fill('产品甲');
-  await expect(table.getByText('SKU · A 产品甲', { exact: true })).toHaveCount(2);
+  await expect(table.getByText('SKU · A 产品甲', { exact: true })).toHaveCount(3);
   await expect(table.getByText('SKU · B 产品乙', { exact: true })).toHaveCount(0);
   await expect(base).toHaveAttribute('aria-expanded', 'true');
   const pending = page.waitForEvent('download');
@@ -111,6 +111,9 @@ test('搜索单品直接展开各基地SKU，下载仅含当前范围，清空�
   const exportedSkus = exported.filter((row) => row['产品编码']);
   assert.ok(exportedSkus.length > 0);
   assert.ok(exportedSkus.every((row) => row['产品编码'] === 'A'));
+  const firstNational = exported.findIndex((row) => row['粒度'] === '全国SKU汇总');
+  const firstBase = exported.findIndex((row) => row['粒度'] === '基地汇总');
+  assert.ok(firstNational >= 0 && firstNational < firstBase);
   await search.fill('');
   await expect(base).toHaveAttribute('aria-expanded', 'false');
   await expect(table.getByText('SKU · A 产品甲', { exact: true })).toHaveCount(0);
@@ -163,6 +166,7 @@ test('全国视角逐层汇总大类、物料组和SKU，不重复累计多月�
 
 test('基地SKU修正后父级读取有效数量，全国汇总与明细下载一致且不挤占其他基地', async (t) => {
   const { frame, table, month } = await skuPage(t, true);
+  await frame.getByLabel('需求层级视角', { exact: true }).selectOption('base');
   const base = table.getByRole('button', { name: '基地 · 郑州', exact: true });
   await base.press('Enter');
   await table.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).press('Enter');

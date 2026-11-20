@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPage, openMpsCategoryFilter } from './helpers/mps-page.mjs';
 import { adjustLeaf } from './helpers/mps-edit.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
@@ -240,10 +240,10 @@ test('完整分页金额包含池外及缺基地，缺价显示已知小计，�
   await frame.getByLabel('基地筛选', { exact: true }).selectOption('郑州');
   await expect(amounts).toContainText('1条源金额无法归属当前筛选范围');
   await expect(amounts).toContainText('分别为10.00、10.00元');
-  await frame
-    .getByRole('group', { name: '大类筛选', exact: true })
-    .getByRole('checkbox', { name: '汤圆', exact: true })
-    .check();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  const filter = await openMpsCategoryFilter(frame);
+  await filter.getByRole('checkbox', { name: '汤圆', exact: true }).check();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   await expect(amounts).toContainText('199条源金额无法归属当前筛选范围');
   await expect(amounts).toContainText('分别为208.00、208.00元');
   const pending = page.waitForEvent('download');

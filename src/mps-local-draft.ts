@@ -32,6 +32,15 @@ const categoryAdjustment = z.strictObject({ month, category: text, quantity, ...
 const shareAdjustment = z.strictObject({ rowId: text, share: quantity.max(1), ...audit });
 const quantityIdentity = { month, category: text, group: text, quantity, ...audit };
 const quantityAdjustment = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('category-total'),
+    month,
+    category: text,
+    base: text.optional(),
+    quantity,
+    ...audit,
+  }),
+  z.strictObject({ kind: z.literal('group-total'), ...quantityIdentity, base: text.optional() }),
   z.strictObject({ kind: z.literal('group'), ...quantityIdentity }),
   z.strictObject({ kind: z.literal('sku'), ...quantityIdentity, code: text }),
   z.strictObject({ kind: z.literal('base-sku'), ...quantityIdentity, code: text, base: text }),
@@ -112,6 +121,9 @@ export const mpsLocalDraftSchema = z.strictObject({
   name: text,
   month,
   pull: z.enum(['monthly', 'adjust', 'correction']),
+  festivalBasis: z
+    .union([z.strictObject({}), z.strictObject({ name: text.min(1), date: z.iso.date() })])
+    .optional(),
   inputs: z.strictObject({
     products: input.optional(),
     annual: input.optional(),

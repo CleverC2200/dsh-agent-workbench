@@ -1,6 +1,7 @@
 import { matchesCategories } from './category-filter.js';
 import { useStepViewField } from './step-view-state.js';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
+import { canonicalBaseName, latestTransferSnapshot } from './relations.js';
 
 const kinds = {
   history: '历史有发货SKU',
@@ -28,9 +29,39 @@ const columns = [
 ];
 const value = (quantity) => (quantity === null ? '缺失或无效' : quantity);
 
+export function poolSubmissionRows(result, products, relations, categories) {
+  const tags = Map.groupBy(
+    [...(products ?? []), ...latestTransferSnapshot(relations?.sources?.transfers ?? []).rows],
+    (row) => JSON.stringify([canonicalBaseName(row.target_base), row.material_code?.trim()]),
+  );
+  return (result.poolExceptions?.report ?? [])
+    .filter(
+      (row) =>
+        matchesCategories(row.category || row.sourceCategory, categories) &&
+        !(tags.get(JSON.stringify([row.base, row.code])) ?? []).some((source) =>
+          ['新品', '下市品'].includes(source.transfer_tag?.trim()),
+        ),
+    )
+    .map((row) => ({
+      基地: row.base,
+      SKU: row.code,
+      大类: row.category || row.sourceCategory,
+      月份: row.month,
+      销售提报量: row.quantity,
+      原因: row.reason,
+    }));
+}
+
 export function createPoolExceptionReport(react, { downloadCsv }) {
   const h = react.createElement;
-  return function PoolExceptionReport({ draft, result, filters, table, view }) {
+  return function PoolExceptionReport({
+    draft,
+    result,
+    filters,
+    table,
+    view,
+    collapsible = false,
+  }) {
     const [kind, setKind] = useStepViewField(react, view, 'poolExceptions.kind', 'total');
     const [page, setPage] = useStepViewField(react, view, 'poolExceptions.page', 0);
     const period = previousFiscalYear(draft.month);
@@ -86,13 +117,12 @@ export function createPoolExceptionReport(react, { downloadCsv }) {
           }))
         : groups[kind].map(detail);
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(rows.length / 25) - 1));
-    return h(
-      'section',
-      { className: 'dc-card', 'aria-label': '产品范围与池外异常' },
+    const title = '产品范围与池外异常';
+    const content = [
       h(
         'div',
         { className: 'dc-card-head' },
-        h('h3', null, '产品范围与池外异常'),
+        !collapsible && h('h3', null, title),
         h(
           'button',
           {
@@ -159,6 +189,18 @@ export function createPoolExceptionReport(react, { downloadCsv }) {
             '下一页池外异常',
           ),
         ),
+    ];
+    return h(
+      'section',
+      { className: 'dc-card', 'aria-label': title },
+      collapsible
+        ? h(
+            'details',
+            { className: 'wf-exception-report', open: true },
+            h('summary', null, title),
+            ...content,
+          )
+        : content,
     );
   };
 }

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
 import { authorPage } from './helpers/author-page.mjs';
+import { openMpsCategoryFilter } from './helpers/mps-page.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const rows = {
   products: [
@@ -149,7 +150,7 @@ async function version(frame, month) {
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
 }
 test('fourth MPS step uses exact-code source relations, paginates the full set and keeps unconfirmed source labels', async (t) => {
-  const { page, view, contexts } = await relations(t);
+  const { page, frame, view, contexts } = await relations(t);
   await expect(view).toContainText('共29条');
   await expect(view.locator('tbody tr')).toHaveCount(25);
   await expect(view.locator('tbody tr').nth(0)).toContainText('产线候选甲');
@@ -201,6 +202,14 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
       .filter((context) => context.parts?.masterdata)
       .every((context) => context.parts.masterdata.rows.length <= 25),
   );
+  await view.getByRole('tab', { name: /单品与候选产线/ }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  const filter = await openMpsCategoryFilter(frame);
+  await filter.getByRole('checkbox', { name: '汤圆', exact: true }).check();
+  await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
+  await expect(view).toContainText('共27条');
+  await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('同名空码');
+  await expect(view.getByText('同名空码', { exact: true })).toHaveCount(0);
 });
 test('fourth MPS step clears records on failed refresh and discards a late result after version change', async (t) => {
   let denied = false,

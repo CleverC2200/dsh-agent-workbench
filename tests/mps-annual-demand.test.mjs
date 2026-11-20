@@ -109,6 +109,32 @@ test('annual SQL counts equal quantities once per full grain and retains conflic
   assert.equal(national('汤圆')['缺失数量'], 2);
   assert.equal(national('馄饨')['数量'], 0);
   assert.equal(national('面点')['数量'], '');
+  db.exec(`
+    CREATE TABLE agents_dim_product_list_mi (stat_period TEXT, material_code TEXT, sub_category TEXT);
+    INSERT INTO agents_dim_product_list_mi VALUES
+      ('2026-10','A','休闲'), ('2026-11','A','水饺'), ('2026-11','B','火锅料'),
+      ('2026-11','C','预制食材'), ('2026-11','D','汤圆'), ('2026-11','E','馄饨'),
+      ('2026-11','F','预制食材'), ('2026-11','G','预制食材');
+  `);
+  insert.run(...row('调理肉制品', 'G', 11));
+  insert.run(...row('未归属', 'UNKNOWN', 60));
+  const mapped = db
+    .prepare(config.queries['annual-pool.detail'].request.sql)
+    .all({ gea_p98: 200, gea_p99: 0 });
+  assert.equal(
+    db.prepare(config.queries['annual-pool.count'].request.sql).get().total,
+    mapped.length,
+  );
+  const current = new Map(
+    annualRows(mapped)
+      .filter((item) => item['基地'] === '全国')
+      .map((item) => [item['大类'], item]),
+  );
+  assert.equal(current.get('水饺')['数量'], 100);
+  assert.equal(current.get('火锅料')['数量'], 100);
+  assert.equal(current.get('预制食材')['数量'], '');
+  assert.equal(current.get('预制食材')['重复记录数'], 4);
+  assert(!current.has('未归属'));
 });
 
 test('product snapshot reads the latest month with base/tag source attributes but keeps one nationwide relationship', (t) => {

@@ -1,11 +1,11 @@
-import { archiveUpperAdjustments } from './local-draft.js';
+import { archiveUpperAdjustments, isLegacyQuantityAdjustment } from './local-draft.js';
 export function createUpperAdjustmentConflicts(react) {
   const h = react.createElement;
   return function UpperAdjustmentConflicts({ draft, update }) {
     const state = draft.adjustments;
     const entries = [
       ...(state?.categoryDemand ?? []),
-      ...(state?.quantities ?? []).filter((row) => row.kind !== 'base-sku'),
+      ...(state?.quantities ?? []).filter(isLegacyQuantityAdjustment),
     ];
     if (!entries.length) return null;
     return h(
@@ -15,7 +15,7 @@ export function createUpperAdjustmentConflicts(react) {
       h(
         'p',
         { role: 'alert' },
-        '旧大类、物料组和全国SKU修正与当前基地SKU规则冲突，未参与计算。请归档原记录，再按基地SKU重新修正；归档保留原数量、原因和时间。',
+        '旧版上层修正保留为历史记录。归档保留原数量、原因和时间，当前需求请在调整模式重新录入。',
       ),
       h(
         'ul',

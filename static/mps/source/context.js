@@ -104,7 +104,7 @@ function cancelPublication() {
 }
 
 export function useMpsPart(react, key, value, label, active = true) {
-  const serialized = JSON.stringify(value);
+  const serialized = active ? JSON.stringify(value) : '';
   const [restoreRevision, setRestoreRevision] = react.useState(restoration);
   react.useEffect(() => {
     restorationListeners.add(setRestoreRevision);

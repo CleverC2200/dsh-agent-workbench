@@ -4,31 +4,68 @@ export const matchesCategories = (category, selected = []) =>
 export function createCategoryFilter(react) {
   const h = react.createElement;
   return function CategoryFilter({ categories, selected, change, disabled }) {
+    const filter = react.useRef(null);
+    react.useEffect(() => {
+      const dropdown = filter.current;
+      const page = dropdown.ownerDocument;
+      const closeOutside = (event) => {
+        if (dropdown.open && !dropdown.contains(event.target)) dropdown.open = false;
+      };
+      page.addEventListener('pointerdown', closeOutside, true);
+      page.addEventListener('focusin', closeOutside, true);
+      return () => {
+        page.removeEventListener('pointerdown', closeOutside, true);
+        page.removeEventListener('focusin', closeOutside, true);
+      };
+    }, []);
     return h(
-      'fieldset',
-      { className: 'dc-category-filter', disabled },
-      h('legend', null, '大类筛选'),
-      categories.map((category) =>
-        h(
-          'label',
-          { key: category },
-          h('input', {
-            type: 'checkbox',
-            checked: selected.includes(category),
-            onChange: (event) =>
-              change(
-                event.target.checked
-                  ? [...selected, category]
-                  : selected.filter((value) => value !== category),
-              ),
-          }),
-          category,
-        ),
+      'details',
+      {
+        className: 'dc-category-select',
+        ref: filter,
+        onKeyDown: (event) => {
+          if (event.key !== 'Escape' || !event.currentTarget.open) return;
+          event.stopPropagation();
+          event.currentTarget.firstElementChild.focus();
+          event.currentTarget.open = false;
+        },
+      },
+      h(
+        'summary',
+        {
+          'aria-label': '大类筛选',
+          'aria-disabled': disabled || undefined,
+          onClick: (event) => {
+            if (disabled) event.preventDefault();
+          },
+        },
+        selected.length ? `大类 · 已选 ${selected.length} 项` : '大类 · 全部',
       ),
       h(
-        'button',
-        { type: 'button', disabled: !selected.length, onClick: () => change([]) },
-        '清空筛选',
+        'fieldset',
+        { className: 'dc-category-filter', 'aria-label': '大类筛选', disabled },
+        categories.map((category) =>
+          h(
+            'label',
+            { key: category },
+            h('input', {
+              type: 'checkbox',
+              checked: selected.includes(category),
+              onChange: (event) =>
+                change(
+                  event.target.checked
+                    ? [...selected, category]
+                    : selected.filter((value) => value !== category),
+                ),
+            }),
+            category,
+          ),
+        ),
+        h(
+          'button',
+          { type: 'button', disabled: !selected.length, onClick: () => change([]) },
+          '清空筛选',
+        ),
       ),
     );
   };

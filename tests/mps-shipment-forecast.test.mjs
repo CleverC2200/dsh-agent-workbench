@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveShipmentForecast } from '../static/mps/source/shipment-forecast.js';
+import {
+  applyShipmentCoefficient,
+  deriveShipmentCoefficient,
+  deriveShipmentForecast,
+  shipmentCoefficientPeriods,
+} from '../static/mps/source/shipment-forecast.js';
 
 const input = (changes = {}) => ({
   month: '2026-11',
@@ -12,6 +17,49 @@ const input = (changes = {}) => ({
   sourceDays: 20,
   duplicateDays: 0,
   ...changes,
+});
+
+test('发运系数将上月同日计入未过区间，跨月和月底按自然日处理', () => {
+  assert.deepEqual(shipmentCoefficientPeriods('2026-01-22'), {
+    elapsed: { start: '2025-12-01', end: '2025-12-21', days: 21 },
+    remaining: { start: '2025-12-22', end: '2025-12-31', days: 10 },
+  });
+  assert.deepEqual(shipmentCoefficientPeriods('2024-03-29').remaining, {
+    start: '2024-02-29',
+    end: '2024-02-29',
+    days: 1,
+  });
+  assert.match(shipmentCoefficientPeriods('2024-03-30').reason, /未过区间无天数/);
+  assert.match(shipmentCoefficientPeriods('2026-09-30').reason, /月底/);
+  assert.match(shipmentCoefficientPeriods('2026-09-01').reason, /无天数/);
+});
+
+test('未过日均除以上月已过日均，系数最小为1且数量保底直接取原值', () => {
+  const periods = shipmentCoefficientPeriods('2026-09-22');
+  const coefficient = deriveShipmentCoefficient(210, 200, periods);
+  assert.equal(coefficient.factor, 2);
+  for (const [elapsed, remaining, reason] of [
+    [210, 50, /低于 1/],
+    [0, 200, /日均不大于 0/],
+    [null, 200, /缺少完整/],
+  ]) {
+    const result = deriveShipmentCoefficient(elapsed, remaining, periods);
+    assert.equal(result.factor, 1);
+    assert.match(result.reason, reason);
+  }
+  for (const [changes, original, adjusted, factor] of [
+    [{}, 150, 300, 2],
+    [{ average: 0 }, 120, 120, 1],
+    [{ average: null }, null, null, 1],
+  ]) {
+    const result = applyShipmentCoefficient(
+      deriveShipmentForecast(input(changes), 20, 30),
+      coefficient,
+    );
+    assert.equal(result.basePrediction, original);
+    assert.equal(result.prediction, adjusted);
+    assert.equal(result.shipmentFactor, factor);
+  }
 });
 
 test('非正近三天日均直接用正近30天日均，保留既有预测公式', () => {
@@ -29,10 +77,23 @@ test('两种日均均无正数且近30天有效时取已发已备未备之和', 
     for (const average of [0, -2]) {
       const result = deriveShipmentForecast(input({ daily3, average }), 20, 30);
       assert.equal(result.prediction, 120);
-      assert.equal(result.shipDays, null);
+      assert.equal(result.shipDays, 0);
       assert.equal(result.paceSource, '已发已备未备合计');
       assert.equal(result.forecastIssue, '');
     }
+  }
+});
+
+test('发货依据待核时不将无正日均当成有效回退', () => {
+  for (const changes of [
+    { sourceDays: 19 },
+    { duplicateDays: 1 },
+    { prepped: null },
+    { average: null },
+  ]) {
+    const result = deriveShipmentForecast(input({ average: 0, ...changes }), 20, 30);
+    assert.equal(result.prediction, null);
+    assert.equal(result.shipDays, null);
   }
 });
 

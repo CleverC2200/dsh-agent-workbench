@@ -2,11 +2,43 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPage, openMpsCategoryFilter } from './helpers/mps-page.mjs';
 import { openCategoryCalculation, beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
+
+const holidayRows = (categories) =>
+  [
+    ['202612', '春节', '2027-02-06', -2],
+    ['202701', '春节', '2027-02-06', -1],
+    ['202702', '春节', '2027-02-06', 0],
+    ['202703', '端午节', '2027-06-09', -3],
+  ].flatMap(([mother_month, festival_name, mother_festival_date, month_offset]) =>
+    [2024, 2025, 2026].flatMap((festival_year) => {
+      const stat_month = `${Number(mother_month.slice(0, 4)) - (2027 - festival_year)}${mother_month.slice(4)}`;
+      return categories.map(([, dimension_value]) => ({
+        dimension_type: '基地+大类',
+        stat_month,
+        belong_base: '郑州',
+        dimension_value,
+        dimension_act_dl_qty: 200,
+        last_year_dimension_act_dl_qty: 100,
+        last_month_dimension_act_dl_qty: 100,
+        national_dimension_fiscal_act_dl_qty: 1000,
+        fiscal_year: String(festival_year),
+        festival_name,
+        festival_year,
+        mother_festival_date,
+        festival_date: `${festival_year}${mother_festival_date.slice(4)}`,
+        mother_month,
+        comparison_month: stat_month,
+        month_offset,
+        actual_start_date: `${stat_month.slice(0, 4)}-${stat_month.slice(4)}-01`,
+        actual_end_date: `${stat_month.slice(0, 4)}-${stat_month.slice(4)}-28`,
+      }));
+    }),
+  );
 
 test('category monthly totals retain missing inputs and real zero, and filters match calculations and downloads', async (t) => {
   const { page, frame } = await mpsPage(t, config, ({ queryId, parameters }) => {
@@ -48,6 +80,7 @@ test('category monthly totals retain missing inputs and real zero, and filters m
         })),
       );
     if (queryId.startsWith('annual-pool.')) rows = [];
+    if (queryId.startsWith('festival-history.')) rows = holidayRows(products);
     return {
       rows: queryId.endsWith('.count')
         ? [{ total: rows.length }]
@@ -111,10 +144,50 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   await openCategoryCalculation(frame);
   const calculation = frame.getByRole('region', { name: '逐月测算', exact: true });
   await expect(calculation.locator('tbody tr')).toHaveCount(12);
-  await frame
-    .getByRole('group', { name: '大类筛选', exact: true })
-    .getByRole('checkbox', { name: '乙类', exact: true })
-    .check();
+  const calendar = calculation.getByRole('radio', { name: '自然月', exact: true });
+  await expect(calendar).toBeChecked();
+  await calculation.getByRole('radio', { name: '节日推算', exact: true }).check();
+  const holiday = calculation.getByLabel('评估节日', { exact: true });
+  await expect(holiday).toHaveValue('');
+  await expect(
+    calculation.getByRole('button', { name: '下载测算明细', exact: true }),
+  ).toBeDisabled();
+  await holiday.selectOption({ label: '春节 · 2027-02-06' });
+  await expect(calculation).toContainText('预测沿用自然月：2027-03');
+  await expect(
+    matrix.getByRole('row').filter({ hasText: '甲类' }).locator('.dc-demand-amount'),
+  ).toHaveText(['150', '300', '500', '待补']);
+  const saved = await page.evaluate(() => {
+    const { localDrafts } = window.readView();
+    return localDrafts.drafts.find((entry) => entry.id === localDrafts.selected).festivalBasis;
+  });
+  assert.deepEqual(saved, { name: '春节', date: '2027-02-06' });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await expect(
+    frame
+      .getByRole('table', { name: '大类需求总表', exact: true })
+      .getByRole('row')
+      .filter({ hasText: '甲类' })
+      .getByRole('cell')
+      .nth(2),
+  ).toHaveText('150');
+  await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
+  await frame.getByRole('button', { name: '执行评估', exact: true }).click();
+  await expect(frame.getByRole('button', { name: '重新评估', exact: true })).toBeEnabled();
+  await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  const reportDownload = page.waitForEvent('download');
+  await frame.getByRole('button', { name: '下载产销存分层汇总及明细', exact: true }).click();
+  const reportCsv = await mpsDownloadText(await (await reportDownload).path());
+  assert.match(reportCsv, /推算口径/);
+  assert.match(reportCsv, /春节/);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  await openCategoryCalculation(frame);
+  await calendar.check();
+  await expect(
+    matrix.getByRole('row').filter({ hasText: '甲类' }).locator('.dc-demand-amount'),
+  ).toHaveText(['100', '100', '待补', '待补']);
+  const filter = await openMpsCategoryFilter(frame);
+  await filter.getByRole('checkbox', { name: '乙类', exact: true }).check();
   await expect(total().locator('.dc-demand-amount')).toHaveText(['0', '0', '待补', '待补']);
   await expect(total().getByRole('cell').nth(1)).not.toContainText('待补');
   await expect(calculation.locator('tbody tr')).toHaveCount(4);
@@ -130,10 +203,8 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   const csv = await mpsDownloadText(await (await downloading).path());
   assert.match(csv, /乙类/);
   assert.doesNotMatch(csv, /甲类|丙类/);
-  await frame
-    .getByRole('group', { name: '大类筛选', exact: true })
-    .getByRole('button', { name: '清空筛选', exact: true })
-    .click();
+  const returnedFilter = await openMpsCategoryFilter(frame);
+  await returnedFilter.getByRole('button', { name: '清空筛选', exact: true }).click();
   await expect(total().locator('.dc-demand-amount').first()).toHaveText('100');
   await expect(calculation.locator('tbody tr')).toHaveCount(12);
   if (process.env.MPS03_EVIDENCE_DIR)

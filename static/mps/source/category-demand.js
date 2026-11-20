@@ -6,6 +6,7 @@ import {
   sourceProductMappings,
 } from './source-projections.js';
 import { canonicalBaseName } from './relations.js';
+import { festivalDemandBasis } from './festival-demand.js';
 
 const number = (value) =>
   value === '' || value == null || !Number.isFinite(Number(value)) ? null : Number(value);
@@ -44,7 +45,7 @@ export function categoryDemandMissing(result, row) {
   }
   return missing;
 }
-export function buildCategoryDemand(draft, shipmentSnapshot) {
+export function buildCategoryDemand(draft, shipmentSnapshot, historicalFilter) {
   const baseDate = new Date(`${draft.month}-01T00:00:00Z`);
   baseDate.setUTCMonth(baseDate.getUTCMonth() - 1);
   const baseMonth = baseDate.toISOString().slice(0, 7);
@@ -228,9 +229,14 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
     scopedChecks,
     ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : productMappings,
   );
-  const historical = ready(draft.historicalIndicatorsRead, draft.month)
+  const calendarHistory = ready(draft.historicalIndicatorsRead, draft.month)
     ? draft.historicalIndicators.periods.flatMap((period) => (period.error ? [] : period.rows))
     : [];
+  const {
+    history: historical,
+    actual: festivalActual,
+    festival,
+  } = festivalDemandBasis(draft, calendarHistory);
   const annual = ready(draft.historicalIndicatorsRead, draft.month)
     ? (draft.historicalIndicators.annual?.rows ?? [])
     : [];
@@ -256,6 +262,14 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
     return values.length && values.every((value) => value !== null)
       ? values.reduce((sum, value) => sum + value, 0)
       : null;
+  };
+  const actualQuantity = (row) => {
+    if (!festival?.months.includes(row.month)) return row.actual.quantity;
+    const rows = (festivalActual.get(row.month) ?? []).filter(
+      ({ source }) => source.dimension_value === row.category,
+    );
+    if (new Set(rows.map(({ source }) => source.belong_base)).size !== rows.length) return null;
+    return total(rows, ({ source }) => number(source.dimension_act_dl_qty));
   };
   const reportReady = (month) => {
     const read = draft.reportRead?.periods?.[month] ?? draft.reportRead;
@@ -295,7 +309,9 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
         : null,
     })),
     historical: historical
-      .filter((row) => row['维度类型'] === '基地+大类')
+      .filter(
+        (row) => row['维度类型'] === '基地+大类' && (!historicalFilter || historicalFilter(row)),
+      )
       .map((row) => ({
         month: row['月份'],
         category: row['维度值'],
@@ -307,6 +323,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
         fiscalYear: row['财年'],
         valid: row['粒度状态'] !== '业务键重复，仅保留源值' && !!row['维度值'],
       })),
+    festivalMonths: festival?.months,
     checks: checks.rows.map((row) => ({
       month: row.month,
       category: row.category,
@@ -315,7 +332,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
           issue.category === row.category && issue.month === row.month && issue.source === 'BI实绩',
       )
         ? null
-        : row.actual.quantity,
+        : actualQuantity(row),
       plan: scopeIssues.some(
         (issue) =>
           issue.category === row.category && issue.month === row.month && issue.source === '计划量',
@@ -348,6 +365,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot) {
   });
   return {
     ...result,
+    ...(festival ? { festival } : {}),
     shipmentScope: { ready: shipmentReady, excluded, coverage, issues: scopeIssues },
     rows: result.rows.map((row) => ({
       ...row,

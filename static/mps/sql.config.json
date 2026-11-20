@@ -1026,6 +1026,114 @@
         "sql": "SELECT COUNT(*) AS total FROM (SELECT DISTINCT dimension_type, stat_month, belong_base, category_name, material_group_name, material_code, product_name, dimension_allnum, parent_allnum, dimension_rate FROM agents_scm_dimension_plan_rate_mi WHERE stat_month IN (:gea_p1)) plan_rates"
       }
     },
+    "festival-history.detail": {
+      "title": "节日对照的基地大类发货指标",
+      "grain": [
+        "dimension_type",
+        "stat_month",
+        "belong_base",
+        "dimension_value",
+        "product_name",
+        "dimension_act_dl_qty",
+        "fiscal_year",
+        "national_dimension_fiscal_act_dl_qty",
+        "dimension_act_dl_qty_rate",
+        "last_year_stat_month",
+        "last_year_dimension_act_dl_qty",
+        "year_on_year_act_dl_qty",
+        "year_on_year_rate",
+        "last_month_stat_month",
+        "last_month_dimension_act_dl_qty",
+        "month_on_month_act_dl_qty",
+        "month_on_month_rate",
+        "mother_fiscal_year",
+        "festival_name",
+        "festival_year",
+        "mother_festival_date",
+        "festival_date",
+        "month_offset",
+        "month_position",
+        "mother_month",
+        "comparison_month",
+        "actual_start_date",
+        "actual_end_date"
+      ],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 24
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "sql": "SELECT DISTINCT dimension_type, stat_month, belong_base, dimension_value, product_name, dimension_act_dl_qty, fiscal_year, national_dimension_fiscal_act_dl_qty, dimension_act_dl_qty_rate, last_year_stat_month, last_year_dimension_act_dl_qty, year_on_year_act_dl_qty, year_on_year_rate, last_month_stat_month, last_month_dimension_act_dl_qty, month_on_month_act_dl_qty, month_on_month_rate, mother_fiscal_year, festival_name, festival_year, mother_festival_date, festival_date, month_offset, month_position, mother_month, comparison_month, actual_start_date, actual_end_date FROM agents_scm_base_festival_mi WHERE dimension_type = '基地+大类' AND mother_month IN (:gea_p1) ORDER BY stat_month, belong_base, dimension_value, dimension_act_dl_qty, fiscal_year, national_dimension_fiscal_act_dl_qty, last_year_stat_month, last_year_dimension_act_dl_qty, last_month_stat_month, last_month_dimension_act_dl_qty, mother_fiscal_year, festival_name, festival_year, mother_festival_date, festival_date, month_offset, month_position, mother_month, comparison_month, actual_start_date, actual_end_date, dimension_type, product_name, dimension_act_dl_qty_rate, year_on_year_act_dl_qty, year_on_year_rate, month_on_month_act_dl_qty, month_on_month_rate LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "festival-history.count"
+      },
+      "columns": [
+        "dimension_type",
+        "stat_month",
+        "belong_base",
+        "dimension_value",
+        "product_name",
+        "dimension_act_dl_qty",
+        "fiscal_year",
+        "national_dimension_fiscal_act_dl_qty",
+        "dimension_act_dl_qty_rate",
+        "last_year_stat_month",
+        "last_year_dimension_act_dl_qty",
+        "year_on_year_act_dl_qty",
+        "year_on_year_rate",
+        "last_month_stat_month",
+        "last_month_dimension_act_dl_qty",
+        "month_on_month_act_dl_qty",
+        "month_on_month_rate",
+        "mother_fiscal_year",
+        "festival_name",
+        "festival_year",
+        "mother_festival_date",
+        "festival_date",
+        "month_offset",
+        "month_position",
+        "mother_month",
+        "comparison_month",
+        "actual_start_date",
+        "actual_end_date"
+      ]
+    },
+    "festival-history.count": {
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 24
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT DISTINCT dimension_type, stat_month, belong_base, dimension_value, product_name, dimension_act_dl_qty, fiscal_year, national_dimension_fiscal_act_dl_qty, dimension_act_dl_qty_rate, last_year_stat_month, last_year_dimension_act_dl_qty, year_on_year_act_dl_qty, year_on_year_rate, last_month_stat_month, last_month_dimension_act_dl_qty, month_on_month_act_dl_qty, month_on_month_rate, mother_fiscal_year, festival_name, festival_year, mother_festival_date, festival_date, month_offset, month_position, mother_month, comparison_month, actual_start_date, actual_end_date FROM agents_scm_base_festival_mi WHERE dimension_type = '基地+大类' AND mother_month IN (:gea_p1)) AS festival_rows"
+      }
+    },
     "category-history.detail": {
       "title": "当前产品池三年全国大类发货指标",
       "grain": ["stat_month", "dimension_value"],
@@ -1278,6 +1386,68 @@
           "offset": {
             "$parameter": "offset"
           }
+        }
+      }
+    },
+    "facts.shipment-history": {
+      "title": "大类发运系数历史发货量",
+      "grain": [
+        "agents_scm_cust_deliv_daily_di.belong_base",
+        "agents_scm_cust_deliv_daily_di.material_code"
+      ],
+      "columns": [
+        "agents_scm_cust_deliv_daily_di.belong_base",
+        "agents_scm_cust_deliv_daily_di.material_code",
+        "agents_scm_cust_deliv_daily_di.act_dl_qty_total"
+      ],
+      "parameterSpec": {
+        "page_size": {
+          "name": "page_size",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "offset": {
+          "name": "offset",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "start": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "end": {
+          "name": "end",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        }
+      },
+      "request": {
+        "cube": {
+          "measures": ["agents_scm_cust_deliv_daily_di.act_dl_qty_total"],
+          "dimensions": [
+            "agents_scm_cust_deliv_daily_di.belong_base",
+            "agents_scm_cust_deliv_daily_di.material_code"
+          ],
+          "timeDimensions": [
+            {
+              "dimension": "agents_scm_cust_deliv_daily_di.shipment_date",
+              "dateRange": [{ "$parameter": "start" }, { "$parameter": "end" }]
+            }
+          ],
+          "timezone": "UTC",
+          "order": [
+            ["agents_scm_cust_deliv_daily_di.belong_base", "asc"],
+            ["agents_scm_cust_deliv_daily_di.material_code", "asc"]
+          ],
+          "limit": { "$parameter": "page_size" },
+          "offset": { "$parameter": "offset" }
         }
       }
     },

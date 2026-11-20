@@ -31,8 +31,20 @@ async function mount(t, initialShipment) {
   t.after(() => browser.close());
   const page = await browser.newPage();
   const calls = [];
-  await page.exposeFunction('query', ({ queryId }) => {
+  await page.exposeFunction('query', ({ queryId, parameters }) => {
     calls.push(queryId);
+    if (queryId === 'facts.shipment-history') {
+      const values = ['郑州', 'A', parameters.start.endsWith('-01') ? 210 : 99];
+      const returnedColumns = config.queries[queryId].columns;
+      return {
+        rows: [Object.fromEntries(returnedColumns.map((column, index) => [column, values[index]]))],
+        returnedColumns,
+        configVersion: 'v1',
+        totalRowCount: 1,
+        offset: 0,
+        hasMorePages: false,
+      };
+    }
     return {
       rows:
         queryId === 'facts.shipment-latest'
@@ -115,8 +127,12 @@ test(
       .toBe('business');
     const snapshot = await page.evaluate(() => window.snapshot);
     assert.equal(snapshot.status, 'ok');
-    assert.deepEqual(snapshot.rows, [{ base: '郑州', code: 'A', fin: 310, end: 90 }]);
-    assert.deepEqual(calls, ['facts.shipment.count', 'facts.shipment', 'facts.shipment.count']);
+    assert.deepEqual(snapshot.rows, [{ base: '郑州', code: 'A', fin: 341, end: 59 }]);
+    assert.deepEqual(
+      calls.filter((id) => id !== 'facts.shipment-history'),
+      ['facts.shipment.count', 'facts.shipment', 'facts.shipment.count'],
+    );
+    assert.equal(calls.filter((id) => id === 'facts.shipment-history').length, 2);
   },
 );
 test('没有可用截止日时发布失败状态，不永久停在输入准备中', { timeout: 20000 }, async (t) => {

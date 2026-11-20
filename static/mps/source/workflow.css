@@ -81,6 +81,21 @@
 .wf-toolbar-actions {
   margin-inline-start: auto;
 }
+.ap-app[data-step='process'] .wf-toolbar {
+  padding: 4px 12px;
+  background: var(--dc-surface, #fff);
+  border: 1px solid var(--dc-line, #e3e6ea);
+  border-radius: 10px;
+}
+.wf-exception-reports {
+  display: grid;
+  gap: 12px;
+}
+.wf-exception-report > summary {
+  padding: 12px 16px;
+  cursor: pointer;
+  font-weight: 600;
+}
 .wf-actions {
   margin-bottom: 12px;
 }

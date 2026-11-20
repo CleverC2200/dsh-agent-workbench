@@ -31,6 +31,25 @@ export async function readHistoryAnnual(month, signal) {
   const period = previousFiscalYear(month);
   return readFacts('facts.history-annual', period, signal, 'historyAnnual');
 }
+export async function readShipmentCoefficientFacts(periods, signal) {
+  if (periods.reason) return { reason: periods.reason };
+  try {
+    const read = ({ start, end }) =>
+      readFacts('facts.shipment-history', { start, end }, signal, 'shipmentHistory');
+    const [elapsed, remaining] = await Promise.all([
+      read(periods.elapsed),
+      read(periods.remaining),
+    ]);
+    if (elapsed.metadata.partial || remaining.metadata.partial)
+      return { reason: '上月 BI 区间数据不完整' };
+    if (elapsed.metadata.configVersion !== remaining.metadata.configVersion)
+      return { reason: '上月 BI 区间数据配置版本不一致' };
+    return { elapsed: elapsed.rows, remaining: remaining.rows, reason: '' };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { reason: '上月 BI 发运量读取失败' };
+  }
+}
 export async function readHistoryWindow(month, signal) {
   const months = completeHistoryMonths(
     month,
@@ -204,6 +223,8 @@ async function readFacts(id, parameters, signal, type, month) {
     const value = (name) => row[prefix + name];
     const base = text(value('belong_base'));
     const code = text(value('material_code'));
+    if (type === 'shipmentHistory')
+      return { 基地: base, 产品编码: code, 数量: number(value('act_dl_qty_total')) };
     return {
       ...(type === 'historyAnnual'
         ? { 期间开始: parameters.start, 期间结束: parameters.end }

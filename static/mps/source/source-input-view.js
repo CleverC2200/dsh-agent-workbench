@@ -1,6 +1,7 @@
 import { matchesCategories, createDimensionCategoryMatcher } from './category-filter.js';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { buildCategoryDemand } from './category-demand.js';
+import { festivalDemandBasis } from './festival-demand.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createPlanRates } from './plan-rate-view.js';
 import { hasMpsSource } from './master-data.js';
@@ -8,11 +9,20 @@ import { readFactMonth, readHistoryAnnual, readHistoryWindow } from './facts.js'
 import { readSourceTable } from './source-tables.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { sourceCheckRows, sourceProductMappings } from './source-projections.js';
+import { createGrowthAnomalyReport, growthSourceAnomalies } from './growth-anomaly-report.js';
 
 const monthOffset = (month, offset) => {
   const date = new Date(month + '-01T00:00:00Z');
   date.setUTCMonth(date.getUTCMonth() + offset);
   return date.toISOString().slice(0, 7);
+};
+const distinctHistoryMonths = (periods) => {
+  const seen = new Set();
+  return periods.map((period) => {
+    const rows = period.rows.filter((row) => !seen.has(row['月份']));
+    for (const row of rows) seen.add(row['月份']);
+    return { ...period, rows };
+  });
 };
 const number = (value) =>
   value == null || value === ''
@@ -28,6 +38,7 @@ const percent = (value) =>
 export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
   const PlanRates = createPlanRates(react, { Dialog, table, downloadCsv });
+  const GrowthAnomalyReport = createGrowthAnomalyReport(react, { table, downloadCsv });
   return function SourceInputs({
     kind,
     draft,
@@ -164,7 +175,9 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         if (!stop.signal.aborted)
           update({
             [type]:
-              kind === 'parameters' ? { periods: result.periods, annual: result.annual } : result,
+              kind === 'parameters'
+                ? { periods: distinctHistoryMonths(result.periods), annual: result.annual }
+                : result,
             [type + 'Read']: { status: 'ready', month: draft.month, error: errors.join('；') },
           });
       } catch (error) {
@@ -236,20 +249,37 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       ...basicAnomalies,
       ...checks.details.filter((row) => !row['原因'] && !row['缺项原因']),
     ];
-    const historical =
+    const calendarHistorical =
       current && kind === 'parameters'
         ? draft.historicalIndicators.periods.flatMap((period) => period.rows)
         : [];
+    const historical =
+      kind === 'parameters'
+        ? festivalDemandBasis(draft, calendarHistorical).history
+        : calendarHistorical;
     const matchesDimension = react.useMemo(
       () => createDimensionCategoryMatcher(draft.products, selectedCategories),
       [draft.products, selectedCategories],
     );
+    const comparisonMonths = new Set(
+      calculated.historical.flatMap((row) => row.years.map((year) => year.month)),
+    );
     const historicalRows = historical.filter(
       (row) =>
+        comparisonMonths.has(row['月份']) &&
         (!dimension || row['维度类型'] === dimension) &&
         (!base || row['基地'] === base) &&
         matchesDimension(row),
     );
+    const growthAnomalies =
+      kind === 'parameters'
+        ? [
+            ...calculated.growthAnomalies.filter((row) =>
+              matchesCategories(row.category, selectedCategories),
+            ),
+            ...growthSourceAnomalies(historical.filter(matchesDimension)),
+          ]
+        : [];
     const metric =
       preview === '三年环比'
         ? {
@@ -276,20 +306,12 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
     const scoped = react.useMemo(
       () =>
         base || dimension !== '基地+大类'
-          ? buildCategoryDemand({
-              ...draft,
-              historicalIndicators: {
-                ...draft.historicalIndicators,
-                periods: (draft.historicalIndicators?.periods ?? []).map((period) => ({
-                  ...period,
-                  rows: period.rows.filter(
-                    (row) =>
-                      (!dimension || row['维度类型'] === dimension) &&
-                      (!base || row['基地'] === base),
-                  ),
-                })),
-              },
-            })
+          ? buildCategoryDemand(
+              draft,
+              undefined,
+              (row) =>
+                (!dimension || row['维度类型'] === dimension) && (!base || row['基地'] === base),
+            )
           : calculated,
       [draft, calculated, dimension, base],
     );
@@ -297,6 +319,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       '大类',
       '目标月份',
       '分子年月',
+      ...(draft.festivalBasis ? ['节日对照区间'] : []),
       metric.field === 'share' ? '分母期间' : '分母年月',
       '分子数量',
       '分母数量',
@@ -313,31 +336,44 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         const ratio =
           metric.field === 'yoy'
             ? year.ratio
-            : year.quantity !== null &&
-                denominator !== null &&
-                denominator > 0 &&
-                Number.isFinite(year.quantity / denominator) &&
-                Math.abs(year.quantity / denominator) <= Number.MAX_SAFE_INTEGER
-              ? year.quantity / denominator
-              : null;
+            : metric.field === 'mom'
+              ? year.mom
+              : year.quantity !== null &&
+                  denominator !== null &&
+                  denominator > 0 &&
+                  Number.isFinite(year.quantity / denominator) &&
+                  Math.abs(year.quantity / denominator) <= Number.MAX_SAFE_INTEGER
+                ? year.quantity / denominator
+                : null;
         const reasons =
           metric.field === 'yoy'
             ? year.excludedReasons
-            : [
-                ...(year.quantity === null ? ['分子数量缺失或无效'] : []),
-                ...(denominator === null
-                  ? ['分母数量缺失或无效']
-                  : denominator <= 0
-                    ? ['分母数量为0或负数']
+            : metric.field === 'mom' && ratio !== null && ratio !== year.quantity / denominator
+              ? ['已采用替代值，详见同比环比异常报告']
+              : [
+                  ...(year.quantity === null ? ['分子数量缺失或无效'] : []),
+                  ...(denominator === null
+                    ? ['分母数量缺失或无效']
+                    : denominator <= 0
+                      ? ['分母数量为0或负数']
+                      : []),
+                  ...(ratio === null && year.quantity !== null && denominator > 0
+                    ? ['比值超出有效范围']
                     : []),
-                ...(ratio === null && year.quantity !== null && denominator > 0
-                  ? ['比值超出有效范围']
-                  : []),
-              ];
+                ];
+        const source = historicalRows.find(
+          (entry) =>
+            entry['月份'] === year.month && entry['维度值'] === row.category && entry['对照月份'],
+        );
         return {
           大类: row.category,
           目标月份: row.month,
-          分子年月: year.numeratorMonth,
+          分子年月: source?.['对照月份'] ?? year.numeratorMonth,
+          节日对照区间: source
+            ? `${source['推算口径']} ${source['实际开始日期']}至${source['实际结束日期']}`
+            : draft.festivalBasis
+              ? '自然月'
+              : '',
           [metric.field === 'share' ? '分母期间' : '分母年月']:
             metric.field === 'share'
               ? [
@@ -351,7 +387,8 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                       .filter(Boolean),
                   ),
                 ].join('、') || '财年缺失'
-              : monthOffset(year.month, metric.period),
+              : source?.[metric.field === 'mom' ? '上月月份' : '上年同期月份'] ||
+                monthOffset(year.month, metric.period),
           分子数量: year.quantity ?? '',
           分母数量: denominator ?? '',
           [metric.label]: ratio ?? '',
@@ -480,7 +517,10 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               '历史占比',
               '核对状态',
             ]
-      : historicalColumns;
+      : [
+          ...historicalColumns,
+          ...(draft.festivalBasis ? ['推算口径', '对照月份', '实际开始日期', '实际结束日期'] : []),
+        ];
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(previewRows.length / 25) - 1));
     const totals = (category, side) => {
       const rows = checks.rows.filter(
@@ -824,7 +864,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                     ? index === 0
                       ? '最近三年逐年汇总同大类数量后计算同比系数，按有效年份等权平均。缺年、零分母或无效年度跳过；全部不可用时留空，实际年份见预览。'
                       : index === 1
-                        ? '逐年月发货数量÷上月发货数量，对三个完整年份的环比系数等权平均。'
+                        ? '逐年月发货数量÷上月发货数量，对三个完整年份的环比系数等权平均。异常环比的替代值和样本月份见异常报告。'
                         : '逐年月发货数量÷对应财年全国维度发货数量，对三个完整年份的月占比等权平均。'
                     : `${previousFiscalYear(draft.month).start}至${previousFiscalYear(draft.month).end}全年发货；按当前物料编码、物料组编码计算物料组占大类、产品占物料组、基地产品占范围内同SKU。`,
                 ),
@@ -858,6 +898,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           },
         ),
       ),
+      h(GrowthAnomalyReport, { draft, anomalies: growthAnomalies }),
       state?.error && h('p', { role: 'alert' }, state.error),
       draft.historyAnnualRead?.error && h('p', { role: 'alert' }, draft.historyAnnualRead.error),
       preview &&
