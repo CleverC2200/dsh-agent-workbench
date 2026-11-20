@@ -908,6 +908,52 @@ for (const target of ['home', 'business'])
     }
   });
 
+test('business pages open the split conversation at the minimum width', async (t) => {
+  const page = await fixture(t, 'darwin', true);
+  await page.evaluate(() => window.selectBusiness());
+  const conversation = page.getByRole('complementary', { name: 'AI对话', exact: true });
+  await expect(conversation).toBeVisible();
+  for (const width of [1920, 1150, 1000, 850]) {
+    await page.setViewportSize({ width, height: 720 });
+    await expect
+      .poll(() => conversation.evaluate((node) => node.getBoundingClientRect().width))
+      .toBe(300);
+  }
+});
+
+test('business pages share the last manually chosen split width', async (t) => {
+  const page = await fixture(t, 'darwin', true);
+  await page.evaluate(() => window.selectBusiness());
+  const conversation = page.getByRole('complementary', { name: 'AI对话', exact: true });
+  const divider = page.getByRole('separator', { name: '调整业务与AI栏宽', exact: true });
+  const width = () => conversation.evaluate((node) => node.getBoundingClientRect().width);
+  const resize = async (delta) => {
+    const box = await divider.boundingBox();
+    assert.ok(box);
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x - delta, y, { steps: 4 });
+    await page.mouse.up();
+  };
+  await expect.poll(width).toBe(300);
+  await resize(110);
+  await expect.poll(width).toBe(410);
+  await page.evaluate(() => window.selectSecond());
+  await expect(page.getByRole('textbox', { name: '第二页面筛选' })).toBeVisible();
+  await expect.poll(width).toBe(410);
+  await resize(70);
+  await expect.poll(width).toBe(480);
+  await page.evaluate(() => window.selectBusiness());
+  await expect(page.getByRole('textbox', { name: '业务筛选' })).toBeVisible();
+  await expect.poll(width).toBe(480);
+  await page.evaluate(() => window.selectHome());
+  await expect(conversation).toBeHidden();
+  await page.evaluate(() => window.selectSecond());
+  await expect.poll(width).toBe(480);
+});
+
 test('static Documents preserve their own body and mode while the actual Core main Conversation remains selected', async (t) => {
   const page = await fixture(t, 'darwin', true);
   await page.evaluate(() => window.selectBusiness());
