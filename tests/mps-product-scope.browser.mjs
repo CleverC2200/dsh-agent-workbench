@@ -185,7 +185,13 @@ test('实际提报池外项即使缺占比仍出现在产销存报告和下载',
   );
   await frame.getByRole('button', { name: '读取去年发运占比源值', exact: true }).click();
   await expect(frame.getByText('全年历史读取中…')).toHaveCount(0);
+  const bell = frame.getByRole('button', { name: '池外销售提报，1 条', exact: true });
+  await bell.click();
+  const warning = frame.getByRole('dialog', { name: '池外销售提报', exact: true });
+  await expect(warning.getByRole('cell', { name: 'OUT', exact: true })).toBeVisible();
+  await warning.getByRole('button', { name: '关闭弹窗' }).click();
   await workflowStep(frame, '产销存报告');
+  await expect(bell).toHaveCount(0);
   const report = frame
     .getByRole('region', { name: '产销存报告', exact: true })
     .getByRole('region', { name: '产品范围与池外异常', exact: true });

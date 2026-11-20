@@ -44,6 +44,7 @@ export function encodeLocalDrafts(drafts, selected) {
       name: draft.name,
       month: draft.month,
       pull: draft.pull,
+      ...fields(draft, ['festivalBasis']),
       inputs: Object.fromEntries(
         sources.flatMap((source) => {
           const local =
@@ -147,10 +148,23 @@ export const quantityAdjustmentKey = (entry) =>
     entry.code ?? '',
     entry.base ?? '',
   ]);
+export const isLegacyQuantityAdjustment = (entry) => entry.kind === 'group' || entry.kind === 'sku';
+
+export const matchesQuantityAdjustment = (row, entry) =>
+  !isLegacyQuantityAdjustment(entry) &&
+  row.month === entry.month &&
+  row.category === entry.category &&
+  (entry.group === undefined || row.group === entry.group) &&
+  (entry.base === undefined || row.base === entry.base) &&
+  (entry.kind === 'base-sku' ? row.code === entry.code : !row.delisted);
+
 export function changeAdjustment(adjustments, kind, input, undo = false) {
   const state = adjustments ?? emptyAdjustments();
-  if (kind !== 'shares' && (kind !== 'quantities' || input.kind !== 'base-sku'))
-    throw Error('需求仅支持基地SKU和月份修正，历史上层记录请归档。');
+  if (
+    kind !== 'shares' &&
+    (kind !== 'quantities' || !['base-sku', 'category-total', 'group-total'].includes(input.kind))
+  )
+    throw Error('需求调整范围无效。');
   const keyOf = kind === 'quantities' ? quantityAdjustmentKey : (entry) => entry.rowId;
   const key = keyOf(input);
   const previous = (state[kind] ?? []).find((entry) => keyOf(entry) === key);
@@ -194,14 +208,14 @@ export function archiveUpperAdjustments(adjustments) {
   const upper = [
     ...state.categoryDemand.map((entry) => ({ kind: 'categoryDemand', entry })),
     ...state.quantities
-      .filter((entry) => entry.kind !== 'base-sku')
+      .filter(isLegacyQuantityAdjustment)
       .map((entry) => ({ kind: 'quantities', entry })),
   ];
   if (!upper.length) return state;
   return {
     ...state,
     categoryDemand: [],
-    quantities: state.quantities.filter((entry) => entry.kind === 'base-sku'),
+    quantities: state.quantities.filter((entry) => !isLegacyQuantityAdjustment(entry)),
     history: [
       ...state.history,
       ...upper.map(({ kind, entry }) => ({

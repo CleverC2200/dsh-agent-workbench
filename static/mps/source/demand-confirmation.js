@@ -29,6 +29,7 @@ import { productFileText, productReplacementErrors } from './product-file.js';
 import { sumSourceAmounts } from './source-money.js';
 import { workbookBytes } from './workbook.js';
 import { annualWorkbookTables } from './annual-workbook.js';
+import { poolSubmissionRows } from './pool-exception-view.js';
 const productColumns = [
   '基地',
   '产品编码',
@@ -223,34 +224,33 @@ function annualSelection(draft) {
         : draft.annual,
   };
 }
-function forecastSourceRows(draft) {
+function forecastSourceRows(draft, rows = draft.forecast) {
   const productsReady = !['loading', 'failed'].includes(draft.productsRead?.status);
   return (
     draft.forecastSource === 'business' && productsReady
-      ? forecastDimensions(draft.forecast, draft.products)
-      : draft.forecast
+      ? forecastDimensions(rows, draft.products)
+      : rows
   ).map((row) => ({ ...row, 读取状态: draft.forecastRead?.status ?? 'unread' }));
 }
+function sourcePeriod(draft, type) {
+  if (type === 'report') return draft.month;
+  if (type === 'forecast') return monthOffset(draft.month, draft.forecastOffset - 1);
+  return monthOffset(draft.month, -12 * draft.historyYears);
+}
 function sourceSelection(draft, type) {
-  const period =
-    type === 'report'
-      ? draft.month
-      : type === 'forecast'
-        ? monthOffset(draft.month, draft.forecastOffset - 1)
-        : monthOffset(draft.month, -12 * draft.historyYears);
+  const period = sourcePeriod(draft, type);
   const column = type === 'report' ? (draft.pull === 'monthly' ? '月初数量' : '纠偏数量') : '数量';
+  const rows = draft[type].filter((row) => row['月份'] === period);
   return {
     period,
     column,
-    rows: (type === 'forecast'
-      ? forecastSourceRows(draft)
-      : ['report', 'history'].includes(type)
-        ? sourceDimensions(
-            draft[type],
+    rows:
+      type === 'forecast'
+        ? forecastSourceRows(draft, rows)
+        : sourceDimensions(
+            rows,
             ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : draft.products,
-          )
-        : draft[type]
-    ).filter((row) => row['月份'] === period),
+          ),
   };
 }
 function downloadFile(name, mime, text) {
@@ -328,7 +328,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
   const table = (columns, rows, headers = {}, renderDetail) =>
     h(
       'div',
-      { className: 'dc-table-scroll' },
+      { className: 'dc-table-scroll', tabIndex: 0 },
       h(
         'table',
         {},
@@ -338,7 +338,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'tr',
             {},
-            columns.map((column) => h('th', { key: column }, headers[column] ?? column)),
+            columns.map((column) =>
+              h('th', { key: column, scope: 'col' }, headers[column] ?? column),
+            ),
           ),
         ),
         h(
@@ -402,11 +404,21 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
       ),
     );
-  function Source({ type, draft, read, sync, update, error, busy, selectedCategories = [] }) {
+  function Source({
+    type,
+    draft,
+    selection,
+    read,
+    sync,
+    update,
+    error,
+    busy,
+    selectedCategories = [],
+  }) {
     const definition = sourceDefinitions[type];
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = react.useState(0);
-    const { period, column, rows: fullRows } = sourceSelection(draft, type);
+    const { period, column, rows: fullRows } = selection;
     const matchProduct = react.useMemo(
       () => createSourceProductMatcher(draft.products),
       [draft.products],
@@ -1105,6 +1117,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [compareOpen, setCompareOpen] = react.useState(false);
     const [compareId, setCompareId] = react.useState('local-1');
     const [helpOpen, setHelpOpen] = react.useState(false);
+    const [submissionWarningOpen, setSubmissionWarningOpen] = react.useState(false);
     const [error, setError] = react.useState('');
     const [search, setSearch] = react.useState('');
     const [selectedCategories, setSelectedCategories] = react.useState([]);
@@ -1176,18 +1189,24 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const { signal, valid } = begin('annualExport');
       try {
         const rows = await readAnnualDetails(months, base, signal);
-        const matchProduct = createSourceProductMatcher(draft.products);
+        const matchProduct = createSourceProductMatcher(
+          draft.productRaw?.length ? draft.productRaw : draft.products,
+        );
+        const projected = rows.map((row) => {
+          const { category } = matchProduct(row.material_code);
+          return {
+            ...row,
+            source_sub_category: row.sub_category,
+            sub_category: row.material_code ? category || '分类待核' : row.sub_category,
+          };
+        });
         const tables = annualWorkbookTables(
-          rows.filter((row) =>
-            matchesCategories(
-              row.sub_category ??
-                row['大类'] ??
-                matchProduct(row.material_code ?? row['产品编码']).category,
-              selectedCategories,
-            ),
-          ),
+          projected.filter((row) => matchesCategories(row.sub_category, selectedCategories)),
           months,
           base,
+          annualSelection(draft).rows.filter((row) =>
+            matchesCategories(row['大类'], selectedCategories),
+          ),
         );
         const bytes = await workbookBytes(tables);
         if (valid())
@@ -1210,7 +1229,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         type === 'delivery'
           ? (draft.deliveryMonth ?? draft.month)
           : fact
-            ? sourceSelection(draft, type).period
+            ? sourcePeriod(draft, type)
             : undefined;
       const periods =
         requestedPeriods ??
@@ -1422,12 +1441,18 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       }
     };
     const draft = drafts.find((entry) => entry.id === selected) ?? drafts[0];
+    react.useEffect(() => setSubmissionWarningOpen(false), [draft.id, step]);
     const workflowScope = JSON.stringify([draft.id, draft.month, scopeGeneration]);
     if (workflowStep.current.scope !== workflowScope)
       workflowStep.current = { scope: workflowScope, step: null };
     const workflowActive =
       active && ['process', 'constraints', 'capacity', 'report'].includes(step);
     if (workflowActive) workflowStep.current.step = step;
+    const demandReadScope = react.useRef(null);
+    const checkActive = active && step === 'check';
+    if (scopeGeneration > 0 && (view.get().tab ?? step) === step && (checkActive || workflowActive))
+      demandReadScope.current = workflowScope;
+    const demandSourcesActive = active && demandReadScope.current === workflowScope;
     react.useEffect(() => {
       onScopeChange?.({
         id: draft.id,
@@ -1502,7 +1527,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ready.then(() => {
           if (current && canPersistLocal.current) {
             void sync('products');
-            if (!draft.annualSource) void sync('annual');
           }
         });
       }
@@ -1512,58 +1536,101 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     }, [draft.id, draft.month, active, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
-      if (active && hasMpsSource())
+      if (demandSourcesActive && hasMpsSource())
+        ready.then(() => {
+          if (current && !draft.annualSource) void sync('annual');
+        });
+      return () => {
+        current = false;
+      };
+    }, [draft.id, draft.month, demandSourcesActive, scopeGeneration]);
+    react.useEffect(() => {
+      let current = true;
+      if (demandSourcesActive && hasMpsSource())
         ready.then(() => {
           if (current && canPersistLocal.current && !draft.files.report) void sync('report');
         });
       return () => {
         current = false;
       };
-    }, [draft.id, draft.month, active, scopeGeneration]);
+    }, [draft.id, draft.month, demandSourcesActive, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
-      if (active && hasMpsSource())
+      if (demandSourcesActive && hasMpsSource())
         ready.then(() => {
           if (current && canPersistLocal.current && !draft.files.history) void sync('history');
         });
       return () => {
         current = false;
       };
-    }, [draft.id, draft.month, draft.historyYears, active, scopeGeneration]);
+    }, [draft.id, draft.month, draft.historyYears, demandSourcesActive, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
-      if (active && hasMpsSource())
+      if (demandSourcesActive && hasMpsSource())
         ready.then(() => {
           if (current && canPersistLocal.current && !draft.files.forecast) void sync('forecast');
         });
       return () => {
         current = false;
       };
-    }, [draft.id, draft.month, active, scopeGeneration]);
+    }, [draft.id, draft.month, demandSourcesActive, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
-      if (active && hasMpsSource())
+      if (demandSourcesActive && hasMpsSource())
         ready.then(() => {
           if (current) void sync('delivery');
         });
       return () => {
         current = false;
       };
-    }, [draft.id, draft.month, draft.deliveryMonth, active, scopeGeneration]);
+    }, [draft.id, draft.month, draft.deliveryMonth, demandSourcesActive, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
-      if (active && hasMpsSource())
+      if (demandSourcesActive && hasMpsSource())
         ready.then(() => {
           if (current) void syncInventoryTargets();
         });
       return () => {
         current = false;
       };
-    }, [draft.id, draft.month, active, scopeGeneration]);
+    }, [draft.id, draft.month, demandSourcesActive, scopeGeneration]);
     const update = (changes) =>
       setDrafts((entries) =>
         entries.map((entry) => (entry.id === draft.id ? { ...entry, ...changes } : entry)),
       );
+    const festivalEnabled = Boolean(draft.festivalBasis);
+    const [festivalReadAttempt, retryFestivalHistory] = react.useReducer(
+      (attempt) => attempt + 1,
+      0,
+    );
+    react.useEffect(() => {
+      if (!demandSourcesActive || !festivalEnabled) return;
+      const controller = new AbortController();
+      const month = draft.month;
+      if (!hasMpsSource()) {
+        update({ festivalHistoryRead: { month, status: 'failed', error: '节日发货来源尚未连接' } });
+        return;
+      }
+      update({ festivalHistoryRead: { month, status: 'loading' } });
+      ready
+        .then(() => readSourceTable('festival-history', month, controller.signal))
+        .then(({ rows }) => {
+          if (!controller.signal.aborted)
+            update({ festivalHistoryRead: { month, status: 'ready', rows } });
+        })
+        .catch((error) => {
+          if (!controller.signal.aborted)
+            update({ festivalHistoryRead: { month, status: 'failed', error: error.message } });
+        });
+      return () => controller.abort();
+    }, [
+      demandSourcesActive,
+      festivalEnabled,
+      draft.id,
+      draft.month,
+      scopeGeneration,
+      festivalReadAttempt,
+    ]);
     const editProducts = (products) =>
       update({
         products,
@@ -1580,6 +1647,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
       [draft, relations, shipmentSnapshot, scopeGeneration],
     );
+    const submissionWarnings =
+      step === 'check'
+        ? poolSubmissionRows(
+            workflowResult,
+            draft.productRaw,
+            relations?.scopeKey === workflowScope ? relations : null,
+            selectedCategories,
+          )
+        : [];
     const categoryComputation = react.useMemo(() => {
       const result = workflowResult.categoryComputation;
       if (!(draft.adjustments?.quantities ?? []).some((entry) => entry.kind === 'base-sku'))
@@ -1699,82 +1775,91 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       () => createSourceProductMatcher(draft.products),
       [draft.products],
     );
-    const sourceSummaries = Object.fromEntries(
-      Object.keys(sourceDefinitions).map((type) => {
-        const { period, column, rows: fullRows } = sourceSelection(draft, type);
-        const rows = !selectedCategories.length
-          ? fullRows
-          : fullRows.filter((row) => matchesCategories(row['大类'], selectedCategories));
-        const amountRead = type === 'report' ? reportAmountSource(draft, period) : null;
-        const amountRows = (amountRead?.status === 'ready' ? amountRead.rows : []).filter(
-          (row) =>
-            !selectedCategories.length ||
-            matchesCategories(
-              sourceCategory(row['产品编码'], row['基地']).category,
-              selectedCategories,
-            ),
-        );
-        return [
-          type,
-          {
-            period,
-            column,
-            businessSource:
-              draft[type + 'Source'] === 'business'
-                ? type === 'forecast'
-                  ? 'governed-sql'
-                  : 'cube'
-                : 'not-read',
-            localFile: draft.files[type] ?? null,
-            rowCount: rows.length,
-            quantity:
-              (type !== 'forecast' ||
-                draft.forecastSource !== 'business' ||
-                draft.forecastRead?.status === 'ready') &&
-              rows.some((row) => row[column] !== '') &&
-              (draft[type + 'Source'] !== 'business' || rows.every((row) => row[column] !== ''))
-                ? quantity(rows, column)
-                : null,
-            metadata: draft[type + 'Metadata'] ?? null,
-            read: draft[type + 'Read'] ?? null,
-            versions: type === 'report' ? ['月初数量', '纠偏数量'] : undefined,
-            amounts:
-              type === 'report'
-                ? {
-                    period,
-                    unit: '元',
-                    status: amountRead?.status ?? 'unread',
-                    sourceTable:
-                      amountRead?.sourceTable ?? 'ai_db.agents_scm_dws_scm_cust_plan_exe_di',
-                    rowCount: amountRows.length,
-                    initialPlan: sumSourceAmounts(amountRows, '月初计划金额'),
-                    finalPlan: sumSourceAmounts(amountRows, '最终计划金额'),
-                    missingDimensions: amountRows.filter((row) => row['缺项原因']).length,
-                    error: amountRead?.error ?? null,
-                  }
-                : undefined,
-            shipmentMetrics:
-              type === 'history' && draft.historySource === 'business'
-                ? ['数量', '含赠品数量', '不含税收入']
-                : undefined,
-            missingQuantity: rows.filter((row) => row[column] === '').length,
-            missingReasons:
-              type === 'forecast'
-                ? [...new Set(rows.map((row) => row['缺项原因']).filter(Boolean))]
-                : undefined,
-            dimensions: Object.fromEntries(
-              dimensions.map((dimension) => [
-                dimension,
-                {
-                  count: new Set(rows.map((row) => row[dimension]).filter(Boolean)).size,
-                  missing: rows.filter((row) => !row[dimension]).length,
-                },
-              ]),
-            ),
-          },
-        ];
-      }),
+    const sourceSelections = react.useMemo(
+      () =>
+        Object.fromEntries(
+          Object.keys(sourceDefinitions).map((type) => [type, sourceSelection(draft, type)]),
+        ),
+      [draft],
     );
+    const sourceSummaries =
+      checkActive &&
+      Object.fromEntries(
+        Object.keys(sourceDefinitions).map((type) => {
+          const { period, column, rows: fullRows } = sourceSelections[type];
+          const rows = !selectedCategories.length
+            ? fullRows
+            : fullRows.filter((row) => matchesCategories(row['大类'], selectedCategories));
+          const amountRead = type === 'report' ? reportAmountSource(draft, period) : null;
+          const amountRows = (amountRead?.status === 'ready' ? amountRead.rows : []).filter(
+            (row) =>
+              !selectedCategories.length ||
+              matchesCategories(
+                sourceCategory(row['产品编码'], row['基地']).category,
+                selectedCategories,
+              ),
+          );
+          return [
+            type,
+            {
+              period,
+              column,
+              businessSource:
+                draft[type + 'Source'] === 'business'
+                  ? type === 'forecast'
+                    ? 'governed-sql'
+                    : 'cube'
+                  : 'not-read',
+              localFile: draft.files[type] ?? null,
+              rowCount: rows.length,
+              quantity:
+                (type !== 'forecast' ||
+                  draft.forecastSource !== 'business' ||
+                  draft.forecastRead?.status === 'ready') &&
+                rows.some((row) => row[column] !== '') &&
+                (draft[type + 'Source'] !== 'business' || rows.every((row) => row[column] !== ''))
+                  ? quantity(rows, column)
+                  : null,
+              metadata: draft[type + 'Metadata'] ?? null,
+              read: draft[type + 'Read'] ?? null,
+              versions: type === 'report' ? ['月初数量', '纠偏数量'] : undefined,
+              amounts:
+                type === 'report'
+                  ? {
+                      period,
+                      unit: '元',
+                      status: amountRead?.status ?? 'unread',
+                      sourceTable:
+                        amountRead?.sourceTable ?? 'ai_db.agents_scm_dws_scm_cust_plan_exe_di',
+                      rowCount: amountRows.length,
+                      initialPlan: sumSourceAmounts(amountRows, '月初计划金额'),
+                      finalPlan: sumSourceAmounts(amountRows, '最终计划金额'),
+                      missingDimensions: amountRows.filter((row) => row['缺项原因']).length,
+                      error: amountRead?.error ?? null,
+                    }
+                  : undefined,
+              shipmentMetrics:
+                type === 'history' && draft.historySource === 'business'
+                  ? ['数量', '含赠品数量', '不含税收入']
+                  : undefined,
+              missingQuantity: rows.filter((row) => row[column] === '').length,
+              missingReasons:
+                type === 'forecast'
+                  ? [...new Set(rows.map((row) => row['缺项原因']).filter(Boolean))]
+                  : undefined,
+              dimensions: Object.fromEntries(
+                dimensions.map((dimension) => [
+                  dimension,
+                  {
+                    count: new Set(rows.map((row) => row[dimension]).filter(Boolean)).size,
+                    missing: rows.filter((row) => !row[dimension]).length,
+                  },
+                ]),
+              ),
+            },
+          ];
+        }),
+      );
     const annualContext = annualSelection(draft);
     useMpsPart(
       react,
@@ -1823,15 +1908,16 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         retention: retentionError ? 'local-save-failed' : 'subject-session-scoped-local-draft',
       },
       '需求确认',
-      active && step === 'check',
+      checkActive,
     );
+    const filterStep = ['check', 'ship', 'process', 'masterdata', 'constraints'].includes(step);
     return h(
       'div',
       { className: 'dc-page', hidden: !active },
       retentionError && h('p', { role: 'alert' }, retentionError),
       h(
         'header',
-        { className: 'dc-page-head' },
+        { className: filterStep ? 'dc-page-head dc-page-head-sticky' : 'dc-page-head' },
         h(
           'div',
           { className: 'dc-title-row' },
@@ -1879,86 +1965,143 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             'div',
             { className: 'dc-version-switch' },
             h(
-              'select',
-              {
-                'aria-label': '评估月份选择',
-                disabled: adjusting,
-                value: draft.month,
-                onFocus: () => setActualMonth(currentMonth()),
-                onPointerDown: () => setActualMonth(currentMonth()),
-                onKeyDown: () => setActualMonth(currentMonth()),
-                onChange: (event) => {
-                  const month = event.target.value;
-                  const start = currentMonth();
-                  if (month < start || month > monthOffset(start, 2)) return;
-                  const current = localRef.current;
-                  if (
-                    current.drafts.find((entry) => entry.id === current.selected)?.month === month
-                  )
-                    return;
-                  const existing = current.drafts.find((entry) => entry.month === month);
-                  const next = existing ?? makeDraft(`local-${current.drafts.length + 1}`, month);
-                  clearFiles();
-                  saveLocal({
-                    drafts: existing ? current.drafts : [...current.drafts, next],
-                    selected: next.id,
-                  });
-                  resetEditor();
+              'div',
+              { className: 'dc-version-fields' },
+              filterStep &&
+                h(CategoryFilter, {
+                  key: step,
+                  categories: [
+                    ...new Set(
+                      [
+                        ...draft.products.map((row) => row['大类']),
+                        ...categoryComputation.bases.map((row) => row.category),
+                        ...(draft.shipment?.rows ?? []).map((row) => row.category),
+                      ].filter(Boolean),
+                    ),
+                  ].sort(),
+                  selected: selectedCategories,
+                  change: setSelectedCategories,
+                  disabled: adjusting,
+                }),
+              submissionWarnings.length > 0 &&
+                h(
+                  'button',
+                  {
+                    className: 'dc-submission-alert',
+                    type: 'button',
+                    'aria-label': `池外销售提报，${submissionWarnings.length} 条`,
+                    onClick: () => setSubmissionWarningOpen(true),
+                  },
+                  h(
+                    'svg',
+                    {
+                      viewBox: '0 0 24 24',
+                      width: 16,
+                      height: 16,
+                      fill: 'none',
+                      stroke: 'currentColor',
+                      'aria-hidden': true,
+                    },
+                    h('path', {
+                      d: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',
+                      strokeWidth: 1.5,
+                      strokeLinecap: 'round',
+                    }),
+                  ),
+                  submissionWarnings.length,
+                ),
+              h(
+                'select',
+                {
+                  'aria-label': '评估月份选择',
+                  disabled: adjusting,
+                  value: draft.month,
+                  onFocus: () => setActualMonth(currentMonth()),
+                  onPointerDown: () => setActualMonth(currentMonth()),
+                  onKeyDown: () => setActualMonth(currentMonth()),
+                  onChange: (event) => {
+                    const month = event.target.value;
+                    const start = currentMonth();
+                    if (month < start || month > monthOffset(start, 2)) return;
+                    const current = localRef.current;
+                    if (
+                      current.drafts.find((entry) => entry.id === current.selected)?.month === month
+                    )
+                      return;
+                    const existing = current.drafts.find((entry) => entry.month === month);
+                    const next = existing ?? makeDraft(`local-${current.drafts.length + 1}`, month);
+                    clearFiles();
+                    saveLocal({
+                      drafts: existing ? current.drafts : [...current.drafts, next],
+                      selected: next.id,
+                    });
+                    resetEditor();
+                  },
                 },
-              },
-              !evaluationMonths.includes(draft.month) &&
-                h('option', { value: draft.month, disabled: true }, `历史月份 · ${draft.month}`),
-              evaluationMonths.map((month) => h('option', { key: month, value: month }, month)),
-            ),
-            h(
-              'select',
-              {
-                'aria-label': '评估版本选择',
-                disabled: adjusting,
-                value: draft.id,
-                onChange: (event) => {
-                  clearFiles();
-                  setSelected(event.target.value);
-                  resetEditor();
+                !evaluationMonths.includes(draft.month) &&
+                  h('option', { value: draft.month, disabled: true }, `历史月份 · ${draft.month}`),
+                evaluationMonths.map((month) => h('option', { key: month, value: month }, month)),
+              ),
+              h(
+                'select',
+                {
+                  'aria-label': '评估版本选择',
+                  className: 'dc-version-select',
+                  disabled: adjusting,
+                  value: draft.id,
+                  onChange: (event) => {
+                    clearFiles();
+                    setSelected(event.target.value);
+                    resetEditor();
+                  },
                 },
-              },
-              drafts.map((entry) =>
-                h('option', { key: entry.id, value: entry.id }, `${entry.name}（${entry.month}）`),
+                drafts.map((entry) =>
+                  h(
+                    'option',
+                    { key: entry.id, value: entry.id },
+                    `${entry.name}（${entry.month}）`,
+                  ),
+                ),
               ),
             ),
             h(
-              'button',
-              {
-                disabled: adjusting,
-                onClick: () => {
-                  setVersionName('');
-                  setActualMonth(currentMonth());
-                  setMonth(currentMonth());
-                  setReference('');
-                  setVersionOpen(true);
+              'div',
+              { className: 'dc-version-actions' },
+              h(
+                'button',
+                {
+                  className: 'dc-version-new',
+                  disabled: adjusting,
+                  onClick: () => {
+                    setVersionName('');
+                    setActualMonth(currentMonth());
+                    setMonth(currentMonth());
+                    setReference('');
+                    setVersionOpen(true);
+                  },
                 },
-              },
-              '新建评估版本',
-            ),
-            h(
-              'button',
-              {
-                onClick: () => {
-                  setCompareId(drafts.find((entry) => entry.id !== draft.id)?.id ?? draft.id);
-                  setCompareOpen(true);
+                '新建评估版本',
+              ),
+              h(
+                'button',
+                {
+                  onClick: () => {
+                    setCompareId(drafts.find((entry) => entry.id !== draft.id)?.id ?? draft.id);
+                    setCompareOpen(true);
+                  },
                 },
-              },
-              '版本对比',
-            ),
-            hasMpsSource() && h('button', { onClick: () => setMasterOpen(true) }, '数据源'),
-            h(
-              'span',
-              {
-                role: 'status',
-                className: 'dc-draft-status',
-                title: '修改保存到当前本地草稿，尚未正式提交',
-              },
-              '本地草稿',
+                '版本对比',
+              ),
+              hasMpsSource() && h('button', { onClick: () => setMasterOpen(true) }, '数据源'),
+              h(
+                'span',
+                {
+                  role: 'status',
+                  className: 'dc-draft-status',
+                  title: '修改保存到当前本地草稿，尚未正式提交',
+                },
+                '本地草稿',
+              ),
             ),
           ),
         ),
@@ -1969,21 +2112,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             '请保存或取消当前调整，再切换步骤、月份或版本。',
           ),
       ),
-      !['capacity', 'report'].includes(step) &&
-        h(CategoryFilter, {
-          categories: [
-            ...new Set(
-              [
-                ...draft.products.map((row) => row['大类']),
-                ...categoryComputation.bases.map((row) => row.category),
-                ...(draft.shipment?.rows ?? []).map((row) => row.category),
-              ].filter(Boolean),
-            ),
-          ].sort(),
-          selected: selectedCategories,
-          change: setSelectedCategories,
-          disabled: adjusting,
-        }),
+      step === 'check' &&
+        submissionWarningOpen &&
+        h(
+          Dialog,
+          { title: '池外销售提报', close: () => setSubmissionWarningOpen(false) },
+          table(['基地', 'SKU', '大类', '月份', '销售提报量', '原因'], submissionWarnings),
+        ),
       versionOpen &&
         h(
           Dialog,
@@ -2250,6 +2385,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           key: `${draft.id}-${scopeGeneration}`,
           draft,
           update,
+          retryFestivalHistory,
+          basisDisabled: adjusting,
           active: active && step === 'check',
           onEditingChange: setAdjusting,
         }),
@@ -2676,6 +2813,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               key: `${draft.id}-${type}`,
               type,
               draft,
+              selection: sourceSelections[type],
               read,
               sync,
               update,
@@ -2706,8 +2844,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               ? relations
               : null,
 
-          active,
-          contextActive: active && step === 'check',
+          active: demandSourcesActive,
+          contextActive: checkActive,
         }),
         h(
           'div',
@@ -2725,8 +2863,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
               ? relations
               : null,
-          active,
-          contextActive: active && step === 'check',
+          active: demandSourcesActive,
+          contextActive: checkActive,
         }),
       ),
       !helpOpen && assistant,

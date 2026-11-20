@@ -547,7 +547,7 @@ test('failed source-check refresh retracts old comparisons instead of leaving an
   await expect(row.locator('td').nth(3)).toHaveText('-');
 });
 
-test('a failed historical year does not hide the two successfully read years', async (t) => {
+test('历史窗口读取失败仍保留其他窗口已取到的月份，同一源月份只算一次', async (t) => {
   const { frame } = await mpsPage(t, config, (query) => {
     if (query.queryId.startsWith('category-history.') && query.parameters.months.includes('202310'))
       throw Error('HISTORICAL_YEAR_UNAVAILABLE');
@@ -564,8 +564,42 @@ test('a failed historical year does not hide the two successfully read years', a
   const dialog = frame.getByRole('dialog', { name: '三年同比 · 源值核对', exact: true });
   await expect(dialog).toContainText('2024-10');
   await expect(dialog).toContainText('2025-10');
-  await expect(dialog).toContainText('共16条');
+  await expect(dialog).toContainText('共18条');
   await expect(dialog).toContainText('2025、2024（2年）');
+});
+
+test('同比环比异常报告保留原值、替代值及样本月份，下载与页面一致', async (t) => {
+  const { frame, page } = await mpsPage(t, config, (query) => {
+    const result = fixture(query);
+    if (query.queryId === 'category-history.detail')
+      for (const row of result.rows)
+        if (row.stat_month === '202511') {
+          row.last_month_dimension_act_dl_qty = 1;
+          row.month_on_month_rate = 99;
+        }
+    if (query.queryId === 'delivery.detail')
+      Object.assign(result.rows[0], {
+        last_year_dimension_act_dl_qty: -9,
+        year_on_year_rate: '-126.7778',
+      });
+    return result;
+  });
+  await version(frame, '2026-11');
+  const anomalyReport = frame.locator('details[aria-label="同比环比异常报告"]:visible');
+  await expect(anomalyReport.locator('summary')).toContainText('同比环比异常报告');
+  await anomalyReport.locator('summary').click();
+  await expect(anomalyReport).toContainText('使用前三个月有效环比均值');
+  await expect(anomalyReport).toContainText('2025-10、2025-09、2025-08');
+  const waiting = page.waitForEvent('download');
+  await anomalyReport.getByRole('button', { name: '下载同比环比异常报告' }).click();
+  const csv = await mpsDownloadText(await (await waiting).path());
+  assert.match(csv, /原增长率.*采用增长率.*计算倍率.*采用月份/);
+  assert.match(csv, /2025-11.*历史环比.*99.*2025-10、2025-09、2025-08/);
+  const delivery = frame.getByRole('region', { name: '基地多维发货指标', exact: true });
+  await delivery.getByRole('button', { name: '展开基地多维发货指标' }).click();
+  await expect(delivery.getByRole('table').first()).toContainText('同比：基期为零或负数');
+  await delivery.getByText('同比环比异常报告（1条）', { exact: true }).click();
+  await expect(delivery).toContainText('-126.7778');
 });
 
 test('identity reset cancels pending source checks even when the replacement draft reuses local-1', async (t) => {
@@ -604,7 +638,7 @@ test('identity and page lifecycle resets pause sources until the owned view rest
   const checks = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
   const sources = [
     'products.detail',
-    'annual.summary.count',
+    'annual-pool.count',
     'facts.report',
     'facts.history',
     'forecast.count',
@@ -695,6 +729,16 @@ test('entering demand confirmation reads the three-month source check without a 
     .locator('tbody tr')
     .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
   await expect(row.locator('td').nth(2)).toHaveText('120');
+});
+
+test('从发货步骤恢复时先读取发货所需数据，进入需求步骤才读历史和提报核对', async (t) => {
+  const { frame, calls } = await mpsPage(t, config, fixture, { startAtShipment: true });
+  const requested = (id) => calls.some(({ queryId }) => queryId === id);
+  const demandQueries = ['facts.history-annual', 'facts.plan-quantity', 'category-history.detail'];
+  await expect.poll(() => requested('products.detail')).toBe(true);
+  assert.deepEqual(demandQueries.filter(requested), []);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await expect.poll(() => demandQueries.filter(requested)).toEqual(demandQueries);
 });
 
 test('sales plan share card rebuilds three dimensions using current material-group codes', async (t) => {

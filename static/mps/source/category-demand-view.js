@@ -1,10 +1,12 @@
 import { matchesCategories } from './category-filter.js';
 import { categoryDemandMissing } from './category-demand.js';
+import { demandBasisLabel, festivalOptionValue } from './festival-demand.js';
 import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
 
 export function createShipmentScopeNotice(react, { downloadCsv }) {
   const h = react.createElement;
   return function ShipmentScopeNotice({ scope, month, cutoff, selectedCategories = [] }) {
+    const [expanded, setExpanded] = react.useState(false);
     scope = scope && {
       ...scope,
       excluded: scope.excluded.filter((row) => matchesCategories(row.category, selectedCategories)),
@@ -43,62 +45,72 @@ export function createShipmentScopeNotice(react, { downloadCsv }) {
     const columns = Object.keys(rows[0]);
     return h(
       'section',
-      { className: 'dc-card', 'aria-label': '待定单品异常' },
+      { className: 'dc-card dc-scope-notice', 'aria-label': '待定单品异常' },
       h(
-        'p',
-        { role: 'status', className: 'dc-card-note' },
-        `部分可计算：${scope.excluded.length}条基地＋单品记录单列异常，其余有效记录继续计算。数量只代表参与范围，不代表完整大类。`,
-      ),
-      h(
-        'p',
-        { className: 'dc-card-note' },
-        scope.coverage
-          .map((row) => `${row.category}：参与${row.included}条，排除${row.excluded}条`)
-          .join('；'),
-      ),
-      scope.issues?.length > 0 &&
+        'div',
+        { className: 'dc-scope-notice-bar' },
         h(
           'p',
-          { role: 'status', className: 'dc-card-note' },
-          `另有${scope.issues.length}条来源缺基地，无法确认参与范围，相关系数保留待定，明细已列入CSV。`,
+          { role: 'status' },
+          `部分可计算 · ${scope.excluded.length} 条基地 SKU 待补，数量仅覆盖有效记录`,
         ),
-      h(
-        'button',
-        { onClick: () => downloadCsv(`待定单品异常-${month}.csv`, columns, rows) },
-        '下载待定单品异常CSV',
+        h(
+          'button',
+          { onClick: () => downloadCsv(`待定单品异常-${month}.csv`, columns, rows) },
+          '下载待定单品异常CSV',
+        ),
       ),
       h(
         'details',
-        null,
+        { open: expanded, onToggle: (event) => setExpanded(event.currentTarget.open) },
         h('summary', null, `查看待定单品异常（${rows.length}条）`),
         h(
-          'div',
-          { className: 'dc-table-wrap' },
+          'p',
+          { className: 'dc-card-note' },
+          scope.coverage
+            .map((row) => `${row.category}：参与${row.included}条，排除${row.excluded}条`)
+            .join('；'),
+        ),
+        scope.issues?.length > 0 &&
           h(
-            'table',
-            { className: 'dc-table' },
+            'p',
+            { role: 'status', className: 'dc-card-note' },
+            `另有${scope.issues.length}条来源缺基地，无法确认参与范围，相关系数保留待定，明细已列入CSV。`,
+          ),
+        expanded &&
+          h(
+            'div',
+            {
+              className: 'dc-table-scroll',
+              tabIndex: 0,
+              role: 'region',
+              'aria-label': '待定单品异常滚动区域',
+            },
             h(
-              'thead',
-              null,
+              'table',
+              { className: 'dc-table' },
               h(
-                'tr',
+                'thead',
                 null,
-                columns.map((column) => h('th', { key: column, scope: 'col' }, column)),
-              ),
-            ),
-            h(
-              'tbody',
-              null,
-              rows.slice(0, 50).map((row, index) =>
                 h(
                   'tr',
-                  { key: index },
-                  columns.map((column) => h('td', { key: column }, row[column])),
+                  null,
+                  columns.map((column) => h('th', { key: column, scope: 'col' }, column)),
+                ),
+              ),
+              h(
+                'tbody',
+                null,
+                rows.slice(0, 50).map((row, index) =>
+                  h(
+                    'tr',
+                    { key: index },
+                    columns.map((column) => h('td', { key: column }, row[column])),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
         rows.length > 50 &&
           h('p', { className: 'dc-card-note' }, '页面预览前50条，CSV包含全部异常。'),
       ),
@@ -142,6 +154,9 @@ export function createCategoryDemand(
     '参与单品记录数',
     '排除单品记录数',
     '计算口径',
+    '推算口径',
+    '节日对照区间',
+    '近三月自然月实绩月份',
     '缺项说明',
   ];
   const UpperAdjustmentConflicts = createUpperAdjustmentConflicts(react);
@@ -152,7 +167,18 @@ export function createCategoryDemand(
     selectedCategories = [],
     shipmentSnapshot,
     result,
+    retryFestivalHistory,
+    basisDisabled,
   }) {
+    const basisRadioId = react.useId();
+    const festivalSelectId = react.useId();
+    const festival = result.festival;
+    const festivalMonths = new Set(festival?.months);
+    const naturalActualMonths = result.recent.filter((month) => !festivalMonths.has(month));
+    const option = festival?.selected ? festivalOptionValue(festival.selected) : '';
+    const waiting = ['loading', 'choose'].includes(festival?.status);
+    const chainColumn = festival ? '采用环比' : '年度环比';
+    const calculationColumns = columns.map((name) => (name === '年度环比' ? chainColumn : name));
     const selectedRows = result.rows.filter((row) =>
       matchesCategories(row.category, selectedCategories),
     );
@@ -162,7 +188,7 @@ export function createCategoryDemand(
         大类: row.category,
         月份: `${row.month}（M+${(index % 4) + 1}）`,
         历史平均环比: row.mom ?? '',
-        年度环比: row.chain ?? '',
+        [chainColumn]: row.chain ?? '',
         '① 环比法': row.momMethod ?? '',
         同期平均占比: row.share ?? '',
         '② 占比法': row.shareMethod ?? '',
@@ -183,6 +209,14 @@ export function createCategoryDemand(
           result.shipmentScope.coverage.find((entry) => entry.category === row.category)
             ?.excluded ?? 0,
         计算口径: row.method,
+        推算口径: demandBasisLabel(festival, row.month),
+        节日对照区间: (festival?.windows ?? [])
+          .filter((window) => window.month === row.month)
+          .map(
+            (window) => `${window.year}年 ${window.comparison}（${window.start}至${window.end}）`,
+          )
+          .join('；'),
+        近三月自然月实绩月份: festival ? naturalActualMonths.join('、') : '',
         系统需求数量: row.systemQuantity ?? '',
         大类预估需求数量: row.quantity ?? '',
         需求数量来源: row.adjusted ? '基地SKU汇总，调整原因和时间见逐叶子明细' : '系统测算',
@@ -339,7 +373,7 @@ export function createCategoryDemand(
           { 'aria-label': '逐月测算', className: 'dc-card dc-results dc-category-demand' },
           h(
             'div',
-            { className: 'dc-card-head' },
+            { className: 'dc-card-head dc-calculation-toolbar' },
             h('h3', {}, '逐月测算（到大类预估需求数量）'),
             h(
               'span',
@@ -347,22 +381,117 @@ export function createCategoryDemand(
               `${selectedRows.filter((row) => row.quantity !== null).length} / ${visibleRows.length} 项可计算 · 单位：件`,
             ),
             h(
+              'fieldset',
+              { className: 'dc-calculation-basis' },
+              h('legend', null, '推算口径'),
+              ...[
+                ['calendar', '自然月'],
+                ['festival', '节日推算'],
+              ].map(([value, label]) =>
+                h(
+                  'span',
+                  { key: value },
+                  h('input', {
+                    id: basisRadioId + value,
+                    name: basisRadioId,
+                    type: 'radio',
+                    value,
+                    checked: value === (festival ? 'festival' : 'calendar'),
+                    disabled: basisDisabled,
+                    onChange: () =>
+                      update({
+                        festivalBasis: value === 'festival' ? {} : undefined,
+                        festivalHistoryRead: undefined,
+                      }),
+                  }),
+                  h('label', { htmlFor: basisRadioId + value }, label),
+                ),
+              ),
+            ),
+            festival?.options.length > 1 &&
+              h(
+                'div',
+                { className: 'dc-festival-picker' },
+                h('label', { htmlFor: festivalSelectId }, '评估节日'),
+                h(
+                  'select',
+                  {
+                    id: festivalSelectId,
+                    value: option,
+                    disabled: basisDisabled,
+                    onChange: (event) =>
+                      update({
+                        festivalBasis:
+                          festival.options.find(
+                            (candidate) => festivalOptionValue(candidate) === event.target.value,
+                          ) ?? {},
+                      }),
+                  },
+                  h('option', { value: '' }, '请选择节日'),
+                  festival.options.map((candidate) => {
+                    const id = festivalOptionValue(candidate);
+                    return h(
+                      'option',
+                      { key: id, value: id },
+                      `${candidate.name} · ${candidate.date}`,
+                    );
+                  }),
+                ),
+              ),
+            h(
               'button',
               {
+                disabled: waiting,
                 onClick: () =>
                   downloadCsv(
                     `大类逐月测算-${draft.month}.csv`,
-                    [...columns, ...detailColumns.filter((column) => !columns.includes(column))],
+                    [
+                      ...calculationColumns,
+                      ...detailColumns.filter((column) => !calculationColumns.includes(column)),
+                    ],
                     visibleRows,
                   ),
               },
               '下载测算明细',
             ),
           ),
+          festival &&
+            h(
+              'div',
+              {
+                className: 'dc-festival-status',
+                role: festival.status === 'failed' ? 'alert' : 'status',
+              },
+              festival.status === 'loading'
+                ? '正在读取节日发货及对照月份…'
+                : festival.status === 'choose'
+                  ? '请选择本评估使用的节日。整份评估使用同一套节日映射。'
+                  : festival.status === 'failed'
+                    ? `节日发货读取失败。 ${festival.error}`
+                    : festival.status === 'outside'
+                      ? '本期没有节日映射，逐月测算采用自然月。'
+                      : [
+                          `${festival.selected.name}（${festival.selected.date}）`,
+                          festival.naturalMonths.length
+                            ? `预测沿用自然月：${festival.naturalMonths.join('、')}`
+                            : '',
+                          naturalActualMonths.length
+                            ? `近三月实绩沿用自然月：${naturalActualMonths.join('、')}`
+                            : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' · '),
+              festival.status === 'failed' &&
+                h(
+                  'button',
+                  { type: 'button', onClick: retryFestivalHistory, disabled: basisDisabled },
+                  '重试',
+                ),
+            ),
           h(
             'p',
             { className: 'dc-card-note' },
-            `${result.rows[0]?.baseMonth ?? ''}为统计基月M。M+1、M+2使用历史环比，M+3、M+4使用年度环比；后月只承接前月环比测算量。四个月均计算两法平均量，仅M+1再与销售校正量各占一半，M+2至M+4直接使用两法平均量。M+4仅作库存参考。`,
+            `${result.rows[0]?.baseMonth ?? ''}为统计基月M。${festival ? '节日覆盖月份使用对照区间的历史环比和同期占比，窗口外沿用自然月。' : 'M+1、M+2使用历史环比，M+3、M+4使用年度环比；'}后月只承接前月环比测算量。四个月均计算两法平均量，仅M+1再与销售校正量各占一半，M+2至M+4直接使用两法平均量。M+4仅作库存参考。`,
           ),
           result.adjustmentIssues.length > 0 &&
             h('p', { role: 'alert' }, `以下调整未生效：${result.adjustmentIssues.join('；')}`),
@@ -370,7 +499,7 @@ export function createCategoryDemand(
             'div',
             { className: 'dc-category-demand-main' },
             table(
-              columns,
+              calculationColumns,
               visibleRows,
               Object.fromEntries(
                 [

@@ -102,7 +102,7 @@ export function createDelistedReport(react, { downloadCsv }) {
     '来源',
     '原因',
   ];
-  return function DelistedReport({ draft, result, filters, table }) {
+  return function DelistedReport({ draft, result, filters, table, collapsible = false }) {
     const [page, setPage] = react.useState(0);
     const issues = (result.delistedIssues ?? []).filter(
       (row) =>
@@ -117,7 +117,7 @@ export function createDelistedReport(react, { downloadCsv }) {
     );
     const scope = JSON.stringify(filters);
     react.useEffect(() => setPage(0), [scope]);
-    if (!(result.delistedIssues ?? []).length) return null;
+    if (!collapsible && !(result.delistedIssues ?? []).length) return null;
     const rows = issues.map((row) => ({
       异常类别: row.kind,
       基地: row.base,
@@ -130,13 +130,12 @@ export function createDelistedReport(react, { downloadCsv }) {
       原因: row.reason,
     }));
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(rows.length / 25) - 1));
-    return h(
-      'section',
-      { className: 'dc-card', 'aria-label': '下市品需求与库存报告' },
+    const title = '下市品需求与库存报告';
+    const content = [
       h(
         'div',
         { className: 'dc-card-head' },
-        h('h3', null, '下市品需求与库存报告'),
+        !collapsible && h('h3', null, title),
         h(
           'button',
           {
@@ -151,20 +150,22 @@ export function createDelistedReport(react, { downloadCsv }) {
         { className: 'dc-card-note' },
         '自动新增需求和补货从评估当月起停止。已有人工正需求保留有效状态，是否停止由人决定。第二步结存和已维护的后续调拨继续承接；独立未来生产及在途计划来源尚未接入。',
       ),
-      react.cloneElement(
-        table(
-          '下市品需求与库存异常明细',
-          columns,
-          rows
-            .slice(pageIndex * 25, (pageIndex + 1) * 25)
-            .map((row) => columns.map((column) => row[column])),
-        ),
-        {
-          tabIndex: 0,
-          role: 'region',
-          'aria-label': '下市品异常明细，可横向滚动',
-        },
-      ),
+      rows.length
+        ? react.cloneElement(
+            table(
+              '下市品需求与库存异常明细',
+              columns,
+              rows
+                .slice(pageIndex * 25, (pageIndex + 1) * 25)
+                .map((row) => columns.map((column) => row[column])),
+            ),
+            {
+              tabIndex: 0,
+              role: 'region',
+              'aria-label': '下市品异常明细，可横向滚动',
+            },
+          )
+        : h('p', { role: 'status', className: 'dc-card-note' }, '当前范围无下市品异常。'),
       rows.length > 25 &&
         h(
           'div',
@@ -187,6 +188,18 @@ export function createDelistedReport(react, { downloadCsv }) {
             '下一页下市品异常',
           ),
         ),
+    ];
+    return h(
+      'section',
+      { className: 'dc-card', 'aria-label': title },
+      collapsible
+        ? h(
+            'details',
+            { className: 'wf-exception-report', open: true },
+            h('summary', null, title),
+            ...content,
+          )
+        : content,
     );
   };
 }

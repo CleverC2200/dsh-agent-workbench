@@ -1,6 +1,6 @@
 import { normalizedMonth } from './master-data.js';
 
-export function annualWorkbookTables(source, months, base) {
+export function annualWorkbookTables(source, months, base, projectedSummary) {
   const dimensions = ['基地', '大类', '老大类', '物料组编码', '物料组名称', '物料编码', '物料名称'];
   const fields = [
     'belong_base',
@@ -18,8 +18,10 @@ export function annualWorkbookTables(source, months, base) {
       throw Error('年度明细超出当前基地或月份范围，请重新下载');
     const values = fields.map((field) => row[field] ?? '');
     const key = JSON.stringify(values);
-    if (!records.has(key)) records.set(key, { values, cells: new Map() });
+    if (!records.has(key))
+      records.set(key, { values, cells: new Map(), sourceCategories: new Set() });
     const cells = records.get(key).cells;
+    if (row.source_sub_category) records.get(key).sourceCategories.add(row.source_sub_category);
     if (!cells.has(month)) cells.set(month, new Set());
     const quantity = row.demand_qty == null || row.demand_qty === '' ? '' : Number(row.demand_qty);
     if (
@@ -31,7 +33,7 @@ export function annualWorkbookTables(source, months, base) {
   }
   const sku = [],
     groups = [];
-  for (const { values, cells } of records.values()) {
+  for (const { values, cells, sourceCategories } of records.values()) {
     const row = Object.fromEntries(dimensions.map((column, index) => [column, values[index]]));
     let total = 0,
       complete = true;
@@ -48,28 +50,49 @@ export function annualWorkbookTables(source, months, base) {
     }
     row['全年合计'] = complete ? total : '';
     row['核对说明'] = notes.join('；');
+    row['源大类'] = [...sourceCategories].join('、');
     (row['物料编码'] ? sku : groups).push(row);
   }
-  const summary = [...new Set(sku.map((row) => row['大类']))].map((category) => {
-    const rows = sku.filter((row) => row['大类'] === category);
-    const result = { 基地: base, 大类: category };
-    for (const month of months) {
-      result[month] = rows.every((row) => row[month] !== '')
-        ? rows.reduce((sum, row) => sum + row[month], 0)
+  const summary = [...new Set((projectedSummary ?? sku).map((row) => row['大类']))].map(
+    (category) => {
+      const rows = sku.filter((row) => row['大类'] === category);
+      const result = { 基地: base, 大类: category };
+      for (const month of months) {
+        const values = projectedSummary
+          ? projectedSummary
+              .filter((row) => row['大类'] === category && row['月份'] === month)
+              .map((row) => row['数量'])
+              .filter((value) => value !== '')
+          : rows.every((row) => row[month] !== '')
+            ? rows.map((row) => row[month])
+            : [];
+        result[month] = values.length ? values.reduce((sum, value) => sum + value, 0) : '';
+        const index = months.indexOf(month);
+        const previous = result[months[index - 1]],
+          current = result[month];
+        result[`${month}环比`] =
+          index && previous !== '' && current !== '' && previous !== 0
+            ? current / previous - 1
+            : '';
+      }
+      result['全年合计'] = months.every((month) => result[month] !== '')
+        ? months.reduce((sum, month) => sum + result[month], 0)
         : '';
-      const index = months.indexOf(month);
-      const previous = result[months[index - 1]],
-        current = result[month];
-      result[`${month}环比`] =
-        index && previous !== '' && current !== '' && previous !== 0 ? current / previous - 1 : '';
-    }
-    result['全年合计'] = months.every((month) => result[month] !== '')
-      ? months.reduce((sum, month) => sum + result[month], 0)
-      : '';
-    return result;
-  });
+      return result;
+    },
+  );
   return [
-    { name: 'SKU明细', columns: [...dimensions, ...months, '全年合计', '核对说明'], rows: sku },
+    {
+      name: 'SKU明细',
+      columns: [
+        ...dimensions,
+        ...months,
+        '全年合计',
+        '核对说明',
+        ...(projectedSummary ? ['源大类'] : []),
+      ],
+      rows: sku,
+    },
     {
       name: '大类汇总（仅SKU）',
       columns: ['基地', '大类', ...months, '全年合计', ...months.map((month) => `${month}环比`)],

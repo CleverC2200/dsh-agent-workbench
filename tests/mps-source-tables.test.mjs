@@ -268,6 +268,12 @@ test('预测按产品物料编码对应当前产品明细，大类系列和物�
 
 test('category history covers the recent window and all four demand months across the year boundary', () => {
   assert.deepEqual(sourceTableParameters('category-history', '2025-11').months, [
+    '202501',
+    '202502',
+    '202503',
+    '202504',
+    '202505',
+    '202506',
     '202507',
     '202508',
     '202509',

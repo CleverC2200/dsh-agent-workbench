@@ -1,6 +1,7 @@
 import { createCapacityScopeView } from './capacity-scope-view.js';
 import { delistedDownloadColumns, delistedDownloadFields } from './delisted-report.js';
 import { useStepViewField } from './step-view-state.js';
+import { demandBasisLabel } from './festival-demand.js';
 import { createCapacityReport } from './capacity-report-view.js';
 import {
   turnoverDaysSources,
@@ -216,6 +217,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
       '',
     );
     const plan = currentEvaluation?.result.plan;
+    const festival = currentEvaluation?.result.categoryComputation?.festival;
     const stamp = currentEvaluation?.at;
     const inputScope = JSON.stringify([
       stamp,
@@ -308,8 +310,79 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
       JSON.stringify([row.month, row.base, row.code]),
     );
     const reportGroups = [
-      ...Map.groupBy(reportRows, (row) => JSON.stringify([row.month, row.base])).values(),
-    ].map((rows) => ({ month: rows[0].month, base: rows[0].base, rows }));
+      ...[...Map.groupBy(reportRows, (row) => row.month).values()].map((rows) => ({
+        month: rows[0].month,
+        base: '全国',
+        rows,
+      })),
+      ...[...Map.groupBy(reportRows, (row) => row.base).values()].flatMap((baseRows) =>
+        [...Map.groupBy(baseRows, (row) => row.month).values()].map((rows) => ({
+          month: rows[0].month,
+          base: rows[0].base,
+          rows,
+        })),
+      ),
+    ];
+    const detailLevels = (rows, national) => [
+      ...[...Map.groupBy(rows, (row) => row.category).values()].map((items) => ({
+        level: '大类',
+        category: items[0].category,
+        rows: items,
+      })),
+      ...[...Map.groupBy(rows, (row) => JSON.stringify([row.category, row.group])).values()].map(
+        (items) => ({
+          level: '物料组',
+          category: items[0].category,
+          group: items[0].group,
+          rows: items,
+        }),
+      ),
+      ...[
+        ...Map.groupBy(rows, (row) =>
+          JSON.stringify([row.category, row.group, row.code, national ? '' : row.base]),
+        ).values(),
+      ].map((items) => ({
+        level: 'SKU',
+        category: items[0].category,
+        group: items[0].group,
+        code: items[0].code,
+        name: items[0].name,
+        rows: items,
+      })),
+    ];
+    const downloadBalanceLevels = () =>
+      downloadCsv(
+        `${draft.month}-产销存分层汇总及明细.csv`,
+        [
+          '月份',
+          '基地',
+          '粒度',
+          '大类',
+          '物料组',
+          '产品编码',
+          '产品名称',
+          ...(festival ? ['推算口径'] : []),
+          ...labels,
+        ],
+        reportGroups.flatMap((scope) =>
+          [
+            { level: '合计', rows: scope.rows },
+            ...detailLevels(scope.rows, scope.base === '全国'),
+          ].map((entry) => ({
+            月份: scope.month,
+            基地: scope.base,
+            粒度: entry.level,
+            大类: entry.category,
+            物料组: entry.group,
+            产品编码: entry.code,
+            产品名称: entry.name,
+            推算口径: demandBasisLabel(festival, scope.month),
+            ...Object.fromEntries(
+              plannedFields.map((field, index) => [labels[index], known(entry.rows, field).value]),
+            ),
+          })),
+        ),
+      );
     const metric = (rows, field) => {
       const data = known(rows, field);
       return h(
@@ -399,6 +472,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         排除单品记录数: plan.excludedShipments?.length ?? 0,
         结果时间: stamp,
         月份: row.month,
+        ...(festival ? { 推算口径: demandBasisLabel(festival, row.month) } : {}),
         基地: row.base,
         大类: row.category,
         系列: row.series,
@@ -449,6 +523,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           '排除单品记录数',
           '结果时间',
           '月份',
+          ...(festival ? ['推算口径'] : []),
           '基地',
           '大类',
           '系列',
@@ -511,14 +586,20 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         },
         numberText(row[field]),
       );
-    const detail = (rows, key) => {
+    const detail = (rows, key, national) => {
       const selection = detailSelection[key] ?? {};
       const categories = [...new Set(rows.map((row) => row.category || '分类待补'))];
-      const category = categories.includes(selection.category) ? selection.category : categories[0];
-      const categoryRows = rows.filter((row) => (row.category || '分类待补') === category);
+      const category = categories.includes(selection.category) ? selection.category : '';
+      const categoryRows = rows.filter(
+        (row) => !category || (row.category || '分类待补') === category,
+      );
       const groups = [...new Set(categoryRows.map((row) => row.group || '物料组待补'))];
-      const group = groups.includes(selection.group) ? selection.group : groups[0];
-      const selected = categoryRows.filter((row) => (row.group || '物料组待补') === group);
+      const group = groups.includes(selection.group) ? selection.group : '';
+      const levels = detailLevels(
+        categoryRows.filter((row) => !group || (row.group || '物料组待补') === group),
+        national,
+      );
+      const selected = levels.filter((entry) => entry.level === 'SKU');
       const pageKey = `${key}/${category}/${group}`;
       const page = Math.min(
         skuPages[pageKey] ?? 0,
@@ -545,6 +626,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                     [key]: { category: event.target.value },
                   }),
               },
+              h('option', { value: '' }, '全部大类'),
               categories.map((value) => h('option', { key: value, value }, value)),
             ),
           ),
@@ -563,6 +645,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                     [key]: { category, group: event.target.value },
                   }),
               },
+              h('option', { value: '' }, '全部物料组'),
               groups.map((value) => {
                 const sample = categoryRows.find((row) => (row.group || '物料组待补') === value);
                 return h(
@@ -577,15 +660,23 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         ),
         table(
           '求解单品明细',
-          ['产品编码', '产品名称', ...labels, '状态'],
-          selected
-            .slice(page * 25, (page + 1) * 25)
-            .map((row) => [
-              row.code,
-              h('span', { className: 'wf-plan-product-name', title: row.name }, row.name),
-              ...plannedFields.map((field) => quantityCell(row, field)),
-              reportStatus(row),
-            ]),
+          ['粒度', '大类', '物料组', '产品编码', '产品名称', ...labels, '状态'],
+          [
+            ...levels.filter((entry) => entry.level !== 'SKU'),
+            ...selected.slice(page * 25, (page + 1) * 25),
+          ].map((entry) => [
+            entry.level,
+            entry.category,
+            entry.group,
+            entry.code,
+            entry.name,
+            ...plannedFields.map((field) =>
+              entry.level === 'SKU' && !national
+                ? quantityCell(entry.rows[0], field)
+                : metric(entry.rows, field),
+            ),
+            entry.level === 'SKU' && !national ? reportStatus(entry.rows[0]) : '',
+          ]),
         ),
         h(
           'div',
@@ -616,14 +707,20 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         h(
           react.Fragment,
           null,
+          h('p', { className: 'wf-note' }, '单位：件。带 * 的数值为已知小计，缺项在状态列标注。'),
           h(
-            'p',
-            { className: 'wf-note' },
-            '单位：件。带 * 的数值为已知小计，缺项在状态列标注。展开基地查看大类、物料组与单品。',
+            'button',
+            { type: 'button', disabled: !active, onClick: downloadBalanceLevels },
+            '下载产销存分层汇总及明细',
           ),
           h(
             'div',
-            { className: 'dc-table-scroll wf-plan-balances' },
+            {
+              className: 'dc-table-scroll wf-plan-balances',
+              tabIndex: 0,
+              role: 'region',
+              'aria-label': '产销存汇总滚动区域',
+            },
             h(
               'table',
               { 'aria-label': '产销存汇总' },
@@ -634,7 +731,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                   'tr',
                   null,
                   ['计划月', '基地', ...labels, '状态 / 明细'].map((name) =>
-                    h('th', { key: name }, name),
+                    h('th', { key: name, scope: 'col' }, name),
                   ),
                 ),
               ),
@@ -678,6 +775,10 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                               {
                                 className: 'dc-link',
                                 'aria-expanded': reportOpen === key,
+                                'aria-label':
+                                  group.base === '全国'
+                                    ? `${reportOpen === key ? '收起' : '展开'}全国 ${group.month}`
+                                    : undefined,
                                 onClick: () => setReportOpen(reportOpen === key ? null : key),
                               },
                               `${reportOpen === key ? '收起' : '展开'} ${group.rows.length}个单品`,
@@ -696,7 +797,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                                   { className: 'wf-plan-detail-title' },
                                   `${group.month} / ${group.base} · 单品明细`,
                                 ),
-                                detail(group.rows, key),
+                                detail(group.rows, key, group.base === '全国'),
                               ),
                             )
                           : null,

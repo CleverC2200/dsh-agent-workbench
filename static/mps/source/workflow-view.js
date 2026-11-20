@@ -8,6 +8,8 @@ import { createBatchEdit } from './batch-edit.js';
 import { matchesCategories } from './category-filter.js';
 import { createShipmentScopeNotice } from './category-demand-view.js';
 import { createProcessedDemand } from './processed-demand-view.js';
+import { demandBasisLabel } from './festival-demand.js';
+import { matchesQuantityAdjustment } from './local-draft.js';
 import { createReportPage } from './report-page.js';
 import {
   createInventoryTargetPanel,
@@ -211,6 +213,7 @@ export function createWorkflow(
     }, [savedDraft, relations, shipmentSnapshot, scopeGeneration]);
 
     const preparingInputs =
+      ['loading', 'choose'].includes(result.categoryComputation.festival?.status) ||
       (savedDraft.productSource === 'business' &&
         (!shipmentSnapshot || ['unread', 'loading'].includes(shipmentSnapshot.status))) ||
       [
@@ -513,7 +516,7 @@ export function createWorkflow(
     const table = (name, columns, rows, renderDetail) =>
       h(
         'div',
-        { className: 'dc-table-scroll wf-table-scroll' },
+        { className: 'dc-table-scroll wf-table-scroll', tabIndex: 0 },
         h(
           'table',
           { 'aria-label': name },
@@ -523,7 +526,7 @@ export function createWorkflow(
             h(
               'tr',
               null,
-              columns.map((column, index) => h('th', { key: index }, column)),
+              columns.map((column, index) => h('th', { key: index, scope: 'col' }, column)),
             ),
           ),
           h(
@@ -613,7 +616,7 @@ export function createWorkflow(
         );
         const history = result.comparisonSources.historyPeriod;
         expression = row.quantityAdjusted
-          ? `${row.base} ${row.code}在${row.month}人工修正为${value(row.demand)}件，系统原值${value(row.systemDemand)}件保留供核对。物料组、大类及全国由当前基地SKU有效需求加总，其他SKU及基地数量独立。`
+          ? `${row.base} ${row.code}在${row.month}调整后为${value(row.demand)}件，系统原值${value(row.systemDemand)}件保留供核对。物料组、大类及全国由当前基地SKU有效需求加总。`
           : `${row.category}有效大类需求${value(total)}件，当前基地SKU需求${value(row.demand)}件，有效占比${percent(row.share)}。系统占比${percent(row.systemShare)}保留供核对。`;
         expression +=
           row.splitBasis === 'history-only-zero-report'
@@ -743,6 +746,7 @@ export function createWorkflow(
         ...new Set([
           '评估版本',
           '评估月份',
+          ...(draft.festivalBasis ? ['推算口径'] : []),
           '计算范围',
           '粒度',
           '相对月份',
@@ -808,15 +812,7 @@ export function createWorkflow(
         const shipment = shipmentByProduct.get(JSON.stringify([row.base, row.code]));
         const forecast = forecastByMonth.get(JSON.stringify([row.month, row.base, row.code]));
         const adjustment = row.quantityAdjusted
-          ? draft.adjustments?.quantities?.find(
-              (item) =>
-                item.kind === 'base-sku' &&
-                item.month === row.month &&
-                item.base === row.base &&
-                item.code === row.code &&
-                item.category === row.category &&
-                item.group === row.group,
-            )
+          ? draft.adjustments?.quantities?.findLast((item) => matchesQuantityAdjustment(row, item))
           : draft.adjustments?.shares?.find((item) => item.rowId === row.id);
         const layerValues = ['reportLayers', 'historyLayers'].flatMap((key) =>
           ['groupShare', 'skuShare', 'baseShare', 'product'].map((field) => row[key]?.[field]),
@@ -829,6 +825,7 @@ export function createWorkflow(
         return {
           评估版本: draft.name,
           评估月份: draft.month,
+          推算口径: demandBasisLabel(result.categoryComputation.festival, row.month),
           计算范围: result.partial ? '部分可计算，待定单品已单列异常' : '当前参与范围',
           相对月份: `M+${result.months.indexOf(row.month) + 1}`,
           粒度: includeCategory ? '基地×物料组×SKU' : '需求推导产销存参考',
@@ -893,7 +890,13 @@ export function createWorkflow(
           本月预估发货缺项数: shipment?.fin != null ? 0 : 1,
           模型预测数量: forecast,
           模型已知小计: forecast,
-          数量调整状态: row.quantityAdjusted ? '基地SKU修正' : '系统拆分或占比调整',
+          数量调整状态: row.quantityAdjusted
+            ? ({
+                'base-sku': '基地SKU修正',
+                'category-total': '大类调整拆分',
+                'group-total': '物料组调整拆分',
+              }[adjustment?.kind] ?? '人工调整')
+            : '系统拆分或占比调整',
           Top1托底: row.fallback ? '是' : '否',
           提报数量口径: row.reportMissingAsZero ? '完整读取后未提报按0' : '源记录数量',
           需求拆分口径:
@@ -1545,6 +1548,7 @@ export function createWorkflow(
       false,
     );
     const localRules = draft.constraints?.rules?.local ?? result.constraints.rules.local ?? [];
+    const exceptionFilters = { base, category, categories: viewCategories, month, search };
     return h(
       'section',
       {
@@ -1564,7 +1568,7 @@ export function createWorkflow(
             h(
               react.Fragment,
               null,
-              h('span', { className: 'dc-card-note' }, '按当前月份、基地、大类和搜索范围下载'),
+              h('span', { className: 'dc-card-note' }, '按当前筛选范围下载'),
               h(
                 'button',
                 { onClick: () => exportRows('需求拆分', processFields, true) },
@@ -1594,19 +1598,19 @@ export function createWorkflow(
         selectedCategories: viewCategories,
         cutoff: shipmentSnapshot?.cutoff,
       }),
-      ['process', 'report'].includes(step) &&
+      step === 'report' &&
         h(PoolExceptionReport, {
           draft,
           result,
-          filters: { base, category, categories: viewCategories, month, search },
+          filters: exceptionFilters,
           table,
           view,
         }),
-      ['process', 'report'].includes(step) &&
+      step === 'report' &&
         h(DelistedReport, {
           draft,
           result,
-          filters: { base, category, categories: viewCategories, month, search },
+          filters: exceptionFilters,
           table,
         }),
       step === 'process'
@@ -2127,6 +2131,20 @@ export function createWorkflow(
             ),
           )
         : null,
+      step === 'process' &&
+        h(
+          'div',
+          { className: 'wf-exception-reports' },
+          h(PoolExceptionReport, {
+            draft,
+            result,
+            filters: exceptionFilters,
+            table,
+            view,
+            collapsible: true,
+          }),
+          h(DelistedReport, { draft, result, filters: exceptionFilters, table, collapsible: true }),
+        ),
       step === 'report' &&
         h('div', { className: 'wf-actions' }, h('button', { disabled: true }, '保存正式报告')),
       formula

@@ -65,11 +65,17 @@ export function sourceTableParameters(kind, month) {
   const months = sourceMonthValues(month);
   if (kind === 'category-history')
     return {
+      months: Array.from({ length: 14 }, (_, index) =>
+        monthOffset(month, index - 10).replace('-', ''),
+      ),
+    };
+  if (kind === 'annual-pool') return {};
+  if (kind === 'festival-history')
+    return {
       months: Array.from({ length: 8 }, (_, index) =>
         monthOffset(month, index - 4).replace('-', ''),
       ),
     };
-  if (kind === 'annual-pool') return {};
   if (kind === 'forecast')
     return {
       months: [
@@ -146,6 +152,7 @@ export const deliveryColumns = {
   month_on_month_act_dl_qty: '环比数量差额',
   month_on_month_rate: '环比增长率',
 };
+
 const deliveryText = new Set([
   'dimension_type',
   'stat_month',
@@ -244,13 +251,18 @@ export async function readSourceTable(kind, month, signal) {
     rows:
       kind === 'forecast'
         ? forecastRows(result.rows, month)
-        : kind === 'annual-pool'
-          ? annualRows(result.rows)
-          : kind === 'category-history'
-            ? result.rows.map((row) => deliveryRows([row], tableMonth(row.stat_month))[0])
-            : kind === 'plan-rate'
-              ? planRateRows(result.rows, month)
-              : deliveryRows(result.rows, month),
+        : kind === 'festival-history'
+          ? result.rows.map((row) => ({
+              ...row,
+              metrics: deliveryRows([{ ...row, source_rows: 1 }], tableMonth(row.stat_month))[0],
+            }))
+          : kind === 'annual-pool'
+            ? annualRows(result.rows)
+            : kind === 'category-history'
+              ? result.rows.map((row) => deliveryRows([row], tableMonth(row.stat_month))[0])
+              : kind === 'plan-rate'
+                ? planRateRows(result.rows, month)
+                : deliveryRows(result.rows, month),
     metadata: {
       period: month,
       source:
@@ -260,7 +272,9 @@ export async function readSourceTable(kind, month, signal) {
             ? 'agents_dim_demand_annual_mi'
             : kind === 'plan-rate'
               ? 'agents_scm_dimension_plan_rate_mi'
-              : 'agents_scm_base_dimension_delivery_mi',
+              : kind === 'festival-history'
+                ? 'agents_scm_base_festival_mi'
+                : 'agents_scm_base_dimension_delivery_mi',
       total: result.rows.length,
       configVersion: result.configVersion,
       units: 'unconfirmed',

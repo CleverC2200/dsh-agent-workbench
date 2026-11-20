@@ -6,7 +6,7 @@ import {
 } from './helpers/mps-shipment-source.mjs';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPage, openMpsCategoryFilter } from './helpers/mps-page.mjs';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { authorPage } from './helpers/author-page.mjs';
@@ -81,16 +81,40 @@ async function open(
   return { page, frame, products };
 }
 
-test('前五步共享两类联选，下载和异常随筛选，后两步与保存保留全量', async (t) => {
+test('前五步均可修改共享大类筛选，下载和异常随筛选，后两步与保存保留全量', async (t) => {
   const { page, frame, products } = await open(t);
-  const filter = frame.getByRole('group', { name: '大类筛选', exact: true });
-  await filter.getByRole('checkbox', { name: '甲类', exact: true }).check();
+  const trigger = frame.locator('summary[aria-label="大类筛选"]');
+  await expect(trigger).toHaveText('大类 · 全部');
+  const board = frame.locator('.ap-board-body');
+  await expect
+    .poll(() =>
+      board.evaluate((element) => {
+        element.scrollTop = 400;
+        return {
+          scrolled: element.scrollTop > 100,
+          headerStuck:
+            element.querySelector('.dc-page-head').getBoundingClientRect().top ===
+            element.getBoundingClientRect().top,
+        };
+      }),
+    )
+    .toEqual({ scrolled: true, headerStuck: true });
+  const filter = await openMpsCategoryFilter(frame);
+  await filter.locator('label').filter({ hasText: '甲类' }).click();
+  await expect(filter.getByRole('checkbox', { name: '甲类', exact: true })).toBeChecked();
+  await frame.locator('.dc-heading').click();
+  await expect(filter).toBeHidden();
+  await openMpsCategoryFilter(frame);
   await filter.getByRole('checkbox', { name: '乙类', exact: true }).check();
+  await filter.getByRole('checkbox', { name: '乙类', exact: true }).press('Escape');
+  await expect(filter).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toHaveText('大类 · 已选 2 项');
   const details = frame.getByRole('region', { name: '产品明细', exact: true });
   await expect(details.locator('tbody tr')).toHaveCount(2);
   await expect(details.locator('tbody tr').first().locator('td').nth(9)).toHaveText('');
   await step(frame, '本月预估发货');
-  await expect(filter.getByRole('checkbox', { name: '乙类', exact: true })).toBeChecked();
+  await expect(trigger).toHaveText('大类 · 已选 2 项');
   await frame.getByLabel('数据截止日', { exact: true }).fill('2026-11-17');
   await upload(
     frame,
@@ -119,7 +143,14 @@ test('前五步共享两类联选，下载和异常随筛选，后两步与保�
   assert.match(issues, /A/);
   assert.match(issues, /B/);
   assert.doesNotMatch(issues, /"C"/);
+  const shipFilter = await openMpsCategoryFilter(frame);
+  await shipFilter.getByRole('checkbox', { name: '甲类', exact: true }).uncheck();
+  await expect(
+    table.getByRole('button', { name: '全国合计 本月已发货 计算过程', exact: true }),
+  ).toHaveText('10');
   await step(frame, '需求确认');
+  await expect(trigger).toHaveText('大类 · 已选 1 项');
+  await expect(details.locator('tbody tr')).toHaveCount(1);
   const shipmentIssues = frame.getByRole('region', { name: '待定单品异常', exact: true });
   const excluded = await download(
     page,
@@ -129,18 +160,37 @@ test('前五步共享两类联选，下载和异常随筛选，后两步与保�
   assert.match(excluded, /2026-11-17/);
   assert.doesNotMatch(excluded, /丙类/);
 
-  for (const name of ['需求加工与收敛', '主数据对应关系', '约束与配置']) {
-    await step(frame, name);
-    await expect(filter.getByRole('checkbox', { name: '甲类', exact: true })).toBeChecked();
-    await expect(filter.getByRole('checkbox', { name: '乙类', exact: true })).toBeChecked();
-    if (name === '约束与配置') {
-      const inventory = frame.getByRole('region', { name: '基地与单品目标库存', exact: true });
-      await expect(inventory).not.toContainText('产品C');
-    }
-  }
+  await step(frame, '需求加工与收敛');
+  const processFilter = await openMpsCategoryFilter(frame);
+  await expect(processFilter.getByRole('checkbox', { name: '乙类', exact: true })).toBeChecked();
+  await processFilter.getByRole('checkbox', { name: '甲类', exact: true }).check();
+  await step(frame, '主数据对应关系');
+  const relationsFilter = await openMpsCategoryFilter(frame);
+  await expect(relationsFilter.getByRole('checkbox', { name: '甲类', exact: true })).toBeChecked();
+  await relationsFilter.getByRole('checkbox', { name: '乙类', exact: true }).uncheck();
+  await step(frame, '约束与配置');
+  const constraintsFilter = await openMpsCategoryFilter(frame);
+  await expect(
+    constraintsFilter.getByRole('checkbox', { name: '乙类', exact: true }),
+  ).not.toBeChecked();
+  await constraintsFilter.getByRole('checkbox', { name: '乙类', exact: true }).check();
+  const inventory = frame.getByRole('region', { name: '基地与单品目标库存', exact: true });
+  await expect(inventory).not.toContainText('产品C');
+  await openMpsCategoryFilter(frame);
+  await expect(constraintsFilter).toBeVisible();
+  await expect(constraintsFilter.locator('label').first()).toHaveCSS('flex-direction', 'row');
+  const labels = await constraintsFilter.locator('label').evaluateAll((elements) =>
+    elements.map((element) => {
+      const { x, y, width } = element.getBoundingClientRect();
+      return { x, y, width };
+    }),
+  );
+  assert(labels[0].width > 0 && labels[1].x > labels[0].x);
+  assert.equal(labels[0].y, labels[1].y);
+  assert(labels[2].y > labels[0].y);
   for (const name of ['产能评估与缺口', '产销存报告']) {
     await step(frame, name);
-    await expect(filter).toHaveCount(0);
+    await expect(trigger).toHaveCount(0);
   }
   const report = await download(
     page,
@@ -148,7 +198,10 @@ test('前五步共享两类联选，下载和异常随筛选，后两步与保�
   );
   assert.match(report, /丙类/);
   await step(frame, '需求确认');
-  await filter.getByRole('button', { name: '清空筛选', exact: true }).click();
+  const returnedFilter = await openMpsCategoryFilter(frame);
+  await expect(returnedFilter.getByRole('checkbox', { name: '甲类', exact: true })).toBeChecked();
+  await expect(returnedFilter.getByRole('checkbox', { name: '乙类', exact: true })).toBeChecked();
+  await returnedFilter.getByRole('button', { name: '清空筛选', exact: true }).click();
   await expect(details.locator('tbody tr')).toHaveCount(3);
   await step(frame, '本月预估发货');
   await expect(
@@ -200,12 +253,20 @@ test('筛选内汇总调整及恢复只修改当前叶子，隐藏大类的调�
   const adjust = async (name, value) => {
     await frame.getByRole('button', { name: '调整', exact: true }).click();
     await frame.getByLabel(name, { exact: true }).fill(value);
-    await expect(
-      frame.getByRole('group', { name: '大类筛选', exact: true }).getByRole('checkbox').first(),
-    ).toBeDisabled();
+    await expect(frame.locator('.ap-page-tab').filter({ hasText: '需求确认' })).toBeDisabled();
     await frame.getByRole('button', { name: '保存调整', exact: true }).click();
   };
-  const filter = frame.getByRole('group', { name: '大类筛选', exact: true });
+  const filterCategories = async (...categories) => {
+    await step(frame, '需求确认');
+    const filter = await openMpsCategoryFilter(frame);
+    if (categories.length) {
+      for (const name of categories)
+        await filter.getByRole('checkbox', { name, exact: true }).check();
+    } else {
+      await filter.getByRole('button', { name: '清空筛选', exact: true }).click();
+    }
+    await step(frame, '本月预估发货');
+  };
   const checkStock = async (code, remaining, end) => {
     await expect(
       frame.getByRole('button', { name: '郑州 本月已发货 计算过程', exact: true }),
@@ -225,20 +286,18 @@ test('筛选内汇总调整及恢复只修改当前叶子，隐藏大类的调�
     assert.equal(Number(row['剩余天数入库']), remaining);
     assert.equal(Number(row['预计月末结存']), end);
   };
-  await filter.getByRole('checkbox', { name: '甲类', exact: true }).check();
-  await filter.getByRole('checkbox', { name: '乙类', exact: true }).check();
+  await filterCategories('甲类', '乙类');
   await adjust('郑州 剩余天数入库', '30');
-  await filter.getByRole('button', { name: '清空筛选', exact: true }).click();
+  await filterCategories();
   await checkStock('C', 10, 104);
   await adjust('郑州 剩余天数入库', '60');
-  await filter.getByRole('checkbox', { name: '甲类', exact: true }).check();
-  await filter.getByRole('checkbox', { name: '乙类', exact: true }).check();
+  await filterCategories('甲类', '乙类');
   await adjust('全国合计 整月预估发货', '120');
   await adjust('郑州 剩余天数入库', '0');
   await checkStock('A', 0, 52);
   await adjust('郑州 剩余天数入库', '');
   await checkStock('A', 10, 62);
-  await filter.getByRole('button', { name: '清空筛选', exact: true }).click();
+  await filterCategories();
   await checkStock('C', 20, 114);
   await checkStock('A', 10, 62);
   await page.evaluate(() => window.openAuthor('mps', 1200, structuredClone(window.readView())));
@@ -294,7 +353,7 @@ test('产品下载遵循大类多选且不受独立文本搜索影响，清空�
   await expect(
     frame.getByRole('region', { name: '产品明细', exact: true }).locator('tbody tr'),
   ).toHaveCount(3);
-  const filter = frame.getByRole('group', { name: '大类筛选', exact: true });
+  const filter = await openMpsCategoryFilter(frame);
   await filter.getByRole('checkbox', { name: '甲类', exact: true }).check();
   await filter.getByRole('checkbox', { name: '乙类', exact: true }).check();
   const details = frame.getByRole('region', { name: '产品明细', exact: true });
@@ -306,7 +365,11 @@ test('产品下载遵循大类多选且不受独立文本搜索影响，清空�
     assert.match(text, /产品B/);
     assert.doesNotMatch(text, /产品C/);
   }
-  await filter.getByRole('button', { name: '清空筛选', exact: true }).click();
+  await (
+    await openMpsCategoryFilter(frame)
+  )
+    .getByRole('button', { name: '清空筛选', exact: true })
+    .click();
   for (const name of ['下载', '下载产品源字段'])
     assert.match(await download(page, details.getByRole('button', { name, exact: true })), /产品C/);
 });

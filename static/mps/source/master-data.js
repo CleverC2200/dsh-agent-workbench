@@ -157,9 +157,10 @@ export async function readProducts(signal) {
 }
 export async function readAnnual(signal) {
   const { config, query } = client();
-  const definition = config.queries['annual.summary'];
+  const id = 'annual-pool.detail';
+  const definition = config.queries[id];
   const result = await query.readAll(
-    'annual.summary',
+    id,
     { page_size: 5000, offset: 0 },
     {
       signal,

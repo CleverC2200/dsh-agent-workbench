@@ -36,7 +36,7 @@ async function upload(frame, rows) {
   });
 }
 
-test('MPS shipment recalculates local warehouse inputs in pieces and explains the aggregated forecast separately from SKU totals', async (t) => {
+test('MPS shipment totals corrected SKU forecasts and explains the SKU calculation separately', async (t) => {
   const { frame, table } = await shipment(t);
   await upload(frame, [
     '2026-09,郑州,A,产品A,汤圆,系列,组,220,10,10,10,100,200,80',
@@ -46,6 +46,8 @@ test('MPS shipment recalculates local warehouse inputs in pieces and explains th
   await expect(
     table.getByRole('button', { name: '全国合计 整月预估发货 计算过程', exact: true }),
   ).toHaveText('450');
+  await expectShipment(table, '全国合计 本月预测量', '450');
+  await expectShipment(table, '郑州 本月预测量', '450');
   await expandShipmentBase(frame, '郑州');
   await expectShipment(table, '郑州 A 整月预估发货', '300');
   await expectShipment(table, '郑州 B 整月预估发货', '150');
@@ -55,7 +57,7 @@ test('MPS shipment recalculates local warehouse inputs in pieces and explains th
   await expect(formula).toContainText('300');
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await table.getByRole('button', { name: '全国合计 本月预测量 计算过程', exact: true }).click();
-  await expect(formula).toContainText('438');
+  await expect(formula).toContainText('逐基地、逐SKU修正后预测量求和 = 450 件');
 });
 
 async function edit(table, label, value) {
@@ -98,7 +100,7 @@ test('MPS shipment summarizes available values and marks missing SKUs without fi
   await expectShipment(table, '西南 整月预估发货', '0');
   await expect(table.getByRole('row').filter({ hasText: '郑州' })).toContainText('部分汇总');
   await table.getByRole('button', { name: '郑州 本月预测量 计算过程', exact: true }).click();
-  await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText('1/2个单品重算');
+  await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText('已汇总1/2个单品');
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText(
@@ -349,6 +351,136 @@ async function businessShipment(t, execute = shipmentFacts) {
   await expect(frame.getByLabel('数据截止日')).toHaveValue('2026-09-22');
   return { ...result, table: frame.getByRole('table', { name: '本月预估发货明细' }) };
 }
+
+test('第二步按上月BI日期分段应用大类系数，保留数量保底与人工覆盖', async (t) => {
+  const history = 'facts.shipment-history';
+  const prefix = 'agents_scm_cust_deliv_daily_di.';
+  let rejectHistory = false;
+  const { page, frame, table, calls } = await businessShipment(t, (query) => {
+    const result = shipmentFacts(query);
+    if (query.queryId === history && query.parameters.start.startsWith('2026-08')) {
+      if (rejectHistory) throw Error('BI unavailable');
+      const isElapsed = query.parameters.start === '2026-08-01';
+      const rows = [
+        {
+          belong_base: '郑州',
+          material_code: 'OLD_A',
+          act_dl_qty_total: isElapsed ? 210 : 200,
+        },
+        {
+          belong_base: '郑州',
+          material_code: 'C',
+          act_dl_qty_total: isElapsed ? 0 : 500,
+        },
+      ];
+      result.rows = rows.map((row) =>
+        Object.fromEntries(Object.entries(row).map(([key, value]) => [prefix + key, value])),
+      );
+      result.totalRowCount = rows.length;
+    }
+    if (query.queryId === 'facts.shipment.count') result.rows[0].total = 3;
+    if (query.queryId === 'facts.shipment') {
+      result.rows.push(
+        {
+          ...result.rows[0],
+          material_code: 'B',
+          material_name: '产品B',
+          shipped: 1,
+          prepped: 10,
+          unprepped: 0,
+          daily3: 0,
+          average: 0,
+        },
+        { ...result.rows[0], material_code: 'C', material_name: '产品C' },
+      );
+      result.totalRowCount = 3;
+    }
+    return result;
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '产品关系.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n' +
+        '郑州,A,产品A,汤圆,系列,汤圆组,OLD_A,老品\n郑州,B,产品B,汤圆,系列,汤圆组,,\n郑州,C,产品C,水饺,系列,水饺组,,',
+    ),
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await expectShipment(table, '郑州 整月预估发货', '911');
+  const periods = calls
+    .filter((query) => query.queryId === history && query.parameters.start.startsWith('2026-08'))
+    .map(({ parameters: { start, end } }) => [start, end])
+    .sort();
+  assert.deepEqual(periods, [
+    ['2026-08-01', '2026-08-21'],
+    ['2026-08-22', '2026-08-31'],
+  ]);
+  await frame.getByText('大类发运系数', { exact: true }).click();
+  await expect(frame.getByText(/未过区间 2026-08-22 至 2026-08-31（10 天）/)).toBeVisible();
+  const factors = frame.getByRole('table', { name: '大类发运系数' });
+  await expect(factors.getByRole('row').filter({ hasText: '汤圆' }).getByRole('cell')).toHaveText([
+    '210',
+    '200',
+    '2',
+    '未过区间日均 ÷ 已过区间日均',
+  ]);
+  await expect(factors.getByRole('row').filter({ hasText: '水饺' }).getByRole('cell')).toHaveText([
+    '0',
+    '500',
+    '1',
+    '上月已过区间日均不大于 0',
+  ]);
+  await expandShipmentBase(frame, '郑州');
+  await expectShipment(table, '郑州 A 整月预估发货', '600');
+  await expectShipment(table, '郑州 B 已备未备预估发运天数', '0');
+  await expectShipment(table, '郑州 B 整月预估发货', '11');
+  await expectShipment(table, '郑州 C 整月预估发货', '300');
+  await table.getByRole('button', { name: '郑州 A 本月预测量 计算过程', exact: true }).click();
+  await expect(frame.getByRole('dialog')).toContainText(
+    '原预测 300 件 × 发运系数 2，四舍五入为 600 件',
+  );
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await edit(table, '郑州 A 整月预估发货', 650);
+  await expectShipment(table, '全国合计 本月预测量', '911');
+  await expectShipment(table, '全国合计 整月预估发货', '961');
+  await expectShipment(table, '郑州 整月预估发货', '961');
+  const csv = await exported(page, frame);
+  assert.match(csv, /应用系数前预测量,实际应用发运系数,发运系数说明,本月预测量,整月预估发货/);
+  assert.match(csv, /,300,2,,600,650,/);
+  assert.match(csv, /,11,1,已发已备未备合计,11,11,/);
+  rejectHistory = true;
+  await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
+  await frame.getByText('大类发运系数', { exact: true }).click();
+  await expect(factors.getByRole('row').filter({ hasText: '汤圆' })).toContainText(
+    '上月 BI 发运量读取失败',
+  );
+  await expectShipment(table, '郑州 整月预估发货', '961');
+  await expandShipmentBase(frame, '郑州');
+  await table.getByRole('button', { name: '郑州 A 本月预测量 计算过程', exact: true }).click();
+  await expect(frame.getByRole('dialog')).toContainText(
+    '原预测 300 件 × 发运系数 1，四舍五入为 300 件',
+  );
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  const priorReads = calls.filter(
+    (query) => query.queryId === history && query.parameters.start.startsWith('2026-08'),
+  ).length;
+  await frame.getByLabel('数据截止日').fill('2026-09-30');
+  await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  await expectShipment(table, '郑州 整月预估发货', '491');
+  await frame.getByText('大类发运系数', { exact: true }).click();
+  await expect(factors.getByRole('row').filter({ hasText: '汤圆' })).toContainText(
+    '统计月已到月底',
+  );
+  assert.equal(
+    calls.filter(
+      (query) => query.queryId === history && query.parameters.start.startsWith('2026-08'),
+    ).length,
+    priorReads,
+  );
+});
+
 test('MPS shipment finishes the current sync after moving to processing', async (t) => {
   let release;
   const pending = new Promise((resolve) => {
@@ -439,6 +571,7 @@ test('零三天及本月发货时用近30天日均估算，零日均取订单合
     await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
     await expandShipmentBase(frame, '郑州');
     await expectShipment(table, '郑州 A 整月预估发货', average === 0 ? '20' : '');
+    await expectShipment(table, '郑州 A 已备未备预估发运天数', average === 0 ? '0' : '');
   }
 });
 test('V2发货回退、真实零及日期待核在页面和下载保持一致', async (t) => {
@@ -842,7 +975,7 @@ async function expectShipment(table, label, value) {
 }
 
 test('shipment exposes national and base category, material group and SKU levels before the bases', async (t) => {
-  const { frame, table } = await shipment(t);
+  const { page, frame, table } = await shipment(t);
   await upload(frame, [
     '2026-09,郑州,A,产品A,汤圆,系列,黑芝麻,220,10,10,10,100,200,80',
     '2026-09,华东,A,产品A,汤圆,系列,黑芝麻,110,0,0,0,10,20,8',
@@ -850,8 +983,10 @@ test('shipment exposes national and base category, material group and SKU levels
   ]);
   await expect(table.locator('tbody > tr').first()).toContainText('全国合计');
   await table.getByRole('button', { name: '展开 全国合计', exact: true }).click();
+  await expectShipment(table, '全国合计 汤圆 本月预测量', '450');
   await expectShipment(table, '全国合计 汤圆 整月预估发货', '450');
   await table.getByRole('button', { name: '展开 全国合计 汤圆', exact: true }).click();
+  await expectShipment(table, '全国合计 汤圆 黑芝麻 本月预测量', '450');
   await expectShipment(table, '全国合计 汤圆 黑芝麻 整月预估发货', '450');
   await table.getByRole('button', { name: '展开 全国合计 汤圆 黑芝麻', exact: true }).click();
   await expectShipment(table, '全国合计 A 整月预估发货', '450');
@@ -863,6 +998,25 @@ test('shipment exposes national and base category, material group and SKU levels
   await table.getByRole('button', { name: '展开 郑州 汤圆', exact: true }).click();
   await table.getByRole('button', { name: '展开 郑州 汤圆 黑芝麻', exact: true }).click();
   await expectShipment(table, '郑州 A 整月预估发货', '300');
+  const levels = await table
+    .locator('tbody > tr')
+    .evaluateAll((rows) => rows.slice(0, 5).map((row) => row.className));
+  assert.deepEqual(levels, ['sp-total', 'sp-level-1', 'sp-level-1', 'sp-level-2', 'sp-sku']);
+  const hierarchy = await exported(page, frame, '下载汇总及明细');
+  assert.match(
+    hierarchy,
+    /全国合计,合计[\s\S]*全国合计,大类,汤圆[\s\S]*全国合计,大类,水饺[\s\S]*全国合计,物料组,汤圆[\s\S]*全国合计,SKU,汤圆/,
+  );
+  const search = frame.getByLabel('搜索发货单品', { exact: true });
+  await table.getByRole('button', { name: '收起 郑州', exact: true }).click();
+  await search.fill('A');
+  await search.press('Enter');
+  await expectShipment(table, '郑州 A 整月预估发货', '300');
+  await expect(
+    table.getByRole('button', { name: '郑州 B 整月预估发货 计算过程', exact: true }),
+  ).toHaveCount(0);
+  await search.fill('不存在');
+  await expect(frame.getByText('主表中没有匹配的单品', { exact: true })).toBeVisible();
 });
 
 test('shipment hierarchy uses current unique product categories and material codes with names while retaining unmatched and conflicting quantities', async (t) => {

@@ -259,11 +259,14 @@ test('下市品上传正需求保持有效，其他基地及兄弟SKU不重摊�
   await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
   await expect(report).toContainText('下市品人工正需求');
   await expect(report).toContainText('保留人工原值');
+  await expect
+    .poll(async () => {
+      const saved = await draft(page);
+      return saved.adjustments.quantities.find((row) => row.base === '郑州' && row.code === 'A')
+        ?.quantity;
+    })
+    .toBe(88);
   const saved = await draft(page);
-  assert.equal(
-    saved.adjustments.quantities.find((row) => row.base === '郑州' && row.code === 'A').quantity,
-    88,
-  );
   assert.equal(saved.adjustments.history.length, 3);
   const after = await workflowExportRows(frame);
   const leaf = after.find(

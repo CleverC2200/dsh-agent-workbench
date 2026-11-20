@@ -3,9 +3,14 @@ import { createDemandAdjustmentUpload } from './demand-adjustment-upload.js';
 import { createHistoryReport, historyColumns, historyExportRows } from './history-report-view.js';
 import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
 import { useStepViewField } from './step-view-state.js';
+import { demandBasisLabel } from './festival-demand.js';
 import { createProcessedDemandEvidence } from './processed-demand-evidence-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
-import { changeAdjustment, quantityAdjustmentKey } from './local-draft.js';
+import {
+  changeAdjustment,
+  matchesQuantityAdjustment,
+  quantityAdjustmentKey,
+} from './local-draft.js';
 import { createBatchEdit } from './batch-edit.js';
 import { createAmountReconciliation } from './amount-reconciliation-view.js';
 import { createReportPage } from './report-page.js';
@@ -22,12 +27,7 @@ const comparison = (value) =>
     : value?.knownQuantity != null
       ? `${number(value.knownQuantity)}（已知小计）`
       : '—';
-const matches = (row, entry) =>
-  row.month === entry.month &&
-  row.category === entry.category &&
-  row.group === entry.group &&
-  row.code === entry.code &&
-  row.base === entry.base;
+const adjustmentDepth = { 'category-total': 0, 'group-total': 2, 'base-sku': 4 };
 const label = (entry) =>
   [entry.category, entry.group, entry.code, entry.base, entry.month].filter(Boolean).join(' ');
 
@@ -72,7 +72,7 @@ export function createProcessedDemand(
       react,
       view,
       'ProcessedDemand.hierarchy',
-      'base',
+      'all',
     );
     const hierarchyId = react.useId();
     const [historyOpen, setHistoryOpen] = useStepViewField(
@@ -113,8 +113,12 @@ export function createProcessedDemand(
     const saved = (entry) =>
       quantities.find((item) => quantityAdjustmentKey(item) === quantityAdjustmentKey(entry));
     const effective = (computed, entry) =>
-      [...computed.rows, ...(computed.referenceRows ?? [])].find((row) => matches(row, entry))
-        ?.demand ?? null;
+      sum(
+        [...computed.rows, ...(computed.referenceRows ?? [])].filter((row) =>
+          matchesQuantityAdjustment(row, entry),
+        ),
+        'demand',
+      );
     const fieldKey = quantityAdjustmentKey;
     const applyBatch = (entries, reason) => {
       if (!entries.length) return;
@@ -135,7 +139,14 @@ export function createProcessedDemand(
       const snapshot = shipping ? { ...shipmentSnapshot, rows: shipping.rows } : shipmentSnapshot;
       let adjustments = draft.adjustments;
       const undos = new Map();
-      const quantities = entries.filter((entry) => entry.meta.kind !== 'shipment');
+      const quantities = entries
+        .filter((entry) => entry.meta.kind !== 'shipment')
+        .sort(
+          (a, b) =>
+            adjustmentDepth[a.meta.kind] +
+            Number(Boolean(a.meta.base)) -
+            (adjustmentDepth[b.meta.kind] + Number(Boolean(b.meta.base))),
+        );
       for (const entry of quantities) {
         const { editorRow: _editorRow, ...fields } = entry.meta;
         const input = { ...fields, quantity: entry.value, reason: entry.reason ?? reason };
@@ -153,10 +164,10 @@ export function createProcessedDemand(
         if (
           entry.value !== null &&
           ![...candidate.rows, ...(candidate.referenceRows ?? [])].some(
-            (row) => matches(row, entry.meta) && row.quantityAdjusted,
+            (row) => matchesQuantityAdjustment(row, entry.meta) && row.quantityAdjusted,
           )
         )
-          throw Error('当前基地SKU数量未生效，请核对月份和产品范围。');
+          throw Error('当前需求调整未生效，请核对月份、产品范围和拆分依据。');
       }
       if (undos.size)
         adjustments = {
@@ -177,7 +188,10 @@ export function createProcessedDemand(
     }, [batch.commit, applyBatch]);
     const controls = (entry, systemValue, value) => {
       const fixed = saved(entry);
-      const disabled = entry.kind !== 'base-sku' || !months.includes(entry.month);
+      const disabled =
+        !months.includes(entry.month) ||
+        (entry.kind !== 'base-sku' &&
+          (Boolean(filters.search) || Boolean(filters.base && !entry.base)));
       return h(
         'div',
         { className: 'wf-quantity-cell' },
@@ -186,7 +200,7 @@ export function createProcessedDemand(
           id: fieldKey(entry),
           label: `${label(entry)} 需求数量`,
           value,
-          meta: { ...entry, systemValue },
+          meta: { ...entry, systemValue: systemValue ?? null },
           disabled,
           format: number,
           editFormat: (value) => String(Math.round(value)),
@@ -212,7 +226,7 @@ export function createProcessedDemand(
       const demand = (month) => {
         const row = categoryValue(category, month);
         return controls(
-          { kind: 'categoryDemand', category, month, editorRow: `summary:${category}` },
+          { kind: 'category-total', category, month, editorRow: `summary:${category}` },
           row?.systemQuantity,
           row?.quantity,
         );
@@ -240,13 +254,8 @@ export function createProcessedDemand(
         if (!groupNames.has(key)) groupNames.set(key, new Set());
         if (product['物料组名称']) groupNames.get(key).add(product['物料组名称']);
       }
-      const add = (map, entry, row) => {
-        const key = nodeKey(entry);
-        if (!map.has(key)) map.set(key, []);
-        map.get(key).push(row);
-      };
-      const path = (row) =>
-        hierarchy === 'national'
+      const path = (row, scope) =>
+        scope === 'national'
           ? [
               { kind: 'national-category', category: row.category },
               { kind: 'national-group', category: row.category, group: row.group },
@@ -264,14 +273,27 @@ export function createProcessedDemand(
                 base: row.base,
               },
             ];
-      for (const row of rows) for (const entry of path(row)) add(all, entry, row);
-      for (const row of rows) {
-        const entries = path(row);
-        roots.set(nodeKey(entries[0]), entries[0]);
-        for (let index = 0; index < entries.length - 1; index++) {
-          const parent = nodeKey(entries[index]);
-          if (!children.has(parent)) children.set(parent, new Map());
-          children.get(parent).set(nodeKey(entries[index + 1]), entries[index + 1]);
+      const scopes = hierarchy === 'all' ? ['national', 'base'] : [hierarchy];
+      for (const scope of scopes) {
+        const branches = new Map();
+        for (const row of rows) {
+          const identity = JSON.stringify([row.category, row.group, row.code, row.base]);
+          let buckets = branches.get(identity);
+          if (!buckets) {
+            const entries = path(row, scope);
+            const keys = entries.map(nodeKey);
+            roots.set(keys[0], entries[0]);
+            buckets = keys.map((key, index) => {
+              if (!all.has(key)) all.set(key, []);
+              if (index < keys.length - 1) {
+                if (!children.has(key)) children.set(key, new Map());
+                children.get(key).set(keys[index + 1], entries[index + 1]);
+              }
+              return all.get(key);
+            });
+            branches.set(identity, buckets);
+          }
+          for (const bucket of buckets) bucket.push(row);
         }
       }
       const shipment = new Map(
@@ -367,7 +389,11 @@ export function createProcessedDemand(
       return `SKU · ${entry.code} ${data.full[0]?.name ?? ''}`;
     };
     const detailColumns = [
-      hierarchy === 'national' ? '全国 / 大类 / 物料组 / SKU' : '基地 / 大类 / 物料组 / SKU',
+      hierarchy === 'national'
+        ? '全国 / 大类 / 物料组 / SKU'
+        : hierarchy === 'base'
+          ? '基地 / 大类 / 物料组 / SKU'
+          : '全国 / 基地 / 大类 / 物料组 / SKU',
       `M+1 ${months[0]} 计划提报`,
       `上一财年发货 ${result.comparisonSources.historyPeriod.start.slice(0, 7)}至${result.comparisonSources.historyPeriod.end.slice(0, 7)}`,
       `${result.shipmentMonth} 本月预估发货（可调整）`,
@@ -377,15 +403,28 @@ export function createProcessedDemand(
       `M+4 ${months[3]} 库存参考（可调整）`,
     ];
     const isExpanded = (key) => Boolean(filters.search) || expanded.has(key);
-    const visible = [];
-    const append = (entry, depth) => {
-      const key = nodeKey(entry);
-      visible.push({ entry, depth });
-      if (isExpanded(key))
-        for (const child of indexed.children.get(key)?.values() ?? []) append(child, depth + 1);
+    const orderedEntries = (showAll) => {
+      const roots = [...indexed.roots.values()];
+      const collect = (entries) => {
+        const ordered = [];
+        let level = entries;
+        for (let depth = 0; level.length; depth++) {
+          ordered.push(...level.map((entry) => ({ entry, depth })));
+          level = level.flatMap((entry) => {
+            const key = nodeKey(entry);
+            return showAll || isExpanded(key)
+              ? [...(indexed.children.get(key)?.values() ?? [])]
+              : [];
+          });
+        }
+        return ordered;
+      };
+      return [
+        ...collect(roots.filter((entry) => !entry.base)),
+        ...roots.filter((entry) => entry.base).flatMap((entry) => collect([entry])),
+      ];
     };
-    for (const entry of indexed.roots.values()) append(entry, 0);
-    const detailRows = visible.map(({ entry, depth }) => {
+    const detailRows = orderedEntries(false).map(({ entry, depth }) => {
       const key = nodeKey(entry);
       const data = nodeData(entry);
       const children = indexed.children.get(key)?.size;
@@ -458,10 +497,7 @@ export function createProcessedDemand(
               kind: 'shipment',
               keys: data.identities.map((row) => productKey(row.base, row.code)),
             },
-            disabled:
-              hierarchy === 'national' ||
-              currentShipment == null ||
-              !shipmentSnapshot?.prepareForecast,
+            disabled: !entry.base || currentShipment == null || !shipmentSnapshot?.prepareForecast,
             integer: true,
             min: null,
             format: number,
@@ -483,11 +519,19 @@ export function createProcessedDemand(
           const selected = data.full.filter((row) => row.month === month);
           const value = sum(selected, 'demand');
           const system = sum(selected, 'systemDemand');
+          const editingKind =
+            entry.kind === 'base-category'
+              ? 'category-total'
+              : ['base-group', 'national-group'].includes(entry.kind)
+                ? 'group-total'
+                : entry.kind === 'base-sku'
+                  ? 'base-sku'
+                  : null;
           return h(
             'td',
             { key: month },
-            entry.kind === 'base-sku'
-              ? controls({ ...entry, month, editorRow: key }, system, value, '', true)
+            editingKind
+              ? controls({ ...entry, kind: editingKind, month, editorRow: key }, system, value)
               : sourceCell(sourceSummary(selected.map((row) => row.demand))),
             index < 2 &&
               h(
@@ -588,15 +632,18 @@ export function createProcessedDemand(
         }));
     });
     const exportScope = () => {
+      const festival = result.categoryComputation?.festival;
       const columns = [
         '评估版本',
         '评估月份',
         '粒度',
         '月份',
+        ...(festival ? ['推算口径'] : []),
         '基地',
         '产品编码',
         '产品名称',
         '大类',
+        '物料组',
         '计划提报已知小计',
         '计划提报待补数',
         '模型预测已知小计',
@@ -612,6 +659,24 @@ export function createProcessedDemand(
         '调整原因',
       ];
       const context = { 评估版本: draft.name, 评估月份: draft.month };
+      const leaf = (row) => ({
+        ...context,
+        月份: row.month,
+        推算口径: demandBasisLabel(festival, row.month),
+        基地: row.base,
+        产品编码: row.code,
+        产品名称: row.name,
+        大类: row.category,
+        物料组: row.group,
+        有效需求数量: row.demand,
+        ...historyExportRows([row], {}, result.comparisonSources.historyPeriod, false)[0],
+        粒度: '基地SKU',
+        系统需求数量: row.systemDemand,
+        人工修正状态: row.quantityAdjusted ? '有效人工修正' : '系统值',
+        调整原因: row.quantityAdjusted
+          ? quantities.findLast((item) => matchesQuantityAdjustment(row, item))?.reason
+          : undefined,
+      });
       downloadCsv(`${draft.month}-当前范围需求.csv`, columns, [
         ...months
           .filter((month) => !filters.month || filters.month === month)
@@ -624,6 +689,7 @@ export function createProcessedDemand(
               ...context,
               粒度: scopeLabel,
               月份: month,
+              推算口径: demandBasisLabel(festival, month),
               计算用历史数量: total.history.quantity,
               历史期间: `${result.comparisonSources.historyPeriod.start}至${result.comparisonSources.historyPeriod.end}`,
               ...(index === 0
@@ -639,58 +705,40 @@ export function createProcessedDemand(
               有效需求待补数: demand.missing,
             };
           }),
-        ...[
-          ...indexed.roots.values(),
-          ...[...indexed.children.values()].flatMap((children) => [...children.values()]),
-        ]
-          .filter((entry) => entry.kind !== 'base-sku')
-          .flatMap((entry) => {
-            const data = nodeData(entry);
-            const level =
-              entry.kind === 'base'
-                ? '基地汇总'
-                : entry.kind.endsWith('category')
-                  ? '大类汇总'
-                  : entry.kind.endsWith('group')
-                    ? '物料组汇总'
-                    : '全国SKU汇总';
-            return months
-              .filter((month) => !filters.month || filters.month === month)
-              .map((month) => {
-                const demand = sourceSummary(
-                  data.full.filter((row) => row.month === month).map((row) => row.demand),
-                );
-                return {
-                  ...context,
-                  粒度: level,
-                  月份: month,
-                  基地: entry.base || '全国',
-                  大类: entry.category,
-                  物料组: entry.group,
-                  产品编码: entry.code,
-                  计算用历史数量: data.history.quantity,
-                  历史期间: `${result.comparisonSources.historyPeriod.start}至${result.comparisonSources.historyPeriod.end}`,
-                  有效需求数量: demand.quantity,
-                  有效需求已知小计: demand.knownQuantity,
-                  有效需求待补数: demand.missing,
-                };
-              });
-          }),
-        ...rows.map((row) => ({
-          ...context,
-          月份: row.month,
-          基地: row.base,
-          产品编码: row.code,
-          产品名称: row.name,
-          大类: row.category,
-          有效需求数量: row.demand,
-          ...historyExportRows([row], {}, result.comparisonSources.historyPeriod, false)[0],
-          粒度: '基地SKU',
-          系统需求数量: row.systemDemand,
-          人工修正状态: row.quantityAdjusted ? '有效人工修正' : '系统值',
-          调整原因: quantities.find((item) => item.kind === 'base-sku' && matches(row, item))
-            ?.reason,
-        })),
+        ...orderedEntries(true).flatMap(({ entry }) => {
+          const data = nodeData(entry);
+          if (entry.kind === 'base-sku') return data.full.map(leaf);
+          const level =
+            entry.kind === 'base'
+              ? '基地汇总'
+              : entry.kind.endsWith('category')
+                ? '大类汇总'
+                : entry.kind.endsWith('group')
+                  ? '物料组汇总'
+                  : '全国SKU汇总';
+          return months
+            .filter((month) => !filters.month || filters.month === month)
+            .map((month) => {
+              const demand = sourceSummary(
+                data.full.filter((row) => row.month === month).map((row) => row.demand),
+              );
+              return {
+                ...context,
+                粒度: level,
+                月份: month,
+                推算口径: demandBasisLabel(festival, month),
+                基地: entry.base || '全国',
+                大类: entry.category,
+                物料组: entry.group,
+                产品编码: entry.code,
+                计算用历史数量: data.history.quantity,
+                历史期间: `${result.comparisonSources.historyPeriod.start}至${result.comparisonSources.historyPeriod.end}`,
+                有效需求数量: demand.quantity,
+                有效需求已知小计: demand.knownQuantity,
+                有效需求待补数: demand.missing,
+              };
+            });
+        }),
         ...historyExportRows(rows, context, result.comparisonSources.historyPeriod),
         ...missingRows.map((row) => ({ ...context, 粒度: '缺项报告', ...row })),
       ]);
@@ -804,6 +852,7 @@ export function createProcessedDemand(
               disabled: batch.active,
               onChange: (event) => setHierarchy(event.target.value),
             },
+            h('option', { value: 'all' }, '全国和基地'),
             h('option', { value: 'base' }, '按基地查看'),
             h('option', { value: 'national' }, '全国汇总查看'),
           ),
