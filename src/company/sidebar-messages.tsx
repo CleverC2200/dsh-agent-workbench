@@ -13,8 +13,9 @@ type ReminderHistory = { since: number; hidden: string[] };
 const announcementKey = (item: Announcement) => JSON.stringify([item.id, item.publishTime]);
 
 function readHistory(key: string): ReminderHistory | undefined {
+  if (typeof window === 'undefined') return;
   try {
-    const value = JSON.parse(localStorage.getItem(key) ?? 'null');
+    const value = JSON.parse(window.localStorage.getItem(key) ?? 'null');
     if (
       value &&
       Number.isFinite(value.since) &&
@@ -23,7 +24,7 @@ function readHistory(key: string): ReminderHistory | undefined {
     )
       return value;
   } catch (error) {
-    if (!(error instanceof SyntaxError || error instanceof DOMException)) throw error;
+    if (!(error instanceof SyntaxError || error instanceof window.DOMException)) throw error;
   }
 }
 
@@ -77,9 +78,9 @@ export function AnnouncementReminders({
   useEffect(() => {
     if (!history) return;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(history));
+      window.localStorage.setItem(storageKey, JSON.stringify(history));
     } catch (error) {
-      if (!(error instanceof DOMException)) throw error;
+      if (!(error instanceof window.DOMException)) throw error;
     }
   }, [history, storageKey]);
   if (!history) return null;
@@ -162,8 +163,9 @@ export function SidebarMessages({
   };
   useEffect(() => {
     const rail = track.current;
-    if (!rail) return;
-    const observer = new MutationObserver(sync);
+    const Observer = rail?.ownerDocument.defaultView?.MutationObserver;
+    if (!rail || !Observer) return;
+    const observer = new Observer(sync);
     observer.observe(rail, { childList: true, subtree: true });
     sync();
     return () => observer.disconnect();

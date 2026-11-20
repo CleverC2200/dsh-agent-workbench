@@ -591,6 +591,7 @@ export function mountCompanyUI(
     PropsRenderSlots<
       | 'sidebar.brand.mark'
       | 'sidebar.brand.name'
+      | 'sidebar.toggle.badge'
       | 'sidebar.panellist'
       | 'sidebar.workspaces'
       | 'sidebar.settings'
@@ -616,6 +617,7 @@ export function mountCompanyUI(
         onClick={() => ctx.layout.toggleSidebar()}
       >
         <IconPanelLeftOutlineRegular size={16} />
+        {collapsed && renderSlot('sidebar.toggle.badge', {})}
       </button>
     );
     const documentState = useSyncExternalStore(
@@ -1202,6 +1204,7 @@ export function mountCompanyUI(
         children: {
           'sidebar.brand.mark': { kind: 'single', scope: 'root' },
           'sidebar.brand.name': { kind: 'single', scope: 'root' },
+          'sidebar.toggle.badge': { kind: 'single', scope: 'root' },
           'sidebar.panellist': { kind: 'list', scope: 'root' },
           'sidebar.workspaces': { kind: 'single', scope: 'root' },
           'sidebar.settings': { kind: 'single', scope: 'root' },

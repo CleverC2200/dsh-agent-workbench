@@ -725,6 +725,12 @@ test('formal account menu preserves keyboard focus and dismissal while ignoring 
       new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
     ),
   );
+  assert.equal(document.activeElement.textContent, '消息中心');
+  await act(async () =>
+    document.activeElement.dispatchEvent(
+      new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+    ),
+  );
   assert.equal(document.activeElement.textContent, '退出登录');
   await act(async () => document.activeElement.click());
   await act(async () =>
@@ -1373,6 +1379,7 @@ test('public official and third-party panel rows keep order, icons, activation, 
       ),
     );
   await render(false);
+  assert.equal(document.querySelector('.gea-owned-sidebar-toggle [data-actual-badge]'), null);
   assert.deepEqual(
     [...document.querySelectorAll('.gea-plugin-entry')].map((button) =>
       button.getAttribute('aria-label'),
