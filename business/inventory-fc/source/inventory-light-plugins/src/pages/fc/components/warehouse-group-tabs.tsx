@@ -32,7 +32,7 @@ export function WarehouseGroupTabs({
           {...(value === group ? { focusgroupstart: '' } : {})}
           onClick={() => onChange(group)}
         >
-          {group === 'branch' ? '分仓' : '基地仓'}
+          {group === 'branch' ? '分仓属性' : '基地仓属性'}
         </button>
       ))}
     </div>

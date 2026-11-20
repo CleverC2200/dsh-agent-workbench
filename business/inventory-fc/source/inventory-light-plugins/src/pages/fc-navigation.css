@@ -46,20 +46,24 @@
   background: var(--ui-soft, #eef0f3);
 }
 .agent-root.fc-redesign .fc-management-switch button {
+  position: relative;
   height: 34px;
   min-height: 34px;
   padding: 0 20px;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--ui-secondary, #596273);
   cursor: pointer;
 }
-.agent-root.fc-redesign .fc-management-switch button.active {
-  background: var(--ui-surface, #fff);
-  border-block-end-color: var(--ui-accent, #df1732);
-  color: var(--ui-accent, #e61435);
-  box-shadow: 0 1px 4px #17243a16;
+.agent-root.fc-redesign .fc-management-switch button[aria-current='page'] {
+  color: var(--ui-accent, #df1732);
+}
+.agent-root.fc-redesign .fc-management-switch button[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  inset: auto 20px 3px;
+  border-block-end: 2px solid var(--ui-secondary, #596273);
 }
 .agent-root.fc-redesign .fc-warehouse-row {
   display: flex;
@@ -160,7 +164,8 @@
 }
 
 @media (forced-colors: active) {
-  .agent-root.fc-redesign .fc-navigation-stack button[aria-current='page'] {
+  .agent-root.fc-redesign .fc-warehouse-chips button[aria-current='page'],
+  .agent-root.fc-redesign .fc-management-switch button[aria-current='page']::after {
     border-color: Highlight;
   }
   .agent-root.fc-redesign .fc-navigation-stack button:focus-visible {
