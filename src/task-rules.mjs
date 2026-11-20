@@ -11,16 +11,33 @@ export function permitsNullHealthy(description = '') {
         !/(?:不|不能|不得|不要|不可).{0,4}(?:算|视为|按|判为|作为)/.test(clause),
     );
 }
-export function validateTaskRule(row, task) {
+export function validateTaskRule(row, task, nullPolicyText) {
   const r = row.rule;
   if (r?.sourceType !== 'task') return false;
-  const wholeTask = `指标：${task.metric}；检测范围：${task.scope}；任务说明：${task.description}`;
-  if (r.taskQuote === wholeTask && task.description) {
-    r.originalTaskQuote = r.taskQuote;
-    r.taskQuote = task.description;
+  const description = String(task.description || '');
+  const original = typeof r.taskQuote === 'string' ? r.taskQuote : '';
+  const wrapper = `指标：${task.metric}；检测范围：${task.scope}；任务说明：`;
+  let quote = original;
+  if (quote === wrapper + description) quote = description;
+  const suffix = '空值处理补充：' + nullPolicyText;
+  if (nullPolicyText && !description.includes(quote) && quote.endsWith(suffix)) {
+    quote = quote
+      .slice(0, -suffix.length)
+      .trimEnd()
+      .replace(/[。；;]$/, '')
+      .trimEnd();
+    for (const prefix of [wrapper, '任务说明：']) {
+      if (quote.startsWith(prefix)) {
+        quote = quote.slice(prefix.length).trim();
+        break;
+      }
+    }
   }
-  if (!r.taskQuote || !String(task.description || '').includes(r.taskQuote))
-    throw Error('任务规则缺少原文依据');
+  if (!quote || !description.includes(quote)) throw Error('任务规则缺少原文依据');
+  if (quote !== original) {
+    r.originalTaskQuote = original;
+    r.taskQuote = quote;
+  }
   r.source = '任务自定义：' + r.taskQuote;
   r.id = 'task:' + task.id;
   r.version = '任务执行快照';

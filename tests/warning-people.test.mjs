@@ -85,6 +85,7 @@ async function picker(t, response, pageId = 'inventory-apsplan') {
     }
   });
   return {
+    call: (input) => channel.call('detection', input),
     search: () =>
       channel.call('detection', {
         op: 'people',
@@ -95,6 +96,20 @@ async function picker(t, response, pageId = 'inventory-apsplan') {
     calls,
   };
 }
+
+test('saving a warning forwards the configuration to the owner-scoped endpoint directly', async (t) => {
+  const { call, calls } = await picker(t, () => Response.json({ id: 'scheduled' }));
+  const input = {
+    op: 'save',
+    task: { id: 'scheduled', schedule: { frequency: 'daily', time: '10:00' } },
+  };
+  assert.deepEqual(await call(input), { id: 'scheduled' });
+  assert.deepEqual(
+    calls.map((call) => call.path),
+    ['/api/agent-workbench/detection'],
+  );
+  assert.deepEqual(JSON.parse(calls[0].init.body), input);
+});
 
 test('warning picker receives people rather than the GEA response envelope', async (t) => {
   const value = {

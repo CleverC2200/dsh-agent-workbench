@@ -86,3 +86,23 @@ test('单侧任务阈值可不设严重等级', () => {
   };
   assert.equal(check(r, { ...task, description: '大于11天预警' })[0].status, '预警');
 });
+test('系统附加的空值说明可从引用中剥离，任务原文仍需匹配', () => {
+  const description = '单品库存的周转天数超过11天，需做发货跟进与排产调控';
+  const suffix = '；空值处理补充：未授权空值正常；缺值不得判健康。';
+  const taskSnapshot = { ...task, description };
+  const result = row(15, '预警');
+  result.rule = {
+    sourceType: 'task',
+    taskQuote: description + suffix,
+    healthy: 11,
+    healthyOperator: 'lte',
+  };
+  assert.equal(check(result, taskSnapshot)[0].rule.taskQuote, description);
+  assert.equal(result.rule.originalTaskQuote, description + suffix);
+  result.rule.taskQuote = '任务说明：' + description + '。' + suffix.slice(1);
+  assert.equal(check(result, taskSnapshot)[0].rule.taskQuote, description);
+  result.rule.taskQuote = description.replace('11天', '12天') + suffix;
+  assert.throws(() => check(result, taskSnapshot), /原文依据/);
+  result.rule.taskQuote = description + suffix.replace('缺值不得判健康', '缺值也算健康');
+  assert.throws(() => check(result, taskSnapshot), /原文依据/);
+});

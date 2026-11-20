@@ -6,12 +6,13 @@ import { chromium, expect } from '@playwright/test';
 const output = await build({
   stdin: {
     contents:
-      "import {openAlertManagement} from './business/inventory-apsplan/source/app/monitor-management.js';window.openWarning=(startNew=true)=>openAlertManagement([],()=>{},startNew);",
+      "import {openAlertManagement} from './business/inventory-apsplan/source/app/monitor-management.js';import './business/inventory-apsplan/source/app/monitor-management.css';window.openWarning=(startNew=true)=>openAlertManagement([],()=>{},startNew);",
     resolveDir: process.cwd(),
     loader: 'js',
   },
   bundle: true,
   write: false,
+  outfile: 'page.js',
   format: 'iife',
   platform: 'browser',
   plugins: [
@@ -28,7 +29,24 @@ const output = await build({
       export const ask=async()=>{};
       export async function call(method,input){
         window.calls.push({method,input});
-        if(input.op==='list')return{tasks:window.warningTasks||[],runs:[],events:[]};
+        if(input.op==='list'){
+          if(window.failRefresh)throw Error('暂时无法刷新列表');
+          return{tasks:window.warningTasks,runs:window.warningRuns,events:[]};
+        }
+        if(input.op==='save'){
+          await new Promise(resolve=>window.finishSave=resolve);
+          if(window.saveError)throw Error(window.saveError);
+          const existing=window.warningTasks.find(task=>task.id===input.task.id);
+          const saved={...existing,...input.task};
+          window.warningTasks=[saved];
+          return saved;
+        }
+        if(input.op==='run'){
+          const task=window.warningTasks.find(task=>task.id===input.id);
+          const run={id:'run-manual',taskId:task.id,name:task.metric+'检测',at:new Date().toISOString(),status:'执行中'};
+          window.warningRuns.unshift(run);
+          return{accepted:true,run};
+        }
         if(input.op==='agents')return[{id:'gea-html-inventory-apsplan',name:'产销协同Agent'}];
         if(input.op==='metric')throw Error('Fixed metric definitions must not require a backend request');
         if(input.op==='people')return{people:[{username:'10008447',realname:'刘壮壮',orgCodeTxt:'产品生成数智化组'}],hasMore:false};
@@ -40,10 +58,10 @@ const output = await build({
     },
   ],
 });
-async function warningPage(t, tasks = []) {
+async function warningPage(t, tasks = [], { sandboxed = false } = {}) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
-  const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  let page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
   await page.route('http://warning-fixture.test/**', (r) =>
     r.fulfill({
       contentType: 'text/html',
@@ -51,13 +69,106 @@ async function warningPage(t, tasks = []) {
     }),
   );
   await page.goto('http://warning-fixture.test/');
+  if (sandboxed) {
+    const attached = page.waitForEvent('framenavigated', (frame) => !!frame.parentFrame());
+    await page.setContent(
+      '<iframe title="预警" sandbox="allow-scripts allow-downloads" src="http://warning-fixture.test/frame" style="width:100%;height:950px"></iframe>',
+    );
+    page = await attached;
+  }
   await page.evaluate((tasks) => {
     window.calls = [];
     window.warningTasks = tasks;
+    window.warningRuns = [];
   }, tasks);
-  await page.addScriptTag({ content: output.outputFiles[0].text });
+  await page.addStyleTag({
+    content: output.outputFiles.find((file) => file.path.endsWith('.css')).text,
+  });
+  await page.addScriptTag({
+    content: output.outputFiles.find((file) => file.path.endsWith('.js')).text,
+  });
   return page;
 }
+
+test('scheduled task edits report progress, retain inputs on error, and acknowledge a saved change without a list refresh', async (t) => {
+  const page = await warningPage(
+    t,
+    [
+      {
+        id: 'scheduled',
+        metric: '当前库存',
+        scope: '品类',
+        description: '检查库存',
+        enabled: true,
+        notifyStrategy: 'off',
+        frequency: '每天 09:00',
+        schedule: { frequency: 'daily', time: '09:00' },
+        agentPreset: 'gea-html-inventory-apsplan',
+      },
+    ],
+    { sandboxed: true },
+  );
+  await page.evaluate(() => window.openWarning(false));
+  await page.getByRole('button', { name: '修改', exact: true }).click();
+  await expect(page.getByRole('button', { name: '执行数字人' })).toHaveText('产销协同Agent');
+  await page.getByLabel('任务说明').fill('核实库存超标');
+  await page.getByRole('button', { name: '执行小时' }).click();
+  await page.getByRole('option', { name: '10', exact: true }).press('Enter');
+  await page.evaluate(() => (window.saveError = '调度配置暂不可用'));
+  await page.getByRole('button', { name: '保存修改' }).click();
+  await expect(page.getByRole('button', { name: '正在保存…' })).toBeDisabled();
+  await page.evaluate(() => window.finishSave());
+  await expect(page.getByRole('alert')).toHaveText('调度配置暂不可用');
+  await expect(page.getByLabel('任务说明')).toHaveValue('核实库存超标');
+  await page.evaluate(() => {
+    window.saveError = '';
+    window.failRefresh = true;
+  });
+  await page.getByRole('button', { name: '保存修改' }).press('Enter');
+  await expect(page.getByRole('button', { name: '正在保存…' })).toBeDisabled();
+  await page.evaluate(() => window.finishSave());
+  await expect(page.getByRole('status')).toContainText('检测任务已更新');
+  await expect(page.getByText('核实库存超标', { exact: true })).toBeVisible();
+  await expect(page.getByText('每天 10:00')).toBeVisible();
+  const payloads = await page.evaluate(() =>
+    window.calls.filter(({ input }) => input.op === 'save').map(({ input }) => input.task),
+  );
+  assert.equal(payloads.length, 2);
+  assert.deepEqual(
+    payloads.map(({ schedule }) => schedule.time),
+    ['10:00', '10:00'],
+  );
+});
+
+test('run now shows a new execution record immediately for an enabled scheduled task', async (t) => {
+  const page = await warningPage(
+    t,
+    [
+      {
+        id: 'scheduled',
+        metric: '当前库存',
+        scope: '品类',
+        description: '检查库存',
+        enabled: true,
+        frequency: '每天 09:00',
+        schedule: { frequency: 'daily', time: '09:00' },
+      },
+    ],
+    { sandboxed: true },
+  );
+  await page.evaluate(() => window.openWarning(false));
+  await page.getByRole('button', { name: '立即执行' }).click();
+  await expect(page.getByRole('tab', { name: '执行记录' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('status')).toContainText('本次检测已启动');
+  await expect(page.getByRole('row', { name: /当前库存检测.*执行中/ })).toBeVisible();
+  const calls = await page.evaluate(() => window.calls.filter(({ input }) => input.op === 'run'));
+  assert.equal(calls.length, 1);
+  await page.getByRole('tab', { name: '检测任务' }).click();
+  await expect(page.getByText('每天 09:00')).toBeVisible();
+});
 test('the warning dialog shows the registered gap definition and selects the verified named recipient', async (t) => {
   const page = await warningPage(t);
   await page.evaluate(() => window.openWarning());

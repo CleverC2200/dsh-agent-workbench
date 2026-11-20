@@ -23,6 +23,15 @@ test('terminal error takes precedence over earlier JSON', () => {
   assert.throws(() => parseDetectionOutput(['{"complete":true}', 'unfinished']), /最终回复/);
   assert.deepEqual(parseDetectionOutput(['```json\n{"complete":true}\n```']), { complete: true });
 });
+test('reads one JSON result fenced inside the final answer and rejects ambiguous results', () => {
+  const fence = '```json\n{"complete":true,"results":[]}\n```';
+  assert.deepEqual(parseDetectionOutput(['检测结果如下：\n' + fence + '\n检测完成。']), {
+    complete: true,
+    results: [],
+  });
+  assert.throws(() => parseDetectionOutput([fence + '\n' + fence]), /有效JSON/);
+  assert.throws(() => parseDetectionOutput([fence, '最终未完成']), /有效JSON/);
+});
 test('replay 38 objects; reject duplicates and wrong scope', () => {
   const { task, response } = JSON.parse(
     readFileSync(new URL('./fixtures/detection-scope-alias.json', import.meta.url), 'utf8'),
