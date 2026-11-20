@@ -47,10 +47,10 @@ async function documentFixture(t, pageId = 'business') {
   await expect(page.getByRole('complementary', { name: 'AI对话' })).toBeVisible();
   return page;
 }
-test('business Document uses the formal wide default beside the unchanged left column', async (t) => {
+test('business Document opens at the minimum width and preserves its content across layout modes', async (t) => {
   const page = await documentFixture(t);
   const ai = page.getByRole('complementary', { name: 'AI对话' });
-  assert.equal((await ai.boundingBox()).width, 520);
+  assert.equal((await ai.boundingBox()).width, 300);
   const business = page.getByRole('textbox', { name: '业务筛选' });
   await business.fill('保留筛选');
   await page.getByRole('button', { name: '会话区最大，隐藏中间区域' }).click();
@@ -62,9 +62,9 @@ test('business Document uses the formal wide default beside the unchanged left c
   await page.getByRole('button', { name: '同时显示中间区域和会话区' }).click();
   await expect(business).toHaveValue('保留筛选');
   await expect(ai).toBeVisible();
-  assert.equal((await ai.boundingBox()).width, 520);
+  assert.equal((await ai.boundingBox()).width, 300);
 });
-test('wide drag obeys the formal range and plugin lifetime memory while narrow breakpoints take priority', async (t) => {
+test('dragged width survives remounts and follows available space', async (t) => {
   const page = await documentFixture(t);
   const ai = page.getByRole('complementary', { name: 'AI对话' });
   const handle = page.getByRole('separator', { name: '调整业务与AI栏宽' });
@@ -72,7 +72,7 @@ test('wide drag obeys the formal range and plugin lifetime memory while narrow b
   const box = await handle.boundingBox();
   await page.mouse.move(box.x + box.width / 2, 200);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 - 80, 200);
+  await page.mouse.move(box.x + box.width / 2 - 300, 200);
   await page.mouse.up();
   assert.equal((await ai.boundingBox()).width, 600);
   await page.evaluate(() => window.remount());
@@ -83,12 +83,9 @@ test('wide drag obeys the formal range and plugin lifetime memory while narrow b
     .toBe(600);
   for (const [viewport, width] of [
     [1201, 521],
-    [1200, 440],
-    [1025, 440],
-    [1024, 360],
-    [861, 360],
-    [860, 320],
-    [859, 320],
+    [1200, 520],
+    [1024, 344],
+    [860, 300],
     [1600, 600],
   ]) {
     await page.setViewportSize({ width: viewport, height: 700 });
