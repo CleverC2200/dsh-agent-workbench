@@ -50,7 +50,7 @@ function App(){
   draft:{invoke:async(query)=>{window.coverageCalls.draft++;if(query.draft){window.coverageCalls.draftWrite++;window.localDrafts[query.versionId]=query.draft;}return {draft:window.localDrafts[query.versionId]??null}}},
   versions:{invoke:async()=>[]},logs:{invoke:async()=>[]},compare:{invoke:async()=>[]},
   skuQuotes:{invoke:async({skuCodes})=>skuCodes.filter(code=>code==='10004778').map(skuCode=>({skuCode,skuName:'新增测试商品',productCategName:'汤圆',price:localStorage.getItem('coverage-latest-price')??'295.00'}))},
-  reportFacts:{invoke:async({planId,versionId})=>({planId,versionId,month:'2026-10',rows:window.exportBehavior==='unread-facts'?[]:[sku(versionId).skuCode,...(window.exportBehavior==='added-at-province'?['10004778']:[])].map(skuCode=>({skuCode,grading:'FACTORY_WH',inventoryOrganization:'总部库存',customerType:'经销商',customerGroup:'组',materialGroupCode:'0001',materialGroupName:'组'}))})},
+  reportFacts:{invoke:async({planId,versionId,resolveAreaName})=>({planId,versionId,month:'2026-10',...(resolveAreaName?{fallbackAreaName:'补查大区'}:{}),rows:window.exportBehavior==='unread-facts'?[]:[sku(versionId).skuCode,...(window.exportBehavior==='added-at-province'?['10004778']:[])].map(skuCode=>({skuCode,grading:'FACTORY_WH',inventoryOrganization:versionId==='v1'?'补查库存组织':'总部库存',customerType:'经销商',customerGroup:'组',materialGroupCode:'0001',materialGroupName:'组'}))})},
   versionSkus:{invoke:async({versionId,signal})=>{
    signal?.throwIfAborted();window.coverageCalls.sku.push({versionId,mode});
    const behavior=window.exportBehavior;
@@ -142,6 +142,7 @@ test(
     for (const checkbox of await checks.all()) await checkbox.check();
     await page.getByRole('button', { name: '通过', exact: true }).click();
     const dialog = page.getByRole('dialog');
+    await expect(dialog.getByLabel('批量审批备注')).toHaveValue('同意');
     await expect(
       dialog.getByRole('alert').filter({ hasText: '当前账号没有大区审批权限' }),
     ).toBeVisible();
@@ -153,11 +154,12 @@ test(
         planId,
         role: request.approvalRole,
         adjustments: request.adjustments,
+        remark: request.remark,
       })),
     );
     assert.deepEqual(actions, [
-      { planId: 'p1', role: 'region', adjustments: undefined },
-      { planId: 'p2', role: 'category', adjustments: undefined },
+      { planId: 'p1', role: 'region', adjustments: undefined, remark: '同意' },
+      { planId: 'p2', role: 'category', adjustments: undefined, remark: '同意' },
     ]);
   },
 );
@@ -286,6 +288,7 @@ test(
     ).toContainText('¥200');
     await page.evaluate(() => {
       window.exportBehavior = 'precise';
+      window.fixtureRows[0].areaName = null;
     });
     const downloaded = page.waitForEvent('download');
     await page.getByRole('button', { name: '导出月度计划报表', exact: true }).click();
@@ -299,6 +302,13 @@ test(
     assert.equal(rows.length, 24);
     assert.equal(rows[0].length, 24);
     assert.deepEqual(workbook.SheetNames, ['月度计划']);
+    assert.deepEqual(rows.find((row) => row[8] === 'd1').slice(0, 4), [
+      '工厂级',
+      '基地1',
+      '补查库存组织',
+      '补查大区',
+    ]);
+    assert.equal(rows.find((row) => row[8] === 'd2')[3], '大区2');
     const exportedIds = Array.from({ length: 23 }, (_, index) => 'd' + (index + 1));
     assert.deepEqual(
       rows

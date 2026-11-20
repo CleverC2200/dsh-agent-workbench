@@ -42,7 +42,10 @@ export async function downloadSalesPlanMonthlyReport(
     const key = JSON.stringify([row[8], row[13], row[17]]);
     if (keys.has(key)) throw new SalesPlanMonthlyReportError('DUPLICATE_REPORT_ROW');
     keys.add(key);
-    return row.map((value, index) => (index >= 18 ? spreadsheetNumber(value) : value));
+    return row.map((value, index) => {
+      if (index >= 18) return spreadsheetNumber(value);
+      return value === '' ? null : value;
+    });
   });
   const xlsx = await import('xlsx-republish');
   signal.throwIfAborted();

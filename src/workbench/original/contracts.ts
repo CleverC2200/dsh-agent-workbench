@@ -295,6 +295,7 @@ export type GeaSalesPlanReportFacts = {
   planId: string;
   versionId: string;
   month: string;
+  fallbackAreaName?: string | null;
   rows: Array<{
     skuCode: string;
     grading: string | null;

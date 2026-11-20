@@ -12,6 +12,7 @@ import {
 } from './models/salesPlanReturnModel.ts';
 import { salesPlanApprovalDraftValues } from './models/salesPlanLocalDraftModel.ts';
 import {
+  DEFAULT_SALES_PLAN_APPROVAL_REMARK,
   SalesPlanActionAttempt,
   classifySalesPlanActionError,
   type SalesPlanActionClient,
@@ -85,7 +86,9 @@ const RegionalApprovalBatchActionDialog: React.FC<{
   const { salesPlan } = useWorkbenchHost();
   const submitting = useRef(false);
   const attempts = useRef(new Map<string, SalesPlanActionAttempt>());
-  const [remark, setRemark] = useState('');
+  const [remark, setRemark] = useState(
+    kind === 'APPROVE' ? DEFAULT_SALES_PLAN_APPROVAL_REMARK : '',
+  );
   const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [outcomes, setOutcomes] = useState<BatchActionOutcome[]>();

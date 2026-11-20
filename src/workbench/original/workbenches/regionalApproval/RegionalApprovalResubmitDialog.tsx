@@ -7,6 +7,7 @@ import { salesPlanDecimalValue } from './models/salesPlanQuantityModel.ts';
 import type { NativeBusinessStatus } from '../../../business-contract.ts';
 import { isBackendHttpError } from '../../http-error.ts';
 import {
+  DEFAULT_SALES_PLAN_APPROVAL_REMARK,
   salesPlanRejectionMessage,
   reportSalesPlanError,
   SalesPlanActionAttempt,
@@ -174,7 +175,7 @@ export function RegionalApprovalResubmitDialog({
   const [rows, setRows] = useState<SubmissionRow[]>();
   const [busy, setBusy] = useState(false);
   const [attempted, setAttempted] = useState(false);
-  const [remark, setRemark] = useState('');
+  const [remark, setRemark] = useState(DEFAULT_SALES_PLAN_APPROVAL_REMARK);
   const [ignoredDrafts, setIgnoredDrafts] = useState<ReadonlySet<string>>(() => new Set());
   const submitting = useRef(false);
   const mounted = useRef(true);

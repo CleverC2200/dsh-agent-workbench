@@ -15,6 +15,8 @@ import type {
   GeaSalesPlanVersionSkuQuery,
 } from '../../../bridge.ts';
 
+export const DEFAULT_SALES_PLAN_APPROVAL_REMARK = '同意';
+
 export type SalesPlanActionClient = {
   action: { invoke: (params: GeaSalesPlanActionParams) => Promise<GeaSalesPlanActionReceipt> };
   versionSkus?: { invoke: (query: GeaSalesPlanVersionSkuQuery) => Promise<GeaSalesPlanSku[]> };
@@ -384,7 +386,9 @@ export const salesPlanActionReadbackMatches = (
     (receipt.toStatus === 5 && detail.currentVersion.status === 10));
 
 const normalizedInput = (input: SalesPlanActionInput): SalesPlanActionInput => {
-  const { remark, adjustments, ...request } = input.request;
+  const { remark: inputRemark, adjustments, ...request } = input.request;
+  const remark =
+    inputRemark?.trim() || (request.action === 'APPROVE' ? DEFAULT_SALES_PLAN_APPROVAL_REMARK : '');
   return {
     planId: input.planId,
     versionId: input.versionId,
@@ -393,7 +397,7 @@ const normalizedInput = (input: SalesPlanActionInput): SalesPlanActionInput => {
     ...(input.serverWorkflowResult ? { serverWorkflowResult: true } : {}),
     request: {
       ...request,
-      ...(remark?.trim() ? { remark: remark.trim() } : {}),
+      ...(remark ? { remark } : {}),
       ...(adjustments?.length ||
       (request.adjustmentMode === 'ABSOLUTE_NET' && request.action !== 'REJECT')
         ? {
