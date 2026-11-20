@@ -54,6 +54,7 @@ export function mountBusinessViews(ctx: Context) {
           <MessageCenter
             key={accountScope ?? 'unconfirmed'}
             t={t}
+            defaultTab="announcements"
             navigation={navigation?.panel === INBOX ? navigation : null}
             view={view}
             onViewChange={(next) => {

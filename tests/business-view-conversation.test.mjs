@@ -190,9 +190,9 @@ test('Inbox page/read filter survives Body remount and stays partitioned by the 
     (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)],
   );
   const reads = [];
-  const fetch = async (_path, options) => {
+  const fetch = async (path, options) => {
     const query = JSON.parse(options.body);
-    reads.push(query);
+    if (path === '/api/gea-proof/notifications') reads.push(query);
     return Response.json({
       ok: true,
       value: {
@@ -225,7 +225,16 @@ test('Inbox page/read filter survives Body remount and stays partitioned by the 
       else delete globalThis[key];
     }
   });
-  const mount = () => act(async () => root.render(React.createElement(inbox.body)));
+  const mount = async () => {
+    await act(async () => root.render(React.createElement(inbox.body)));
+    const selected = document.querySelector('[role="tab"][aria-selected="true"]');
+    assert.equal(selected?.textContent, 'announcements');
+    await act(async () =>
+      [...document.querySelectorAll('[role="tab"]')]
+        .find((tab) => tab.textContent === 'businessReminder')
+        .click(),
+    );
+  };
   await mount();
   await act(async () => {
     const filter = document.querySelector('[aria-label="notificationState"]');

@@ -27,6 +27,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types';
 import type { WorkbenchFramePage } from '../frame.ts';
 import type { WorkbenchController } from '../workbench.ts';
 import type { BusinessAccount } from './account.ts';
+import { AnnouncementReminders, SidebarMessages } from './sidebar-messages.tsx';
 import { LoginDialog } from './login-dialog.tsx';
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots';
 import { zh, en, type CopyKey } from './locales.ts';
@@ -75,6 +76,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
   interface SlotMap {
     'agent-workbench.documents': { kind: 'single'; scope: 'root' };
+    'gea.account.actions': { kind: 'list'; scope: 'root'; owner: { onSelect: () => void } };
     'agent-workbench.main-session-observer': {
       kind: 'single';
       scope: 'session-maybe';
@@ -293,7 +295,9 @@ export function mountCompanyUI(
     settingsOpen,
     openSettings,
     settingsShortcut,
-  }: PropsRuntime<'settings.launcher'>) {
+    renderSlot,
+  }: PropsRuntime<'settings.launcher'> & PropsRenderSlots<'gea.account.actions'>) {
+    const sidebar = React.useContext(SidebarGeometry);
     useSyncExternalStore(
       (listener) => ctx.locale.subscribe(listener),
       () => ctx.locale.getSnapshot().active,
@@ -504,6 +508,24 @@ export function mountCompanyUI(
                 <span aria-hidden="true">⚙</span>
                 <span>{t('settings')}</span>
               </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="gea-logout-button"
+                onClick={() => {
+                  close();
+                  void workbench.open(INBOX);
+                }}
+              >
+                <NavIcon kind="bell" />
+                <span>{t('messageInbox')}</span>
+              </button>
+              {renderSlot('gea.account.actions', {
+                onSelect: () => {
+                  close();
+                  sidebar.expand();
+                },
+              })}
               {!authenticated && (
                 <button
                   type="button"
@@ -595,7 +617,7 @@ export function mountCompanyUI(
         onClick={() => ctx.layout.toggleSidebar()}
       >
         <IconPanelLeftOutlineRegular size={16} />
-        {renderSlot('sidebar.toggle.badge', {})}
+        {collapsed && renderSlot('sidebar.toggle.badge', {})}
       </button>
     );
     const documentState = useSyncExternalStore(
@@ -775,20 +797,6 @@ export function mountCompanyUI(
               {renderSlot('sidebar.brand.mark', { size: 38 })}
               {!collapsed && renderSlot('sidebar.brand.name', {})}
             </div>
-            {!collapsed && (
-              <>
-                <button
-                  type="button"
-                  className="gea-inbox-quick-action"
-                  aria-label={t('messageInbox')}
-                  title={t('messageInbox')}
-                  disabled={!available.has(INBOX)}
-                  onClick={() => void workbench.open(INBOX)}
-                >
-                  <NavIcon kind="bell" />
-                </button>
-              </>
-            )}
             {!darwin && sidebarToggle}
           </div>
         </SidebarGeometry.Provider>
@@ -1025,11 +1033,23 @@ export function mountCompanyUI(
           </div>
         </div>
         <footer className="gea-sidebar-footer">
-          <div className="gea-sidebar-updates">
-            {renderSlot('sidebar.footer.action', { wide: !collapsed })}
-          </div>
+          {!collapsed && (
+            <SidebarMessages t={t}>
+              {available.has(INBOX) && scope && (
+                <AnnouncementReminders
+                  key={scope}
+                  scope={scope}
+                  open={() => void workbench.open(INBOX)}
+                  t={t}
+                />
+              )}
+              {renderSlot('sidebar.footer.action', { wide: true })}
+            </SidebarMessages>
+          )}
           <div className="gea-sidebar-account">
-            {renderSlot('sidebar.settings', { wide: !collapsed })}
+            <SidebarGeometry.Provider value={{ collapsed, expand: expandSidebar }}>
+              {renderSlot('sidebar.settings', { wide: !collapsed })}
+            </SidebarGeometry.Provider>
           </div>
         </footer>
       </aside>
@@ -1196,7 +1216,12 @@ export function mountCompanyUI(
   );
   ctx.slots.inject('settings.launcher', () =>
     ctx.slots.register(
-      { name: 'settings.launcher', priority: -20, locale: 'companyWorkbench' },
+      {
+        name: 'settings.launcher',
+        priority: -20,
+        locale: 'companyWorkbench',
+        children: { 'gea.account.actions': { kind: 'list', scope: 'root' } },
+      },
       Account,
     ),
   );

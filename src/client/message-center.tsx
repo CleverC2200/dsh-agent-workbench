@@ -7,9 +7,12 @@ const tabs = ['businessReminder', 'announcements'] as const;
 type Tab = (typeof tabs)[number];
 type Translate = (key: CopyKey) => string;
 
-export function MessageCenter(props: React.ComponentProps<typeof Inbox>) {
+export function MessageCenter({
+  defaultTab = 'businessReminder',
+  ...props
+}: React.ComponentProps<typeof Inbox> & { defaultTab?: Tab }) {
   const id = useId();
-  const [tab, setTab] = useState<Tab>('businessReminder');
+  const [tab, setTab] = useState<Tab>(props.navigation ? 'businessReminder' : defaultTab);
   const receipt = props.navigation?.receipt;
   const [lastReceipt, setLastReceipt] = useState(receipt);
   if (receipt !== lastReceipt) {
@@ -68,14 +71,19 @@ type Announcement = {
   publishTime: string | null;
   top: boolean;
 };
-type AnnouncementPage = { items: Announcement[]; total: number; pageNo: number; pageSize: number };
+export type AnnouncementPage = {
+  items: Announcement[];
+  total: number;
+  pageNo: number;
+  pageSize: number;
+};
 type AnnouncementDetail = Announcement & { content: string | null };
 type Result<T> =
   | { kind: 'loading' }
   | { kind: 'loaded'; value: T }
   | { kind: 'failed'; error: CopyKey };
 
-async function readAnnouncements<T>(
+export async function readAnnouncements<T>(
   query: { id: string } | { pageNo: number; title: string },
   signal: AbortSignal,
 ): Promise<T> {
