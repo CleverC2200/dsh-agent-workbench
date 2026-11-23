@@ -136,6 +136,7 @@ export function createShipment(
     autoRead = false,
     scopeGeneration,
     onSnapshot,
+    calculationSnapshot,
     onEditingChange,
     selectedCategories = [],
   }) {
@@ -150,6 +151,8 @@ export function createShipment(
     const maxCutoff = today < evaluationEnd ? today : evaluationEnd;
     const hasCutoffRange = minCutoff <= maxCutoff;
     const state = draft.shipment ?? {};
+    const calculationMonth = monthOffset(draft.month, -1);
+    const calculationEnd = `${calculationMonth}-${new Date(Date.UTC(evaluationYear, evaluationMonth - 1, 0)).getUTCDate()}`;
     const cutoff = state.cutoff ?? state.business?.cutoff ?? '';
     const cutoffIssue =
       !cutoff && !hasCutoffRange ? `最早可选日期为 ${minCutoff}，该评估版本尚无可选截止日` : null;
@@ -185,11 +188,11 @@ export function createShipment(
     const [syncStatus, setSyncStatus] = react.useState('unread');
     const [expanded, setExpanded] = react.useState([]);
     const [skuSearch, setSkuSearch] = react.useState('');
-    const [skuPages, setSkuPages] = react.useState({});
     const [issuesOpen, setIssuesOpen] = react.useState(false);
     const [formula, setFormula] = react.useState(null);
     const [error, setError] = react.useState('');
     const [busy, setBusy] = react.useState(false);
+    const [pendingCalculationRead, setPendingCalculationRead] = react.useState(null);
     const generation = react.useRef(0);
     react.useEffect(() => {
       generation.current++;
@@ -488,7 +491,49 @@ export function createShipment(
     );
     const national = aggregate(categoryRows, '全国合计');
     const updateState = (changes) => update({ shipment: { ...stateRef.current, ...changes } });
-    const readLatestDate = async () => {
+    const changeCutoff = (value, cutoffMetadata) => {
+      generation.current++;
+      controller.current?.abort();
+      const byCutoff = { ...state.editsByCutoff };
+      const saved = byCutoff[value] ?? {};
+      delete byCutoff[value];
+      const current = {
+        ...state.sourceEdits,
+        [activeSource]: { values: state.values, remaining: state.remaining },
+      };
+      if (
+        cutoff &&
+        Object.values(current).some(
+          (edits) =>
+            Object.keys(edits.values ?? {}).length || Object.keys(edits.remaining ?? {}).length,
+        )
+      )
+        byCutoff[cutoff] = current;
+      updateState({
+        cutoff: value,
+        ...(value.startsWith(calculationMonth) ? { calculationCutoff: value } : {}),
+        cutoffMetadata,
+        business: null,
+        editsByCutoff: Object.keys(byCutoff).length ? byCutoff : undefined,
+        sourceEdits: saved,
+        values: saved[activeSource]?.values ?? {},
+        remaining: saved[activeSource]?.remaining ?? {},
+      });
+      setFormula(null);
+    };
+    const publishCalculationRead = (status, failure = null) =>
+      snapshotCallback.current?.({
+        draftId: draft.id,
+        month: draft.month,
+        shipmentMonth: calculationMonth,
+        cutoff: state.calculationCutoff ?? '',
+        source: '库存日报统计基月读取',
+        sourceKind: 'business',
+        status,
+        error: failure,
+        rows: [],
+      });
+    const readLatestDate = async (latest = maxCutoff, synchronize = false) => {
       if (!hasCutoffRange) return;
       controller.current?.abort();
       const stop = new AbortController();
@@ -499,19 +544,23 @@ export function createShipment(
         !stop.signal.aborted && request === generation.current && scope === scopeGeneration.current;
       setBusy(true);
       setError('');
+      if (synchronize) publishCalculationRead('loading');
       try {
-        const result = await readLatestShipmentDate(maxCutoff, stop.signal);
+        const result = await readLatestShipmentDate(latest, stop.signal);
         if (!valid()) return;
         if (result.date === null) {
           setSyncStatus('failed');
           setError('该统计月份暂无可用发货日期，请补齐来源或手动选择截止日');
+          if (synchronize) publishCalculationRead('failed', '统计基月暂无可用发货日期');
           return;
         }
-        updateState({ cutoff: result.date, cutoffMetadata: result.metadata });
+        if (result.date !== cutoff) changeCutoff(result.date, result.metadata);
+        if (synchronize) setPendingCalculationRead(result.date);
       } catch (failure) {
         if (valid()) {
           setSyncStatus('failed');
           setError('读取最新发货日期失败：' + failure.message);
+          if (synchronize) publishCalculationRead('failed', failure.message);
         }
       } finally {
         if (valid()) setBusy(false);
@@ -633,6 +682,7 @@ export function createShipment(
         ).length;
         const duplicateRows = actualRows.filter((row) => row.duplicateDays > 0).length;
         updateState({
+          ...(month === calculationMonth ? { calculationCutoff: cutoff } : {}),
           business: {
             month,
             cutoff,
@@ -672,7 +722,20 @@ export function createShipment(
       }
     };
     react.useEffect(() => {
-      if (!autoRead || !cutoff || activeSource !== 'business' || business || !hasMpsSource())
+      if (pendingCalculationRead === cutoff && cutoff && hasMpsSource()) {
+        setPendingCalculationRead(null);
+        void sync();
+      }
+    }, [pendingCalculationRead, cutoff]);
+    react.useEffect(() => {
+      if (
+        pendingCalculationRead ||
+        !autoRead ||
+        !cutoff ||
+        activeSource !== 'business' ||
+        business ||
+        !hasMpsSource()
+      )
         return;
       void sync();
     }, [autoRead, draft.id, month, cutoff, activeSource]);
@@ -767,7 +830,23 @@ export function createShipment(
       return { ...currentState, values };
     };
     const prepareForecast = (changes) => {
-      let next = stateRef.current;
+      const currentState = stateRef.current;
+      let next =
+        currentState.cutoff === cutoff
+          ? currentState
+          : {
+              ...state,
+              editsByCutoff: {
+                ...currentState.editsByCutoff,
+                [currentState.cutoff]: {
+                  ...currentState.sourceEdits,
+                  [currentState.activeSource ?? 'business']: {
+                    values: currentState.values,
+                    remaining: currentState.remaining,
+                  },
+                },
+              },
+            };
       for (const change of changes) {
         const current = calculate(next);
         const selected = current.rows.filter((row) => change.keys.includes(keyOf(row)));
@@ -1107,7 +1186,7 @@ export function createShipment(
         ),
         ...fields.map((field) => numberCell(row, field, who)),
       );
-    const toggleLabel = (id, who, label, count) =>
+    const toggleLabel = (id, who, label, count, descendants = []) =>
       h(
         react.Fragment,
         {},
@@ -1120,7 +1199,9 @@ export function createShipment(
             disabled: Boolean(searchTerm),
             onClick: () =>
               setExpanded((current) =>
-                current.includes(id) ? current.filter((key) => key !== id) : [...current, id],
+                current.includes(id)
+                  ? current.filter((key) => key !== id)
+                  : [...new Set([...current, id, ...descendants])],
               ),
           },
           h(
@@ -1139,7 +1220,7 @@ export function createShipment(
             h('path', { d: 'M4 2l4 4-4 4' }),
           ),
         ),
-        label,
+        h('span', { className: 'sp-hierarchy-name', title: label }, label),
         h('span', { className: 'sp-count' }, `${count} 个单品`),
       );
     const skuLabel = (row) =>
@@ -1158,6 +1239,18 @@ export function createShipment(
           row.name || '产品名称未提供',
         ),
       );
+    const groupLabel = (value, children) => {
+      const names = [...new Set(children.map((row) => row.groupName).filter(Boolean))];
+      return sourceKind === 'business' && children[0].group
+        ? `${value} · ${
+            names.length > 1
+              ? '名称冲突'
+              : children.every((row) => row.groupName) && names.length === 1
+                ? names[0]
+                : '名称未提供'
+          }`
+        : value;
+    };
     const renderHierarchy = (parent, scope, path, levels, showAll = false) => {
       const id = JSON.stringify([scope, ...path]);
       if (!showAll && !searchTerm && !expanded.includes(id)) return;
@@ -1170,17 +1263,7 @@ export function createShipment(
           partition.get(name).push(row);
         }
         for (const [value, children] of partition) {
-          const groupNames = [...new Set(children.map((row) => row.groupName).filter(Boolean))];
-          const name =
-            dimension === 'group' && sourceKind === 'business' && children[0].group
-              ? `${value} · ${
-                  groupNames.length > 1
-                    ? '名称冲突'
-                    : children.every((row) => row.groupName) && groupNames.length === 1
-                      ? groupNames[0]
-                      : '名称未提供'
-                }`
-              : value;
+          const name = dimension === 'group' ? groupLabel(value, children) : value;
           const nextPath = [...path, name];
           const who = [scope, ...nextPath].join(' ');
           const group = {
@@ -1202,6 +1285,12 @@ export function createShipment(
                     scope === '全国合计'
                       ? new Set(children.map((row) => row.code)).size
                       : children.length,
+                    dimension === 'category'
+                      ? [...Map.groupBy(children, (row) => row.group || '物料组未提供')].map(
+                          ([value, rows]) =>
+                            JSON.stringify([scope, ...nextPath, groupLabel(value, rows)]),
+                        )
+                      : [],
                   ),
                   `sp-level-${nextPath.length}`,
                 ),
@@ -1237,41 +1326,8 @@ export function createShipment(
         levels[2].push(...children.map((row) => ({ ...row, base: scope, level: 'SKU' })));
         return;
       }
-      const page = Math.min(skuPages[id] ?? 0, Math.max(0, Math.ceil(children.length / 25) - 1));
-      const who = [scope, ...path].join(' ');
       levels[2].push(
-        ...children
-          .slice(page * 25, (page + 1) * 25)
-          .map((row) => renderRow(row, `${scope} ${row.code}`, skuLabel(row), 'sp-sku')),
-        ...(children.length > 25
-          ? [
-              h(
-                'tr',
-                { key: `${id}-page` },
-                h(
-                  'td',
-                  { colSpan: fields.length + 1 },
-                  h(
-                    'div',
-                    { className: 'sp-sku-pages' },
-                    h('span', null, `${who} · 共${children.length}个单品 · 第${page + 1}页`),
-                    ...[-1, 1].map((direction) =>
-                      h(
-                        'button',
-                        {
-                          key: direction,
-                          'aria-label': `${who} ${direction < 0 ? '上一页' : '下一页'}单品`,
-                          disabled: direction < 0 ? !page : (page + 1) * 25 >= children.length,
-                          onClick: () => setSkuPages({ ...skuPages, [id]: page + direction }),
-                        },
-                        direction < 0 ? '上一页' : '下一页',
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ]
-          : []),
+        ...children.map((row) => renderRow(row, `${scope} ${row.code}`, skuLabel(row), 'sp-sku')),
       );
     };
     const shipmentHierarchy = (parent, scope, showAll = false) => {
@@ -1494,9 +1550,35 @@ export function createShipment(
             ),
         );
       })();
+    const calculationCutoff =
+      state.calculationCutoff ?? (cutoff.startsWith(calculationMonth) ? cutoff : '');
+    const usableCalculationSnapshot =
+      calculationSnapshot?.draftId === draft.id &&
+      calculationSnapshot.month === draft.month &&
+      calculationSnapshot.shipmentMonth === calculationMonth &&
+      calculationSnapshot.cutoff === calculationCutoff &&
+      ['business', 'local-file'].includes(calculationSnapshot.sourceKind) &&
+      ['ok', 'partial', 'local-file'].includes(calculationSnapshot.status);
     return h(
       'section',
       { hidden: !active, className: 'sp-page', 'aria-label': '发货本地核对' },
+      h('p', {}, `当前展示月 ${month}；评估所需统计基月 ${calculationMonth}。`),
+      h(
+        'p',
+        { role: 'status', 'aria-label': '计算快照状态' },
+        usableCalculationSnapshot
+          ? `${calculationSnapshot.cutoff} 快照已进入评估。${calculationSnapshot.rows.length} 条基地 SKU；发货待补 ${calculationSnapshot.rows.filter((row) => row.fin == null).length} 条，预计月末结存待补 ${calculationSnapshot.rows.filter((row) => row.end == null).length} 条。`
+          : `${calculationMonth} 计算快照尚未取得或已失效。${calculationSnapshot?.shipmentMonth === calculationMonth ? (calculationSnapshot.error ?? '') : ''}`,
+      ),
+      h(
+        'button',
+        {
+          disabled: busy || batch.active || !hasCutoffRange || !hasMpsSource(),
+          onClick: () =>
+            readLatestDate(calculationEnd < maxCutoff ? calculationEnd : maxCutoff, true),
+        },
+        `读取 ${calculationMonth} 计算快照`,
+      ),
       h(
         'div',
         { className: 'sp-parameters' },
@@ -1523,34 +1605,8 @@ export function createShipment(
             onChange: ({ target }) => {
               const value = target.value;
               if (!value || value === cutoff || !target.validity.valid) return;
-              generation.current++;
-              controller.current?.abort();
-              const byCutoff = { ...state.editsByCutoff };
-              const saved = byCutoff[value] ?? {};
-              delete byCutoff[value];
-              const current = {
-                ...state.sourceEdits,
-                [activeSource]: { values: state.values, remaining: state.remaining },
-              };
-              if (
-                cutoff &&
-                Object.values(current).some(
-                  (edits) =>
-                    Object.keys(edits.values ?? {}).length ||
-                    Object.keys(edits.remaining ?? {}).length,
-                )
-              )
-                byCutoff[cutoff] = current;
-              updateState({
-                cutoff: value,
-                cutoffMetadata: undefined,
-                business: null,
-                editsByCutoff: Object.keys(byCutoff).length ? byCutoff : undefined,
-                sourceEdits: saved,
-                values: saved[activeSource]?.values ?? {},
-                remaining: saved[activeSource]?.remaining ?? {},
-              });
-              setFormula(null);
+              setPendingCalculationRead(null);
+              changeCutoff(value);
             },
           }),
         ),
@@ -1559,7 +1615,7 @@ export function createShipment(
           !cutoff &&
           h(
             'button',
-            { disabled: busy, onClick: readLatestDate },
+            { disabled: busy, onClick: () => readLatestDate() },
             busy ? '读取最新日期中…' : '读取最新可用日期',
           ),
         (state.rows != null || state.businessAttempted || business) &&
@@ -1594,7 +1650,6 @@ export function createShipment(
             value: skuSearch,
             onChange: (event) => {
               setSkuSearch(event.target.value);
-              setSkuPages({});
             },
           }),
           sourceKind === 'demo' && h('span', { className: 'dc-status' }, '演示数据'),
@@ -1772,7 +1827,7 @@ export function createShipment(
             h(
               'colgroup',
               {},
-              ...[132, 72, 62, 62, 82, 82, 94, 88, 96, 68, 72, 98, 80, 80, 94].map((width, index) =>
+              ...[260, 72, 62, 62, 82, 82, 94, 88, 96, 68, 72, 98, 80, 80, 94].map((width, index) =>
                 h('col', { key: index, style: { width } }),
               ),
             ),

@@ -971,10 +971,6 @@ test(
     await processed.getByRole('button', { name: '基地 · 郑州', exact: true }).press('Enter');
     await processed.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).press('Enter');
     await processed
-      .getByRole('button', { name: /郑州 物料组 ·/ })
-      .first()
-      .press('Enter');
-    await processed
       .getByRole('button', { name: '运算过程 郑州 A 2026-10', exact: true })
       .press('Enter');
     const explanation = frame.getByRole('dialog');
@@ -1270,7 +1266,7 @@ test('basic source anomalies keep known BI quantities and export every row while
         product_item_name: '物料组甲',
         material_code: `IN-${index + 1}`,
         material_name: `池内产品${index + 1}`,
-        sub_category: '汤圆',
+        responsible_item: '汤圆',
         series: '系列甲',
         source_rows: 1,
       }),

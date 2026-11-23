@@ -8,7 +8,6 @@ const labels = {
   product_item_name: '物料组名称',
   material_code: '物料编码',
   material_name: '物料名称',
-  responsible_item: '产品标签',
   replacement_product: '替换品',
   replacement_material_code: '替换物料编码',
   stat_month: '源月份',
@@ -52,7 +51,11 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
       );
       return () => controller.abort();
     }, [kind, month, page, attempt]);
-    const columns = state.columns?.map((column) => labels[column] ?? column) ?? [];
+    const columnLabels =
+      kind === 'products'
+        ? { ...labels, sub_category: '源大类', responsible_item: '大类' }
+        : labels;
+    const columns = state.columns?.map((column) => columnLabels[column] ?? column) ?? [];
     const rows =
       state.rows?.map((row) =>
         Object.fromEntries(state.columns.map((column, index) => [columns[index], row[column]])),

@@ -7,13 +7,20 @@ import {
   createHistoryDependentLookup,
 } from './source-projections.js';
 import { buildCategoryDemand } from './category-demand.js';
+import { buildDemandDiagnostics } from './demand-diagnostics.js';
 import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { solveMpsPlan } from 'dsh-agent-manage/mps-compute/plan';
 import { buildPlanSources, resolveWeightPairs } from './plan-inputs.js';
 import { attachPlanReport } from './plan-diagnostics.js';
-import { inventoryVersionOrder, selectedInventoryMonth } from './inventory-selection.js';
+import {
+  inventoryVersionOrder,
+  selectedInventoryMonth,
+  selectedInventoryBusinessDate,
+} from './inventory-selection.js';
 import { buildCapacityReport } from 'dsh-agent-manage/mps-compute/capacity-report';
 import { productionCalendarDays } from './production-calendar.js';
+import { buildProductScope } from './product-scope.js';
+import { isCalendarMonthEnd } from './business-date.js';
 
 const number = (value) => {
   if (
@@ -44,6 +51,13 @@ const historyWarningMessages = (warnings) => [
 ];
 const demo = (value) => /demo|演示|原型/i.test(String(value ?? ''));
 const rowKey = (row) => JSON.stringify([row.base, row.code]);
+const inventoryKey = (row) => JSON.stringify([row.month, row.base, row.code]);
+const inventoryIdentity = (row) => ({
+  ...row,
+  base: canonicalBaseName(row.base),
+  code: text(row.code),
+});
+const movementFields = ['productionInbound', 'inTransitInbound', 'transferIn', 'transferOut'];
 function productHistoryMappings(products, raw) {
   const sources = new Map();
   for (const row of raw ?? []) {
@@ -241,7 +255,8 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   const date = new Date(`${draft.month}-01T00:00:00Z`);
   date.setUTCMonth(date.getUTCMonth() - 1);
   const shipmentMonth = date.toISOString().slice(0, 7);
-  const savedCutoff = draft.shipment?.cutoff ?? draft.shipment?.business?.cutoff;
+  const savedCutoff =
+    draft.shipment?.calculationCutoff ?? draft.shipment?.cutoff ?? draft.shipment?.business?.cutoff;
   const validShipment =
     shipmentSnapshot?.draftId === draft.id &&
     shipmentSnapshot.month === draft.month &&
@@ -258,6 +273,19 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         rawQuantity: number(row.rawEnd === undefined ? row.end : row.rawEnd),
       }))
     : [];
+  const monthlyInventory = Map.groupBy(
+    (evaluation?.inventory?.monthly?.rows ?? []).map(inventoryIdentity),
+    inventoryKey,
+  );
+  const transitInventory = Map.groupBy(
+    (evaluation?.inventory?.transit?.rows ?? []).map(inventoryIdentity),
+    inventoryKey,
+  );
+  const physicalInventory = Map.groupBy(
+    (evaluation?.inventory?.physical?.rows ?? []).map(inventoryIdentity),
+    rowKey,
+  );
+  const openingSources = new Map();
   const products = demo(draft.productSource)
     ? []
     : productHistoryMappings(
@@ -284,6 +312,34 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         },
       ]),
   );
+  if (
+    validShipment &&
+    shipmentSnapshot.sourceKind === 'business' &&
+    ['ok', 'partial'].includes(shipmentSnapshot.status) &&
+    isCalendarMonthEnd(shipmentSnapshot.cutoff)
+  ) {
+    const covered = new Set(openingInventory.map(rowKey));
+    for (const product of productMonths.values()) {
+      const key = rowKey(product);
+      if (covered.has(key)) continue;
+      const monthly = monthlyInventory.get(inventoryKey(product)) ?? [];
+      const physical = physicalInventory.get(key) ?? [];
+      const monthOpening = monthly.length === 1 ? number(monthly[0].opening) : null;
+      const physicalOpening =
+        physical.length === 1 && evaluation.inventory.physical.cutoff === shipmentSnapshot.cutoff
+          ? number(physical[0].opening)
+          : null;
+      const quantity = monthOpening ?? physicalOpening;
+      if (quantity === null) continue;
+      openingInventory.push({ ...product, quantity, rawQuantity: quantity });
+      openingSources.set(
+        key,
+        monthOpening !== null
+          ? `库存日报 begin_stock（${monthly[0].sourceDate} 同月月初）`
+          : `基地批次实存 live_qty（${shipmentSnapshot.cutoff}，仓类01/02）`,
+      );
+    }
+  }
   const reportRead =
     draft.reportSource === 'business'
       ? draft.planRatesRead
@@ -373,12 +429,54 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       },
     ];
   });
+  const confirmedMovements = new Map(
+    (draft.inventoryMovements ?? []).map(inventoryIdentity).map((row) => [inventoryKey(row), row]),
+  );
+  const inventoryMovements = [
+    ...new Set([...confirmedMovements.keys(), ...monthlyInventory.keys()]),
+  ]
+    .map((key) => {
+      const confirmed = confirmedMovements.get(key);
+      const matches = monthlyInventory.get(key) ?? [];
+      const published = matches.length === 1 ? matches[0] : undefined;
+      const identity = confirmed ?? published;
+      if (!identity || identity.month < draft.month || identity.month > months.at(-1)) return null;
+      const quantities = {};
+      const sources = [];
+      const arrivals = transitInventory.get(key) ?? [];
+      const transit =
+        arrivals.length === 1 &&
+        published?.transferIn === 0 &&
+        (number(confirmed?.transferIn) ?? 0) === 0
+          ? arrivals[0]
+          : null;
+      for (const field of movementFields) {
+        const explicit = number(confirmed?.[field]);
+        const automatic =
+          field === 'inTransitInbound' ? number(transit?.quantity) : number(published?.[field]);
+        quantities[field] = explicit ?? automatic;
+        if (explicit !== null && confirmed.source) sources.push(confirmed.source);
+        else if (automatic !== null)
+          sources.push(
+            field === 'productionInbound'
+              ? `库存日报 ${published.sourceDate} ${published.productionBasis}`
+              : field === 'inTransitInbound'
+                ? `WMS 发运和收货 / TMS 到货 / ASN ${transit.sourceOrders} 单，月度调入计划明确为0`
+                : `库存日报 ${published.sourceDate} 月度调拨计划`,
+          );
+      }
+      return { ...identity, ...quantities, source: [...new Set(sources)].join('；') };
+    })
+    .filter(Boolean);
   const workflowInput = {
     context,
     inventoryTargets: draft.inventoryTargets ?? [],
     inventoryTargetVersion: draft.constraints?.targetVersion ?? 'auto',
     inventoryTurnoverMonth: selectedInventoryMonth(draft),
-    inventoryTargetPriority: inventoryVersionOrder(selectedInventoryMonth(draft)),
+    inventoryTargetPriority: inventoryVersionOrder(
+      selectedInventoryMonth(draft),
+      selectedInventoryBusinessDate(draft),
+    ),
     requireSourceTurnoverDays: true,
     inventoryTargetIssues:
       draft.inventoryTargetsRead?.status === 'ready'
@@ -443,20 +541,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     },
     openingInventory,
     delistedProducts,
-    inventoryMovements: [
-      ...new Map(
-        (draft.inventoryMovements ?? []).map((row) => [
-          JSON.stringify([row.month, row.base, row.code]),
-          {
-            ...row,
-            productionInbound: number(row.productionInbound),
-            inTransitInbound: number(row.inTransitInbound),
-            transferIn: number(row.transferIn),
-            transferOut: number(row.transferOut),
-          },
-        ]),
-      ).values(),
-    ].filter((row) => row.month >= draft.month && row.month <= months.at(-1)),
+    inventoryMovements,
     capacities,
     adjustments: {
       categoryDemand: (draft.adjustments?.categoryDemand ?? []).map(
@@ -524,6 +609,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     },
   };
   const result = computeMpsWorkflow(workflowInput);
+  result.productScope = buildProductScope(draft, products, result, excludedShipments);
   result.delistedIssues = delistedReportIssues(result.rows, result.context);
   result.categoryComputation = categoryComputation;
   result.excludedShipments = excludedShipments;
@@ -612,6 +698,18 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       planSourceIssues: [...planSources.planSourceIssues, ...(evaluation.sourceIssues ?? [])],
     };
     result.plan = solveMpsPlan(planInput);
+    const movementSources = new Map(
+      inventoryMovements.map((row) => [inventoryKey(row), row.source]),
+    );
+    for (const row of result.plan.rows) {
+      row.openingInventorySource =
+        row.openingInventory === null
+          ? ''
+          : row.month === draft.month
+            ? (openingSources.get(rowKey(row)) ?? '第二步预计月末结存')
+            : '上月求解实际期末库存';
+      row.inventoryMovementSource = movementSources.get(inventoryKey(row)) ?? '';
+    }
     result.plan.partial = result.partial;
     result.plan.scopeStatus = result.scopeStatus;
     result.plan.excludedShipments = excludedShipments;
@@ -657,6 +755,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     attachPlanReport(result.plan, planSources, relations, {
       categoryComputation,
       shipmentSnapshot,
+      inventory: evaluation.inventory,
     });
   }
   for (const row of result.rows) {
@@ -680,5 +779,6 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   if (demo(draft.productSource)) result.missing.push('原型产品清单未接入后续计算');
   if (validShipment && openingInventory.some((row) => !knownProducts.has(rowKey(row))))
     result.missing.push('部分发货结存尚无本版本产品对应');
+  result.demandDiagnostics = buildDemandDiagnostics(result, workflowInput.categoryDemand);
   return result;
 }

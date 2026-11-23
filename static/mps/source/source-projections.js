@@ -3,11 +3,12 @@ import { canonicalBaseName } from './relations.js';
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const values = (rows, field) => [...new Set(rows.map((row) => text(row[field])).filter(Boolean))];
 const key = (code, group) => JSON.stringify([code, group]);
+const productCategoryField = 'responsible_item';
 const productSourceFields = {
   统计月份: 'stat_period',
   目标基地: 'target_base',
   调拨标签: 'transfer_tag',
-  大类: 'sub_category',
+  大类: productCategoryField,
   系列: 'series',
   物料组编码: 'product_item',
   物料组名称: 'product_item_name',
@@ -66,7 +67,7 @@ export function productProjections(products, raw = [], facts = [], prices = []) 
     const childSources = children.flatMap(
       (child) => source.get(key(products[child]['产品编码'], products[child]['物料组'])) ?? [],
     );
-    const category = values(childSources, 'sub_category');
+    const category = values(childSources, productCategoryField);
     const series = values(childSources, 'series');
     const labels = values(children.length ? childSources : records, 'responsible_item');
     const sourceRecords = children.length ? childSources : records;
@@ -90,7 +91,7 @@ export function productProjections(products, raw = [], facts = [], prices = []) 
       ['大类', category],
       ['系列', series],
     ]) {
-      const sourceField = field === '大类' ? 'sub_category' : 'series';
+      const sourceField = field === '大类' ? productCategoryField : 'series';
       const complete =
         children.every((child) =>
           source.has(key(products[child]['产品编码'], products[child]['物料组'])),
@@ -130,7 +131,7 @@ export function sourceDimensions(rows, products) {
   const normalized = (products ?? []).map((product) => ({
     基地: text(product['基地'] ?? product.belong_base),
     产品编码: text(product['产品编码'] ?? product.material_code),
-    大类: text(product['大类'] ?? product.sub_category),
+    大类: text(product['大类'] ?? product[productCategoryField]),
     系列: text(product['系列'] ?? product.series),
     物料组: text(product['物料组'] ?? product.product_item),
     物料组名称: text(product['物料组名称'] ?? product.product_item_name),
@@ -196,7 +197,7 @@ export function productRows(rows) {
     基地: '',
     产品编码: text(row.material_code),
     产品名称: text(row.material_name),
-    大类: text(row.sub_category),
+    大类: text(row[productCategoryField]),
     系列: text(row.series),
     物料组: text(row.product_item),
     物料组名称: text(row.product_item_name),
@@ -261,7 +262,7 @@ export function createSourceProductMatcher(rawProducts) {
     const code = text(product.material_code) || text(product['产品编码']);
     if (!code) continue;
     const categories = categoriesByCode.get(code) ?? new Set();
-    categories.add(text(product.sub_category) || text(product['大类']));
+    categories.add(text(product[productCategoryField]) || text(product['大类']));
     categoriesByCode.set(code, categories);
     const oldCode = text(product.replacement_material_code) || text(product['老品编码']);
     if (oldCode) {
@@ -361,7 +362,9 @@ export function sourceCheckRows(checks, rawProducts) {
   }));
   const classes = [
     ...new Set(
-      (rawProducts ?? []).map((row) => text(row.sub_category) || text(row['大类'])).filter(Boolean),
+      (rawProducts ?? [])
+        .map((row) => text(row[productCategoryField]) || text(row['大类']))
+        .filter(Boolean),
     ),
   ];
   const column = '计划数量';

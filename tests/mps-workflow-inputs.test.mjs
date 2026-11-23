@@ -105,6 +105,25 @@ function partialDemandFixture() {
   return { source, snapshot };
 }
 
+test('查看评估当月发货时仍使用同版本统计基月快照计算需求和期初库存', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.shipment = { cutoff: '2026-11-19', calculationCutoff: '2026-10-31' };
+  snapshot.rows[0].end = 75;
+  const result = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(result.categoryComputation.rows[0].shipment, 100);
+  assert.equal(
+    result.rows.find((row) => row.base === '甲' && row.code === 'A').openingInventory,
+    75,
+  );
+  source.shipment.calculationCutoff = '2026-10-30';
+  const stale = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(stale.categoryComputation.rows[0].shipment, null);
+  assert.equal(
+    stale.rows.find((row) => row.base === '甲' && row.code === 'A').openingInventory,
+    null,
+  );
+});
+
 test('待定发货单品隔离后，同范围的基数、提报和历史继续计算并传入后续需求', () => {
   const { source, snapshot } = partialDemandFixture();
   const untouched = structuredClone(source);
@@ -116,6 +135,20 @@ test('待定发货单品隔离后，同范围的基数、提报和历史继续�
   assert.equal(result.categoryComputation.shipmentScope.excluded.length, 1);
   assert.equal(result.categoryComputation.rows[0].coverage, 'partial');
   assert.equal(result.categoryComputation.bases[0].actual, 300);
+  assert.deepEqual(
+    result.demandDiagnostics.map((row) => [
+      row.expected,
+      row.computed,
+      row.includedShipments,
+      row.excludedShipments,
+    ]),
+    [
+      [1, 1, 1, 1],
+      [1, 1, 1, 1],
+      [1, 1, 1, 1],
+      [1, 1, 1, 1],
+    ],
+  );
   assert.equal(
     result.rows.find((row) => row.month === source.month && row.code === 'A').demand,
     110,
@@ -150,6 +183,95 @@ test('partial 全国SKU无法裁剪时隔离该SKU全部基地，全待定不生
     buildMpsWorkflow(source, null, snapshot).categoryComputation.rows.every(
       (row) => row.quantity === null,
     ),
+  );
+});
+
+test('需求诊断逐类月区分大类缺输入、拆分缺依据与完整有效零，并保留M+4参考', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.products = source.products.slice(0, 1);
+  source.report = source.report.slice(0, 1);
+  snapshot.rows = snapshot.rows.slice(0, 1);
+  const complete = buildMpsWorkflow(source, null, snapshot);
+  assert.deepEqual(
+    complete.demandDiagnostics.map((row) => [row.month, row.status, row.expected, row.computed]),
+    [
+      ['2026-11', 'complete', 1, 1],
+      ['2026-12', 'complete', 1, 1],
+      ['2027-01', 'complete', 1, 1],
+      ['2027-02', 'complete', 1, 1],
+    ],
+  );
+  assert.equal(complete.demandDiagnostics[0].sourceQuantity, 110);
+  assert.equal(complete.demandDiagnostics[3].inventoryReference, true);
+  source.adjustments = {
+    quantities: [
+      { kind: 'base-sku', month: '2027-02', category: '点心', base: '甲', code: 'A', quantity: 25 },
+    ],
+  };
+  const adjusted = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(adjusted.demandDiagnostics[3].sourceQuantity, 100);
+  assert.equal(adjusted.demandDiagnostics[3].effectiveQuantity, 25);
+  assert.equal(adjusted.demandDiagnostics[3].status, 'complete');
+  delete source.adjustments;
+  const noShipment = buildMpsWorkflow(source);
+  assert.equal(noShipment.demandDiagnostics[0].status, 'category-demand-missing');
+  assert.match(noShipment.demandDiagnostics[0].reason, /2026-10.*发货/);
+  source.products[0]['老品编码'] = 'OLD';
+  source.productRaw = [
+    { material_code: 'A', target_base: '甲', replacement_material_code: 'OLD', replace_num: null },
+  ];
+  const noSplit = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(noSplit.demandDiagnostics[0].sourceQuantity, 110);
+  assert.equal(noSplit.demandDiagnostics[0].status, 'split-basis-missing');
+  assert.match(noSplit.demandDiagnostics[0].reason, /替换系数/);
+  assert.deepEqual(
+    noSplit.demandDiagnostics[0].firstMissing.map((row) => [row.base, row.code, row.month]),
+    [['甲', 'A', '2026-11']],
+  );
+  source.categoryDemand = complete.months.map((month) => ({
+    month,
+    category: '点心',
+    quantity: 0,
+  }));
+  const zero = buildMpsWorkflow(source, null, snapshot);
+  assert.ok(
+    zero.demandDiagnostics.every((row) => row.status === 'complete' && row.effectiveQuantity === 0),
+  );
+});
+
+test('需求诊断保留第一处读取失败原因，模型变化不回填有效需求或M+4参考', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.products = source.products.slice(0, 1);
+  source.report = source.report.slice(0, 1);
+  snapshot.rows = snapshot.rows.slice(0, 1);
+  const before = buildMpsWorkflow(source, null, snapshot);
+  source.forecast = [
+    { 月份: '2026-11', 基地: '甲', 产品编码: 'A', 数量: 999999 },
+    { 月份: '2026-12', 基地: '甲', 产品编码: 'A', 数量: 0 },
+  ];
+  source.forecastRead = { status: 'ready', month: source.month };
+  const changed = buildMpsWorkflow(source, null, snapshot);
+  assert.deepEqual(changed.demandDiagnostics, before.demandDiagnostics);
+  assert.deepEqual(
+    changed.rows.map((row) => row.demand),
+    before.rows.map((row) => row.demand),
+  );
+  assert.equal(changed.categoryComparisons[0].forecast['2026-11'].quantity, 999999);
+  source.sourceChecksRead = { status: 'failed', month: source.month, error: 'BI范围查询拒绝' };
+  source.historicalIndicatorsRead = {
+    status: 'failed',
+    month: source.month,
+    error: '年度计划读取超时',
+  };
+  const failed = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(failed.demandDiagnostics[0].status, 'category-demand-missing');
+  assert.match(failed.demandDiagnostics[0].reason, /BI范围查询拒绝/);
+  assert.match(failed.demandDiagnostics[2].reason, /年度计划读取超时/);
+  assert.equal(failed.rows[0].demand, null);
+  source.forecastRead = { status: 'failed', month: source.month, error: '模型读取失败' };
+  assert.deepEqual(
+    buildMpsWorkflow(source, null, snapshot).demandDiagnostics,
+    failed.demandDiagnostics,
   );
 });
 
@@ -1224,7 +1346,7 @@ test('安全天数采用实际读取来源起月与版本，评估月保持独�
   const source = draft();
   source.inventoryTargetsRead = {
     status: 'ready',
-    metadata: { start_month: '2026-11', end_month: '2027-01' },
+    metadata: { start_month: '2026-11', end_month: '2027-01', businessDate: '2026-11-20' },
   };
   const target = {
     month: '2026-11',
@@ -1748,4 +1870,111 @@ test('历史手填调拨保留在版本中但不进入后续既有库存变动�
   assert.equal(row.existingTransferIn, null);
   assert.equal(row.existingTransferOut, null);
   assert.equal(source.shipment.transferPlans[0].inbound, 999);
+});
+
+test('评估接入已确认的月初及库存变动，保留预计结存和逐字段人工值', () => {
+  const source = draft();
+  source.shipment = { cutoff: '2026-12-19', calculationCutoff: '2026-11-30' };
+  source.inventoryMovements = [
+    {
+      month: source.month,
+      base: '乙',
+      code: 'B',
+      productionInbound: null,
+      inTransitInbound: 0,
+      transferIn: 0,
+      transferOut: null,
+      source: '人工确认',
+    },
+  ];
+  const snapshot = {
+    draftId: source.id,
+    month: source.month,
+    shipmentMonth: '2026-11',
+    cutoff: '2026-11-30',
+    sourceKind: 'business',
+    status: 'partial',
+    rows: [{ base: '甲', code: 'A', end: 12, fin: 5 }],
+  };
+  const evaluation = {
+    inventory: {
+      monthly: {
+        rows: [
+          {
+            month: source.month,
+            base: '甲',
+            code: 'A',
+            opening: 44,
+            sourceDate: '2026-12-19',
+            productionInbound: 8,
+            transferIn: 9,
+            transferOut: 10,
+          },
+          {
+            month: source.month,
+            base: '乙',
+            code: 'B',
+            opening: 21,
+            sourceDate: '2026-12-19',
+            productionInbound: 0,
+            transferIn: 7,
+            transferOut: 3,
+          },
+        ],
+      },
+      physical: { cutoff: '2026-11-30', rows: [{ base: '乙', code: 'B', opening: 18 }] },
+    },
+  };
+  const result = buildMpsWorkflow(source, null, snapshot, evaluation);
+  const a = result.plan.rows.find((row) => row.month === source.month && row.code === 'A');
+  const b = result.plan.rows.find((row) => row.month === source.month && row.code === 'B');
+  assert.equal(a.openingInventory, 12);
+  assert.equal(a.existingInTransitInbound, null);
+  assert.equal(b.openingInventory, 21);
+  assert.equal(b.existingProductionInbound, 0);
+  assert.equal(b.existingInTransitInbound, 0);
+  assert.equal(b.existingTransferIn, 0);
+  assert.equal(b.existingTransferOut, 3);
+  assert.match(b.openingInventorySource, /begin_stock/);
+  evaluation.inventory.monthly.rows.pop();
+  const physical = buildMpsWorkflow(source, null, snapshot, evaluation).plan.rows.find(
+    (row) => row.month === source.month && row.code === 'B',
+  );
+  assert.equal(physical.openingInventory, 18);
+  assert.match(physical.openingInventorySource, /live_qty/);
+  assert.equal(
+    buildMpsWorkflow(source, null, { ...snapshot, cutoff: '2026-11-29' }, evaluation).rows[1]
+      .openingInventory,
+    null,
+  );
+});
+
+test('有货物在途证据及调入来源明确为零时才接入，保留人工值和缺项', () => {
+  const source = draft();
+  const row = { month: source.month, base: '甲', code: 'A' };
+  const monthly = { ...row, productionInbound: 4, transferIn: 0, transferOut: 0 };
+  const inTransit = { ...row, quantity: 12, sourceOrders: 1 };
+  const evaluation = {
+    inventory: { monthly: { rows: [monthly] }, transit: { rows: [inTransit] } },
+  };
+  const solve = () => buildMpsWorkflow(source, null, null, evaluation).plan.rows;
+  const actual = () => solve().find((item) => item.month === row.month && item.code === row.code);
+  assert.equal(actual().existingInTransitInbound, 12);
+  assert.match(actual().inventoryMovementSource, /TMS/);
+  for (const pendingTransfer of [2, null]) {
+    monthly.transferIn = pendingTransfer;
+    assert.equal(actual().existingInTransitInbound, null);
+  }
+  monthly.transferIn = 0;
+  evaluation.inventory.transit.rows = [inTransit, inTransit];
+  assert.equal(actual().existingInTransitInbound, null);
+  evaluation.inventory.transit.rows = [inTransit];
+  source.inventoryMovements = [{ ...row, transferIn: 8 }];
+  assert.equal(actual().existingInTransitInbound, null);
+  source.inventoryMovements = [{ ...row, transferIn: 0, inTransitInbound: 0, source: '人工确认' }];
+  assert.equal(actual().existingInTransitInbound, 0);
+  assert.equal(
+    solve().find((item) => item.month === row.month && item.code === 'B').existingInTransitInbound,
+    null,
+  );
 });

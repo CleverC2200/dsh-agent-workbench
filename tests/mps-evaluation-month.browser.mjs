@@ -20,7 +20,8 @@ function source({ queryId, parameters }) {
       record('products.detail', {
         material_code: 'A',
         material_name: '产品A',
-        sub_category: '汤圆',
+        sub_category: '旧大类',
+        responsible_item: '汤圆',
         series: '系列甲',
         product_item: 'G',
         product_item_name: '物料组甲',

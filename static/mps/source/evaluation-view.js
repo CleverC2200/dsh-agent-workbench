@@ -185,10 +185,10 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     numberText,
   }) {
     const [trace, setTrace] = react.useState(null);
-    const [skuPages, setSkuPages] = useStepViewField(
+    const [reportExpanded, setReportExpanded] = useStepViewField(
       react,
       view,
-      'EvaluationOverview.skuPages',
+      'EvaluationOverview.reportExpanded',
       {},
     );
     const [detailPages, setDetailPages] = useStepViewField(
@@ -237,7 +237,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
       if (shownInput === inputScope) return;
       setShownInput(inputScope);
       setTrace(null);
-      setSkuPages({});
+      setReportExpanded({});
       setReportOpen(null);
       setDetailSelection({});
       setDetailPages({});
@@ -362,7 +362,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           '产品编码',
           '产品名称',
           ...(festival ? ['推算口径'] : []),
-          ...labels,
+          ...labels.flatMap((label) => [label, `${label}待补数`, `${label}完整性`]),
         ],
         reportGroups.flatMap((scope) =>
           [
@@ -378,7 +378,17 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             产品名称: entry.name,
             推算口径: demandBasisLabel(festival, scope.month),
             ...Object.fromEntries(
-              plannedFields.map((field, index) => [labels[index], known(entry.rows, field).value]),
+              plannedFields.flatMap((field, index) => {
+                const data = known(entry.rows, field);
+                return [
+                  [labels[index], data.value],
+                  [`${labels[index]}待补数`, data.missing],
+                  [
+                    `${labels[index]}完整性`,
+                    data.missing ? (data.value === null ? '未知' : '已知小计') : '完整',
+                  ],
+                ];
+              }),
             ),
           })),
         ),
@@ -492,6 +502,8 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             : '自身历史，同码只计一次',
         ...Object.fromEntries(plannedFields.map((field, index) => [labels[index], row[field]])),
         ...delistedDownloadFields(row),
+        期初库存来源: row.openingInventorySource,
+        既有库存变动来源: row.inventoryMovementSource,
         需求已满足量: row.fulfilledDemand,
         ODM默认计划到货吨数: row.odmArrivalTons,
         ODM估算说明: row.odmBasis,
@@ -540,6 +552,8 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           '历史参考口径',
           ...labels,
           ...delistedDownloadColumns,
+          '期初库存来源',
+          '既有库存变动来源',
           '需求已满足量',
           'ODM默认计划到货吨数',
           'ODM估算说明',
@@ -600,11 +614,55 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         national,
       );
       const selected = levels.filter((entry) => entry.level === 'SKU');
-      const pageKey = `${key}/${category}/${group}`;
-      const page = Math.min(
-        skuPages[pageKey] ?? 0,
-        Math.max(0, Math.ceil(selected.length / 25) - 1),
+      const entryKey = (entry) => JSON.stringify([key, entry.level, entry.category, entry.group]);
+      const categoryOpen = (value) =>
+        reportExpanded[entryKey({ level: '大类', category: value })] ?? Boolean(category || group);
+      const groupOpen = (entry) =>
+        reportExpanded[entryKey({ ...entry, level: '物料组' })] ?? Boolean(category || group);
+      const toggle = (entry) => {
+        const id = entryKey(entry);
+        const open = entry.level === '大类' ? categoryOpen(entry.category) : groupOpen(entry);
+        const next = { ...reportExpanded, [id]: !open };
+        if (entry.level === '大类' && !open)
+          for (const child of levels.filter(
+            (row) => row.level === '物料组' && row.category === entry.category,
+          ))
+            next[entryKey(child)] = true;
+        setReportExpanded(next);
+      };
+      const visible = levels.filter(
+        (entry) =>
+          entry.level === '大类' ||
+          (categoryOpen(entry.category) && (entry.level === '物料组' || groupOpen(entry))),
       );
+      const disclosure = (entry, text) => {
+        const open = entry.level === '大类' ? categoryOpen(entry.category) : groupOpen(entry);
+        return h(
+          'button',
+          {
+            type: 'button',
+            className: 'wf-report-toggle',
+            title: text,
+            'aria-label':
+              entry.level === '大类'
+                ? `产销存 大类 · ${entry.category}`
+                : `产销存 ${entry.category} 物料组 · ${entry.group}`,
+            'aria-expanded': open,
+            onClick: () => toggle(entry),
+          },
+          h(
+            'svg',
+            { viewBox: '0 0 12 12', width: 12, height: 12, 'aria-hidden': true },
+            h('path', {
+              d: open ? 'M2 4 L6 8 L10 4' : 'M4 2 L8 6 L4 10',
+              fill: 'none',
+              stroke: 'currentColor',
+              strokeWidth: 1.5,
+            }),
+          ),
+          text,
+        );
+      };
       return h(
         react.Fragment,
         null,
@@ -661,13 +719,10 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         table(
           '求解单品明细',
           ['粒度', '大类', '物料组', '产品编码', '产品名称', ...labels, '状态'],
-          [
-            ...levels.filter((entry) => entry.level !== 'SKU'),
-            ...selected.slice(page * 25, (page + 1) * 25),
-          ].map((entry) => [
+          visible.map((entry) => [
             entry.level,
-            entry.category,
-            entry.group,
+            entry.level === '大类' ? disclosure(entry, entry.category) : entry.category,
+            entry.level === '物料组' ? disclosure(entry, entry.group) : entry.group,
             entry.code,
             entry.name,
             ...plannedFields.map((field) =>
@@ -681,23 +736,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         h(
           'div',
           { className: 'dc-card-foot' },
-          `共${selected.length}个单品 · 第${page + 1}页`,
-          h(
-            'button',
-            {
-              disabled: page === 0,
-              onClick: () => setSkuPages({ ...skuPages, [pageKey]: page - 1 }),
-            },
-            '上一页单品',
-          ),
-          h(
-            'button',
-            {
-              disabled: (page + 1) * 25 >= selected.length,
-              onClick: () => setSkuPages({ ...skuPages, [pageKey]: page + 1 }),
-            },
-            '下一页单品',
-          ),
+          `共${selected.length}个单品 · 已展开${visible.filter((entry) => entry.level === 'SKU').length}个单品`,
         ),
       );
     };

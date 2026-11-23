@@ -266,7 +266,7 @@ test('reported quantities retain partial NULL independently and preserve real ze
     );
     CREATE TABLE agents_dim_product_list_mi (
       stat_period TEXT,
-      material_code TEXT, material_name TEXT, sub_category TEXT, series TEXT,
+      material_code TEXT, material_name TEXT, sub_category TEXT, responsible_item TEXT, series TEXT,
       product_item TEXT, product_item_name TEXT
     );
   `);
@@ -282,9 +282,13 @@ test('reported quantities retain partial NULL independently and preserve real ze
     ['D', 6, 5],
   ])
     insert.run('2026-10-01', 'customer', '基地甲', code, plan, correction);
+  db.exec(
+    "INSERT INTO agents_dim_product_list_mi VALUES ('2026-11','A','产品甲','旧大类','汤圆','甲系列','G','甲组')",
+  );
   const query = db.prepare(config.queries['facts.report'].request.sql);
   const first = query.all({ month: '2026-10-01', gea_p98: 2, gea_p99: 0 });
   const second = query.all({ month: '2026-10-01', gea_p98: 2, gea_p99: 2 });
+  assert.equal([...first, ...second].find((row) => row.material_code === 'A').sub_category, '汤圆');
   assert.equal(
     db.prepare(config.queries['facts.report.count'].request.sql).get({ month: '2026-10-01' }).total,
     4,

@@ -5,6 +5,7 @@ import { createCategoryDemand } from './category-demand-view.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
 import { mpsBusinessDate } from './business-date.js';
+import { defaultInventoryMonth } from './inventory-selection.js';
 import {
   hasMpsSource,
   readProducts,
@@ -30,6 +31,7 @@ import { sumSourceAmounts } from './source-money.js';
 import { workbookBytes } from './workbook.js';
 import { annualWorkbookTables } from './annual-workbook.js';
 import { poolSubmissionRows } from './pool-exception-view.js';
+import { createProductScopeReport } from './product-scope-view.js';
 const productColumns = [
   '基地',
   '产品编码',
@@ -1037,6 +1039,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     );
   }
   const MasterData = createMasterData(react, { Dialog, table, downloadCsv, useMpsPart });
+  const ProductScopeReport = createProductScopeReport(react, {
+    table,
+    downloadCsv: downloadCsvLegacy,
+  });
   const DeliveryMetrics = createDeliveryMetrics(react, { table, downloadCsv, useMpsPart });
   const Workflow = createWorkflow(react, useMpsPart, {
     Dialog,
@@ -1133,7 +1139,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [evaluation, setEvaluation] = react.useState(null);
     const workflowStep = react.useRef({ scope: '', step: null });
     const receiveShipment = react.useCallback(
-      (snapshot) => setShipmentSnapshot({ ...snapshot, scopeGeneration }),
+      (snapshot) => {
+        if (snapshot.shipmentMonth === monthOffset(snapshot.month, -1))
+          setShipmentSnapshot({ ...snapshot, scopeGeneration });
+      },
       [scopeGeneration],
     );
     const generation = react.useRef(0),
@@ -1348,7 +1357,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const id = draft.id;
       const { signal, valid } = begin('inventoryTargets');
       try {
-        const result = await readInventoryTargets(draft.month, monthOffset(draft.month, 2), signal);
+        const businessDate = mpsBusinessDate();
+        const sourceMonth = defaultInventoryMonth(businessDate);
+        const result = await readInventoryTargets(sourceMonth, sourceMonth, signal);
+        result.metadata.businessDate = businessDate;
         if (valid())
           setDrafts((entries) =>
             entries.map((entry) =>
@@ -2338,9 +2350,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             draft.productSource === 'business' &&
             ['check', 'ship', 'process', 'constraints', 'capacity', 'report'].includes(step),
           onSnapshot: receiveShipment,
+          calculationSnapshot:
+            shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
           onEditingChange: setAdjusting,
         }),
       ),
+      ['process', 'masterdata'].includes(step) &&
+        h(ProductScopeReport, { key: draft.id, result: workflowResult, selectedCategories }),
       h(
         'div',
         { hidden: step !== 'masterdata' },
