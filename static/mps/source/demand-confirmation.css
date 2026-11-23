@@ -1253,9 +1253,8 @@
 .ap-app[data-step='ship'] .sp-hierarchy-name {
   display: inline-block;
   max-inline-size: calc(100% - 28px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
   vertical-align: middle;
 }
 .ap-app[data-step='ship'] .sp-count {

@@ -216,6 +216,12 @@ test('第2步长物料组不盖数量，正常与窄窗中双层表头跟随表�
     });
     assert.ok(bounds.clipped || bounds.textRight <= bounds.cellRight + 1, '名称在首列边界内显示');
     await expect(group.getByText(longGroup, { exact: true })).toHaveAttribute('title', longGroup);
+    assert.ok(
+      await group
+        .getByText(longGroup, { exact: true })
+        .evaluate((element) => element.scrollWidth <= element.clientWidth),
+      '完整物料组名称在首列内换行可读',
+    );
     const quantity = group.getByRole('button', {
       name: `郑州 汤圆 ${longGroup} 本月已发货 计算过程`,
       exact: true,
