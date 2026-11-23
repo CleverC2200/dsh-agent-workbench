@@ -1296,7 +1296,10 @@ for (const boundary of ['Session', 'identity']) {
       ),
     });
     await expect(
-      frame.getByRole('region', { name: '发货本地核对' }).getByRole('status'),
+      frame.getByRole('region', { name: '发货本地核对' }).getByRole('status', {
+        name: '',
+        exact: true,
+      }),
     ).toContainText('正在读取或校验输入');
     if (boundary === 'Session')
       await page.evaluate(() =>

@@ -94,3 +94,71 @@ test('业务提报池外项保留大类，与同大类历史合并时保留双�
     ],
   );
 });
+
+test('源产品清单独立对账实际参与组合，列出映射遗漏、额外组合与源字段冲突', () => {
+  const draft = workflowDraft();
+  draft.productSource = 'business';
+  draft.productsRead = { status: 'ready' };
+  draft.products = [draft.products[0], { ...draft.products[0], 产品编码: 'EXTRA' }];
+  draft.productRaw = [
+    {
+      stat_period: '2026-12',
+      target_base: '甲',
+      material_code: 'A',
+      responsible_item: '点心',
+      series: '系列',
+      product_item: '包点',
+    },
+    {
+      stat_period: '2026-12',
+      target_base: '乙',
+      material_code: 'B',
+      responsible_item: '点心',
+      series: '系列',
+      product_item: '包点',
+    },
+    {
+      stat_period: '2026-12',
+      target_base: '甲',
+      material_code: 'A',
+      responsible_item: '冲突大类',
+      series: '系列',
+      product_item: '包点',
+    },
+    { stat_period: '2026-12', target_base: '', material_code: 'NOBASE', responsible_item: '点心' },
+  ];
+  const result = buildMpsWorkflow(draft);
+  assert.equal(result.productScope.sourceRows, 4);
+  assert.equal(result.productScope.expectedCount, 2);
+  assert.equal(result.productScope.participatingCount, 2);
+  assert.equal(result.productScope.missingCount, 1);
+  assert.equal(result.productScope.extraCount, 1);
+  assert.match(
+    result.productScope.rows.find((row) => row.code === 'A').issues.join('；'),
+    /大类.*冲突/,
+  );
+  assert.equal(result.productScope.rows.find((row) => row.code === 'B').status, '遗漏');
+  assert.equal(result.productScope.rows.find((row) => row.code === 'EXTRA').status, '额外组合');
+  assert.match(
+    result.productScope.rows.find((row) => row.code === 'NOBASE').issues.join('；'),
+    /缺基地/,
+  );
+  assert.equal(result.scopeCoverage, 'in-scope');
+  assert.match(result.productScope.coverageIssues.join('；'), /全国/);
+});
+
+test('范围对账能定位同基地替换系数冲突，不把待核的已参与SKU视为完整', () => {
+  const draft = workflowDraft();
+  draft.products[0].老品编码 = 'OLD';
+  draft.productRaw = [1, 2].map((replace_num) => ({
+    target_base: '甲',
+    material_code: 'A',
+    replacement_material_code: 'OLD',
+    replace_num,
+  }));
+  const result = buildMpsWorkflow(draft);
+  assert.equal(result.rows[0].historyQuantity, null);
+  const row = result.productScope.rows.find((row) => row.base === '甲' && row.code === 'A');
+  assert.equal(row.participating, true);
+  assert.match(row.issues.join('；'), /替换系数.*冲突/);
+});

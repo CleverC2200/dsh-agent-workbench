@@ -134,7 +134,7 @@ test('春节跨月扣减显示在生产日历和年度矩阵，人工覆盖可�
   await expect(view.getByLabel('郑州 2025-01 生产天数', { exact: true })).toHaveValue('18');
   await workflowStep(frame, '产能评估与缺口');
   await frame.getByRole('button', { name: '执行评估', exact: true }).click();
-  const matrix = frame.getByRole('table', { name: '全年月度负荷率矩阵', exact: true });
+  const matrix = frame.getByRole('table', { name: '全年月度隧道利用率矩阵', exact: true });
   await expect(
     matrix.getByRole('columnheader', { name: '2025-01 春节扣7天', exact: true }),
   ).toBeVisible();
@@ -199,7 +199,6 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
   const baseBranch = detail.getByRole('button', { name: '基地 · 郑州', exact: true });
   if ((await baseBranch.getAttribute('aria-expanded')) === 'false') await baseBranch.press('Enter');
   await detail.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).press('Enter');
-  await detail.getByRole('button', { name: '郑州 物料组 · 组', exact: true }).press('Enter');
   await expect(detail.getByText('SKU · A 产品甲', { exact: true })).toHaveCount(1);
   await expect(detail.getByText('SKU · B 产品乙', { exact: true })).toHaveCount(1);
   await expect(
@@ -236,7 +235,6 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
   await detail.getByRole('button', { name: '基地 · 郑州', exact: true }).press('Enter');
   await detail.getByRole('button', { name: '基地 · 华东', exact: true }).press('Enter');
   await detail.getByRole('button', { name: '华东 大类 · 汤圆', exact: true }).press('Enter');
-  await detail.getByRole('button', { name: '华东 物料组 · 组', exact: true }).press('Enter');
   const product = detail.getByRole('row').filter({ hasText: 'SKU · A 产品甲' });
   await expect(product.getByRole('cell').first()).toHaveText('40');
   const csv = await download(page, view, '下载需求拆分');
@@ -1101,7 +1099,9 @@ test('MPS explicit leaf quantities and share history drive the same inventory an
   await expect(capacity.getByRole('table', { name: '基地大类RCCP', exact: true })).toContainText(
     '无归属需求',
   );
-  await expect(capacity.getByRole('region', { name: '全年月度负荷率', exact: true })).toBeVisible();
+  await expect(
+    capacity.getByRole('region', { name: '全年月度隧道利用率', exact: true }),
+  ).toBeVisible();
   await expect(capacity.getByRole('region', { name: '缺口明细', exact: true })).toBeVisible();
   const rccpReport = capacity.getByRole('table', { name: '基地大类RCCP', exact: true });
   await expect(rccpReport.getByRole('columnheader')).toHaveCount(10);
@@ -1191,7 +1191,7 @@ test('MPS explicit leaf quantities and share history drive the same inventory an
   await report.getByLabel('单品明细物料组', { exact: true }).selectOption('组');
   await expect(report.getByRole('table', { name: '求解单品明细', exact: true })).toContainText('A');
   const skuScroll = report.locator('.wf-plan-detail-row .wf-table-scroll');
-  assert.equal(await skuScroll.evaluate((element) => getComputedStyle(element).maxHeight), 'none');
+  assert.ok(await skuScroll.evaluate((element) => getComputedStyle(element).overflowY === 'auto'));
   const skuTable = await skuScroll.getByRole('table').boundingBox();
   const skuPager = await report.locator('.wf-plan-detail-row .dc-card-foot').boundingBox();
   assert.ok(skuPager.y >= skuTable.y + skuTable.height - 2);
@@ -1200,23 +1200,19 @@ test('MPS explicit leaf quantities and share history drive the same inventory an
       document.getElementById('root').style.width = `${width + 520}px`;
     }, width);
     const frameBounds = await page.locator('iframe').boundingBox();
-    const next = await report
-      .getByRole('button', { name: '下一页单品', exact: true })
-      .boundingBox();
+    const next = await report.locator('.wf-plan-detail-row .dc-card-foot').boundingBox();
     assert.ok(
       next.x >= frameBounds.x && next.x + next.width <= frameBounds.x + frameBounds.width,
-      `pagination remains visible at ${width}px`,
+      `expanded SKU count remains visible at ${width}px`,
     );
     await report.locator('.wf-plan-balances').evaluate((element) => {
       element.scrollLeft = element.scrollWidth;
     });
-    const scrolled = await report
-      .getByRole('button', { name: '下一页单品', exact: true })
-      .boundingBox();
+    const scrolled = await report.locator('.wf-plan-detail-row .dc-card-foot').boundingBox();
     assert.ok(
       scrolled.x >= frameBounds.x &&
         scrolled.x + scrolled.width <= frameBounds.x + frameBounds.width,
-      `pagination remains visible after horizontal scrolling at ${width}px`,
+      `expanded SKU count remains visible after horizontal scrolling at ${width}px`,
     );
     await report.locator('.wf-plan-balances').evaluate((element) => {
       element.scrollLeft = 0;
@@ -1243,8 +1239,8 @@ test('部分需求缺失显示已知负荷，导出保留完整负荷为空和�
   await capacity.getByRole('button', { name: '执行评估', exact: true }).click();
   await capacity.getByLabel('月份筛选', { exact: true }).selectOption('2026-12');
   const rccp = capacity.getByRole('table', { name: '基地大类RCCP', exact: true });
-  await expect(rccp).toContainText('已知需求负荷');
-  await expect(rccp).toContainText('完整负荷待补');
+  await expect(rccp).toContainText('已知需求隧道利用率');
+  await expect(rccp).toContainText('完整隧道利用率待补');
   await capacity.getByText('查看2026-12缺项明细 1项', { exact: true }).click();
   const issues = capacity.getByRole('table', { name: '需求与折吨缺项', exact: true });
   await expect(issues).toContainText('B 产品乙');
@@ -1612,12 +1608,12 @@ test('MPS Tab5 reuses explicit SKU turnover supplements across three months whil
   await beginAdjustment(view);
   csv = await download(page, view, '下载目标库存明细');
   assert.match(csv, /2026-12,郑州,B,产品乙,月初,300,10,30,10,人工补充目标周转天数/);
+  const targetReads = calls.filter((call) => call.queryId === 'inventory-targets.detail');
+  assert.ok(targetReads.length > 0);
   assert.ok(
-    calls.some(
+    targetReads.every(
       (call) =>
-        call.queryId === 'inventory-targets.detail' &&
-        call.parameters.start_month === '2026-12' &&
-        call.parameters.end_month === '2027-02',
+        call.parameters.start_month === '2026-12' && call.parameters.end_month === '2026-12',
     ),
   );
   await view.getByLabel('目标库存版本', { exact: true }).selectOption('auto');
@@ -1625,8 +1621,10 @@ test('MPS Tab5 reuses explicit SKU turnover supplements across three months whil
   await beginAdjustment(view);
   const fullCsv = await download(page, view, '下载三个月完整目标库存');
   const sourceCsv = await download(page, view, '下载完整目标源记录');
-  assert.match(sourceCsv, /2027-01,郑州,A,滚动,220,10/);
-  assert.match(sourceCsv, /2027-02,郑州,A,滚动,50,0/);
+  assert.match(sourceCsv, /2026-12,郑州,A,纠偏,120,10/);
+  assert.match(sourceCsv, /2026-12,郑州,A,月初,500,10/);
+  assert.match(sourceCsv, /2026-12,郑州,B,月初,300,10/);
+  assert.doesNotMatch(sourceCsv, /2027-01|2027-02/);
   const book = XLSX.read(fullCsv, { type: 'string', raw: true });
   const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
   for (const row of exported) {
@@ -1912,21 +1910,22 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
     turnover_days_value_count: 1,
     missing_turnover_days_rows: 0,
   };
-  const { page, frame } = await mpsPage(t, config, ({ queryId }) =>
-    queryId.startsWith('inventory-targets.')
-      ? {
-          rows: queryId.endsWith('.count')
-            ? [{ total: 3 }]
-            : [
-                source,
-                { ...source, target_month: '2027-01', final_target_turnover_days: 30 },
-                { ...source, target_month: '2027-02', final_target_turnover_days: 40 },
-              ],
-          returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,
-          configVersion: 'turnover-days-source',
-        }
-      : emptySource({ queryId }),
-  );
+  const { page, frame, calls } = await mpsPage(t, config, ({ queryId, parameters }) => {
+    if (!queryId.startsWith('inventory-targets.')) return emptySource({ queryId });
+    const rows = [
+      source,
+      { ...source, target_month: '2027-01', final_target_turnover_days: 30 },
+      { ...source, target_month: '2027-02', final_target_turnover_days: 40 },
+    ].filter(
+      (row) =>
+        row.target_month >= parameters.start_month && row.target_month <= parameters.end_month,
+    );
+    return {
+      rows: queryId.endsWith('.count') ? [{ total: rows.length }] : rows,
+      returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,
+      configVersion: 'turnover-days-source',
+    };
+  });
   await version(frame, '2026-12');
   await upload(
     frame,
@@ -1944,7 +1943,15 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
   const pending = view.getByRole('table', { name: '目标周转天数待补', exact: true });
   await expect(pending.locator('tbody tr')).toHaveCount(1);
   await expect(pending).toContainText('产品乙');
-  await expect(view).toContainText('安全天数来源：2026-12 月初版，供本次三个评估月共用');
+  await expect(view).toContainText('业务日期2026-12-15，安全天数来源月2026-12');
+  await expect(view).toContainText('逐基地SKU按纠偏、月初选择，实际采用月初');
+  await expect(view).toContainText('同一基地SKU的天数供本次三个评估月共用');
+  const turnoverReport = view.getByRole('table', { name: '周转天数与库存目标报告', exact: true });
+  await expect(
+    turnoverReport
+      .getByRole('row')
+      .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) }),
+  ).toContainText('周转天数版本回退');
   if (process.env.MPS_TURNOVER_SCREENSHOT)
     await page.screenshot({ path: process.env.MPS_TURNOVER_SCREENSHOT, fullPage: true });
   const referenceRows = async (label) => {
@@ -1970,7 +1977,7 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
     for (const row of rows) {
       assert.equal(row['评估月'], row['月份']);
       assert.equal(row['安全天数来源月'], '2026-12');
-      assert.equal(row['安全天数来源版本'], '月初');
+      assert.equal(row['安全天数来源版本'], row['产品编码'] === 'A' ? '月初' : '纠偏');
       assert.equal(
         row['依赖需求月'],
         {
@@ -2009,7 +2016,11 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
     ['2026-12', '2027-01', '2027-02'],
   );
   assert.ok(
-    rows.every((row) => row['安全天数来源月'] === '2026-12' && row['安全天数来源版本'] === '月初'),
+    rows.every(
+      (row) =>
+        row['安全天数来源月'] === '2026-12' &&
+        row['安全天数来源版本'] === (row['产品编码'] === 'A' ? '月初' : '纠偏'),
+    ),
   );
   assert.deepEqual(
     [...new Set(rows.map((row) => row['依赖需求月']))],
@@ -2039,15 +2050,22 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
     raw: true,
   });
   const sourceRows = XLSX.utils.sheet_to_json(sourceBook.Sheets[sourceBook.SheetNames[0]]);
-  assert.equal(sourceRows.length, 3);
+  assert.equal(sourceRows.length, 1);
   assert.deepEqual(
     sourceRows.map((row) => Number(row['源最终目标周转天数'])),
-    [27, 30, 40],
+    [27],
   );
   assert.equal(
-    sourceRows.filter((row) => row['安全天数使用状态'] === '选定来源月及版本，按基地SKU匹配')
-      .length,
+    sourceRows.filter((row) => row['安全天数使用状态'] === '已采用该基地SKU的来源月及版本').length,
     1,
+  );
+  const targetReads = calls.filter((call) => call.queryId === 'inventory-targets.detail');
+  assert.ok(targetReads.length > 0);
+  assert.ok(
+    targetReads.every(
+      (call) =>
+        call.parameters.start_month === '2026-12' && call.parameters.end_month === '2026-12',
+    ),
   );
   await field.fill('25');
   await field.press('Tab');

@@ -14,7 +14,7 @@ async function setup(t, extra = {}) {
       material_code: code,
       target_base: '郑州',
       material_name: `产品${code}`,
-      sub_category: '汤圆',
+      responsible_item: '汤圆',
       series: '系列',
       product_item: '组',
       product_item_name: '组',

@@ -135,13 +135,13 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
             'span',
             {
               className: 'wf-capacity-partial',
-              title: '仅用已知需求除以产能；缺项未计入，完整负荷仍未知',
+              title: '仅用已知需求除以产能；缺项未计入，完整隧道利用率仍未知',
             },
-            `已知需求负荷 ${numberText(row.knownLoad, true)}`,
-            h('small', null, `缺需求或折吨${row.demand.missing}项，完整负荷待补`),
+            `已知需求隧道利用率 ${numberText(row.knownLoad, true)}`,
+            h('small', null, `缺需求或折吨${row.demand.missing}项，完整隧道利用率待补`),
           )
         : row.demand.missing
-          ? `缺需求或折吨${row.demand.missing}项，完整负荷待补`
+          ? `缺需求或折吨${row.demand.missing}项，完整隧道利用率待补`
           : '未取得需求来源';
     };
     const demandIssues = (report.demandIssues ?? []).filter(
@@ -187,8 +187,8 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         已知无归属需求吨数: row.unassigned.known,
         日产吨数: row.dailyTons,
         月产能: row.capacity,
-        负荷率: row.load,
-        已知需求对应负荷: row.knownLoad,
+        隧道利用率: row.load,
+        已知需求对应隧道利用率: row.knownLoad,
         未计入归属需求项数: row.demand.missing,
         未计入无归属需求项数: row.unassigned.missing,
         余量吨数: row.margin,
@@ -281,18 +281,18 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
           '基地需求与月总产能',
           [
             '基地',
-            '产线条数',
+            '物理隧道数',
             `${month}内部需求（吨）`,
             `${month}ODM需求（吨，不占产能）`,
             '生产天数',
             '日标准产能（吨/日）',
             '月总产能（吨）',
-            '负荷率',
+            '隧道利用率',
             '余量（吨）',
             ...Array.from(
               { length: 4 },
               (_, index) =>
-                `${offset(month, index + 1)}负荷率${plan.months.includes(offset(month, index + 1)) ? '' : '（年度参考）'}`,
+                `${offset(month, index + 1)}隧道利用率${plan.months.includes(offset(month, index + 1)) ? '' : '（年度参考）'}`,
             ),
           ],
           baseRows.map((row) => [
@@ -321,7 +321,11 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         h(
           react.Fragment,
           null,
-          h('p', { className: 'wf-note' }, '已知负荷未包含缺项需求；完整负荷、余量及缺口待补。'),
+          h(
+            'p',
+            { className: 'wf-note' },
+            '已知隧道利用率未包含缺项需求；完整隧道利用率、余量及缺口待补。',
+          ),
           rccpTable(
             [
               '基地',
@@ -329,9 +333,9 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
               `${month}归属需求（吨）`,
               '日产能（吨/日）',
               '月产能（吨）',
-              `${month}负荷率`,
+              `${month}隧道利用率`,
               '余量（吨）',
-              `${next}负荷率`,
+              `${next}隧道利用率`,
               '无归属需求（吨）',
               'ODM需求（吨，不占产能）',
             ],
@@ -656,7 +660,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         ),
       ),
       card(
-        '全年月度负荷率',
+        '全年月度隧道利用率',
         h(
           react.Fragment,
           null,
@@ -730,7 +734,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
             'div',
             null,
             table(
-              '全年月度负荷率矩阵',
+              '全年月度隧道利用率矩阵',
               [
                 '基地',
                 ...report.fiscalMonths.map((period) => {
@@ -925,7 +929,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                   '需求（吨）',
                   '月产能上限（吨）',
                   '缺口（吨）',
-                  '负荷率',
+                  '隧道利用率',
                   '瓶颈类型',
                 ],
                 gaps.map((row) => [
@@ -958,22 +962,22 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
             h(
               'p',
               null,
-              `月产能＝去重后的物理产线日产吨数×有效生产天数。${productionCalendarRule}已采用停线约束继续生效。`,
+              `月产能＝去重后的物理隧道日产吨数×有效生产天数。${productionCalendarRule}已采用停线约束继续生效。`,
             ),
             h(
               'p',
               null,
-              'RCCP只用有有效本基地产线的需求评估本基地负荷；无归属需求单列。组合柔线可在不同大类引用，全国物理总产能去重。',
+              'RCCP只用有有效本基地产线的需求评估本基地隧道利用率；无归属需求单列。组合柔线可在不同大类引用，全国物理总产能去重。',
             ),
             h(
               'p',
               null,
-              '负荷90%至105%为黄色，超过105%为红色。系列配额＝大类月产能×归属需求占比，保留超配额正负值以对平大类余量。',
+              '隧道利用率90%至105%为黄色，超过105%为红色。系列配额＝大类月产能×归属需求占比，保留超配额正负值以对平大类余量。',
             ),
             h(
               'p',
               null,
-              '生产达成率＝实际发货加调出量后除以实际生产量；计划达成率＝实际发货÷预测。两者只用于对应复盘口径，不与需求负荷混算。',
+              '生产达成率＝实际发货加调出量后除以实际生产量；计划达成率＝实际发货÷预测。两者只用于对应复盘口径，不与隧道利用率混算。',
             ),
             h(
               'p',

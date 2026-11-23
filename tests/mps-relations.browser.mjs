@@ -12,9 +12,9 @@ const rows = {
       material_code: `P${String(index).padStart(3, '0')}`,
       material_name: `源产品${index}`,
       series: '产品系列',
-      sub_category: '汤圆',
+      responsible_item: '汤圆',
     })),
-    { material_code: '', material_name: '同名空码', series: null, sub_category: null },
+    { material_code: '', material_name: '同名空码', series: null, responsible_item: null },
   ],
   sku_capacity: [
     {
@@ -174,6 +174,8 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
   assert.equal(candidate['隧道类型'], '双螺旋');
   assert.equal(candidate['组合标准日产/件'], 50);
   assert.equal(candidate['组合标准日产/吨'], 0);
+  assert.match(candidate['核对状态'], /产线归属待补.*当前读取字段未提供独立产线/);
+  await expect(view.locator('tbody tr').nth(0)).toContainText('产线归属待补');
   await view.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(view.locator('tbody tr')).toHaveCount(4);
   await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('同名空码');
@@ -186,6 +188,7 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
   await expect(view.getByRole('columnheader', { name: '源记录数', exact: true })).toBeVisible();
   await expect(view.locator('tbody tr').locator('td').nth(9)).toHaveText('39');
   await expect(view.locator('tbody tr')).toContainText('四川');
+  await expect(view.locator('tbody tr')).toContainText('产线归属待补');
   await expect(view.locator('tbody tr')).not.toContainText('西南');
   await view.getByRole('tab', { name: /基地与调拨/ }).click();
   await expect(view.locator('tbody tr')).toContainText('2026-10');

@@ -93,6 +93,7 @@ export function encodeLocalDrafts(drafts, selected) {
             shipment: {
               ...fields(draft.shipment, [
                 'cutoff',
+                'calculationCutoff',
                 'activeSource',
                 'values',
                 'remaining',

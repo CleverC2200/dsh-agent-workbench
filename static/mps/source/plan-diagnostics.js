@@ -20,7 +20,7 @@ export function attachPlanReport(
   plan,
   sources,
   relations,
-  { categoryComputation, shipmentSnapshot } = {},
+  { categoryComputation, shipmentSnapshot, inventory } = {},
 ) {
   const raw = relations?.sources;
   const candidates = groupBy(sources.planCandidates, (row) => pair(row.base, row.code));
@@ -134,7 +134,19 @@ export function attachPlanReport(
                 ...(shipmentSnapshot.error ? [shipmentSnapshot.error] : []),
               ]
             : !source
-              ? [`${shipmentSnapshot.cutoff}发货库存读取结果无同基地SKU记录`]
+              ? [
+                  `${shipmentSnapshot.cutoff}发货库存读取结果无同基地SKU记录`,
+                  ...(inventory?.monthly?.error
+                    ? [`评估月库存日报读取失败：${inventory.monthly.error}`]
+                    : inventory?.monthly
+                      ? ['评估月日报无可用月初值']
+                      : []),
+                  ...(inventory?.physical?.error
+                    ? [`月末基地批次实存读取失败：${inventory.physical.error}`]
+                    : inventory?.physical
+                      ? ['同日01/02仓类无可用同基地SKU实存']
+                      : []),
+                ]
               : [
                   ...['open', 'inbound', 'remaining', 'fin']
                     .filter((field) => source[field] == null)
@@ -163,6 +175,21 @@ export function attachPlanReport(
             ? '先核对读取错误、访问权限及截止日，重新同步有效来源后再核对具体缺项'
             : '人工补齐第二步该基地SKU的截止日库存、入库和预估发货输入，形成有效月末结存后重新评估'
           : '先处理上月该基地SKU的需求、库存或产能异常，取得实际期末结存后重新评估',
+      );
+    }
+    if (row.planMissing.includes('既有入库或调拨计划缺项')) {
+      const missing = [
+        ['existingProductionInbound', '既有生产入库'],
+        ['existingInTransitInbound', '既有在途入库'],
+        ['existingTransferIn', '既有调入'],
+        ['existingTransferOut', '既有调出'],
+      ].filter(([field]) => !Number.isFinite(row[field]));
+      add(
+        '既有入库或调拨计划缺项',
+        `${row.month} ${row.base} ${row.code} 缺${missing.map(([, label]) => label).join('、')}，可用库存与实际期末结存不能完整计算，未知值不补0`,
+        '月度库存日报 / WMS-TMS-入库通知 / 当前评估版本既有库存变动确认',
+        missing.map(([field]) => field).join(' / '),
+        `在第五步约束与配置的既有库存变动确认中核对${row.month} ${row.base} ${row.code}已有订单和在途计划，补齐所列字段并填写来源和确认原因；确认无计划时明确填0，保存后重新评估`,
       );
     }
     for (const issue of row.inventoryIssues ?? [])
@@ -238,6 +265,7 @@ export function attachPlanReport(
             '缺前月实际结存',
             '缺目标库存',
             '缺唯一有效件吨系数',
+            '既有入库或调拨计划缺项',
             '无有效ODM收货或调拨路径',
           ].includes(item) && !item.startsWith('ODM来源冲突：'),
       ))
