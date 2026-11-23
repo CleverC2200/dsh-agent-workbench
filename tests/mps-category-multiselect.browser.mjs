@@ -215,7 +215,7 @@ test('前五步均可修改共享大类筛选，下载和异常随筛选，后�
   assert.equal(saved.draft.shipment.rows.length, 3);
 });
 
-test('发货物料组仅一页隐藏整个分页条，多页仍能查看最后一个单品', async (t) => {
+test('发货大类展开全部物料组和单品，小组不显示分页条', async (t) => {
   const products = Array.from({ length: 26 }, (_, i) => [`A${i}`, '甲类']);
   products.push(['B', '乙类']);
   const { frame } = await open(t, products);
@@ -237,9 +237,9 @@ test('发货物料组仅一页隐藏整个分页条，多页仍能查看最后�
     frame.getByRole('button', { name: '郑州 乙类 乙类组 下一页单品', exact: true }),
   ).toHaveCount(0);
   await expect(frame.locator('.sp-sku-pages').filter({ hasText: '郑州 乙类' })).toHaveCount(0);
-  const next = frame.getByRole('button', { name: '郑州 甲类 甲类组 下一页单品', exact: true });
-  await expect(next).toBeEnabled();
-  await next.click();
+  await expect(
+    frame.getByRole('button', { name: '郑州 甲类 甲类组 下一页单品', exact: true }),
+  ).toHaveCount(0);
   await expect(
     frame.getByRole('button', { name: '郑州 A25 本月已发货 计算过程', exact: true }),
   ).toBeVisible();
