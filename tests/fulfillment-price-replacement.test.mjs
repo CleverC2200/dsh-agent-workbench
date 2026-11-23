@@ -101,13 +101,13 @@ async function replace(f) {
   f.button('完成选品').click();
   await tick();
 }
-test('missing price shows a dash with the specific reason in red, while deletion and date editing remain available', () => {
+test('missing price shows a dash and a short red label, while deletion and date editing remain available', () => {
   const f = setup();
   try {
     const row = f.document.querySelector('article[data-sku="BAD"]');
     assert.equal(row.querySelector('.editor-price strong').textContent, '¥ —');
     const hint = row.querySelector('.editor-price-warning');
-    assert.match(hint.textContent, /SAP未返回/);
+    assert.equal(hint.textContent, '暂无价格');
     assert.equal(f.dom.window.getComputedStyle(hint).color, 'rgb(237, 34, 50)');
     assert.equal(f.document.querySelector('[aria-label="BAD 数量"]').disabled, true);
     assert.equal(
@@ -116,6 +116,26 @@ test('missing price shows a dash with the specific reason in red, while deletion
     );
     assert.ok(f.document.querySelector('.editor-remove'));
     assert.ok(!row.querySelector('.editor-price').textContent.includes('价格异常'));
+  } finally {
+    f.dom.window.close();
+  }
+});
+test('price labels stay on one line without expandable details or business actions', () => {
+  const f = setup();
+  try {
+    const row = f.document.querySelector('article[data-sku="BAD"]');
+    const hint = row.querySelector('.editor-price-warning');
+    const style = f.dom.window.getComputedStyle(hint);
+    assert.equal(style.whiteSpace, 'nowrap');
+    assert.equal(style.textOverflow, 'ellipsis');
+    assert.equal(f.dom.window.getComputedStyle(row.querySelector('.editor-price')).minWidth, '0');
+    assert.equal(hint.textContent, '暂无价格');
+    assert.equal(hint.tagName, 'SMALL');
+    assert.equal(hint.title, '');
+    hint.click();
+    assert.equal(row.querySelector('[data-editor-price-detail]'), null);
+    assert.equal(hint.hasAttribute('aria-expanded'), false);
+    assert.equal(f.calls.length, 0);
   } finally {
     f.dom.window.close();
   }
@@ -147,9 +167,9 @@ test('fresh price failure still blocks submission and updates the displayed caus
   try {
     await replace(f);
     assert.equal(f.document.querySelector('[data-editor-price="NEW"]').textContent, '¥ —');
-    assert.match(
+    assert.equal(
       f.document.querySelector('[data-editor-price-reason="NEW"]').textContent,
-      /查价超时/,
+      '暂无价格',
     );
     f.button('提交').click();
     assert.equal(f.document.querySelector('[data-editor-confirm]').disabled, true);
