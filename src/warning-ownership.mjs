@@ -45,7 +45,10 @@ export function createOwnerScopedApi({ state, currentOwner, api }) {
     let taskId;
     if (['delete', 'toggle', 'run'].includes(input.op)) taskId = input.id;
     else if (input.op === 'save' && input.task?.id) taskId = input.task.id;
-    else if (['close-event', 'notify-test'].includes(input.op)) {
+    else if (input.op === 'retry-notification') {
+      taskId = state.runs.find((run) => run.id === input.runId)?.taskId;
+      if (!taskId) throw Error('执行记录不存在或不属于当前用户');
+    } else if (['close-event', 'notify-test'].includes(input.op)) {
       const event = state.events.find(
         (e) => e.id === (input.op === 'notify-test' ? input.eventId : input.id),
       );

@@ -7,6 +7,7 @@ import {
   enqueueChanges,
   enqueueNotification,
   drainNotifications,
+  requeueFailedNotification,
 } from './feishu-warning-transport.mjs';
 import { baseOwners, categoryOwners, resolveWarningRoutes } from './warning-recipient-routing.mjs';
 import { validateOwnerDirectory } from './warning-owner-directory.mjs';
@@ -839,6 +840,17 @@ export async function installDetection(ctx) {
           recipientName: job.recipientName,
         };
       }
+      case 'retry-notification':
+        return locked(async () => {
+          const run = state.runs.find((entry) => entry.id === input.runId);
+          const task = state.tasks.find((entry) => entry.id === run?.taskId);
+          if (!task || task.deletedAt || !/^[a-f0-9]{32}$/.test(input.batchId || ''))
+            throw Error('检测任务或发送批次无效');
+          const events = requeueFailedNotification(state, task.id, run.id, input.batchId);
+          await save({ ...state, events });
+          state.events = events;
+          return { status: '待发送' };
+        });
       case 'close-event':
         return locked(async () => {
           const e = state.events.find((x) => x.id === input.id);
@@ -987,10 +999,15 @@ export async function installDetection(ctx) {
     }
   }
   const ownedApi = createOwnerScopedApi({ state, currentOwner, api });
+  let delivering = false;
+  const reloadIdleState = () =>
+    locked(async () => {
+      if (!running.size && !delivering) Object.assign(state, await store.load());
+    });
   let requests = Promise.resolve();
   const scopedApi = (input) => {
     const pending = requests.then(async () => {
-      if (!running.size) Object.assign(state, await store.load());
+      await reloadIdleState();
       const result = await ownedApi(input);
       if (input.op !== 'list') return result;
       const cutoff = Date.now() - DETECTION_TIMEOUT_MS;
@@ -1022,12 +1039,12 @@ export async function installDetection(ctx) {
       },
     }),
   );
-  let delivering = false;
   async function deliver() {
-    if (delivering || (await scheduler({ operation: 'feishu-status' })).enabled !== true) return;
+    if (delivering) return;
     delivering = true;
     try {
-      await drainNotifications({ state, save, locked, send: sendNotification });
+      if ((await scheduler({ operation: 'feishu-status' })).enabled === true)
+        await drainNotifications({ state, save, locked, send: sendNotification });
     } finally {
       delivering = false;
     }
@@ -1054,7 +1071,7 @@ export async function installDetection(ctx) {
       const { job } = await scheduler({ operation: 'poll', busy: running.size > 0 });
       if (job && !disposed) {
         await requests;
-        if (!running.size) Object.assign(state, await store.load());
+        await reloadIdleState();
         void runTask(job.taskId, job.runKey)
           .then(
             (result) =>

@@ -50,6 +50,34 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     ...run,
     value: run.response?.results?.length ? '检测 ' + run.response.results.length + ' 个对象' : '—',
   });
+  function readRunLogs(state) {
+    const notificationsByRun = new Map();
+    for (const event of state.events || []) {
+      for (const delivery of event.notifications || []) {
+        if (delivery.kind === 'test' || !delivery.runId) continue;
+        if (!notificationsByRun.has(delivery.runId))
+          notificationsByRun.set(delivery.runId, { names: new Set(), statuses: new Set() });
+        const { names, statuses } = notificationsByRun.get(delivery.runId);
+        statuses.add(delivery.status);
+        if (delivery.status === '已发送' && typeof delivery.recipientName === 'string') {
+          const name = delivery.recipientName.trim();
+          if (name) names.add(name);
+        }
+      }
+    }
+    return state.runs.map((run) => {
+      const receipts = notificationsByRun.get(run.id);
+      const notices = ['发送失败', '待核实', '发送中', '待发送', '已取消'].filter((status) =>
+        receipts?.statuses.has(status),
+      );
+      if (run.notificationIssue) notices.push('通知待处理');
+      return {
+        ...runLog(run),
+        sentTo: Array.from(receipts?.names || []).join('、'),
+        notificationStatus: notices.join(' · '),
+      };
+    });
+  }
   let monitors = [],
     logs = [],
     runEvents = [],
@@ -60,6 +88,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
   let deleteTarget = null;
   let deletePending = null;
   let deleteError = '';
+  let locatedTaskId;
   let stateVersion = 0;
   events = [...events];
   const mask = document.createElement('div');
@@ -100,7 +129,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       if (!mask.isConnected) return;
       monitors = state.tasks;
       runEvents = state.events || [];
-      logs = state.runs.map(runLog);
+      logs = readRunLogs(state);
       canWrite = state.capabilities?.write !== false;
       writeReason = canWrite ? '' : state.capabilities.reason;
       nav.hidden = false;
@@ -140,7 +169,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     if (!mask.isConnected || version !== stateVersion || deleteDialog.open) return;
     monitors = state.tasks;
     runEvents = state.events || [];
-    logs = state.runs.map(runLog);
+    logs = readRunLogs(state);
     window.dispatchEvent(new Event('gea-detection-updated'));
     if (!main.classList.contains('am-editing') && before !== JSON.stringify([monitors, logs]))
       render();
@@ -209,13 +238,30 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       '</div>'
     );
   }
+  function locateTask(taskId) {
+    tab = 'monitors';
+    locatedTaskId = taskId;
+    render();
+    const target = main.querySelector('[data-located-task]');
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: 'center', inline: 'start', behavior: 'instant' });
+  }
   function render() {
     const pageSize = 10;
     const pageCount = Math.max(1, Math.ceil(logs.length / pageSize));
     runPage = Math.min(runPage, pageCount - 1);
     const pageLogs = logs.slice(runPage * pageSize, (runPage + 1) * pageSize);
-    const previousScroll = main.querySelector('.am-table')?.scrollLeft || 0;
+    const previousTable = main.querySelector('.am-table');
+    const previousScroll = previousTable?.scrollLeft || 0;
+    const previousRunTop = previousTable?.matches('.am-run-table') ? previousTable.scrollTop : 0;
+    const restoreTableFocus = previousTable === document.activeElement;
+    const restoreLocatedFocus =
+      main.querySelector('[data-located-task]') === document.activeElement;
+    const showRuns = tab === 'logs' && logs.length > 0;
+    if (tab !== 'monitors') locatedTaskId = undefined;
     main.classList.remove('am-editing', 'am-owner-page');
+    main.classList.toggle('am-run-list', showRuns);
     mask
       .querySelectorAll('[data-tab]')
       .forEach(
@@ -225,6 +271,10 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
           (b.tabIndex = b.dataset.tab === tab ? 0 : -1)
         ),
       );
+    main.setAttribute(
+      'aria-label',
+      nav.querySelector('[aria-selected="true"]')?.textContent || '预警管理内容',
+    );
     if (tab === 'owners') {
       void renderOwnerDirectory(main, api, { canWrite, writeReason });
       return;
@@ -256,7 +306,9 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
         monitors
           .map(
             (m) =>
-              '<tr><td>' +
+              (locatedTaskId && m.id === locatedTaskId
+                ? '<tr class="am-located-task"><td data-located-task tabindex="-1">'
+                : '<tr><td>') +
               esc(m.metric) +
               '<small class="am-task-state ' +
               (m.enabled ? 'is-enabled' : 'is-disabled') +
@@ -329,9 +381,10 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
           )
           .join('') +
         '</tbody></table>';
-    if (tab === 'logs')
+    if (tab === 'logs') {
+      const taskIds = new Set(monitors.map((task) => task.id));
       html =
-        '<table><thead><tr><th>执行时间</th><th>检测任务</th><th>执行数字人</th><th>实际模型</th><th>检测结果</th><th>状态</th><th>AI上下文</th><th>处理结果</th></tr></thead><tbody>' +
+        '<table><thead><tr><th>执行时间</th><th>检测任务</th><th>执行数字人</th><th>实际模型</th><th>检测结果</th><th scope="col">检测状态</th><th scope="col">发送对象</th><th>AI上下文</th><th>处理结果</th></tr></thead><tbody>' +
         pageLogs
           .map(
             (x) =>
@@ -343,7 +396,15 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
                 }),
               ) +
               '</td><td>' +
-              esc(x.name) +
+              (x.taskId && taskIds.has(x.taskId)
+                ? '<button type="button" class="am-run-task-link" data-locate-task="' +
+                  esc(x.taskId) +
+                  '" title="' +
+                  esc(x.name) +
+                  '">' +
+                  esc(x.name) +
+                  '</button>'
+                : esc(x.name)) +
               '</td><td>' +
               esc(x.actualAgent?.name || x.actualAgent?.id || '未留存') +
               '</td><td>' +
@@ -352,6 +413,11 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
               esc(x.value) +
               '</td><td>' +
               esc(x.status) +
+              '</td><td class="am-run-recipients">' +
+              esc(x.sentTo || x.notificationStatus || '-') +
+              (x.sentTo && x.notificationStatus
+                ? '<small>' + esc(x.notificationStatus) + '</small>'
+                : '') +
               '</td><td><button type="button" class="am-context-button" data-context="' +
               esc(x.id) +
               '" ' +
@@ -370,17 +436,19 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
           )
           .join('') +
         '</tbody></table>';
-    main.querySelector('.am-table').innerHTML =
+    }
+    const table = main.querySelector('.am-table');
+    table.innerHTML =
       tab === 'monitors' && !monitors.length
         ? '<div class="am-empty">暂无检测任务，点击“新增检测”开始。</div>'
         : tab === 'logs' && !logs.length
           ? '<div class="am-empty">暂无执行记录。任务执行后将在这里显示。</div>'
           : html;
-    main
-      .querySelector('.am-table')
-      .classList.add(tab === 'monitors' ? 'am-task-table' : 'am-run-table');
-    main.querySelector('.am-table').scrollLeft = previousScroll;
-    if (tab === 'logs' && logs.length) {
+    table.classList.add(tab === 'monitors' ? 'am-task-table' : 'am-run-table');
+    if (showRuns) {
+      table.tabIndex = 0;
+      table.setAttribute('role', 'region');
+      table.setAttribute('aria-label', '执行记录表格');
       const pager = document.createElement('div');
       pager.className = 'am-pagination';
       pager.setAttribute('aria-label', '执行记录分页');
@@ -402,16 +470,30 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       pager.querySelector('[data-page-prev]').onclick = () => {
         if (runPage > 0) {
           runPage--;
+          table.scrollTop = 0;
           render();
         }
       };
       pager.querySelector('[data-page-next]').onclick = () => {
         if (runPage < pageCount - 1) {
           runPage++;
+          table.scrollTop = 0;
           render();
         }
       };
+      table.scrollTop = previousRunTop;
+      if (restoreTableFocus) table.focus({ preventScroll: true });
     }
+    table.scrollLeft = previousScroll;
+    if (restoreLocatedFocus)
+      (
+        table.querySelector('[data-located-task]') || nav.querySelector('[data-tab="monitors"]')
+      ).focus({
+        preventScroll: true,
+      });
+    table.querySelectorAll('[data-locate-task]').forEach((button) => {
+      button.onclick = () => locateTask(button.dataset.locateTask);
+    });
     main
       .querySelectorAll('[data-context]')
       .forEach(
@@ -419,11 +501,13 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
       );
     main.querySelectorAll('[data-result]').forEach(
       (b) =>
-        (b.onclick = () =>
-          showRunResult(
-            logs.find((r) => r.id === b.dataset.result),
-            runEvents,
-          )),
+        (b.onclick = () => {
+          const entry = logs.find((r) => r.id === b.dataset.result);
+          showRunResult(entry, runEvents, {
+            canRetry: canWrite && monitors.some((task) => task.id === entry.taskId),
+            currentEvents: () => runEvents,
+          });
+        }),
     );
     if (!canWrite)
       main
@@ -814,6 +898,7 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     ).join('');
     const formCatalog =
       edit?.metric && !catalog.includes(edit.metric) ? [...catalog, edit.metric] : catalog;
+    main.classList.remove('am-run-list');
     main.classList.add('am-editing');
     main.innerHTML =
       '<h3>' +
@@ -1056,9 +1141,9 @@ export const openAlertManagement = async function (events, onEvent, startNew) {
     if (deleteDialog.open || document.querySelector('.audit-mask')) return;
     if (e.key === 'Escape' && !e.defaultPrevented) close();
     if (e.key === 'Tab') {
-      const nodes = [...mask.querySelectorAll('button,input,select,textarea')].filter(
-        (x) => !x.disabled && x.getClientRects().length,
-      );
+      const nodes = [
+        ...mask.querySelectorAll('button,input,select,textarea,.am-run-table[tabindex]'),
+      ].filter((x) => !x.disabled && x.getClientRects().length);
       if (!nodes.length) return;
       const first = nodes[0],
         last = nodes[nodes.length - 1];

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installDetection } from '../src/detection-backend.mjs';
 import { warningOwner } from '../src/warning-ownership.mjs';
-import { drainNotifications } from '../src/feishu-warning-transport.mjs';
+import { drainNotifications, enqueueNotification } from '../src/feishu-warning-transport.mjs';
 const status = {
   authenticated: true,
   environment: 'test',
@@ -162,6 +162,54 @@ async function setup(
   await service.api({ op: 'list' });
   return { service, calls, state: () => state, finished: finished.promise };
 }
+test('manual retry reuses one original failed recipient batch and leaves other receipts untouched', async (t) => {
+  const f = await setup(t);
+  const run = await f.service.runTask('task', 'retry-batch');
+  for (const event of f.state().events) {
+    for (const receiveId of ['already-sent', 'unknown']) {
+      enqueueNotification(event, 'new', run.id, {
+        transport: 'shared-feishu-app',
+        receiveId,
+        receiveIdType: 'gea',
+        recipientName: receiveId,
+      });
+    }
+  }
+  const drain = (send) =>
+    drainNotifications({
+      state: f.state(),
+      save: async () => {},
+      locked: (operation) => operation(),
+      send,
+    });
+  await drain(async ({ receiveId }) => {
+    if (receiveId === 'already-sent') return { messageId: 'om_original' };
+    throw Object.assign(Error('测试发送状态'), { unknown: receiveId === 'unknown' });
+  });
+  const [failed, sent, ambiguous] = f.state().events[0].notifications;
+  const retry = (batchId) => f.service.api({ op: 'retry-notification', runId: run.id, batchId });
+  for (const job of [sent, ambiguous]) await assert.rejects(retry(job.batchId), /仅可补发明确失败/);
+  const repeated = await Promise.allSettled([retry(failed.batchId), retry(failed.batchId)]);
+  assert.deepEqual(
+    repeated.map((result) => result.status),
+    ['fulfilled', 'rejected'],
+  );
+  assert.deepEqual(
+    f.state().events[0].notifications.map((job) => job.status),
+    ['待发送', '已发送', '待核实'],
+  );
+  const sentBatches = [];
+  await drain(async (job) => {
+    sentBatches.push({ recipient: job.recipientName, uuid: job.uuid });
+    return { messageId: 'om_retry' };
+  });
+  assert.deepEqual(sentBatches, [{ recipient: '测试负责人', uuid: failed.batchId }]);
+  assert.deepEqual(
+    f.state().events[0].notifications.map((job) => job.messageId),
+    ['om_retry', 'om_original', undefined],
+  );
+});
+
 test('a failed run gets a terminal receipt even when another session saves concurrently', async (t) => {
   let conflict = false;
   const f = await setup(t, {
