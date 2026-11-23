@@ -110,8 +110,8 @@ test('annual SQL counts equal quantities once per full grain and retains conflic
   assert.equal(national('馄饨')['数量'], 0);
   assert.equal(national('面点')['数量'], '');
   db.exec(`
-    CREATE TABLE agents_dim_product_list_mi (stat_period TEXT, material_code TEXT, sub_category TEXT);
-    INSERT INTO agents_dim_product_list_mi VALUES
+    CREATE TABLE agents_dim_product_list_mi (stat_period TEXT, material_code TEXT, responsible_item TEXT, sub_category TEXT DEFAULT '旧大类');
+    INSERT INTO agents_dim_product_list_mi (stat_period, material_code, responsible_item) VALUES
       ('2026-10','A','休闲'), ('2026-11','A','水饺'), ('2026-11','B','火锅料'),
       ('2026-11','C','预制食材'), ('2026-11','D','汤圆'), ('2026-11','E','馄饨'),
       ('2026-11','F','预制食材'), ('2026-11','G','预制食材');
@@ -185,6 +185,7 @@ test('product snapshot reads the latest month with base/tag source attributes bu
   assert.equal(rows[0].replace_num, '0.00000000');
   assert.equal(productRows(rows).length, 1);
   assert.equal(productRows(rows)[0]['基地'], '');
+  assert.equal(productRows(rows)[0]['大类'], '标签甲');
   for (const [id, query] of Object.entries(config.queries)) {
     if (!query.request?.sql?.includes('agents_dim_product_list_mi')) continue;
     assert.match(

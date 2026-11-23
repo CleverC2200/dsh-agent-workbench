@@ -1266,7 +1266,7 @@ test('basic source anomalies keep known BI quantities and export every row while
         product_item_name: '物料组甲',
         material_code: `IN-${index + 1}`,
         material_name: `池内产品${index + 1}`,
-        sub_category: '汤圆',
+        responsible_item: '汤圆',
         series: '系列甲',
         source_rows: 1,
       }),

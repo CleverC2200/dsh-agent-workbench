@@ -154,7 +154,7 @@ export function relationRecords(sources, month) {
     const missing = [];
     if (!product.material_code?.trim()) missing.push('缺产品编码');
     if (!product.series?.trim()) missing.push('缺产品系列');
-    if (!product.sub_category?.trim()) missing.push('缺产品分类');
+    if (!text(product.responsible_item)) missing.push('缺产品分类');
     const matches = byCode.get(product.material_code) ?? [];
     if (!matches.length) {
       sku.push({ month, product, capacity: null, missing: [...missing, '无候选产线'] });

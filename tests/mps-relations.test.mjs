@@ -18,10 +18,10 @@ test('relation result keeps every exact-code candidate and never matches by name
           material_code: '001',
           material_name: '同名产品',
           series: '产品系列',
-          sub_category: '汤圆',
+          responsible_item: '汤圆',
         },
-        { material_code: '', material_name: '同名产品', series: null, sub_category: null },
-        { material_code: '1', material_name: '同名产品', series: '系列乙', sub_category: '汤圆' },
+        { material_code: '', material_name: '同名产品', series: null, responsible_item: null },
+        { material_code: '1', material_name: '同名产品', series: '系列乙', responsible_item: '汤圆' },
       ],
       sku_capacity: [
         {
@@ -179,7 +179,7 @@ test('self-produced source labels with empty directions stay unconfirmed', () =>
   };
   const result = relationRecords(
     {
-      products: [{ material_code: '001', series: '系列甲', sub_category: '汤圆' }],
+      products: [{ material_code: '001', series: '系列甲', responsible_item: '汤圆' }],
       sku_capacity: [],
       tunnels: [],
       transfers: [source],
@@ -194,7 +194,7 @@ test('self-produced source labels with empty directions stay unconfirmed', () =>
 test('source series and categories remain missing even when the exact product is complete', () => {
   const result = relationRecords(
     {
-      products: [{ material_code: '001', series: '产品系列', sub_category: '产品分类' }],
+      products: [{ material_code: '001', series: '产品系列', responsible_item: '产品分类' }],
       sku_capacity: [
         {
           material_code: '001',
@@ -307,7 +307,7 @@ test('产线只按同基地同生产单位同隧道匹配，未匹配与多匹�
   };
   const result = relationRecords(
     {
-      products: [{ material_code: 'A', series: '产品系列', sub_category: '产品大类' }],
+      products: [{ material_code: 'A', series: '产品系列', responsible_item: '产品大类' }],
       tunnels: [tunnel, { ...tunnel, series: '系列乙' }],
       sku_capacity: [sku, { ...sku, workshop: '未知车间' }, { ...sku, workshop: '' }],
       transfers: [],
@@ -320,6 +320,6 @@ test('产线只按同基地同生产单位同隧道匹配，未匹配与多匹�
   assert.equal(result.sku[2].tunnelMatch.status, 'missing-key');
   assert.match(result.sku[1].missing.join('；'), /生产单位.*车间/);
   assert.match(result.lines[0].missing.join('；'), /重复/);
-  assert.equal(result.sku[0].product.sub_category, '产品大类');
+  assert.equal(result.sku[0].product.responsible_item, '产品大类');
   assert.equal(result.sku[0].capacity.production_category, 'SKU品类');
 });

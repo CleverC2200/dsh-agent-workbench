@@ -1019,7 +1019,7 @@ test('shipment hierarchy uses current unique product categories and material cod
         {
           material_code: 'A',
           material_name: '产品A',
-          sub_category: '汤圆',
+          responsible_item: '汤圆',
           series: '系列',
           product_item: 'G',
           product_item_name: '组',
@@ -1028,7 +1028,7 @@ test('shipment hierarchy uses current unique product categories and material cod
         {
           material_code: 'B',
           material_name: '产品B',
-          sub_category: '汤圆',
+          responsible_item: '汤圆',
           series: '系列',
           product_item: 'G',
           product_item_name: '组',
@@ -1037,7 +1037,7 @@ test('shipment hierarchy uses current unique product categories and material cod
         {
           material_code: 'B',
           material_name: '产品B',
-          sub_category: '水饺',
+          responsible_item: '水饺',
           series: '系列',
           product_item: 'G2',
           product_item_name: '组2',

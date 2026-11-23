@@ -70,7 +70,7 @@ function cells(kind, row) {
       product.material_code ?? source.material_code,
       product.material_name,
       product.series,
-      product.sub_category,
+      product.responsible_item,
       source.material_name,
       source.belong_base,
       source.workshop,
@@ -193,7 +193,7 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
     );
     const selectedSkus = (state.records?.sku ?? []).filter(
       (row) =>
-        matchesCategories(row.product?.sub_category, selectedCategories) ||
+        matchesCategories(row.product?.responsible_item, selectedCategories) ||
         codes.has(row.product?.material_code),
     );
     const lineKeys = new Set(
