@@ -4,21 +4,27 @@ import { build } from 'esbuild';
 import { runInNewContext } from 'node:vm';
 
 const { outputFiles } = await build({
-  entryPoints: ['static/mps/source/context.js'],
+  stdin: {
+    contents:
+      "import { registerMpsRefresh } from './static/mps/source/context.js'; registerMpsRefresh(() => window.startRecalculation());",
+    resolveDir: process.cwd(),
+  },
   bundle: true,
   write: false,
   format: 'iife',
   platform: 'browser',
 });
 
-test('MPS refresh returns a JSON acknowledgement before reloading the owned page', async () => {
+test('both MPS refresh routes start a recalculation on the connected page', async () => {
   const listeners = new Map(),
     messages = [],
     timers = [];
-  let reloads = 0;
+  let reloads = 0,
+    recalculations = 0;
   const parent = { postMessage() {} };
   const window = {
     parent,
+    startRecalculation: () => recalculations++,
     location: {
       reload: () => {
         reloads++;
@@ -72,9 +78,22 @@ test('MPS refresh returns a JSON acknowledgement before reloading the owned page
     (message) => message.type === 'invoked' && message.id === 'refresh-call',
   );
   assert.ok(receipt);
-  assert.deepEqual(JSON.parse(JSON.stringify(receipt.result)), { reloadScheduled: true });
-  assert.equal(reloads, 0, 'the acknowledgement must be posted before navigation');
-  assert.equal(timers.length, 1);
-  timers[0]();
-  assert.equal(reloads, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(receipt.result)), { status: 'recalculation-started' });
+  assert.equal(recalculations, 1);
+  port.onmessage({
+    data: {
+      type: 'apply',
+      session: 'owned-session',
+      toolCallId: 'catalog-refresh',
+      args: { kind: 'invoke', target: 'control:refresh' },
+    },
+  });
+  await new Promise(setImmediate);
+  const applied = messages.find(
+    (message) => message.type === 'applied' && message.toolCallId === 'catalog-refresh',
+  );
+  assert.equal(applied?.applied, true);
+  assert.equal(recalculations, 2);
+  assert.equal(reloads, 0);
+  assert.equal(timers.length, 0);
 });
