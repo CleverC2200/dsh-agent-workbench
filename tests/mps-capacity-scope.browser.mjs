@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as XLSX from 'xlsx-republish';
 import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
+import { mpsDownloadText } from './helpers/mps-download.mjs';
 
 test('设备范围与产品层级在产能及报告页查看下载一致，缺产线归属保持待补', async (t) => {
   const output = await build({
@@ -30,6 +31,8 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
         const restored=decodeLocalDrafts(JSON.parse(localStorage.getItem('capacityDraft')),(id,month)=>({id,month,files:{}}),()=>{throw Error('草稿恢复失败')});
         sample.draft={...sample.draft,...restored.drafts[0]};
         if(scenario==='missing') sample.shipment.rows.forEach(row=>row.end=null);
+        if(scenario==='partial') sample.shipment.rows[0].end=null;
+        if(scenario==='movement') {sample.draft.inventoryMovements[0].productionInbound=null;sample.draft.inventoryMovements[0].transferIn=null;}
         if(scenario==='demand') sample.draft.categoryDemand[0].quantity=null;
         if(scenario==='zero') sample.draft.categoryDemand.forEach(row=>row.quantity=0);
         const result=buildMpsWorkflow(sample.draft,sample.relations,sample.shipment,sample.evaluation);
@@ -188,4 +191,53 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
   assert.ok(exported.rows.every((row) => row.关联需求吨数 === null));
   assert.ok(exported.rows.every((row) => row.范围月产能吨数 === 100));
   assert.ok(exported.rows.every((row) => row.待补需求项数 === 2));
+  await page.evaluate(() => {
+    window.runCapacity(2, false, 'movement');
+  });
+  const problems = page.getByRole('region', { name: '问题分类与补充清单', exact: true });
+  await expect(problems).toContainText('既有入库或调拨计划缺项');
+  await page.getByRole('button', { name: '导出求解结果', exact: true }).click();
+  exported = await page.evaluate(() => window.downloads.at(-1));
+  const blocked = exported.rows.find((row) => row.产品编码 === '0');
+  assert.match(blocked.问题分类, /既有入库或调拨计划缺项/);
+  assert.match(blocked.异常说明, /缺既有生产入库、既有调入/);
+  assert.doesNotMatch(blocked.异常说明, /缺既有在途入库|缺既有调出/);
+  assert.match(blocked.需人工补齐, /第五步约束与配置/);
+  for (const [scenario, quantity, missing, status] of [
+    ['partial', 0, 1, '已知小计'],
+    ['missing', null, 2, '未知'],
+    ['complete', 0, 0, '完整'],
+  ]) {
+    await page.waitForTimeout(1100);
+    await page.evaluate((scenario) => {
+      window.runCapacity(2, false, scenario);
+      window.showStep('report');
+    }, scenario);
+    const pending = page.waitForEvent('download');
+    await page.getByRole('button', { name: '下载产销存分层汇总及明细', exact: true }).click();
+    const csv = await mpsDownloadText(await (await pending).path());
+    const book = XLSX.read(csv, { type: 'string', raw: true });
+    const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
+    const national = rows.find((row) => row.基地 === '全国' && row.粒度 === '合计');
+    assert.equal(national.期初库存, quantity === null ? '' : String(quantity));
+    assert.equal(national.期初库存待补数, String(missing));
+    assert.equal(national.期初库存完整性, status);
+    assert.equal(national.需求数量完整性, '完整');
+    assert.equal(national.需求数量待补数, '0');
+    assert.equal(rows.filter((row) => row.粒度 === 'SKU').length, 4);
+    if (scenario === 'partial') {
+      const unknown = rows.find(
+        (row) => row.基地 === '全国' && row.粒度 === 'SKU' && row.产品编码 === '0',
+      );
+      assert.equal(unknown.期初库存完整性, '未知');
+      const zero = rows.find(
+        (row) => row.基地 === '全国' && row.粒度 === 'SKU' && row.产品编码 === '1',
+      );
+      assert.equal(zero.期初库存, '0');
+      assert.equal(zero.期初库存完整性, '完整');
+      await expect(
+        page.locator('.wf-plan-balances [aria-label="已知小计，含缺项"]').first(),
+      ).toBeVisible();
+    }
+  }
 });

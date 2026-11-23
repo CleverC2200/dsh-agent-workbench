@@ -165,6 +165,21 @@ export function attachPlanReport(
           : '先处理上月该基地SKU的需求、库存或产能异常，取得实际期末结存后重新评估',
       );
     }
+    if (row.planMissing.includes('既有入库或调拨计划缺项')) {
+      const missing = [
+        ['existingProductionInbound', '既有生产入库'],
+        ['existingInTransitInbound', '既有在途入库'],
+        ['existingTransferIn', '既有调入'],
+        ['existingTransferOut', '既有调出'],
+      ].filter(([field]) => !Number.isFinite(row[field]));
+      add(
+        '既有入库或调拨计划缺项',
+        `${row.month} ${row.base} ${row.code} 缺${missing.map(([, label]) => label).join('、')}，可用库存与实际期末结存不能完整计算，未知值不补0`,
+        '当前评估版本 / 既有库存变动确认',
+        missing.map(([field]) => field).join(' / '),
+        `在第五步约束与配置的既有库存变动确认中核对${row.month} ${row.base} ${row.code}已有订单和在途计划，补齐所列字段并填写来源和确认原因；确认无计划时明确填0，保存后重新评估`,
+      );
+    }
     for (const issue of row.inventoryIssues ?? [])
       add(
         '负库存归零',
@@ -238,6 +253,7 @@ export function attachPlanReport(
             '缺前月实际结存',
             '缺目标库存',
             '缺唯一有效件吨系数',
+            '既有入库或调拨计划缺项',
             '无有效ODM收货或调拨路径',
           ].includes(item) && !item.startsWith('ODM来源冲突：'),
       ))
