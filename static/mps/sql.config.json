@@ -1451,6 +1451,78 @@
         }
       }
     },
+    "facts.inventory-transit": {
+      "title": "截止日在途入库已发未收",
+      "grain": ["arrival_month", "belong_base", "material_code"],
+      "columns": ["arrival_month", "belong_base", "material_code", "quantity", "source_orders"],
+      "parameterSpec": {
+        "start_month": {
+          "name": "start_month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
+        "cutoff": {
+          "name": "cutoff",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "next_day": {
+          "name": "next_day",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "sql": "WITH warehouse_scope AS ( SELECT warehouseid, MAX(belong_base) AS belong_base FROM agents_scm_inventory_sku_data_d WHERE month_date = REPLACE(CAST(:cutoff AS VARCHAR(10)), '-', '') AND warehouse_classify IN ('01', '02') GROUP BY warehouseid HAVING COUNT(DISTINCT NULLIF(TRIM(belong_base), '')) = 1 AND COUNT(NULLIF(TRIM(belong_base), '')) = COUNT(*) ), asn_scope AS ( SELECT w.belong_base, a.warehouseid, a.source_warehouseid, a.asnreference1, a.material_code, a.asntype, a.asnno, a.asnlineno, a.expectedqty, a.receivedqty, a.lastreceivingtime, a.header_addtime, a.order_close_time, a.asnstatus FROM agents_scm_asn_detail_d a JOIN warehouse_scope w ON a.warehouseid = w.warehouseid WHERE a.warehouse_classify IN ('01', '02') AND a.material_code IS NOT NULL AND (a.header_addtime < :next_day OR a.header_addtime IS NULL) AND (a.order_close_time IS NULL OR a.order_close_time >= :next_day) AND (a.asntype IS NULL OR a.asntype NOT IN ('SC', 'ADJ', 'QC')) AND (a.expectedqty IS NULL OR a.receivedqty IS NULL OR a.expectedqty > a.receivedqty OR a.lastreceivingtime >= :next_day OR (a.lastreceivingtime IS NULL AND a.expectedqty > 0)) ), eligible_asn AS ( SELECT belong_base, warehouseid, source_warehouseid, asnreference1, material_code, COUNT(*) AS receipt_lines, SUM(expectedqty) AS quantity FROM asn_scope WHERE asntype = 'TT' GROUP BY belong_base, warehouseid, source_warehouseid, asnreference1, material_code HAVING COUNT(DISTINCT asnno) = 1 AND COUNT(asnno) = COUNT(*) AND COUNT(DISTINCT asnlineno) = COUNT(*) AND COUNT(header_addtime) = COUNT(*) AND MIN(expectedqty) > 0 AND COUNT(expectedqty) = COUNT(*) AND COUNT(CASE WHEN (lastreceivingtime >= :next_day AND receivedqty = expectedqty) OR (asnstatus = '00' AND order_close_time IS NULL AND lastreceivingtime IS NULL AND receivedqty = 0) THEN 1 END) = COUNT(*) ), execution_scope AS ( SELECT a.belong_base, a.warehouseid, a.source_warehouseid, a.asnreference1, a.material_code, MAX(e.executeorderno) AS executeorderno, MAX(e.cust_code) AS cust_code, MAX(e.wms_close_time) AS wms_close_time, MAX(e.system_calc_arrival_date) AS system_calc_arrival_date, a.receipt_lines, a.quantity FROM eligible_asn a JOIN agents_scm_execute_detail_d e ON e.receive_wh = a.warehouseid AND e.warehouseid = a.source_warehouseid AND e.fromorderno = a.asnreference1 AND e.material_code = a.material_code WHERE e.order_type = 'ZUB' AND e.detailstatus = 10 AND NULLIF(TRIM(e.canceltime), '') IS NULL AND NULLIF(TRIM(e.dmscanceltime), '') IS NULL AND e.wms_close_time >= :start_month AND e.wms_close_time < :next_day AND e.qtyshipped > 0 GROUP BY a.belong_base, a.warehouseid, a.source_warehouseid, a.asnreference1, a.material_code, a.receipt_lines, a.quantity HAVING COUNT(*) = 1 AND COUNT(CASE WHEN e.bizunitconvertrate > 0 AND e.qtyshipped = a.quantity * e.bizunitconvertrate THEN 1 END) = 1 ), witnessed AS ( SELECT e.belong_base, e.warehouseid, e.source_warehouseid, e.asnreference1, e.material_code, MIN(SUBSTRING(CAST(t.expected_deliv_time AS VARCHAR(32)), 1, 7)) AS arrival_month, MIN(e.quantity) AS quantity, MIN(e.receipt_lines) AS receipt_lines FROM execution_scope e JOIN agents_scm_order_trace_final_di t ON t.executeorderno = e.executeorderno AND t.cust_code = e.cust_code AND t.receive_wh = e.warehouseid AND t.deliver_wh = e.source_warehouseid AND t.fromorderno = e.asnreference1 GROUP BY e.belong_base, e.warehouseid, e.source_warehouseid, e.asnreference1, e.material_code HAVING COUNT(*) = 1 AND COUNT(CASE WHEN t.lastshipmenttime >= :start_month AND t.lastshipmenttime < :next_day AND SUBSTRING(CAST(t.lastshipmenttime AS VARCHAR(32)), 1, 10) = SUBSTRING(CAST(e.wms_close_time AS VARCHAR(32)), 1, 10) AND t.expected_deliv_time >= :next_day AND SUBSTRING(CAST(t.expected_deliv_time AS VARCHAR(32)), 1, 10) = SUBSTRING(CAST(e.system_calc_arrival_date AS VARCHAR(32)), 1, 10) AND (t.gpsisinraildate_to IS NULL OR t.gpsisinraildate_to >= :next_day) AND (t.arriveconfirm_time IS NULL OR t.arriveconfirm_time >= :next_day) AND (t.tms_delivery_confirm_time IS NULL OR t.tms_delivery_confirm_time >= :next_day) AND (t.gpsisinraildate_to >= :next_day OR t.arriveconfirm_time >= :next_day) THEN 1 END) = 1 ), scope_counts AS ( SELECT belong_base, material_code, COUNT(*) AS receipt_lines FROM asn_scope GROUP BY belong_base, material_code ), witnessed_totals AS ( SELECT belong_base, material_code, MIN(arrival_month) AS arrival_month, SUM(quantity) AS quantity, SUM(receipt_lines) AS receipt_lines, COUNT(*) AS source_orders FROM witnessed GROUP BY belong_base, material_code HAVING COUNT(DISTINCT arrival_month) = 1 ), verified AS ( SELECT w.arrival_month, w.belong_base, w.material_code, w.quantity, w.source_orders FROM witnessed_totals w JOIN scope_counts a ON a.belong_base = w.belong_base AND a.material_code = w.material_code AND a.receipt_lines = w.receipt_lines ) SELECT arrival_month, belong_base, material_code, quantity, source_orders FROM verified ORDER BY arrival_month, belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "facts.inventory-transit.count"
+      }
+    },
+    "facts.inventory-transit.count": {
+      "title": "截止日在途入库已发未收计数",
+      "columns": ["total"],
+      "parameterSpec": {
+        "start_month": {
+          "name": "start_month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
+        "cutoff": {
+          "name": "cutoff",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "next_day": {
+          "name": "next_day",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        }
+      },
+      "request": {
+        "sql": "WITH warehouse_scope AS ( SELECT warehouseid, MAX(belong_base) AS belong_base FROM agents_scm_inventory_sku_data_d WHERE month_date = REPLACE(CAST(:cutoff AS VARCHAR(10)), '-', '') AND warehouse_classify IN ('01', '02') GROUP BY warehouseid HAVING COUNT(DISTINCT NULLIF(TRIM(belong_base), '')) = 1 AND COUNT(NULLIF(TRIM(belong_base), '')) = COUNT(*) ), asn_scope AS ( SELECT w.belong_base, a.warehouseid, a.source_warehouseid, a.asnreference1, a.material_code, a.asntype, a.asnno, a.asnlineno, a.expectedqty, a.receivedqty, a.lastreceivingtime, a.header_addtime, a.order_close_time, a.asnstatus FROM agents_scm_asn_detail_d a JOIN warehouse_scope w ON a.warehouseid = w.warehouseid WHERE a.warehouse_classify IN ('01', '02') AND a.material_code IS NOT NULL AND (a.header_addtime < :next_day OR a.header_addtime IS NULL) AND (a.order_close_time IS NULL OR a.order_close_time >= :next_day) AND (a.asntype IS NULL OR a.asntype NOT IN ('SC', 'ADJ', 'QC')) AND (a.expectedqty IS NULL OR a.receivedqty IS NULL OR a.expectedqty > a.receivedqty OR a.lastreceivingtime >= :next_day OR (a.lastreceivingtime IS NULL AND a.expectedqty > 0)) ), eligible_asn AS ( SELECT belong_base, warehouseid, source_warehouseid, asnreference1, material_code, COUNT(*) AS receipt_lines, SUM(expectedqty) AS quantity FROM asn_scope WHERE asntype = 'TT' GROUP BY belong_base, warehouseid, source_warehouseid, asnreference1, material_code HAVING COUNT(DISTINCT asnno) = 1 AND COUNT(asnno) = COUNT(*) AND COUNT(DISTINCT asnlineno) = COUNT(*) AND COUNT(header_addtime) = COUNT(*) AND MIN(expectedqty) > 0 AND COUNT(expectedqty) = COUNT(*) AND COUNT(CASE WHEN (lastreceivingtime >= :next_day AND receivedqty = expectedqty) OR (asnstatus = '00' AND order_close_time IS NULL AND lastreceivingtime IS NULL AND receivedqty = 0) THEN 1 END) = COUNT(*) ), execution_scope AS ( SELECT a.belong_base, a.warehouseid, a.source_warehouseid, a.asnreference1, a.material_code, MAX(e.executeorderno) AS executeorderno, MAX(e.cust_code) AS cust_code, MAX(e.wms_close_time) AS wms_close_time, MAX(e.system_calc_arrival_date) AS system_calc_arrival_date, a.receipt_lines, a.quantity FROM eligible_asn a JOIN agents_scm_execute_detail_d e ON e.receive_wh = a.warehouseid AND e.warehouseid = a.source_warehouseid AND e.fromorderno = a.asnreference1 AND e.material_code = a.material_code WHERE e.order_type = 'ZUB' AND e.detailstatus = 10 AND NULLIF(TRIM(e.canceltime), '') IS NULL AND NULLIF(TRIM(e.dmscanceltime), '') IS NULL AND e.wms_close_time >= :start_month AND e.wms_close_time < :next_day AND e.qtyshipped > 0 GROUP BY a.belong_base, a.warehouseid, a.source_warehouseid, a.asnreference1, a.material_code, a.receipt_lines, a.quantity HAVING COUNT(*) = 1 AND COUNT(CASE WHEN e.bizunitconvertrate > 0 AND e.qtyshipped = a.quantity * e.bizunitconvertrate THEN 1 END) = 1 ), witnessed AS ( SELECT e.belong_base, e.warehouseid, e.source_warehouseid, e.asnreference1, e.material_code, MIN(SUBSTRING(CAST(t.expected_deliv_time AS VARCHAR(32)), 1, 7)) AS arrival_month, MIN(e.quantity) AS quantity, MIN(e.receipt_lines) AS receipt_lines FROM execution_scope e JOIN agents_scm_order_trace_final_di t ON t.executeorderno = e.executeorderno AND t.cust_code = e.cust_code AND t.receive_wh = e.warehouseid AND t.deliver_wh = e.source_warehouseid AND t.fromorderno = e.asnreference1 GROUP BY e.belong_base, e.warehouseid, e.source_warehouseid, e.asnreference1, e.material_code HAVING COUNT(*) = 1 AND COUNT(CASE WHEN t.lastshipmenttime >= :start_month AND t.lastshipmenttime < :next_day AND SUBSTRING(CAST(t.lastshipmenttime AS VARCHAR(32)), 1, 10) = SUBSTRING(CAST(e.wms_close_time AS VARCHAR(32)), 1, 10) AND t.expected_deliv_time >= :next_day AND SUBSTRING(CAST(t.expected_deliv_time AS VARCHAR(32)), 1, 10) = SUBSTRING(CAST(e.system_calc_arrival_date AS VARCHAR(32)), 1, 10) AND (t.gpsisinraildate_to IS NULL OR t.gpsisinraildate_to >= :next_day) AND (t.arriveconfirm_time IS NULL OR t.arriveconfirm_time >= :next_day) AND (t.tms_delivery_confirm_time IS NULL OR t.tms_delivery_confirm_time >= :next_day) AND (t.gpsisinraildate_to >= :next_day OR t.arriveconfirm_time >= :next_day) THEN 1 END) = 1 ), scope_counts AS ( SELECT belong_base, material_code, COUNT(*) AS receipt_lines FROM asn_scope GROUP BY belong_base, material_code ), witnessed_totals AS ( SELECT belong_base, material_code, MIN(arrival_month) AS arrival_month, SUM(quantity) AS quantity, SUM(receipt_lines) AS receipt_lines, COUNT(*) AS source_orders FROM witnessed GROUP BY belong_base, material_code HAVING COUNT(DISTINCT arrival_month) = 1 ), verified AS ( SELECT w.arrival_month, w.belong_base, w.material_code, w.quantity, w.source_orders FROM witnessed_totals w JOIN scope_counts a ON a.belong_base = w.belong_base AND a.material_code = w.material_code AND a.receipt_lines = w.receipt_lines ) SELECT COUNT(*) AS total FROM verified"
+      }
+    },
     "facts.inventory-movements": {
       "title": "评估月生产入库和调拨计划",
       "grain": ["stock_month", "belong_base", "material_code"],

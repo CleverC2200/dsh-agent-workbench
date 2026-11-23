@@ -268,7 +268,7 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
         signal.throwIfAborted();
         return { rows: [], error: error.message };
       });
-  const [monthly, physical] = await Promise.all([
+  const [monthly, physical, transit] = await Promise.all([
     cutoff >= draft.month + '-01'
       ? read(
           'facts.inventory-movements',
@@ -337,8 +337,40 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
           })),
         ).then((result) => ({ ...result, cutoff: basis.cutoff }))
       : null,
+    cutoff >= draft.month + '-01'
+      ? read(
+          'facts.inventory-transit',
+          {
+            start_month: draft.month + '-01',
+            cutoff,
+            next_day: new Date(Date.parse(cutoff + 'T00:00:00Z') + 86400000)
+              .toISOString()
+              .slice(0, 10),
+          },
+          (rows) =>
+            rows.flatMap((row) => {
+              const month = row.arrival_month;
+              const quantity = number(row.quantity);
+              const sourceOrders = number(row.source_orders);
+              return months.includes(month) &&
+                quantity > 0 &&
+                Number.isSafeInteger(sourceOrders) &&
+                sourceOrders > 0
+                ? [
+                    {
+                      month,
+                      base: text(row.belong_base),
+                      code: text(row.material_code),
+                      quantity,
+                      sourceOrders,
+                    },
+                  ]
+                : [];
+            }),
+        )
+      : null,
   ]);
-  return { monthly, physical };
+  return { monthly, physical, transit };
 }
 
 export async function readLatestShipmentDate(through, signal) {

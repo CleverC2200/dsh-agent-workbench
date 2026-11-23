@@ -277,6 +277,10 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     (evaluation?.inventory?.monthly?.rows ?? []).map(inventoryIdentity),
     inventoryKey,
   );
+  const transitInventory = Map.groupBy(
+    (evaluation?.inventory?.transit?.rows ?? []).map(inventoryIdentity),
+    inventoryKey,
+  );
   const physicalInventory = Map.groupBy(
     (evaluation?.inventory?.physical?.rows ?? []).map(inventoryIdentity),
     rowKey,
@@ -439,16 +443,26 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       if (!identity || identity.month < draft.month || identity.month > months.at(-1)) return null;
       const quantities = {};
       const sources = [];
+      const arrivals = transitInventory.get(key) ?? [];
+      const transit =
+        arrivals.length === 1 &&
+        published?.transferIn === 0 &&
+        (number(confirmed?.transferIn) ?? 0) === 0
+          ? arrivals[0]
+          : null;
       for (const field of movementFields) {
         const explicit = number(confirmed?.[field]);
-        const automatic = number(published?.[field]);
+        const automatic =
+          field === 'inTransitInbound' ? number(transit?.quantity) : number(published?.[field]);
         quantities[field] = explicit ?? automatic;
         if (explicit !== null && confirmed.source) sources.push(confirmed.source);
         else if (automatic !== null)
           sources.push(
             field === 'productionInbound'
               ? `库存日报 ${published.sourceDate} ${published.productionBasis}`
-              : `库存日报 ${published.sourceDate} 月度调拨计划`,
+              : field === 'inTransitInbound'
+                ? `WMS 发运和收货 / TMS 到货 / ASN ${transit.sourceOrders} 单，月度调入计划明确为0`
+                : `库存日报 ${published.sourceDate} 月度调拨计划`,
           );
       }
       return { ...identity, ...quantities, source: [...new Set(sources)].join('；') };

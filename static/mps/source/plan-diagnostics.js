@@ -187,7 +187,7 @@ export function attachPlanReport(
       add(
         '既有入库或调拨计划缺项',
         `${row.month} ${row.base} ${row.code} 缺${missing.map(([, label]) => label).join('、')}，可用库存与实际期末结存不能完整计算，未知值不补0`,
-        '月度库存日报 / 当前评估版本既有库存变动确认',
+        '月度库存日报 / WMS-TMS-入库通知 / 当前评估版本既有库存变动确认',
         missing.map(([field]) => field).join(' / '),
         `在第五步约束与配置的既有库存变动确认中核对${row.month} ${row.base} ${row.code}已有订单和在途计划，补齐所列字段并填写来源和确认原因；确认无计划时明确填0，保存后重新评估`,
       );

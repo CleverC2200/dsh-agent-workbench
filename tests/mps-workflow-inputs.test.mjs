@@ -1948,3 +1948,33 @@ test('评估接入已确认的月初及库存变动，保留预计结存和逐�
     null,
   );
 });
+
+test('有货物在途证据及调入来源明确为零时才接入，保留人工值和缺项', () => {
+  const source = draft();
+  const row = { month: source.month, base: '甲', code: 'A' };
+  const monthly = { ...row, productionInbound: 4, transferIn: 0, transferOut: 0 };
+  const inTransit = { ...row, quantity: 12, sourceOrders: 1 };
+  const evaluation = {
+    inventory: { monthly: { rows: [monthly] }, transit: { rows: [inTransit] } },
+  };
+  const solve = () => buildMpsWorkflow(source, null, null, evaluation).plan.rows;
+  const actual = () => solve().find((item) => item.month === row.month && item.code === row.code);
+  assert.equal(actual().existingInTransitInbound, 12);
+  assert.match(actual().inventoryMovementSource, /TMS/);
+  for (const pendingTransfer of [2, null]) {
+    monthly.transferIn = pendingTransfer;
+    assert.equal(actual().existingInTransitInbound, null);
+  }
+  monthly.transferIn = 0;
+  evaluation.inventory.transit.rows = [inTransit, inTransit];
+  assert.equal(actual().existingInTransitInbound, null);
+  evaluation.inventory.transit.rows = [inTransit];
+  source.inventoryMovements = [{ ...row, transferIn: 8 }];
+  assert.equal(actual().existingInTransitInbound, null);
+  source.inventoryMovements = [{ ...row, transferIn: 0, inTransitInbound: 0, source: '人工确认' }];
+  assert.equal(actual().existingInTransitInbound, 0);
+  assert.equal(
+    solve().find((item) => item.month === row.month && item.code === 'B').existingInTransitInbound,
+    null,
+  );
+});
