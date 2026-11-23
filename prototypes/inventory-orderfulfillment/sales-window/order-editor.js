@@ -421,7 +421,7 @@ window.OrderShortageEditor = (() => {
           (line) => line.sku === item.dataset.editorPriceReason,
         );
         if (line) {
-          item.textContent = priceMessage(line);
+          item.textContent = priceMessage(line) ? '暂无价格' : '';
           item.hidden = !item.textContent;
         }
       }
@@ -515,7 +515,11 @@ window.OrderShortageEditor = (() => {
         price = node('div', undefined, 'editor-price');
       const priceNumber = node('strong', '¥ ' + display(priceValue(line)));
       priceNumber.dataset.editorPrice = line.sku;
-      const priceNotice = node('small', priceMessage(line), 'editor-price-warning');
+      const priceNotice = node(
+        'small',
+        priceMessage(line) ? '暂无价格' : '',
+        'editor-price-warning',
+      );
       priceNotice.dataset.editorPriceReason = line.sku;
       priceNotice.hidden = !priceNotice.textContent;
       price.append(priceNumber, priceNotice);
@@ -682,6 +686,7 @@ window.OrderShortageEditor = (() => {
       return info;
     }
     function render() {
+      window.OrderDeliveryDatePicker?.close(false);
       if (root.__fulfillmentEditorOwner !== mountOwner) return;
       root.replaceChildren();
       root.dataset.page = page;
@@ -904,15 +909,38 @@ window.OrderShortageEditor = (() => {
         }
         const date = node('input');
         date.type = 'date';
+        date.hidden = true;
         date.value = /^\d{4}-\d{2}-\d{2}$/.test(deliveryDate) ? deliveryDate : '';
         date.disabled = !editable;
         date.setAttribute('aria-label', '预计交货日期');
+        const dateTrigger = button(
+          date.value || '选择日期',
+          () => {
+            window.OrderDeliveryDatePicker.open({
+              trigger: dateTrigger,
+              value: date.value,
+              onConfirm(value) {
+                if (root.__fulfillmentEditorOwner !== mountOwner || !dateTrigger.isConnected)
+                  return;
+                date.value = value;
+                date.dispatchEvent(new Event('change', { bubbles: true }));
+              },
+            });
+          },
+          !editable,
+          'editor-date-trigger',
+        );
+        dateTrigger.setAttribute('aria-label', '选择预计交货日期');
+        dateTrigger.setAttribute('aria-haspopup', 'dialog');
+        dateTrigger.setAttribute('aria-expanded', 'false');
+        dateTrigger.setAttribute('aria-controls', 'deferDatePicker');
         date.addEventListener('change', () => {
           deliveryDate = date.value;
+          dateTrigger.textContent = date.value || '选择日期';
           updateTotals();
         });
-        const label = node('label', '预计交货日期', 'editor-delivery-date');
-        label.append(date);
+        const label = node('div', undefined, 'editor-delivery-date');
+        label.append(node('span', '预计交货日期'), date, dateTrigger);
         toolbar.append(vehicle, label);
         header.lastElementChild.replaceWith(
           button(

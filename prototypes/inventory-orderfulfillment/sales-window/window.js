@@ -52,35 +52,48 @@ const deferDays = () => {
   return Number.isInteger(delta) && delta >= 1 && delta <= 7 ? delta : null;
 };
 
-const deferDatePicker = (() => {
-  const input = element('days');
-  const trigger = element('deferDateTrigger');
+window.OrderDeliveryDatePicker = (() => {
   const overlay = element('deferDatePicker');
   const dialog = overlay.querySelector('section');
   const days = element('deferCalendarDays');
   const confirm = element('deferDateConfirm');
-  let draft = '',
+  let active,
+    draft = '',
     month = '',
     previousOverflow = '';
-  const withinRange = (date) => date >= input.min && date <= input.max;
+  const validDate = (date) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+    Number.isFinite(Date.parse(date + 'T00:00:00Z')) &&
+    new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date;
+  const withinRange = (date) =>
+    Boolean(active) &&
+    validDate(date) &&
+    (!active.min || date >= active.min) &&
+    (!active.max || date <= active.max);
   const close = (restoreFocus = true) => {
     if (overlay.hidden) return;
     overlay.hidden = true;
     dialog.removeAttribute('role');
     dialog.removeAttribute('aria-modal');
+    const trigger = active.trigger;
     trigger.setAttribute('aria-expanded', 'false');
     document.body.style.overflow = previousOverflow;
-    if (restoreFocus && !trigger.disabled) trigger.focus();
+    if (restoreFocus && trigger.isConnected && !trigger.disabled) trigger.focus();
+    active = undefined;
   };
   const render = () => {
     const [year, number] = month.split('-').map(Number);
     element('deferCalendarMonth').textContent = `${year}年${number}月`;
-    element('deferMonthPrevious').disabled = month <= input.min.slice(0, 7);
-    element('deferMonthNext').disabled = month >= input.max.slice(0, 7);
+    element('deferMonthPrevious').disabled = month <= (active.min?.slice(0, 7) || '0001-01');
+    element('deferMonthNext').disabled = month >= (active.max?.slice(0, 7) || '9999-12');
     days.replaceChildren();
-    const weekday = new Date(Date.UTC(year, number - 1, 1)).getUTCDay();
+    const first = new Date(month + '-01T00:00:00Z');
+    const weekday = first.getUTCDay();
     for (let i = 0; i < weekday; i++) days.append(document.createElement('span'));
-    const count = new Date(Date.UTC(year, number, 0)).getUTCDate();
+    const last = new Date(first);
+    last.setUTCMonth(last.getUTCMonth() + 1);
+    last.setUTCDate(0);
+    const count = last.getUTCDate();
     for (let day = 1; day <= count; day++) {
       const date = `${month}-${String(day).padStart(2, '0')}`;
       const button = document.createElement('button');
@@ -99,16 +112,18 @@ const deferDatePicker = (() => {
     }
     confirm.disabled = !withinRange(draft);
   };
-  trigger.onclick = () => {
-    if (trigger.disabled) return;
-    draft = withinRange(input.value) ? input.value : input.min;
+  const open = (options) => {
+    if (options.trigger.disabled) return;
+    close(false);
+    active = options;
+    draft = withinRange(options.value) ? options.value : options.min || calendarDate();
     month = draft.slice(0, 7);
     previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     overlay.hidden = false;
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
-    trigger.setAttribute('aria-expanded', 'true');
+    active.trigger.setAttribute('aria-expanded', 'true');
     render();
     days.querySelector(`[data-date="${draft}"]`)?.focus();
   };
@@ -117,16 +132,18 @@ const deferDatePicker = (() => {
     ['deferMonthNext', 1],
   ])
     element(id).onclick = () => {
-      const [year, number] = month.split('-').map(Number);
-      month = new Date(Date.UTC(year, number - 1 + delta, 1)).toISOString().slice(0, 7);
+      const next = new Date(month + '-01T00:00:00Z');
+      next.setUTCMonth(next.getUTCMonth() + delta);
+      month = next.toISOString().slice(0, 7);
       render();
       element(id).focus();
     };
   confirm.onclick = () => {
-    if (confirm.disabled || !withinRange(draft)) return;
-    input.value = draft;
+    if (overlay.hidden || confirm.disabled || !withinRange(draft)) return;
+    const selected = draft,
+      onConfirm = active.onConfirm;
     close();
-    input.dispatchEvent(new Event('change', { bubbles: true }));
+    onConfirm(selected);
   };
   overlay.onclick = (event) => {
     if (event.target === overlay) close();
@@ -148,11 +165,33 @@ const deferDatePicker = (() => {
       }
     }
   };
+  return { open, close };
+})();
+
+const deferDatePicker = (() => {
+  const input = element('days'),
+    trigger = element('deferDateTrigger');
+  trigger.onclick = () =>
+    window.OrderDeliveryDatePicker.open({
+      trigger,
+      value: input.value,
+      min: input.min,
+      max: input.max,
+      onConfirm(date) {
+        input.value = date;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      },
+    });
   return {
     sync(enabled) {
       trigger.disabled = !enabled;
       element('deferDateValue').textContent = input.value || '选择日期';
-      if (!enabled) close(false);
+      if (
+        !enabled &&
+        !element('deferDatePicker').hidden &&
+        trigger.getAttribute('aria-expanded') === 'true'
+      )
+        window.OrderDeliveryDatePicker.close(false);
     },
   };
 })();

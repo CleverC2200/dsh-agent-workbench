@@ -285,13 +285,21 @@ export async function call(method, parameters = {}, options = {}) {
     });
   });
 }
-export function action(name, description, handler) {
+export function action(name, description, handler, { effect } = {}) {
   handlers.set(name, handler);
   const release =
     name === 'refresh'
       ? reportElements(
           'refresh',
-          [{ id: 'control:refresh', role: 'control', label: description, actions: ['invoke'] }],
+          [
+            {
+              id: 'control:refresh',
+              role: 'control',
+              label: description,
+              actions: ['invoke'],
+              ...(effect === undefined ? {} : { effect }),
+            },
+          ],
           (args, signal) => {
             if (args.kind !== 'invoke') throw Error('ACTION_NOT_ALLOWED');
             return handler({}, { signal });
