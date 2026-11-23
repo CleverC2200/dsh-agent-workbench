@@ -7,12 +7,13 @@ const esc = (v) =>
   );
 const date = (v) =>
   v ? new Date(v).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '—';
-function modal(title, note) {
+function modal(title, note, onClose) {
   const previous = document.activeElement,
     mask = document.createElement('div');
   mask.className = 'am-mask audit-mask';
   mask.innerHTML = `<section class="am-panel audit-panel" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><div><small>工作台运营</small><h2>${esc(title)}</h2></div><button data-close aria-label="关闭${esc(title)}">×</button></header><p class="am-notice">${esc(note)}</p><main></main></section>`;
   const close = () => {
+    onClose?.();
     mask.remove();
     document.removeEventListener('keydown', key, true);
     previous?.focus();
@@ -134,11 +135,11 @@ function warningChanges(run, events) {
     : '';
 }
 
-function notificationDetails(run, events) {
+function notificationDetails(run, events, canRetry) {
   const jobs = events.flatMap((event) =>
     (event.notifications || [])
-      .filter((job) => job.runId === run.id)
-      .map((job) => ({ ...job, objectName: event.scope })),
+      .filter((job) => job.runId === run.id && job.kind !== 'test')
+      .map((job) => ({ ...job, eventStatus: event.eventStatus })),
   );
   if (!run.notificationRouting && !jobs.length && !run.notificationIssue) return '';
   const batches = new Map();
@@ -151,19 +152,43 @@ function notificationDetails(run, events) {
         job.transport,
         job.credentialProfile || 'default',
         job.receiveIdType,
-        job.receiveId,
+        job.receiveId ?? job.recipientName ?? job.id,
       ]);
-    if (!batches.has(key)) batches.set(key, { ...job, count: 0 });
-    batches.get(key).count++;
+    if (!batches.has(key)) batches.set(key, []);
+    batches.get(key).push(job);
   }
   const matches = run.notificationRouting?.matches || [];
   return `<h3>消息通知</h3>${run.notificationIssue ? `<p role="status">${esc(run.notificationIssue)}</p>` : ''}
     ${run.notificationRouting ? `<p>自动匹配 · 负责人配置版本 ${esc(run.notificationRouting.directoryRevision)}</p><ul class="audit-detection-results">${matches.map((row) => `<li><strong>${esc(row.objectName)}</strong><p>${row.recipients.map((person) => esc(person.name) + '（' + esc(person.account) + '）').join('、') || '未匹配有效负责人'}</p></li>`).join('')}</ul>` : ''}
-    <p>本次共 ${jobs.length} 条通知明细，${batches.size} 个发送批次。</p><ul class="audit-detection-results">${[...batches.values()].map((job) => `<li><strong>${esc(job.recipientName)} · ${esc(job.status)}</strong><p>合并 ${job.count} 项${job.messageId ? ' · 回执 ' + esc(job.messageId) : ''}${job.error ? ' · ' + esc(job.error) : ''}</p></li>`).join('')}</ul>`;
+    <ul class="audit-detection-results">${[...batches.values()]
+      .map((batch) => {
+        const [first] = batch;
+        const states = [...new Set(batch.map((job) => job.status))].join('、');
+        const retryable =
+          canRetry &&
+          /^[a-f0-9]{32}$/.test(first.batchId || '') &&
+          batch.every(
+            (job) =>
+              job.status === '发送失败' &&
+              !job.messageId &&
+              !['已关闭', '已合并'].includes(job.eventStatus),
+          );
+        const receipt = batch.find((job) => job.messageId);
+        const time = first.sentAt || first.attemptedAt || first.at;
+        const recipient = esc(first.recipientName || '未留存接收人');
+        return `<li><strong>${recipient} · <span data-notification-state>${esc(states)}</span></strong><p>${batch.length} 项${time ? ' · ' + esc(date(time)) : ''}${receipt ? ' · 回执 ' + esc(receipt.messageId) : ''}${first.error ? ' · ' + esc(first.error) : ''}</p>${retryable ? `<button type="button" class="am-context-button" data-retry-notification="${esc(first.batchId)}" aria-label="补发给${recipient}">补发</button>` : ''}</li>`;
+      })
+      .join('')}</ul>`;
 }
 
-export function showRunResult(run, events = []) {
-  const view = modal('执行结果', '查看本次预警处理和 AI 逐对象检测明细。');
+export function showRunResult(
+  run,
+  events = [],
+  { currentEvents = () => events, canRetry = false } = {},
+) {
+  const view = modal('执行结果', '查看本次预警处理和 AI 逐对象检测明细。', () => {
+    window.removeEventListener('gea-detection-updated', updateNotifications);
+  });
   view.main.innerHTML = `<dl class="audit-summary">
     <div><dt>检测任务</dt><dd>${esc(run.name)}</dd></div>
     <div><dt>执行时间</dt><dd>${esc(date(run.at))}</dd></div>
@@ -172,8 +197,48 @@ export function showRunResult(run, events = []) {
     <h3>${run.status === '失败' ? '失败原因' : '预警处理结果'}</h3>
     <pre class="audit-pre">${esc(describeRunResult(run) || '暂无处理结果')}</pre>
     ${run.status === '成功' ? warningChanges(run, events) : ''}
-    ${notificationDetails(run, events)}
+    <section data-run-notifications></section>
+    <p role="status" data-notification-feedback></p>
     ${detectionDetails(run)}`;
+  const details = view.main.querySelector('[data-run-notifications]');
+  const feedback = view.main.querySelector('[data-notification-feedback]');
+  let markup,
+    pending = false;
+  function updateNotifications() {
+    if (pending) return;
+    const next = notificationDetails(run, currentEvents(), canRetry);
+    if (next === markup) return;
+    if (details.contains(document.activeElement)) view.mask.querySelector('[data-close]').focus();
+    markup = next;
+    details.innerHTML = next;
+  }
+  window.addEventListener('gea-detection-updated', updateNotifications);
+  updateNotifications();
+  details.addEventListener('click', async (event) => {
+    const button = event.target.closest('button[data-retry-notification]');
+    if (!button || pending) return;
+    pending = true;
+    feedback.textContent = '';
+    button.setAttribute('aria-disabled', 'true');
+    try {
+      const result = await call('detection', {
+        op: 'retry-notification',
+        runId: run.id,
+        batchId: button.dataset.retryNotification,
+      });
+      if (result?.status !== '待发送') throw Error('补发结果待核实，请刷新执行记录');
+      button.closest('li').querySelector('[data-notification-state]').textContent = result.status;
+      if (button === document.activeElement) view.mask.querySelector('[data-close]').focus();
+      button.remove();
+      feedback.textContent = '已加入补发队列';
+    } catch (error) {
+      button.removeAttribute('aria-disabled');
+      feedback.textContent = error.message || '补发失败，请刷新执行记录';
+    } finally {
+      pending = false;
+      updateNotifications();
+    }
+  });
 }
 export function combineWarnings(_board, events, _range) {
   return events

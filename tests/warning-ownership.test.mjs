@@ -71,6 +71,8 @@ test('所有跨用户写操作在调用业务逻辑前被拒绝', async () => {
     { op: 'save', task: { id: 'b', owner: a } },
     { op: 'close-event', id: 'eb' },
     { op: 'notify-test', eventId: 'eb' },
+    { op: 'retry-notification', runId: 'rb', batchId: 'f'.repeat(32) },
+    { op: 'retry-notification', batchId: 'f'.repeat(32) },
     { op: 'delete' },
     { op: 'run', id: 'missing' },
   ])

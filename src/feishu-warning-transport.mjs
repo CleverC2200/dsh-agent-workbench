@@ -293,6 +293,42 @@ function deliveryGroup(event, job) {
     job.receiveId,
   ]);
 }
+export function requeueFailedNotification(state, taskId, runId, batchId) {
+  const entries = state.events.flatMap((event) =>
+    event.monitorId === taskId
+      ? (event.notifications || [])
+          .filter((job) => job.runId === runId && job.kind !== 'test')
+          .map((job) => ({ event, job }))
+      : [],
+  );
+  const first = entries.find(({ job }) => job.batchId === batchId);
+  if (!first) throw Error('未找到原发送批次');
+  const group = deliveryGroup(first.event, first.job);
+  const recipients = entries.filter(({ event, job }) => deliveryGroup(event, job) === group);
+  if (
+    recipients.some(
+      ({ event, job }) =>
+        job.batchId !== batchId ||
+        job.status !== '发送失败' ||
+        job.messageId ||
+        ['已关闭', '已合并'].includes(event.eventStatus),
+    )
+  )
+    throw Error('仅可补发明确失败且仍有效的通知，请刷新后核对原回执');
+  const retry = new Set(recipients.map(({ job }) => job));
+  return state.events.map((event) =>
+    event.notifications?.some((job) => retry.has(job))
+      ? {
+          ...event,
+          notifications: event.notifications.map((job) =>
+            retry.has(job)
+              ? { ...job, status: '待发送', error: undefined, providerCode: undefined }
+              : job,
+          ),
+        }
+      : event,
+  );
+}
 export function notificationDigest(entries) {
   const counts = { severe: 0, warning: 0, recovered: 0 };
   const rows = entries.map(({ job }) => {
