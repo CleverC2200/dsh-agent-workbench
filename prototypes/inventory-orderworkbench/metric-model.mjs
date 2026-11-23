@@ -2,7 +2,7 @@ import { metricSection, readySectionRows } from './metric-sections.mjs';
 import { metricDefinition } from './metric-definitions.mjs';
 import { workbenchMetricState } from './performance-rules.mjs';
 export const metricCalculationVersion =
-  typeof ORDER_WORKBENCH_METRIC_VERSION === 'undefined' ? 44 : ORDER_WORKBENCH_METRIC_VERSION;
+  typeof ORDER_WORKBENCH_METRIC_VERSION === 'undefined' ? 45 : ORDER_WORKBENCH_METRIC_VERSION;
 export function retainableWorkbenchFacts(facts) {
   return (
     facts?.attributionVersion === 2 &&
@@ -485,7 +485,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
         (row) => Number(row.invalid) > 0 || row.numerator == null || row.denominator == null,
       )
     )
-      return '作废商品数量或统计范围依据不足：需dms_last_update_qty、change_order_qty或need_qty_origin，以及OMS新增时间header_addtime、作废时间canceltime、OMS最晚发车时间latestsendcardate和执行商品行标识；收发仓的工厂仓属性及仓库主数据“归属工厂提货点”关系也须可核实；归属关系取已确认的agents_scm_material_in_out_summary_d.pickup_point穿透数据，按仓库编码唯一映射，不用自身提货点；缺失或冲突仍保留未知。发货仓为*且有效数量已知大于0时，只有穿透表最新版本的客户、原订单、执行单及收货仓匹配，且发货仓完整唯一，才回补deliver_wh；不使用较旧版本覆盖最新空值。仍缺发货仓（空或*）时，取订单pickup_point，与收货仓归属工厂提货点比较；仓类取订单warehouse_classify，兼容编码及日表中文名称；两点不同即可排除短拨，同点仍须核实双方工厂仓/外租仓属性。真实0保留，缺失数量、冲突商品行或未判定短拨不当作0。';
+      return '作废商品数量或统计范围依据不足：需dms_last_update_qty、change_order_qty或need_qty_origin，以及OMS新增时间header_addtime、作废时间canceltime和执行商品行标识；收发仓的工厂仓属性及仓库主数据“归属工厂提货点”关系也须可核实；归属关系取已确认的agents_scm_material_in_out_summary_d.pickup_point穿透数据，按仓库编码唯一映射，不用自身提货点；缺失或冲突仍保留未知。发货仓为*且有效数量已知大于0时，只有穿透表最新版本的客户、原订单、执行单及收货仓匹配，且发货仓完整唯一，才回补deliver_wh；不使用较旧版本覆盖最新空值。仍缺发货仓（空或*）时，取订单pickup_point，与收货仓归属工厂提货点比较；仓类取订单warehouse_classify，兼容编码及日表中文名称；两点不同即可排除短拨，同点仍须核实双方工厂仓/外租仓属性。真实0保留，缺失数量、冲突商品行或未判定短拨不当作0。';
     if (selected.reduce((sum, row) => sum + Number(row.denominator ?? 0), 0) === 0)
       return `系统未能计算：当前分组有效商品数量分母为0，不能计算${name}。`;
   }

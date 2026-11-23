@@ -207,7 +207,6 @@ export function cancellationEventsSql({
     q.cancelled,q.business_time,q.locked,q.effective_qty,q.source_rows,q.short_transfer,q.scope_pickup_point
     FROM (${quantities}) q ${periods ? `INNER JOIN report_windows rw ON rw.enabled=TRUE AND (${inPeriod('rw.start_date', 'rw.end_date')})` : ''}
     WHERE ${periods ? '1=1' : '(' + inPeriod(':gea_p1', ':gea_p2') + ')'}
-      AND q.latestsendcardate IS NOT NULL
       AND q.scope_pickup_point IN ('01','02','03','04','37')
       AND (:gea_p900<>'郑州' OR q.scope_pickup_point='01' OR q.scope_pickup_point IS NULL OR q.source_rows<>1)
       AND (q.source_rows<>1 OR TRIM(q.createsource)='20')
@@ -227,7 +226,7 @@ export function cancellationEventsSql({
       OR created IS NULL OR status IS NULL OR effective_qty IS NULL OR effective_qty<0
       OR (:gea_p900='郑州' AND scope_pickup_point IS NULL)
       OR (effective_qty<>0 AND short_transfer IS NULL)
-      OR (status=90 AND (cancelled IS NULL OR cancelled<created OR latest_departure IS NULL))
+      OR (status=90 AND (cancelled IS NULL OR cancelled<created))
       THEN 1 ELSE 0 END AS invalid_cancel
     FROM (${cohort}) cancellation_cohort`;
   const prefix =

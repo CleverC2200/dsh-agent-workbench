@@ -10,6 +10,13 @@ const sql = await readFile(
   'utf8',
 );
 
+test('cancellation history does not require OMS latest departure timestamps', () => {
+  assert.doesNotMatch(sql, /q\.latestsendcardate IS NOT NULL/);
+  assert.doesNotMatch(sql, /latest_departure IS NULL/);
+  assert.match(sql, /CASE WHEN s\.cancelled IS NOT NULL THEN s\.cancelled/);
+  assert.match(sql, /cancelled>created \+ INTERVAL '12' HOUR/);
+});
+
 test('daily SQL is standalone and reads its existing checkpoint rather than embedding takeover state', () => {
   assert.ok(Buffer.byteLength(sql) < 1000000);
   assert.doesNotMatch(sql, /\$\{|:(?:gea_p\d+|as_of|inventory_end|order_end|relation_end)\b/);
