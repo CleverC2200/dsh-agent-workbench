@@ -259,6 +259,38 @@ test('full fact paging keeps zero and missing base distinct, without a failed sh
   await report.getByRole('button', { name: '预览当前明细' }).click();
   await expect(frame.getByRole('dialog').locator('tbody tr').first()).toContainText('0');
 });
+test('历史实绩大页碰到返回上限时缩小该页，从原偏移继续完整取数', async (t) => {
+  const records = Array.from({ length: 740 }, (_, index) => ({
+    [shipment + 'belong_base']: '基地甲',
+    [shipment + 'material_code']: String(index).padStart(5, '0'),
+    [shipment + 'act_dl_qty_total']: index === 739 ? 11 : 1,
+  }));
+  const pages = [];
+  const { frame } = await mpsPage(
+    t,
+    config,
+    (query) => {
+      if (query.queryId !== 'facts.history' || query.parameters.month !== '2023-11-01')
+        return fixture(query);
+      const { offset, page_size: size } = query.parameters;
+      pages.push([offset, size]);
+      if (offset === 500 && size > 200) throw Error('AI_GATEWAY_MCP_RESULT_TOO_LARGE');
+      return fixture(query, records);
+    },
+    { time: '2026-11-15T12:00:00+08:00' },
+  );
+  const history = frame.getByRole('region', { name: '历史同期发货', exact: true });
+  await history.getByLabel('历史同期').selectOption('3');
+  await expect(history).toContainText('发货数量：750件');
+  await expect(history).toContainText('当前期间740条');
+  assert.deepEqual(pages, [
+    [0, 500],
+    [500, 500],
+    [500, 200],
+    [700, 200],
+  ]);
+});
+
 test('refreshing facts keeps an uploaded annual plan marked as a local file', async (t) => {
   const { frame, calls } = await mpsPage(t, config, fixture);
   const report = frame.getByRole('region', { name: '计划提报数据', exact: true });

@@ -11,6 +11,7 @@ import * as XLSX from 'xlsx-republish';
 import { expect } from '@playwright/test';
 import { mpsPage } from './helpers/mps-page.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
+import { shipmentSourceResponse, shipmentSourceRow } from './helpers/mps-shipment-source.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const record = (id, values) => ({
@@ -1026,6 +1027,73 @@ test('the opening plan reads June to August while the adjusted plan reads July t
       ),
     )
     .toBe(true);
+});
+
+test('打开和恢复11月评估自动用10月快照计算需求，11月发货视图仍独立', async (t) => {
+  const november = { time: '2026-11-15T12:00:00+08:00' };
+  const { page, frame, calls } = await mpsPage(
+    t,
+    config,
+    (query) => {
+      const october = query.parameters.month === '2026-10-01';
+      return (
+        shipmentSourceResponse(
+          config,
+          query,
+          ['A', 'B'].map((material_code) =>
+            shipmentSourceRow({ material_code, shipped: october ? 160 : 20 }),
+          ),
+          october ? '2026-10-31' : '2026-11-14',
+        ) ?? fixture(query)
+      );
+    },
+    november,
+  );
+  await expect(frame.getByLabel('评估版本选择')).toContainText('2026-11');
+  const demand = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
+  const category = demand.getByRole('row').filter({
+    has: frame.getByRole('cell', { name: '汤圆', exact: true }),
+  });
+  await expect(category.locator('.dc-demand-amount').first()).toHaveText(/^\d+$/);
+  assert.ok(
+    !calls.some(
+      (call) => call.queryId === 'facts.shipment' && call.parameters.cutoff === '2026-11-14',
+    ),
+  );
+  await expect
+    .poll(() =>
+      calls.some(
+        (call) => call.queryId === 'facts.history' && call.parameters.month === '2026-01-01',
+      ),
+    )
+    .toBe(true);
+  for (const month of ['2026-07-01', '2026-08-01', '2026-09-01'])
+    assert.equal(
+      calls.filter((call) => call.queryId === 'facts.history' && call.parameters.month === month)
+        .length,
+      1,
+    );
+  const saved = await page.evaluate(() => window.readView());
+  const reads = () =>
+    calls.filter(
+      (call) => call.queryId === 'facts.shipment' && call.parameters.cutoff === '2026-10-31',
+    ).length;
+  assert.equal(reads(), 1);
+  await page.evaluate((seed) => window.openAuthor('mps', 1200, seed), saved);
+  await expect(category.locator('.dc-demand-amount').first()).toHaveText(/^\d+$/);
+  assert.equal(reads(), 2);
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await expect(frame.getByLabel('数据截止日')).toHaveValue('2026-11-14');
+  await expect
+    .poll(() =>
+      calls.some(
+        (call) => call.queryId === 'facts.shipment' && call.parameters.cutoff === '2026-11-14',
+      ),
+    )
+    .toBe(true);
+  await expect(frame.getByRole('status', { name: '计算快照状态' })).toContainText(
+    '2026-10-31 快照已进入评估',
+  );
 });
 
 test('missing current shipment keeps demand pending and exports the missing source from the real page path', async (t) => {
