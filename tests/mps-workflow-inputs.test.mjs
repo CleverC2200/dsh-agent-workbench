@@ -1243,7 +1243,7 @@ test('安全天数采用实际读取来源起月与版本，评估月保持独�
   const source = draft();
   source.inventoryTargetsRead = {
     status: 'ready',
-    metadata: { start_month: '2026-11', end_month: '2027-01' },
+    metadata: { start_month: '2026-11', end_month: '2027-01', businessDate: '2026-11-20' },
   };
   const target = {
     month: '2026-11',

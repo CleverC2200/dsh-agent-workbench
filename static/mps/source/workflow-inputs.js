@@ -11,7 +11,11 @@ import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-com
 import { solveMpsPlan } from 'dsh-agent-manage/mps-compute/plan';
 import { buildPlanSources, resolveWeightPairs } from './plan-inputs.js';
 import { attachPlanReport } from './plan-diagnostics.js';
-import { inventoryVersionOrder, selectedInventoryMonth } from './inventory-selection.js';
+import {
+  inventoryVersionOrder,
+  selectedInventoryMonth,
+  selectedInventoryBusinessDate,
+} from './inventory-selection.js';
 import { buildCapacityReport } from 'dsh-agent-manage/mps-compute/capacity-report';
 import { productionCalendarDays } from './production-calendar.js';
 
@@ -379,7 +383,10 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     inventoryTargets: draft.inventoryTargets ?? [],
     inventoryTargetVersion: draft.constraints?.targetVersion ?? 'auto',
     inventoryTurnoverMonth: selectedInventoryMonth(draft),
-    inventoryTargetPriority: inventoryVersionOrder(selectedInventoryMonth(draft)),
+    inventoryTargetPriority: inventoryVersionOrder(
+      selectedInventoryMonth(draft),
+      selectedInventoryBusinessDate(draft),
+    ),
     requireSourceTurnoverDays: true,
     inventoryTargetIssues:
       draft.inventoryTargetsRead?.status === 'ready'
