@@ -48,25 +48,39 @@ export const salesCardTemplate = {
             text: {
               tag: 'plain_text',
               text_color: 'red',
-              content: conditional('section.hasInstruction', '${section.instruction}', {
+              content: {
                 $concat: [
-                  conditional(
-                    'section.rateKnown',
-                    conditional(
-                      'section.ready',
-                      '请核对订单信息并处理。',
-                      '请核对订单信息并处理。',
+                  conditional('section.hasInstruction', '${section.instruction}', {
+                    $concat: [
+                      conditional(
+                        'section.rateKnown',
+                        '请核对订单信息并处理。',
+                        '订单满足率暂未完整提供，请核对后处理。',
+                      ),
+                      {
+                        $each: 'section.shortages',
+                        as: 'shortage',
+                        template: '\nSKU：${shortage.sku} 原订单缺货：${shortage.quantity}',
+                      },
+                      conditional('section.moreShortages', '\n其余缺货商品请在“订单处理”中核对。'),
+                    ],
+                  }),
+                  conditional('section.hasPriceSkus', {
+                    $each: 'section.priceSkus',
+                    as: 'priceSku',
+                    template: conditional(
+                      'section.priceSkusUnconfirmed',
+                      '\n待核实SKU：${priceSku.sku}',
+                      '\nSKU：${priceSku.sku}',
                     ),
-                    '订单满足率暂未完整提供，请核对后处理。',
+                  }),
+                  conditional('section.morePriceSkus', '\n其余涉及商品请在订单明细中查看。'),
+                  conditional(
+                    'section.priceSkusUnlocated',
+                    '\n异常商品SKU未完整提供，请核对订单明细。',
                   ),
-                  {
-                    $each: 'section.shortages',
-                    as: 'shortage',
-                    template: '\nSKU：${shortage.sku} 原订单缺货：${shortage.quantity}',
-                  },
-                  conditional('section.moreShortages', '\n其余缺货商品请在“订单处理”中核对。'),
                 ],
-              }),
+              },
             },
           },
           {

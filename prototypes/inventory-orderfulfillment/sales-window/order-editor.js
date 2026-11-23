@@ -53,6 +53,8 @@ window.OrderShortageEditor = (() => {
       throw Error('订单商品数据不完整，无法打开处理页');
     const lines = original.map((line) => ({
       ...line,
+      priceStatus:
+        line.priceStatus || (snapshot.priceStatus !== 'READY' ? snapshot.priceStatus : undefined),
       sku: String(line.sku),
       originalQuantity: number(line.quantity),
       draftQuantity: number(line.quantity),
@@ -66,6 +68,41 @@ window.OrderShortageEditor = (() => {
       state.previewOnly !== true &&
       capabilities.inventoryRecalculationAvailable === true &&
       typeof state.onInventoryRecalculate === 'function';
+    const priceRecalculationEnabled =
+      inventoryEnabled && capabilities.priceRecalculationAvailable === true;
+    function priceValue(line) {
+      return line.priceStatus && line.priceStatus !== 'READY' ? null : number(line.unitPrice);
+    }
+    function priceMessage(line) {
+      if (priceValue(line) !== null) return '';
+      if (typeof line.priceMessage === 'string' && line.priceMessage.trim())
+        return line.priceMessage;
+      const reasons = {
+        PRICE_MISSING: 'SAP未返回该商品的价格，请联系业务核实。',
+        missing_or_expired: '商品价格缺失或已过期，请联系业务核实。',
+        PRICE_CONTEXT_QUERY_UNAVAILABLE: '查价资料查询未成功，请核对读取权限或查询服务。',
+        PRICE_CONTEXT_NOT_VISIBLE_OR_MISSING:
+          '未读取到客户与提货点的查价资料，请核对资料及读取权限。',
+        PRICE_CONTEXT_CONFLICTING: '客户与提货点的查价资料不唯一，请联系业务核实。',
+        PRICE_CONTEXT_SCOPE_MISMATCH: '查价资料与订单客户或提货点不一致，请联系业务核实。',
+        PRICE_CONTEXT_MISSING: '查价所需的客户、提货点、公司或工厂资料不完整，请核对后重试。',
+        PRICE_CONTEXT_MISSING_OR_CONFLICTING:
+          '未取得唯一且可读取的查价资料，请核对客户、提货点及权限。',
+        PICKUP_POINT_INACTIVE: '提货点未启用或未完成匹配，请联系业务核实。',
+        PRICE_CONFLICT: 'SAP返回的价格或计价条件存在冲突，请联系业务核实。',
+        SAP_PRICE_CUSTOMER_BLOCKED: 'SAP查价提示客户冻结，请联系业务核实',
+        SAP_PRICE_REJECTED: 'SAP拒绝本次查价，请联系业务核实。',
+        SAP_PRICE_TIMEOUT: 'SAP查价超时，请稍后重试。',
+        SAP_PRICE_CONNECTION_FAILED: '暂时无法连接SAP查价服务，请稍后重试。',
+        SAP_PRICE_HTTP_ERROR: 'SAP查价服务返回异常状态，请联系接口负责人核查。',
+        SAP_PRICE_RESPONSE_INVALID: 'SAP查价返回的数据格式异常，请联系接口负责人核查。',
+        SAP_PRICE_SCOPE_MISMATCH: 'SAP返回的报价与订单查价范围不一致，请联系接口负责人核查。',
+        SAP_PRICE_INTERRUPTED: 'SAP查价已中断，请重新查询。',
+        PRICE_CONDITIONS_UNSUPPORTED: 'SAP返回的计价信息不符合当前规则，请联系业务核实。',
+        PRICE_QUERY_DISABLED: '商品查价服务未启用，暂时无法核验价格。',
+      };
+      return reasons[line.priceStatus] || '商品价格尚未获取或核验未完成，请重新核验。';
+    }
     let inventoryResult,
       inventoryPhase = 'idle',
       inventoryError = '',
@@ -108,6 +145,8 @@ window.OrderShortageEditor = (() => {
     let deliveryDate = snapshot.deliveryDate || '',
       vehicleType = snapshot.vehicleType || '',
       loadingProducts = false,
+      loadingVehicles = false,
+      vehiclesLoaded = Array.isArray(capabilities.vehicleOptions),
       modal = false,
       saving = false,
       notice = '';
@@ -141,15 +180,21 @@ window.OrderShortageEditor = (() => {
       lines
         .filter((line) => line.draftQuantity > 0)
         .map((line) => ({ sku: line.sku, quantity: line.draftQuantity }));
-    const inventoryDraftKey = () => JSON.stringify(inventoryLines());
+    const inventoryDraftKey = () =>
+      JSON.stringify({ lines: inventoryLines(), deliveryDate, vehicleType });
     const currentRate = () =>
-      inventoryEnabled
+      inventoryEnabled && page !== 'details'
         ? inventoryPhase === 'ready'
           ? number(inventoryResult?.satisfactionRate)
           : null
         : number(snapshot.satisfactionRate);
     function queueInventory() {
-      if (!inventoryEnabled || root.__fulfillmentEditorOwner !== mountOwner) return;
+      if (
+        !inventoryEnabled ||
+        !['order', 'catalog', 'recommendations'].includes(page) ||
+        root.__fulfillmentEditorOwner !== mountOwner
+      )
+        return;
       const draftLines = inventoryLines();
       if (
         !draftLines.length ||
@@ -216,12 +261,26 @@ window.OrderShortageEditor = (() => {
           const computedRate = (100 * (total - missing)) / total;
           if (!(total > 0) || Math.abs(computedRate - Number(result.satisfactionRate)) > 1e-6)
             throw Error('库存满足率与商品明细不一致，请重新核算');
+          if (
+            priceRecalculationEnabled &&
+            (typeof result.pricesReady !== 'boolean' ||
+              result.pricesReady !==
+                result.lines.every(
+                  (line) => line.priceStatus === 'READY' && number(line.unitPrice) !== null,
+                ))
+          )
+            throw Error('价格核验结果不完整，请重新核验');
           inventoryResult = { ...result, satisfactionRate: computedRate };
           inventoryPhase = 'ready';
           for (const fresh of result.lines) {
             const line = lines.find((item) => item.sku === fresh.sku);
             line.shortage = Number(fresh.shortage);
             line.availableQuantity = Number(fresh.availableQuantity);
+            if (priceRecalculationEnabled) {
+              line.unitPrice = number(fresh.unitPrice);
+              line.priceStatus = fresh.priceStatus || 'UNAVAILABLE';
+              line.priceMessage = typeof fresh.priceMessage === 'string' ? fresh.priceMessage : '';
+            }
           }
         } catch (error) {
           if (root.__fulfillmentEditorOwner !== mountOwner || generation !== inventoryGeneration)
@@ -229,16 +288,20 @@ window.OrderShortageEditor = (() => {
           inventoryPhase = 'error';
           inventoryResult = undefined;
           inventoryError = error.message || '库存查询失败，请重新核算';
+          if (priceRecalculationEnabled)
+            for (const line of lines.filter((item) => item.draftQuantity > 0)) {
+              line.unitPrice = null;
+              line.priceStatus = 'PRICE_VERIFICATION_UNAVAILABLE';
+              line.priceMessage = '价格与库存核验未完成，请重试。';
+            }
         }
         updateTotals();
       }, 300);
     }
     const amount = () =>
-      selected().some((line) => number(line.unitPrice) === null || line.draftQuantity === null)
+      selected().some((line) => priceValue(line) === null || line.draftQuantity === null)
         ? '—'
-        : display(
-            selected().reduce((sum, line) => sum + Number(line.unitPrice) * line.draftQuantity, 0),
-          );
+        : display(selected().reduce((sum, line) => sum + priceValue(line) * line.draftQuantity, 0));
     function quantityError(line, quantity) {
       const minimum = number(line.minimumOrderQuantity),
         pallet = number(line.orderMultiple);
@@ -277,8 +340,9 @@ window.OrderShortageEditor = (() => {
       if (!editable) return capabilities.reason || taskNotice();
       if (snapshot.credit?.status === 'insufficient') return '信用额度不足，需先补充并经后台核验。';
       if (
-        (snapshot.priceStatus && snapshot.priceStatus !== 'READY') ||
-        (snapshot.omsEventType === 'PRICE_CHECK_FAILED' && snapshot.priceStatus !== 'READY')
+        !priceRecalculationEnabled &&
+        ((snapshot.priceStatus && snapshot.priceStatus !== 'READY') ||
+          (snapshot.omsEventType === 'PRICE_CHECK_FAILED' && snapshot.priceStatus !== 'READY'))
       )
         return state.notice || '商品价格核验未通过，请先点击“价格已维护”重新查价。';
       if (route(snapshot) !== 'order' && capabilities.omsModificationAvailable !== true) {
@@ -313,6 +377,7 @@ window.OrderShortageEditor = (() => {
         )
           return '请选择当前提货点可用的车型。';
         if (
+          !priceRecalculationEnabled &&
           selected().some(
             (line) =>
               !original.some((item) => item.sku === line.sku) &&
@@ -327,6 +392,10 @@ window.OrderShortageEditor = (() => {
           (inventoryPhase !== 'ready' || inventoryKey !== inventoryDraftKey())
         )
           return '正在核算最新库存，请稍候。';
+        if (priceRecalculationEnabled && inventoryResult?.pricesReady !== true)
+          return (
+            inventoryResult?.priceMessage || '所选商品价格核验未通过，请核对红色原因或更换商品。'
+          );
       } else if (changed()) return '调整内容尚未通过重新核验，暂不能提交。';
       if (typeof state.onConfirm !== 'function') return '当前无法在此提交，请联系业务处理。';
       return '';
@@ -341,6 +410,33 @@ window.OrderShortageEditor = (() => {
       });
       const price = root.querySelector('[data-editor-amount]');
       if (price) price.textContent = '¥ ' + amount();
+      for (const item of root.querySelectorAll('[data-editor-price]')) {
+        const line = (page === 'recommendations' ? recommendationDrafts : lines).find(
+          (line) => line.sku === item.dataset.editorPrice,
+        );
+        if (line) item.textContent = '¥ ' + display(priceValue(line));
+      }
+      for (const item of root.querySelectorAll('[data-editor-price-reason]')) {
+        const line = (page === 'recommendations' ? recommendationDrafts : lines).find(
+          (line) => line.sku === item.dataset.editorPriceReason,
+        );
+        if (line) {
+          item.textContent = priceMessage(line);
+          item.hidden = !item.textContent;
+        }
+      }
+      const originalNotice = root.querySelector('[data-editor-notice]');
+      if (
+        originalNotice &&
+        priceRecalculationEnabled &&
+        inventoryPhase === 'ready' &&
+        snapshot.credit?.status !== 'insufficient'
+      ) {
+        originalNotice.textContent = inventoryResult.pricesReady
+          ? ''
+          : inventoryResult.priceMessage || '所选商品价格核验未通过。';
+        originalNotice.hidden = !originalNotice.textContent;
+      }
       const hint = root.querySelector('#editorSubmitReason');
       if (hint) {
         hint.textContent = reason();
@@ -348,33 +444,36 @@ window.OrderShortageEditor = (() => {
       }
       const rate = root.querySelector('.editor-rate');
       if (rate)
-        rate.textContent = inventoryEnabled
-          ? inventoryPhase === 'ready'
-            ? `订单满足率：${rateText(currentRate())}`
-            : inventoryPhase === 'error'
-              ? '订单满足率：核算失败'
-              : '订单满足率：待核算'
-          : changed()
-            ? '调整后满足率：待重新核算'
-            : number(snapshot.satisfactionRate) === null
-              ? '订单满足率：待核实'
-              : number(snapshot.satisfactionRate) > 100
-                ? '订单满足率：数据异常'
-                : `订单满足率：${rateText(snapshot.satisfactionRate)}`;
+        rate.textContent =
+          inventoryEnabled && page !== 'details'
+            ? inventoryPhase === 'ready'
+              ? `订单满足率：${rateText(currentRate())}`
+              : inventoryPhase === 'error'
+                ? '订单满足率：核算失败'
+                : '订单满足率：待核算'
+            : changed()
+              ? '调整后满足率：待重新核算'
+              : number(snapshot.satisfactionRate) === null
+                ? '订单满足率：待核实'
+                : number(snapshot.satisfactionRate) > 100
+                  ? '订单满足率：数据异常'
+                  : `订单满足率：${rateText(snapshot.satisfactionRate)}`;
       root.querySelectorAll('[data-editor-rate]').forEach((item) => {
         item.textContent = rateText(currentRate());
       });
       root.querySelectorAll('[data-editor-stock]').forEach((item) => {
         const line = lines.find((line) => line.sku === item.dataset.editorStock);
-        if (!inventoryEnabled || !line || !(line.draftQuantity > 0)) return;
+        if (!inventoryEnabled || page === 'details' || !line || !(line.draftQuantity > 0)) return;
         item.textContent =
-          inventoryPhase === 'ready'
-            ? line.shortage > 0
-              ? `库存不足：当前缺货 ${display(line.shortage)} 箱`
-              : ''
-            : inventoryPhase === 'error'
-              ? '库存核算失败，请重新核算'
-              : '正在核算最新库存';
+          inventoryPhase === 'invalid'
+            ? ''
+            : inventoryPhase === 'ready'
+              ? line.shortage > 0
+                ? `库存不足：当前缺货 ${display(line.shortage)} 箱`
+                : ''
+              : inventoryPhase === 'error'
+                ? '库存核算失败，请重新核算'
+                : '正在核算最新库存';
         item.hidden = !item.textContent;
       });
       const retry = root.querySelector('[data-editor-inventory-retry]');
@@ -414,8 +513,12 @@ window.OrderShortageEditor = (() => {
       );
       const trading = node('div', undefined, 'editor-product-trading'),
         price = node('div', undefined, 'editor-price');
-      price.append(node('strong', '¥ ' + display(line.unitPrice)));
-      if (number(line.unitPrice) === null) price.append(node('small', '暂无价格'));
+      const priceNumber = node('strong', '¥ ' + display(priceValue(line)));
+      priceNumber.dataset.editorPrice = line.sku;
+      const priceNotice = node('small', priceMessage(line), 'editor-price-warning');
+      priceNotice.dataset.editorPriceReason = line.sku;
+      priceNotice.hidden = !priceNotice.textContent;
+      price.append(priceNumber, priceNotice);
       trading.append(price);
       if (readOnly)
         trading.append(
@@ -501,19 +604,38 @@ window.OrderShortageEditor = (() => {
         error.textContent = initialError;
         controls.append(minus, input, plus, node('span', '箱'));
         trading.append(controls);
-        if (capabilities.catalogAvailable === true && editable && line.draftQuantity > 0)
-          trading.append(
-            button(
-              '删除',
-              () => {
-                line.draftQuantity = 0;
-                line.inputError = '';
-                render();
-              },
-              false,
-              'editor-add',
-            ),
+        if (
+          capabilities.catalogAvailable === true &&
+          editable &&
+          (line.draftQuantity === null || line.draftQuantity > 0)
+        ) {
+          const remove = button(
+            '',
+            () => {
+              line.draftQuantity = 0;
+              line.inputError = '';
+              render();
+            },
+            false,
+            'editor-remove',
           );
+          remove.setAttribute('aria-label', `删除商品 ${line.name || line.sku}`);
+          remove.title = '删除商品';
+          const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          icon.setAttribute('viewBox', '0 0 24 24');
+          icon.setAttribute('aria-hidden', 'true');
+          icon.setAttribute('focusable', 'false');
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', 'M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6');
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', 'currentColor');
+          path.setAttribute('stroke-width', '1.7');
+          path.setAttribute('stroke-linecap', 'round');
+          path.setAttribute('stroke-linejoin', 'round');
+          icon.append(path);
+          remove.append(icon);
+          trading.append(remove);
+        }
         info.append(error);
       }
       info.append(trading);
@@ -652,6 +774,7 @@ window.OrderShortageEditor = (() => {
         body.append(node('p', taskNotice(), 'editor-warning'));
       if (state.status === 'pending' && typeof state.notice === 'string' && state.notice.trim()) {
         const message = node('p', state.notice, 'editor-warning');
+        message.dataset.editorNotice = '';
         message.style.whiteSpace = 'pre-line';
         body.append(message);
       }
@@ -717,6 +840,7 @@ window.OrderShortageEditor = (() => {
         const toolbar = node('div', undefined, 'editor-toolbar'),
           vehicle = node('select');
         vehicle.setAttribute('aria-label', '选择车型');
+        vehicle.title = capabilities.vehicleNotice || '';
         const cars =
           capabilities.vehicleRulesAvailable === true && Array.isArray(capabilities.vehicleOptions)
             ? capabilities.vehicleOptions
@@ -735,6 +859,49 @@ window.OrderShortageEditor = (() => {
           vehicleType = vehicle.value;
           updateTotals();
         });
+        if (
+          editable &&
+          capabilities.vehicleRulesAvailable === true &&
+          !vehiclesLoaded &&
+          !loadingVehicles &&
+          typeof state.onLookupVehicles === 'function'
+        ) {
+          loadingVehicles = true;
+          Promise.resolve()
+            .then(() => state.onLookupVehicles())
+            .then((options) => {
+              if (root.__fulfillmentEditorOwner !== mountOwner) return;
+              if (
+                !Array.isArray(options) ||
+                options.length > 100 ||
+                options.some((item) => !item || typeof item.value !== 'string' || !item.value)
+              )
+                throw Error('车型资料返回异常，请重新打开订单');
+              capabilities.vehicleOptions = options;
+              vehiclesLoaded = true;
+              const currentVehicle = root.querySelector('[aria-label="选择车型"]');
+              if (currentVehicle) {
+                for (const item of options.filter(
+                  (item) => item.value && item.value !== vehicleType,
+                )) {
+                  const option = node('option', item.label || item.value);
+                  option.value = item.value;
+                  currentVehicle.append(option);
+                }
+                currentVehicle.disabled = !options.length;
+              }
+            })
+            .catch((error) => {
+              if (root.__fulfillmentEditorOwner !== mountOwner) return;
+              vehiclesLoaded = true;
+              capabilities.vehicleNotice = error.message || '车型读取失败，请重新打开订单';
+              const currentVehicle = root.querySelector('[aria-label="选择车型"]');
+              if (currentVehicle) currentVehicle.title = capabilities.vehicleNotice;
+            })
+            .finally(() => {
+              loadingVehicles = false;
+            });
+        }
         const date = node('input');
         date.type = 'date';
         date.value = /^\d{4}-\d{2}-\d{2}$/.test(deliveryDate) ? deliveryDate : '';
@@ -912,7 +1079,7 @@ window.OrderShortageEditor = (() => {
         count = node('strong');
       count.dataset.editorCount = '';
       summary.append(count, node('p', '', 'editor-rate'));
-      if (inventoryEnabled) {
+      if (inventoryEnabled && page !== 'details') {
         const retry = button(
           '重新核算库存',
           () => {
@@ -1023,6 +1190,7 @@ window.OrderShortageEditor = (() => {
                   [
                     'ORDER_CONFIRMATION_OMS_MODIFICATION_INVENTORY_CHANGED',
                     'ORDER_CONFIRMATION_OMS_MODIFICATION_INVENTORY_UNAVAILABLE',
+                    'ORDER_CONFIRMATION_OMS_MODIFICATION_PRICE_NOT_READY',
                   ].includes(error.code)
                 ) {
                   inventoryKey = '';
