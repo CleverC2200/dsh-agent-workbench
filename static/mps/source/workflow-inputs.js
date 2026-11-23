@@ -19,6 +19,7 @@ import {
 } from './inventory-selection.js';
 import { buildCapacityReport } from 'dsh-agent-manage/mps-compute/capacity-report';
 import { productionCalendarDays } from './production-calendar.js';
+import { buildProductScope } from './product-scope.js';
 
 const number = (value) => {
   if (
@@ -533,6 +534,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     },
   };
   const result = computeMpsWorkflow(workflowInput);
+  result.productScope = buildProductScope(draft, products, result, excludedShipments);
   result.delistedIssues = delistedReportIssues(result.rows, result.context);
   result.categoryComputation = categoryComputation;
   result.excludedShipments = excludedShipments;
