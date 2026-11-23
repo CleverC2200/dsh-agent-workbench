@@ -3,6 +3,35 @@ import assert from 'node:assert/strict';
 import { salesConfirmationCard } from '../prototypes/inventory-orderfulfillment/sales-confirmation-card.mjs';
 import { salesConfirmationCard as packagedCard } from '../lib/business/inventory-orderfulfillment/sales-window/card.mjs';
 
+test('shortage SKUs remain visible alongside actual instructions at any satisfaction rate', () => {
+  for (const rate of [70, 95, null]) {
+    const draft = {
+      rate,
+      notice: '库存校验发现部分商品不足，请核对。',
+      lines: [
+        { sku: '10000362', rawShortage: 5, shortage: '5 箱' },
+        { sku: '10003705', shortage: 2 },
+        { sku: 'IN-STOCK', rawShortage: 0, shortage: 10 },
+      ],
+    };
+    const before = structuredClone(draft);
+    const text = JSON.stringify(salesConfirmationCard(draft));
+    assert.ok(text.includes(draft.notice));
+    assert.ok(text.includes('SKU：10000362 原订单缺货：5 箱'));
+    assert.ok(text.includes('SKU：10003705 原订单缺货：2'));
+    assert.equal(text.includes('IN-STOCK'), false);
+    assert.deepEqual(draft, before);
+  }
+});
+
+test('shortage card limits the summary to five affected SKUs', () => {
+  const lines = Array.from({ length: 7 }, (_, i) => ({ sku: `MISSING-${i}`, rawShortage: 1 }));
+  const text = JSON.stringify(salesConfirmationCard({ rate: 70, lines }));
+  assert.ok(text.includes('SKU：MISSING-4'));
+  assert.equal(text.includes('SKU：MISSING-5'), false);
+  assert.ok(text.includes('其余缺货商品请在“订单处理”中核对。'));
+});
+
 test('order cards stay concise when the snapshot includes product trading rules', () => {
   const lines = Array.from({ length: 19 }, (_, index) => ({
     sku: `PRODUCT-${index}`,
