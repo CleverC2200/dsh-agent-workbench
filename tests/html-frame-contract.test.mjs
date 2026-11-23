@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { delimiter } from 'node:path';
 import { build } from 'esbuild';
 import { readFile } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
 
 const { outputFiles } = await build({
+  nodePaths: (process.env.WORKBENCH_BROWSER_NODE_PATH ?? '').split(delimiter).filter(Boolean),
   stdin: {
     contents: `
 import React,{useSyncExternalStore} from 'react';
@@ -28,7 +30,7 @@ window.fetch=async(url,options)=>{
     return Response.json({owner:'owner-'+input.sessionId,binding:{surface:'gea-html-inventory-fixture',tool:'gea_plugin_page_apply'}});
   }
   if(input.operation==='events'&&window.failEvents)return Response.json({error:'页面连接已断开'},{status:503});
-  return Response.json(input.operation==='events'?(window.nextEvents?.splice(0)??[]):input.operation==='catalog'?{events:[]}:{});
+  return Response.json(input.operation==='events'?(window.nextEvents?.splice(0)??[]):input.operation==='catalog'?{events:window.nextCatalogEvents?.splice(0)??[]}:{});
 };
 const ctx={
   get:()=>undefined,provide(){},
@@ -167,9 +169,13 @@ test('MPS reconnect replaces the owned frame, releases the old connection and pr
   assert.deepEqual(errors, []);
 });
 
-test('the MPS refresh receipt reaches the Host before reload and its new page reconnects', async (t) => {
+test('the MPS refresh action reaches the Host without replacing the page connection', async (t) => {
   const author = await build({
-    entryPoints: ['static/mps/source/context.js'],
+    stdin: {
+      contents:
+        "import { registerMpsRefresh } from './static/mps/source/context.js'; registerMpsRefresh(() => { document.body.dataset.recalculated = 'yes'; });",
+      resolveDir: process.cwd(),
+    },
     bundle: true,
     write: false,
     format: 'iife',
@@ -191,30 +197,33 @@ test('the MPS refresh receipt reaches the Host before reload and its new page re
   const before = loads();
   await page.getByLabel('public draft fixture').fill('刷新时保留的会话草稿');
   await page.evaluate(() => {
-    window.nextEvents = [
-      { type: 'invoke', session: 'session-1', id: 'mps-refresh', name: 'refresh', arguments: {} },
+    window.nextCatalogEvents = [
+      { type: 'TOOL_CALL_START', toolCallId: 'mps-refresh', toolCallName: 'gea_plugin_page_apply' },
+      {
+        type: 'TOOL_CALL_ARGS',
+        toolCallId: 'mps-refresh',
+        delta: JSON.stringify({ kind: 'invoke', target: 'control:refresh', reason: '重算' }),
+      },
+      { type: 'TOOL_CALL_END', toolCallId: 'mps-refresh' },
     ];
   });
   await expect
     .poll(() =>
       page.evaluate(
         () =>
-          calls.find((call) => call.operation === 'reply' && call.parameters?.id === 'mps-refresh')
-            ?.parameters.result,
+          calls
+            .flatMap((call) => call.parameters?.toolMessages ?? [])
+            .find((message) => message.toolCallId === 'mps-refresh')?.content,
       ),
     )
-    .toEqual({ reloadScheduled: true });
-  await expect.poll(() => loads()).toBe(before + 1);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          calls.filter(
-            (call) => call.operation === 'register' && call.parameters?.name === 'refresh',
-          ).length,
-      ),
-    )
-    .toBe(2);
+    .toBe(JSON.stringify({ toolCallId: 'mps-refresh', applied: true }));
+  await expect(page.frameLocator('iframe').locator('body')).toHaveAttribute(
+    'data-recalculated',
+    'yes',
+  );
+  assert.equal(loads(), before);
+  assert.deepEqual(await page.evaluate(() => opens), ['session-1']);
+  assert.equal(await page.evaluate(() => calls.some((call) => call.operation === 'close')), false);
   await expect(page.getByLabel('public draft fixture')).toHaveValue('刷新时保留的会话草稿');
   assert.deepEqual(errors, []);
 });

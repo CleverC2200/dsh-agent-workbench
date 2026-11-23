@@ -165,29 +165,18 @@ void ready.then(() => {
   connected = true;
   schedule();
 });
-const refreshLabel = '刷新MPS页面，保留对话界面意图和未发送文字，清除本页隔离输入';
-action('refresh', refreshLabel, () => {
-  setTimeout(() => window.location.reload(), 0);
-  return { reloadScheduled: true };
-});
-reportElements(
-  'refresh',
-  [
-    {
-      id: 'control:refresh',
-      role: 'control',
-      label: refreshLabel,
-      actions: ['invoke'],
-      effect: 'view',
+export function registerMpsRefresh(startRecalculation) {
+  return action(
+    'refresh',
+    '重读MPS业务数据并重算，保留本地草稿和当前页面',
+    (_, { signal }) => {
+      signal.throwIfAborted();
+      startRecalculation();
+      return { status: 'recalculation-started' };
     },
-  ],
-  (args, signal) => {
-    signal.throwIfAborted();
-    if (args.kind !== 'invoke' || (args.action && args.action !== 'invoke'))
-      throw Error('ACTION_NOT_ALLOWED');
-    window.location.reload();
-  },
-);
+    { effect: 'view' },
+  );
+}
 window.addEventListener('gea-session-changing', () => {
   cancelPublication();
   restored = false;

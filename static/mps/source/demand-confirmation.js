@@ -3,6 +3,7 @@ import { buildMpsWorkflow } from './workflow-inputs.js';
 import { encodeLocalDrafts, decodeLocalDrafts, changeAdjustment } from './local-draft.js';
 import { createCategoryDemand } from './category-demand-view.js';
 import { ready } from '../../../business/shared/channel.js';
+import { registerMpsRefresh } from './context.js';
 import { createShipment } from './shipment.js';
 import { mpsBusinessDate } from './business-date.js';
 import { defaultInventoryMonth } from './inventory-selection.js';
@@ -1134,7 +1135,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [masterOpen, setMasterOpen] = react.useState(false);
     const [errors, setErrors] = react.useState({});
     const [busy, setBusy] = react.useState({});
-    const [scopeGeneration, setScopeGeneration] = react.useState(0);
+    const [{ scopeGeneration, refreshSources }, setScope] = react.useState({
+      scopeGeneration: 0,
+      refreshSources: false,
+    });
+    const renewScope = (refreshSources = false) =>
+      setScope((scope) => ({ scopeGeneration: scope.scopeGeneration + 1, refreshSources }));
     const [shipmentSnapshot, setShipmentSnapshot] = react.useState(null);
     const [evaluation, setEvaluation] = react.useState(null);
     const workflowStep = react.useRef({ scope: '', step: null });
@@ -1462,7 +1468,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     if (workflowActive) workflowStep.current.step = step;
     const demandReadScope = react.useRef(null);
     const checkActive = active && step === 'check';
-    if (scopeGeneration > 0 && (view.get().tab ?? step) === step && (checkActive || workflowActive))
+    if (
+      scopeGeneration > 0 &&
+      (refreshSources || ((view.get().tab ?? step) === step && (checkActive || workflowActive)))
+    )
       demandReadScope.current = workflowScope;
     const demandSourcesActive = active && demandReadScope.current === workflowScope;
     react.useEffect(() => {
@@ -1486,7 +1495,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const reset = () => {
         canPersistLocal.current = false;
         clearFiles();
-        setScopeGeneration((value) => value + 1);
+        renewScope();
         const empty = initialDrafts();
         localRef.current = empty;
         setLocalState(empty);
@@ -1504,7 +1513,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         canPersistLocal.current = true;
         localRef.current = restored;
         setLocalState(restored);
-        setScopeGeneration((value) => value + 1);
+        renewScope();
       };
       const stop = view.subscribe((snapshot, event) => {
         if (event === 'released') reset();
@@ -1513,7 +1522,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         else restore(snapshot);
       });
       if (view.get().localDrafts) restore(view.get());
-      const reconnect = () => setScopeGeneration((value) => value + 1);
+      const reconnect = () => renewScope();
       window.addEventListener('gea-session-changing', reset);
       window.addEventListener('gea-session-changed', reconnect);
       window.addEventListener('gea-identity-changed', reset);
@@ -1528,6 +1537,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       };
     }, []);
     react.useEffect(() => {
+      if (!active) return;
+      return registerMpsRefresh(() => {
+        if (!canPersistLocal.current || !hasMpsSource())
+          throw Error('页面数据尚未连接，请先重新连接页面能力。');
+        clearFiles();
+        renewScope(true);
+      });
+    }, [active]);
+    react.useEffect(() => {
       if (!active) {
         clearFiles();
         setMasterOpen(false);
@@ -1535,7 +1553,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     }, [active]);
     react.useEffect(() => {
       let current = true;
-      if (active && hasMpsSource() && draft.productSource === 'business-unread') {
+      if (
+        active &&
+        hasMpsSource() &&
+        (draft.productSource === 'business-unread' ||
+          (refreshSources && draft.productSource === 'business'))
+      ) {
         ready.then(() => {
           if (current && canPersistLocal.current) {
             void sync('products');
@@ -1550,7 +1573,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       let current = true;
       if (demandSourcesActive && hasMpsSource())
         ready.then(() => {
-          if (current && !draft.annualSource) void sync('annual');
+          if (
+            current &&
+            (!draft.annualSource || (refreshSources && draft.annualSource === 'business'))
+          )
+            void sync('annual');
         });
       return () => {
         current = false;
