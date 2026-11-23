@@ -83,6 +83,7 @@ export function addWorkbenchSummaryQueries(config) {
             'invalid_denominator',
             'invalid_change',
             'unknown_quantity',
+            'change_observed',
           ]
         : [
             'base',

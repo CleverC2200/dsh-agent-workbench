@@ -3,7 +3,7 @@ import { ontimeMetricContract } from '../../business/inventory-orderworkbench/on
 import { metricDimensionContract } from './metric-dimensions.mjs';
 
 export function metricDefinition(name, turnoverScope = 'national') {
-  return {
+  const definition = {
     作废率:
       '按商品明细有效数量合计：接单超过12小时后作废的有效商品数量 ÷ O接收的有效商品数量；有效量依次取客户要求改单量change_order_qty、DMS最后修改量dms_last_update_qty、调整需求量备份need_qty_origin，真实0有效；小时表逐字段为空时，按客户＋原订单＋执行单＋商品行号＋SKU＋基地精确匹配日表，分别回补对应字段的完整唯一非空值，再按客户改单、DMS、备份顺序取值；小时及日表真实0均保留，已有小时字段不覆盖，必需的高优先级日表字段冲突保留未知，已有小时商品行不被日表替换；缺失的日表商品行在detailstatus=10，或整单作废orderstatus=90且detailstatus=20时补入；已有小时行及真实0不覆盖，其他删除行不补；有作废时间取canceltime，否则按已确认装车完成的轨迹最新批次lastshipmenttime归属周期；装车时间缺失时取同一已确认发运轨迹的wms_order_close_time，不因qtyshipped为0否认已确认发运；轨迹缺失时，按执行单号＋客户编码，依次使用小时表、日表中订单已完成orderstatus=100且整单有实发qtyshipped>0的WMS关单时间wms_close_time补充；不使用OMS关闭时间order_close_time或新增时间代替发货时间；轨迹按执行单号＋客户编码关联；全国仅订单提货点01/02/03/04/37；郑州仅按订单执行明细pickup_point=01筛选，不使用仓库映射或belong_base判断范围；不额外限制仓类；小时表订单提货点为空时按精确日表抬头唯一值回补；仍不明保留待确认；仅纳入接口来源20；发货仓为*且有效数量已知大于0时，先按穿透表最新版本精确回补；仍无发货仓时直接取订单pickup_point，与收货仓归属工厂提货点比较，双方仓类均工厂仓/外租仓且同点才剔除；提货点或必要仓类缺失、冲突仍待确认；剔除虚拟出1/2、超时原因14/16、同一归属工厂提货点且两端均工厂仓/外租仓的短拨（使用已确认的出入库pickup_point穿透字段），以及接单后12小时以内（含恰好12小时）作废；暂不执行作废时间与最晚发车时间及其前7天的锁单判断；接单超过12小时后作废才计分子；小时字段为空时按精确日表抬头唯一值回补；最晚发车时间latestsendcardate为空不影响按作废时间或实际发货时间统计；不按订单张数或SKU种类计数',
     改单率:
@@ -21,6 +21,7 @@ export function metricDefinition(name, turnoverScope = 'national') {
         : '全国及品项日均=月度需求计划÷对应月份天数；取库存计划表对应初版、纠偏、滚动或下月字段，不以客户需求表allnum替代') +
       '；各维度库存与计划在同范围内独立汇总，不要求商品逐条匹配；负库存按来源原值汇总；源内缺值、负计划、负库存合计或重复计划粒度不计算',
   }[name];
+  return name === '改单率' ? definition + '；' + amendmentMetricContract.availability : definition;
 }
 
 export const metricSpecs = {

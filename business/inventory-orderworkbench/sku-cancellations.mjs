@@ -295,7 +295,7 @@ export function aggregateCancellationSql(
     SUM(CASE WHEN invalid_cancel=0 THEN cancel_denominator ELSE 0 END) AS sample_denominator,
     SUM(CASE WHEN invalid_cancel=0 THEN 1 ELSE 0 END) AS sample_records,
     SUM(CASE WHEN invalid_cancel>0 THEN cancel_denominator ELSE 0 END) AS unknown_quantity,
-    COUNT(*) AS records,SUM(invalid_cancel) AS invalid
+    COUNT(*) AS records,SUM(invalid_cancel) AS invalid,NULL AS change_observations
     FROM ${sourceName ? events : '(' + events + ')'} cancellation_events
     ${groupKeys.length ? 'GROUP BY ' + groupKeys.join(',') : ''}`;
 }

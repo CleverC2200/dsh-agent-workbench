@@ -25,6 +25,7 @@ const numbers = new Set([
   'sample_demand',
   'sample_shortage',
   'sample_records',
+  'change_observations',
   'sample_numerator',
   'sample_denominator',
   'records',

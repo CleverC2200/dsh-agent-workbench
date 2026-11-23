@@ -3,6 +3,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import {
+  computeWorkbenchMetrics,
+  metricDelta,
+} from '../prototypes/inventory-orderworkbench/metric-model.mjs';
+import { metricSnapshot } from '../prototypes/inventory-orderworkbench/metric-components.mjs';
+import {
   amendmentEventsSql,
   amendmentChangesSql,
   customersSql,
@@ -121,6 +126,69 @@ function read(rows, { base = '', dims = warehouses, period = false, shipments } 
     db.close();
   }
 }
+function metricFromSummary(rows) {
+  const period = {
+    start: '2026-10-01',
+    end: '2026-11-01',
+    sections: [{ id: 'changes', status: 'ready', rows }],
+  };
+  period.metrics = computeWorkbenchMetrics(period);
+  return { metric: period.metrics['改单率'], snapshot: metricSnapshot(period, '改单率') };
+}
+
+test('uncollected amendment fields cannot become a zero-rate year comparison', () => {
+  const { summary } = read([
+    row('not-collected', {
+      change_order_qty: null,
+      dms_last_update_qty: null,
+      need_qty_origin: 100,
+    }),
+  ]);
+  assert.equal(summary[0].numerator, 0);
+  assert.equal(summary[0].denominator, 100);
+  assert.equal(summary[0].change_observations, 0);
+  const { metric, snapshot } = metricFromSummary(summary);
+  assert.equal(metric.value, null);
+  assert.equal(snapshot.numerator, null);
+  assert.equal(snapshot.denominator, 100);
+  assert.equal(snapshot.dataUnavailable, true);
+  assert.match(snapshot.missingReason, /均未采集/);
+  assert.equal(metricDelta({ 改单率: { value: 2.14 } }, { 改单率: metric }, '改单率'), '—');
+});
+
+test('observed zero changes retain a valid zero rate and a calculable comparison', () => {
+  const { summary } = read([row('unchanged', { change_order_qty: 100, dms_last_update_qty: 100 })]);
+  const { metric } = metricFromSummary(summary);
+  assert.equal(metric.value, 0);
+  assert.equal(metricDelta({ 改单率: { value: 2.14 } }, { 改单率: metric }, '改单率'), '+2.14%');
+  const explicitZero = metricFromSummary(
+    read([
+      row('reduced-to-zero', {
+        change_order_qty: 0,
+        dms_last_update_qty: null,
+        need_qty_origin: 100,
+      }),
+    ]).summary,
+  );
+  assert.equal(explicitZero.metric.value, 100);
+});
+
+test('availability uses the whole selected scope without dropping backup-only denominator quantities', () => {
+  const { summary } = read([
+    row('backup-only', {
+      change_order_qty: null,
+      dms_last_update_qty: null,
+      need_qty_origin: 10,
+      province_region_name: '其他省区',
+    }),
+    row('observed', { change_order_qty: 5, dms_last_update_qty: 10 }),
+  ]);
+  const { metric, snapshot } = metricFromSummary(summary);
+  assert.equal(metric.value, 25);
+  assert.equal(snapshot.denominator, 20);
+  assert.equal(snapshot.numerator, 5);
+});
+
 test('sums split detail quantities and shares the customer formula without event fields', () => {
   const r = read([
     row('O', { change_order_qty: 12 }),
