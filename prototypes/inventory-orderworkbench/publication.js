@@ -1,4 +1,5 @@
 import { ready, call, reportElements } from '../../business/shared/channel.js';
+import { orderPageContext } from './page-context.mjs';
 
 export function publishReport(snapshot, disposePage, importer) {
   let active = true,
@@ -24,7 +25,7 @@ export function publishReport(snapshot, disposePage, importer) {
         identity = epoch;
       try {
         const next = snapshot();
-        await call('context', next, { signal: lifetime.signal });
+        await call('context', orderPageContext(next), { signal: lifetime.signal });
         if (!active || !connected || identity !== epoch) continue;
         if (version !== revision) continue;
         showStatus('');

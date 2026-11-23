@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
+import { orderPageContext } from '../prototypes/inventory-orderworkbench/page-context.mjs';
 
 test('report publication coalesces clicks and drops queued snapshots on identity loss or disposal', async (t) => {
   const { window } = new JSDOM('<p id="pageSyncStatus"></p>', { runScripts: 'outside-only' });
@@ -16,6 +17,7 @@ test('report publication coalesces clicks and drops queued snapshots on identity
   };
   window.clearTimeout = (id) => frames.delete(id);
   window.ready = Promise.resolve();
+  window.orderPageContext = orderPageContext;
   window.call = async (type, value) => {
     sent.push(value);
   };
@@ -71,6 +73,7 @@ test('refreshing report evidence keeps the live action catalogue until replaceme
   };
   window.clearTimeout = (id) => frames.delete(id);
   window.ready = Promise.resolve();
+  window.orderPageContext = orderPageContext;
   window.call = async () => {
     if (block)
       await new Promise((resolve) => {
@@ -118,5 +121,73 @@ test('refreshing report evidence keeps the live action catalogue until replaceme
   release();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(catalogue, null, 'a late response cannot republish the previous identity');
+  window.dispatchEvent(new window.Event('pagehide'));
+});
+
+test('a newer report replaces an in-flight context and genuine publication failures stay visible', async (t) => {
+  const { window } = new JSDOM('<p id="pageSyncStatus"></p>', { runScripts: 'outside-only' });
+  t.after(() => window.close());
+  const frames = new Map(),
+    sent = [];
+  let timer = 0,
+    value = '1%',
+    release,
+    reject = false;
+  window.setTimeout = (callback) => {
+    frames.set(++timer, callback);
+    return timer;
+  };
+  window.clearTimeout = (id) => frames.delete(id);
+  window.ready = Promise.resolve();
+  window.orderPageContext = orderPageContext;
+  window.reportElements = () => () => {};
+  window.call = async (_type, context) => {
+    sent.push(context);
+    if (sent.length === 1)
+      await new Promise((resolve) => {
+        release = resolve;
+      });
+    if (reject) throw Error('DATA_PERMISSION_DENIED');
+  };
+  window.eval(
+    readFileSync('prototypes/inventory-orderworkbench/publication.js', 'utf8')
+      .replace(/^import .*;$/gm, '')
+      .replace('export function publishReport', 'window.publishReport = function'),
+  );
+  const update = window.publishReport(
+    () => ({
+      period: { label: '当前周期' },
+      metrics: [{ key: '改单率', value }],
+      events: [],
+      tasks: [],
+      dimension: {
+        report: { rows: Array.from({ length: 300 }, () => ({ note: '长维度内容'.repeat(100) })) },
+      },
+    }),
+    () => {},
+  );
+  const flush = async () => {
+    const pending = [...frames.values()];
+    frames.clear();
+    pending.forEach((callback) => callback());
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+  await Promise.resolve();
+  await flush();
+  value = '2%';
+  update();
+  await flush();
+  release();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sent.at(-1).metrics[0].value, '2%');
+  assert.equal(sent.at(-1).contextProjection.detailsSummarized, true);
+  assert.equal(window.document.getElementById('pageSyncStatus').textContent, '');
+  reject = true;
+  update();
+  await flush();
+  assert.match(
+    window.document.getElementById('pageSyncStatus').textContent,
+    /DATA_PERMISSION_DENIED/,
+  );
   window.dispatchEvent(new window.Event('pagehide'));
 });
