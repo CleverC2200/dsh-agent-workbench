@@ -31,7 +31,7 @@ const execute =
 const products = ['A', 'B'].map((code) => ({
   material_code: code,
   material_name: `产品${code}`,
-  sub_category: '汤圆',
+  responsible_item: '汤圆',
   series: '系列甲',
   product_item: 'G',
   product_item_name: '组甲',

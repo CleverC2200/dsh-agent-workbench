@@ -12,9 +12,9 @@ const rows = {
       material_code: `P${String(index).padStart(3, '0')}`,
       material_name: `源产品${index}`,
       series: '产品系列',
-      sub_category: '汤圆',
+      responsible_item: '汤圆',
     })),
-    { material_code: '', material_name: '同名空码', series: null, sub_category: null },
+    { material_code: '', material_name: '同名空码', series: null, responsible_item: null },
   ],
   sku_capacity: [
     {

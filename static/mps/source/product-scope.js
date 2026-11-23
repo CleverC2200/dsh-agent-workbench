@@ -7,7 +7,7 @@ const normalize = (row) => ({
   base: canonicalBaseName(row.target_base ?? row['基地'] ?? row.base),
   code: text(row.material_code ?? row['产品编码'] ?? row.code),
   name: text(row.material_name ?? row['产品名称'] ?? row.name),
-  category: text(row.sub_category ?? row['大类'] ?? row.category),
+  category: text(row.responsible_item ?? row['大类'] ?? row.category),
   series: text(row.series ?? row['系列']),
   group: text(row.product_item ?? row['物料组'] ?? row.group),
   historyCode: text(row.replacement_material_code ?? row['老品编码'] ?? row.historyCode),
