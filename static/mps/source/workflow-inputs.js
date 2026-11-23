@@ -241,7 +241,8 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   const date = new Date(`${draft.month}-01T00:00:00Z`);
   date.setUTCMonth(date.getUTCMonth() - 1);
   const shipmentMonth = date.toISOString().slice(0, 7);
-  const savedCutoff = draft.shipment?.cutoff ?? draft.shipment?.business?.cutoff;
+  const savedCutoff =
+    draft.shipment?.calculationCutoff ?? draft.shipment?.cutoff ?? draft.shipment?.business?.cutoff;
   const validShipment =
     shipmentSnapshot?.draftId === draft.id &&
     shipmentSnapshot.month === draft.month &&

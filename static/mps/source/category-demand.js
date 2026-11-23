@@ -54,7 +54,10 @@ export function buildCategoryDemand(draft, shipmentSnapshot, historicalFilter) {
     shipmentSnapshot.month === draft.month &&
     shipmentSnapshot.shipmentMonth === baseMonth &&
     shipmentSnapshot.cutoff ===
-      (draft.shipment?.cutoff ?? draft.shipment?.business?.cutoff ?? '') &&
+      (draft.shipment?.calculationCutoff ??
+        draft.shipment?.cutoff ??
+        draft.shipment?.business?.cutoff ??
+        '') &&
     ['business', 'local-file'].includes(shipmentSnapshot.sourceKind) &&
     ['ok', 'partial', 'local-file'].includes(shipmentSnapshot.status);
   const productMappings = sourceProductMappings(draft.products, draft.productRaw);

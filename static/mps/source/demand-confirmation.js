@@ -1133,7 +1133,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [evaluation, setEvaluation] = react.useState(null);
     const workflowStep = react.useRef({ scope: '', step: null });
     const receiveShipment = react.useCallback(
-      (snapshot) => setShipmentSnapshot({ ...snapshot, scopeGeneration }),
+      (snapshot) => {
+        if (snapshot.shipmentMonth === monthOffset(snapshot.month, -1))
+          setShipmentSnapshot({ ...snapshot, scopeGeneration });
+      },
       [scopeGeneration],
     );
     const generation = react.useRef(0),
@@ -2338,6 +2341,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             draft.productSource === 'business' &&
             ['check', 'ship', 'process', 'constraints', 'capacity', 'report'].includes(step),
           onSnapshot: receiveShipment,
+          calculationSnapshot:
+            shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
           onEditingChange: setAdjusting,
         }),
       ),

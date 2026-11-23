@@ -94,6 +94,7 @@ const shipment = z.strictObject({
   sourceEdits: shipmentSourceEdits.optional(),
   editsByCutoff: z.record(z.iso.date(), shipmentSourceEdits).optional(),
   cutoff: text.optional(),
+  calculationCutoff: z.iso.date().optional(),
   file: text.optional(),
   activeSource: z.enum(['local-file', 'business']).optional(),
   rows: list(
