@@ -160,7 +160,7 @@ test('card, independent Agent summary and base groups share quantities, pending 
     period.metrics = computeWorkbenchMetrics(period);
     const card = metricSnapshot(period, '作废率');
     assert.equal(card.numerator, 30);
-    assert.equal(card.denominator, 100);
+    assert.equal(card.denominator, 1099);
     assert.equal(card.pending, 1);
     for (const view of ['summary', 'groups']) {
       const calls = [];
@@ -193,7 +193,7 @@ test('card, independent Agent summary and base groups share quantities, pending 
       if (view === 'groups') {
         assert.equal(result.groups.reconciliation.matches, true);
         assert.equal(result.groups.total.numerator, 30);
-        assert.equal(result.groups.total.denominator, 100);
+        assert.equal(result.groups.total.denominator, 1099);
         assert.equal(result.groups.total.pending, 1);
       }
       assert(calls.length > 0);

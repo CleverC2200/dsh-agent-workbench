@@ -541,12 +541,12 @@ test('six-window combined queries use the same cancellation event period and qua
 });
 
 test('cached metrics from the previous cancellation quantity definition are rejected', () => {
-  assert.equal(metricCalculationVersion, 44);
+  assert.equal(metricCalculationVersion, 45);
   assert.equal(
     compatibleWorkbenchFacts({
       complete: true,
       attributionVersion: 2,
-      metricCalculationVersion: 40,
+      metricCalculationVersion: 44,
       periods: { month: {} },
     }),
     false,
@@ -658,7 +658,7 @@ test('cancellations before and at the former seven-day boundary both count after
   assert.equal(row.invalid, 0);
 });
 
-test('missing OMS departure times recover only unique exact daily headers and never use confirmed delivery', (t) => {
+test('missing or conflicting OMS departure times do not exclude cancelled or shipped quantities', (t) => {
   const { read } = calculate(t, {
     hourly: [
       cancelled('before-departure', {
@@ -682,10 +682,10 @@ test('missing OMS departure times recover only unique exact daily headers and ne
       line('active-recovered'),
     ],
   });
-  assert.equal(read().sample_numerator, 130);
-  assert.equal(read().sample_denominator, 170);
+  assert.equal(read().sample_numerator, 210);
+  assert.equal(read().sample_denominator, 290);
   assert.equal(read().invalid, 0);
-  assert.equal(read().records, 4);
+  assert.equal(read().records, 7);
 });
 
 test('Zhengzhou scope uses order pickup 01 across source bases, never warehouse pickup mappings', (t) => {
