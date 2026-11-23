@@ -871,3 +871,37 @@
   width: 100%;
   min-width: 0;
 }
+
+.ap-app:is([data-step='process'], [data-step='report']) .wf-table-scroll > table,
+.ap-app[data-step='report'] .wf-plan-balances > table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.ap-app:is([data-step='process'], [data-step='report']) .wf-table-scroll > table > thead {
+  z-index: 4;
+}
+.ap-app[data-step='report'] .wf-plan-detail-row .wf-table-scroll {
+  max-block-size: min(62vh, 510px);
+  overflow: auto;
+}
+.ap-app[data-step='report'] .wf-plan-detail-row .wf-table-scroll th {
+  position: static;
+}
+.ap-app[data-step='report'] .wf-report-toggle:focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: -2px;
+}
+
+.ap-app[data-step='report'] .wf-report-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+.ap-app[data-step='report'] .wf-report-toggle svg {
+  flex: 0 0 12px;
+}

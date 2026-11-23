@@ -907,7 +907,7 @@ test('MPS shipment rounds displayed quantities while keeping decimal source valu
   assert(csv.includes('80.375'));
 });
 
-test('shipment requires an explicit save and paginates SKU display without changing complete totals or export', async (t) => {
+test('shipment requires an explicit save and expands all category SKUs without changing complete totals or export', async (t) => {
   const { page, frame, table } = await shipment(t);
   await upload(
     frame,
@@ -921,18 +921,12 @@ test('shipment requires an explicit save and paginates SKU display without chang
   await expandShipmentBase(frame, '郑州');
   await expect(
     table.getByRole('button', { name: /^郑州 P\d+ 整月预估发货 计算过程$/ }),
-  ).toHaveCount(25);
+  ).toHaveCount(53);
   await expandShipmentBase(frame, '全国合计');
   await expect(
     table.getByRole('button', { name: /^全国合计 P\d+ 整月预估发货 计算过程$/ }),
-  ).toHaveCount(25);
-  await table.getByRole('button', { name: '全国合计 汤圆 组 下一页单品', exact: true }).click();
-  await expect(
-    table.getByText('全国合计 汤圆 组 · 共53个单品 · 第2页', { exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(53);
   const original = await exported(page, frame);
-  await table.getByRole('button', { name: '郑州 汤圆 组 下一页单品', exact: true }).click();
-  await expect(table.getByText('郑州 汤圆 组 · 共53个单品 · 第2页', { exact: true })).toBeVisible();
   await frame.getByLabel('搜索发货单品', { exact: true }).fill('P52');
   await expect(
     table.getByRole('button', { name: /^郑州 P\d+ 整月预估发货 计算过程$/ }),
@@ -988,7 +982,6 @@ test('shipment exposes national and base category, material group and SKU levels
   await table.getByRole('button', { name: '展开 全国合计 汤圆', exact: true }).click();
   await expectShipment(table, '全国合计 汤圆 黑芝麻 本月预测量', '450');
   await expectShipment(table, '全国合计 汤圆 黑芝麻 整月预估发货', '450');
-  await table.getByRole('button', { name: '展开 全国合计 汤圆 黑芝麻', exact: true }).click();
   await expectShipment(table, '全国合计 A 整月预估发货', '450');
   await expect(
     table.getByRole('button', { name: '全国合计 A 整月预估发货 计算过程', exact: true }),
@@ -996,7 +989,6 @@ test('shipment exposes national and base category, material group and SKU levels
   await table.getByRole('button', { name: '展开 郑州', exact: true }).click();
   await expectShipment(table, '郑州 汤圆 整月预估发货', '300');
   await table.getByRole('button', { name: '展开 郑州 汤圆', exact: true }).click();
-  await table.getByRole('button', { name: '展开 郑州 汤圆 黑芝麻', exact: true }).click();
   await expectShipment(table, '郑州 A 整月预估发货', '300');
   const levels = await table
     .locator('tbody > tr')
@@ -1084,14 +1076,10 @@ test('shipment hierarchy uses current unique product categories and material cod
   await expectShipment(table, '全国合计 整月预估发货', '900');
   await table.getByRole('button', { name: '展开 全国合计 汤圆', exact: true }).click();
   await expectShipment(table, '全国合计 汤圆 G · 组 整月预估发货', '300');
-  await table.getByRole('button', { name: '展开 全国合计 汤圆 G · 组', exact: true }).click();
   await expectShipment(table, '全国合计 A 整月预估发货', '300');
   await table.getByRole('button', { name: '展开 全国合计 大类未提供', exact: true }).focus();
   await table.getByRole('button', { name: '展开 全国合计 大类未提供', exact: true }).press('Enter');
   await expectShipment(table, '全国合计 大类未提供 物料组未提供 整月预估发货', '600');
-  await table
-    .getByRole('button', { name: '展开 全国合计 大类未提供 物料组未提供', exact: true })
-    .press('Enter');
   await expect(
     table.locator('tr.sp-sku').filter({ hasText: '产品B' }).getByText('分类待补', { exact: true }),
   ).toHaveAttribute('title', /物料组存在多个当前值/);
@@ -1132,7 +1120,6 @@ test('shipment national SKU preserves base adjustment sources, aggregate days an
   await edit(table, '郑州 A 整月预估发货', 301);
   await table.getByRole('button', { name: '展开 全国合计', exact: true }).click();
   await table.getByRole('button', { name: '展开 全国合计 汤圆', exact: true }).click();
-  await table.getByRole('button', { name: '展开 全国合计 汤圆 组', exact: true }).click();
   await expectShipment(table, '全国合计 A 整月预估发货', '464');
   await expectShipment(table, '全国合计 A 已备未备预估发运天数', '2');
   await expectShipment(table, '全国合计 汤圆 组 整月预估发货', '464');

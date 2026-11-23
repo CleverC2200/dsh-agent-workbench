@@ -938,9 +938,6 @@
   font-weight: 400;
   color: #4e5969;
 }
-.dc-page .sp-table:has(.sp-sku) col:first-child {
-  width: 240px !important;
-}
 .dc-page .sp-column-formula {
   min-height: 0;
   padding: 0;
@@ -1230,4 +1227,38 @@
 }
 .dc-page .dc-version-switch .dc-category-filter button:hover:not(:disabled) {
   background: #f2f6ff;
+}
+
+.ap-app[data-step='ship'] .sp-table {
+  width: 1220px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.ap-app[data-step='ship'] .sp-table tbody tr > th:first-child,
+.ap-app[data-step='ship'] .sp-table thead tr:first-child > th:first-child {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: #fff;
+}
+.ap-app[data-step='ship'] .sp-table thead tr:first-child > th:first-child {
+  z-index: 3;
+  background: #fbfbfd;
+}
+.ap-app[data-step='ship'] .sp-table .sp-sku > th:first-child {
+  background: #fafbfc;
+}
+.ap-app[data-step='ship'] .sp-hierarchy-name {
+  display: inline-block;
+  max-inline-size: calc(100% - 28px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.ap-app[data-step='ship'] .sp-count {
+  display: block;
+  margin-inline-start: 22px;
 }

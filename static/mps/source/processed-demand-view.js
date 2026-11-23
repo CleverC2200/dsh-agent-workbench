@@ -88,11 +88,14 @@ export function createProcessedDemand(
       [view],
     );
     const quantities = draft.adjustments?.quantities ?? [];
-    const toggle = (key) => {
+    const toggle = (key, entry) => {
       setExpanded((previous) => {
         const next = new Set(previous);
-        if (!next.has(key)) next.add(key);
-        else next.delete(key);
+        if (!next.has(key)) {
+          next.add(key);
+          if (entry.kind.endsWith('category'))
+            for (const childKey of indexed.children.get(key)?.keys() ?? []) next.add(childKey);
+        } else next.delete(key);
         return next;
       });
     };
@@ -448,7 +451,7 @@ export function createProcessedDemand(
                     disabled: Boolean(filters.search),
                     'aria-label': entry.kind === 'base' ? name : `${entry.base || '全国'} ${name}`,
                     'aria-expanded': isExpanded(key),
-                    onClick: () => toggle(key),
+                    onClick: () => toggle(key, entry),
                   },
                   h(
                     'svg',

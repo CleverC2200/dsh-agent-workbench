@@ -137,8 +137,7 @@ test('全国视角逐层汇总大类、物料组和SKU，不重复累计多月�
   await expect(category).toHaveAttribute('aria-expanded', 'false');
   await category.press('Enter');
   const group = table.getByRole('button', { name: '全国 物料组 · G1 物料组甲', exact: true });
-  await expect(group).toHaveAttribute('aria-expanded', 'false');
-  await group.press('Enter');
+  await expect(group).toHaveAttribute('aria-expanded', 'true');
   await expect(table.getByText('SKU · A 产品甲', { exact: true })).toHaveCount(1);
   for (const name of ['大类 · 汤圆', '物料组 · G1 物料组甲', 'SKU · A 产品甲']) {
     const row = table.getByRole('row').filter({ has: frame.getByText(name, { exact: true }) });
@@ -170,9 +169,6 @@ test('基地SKU修正后父级读取有效数量，全国汇总与明细下载�
   const base = table.getByRole('button', { name: '基地 · 郑州', exact: true });
   await base.press('Enter');
   await table.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).press('Enter');
-  await table
-    .getByRole('button', { name: '郑州 物料组 · G1 物料组甲', exact: true })
-    .press('Enter');
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   await beginAdjustment(view);
   await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('50');
@@ -193,9 +189,6 @@ test('基地SKU修正后父级读取有效数量，全国汇总与明细下载�
   await demandCell('基地 · 郑州', '70');
   await frame.getByLabel('需求层级视角', { exact: true }).selectOption('national');
   await table.getByRole('button', { name: '全国 大类 · 汤圆', exact: true }).press('Enter');
-  await table
-    .getByRole('button', { name: '全国 物料组 · G1 物料组甲', exact: true })
-    .press('Enter');
   await demandCell('SKU · A 产品甲', '90');
   await demandCell('物料组 · G1 物料组甲', '90');
   await demandCell('大类 · 汤圆', '90');
