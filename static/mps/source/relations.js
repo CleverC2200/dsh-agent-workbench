@@ -168,6 +168,7 @@ export function relationRecords(sources, month) {
         product,
         capacity,
         tunnelMatch,
+        pending: ['产线归属待补：当前读取字段未提供独立产线'],
         missing: [
           ...missing,
           ...capacityMissing(capacity),
@@ -186,6 +187,7 @@ export function relationRecords(sources, month) {
       product: null,
       capacity,
       tunnelMatch,
+      pending: ['产线归属待补：当前读取字段未提供独立产线'],
       missing: [
         ...(!capacity.material_code?.trim() ? ['缺产线物料编码'] : []),
         '无产品记录',
@@ -202,6 +204,7 @@ export function relationRecords(sources, month) {
   const lines = sources.tunnels.map((source) => ({
     month,
     source,
+    pending: ['产线归属待补：当前读取字段未提供独立产线'],
     missing: [
       ...(!source.series?.trim() ? ['缺源系列'] : []),
       ...(!source.production_category?.trim() ? ['缺生产品类'] : []),

@@ -134,7 +134,7 @@ test('春节跨月扣减显示在生产日历和年度矩阵，人工覆盖可�
   await expect(view.getByLabel('郑州 2025-01 生产天数', { exact: true })).toHaveValue('18');
   await workflowStep(frame, '产能评估与缺口');
   await frame.getByRole('button', { name: '执行评估', exact: true }).click();
-  const matrix = frame.getByRole('table', { name: '全年月度负荷率矩阵', exact: true });
+  const matrix = frame.getByRole('table', { name: '全年月度隧道利用率矩阵', exact: true });
   await expect(
     matrix.getByRole('columnheader', { name: '2025-01 春节扣7天', exact: true }),
   ).toBeVisible();
@@ -1101,7 +1101,9 @@ test('MPS explicit leaf quantities and share history drive the same inventory an
   await expect(capacity.getByRole('table', { name: '基地大类RCCP', exact: true })).toContainText(
     '无归属需求',
   );
-  await expect(capacity.getByRole('region', { name: '全年月度负荷率', exact: true })).toBeVisible();
+  await expect(
+    capacity.getByRole('region', { name: '全年月度隧道利用率', exact: true }),
+  ).toBeVisible();
   await expect(capacity.getByRole('region', { name: '缺口明细', exact: true })).toBeVisible();
   const rccpReport = capacity.getByRole('table', { name: '基地大类RCCP', exact: true });
   await expect(rccpReport.getByRole('columnheader')).toHaveCount(10);
@@ -1243,8 +1245,8 @@ test('部分需求缺失显示已知负荷，导出保留完整负荷为空和�
   await capacity.getByRole('button', { name: '执行评估', exact: true }).click();
   await capacity.getByLabel('月份筛选', { exact: true }).selectOption('2026-12');
   const rccp = capacity.getByRole('table', { name: '基地大类RCCP', exact: true });
-  await expect(rccp).toContainText('已知需求负荷');
-  await expect(rccp).toContainText('完整负荷待补');
+  await expect(rccp).toContainText('已知需求隧道利用率');
+  await expect(rccp).toContainText('完整隧道利用率待补');
   await capacity.getByText('查看2026-12缺项明细 1项', { exact: true }).click();
   const issues = capacity.getByRole('table', { name: '需求与折吨缺项', exact: true });
   await expect(issues).toContainText('B 产品乙');
