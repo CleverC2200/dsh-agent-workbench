@@ -24,6 +24,19 @@ const distinctHistoryMonths = (periods) => {
     return { ...period, rows };
   });
 };
+const demandSourcePriority = 3;
+const historyReadState = (month, entries) => ({
+  status: entries.some((entry) => entry.error)
+    ? 'failed'
+    : entries.some((entry) => entry.metadata?.partial)
+      ? 'partial'
+      : 'ready',
+  month,
+  error: entries
+    .filter((entry) => entry.error)
+    .map((entry) => `${entry.month || `${entry.start}至${entry.end}`}：${entry.error}`)
+    .join('；'),
+});
 const number = (value) =>
   value == null || value === ''
     ? '-'
@@ -57,6 +70,11 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
     const [dimension, setDimension] = react.useState('基地+大类');
     const [base, setBase] = react.useState('');
     const controller = react.useRef(null);
+    const [historyReadAttempt, retryHistoryDetails] = react.useReducer((attempt) => attempt + 1, 0);
+    const recentDemandRead = draft.sourceChecksRead;
+    const recentDemandSettled =
+      recentDemandRead?.month === draft.month &&
+      ['ready', 'failed'].includes(recentDemandRead.status);
     const type = kind === 'parameters' ? 'historicalIndicators' : 'sourceChecks';
     const state = draft[type + 'Read'];
     const busy = state?.status === 'loading';
@@ -98,41 +116,24 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           return { rows: [], error: error.message };
         }
       };
-      if (kind === 'parameters')
-        void (async () => {
-          try {
-            const [annual, historyWindow] = await Promise.all([
-              read(() => readHistoryAnnual(draft.month, stop.signal)),
-              readHistoryWindow(draft.month, stop.signal),
-            ]);
+      if (kind === 'parameters') {
+        retryHistoryDetails();
+        void read(() => readHistoryAnnual(draft.month, stop.signal))
+          .then((annual) => {
+            if (stop.signal.aborted) return;
             const periods = [{ ...previousFiscalYear(draft.month), ...annual }];
-            const readState = (entries) => ({
-              status: entries.some((entry) => entry.error)
-                ? 'failed'
-                : entries.some((entry) => entry.metadata?.partial)
-                  ? 'partial'
-                  : 'ready',
-              month: draft.month,
-              error: entries
-                .filter((entry) => entry.error)
-                .map((entry) => `${entry.month || `${entry.start}至${entry.end}`}：${entry.error}`)
-                .join('；'),
+            update({
+              historyAnnual: { periods },
+              historyAnnualRead: historyReadState(draft.month, periods),
             });
-            if (!stop.signal.aborted)
-              update({
-                historyAnnual: { periods },
-                historyAnnualRead: readState(periods),
-                historyWindow,
-                historyWindowRead: readState(historyWindow.periods),
-              });
-          } catch (error) {
+          })
+          .catch((error) => {
             if (!stop.signal.aborted)
               update({
                 historyAnnualRead: { status: 'failed', month: draft.month, error: error.message },
-                historyWindowRead: { status: 'failed', month: draft.month, error: error.message },
               });
-          }
-        })();
+          });
+      }
       try {
         const result =
           kind === 'parameters'
@@ -154,8 +155,12 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                 periods: await Promise.all(
                   calculated.recent.map(async (month) => {
                     const [history, report] = await Promise.all([
-                      read(() => readFactMonth('history', month, stop.signal)),
-                      read(() => readFactMonth('plan-quantity', month, stop.signal)),
+                      read(() =>
+                        readFactMonth('history', month, stop.signal, demandSourcePriority),
+                      ),
+                      read(() =>
+                        readFactMonth('plan-quantity', month, stop.signal, demandSourcePriority),
+                      ),
                     ]);
                     return { month, history, report };
                   }),
@@ -198,6 +203,26 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         controller.current?.abort();
       };
     }, [active, draft.month]);
+    react.useEffect(() => {
+      if (!active || kind !== 'parameters' || !historyReadAttempt || !recentDemandSettled) return;
+      const stop = new AbortController();
+      const recent = recentDemandRead.status === 'ready' ? draft.sourceChecks?.periods : [];
+      void readHistoryWindow(draft.month, stop.signal, recent)
+        .then((historyWindow) => {
+          if (!stop.signal.aborted)
+            update({
+              historyWindow,
+              historyWindowRead: historyReadState(draft.month, historyWindow.periods),
+            });
+        })
+        .catch((error) => {
+          if (!stop.signal.aborted)
+            update({
+              historyWindowRead: { status: 'failed', month: draft.month, error: error.message },
+            });
+        });
+      return () => stop.abort();
+    }, [active, kind, draft.month, historyReadAttempt, recentDemandSettled]);
     const readParameterWorkflow = react.useMemo(() => {
       let result;
       return () => (result ??= buildMpsWorkflow(draft, relations, null));

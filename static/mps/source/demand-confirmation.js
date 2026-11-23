@@ -2345,10 +2345,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           draft,
           update,
           active: active && step === 'ship',
-          autoRead:
-            active &&
-            draft.productSource === 'business' &&
-            ['check', 'ship', 'process', 'constraints', 'capacity', 'report'].includes(step),
+          autoRead: active && draft.productSource === 'business',
+          autoReadCalculation:
+            (demandSourcesActive || (active && step === 'ship' && scopeGeneration > 0)) &&
+            draft.productSource.startsWith('business'),
           onSnapshot: receiveShipment,
           calculationSnapshot:
             shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,

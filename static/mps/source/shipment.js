@@ -22,6 +22,7 @@ import { createReportPage } from './report-page.js';
 import { mpsBusinessDate } from './business-date.js';
 import { canonicalBaseName } from './relations.js';
 const emptyRows = [];
+const calculationShipmentPriority = 4;
 const bases = ['西南', '郑州', '遂平', '华东', '华南'];
 const fields = [
   'shipped',
@@ -121,6 +122,202 @@ function allocate(weights, target) {
     throw Error('重摊结果超出安全范围，未修改原值。');
   return values;
 }
+function shipmentMonthDays(month) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+}
+
+function projectShipment(draft, cutoff, month, sourceKind, sourceRows, coefficientFacts) {
+  const passed = Number(cutoff.slice(8));
+  const totalDays = shipmentMonthDays(month);
+  const products = ['loading', 'failed'].includes(draft.productsRead?.status)
+    ? emptyRows
+    : (draft.products ?? emptyRows);
+  const dimensions =
+    sourceKind === 'business'
+      ? new Map(
+          sourceDimensions(
+            sourceRows.map((row) => ({ 基地: row.base, 产品编码: row.code })),
+            products,
+          ).map((row) => [JSON.stringify([row['基地'], row['产品编码']]), row]),
+        )
+      : new Map();
+  const periods = cutoff ? shipmentCoefficientPeriods(cutoff) : null;
+  const coefficients = new Map();
+  if (sourceKind === 'business' && coefficientFacts && !coefficientFacts.reason) {
+    const matchProduct = createSourceProductMatcher(
+      sourceProductMappings(products, draft.productRaw),
+    );
+    const elapsed = shipmentQuantityByCategory(coefficientFacts.elapsed, matchProduct);
+    const remaining = shipmentQuantityByCategory(coefficientFacts.remaining, matchProduct);
+    for (const category of new Set([...elapsed.keys(), ...remaining.keys()]))
+      coefficients.set(
+        category,
+        deriveShipmentCoefficient(
+          elapsed.get(category) ?? null,
+          remaining.get(category) ?? null,
+          periods,
+        ),
+      );
+  }
+  const defaultCoefficient = {
+    factor: 1,
+    elapsed: null,
+    remaining: null,
+    reason:
+      periods?.reason ||
+      (sourceKind !== 'business'
+        ? '当前来源未同步 BI 发运量'
+        : coefficientFacts?.reason || '大类缺少完整的上月 BI 区间发运量'),
+  };
+  const deriveRows = (currentState) => {
+    return sourceRows
+      .filter((row) => row.month === month && bases.includes(row.base))
+      .map((row) => {
+        const dimension = dimensions.get(keyOf(row));
+        const category = sourceKind === 'business' ? (dimension?.['大类'] ?? '') : row.category;
+        const derived = applyShipmentCoefficient(
+          derive(row, passed, totalDays),
+          coefficients.get(category) ??
+            (category ? defaultCoefficient : { ...defaultCoefficient, reason: '当前大类未匹配' }),
+        );
+        const adjustment = currentState.values?.[keyOf(row)];
+        const remainingEdit = currentState.remaining?.[row.base];
+        const remainingValue = remainingEdit?.values[keyOf(row)];
+        const remaining = remainingValue ?? row.remaining;
+        const fin = adjustment ? adjustment.value : derived.prediction;
+        const transferIn = sourceKind === 'business' ? (row.transferIn ?? null) : null;
+        const transferOut = sourceKind === 'business' ? (row.transferOut ?? null) : null;
+        const open = row.open == null ? null : Math.max(0, row.open);
+        const inputs = { ...row, transferIn, transferOut };
+        const rawEnd = [open, row.inbound, remaining, fin, transferIn, transferOut].every(
+          (value) => value != null,
+        )
+          ? finite(open + row.inbound + remaining + transferIn - transferOut - fin)
+          : null;
+        const end = rawEnd == null ? null : Math.max(0, rawEnd);
+        const inventoryIssues = [
+          ...(row.open < 0
+            ? [
+                {
+                  metric: 'openingInventory',
+                  rawValue: row.open,
+                  calculationValue: 0,
+                  reason: '原始月初库存为负，原因待核；计算用值归0',
+                },
+              ]
+            : []),
+          ...(rawEnd < 0
+            ? [
+                {
+                  metric: 'projectedClosing',
+                  rawValue: rawEnd,
+                  calculationValue: 0,
+                  reason: '库存收支预测为负，原因待核；计算用值归0，原始不足保留',
+                },
+              ]
+            : []),
+        ];
+        return {
+          ...derived,
+          rawOpen: row.open,
+          open,
+          rawEnd,
+          inventoryIssues,
+          ...(sourceKind === 'business'
+            ? {
+                category,
+                group: dimension?.['物料组'] ?? '',
+                groupName: dimension?.['物料组名称'] ?? '',
+                dimensionIssue: dimension?.['缺项原因'] ?? '',
+              }
+            : {}),
+          fin,
+          remaining,
+          inputRemaining: row.remaining,
+          transferIn,
+          transferOut,
+          end,
+          adjustment: adjustment ?? null,
+          remainingSource: remainingValue == null ? null : remainingEdit.source,
+          missingFields: [
+            ...inputFields,
+            'transferIn',
+            'transferOut',
+            ...(sourceKind === 'business' ? ['average'] : []),
+          ].filter((field) => inputs[field] == null),
+        };
+      });
+  };
+  return { deriveRows, coefficients, defaultCoefficient, coefficientPeriods: periods };
+}
+
+async function readShipmentBusiness(cutoff, signal, priority) {
+  const month = cutoff.slice(0, 7);
+  const passed = Number(cutoff.slice(8));
+  const totalDays = shipmentMonthDays(month);
+  const [result, coefficientFacts] = await Promise.all([
+    readShipmentInputs(cutoff, signal, priority),
+    readShipmentCoefficientFacts(shipmentCoefficientPeriods(cutoff), signal),
+  ]);
+  const rows = result.rows.filter((row) => row.base && row.code && bases.includes(row.base));
+  const omitted = result.rows.length - rows.length;
+  const missingDimensions = rows.filter((row) => !row.name || !row.series || !row.group).length;
+  const incompleteRows = rows.filter(
+    (row) =>
+      inputFields.some((field) => row[field] == null) ||
+      row.average == null ||
+      row.transferIn == null ||
+      row.transferOut == null ||
+      derive(row, passed, totalDays).sourceDateIssue,
+  ).length;
+  const duplicateRows = rows.filter((row) => row.duplicateDays > 0).length;
+  return {
+    month,
+    cutoff,
+    rows,
+    sourceRecords: result.rows,
+    coefficientFacts,
+    metadata: {
+      ...result.metadata,
+      partial:
+        result.metadata.partial ||
+        Boolean(!rows.length || omitted || missingDimensions || incompleteRows || duplicateRows),
+      recentStatus: passed < 3 ? 'insufficient-days' : 'ok',
+      omittedRows: omitted,
+      missingDimensions,
+      incompleteRows,
+      duplicateRows,
+    },
+  };
+}
+
+function assignShipmentForecast(values, children, amount, label) {
+  const weights = children.map((child) => child.fin);
+  const allocated = allocate(weights, amount);
+  const weightTotal = weights.reduce((sum, value) => sum + value, 0);
+  children.forEach((child, index) => {
+    values[keyOf(child)] = {
+      value: allocated[index],
+      source: label,
+      target: amount,
+      previous: child.fin,
+      weightTotal,
+    };
+  });
+}
+
+function applyShipmentForecastChanges(edits, changes, deriveRows) {
+  const values = { ...edits.values };
+  const next = { ...edits, values };
+  for (const change of changes) {
+    const selected = deriveRows(next).filter((row) => change.keys.includes(keyOf(row)));
+    if (!selected.length) throw Error('当前对象无本月发货明细，未修改。');
+    assignShipmentForecast(values, selected, change.value, change.label);
+  }
+  return next;
+}
+
 export function createShipment(
   react,
   useMpsPart,
@@ -134,6 +331,7 @@ export function createShipment(
     update,
     active,
     autoRead = false,
+    autoReadCalculation = false,
     scopeGeneration,
     onSnapshot,
     calculationSnapshot,
@@ -158,8 +356,8 @@ export function createShipment(
       !cutoff && !hasCutoffRange ? `最早可选日期为 ${minCutoff}，该评估版本尚无可选截止日` : null;
     const month = (cutoff || (hasCutoffRange ? maxCutoff : minCutoff)).slice(0, 7);
     const passed = Number(cutoff.slice(8));
-    const [year, monthNumber] = month.split('-').map(Number);
-    const totalDays = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+    const totalDays = shipmentMonthDays(month);
+    const calculationThrough = calculationEnd < maxCutoff ? calculationEnd : maxCutoff;
     const demo =
       draft.productSource.startsWith('demo') &&
       state.rows == null &&
@@ -185,6 +383,8 @@ export function createShipment(
     const snapshotCallback = react.useRef(onSnapshot);
     snapshotCallback.current = onSnapshot;
     const controller = react.useRef(null);
+    const calculationController = react.useRef(null);
+    const [automaticBasis, setAutomaticBasis] = react.useState(null);
     const [syncStatus, setSyncStatus] = react.useState('unread');
     const [expanded, setExpanded] = react.useState([]);
     const [skuSearch, setSkuSearch] = react.useState('');
@@ -206,158 +406,23 @@ export function createShipment(
         controller.current?.abort();
       };
     }, [draft.id, draft.month, cutoff]);
-    const dimensions = react.useMemo(() => {
-      if (sourceKind !== 'business') return new Map();
-      const products = ['loading', 'failed'].includes(draft.productsRead?.status)
-        ? []
-        : (draft.products ?? []);
-      return new Map(
-        sourceDimensions(
-          sourceRows.map((row) => ({ 基地: row.base, 产品编码: row.code })),
-          products,
-        ).map((row) => [JSON.stringify([row['基地'], row['产品编码']]), row]),
-      );
-    }, [sourceKind, sourceRows, draft.products, draft.productsRead]);
-    const coefficientPeriods = react.useMemo(
-      () => (cutoff ? shipmentCoefficientPeriods(cutoff) : null),
-      [cutoff],
-    );
     const coefficientFacts = business?.coefficientFacts;
-    const coefficients = react.useMemo(() => {
-      const byCategory = new Map();
-      if (sourceKind !== 'business' || !coefficientFacts || coefficientFacts.reason)
-        return byCategory;
-      const products = ['loading', 'failed'].includes(draft.productsRead?.status)
-        ? []
-        : sourceProductMappings(draft.products ?? [], draft.productRaw);
-      const matchProduct = createSourceProductMatcher(products);
-      const elapsed = shipmentQuantityByCategory(coefficientFacts.elapsed, matchProduct);
-      const remaining = shipmentQuantityByCategory(coefficientFacts.remaining, matchProduct);
-      for (const category of new Set([...elapsed.keys(), ...remaining.keys()])) {
-        byCategory.set(
-          category,
-          deriveShipmentCoefficient(
-            elapsed.get(category) ?? null,
-            remaining.get(category) ?? null,
-            coefficientPeriods,
-          ),
-        );
-      }
-      return byCategory;
-    }, [
-      coefficientFacts,
-      coefficientPeriods,
-      sourceKind,
-      draft.products,
-      draft.productRaw,
-      draft.productsRead,
-    ]);
-    const defaultCoefficient = react.useMemo(
-      () => ({
-        factor: 1,
-        elapsed: null,
-        remaining: null,
-        reason:
-          coefficientPeriods?.reason ||
-          (sourceKind !== 'business'
-            ? '当前来源未同步 BI 发运量'
-            : coefficientFacts?.reason || '大类缺少完整的上月 BI 区间发运量'),
-      }),
-      [coefficientPeriods, sourceKind, coefficientFacts],
+    const { deriveRows, coefficients, defaultCoefficient, coefficientPeriods } = react.useMemo(
+      () => projectShipment(draft, cutoff, month, sourceKind, sourceRows, coefficientFacts),
+      [
+        draft.products,
+        draft.productsRead,
+        draft.productRaw,
+        cutoff,
+        month,
+        sourceKind,
+        sourceRows,
+        coefficientFacts,
+      ],
     );
-    const deriveRows = (currentState) => {
-      return sourceRows
-        .filter((row) => row.month === month && bases.includes(row.base))
-        .map((row) => {
-          const dimension = dimensions.get(keyOf(row));
-          const category = sourceKind === 'business' ? (dimension?.['大类'] ?? '') : row.category;
-          const derived = applyShipmentCoefficient(
-            derive(row, passed, totalDays),
-            coefficients.get(category) ??
-              (category ? defaultCoefficient : { ...defaultCoefficient, reason: '当前大类未匹配' }),
-          );
-          const adjustment = currentState.values?.[keyOf(row)];
-          const remainingEdit = currentState.remaining?.[row.base];
-          const remainingValue = remainingEdit?.values[keyOf(row)];
-          const remaining = remainingValue ?? row.remaining;
-          const fin = adjustment ? adjustment.value : derived.prediction;
-          const transferIn = sourceKind === 'business' ? (row.transferIn ?? null) : null;
-          const transferOut = sourceKind === 'business' ? (row.transferOut ?? null) : null;
-          const open = row.open == null ? null : Math.max(0, row.open);
-          const inputs = { ...row, transferIn, transferOut };
-          const rawEnd = [open, row.inbound, remaining, fin, transferIn, transferOut].every(
-            (value) => value != null,
-          )
-            ? finite(open + row.inbound + remaining + transferIn - transferOut - fin)
-            : null;
-          const end = rawEnd == null ? null : Math.max(0, rawEnd);
-          const inventoryIssues = [
-            ...(row.open < 0
-              ? [
-                  {
-                    metric: 'openingInventory',
-                    rawValue: row.open,
-                    calculationValue: 0,
-                    reason: '原始月初库存为负，原因待核；计算用值归0',
-                  },
-                ]
-              : []),
-            ...(rawEnd < 0
-              ? [
-                  {
-                    metric: 'projectedClosing',
-                    rawValue: rawEnd,
-                    calculationValue: 0,
-                    reason: '库存收支预测为负，原因待核；计算用值归0，原始不足保留',
-                  },
-                ]
-              : []),
-          ];
-          return {
-            ...derived,
-            rawOpen: row.open,
-            open,
-            rawEnd,
-            inventoryIssues,
-            ...(sourceKind === 'business'
-              ? {
-                  category,
-                  group: dimension?.['物料组'] ?? '',
-                  groupName: dimension?.['物料组名称'] ?? '',
-                  dimensionIssue: dimension?.['缺项原因'] ?? '',
-                }
-              : {}),
-            fin,
-            remaining,
-            inputRemaining: row.remaining,
-            transferIn,
-            transferOut,
-            end,
-            adjustment: adjustment ?? null,
-            remainingSource: remainingValue == null ? null : remainingEdit.source,
-            missingFields: [
-              ...inputFields,
-              'transferIn',
-              'transferOut',
-              ...(sourceKind === 'business' ? ['average'] : []),
-            ].filter((field) => inputs[field] == null),
-          };
-        });
-    };
     const rows = react.useMemo(
       () => deriveRows(state),
-      [
-        sourceRows,
-        sourceKind,
-        dimensions,
-        coefficients,
-        defaultCoefficient,
-        month,
-        passed,
-        totalDays,
-        state.values,
-        state.remaining,
-      ],
+      [deriveRows, state.values, state.remaining],
     );
     const categoryRows = rows.filter((row) => matchesCategories(row.category, selectedCategories));
     const coefficientCategories = [
@@ -533,8 +598,129 @@ export function createShipment(
         error: failure,
         rows: [],
       });
+    const calculationCutoff = state.calculationCutoff?.startsWith(calculationMonth + '-')
+      ? state.calculationCutoff
+      : cutoff.startsWith(calculationMonth + '-')
+        ? cutoff
+        : '';
+    const usableCalculationSnapshot =
+      calculationSnapshot?.draftId === draft.id &&
+      calculationSnapshot.month === draft.month &&
+      calculationSnapshot.shipmentMonth === calculationMonth &&
+      calculationSnapshot.cutoff === calculationCutoff &&
+      ['business', 'local-file'].includes(calculationSnapshot.sourceKind) &&
+      ['ok', 'partial', 'local-file'].includes(calculationSnapshot.status);
+    const separateCalculation = month !== calculationMonth && activeSource === 'business';
+    const autoReadDisplay =
+      (autoRead && active) || (autoReadCalculation && month === calculationMonth);
+    const canLoadCalculation =
+      autoReadCalculation && separateCalculation && hasCutoffRange && hasMpsSource();
+    react.useEffect(() => {
+      if (
+        !canLoadCalculation ||
+        usableCalculationSnapshot ||
+        automaticBasis?.cutoff === calculationCutoff
+      )
+        return;
+      const stop = new AbortController();
+      calculationController.current = stop;
+      const scope = scopeGeneration.current;
+      const current = () => !stop.signal.aborted && scope === scopeGeneration.current;
+      publishCalculationRead('loading');
+      const load = async () => {
+        const date =
+          calculationCutoff && calculationCutoff <= calculationThrough
+            ? calculationCutoff
+            : (
+                await readLatestShipmentDate(
+                  calculationThrough,
+                  stop.signal,
+                  calculationShipmentPriority,
+                )
+              ).date;
+        if (!current()) return;
+        if (!date) throw Error('统计基月暂无可用发货日期');
+        const basis = await readShipmentBusiness(date, stop.signal, calculationShipmentPriority);
+        if (!current()) return;
+        setAutomaticBasis(basis);
+        if (date !== stateRef.current.calculationCutoff) updateState({ calculationCutoff: date });
+      };
+      void load().catch((failure) => {
+        if (current()) publishCalculationRead('failed', failure.message);
+      });
+      return () => stop.abort();
+    }, [canLoadCalculation, draft.id, draft.month, calculationThrough, calculationCutoff]);
+    const backgroundBasis =
+      separateCalculation && automaticBasis?.cutoff === calculationCutoff ? automaticBasis : null;
+    const basisProjection = react.useMemo(
+      () =>
+        backgroundBasis &&
+        projectShipment(
+          draft,
+          calculationCutoff,
+          calculationMonth,
+          'business',
+          backgroundBasis.rows,
+          backgroundBasis.coefficientFacts,
+        ),
+      [
+        draft.products,
+        draft.productsRead,
+        draft.productRaw,
+        calculationCutoff,
+        calculationMonth,
+        backgroundBasis,
+      ],
+    );
+    const basisEdits = state.editsByCutoff?.[calculationCutoff]?.business;
+    react.useEffect(() => {
+      if (!backgroundBasis || batch.active) return;
+      const { deriveRows } = basisProjection;
+      snapshotCallback.current?.({
+        draftId: draft.id,
+        month: draft.month,
+        shipmentMonth: calculationMonth,
+        cutoff: calculationCutoff,
+        source: `业务来源：ai_db.agents_scm_stock_detail_d，${calculationMonth}-01 至 ${calculationCutoff}`,
+        sourceKind: 'business',
+        status: backgroundBasis.metadata.partial ? 'partial' : 'ok',
+        error: null,
+        sourceRows: backgroundBasis.rows,
+        sourceRecords: backgroundBasis.sourceRecords,
+        rows: deriveRows(basisEdits ?? {}),
+        metadata: backgroundBasis.metadata,
+        prepareForecast: (changes) => {
+          const current = stateRef.current;
+          const previous = current.editsByCutoff?.[calculationCutoff] ?? {};
+          const edits = applyShipmentForecastChanges(previous.business ?? {}, changes, deriveRows);
+          return {
+            state: {
+              ...current,
+              editsByCutoff: {
+                ...current.editsByCutoff,
+                [calculationCutoff]: { ...previous, business: edits },
+              },
+            },
+            rows: deriveRows(edits),
+          };
+        },
+      });
+    }, [
+      draft.id,
+      draft.month,
+      calculationMonth,
+      calculationCutoff,
+      backgroundBasis,
+      basisProjection,
+      basisEdits,
+      batch.active,
+    ]);
     const readLatestDate = async (latest = maxCutoff, synchronize = false) => {
       if (!hasCutoffRange) return;
+      if (synchronize) {
+        calculationController.current?.abort();
+        setAutomaticBasis(null);
+      }
       controller.current?.abort();
       const stop = new AbortController();
       controller.current = stop;
@@ -567,10 +753,10 @@ export function createShipment(
       }
     };
     react.useEffect(() => {
-      if ((!active && !autoRead) || cutoff) return;
+      if ((!active && !autoReadDisplay) || cutoff) return;
       void readLatestDate();
       return () => controller.current?.abort();
-    }, [active, autoRead, draft.id, minCutoff, maxCutoff, cutoff]);
+    }, [active, autoReadDisplay, draft.id, minCutoff, maxCutoff, cutoff]);
     const selectSource = (next) => {
       updateState({
         activeSource: next,
@@ -660,53 +846,15 @@ export function createShipment(
           : {}),
       });
       try {
-        const [result, coefficientFacts] = await Promise.all([
-          readShipmentInputs(cutoff, stop.signal),
-          readShipmentCoefficientFacts(coefficientPeriods, stop.signal),
-        ]);
-        if (!valid()) return;
-        const actualRows = result.rows.filter(
-          (row) => row.base && row.code && bases.includes(row.base),
+        const nextBusiness = await readShipmentBusiness(
+          cutoff,
+          stop.signal,
+          month === calculationMonth ? calculationShipmentPriority : undefined,
         );
-        const omitted = result.rows.length - actualRows.length;
-        const missingDimensions = actualRows.filter(
-          (row) => !row.name || !row.series || !row.group,
-        ).length;
-        const incompleteRows = actualRows.filter(
-          (row) =>
-            inputFields.some((field) => row[field] == null) ||
-            row.average == null ||
-            row.transferIn == null ||
-            row.transferOut == null ||
-            derive(row, passed, totalDays).sourceDateIssue,
-        ).length;
-        const duplicateRows = actualRows.filter((row) => row.duplicateDays > 0).length;
+        if (!valid()) return;
         updateState({
           ...(month === calculationMonth ? { calculationCutoff: cutoff } : {}),
-          business: {
-            month,
-            cutoff,
-            rows: actualRows,
-            sourceRecords: result.rows,
-            coefficientFacts,
-            metadata: {
-              ...result.metadata,
-              partial:
-                result.metadata.partial ||
-                !!(
-                  !actualRows.length ||
-                  omitted ||
-                  missingDimensions ||
-                  incompleteRows ||
-                  duplicateRows
-                ),
-              recentStatus: passed < 3 ? 'insufficient-days' : 'ok',
-              omittedRows: omitted,
-              missingDimensions,
-              incompleteRows,
-              duplicateRows,
-            },
-          },
+          business: nextBusiness,
         });
         setSyncStatus('ok');
       } catch (failure) {
@@ -730,7 +878,7 @@ export function createShipment(
     react.useEffect(() => {
       if (
         pendingCalculationRead ||
-        !autoRead ||
+        !autoReadDisplay ||
         !cutoff ||
         activeSource !== 'business' ||
         business ||
@@ -738,7 +886,7 @@ export function createShipment(
       )
         return;
       void sync();
-    }, [autoRead, draft.id, month, cutoff, activeSource]);
+    }, [autoReadDisplay, draft.id, month, cutoff, activeSource]);
     const explain = (row, field, who) => setFormula({ row, field, who });
     const calculate = (currentState) => {
       const currentRows = deriveRows(currentState);
@@ -793,19 +941,8 @@ export function createShipment(
         };
       }
       const values = { ...currentState.values };
-      const assign = (children, amount, label) => {
-        const weights = children.map((child) => child.fin);
-        const allocated = allocate(weights, amount);
-        children.forEach((child, index) => {
-          values[keyOf(child)] = {
-            value: allocated[index],
-            source: label,
-            target: amount,
-            previous: child.fin,
-            weightTotal: weights.reduce((sum, value) => sum + value, 0),
-          };
-        });
-      };
+      const assign = (children, amount, label) =>
+        assignShipmentForecast(values, children, amount, label);
       if (who === '全国合计') {
         const present = currentGroups.filter((group) => group.children.length);
         if (!present.length) throw Error('当前月份无明细，无法重摊。');
@@ -831,7 +968,7 @@ export function createShipment(
     };
     const prepareForecast = (changes) => {
       const currentState = stateRef.current;
-      let next =
+      const initial =
         currentState.cutoff === cutoff
           ? currentState
           : {
@@ -847,19 +984,7 @@ export function createShipment(
                 },
               },
             };
-      for (const change of changes) {
-        const current = calculate(next);
-        const selected = current.rows.filter((row) => change.keys.includes(keyOf(row)));
-        if (!selected.length) throw Error('当前对象无本月发货明细，未修改。');
-        next = changeState(
-          next,
-          { children: selected },
-          'fin',
-          change.value,
-          change.label,
-          current.groups,
-        );
-      }
+      const next = applyShipmentForecastChanges(initial, changes, deriveRows);
       return { state: next, rows: deriveRows(next) };
     };
     const applyBatch = (entries) => {
@@ -1550,15 +1675,6 @@ export function createShipment(
             ),
         );
       })();
-    const calculationCutoff =
-      state.calculationCutoff ?? (cutoff.startsWith(calculationMonth) ? cutoff : '');
-    const usableCalculationSnapshot =
-      calculationSnapshot?.draftId === draft.id &&
-      calculationSnapshot.month === draft.month &&
-      calculationSnapshot.shipmentMonth === calculationMonth &&
-      calculationSnapshot.cutoff === calculationCutoff &&
-      ['business', 'local-file'].includes(calculationSnapshot.sourceKind) &&
-      ['ok', 'partial', 'local-file'].includes(calculationSnapshot.status);
     return h(
       'section',
       { hidden: !active, className: 'sp-page', 'aria-label': '发货本地核对' },
@@ -1574,8 +1690,7 @@ export function createShipment(
         'button',
         {
           disabled: busy || batch.active || !hasCutoffRange || !hasMpsSource(),
-          onClick: () =>
-            readLatestDate(calculationEnd < maxCutoff ? calculationEnd : maxCutoff, true),
+          onClick: () => readLatestDate(calculationThrough, true),
         },
         `读取 ${calculationMonth} 计算快照`,
       ),

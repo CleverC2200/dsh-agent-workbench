@@ -7,6 +7,7 @@
   "templates": {},
   "queries": {
     "products.detail": {
+      "priority": 3,
       "title": "products",
       "grain": [
         "stat_period",
@@ -72,6 +73,7 @@
       ]
     },
     "products.count": {
+      "priority": 3,
       "parameterSpec": {},
       "request": {
         "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, CAST(net_weight AS VARCHAR) AS net_weight, weight_unit, measure_unit, CAST(replace_num AS VARCHAR) AS replace_num, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_product_list_mi WHERE stat_period = (SELECT MAX(stat_period) FROM agents_dim_product_list_mi) GROUP BY stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, net_weight, weight_unit, measure_unit, replace_num) AS mps_rows"
@@ -581,7 +583,7 @@
           "type": "integer",
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 500
         },
         "offset": {
           "name": "offset",
@@ -1135,6 +1137,7 @@
       }
     },
     "category-history.detail": {
+      "priority": 3,
       "title": "当前产品池三年全国大类发货指标",
       "grain": ["stat_month", "dimension_value"],
       "parameterSpec": {
@@ -1190,6 +1193,7 @@
       ]
     },
     "category-history.count": {
+      "priority": 3,
       "parameterSpec": {
         "gea_p1": {
           "name": "months",
@@ -1204,6 +1208,7 @@
       }
     },
     "annual-pool.detail": {
+      "priority": 3,
       "title": "当前产品池年度大类需求",
       "grain": ["belong_base", "sub_category", "stat_month"],
       "parameterSpec": {
@@ -1242,6 +1247,7 @@
       ]
     },
     "annual-pool.count": {
+      "priority": 3,
       "request": {
         "sql": "SELECT COUNT(*) AS total FROM (SELECT a.belong_base, p.category AS sub_category, a.stat_month, SUM(a.source_rows) AS source_rows, SUM(a.missing_qty) AS missing_qty, SUM(CASE WHEN a.quantity_variants > 1 THEN a.source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN a.quantity_variants = 1 AND a.missing_qty = 0 THEN a.raw_quantity ELSE 0 END) AS demand_qty, MAX(a.update_time) AS update_time FROM (SELECT belong_base, material_code, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, TRIM(material_code) AS material_code, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, TRIM(material_code), stat_month, demand_qty) AS source_values GROUP BY belong_base, material_code, stat_month) AS a INNER JOIN (SELECT TRIM(material_code) AS material_code, MIN(TRIM(responsible_item)) AS category FROM agents_dim_product_list_mi WHERE stat_period = (SELECT MAX(stat_period) FROM agents_dim_product_list_mi) AND material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY TRIM(material_code) HAVING COUNT(DISTINCT TRIM(responsible_item)) = 1 AND COUNT(CASE WHEN responsible_item IS NULL OR TRIM(responsible_item) = '' THEN 1 END) = 0) AS p ON a.material_code = p.material_code GROUP BY a.belong_base, p.category, a.stat_month) AS mps_rows"
       },
@@ -1767,6 +1773,7 @@
       }
     },
     "products.prices": {
+      "priority": 3,
       "title": "SKU未税到岸单价",
       "grain": ["material_code"],
       "parameterSpec": {
@@ -1796,6 +1803,7 @@
       "columns": ["material_code", "cif_price"]
     },
     "products.prices.count": {
+      "priority": 3,
       "parameterSpec": {},
       "request": {
         "sql": "SELECT COUNT(*) AS total FROM (SELECT DISTINCT material_code, cif_price FROM agents_scm_cust_jxc_ai_daliy_d) AS price_rows"
