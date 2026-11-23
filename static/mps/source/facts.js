@@ -288,6 +288,9 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
               const chosenPlan = row.produce_plan_adj ?? row.produce_plan;
               const actual = row.production_actual === null ? null : number(row.production_actual);
               const plan = chosenPlan === null ? null : number(chosenPlan);
+              const monthClosed = isCalendarMonthEnd(sourceDate);
+              const actualAlreadyCoversPlan =
+                plan === 0 || (actual !== null && plan !== null && plan > 0 && actual > plan);
               const transfer = (direction) => {
                 const value =
                   row[`transfer_${direction}_plan_adj`] ?? row[`transfer_${direction}_plan_v1`];
@@ -303,15 +306,15 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
                   productionInbound:
                     actual === null
                       ? null
-                      : isCalendarMonthEnd(sourceDate)
+                      : monthClosed || actualAlreadyCoversPlan
                         ? actual
-                        : plan !== null && plan >= 0
-                          ? Math.max(actual, plan)
+                        : plan !== null && plan > 0
+                          ? plan
                           : null,
-                  productionBasis: isCalendarMonthEnd(sourceDate)
+                  productionBasis: monthClosed
                     ? '月末实绩'
-                    : actual !== null && plan !== null && actual > plan
-                      ? '已入库实绩超过月计划'
+                    : actualAlreadyCoversPlan && actual !== 0
+                      ? '已入库净实绩，含冲销'
                       : row.produce_plan_adj !== null
                         ? '纠偏生产计划'
                         : '初版生产计划',
