@@ -220,6 +220,66 @@ test('11月评估版本可按11月截止日读取实际发货并追踪公式', a
   await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText('620');
 });
 
+test('当月发货可查看且能取得并保留上月计算快照', async (t) => {
+  const { page, frame, calls } = await mpsPage(
+    t,
+    config,
+    (query) =>
+      fixture(query, query.parameters.month === '2026-10-01' ? '2026-10-31' : '2026-11-16'),
+    november,
+  );
+  await create(frame);
+  const view = frame.getByRole('region', { name: '发货本地核对' });
+  await expect(view.getByLabel('数据截止日')).toHaveValue('2026-11-16');
+  await expect(view).toContainText('当前展示月 2026-11');
+  await expect(view).toContainText('评估所需统计基月 2026-10');
+  await expect(view.getByRole('status', { name: '计算快照状态' })).toContainText('尚未取得');
+  await view.getByRole('button', { name: '读取 2026-10 计算快照', exact: true }).click();
+  await expect(view.getByLabel('数据截止日')).toHaveValue('2026-10-31');
+  await expect(view.getByRole('status', { name: '计算快照状态' })).toContainText('已进入评估');
+  await expect
+    .poll(async () => (await selected(page)).shipment.calculationCutoff)
+    .toBe('2026-10-31');
+  await view.getByLabel('数据截止日').fill('2026-11-16');
+  await view.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  await expect(view).toContainText('当前展示月 2026-11');
+  await expect(view.getByRole('status', { name: '计算快照状态' })).toContainText('2026-10-31');
+  await expect(view.getByRole('status', { name: '计算快照状态' })).toContainText('已进入评估');
+  assert.ok(
+    calls.some((row) => row.queryId === 'facts.shipment' && row.parameters.cutoff === '2026-10-31'),
+  );
+});
+
+test('重读统计基月失败后撤销旧计算快照，恢复页面后也须重新取数', async (t) => {
+  let fail = false;
+  const { page, frame } = await mpsPage(
+    t,
+    config,
+    (query) => {
+      if (fail && query.queryId === 'facts.shipment-latest') throw Error('BASE_MONTH_UNAVAILABLE');
+      return fixture(query, query.parameters.month === '2026-10-01' ? '2026-10-31' : '2026-11-16');
+    },
+    november,
+  );
+  await create(frame);
+  const view = frame.getByRole('region', { name: '发货本地核对' });
+  const status = view.getByRole('status', { name: '计算快照状态' });
+  await expect(view.getByLabel('数据截止日')).toHaveValue('2026-11-16');
+  const read = view.getByRole('button', { name: '读取 2026-10 计算快照', exact: true });
+  await read.click();
+  await expect(status).toContainText('已进入评估');
+  await view.getByLabel('数据截止日').fill('2026-11-16');
+  fail = true;
+  await read.click();
+  await expect(status).toContainText('读取失败');
+  await expect(status).toContainText('已失效');
+  const saved = await page.evaluate(() => window.readView());
+  await page.evaluate((seed) => window.openAuthor('mps', 1200, seed), saved);
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await expect(status).toContainText('尚未取得');
+  assert.equal((await selected(page)).shipment.calculationCutoff, '2026-10-31');
+});
+
 test('未到数的当日保持待补，未来评估月不读取未来实际发货', async (t) => {
   const { frame, calls } = await mpsPage(
     t,

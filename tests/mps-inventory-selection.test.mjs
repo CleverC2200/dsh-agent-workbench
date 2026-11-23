@@ -17,7 +17,7 @@ test('库存默认月份与版本优先级在20日和21日切换，跨年进入�
 });
 
 test('来源月沿真实读取起月，旧版显式评估月份不随今日日期重写', () => {
-  assert.equal(selectedInventoryMonth({ month: '2026-04' }), '2026-04');
+  assert.equal(selectedInventoryMonth({ month: '2026-04' }), defaultInventoryMonth());
   assert.equal(
     selectedInventoryMonth({
       month: '2026-04',
@@ -31,4 +31,20 @@ test('来源月沿真实读取起月，旧版显式评估月份不随今日日�
   assert.equal(defaultInventoryMonth(new Date(2026, 11, 20)), '2026-12');
   assert.equal(defaultInventoryMonth(new Date(2026, 11, 21)), '2027-01');
   assert.deepEqual(inventoryVersionOrder('2027-01', new Date(2026, 11, 21)), ['月初', '滚动']);
+});
+
+test('业务日选择来源月，读取元数据固化选择，后续日期变化不改已取来源', () => {
+  assert.equal(defaultInventoryMonth('2026-11-20'), '2026-11');
+  assert.equal(defaultInventoryMonth('2026-11-21'), '2026-12');
+  assert.equal(defaultInventoryMonth('2026-12-21'), '2027-01');
+  const snapshot = {
+    month: '2026-04',
+    inventoryTargetsRead: {
+      status: 'ready',
+      metadata: { start_month: '2026-11', businessDate: '2026-11-20' },
+    },
+  };
+  assert.equal(selectedInventoryMonth(snapshot), '2026-11');
+  assert.deepEqual(inventoryVersionOrder('2026-11', '2026-11-20'), ['纠偏', '月初']);
+  assert.deepEqual(inventoryVersionOrder('2026-12', '2026-11-21'), ['月初', '滚动']);
 });
