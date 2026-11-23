@@ -253,3 +253,49 @@ test('负库存归零报告保留原数和不足，提示不阻断其他输入�
   assert.match(issue.action, /不足.*保留/);
   assert.equal(issue.blocking, false);
 });
+
+test('既有库存变动缺项列出实际缺字段与确认入口，明确零有效并追到后月期初', () => {
+  const plan = {
+    context: { month: '2026-11' },
+    resourceSchedules: [],
+    rows: [
+      {
+        month: '2026-11',
+        base: '甲',
+        code: 'A',
+        openingInventory: 2,
+        existingProductionInbound: null,
+        existingInTransitInbound: 0,
+        existingTransferIn: null,
+        existingTransferOut: 0,
+        planMissing: ['既有入库或调拨计划缺项'],
+      },
+      { month: '2026-12', base: '甲', code: 'A', planMissing: ['缺前月实际结存'] },
+      {
+        month: '2026-11',
+        base: '甲',
+        code: 'ZERO',
+        existingProductionInbound: 0,
+        existingInTransitInbound: 0,
+        existingTransferIn: 0,
+        existingTransferOut: 0,
+        planMissing: [],
+      },
+    ],
+  };
+  attachPlanReport(plan, { planCandidates: [], unitWeights: [], transferRoutes: [] }, null);
+  const issue = plan.reportIssues.find((row) => row.kind === '既有入库或调拨计划缺项');
+  assert.ok(issue);
+  assert.equal(issue.blocking, true);
+  assert.equal(issue.sourceFields, 'existingProductionInbound / existingTransferIn');
+  assert.match(issue.reason, /缺既有生产入库、既有调入/);
+  assert.doesNotMatch(issue.reason, /既有在途入库|既有调出/);
+  assert.match(issue.sourceTable, /当前评估版本.*既有库存变动确认/);
+  assert.match(issue.action, /约束与配置.*2026-11.*甲.*A.*来源.*原因.*0.*重新评估/);
+  assert.deepEqual(plan.rows[0].reportIssueKinds, ['既有入库或调拨计划缺项']);
+  assert.match(
+    plan.reportIssues.find((row) => row.month === '2026-12').rootCause,
+    /2026-11 既有入库或调拨计划缺项/,
+  );
+  assert.deepEqual(plan.rows[2].reportIssueKinds, []);
+});

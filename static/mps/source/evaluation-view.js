@@ -362,7 +362,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           '产品编码',
           '产品名称',
           ...(festival ? ['推算口径'] : []),
-          ...labels,
+          ...labels.flatMap((label) => [label, `${label}待补数`, `${label}完整性`]),
         ],
         reportGroups.flatMap((scope) =>
           [
@@ -378,7 +378,17 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             产品名称: entry.name,
             推算口径: demandBasisLabel(festival, scope.month),
             ...Object.fromEntries(
-              plannedFields.map((field, index) => [labels[index], known(entry.rows, field).value]),
+              plannedFields.flatMap((field, index) => {
+                const data = known(entry.rows, field);
+                return [
+                  [labels[index], data.value],
+                  [`${labels[index]}待补数`, data.missing],
+                  [
+                    `${labels[index]}完整性`,
+                    data.missing ? (data.value === null ? '未知' : '已知小计') : '完整',
+                  ],
+                ];
+              }),
             ),
           })),
         ),
