@@ -311,7 +311,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   if (
     validShipment &&
     shipmentSnapshot.sourceKind === 'business' &&
-    shipmentSnapshot.status === 'ok' &&
+    ['ok', 'partial'].includes(shipmentSnapshot.status) &&
     isCalendarMonthEnd(shipmentSnapshot.cutoff)
   ) {
     const covered = new Set(openingInventory.map(rowKey));

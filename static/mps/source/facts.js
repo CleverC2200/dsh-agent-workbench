@@ -291,7 +291,7 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
               const transfer = (direction) => {
                 const value =
                   row[`transfer_${direction}_plan_adj`] ?? row[`transfer_${direction}_plan_v1`];
-                return value === null ? 0 : number(value);
+                return value === null ? null : number(value);
               };
               return [
                 {
@@ -324,7 +324,7 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
       : null,
     basis?.sourceKind === 'business' &&
     basis.draftId === draft.id &&
-    basis.status === 'ok' &&
+    ['ok', 'partial'].includes(basis.status) &&
     isCalendarMonthEnd(basis.cutoff)
       ? read('facts.opening-physical', { cutoff: basis.cutoff }, (rows) =>
           rows.map((row) => ({

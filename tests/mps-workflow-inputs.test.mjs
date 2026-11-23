@@ -1893,7 +1893,7 @@ test('评估接入已确认的月初及库存变动，保留预计结存和逐�
     shipmentMonth: '2026-11',
     cutoff: '2026-11-30',
     sourceKind: 'business',
-    status: 'ok',
+    status: 'partial',
     rows: [{ base: '甲', code: 'A', end: 12, fin: 5 }],
   };
   const evaluation = {
