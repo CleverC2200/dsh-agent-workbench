@@ -105,6 +105,51 @@ export function createCapacityScopeView(react, downloadCsv) {
         ? `已知${numberText(value.known)}；${value.missing}项待补`
         : numberText(value.value);
     const percent = (value) => (value === null ? '待补' : `${(value * 100).toFixed(2)}%`);
+    const pairKey = (row) => JSON.stringify([row.base, row.code]);
+    const productKey = (row) =>
+      JSON.stringify([
+        row.category,
+        ...(level === 'category' ? [] : [row.group]),
+        ...(level === 'sku' ? [row.base, row.code] : []),
+      ]);
+    const plannedRows = new Map(
+      plan.rows.filter((row) => row.month === month).map((row) => [pairKey(row), row]),
+    );
+    const allocations = Map.groupBy(
+      report.allocations.filter((row) => row.month === month),
+      (row) => JSON.stringify([row.demandBase, row.code]),
+    );
+    const related = (row, ids) =>
+      row.resourceIds.some((id) => ids.has(id)) ||
+      (allocations.get(pairKey(row)) ?? []).some((allocation) => ids.has(allocation.resourceId));
+    const resourceIds = selected.lines.map((row) => row.resourceId);
+    const ids = new Set(resourceIds);
+    const scopeDetails = report.productDetails.filter(
+      (row) => row.month === month && !row.odm && related(row, ids),
+    );
+    const productDetails = Map.groupBy(scopeDetails, productKey);
+    const scheduleState = (resourceIds, product) => {
+      const ids = new Set(resourceIds);
+      const details = (
+        product ? (productDetails.get(productKey(product)) ?? []) : scopeDetails
+      ).filter((row) => related(row, ids));
+      const pending = details.filter(
+        (row) => plannedRows.get(pairKey(row))?.scheduledTons == null,
+      ).length;
+      if (!details.length) return '本月尚未形成排产分配';
+      if (pending === details.length) return `尚未形成排产分配，${pending}项待评估`;
+      if (pending) return `已取得部分排产分配，${pending}项待评估`;
+      const occupied = details.some((row) =>
+        (allocations.get(pairKey(row)) ?? []).some(
+          (allocation) => ids.has(allocation.resourceId) && allocation.tons > 0,
+        ),
+      );
+      return occupied ? '本轮排产已计算' : '本轮排产已计算，实际占用为0';
+    };
+    const utilization = (demand) =>
+      demand !== null && selected.capacity !== null && selected.capacity > 0
+        ? demand / selected.capacity
+        : null;
     const scopeColumns = {
       月份: month,
       设备范围: label,
@@ -112,8 +157,8 @@ export function createCapacityScopeView(react, downloadCsv) {
     };
     const exportRows = productRows.map((row) => ({
       ...scopeColumns,
-      大类: row.category,
-      物料组: row.group,
+      大类: row.category || '大类待补',
+      物料组: level === 'category' ? '' : row.group || '物料组待补',
       需求基地: row.base,
       SKU: row.code,
       名称: row.name,
@@ -121,22 +166,32 @@ export function createCapacityScopeView(react, downloadCsv) {
       已知关联需求吨数: row.demand.known,
       待补需求项数: row.demand.missing,
       实际占用吨数: row.scheduledTons,
+      排产状态: scheduleState(resourceIds, row),
       范围产能占比: row.occupancy,
       范围月产能吨数: selected.capacity,
+      隧道利用率: utilization(row.demand.value),
     }));
-    const equipmentRows = selected.lines.map((row) => ({
-      月份: month,
-      设备范围: label,
-      基地: row.base,
-      车间: row.workshop || '车间归属待补',
-      产线: row.productionLines.join('、') || '产线归属待补',
-      隧道号: row.tunnel || '隧道号待补',
-      物理资源ID: row.resourceId,
-      日标准产能吨数: row.dailyTons,
-      生产天数: row.days,
-      月产能吨数: row.capacity,
-      实际占用吨数: row.scheduledTons,
-    }));
+    const equipmentRows = selected.lines.map((row) => {
+      const equipment = selectCapacityScope(report, { ...scope, resourceId: row.resourceId });
+      return {
+        月份: month,
+        设备范围: label,
+        基地: row.base,
+        车间: row.workshop || '车间归属待补',
+        产线: row.productionLines.join('、') || '产线归属待补',
+        隧道号: row.tunnel || '隧道号待补',
+        物理资源ID: row.resourceId,
+        日标准产能吨数: row.dailyTons,
+        生产天数: row.days,
+        月产能吨数: row.capacity,
+        关联需求吨数: equipment.demand.value,
+        已知关联需求吨数: equipment.demand.known,
+        待补需求项数: equipment.demand.missing,
+        隧道利用率: equipment.load,
+        实际占用吨数: row.scheduledTons,
+        排产状态: scheduleState([row.resourceId]),
+      };
+    });
     const download = (name, rows) =>
       downloadCsv(
         `${month}-${name}.csv`,
@@ -195,7 +250,7 @@ export function createCapacityScopeView(react, downloadCsv) {
         h(
           'p',
           { className: 'wf-note' },
-          '关联需求按当前设备范围的有效关联去重。多个候选设备可能对应同一需求，各设备需求不能直接相加；实际占用来自本轮排产分配，包含调拨供给。产品占比使用当前范围去重总产能，不为各产品重复累计产能。',
+          '关联需求按当前设备范围的有效关联去重。多个候选设备可能对应同一需求，各设备需求不能直接相加；隧道利用率＝关联需求吨数÷月产能；实际占用来自本轮排产分配，包含调拨供给，未完成评估时的已分配量不能视为完整占用。产品占比使用当前范围去重总产能，不为各产品重复累计产能。',
         ),
         scopeTable(
           '所选设备范围汇总',
@@ -205,8 +260,9 @@ export function createCapacityScopeView(react, downloadCsv) {
             '关联需求（吨）',
             '日标准产能（吨/日）',
             '月产能（吨）',
-            '负荷率',
+            '隧道利用率',
             '实际占用（吨）',
+            '排产状态',
           ],
           [
             [
@@ -217,6 +273,7 @@ export function createCapacityScopeView(react, downloadCsv) {
               numberText(selected.capacity),
               percent(selected.load),
               numberText(selected.scheduledTons),
+              scheduleState(resourceIds),
             ],
           ],
         ),
@@ -243,18 +300,22 @@ export function createCapacityScopeView(react, downloadCsv) {
             'SKU',
             '名称',
             '关联需求（吨）',
+            '隧道利用率',
             '实际占用（吨）',
             '范围产能占比',
+            '排产状态',
           ],
           shownProducts.map((row) => [
-            row.category,
-            row.group || '—',
+            row.category || '大类待补',
+            level === 'category' ? '—' : row.group || '物料组待补',
             row.base || '—',
             row.code || '—',
             row.name,
             metric(row.demand),
+            percent(utilization(row.demand.value)),
             numberText(row.scheduledTons),
             percent(row.occupancy),
+            scheduleState(resourceIds, row),
           ]),
         ),
         h(
@@ -290,7 +351,10 @@ export function createCapacityScopeView(react, downloadCsv) {
             '日标准产能（吨/日）',
             '生产天数',
             '月产能（吨）',
+            '关联需求（吨）',
+            '隧道利用率',
             '实际占用（吨）',
+            '排产状态',
           ],
           equipmentRows.map((row) => [
             row.基地,
@@ -301,7 +365,14 @@ export function createCapacityScopeView(react, downloadCsv) {
             numberText(row.日标准产能吨数),
             row.生产天数 ?? '待补',
             numberText(row.月产能吨数),
+            metric({
+              value: row.关联需求吨数,
+              known: row.已知关联需求吨数,
+              missing: row.待补需求项数,
+            }),
+            percent(row.隧道利用率),
             numberText(row.实际占用吨数),
+            row.排产状态,
           ]),
         ),
         issues.length
