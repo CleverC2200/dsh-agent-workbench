@@ -31,6 +31,7 @@ import { sumSourceAmounts } from './source-money.js';
 import { workbookBytes } from './workbook.js';
 import { annualWorkbookTables } from './annual-workbook.js';
 import { poolSubmissionRows } from './pool-exception-view.js';
+import { createProductScopeReport } from './product-scope-view.js';
 const productColumns = [
   '基地',
   '产品编码',
@@ -1038,6 +1039,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     );
   }
   const MasterData = createMasterData(react, { Dialog, table, downloadCsv, useMpsPart });
+  const ProductScopeReport = createProductScopeReport(react, {
+    table,
+    downloadCsv: downloadCsvLegacy,
+  });
   const DeliveryMetrics = createDeliveryMetrics(react, { table, downloadCsv, useMpsPart });
   const Workflow = createWorkflow(react, useMpsPart, {
     Dialog,
@@ -2350,6 +2355,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           onEditingChange: setAdjusting,
         }),
       ),
+      ['process', 'masterdata'].includes(step) &&
+        h(ProductScopeReport, { key: draft.id, result: workflowResult, selectedCategories }),
       h(
         'div',
         { hidden: step !== 'masterdata' },
