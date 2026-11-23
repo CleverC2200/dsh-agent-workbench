@@ -205,7 +205,7 @@ export function buildCategoryDemand(draft, shipmentSnapshot, historicalFilter) {
             ...new Set(
               productMappings
                 .filter((product) => codes.includes(product['产品编码'] || product.material_code))
-                .map((product) => product['大类'] || product.sub_category)
+                .map((product) => product['大类'] || product.responsible_item)
                 .filter(Boolean),
             ),
           ];

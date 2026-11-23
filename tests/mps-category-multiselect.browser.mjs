@@ -337,7 +337,7 @@ test('产品下载遵循大类多选且不受独立文本搜索影响，清空�
               target_base: '郑州',
               material_code: code,
               material_name: `产品${code}`,
-              sub_category: category,
+              responsible_item: category,
               series: '系列',
               product_item: `${category}组`,
               transfer_tag: null,

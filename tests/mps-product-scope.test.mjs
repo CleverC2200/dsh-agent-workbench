@@ -105,7 +105,7 @@ test('源产品清单独立对账实际参与组合，列出映射遗漏、额�
       stat_period: '2026-12',
       target_base: '甲',
       material_code: 'A',
-      sub_category: '点心',
+      responsible_item: '点心',
       series: '系列',
       product_item: '包点',
     },
@@ -113,7 +113,7 @@ test('源产品清单独立对账实际参与组合，列出映射遗漏、额�
       stat_period: '2026-12',
       target_base: '乙',
       material_code: 'B',
-      sub_category: '点心',
+      responsible_item: '点心',
       series: '系列',
       product_item: '包点',
     },
@@ -121,11 +121,11 @@ test('源产品清单独立对账实际参与组合，列出映射遗漏、额�
       stat_period: '2026-12',
       target_base: '甲',
       material_code: 'A',
-      sub_category: '冲突大类',
+      responsible_item: '冲突大类',
       series: '系列',
       product_item: '包点',
     },
-    { stat_period: '2026-12', target_base: '', material_code: 'NOBASE', sub_category: '点心' },
+    { stat_period: '2026-12', target_base: '', material_code: 'NOBASE', responsible_item: '点心' },
   ];
   const result = buildMpsWorkflow(draft);
   assert.equal(result.productScope.sourceRows, 4);

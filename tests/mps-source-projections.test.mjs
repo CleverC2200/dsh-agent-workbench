@@ -31,13 +31,15 @@ test('同一老品按实际基地唯一匹配，缺基地或同基地多义继�
       material_code: 'N1',
       target_base: '甲',
       replacement_material_code: 'OLD',
-      sub_category: '汤圆',
+      sub_category: '旧汤圆',
+      responsible_item: '汤圆',
     },
     {
       material_code: 'N2',
       target_base: '乙',
       replacement_material_code: 'OLD',
-      sub_category: '面点',
+      sub_category: '旧面点',
+      responsible_item: '面点',
     },
   ];
   const match = createSourceProductMatcher(products);
@@ -51,6 +53,8 @@ test('同一老品按实际基地唯一匹配，缺基地或同基地多义继�
   assert.equal(conflict('OLD', '甲').currentCode, '');
   assert.equal(conflict('N1', '甲').currentCode, 'N1');
   const projection = productRows(products);
+  assert.deepEqual(projection.map((product) => product['大类']), ['汤圆', '面点']);
+  assert.equal(productRows([{ material_code: 'A', sub_category: '旧大类' }])[0]['大类'], '');
   projection[0]['大类'] = '人工分类';
   const mapped = sourceProductMappings(projection, products);
   const businessMatch = createSourceProductMatcher(mapped);
@@ -96,7 +100,7 @@ test('product groups reveal exact child SKUs and unique source attributes withou
   );
   assert.deepEqual(result[0].children, [1, 2]);
   assert.deepEqual(result[0].labels, ['汤圆']);
-  assert.equal(result[0].display['大类'], '细类');
+  assert.equal(result[0].display['大类'], '汤圆');
   assert.equal(result[0].display['系列'], '系列');
   assert.equal(result[0].display['产品编码'], '');
   assert.deepEqual(result[0].candidateBases, ['华东', '郑州']);
@@ -108,7 +112,7 @@ test('product groups reveal exact child SKUs and unique source attributes withou
 test('multi-class groups keep all values and never select one arbitrary classification', () => {
   const result = productProjections(
     [row(''), row('A'), row('B')],
-    [raw('A'), raw('B', { sub_category: '另细类', series: '另一系列', responsible_item: '休闲' })],
+    [raw('A'), raw('B', { series: '另一系列', responsible_item: '休闲' })],
   );
   assert.equal(result[0].display['大类'], '多值（2项）');
   assert.equal(result[0].display['系列'], '多值（2项）');
@@ -135,9 +139,9 @@ const checks = (actual, plan) => ({
 
 test('source checks use allnum plan quantities independently of obsolete report-version quantities', () => {
   const input = checks([history(12)], [report(10, 20)]);
-  const monthly = sourceCheckRows(input, [raw('A', { sub_category: '汤圆' })], 'monthly', ['汤圆'])
+  const monthly = sourceCheckRows(input, [raw('A', { responsible_item: '汤圆' })], 'monthly', ['汤圆'])
     .rows[0];
-  const adjusted = sourceCheckRows(input, [raw('A', { sub_category: '汤圆' })], 'adjust', ['汤圆'])
+  const adjusted = sourceCheckRows(input, [raw('A', { responsible_item: '汤圆' })], 'adjust', ['汤圆'])
     .rows[0];
   assert.equal(monthly.plan.quantity, 10);
   assert.equal(monthly.ratio, 1.2);
@@ -148,7 +152,7 @@ test('source checks use allnum plan quantities independently of obsolete report-
 test('zero, absent periods and incomplete values remain distinct; partial known subtotals do not produce ratios', () => {
   const zero = sourceCheckRows(
     checks([history(0)], [report(0, 0)]),
-    [raw('A', { sub_category: '汤圆' })],
+    [raw('A', { responsible_item: '汤圆' })],
     'monthly',
     ['汤圆'],
   ).rows[0];
@@ -157,14 +161,14 @@ test('zero, absent periods and incomplete values remain distinct; partial known 
   assert.equal(zero.ratio, null);
   const partial = sourceCheckRows(
     checks([history(4), history('')], [report(10, 10)]),
-    [raw('A', { sub_category: '汤圆' })],
+    [raw('A', { responsible_item: '汤圆' })],
     'monthly',
     ['汤圆'],
   ).rows[0];
   assert.equal(partial.actual.knownQuantity, 4);
   assert.equal(partial.actual.quantity, null);
   assert.equal(partial.ratio, null);
-  const absent = sourceCheckRows(checks([], []), [raw('A', { sub_category: '汤圆' })], 'monthly', [
+  const absent = sourceCheckRows(checks([], []), [raw('A', { responsible_item: '汤圆' })], 'monthly', [
     '汤圆',
   ]).rows[0];
   assert.equal(absent.actual.knownQuantity, null);
@@ -177,7 +181,7 @@ test('current pool remaps BI and DMS by SKU; excluded nonzero historical SKUs do
       [history(8, { 大类: '饺子' }), history(4, { 产品编码: 'OLD' })],
       [report(10, 10), report(2, 2, { 产品编码: 'OLD' })],
     ),
-    [raw('A', { sub_category: '水饺' })],
+    [raw('A', { responsible_item: '水饺' })],
     'monthly',
     ['饺子'],
   );
@@ -196,7 +200,7 @@ test('current pool remaps BI and DMS by SKU; excluded nonzero historical SKUs do
 test('nationwide pool totals retain source quantities without a base; ambiguous current classifications are listed for completion', () => {
   const result = sourceCheckRows(
     checks([history(8, { 基地: '' })], [report(20, 20, { 基地: '' })]),
-    [raw('A', { sub_category: '汤圆', belong_base: '郑州' })],
+    [raw('A', { responsible_item: '汤圆', belong_base: '郑州' })],
     'adjust',
   );
   assert.equal(result.rows[0].actual.quantity, 8);
@@ -206,8 +210,8 @@ test('nationwide pool totals retain source quantities without a base; ambiguous 
   const ambiguous = sourceCheckRows(
     checks([history(8)], [report(10, 10)]),
     [
-      raw('A', { sub_category: '汤圆', belong_base: '郑州' }),
-      raw('A', { sub_category: '水饺', belong_base: '乙' }),
+      raw('A', { responsible_item: '汤圆', belong_base: '郑州' }),
+      raw('A', { responsible_item: '水饺', belong_base: '乙' }),
     ],
     'monthly',
   );
@@ -245,10 +249,10 @@ test('历史事实按基地物料唯一补齐系列，保留源值、零数量�
 
 test('产品列表的大类覆盖保留无来源及分类冲突涉及的大类，不由数量或唯一映射缩减范围', () => {
   const result = sourceCheckRows(checks([history(0)], []), [
-    raw('A', { sub_category: '饺子' }),
-    raw('A', { sub_category: '汤圆' }),
-    raw('B', { sub_category: '调理肉制品' }),
-    raw('C', { sub_category: '饼类' }),
+    raw('A', { responsible_item: '饺子' }),
+    raw('A', { responsible_item: '汤圆' }),
+    raw('B', { responsible_item: '调理肉制品' }),
+    raw('C', { responsible_item: '饼类' }),
   ]);
   assert.deepEqual(result.categories, ['饺子', '汤圆', '调理肉制品', '饼类']);
   assert.equal(result.rows.length, 4);
@@ -264,7 +268,7 @@ test('池外仅过滤各自真实源数量的零值和空值，池内零值及�
   );
   const result = sourceCheckRows(
     checks([...actual, history(0), history('')], [...plans, report(0, 0)]),
-    [raw('A', { sub_category: '汤圆' })],
+    [raw('A', { responsible_item: '汤圆' })],
   );
   assert.deepEqual(
     result.excluded.map((row) => [row['来源'], row['数量'] ?? row['计划数量']]),
@@ -309,7 +313,7 @@ test('真实空计划量附带来源缺项说明时只过滤池外记录，池�
         }),
       ],
     ),
-    [raw('A', { sub_category: '汤圆' })],
+    [raw('A', { responsible_item: '汤圆' })],
   );
   assert.deepEqual(
     result.excluded.map((row) => row['产品编码']),
@@ -327,8 +331,8 @@ test('真实空计划量附带来源缺项说明时只过滤池外记录，池�
 
 test('当前编码优先且唯一老品只归属一个当前SKU，保留来源编码与原始数量', () => {
   const products = [
-    raw('A', { sub_category: '汤圆', replacement_material_code: 'OLD' }),
-    raw('A', { sub_category: '汤圆', replacement_material_code: 'OLD', belong_base: '乙' }),
+    raw('A', { responsible_item: '汤圆', replacement_material_code: 'OLD' }),
+    raw('A', { responsible_item: '汤圆', replacement_material_code: 'OLD', belong_base: '乙' }),
     { 产品编码: 'B', 大类: '水饺', 老品编码: 'A' },
   ];
   const input = checks(
@@ -424,7 +428,7 @@ test('multi-base source rows keep national groups unique and expose new-product 
   ];
   const products = [row(''), row('A'), row('B')];
   const projected = productProjections(products, records);
-  assert.equal(projected[0].display['大类'], '细类');
+  assert.equal(projected[0].display['大类'], '汤圆');
   assert.equal(projected[1].display['新品标记'], '部分基地新品');
   assert.equal(projected[2].display['新品标记'], '非新品');
   assert.deepEqual(projected[1].targetBases, ['郑州', '华东']);
