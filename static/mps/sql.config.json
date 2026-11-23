@@ -1451,6 +1451,140 @@
         }
       }
     },
+    "facts.inventory-movements": {
+      "title": "评估月生产入库和调拨计划",
+      "grain": ["stock_month", "belong_base", "material_code"],
+      "columns": [
+        "stock_month",
+        "belong_base",
+        "material_code",
+        "source_date",
+        "source_rows",
+        "begin_stock",
+        "produce_plan",
+        "produce_plan_adj",
+        "transfer_in_plan_v1",
+        "transfer_in_plan_adj",
+        "transfer_out_plan_v1",
+        "transfer_out_plan_adj",
+        "production_actual"
+      ],
+      "parameterSpec": {
+        "start_month": {
+          "name": "start_month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
+        "end_month": {
+          "name": "end_month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
+        "cutoff": {
+          "name": "cutoff",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "sql": "WITH month_dates AS (SELECT data_month, MAX(the_date) AS latest_date FROM agents_scm_stock_detail_d WHERE data_month BETWEEN :start_month AND :end_month AND the_date >= data_month AND the_date <= :cutoff GROUP BY data_month), actuals AS (SELECT data_month, belong_base, material_code, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(produce_in_qty) = COUNT(*) AND COUNT(DISTINCT the_date) = DATEDIFF(MAX(the_date), data_month) + 1 THEN SUM(produce_in_qty) ELSE NULL END AS production_actual FROM agents_scm_stock_detail_d WHERE data_month BETWEEN :start_month AND :end_month AND the_date >= data_month AND the_date <= :cutoff GROUP BY data_month, belong_base, material_code), plans AS (SELECT t.data_month AS stock_month, t.belong_base, t.material_code, MAX(t.the_date) AS source_date, COUNT(*) AS source_rows, CASE WHEN COUNT(*) = 1 THEN MAX(t.begin_stock) ELSE NULL END AS begin_stock, CASE WHEN COUNT(*) = 1 THEN MAX(t.produce_plan) ELSE NULL END AS produce_plan, CASE WHEN COUNT(*) = 1 THEN MAX(t.produce_plan_adj) ELSE NULL END AS produce_plan_adj, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_in_plan_v1) ELSE NULL END AS transfer_in_plan_v1, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_in_plan_adj) ELSE NULL END AS transfer_in_plan_adj, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_out_plan_v1) ELSE NULL END AS transfer_out_plan_v1, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_out_plan_adj) ELSE NULL END AS transfer_out_plan_adj FROM agents_scm_stock_detail_d t JOIN month_dates d ON t.data_month = d.data_month AND t.the_date = d.latest_date GROUP BY t.data_month, t.belong_base, t.material_code) SELECT p.stock_month, p.belong_base, p.material_code, p.source_date, p.source_rows, p.begin_stock, p.produce_plan, p.produce_plan_adj, p.transfer_in_plan_v1, p.transfer_in_plan_adj, p.transfer_out_plan_v1, p.transfer_out_plan_adj, a.production_actual FROM plans p LEFT JOIN actuals a ON p.stock_month = a.data_month AND p.belong_base = a.belong_base AND p.material_code = a.material_code ORDER BY stock_month, belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "facts.inventory-movements.count"
+      }
+    },
+    "facts.inventory-movements.count": {
+      "title": "评估月生产入库和调拨计划计数",
+      "columns": ["total"],
+      "parameterSpec": {
+        "start_month": {
+          "name": "start_month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
+        "end_month": {
+          "name": "end_month",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
+        "cutoff": {
+          "name": "cutoff",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        }
+      },
+      "request": {
+        "sql": "WITH month_dates AS (SELECT data_month, MAX(the_date) AS latest_date FROM agents_scm_stock_detail_d WHERE data_month BETWEEN :start_month AND :end_month AND the_date >= data_month AND the_date <= :cutoff GROUP BY data_month) SELECT COUNT(*) AS total FROM (SELECT t.data_month, t.belong_base, t.material_code FROM agents_scm_stock_detail_d t JOIN month_dates d ON t.data_month = d.data_month AND t.the_date = d.latest_date GROUP BY t.data_month, t.belong_base, t.material_code) source_keys"
+      }
+    },
+    "facts.opening-physical": {
+      "title": "月末基地主仓实存",
+      "grain": ["belong_base", "material_code"],
+      "columns": ["belong_base", "material_code", "quantity"],
+      "parameterSpec": {
+        "cutoff": {
+          "name": "cutoff",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "sql": "WITH stock_batches AS (SELECT belong_base, material_code, CASE WHEN COUNT(live_qty) = COUNT(*) AND (COUNT(*) = 1 OR (MIN(live_qty) = 0 AND MAX(live_qty) = 0)) THEN SUM(live_qty) ELSE NULL END AS live_qty FROM agents_scm_inventory_sku_data_d WHERE warehouse_classify IN ('01', '02') AND month_date = REPLACE(CAST(:cutoff AS VARCHAR(10)), '-', '') GROUP BY belong_base, material_code, warehouseid, prod_date, sap_warehouseid, plant, quality_batch, is_good_prod, warehouse_classify) SELECT belong_base, material_code, CASE WHEN COUNT(live_qty) = COUNT(*) THEN SUM(live_qty) ELSE NULL END AS quantity FROM stock_batches GROUP BY belong_base, material_code ORDER BY belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "facts.opening-physical.count"
+      }
+    },
+    "facts.opening-physical.count": {
+      "title": "月末基地主仓实存计数",
+      "columns": ["total"],
+      "parameterSpec": {
+        "cutoff": {
+          "name": "cutoff",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code FROM agents_scm_inventory_sku_data_d WHERE warehouse_classify IN ('01', '02') AND month_date = REPLACE(CAST(:cutoff AS VARCHAR(10)), '-', '') GROUP BY belong_base, material_code) source_keys"
+      }
+    },
     "facts.shipment.count": {
       "title": "本月预估发货基地物料计数",
       "columns": ["total"],

@@ -1871,3 +1871,80 @@ test('历史手填调拨保留在版本中但不进入后续既有库存变动�
   assert.equal(row.existingTransferOut, null);
   assert.equal(source.shipment.transferPlans[0].inbound, 999);
 });
+
+test('评估接入已确认的月初及库存变动，保留预计结存和逐字段人工值', () => {
+  const source = draft();
+  source.shipment = { cutoff: '2026-12-19', calculationCutoff: '2026-11-30' };
+  source.inventoryMovements = [
+    {
+      month: source.month,
+      base: '乙',
+      code: 'B',
+      productionInbound: null,
+      inTransitInbound: 0,
+      transferIn: 0,
+      transferOut: null,
+      source: '人工确认',
+    },
+  ];
+  const snapshot = {
+    draftId: source.id,
+    month: source.month,
+    shipmentMonth: '2026-11',
+    cutoff: '2026-11-30',
+    sourceKind: 'business',
+    status: 'ok',
+    rows: [{ base: '甲', code: 'A', end: 12, fin: 5 }],
+  };
+  const evaluation = {
+    inventory: {
+      monthly: {
+        rows: [
+          {
+            month: source.month,
+            base: '甲',
+            code: 'A',
+            opening: 44,
+            sourceDate: '2026-12-19',
+            productionInbound: 8,
+            transferIn: 9,
+            transferOut: 10,
+          },
+          {
+            month: source.month,
+            base: '乙',
+            code: 'B',
+            opening: 21,
+            sourceDate: '2026-12-19',
+            productionInbound: 0,
+            transferIn: 7,
+            transferOut: 3,
+          },
+        ],
+      },
+      physical: { cutoff: '2026-11-30', rows: [{ base: '乙', code: 'B', opening: 18 }] },
+    },
+  };
+  const result = buildMpsWorkflow(source, null, snapshot, evaluation);
+  const a = result.plan.rows.find((row) => row.month === source.month && row.code === 'A');
+  const b = result.plan.rows.find((row) => row.month === source.month && row.code === 'B');
+  assert.equal(a.openingInventory, 12);
+  assert.equal(a.existingInTransitInbound, null);
+  assert.equal(b.openingInventory, 21);
+  assert.equal(b.existingProductionInbound, 0);
+  assert.equal(b.existingInTransitInbound, 0);
+  assert.equal(b.existingTransferIn, 0);
+  assert.equal(b.existingTransferOut, 3);
+  assert.match(b.openingInventorySource, /begin_stock/);
+  evaluation.inventory.monthly.rows.pop();
+  const physical = buildMpsWorkflow(source, null, snapshot, evaluation).plan.rows.find(
+    (row) => row.month === source.month && row.code === 'B',
+  );
+  assert.equal(physical.openingInventory, 18);
+  assert.match(physical.openingInventorySource, /live_qty/);
+  assert.equal(
+    buildMpsWorkflow(source, null, { ...snapshot, cutoff: '2026-11-29' }, evaluation).rows[1]
+      .openingInventory,
+    null,
+  );
+});

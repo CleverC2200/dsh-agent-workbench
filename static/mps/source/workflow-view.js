@@ -30,6 +30,7 @@ import {
 import { readPlanRelations } from './relations.js';
 import { computeWorkflow } from './workflow-worker-client.js';
 import { readCapacityAnnual } from './master-data.js';
+import { readEvaluationInventory } from './facts.js';
 import { capacityFiscalMonths } from 'dsh-agent-manage/mps-compute/capacity-report';
 import {
   defaultProductionCalendar,
@@ -318,7 +319,7 @@ export function createWorkflow(
       setEvaluationError('');
       try {
         const config = JSON.parse(document.getElementById('agent-sql-config').textContent);
-        const [weights, sourceRead, annual] = await Promise.all([
+        const [weights, sourceRead, annual, inventory] = await Promise.all([
           weightRead ? Promise.resolve(weightRead) : syncWeights(controller.signal),
           (relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration]) &&
           !relations.busy &&
@@ -351,6 +352,14 @@ export function createWorkflow(
                 controller.signal,
               ).catch((error) => ({ rows: [], error: error.message }))
             : Promise.resolve({ rows: [], error: '人工模拟未读取全年年度SKU来源' }),
+          draft.productSource === 'business'
+            ? readEvaluationInventory(
+                draft,
+                shipmentSnapshot,
+                result.months.slice(0, 3),
+                controller.signal,
+              )
+            : null,
         ]);
         if (ticket !== executionGeneration.current) return;
         if (
@@ -393,7 +402,7 @@ export function createWorkflow(
           draft,
           sourceRead.value ?? null,
           shipmentSnapshot,
-          { weights, annual, sourceIssues: sourceRead.error ? [sourceRead.error] : [] },
+          { weights, annual, inventory, sourceIssues: sourceRead.error ? [sourceRead.error] : [] },
           controller.signal,
         );
         if (ticket !== executionGeneration.current) return;

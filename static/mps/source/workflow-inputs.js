@@ -20,6 +20,7 @@ import {
 import { buildCapacityReport } from 'dsh-agent-manage/mps-compute/capacity-report';
 import { productionCalendarDays } from './production-calendar.js';
 import { buildProductScope } from './product-scope.js';
+import { isCalendarMonthEnd } from './business-date.js';
 
 const number = (value) => {
   if (
@@ -50,6 +51,13 @@ const historyWarningMessages = (warnings) => [
 ];
 const demo = (value) => /demo|演示|原型/i.test(String(value ?? ''));
 const rowKey = (row) => JSON.stringify([row.base, row.code]);
+const inventoryKey = (row) => JSON.stringify([row.month, row.base, row.code]);
+const inventoryIdentity = (row) => ({
+  ...row,
+  base: canonicalBaseName(row.base),
+  code: text(row.code),
+});
+const movementFields = ['productionInbound', 'inTransitInbound', 'transferIn', 'transferOut'];
 function productHistoryMappings(products, raw) {
   const sources = new Map();
   for (const row of raw ?? []) {
@@ -265,6 +273,15 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         rawQuantity: number(row.rawEnd === undefined ? row.end : row.rawEnd),
       }))
     : [];
+  const monthlyInventory = Map.groupBy(
+    (evaluation?.inventory?.monthly?.rows ?? []).map(inventoryIdentity),
+    inventoryKey,
+  );
+  const physicalInventory = Map.groupBy(
+    (evaluation?.inventory?.physical?.rows ?? []).map(inventoryIdentity),
+    rowKey,
+  );
+  const openingSources = new Map();
   const products = demo(draft.productSource)
     ? []
     : productHistoryMappings(
@@ -291,6 +308,34 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
         },
       ]),
   );
+  if (
+    validShipment &&
+    shipmentSnapshot.sourceKind === 'business' &&
+    shipmentSnapshot.status === 'ok' &&
+    isCalendarMonthEnd(shipmentSnapshot.cutoff)
+  ) {
+    const covered = new Set(openingInventory.map(rowKey));
+    for (const product of productMonths.values()) {
+      const key = rowKey(product);
+      if (covered.has(key)) continue;
+      const monthly = monthlyInventory.get(inventoryKey(product)) ?? [];
+      const physical = physicalInventory.get(key) ?? [];
+      const monthOpening = monthly.length === 1 ? number(monthly[0].opening) : null;
+      const physicalOpening =
+        physical.length === 1 && evaluation.inventory.physical.cutoff === shipmentSnapshot.cutoff
+          ? number(physical[0].opening)
+          : null;
+      const quantity = monthOpening ?? physicalOpening;
+      if (quantity === null) continue;
+      openingInventory.push({ ...product, quantity, rawQuantity: quantity });
+      openingSources.set(
+        key,
+        monthOpening !== null
+          ? `库存日报 begin_stock（${monthly[0].sourceDate} 同月月初）`
+          : `基地批次实存 live_qty（${shipmentSnapshot.cutoff}，仓类01/02）`,
+      );
+    }
+  }
   const reportRead =
     draft.reportSource === 'business'
       ? draft.planRatesRead
@@ -380,6 +425,35 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       },
     ];
   });
+  const confirmedMovements = new Map(
+    (draft.inventoryMovements ?? []).map(inventoryIdentity).map((row) => [inventoryKey(row), row]),
+  );
+  const inventoryMovements = [
+    ...new Set([...confirmedMovements.keys(), ...monthlyInventory.keys()]),
+  ]
+    .map((key) => {
+      const confirmed = confirmedMovements.get(key);
+      const matches = monthlyInventory.get(key) ?? [];
+      const published = matches.length === 1 ? matches[0] : undefined;
+      const identity = confirmed ?? published;
+      if (!identity || identity.month < draft.month || identity.month > months.at(-1)) return null;
+      const quantities = {};
+      const sources = [];
+      for (const field of movementFields) {
+        const explicit = number(confirmed?.[field]);
+        const automatic = number(published?.[field]);
+        quantities[field] = explicit ?? automatic;
+        if (explicit !== null && confirmed.source) sources.push(confirmed.source);
+        else if (automatic !== null)
+          sources.push(
+            field === 'productionInbound'
+              ? `库存日报 ${published.sourceDate} ${published.productionBasis}`
+              : `库存日报 ${published.sourceDate} 月度调拨计划`,
+          );
+      }
+      return { ...identity, ...quantities, source: [...new Set(sources)].join('；') };
+    })
+    .filter(Boolean);
   const workflowInput = {
     context,
     inventoryTargets: draft.inventoryTargets ?? [],
@@ -453,20 +527,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     },
     openingInventory,
     delistedProducts,
-    inventoryMovements: [
-      ...new Map(
-        (draft.inventoryMovements ?? []).map((row) => [
-          JSON.stringify([row.month, row.base, row.code]),
-          {
-            ...row,
-            productionInbound: number(row.productionInbound),
-            inTransitInbound: number(row.inTransitInbound),
-            transferIn: number(row.transferIn),
-            transferOut: number(row.transferOut),
-          },
-        ]),
-      ).values(),
-    ].filter((row) => row.month >= draft.month && row.month <= months.at(-1)),
+    inventoryMovements,
     capacities,
     adjustments: {
       categoryDemand: (draft.adjustments?.categoryDemand ?? []).map(
@@ -623,6 +684,18 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       planSourceIssues: [...planSources.planSourceIssues, ...(evaluation.sourceIssues ?? [])],
     };
     result.plan = solveMpsPlan(planInput);
+    const movementSources = new Map(
+      inventoryMovements.map((row) => [inventoryKey(row), row.source]),
+    );
+    for (const row of result.plan.rows) {
+      row.openingInventorySource =
+        row.openingInventory === null
+          ? ''
+          : row.month === draft.month
+            ? (openingSources.get(rowKey(row)) ?? '第二步预计月末结存')
+            : '上月求解实际期末库存';
+      row.inventoryMovementSource = movementSources.get(inventoryKey(row)) ?? '';
+    }
     result.plan.partial = result.partial;
     result.plan.scopeStatus = result.scopeStatus;
     result.plan.excludedShipments = excludedShipments;
@@ -668,6 +741,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     attachPlanReport(result.plan, planSources, relations, {
       categoryComputation,
       shipmentSnapshot,
+      inventory: evaluation.inventory,
     });
   }
   for (const row of result.rows) {
