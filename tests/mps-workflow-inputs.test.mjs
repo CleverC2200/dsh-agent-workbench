@@ -135,6 +135,20 @@ test('待定发货单品隔离后，同范围的基数、提报和历史继续�
   assert.equal(result.categoryComputation.shipmentScope.excluded.length, 1);
   assert.equal(result.categoryComputation.rows[0].coverage, 'partial');
   assert.equal(result.categoryComputation.bases[0].actual, 300);
+  assert.deepEqual(
+    result.demandDiagnostics.map((row) => [
+      row.expected,
+      row.computed,
+      row.includedShipments,
+      row.excludedShipments,
+    ]),
+    [
+      [1, 1, 1, 1],
+      [1, 1, 1, 1],
+      [1, 1, 1, 1],
+      [1, 1, 1, 1],
+    ],
+  );
   assert.equal(
     result.rows.find((row) => row.month === source.month && row.code === 'A').demand,
     110,
@@ -169,6 +183,95 @@ test('partial 全国SKU无法裁剪时隔离该SKU全部基地，全待定不生
     buildMpsWorkflow(source, null, snapshot).categoryComputation.rows.every(
       (row) => row.quantity === null,
     ),
+  );
+});
+
+test('需求诊断逐类月区分大类缺输入、拆分缺依据与完整有效零，并保留M+4参考', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.products = source.products.slice(0, 1);
+  source.report = source.report.slice(0, 1);
+  snapshot.rows = snapshot.rows.slice(0, 1);
+  const complete = buildMpsWorkflow(source, null, snapshot);
+  assert.deepEqual(
+    complete.demandDiagnostics.map((row) => [row.month, row.status, row.expected, row.computed]),
+    [
+      ['2026-11', 'complete', 1, 1],
+      ['2026-12', 'complete', 1, 1],
+      ['2027-01', 'complete', 1, 1],
+      ['2027-02', 'complete', 1, 1],
+    ],
+  );
+  assert.equal(complete.demandDiagnostics[0].sourceQuantity, 110);
+  assert.equal(complete.demandDiagnostics[3].inventoryReference, true);
+  source.adjustments = {
+    quantities: [
+      { kind: 'base-sku', month: '2027-02', category: '点心', base: '甲', code: 'A', quantity: 25 },
+    ],
+  };
+  const adjusted = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(adjusted.demandDiagnostics[3].sourceQuantity, 100);
+  assert.equal(adjusted.demandDiagnostics[3].effectiveQuantity, 25);
+  assert.equal(adjusted.demandDiagnostics[3].status, 'complete');
+  delete source.adjustments;
+  const noShipment = buildMpsWorkflow(source);
+  assert.equal(noShipment.demandDiagnostics[0].status, 'category-demand-missing');
+  assert.match(noShipment.demandDiagnostics[0].reason, /2026-10.*发货/);
+  source.products[0]['老品编码'] = 'OLD';
+  source.productRaw = [
+    { material_code: 'A', target_base: '甲', replacement_material_code: 'OLD', replace_num: null },
+  ];
+  const noSplit = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(noSplit.demandDiagnostics[0].sourceQuantity, 110);
+  assert.equal(noSplit.demandDiagnostics[0].status, 'split-basis-missing');
+  assert.match(noSplit.demandDiagnostics[0].reason, /替换系数/);
+  assert.deepEqual(
+    noSplit.demandDiagnostics[0].firstMissing.map((row) => [row.base, row.code, row.month]),
+    [['甲', 'A', '2026-11']],
+  );
+  source.categoryDemand = complete.months.map((month) => ({
+    month,
+    category: '点心',
+    quantity: 0,
+  }));
+  const zero = buildMpsWorkflow(source, null, snapshot);
+  assert.ok(
+    zero.demandDiagnostics.every((row) => row.status === 'complete' && row.effectiveQuantity === 0),
+  );
+});
+
+test('需求诊断保留第一处读取失败原因，模型变化不回填有效需求或M+4参考', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.products = source.products.slice(0, 1);
+  source.report = source.report.slice(0, 1);
+  snapshot.rows = snapshot.rows.slice(0, 1);
+  const before = buildMpsWorkflow(source, null, snapshot);
+  source.forecast = [
+    { 月份: '2026-11', 基地: '甲', 产品编码: 'A', 数量: 999999 },
+    { 月份: '2026-12', 基地: '甲', 产品编码: 'A', 数量: 0 },
+  ];
+  source.forecastRead = { status: 'ready', month: source.month };
+  const changed = buildMpsWorkflow(source, null, snapshot);
+  assert.deepEqual(changed.demandDiagnostics, before.demandDiagnostics);
+  assert.deepEqual(
+    changed.rows.map((row) => row.demand),
+    before.rows.map((row) => row.demand),
+  );
+  assert.equal(changed.categoryComparisons[0].forecast['2026-11'].quantity, 999999);
+  source.sourceChecksRead = { status: 'failed', month: source.month, error: 'BI范围查询拒绝' };
+  source.historicalIndicatorsRead = {
+    status: 'failed',
+    month: source.month,
+    error: '年度计划读取超时',
+  };
+  const failed = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(failed.demandDiagnostics[0].status, 'category-demand-missing');
+  assert.match(failed.demandDiagnostics[0].reason, /BI范围查询拒绝/);
+  assert.match(failed.demandDiagnostics[2].reason, /年度计划读取超时/);
+  assert.equal(failed.rows[0].demand, null);
+  source.forecastRead = { status: 'failed', month: source.month, error: '模型读取失败' };
+  assert.deepEqual(
+    buildMpsWorkflow(source, null, snapshot).demandDiagnostics,
+    failed.demandDiagnostics,
   );
 });
 

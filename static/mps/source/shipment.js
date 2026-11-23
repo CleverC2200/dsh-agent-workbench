@@ -188,7 +188,6 @@ export function createShipment(
     const [syncStatus, setSyncStatus] = react.useState('unread');
     const [expanded, setExpanded] = react.useState([]);
     const [skuSearch, setSkuSearch] = react.useState('');
-    const [skuPages, setSkuPages] = react.useState({});
     const [issuesOpen, setIssuesOpen] = react.useState(false);
     const [formula, setFormula] = react.useState(null);
     const [error, setError] = react.useState('');
@@ -1187,7 +1186,7 @@ export function createShipment(
         ),
         ...fields.map((field) => numberCell(row, field, who)),
       );
-    const toggleLabel = (id, who, label, count) =>
+    const toggleLabel = (id, who, label, count, descendants = []) =>
       h(
         react.Fragment,
         {},
@@ -1200,7 +1199,9 @@ export function createShipment(
             disabled: Boolean(searchTerm),
             onClick: () =>
               setExpanded((current) =>
-                current.includes(id) ? current.filter((key) => key !== id) : [...current, id],
+                current.includes(id)
+                  ? current.filter((key) => key !== id)
+                  : [...new Set([...current, id, ...descendants])],
               ),
           },
           h(
@@ -1219,7 +1220,7 @@ export function createShipment(
             h('path', { d: 'M4 2l4 4-4 4' }),
           ),
         ),
-        label,
+        h('span', { className: 'sp-hierarchy-name', title: label }, label),
         h('span', { className: 'sp-count' }, `${count} 个单品`),
       );
     const skuLabel = (row) =>
@@ -1238,6 +1239,18 @@ export function createShipment(
           row.name || '产品名称未提供',
         ),
       );
+    const groupLabel = (value, children) => {
+      const names = [...new Set(children.map((row) => row.groupName).filter(Boolean))];
+      return sourceKind === 'business' && children[0].group
+        ? `${value} · ${
+            names.length > 1
+              ? '名称冲突'
+              : children.every((row) => row.groupName) && names.length === 1
+                ? names[0]
+                : '名称未提供'
+          }`
+        : value;
+    };
     const renderHierarchy = (parent, scope, path, levels, showAll = false) => {
       const id = JSON.stringify([scope, ...path]);
       if (!showAll && !searchTerm && !expanded.includes(id)) return;
@@ -1250,17 +1263,7 @@ export function createShipment(
           partition.get(name).push(row);
         }
         for (const [value, children] of partition) {
-          const groupNames = [...new Set(children.map((row) => row.groupName).filter(Boolean))];
-          const name =
-            dimension === 'group' && sourceKind === 'business' && children[0].group
-              ? `${value} · ${
-                  groupNames.length > 1
-                    ? '名称冲突'
-                    : children.every((row) => row.groupName) && groupNames.length === 1
-                      ? groupNames[0]
-                      : '名称未提供'
-                }`
-              : value;
+          const name = dimension === 'group' ? groupLabel(value, children) : value;
           const nextPath = [...path, name];
           const who = [scope, ...nextPath].join(' ');
           const group = {
@@ -1282,6 +1285,12 @@ export function createShipment(
                     scope === '全国合计'
                       ? new Set(children.map((row) => row.code)).size
                       : children.length,
+                    dimension === 'category'
+                      ? [...Map.groupBy(children, (row) => row.group || '物料组未提供')].map(
+                          ([value, rows]) =>
+                            JSON.stringify([scope, ...nextPath, groupLabel(value, rows)]),
+                        )
+                      : [],
                   ),
                   `sp-level-${nextPath.length}`,
                 ),
@@ -1317,41 +1326,8 @@ export function createShipment(
         levels[2].push(...children.map((row) => ({ ...row, base: scope, level: 'SKU' })));
         return;
       }
-      const page = Math.min(skuPages[id] ?? 0, Math.max(0, Math.ceil(children.length / 25) - 1));
-      const who = [scope, ...path].join(' ');
       levels[2].push(
-        ...children
-          .slice(page * 25, (page + 1) * 25)
-          .map((row) => renderRow(row, `${scope} ${row.code}`, skuLabel(row), 'sp-sku')),
-        ...(children.length > 25
-          ? [
-              h(
-                'tr',
-                { key: `${id}-page` },
-                h(
-                  'td',
-                  { colSpan: fields.length + 1 },
-                  h(
-                    'div',
-                    { className: 'sp-sku-pages' },
-                    h('span', null, `${who} · 共${children.length}个单品 · 第${page + 1}页`),
-                    ...[-1, 1].map((direction) =>
-                      h(
-                        'button',
-                        {
-                          key: direction,
-                          'aria-label': `${who} ${direction < 0 ? '上一页' : '下一页'}单品`,
-                          disabled: direction < 0 ? !page : (page + 1) * 25 >= children.length,
-                          onClick: () => setSkuPages({ ...skuPages, [id]: page + direction }),
-                        },
-                        direction < 0 ? '上一页' : '下一页',
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ]
-          : []),
+        ...children.map((row) => renderRow(row, `${scope} ${row.code}`, skuLabel(row), 'sp-sku')),
       );
     };
     const shipmentHierarchy = (parent, scope, showAll = false) => {
@@ -1674,7 +1650,6 @@ export function createShipment(
             value: skuSearch,
             onChange: (event) => {
               setSkuSearch(event.target.value);
-              setSkuPages({});
             },
           }),
           sourceKind === 'demo' && h('span', { className: 'dc-status' }, '演示数据'),
@@ -1852,7 +1827,7 @@ export function createShipment(
             h(
               'colgroup',
               {},
-              ...[132, 72, 62, 62, 82, 82, 94, 88, 96, 68, 72, 98, 80, 80, 94].map((width, index) =>
+              ...[260, 72, 62, 62, 82, 82, 94, 88, 96, 68, 72, 98, 80, 80, 94].map((width, index) =>
                 h('col', { key: index, style: { width } }),
               ),
             ),

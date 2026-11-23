@@ -134,7 +134,7 @@ test('春节跨月扣减显示在生产日历和年度矩阵，人工覆盖可�
   await expect(view.getByLabel('郑州 2025-01 生产天数', { exact: true })).toHaveValue('18');
   await workflowStep(frame, '产能评估与缺口');
   await frame.getByRole('button', { name: '执行评估', exact: true }).click();
-  const matrix = frame.getByRole('table', { name: '全年月度负荷率矩阵', exact: true });
+  const matrix = frame.getByRole('table', { name: '全年月度隧道利用率矩阵', exact: true });
   await expect(
     matrix.getByRole('columnheader', { name: '2025-01 春节扣7天', exact: true }),
   ).toBeVisible();
@@ -199,7 +199,6 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
   const baseBranch = detail.getByRole('button', { name: '基地 · 郑州', exact: true });
   if ((await baseBranch.getAttribute('aria-expanded')) === 'false') await baseBranch.press('Enter');
   await detail.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).press('Enter');
-  await detail.getByRole('button', { name: '郑州 物料组 · 组', exact: true }).press('Enter');
   await expect(detail.getByText('SKU · A 产品甲', { exact: true })).toHaveCount(1);
   await expect(detail.getByText('SKU · B 产品乙', { exact: true })).toHaveCount(1);
   await expect(
@@ -236,7 +235,6 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
   await detail.getByRole('button', { name: '基地 · 郑州', exact: true }).press('Enter');
   await detail.getByRole('button', { name: '基地 · 华东', exact: true }).press('Enter');
   await detail.getByRole('button', { name: '华东 大类 · 汤圆', exact: true }).press('Enter');
-  await detail.getByRole('button', { name: '华东 物料组 · 组', exact: true }).press('Enter');
   const product = detail.getByRole('row').filter({ hasText: 'SKU · A 产品甲' });
   await expect(product.getByRole('cell').first()).toHaveText('40');
   const csv = await download(page, view, '下载需求拆分');
@@ -1101,7 +1099,9 @@ test('MPS explicit leaf quantities and share history drive the same inventory an
   await expect(capacity.getByRole('table', { name: '基地大类RCCP', exact: true })).toContainText(
     '无归属需求',
   );
-  await expect(capacity.getByRole('region', { name: '全年月度负荷率', exact: true })).toBeVisible();
+  await expect(
+    capacity.getByRole('region', { name: '全年月度隧道利用率', exact: true }),
+  ).toBeVisible();
   await expect(capacity.getByRole('region', { name: '缺口明细', exact: true })).toBeVisible();
   const rccpReport = capacity.getByRole('table', { name: '基地大类RCCP', exact: true });
   await expect(rccpReport.getByRole('columnheader')).toHaveCount(10);
@@ -1191,7 +1191,7 @@ test('MPS explicit leaf quantities and share history drive the same inventory an
   await report.getByLabel('单品明细物料组', { exact: true }).selectOption('组');
   await expect(report.getByRole('table', { name: '求解单品明细', exact: true })).toContainText('A');
   const skuScroll = report.locator('.wf-plan-detail-row .wf-table-scroll');
-  assert.equal(await skuScroll.evaluate((element) => getComputedStyle(element).maxHeight), 'none');
+  assert.ok(await skuScroll.evaluate((element) => getComputedStyle(element).overflowY === 'auto'));
   const skuTable = await skuScroll.getByRole('table').boundingBox();
   const skuPager = await report.locator('.wf-plan-detail-row .dc-card-foot').boundingBox();
   assert.ok(skuPager.y >= skuTable.y + skuTable.height - 2);
@@ -1200,23 +1200,19 @@ test('MPS explicit leaf quantities and share history drive the same inventory an
       document.getElementById('root').style.width = `${width + 520}px`;
     }, width);
     const frameBounds = await page.locator('iframe').boundingBox();
-    const next = await report
-      .getByRole('button', { name: '下一页单品', exact: true })
-      .boundingBox();
+    const next = await report.locator('.wf-plan-detail-row .dc-card-foot').boundingBox();
     assert.ok(
       next.x >= frameBounds.x && next.x + next.width <= frameBounds.x + frameBounds.width,
-      `pagination remains visible at ${width}px`,
+      `expanded SKU count remains visible at ${width}px`,
     );
     await report.locator('.wf-plan-balances').evaluate((element) => {
       element.scrollLeft = element.scrollWidth;
     });
-    const scrolled = await report
-      .getByRole('button', { name: '下一页单品', exact: true })
-      .boundingBox();
+    const scrolled = await report.locator('.wf-plan-detail-row .dc-card-foot').boundingBox();
     assert.ok(
       scrolled.x >= frameBounds.x &&
         scrolled.x + scrolled.width <= frameBounds.x + frameBounds.width,
-      `pagination remains visible after horizontal scrolling at ${width}px`,
+      `expanded SKU count remains visible after horizontal scrolling at ${width}px`,
     );
     await report.locator('.wf-plan-balances').evaluate((element) => {
       element.scrollLeft = 0;
@@ -1243,8 +1239,8 @@ test('部分需求缺失显示已知负荷，导出保留完整负荷为空和�
   await capacity.getByRole('button', { name: '执行评估', exact: true }).click();
   await capacity.getByLabel('月份筛选', { exact: true }).selectOption('2026-12');
   const rccp = capacity.getByRole('table', { name: '基地大类RCCP', exact: true });
-  await expect(rccp).toContainText('已知需求负荷');
-  await expect(rccp).toContainText('完整负荷待补');
+  await expect(rccp).toContainText('已知需求隧道利用率');
+  await expect(rccp).toContainText('完整隧道利用率待补');
   await capacity.getByText('查看2026-12缺项明细 1项', { exact: true }).click();
   const issues = capacity.getByRole('table', { name: '需求与折吨缺项', exact: true });
   await expect(issues).toContainText('B 产品乙');

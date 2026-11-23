@@ -971,10 +971,6 @@ test(
     await processed.getByRole('button', { name: '基地 · 郑州', exact: true }).press('Enter');
     await processed.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).press('Enter');
     await processed
-      .getByRole('button', { name: /郑州 物料组 ·/ })
-      .first()
-      .press('Enter');
-    await processed
       .getByRole('button', { name: '运算过程 郑州 A 2026-10', exact: true })
       .press('Enter');
     const explanation = frame.getByRole('dialog');
