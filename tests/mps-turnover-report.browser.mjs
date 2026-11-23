@@ -71,16 +71,19 @@ async function downloadRows(page, view, name) {
 }
 
 test('周转报告区分有效零、缺失待补和人工补充，筛选后下载与目标库存同步', async (t) => {
-  const { page, frame } = await mpsPage(t, config, ({ queryId }) => ({
+  const { page, frame, calls } = await mpsPage(t, config, ({ queryId }) => ({
     rows: queryId.endsWith('.count')
       ? [{ total: queryId.startsWith('inventory-targets.') ? 2 : 0 }]
       : queryId.startsWith('inventory-targets.')
-        ? [zeroSource('甲'), zeroSource('乙')]
+        ? [
+            zeroSource('甲'),
+            { ...zeroSource('乙'), inventory_version: '滚动', final_target_turnover_days: 10 },
+          ]
         : [],
     returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,
     configVersion: 'turnover-report-fixture',
   }));
-  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
+  await page.clock.install({ time: new Date('2026-11-21T12:00:00+08:00') });
   await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-12');
   await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
     name: '产品范围.csv',
@@ -123,6 +126,15 @@ test('周转报告区分有效零、缺失待补和人工补充，筛选后下�
   await expect(report).toContainText('有效零周转天数');
   await expect(report).toContainText('周转天数待补');
   await expect(report).toContainText('缺目标记录');
+  await expect(report).toContainText('周转天数版本回退');
+  assert.ok(
+    calls
+      .filter((call) => call.queryId.startsWith('inventory-targets.'))
+      .every(
+        (call) =>
+          call.parameters.start_month === '2026-12' && call.parameters.end_month === '2026-12',
+      ),
+  );
   await expect(view).not.toContainText('临时按0天');
   await expect(view.getByRole('table', { name: '基地安全天数策略', exact: true })).toHaveCount(0);
   let rows = await downloadRows(page, view, '下载周转天数报告');
@@ -133,6 +145,14 @@ test('周转报告区分有效零、缺失待补和人工补充，筛选后下�
   assert.equal(zero['目标期末库存'], '0');
   assert.match(zero['来源'], /源最终目标周转天数.*2026-12.*月初/);
   assert.match(zero['计算依据'], /0天.*目标库存为0.*预测期末库存.*库存收支/);
+  const fallback = rows.find((row) => row['基地'] === '乙');
+  assert.equal(fallback['来源月'], '2026-12');
+  assert.equal(fallback['来源版本'], '滚动');
+  assert.match(fallback['回退原因'], /月初.*缺目标记录/);
+  assert.equal(fallback['下月有效需求'], '10');
+  assert.ok(Math.abs(Number(fallback['目标期末库存']) - 100 / 31) < 1e-8);
+  const sources = await downloadRows(page, view, '下载完整目标源记录');
+  assert.ok(sources.every((row) => row['安全天数使用状态'] === '已采用该基地SKU的来源月及版本'));
   await view.getByLabel('目标明细基地', { exact: true }).selectOption('甲');
   await view.getByLabel('搜索目标单品', { exact: true }).fill('B');
   rows = await downloadRows(page, view, '下载周转天数报告');
@@ -163,3 +183,37 @@ test('周转报告区分有效零、缺失待补和人工补充，筛选后下�
   assert.equal(rows[0]['月份'], '2027-01');
   assert.ok(Math.abs(Number(rows[0]['目标期末库存']) - 150 / 28) < 1e-8);
 });
+
+for (const [businessDate, sourceMonth, versions] of [
+  ['2026-11-20', '2026-11', '纠偏、月初'],
+  ['2026-11-21', '2026-12', '月初、滚动'],
+  ['2026-12-20', '2026-12', '纠偏、月初'],
+  ['2026-12-21', '2027-01', '月初、滚动'],
+]) {
+  test(`同步周转按业务日${businessDate}读取${sourceMonth}，与评估月份分开`, async (t) => {
+    const { frame, calls } = await mpsPage(
+      t,
+      config,
+      ({ queryId }) => ({
+        rows: queryId.endsWith('.count') ? [{ total: 0 }] : [],
+        returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,
+        configVersion: 'turnover-business-date',
+      }),
+      { time: businessDate + 'T12:00:00+08:00' },
+    );
+    await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2027-01');
+    await workflowStep(frame, '约束与配置');
+    const view = frame.getByRole('region', { name: '约束与配置', exact: true });
+    await view.getByRole('button', { name: '同步目标库存', exact: true }).click();
+    await expect(view).toContainText(`业务日期${businessDate}，安全天数来源月${sourceMonth}`);
+    await expect(view).toContainText(`逐基地SKU按${versions}选择`);
+    const reads = calls.filter((call) => call.queryId.startsWith('inventory-targets.'));
+    assert.ok(reads.length > 0);
+    assert.ok(
+      reads.every(
+        (call) =>
+          call.parameters.start_month === sourceMonth && call.parameters.end_month === sourceMonth,
+      ),
+    );
+  });
+}
