@@ -53,7 +53,10 @@ test('同一老品按实际基地唯一匹配，缺基地或同基地多义继�
   assert.equal(conflict('OLD', '甲').currentCode, '');
   assert.equal(conflict('N1', '甲').currentCode, 'N1');
   const projection = productRows(products);
-  assert.deepEqual(projection.map((product) => product['大类']), ['汤圆', '面点']);
+  assert.deepEqual(
+    projection.map((product) => product['大类']),
+    ['汤圆', '面点'],
+  );
   assert.equal(productRows([{ material_code: 'A', sub_category: '旧大类' }])[0]['大类'], '');
   projection[0]['大类'] = '人工分类';
   const mapped = sourceProductMappings(projection, products);
@@ -139,10 +142,12 @@ const checks = (actual, plan) => ({
 
 test('source checks use allnum plan quantities independently of obsolete report-version quantities', () => {
   const input = checks([history(12)], [report(10, 20)]);
-  const monthly = sourceCheckRows(input, [raw('A', { responsible_item: '汤圆' })], 'monthly', ['汤圆'])
-    .rows[0];
-  const adjusted = sourceCheckRows(input, [raw('A', { responsible_item: '汤圆' })], 'adjust', ['汤圆'])
-    .rows[0];
+  const monthly = sourceCheckRows(input, [raw('A', { responsible_item: '汤圆' })], 'monthly', [
+    '汤圆',
+  ]).rows[0];
+  const adjusted = sourceCheckRows(input, [raw('A', { responsible_item: '汤圆' })], 'adjust', [
+    '汤圆',
+  ]).rows[0];
   assert.equal(monthly.plan.quantity, 10);
   assert.equal(monthly.ratio, 1.2);
   assert.equal(adjusted.plan.quantity, 10);
@@ -168,9 +173,12 @@ test('zero, absent periods and incomplete values remain distinct; partial known 
   assert.equal(partial.actual.knownQuantity, 4);
   assert.equal(partial.actual.quantity, null);
   assert.equal(partial.ratio, null);
-  const absent = sourceCheckRows(checks([], []), [raw('A', { responsible_item: '汤圆' })], 'monthly', [
-    '汤圆',
-  ]).rows[0];
+  const absent = sourceCheckRows(
+    checks([], []),
+    [raw('A', { responsible_item: '汤圆' })],
+    'monthly',
+    ['汤圆'],
+  ).rows[0];
   assert.equal(absent.actual.knownQuantity, null);
   assert.equal(absent.plan.quantity, null);
 });

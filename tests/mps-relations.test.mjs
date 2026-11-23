@@ -21,7 +21,12 @@ test('relation result keeps every exact-code candidate and never matches by name
           responsible_item: '汤圆',
         },
         { material_code: '', material_name: '同名产品', series: null, responsible_item: null },
-        { material_code: '1', material_name: '同名产品', series: '系列乙', responsible_item: '汤圆' },
+        {
+          material_code: '1',
+          material_name: '同名产品',
+          series: '系列乙',
+          responsible_item: '汤圆',
+        },
       ],
       sku_capacity: [
         {

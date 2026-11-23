@@ -282,7 +282,9 @@ test('reported quantities retain partial NULL independently and preserve real ze
     ['D', 6, 5],
   ])
     insert.run('2026-10-01', 'customer', '基地甲', code, plan, correction);
-  db.exec("INSERT INTO agents_dim_product_list_mi VALUES ('2026-11','A','产品甲','旧大类','汤圆','甲系列','G','甲组')");
+  db.exec(
+    "INSERT INTO agents_dim_product_list_mi VALUES ('2026-11','A','产品甲','旧大类','汤圆','甲系列','G','甲组')",
+  );
   const query = db.prepare(config.queries['facts.report'].request.sql);
   const first = query.all({ month: '2026-10-01', gea_p98: 2, gea_p99: 0 });
   const second = query.all({ month: '2026-10-01', gea_p98: 2, gea_p99: 2 });

@@ -362,7 +362,9 @@ export function sourceCheckRows(checks, rawProducts) {
   }));
   const classes = [
     ...new Set(
-      (rawProducts ?? []).map((row) => text(row[productCategoryField]) || text(row['大类'])).filter(Boolean),
+      (rawProducts ?? [])
+        .map((row) => text(row[productCategoryField]) || text(row['大类']))
+        .filter(Boolean),
     ),
   ];
   const column = '计划数量';

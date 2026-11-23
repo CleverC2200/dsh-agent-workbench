@@ -52,7 +52,9 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
       return () => controller.abort();
     }, [kind, month, page, attempt]);
     const columnLabels =
-      kind === 'products' ? { ...labels, sub_category: '源大类', responsible_item: '大类' } : labels;
+      kind === 'products'
+        ? { ...labels, sub_category: '源大类', responsible_item: '大类' }
+        : labels;
     const columns = state.columns?.map((column) => columnLabels[column] ?? column) ?? [];
     const rows =
       state.rows?.map((row) =>
