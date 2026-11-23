@@ -7,6 +7,7 @@ import {
   createHistoryDependentLookup,
 } from './source-projections.js';
 import { buildCategoryDemand } from './category-demand.js';
+import { buildDemandDiagnostics } from './demand-diagnostics.js';
 import { computeMpsWorkflow, previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { solveMpsPlan } from 'dsh-agent-manage/mps-compute/plan';
 import { buildPlanSources, resolveWeightPairs } from './plan-inputs.js';
@@ -688,5 +689,6 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
   if (demo(draft.productSource)) result.missing.push('原型产品清单未接入后续计算');
   if (validShipment && openingInventory.some((row) => !knownProducts.has(rowKey(row))))
     result.missing.push('部分发货结存尚无本版本产品对应');
+  result.demandDiagnostics = buildDemandDiagnostics(result, workflowInput.categoryDemand);
   return result;
 }

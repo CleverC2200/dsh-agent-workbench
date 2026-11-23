@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
+import * as XLSX from 'xlsx-republish';
 import { readFile } from 'node:fs/promises';
 import { mpsPage, openMpsCategoryFilter } from './helpers/mps-page.mjs';
 import { openCategoryCalculation, beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
@@ -171,6 +172,34 @@ test('category monthly totals retain missing inputs and real zero, and filters m
       .getByRole('cell')
       .nth(2),
   ).toHaveText('150');
+  await frame.getByText('有效需求计算核对', { exact: true }).click();
+  const demandCheck = frame.getByRole('region', { name: '有效需求计算核对', exact: true });
+  const checkRows = demandCheck.getByRole('table', { name: '逐类月需求核对', exact: true });
+  const firstCheck = checkRows.getByRole('row').filter({ hasText: /^甲类2026-12/ });
+  await expect(firstCheck).toContainText('150');
+  await expect(firstCheck).toContainText('完整可计算');
+  const missingCheck = checkRows.getByRole('row').filter({ hasText: /^丙类2026-12/ });
+  await expect(missingCheck).toContainText('大类总量未生成');
+  await expect(missingCheck).toContainText('发货');
+  const checkDownload = page.waitForEvent('download');
+  await demandCheck.getByRole('button', { name: '下载需求计算核对', exact: true }).click();
+  const checkCsv = await mpsDownloadText(await (await checkDownload).path());
+  assert.match(checkCsv, /统计基月/);
+  assert.match(checkCsv, /拆分前大类需求/);
+  assert.match(checkCsv, /基地SKU首个缺项/);
+  assert.match(checkCsv, /2026-11/);
+  assert.match(checkCsv, /大类总量未生成/);
+  const checkBook = XLSX.read(checkCsv, { type: 'string', raw: true });
+  const checkRecords = XLSX.utils.sheet_to_json(checkBook.Sheets[checkBook.SheetNames[0]], {
+    defval: '',
+  });
+  const checkedFirst = checkRecords.find(
+    (row) => row['大类'] === '甲类' && row['月份'] === '2026-12',
+  );
+  assert.equal(Number(checkedFirst['拆分前大类需求']), 150);
+  assert.equal(Number(checkedFirst['有效大类需求']), 150);
+  assert.equal(Number(checkedFirst['已算条数']), 1);
+  assert.equal(Number(checkedFirst['待补条数']), 0);
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   await frame.getByRole('button', { name: '执行评估', exact: true }).click();
   await expect(frame.getByRole('button', { name: '重新评估', exact: true })).toBeEnabled();

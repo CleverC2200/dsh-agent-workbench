@@ -15,9 +15,25 @@ export function categoryDemandMissing(result, row) {
   if (row.systemQuantity !== null) return [];
   const basis = result.bases.find((entry) => entry.category === row.category);
   const index = result.rows.indexOf(row);
-  const missing = (result.shipmentScope.issues ?? [])
-    .filter((issue) => issue.category === row.category)
-    .flatMap((issue) => issue.missing);
+  const reads = result.readIssues ?? {};
+  const missing = [
+    ...(row.shipment === null ? (reads.shipment ?? []) : []),
+    ...(reads.checks ?? []),
+    ...(reads.historical ?? []),
+    ...(index % 4 === 0 ? (reads.submission ?? []) : []),
+    ...(result.sourceChecks ?? [])
+      .filter((entry) => entry.category === row.category && result.recent.includes(entry.month))
+      .flatMap((entry) =>
+        entry.issues
+          .filter((issue) => index % 4 === 0 || !/计划/.test(issue))
+          .map((issue) => `${entry.month} ${issue}`),
+      ),
+  ];
+  missing.push(
+    ...(result.shipmentScope.issues ?? [])
+      .filter((issue) => issue.category === row.category)
+      .flatMap((issue) => issue.missing),
+  );
   if (row.shipment === null) missing.push(`${row.baseMonth} 本月有效预估发货缺失`);
   if (basis.actual === null)
     missing.push(`${result.recent[0]}至${basis.endMonth} BI实绩缺失或不完整`);
@@ -43,7 +59,7 @@ export function categoryDemandMissing(result, row) {
     if (row.chain === null) missing.push(`${row.month} 年度分月环比缺失或分母为0`);
     if (result.rows[index - 1].momMethod === null) missing.push('上月环比测算量缺失');
   }
-  return missing;
+  return [...new Set(missing)];
 }
 export function buildCategoryDemand(draft, shipmentSnapshot, historicalFilter) {
   const baseDate = new Date(`${draft.month}-01T00:00:00Z`);
@@ -366,8 +382,46 @@ export function buildCategoryDemand(draft, shipmentSnapshot, historicalFilter) {
     const omitted = excluded.filter((row) => row.category === category).length;
     return { category, included: rows.length - omitted, excluded: omitted };
   });
+  const readIssues = (label, state) =>
+    ready(state, draft.month)
+      ? []
+      : [
+          `${label}${
+            state?.month && state.month !== draft.month
+              ? `月份不符（${state.month}）`
+              : ['failed', 'error', 'denied'].includes(state?.status)
+                ? '读取失败'
+                : state?.status === 'loading'
+                  ? '正在读取'
+                  : '尚未就绪'
+          }${state?.error ? `：${state.error}` : ''}`,
+        ];
+  const shipmentIssue = shipmentReady
+    ? []
+    : [
+        `${baseMonth} 同版发货快照未就绪${
+          shipmentSnapshot?.error
+            ? `：${shipmentSnapshot.error}`
+            : shipmentSnapshot?.draftId && shipmentSnapshot.draftId !== draft.id
+              ? '：评估版本不符'
+              : shipmentSnapshot?.shipmentMonth && shipmentSnapshot.shipmentMonth !== baseMonth
+                ? `：当前快照为${shipmentSnapshot.shipmentMonth}`
+                : shipmentSnapshot?.cutoff
+                  ? `：请核对计算截止日${shipmentSnapshot.cutoff}`
+                  : ''
+        }`,
+      ];
   return {
     ...result,
+    sourceChecks: checks.rows,
+    readIssues: {
+      shipment: shipmentIssue,
+      checks: readIssues('近三月实际与计划', draft.sourceChecksRead),
+      historical: readIssues('历史与年度计划', draft.historicalIndicatorsRead),
+      submission: reportReady(draft.month)
+        ? []
+        : readIssues('本期销售提报', draft.reportRead?.periods?.[draft.month] ?? draft.reportRead),
+    },
     ...(festival ? { festival } : {}),
     shipmentScope: { ready: shipmentReady, excluded, coverage, issues: scopeIssues },
     rows: result.rows.map((row) => ({
