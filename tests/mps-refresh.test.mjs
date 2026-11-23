@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { runInNewContext } from 'node:vm';
+import { pageActionEffect } from '../src/page-bridge/catalog.ts';
 
 const { outputFiles } = await build({
   stdin: {
@@ -64,6 +65,9 @@ test('both MPS refresh routes start a recalculation on the connected page', asyn
     });
   await new Promise(setImmediate);
   assert.ok(messages.some((message) => message.type === 'register' && message.name === 'refresh'));
+  const catalog = messages.findLast((message) => message.type === 'catalog');
+  const args = { kind: 'invoke', target: 'control:refresh' };
+  assert.equal(pageActionEffect(catalog, args), 'view');
   port.onmessage({
     data: {
       type: 'invoke',
@@ -85,7 +89,7 @@ test('both MPS refresh routes start a recalculation on the connected page', asyn
       type: 'apply',
       session: 'owned-session',
       toolCallId: 'catalog-refresh',
-      args: { kind: 'invoke', target: 'control:refresh' },
+      args,
     },
   });
   await new Promise(setImmediate);

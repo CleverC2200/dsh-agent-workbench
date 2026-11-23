@@ -166,11 +166,16 @@ void ready.then(() => {
   schedule();
 });
 export function registerMpsRefresh(startRecalculation) {
-  return action('refresh', '重读MPS业务数据并重算，保留本地草稿和当前页面', (_, { signal }) => {
-    signal.throwIfAborted();
-    startRecalculation();
-    return { status: 'recalculation-started' };
-  });
+  return action(
+    'refresh',
+    '重读MPS业务数据并重算，保留本地草稿和当前页面',
+    (_, { signal }) => {
+      signal.throwIfAborted();
+      startRecalculation();
+      return { status: 'recalculation-started' };
+    },
+    { effect: 'view' },
+  );
 }
 window.addEventListener('gea-session-changing', () => {
   cancelPublication();
