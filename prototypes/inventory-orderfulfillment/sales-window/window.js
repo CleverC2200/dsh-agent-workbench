@@ -52,6 +52,111 @@ const deferDays = () => {
   return Number.isInteger(delta) && delta >= 1 && delta <= 7 ? delta : null;
 };
 
+const deferDatePicker = (() => {
+  const input = element('days');
+  const trigger = element('deferDateTrigger');
+  const overlay = element('deferDatePicker');
+  const dialog = overlay.querySelector('section');
+  const days = element('deferCalendarDays');
+  const confirm = element('deferDateConfirm');
+  let draft = '',
+    month = '',
+    previousOverflow = '';
+  const withinRange = (date) => date >= input.min && date <= input.max;
+  const close = (restoreFocus = true) => {
+    if (overlay.hidden) return;
+    overlay.hidden = true;
+    dialog.removeAttribute('role');
+    dialog.removeAttribute('aria-modal');
+    trigger.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = previousOverflow;
+    if (restoreFocus && !trigger.disabled) trigger.focus();
+  };
+  const render = () => {
+    const [year, number] = month.split('-').map(Number);
+    element('deferCalendarMonth').textContent = `${year}年${number}月`;
+    element('deferMonthPrevious').disabled = month <= input.min.slice(0, 7);
+    element('deferMonthNext').disabled = month >= input.max.slice(0, 7);
+    days.replaceChildren();
+    const weekday = new Date(Date.UTC(year, number - 1, 1)).getUTCDay();
+    for (let i = 0; i < weekday; i++) days.append(document.createElement('span'));
+    const count = new Date(Date.UTC(year, number, 0)).getUTCDate();
+    for (let day = 1; day <= count; day++) {
+      const date = `${month}-${String(day).padStart(2, '0')}`;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = String(day);
+      button.dataset.date = date;
+      button.disabled = !withinRange(date);
+      button.setAttribute('aria-label', `${year}年${number}月${day}日`);
+      button.setAttribute('aria-pressed', String(date === draft));
+      button.onclick = () => {
+        draft = date;
+        render();
+        days.querySelector(`[data-date="${date}"]`).focus();
+      };
+      days.append(button);
+    }
+    confirm.disabled = !withinRange(draft);
+  };
+  trigger.onclick = () => {
+    if (trigger.disabled) return;
+    draft = withinRange(input.value) ? input.value : input.min;
+    month = draft.slice(0, 7);
+    previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    overlay.hidden = false;
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    trigger.setAttribute('aria-expanded', 'true');
+    render();
+    days.querySelector(`[data-date="${draft}"]`)?.focus();
+  };
+  for (const [id, delta] of [
+    ['deferMonthPrevious', -1],
+    ['deferMonthNext', 1],
+  ])
+    element(id).onclick = () => {
+      const [year, number] = month.split('-').map(Number);
+      month = new Date(Date.UTC(year, number - 1 + delta, 1)).toISOString().slice(0, 7);
+      render();
+      element(id).focus();
+    };
+  confirm.onclick = () => {
+    if (confirm.disabled || !withinRange(draft)) return;
+    input.value = draft;
+    close();
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  overlay.onclick = (event) => {
+    if (event.target === overlay) close();
+  };
+  overlay.onkeydown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+    } else if (event.key === 'Tab') {
+      const buttons = [...overlay.querySelectorAll('button')].filter((button) => !button.disabled);
+      const first = buttons[0],
+        last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  };
+  return {
+    sync(enabled) {
+      trigger.disabled = !enabled;
+      element('deferDateValue').textContent = input.value || '选择日期';
+      if (!enabled) close(false);
+    },
+  };
+})();
+
 async function request(path, options = {}) {
   const response = await fetch(location.pathname + path, {
     cache: 'no-store',
@@ -68,6 +173,7 @@ async function request(path, options = {}) {
 }
 function status() {
   const pending = state?.status === 'pending' && state?.permissions?.canAct === true;
+  deferDatePicker.sync(pending && !inflight && mode === 'defer');
   element('submit').hidden = mode !== 'defer' || !pending;
   element('submit').disabled =
     inflight ||
@@ -96,19 +202,6 @@ async function load() {
   clearTimeout(refreshTimer);
   state = await request('/data?includeRelated=' + (mode === 'list') + '&pageNo=' + pageNo);
   if (
-    state.permissions?.canAct === true &&
-    state.status === 'pending' &&
-    state.editor?.vehicleRulesAvailable === true
-  ) {
-    try {
-      const options = await request('/options?kind=vehicles');
-      state.editor.vehicleOptions = options.vehicles;
-    } catch (error) {
-      state.editor.vehicleOptions = [];
-      state.editor.vehicleNotice = error.message;
-    }
-  }
-  if (
     state.previewOnly !== true &&
     state.orderRefresh?.status === 'waiting' &&
     state.editor?.modificationState === 'succeeded' &&
@@ -121,6 +214,10 @@ async function load() {
   if (mode !== 'list' && (mode !== 'defer' || state.permissions?.canAct !== true)) {
     window.OrderShortageEditor.mount(document, {
       ...state,
+      onLookupVehicles: async () => {
+        const options = await request('/options?kind=vehicles');
+        return options.vehicles;
+      },
       onInventoryRecalculate: async (draft) => {
         if (
           state.previewOnly === true ||
@@ -228,6 +325,7 @@ async function load() {
             [
               'ORDER_CONFIRMATION_OMS_MODIFICATION_INVENTORY_CHANGED',
               'ORDER_CONFIRMATION_OMS_MODIFICATION_INVENTORY_UNAVAILABLE',
+              'ORDER_CONFIRMATION_OMS_MODIFICATION_PRICE_NOT_READY',
             ].includes(error.code)
           )
             submitted = undefined;

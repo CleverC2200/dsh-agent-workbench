@@ -109,10 +109,32 @@
     <h1 id="title"></h1>
     <p id="summary"></p>
     <section id="items" hidden></section>
-    <label id="defer" hidden
-      >预计交货日期
-      <input id="days" type="date" aria-label="预计交货日期" />
-    </label>
+    <div id="defer" hidden>
+      <span>预计交货日期</span>
+      <input id="days" type="date" aria-label="预计交货日期" hidden />
+      <button
+        id="deferDateTrigger"
+        type="button"
+        aria-label="选择预计交货日期"
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        disabled
+      >
+        <span id="deferDateValue">选择日期</span>
+        <svg
+          viewBox="0 0 24 24"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M5 4h14a1 1 0 0 1 1 1v15H4V5a1 1 0 0 1 1-1ZM8 2v5M16 2v5M4 10h16" />
+        </svg>
+      </button>
+    </div>
     <p id="quantity"></p>
     <p id="notice" role="alert"></p>
     <p id="result" role="status" hidden></p>
@@ -126,9 +148,25 @@
     </div>
   </main>
 
+  <div id="deferDatePicker" hidden>
+    <section aria-labelledby="deferDateTitle">
+      <h2 id="deferDateTitle">选择预计交货日期</h2>
+      <div class="defer-calendar-header">
+        <button id="deferMonthPrevious" type="button" aria-label="上个月">‹</button>
+        <h3 id="deferCalendarMonth" aria-live="polite"></h3>
+        <button id="deferMonthNext" type="button" aria-label="下个月">›</button>
+      </div>
+      <div class="defer-calendar-week" aria-hidden="true">
+        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span
+        ><span>六</span>
+      </div>
+      <div id="deferCalendarDays" role="group" aria-label="日期"></div>
+      <button id="deferDateConfirm" class="primary" type="button">确认</button>
+    </section>
+  </div>
+
   <main id="orderEditor" hidden aria-label="订单履约"></main>
   <style>
-
     #orderEditor {
       width: min(760px, calc(100% - 32px));
       height: calc(100dvh - 32px);
@@ -220,6 +258,27 @@
       background: white;
       color: #9c9fa6;
       font-size: 13px;
+    }
+    #orderEditor .editor-remove {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      padding: 8px;
+      border: 0;
+      background: transparent;
+      color: #f52238;
+      cursor: pointer;
+    }
+    #orderEditor .editor-remove svg {
+      width: 22px;
+      height: 22px;
+    }
+    #orderEditor .editor-remove:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: 2px;
+      border-radius: 4px;
     }
     #orderEditor .editor-add {
       margin-left: auto;
@@ -331,6 +390,10 @@
       display: block;
       font-size: 10px;
       color: #a2a5ac;
+    }
+    #orderEditor .editor-price .editor-price-warning {
+      color: #ed2232;
+      max-width: 320px;
     }
     #orderEditor .editor-quantity {
       display: flex;
@@ -824,6 +887,106 @@
       background: #ed2232;
       border-color: #ed2232;
     }
+    #confirmationMain #defer {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    #deferDateTrigger {
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      min-width: 160px;
+      padding: 9px 12px;
+      border: 1px solid #c9cdd4;
+      background: #fff;
+      color: #34383e;
+    }
+    #deferDateTrigger svg {
+      color: #838a96;
+      flex-shrink: 0;
+    }
+    #deferDatePicker {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      background: rgb(0 0 0 / 35%);
+    }
+    #deferDatePicker section {
+      width: min(100%, 360px);
+      box-sizing: border-box;
+      padding: 20px;
+      border-radius: 14px;
+      background: #fff;
+    }
+    #deferDatePicker h2 {
+      margin: 0 0 16px;
+      font-size: 18px;
+    }
+    #deferDatePicker .defer-calendar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    #deferCalendarMonth {
+      margin: 0;
+      font-size: 16px;
+    }
+    #deferDatePicker .defer-calendar-week,
+    #deferCalendarDays {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 4px;
+      text-align: center;
+    }
+    #deferDatePicker .defer-calendar-week {
+      margin-bottom: 8px;
+      color: #838a96;
+      font-size: 13px;
+    }
+    #deferDatePicker button:not(#deferDateConfirm) {
+      min-width: 0;
+      height: 38px;
+      padding: 0;
+      border: 0;
+      border-radius: 6px;
+      background: #fff;
+    }
+    #deferDatePicker .defer-calendar-header button {
+      width: 38px;
+      font-size: 24px;
+    }
+    #deferDatePicker #deferCalendarDays button[aria-pressed='true'],
+    #deferDateConfirm {
+      background: #ed2232;
+      color: #fff;
+    }
+    #deferDatePicker button:focus-visible,
+    #deferDateTrigger:focus-visible {
+      outline: 2px solid #ed2232;
+      outline-offset: 2px;
+    }
+    #deferDateConfirm {
+      width: 100%;
+      margin-top: 20px;
+      border-color: #ed2232;
+    }
+    @media (max-width: 500px) {
+      #deferDatePicker {
+        align-items: end;
+        padding: 0;
+      }
+      #deferDatePicker section {
+        width: 100%;
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+        border-radius: 16px 16px 0 0;
+      }
+    }
     @media (max-width: 500px) {
       #orderEditor .editor-basic-info {
         padding: 12px 14px;
@@ -848,7 +1011,6 @@
         gap: 7px;
       }
     }
-
   </style>
   <script defer src="../assets/order-editor"></script>
   <script defer src="../assets/window-script"></script>
