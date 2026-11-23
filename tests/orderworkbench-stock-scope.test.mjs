@@ -231,6 +231,7 @@ test('a failed cancellation query does not hide the independently readable amend
             sample_denominator: 100,
             sample_records: 1,
             unknown_quantity: 0,
+            change_observations: 1,
           },
         ],
       };

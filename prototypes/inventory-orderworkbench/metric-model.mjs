@@ -2,7 +2,7 @@ import { metricSection, readySectionRows } from './metric-sections.mjs';
 import { metricDefinition } from './metric-definitions.mjs';
 import { workbenchMetricState } from './performance-rules.mjs';
 export const metricCalculationVersion =
-  typeof ORDER_WORKBENCH_METRIC_VERSION === 'undefined' ? 45 : ORDER_WORKBENCH_METRIC_VERSION;
+  typeof ORDER_WORKBENCH_METRIC_VERSION === 'undefined' ? 46 : ORDER_WORKBENCH_METRIC_VERSION;
 export function retainableWorkbenchFacts(facts) {
   return (
     facts?.attributionVersion === 2 &&
@@ -335,6 +335,19 @@ export function computeWorkbenchMetrics(
     result['准交率'].note +=
       '；显示已确认准交数÷全部应统计已发货执行单数；缺失数据的执行单保留在分母，暂不计入准交数，补齐后重算';
   }
+  if (
+    amendmentRows.length &&
+    amendmentRows.every((row) => finite(row.change_observations)) &&
+    sum(amendmentRows, 'change_observations') === 0
+  ) {
+    Object.assign(amendment, {
+      value: null,
+      sample: null,
+      provisional: false,
+      population: null,
+      dataUnavailable: true,
+    });
+  }
   for (const [id, names] of [
     ['orders', ['订单满足率']],
     ['ontime', ['准交率']],
@@ -473,6 +486,12 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
       return name === '改单率'
         ? '当前统计周期没有可归属的有效商品数量记录：按日表order_close_time订单关单时间筛选；缺时间不以OMS新增、WMS关单或轨迹装车时间替代。'
         : '源数据未提供：agents_scm_execute_detail_hourly_d 在当前分组没有商品数量统计记录。';
+    if (
+      name === '改单率' &&
+      selected.every((row) => finite(row.change_observations)) &&
+      total('change_observations') === 0
+    )
+      return '当前统计范围的客户要求改单量和D最后修改量均未采集，不能仅凭备份需求量认定改单率为0；缺少有效同期数据时不计算同比，显示“—”。';
     if (
       name === '改单率' &&
       selected.some(

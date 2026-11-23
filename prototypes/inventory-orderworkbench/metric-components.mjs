@@ -83,10 +83,11 @@ export function metricSnapshot(
     note: metric.note,
     coverageNote: metric.coverageNote ?? null,
     population: metric.population ?? null,
-    numerator,
+    numerator: metric.dataUnavailable ? null : numerator,
     denominator,
     quantityUnit,
     pending,
+    ...(metric.dataUnavailable ? { dataUnavailable: true } : {}),
     ...(key === '准交率'
       ? {
           known: available ? metric.counts?.known ?? null : null,

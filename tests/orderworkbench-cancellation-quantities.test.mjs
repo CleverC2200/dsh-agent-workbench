@@ -541,12 +541,12 @@ test('six-window combined queries use the same cancellation event period and qua
 });
 
 test('cached metrics from the previous cancellation quantity definition are rejected', () => {
-  assert.equal(metricCalculationVersion, 45);
+  assert.equal(metricCalculationVersion, 46);
   assert.equal(
     compatibleWorkbenchFacts({
       complete: true,
       attributionVersion: 2,
-      metricCalculationVersion: 44,
+      metricCalculationVersion: 45,
       periods: { month: {} },
     }),
     false,

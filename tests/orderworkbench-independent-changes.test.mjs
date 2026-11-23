@@ -36,6 +36,7 @@ const row = (kind) => ({
   sample_denominator: 100,
   sample_records: 10,
   unknown_quantity: 0,
+  change_observations: kind === '2' ? 10 : null,
 });
 const options = (execute) => ({
   execute,
@@ -52,36 +53,40 @@ function response(id, rows) {
   };
 }
 
-test('amendment publishes its numerator and denominator while cancellation is still pending', async () => {
-  let paintedOnce = false;
-  let release;
-  const gate = new Promise((resolve) => (release = resolve));
-  let painted;
-  const early = new Promise((resolve) => (painted = resolve));
-  const seen = [];
-  const result = loadWorkbenchReport('2026-10-01', '2026-10-26', undefined, {
-    ...options(async (_q, { queryId: id }) => {
-      seen.push(id);
-      if (id.includes('.cancellation')) await gate;
-      return response(id, [row(id.endsWith('amendment') ? '2' : '1')]);
-    }),
-    onProgress: (f) => {
-      const p = f.periods.month;
-      if (!paintedOnce && p?.metrics['改单率'].value === 5) {
-        paintedOnce = true;
-        assert.equal(p.metrics['作废率'].loading, true);
-        assert.equal(metricSnapshot(p, '改单率').denominator, 100);
-        painted();
-      }
-    },
-  });
-  await early;
-  release();
-  const facts = await result;
-  assert.equal(facts.periods.month.metrics['作废率'].value, 10);
-  assert.equal(facts.periods.month.metrics['改单率'].value, 5);
-  assert.equal(seen.filter((x) => x === 'workbench.changes').length, 0);
-});
+test(
+  'amendment publishes its numerator and denominator while cancellation is still pending',
+  { timeout: 10000 },
+  async () => {
+    let paintedOnce = false;
+    let release;
+    const gate = new Promise((resolve) => (release = resolve));
+    let painted;
+    const early = new Promise((resolve) => (painted = resolve));
+    const seen = [];
+    const result = loadWorkbenchReport('2026-10-01', '2026-10-26', undefined, {
+      ...options(async (_q, { queryId: id }) => {
+        seen.push(id);
+        if (id.includes('.cancellation')) await gate;
+        return response(id, [row(id.endsWith('amendment') ? '2' : '1')]);
+      }),
+      onProgress: (f) => {
+        const p = f.periods.month;
+        if (!paintedOnce && p?.metrics['改单率'].value === 5) {
+          paintedOnce = true;
+          assert.equal(p.metrics['作废率'].loading, true);
+          assert.equal(metricSnapshot(p, '改单率').denominator, 100);
+          painted();
+        }
+      },
+    });
+    await early;
+    release();
+    const facts = await result;
+    assert.equal(facts.periods.month.metrics['作废率'].value, 10);
+    assert.equal(facts.periods.month.metrics['改单率'].value, 5);
+    assert.equal(seen.filter((x) => x === 'workbench.changes').length, 0);
+  },
+);
 
 test('permission failure of cancellation leaves amendment usable and never retries the denial', async () => {
   let calls = 0;

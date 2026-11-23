@@ -51,6 +51,7 @@ test('base-only cancellation groups use one direct aggregation without product a
       records: 2,
       invalid: 0,
       unknown_quantity: 0,
+      change_observations: null,
     },
     {
       base: '华东',
@@ -65,6 +66,7 @@ test('base-only cancellation groups use one direct aggregation without product a
       records: 2,
       invalid: 1,
       unknown_quantity: 20,
+      change_observations: null,
     },
   ];
   const calls = [];
@@ -257,6 +259,7 @@ test('grouped amendment dispatches published groups with explicit scope and pres
             sample_denominator: 100,
             sample_records: 1,
             unknown_quantity: 0,
+            change_observations: 1,
           },
         ],
       };
@@ -307,6 +310,44 @@ test('built page and independent evaluator carry the automatic fingerprint of th
   assert.equal(hash(await readFile(root + 'metric-runtime.mjs')), config.metricRuntime.sha256);
   assert.ok((await readFile(root + 'index.html', 'utf8')).includes(revision));
 });
+test('independent amendment summary and groups keep uncollected comparison data unavailable', async () => {
+  for (const view of ['summary', 'groups']) {
+    const result = await readOrderMetric(
+      config,
+      { metric: '改单率', start: '2025-10-19', endExclusive: '2025-10-26', view },
+      async () => ({
+        configVersion: 'uncollected-test',
+        rows: [
+          {
+            base: '郑州',
+            item: '水饺',
+            kind: '2',
+            region: '大区',
+            province: '省区',
+            numerator: 0,
+            denominator: 100,
+            records: 1,
+            invalid: 0,
+            sample_numerator: 0,
+            sample_denominator: 100,
+            sample_records: 1,
+            unknown_quantity: 0,
+            change_observations: 0,
+          },
+        ],
+      }),
+    );
+    assert.equal(result.current.value, null);
+    assert.equal(result.current.numerator, null);
+    assert.equal(result.current.dataUnavailable, true);
+    assert.match(result.current.missingReason, /均未采集/);
+    if (view === 'groups') {
+      assert.equal(result.groups.availability, 'available');
+      assert.equal(result.groups.rows[0].current.value, null);
+    }
+  }
+});
+
 test('single-period independent query preserves the explicit dates, quantity grain and source failures', async () => {
   const calls = [];
   const result = await readOrderMetric(
@@ -330,6 +371,7 @@ test('single-period independent query preserves the explicit dates, quantity gra
             sample_denominator: 100,
             sample_records: 1,
             unknown_quantity: 0,
+            change_observations: 1,
           },
         ],
       };

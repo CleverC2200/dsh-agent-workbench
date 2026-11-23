@@ -134,10 +134,10 @@ export const workbenchQueries = {
   'amendment.summary': {
     scoped: true,
     metricContract: amendmentMetricContract,
-    columns: ['numerator', 'denominator', 'records', 'invalid'],
+    columns: ['numerator', 'denominator', 'records', 'invalid', 'change_observations'],
     sql: `SELECT CASE WHEN SUM(invalid_change)=0 THEN SUM(change_numerator) END AS numerator,
       CASE WHEN SUM(invalid_denominator)=0 THEN SUM(change_denominator) END AS denominator,
-      COUNT(*) AS records,SUM(invalid_change) AS invalid
+      COUNT(*) AS records,SUM(invalid_change) AS invalid,SUM(change_observed) AS change_observations
       FROM (${skuAmendmentEventsSql()}) approved_events`,
   },
   'amendment.details': {
@@ -207,6 +207,7 @@ export const workbenchQueries = {
       'sample_records',
       'unknown_quantity',
       'base',
+      'change_observations',
     ],
     sql: baseChangesSql,
     scoped: true,
@@ -223,6 +224,7 @@ export const workbenchQueries = {
       'records',
       'invalid',
       'unknown_quantity',
+      'change_observations',
     ],
     sql: customersSql,
     scoped: true,

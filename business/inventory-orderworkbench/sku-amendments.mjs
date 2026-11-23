@@ -18,6 +18,8 @@ export const amendmentMetricContract = {
   numerator: `SUM(${amendmentReductionSql('change_order_qty', 'COALESCE(dms_last_update_qty,need_qty_origin,0)')})`,
   denominator: 'SUM(COALESCE(dms_last_update_qty,need_qty_origin,0))',
   denominatorScope: '全部有效明细；客户要求改单量为空或负值的有效量仍保留在分母，三个数量全空剔除',
+  availability:
+    '统计范围内客户要求改单量与D最后修改量均未采集时，不能仅凭备份需求量认定改单率为0；同期不可用时不计算同比，真实0值正常参与统计',
   lockPeriod: false,
   changeTimeRequired: false,
   filters:
@@ -89,6 +91,7 @@ export function skuAmendmentEventsSql({
       OR orderstatus IS NULL`;
   const classified = `SELECT ${periods ? 'period_index,' : ''}${dimensions ? "CASE WHEN :gea_p900<>'' THEN :gea_p900 ELSE belong_base END AS base," : 'belong_base AS base,'}cust_code,cust_order_no,material_code,cust_name,region_name,province_region_name,
     requested_qty,effective_qty,
+    CASE WHEN requested_qty IS NOT NULL OR dms_last_update_qty IS NOT NULL THEN 1 ELSE 0 END AS change_observed,
     ${amendmentReductionSql()} AS difference_qty,
     ${amendmentReductionSql()} AS changed_quantity,
     CASE WHEN ${invalid} THEN 1 ELSE 0 END AS invalid_denominator,
@@ -97,7 +100,7 @@ export function skuAmendmentEventsSql({
   const events = `SELECT ${periods ? 'period_index,' : ''}base,cust_code,cust_order_no,material_code,cust_name AS name,
     region_name AS region,province_region_name AS province,
     CASE WHEN invalid_line=0 THEN changed_quantity ELSE 0 END AS change_numerator,
-    effective_qty AS change_denominator,invalid_denominator,invalid_line AS invalid_change,
+    effective_qty AS change_denominator,invalid_denominator,invalid_line AS invalid_change,change_observed,
     CASE WHEN invalid_line>0 THEN difference_qty ELSE 0 END AS unknown_quantity
     FROM (${classified}) classified_details`;
   const selected = { cohort, lines, classified, events }[stage];
@@ -119,7 +122,7 @@ export function aggregateAmendmentSql(events, customer = false, periods = false,
     SUM(CASE WHEN invalid_change=0 THEN 1 ELSE 0 END) AS sample_records,`
     }
     SUM(unknown_quantity) AS unknown_quantity,
-    COUNT(*) AS records,SUM(invalid_change) AS invalid
+    COUNT(*) AS records,SUM(invalid_change) AS invalid,SUM(change_observed) AS change_observations
     FROM (${events}) sku_events GROUP BY ${periods ? 'period_index,' : ''}${grouped}region,province${customer ? ',cust_code' : ''}`;
 }
 
