@@ -378,7 +378,8 @@
       margin-top: 16px;
     }
     #orderEditor .editor-price {
-      flex-shrink: 0;
+      flex: 1 1 0;
+      min-width: 0;
     }
     #orderEditor .editor-price strong {
       display: block;
@@ -393,10 +394,22 @@
     }
     #orderEditor .editor-price .editor-price-warning {
       color: #ed2232;
-      max-width: 320px;
+      display: block;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      font-size: 10px;
+      line-height: 1.5;
+      text-align: left;
     }
     #orderEditor .editor-quantity {
       display: flex;
+      flex-shrink: 0;
       align-items: center;
       margin-left: auto;
     }
@@ -694,7 +707,7 @@
         font-size: 14px;
       }
       #orderEditor .editor-product-trading {
-        gap: 7px;
+        gap: 6px;
         margin-top: 12px;
       }
       #orderEditor .editor-quantity button {
@@ -892,7 +905,8 @@
       align-items: center;
       gap: 12px;
     }
-    #deferDateTrigger {
+    #deferDateTrigger,
+    #orderEditor .editor-date-trigger {
       display: inline-flex;
       align-items: center;
       justify-content: space-between;
@@ -902,6 +916,7 @@
       border: 1px solid #c9cdd4;
       background: #fff;
       color: #34383e;
+      font: inherit;
     }
     #deferDateTrigger svg {
       color: #838a96;
@@ -967,7 +982,8 @@
       color: #fff;
     }
     #deferDatePicker button:focus-visible,
-    #deferDateTrigger:focus-visible {
+    #deferDateTrigger:focus-visible,
+    #orderEditor .editor-date-trigger:focus-visible {
       outline: 2px solid #ed2232;
       outline-offset: 2px;
     }
