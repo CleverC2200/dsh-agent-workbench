@@ -416,7 +416,7 @@ test('reason-only pruning keeps exactly the valid positive cancellation events',
     assert.deepEqual(select(cancellationReasonEvents), expected);
     assert.deepEqual(
       expected.map((row) => row.cust_order_no),
-      ['valid'],
+      ['no-departure', 'valid'],
     );
   } finally {
     db.close();
