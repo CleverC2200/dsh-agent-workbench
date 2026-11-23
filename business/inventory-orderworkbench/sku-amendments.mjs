@@ -18,7 +18,8 @@ export const amendmentMetricContract = {
   numerator: `SUM(${amendmentReductionSql('change_order_qty', 'COALESCE(dms_last_update_qty,need_qty_origin,0)')})`,
   denominator: 'SUM(COALESCE(dms_last_update_qty,need_qty_origin,0))',
   denominatorScope: '全部有效明细；客户要求改单量为空或负值的有效量仍保留在分母，三个数量全空剔除',
-  availability: '统计范围内客户要求改单量与D最后修改量均未采集时，不能仅凭备份需求量认定改单率为0；同期不可用时不计算同比，真实0值正常参与统计',
+  availability:
+    '统计范围内客户要求改单量与D最后修改量均未采集时，不能仅凭备份需求量认定改单率为0；同期不可用时不计算同比，真实0值正常参与统计',
   lockPeriod: false,
   changeTimeRequired: false,
   filters:
