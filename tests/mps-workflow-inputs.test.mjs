@@ -105,6 +105,25 @@ function partialDemandFixture() {
   return { source, snapshot };
 }
 
+test('查看评估当月发货时仍使用同版本统计基月快照计算需求和期初库存', () => {
+  const { source, snapshot } = partialDemandFixture();
+  source.shipment = { cutoff: '2026-11-19', calculationCutoff: '2026-10-31' };
+  snapshot.rows[0].end = 75;
+  const result = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(result.categoryComputation.rows[0].shipment, 100);
+  assert.equal(
+    result.rows.find((row) => row.base === '甲' && row.code === 'A').openingInventory,
+    75,
+  );
+  source.shipment.calculationCutoff = '2026-10-30';
+  const stale = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(stale.categoryComputation.rows[0].shipment, null);
+  assert.equal(
+    stale.rows.find((row) => row.base === '甲' && row.code === 'A').openingInventory,
+    null,
+  );
+});
+
 test('待定发货单品隔离后，同范围的基数、提报和历史继续计算并传入后续需求', () => {
   const { source, snapshot } = partialDemandFixture();
   const untouched = structuredClone(source);
