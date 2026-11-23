@@ -87,12 +87,10 @@ export function salesConfirmationCard(input, options = {}) {
   const windowUrl = (url) =>
     'https://applink.feishu.cn/client/web_url/open?mode=window&width=640&height=720&url=' +
     encodeURIComponent(url);
-  const missing = (draft.lines || []).filter(
-    (line) =>
-      typeof line.rawShortage === 'number' &&
-      Number.isFinite(line.rawShortage) &&
-      line.rawShortage > 0,
-  );
+  const missing = (draft.lines || []).filter((line) => {
+    const shortage = line.rawShortage ?? line.shortage;
+    return typeof shortage === 'number' && Number.isFinite(shortage) && shortage > 0;
+  });
   const lines = Array.isArray(draft.lines) ? draft.lines : [];
   const abnormalPrices = lines.filter(
     (line) =>
@@ -151,7 +149,7 @@ export function salesConfirmationCard(input, options = {}) {
     pending: true,
     separator: false,
     shortages: missing.slice(0, 5).map((line) => ({
-      sku: String(line.sku ?? '—'),
+      sku: String(line.sku ?? '').trim() || '未提供',
       quantity: String(line.shortage ?? '数量单位待核对'),
     })),
     moreShortages: missing.length > 5,
