@@ -57,14 +57,14 @@ export const salesCardTemplate = {
                         '请核对订单信息并处理。',
                         '订单满足率暂未完整提供，请核对后处理。',
                       ),
-                      {
-                        $each: 'section.shortages',
-                        as: 'shortage',
-                        template: '\nSKU：${shortage.sku} 原订单缺货：${shortage.quantity}',
-                      },
-                      conditional('section.moreShortages', '\n其余缺货商品请在“订单处理”中核对。'),
                     ],
                   }),
+                  {
+                    $each: 'section.shortages',
+                    as: 'shortage',
+                    template: '\nSKU：${shortage.sku} 原订单缺货：${shortage.quantity}',
+                  },
+                  conditional('section.moreShortages', '\n其余缺货商品请在“订单处理”中核对。'),
                   conditional('section.hasPriceSkus', {
                     $each: 'section.priceSkus',
                     as: 'priceSku',
