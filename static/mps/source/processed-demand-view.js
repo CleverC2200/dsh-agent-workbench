@@ -5,6 +5,7 @@ import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js'
 import { useStepViewField } from './step-view-state.js';
 import { demandBasisLabel } from './festival-demand.js';
 import { createProcessedDemandEvidence } from './processed-demand-evidence-view.js';
+import { createDemandDiagnostics } from './demand-diagnostics-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import {
   changeAdjustment,
@@ -48,6 +49,7 @@ export function createProcessedDemand(
   const HistoryReport = createHistoryReport(react, { downloadCsv });
   const ReportPage = createReportPage(react);
   const Evidence = createProcessedDemandEvidence(react, { downloadCsv });
+  const DemandDiagnostics = createDemandDiagnostics(react, { downloadCsv });
   return function ProcessedDemand({
     view,
     draft,
@@ -824,6 +826,7 @@ export function createProcessedDemand(
           h('button', { onClick: exportSummary }, '下载大类需求总表'),
         ),
       ),
+      h(DemandDiagnostics, { view, draft, result, rows, filters, table }),
       h(Evidence, { view, draft, result: result.categoryComputation, rows, filters, table }),
       card(
         '加工后的需求',
