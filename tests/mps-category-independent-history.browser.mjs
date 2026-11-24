@@ -18,9 +18,16 @@ for (const scenario of [
   'read-failure',
   'aggregate-only',
   'mixed-annual',
+  'excluded-overlap',
+  'other-category-overlap',
 ])
   test(`category demand and CSV scope base SKU details; independent monthly populations ${scenario}`, async (t) => {
-    const complete = ['independent', 'mixed-annual'].includes(scenario);
+    const complete = [
+      'independent',
+      'mixed-annual',
+      'excluded-overlap',
+      'other-category-overlap',
+    ].includes(scenario);
     const { page, frame, calls } = await mpsPage(t, config, ({ queryId, parameters }) => {
       const entries = [
         ['郑州', 'A', 100],
@@ -33,6 +40,7 @@ for (const scenario of [
           ['A', '水饺'],
           ['B', '水饺'],
           ['Z', '粽子'],
+          ...(scenario === 'other-category-overlap' ? [['T', '汤圆']] : []),
         ].map(([material_code, responsible_item]) => ({
           stat_period: parameters.month ?? '2026-12',
           target_base: '郑州',
@@ -79,10 +87,18 @@ for (const scenario of [
             ['华东', 'A', 9000],
             ['郑州', 'Z', 8000],
             ['', 'A', 7000],
+            ...(scenario === 'other-category-overlap'
+              ? [['郑州', 'T', parameters.months.at(-1) === '202606' ? 501 : 500]]
+              : []),
           ].map(([belong_base, dimension_value, quantity]) => ({
             dimension_type: '基地+产品',
             stat_month,
-            belong_base,
+            belong_base:
+              scenario === 'excluded-overlap' &&
+              parameters.months.at(-1) === '202606' &&
+              belong_base === '郑州'
+                ? '郑州基地'
+                : belong_base,
             dimension_value,
             dimension_act_dl_qty:
               belong_base === '郑州' &&
@@ -96,13 +112,20 @@ for (const scenario of [
                     scenario === 'inconsistent-overlap' &&
                     parameters.months.at(-1) === '202606'
                   ? 101
-                  : quantity,
+                  : scenario === 'excluded-overlap' &&
+                      parameters.months.at(-1) === '202606' &&
+                      (belong_base !== '郑州' || dimension_value === 'Z')
+                    ? quantity + 1
+                    : quantity,
             last_year_dimension_act_dl_qty: null,
             last_month_dimension_act_dl_qty: null,
             base_fiscal_act_dl_qty: null,
             base_fiscal_month_count: 1,
             base_fiscal_quantity_month_count: 1,
-            national_dimension_fiscal_act_dl_qty: 999999,
+            national_dimension_fiscal_act_dl_qty:
+              scenario === 'excluded-overlap' && parameters.months.at(-1) === '202606'
+                ? 999998
+                : 999999,
             fiscal_year:
               stat_month === '202506' && scenario === 'fiscal-conflict'
                 ? '不一致财年'
@@ -156,7 +179,8 @@ for (const scenario of [
       name: '产品.csv',
       mimeType: 'text/csv',
       buffer: Buffer.from(
-        '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,甲产品,水饺,系列,组,,\n郑州,B,乙产品,水饺,系列,组,,\n郑州,Z,粽子,粽子,系列,组,,',
+        '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,甲产品,水饺,系列,组,,\n郑州,B,乙产品,水饺,系列,组,,\n郑州,Z,粽子,粽子,系列,组,,' +
+          (scenario === 'other-category-overlap' ? '\n郑州,T,汤圆,汤圆,系列,汤圆组,,' : ''),
       ),
     });
     await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
@@ -226,6 +250,10 @@ for (const scenario of [
     assert.match(sourceCsv, /原始全国SKU财年量/);
     assert.match(sourceCsv, /999999/);
     assert.match(sourceCsv, /7000/);
+    if (scenario === 'excluded-overlap') {
+      assert.match(sourceCsv, /7001/);
+      assert.match(sourceCsv, /999998/);
+    }
     assert.doesNotMatch(sourceCsv, /华东|粽子|9000|8000/);
     const sourceBook = XLSX.read(sourceCsv, { type: 'string', raw: true });
     const sourceRecords = XLSX.utils.sheet_to_json(sourceBook.Sheets[sourceBook.SheetNames[0]], {
@@ -239,6 +267,13 @@ for (const scenario of [
         row['产品编码'] === 'B',
     );
     if (complete) assert.equal(Number(december['池内大类财年量']), 1300);
+    if (scenario === 'other-category-overlap') {
+      const conflicted = sourceRecords.find(
+        (row) => row['月份'] === '2024-12' && row['产品编码'] === 'T',
+      );
+      assert.equal(conflicted['池内大类财年量'], '');
+      assert.match(conflicted['财年缺失或冲突月份'], /2025-01/);
+    }
     if (scenario === 'missing-month') {
       assert.equal(december['池内大类财年量'], '');
       assert.match(december['财年缺失或冲突月份'], /2026-06/);
@@ -255,7 +290,9 @@ for (const scenario of [
       );
     assert.doesNotMatch(csv, /9000|8000|999999|粽子|旧分类/);
     const book = XLSX.read(csv, { type: 'string', raw: true });
-    const records = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
+    const records = XLSX.utils
+      .sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' })
+      .filter((row) => row['大类'] === '水饺');
     assert.equal(records.length, 4);
     assert.equal(records[0]['系统需求数量'], complete ? '150' : '', csv);
     if (complete) {

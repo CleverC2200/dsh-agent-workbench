@@ -89,19 +89,40 @@ export function categorySourceInputs(draft) {
       sourceMonths.set(month, observations);
     }
   }
-  const completeMonths = new Map(
-    [...sourceMonths].map(([month, observations]) => {
-      const completed = observations.filter(({ complete }) => complete);
-      const complete = completed.length > 0 && completed.every(({ rows }) => rows.length > 0);
-      const values =
-        complete && completed.length > 1
-          ? completed.map(({ rows }) =>
-              JSON.stringify(rows.map((row) => JSON.stringify(row)).sort()),
+  const completeMonths = new Map();
+  const conflictingGroups = new Set();
+  for (const [month, observations] of sourceMonths) {
+    const completed = observations.filter(({ complete }) => complete);
+    completeMonths.set(month, completed.length > 0 && completed.every(({ rows }) => rows.length));
+    if (completed.length < 2) continue;
+    const groups = completed.map(({ rows }) =>
+      Map.groupBy(
+        scope(rows, '历史发货', true).filter((row) => row['基地']),
+        (row) => JSON.stringify([row['大类'], row['基地']]),
+      ),
+    );
+    for (const key of new Set(groups.flatMap((group) => [...group.keys()]))) {
+      const values = groups.map((group) =>
+        JSON.stringify(
+          (group.get(key) ?? [])
+            .map((row) =>
+              JSON.stringify([
+                row['维度值'],
+                number(row['月发货数量']),
+                row['粒度状态'],
+                row['财年'],
+              ]),
             )
-          : [];
-      return [month, complete && new Set(values).size <= 1];
-    }),
-  );
+            .sort(),
+        ),
+      );
+      if (new Set(values).size > 1) {
+        const [category, base] = JSON.parse(key);
+        conflictingGroups.add(JSON.stringify([month, category, base]));
+        conflictingGroups.add(JSON.stringify([month, category]));
+      }
+    }
+  }
   const raw = [
     ...new Map(
       [...sourceMonths.values()]
@@ -141,7 +162,9 @@ export function categorySourceInputs(draft) {
       const categoryRows = monthly.get(categoryKey) ?? [];
       const rows = baseMonthly.get(JSON.stringify([month, category, base])) ?? [];
       const complete =
-        completeMonths.get(month) && (categoryRows.length || !unassigned.has(categoryKey));
+        completeMonths.get(month) &&
+        !conflictingGroups.has(JSON.stringify([month, category, base])) &&
+        (categoryRows.length || !unassigned.has(categoryKey));
       quantities.set(JSON.stringify([month, category, base]), {
         rows,
         quantity: complete ? sum(rows) : null,
@@ -166,7 +189,9 @@ export function categorySourceInputs(draft) {
           const key = JSON.stringify([period, category]);
           const rows = monthly.get(key) ?? [];
           return (
-            !completeMonths.get(period) || (rows.length ? sum(rows) === null : unassigned.has(key))
+            !completeMonths.get(period) ||
+            conflictingGroups.has(key) ||
+            (rows.length ? sum(rows) === null : unassigned.has(key))
           );
         });
         const complete =
