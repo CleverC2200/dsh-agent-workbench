@@ -1236,7 +1236,7 @@
 }
 
 .ap-app[data-step='ship'] .sp-table {
-  width: 1220px;
+  width: 100%;
   border-collapse: separate;
   border-spacing: 0;
 }

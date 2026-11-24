@@ -494,7 +494,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                   : plan.summary.evaluatedRows
                     ? '部分可评估，缺项已单列'
                     : plan.summary.totalRows
-                      ? '计算已完成，排产缺项待人工补齐'
+                      ? '暂无单品月份满足排产条件，缺项待补'
                       : '缺需求单品范围，尚未生成排产';
     const exportPlan = () => {
       if (!active) return;
@@ -905,7 +905,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
               'span',
               null,
               stamp
-                ? `生成于 ${stamp} · 已评估 ${plan.summary.evaluatedRows}/${plan.summary.totalRows} 个单品月份`
+                ? `生成于 ${stamp} · 满足排产条件 ${plan.summary.evaluatedRows}/${plan.summary.totalRows} 个单品月份`
                 : '按当前版本的数据与约束执行评估',
             ),
           ),

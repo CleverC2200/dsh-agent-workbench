@@ -1620,21 +1620,6 @@ export function createWorkflow(
           selectedCategories: viewCategories,
           cutoff: shipmentSnapshot?.cutoff,
         }),
-      step === 'report' &&
-        h(PoolExceptionReport, {
-          draft,
-          result,
-          filters: exceptionFilters,
-          table,
-          view,
-        }),
-      step === 'report' &&
-        h(DelistedReport, {
-          draft,
-          result,
-          filters: exceptionFilters,
-          table,
-        }),
       step === 'process'
         ? h(
             react.Fragment,
@@ -2137,6 +2122,21 @@ export function createWorkflow(
                 ),
               ),
             ),
+      step === 'report' &&
+        h(PoolExceptionReport, {
+          draft,
+          result,
+          filters: exceptionFilters,
+          table,
+          view,
+        }),
+      step === 'report' &&
+        h(DelistedReport, {
+          draft,
+          result,
+          filters: exceptionFilters,
+          table,
+        }),
       ['process', 'constraints'].includes(step) && result.missing.length
         ? h(
             'details',
