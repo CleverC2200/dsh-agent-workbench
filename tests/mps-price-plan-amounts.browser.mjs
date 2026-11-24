@@ -19,6 +19,7 @@ const execute =
     ).map((row) => ({
       ...Object.fromEntries((config.queries[queryId]?.columns ?? []).map((key) => [key, null])),
       ...row,
+      ...(queryId === 'products.detail' ? { stat_period: parameters.month } : {}),
     }));
     return {
       rows: queryId.endsWith('.count')
@@ -29,6 +30,7 @@ const execute =
     };
   };
 const products = ['A', 'B'].map((code) => ({
+  target_base: '基地甲',
   material_code: code,
   material_name: `产品${code}`,
   responsible_item: '汤圆',
@@ -127,7 +129,11 @@ test('提报金额独立汇总全部分页，产品关联不放大，预览和�
         configVersion: 'amount-v1',
       };
     return execute({
-      'products.detail': [...products, { ...products[0], product_item: 'G2' }],
+      'products.detail': [
+        ...products,
+        { ...products[0], product_item: 'G2' },
+        ...amountRows.map((row) => ({ ...products[0], material_code: row.material_code })),
+      ],
       'facts.report': Array.from({ length: 31 }, (_, index) => ({
         region_name: `大区${index}`,
         belong_base: '基地甲',
@@ -177,6 +183,7 @@ test('金额来源未配置时保留提报数量，明确待补且不将缺项�
     t,
     missingConfig,
     execute({
+      'products.detail': products,
       'facts.report': [
         { belong_base: '基地甲', material_code: 'A', plannum_total: 5, allnum_total: 7 },
       ],
@@ -189,15 +196,17 @@ test('金额来源未配置时保留提报数量，明确待补且不将缺项�
   await expect(section).toContainText('数量合计5件');
 });
 
-test('金额缺项显示已知小计，刷新失败后隐藏旧金额且不影响数量读取', async (t) => {
+test('池内金额缺项显示已知小计，池外缺基地金额排除，刷新失败后隐藏旧金额且不影响数量读取', async (t) => {
   let denied = false;
   const respond = execute({
+    'products.detail': products,
     'facts.report': [
       { belong_base: '基地甲', material_code: 'A', plannum_total: 5, allnum_total: 7 },
     ],
     'facts.report-amounts': [
-      { belong_base: null, material_code: 'A', ycplanamount: '1.25', monthamount: '2.00' },
+      { belong_base: '基地甲', material_code: 'A', ycplanamount: '1.25', monthamount: '2.00' },
       { belong_base: '基地甲', material_code: 'B', ycplanamount: null, monthamount: '2.00' },
+      { belong_base: null, material_code: 'A', ycplanamount: '999', monthamount: '999' },
     ],
   });
   const { frame, contexts } = await mpsPage(t, config, (query) => {
@@ -217,7 +226,8 @@ test('金额缺项显示已知小计，刷新失败后隐藏旧金额且不影�
     contexts.at(-1).parts.check.sourceSummaries.report.amounts.initialPlan.knownAmount,
     '1.25',
   );
-  await expect(section).toContainText('1条缺基地或产品编码');
+  assert.equal(contexts.at(-1).parts.check.sourceSummaries.report.amounts.missingDimensions, 0);
+  await expect(section).not.toContainText('999');
   denied = true;
   await section.getByRole('button', { name: '同步', exact: true }).click();
   await expect(section.getByRole('alert')).toContainText('当前账号暂无数据权限');
