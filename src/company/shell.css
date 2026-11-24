@@ -1598,6 +1598,12 @@
   cursor: pointer;
 }
 
+.gea-account-menu .gea-logout-button > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
 .gea-logout-button:hover {
   background: rgba(128, 128, 128, 0.12);
 }

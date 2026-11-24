@@ -326,6 +326,11 @@ async function fixture(
       json: { ok: true, value: { items, total: items.length, pageNo: 1, pageSize: 20 } },
     });
   });
+  await page.route('**/api/gea-proof/notifications', async (route) => {
+    assert.deepEqual(route.request().postDataJSON(), { operation: 'unread-count' });
+    const count = await page.evaluate(() => window.fixtureUnreadCount ?? 0);
+    await route.fulfill({ json: { ok: true, value: { count } } });
+  });
   const origin = updates ? 'http://localhost/' : 'http://client-ui.fixture.test/';
   await page.route(origin, (route) =>
     route.fulfill({ contentType: 'text/html', body: documentHtml }),
@@ -440,18 +445,19 @@ test('the first GEA login closes into the same workspace after identity is confi
   );
 });
 
-test('new announcements and updates share a dismissible swipeable card', async (t) => {
-  const page = await fixture(t, 'win32', true, signedIn, 'current');
-  const card = page.getByRole('region', { name: '消息中心', exact: true });
-  const rail = card.locator('.gea-sidebar-message-track');
+test('the sidebar bell shows one centered dot for new announcements and unread business messages', async (t) => {
+  const page = await fixture(t, 'darwin', true, signedIn, 'current');
+  const bell = page.getByRole('button', { name: '消息中心', exact: true });
+  const unread = page.locator('.gea-sidebar-inbox[data-unread]');
+  const announcementHistory = 'gea.announcement-reminders.v1:fixture:user';
+  await expect(
+    page.locator('.gea-sidebar-brand-row').getByRole('button', { name: '消息中心' }),
+  ).toBeVisible();
+  await expect(bell).toHaveText('');
   await expect
-    .poll(() =>
-      page.evaluate(
-        () => localStorage.getItem('gea.announcement-reminders.v1:fixture:user') !== null,
-      ),
-    )
-    .toBe(true);
-  await expect(card).toBeHidden();
+    .poll(() => page.evaluate((key) => localStorage.getItem(key), announcementHistory))
+    .not.toBeNull();
+  await expect(unread).toHaveCount(0);
   await page.evaluate(() => {
     window.fixtureAnnouncements = [
       { id: 'first', title: '第一条新公告' },
@@ -460,32 +466,78 @@ test('new announcements and updates share a dismissible swipeable card', async (
     ];
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await expect(card.locator('.gea-sidebar-reminder')).toHaveCount(2);
+  await expect(unread).toBeVisible();
+  await expect(bell).toHaveAccessibleDescription('有新消息');
+  await expect(page.getByText('第一条新公告', { exact: true })).toHaveCount(0);
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate((theme) => {
+      document.body.toggleAttribute('data-ds-dark-theme', theme === 'dark');
+      document.documentElement.style.colorScheme = theme;
+    }, theme);
+    const geometry = await bell.evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      const icon = button.querySelector('svg').getBoundingClientRect();
+      const dot = getComputedStyle(button, '::after');
+      const width = parseFloat(dot.width);
+      const height = parseFloat(dot.height);
+      const center = rect.left + parseFloat(dot.left) + new DOMMatrix(dot.transform).e + width / 2;
+      return {
+        width,
+        height,
+        centered: Math.abs(center - icon.left - icon.width / 2) < 0.5,
+        gap: rect.bottom - parseFloat(dot.bottom) - height - icon.bottom,
+      };
+    });
+    assert.deepEqual(geometry, { width: 5, height: 5, centered: true, gap: -1 });
+    if (process.env.GEA_TEST_BADGE_EVIDENCE)
+      await page.locator('.gea-sidebar-brand-row').screenshot({
+        path: resolve(process.env.GEA_TEST_BADGE_EVIDENCE, `message-center-${theme}.png`),
+      });
+  }
+  await page.evaluate(() => {
+    window.fixtureUnreadCount = 1;
+    window.dispatchEvent(new Event('gea-notifications-changed'));
+  });
+  await page.getByRole('button', { name: '收起侧边栏', exact: true }).click();
+  await expect(unread).toBeVisible();
+  await bell.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: '通知公告', exact: true })).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate((key) => JSON.parse(localStorage.getItem(key)).hidden, announcementHistory),
+    )
+    .toEqual(['["old",null]', '["first",null]', '["second",null]']);
+  await expect(unread).toBeVisible();
+  await page.evaluate(() => {
+    window.fixtureUnreadCount = 0;
+    window.dispatchEvent(new Event('gea-notifications-changed'));
+  });
+  await expect(unread).toHaveCount(0);
+  await page.evaluate(() => {
+    window.fixtureUnreadCount = 2;
+    window.dispatchEvent(new Event('gea-notifications-changed'));
+  });
+  await expect(unread).toBeVisible();
+  await page.evaluate(
+    (identity) => {
+      window.fixtureUnreadCount = 0;
+      window.changeIdentity(identity);
+    },
+    { ...signedIn, scope: 'fixture:other-user' },
+  );
+  await expect(unread).toHaveCount(0);
+});
+
+test('the software update card remains dismissible and offers a later update', async (t) => {
+  const page = await fixture(t, 'win32', true, signedIn, 'current');
+  const card = page.getByRole('region', { name: '更新提醒', exact: true });
+  await expect(card).toBeHidden();
   await page.evaluate(() => window.emitNative({ phase: 'available', version: '0.1.60' }));
-  await expect(card.locator('.gea-sidebar-reminder')).toHaveCount(3);
-  await expect(card.getByText('已有公告')).toHaveCount(0);
-  await expect(card.getByText('1 / 3')).toBeVisible();
-  await rail.hover();
-  await page.mouse.wheel(240, 0);
-  await expect(card.getByText('2 / 3')).toBeVisible();
-  await card.getByRole('button', { name: '下一条提醒' }).click();
-  await expect(card.getByText('3 / 3')).toBeVisible();
+  await expect(card.locator('.gea-sidebar-reminder')).toHaveCount(1);
   await expect(card.getByRole('region', { name: '客户端', exact: true })).toContainText('0.1.60');
   await card.getByRole('button', { name: '关闭更新提醒' }).click();
-  await page.evaluate(() => {
-    window.emitNative({ phase: 'available', version: '0.1.60' });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
-  await expect(card.locator('.gea-sidebar-reminder')).toHaveCount(2);
-  await card
-    .getByRole('article')
-    .filter({ hasText: '第一条新公告' })
-    .getByRole('button', { name: '关闭公告提醒' })
-    .click();
-  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-  await expect(card.locator('.gea-sidebar-reminder')).toHaveCount(1);
-  await card.getByRole('button', { name: /第二条新公告/ }).click();
-  await expect(page.getByRole('heading', { name: '通知公告', exact: true })).toBeVisible();
+  await page.evaluate(() => window.emitNative({ phase: 'available', version: '0.1.60' }));
   await expect(card).toBeHidden();
   await page.evaluate(() => window.emitNative({ phase: 'available', version: '0.1.61' }));
   await expect(card).toContainText('0.1.61');
@@ -498,7 +550,7 @@ test('new announcements and updates share a dismissible swipeable card', async (
 
 test('only explicit confirmation starts manual client and plugin version checks', async (t) => {
   const page = await fixture(t, 'win32', true, signedIn, 'failed');
-  const card = page.getByRole('region', { name: '消息中心', exact: true });
+  const card = page.getByRole('region', { name: '更新提醒', exact: true });
   await expect.poll(() => page.evaluate(() => window.pluginChecks ?? 0)).toBe(0);
   const account = page.getByRole('button', { name: '账户菜单', exact: true });
   const check = page.getByRole('menuitem', { name: '检查更新', exact: true });
@@ -537,7 +589,7 @@ test('only explicit confirmation starts manual client and plugin version checks'
 
 test('plugin-only update uses the existing desktop takeover with the verified suite', async (t) => {
   const page = await fixture(t, 'win32', true, signedIn, 'plugins-available');
-  const card = page.getByRole('region', { name: '消息中心', exact: true });
+  const card = page.getByRole('region', { name: '更新提醒', exact: true });
   const plugins = card.getByRole('region', { name: '公司插件', exact: true });
   await plugins.getByRole('button', { name: '重启更新', exact: true }).click();
   await expect
@@ -577,7 +629,7 @@ test('Test environment badge stays beside the brand subtitle without covering th
     const subtitle = await page.locator('.gea-brand-subtitle').boundingBox();
     const menu = page.getByRole('button', { name: '账户菜单', exact: true });
     await menu.click();
-    await expect(page.getByRole('menuitem', { name: '消息中心', exact: true })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: '消息中心', exact: true })).toHaveCount(0);
     await page.keyboard.press('Escape');
     assert.ok(
       marker.x >= subtitle.x &&

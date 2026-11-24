@@ -719,13 +719,8 @@ test('formal account menu preserves keyboard focus and dismissal while ignoring 
   );
   const trigger = document.querySelector('button[aria-label="账户菜单"]');
   await act(async () => trigger.click());
-  assert.equal(document.activeElement.textContent, '⚙设置');
-  await act(async () =>
-    document.activeElement.dispatchEvent(
-      new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
-    ),
-  );
-  assert.equal(document.activeElement.textContent, '消息中心');
+  assert.equal(document.activeElement.textContent, '设置');
+  assert.equal(document.activeElement.querySelector('svg')?.getAttribute('aria-hidden'), 'true');
   await act(async () =>
     document.activeElement.dispatchEvent(
       new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),

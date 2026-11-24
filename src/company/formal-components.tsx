@@ -15,6 +15,8 @@ type NavIconKind =
   | 'folder'
   | 'apps'
   | 'newChat'
+  | 'settings'
+  | 'logout'
   | BusinessGroupIcon;
 
 export function AgentWelcome({
@@ -305,6 +307,13 @@ export function NavIcon({ kind }: { kind: NavIconKind }) {
         <path d="M10 21h4" />
       </>
     ),
+    settings: (
+      <>
+        <path d="M7.5 4h9l4.5 8-4.5 8h-9L3 12z" />
+        <circle cx="12" cy="12" r="3" />
+      </>
+    ),
+    logout: <path d="M10 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5m6-13 5 5-5 5m-7-5h12" />,
     desktop: (
       <>
         <rect x="4" y="5" width="16" height="11" rx="1.5" />
