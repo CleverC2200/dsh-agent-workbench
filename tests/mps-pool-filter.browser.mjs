@@ -99,12 +99,12 @@ async function downloadRows(page, button) {
   return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
 }
 
-test('来源核对的计数、预览及工作簿保留池外非零BI和计划量，并标明唯一老品归属', async (t) => {
+test('来源核对保留池外非零BI和计划量，池外老品不归入当前产品', async (t) => {
   const { page, frame, section } = await openChecks(
     t,
     [
       {
-        基地: '',
+        基地: '郑州',
         产品编码: 'A',
         产品名称: '新品',
         大类: '汤圆',
@@ -135,14 +135,14 @@ test('来源核对的计数、预览及工作簿保留池外非零BI和计划量
       },
     ],
   );
-  const pool = section.getByRole('button', { name: '下载池外待补清单（2条）', exact: true });
+  const pool = section.getByRole('button', { name: '下载池外待补清单（4条）', exact: true });
   await expect(pool).toBeEnabled();
   const rows = await downloadRows(page, pool);
-  assert.equal(rows.length, 2);
-  assert.equal(rows.find((row) => row['来源'] === 'BI')['数量'], '-2418');
-  assert.equal(rows.find((row) => row['来源'] === '计划量')['计划数量'], '9');
+  assert.equal(rows.length, 4);
+  assert.equal(rows.find((row) => row['产品编码'] === 'OUT')['数量'], '-2418');
+  assert.equal(rows.find((row) => row['产品编码'] === 'OUTP')['计划数量'], '9');
   await section
-    .getByRole('button', { name: '查看异常与来源明细（2条异常，共5条）', exact: true })
+    .getByRole('button', { name: '查看异常与来源明细（4条异常，共5条）', exact: true })
     .click();
   const preview = frame.getByRole('dialog', { name: '基础核对异常与来源明细', exact: true });
   await expect(preview.locator('tbody tr')).toHaveCount(5);
@@ -154,9 +154,11 @@ test('来源核对的计数、预览及工作簿保留池外非零BI和计划量
     section.getByRole('button', { name: '下载完整来源明细', exact: true }),
   );
   assert.equal(all.length, 5);
-  assert(
-    all.filter((row) => row['产品编码'] === 'OLD').every((row) => row['当前产品编码'] === 'A'),
-  );
+  const old = all.filter((row) => row['产品编码'] === 'OLD');
+  assert.equal(old.length, 2);
+  assert(old.every((row) => row['当前产品编码'] === '' && row['原因'] === '不在当前产品池'));
+  assert.equal(old.find((row) => row['来源'] === 'BI')['数量'], '3');
+  assert.equal(old.find((row) => row['来源'] === '计划量')['计划数量'], '7');
 });
 
 test(

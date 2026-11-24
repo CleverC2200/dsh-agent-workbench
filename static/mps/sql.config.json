@@ -1155,11 +1155,7 @@
     "category-history.detail": {
       "priority": 3,
       "title": "基地SKU三年发货明细",
-      "grain": [
-        "stat_month",
-        "belong_base",
-        "dimension_value"
-      ],
+      "grain": ["stat_month", "belong_base", "dimension_value"],
       "parameterSpec": {
         "gea_p1": {
           "name": "months",
@@ -1233,12 +1229,7 @@
     "annual-pool.detail": {
       "priority": 3,
       "title": "基地SKU年度需求明细",
-      "grain": [
-        "belong_base",
-        "material_code",
-        "sub_category",
-        "stat_month"
-      ],
+      "grain": ["belong_base", "material_code", "sub_category", "stat_month"],
       "parameterSpec": {
         "gea_p98": {
           "name": "page_size",

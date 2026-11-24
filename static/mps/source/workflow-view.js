@@ -1408,7 +1408,10 @@ export function createWorkflow(
     ]);
     const assignmentRows = (configuring ? assignments : [])
       .map((assignment, index) => ({ assignment, index }))
-      .filter(({ assignment }) => !assignment.base || !assignment.code || inScope(assignment.base, assignment.code))
+      .filter(
+        ({ assignment }) =>
+          !assignment.base || !assignment.code || inScope(assignment.base, assignment.code),
+      )
       .map(({ assignment, index }) => [
         h(
           'select',
