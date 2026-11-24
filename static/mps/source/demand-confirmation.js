@@ -1,4 +1,5 @@
 import { createCategoryFilter, matchesCategories } from './category-filter.js';
+import { canonicalBaseName } from './relations.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { encodeLocalDrafts, decodeLocalDrafts, changeAdjustment } from './local-draft.js';
 import { createCategoryDemand } from './category-demand-view.js';
@@ -1754,17 +1755,18 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         draft.month,
       ],
     );
-    const categoryProducts = productViews.filter(({ display }) =>
-      matchesCategories(display['大类'], selectedCategories),
+    const categoryProducts = productViews.filter(
+      ({ display }) =>
+        canonicalBaseName(display['基地']) !== 'ODM' &&
+        matchesCategories(display['大类'], selectedCategories),
     );
     const filteredProducts = categoryProducts.filter(
-      ({ display, labels, replacementCodes, targetBases, transferTags, sourcePeriods }) =>
+      ({ display, labels, replacementCodes, targetBases, sourcePeriods }) =>
         [
           ...Object.values(display),
           ...labels,
           ...replacementCodes,
           ...targetBases,
-          ...transferTags,
           ...sourcePeriods,
         ].some((value) => value.includes(search)),
     );
@@ -1923,7 +1925,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               replacementNames,
               candidateBases,
               targetBases,
-              transferTags,
               sourcePeriods,
             }) => ({
               ...display,
@@ -1933,7 +1934,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               源替换品名称: replacementNames.join(' / '),
               事实候选基地: candidateBases.join(' / '),
               源目标基地: targetBases.join(' / '),
-              源调拨标签: transferTags.join(' / '),
               源统计月份: sourcePeriods.join(' / '),
             }),
           ),
@@ -2360,7 +2360,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           assistant,
         ),
       masterOpen &&
-        h(MasterData, { key: draft.id, month: draft.month, close: () => setMasterOpen(false) }),
+        h(MasterData, {
+          key: draft.id,
+          month: draft.month,
+          demandOnly: ['check', 'ship', 'process'].includes(step),
+          close: () => setMasterOpen(false),
+        }),
       h(
         'div',
         { hidden: step !== 'ship' },

@@ -427,7 +427,9 @@ export function createWorkflow(
     const viewCategories = ['process', 'constraints'].includes(step) ? selectedCategories : [];
     const fields = step === 'process' ? processFields : planFields;
     const scopedRows =
-      step === 'process' ? [...result.rows, ...(result.referenceRows ?? [])] : result.rows;
+      step === 'process'
+        ? [...result.rows, ...(result.referenceRows ?? [])].filter((row) => row.base !== 'ODM')
+        : result.rows;
     const scopedCategories = result.categoryRows;
     const configurationPairs = [
       ...new Map(
@@ -448,11 +450,15 @@ export function createWorkflow(
       ...new Set(
         [
           ...scopedRows.map((row) => row.base),
-          ...(result.poolExceptions?.total ?? []).map((row) => row.base),
-          ...configurationPairs.map((row) => row.base),
-          ...(draft.resources ?? []).map((row) => row.base),
-          ...(draft.productionDays ?? []).map((row) => row.base),
-          ...result.constraints.safetyDays.map((row) => row.base),
+          ...(step === 'process'
+            ? []
+            : [
+                ...(result.poolExceptions?.total ?? []).map((row) => row.base),
+                ...configurationPairs.map((row) => row.base),
+                ...(draft.resources ?? []).map((row) => row.base),
+                ...(draft.productionDays ?? []).map((row) => row.base),
+                ...result.constraints.safetyDays.map((row) => row.base),
+              ]),
         ].filter(Boolean),
       ),
     ];
