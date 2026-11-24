@@ -230,7 +230,11 @@ test('MPS shipment keeps positive equal-weight residuals nonnegative and allocat
       (code) => `2026-09,郑州,${code},产品${code},汤圆,系列,组,22,0,0,1,0,0,1`,
     ),
   );
+  await expect(frame.getByLabel('发货数据来源', { exact: true })).toHaveValue('local-file');
+  await expectShipment(table, '郑州 整月预估发货', '120');
   await expandShipmentBase(frame, '郑州');
+  for (const code of ['A', 'B', 'C', 'D'])
+    await expectShipment(table, `郑州 ${code} 整月预估发货`, '30');
   await edit(table, '郑州 整月预估发货', 2);
   const amounts = async () =>
     Promise.all(
