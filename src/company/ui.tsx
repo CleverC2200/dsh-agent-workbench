@@ -505,7 +505,7 @@ export function mountCompanyUI(
                   openSettings();
                 }}
               >
-                <span aria-hidden="true">⚙</span>
+                <NavIcon kind="settings" />
                 <span>{t('settings')}</span>
               </button>
               <button
@@ -552,17 +552,7 @@ export function mountCompanyUI(
                     disabled={busy}
                     onClick={() => void logout()}
                   >
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    >
-                      <path d="M10 4H4v16h6M14 8l4 4-4 4M8 12h10" />
-                    </svg>
+                    <NavIcon kind="logout" />
                     <span>{t(busy ? 'loggingOut' : 'logout')}</span>
                   </button>
                   {failed && <span role="alert">{t('logoutFailed')}</span>}
