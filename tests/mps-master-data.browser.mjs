@@ -57,6 +57,9 @@ test('MPS reads governed products and annual demand, preserves missing dimension
   await expect(annualTable).toContainText('100');
   await expect(annualTable).toContainText('源数量');
   assert(calls.some((call) => call.queryId === 'annual-pool.detail'));
+  await expect(frame.getByLabel('产品数据来源', { exact: true })).toHaveCount(0);
+  await expect(products).not.toContainText('演示数据');
+  await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
   await frame.getByRole('button', { name: '数据源', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '月主计划数据源', exact: true });
   for (const [kind, name] of Object.entries({
@@ -71,8 +74,6 @@ test('MPS reads governed products and annual demand, preserves missing dimension
     await expect.poll(() => calls.some((call) => call.queryId === kind + '.detail')).toBe(true);
   }
   await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click();
-  await expect(frame.getByLabel('产品数据来源', { exact: true })).toHaveCount(0);
-  await expect(products).not.toContainText('演示数据');
 });
 test('MPS product sync restores a locally deleted product and keeps edits when the source fails', async (t) => {
   const records = [

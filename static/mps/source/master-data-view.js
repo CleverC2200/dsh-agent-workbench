@@ -1,4 +1,5 @@
 import { readMasterPage, sourceNames } from './master-data.js';
+import { canonicalBaseName } from './relations.js';
 const labels = {
   belong_base: '基地',
   sub_category: '大类',
@@ -31,7 +32,7 @@ const labels = {
 };
 export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
-  return function MasterData({ month, close }) {
+  return function MasterData({ month, close, demandOnly = false }) {
     const [kind, setKind] = react.useState('products');
     const [page, setPage] = react.useState(0);
     const [attempt, setAttempt] = react.useState(0);
@@ -55,11 +56,16 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
       kind === 'products'
         ? { ...labels, sub_category: '源大类', responsible_item: '大类' }
         : labels;
-    const columns = state.columns?.map((column) => columnLabels[column] ?? column) ?? [];
-    const rows =
-      state.rows?.map((row) =>
-        Object.fromEntries(state.columns.map((column, index) => [columns[index], row[column]])),
-      ) ?? [];
+    const sourceColumns = (state.columns ?? []).filter(
+      (column) => !demandOnly || column !== 'transfer_tag',
+    );
+    const sourceRows = (state.rows ?? []).filter(
+      (row) => !demandOnly || canonicalBaseName(row.target_base ?? row.belong_base) !== 'ODM',
+    );
+    const columns = sourceColumns.map((column) => columnLabels[column] ?? column);
+    const rows = sourceRows.map((row) =>
+      Object.fromEntries(sourceColumns.map((column, index) => [columns[index], row[column]])),
+    );
     useMpsPart(
       react,
       'master-data',
@@ -70,7 +76,9 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
         status: state.busy ? 'loading' : state.error ? 'failed' : 'loaded',
         error: state.error,
         total: state.total,
-        rows: state.rows ?? [],
+        rows: sourceRows.map((row) =>
+          Object.fromEntries(sourceColumns.map((column) => [column, row[column]])),
+        ),
       },
       '月主计划数据源',
     );
@@ -93,21 +101,23 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
       h(
         'div',
         { className: 'dc-master-tabs', role: 'tablist', 'aria-label': '主数据表' },
-        Object.entries(sourceNames).map(([key, name]) =>
-          h(
-            'button',
-            {
-              key,
-              role: 'tab',
-              'aria-selected': key === kind,
-              onClick: () => {
-                setKind(key);
-                setPage(0);
+        Object.entries(sourceNames)
+          .filter(([key]) => !demandOnly || ['products', 'annual'].includes(key))
+          .map(([key, name]) =>
+            h(
+              'button',
+              {
+                key,
+                role: 'tab',
+                'aria-selected': key === kind,
+                onClick: () => {
+                  setKind(key);
+                  setPage(0);
+                },
               },
-            },
-            name,
+              name,
+            ),
           ),
-        ),
       ),
       (kind === 'annual' || kind === 'transfers') && h('p', {}, `统计月 ${month}`),
       state.busy && h('p', { role: 'status' }, '正在读取…'),

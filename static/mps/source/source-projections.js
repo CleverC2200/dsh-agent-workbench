@@ -7,7 +7,6 @@ const productCategoryField = 'responsible_item';
 const productSourceFields = {
   统计月份: 'stat_period',
   目标基地: 'target_base',
-  调拨标签: 'transfer_tag',
   大类: productCategoryField,
   系列: 'series',
   物料组编码: 'product_item',
@@ -26,12 +25,18 @@ const productSourceFields = {
 };
 export const productSourceColumns = [...Object.keys(productSourceFields), '新品标记'];
 export function productSourceRows(rows) {
-  return rows.map((row) => ({
-    ...Object.fromEntries(
-      Object.entries(productSourceFields).map(([field, source]) => [field, row[source] ?? '']),
-    ),
-    新品标记: !text(row.transfer_tag) ? '' : text(row.transfer_tag) === '新品' ? '新品' : '非新品',
-  }));
+  return rows
+    .filter((row) => canonicalBaseName(row.target_base) !== 'ODM')
+    .map((row) => ({
+      ...Object.fromEntries(
+        Object.entries(productSourceFields).map(([field, source]) => [field, row[source] ?? '']),
+      ),
+      新品标记: !text(row.transfer_tag)
+        ? ''
+        : text(row.transfer_tag) === '新品'
+          ? '新品'
+          : '非新品',
+    }));
 }
 const numeric = (value) =>
   (typeof value === 'number' || (typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value))) &&
@@ -45,7 +50,7 @@ export function productProjections(products, raw = [], facts = [], prices = []) 
   const source = new Map(),
     groups = new Map(),
     bases = new Map();
-  for (const row of raw) {
+  for (const row of raw.filter((row) => canonicalBaseName(row.target_base) !== 'ODM')) {
     const id = key(text(row.material_code), text(row.product_item));
     source.set(id, [...(source.get(id) ?? []), row]);
   }
@@ -56,7 +61,7 @@ export function productProjections(products, raw = [], facts = [], prices = []) 
     groups.set(row['物料组'], group);
   });
   for (const row of facts) {
-    if (!row['产品编码'] || !row['基地']) continue;
+    if (!row['产品编码'] || !row['基地'] || canonicalBaseName(row['基地']) === 'ODM') continue;
     const current = bases.get(row['产品编码']) ?? new Set();
     current.add(row['基地']);
     bases.set(row['产品编码'], current);
