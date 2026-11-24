@@ -28,6 +28,7 @@ const item = {
   title: '2026 年 9 月 纠偏计划待审核：香纳百川（临沂）食品销售有限公司',
   body: '香纳百川（临沂）食品销售有限公司的 2026 年 9 月纠偏计划已提交，请及时审核。',
   state: 'unread',
+  version: 1,
   kind: 'approval',
   businessType: 'sales_forecast',
   actionText: '去审批',
@@ -36,25 +37,37 @@ const item = {
   source: { type: 'workflow', ref: aggregateId, label: 'sales_plan.approval_required' },
 };
 
-test('inbox shows business wording instead of upstream codes and identifiers', async (t) => {
+test('inbox uses business wording and refreshes the sidebar after marking a message read', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+  let current = item;
   await page.route('http://inbox.test/**', async (route) => {
     if (route.request().method() !== 'POST') {
       await route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' });
       return;
     }
     const query = route.request().postDataJSON();
+    if (query.operation === 'read') {
+      assert.deepEqual(query, {
+        operation: 'read',
+        id: item.id,
+        expectedVersion: item.version,
+        idempotencyKey: 'read-notice-1-1',
+      });
+      current = { ...current, state: 'read', version: 2 };
+      await route.fulfill({ json: { ok: true, value: {} } });
+      return;
+    }
     await route.fulfill({
       json: {
         ok: true,
         value: query.id
-          ? { detail: item }
+          ? { detail: current }
           : {
-              items: [item],
+              items: [current],
               total: 1,
-              unreadCount: 1,
+              unreadCount: Number(current.state === 'unread'),
               pageSize: 10,
               environment: 'test',
               coverage: 'complete',
@@ -64,6 +77,10 @@ test('inbox shows business wording instead of upstream codes and identifiers', a
     });
   });
   await page.goto('http://inbox.test/');
+  await page.evaluate(() => {
+    window.notificationChanges = 0;
+    window.addEventListener('gea-notifications-changed', () => window.notificationChanges++);
+  });
   await page.addStyleTag({ content: css });
   await page.addScriptTag({ content: outputFiles[0].text });
 
@@ -95,4 +112,8 @@ test('inbox shows business wording instead of upstream codes and identifiers', a
     0,
     '待办详情不再展示任何内部标识',
   );
+  assert.equal(await page.evaluate(() => window.notificationChanges), 0);
+  await drawer.getByRole('button', { name: '标记已读', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.notificationChanges)).toBe(1);
+  await expect(drawer.getByText('已读', { exact: true })).toBeVisible();
 });

@@ -432,11 +432,10 @@ const copy = {
   apiLog: ['接口日志', 'API logs'],
   inboxNotConnected: ['消息待办接口尚未接入', 'Message inbox service is not connected'],
   messageInbox: ['消息中心', 'Message center'],
-  dismissAnnouncement: ['关闭公告提醒', 'Dismiss announcement'],
-  announcementUntitled: ['未命名公告', 'Untitled announcement'],
+  newInboxMessages: ['有新消息', 'New messages'],
+  sidebarUpdateReminders: ['更新提醒', 'Update reminders'],
   previousReminder: ['上一条提醒', 'Previous reminder'],
   nextReminder: ['下一条提醒', 'Next reminder'],
-  announcements: ['通知公告', 'Announcements'],
   agentPanel: ['需求预测', 'Demand forecast'],
   agentPanelModel: ['GEA Personal Model · 只读分析', 'GEA Personal Model · read-only analysis'],
   agentPanelHelp: [

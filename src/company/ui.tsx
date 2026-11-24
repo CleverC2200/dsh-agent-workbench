@@ -27,7 +27,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types';
 import type { WorkbenchFramePage } from '../frame.ts';
 import type { WorkbenchController } from '../workbench.ts';
 import type { BusinessAccount } from './account.ts';
-import { AnnouncementReminders, SidebarMessages } from './sidebar-messages.tsx';
+import { MessageCenterButton, SidebarMessages } from './sidebar-messages.tsx';
 import { LoginDialog } from './login-dialog.tsx';
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots';
 import { zh, en, type CopyKey } from './locales.ts';
@@ -508,18 +508,6 @@ export function mountCompanyUI(
                 <NavIcon kind="settings" />
                 <span>{t('settings')}</span>
               </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="gea-logout-button"
-                onClick={() => {
-                  close();
-                  void workbench.open(INBOX);
-                }}
-              >
-                <NavIcon kind="bell" />
-                <span>{t('messageInbox')}</span>
-              </button>
               {renderSlot('gea.account.actions', {
                 onSelect: () => {
                   close();
@@ -716,6 +704,8 @@ export function mountCompanyUI(
         ),
       ...documentState.pages.map((page) => [page.id, workbench.label(page.id)] as const),
     ]);
+    const inboxAvailable = available.has(INBOX);
+    const inboxScope = inboxAvailable ? scope : null;
     const testEnvironment =
       identity.state === 'confirmed' && !identity.error && identity.status?.environment === 'test';
     const menu = resolveBusinessMenu(
@@ -787,6 +777,14 @@ export function mountCompanyUI(
               {renderSlot('sidebar.brand.mark', { size: 38 })}
               {!collapsed && renderSlot('sidebar.brand.name', {})}
             </div>
+            <MessageCenterButton
+              key={inboxScope}
+              scope={inboxScope}
+              disabled={!inboxAvailable}
+              active={activePanel === INBOX}
+              open={() => void workbench.open(INBOX)}
+              t={t}
+            />
             {!darwin && sidebarToggle}
           </div>
         </SidebarGeometry.Provider>
@@ -1025,14 +1023,6 @@ export function mountCompanyUI(
         <footer className="gea-sidebar-footer">
           {!collapsed && (
             <SidebarMessages t={t}>
-              {available.has(INBOX) && scope && (
-                <AnnouncementReminders
-                  key={scope}
-                  scope={scope}
-                  open={() => void workbench.open(INBOX)}
-                  t={t}
-                />
-              )}
               {renderSlot('sidebar.footer.action', { wide: true })}
             </SidebarMessages>
           )}

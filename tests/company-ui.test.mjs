@@ -726,12 +726,6 @@ test('formal account menu preserves keyboard focus and dismissal while ignoring 
       new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
     ),
   );
-  assert.equal(document.activeElement.textContent, '消息中心');
-  await act(async () =>
-    document.activeElement.dispatchEvent(
-      new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
-    ),
-  );
   assert.equal(document.activeElement.textContent, '退出登录');
   await act(async () => document.activeElement.click());
   await act(async () =>
