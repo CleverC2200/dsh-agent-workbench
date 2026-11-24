@@ -217,9 +217,9 @@ test('base SKU drilldown stays on its authorized materialized rows instead of en
         rejectedColumns: [],
         configVersion: 'fixed',
       };
-    if (options.queryId === 'snapshot.calendar.target_versions')
+    if (options.queryId === 'calendar.target_plan_versions')
       return {
-        rows: [{ month: '2026-11-01', inventory_version: '月初' }],
+        rows: [{ month: '2026-11-01', inventory_version: '月初', usable_plan_rows: 1 }],
         returnedColumns: columns,
         rejectedColumns: [],
         configVersion: 'fixed',
@@ -292,9 +292,9 @@ test('latest published company snapshot keeps a later as-of read out of raw perm
         rejectedColumns: [],
         configVersion: 'fixed',
       };
-    if (options.queryId === 'snapshot.calendar.target_versions')
+    if (options.queryId === 'calendar.target_plan_versions')
       return {
-        rows: [{ month: '2026-11-01', inventory_version: '月初' }],
+        rows: [{ month: '2026-11-01', inventory_version: '月初', usable_plan_rows: 1 }],
         returnedColumns: columns,
         rejectedColumns: [],
         configVersion: 'fixed',

@@ -63,8 +63,8 @@ test('real full-chain page requests model insight and refreshes evidence when ch
     let rows = [];
     const row = Object.fromEntries(q.resultColumns.map((k) => [k, 0]));
     if (queryId.startsWith('source.')) rows = [{ day: '2026-11-01' }];
-    else if (queryId === 'calendar.target_versions')
-      rows = [{ month: '2026-11-01', inventory_version: '月初', source_rows: 1 }];
+    else if (queryId === 'calendar.target_plan_versions')
+      rows = [{ month: '2026-11-01', inventory_version: '月初', usable_plan_rows: 1 }];
     else if (q.resultColumns.includes('total')) rows = [{ total: 0 }];
     else if (q.resultColumns.includes('row_count'))
       rows = [

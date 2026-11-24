@@ -6,7 +6,7 @@ const config = JSON.parse(await readFile('business/inventory-qll/sql.config.json
 const out = await build({
   stdin: {
     contents:
-      "export {readConfiguredFacts} from './business/shared/configured-facts';export {qllPublishedDate} from './business/shared/qll-published-date'; export {categoryTreeReader} from './business/shared/qll-category-tree'; export {readConfiguredOverview} from './business/shared/configured-overview';",
+      "export {readConfiguredFacts} from './business/shared/configured-facts';export {qllPublishedDate} from './business/shared/qll-published-date'; export {categoryTreeReader} from './business/shared/qll-category-tree'; export {readConfiguredOverview} from './business/shared/configured-overview'; export {createAgentQueries} from './business/shared/agent-query'; export {readConfiguredTargetScope} from './business/shared/configured-target-scope';",
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -14,10 +14,16 @@ const out = await build({
   platform: 'node',
   format: 'esm',
 });
-const { readConfiguredFacts, qllPublishedDate, categoryTreeReader, readConfiguredOverview } =
-  await import(
-    'data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64')
-  );
+const {
+  readConfiguredFacts,
+  qllPublishedDate,
+  categoryTreeReader,
+  readConfiguredOverview,
+  createAgentQueries,
+  readConfiguredTargetScope,
+} = await import(
+  'data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64')
+);
 const metadata = {
   batch_id: 'batch',
   business_date: '2026-11-06',
@@ -32,6 +38,45 @@ function snapshotReply(options, row = metadata) {
     configVersion: 'fixed',
   };
 }
+test('a plan version with targets but no demand falls back in publication order', async () => {
+  const currentMonth = '2026-11-01';
+  const nextMonth = '2026-12-01';
+  const rows = [
+    { month: nextMonth, inventory_version: '月初', usable_plan_rows: 0 },
+    { month: nextMonth, inventory_version: '滚动', usable_plan_rows: 4 },
+    { month: currentMonth, inventory_version: '纠偏', usable_plan_rows: 3 },
+    { month: currentMonth, inventory_version: '月初', usable_plan_rows: 2 },
+  ];
+  const scope = (omit, asOf = '2026-11-24') =>
+    readConfiguredTargetScope(
+      createAgentQueries(config, async (_, options) => {
+        assert.equal(options.queryId, 'calendar.target_plan_versions');
+        assert.deepEqual(
+          options.values.plan_months,
+          asOf === '2026-11-24' ? [currentMonth, nextMonth] : [currentMonth],
+        );
+        const available = rows.filter((row) => options.values.plan_months.includes(row.month));
+        return {
+          ...snapshotReply(options),
+          rows: available.map((row, index) =>
+            omit.includes(index) ? { ...row, usable_plan_rows: 0 } : row,
+          ),
+        };
+      }),
+      asOf,
+    );
+  const rolling = await scope([]);
+  assert.equal(rolling.targetMonth, nextMonth);
+  assert.equal(rolling.inventoryVersion, '滚动');
+  assert.equal(rolling.fallbackUsed, true);
+  const adjusted = await scope([1]);
+  assert.equal(adjusted.targetMonth, currentMonth);
+  assert.equal(adjusted.inventoryVersion, '纠偏');
+  assert.equal((await scope([0], '2026-11-20')).inventoryVersion, '月初');
+  const allMissing = await scope([1, 2, 3]);
+  assert.equal(allMissing.targetMonth, nextMonth);
+  assert.equal(allMissing.inventoryVersion, '月初');
+});
 test('latest publication stays within the requested month; historical reads cannot use future facts', async () => {
   const execute = async (_, o) => snapshotReply(o);
   assert.equal(await qllPublishedDate(config, '2026-11-09', { execute }), '2026-11-06');
@@ -79,9 +124,9 @@ test('snapshot lists preserve genuine zero and unknown target independently', as
         rejectedColumns: [],
         configVersion: 'fixed',
       };
-    if (o.queryId === 'snapshot.calendar.target_versions')
+    if (o.queryId === 'calendar.target_plan_versions')
       return {
-        rows: [{ month: '2026-11-01', inventory_version: '月初' }],
+        rows: [{ month: '2026-11-01', inventory_version: '月初', usable_plan_rows: 1 }],
         returnedColumns: cols,
         rejectedColumns: [],
         configVersion: 'fixed',
