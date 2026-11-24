@@ -10,7 +10,11 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarDays, Check, ChevronDown, ChevronRight, Search, X } from 'lucide-react';
-import { refreshConfiguredQueries } from '../../../../shared/query-cache';
+import {
+  configuredQueryFreshAfter,
+  refreshConfiguredQueries,
+} from '../../../../shared/query-cache';
+import { useQueryIdentity } from '../../../../shared/use-query-identity';
 import { baseProductHierarchy } from 'dsh-agent-manage/aps-compute/base-product-hierarchy';
 import {
   salesOrgHierarchy,
@@ -202,11 +206,14 @@ function useLanternFacts(
   } = {},
 ) {
   const [revision, setRevision] = useState(0);
+  const queryIdentity = useQueryIdentity();
+  const freshness = configuredQueryFreshAfter();
   const {
     view,
     range: { from, to },
   } = period;
   const category = product?.category,
+    series = product?.series,
     group = product?.group,
     sku = product?.sku,
     level = product?.level;
@@ -218,11 +225,14 @@ function useLanternFacts(
     inventoryScope,
     only,
     category,
+    series,
     group,
     sku,
     level,
     organization,
     revision,
+    queryIdentity,
+    freshness,
   ]);
   const [state, setState] = useState<{ key: string; facts: LanternFacts; busy: boolean }>();
   useEffect(() => {
@@ -240,7 +250,13 @@ function useLanternFacts(
         product:
           category === undefined
             ? undefined
-            : { category, series: '', group: group ?? '', sku: sku ?? '', level: level ?? 0 },
+            : {
+                category,
+                series: series ?? '',
+                group: group ?? '',
+                sku: sku ?? '',
+                level: level ?? 0,
+              },
         onSource: (source, result) => {
           setState((current) =>
             current?.key === key
@@ -275,6 +291,7 @@ function useLanternFacts(
     inventoryScope,
     only,
     category,
+    series,
     group,
     sku,
     level,
@@ -465,6 +482,8 @@ function useHistoricalFacts(
   product?: ProductFilters,
   organization = false,
 ): History {
+  const queryIdentity = useQueryIdentity();
+  const freshness = configuredQueryFreshAfter();
   const {
     view,
     range: { from, to },
@@ -487,6 +506,8 @@ function useHistoricalFacts(
     group,
     sku,
     level,
+    queryIdentity,
+    freshness,
   ]);
   const [history, setHistory] = useState<History & { key: string }>();
   useEffect(() => {
@@ -837,13 +858,11 @@ function MetricResults({
   module,
   period,
   facts,
-  busy,
 }: {
   metrics: readonly Metric[];
   module: 'sales' | 'production';
   period: SelectedPeriod;
   facts: LanternFacts;
-  busy: boolean;
 }) {
   const [metric, setMetric] = useState<string | null>(null);
   return (
@@ -856,7 +875,7 @@ function MetricResults({
         onSelect={setMetric}
       />
       {module === 'sales' ? (
-        <SalesOrgList facts={facts} period={period} busy={busy} />
+        <SalesOrgList facts={facts} period={period} />
       ) : (
         <ProductMetricList metrics={metrics} module={module} period={period} facts={facts} />
       )}
@@ -1434,22 +1453,23 @@ function ProductMetricList({
       : !inventoryScope || inventoryScope === 'all'
         ? ['base', 'branch']
         : [inventoryScope];
-  const stockDetail =
-    module === 'inventory' &&
-    Boolean(product.category || product.group.trim() || product.sku.trim());
-  const detail = useLanternFacts('inventory', period, {
+  const needsDetail =
+    module === 'production'
+      ? product.level >= 2
+      : Boolean(product.category || product.group.trim() || product.sku.trim());
+  const detail = useLanternFacts(module, period, {
     inventoryScope,
     product,
-    enabled: stockDetail,
+    enabled: needsDetail,
   });
-  const tableFacts = stockDetail ? detail.facts : facts;
+  const tableFacts = needsDetail ? detail.facts : facts;
   const categories = useMemo(
     () => buildProductTree(productFacts(facts, keys, { base: base || undefined })),
     [facts, module, inventoryScope, base],
   );
   const products = useProductFilters(
-    stockDetail
-      ? buildProductTree(productFacts(tableFacts, keys))
+    needsDetail
+      ? buildProductTree(productFacts(tableFacts, keys, { base: base || undefined }))
       : byBase && !base
         ? emptyProductCategories
         : categories,
@@ -1462,9 +1482,9 @@ function ProductMetricList({
   const history = useHistoricalFacts(
     period,
     module,
-    active?.key,
+    detail.busy ? undefined : active?.key,
     inventoryScope,
-    stockDetail ? product : undefined,
+    needsDetail ? product : undefined,
   );
   const definitions = module === 'production' ? production : inventoryMetrics(inventoryScope);
   const labels = [
@@ -1642,10 +1662,10 @@ function ProductMetricList({
             aria-labelledby={module === 'production' ? `${id}-dimension-${dimension}` : undefined}
           >
             {history.busy && <p role="status">正在读取清单同期数据…</p>}
-            {stockDetail && detail.busy && <p role="status">正在读取库存明细…</p>}
-            {stockDetail &&
+            {needsDetail && detail.busy && <p role="status">正在读取商品明细…</p>}
+            {needsDetail &&
               Object.values(tableFacts).some((source) => source.status === 'failed') && (
-                <p role="status">部分库存明细查询失败</p>
+                <p role="status">部分商品明细查询失败</p>
               )}
             <ProductDetailTable
               {...products.tableProps}
@@ -1686,11 +1706,9 @@ function ProductMetricList({
 function SalesOrgList({
   period,
   facts: primaryFacts,
-  busy,
 }: {
   period: SelectedPeriod;
   facts: LanternFacts;
-  busy: boolean;
 }) {
   const { view } = period;
   const [selected, setSelected] = useState(0);
@@ -1709,7 +1727,10 @@ function SalesOrgList({
   const isOverview = selected === 0;
   const orgData = useLanternFacts('sales', period, {
     organization: true,
-    enabled: !busy && dimension === 0 && (isOverview || tab.title === '准交率'),
+    enabled:
+      primaryFacts.ontime !== undefined &&
+      dimension === 0 &&
+      (isOverview || tab.title === '准交率'),
   });
   const facts = useMemo(
     () => ({ ...primaryFacts, ...orgData.facts }),
@@ -1765,11 +1786,22 @@ function SalesOrgList({
   const history = useHistoricalFacts(
     period,
     'sales',
-    listMetric === 'budget' ? undefined : listMetric,
+    listMetric,
     undefined,
     showProductList ? product : undefined,
     orgComparison,
   );
+  const companyBudget =
+    listMetric === 'budget'
+      ? rowCells(
+          sales.filter(({ key }) => key === 'budget'),
+          facts,
+          period,
+          {},
+          undefined,
+          history,
+        )
+      : undefined;
   const productData = useLanternFacts('sales', period, {
     product,
     only: orderMetric,
@@ -1983,7 +2015,9 @@ function SalesOrgList({
                 ))}
               </div>
             )}
-            {showProductList ? (
+            {companyBudget ? (
+              <p>销售预算按公司汇总。</p>
+            ) : showProductList ? (
               products.controls
             ) : (
               <div className="lantern-sales-filter-group" role="search" aria-label="销售组织筛选">
@@ -2068,12 +2102,27 @@ function SalesOrgList({
                 className="lantern-table-scroll lantern-sales-detail-table"
                 tabIndex={0}
                 role="region"
-                aria-label="销售组织明细表格"
+                aria-label={companyBudget ? '销售预算明细表格' : '销售组织明细表格'}
               >
-                <table aria-label="销售组织明细">
-                  <SalesTableHeader name="组织名称" columns={columns} />
+                <table aria-label={companyBudget ? '销售预算明细' : '销售组织明细'}>
+                  <SalesTableHeader
+                    name={companyBudget ? '统计范围' : '组织名称'}
+                    columns={columns}
+                  />
                   <tbody>
-                    {organizations.some((node) => matchesFilters(node, 0)) ? (
+                    {companyBudget ? (
+                      <tr>
+                        <th scope="row">公司合计</th>
+                        <td>公司</td>
+                        {columns.map(({ label, targetFor }) => (
+                          <td key={targetFor ?? label}>
+                            {targetFor
+                              ? salesTargets.get(targetFor)
+                              : (companyBudget.get(label)?.value ?? '-')}
+                          </td>
+                        ))}
+                      </tr>
+                    ) : organizations.some((node) => matchesFilters(node, 0)) ? (
                       renderRows(organizations)
                     ) : (
                       <tr>
@@ -2596,7 +2645,6 @@ export function LanternDashboard() {
                     module={tab.id}
                     period={period}
                     facts={facts}
-                    busy={busy}
                     metrics={tab.definitions.map((definition) =>
                       metricValue(definition, observe(definition.key, facts, period)),
                     )}

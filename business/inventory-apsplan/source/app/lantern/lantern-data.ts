@@ -1,5 +1,11 @@
 import { businessDay } from '../../../../shared/business-day';
 import { createAgentQueries } from '../../../../shared/agent-query';
+import { inFlightQueries } from '../../../../shared/in-flight-query';
+import {
+  configuredQueryFreshAfter,
+  configuredQueryIdentity,
+  subscribeQueryIdentity,
+} from '../../../../shared/query-cache';
 import { agentSqlConfig } from '../../../../shared/sql-config';
 import { deriveMetrics } from 'dsh-agent-manage/aps-compute/metrics';
 import configuredSql from '../../../sql.config.json';
@@ -62,7 +68,7 @@ export type Observation = {
 
 const config = agentSqlConfig(configuredSql);
 const sources = {
-  sales: ['budget', 'accuracy', 'cancellation', 'amendment', 'ontime', 'ontimeOrganization'],
+  sales: ['accuracy', 'budget', 'amendment', 'ontime', 'cancellation', 'ontimeOrganization'],
   production: ['production', 'fulfillment'],
   inventory: ['base', 'branch', 'customer'],
 } satisfies Record<DashboardModule, readonly Source[]>;
@@ -119,12 +125,17 @@ const sourceDate = (value: unknown) => {
   return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : undefined;
 };
 
+const recentReads = new Map<string, { expires: number; rows: Row[] }>();
+const pendingReads = inFlightQueries<Row[]>();
+subscribeQueryIdentity(() => recentReads.clear());
+
 async function read(
   client: ReturnType<typeof createAgentQueries>,
   id: string,
   overrides: Record<string, unknown>,
   signal: AbortSignal,
   keyFields?: string[],
+  cacheScope?: { identity: number; freshness: number },
 ): Promise<Row[]> {
   const { parameterSpec, request, resultColumns } = client.config.queries[id];
   const parameters: Record<string, unknown> = {};
@@ -136,18 +147,47 @@ async function read(
   for (const [key, value] of Object.entries(overrides)) {
     if (Object.hasOwn(parameters, key)) parameters[key] = value;
   }
-  if (!keyFields)
-    return (await client.read(id, parameters, { requiredColumns: resultColumns, signal })).rows;
-  Object.assign(parameters, { page_size: 200, offset: 0 });
-  return (
-    await client.readAll(id, parameters, {
-      signal,
-      keyFields,
-      requiredColumns: resultColumns,
-      maxRows: 12_000,
-      singlePageFirst: true,
-    })
-  ).rows;
+  const requiredColumns = resultColumns.filter((column: string) => column !== 'material_name');
+  const load = async (requestSignal: AbortSignal) => {
+    if (!keyFields)
+      return (await client.read(id, parameters, { requiredColumns, signal: requestSignal })).rows;
+    return (
+      await client.readAll(
+        id,
+        { ...parameters, page_size: 200, offset: 0 },
+        {
+          signal: requestSignal,
+          keyFields,
+          requiredColumns,
+          maxRows: 12_000,
+          singlePageFirst: true,
+        },
+      )
+    ).rows;
+  };
+  if (!cacheScope) return load(signal);
+  signal.throwIfAborted();
+  const { identity, freshness } = cacheScope;
+  if (identity !== configuredQueryIdentity()) throw new DOMException('Aborted', 'AbortError');
+  const key = JSON.stringify([identity, freshness, id, parameters]);
+  const cached = recentReads.get(key);
+  if (cached && cached.expires > Date.now()) return cached.rows;
+  return pendingReads(
+    key,
+    async (requestSignal) => {
+      const rows = await load(requestSignal);
+      requestSignal.throwIfAborted();
+      if (identity !== configuredQueryIdentity()) throw new DOMException('Aborted', 'AbortError');
+      if (freshness === configuredQueryFreshAfter()) {
+        recentReads.delete(key);
+        recentReads.set(key, { expires: Date.now() + 120_000, rows });
+        const oldest = recentReads.keys().next().value;
+        if (recentReads.size > 48 && oldest !== undefined) recentReads.delete(oldest);
+      }
+      return rows;
+    },
+    signal,
+  );
 }
 
 function supported(source: Source, period: DashboardPeriod) {
@@ -183,47 +223,52 @@ export async function readLanternFacts({
   organization?: boolean;
   execute?: Parameters<typeof createAgentQueries>[1];
 }): Promise<LanternFacts> {
-  const client = createAgentQueries(config, execute);
+  const freshness = configuredQueryFreshAfter();
+  const cacheScope = execute ? undefined : { identity: configuredQueryIdentity(), freshness };
+  const client = createAgentQueries(config, execute, { freshAfter: freshness });
+  const query = (id: string, overrides: Record<string, unknown>, keyFields?: string[]) =>
+    read(client, id, overrides, signal, keyFields, cacheScope);
   const { from, to } = period.range;
   const fromMonth = monthStart(from),
     nextMonth = shiftMonth(to, 1);
   const end = shiftDay(to, 1);
-  const search = product?.sku.trim() || product?.group.trim();
-  const pattern = search ? '%' + search.toLowerCase().replace(/[\\%_]/g, '\\$&') + '%' : null;
+  const pattern = (value = '') => {
+    const search = value.trim();
+    return search ? '%' + search.toLowerCase().replace(/[\\%_]/g, '\\$&') + '%' : null;
+  };
   const productDimensions = {
     sku_detail: Boolean(product?.sku.trim()),
-    product_pattern: pattern,
+    product_pattern: pattern(product?.sku || product?.group),
     group_detail: Boolean(product && product.level >= 1),
     material_detail: Boolean(product && product.level >= 2),
     product_category: product?.category || null,
+  };
+  const productionDimensions = {
+    ...productDimensions,
+    product_series: product?.series || null,
+    group_pattern: pattern(product?.group),
+    sku_pattern: pattern(product?.sku),
   };
   const results: LanternFacts = {};
   let dates: Promise<Row[]> | undefined;
   const dateFor = async (source: 'base' | 'branch' | 'customer') => {
     if (source === 'customer') {
-      const rows = await read(
-        client,
-        'lantern.customer-date',
-        { start_day: from, end_day: to },
-        signal,
-      );
+      const rows = await query('lantern.customer-date', { start_day: from, end_day: to });
       return sourceDate(rows[0]?.day);
     }
-    dates ??= read(
-      client,
-      'lantern.stock-dates',
-      { start_day: compact(from), end_day: compact(to) },
-      signal,
+    dates ??= query('lantern.stock-dates', { start_day: compact(from), end_day: compact(to) });
+    const rows = await dates;
+    return (
+      sourceDate(rows.find((row) => row.scope === 'all')?.day) ??
+      sourceDate(rows.find((row) => row.scope === source)?.day)
     );
-    return sourceDate((await dates).find((row) => row.scope === source)?.day);
   };
   const get = async (source: Source): Promise<SourceResult> => {
     const ready = (rows: Row[], date?: string): SourceResult => ({ status: 'ready', rows, date });
     switch (source) {
       case 'budget':
         return ready(
-          await read(
-            client,
+          await query(
             'page.budget-performance',
             {
               start_month: compact(fromMonth).slice(0, 6),
@@ -232,20 +277,17 @@ export async function readLanternFacts({
               start: compact(from),
               end_exclusive: compact(end),
             },
-            signal,
             ['month'],
           ),
         );
       case 'accuracy':
         return ready(
-          await read(
-            client,
+          await query(
             'lantern.accuracy',
             {
               start_month: fromMonth,
               end_month_exclusive: nextMonth,
             },
-            signal,
             ['month', 'region', 'province'],
           ),
         );
@@ -254,8 +296,7 @@ export async function readLanternFacts({
       case 'ontime':
         if (product)
           return ready(
-            await read(
-              client,
+            await query(
               'lantern.product-' + source,
               {
                 report_base: '',
@@ -263,63 +304,56 @@ export async function readLanternFacts({
                 end_exclusive: end,
                 ...productDimensions,
               },
-              signal,
               ['category', 'item', 'material', 'sku'],
             ),
           );
         return ready(
-          await read(
-            client,
+          await query(
             'lantern.' + source,
             {
               report_base: '',
               start: from,
               end_exclusive: end,
             },
-            signal,
             source === 'ontime' ? undefined : ['base', 'region', 'province', 'kind'],
           ),
         );
       case 'ontimeOrganization':
         return ready(
-          await read(
-            client,
+          await query(
             'lantern.ontime-organization',
             {
               report_base: '',
               start: from,
               end_exclusive: end,
             },
-            signal,
             ['region', 'province'],
           ),
         );
       case 'production':
         return ready(
-          await read(
-            client,
+          await query(
             'lantern.production',
             {
               start: compact(from),
               end_exclusive: compact(end),
+              ...productionDimensions,
             },
-            signal,
             ['base', 'category', 'item', 'material', 'sku'],
           ),
         );
       case 'fulfillment': {
         const monthly = period.view === 'month';
         return ready(
-          await read(
-            client,
-            monthly ? 'page.orders-month-products' : 'page.orders-products',
+          await query(
+            'lantern.fulfillment',
             {
               date_basis: monthly ? 'order_month' : 'created',
               start: from,
               end_exclusive: end,
+              ...productionDimensions,
             },
-            signal,
-            ['base', 'category', 'item', 'material'],
+            ['base', 'category', 'item', 'material', 'sku'],
           ),
         );
       }
@@ -331,15 +365,13 @@ export async function readLanternFacts({
         if (date < from || date > to) throw Error('库存快照日期超出所选范围');
         const id = source === 'customer' ? 'lantern.customer-stock' : 'lantern.stock-' + source;
         return ready(
-          await read(
-            client,
+          await query(
             id,
             {
               stat_date: date,
               ...productDimensions,
               group_detail: Boolean(product),
             },
-            signal,
             ['category', 'item', 'material', 'sku'],
           ),
           date,
@@ -408,7 +440,8 @@ function scoped(rows: Row[], scope: Scope) {
     if (scope.base && row.base !== scope.base) return false;
     if (
       scope.product &&
-      ((!row.category && !row.sku) || scope.product.some((part, i) => productPath(row)[i] !== part))
+      ((!Object.hasOwn(row, 'category') && !Object.hasOwn(row, 'sku')) ||
+        scope.product.some((part, i) => productPath(row)[i] !== part))
     )
       return false;
     return !scope.organization?.some(
@@ -462,7 +495,7 @@ export function observe(
         ['销售额', known(rows, 'actual')],
         ['月度预算', known(rows, 'budget')],
       ],
-      note: '公司未税收入与月度预算',
+      note: supported('budget', period) ? '公司未税收入与月度预算' : '预算按月发布',
     };
   }
   if (key === 'accuracy') {
@@ -475,7 +508,7 @@ export function observe(
         ['初版需求预测准确率', initial === null ? null : 100 - initial],
         ['纠偏版需求预测准确率', adjusted === null ? null : 100 - adjusted],
       ],
-      note: '源表月度累计',
+      note: supported('accuracy', period) ? '源表月度累计' : '该期间暂无同口径的月度累计',
     };
   }
   if (key === 'production') {
@@ -525,7 +558,7 @@ export function observe(
   const unknownStock = (known(rows, 'unknown_inventory_rows') ?? 0) > 0;
   const note =
     inventoryScope === 'all' && !date && (source('base') || source('branch'))
-      ? '基地与分仓需使用同日快照'
+      ? '所选期间内暂无基地与分仓的同日快照'
       : undefined;
   switch (key) {
     case 'inventory':
@@ -536,7 +569,12 @@ export function observe(
       return {
         value: known(rows, 'stock_value'),
         date,
-        note: (known(rows, 'unknown_value_rows') ?? 0) > 0 ? '已知金额' : note,
+        note:
+          inventoryScope !== 'customer'
+            ? '库存金额来源仅覆盖客户库存'
+            : (known(rows, 'unknown_value_rows') ?? 0) > 0
+              ? '已知金额'
+              : note,
       };
     case 'freshness': {
       const share = ratio(large, stock);

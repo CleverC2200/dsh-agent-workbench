@@ -2594,6 +2594,8 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
     'apsplan',
     768,
     ({ queryId, parameters }, result) => {
+      if (queryId === 'page.budget-performance')
+        Object.assign(result.rows[0], { month: '202610', actual: 80000, budget: 100000 });
       if (queryId === 'lantern.accuracy')
         Object.assign(result.rows[0], {
           month: '2026-10-01',
@@ -2614,6 +2616,21 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
           source_date: '20261019',
           source_basis: 'MES_QUANTITY',
         });
+      if (queryId === 'lantern.fulfillment')
+        Object.assign(result.rows[0], {
+          sku: parameters.sku_detail ? 'sku-A-000' : null,
+          demand: 100,
+          shortage: 12,
+          shipped: 88,
+          records: 1,
+          invalid: 0,
+        });
+      if (queryId === 'lantern.stock-dates')
+        result.rows = [
+          { scope: 'base', day: '20261019' },
+          { scope: 'branch', day: '20261018' },
+          { scope: 'all', day: '20261018' },
+        ];
       return result;
     },
   );
@@ -2632,6 +2649,9 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
   await expect(lantern).toHaveAttribute('aria-current', 'page');
   await expect(dashboard.getByText('数据范围 2026-10-01 至 2026-10-19')).toBeVisible();
   await expect(dashboard.locator('[data-metric="销售提报准确率"]')).toContainText('82.50');
+  await dashboard.getByRole('tab', { name: '销售预算达成率', exact: true }).click();
+  const budgetRow = dashboard.getByRole('row', { name: /公司合计/ });
+  await expect(budgetRow).toContainText('80.00%');
   await sales.press('ArrowRight');
   await expect(production).toBeFocused();
   await expect(sales).toHaveAttribute('aria-selected', 'true');
@@ -2646,6 +2666,36 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
     calls.find(({ queryId }) => queryId === 'lantern.production').parameters.end_exclusive,
     '20261020',
   );
+  const skuBox = dashboard.getByRole('searchbox', { name: 'SKU', exact: true });
+  await skuBox.fill('sku-A-000');
+  const skuRow = dashboard.getByRole('row', { name: /sku-A-000/ });
+  await expect(skuRow).toContainText('88.00%');
+  assert.ok(
+    calls.some(
+      ({ queryId, parameters }) =>
+        queryId === 'lantern.fulfillment' &&
+        parameters.sku_detail &&
+        parameters.sku_pattern === '%sku-a-000%',
+    ),
+  );
+  const inventory = tabs.getByRole('tab', { name: '库存', exact: true });
+  await inventory.click();
+  await expect(dashboard.locator('[data-metric="库存量"]')).toContainText('2.41');
+  for (const queryId of ['lantern.stock-base', 'lantern.stock-branch'])
+    assert.equal(calls.find((call) => call.queryId === queryId).parameters.stat_date, '2026-10-18');
+  const initialProductionCalls = () =>
+    calls.filter(
+      ({ queryId, parameters }) =>
+        queryId === 'lantern.production' &&
+        parameters.start === '20261001' &&
+        !parameters.sku_detail,
+    ).length;
+  await production.click();
+  await expect(dashboard.locator('[data-metric="生产计划达成率"]')).toContainText('90.00');
+  assert.equal(initialProductionCalls(), 1);
+  await dashboard.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect(dashboard.locator('[data-metric="生产计划达成率"]')).toContainText('90.00');
+  assert.equal(initialProductionCalls(), 2);
   const meter = dashboard.locator('[data-metric="生产计划达成率"]');
   await meter.getByRole('button').click();
   const trend = dashboard.getByRole('region', { name: '生产计划达成率趋势', exact: true });
@@ -2666,6 +2716,12 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
     ),
   );
   await workspace.getByRole('button', { name: '产销协同看板', exact: true }).click();
+  await expect(dashboard).toHaveCount(0);
+  await lantern.click();
+  await expect(dashboard).toBeVisible();
+  await dashboard.evaluate((element) => {
+    element.ownerDocument.defaultView.dispatchEvent(new Event('gea-identity-changed'));
+  });
   await expect(dashboard).toHaveCount(0);
   assert.deepEqual(errors, []);
 });
