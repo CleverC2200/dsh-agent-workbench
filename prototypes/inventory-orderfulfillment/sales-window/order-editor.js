@@ -389,7 +389,9 @@ window.OrderShortageEditor = (() => {
         if (inventoryEnabled && inventoryPhase === 'error') return inventoryError;
         if (
           inventoryEnabled &&
-          (inventoryPhase !== 'ready' || inventoryKey !== inventoryDraftKey())
+          (inventoryPhase !== 'ready' ||
+            inventoryKey !== inventoryDraftKey() ||
+            !/^[a-f0-9]{64}$/.test(inventoryResult?.inventoryHash || ''))
         )
           return '正在核算最新库存，请稍候。';
         if (priceRecalculationEnabled && inventoryResult?.pricesReady !== true)
@@ -430,6 +432,7 @@ window.OrderShortageEditor = (() => {
         originalNotice &&
         priceRecalculationEnabled &&
         inventoryPhase === 'ready' &&
+        inventoryResult &&
         snapshot.credit?.status !== 'insufficient'
       ) {
         originalNotice.textContent = inventoryResult.pricesReady
@@ -1199,18 +1202,30 @@ window.OrderShortageEditor = (() => {
             saving ? '保存中…' : '确认',
             async () => {
               if (state.previewOnly === true || reason() || saving) return;
-              saving = true;
-              render();
-              try {
-                await state.onConfirm({
+              const verifiedKey = inventoryDraftKey(),
+                verifiedInventory = inventoryResult,
+                draft = {
                   deliveryDate,
                   ...(vehicleType !== (snapshot.vehicleType || '') ? { vehicleType } : {}),
-                  ...(inventoryEnabled ? { inventoryHash: inventoryResult.inventoryHash } : {}),
+                  ...(inventoryEnabled ? { inventoryHash: verifiedInventory.inventoryHash } : {}),
                   lines: (capabilities.catalogAvailable === true
                     ? lines.filter((line) => line.draftQuantity > 0)
                     : lines
                   ).map((line) => ({ sku: line.sku, quantity: line.draftQuantity })),
-                });
+                };
+              saving = true;
+              notice = '';
+              try {
+                render();
+                if (
+                  verifiedKey !== inventoryDraftKey() ||
+                  (inventoryEnabled &&
+                    (inventoryPhase !== 'ready' ||
+                      inventoryKey !== verifiedKey ||
+                      inventoryResult !== verifiedInventory))
+                )
+                  throw Error('库存核验已变化，请等待重新核算后再提交。');
+                await state.onConfirm(draft);
                 modal = false;
               } catch (error) {
                 notice = error.message;
