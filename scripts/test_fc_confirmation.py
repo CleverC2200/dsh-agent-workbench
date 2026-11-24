@@ -10,8 +10,13 @@ class Confirmation(unittest.TestCase):
   self.db=sqlite3.connect(':memory:');self.db.row_factory=sqlite3.Row;self.addCleanup(self.db.close)
   self.db.create_function('CONCAT',-1,lambda *v:''.join(str(x) for x in v if x is not None))
   tree=sqlglot.parse_one(QUERY['request']['sql'])
-  columns=sorted({c.name for c in tree.find_all(exp.Column) if c.table=='m'})
-  self.db.execute('CREATE TABLE agents_inv_branch_sku_day ('+', '.join(columns)+')')
+  tables={}
+  for table in tree.find_all(exp.Table):
+   if table.name.startswith('agents_'):
+    alias=table.alias_or_name
+    tables.setdefault(table.name,set()).update(c.name for c in tree.find_all(exp.Column) if c.table==alias)
+  for table,columns in tables.items():
+   self.db.execute('CREATE TABLE '+table+' ('+', '.join(sorted(columns))+')')
   for warehouse,sku,qty in [('A020','POS',10),('A020','ZERO',0),('A020','UNKNOWN',None),('A100','OTHER',20)]:
    self.db.execute('INSERT INTO agents_inv_branch_sku_day (inv_batch_id,inv_variant_id,warehouseid,sku,warehouse_name,inv_business_date,month_out_plan,cycle_days,inventory_qty,current_order_shortage,open_transfer_reported_qty,calculation_order_remaining) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',('batch','BRANCH_DEFAULT',warehouse,sku,'长沙' if warehouse=='A020' else '另一仓','2026-10-19',0,7,10,qty,0,0))
  def read(self,**overrides):
