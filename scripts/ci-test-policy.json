@@ -251,6 +251,11 @@
     },
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^src/frame(?:\\.ts|-presenter\\.(?:css|tsx))$",
+      "tests": ["tests/frame-cordis-injection.test.mjs", "tests/frame-layout.browser.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^(?:static|theme|src/company)/",
       "tests": ["tests/frame-layout.browser.mjs"]
     },

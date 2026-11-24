@@ -669,6 +669,10 @@
   padding-left: calc(var(--gea-menu-left, 10px) + 28px);
 }
 
+.gea-panel-function .gea-shell-nav-child.is-nested {
+  padding-left: calc(var(--gea-menu-left, 10px) + 40px);
+}
+
 .gea-shell-user {
   display: flex;
   align-items: center;
