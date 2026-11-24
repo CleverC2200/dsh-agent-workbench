@@ -560,10 +560,58 @@ export async function readConfiguredStockSummary(
     await inventorySettled;
     throw error;
   });
-  if (result.configVersion !== context.configVersion)
-    throw Object.assign(Error('配置已变化，请刷新重读'), { code: 'QUERY_CONFIG_CHANGED' });
+  let groups: Record<string, unknown>[] = result.rows;
+  let reviewReadError: string | undefined;
+  if (groups.length && !groups.some((row) => knownNumber(row.review_turn_daily) !== null)) {
+    try {
+      const snapshot = await client.snapshot({ signal: options.signal });
+      if (
+        snapshot.kind === 'ready' &&
+        snapshot.stockDate === day &&
+        snapshot.targetMonth !== scope.targetMonth
+      ) {
+        const keyFields = options.structure ? ['level'] : ['base', 'category'];
+        const review = await client.readAll(
+          `snapshot.${id}`,
+          {
+            ...values,
+            month: snapshot.targetMonth,
+            inventory_version: snapshot.defaultInventoryVersion ?? '',
+            summary_batch_id: snapshot.batchId,
+          },
+          {
+            signal: options.signal,
+            keyFields,
+            requiredColumns: [...keyFields, 'review_turn_inventory', 'review_turn_daily'],
+            maxRows: 10000,
+            singlePageFirst: true,
+          },
+        );
+        if (review.configVersion !== context.configVersion)
+          throw Object.assign(Error('配置已变化，请刷新重读'), { code: 'QUERY_CONFIG_CHANGED' });
+        const key = (row: Record<string, unknown>) =>
+          JSON.stringify(keyFields.map((field) => row[field]));
+        const byGroup = new Map<string, Record<string, unknown>>(
+          review.rows.map((row: Record<string, unknown>) => [key(row), row]),
+        );
+        groups = groups.map((row) => {
+          const match = byGroup.get(key(row));
+          return match
+            ? {
+                ...row,
+                review_turn_inventory: match.review_turn_inventory,
+                review_turn_daily: match.review_turn_daily,
+              }
+            : row;
+        });
+      }
+    } catch (error) {
+      options.signal?.throwIfAborted();
+      reviewReadError = error instanceof Error ? error.message : '读取实际发货失败';
+    }
+  }
   return {
-    groups: result.rows.map((r: any) =>
+    groups: groups.map((r) =>
       Object.fromEntries(
         Object.entries(r).map(([k, v]) => [
           k,
@@ -573,6 +621,7 @@ export async function readConfiguredStockSummary(
     ),
     scope,
     day,
+    reviewReadError,
     over60Skus: await over60Skus,
   };
 }

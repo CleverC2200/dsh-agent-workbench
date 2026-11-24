@@ -231,6 +231,70 @@ test('landing summary and a later SKU drill share metadata, never their business
   }
 });
 
+test('base cards and structure use actual shipments from the same stock day when the plan month moves forward', async () => {
+  const calls = [];
+  const execute = async (_request, call) => {
+    const { queryId, values } = call;
+    calls.push(call);
+    const columns = config.queries[queryId].resultColumns;
+    if (queryId === 'summary.bootstrap') {
+      const members = config.dailySummary.bundle.members;
+      return {
+        configVersion: 'v1',
+        returnedColumns: columns,
+        rows: members.map((member) => ({
+          batch_id: 'batch-stock-day',
+          business_date: '2026-11-24',
+          stock_date: '2026-11-24',
+          target_month: '2026-11-01',
+          default_inventory_version: '纠偏',
+          bundle_part: member.part,
+          bundle_scope_total: members.length,
+          bundle_total: member.part === 'scalar' ? 1 : 0,
+          bundle_present: member.part === 'scalar' ? 1 : null,
+          [member.columns.day ?? 'v6']: '2026-11-24',
+        })),
+      };
+    }
+    const rows = {
+      'calendar.target_plan_versions': [
+        { month: '2026-12-01', inventory_version: '滚动', usable_plan_rows: 1 },
+        { month: '2026-11-01', inventory_version: '纠偏', usable_plan_rows: 1 },
+      ],
+      'source.health-date': [{ day: '2026-11-24' }],
+      'snapshot.source.health-date': [{ day: '2026-11-24' }],
+      'snapshot.base-over60-sku-count': [{ over60_sku_count: 2 }],
+    }[queryId];
+    if (rows) return { configVersion: 'v1', returnedColumns: columns, rows };
+
+    const snapshot = queryId.startsWith('snapshot.');
+    assert.equal(values.stock_date, '2026-11-24');
+    assert.equal(values.month, snapshot ? '2026-11-01' : '2026-12-01');
+    assert.equal(values.inventory_version, snapshot ? '纠偏' : '滚动');
+    if (snapshot) assert.equal(values.summary_batch_id, 'batch-stock-day');
+    assert.deepEqual(values.bases, ['郑州']);
+    const row = {
+      ...Object.fromEntries(columns.map((key) => [key, null])),
+      ...(queryId.includes('structure') ? { level: '汤圆' } : { base: '郑州', category: '汤圆' }),
+      ...(snapshot
+        ? { inventory: 9900, review_turn_inventory: 120, review_turn_daily: 0 }
+        : { inventory: 120, sales_plan_qty: 310 }),
+    };
+    return { configVersion: 'v1', returnedColumns: columns, rows: [row] };
+  };
+  const options = { execute, now: new Date('2026-11-24T07:00:00Z') };
+  for (const structure of [undefined, { groupBy: 'category' }]) {
+    const result = await readConfiguredStockSummary(['郑州'], { ...options, structure });
+    assert.equal(result.scope.targetMonth, '2026-12-01');
+    assert.equal(result.groups[0].inventory, 120);
+    assert.equal(result.groups[0].sales_plan_qty, 310);
+    assert.equal(result.groups[0].review_turn_inventory, 120);
+    assert.equal(result.groups[0].review_turn_daily, 0);
+  }
+  assert.ok(calls.some(({ queryId }) => queryId === 'snapshot.page.dashboard-groups'));
+  assert.ok(calls.some(({ queryId }) => queryId === 'snapshot.page.structure-groups'));
+});
+
 test('base cards, structure and SKU rows share the available rolling plan when month-start demand is missing', async () => {
   const io = source();
   const calls = [];

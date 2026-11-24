@@ -40,9 +40,6 @@ const coveredComparison = (rows: CubeRow[]) =>
 const coveredDays = (days: number | null, partial: boolean) =>
   days === null ? '-' : partialTargetDisplay(`${days.toFixed(1)}天`, partial);
 
-const forecastTurnoverDisplay = (days: number | null, partial: boolean) =>
-  days === null ? '-' : `${days.toFixed(1)}天${partial ? '（部分）' : ''}`;
-
 function plannedTurnover(rows: Record<string, unknown>[], month: string, includeTransfer: boolean) {
   const sum = (field: string) => rows.reduce((total, row) => total + (numeric(row[field]) ?? 0), 0);
   const calendar = /^(20\d{2})-(0[1-9]|1[0-2])(?:-01)?$/.exec(month);
@@ -54,7 +51,6 @@ function plannedTurnover(rows: Record<string, unknown>[], month: string, include
   const transferCovered = sum('transfer_plan_count');
   const covered = includeTransfer ? Math.min(salesCovered, transferCovered) : salesCovered;
   const complete = planned > 0 && covered === planned;
-  const partial = covered > 0 && !complete;
   const forecastQuantity = complete
     ? sum('sales_plan_qty') + (includeTransfer ? 0.5 * sum('transfer_out_plan_qty') : 0)
     : sum(includeTransfer ? 'transfer_plan_covered' : 'sales_plan_covered');
@@ -73,7 +69,6 @@ function plannedTurnover(rows: Record<string, unknown>[], month: string, include
     target: days > 0 && targetPlan > 0 ? sum('planned_target_stock') / (targetPlan / days) : null,
     covered,
     planned,
-    partial,
   };
 }
 
@@ -1285,7 +1280,7 @@ export async function loadInventoryDashboardTabs(
           current: show('inventory'),
           target: show('target'),
           gap: r.gap_count ? displayNumber(r.gap) : '-',
-          currentTurnover: forecastTurnoverDisplay(plan.turn, plan.partial),
+          currentTurnover: coveredDays(plan.turn, false),
           targetTurnover: coveredDays(plan.target, false),
           dailyDemand: plan.demand === null ? '-' : displayDailyMovement(plan.demand),
           last30d: r.review_turn_daily == null ? '-' : displayDailyMovement(r.review_turn_daily),
@@ -2556,10 +2551,14 @@ function configuredSummaryWorkspace(
     const n = sum('row_count');
     const gapCount = sum('gap_count');
     const plan = plannedTurnover(rs, scope.targetMonth, includeTransfer);
-    const reviewDaily = sum('review_turn_daily');
+    const hasReviewDaily = rs.some((r) => numeric(r.review_turn_daily) !== null);
+    const reviewDaily = hasReviewDaily ? sum('review_turn_daily') : null;
     const reviewInventory = sum('review_turn_inventory');
     const hasReviewInventory = rs.some((r) => numeric(r.review_turn_inventory) !== null);
-    const reviewTurn = hasReviewInventory && reviewDaily > 0 ? reviewInventory / reviewDaily : null;
+    const reviewTurn =
+      hasReviewInventory && reviewDaily !== null && reviewDaily > 0
+        ? reviewInventory / reviewDaily
+        : null;
     const turnGap = reviewTurn !== null && plan.target !== null ? reviewTurn - plan.target : null;
     return {
       sum,
@@ -2625,10 +2624,10 @@ function configuredSummaryWorkspace(
       current: show(s, 'inventory'),
       target: show(s, 'target'),
       gap: s.gap === null ? '-' : displayNumber(s.gap),
-      currentTurnover: forecastTurnoverDisplay(s.turn, s.plan.partial),
+      currentTurnover: days(s.turn),
       targetTurnover: days(s.targetTurn),
       dailyDemand: s.plan.demand === null ? '-' : displayDailyMovement(s.plan.demand),
-      last30d: s.reviewDaily > 0 ? displayDailyMovement(s.reviewDaily) : '-',
+      last30d: s.reviewDaily === null ? '-' : displayDailyMovement(s.reviewDaily),
       age: days(
         weightedStockAge(baseGroups) ??
           health.rows?.find((row: BatchAgeRow) => row.level === base)?.average_age ??
@@ -2711,8 +2710,8 @@ function configuredSummaryWorkspace(
     },
     {
       title: '周转天数',
-      value: forecastTurnoverDisplay(all.turn, all.plan.partial),
-      coverage: `展望按${selectedBases?.length === 1 ? '销售计划加50%调拨计划' : '销售计划'}计算，计划覆盖 ${all.plan.covered}/${all.plan.planned} 个基地SKU。计划缺失时仅使用现库存与计划均有值的SKU。天数差额按回顾周转减目标周转。`,
+      value: days(all.turn),
+      coverage: `展望按${selectedBases?.length === 1 ? '销售计划加50%调拨计划' : '销售计划'}计算，计划覆盖 ${all.plan.covered}/${all.plan.planned} 个基地SKU。计划缺失时仅使用现库存与计划均有值的SKU。回顾按当前库存除以近30日实际正向发货日均量计算。天数差额按回顾周转减目标周转。${stock?.reviewReadError ? ' 回顾周转读取失败，请刷新重试。' : ''}`,
       helpers: [
         { label: '回顾周转天数', value: days(all.reviewTurn) },
         { label: '目标周转天数', value: days(all.targetTurn) },

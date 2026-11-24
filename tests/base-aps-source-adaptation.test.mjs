@@ -906,7 +906,7 @@ test('forecast turnover stays visible when a few planned keys are missing', asyn
     };
   };
   const workspace = await cube.loadInitialDashboard();
-  assert.equal(workspace.workbench.cards[1].value, '10.0天（部分）');
+  assert.equal(workspace.workbench.cards[1].value, '10.0天');
   assert.match(workspace.workbench.cards[1].coverage, /1\/2/);
-  assert.equal(workspace.table.rows[0].currentTurnover, '5.0天（部分）');
+  assert.equal(workspace.table.rows[0].currentTurnover, '5.0天');
 });
