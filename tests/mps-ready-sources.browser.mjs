@@ -1364,6 +1364,7 @@ test('basic source anomalies keep known BI quantities and export every row while
       record('products.detail', {
         product_item: 'G',
         product_item_name: '物料组甲',
+        target_base: '郑州',
         material_code: `IN-${index + 1}`,
         material_name: `池内产品${index + 1}`,
         responsible_item: '汤圆',
@@ -1378,7 +1379,7 @@ test('basic source anomalies keep known BI quantities and export every row while
     if (!query.queryId.startsWith('products.') && query.queryId !== 'facts.history')
       return fixture(query);
     const rows = query.queryId.startsWith('products.')
-      ? currentProducts
+      ? currentProducts.map((row) => ({ ...row, stat_period: query.parameters.month }))
       : Array.from({ length: 32 }, (_, index) =>
           record('facts.history', {
             'agents_scm_cust_deliv_daily_di.belong_base': '郑州',
