@@ -1314,7 +1314,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         try {
           const result =
             type === 'products'
-              ? await readProducts(draft.month, signal)
+              ? await readProducts(draft.productMonth ?? draft.month, signal)
               : type === 'annual'
                 ? await readAnnual(signal)
                 : sourceTable
@@ -2405,6 +2405,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(MasterData, {
           key: draft.id,
           month: draft.month,
+          productMonth: draft.productMonth ?? draft.month,
           demandOnly: ['check', 'ship', 'process'].includes(step),
           close: () => setMasterOpen(false),
         }),
@@ -2498,6 +2499,22 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'div',
               { className: 'dc-card-head dc-product-toolbar' },
+              h(
+                'label',
+                { htmlFor: 'mps-product-month' },
+                '产品统计期',
+                h('input', {
+                  id: 'mps-product-month',
+                  name: 'productMonth',
+                  type: 'month',
+                  value: draft.productMonth ?? draft.month,
+                  disabled: adjusting || busy.products,
+                  onChange: (event) => {
+                    const productMonth = event.target.value;
+                    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(productMonth)) update({ productMonth });
+                  },
+                }),
+              ),
               hasMpsSource() &&
                 h(
                   'button',

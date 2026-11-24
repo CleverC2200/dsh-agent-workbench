@@ -32,17 +32,18 @@ const labels = {
 };
 export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
-  return function MasterData({ month, close, demandOnly = false }) {
+  return function MasterData({ month, productMonth = month, close, demandOnly = false }) {
     const [kind, setKind] = react.useState('products');
     const [page, setPage] = react.useState(0);
     const [attempt, setAttempt] = react.useState(0);
-    const scope = JSON.stringify([kind, month, page]);
+    const sourceMonth = kind === 'products' ? productMonth : month;
+    const scope = JSON.stringify([kind, sourceMonth, page]);
     const [loaded, setState] = react.useState({});
     const state = loaded.scope === scope ? loaded : { busy: true };
     react.useEffect(() => {
       const controller = new AbortController();
       setState({ scope, busy: true });
-      readMasterPage(kind, month, page, controller.signal).then(
+      readMasterPage(kind, sourceMonth, page, controller.signal).then(
         (result) => {
           if (!controller.signal.aborted) setState({ ...result, scope });
         },
@@ -51,7 +52,7 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
         },
       );
       return () => controller.abort();
-    }, [kind, month, page, attempt]);
+    }, [kind, sourceMonth, page, attempt]);
     const columnLabels =
       kind === 'products'
         ? { ...labels, sub_category: '源大类', responsible_item: '大类' }
@@ -71,7 +72,7 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
       'master-data',
       {
         source: sourceNames[kind],
-        month,
+        month: sourceMonth,
         page: page + 1,
         status: state.busy ? 'loading' : state.error ? 'failed' : 'loaded',
         error: state.error,
@@ -93,7 +94,7 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
           {
             disabled: !rows.length,
             onClick: () =>
-              downloadCsv(`${sourceNames[kind]}-${month}-第${page + 1}页.csv`, columns, rows),
+              downloadCsv(`${sourceNames[kind]}-${sourceMonth}-第${page + 1}页.csv`, columns, rows),
           },
           '下载当前页',
         ),
@@ -119,7 +120,7 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
             ),
           ),
       ),
-      (kind === 'annual' || kind === 'transfers') && h('p', {}, `统计月 ${month}`),
+      ['products', 'annual', 'transfers'].includes(kind) && h('p', {}, `统计月 ${sourceMonth}`),
       state.busy && h('p', { role: 'status' }, '正在读取…'),
       state.error && h('p', { role: 'alert' }, state.error),
       state.rows && table(columns, rows),

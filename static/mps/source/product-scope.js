@@ -16,6 +16,7 @@ const normalize = (row) => ({
 });
 
 export function buildProductScope(draft, products, result, exclusions) {
+  const productMonth = draft.productMonth ?? draft.month;
   const raw = draft.productRaw ?? [];
   const source = (raw.length ? raw : (draft.products ?? []))
     .map(normalize)
@@ -102,14 +103,15 @@ export function buildProductScope(draft, products, result, exclusions) {
     ...(draft.productsRead?.status !== 'ready'
       ? [`产品清单读取状态为${draft.productsRead?.status ?? '未记录'}`]
       : []),
-    ...(!periods.length ? ['产品清单缺源统计期，无法证明与评估同期间'] : []),
-    ...(periods.length && (sourceMonths.length !== 1 || sourceMonths[0] !== draft.month)
-      ? [`产品源统计期${periods.join('、')}与评估月${draft.month}未证明同期间`]
+    ...(!periods.length ? ['产品清单缺源统计期，无法证明与所选产品统计期一致'] : []),
+    ...(periods.length && (sourceMonths.length !== 1 || sourceMonths[0] !== productMonth)
+      ? [`产品源统计期${periods.join('、')}与所选产品统计期${productMonth}未证明同期间`]
       : []),
     '未取得同期间全国基地范围及独立完整性证明，仅报告实际参与范围',
   ];
   return {
     month: draft.month,
+    productMonth,
     source: raw.length ? '当前产品源清单' : '当前采用产品清单',
     sourceRows: source.length,
     periods,

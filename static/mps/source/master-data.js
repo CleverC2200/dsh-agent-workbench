@@ -125,7 +125,7 @@ export async function readProducts(month, signal) {
     },
   );
   if (result.rows.some((row) => String(row.stat_period).slice(0, 7) !== month))
-    throw Error('产品清单统计月份与评估月份不一致，请重新同步');
+    throw Error('产品清单统计月份与所选产品统计期不一致，请重新同步');
   let prices;
   try {
     const definition = config.queries['products.prices'];
