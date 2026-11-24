@@ -278,6 +278,30 @@ test('需求诊断保留第一处读取失败原因，模型变化不回填有�
   );
 });
 
+test('大类上游缺项在序列化诊断中按类月保留，所有基地SKU断点仍可定位', () => {
+  const { draft: source } = workflowPerformanceInput(20);
+  delete source.categoryDemand;
+  const reason = '历史源读取拒绝-诊断回归';
+  source.historicalIndicatorsRead = { status: 'failed', month: source.month, error: reason };
+  const result = buildMpsWorkflow(source);
+  for (const row of result.demandDiagnostics) {
+    assert.equal(row.status, 'category-demand-missing');
+    assert.equal(row.sourceQuantity, null);
+    assert.equal(row.expected, 20);
+    assert.equal(row.missing, 20);
+    assert.equal(row.firstMissing.length, 20);
+    assert.deepEqual(
+      row.firstMissing.map((leaf) => [leaf.base, leaf.code, leaf.month]),
+      source.products.map((product) => [product['基地'], product['产品编码'], row.month]),
+    );
+    assert.match(row.reason, /历史源读取拒绝-诊断回归/);
+    assert.ok(
+      JSON.stringify(row).split(reason).length - 1 <= 2,
+      '同一上游异常不得随基地SKU数重复序列化',
+    );
+  }
+});
+
 test('新版源老品与保留人工关系不一致时，历史参考系数未知而非一', () => {
   const source = draft();
   source.products.push({

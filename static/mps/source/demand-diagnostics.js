@@ -22,6 +22,12 @@ export function buildDemandDiagnostics(result, categoryDemand) {
     const computed = rows.filter((row) => known(row.demand));
     const missing = rows.filter((row) => !known(row.demand));
     const upstream = !known(sourceQuantity) && missing.length > 0;
+    const upstreamReasons = upstream
+      ? unique([
+          ...(basis ? categoryDemandMissing(result.categoryComputation, basis) : []),
+          ...category.missing,
+        ])
+      : [];
     const firstMissing = missing.map((row) => ({
       base: row.base,
       code: row.code,
@@ -33,16 +39,15 @@ export function buildDemandDiagnostics(result, categoryDemand) {
           ? 'split-basis-missing'
           : 'calculation-missing',
       reasons: upstream
-        ? unique([
-            ...(basis ? categoryDemandMissing(result.categoryComputation, basis) : []),
-            ...category.missing,
-          ])
+        ? []
         : unique([
             ...row.missing.share,
             ...(row.share == null ? row.missing.historyQuantity : []),
             ...row.missing.demand,
           ]),
     }));
+    const reasons = new Set(upstreamReasons);
+    for (const row of firstMissing) for (const reason of row.reasons) reasons.add(reason);
     const status = !rows.length
       ? 'scope-empty'
       : upstream
@@ -70,12 +75,13 @@ export function buildDemandDiagnostics(result, categoryDemand) {
       excludedShipments: coverage?.excluded ?? 0,
       status,
       reason:
-        unique(firstMissing.flatMap((row) => row.reasons)).join('；') ||
+        [...reasons].join('；') ||
         (status === 'scope-empty'
           ? '本次参与范围无有效基地SKU'
           : status === 'aggregate-missing'
             ? '基地SKU需求已算出，大类汇总未带入结果'
             : ''),
+      upstreamReasons,
       firstMissing,
     };
   });

@@ -191,6 +191,16 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   assert.equal(Number(checkedFirst['有效大类需求']), 100);
   assert.equal(Number(checkedFirst['已算条数']), 1);
   assert.equal(Number(checkedFirst['待补条数']), 0);
+  const checkedMissing = checkRecords.find(
+    (row) => row['粒度'] === '大类月份' && row['大类'] === '丙类' && row['月份'] === '2026-12',
+  );
+  const checkedMissingSku = checkRecords.find(
+    (row) =>
+      row['粒度'] === '基地SKU首个缺项' && row['产品编码'] === 'C' && row['月份'] === '2026-12',
+  );
+  assert.equal(checkedMissingSku['基地'], '郑州');
+  assert.equal(checkedMissingSku['首个断点原因'], checkedMissing['首个断点原因']);
+  assert.match(checkedMissingSku['首个断点原因'], /发货/);
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   await frame.getByRole('button', { name: '执行评估', exact: true }).click();
   await expect(frame.getByRole('button', { name: '重新评估', exact: true })).toBeEnabled();

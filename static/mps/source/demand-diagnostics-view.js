@@ -57,7 +57,8 @@ export function createDemandDiagnostics(react, { downloadCsv }) {
             物料组: leaf.group,
             产品编码: leaf.code,
             状态: labels[leaf.stage],
-            首个断点原因: leaf.reasons.join('；'),
+            首个断点原因:
+              leaf.stage === 'category-demand-missing' ? row.reason : leaf.reasons.join('；'),
           })),
         ),
       ]);
