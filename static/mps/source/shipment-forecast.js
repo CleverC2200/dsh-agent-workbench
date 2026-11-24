@@ -82,7 +82,7 @@ export function deriveShipmentForecast(row, passed, total) {
     const period = `${row.month}-01 至 ${row.month}-${String(passed).padStart(2, '0')}`;
     if (!Number.isSafeInteger(row.sourceDays) || row.sourceDays < 0)
       sourceDateIssues.push(`${period}来源日期天数缺失或无效`);
-    else if (row.sourceDays !== passed)
+    else if (row.sourceDays > passed || (row.sourceDays < passed && !row.shipmentMissingAsZero))
       sourceDateIssues.push(
         `${period}应有${passed}天，实际${row.sourceDays}天，${row.sourceDays < passed ? `缺${passed - row.sourceDays}天，具体日期待核` : '来源日期范围冲突'}`,
       );

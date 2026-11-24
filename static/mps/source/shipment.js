@@ -128,13 +128,46 @@ function shipmentMonthDays(month) {
   return new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
 }
 
-function projectShipment(draft, cutoff, month, sourceKind, sourceRows, coefficientFacts) {
+function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficientFacts) {
   const passed = Number(cutoff.slice(8));
   const totalDays = shipmentMonthDays(month);
   const products = ['loading', 'failed'].includes(draft.productsRead?.status)
     ? emptyRows
     : (draft.products ?? emptyRows);
-  const inScope = createProductScopeMatcher(sourceProductMappings(products, draft.productRaw));
+  const productMappings = sourceProductMappings(products, draft.productRaw);
+  const inScope = createProductScopeMatcher(productMappings);
+  const sourceRows = [...inputRows];
+  if (sourceKind === 'business') {
+    const present = new Set(sourceRows.filter((row) => row.month === month).map(keyOf));
+    for (const product of productMappings) {
+      const base = canonicalBaseName(product['基地']);
+      const code = product['产品编码'];
+      const key = keyOf({ base, code });
+      if (!bases.includes(base) || !code || present.has(key)) continue;
+      present.add(key);
+      sourceRows.push({
+        month,
+        base,
+        code,
+        name: product['产品名称'],
+        series: product['系列'],
+        group: product['物料组'],
+        shipped: 0,
+        prepped: 0,
+        unprepped: 0,
+        daily3: 0,
+        average: 0,
+        open: null,
+        inbound: null,
+        remaining: null,
+        transferIn: null,
+        transferOut: null,
+        sourceDays: 0,
+        duplicateDays: 0,
+        shipmentMissingAsZero: true,
+      });
+    }
+  }
   const dimensions =
     sourceKind === 'business'
       ? new Map(
