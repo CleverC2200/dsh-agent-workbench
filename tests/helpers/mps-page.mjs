@@ -61,3 +61,11 @@ export async function openMpsCategoryFilter(frame) {
   if (!(await group.isVisible())) await frame.locator('summary[aria-label="大类筛选"]').click();
   return group;
 }
+
+export async function openMpsProductDetails(frame) {
+  const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  const details = section.locator(':scope > details');
+  if (!(await details.evaluate((element) => element.open)))
+    await details.locator(':scope > summary').click();
+  return section;
+}

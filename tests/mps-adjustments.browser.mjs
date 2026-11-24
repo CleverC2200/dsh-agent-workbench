@@ -1,5 +1,11 @@
+import { openMpsProductDetails } from './helpers/mps-page.mjs';
 import { expandShipmentBase } from './helpers/mps-shipment.mjs';
-import { beginAdjustment, saveAdjustment, workflowStep } from './helpers/mps-edit.mjs';
+import {
+  beginAdjustment,
+  saveAdjustment,
+  selectAdjustmentReason,
+  workflowStep,
+} from './helpers/mps-edit.mjs';
 import { adjustLeaf } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,8 +23,8 @@ test('MPS local product inputs recover after Document replacement and release cl
       '基地,产品编码,产品名称,大类,系列,物料组,物料组名称,老品编码,老品名称\n郑州,A,恢复产品,汤圆,系列,组,组名称,,',
     ),
   });
-  const products = () => frame.getByRole('region', { name: '产品明细', exact: true });
-  await expect(products().getByRole('cell', { name: '恢复产品', exact: true })).toBeVisible();
+  let products = await openMpsProductDetails(frame);
+  await expect(products.getByRole('cell', { name: '恢复产品', exact: true })).toBeVisible();
   await expect
     .poll(async () =>
       page.evaluate(
@@ -28,12 +34,13 @@ test('MPS local product inputs recover after Document replacement and release cl
     .toBe('恢复产品');
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   frame = page.frameLocator('iframe');
-  await expect(products().getByRole('cell', { name: '恢复产品', exact: true })).toBeVisible();
+  products = await openMpsProductDetails(frame);
+  await expect(products.getByRole('cell', { name: '恢复产品', exact: true })).toBeVisible();
   const saved = await page.evaluate(() => window.readView().localDrafts);
   assert.equal(saved.format, 1);
   assert.deepEqual(Object.keys(saved.drafts[0].inputs), ['products']);
   await page.evaluate(() => window.unassociate());
-  await expect(products().getByRole('cell', { name: '恢复产品', exact: true })).toHaveCount(0);
+  await expect(products.getByRole('cell', { name: '恢复产品', exact: true })).toHaveCount(0);
 });
 
 test('MPS base SKU override records a reason and time, survives reload and undo restores the system value', async (t) => {
@@ -68,10 +75,11 @@ test('MPS base SKU override records a reason and time, survives reload and undo 
     .toBe(120.375);
   await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
   await workflowStep(frame, '需求加工与收敛');
-  await frame.getByText('数量调整与撤销记录（1）', { exact: true }).click();
+  await expect(matrix.getByText(/^数量调整与撤销记录/)).toHaveCount(0);
+  await matrix.getByText('当前固定数量', { exact: true }).click();
   await expect(
     frame
-      .getByRole('table', { name: '数量调整记录', exact: true })
+      .getByRole('table', { name: '当前固定数量', exact: true })
       .getByRole('row')
       .filter({ hasText: '客户已确认增量' }),
   ).toContainText('120');
@@ -92,7 +100,10 @@ test('MPS base SKU override records a reason and time, survives reload and undo 
     ),
     120.375,
   );
-  await adjustLeaf(frame, leaf, '', '恢复系统值');
+  await beginAdjustment(matrix);
+  await matrix.getByRole('button', { name: `撤销固定数量 汤圆 组 A 郑州 ${period}` }).click();
+  await selectAdjustmentReason(matrix, '恢复系统值');
+  await saveAdjustment(matrix);
   await expect
     .poll(async () =>
       page.evaluate(
@@ -108,6 +119,8 @@ test('MPS base SKU override records a reason and time, survives reload and undo 
     ['set', 'undo'],
   );
   assert.equal(history[1].value, null);
+  assert.equal(history[0].reason, '其他：客户已确认增量');
+  await expect(matrix.getByText('当前固定数量', { exact: true })).toHaveCount(0);
   await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
   await expect(frame.getByRole('status').filter({ hasText: /^本地草稿$/ })).toBeVisible();
 });
@@ -121,6 +134,13 @@ test('MPS shipment local overrides and remaining intake survive a business-sourc
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-10');
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '产品.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,物料组名称,老品编码,老品名称\n郑州,A,产品A,汤圆,系列,组,组名称,,',
+    ),
+  });
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await frame.getByLabel('数据截止日', { exact: true }).fill('2026-09-22');
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({

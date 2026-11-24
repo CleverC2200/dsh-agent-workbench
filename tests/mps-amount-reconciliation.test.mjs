@@ -95,7 +95,7 @@ test('未来月份或提报刷新失败不复用旧金额；负数与大额小�
   assert.equal(future.rows[0].final.knownAmount, null);
 });
 
-test('金额沿当前编码优先及唯一老品归属，冲突来源仅保留一次且不改源编码', () => {
+test('金额仅按当前池编码归属，池外老品金额保留审计且不改源编码', () => {
   const draft = setup();
   draft.products = [
     { 产品编码: 'N1', 大类: '汤圆', 老品编码: 'X' },
@@ -119,10 +119,10 @@ test('金额沿当前编码优先及唯一老品归属，冲突来源仅保留�
   const rows = [{ ...demand('X', 1), category: '水饺' }, demand('A', 1)];
   const amounts = reconcileDemandAmounts(draft, {}, rows);
   assert.equal(amounts.rows[0].final.amount, '60.00');
-  assert.equal(amounts.rows[0].missingDemand, 1);
+  assert.equal(amounts.rows[0].missingDemand, 2);
   assert.equal(amounts.rows.find((row) => row.category === '水饺').final.amount, '10.00');
-  assert.equal(amounts.rows.find((row) => row.category === '汤圆').final.amount, '20.00');
-  assert.equal(amounts.rows.find((row) => row.category === '未归类').final.amount, '30.00');
+  assert.equal(amounts.rows.find((row) => row.category === '汤圆').final.amount, null);
+  assert.equal(amounts.rows.find((row) => row.category === '未归类').final.amount, '50.00');
   assert.deepEqual(draft.reportAmounts, original);
 });
 

@@ -69,6 +69,7 @@ export function annualRows(rows) {
     if (!month) throw Error(`年度需求月份无法识别：${text(row.stat_month)}`);
     return {
       基地: text(row.belong_base),
+      ...(Object.hasOwn(row, 'material_code') ? { 产品编码: text(row.material_code) } : {}),
       月份: month,
       大类: text(row.sub_category),
       数量: number(row.missing_qty) || number(row.duplicate_rows) ? '' : number(row.demand_qty),
@@ -78,7 +79,9 @@ export function annualRows(rows) {
       重复记录数: number(row.duplicate_rows),
     };
   });
-  const keys = records.map((row) => JSON.stringify([row['基地'], row['大类'], row['月份']]));
+  const keys = records.map((row) =>
+    JSON.stringify([row['基地'], row['产品编码'] ?? row['大类'], row['月份']]),
+  );
   const counts = new Map();
   keys.forEach((key) => counts.set(key, (counts.get(key) ?? 0) + 1));
   return records.map((row, index) =>
@@ -88,7 +91,8 @@ export function annualRows(rows) {
 export async function readMasterPage(kind, month, page, signal) {
   const { config, query } = client();
   const id = kind + '.detail';
-  const scope = kind === 'annual' ? { months: sourceMonthValues(month) } : {};
+  const scope =
+    kind === 'annual' ? { months: sourceMonthValues(month) } : kind === 'products' ? { month } : {};
   const count = await query.read(kind + '.count', scope, { signal, requiredColumns: ['total'] });
   const total = number(count.rows[0]?.total);
   if (!Number.isSafeInteger(total) || total < 0) throw Error('数据源返回了无效行数');
@@ -107,12 +111,12 @@ export async function readMasterPage(kind, month, page, signal) {
     throw Error('数据源在读取期间变化，请重新同步');
   return { rows: result.rows, total, columns: config.queries[id].columns, page };
 }
-export async function readProducts(signal) {
+export async function readProducts(month, signal) {
   const { config, query } = client();
   const definition = config.queries['products.detail'];
   const result = await query.readAll(
     'products.detail',
-    { page_size: 5000, offset: 0 },
+    { month, page_size: 5000, offset: 0 },
     {
       signal,
       keyFields: definition.grain,
@@ -120,8 +124,8 @@ export async function readProducts(signal) {
       maxRows: 10000,
     },
   );
-  if (new Set(result.rows.map((row) => row.stat_period).filter(Boolean)).size > 1)
-    throw Error('产品清单读取期间最新统计月份变化，请重新同步');
+  if (result.rows.some((row) => String(row.stat_period).slice(0, 7) !== month))
+    throw Error('产品清单统计月份与所选产品统计期不一致，请重新同步');
   let prices;
   try {
     const definition = config.queries['products.prices'];
@@ -153,7 +157,8 @@ export async function readProducts(signal) {
       error: error.message,
     };
   }
-  return { rows: productRows(result.rows), raw: result.rows, prices };
+  const raw = result.rows.filter((row) => row.responsible_item?.trim() !== '粽子');
+  return { rows: productRows(raw), raw, prices };
 }
 export async function readAnnual(signal) {
   const { config, query } = client();
@@ -166,7 +171,7 @@ export async function readAnnual(signal) {
       signal,
       keyFields: definition.grain,
       requiredColumns: definition.columns,
-      maxRows: 2000,
+      maxRows: 100000,
     },
   );
   return annualRows(result.rows);

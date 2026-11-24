@@ -10,6 +10,7 @@ const rows = {
   products: [
     ...Array.from({ length: 26 }, (_, index) => ({
       material_code: `P${String(index).padStart(3, '0')}`,
+      target_base: '四川',
       material_name: `源产品${index}`,
       series: '产品系列',
       responsible_item: '汤圆',
@@ -21,7 +22,7 @@ const rows = {
       material_code: 'P000',
       material_name: '产线候选甲',
       belong_base: '四川',
-      workshop: '车间甲',
+      workshop: '生产单位甲',
       tunnel_no: '1#',
       tunnel_tonnage: 12.5,
       tunnel_type: '双螺旋',
@@ -35,7 +36,7 @@ const rows = {
     {
       material_code: 'P000',
       material_name: '产线候选乙',
-      belong_base: '广州',
+      belong_base: '四川',
       workshop: '车间乙',
       tunnel_no: '1#',
       series: '源系列乙',
@@ -67,7 +68,7 @@ function fixture({ queryId, parameters, sourcePeriod = '2026-10' }) {
             material_code: 'P000',
             material_name: '源产品0',
             series: '调拨源系列',
-            target_base: '广州',
+            target_base: '四川',
             transfer_tag: '自产',
             transfer_direction: null,
             sap_category: 'SAP品类',
@@ -81,6 +82,7 @@ function fixture({ queryId, parameters, sourcePeriod = '2026-10' }) {
     : records.slice(parameters.offset, parameters.offset + parameters.page_size).map((row) => ({
         ...Object.fromEntries(config.queries[queryId].columns.map((column) => [column, null])),
         ...row,
+        ...(kind === 'products' ? { stat_period: parameters.month } : {}),
       }));
   return {
     rows: result,
@@ -151,7 +153,7 @@ async function version(frame, month) {
 }
 test('fourth MPS step uses exact-code source relations, paginates the full set and keeps unconfirmed source labels', async (t) => {
   const { page, frame, view, contexts } = await relations(t);
-  await expect(view).toContainText('共29条');
+  await expect(view).toContainText('共27条');
   await expect(view.locator('tbody tr')).toHaveCount(25);
   await expect(view.locator('tbody tr').nth(0)).toContainText('产线候选甲');
   await expect(view.locator('tbody tr').nth(1)).toContainText('产线候选乙');
@@ -168,7 +170,7 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
   for await (const chunk of await (await waiting).createReadStream()) chunks.push(chunk);
   const book = XLSX.read(Buffer.concat(chunks), { type: 'buffer', raw: true });
   const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
-  assert.equal(exported.length, 29);
+  assert.equal(exported.length, 27);
   const candidate = exported.find((row) => row['源物料名称'] === '产线候选甲');
   assert.equal(candidate['隧道吨位/吨'], 12.5);
   assert.equal(candidate['隧道类型'], '双螺旋');
@@ -177,11 +179,9 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
   assert.match(candidate['核对状态'], /产线归属待补.*当前读取字段未提供独立产线/);
   await expect(view.locator('tbody tr').nth(0)).toContainText('产线归属待补');
   await view.getByRole('button', { name: '下一页', exact: true }).click();
-  await expect(view.locator('tbody tr')).toHaveCount(4);
-  await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('同名空码');
   await expect(view.locator('tbody tr')).toHaveCount(2);
-  await expect(view.locator('tbody tr').nth(0)).toContainText('无候选产线');
-  await expect(view.locator('tbody tr').nth(1)).toContainText('无产品记录');
+  await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('同名空码');
+  await expect(view.getByText('同名空码', { exact: true })).toHaveCount(0);
   await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('');
   await view.getByRole('tab', { name: /产线与源系列/ }).click();
   await expect(view.locator('tbody tr')).toContainText('生产单位甲');
@@ -230,7 +230,7 @@ test('fourth MPS step clears records on failed refresh and discards a late resul
     }
     return result;
   });
-  await expect(view).toContainText('共29条');
+  await expect(view).toContainText('共27条');
   denied = true;
   await view.getByRole('button', { name: '重新读取', exact: true }).click();
   await expect(view.getByRole('alert')).toHaveText('当前账号暂无数据权限');
@@ -271,7 +271,7 @@ test('source series and category gaps stay visible and filterable with a complet
       });
     return result;
   });
-  await expect(view).toContainText('共29条');
+  await expect(view).toContainText('共27条');
   await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('P000');
   await expect(view.locator('tbody tr')).toHaveCount(2);
   await expect(view.getByRole('columnheader', { name: '源生产品类', exact: true })).toBeVisible();

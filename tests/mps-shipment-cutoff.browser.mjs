@@ -24,6 +24,7 @@ function fixture({ queryId, parameters }, latest = '2026-10-31') {
               unprepped: 0,
               daily3: 10,
               average: 10,
+              raw_average: 10,
               open: 100,
               inbound: 200,
               source_days: Number(parameters.cutoff.slice(8)),
@@ -40,7 +41,26 @@ function fixture({ queryId, parameters }, latest = '2026-10-31') {
           ? [{ total: queryId === 'facts.shipment.count' ? 1 : 0 }]
           : [];
   return {
-    rows,
+    rows:
+      queryId === 'products.count'
+        ? [{ total: 1 }]
+        : queryId === 'products.detail'
+          ? [
+              {
+                ...Object.fromEntries(
+                  config.queries[queryId].columns.map((column) => [column, null]),
+                ),
+                stat_period: parameters.month,
+                target_base: '郑州',
+                material_code: 'A',
+                material_name: '产品A',
+                responsible_item: '汤圆',
+                series: '系列',
+                product_item: '汤圆',
+                source_rows: 1,
+              },
+            ]
+          : rows,
     returnedColumns:
       queryId === 'facts.shipment-latest' ? ['latest_date'] : config.queries[queryId].columns,
     configVersion: 'cutoff-fixture',

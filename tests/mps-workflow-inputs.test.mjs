@@ -1,3 +1,4 @@
+import { categoryHistoryMonths } from '../static/mps/source/category-history-periods.js';
 import test from 'node:test';
 import {
   workflowDraft as draft,
@@ -67,24 +68,27 @@ function partialDemandFixture() {
   source.historicalIndicatorsRead = { status: 'ready', month: source.month };
   source.historicalIndicators = {
     periods: [2023, 2024, 2025].map((year) => ({
-      rows: [7, 8, 9, 10, 11, 12, 13, 14].map((month) => ({
-        维度类型: '基地+大类',
+      rows: categoryHistoryMonths(`${year}-11`).map((month) => ({
+        维度类型: '基地+产品',
         基地: '甲',
         大类: '点心',
-        维度值: '点心',
-        月份: `${year + Math.floor((month - 1) / 12)}-${String(((month - 1) % 12) + 1).padStart(2, '0')}`,
+        维度值: 'A',
+        粒度状态: '唯一',
+        月份: month,
         月发货数量: 100,
         上年同期发货数量: 100,
         上月发货数量: 100,
-        全国维度财年发货数量: 1200,
-        财年: String(year),
+        全国维度财年发货数量: 999999,
+        基地维度财年发货数量: 1200,
+        财年: `${Number(month.slice(0, 4)) - (Number(month.slice(5)) < 7 ? 1 : 0)}财年`,
       })),
     })),
     annual: {
       rows: ['2026-11', '2026-12', '2027-01', '2027-02'].map((month) => ({
         月份: month,
         大类: '点心',
-        基地: '全国',
+        基地: '甲',
+        产品编码: 'A',
         数量: 100,
       })),
     },
@@ -220,13 +224,24 @@ test('需求诊断逐类月区分大类缺输入、拆分缺依据与完整有�
   source.productRaw = [
     { material_code: 'A', target_base: '甲', replacement_material_code: 'OLD', replace_num: null },
   ];
+  const outsidePool = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(outsidePool.demandDiagnostics[0].status, 'complete');
+  assert.equal(outsidePool.demandDiagnostics[0].effectiveQuantity, 110);
+  source.products.push({ ...source.products[0], 产品编码: 'OLD', 老品编码: '' });
+  source.productRaw.push({ material_code: 'OLD', target_base: '甲' });
+  source.report.push({ 月份: source.month, 基地: '甲', 产品编码: 'OLD', 月初数量: 0 });
+  source.historyAnnual.periods[0].rows.push({ 基地: '甲', 产品编码: 'OLD', 数量: 0 });
+  snapshot.rows.push({ base: '甲', code: 'OLD', category: '点心', fin: 0, end: 0 });
   const noSplit = buildMpsWorkflow(source, null, snapshot);
   assert.equal(noSplit.demandDiagnostics[0].sourceQuantity, 110);
   assert.equal(noSplit.demandDiagnostics[0].status, 'split-basis-missing');
   assert.match(noSplit.demandDiagnostics[0].reason, /替换系数/);
   assert.deepEqual(
     noSplit.demandDiagnostics[0].firstMissing.map((row) => [row.base, row.code, row.month]),
-    [['甲', 'A', '2026-11']],
+    [
+      ['甲', 'A', '2026-11'],
+      ['甲', 'OLD', '2026-11'],
+    ],
   );
   source.categoryDemand = complete.months.map((month) => ({
     month,
@@ -275,8 +290,61 @@ test('需求诊断保留第一处读取失败原因，模型变化不回填有�
   );
 });
 
+test('大类上游缺项在序列化诊断中按类月保留，所有基地SKU断点仍可定位', () => {
+  const { draft: source } = workflowPerformanceInput(20);
+  delete source.categoryDemand;
+  const reason = '历史源读取拒绝-诊断回归';
+  source.historicalIndicatorsRead = { status: 'failed', month: source.month, error: reason };
+  const result = buildMpsWorkflow(source);
+  for (const row of result.demandDiagnostics) {
+    assert.equal(row.status, 'category-demand-missing');
+    assert.equal(row.sourceQuantity, null);
+    assert.equal(row.expected, 20);
+    assert.equal(row.missing, 20);
+    assert.equal(row.firstMissing.length, 20);
+    assert.deepEqual(
+      row.firstMissing.map((leaf) => [leaf.base, leaf.code, leaf.month]),
+      source.products.map((product) => [product['基地'], product['产品编码'], row.month]),
+    );
+    assert.match(row.reason, /历史源读取拒绝-诊断回归/);
+    assert.ok(
+      JSON.stringify(row).split(reason).length - 1 <= 2,
+      '同一上游异常不得随基地SKU数重复序列化',
+    );
+  }
+});
+
+test('执行评估集中保留全部大类上游原因，逐SKU问题经序列化仍可追溯', () => {
+  const { draft: source, shipment, evaluation } = workflowPerformanceInput(20);
+  delete source.categoryDemand;
+  const reason = '历史源读取拒绝-评估报告回归';
+  source.historicalIndicatorsRead = { status: 'failed', month: source.month, error: reason };
+  const result = buildMpsWorkflow(source, null, shipment, evaluation);
+  const plan = structuredClone(result.plan);
+  const issues = plan.reportIssues.filter((row) => row.kind === '缺有效需求');
+  assert.equal(issues.length, 60);
+  assert.equal(JSON.stringify(plan).split(reason).length - 1, 1);
+  for (const issue of issues) {
+    assert.equal(issue.demand, null);
+    const group = plan.reportCauseGroups.find((group) => group.id === issue.causeGroupId);
+    assert.equal(group.month, issue.month);
+    assert.equal(group.category, issue.productCategory);
+    assert.ok(
+      group.causeIds.some((id) =>
+        plan.reportCauses.find((cause) => cause.id === id).reason.includes(reason),
+      ),
+    );
+  }
+});
+
 test('新版源老品与保留人工关系不一致时，历史参考系数未知而非一', () => {
   const source = draft();
+  source.products.push({
+    ...source.products[0],
+    基地: '甲',
+    产品编码: 'EDITED-OLD',
+    大类: '历史参考',
+  });
   source.products[0]['老品编码'] = 'EDITED-OLD';
   source.productRaw = [
     {
@@ -430,11 +498,12 @@ test('产品老品编码接入同基地历史参考，其他基地老品不扩�
   const result = buildMpsWorkflow(source);
   const row = result.rows.find((row) => row.base === '甲' && row.code === 'A');
   assert.equal(row.historyCode, 'OLD');
-  assert.equal(row.historyQuantity, 160);
+  assert.equal(row.historyQuantity, 60);
   assert.equal(
     result.rows.some((row) => row.base === '丙' && row.code === 'A'),
     false,
   );
+  assert.ok(result.poolExceptions.history.some((row) => row.base === '甲' && row.code === 'OLD'));
   assert.equal(result.poolExceptions.history.find((row) => row.base === '丙').quantity, 20);
   assert.deepEqual(source.historyAnnual, raw);
   const solved = buildMpsWorkflow(source, null, null, {
@@ -1376,6 +1445,10 @@ test('安全天数采用实际读取来源起月与版本，评估月保持独�
 
 test('最新产品源按基地应用替换系数，重复标签不倍增，零与未知分开', () => {
   const source = draft();
+  source.products.push(
+    { ...source.products[0], 基地: '甲', 产品编码: 'OLD', 大类: '历史参考' },
+    { ...source.products[0], 基地: '丙', 产品编码: 'OLD', 大类: '历史参考' },
+  );
   source.products[0]['基地'] = '';
   source.products[0]['老品编码'] = 'OLD';
   source.productRaw = [
@@ -1514,6 +1587,7 @@ test('产品净重同时进入实际排产和年度吨数报告，不依赖旧�
 test('新版产品源缺目标基地或只有另一基地系数时，不能落回旧版默认系数一', () => {
   for (const base of ['', '甲']) {
     const source = draft();
+    source.products.push({ ...source.products[0], 基地: '甲', 产品编码: 'OLD', 大类: '历史参考' });
     source.products[0]['基地'] = base;
     source.products[0]['老品编码'] = 'OLD';
     source.historyAnnual.periods[0].rows.push({ 基地: '甲', 产品编码: 'OLD', 数量: 100 });
@@ -1525,11 +1599,7 @@ test('新版产品源缺目标基地或只有另一基地系数时，不能落�
       const row = result.rows.find((row) => row.base === '甲' && row.code === 'A');
       if (!base) {
         assert.equal(row, undefined);
-        assert.ok(
-          result.poolExceptions.history.some(
-            (issue) => issue.base === '甲' && issue.code === 'OLD',
-          ),
-        );
+        assert.ok(result.rows.some((item) => item.base === '甲' && item.code === 'OLD'));
         continue;
       }
       assert.equal(row.historyReferenceQuantity, 100);
@@ -1706,15 +1776,18 @@ test('历史占比使用同基地的当前或替换编码，池外编码仅保�
   assert.deepEqual(
     currentRows.map((row) => [row.code, row.historyQuantity, row.historyShare]),
     [
-      ['A', 60, 60 / 120],
-      ['B', 40, 40 / 120],
-      ['NEW', 20, 20 / 120],
+      ['A', 60, 0.6],
+      ['B', 40, 0.4],
+      ['NEW', 0, 0],
     ],
   );
   assert.ok(currentRows.every((row) => row.demand !== null));
   assert.deepEqual(
     result.poolExceptions.history.map(({ code, quantity }) => [code, quantity]),
-    [['OUTSIDE', 999]],
+    [
+      ['OUTSIDE', 999],
+      ['OLD', 20],
+    ],
   );
   assert.equal(result.categoryComputation.bases[0].actual, 3300);
   assert.deepEqual({ source, snapshot }, before);
@@ -1749,6 +1822,7 @@ test('后月期初库存缺项追溯首月来源，不重复要求人工补后�
 
 test('原始完整月分类与财年补0分别传入计算，来源失败状态不被补0覆盖', () => {
   const source = draft();
+  source.products.push({ ...source.products[0], 基地: '甲', 产品编码: 'OLD', 大类: '历史参考' });
   source.products[0]['老品编码'] = 'OLD';
   source.historyAnnual.periods[0].rows = [
     { 基地: '甲', 产品编码: 'A', 数量: '' },

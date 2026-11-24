@@ -121,6 +121,7 @@ export const mpsLocalDraftSchema = z.strictObject({
   id: text,
   name: text,
   month,
+  productMonth: month.optional(),
   pull: z.enum(['monthly', 'adjust', 'correction']),
   festivalBasis: z
     .union([z.strictObject({}), z.strictObject({ name: text.min(1), date: z.iso.date() })])

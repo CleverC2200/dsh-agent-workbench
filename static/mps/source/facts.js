@@ -473,6 +473,7 @@ export async function readShipmentInputs(cutoff, signal, priority) {
         series: text(row.series),
         group: text(row.product_item),
         ...quantities,
+        rawAverage: row.raw_average === null ? null : number(row.raw_average),
         transferIn: transferIn.value,
         transferOut: transferOut.value,
         transferInSource: transferIn.source,
@@ -483,6 +484,7 @@ export async function readShipmentInputs(cutoff, signal, priority) {
           quantities.inbound == null || passed <= 1
             ? null
             : Math.round((quantities.inbound / (passed - 1)) * (totalDays - passed)),
+        shipmentMissingAsZero: true,
         sourceDays: number(row.source_days),
         duplicateDays: number(row.duplicate_days),
       };

@@ -45,6 +45,21 @@ test('窄屏加工表切步返回恢复横向位置，新版本从起点浏览',
   const { frame } = await navigationPage(t, false, 720);
   await selectStep(frame, '需求加工与收敛');
   const area = frame.getByRole('region', { name: '加工后的需求横向滚动区', exact: true });
+  await expect(area.getByRole('columnheader')).toHaveText([
+    '全国 / 基地 / 大类 / 物料组 / SKU',
+    /本月预估发货（可调整）/,
+    /计划提报/,
+    /M\+1 .*需求（可调整）/,
+    /M\+2 .*需求（可调整）/,
+    /M\+3 .*需求（可调整）/,
+    /M\+4 .*库存参考（可调整）/,
+  ]);
+  const total = area.getByRole('row').filter({ hasText: '全国合计' });
+  await expect(total.getByRole('cell').nth(0)).toContainText('系统预估');
+  await expect(total.getByRole('cell').nth(1)).toHaveText('300');
+  const base = area.getByRole('row').filter({ hasText: '基地 · 郑州' });
+  await expect(base.getByRole('cell').nth(0)).toContainText('系统预估');
+  await expect(base.getByRole('cell').nth(1)).toHaveText('300');
   const left = await area.evaluate((element) => {
     element.scrollLeft = 200;
     return element.scrollLeft;

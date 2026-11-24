@@ -371,6 +371,12 @@
   color: var(--dc-muted);
   font-size: 11.8px;
 }
+.dc-product-summary {
+  padding: 8px 16px;
+}
+.dc-product-summary .dc-count {
+  margin-inline-start: 8px;
+}
 .dc-page .dc-product-toolbar {
   flex-wrap: wrap;
   gap: 10px;
@@ -718,6 +724,8 @@
 .dc-dialog-body {
   min-height: 0;
   overflow: auto;
+}
+.dc-dialog-content {
   padding: 20px;
 }
 .dc-dialog-body .dc-table-scroll {
@@ -1230,7 +1238,7 @@
 }
 
 .ap-app[data-step='ship'] .sp-table {
-  width: 1220px;
+  width: 100%;
   border-collapse: separate;
   border-spacing: 0;
 }

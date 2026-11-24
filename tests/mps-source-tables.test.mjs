@@ -268,6 +268,7 @@ test('预测按产品物料编码对应当前产品明细，大类系列和物�
 
 test('category history covers the recent window and all four demand months across the year boundary', () => {
   assert.deepEqual(sourceTableParameters('category-history', '2025-11').months, [
+    '202412',
     '202501',
     '202502',
     '202503',
@@ -282,5 +283,20 @@ test('category history covers the recent window and all four demand months acros
     '202512',
     '202601',
     '202602',
+    '202603',
+    '202604',
+    '202605',
+    '202606',
   ]);
+});
+
+test('category history bounds cover every evaluation month without broadening other sources', () => {
+  const counts = Array.from(
+    { length: 12 },
+    (_, index) =>
+      sourceTableParameters('category-history', `2025-${String(index + 1).padStart(2, '0')}`).months
+        .length,
+  );
+  assert.equal(Math.max(...counts), 26);
+  assert.equal(Math.min(...counts), 15);
 });

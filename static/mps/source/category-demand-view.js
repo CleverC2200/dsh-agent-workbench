@@ -2,6 +2,7 @@ import { matchesCategories } from './category-filter.js';
 import { categoryDemandMissing } from './category-demand.js';
 import { demandBasisLabel, festivalOptionValue } from './festival-demand.js';
 import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
+import { workflowContextPreview } from './evaluation-view.js';
 
 export function createShipmentScopeNotice(react, { downloadCsv }) {
   const h = react.createElement;
@@ -176,7 +177,7 @@ export function createCategoryDemand(
     const festivalMonths = new Set(festival?.months);
     const naturalActualMonths = result.recent.filter((month) => !festivalMonths.has(month));
     const option = festival?.selected ? festivalOptionValue(festival.selected) : '';
-    const waiting = ['loading', 'choose'].includes(festival?.status);
+    const waiting = ['loading', 'choose', 'failed'].includes(festival?.status);
     const chainColumn = festival ? '采用环比' : '年度环比';
     const calculationColumns = columns.map((name) => (name === '年度环比' ? chainColumn : name));
     const selectedRows = result.rows.filter((row) =>
@@ -294,8 +295,9 @@ export function createCategoryDemand(
     useMpsPart(
       react,
       'category-demand',
-      {
+      workflowContextPreview({
         ...result,
+        preview: '上下文只预览每组最多10条及完整条数，完整原因和数据见页面和CSV',
         shipmentScope: {
           ...result.shipmentScope,
           excluded: result.shipmentScope.excluded.slice(0, 10),
@@ -316,7 +318,7 @@ export function createCategoryDemand(
           }),
         ),
         adjustments: draft.adjustments ?? null,
-      },
+      }),
       '大类逐月需求计算',
       active,
     );

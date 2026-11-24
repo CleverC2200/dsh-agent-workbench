@@ -26,6 +26,7 @@ async function open(t) {
                   unprepped: 0,
                   daily3: 1,
                   average: 0,
+                  raw_average: 0,
                   open: 101,
                   inbound: 0,
                   source_days: 30,

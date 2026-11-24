@@ -187,12 +187,12 @@ async function checkScrolledTable(table, frame) {
   }
 }
 
-test('第2步长物料组不盖数量，正常与窄窗中双层表头跟随表内和页面滚动', async (t) => {
+test('第2步宽窗表格铺满，长物料组不盖数量且正常与窄窗滚动保留表头', async (t) => {
   const { page, frame } = await navigationPage(t);
   const table = await shipmentTable(frame);
   await table.getByRole('button', { name: '展开 郑州', exact: true }).press('Enter');
   await table.getByRole('button', { name: '展开 郑州 汤圆', exact: true }).press('Enter');
-  for (const width of [1200, 600]) {
+  for (const width of [1830, 1200, 600]) {
     await page.evaluate((width) => {
       document.getElementById('root').style.width = `${width + 300}px`;
     }, width);
@@ -200,6 +200,13 @@ test('第2步长物料组不盖数量，正常与窄窗中双层表头跟随表�
       element.scrollLeft = 0;
       element.scrollTop = 0;
     });
+    if (width === 1830) {
+      const edges = await table.evaluate((element) => ({
+        table: element.getBoundingClientRect().right,
+        wrapper: element.parentElement.getBoundingClientRect().right,
+      }));
+      assert.ok(Math.abs(edges.table - edges.wrapper) < 3, '宽窗末列与表格滚动区域右边缘对齐');
+    }
     const group = table.getByRole('row').filter({
       has: frame.getByRole('button', { name: `收起 郑州 汤圆 ${longGroup}`, exact: true }),
     });
@@ -239,6 +246,16 @@ test('第2步长物料组不盖数量，正常与窄窗中双层表头跟随表�
     );
 
     await checkScrolledTable(table, frame);
+    if (width === 600) {
+      const sticky = await table.evaluate((element) => {
+        const wrapper = element.parentElement.getBoundingClientRect();
+        const first = element.tHead.rows[0].cells[0].getBoundingClientRect();
+        const last = element.tHead.rows[1].lastElementChild.getBoundingClientRect();
+        return { left: first.left - wrapper.left, right: last.right - wrapper.right };
+      });
+      assert.ok(Math.abs(sticky.left) < 3, '窄窗横向滚动后首列仍固定在左边缘');
+      assert.ok(Math.abs(sticky.right) < 3, '窄窗横向滚动后结存列仍固定在右边缘');
+    }
   }
 });
 
@@ -246,7 +263,17 @@ test('第7步点击大类展开全部物料组和超过一页的SKU，旁支独�
   const { page, frame, month } = await navigationPage(t);
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   await frame.getByRole('button', { name: '执行评估', exact: true }).click();
+  const status = frame.getByRole('status').filter({ hasText: '单品月份' });
+  await expect(status).toContainText('暂无单品月份满足排产条件，缺项待补');
+  await expect(status).toContainText('满足排产条件 0/186 个单品月份');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  await expect(status).toContainText('暂无单品月份满足排产条件，缺项待补');
+  await expect(status).toContainText('满足排产条件 0/186 个单品月份');
+  const statusBounds = await status.boundingBox();
+  const exceptionBounds = await frame
+    .getByRole('heading', { name: '产品范围与池外异常', exact: true })
+    .boundingBox();
+  assert.ok(statusBounds.y < exceptionBounds.y, '产销存结果状态显示在产品范围与池外异常之前');
   await frame.getByRole('button', { name: `展开全国 ${month}`, exact: true }).press('Enter');
   const table = frame.getByRole('table', { name: '求解单品明细', exact: true });
   const category = table.getByRole('button', { name: '产销存 大类 · 汤圆', exact: true });

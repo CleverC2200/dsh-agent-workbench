@@ -7,7 +7,6 @@ const productCategoryField = 'responsible_item';
 const productSourceFields = {
   统计月份: 'stat_period',
   目标基地: 'target_base',
-  调拨标签: 'transfer_tag',
   大类: productCategoryField,
   系列: 'series',
   物料组编码: 'product_item',
@@ -26,12 +25,18 @@ const productSourceFields = {
 };
 export const productSourceColumns = [...Object.keys(productSourceFields), '新品标记'];
 export function productSourceRows(rows) {
-  return rows.map((row) => ({
-    ...Object.fromEntries(
-      Object.entries(productSourceFields).map(([field, source]) => [field, row[source] ?? '']),
-    ),
-    新品标记: !text(row.transfer_tag) ? '' : text(row.transfer_tag) === '新品' ? '新品' : '非新品',
-  }));
+  return rows
+    .filter((row) => canonicalBaseName(row.target_base) !== 'ODM')
+    .map((row) => ({
+      ...Object.fromEntries(
+        Object.entries(productSourceFields).map(([field, source]) => [field, row[source] ?? '']),
+      ),
+      新品标记: !text(row.transfer_tag)
+        ? ''
+        : text(row.transfer_tag) === '新品'
+          ? '新品'
+          : '非新品',
+    }));
 }
 const numeric = (value) =>
   (typeof value === 'number' || (typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value))) &&
@@ -45,7 +50,7 @@ export function productProjections(products, raw = [], facts = [], prices = []) 
   const source = new Map(),
     groups = new Map(),
     bases = new Map();
-  for (const row of raw) {
+  for (const row of raw.filter((row) => canonicalBaseName(row.target_base) !== 'ODM')) {
     const id = key(text(row.material_code), text(row.product_item));
     source.set(id, [...(source.get(id) ?? []), row]);
   }
@@ -56,7 +61,7 @@ export function productProjections(products, raw = [], facts = [], prices = []) 
     groups.set(row['物料组'], group);
   });
   for (const row of facts) {
-    if (!row['产品编码'] || !row['基地']) continue;
+    if (!row['产品编码'] || !row['基地'] || canonicalBaseName(row['基地']) === 'ODM') continue;
     const current = bases.get(row['产品编码']) ?? new Set();
     current.add(row['基地']);
     bases.set(row['产品编码'], current);
@@ -193,18 +198,42 @@ function aggregate(rows, column, knownColumn) {
 }
 
 export function productRows(rows) {
-  const products = rows.map((row) => ({
-    基地: '',
-    产品编码: text(row.material_code),
-    产品名称: text(row.material_name),
-    大类: text(row[productCategoryField]),
-    系列: text(row.series),
-    物料组: text(row.product_item),
-    物料组名称: text(row.product_item_name),
-    老品编码: text(row.replacement_material_code),
-    老品名称: text(row.replacement_product),
-  }));
+  const products = rows
+    .filter(
+      (row) =>
+        text(row[productCategoryField]) !== '粽子' && canonicalBaseName(row.target_base) !== 'ODM',
+    )
+    .map((row) => ({
+      基地: canonicalBaseName(row.target_base),
+      产品编码: text(row.material_code),
+      产品名称: text(row.material_name),
+      大类: text(row[productCategoryField]),
+      系列: text(row.series),
+      物料组: text(row.product_item),
+      物料组名称: text(row.product_item_name),
+      老品编码: text(row.replacement_material_code),
+      老品名称: text(row.replacement_product),
+    }));
   return [...new Map(products.map((row) => [JSON.stringify(row), row])).values()];
+}
+
+export function createProductScopeMatcher(products) {
+  const domain = new Set(
+    (products ?? [])
+      .filter((row) => text(row['大类'] ?? row.responsible_item) !== '粽子')
+      .map((row) => [
+        canonicalBaseName(row['基地'] ?? row.target_base ?? row.base),
+        text(row['产品编码'] ?? row.material_code ?? row.code),
+      ])
+      .filter(([base, code]) => base && base !== 'ODM' && code)
+      .map((pair) => JSON.stringify(pair)),
+  );
+  return (base, code) => domain.has(JSON.stringify([canonicalBaseName(base), text(code)]));
+}
+
+export function scopedProductRows(rows, products) {
+  const includes = createProductScopeMatcher(products);
+  return rows.filter((row) => includes(row['基地'], row['产品编码']));
 }
 
 export function sourceProductMappings(products, raw = []) {
@@ -215,32 +244,39 @@ export function sourceProductMappings(products, raw = []) {
     if (!sourcesByCode.has(code)) sourcesByCode.set(code, []);
     sourcesByCode.get(code).push(row);
   }
-  return products.flatMap((product) => {
-    if (text(product['基地'])) return [product];
-    const code = text(product['产品编码']);
-    const sources = sourcesByCode.get(code) ?? [];
-    const matching = sources.filter(
-      (row) => text(row.replacement_material_code) === text(product['老品编码']),
-    );
-    const bases = [
-      ...new Set(
-        (matching.length ? matching : sources)
-          .map((row) => canonicalBaseName(row.target_base))
-          .filter(Boolean),
-      ),
-    ];
-    return bases.length ? bases.map((base) => ({ ...product, 基地: base })) : [product];
-  });
+  return products
+    .filter(
+      (product) => text(product['大类']) !== '粽子' && canonicalBaseName(product['基地']) !== 'ODM',
+    )
+    .flatMap((product) => {
+      if (text(product['基地'])) return [{ ...product, 基地: canonicalBaseName(product['基地']) }];
+      const code = text(product['产品编码']);
+      const sources = sourcesByCode.get(code) ?? [];
+      const matching = sources.filter(
+        (row) => text(row.replacement_material_code) === text(product['老品编码']),
+      );
+      const bases = [
+        ...new Set(
+          (matching.length ? matching : sources)
+            .map((row) => canonicalBaseName(row.target_base))
+            .filter((base) => base && base !== 'ODM'),
+        ),
+      ];
+      return bases.length ? bases.map((base) => ({ ...product, 基地: base })) : [product];
+    });
 }
 
 export function createHistoryDependentLookup(products) {
+  const includes = createProductScopeMatcher(products);
   const bySourceCode = new Map();
   for (const product of products ?? []) {
     const code = text(product['产品编码'] ?? product.material_code);
     if (!code) continue;
     const oldCode = text(product['老品编码'] ?? product.replacement_material_code);
     const base = canonicalBaseName(product.target_base ?? product['基地']);
-    for (const sourceCode of oldCode === code ? [code] : [code, oldCode]) {
+    for (const sourceCode of oldCode === code || !includes(base, oldCode)
+      ? [code]
+      : [code, oldCode]) {
       if (!bySourceCode.has(sourceCode)) bySourceCode.set(sourceCode, []);
       bySourceCode.get(sourceCode).push({ base, code });
     }
@@ -257,19 +293,12 @@ export function createHistoryDependentLookup(products) {
 export function createSourceProductMatcher(rawProducts) {
   const byBase = new Map();
   const categoriesByCode = new Map();
-  const codesByOldCode = new Map();
   for (const product of rawProducts ?? []) {
     const code = text(product.material_code) || text(product['产品编码']);
     if (!code) continue;
     const categories = categoriesByCode.get(code) ?? new Set();
     categories.add(text(product[productCategoryField]) || text(product['大类']));
     categoriesByCode.set(code, categories);
-    const oldCode = text(product.replacement_material_code) || text(product['老品编码']);
-    if (oldCode) {
-      const codes = codesByOldCode.get(oldCode) ?? new Set();
-      codes.add(code);
-      codesByOldCode.set(oldCode, codes);
-    }
   }
   return (sourceCode, sourceBase = '') => {
     const base = canonicalBaseName(sourceBase);
@@ -287,23 +316,14 @@ export function createSourceProductMatcher(rawProducts) {
       return byBase.get(base)(sourceCode);
     }
     sourceCode = text(sourceCode);
-    const oldCodes = codesByOldCode.get(sourceCode);
-    const currentCode = categoriesByCode.has(sourceCode)
-      ? sourceCode
-      : oldCodes?.size === 1
-        ? [...oldCodes][0]
-        : '';
+    const currentCode = categoriesByCode.has(sourceCode) ? sourceCode : '';
     const categories = categoriesByCode.get(currentCode);
     return {
       currentCode,
       category: categories?.size === 1 ? [...categories][0] : '',
-      unknown: !categories && !oldCodes,
+      unknown: !categories,
       poolPresent: categoriesByCode.size > 0,
-      reason: categories
-        ? '当前产品池大类不唯一'
-        : oldCodes
-          ? '老品编码对应多个当前产品，未选择'
-          : '不在当前产品池',
+      reason: categories ? '当前产品池大类不唯一' : '不在当前产品池',
     };
   };
 }

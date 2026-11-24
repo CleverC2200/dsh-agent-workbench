@@ -6,6 +6,7 @@ import {
 import { createStepViewState, useStepViewField } from './step-view-state.js';
 import { createBatchEdit } from './batch-edit.js';
 import { matchesCategories } from './category-filter.js';
+import { sourceProductMappings, createProductScopeMatcher } from './source-projections.js';
 import { createShipmentScopeNotice } from './category-demand-view.js';
 import { createProcessedDemand } from './processed-demand-view.js';
 import { demandBasisLabel } from './festival-demand.js';
@@ -427,13 +428,18 @@ export function createWorkflow(
     const viewCategories = ['process', 'constraints'].includes(step) ? selectedCategories : [];
     const fields = step === 'process' ? processFields : planFields;
     const scopedRows =
-      step === 'process' ? [...result.rows, ...(result.referenceRows ?? [])] : result.rows;
+      step === 'process'
+        ? [...result.rows, ...(result.referenceRows ?? [])].filter((row) => row.base !== 'ODM')
+        : result.rows;
     const scopedCategories = result.categoryRows;
+    const products = sourceProductMappings(draft.products, draft.productRaw);
+    const inScope = createProductScopeMatcher(products);
+    const admittedBases = new Set(products.map((row) => row['基地']).filter(Boolean));
     const configurationPairs = [
       ...new Map(
         [
           ...result.rows,
-          ...(draft.products ?? [])
+          ...products
             .filter((row) => row['基地'] && row['产品编码'])
             .map((row) => ({
               base: row['基地'],
@@ -448,12 +454,15 @@ export function createWorkflow(
       ...new Set(
         [
           ...scopedRows.map((row) => row.base),
-          ...(result.poolExceptions?.total ?? []).map((row) => row.base),
-          ...configurationPairs.map((row) => row.base),
-          ...(draft.resources ?? []).map((row) => row.base),
-          ...(draft.productionDays ?? []).map((row) => row.base),
-          ...result.constraints.safetyDays.map((row) => row.base),
-        ].filter(Boolean),
+          ...(step === 'process'
+            ? []
+            : [
+                ...configurationPairs.map((row) => row.base),
+                ...(draft.resources ?? []).map((row) => row.base),
+                ...(draft.productionDays ?? []).map((row) => row.base),
+                ...result.constraints.safetyDays.map((row) => row.base),
+              ]),
+        ].filter((base) => admittedBases.has(base)),
       ),
     ];
     const categories = [...new Set(scopedCategories.map((row) => row.category))];
@@ -1397,65 +1406,71 @@ export function createWorkflow(
         '删除',
       ),
     ]);
-    const assignmentRows = (configuring ? assignments : []).map((assignment, index) => [
-      h(
-        'select',
-        {
-          'aria-label': `分配${index + 1} 月份`,
-          disabled: !batch.active,
-          value: assignment.month,
-          onChange: (event) =>
-            editEntry('resourceAssignments', assignments, index, { month: event.target.value }),
-        },
-        result.months.slice(0, 3).map((item) => h('option', { key: item, value: item }, item)),
-      ),
-      textEntry(`分配${index + 1} 基地`, assignment.base, (base) =>
-        editEntry('resourceAssignments', assignments, index, { base }),
-      ),
-      textEntry(`分配${index + 1} 产品编码`, assignment.code, (code) =>
-        editEntry('resourceAssignments', assignments, index, { code }),
-      ),
-      h(
-        'select',
-        {
-          'aria-label': `分配${index + 1} 资源`,
-          disabled: !batch.active,
-          value: assignment.resourceId,
-          onChange: (event) =>
-            editEntry('resourceAssignments', assignments, index, {
-              resourceId: event.target.value,
-            }),
-        },
-        h('option', { value: '' }, '选择明确资源'),
-        resources
-          .filter((item) => item.id && (!assignment.base || item.base === assignment.base))
-          .map((item) =>
-            h(
-              'option',
-              { key: item.id, value: item.id },
-              `${item.id} · ${item.name} · ${item.kind === 'forming' ? '成型机' : '隧道'}`,
+    const assignmentRows = (configuring ? assignments : [])
+      .map((assignment, index) => ({ assignment, index }))
+      .filter(
+        ({ assignment }) =>
+          !assignment.base || !assignment.code || inScope(assignment.base, assignment.code),
+      )
+      .map(({ assignment, index }) => [
+        h(
+          'select',
+          {
+            'aria-label': `分配${index + 1} 月份`,
+            disabled: !batch.active,
+            value: assignment.month,
+            onChange: (event) =>
+              editEntry('resourceAssignments', assignments, index, { month: event.target.value }),
+          },
+          result.months.slice(0, 3).map((item) => h('option', { key: item, value: item }, item)),
+        ),
+        textEntry(`分配${index + 1} 基地`, assignment.base, (base) =>
+          editEntry('resourceAssignments', assignments, index, { base }),
+        ),
+        textEntry(`分配${index + 1} 产品编码`, assignment.code, (code) =>
+          editEntry('resourceAssignments', assignments, index, { code }),
+        ),
+        h(
+          'select',
+          {
+            'aria-label': `分配${index + 1} 资源`,
+            disabled: !batch.active,
+            value: assignment.resourceId,
+            onChange: (event) =>
+              editEntry('resourceAssignments', assignments, index, {
+                resourceId: event.target.value,
+              }),
+          },
+          h('option', { value: '' }, '选择明确资源'),
+          resources
+            .filter((item) => item.id && (!assignment.base || item.base === assignment.base))
+            .map((item) =>
+              h(
+                'option',
+                { key: item.id, value: item.id },
+                `${item.id} · ${item.name} · ${item.kind === 'forming' ? '成型机' : '隧道'}`,
+              ),
             ),
-          ),
-      ),
-      numberInput(
-        `分配${index + 1} 分配比例`,
-        assignment.share,
-        (share) => editEntry('resourceAssignments', assignments, index, { share }),
-        1,
-      ),
-      h(
-        'button',
-        {
-          'aria-label': `删除分配${index + 1}`,
-          disabled: !batch.active,
-          onClick: () =>
-            update({
-              resourceAssignments: assignments.filter((_, position) => position !== index),
-            }),
-        },
-        '删除',
-      ),
-    ]);
+        ),
+        numberInput(
+          `分配${index + 1} 分配比例`,
+          assignment.share,
+          (share) => editEntry('resourceAssignments', assignments, index, { share }),
+          1,
+        ),
+        h(
+          'button',
+          {
+            'aria-label': `删除分配${index + 1}`,
+            disabled: !batch.active,
+            onClick: () =>
+              update({
+                resourceAssignments: assignments.filter((_, position) => position !== index),
+              }),
+          },
+          '删除',
+        ),
+      ]);
     const applyConfiguration = () => {
       const number = (value, label, max = Number.MAX_SAFE_INTEGER) => {
         if (typeof value !== 'string') return value;
@@ -1601,26 +1616,12 @@ export function createWorkflow(
           },
           '产品池全国覆盖尚未取得实际证明，仅报告范围内结果',
         ),
-      h(ShipmentScopeNotice, {
-        scope: result.categoryComputation.shipmentScope,
-        month: draft.month,
-        selectedCategories: viewCategories,
-        cutoff: shipmentSnapshot?.cutoff,
-      }),
-      step === 'report' &&
-        h(PoolExceptionReport, {
-          draft,
-          result,
-          filters: exceptionFilters,
-          table,
-          view,
-        }),
-      step === 'report' &&
-        h(DelistedReport, {
-          draft,
-          result,
-          filters: exceptionFilters,
-          table,
+      step !== 'process' &&
+        h(ShipmentScopeNotice, {
+          scope: result.categoryComputation.shipmentScope,
+          month: draft.month,
+          selectedCategories: viewCategories,
+          cutoff: shipmentSnapshot?.cutoff,
         }),
       step === 'process'
         ? h(
@@ -2033,17 +2034,19 @@ export function createWorkflow(
                           月份: row.month,
                           生产天数: row.days,
                         })),
-                        ...weights.map((row) => ({
-                          评估版本: draft.name,
-                          评估月份: draft.month,
-                          配置类型: '件吨系数',
-                          基地: row.base,
-                          产品编码: row.code,
-                          件吨系数: row.tonsPerPiece,
-                          适用渠道: row.channels,
-                          读取配置版本: row.source?.configVersion,
-                          读取时间: row.source?.readAt,
-                        })),
+                        ...weights
+                          .filter((row) => inScope(row.base, row.code))
+                          .map((row) => ({
+                            评估版本: draft.name,
+                            评估月份: draft.month,
+                            配置类型: '件吨系数',
+                            基地: row.base,
+                            产品编码: row.code,
+                            件吨系数: row.tonsPerPiece,
+                            适用渠道: row.channels,
+                            读取配置版本: row.source?.configVersion,
+                            读取时间: row.source?.readAt,
+                          })),
                         ...resources.map((row) => ({
                           评估版本: draft.name,
                           评估月份: draft.month,
@@ -2054,16 +2057,18 @@ export function createWorkflow(
                           资源名称: row.name,
                           日产吨数: row.dailyTons,
                         })),
-                        ...assignments.map((row) => ({
-                          评估版本: draft.name,
-                          评估月份: draft.month,
-                          配置类型: '资源分配',
-                          月份: row.month,
-                          基地: row.base,
-                          产品编码: row.code,
-                          资源编号: row.resourceId,
-                          分配比例: row.share,
-                        })),
+                        ...assignments
+                          .filter((row) => inScope(row.base, row.code))
+                          .map((row) => ({
+                            评估版本: draft.name,
+                            评估月份: draft.month,
+                            配置类型: '资源分配',
+                            月份: row.month,
+                            基地: row.base,
+                            产品编码: row.code,
+                            资源编号: row.resourceId,
+                            分配比例: row.share,
+                          })),
                         ...inputGaps.map(([item, reason]) => ({
                           评估版本: draft.name,
                           评估月份: draft.month,
@@ -2120,6 +2125,21 @@ export function createWorkflow(
                 ),
               ),
             ),
+      step === 'report' &&
+        h(PoolExceptionReport, {
+          draft,
+          result,
+          filters: exceptionFilters,
+          table,
+          view,
+        }),
+      step === 'report' &&
+        h(DelistedReport, {
+          draft,
+          result,
+          filters: exceptionFilters,
+          table,
+        }),
       ['process', 'constraints'].includes(step) && result.missing.length
         ? h(
             'details',

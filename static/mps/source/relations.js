@@ -29,6 +29,7 @@ export async function readRelations(config, execute, month, signal) {
       return query.readAll(
         kind + '.detail',
         {
+          ...(kind === 'products' ? { month } : {}),
           page_size: 5000,
           offset: 0,
         },

@@ -51,11 +51,16 @@ export function attachPlanReport(
     return values.length === 1 && values[0].tonsPerPiece > 0 ? values[0].tonsPerPiece : null;
   };
   const report = [];
+  const causes = new Map();
   const categoryIssues = new Map(
-    (categoryComputation?.rows ?? []).map((row) => [
-      JSON.stringify([row.month, row.category]),
-      categoryDemandMissing(categoryComputation, row),
-    ]),
+    (categoryComputation?.rows ?? []).map((row) => {
+      const id = JSON.stringify([row.month, row.category]);
+      const causeIds = categoryDemandMissing(categoryComputation, row).map((reason) => {
+        if (!causes.has(reason)) causes.set(reason, { id: `cause-${causes.size + 1}`, reason });
+        return causes.get(reason).id;
+      });
+      return [id, { id, month: row.month, category: row.category, causeIds }];
+    }),
   );
   const stock = new Map(
     (shipmentSnapshot?.rows ?? []).map((row) => [pair(row.base, row.code), row]),
@@ -109,20 +114,26 @@ export function attachPlanReport(
         `核对最新月份${row.base}基地${row.code}对应替换品${row.historyCode}的替换系数；同基地同SKU各标签应一致，零系数有效，缺值不能按1计算`,
         row.demand !== 0,
       );
-    if (row.planMissing.includes('缺有效需求'))
+    if (row.planMissing.includes('缺有效需求')) {
+      const causeGroup = categoryIssues.get(JSON.stringify([row.month, row.category]));
       add(
         '缺有效需求',
         [
           ...new Set([
             ...(row.missing?.demand ?? []),
             ...(row.missing?.historyShare?.length ? (row.missing?.historyQuantity ?? []) : []),
-            ...(categoryIssues.get(JSON.stringify([row.month, row.category])) ?? []),
+            ...(causeGroup?.causeIds.length
+              ? [`大类上游原因见${causeGroup.id}，完整来源见大类需求上游原因清单`]
+              : []),
           ]),
         ].join('；') || '基地SKU有效需求尚未形成，缺值保留待补',
         '大类需求测算 / ai_db.agents_scm_dimension_plan_rate_mi / ai_db.agents_scm_cust_deliv_daily_di',
         '需求月及大类有效数量；stat_month / belong_base / material_code / dimension_allnum；shipment_date / belong_base / material_code / act_dl_qty_total（发布指标）',
         `先核对${row.month}大类需求；再核对${row.base}当前SKU ${row.code}${row.historyCode ? `及替换品 ${row.historyCode}` : ''}在上一完整财年的发货。自身历史源行${row.historyOwnRows}条，替换品历史源行${row.historyReferenceRows}条；两品历史合计，已有源行的空值不补0，缺基地需从来源补齐后重算`,
+        true,
+        { causeGroupId: causeGroup?.causeIds.length ? causeGroup.id : '' },
       );
+    }
     if (row.planMissing.includes('缺前月实际结存')) {
       const source = stock.get(pair(row.base, row.code));
       const details =
@@ -493,4 +504,8 @@ export function attachPlanReport(
     issue.action = '先处理根因月份和来源，不另补后续月份期初库存；' + issue.action;
   }
   plan.reportIssues = report;
+  const usedGroups = new Set(report.map((issue) => issue.causeGroupId).filter(Boolean));
+  plan.reportCauseGroups = [...categoryIssues.values()].filter((group) => usedGroups.has(group.id));
+  const usedCauses = new Set(plan.reportCauseGroups.flatMap((group) => group.causeIds));
+  plan.reportCauses = [...causes.values()].filter((cause) => usedCauses.has(cause.id));
 }

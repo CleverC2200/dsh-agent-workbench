@@ -413,7 +413,9 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     ];
     if (tags.length !== 1 || tags[0] !== '下市品') return [];
     const stock = stockBySku?.get(rowKey(product))?.[0];
-    const average = validShipment ? number(stock?.average) : null;
+    const average = validShipment
+      ? number(stock?.rawAverage === undefined ? stock?.average : stock.rawAverage)
+      : null;
     const issue = !validShipment
       ? `库存日报读取状态${shipmentSnapshot?.status ?? 'unread'}；${shipmentSnapshot?.error ?? '同版本库存快照尚未就绪'}`
       : !stock
@@ -530,7 +532,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       ],
       rows: (period.rows ?? []).map((row) => ({
         month: period.month,
-        base: text(row['基地']),
+        base: canonicalBaseName(row['基地']),
         code: text(row['产品编码']),
         quantity: number(row['数量']),
       })),

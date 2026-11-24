@@ -51,7 +51,7 @@ async function downloadRows(page, section) {
   return XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' });
 }
 
-test('第3和4步按同份源清单展示和下载覆盖、冲突、主数据缺项及缺少的全国证明', async (t) => {
+test('第3步隐藏产品范围对账，第4步展示和下载源清单覆盖、冲突及缺项', async (t) => {
   const { page, frame } = await mpsPage(t, config, fixture);
   await page.clock.setFixedTime(new Date('2026-11-15T12:00:00+08:00'));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
@@ -60,6 +60,8 @@ test('第3和4步按同份源清单展示和下载覆盖、冲突、主数据缺
   await expect(frame.getByRole('region', { name: '产品明细', exact: true })).toContainText('产品B');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   const section = frame.getByRole('region', { name: '产品范围对账', exact: true });
+  await expect(section).toHaveCount(0);
+  await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
   await expect(section).toContainText('源清单4条，有效基地SKU 2项，实际参与2项');
   await expect(section).toContainText('冲突1项');
   await expect(section).toContainText('全国基地范围及独立完整性证明');
@@ -72,12 +74,9 @@ test('第3和4步按同份源清单展示和下载覆盖、冲突、主数据缺
     rows.every((row) => row['覆盖声明'] === '实际参与范围' && row['源统计期'] === '2026-11'),
   );
   assert.ok(rows.every((row) => /全国基地范围/.test(row['缺少的覆盖证明'])));
-  await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
-  await expect(section).toContainText('源清单4条，有效基地SKU 2项，实际参与2项');
-  assert.deepEqual(await downloadRows(page, section), rows);
 });
 
-test('三类池外异常页面和CSV保留双来源，总清单去重且唯一历史替换不列异常', async (t) => {
+test('三类池外异常页面和CSV保留双来源，按基地SKU去重并单列池外老品', async (t) => {
   const current = [product('A', '甲'), product('B', '乙')];
   current[0] = { ...current[0], replacement_material_code: 'OLD', replace_num: '2' };
   const prefix = 'agents_scm_cust_deliv_daily_di.';
@@ -165,7 +164,7 @@ test('三类池外异常页面和CSV保留双来源，总清单去重且唯一�
     report.getByRole('button', { name: '销售提报SKU（1条）', exact: true }),
   ).toBeVisible();
   await expect(
-    report.getByRole('button', { name: '总异常清单（3项）', exact: true }),
+    report.getByRole('button', { name: '总异常清单（4项）', exact: true }),
   ).toBeVisible();
   const download = async () => {
     const pending = page.waitForEvent('download');
@@ -179,12 +178,15 @@ test('三类池外异常页面和CSV保留双来源，总清单去重且唯一�
     return XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' });
   };
   const all = await download();
-  assert.equal(all.length, 3);
+  assert.equal(all.length, 4);
   assert.equal(all.find((row) => row.SKU === 'OUT')['来源'], '历史发货；销售提报');
   assert.match(all.find((row) => row.SKU === 'OUT')['原始值'], /历史发货：20；销售提报：8/);
-  assert.ok(!all.some((row) => row.SKU === 'OLD' && row['基地'] === '甲'));
+  assert.match(
+    all.find((row) => row.SKU === 'OLD' && row['基地'] === '甲')['原始值'],
+    /历史发货：3/,
+  );
   for (const [label, size, codes] of [
-    ['历史有发货SKU', 2, ['OUT', 'OLD']],
+    ['历史有发货SKU', 3, ['OLD', 'OUT', 'OLD']],
     ['销售提报SKU', 1, ['OUT']],
     ['其他', 1, ['ZERO']],
   ]) {
@@ -196,7 +198,9 @@ test('三类池外异常页面和CSV保留双来源，总清单去重且唯一�
       codes,
     );
     for (const row of rows)
-      await expect(report.getByRole('row').filter({ hasText: row.SKU })).toContainText(row['来源']);
+      await expect(
+        report.getByRole('row').filter({ hasText: row.SKU }).filter({ hasText: row['基地'] }),
+      ).toContainText(row['来源']);
   }
 });
 
@@ -228,7 +232,7 @@ test('主动排除的基地SKU继续列在对账内，页面和CSV给出首个�
       '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库,近30天日均发货\n2026-09,郑州,A,产品甲,汤圆,系列,组,220,10,10,10,100,200,80,0\n2026-09,郑州,B,产品乙,汤圆,系列,组,110,,10,10,,20,8,0',
     ),
   });
-  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
   const section = frame.getByRole('region', { name: '产品范围对账', exact: true });
   await expect(section).toContainText('实际参与1项。已覆盖1项，主动排除1项，遗漏0项');
   const rows = await downloadRows(page, section);

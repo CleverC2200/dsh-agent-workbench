@@ -2,20 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPage, openMpsProductDetails } from './helpers/mps-page.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const product = Object.fromEntries(
   config.queries['products.detail'].columns.map((key) => [key, null]),
 );
 Object.assign(product, {
-  material_code: '',
+  material_code: '001',
   material_name: '源产品甲',
+  target_base: '郑州',
+  responsible_item: '汤圆',
   product_item: '101005',
   source_rows: 1,
 });
 const annual = {
-  belong_base: '全国',
+  belong_base: '郑州',
+  material_code: '001',
   sub_category: '汤圆',
   stat_month: '2026年10月',
   source_rows: 1,
@@ -24,13 +27,13 @@ const annual = {
   demand_qty: 100,
   update_time: null,
 };
-const livePage = (t, execute) => mpsPage(t, config, execute);
+const livePage = (t, execute) => mpsPage(t, config, execute, { time: '2026-11-15T12:00:00+08:00' });
 function fixture({ queryId, parameters }) {
   let rows;
   if (queryId.startsWith('products.prices'))
     rows = queryId.endsWith('.count') ? [{ total: 0 }] : [];
   else if (queryId.endsWith('.count')) rows = [{ total: 1 }];
-  else if (queryId === 'products.detail') rows = [product];
+  else if (queryId === 'products.detail') rows = [{ ...product, stat_period: parameters.month }];
   else if (queryId === 'annual-pool.detail') rows = [annual];
   else
     rows = [
@@ -48,15 +51,18 @@ function fixture({ queryId, parameters }) {
 }
 test('MPS reads governed products and annual demand, preserves missing dimensions and queries every source by name', async (t) => {
   const { frame, calls } = await livePage(t, fixture);
-  const products = frame.getByRole('region', { name: '产品明细', exact: true });
+  const products = await openMpsProductDetails(frame);
   await expect(products).toContainText('源产品甲');
   await expect(products.locator('.dc-demo')).toHaveCount(0);
-  await expect(products.locator('tbody tr').first().locator('td').first()).toHaveText('-');
+  await expect(products.locator('tbody tr').first().locator('td').nth(3)).toHaveText('-');
   const annualTable = frame.getByRole('region', { name: '年度销售计划', exact: true });
   await annualTable.getByRole('button', { name: '展开年度销售计划' }).click();
   await expect(annualTable).toContainText('100');
   await expect(annualTable).toContainText('源数量');
   assert(calls.some((call) => call.queryId === 'annual-pool.detail'));
+  await expect(frame.getByLabel('产品数据来源', { exact: true })).toHaveCount(0);
+  await expect(products).not.toContainText('演示数据');
+  await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
   await frame.getByRole('button', { name: '数据源', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '月主计划数据源', exact: true });
   for (const [kind, name] of Object.entries({
@@ -71,8 +77,6 @@ test('MPS reads governed products and annual demand, preserves missing dimension
     await expect.poll(() => calls.some((call) => call.queryId === kind + '.detail')).toBe(true);
   }
   await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click();
-  await expect(frame.getByLabel('产品数据来源', { exact: true })).toHaveCount(0);
-  await expect(products).not.toContainText('演示数据');
 });
 test('MPS product sync restores a locally deleted product and keeps edits when the source fails', async (t) => {
   const records = [
@@ -85,11 +89,14 @@ test('MPS product sync restores a locally deleted product and keeps edits when t
       return { ...fixture(query), rows: [{ total: records.length }] };
     if (query.queryId === 'products.detail') {
       if (unavailable) throw Error('GEA SQL 查询服务暂时不可用');
-      return { ...fixture(query), rows: records };
+      return {
+        ...fixture(query),
+        rows: records.map((row) => ({ ...row, stat_period: query.parameters.month })),
+      };
     }
     return fixture(query);
   });
-  const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  const section = await openMpsProductDetails(frame);
   await expect(section.getByRole('button', { name: '删除 001', exact: true })).toBeVisible();
   await section.getByRole('button', { name: '删除 001', exact: true }).click();
   await expect(section.locator('tbody tr')).toHaveCount(1);
@@ -98,8 +105,8 @@ test('MPS product sync restores a locally deleted product and keeps edits when t
   assert.deepEqual(
     calls.filter((call) => call.queryId === 'products.detail').map((call) => call.parameters),
     [
-      { page_size: 5000, offset: 0 },
-      { page_size: 5000, offset: 0 },
+      { month: '2026-11', page_size: 5000, offset: 0 },
+      { month: '2026-11', page_size: 5000, offset: 0 },
     ],
   );
   await section.getByRole('button', { name: '删除 001', exact: true }).click();
@@ -125,12 +132,18 @@ test('MPS denies without falling back to samples and discards a late response af
       if (current === 1) await pending;
       return {
         ...fixture(query),
-        rows: [{ ...product, material_name: current === 1 ? '过期产品' : '新版产品' }],
+        rows: [
+          {
+            ...product,
+            stat_period: query.parameters.month,
+            material_name: current === 1 ? '过期产品' : '新版产品',
+          },
+        ],
       };
     }
     return fixture(query);
   });
-  const products = frame.getByRole('region', { name: '产品明细', exact: true });
+  const products = await openMpsProductDetails(frame);
   await expect(products.getByRole('alert')).toBeVisible();
   await expect(products.locator('tbody tr')).toHaveCount(0);
   deny = false;
@@ -155,7 +168,7 @@ test('MPS denies without falling back to samples and discards a late response af
   await expect(products).toContainText('新版产品');
   await expect(products).not.toContainText('过期产品');
 });
-test('MPS keeps national and base annual quantities separate, preserves zero and blocks duplicate source quantities', async (t) => {
+test('MPS derives national annual quantities from in-pool bases, preserves zero and blocks duplicate source quantities', async (t) => {
   const records = [
     annual,
     { ...annual, belong_base: '华东', stat_month: 'Oct-26', demand_qty: 200 },
@@ -166,8 +179,22 @@ test('MPS keeps national and base annual quantities separate, preserves zero and
       sub_category: `其他大类${index}`,
       demand_qty: 1,
     })),
-  ];
+  ].map((row) => ({ ...row, material_code: '001-' + row.sub_category }));
   const { page, frame } = await livePage(t, (query) => {
+    if (query.queryId === 'products.count')
+      return { ...fixture(query), rows: [{ total: records.length }] };
+    if (query.queryId === 'products.detail')
+      return {
+        ...fixture(query),
+        rows: records.map((row) => ({
+          ...product,
+          stat_period: query.parameters.month,
+          target_base: row.belong_base,
+          material_code: row.material_code,
+          material_name: '产品' + row.sub_category,
+          responsible_item: row.sub_category,
+        })),
+      };
     const exported = records
       .filter((row) => row.belong_base === query.parameters.base)
       .map((row) => ({
@@ -175,7 +202,7 @@ test('MPS keeps national and base annual quantities separate, preserves zero and
           config.queries['annual.export'].columns.map((column) => [column, null]),
         ),
         ...row,
-        material_code: '001-' + row.sub_category,
+        material_code: row.material_code,
         material_name: '产品' + row.sub_category,
         demand_qty: row.duplicate_rows ? null : row.demand_qty,
       }));
@@ -199,8 +226,7 @@ test('MPS keeps national and base annual quantities separate, preserves zero and
     section
       .locator('tbody tr')
       .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) }),
-  ).toContainText('100');
-  await expect(section).not.toContainText('300');
+  ).toContainText('300');
   const zero = section
     .locator('tbody tr')
     .filter({ has: frame.getByRole('cell', { name: '饺子', exact: true }) });
@@ -210,13 +236,14 @@ test('MPS keeps national and base annual quantities separate, preserves zero and
     .filter({ has: frame.getByRole('cell', { name: '饼类', exact: true }) });
   await expect(duplicate).not.toContainText('999');
   await duplicate.locator('details summary').first().click();
-  await expect(duplicate).toContainText('源粒度重复');
+  await expect(duplicate).toContainText('数量缺失');
   const downloaded = page.waitForEvent('download');
   await section.getByRole('button', { name: '下载年度SKU模板', exact: true }).click();
   const csv = await mpsDownloadText(await (await downloaded).path());
   assert.match(csv, /基地,大类,老大类,物料组编码,物料组名称,物料编码,物料名称,2026-07/);
   assert.match(csv, /001-汤圆,产品汤圆/);
-  assert.doesNotMatch(csv, /华东/);
+  assert.match(csv, /郑州/);
+  assert.match(csv, /华东/);
   const scroll = section.locator('.dc-table-scroll');
   await expect
     .poll(() =>
@@ -230,12 +257,16 @@ test('MPS keeps national and base annual quantities separate, preserves zero and
     )
     .toBe(true);
   await section.getByLabel('年度需求基地').selectOption('华东');
-  await expect(section.locator('tbody tr')).toHaveCount(1);
-  await expect(section).toContainText('200');
+  await expect(section.locator('tbody tr')).toHaveCount(29);
+  await expect(
+    section
+      .locator('tbody tr')
+      .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) }),
+  ).toContainText('200');
   await expect(section).not.toContainText('100');
 });
 
-test('MPS product details start with ten rows and keep pagination aligned with filters', async (t) => {
+test('MPS product details start collapsed, open with the keyboard and keep pagination aligned with filters', async (t) => {
   const records = Array.from({ length: 56 }, (_, index) => ({
     ...product,
     product_item: String(index).padStart(6, '0'),
@@ -245,10 +276,21 @@ test('MPS product details start with ten rows and keep pagination aligned with f
   const { frame } = await livePage(t, (query) => {
     if (query.queryId === 'products.count')
       return { ...fixture(query), rows: [{ total: records.length }] };
-    if (query.queryId === 'products.detail') return { ...fixture(query), rows: records };
+    if (query.queryId === 'products.detail')
+      return {
+        ...fixture(query),
+        rows: records.map((row) => ({ ...row, stat_period: query.parameters.month })),
+      };
     return fixture(query);
   });
   const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  const toggle = section.locator(':scope > details > summary');
+  await expect(toggle).toBeVisible();
+  await expect(section.locator('table')).toBeHidden();
+  await expect(section.getByRole('button', { name: '同步产品', exact: true })).toHaveCount(0);
+  await expect(section.getByLabel('搜索产品')).toBeHidden();
+  await toggle.press('Enter');
+  await expect(section.locator('table')).toBeVisible();
   await expect(section.locator('tbody tr')).toHaveCount(10);
   await expect(section.getByLabel('每页产品条数')).toHaveValue('10');
   await section.getByRole('button', { name: '下一页', exact: true }).click();
@@ -263,10 +305,9 @@ test('MPS product details start with ten rows and keep pagination aligned with f
   await section.getByLabel('搜索产品').fill('产品55');
   await expect(section.locator('tbody tr')).toHaveCount(1);
   await expect(section.locator('tbody tr')).toContainText('产品55');
-  const toggle = section.getByRole('button', { name: '收起产品明细', exact: true });
   await toggle.click();
   await expect(section.locator('table')).toBeHidden();
-  await section.getByRole('button', { name: '展开产品明细', exact: true }).click();
+  await toggle.click();
   await expect(section.locator('tbody tr')).toBeVisible();
   await expect(section.getByLabel('产品数据来源', { exact: true })).toHaveCount(0);
   await expect(section.getByRole('button', { name: 'CSV模板', exact: true })).toHaveCount(0);
@@ -336,7 +377,7 @@ test('annual explanations show rounded results without numeric substitution and 
   assert.equal(csv.match(/12\.5/g)?.length, 3);
 });
 
-test('最新产品源按基地标签展示并导出原始小数，全国关系不重复', async (t) => {
+test('最新产品源保留同码两基地组合，按基地标签展示并导出原始小数', async (t) => {
   const records = ['郑州', '华东'].map((base, index) => ({
     ...product,
     stat_period: '2026-11',
@@ -358,17 +399,17 @@ test('最新产品源按基地标签展示并导出原始小数，全国关系�
     if (query.queryId === 'products.detail') return { ...fixture(query), rows: records };
     return fixture(query);
   });
-  const section = frame.getByRole('region', { name: '产品明细', exact: true });
-  await expect(section.locator('tbody tr')).toHaveCount(1);
+  const section = await openMpsProductDetails(frame);
+  await expect(section.locator('tbody tr')).toHaveCount(2);
   await expect(section).toContainText('部分基地新品');
-  await section.getByRole('button', { name: '查看产品 001 的源字段', exact: true }).click();
+  await section.getByRole('button', { name: '查看产品 001 的源字段', exact: true }).first().click();
   const details = frame.getByRole('dialog', { name: '产品源字段与物料组SKU', exact: true });
   await expect(details).toContainText('8.08000001');
   await expect(details).toContainText('0.00000000');
   await expect(details.locator('table').last().locator('tbody tr')).toHaveCount(2);
   await details.getByRole('button', { name: '关闭', exact: true }).click();
   await section.getByRole('textbox', { name: '搜索产品', exact: true }).fill('华东');
-  await expect(section.locator('tbody tr')).toHaveCount(1);
+  await expect(section.locator('tbody tr')).toHaveCount(2);
   const download = page.waitForEvent('download');
   await section.getByRole('button', { name: '下载产品源字段', exact: true }).click();
   const csv = await mpsDownloadText(await (await download).path());

@@ -235,13 +235,23 @@ test('shipment SQL sums daily inbound including reversals, preserves missing flo
     ),
     [
       ['A', 230, 10, 30, 40 / 3, 7.25, 100, 245, 0],
-      ['B', 0, 0, null, 0, 0, 0, null, 0],
+      ['B', 0, 0, 0, 0, 0, 0, null, 0],
       ['C', null, null, null, null, null, null, null, 1],
     ],
   );
   assert.equal(rows[2].material_name, null);
+  assert.deepEqual(
+    rows.map((row) => row.raw_average),
+    [7.25, 0, null],
+  );
+  db.exec(
+    "UPDATE agents_scm_stock_detail_d SET avg_30d_send = NULL WHERE material_code = 'B' AND the_date = '2026-09-22'",
+  );
+  const missingAverage = query.all(parameters).find((row) => row.material_code === 'B');
+  assert.equal(missingAverage.average, 0);
+  assert.equal(missingAverage.raw_average, null);
   const early = query.all({ ...parameters, cutoff: '2026-09-02', recent_start: '2026-09-01' });
-  assert.equal(early[0].daily3, null);
+  assert.equal(early[0].daily3, 20 / 3);
   assert.equal(early[0].inbound, 4);
   assert.equal(early[1].inbound, null);
   db.exec("UPDATE agents_scm_stock_detail_d SET produce_in_qty = 0 WHERE material_code = 'B'");
@@ -249,8 +259,8 @@ test('shipment SQL sums daily inbound including reversals, preserves missing flo
   db.exec(
     "UPDATE agents_scm_stock_detail_d SET total_sales_qty = NULL WHERE material_code = 'A' AND the_date = '2026-09-20'",
   );
-  assert.equal(query.all(parameters)[0].shipped, null);
-  assert.equal(query.all(parameters)[0].daily3, null);
+  assert.equal(query.all(parameters)[0].shipped, 220);
+  assert.equal(query.all(parameters)[0].daily3, 10);
 });
 
 test('reported quantities retain partial NULL independently and preserve real zero through named SQL paging', (t) => {

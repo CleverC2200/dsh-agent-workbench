@@ -1088,12 +1088,32 @@ test('MPS Host context stays at the latest visible step when an earlier transpor
   assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
 });
 
+const mpsProductPairs = (page) =>
+  page.evaluate(() => {
+    const state = window.readState('plan-category-production')?.localDrafts;
+    const draft = state?.drafts.find((row) => row.id === state.selected);
+    return (draft?.inputs.products?.rows ?? []).map((row) => [row['基地'], row['产品编码']]);
+  });
+
+async function seedMpsProductScope(frame, base, code) {
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '恢复测试产品范围.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,物料组名称,老品编码,老品名称\n' +
+        [base, code, '产品', '汤圆', '系列', '组', '', '', ''].join(','),
+    ),
+  });
+  await expect.poll(() => mpsProductPairs(frame.locator('body').page())).toEqual([[base, code]]);
+}
+
 test('MPS Host context keeps the latest edited shipment input when an earlier value arrives late', async (t) => {
   const page = await fixture(t, ['mps']),
     readHost = await publicMpsContext(t, page);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   await expect.poll(async () => (await readHost())?.parts?.navigation?.tab).toBe('check');
   const frame = page.frameLocator('iframe');
+  await seedMpsProductScope(frame, '西南', 'A');
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await frame.getByLabel('数据截止日', { exact: true }).fill('2026-09-22');
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
@@ -1213,6 +1233,7 @@ test('received MPS isolates local files, rejects in-flight reads and restores th
   const creating = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await creating.getByLabel('评估月份', { exact: true }).fill('2026-12');
   await creating.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await seedMpsProductScope(frame, '郑州', 'P1');
   const csv =
     '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,P1,产品,汤圆,系列,组,8,9';
   const upload = (contents = csv) =>
@@ -1259,6 +1280,7 @@ test('received MPS isolates local files, rejects in-flight reads and restores th
     ),
     false,
   );
+  await expect.poll(() => mpsProductPairs(page)).toEqual([]);
   await page.evaluate(() => window.switchViewSession('mock-session'));
   await expect
     .poll(() =>
@@ -1269,6 +1291,7 @@ test('received MPS isolates local files, rejects in-flight reads and restores th
       ),
     )
     .toBe(1);
+  await expect.poll(() => mpsProductPairs(page)).toEqual([['郑州', 'P1']]);
   await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('数量合计8件');
 });
 
@@ -1324,6 +1347,7 @@ test('MPS S2 publishes actual local inputs and carry output within the Host cont
   const readHost = await publicMpsContext(t, page);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   const frame = page.frameLocator('iframe');
+  await seedMpsProductScope(frame, '郑州', 'A');
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await expect.poll(async () => (await readHost())?.parts?.ship?.rowCount).toBe(0);
   await frame.getByLabel('数据截止日', { exact: true }).fill('2026-09-22');

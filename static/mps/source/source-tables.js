@@ -1,3 +1,4 @@
+import { categoryHistoryMonths } from './category-history-periods.js';
 import { sourceDimensions } from './source-projections.js';
 import { call } from '../../../business/shared/channel.js';
 import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
@@ -61,12 +62,12 @@ const tableMonth = (value) => {
         : null)
   );
 };
-export function sourceTableParameters(kind, month) {
+export function sourceTableParameters(kind, month, requestedHistoryMonths) {
   const months = sourceMonthValues(month);
   if (kind === 'category-history')
     return {
-      months: Array.from({ length: 14 }, (_, index) =>
-        monthOffset(month, index - 10).replace('-', ''),
+      months: (requestedHistoryMonths ?? categoryHistoryMonths(month)).map((period) =>
+        period.replace('-', ''),
       ),
     };
   if (kind === 'annual-pool') return {};
@@ -225,8 +226,8 @@ export function planRateRows(rows, month) {
     };
   });
 }
-export async function readSourceTable(kind, month, signal) {
-  const parameters = sourceTableParameters(kind, month);
+export async function readSourceTable(kind, month, signal, requestedHistoryMonths) {
+  const parameters = sourceTableParameters(kind, month, requestedHistoryMonths);
   const element = document.getElementById('agent-sql-config');
   if (!element) throw Error('月主计划数据源尚未装载');
   const config = JSON.parse(element.textContent);
@@ -259,12 +260,20 @@ export async function readSourceTable(kind, month, signal) {
           : kind === 'annual-pool'
             ? annualRows(result.rows)
             : kind === 'category-history'
-              ? result.rows.map((row) => deliveryRows([row], tableMonth(row.stat_month))[0])
+              ? result.rows.map((row) => ({
+                  ...deliveryRows([row], tableMonth(row.stat_month))[0],
+                  基地维度财年发货数量: decimal(row.base_fiscal_act_dl_qty ?? null),
+                  基地财年源月份数: decimal(row.base_fiscal_month_count ?? null),
+                  基地财年有效月份数: decimal(row.base_fiscal_quantity_month_count ?? null),
+                }))
               : kind === 'plan-rate'
                 ? planRateRows(result.rows, month)
                 : deliveryRows(result.rows, month),
     metadata: {
       period: month,
+      ...(kind === 'category-history'
+        ? { requestedMonths: parameters.months.map(tableMonth) }
+        : {}),
       source:
         kind === 'forecast'
           ? 'agents_scm_sales_forecast_mi'

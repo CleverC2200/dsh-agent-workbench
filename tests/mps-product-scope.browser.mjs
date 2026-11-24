@@ -33,7 +33,7 @@ async function downloadRows(page, button) {
   return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
 }
 
-test('三类池外报告页面与下载保留双来源，基地筛选同步，替换专用SKU免报且正常SKU继续计算', async (t) => {
+test('三类池外报告保留双来源和池外老品，基地筛选同步且池内SKU继续计算', async (t) => {
   const { page, frame } = await mpsPage(t, config, ({ queryId, parameters }) => {
     const rows =
       queryId === 'facts.history-annual'
@@ -73,7 +73,7 @@ test('三类池外报告页面与下载保留双来源，基地筛选同步，�
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   const report = view.getByRole('region', { name: '产品范围与池外异常', exact: true });
   await expect(report).toBeVisible();
-  await report.getByRole('button', { name: '总异常清单（3项）', exact: true }).click();
+  await report.getByRole('button', { name: '总异常清单（4项）', exact: true }).click();
   const scroll = report.getByRole('region', { name: '总异常清单明细，可横向滚动', exact: true });
   await scroll.focus();
   await scroll.press('ArrowRight');
@@ -82,12 +82,13 @@ test('三类池外报告页面与下载保留双来源，基地筛选同步，�
     page,
     report.getByRole('button', { name: '下载当前池外异常明细', exact: true }),
   );
-  assert.equal(total.length, 3);
-  assert.ok(total.every((row) => !['A', 'B', 'OLD'].includes(row.SKU)));
+  assert.equal(total.length, 4);
+  assert.ok(total.every((row) => !['A', 'B'].includes(row.SKU)));
+  assert.match(total.find((row) => row.SKU === 'OLD').来源, /历史发货.*销售提报/);
   const out = total.find((row) => row.基地 === '甲' && row.SKU === 'OUT');
   assert.match(out.来源, /历史发货/);
   assert.match(out.来源, /销售提报/);
-  await report.getByRole('button', { name: '历史有发货SKU（2条）', exact: true }).click();
+  await report.getByRole('button', { name: '历史有发货SKU（3条）', exact: true }).click();
   assert.equal(
     (
       await downloadRows(
@@ -95,29 +96,29 @@ test('三类池外报告页面与下载保留双来源，基地筛选同步，�
         report.getByRole('button', { name: '下载当前池外异常明细', exact: true }),
       )
     ).length,
-    2,
+    3,
   );
-  await report.getByRole('button', { name: '销售提报SKU（1条）', exact: true }).click();
+  await report.getByRole('button', { name: '销售提报SKU（2条）', exact: true }).click();
   const sales = await downloadRows(
     page,
     report.getByRole('button', { name: '下载当前池外异常明细', exact: true }),
   );
-  assert.equal(sales[0].原始值, '8');
+  assert.equal(sales.find((row) => row.SKU === 'OUT').原始值, '8');
   await report.getByRole('button', { name: '其他（1条）', exact: true }).click();
   await expect(report.getByRole('table')).toContainText('真实零发货');
-  await report.getByRole('button', { name: '总异常清单（3项）', exact: true }).click();
+  await report.getByRole('button', { name: '总异常清单（4项）', exact: true }).click();
   await view.getByLabel('基地筛选', { exact: true }).selectOption('甲');
-  await expect(report.getByRole('table').locator('tbody tr')).toHaveCount(2);
+  await expect(report.getByRole('table').locator('tbody tr')).toHaveCount(3);
   const filtered = await downloadRows(
     page,
     report.getByRole('button', { name: '下载当前池外异常明细', exact: true }),
   );
-  assert.equal(filtered.length, 2);
+  assert.equal(filtered.length, 3);
   assert.ok(filtered.every((row) => row.基地 === '甲'));
   const demand = await workflowExportRows(frame);
   assert.ok(
     demand.some(
-      (row) => row.产品编码 === 'A' && row.月份 === '2026-12' && row.上一财年发货参考量 === '80',
+      (row) => row.产品编码 === 'A' && row.月份 === '2026-12' && row.上一财年发货参考量 === '60',
     ),
   );
   assert.ok(

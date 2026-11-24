@@ -1,6 +1,3 @@
-import { useStepViewField } from './step-view-state.js';
-import { createReportPage } from './report-page.js';
-
 export const historyColumns = [
   '历史期间',
   '物料组',
@@ -13,6 +10,10 @@ export const historyColumns = [
   '计算用历史数量',
   '补0状态',
   '历史分类',
+  '历史占比',
+  '销售提报占比',
+  '历史占比处理',
+  '历史占比调整说明',
   '来源状态',
   '实际处理',
   '来源',
@@ -66,6 +67,17 @@ export function historyExportRows(rows, context, period, includeMonths = true) {
         计算用历史数量: row.historyQuantity,
         补0状态: row.historyAudit?.zeroFilled ? '缺失数量补0' : '原始有效数量',
         历史分类: row.historyAudit?.classification,
+        历史占比: row.historyShare,
+        销售提报占比: row.reportShare,
+        历史占比处理: row.historyAudit?.shareZeroed
+          ? '最近三个月确认零发货，历史占比归0'
+          : row.missing.historyShare.length
+            ? '历史占比待核'
+            : '按有效历史拆分',
+        历史占比调整说明: [
+          ...(row.coefficientFallback ?? []).filter((reason) => /^(历史SKU|最近三个)/.test(reason)),
+          ...row.missing.historyShare,
+        ].join('；'),
         来源状态: `${statusText(row.historyAudit.sourceStatus)}${row.historyAudit.zeroFilled ? '，缺失数量补0' : ''}`,
         实际处理:
           row.historyQuantity === null
@@ -94,127 +106,4 @@ export function historyExportRows(rows, context, period, includeMonths = true) {
         : []),
     ];
   });
-}
-export function createHistoryReport(react, { downloadCsv }) {
-  const h = react.createElement;
-  const formatNumber = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format;
-  const number = (value) => (value == null ? '待补' : formatNumber(value));
-  const ReportPage = createReportPage(react);
-  return function HistoryReport({ view, draft, rows, period, card, table }) {
-    const entries = react.useMemo(() => uniqueRows(rows), [rows]);
-    const [selected, setSelected] = useStepViewField(react, view, 'HistoryReport.selection', '');
-    const current = entries.find((row) => identity(row) === selected) ?? entries[0];
-    const context = { 评估版本: draft.name, 评估月份: draft.month };
-    const scrollTable = (name, columns, values) =>
-      react.cloneElement(table(name, columns, values), {
-        tabIndex: 0,
-        role: 'region',
-        'aria-label': `${name}，可横向滚动`,
-      });
-    return card(
-      '历史发货分类与补0',
-      h(
-        react.Fragment,
-        null,
-        h(
-          'p',
-          { className: 'wf-note' },
-          '分类使用实际已结束的完整月原始历史。上一完整财年按同基地自身＋替换品×系数展示和计算，缺失数量补0，来源异常保留；0÷0仍待补。',
-        ),
-        h(
-          ReportPage,
-          { view, stateKey: 'HistoryReport.page', label: '财年历史', rows: entries },
-          (visible) =>
-            scrollTable(
-              '历史发货分类及财年数量',
-              [
-                '基地',
-                '产品编码',
-                '历史分类',
-                '自身原始数量',
-                '自身计算用数量',
-                '替换品编码',
-                '替换品原始数量',
-                '替换品计算用数量',
-                '替换系数',
-                '计算用历史数量',
-                '补0状态',
-                '来源状态',
-                '原因',
-              ],
-              historyExportRows(visible, context, period, false).map((row) => [
-                row.基地,
-                row.产品编码,
-                row.历史分类,
-                number(row.自身原始数量),
-                number(row.自身计算用数量),
-                row.替换品编码 || '无',
-                row.替换品编码 ? number(row.替换品原始数量) : '不适用',
-                row.替换品编码 ? number(row.替换品计算用数量) : '不适用',
-                row.替换品编码 ? number(row.替换系数) : '不适用',
-                number(row.计算用历史数量),
-                row.补0状态,
-                row.来源状态,
-                row.原因 || '无异常',
-              ]),
-            ),
-        ),
-        h(
-          'label',
-          null,
-          '核对近24个月历史',
-          h(
-            'select',
-            {
-              'aria-label': '核对历史基地SKU',
-              value: current ? identity(current) : '',
-              onChange: (event) => setSelected(event.target.value),
-            },
-            entries.map((row) =>
-              h(
-                'option',
-                { key: identity(row), value: identity(row) },
-                `${row.base} ${row.code} ${row.name}`,
-              ),
-            ),
-          ),
-        ),
-        current &&
-          scrollTable(
-            '近24个月原始历史',
-            ['月份', '自身数量', '替换品数量', '原始历史数量', '来源状态', '原因'],
-            current.historyAudit.months.map((month) => [
-              month.month,
-              number(month.ownQuantity),
-              current.historyCode ? number(month.referenceQuantity) : '不适用',
-              number(month.quantity),
-              statusText(month.status),
-              month.reasons.join('；') || '完整读取，可确认无记录月份为无实际发货',
-            ]),
-          ),
-      ),
-      h(
-        'button',
-        {
-          onClick: () =>
-            downloadCsv(
-              `${draft.month}-历史及异常明细.csv`,
-              [
-                '评估版本',
-                '评估月份',
-                '粒度',
-                '基地',
-                '产品编码',
-                '产品名称',
-                '大类',
-                ...historyColumns,
-                '原始历史数量',
-              ],
-              historyExportRows(entries, context, period),
-            ),
-        },
-        '下载当前历史及异常明细',
-      ),
-    );
-  };
 }

@@ -17,9 +17,6 @@ test('ODM页面与CSV同一结果：默认到货90，内部排产0，收货只�
         sample.draft.resourceAssignments=[];
         sample.draft.constraints.turnoverDays=[{base:'甲',code:'0',days:6.2}];
         sample.shipment.rows[0].end=30;
-        sample.draft.products[0]['老品编码']='OLD';
-        sample.draft.historyAnnual.periods[0].rows[0]['产品编码']='OLD';
-        sample.draft.productRaw=[{material_code:'0',target_base:'甲',replacement_material_code:'OLD',replace_num:'2'}];
         sample.relations={sources:{tunnels:[],sku_capacity:[],transfers:[{stat_period:'2026-11',target_base:'甲',material_code:'0',transfer_tag:'ODM代工品',transfer_direction:''}]}};
         const result=buildMpsWorkflow(sample.draft,sample.relations,sample.shipment,sample.evaluation);
         window.downloads=[];
@@ -59,8 +56,9 @@ test('ODM页面与CSV同一结果：默认到货90，内部排产0，收货只�
   assert.equal(row.ODM默认计划到货量, 90);
   assert.equal(row.实际期末库存, 20);
   assert.equal(row.历史源数量, 1);
-  assert.equal(row.替换系数, 2);
-  assert.match(row.历史参考口径, /系数/);
+  assert.equal(row.替换系数, '');
+  assert.equal(row.历史合计数量, 1);
+  assert.match(row.历史参考口径, /自身历史/);
   assert.match(row.ODM估算说明, /默认估算/);
   const arrivals = downloads.find((item) => item.name.endsWith('ODM默认计划到货.csv'));
   assert.equal(arrivals.rows.filter((item) => item.月份 === '2026-12').length, 1);

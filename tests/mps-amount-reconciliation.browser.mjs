@@ -51,6 +51,7 @@ async function setup(t, extra = {}) {
     const rows = (sources[sourceId] ?? []).map((row) => ({
       ...Object.fromEntries((config.queries[queryId].columns ?? []).map((key) => [key, null])),
       ...row,
+      ...(sourceId === 'products.detail' ? { stat_period: parameters.month } : {}),
       ...(sourceId === 'facts.report-amounts' && parameters.month !== '2026-12-01'
         ? { monthamount: parameters.month === '2027-02-01' ? '17.00' : '13.00' }
         : {}),
@@ -270,12 +271,27 @@ test('跨月提报先显示已确认数量，金额等待独立完成', async (t
       const amount = queryId.startsWith('facts.report-amounts');
       const report = queryId.startsWith('facts.report') && !amount;
       if (isDecember && queryId === 'facts.report-amounts.count') await holdAmount;
-      const rows =
-        isDecember && (report || amount)
+      const rows = ['products.detail', 'products.count'].includes(queryId)
+        ? [
+            {
+              ...Object.fromEntries(
+                (config.queries[queryId].columns ?? []).map((column) => [column, null]),
+              ),
+              material_code: 'A',
+              target_base: '郑州',
+              responsible_item: '汤圆',
+              material_name: '产品A',
+              series: '系列',
+              product_item: '组',
+              product_item_name: '组',
+              stat_period: parameters.month,
+            },
+          ]
+        : isDecember && (report || amount)
           ? [
               {
                 ...Object.fromEntries(
-                  config.queries[queryId].columns.map((column) => [column, null]),
+                  (config.queries[queryId].columns ?? []).map((column) => [column, null]),
                 ),
                 belong_base: '郑州',
                 material_code: 'A',
@@ -294,6 +310,9 @@ test('跨月提报先显示已确认数量，金额等待独立完成', async (t
     { time: '2026-11-18T12:00:00+08:00' },
   );
   await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-12');
+  await expect(frame.getByRole('region', { name: '产品明细', exact: true })).toContainText(
+    '1 个产品',
+  );
   const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
   await expect
     .poll(() =>
@@ -326,16 +345,32 @@ test('版本切换后的迟到金额响应不覆盖新版本，切回旧版本�
       held = true;
       await oldRead;
     }
-    const rows = monetary
+    const rows = ['products.detail', 'products.count'].includes(queryId)
       ? [
           {
-            belong_base: '郑州',
+            ...Object.fromEntries(
+              (config.queries[queryId].columns ?? []).map((column) => [column, null]),
+            ),
             material_code: 'A',
-            ycplanamount: '1.00',
-            monthamount: parameters.month === '2026-12-01' ? '120.00' : '990.00',
+            target_base: '郑州',
+            responsible_item: '汤圆',
+            material_name: '产品A',
+            series: '系列',
+            product_item: '组',
+            product_item_name: '组',
+            stat_period: parameters.month,
           },
         ]
-      : [];
+      : monetary
+        ? [
+            {
+              belong_base: '郑州',
+              material_code: 'A',
+              ycplanamount: '1.00',
+              monthamount: parameters.month === '2026-12-01' ? '120.00' : '990.00',
+            },
+          ]
+        : [];
     return {
       rows: queryId.endsWith('.count') ? [{ total: rows.length }] : rows,
       returnedColumns: config.queries[queryId].columns,
@@ -348,6 +383,9 @@ test('版本切换后的迟到金额响应不覆盖新版本，切回旧版本�
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-12');
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
   const source = frame.getByRole('region', { name: '计划提报数据', exact: true });
+  await expect(frame.getByRole('region', { name: '产品明细', exact: true })).toContainText(
+    '1 个产品',
+  );
   await expect(source).toContainText('最终计划总金额：120.00元');
   releaseOld();
   await expect(source).not.toContainText('990.00元');

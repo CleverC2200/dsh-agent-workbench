@@ -18,6 +18,7 @@ function source({ queryId, parameters }) {
   if (queryId.startsWith('products.'))
     rows = [
       record('products.detail', {
+        stat_period: parameters.month,
         material_code: 'A',
         material_name: '产品A',
         sub_category: '旧大类',
@@ -114,22 +115,26 @@ function completeSystemSource(query) {
   if (queryId.startsWith('category-history.'))
     rows = parameters.months.map((month) =>
       record('category-history.detail', {
-        dimension_type: '基地+大类',
+        dimension_type: '基地+产品',
         stat_month: month,
         belong_base: '郑州',
-        dimension_value: '汤圆',
+        dimension_value: 'A',
         dimension_act_dl_qty: 100,
         last_year_dimension_act_dl_qty: 100,
         last_month_dimension_act_dl_qty: 100,
+        base_fiscal_act_dl_qty: 1200,
+        base_fiscal_month_count: 12,
+        base_fiscal_quantity_month_count: 12,
         national_dimension_fiscal_act_dl_qty: 1200,
-        fiscal_year: month.slice(0, 4),
+        fiscal_year: `${Number(month.slice(0, 4)) - (Number(month.slice(4)) < 7 ? 1 : 0)}财年`,
         source_rows: 1,
       }),
     );
   if (queryId.startsWith('annual-pool.'))
     rows = ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04'].map((month) =>
       record('annual-pool.detail', {
-        belong_base: '全国',
+        belong_base: '郑州',
+        material_code: 'A',
         sub_category: '汤圆',
         stat_month: month,
         source_rows: 1,

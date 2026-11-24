@@ -216,6 +216,12 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
       'EvaluationOverview.issueKind',
       '',
     );
+    const [causeGroupId, setCauseGroupId] = useStepViewField(
+      react,
+      view,
+      'EvaluationOverview.causeGroupId',
+      '',
+    );
     const plan = currentEvaluation?.result.plan;
     const festival = currentEvaluation?.result.categoryComputation?.festival;
     const stamp = currentEvaluation?.at;
@@ -306,6 +312,22 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
       ]),
     ];
     const selectedIssues = issues.filter((row) => !issueKind || row.kind === issueKind);
+    const selectedCauseGroupIds = new Set(selectedIssues.map((row) => row.causeGroupId));
+    const causeGroups = (plan?.reportCauseGroups ?? []).filter((group) =>
+      selectedCauseGroupIds.has(group.id),
+    );
+    const causeIds = new Set(causeGroups.flatMap((group) => group.causeIds));
+    const causes = (plan?.reportCauses ?? []).filter((cause) => causeIds.has(cause.id));
+    const groupsByCause = new Map();
+    for (const group of causeGroups)
+      for (const id of group.causeIds) {
+        const groups = groupsByCause.get(id) ?? [];
+        groups.push(group.id);
+        groupsByCause.set(id, groups);
+      }
+    const selectedCauseGroup = causeGroups.find((group) => group.id === causeGroupId);
+    const displayedCauseIds = selectedCauseGroup ? new Set(selectedCauseGroup.causeIds) : causeIds;
+    const displayedCauses = causes.filter((cause) => displayedCauseIds.has(cause.id));
     const issuesByRow = Map.groupBy(issues, (row) =>
       JSON.stringify([row.month, row.base, row.code]),
     );
@@ -472,7 +494,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                   : plan.summary.evaluatedRows
                     ? '部分可评估，缺项已单列'
                     : plan.summary.totalRows
-                      ? '计算已完成，排产缺项待人工补齐'
+                      ? '暂无单品月份满足排产条件，缺项待补'
                       : '缺需求单品范围，尚未生成排产';
     const exportPlan = () => {
       if (!active) return;
@@ -883,7 +905,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
               'span',
               null,
               stamp
-                ? `生成于 ${stamp} · 已评估 ${plan.summary.evaluatedRows}/${plan.summary.totalRows} 个单品月份`
+                ? `生成于 ${stamp} · 满足排产条件 ${plan.summary.evaluatedRows}/${plan.summary.totalRows} 个单品月份`
                 : '按当前版本的数据与约束执行评估',
             ),
           ),
@@ -984,6 +1006,11 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                         [
                           '评估版本',
                           '结果时间',
+                          '粒度',
+                          '大类',
+                          '上游原因组',
+                          '上游原因编号',
+                          '上游原因数',
                           '需求月份',
                           '基地',
                           '产品编码',
@@ -1004,45 +1031,114 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                           '根因源表',
                           '根因字段',
                         ],
-                        selectedIssues.map((row) => ({
-                          评估版本: draft.name,
-                          结果时间: stamp,
-                          需求月份: row.month,
-                          基地: row.base,
-                          产品编码: row.code,
-                          产品名称: row.name,
-                          问题分类: row.kind,
-                          来源标签: row.tags,
-                          标签所属月: row.sourceMonth,
-                          需求数量: row.demand,
-                          源表: row.sourceTable,
-                          字段: row.sourceFields,
-                          原始值: row.rawValue === null ? '缺失或无效' : row.rawValue,
-                          计算用值: row.calculationValue,
-                          源值与证据: row.reason,
-                          核对处理: row.action,
-                          根因月份: row.rootMonth,
-                          根因链: row.rootCause,
-                          根因源表: row.rootSourceTable,
-                          根因字段: row.rootSourceFields,
-                          处理性质: row.blocking
-                            ? '仅影响对应基地SKU月份，补齐后重算'
-                            : row.kind === '负库存归零'
-                              ? '库存计算用值已归0；原始不足及修正历史保留'
-                              : row.kind === '拆分依据待补'
-                                ? '来源缺项提示，不阻断当前零需求'
-                                : row.kind === '缺件吨系数'
-                                  ? '来源缺项提示，不阻断当前件数计划；吨数报告待补'
-                                  : row.kind === '下市品停止自动补货'
-                                    ? '自动新增需求及补货已停止，库存继续滚动'
-                                    : row.kind === '下市品日均缺失'
-                                      ? '仅日均计算补0，来源状态保留'
-                                      : '有效人工正需求保留，由人决定是否停用',
-                        })),
+                        [
+                          ...selectedIssues.map((row) => ({
+                            评估版本: draft.name,
+                            结果时间: stamp,
+                            粒度: '基地SKU问题',
+                            大类: row.productCategory,
+                            上游原因组: row.causeGroupId,
+                            需求月份: row.month,
+                            基地: row.base,
+                            产品编码: row.code,
+                            产品名称: row.name,
+                            问题分类: row.kind,
+                            来源标签: row.tags,
+                            标签所属月: row.sourceMonth,
+                            需求数量: row.demand,
+                            源表: row.sourceTable,
+                            字段: row.sourceFields,
+                            原始值: row.rawValue === null ? '缺失或无效' : row.rawValue,
+                            计算用值: row.calculationValue,
+                            源值与证据: row.reason,
+                            核对处理: row.action,
+                            根因月份: row.rootMonth,
+                            根因链: row.rootCause,
+                            根因源表: row.rootSourceTable,
+                            根因字段: row.rootSourceFields,
+                            处理性质: row.blocking
+                              ? '仅影响对应基地SKU月份，补齐后重算'
+                              : row.kind === '负库存归零'
+                                ? '库存计算用值已归0；原始不足及修正历史保留'
+                                : row.kind === '拆分依据待补'
+                                  ? '来源缺项提示，不阻断当前零需求'
+                                  : row.kind === '缺件吨系数'
+                                    ? '来源缺项提示，不阻断当前件数计划；吨数报告待补'
+                                    : row.kind === '下市品停止自动补货'
+                                      ? '自动新增需求及补货已停止，库存继续滚动'
+                                      : row.kind === '下市品日均缺失'
+                                        ? '仅日均计算补0，来源状态保留'
+                                        : '有效人工正需求保留，由人决定是否停用',
+                          })),
+                          ...causeGroups.map((group) => ({
+                            评估版本: draft.name,
+                            结果时间: stamp,
+                            粒度: '大类需求上游组',
+                            需求月份: group.month,
+                            大类: group.category,
+                            上游原因组: group.id,
+                            上游原因数: group.causeIds.length,
+                          })),
+                          ...causes.map((cause) => ({
+                            评估版本: draft.name,
+                            结果时间: stamp,
+                            粒度: '大类需求上游原因',
+                            上游原因组: groupsByCause.get(cause.id).join('；'),
+                            上游原因编号: cause.id,
+                            源值与证据: cause.reason,
+                          })),
+                        ],
                       ),
                   },
                   '导出分类问题清单',
                 ),
+                causeGroups.length
+                  ? disclosure('查看大类需求上游原因', causes.length, () =>
+                      h(
+                        react.Fragment,
+                        null,
+                        h(
+                          'p',
+                          { className: 'wf-note' },
+                          '基地SKU问题按月份和大类引用上游原因组。完整原因按编号共用，导出分类问题清单保留全部组、编号及原因。',
+                        ),
+                        paginate(
+                          '大类需求上游组',
+                          ['上游原因组', '需求月份', '大类', '上游原因数'],
+                          causeGroups,
+                          'classifiedCauseGroups',
+                          (group) => [group.id, group.month, group.category, group.causeIds.length],
+                        ),
+                        h(
+                          'label',
+                          null,
+                          '上游原因组',
+                          h(
+                            'select',
+                            {
+                              'aria-label': '上游原因组筛选',
+                              value: selectedCauseGroup?.id ?? '',
+                              onChange: (event) => {
+                                setCauseGroupId(event.target.value);
+                                setDetailPages((value) => ({ ...value, classifiedCauses: 0 }));
+                              },
+                            },
+                            h('option', { value: '' }, '全部'),
+                            causeGroups.map((group) =>
+                              h('option', { key: group.id, value: group.id }, group.id),
+                            ),
+                          ),
+                        ),
+                        paginate(
+                          '大类需求上游原因',
+                          ['上游原因编号', '源值与证据'],
+                          displayedCauses,
+                          'classifiedCauses',
+                          (cause) => [cause.id, cause.reason],
+                        ),
+                      ),
+                    )
+                  : null,
                 disclosure('查看分类问题明细', issues.length, () =>
                   h(
                     react.Fragment,
@@ -1073,6 +1169,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                         '基地',
                         '产品编码',
                         '产品名称',
+                        '上游原因组',
                         '来源标签 / 所属月',
                         '源值与证据',
                         '源表 / 字段',
@@ -1086,6 +1183,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                         row.base,
                         row.code,
                         row.name,
+                        row.causeGroupId,
                         `${row.tags || '未提供'} / ${row.sourceMonth || '未提供'}`,
                         row.reason,
                         `${row.sourceTable} / ${row.sourceFields}`,

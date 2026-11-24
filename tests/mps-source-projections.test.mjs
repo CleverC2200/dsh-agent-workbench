@@ -11,7 +11,7 @@ import {
   productRows,
 } from '../static/mps/source/source-projections.js';
 
-test('历史匹配保留自身、同基地替换和无基地映射，并去重', () => {
+test('历史匹配仅采用同基地入池自身及替换品，并去重', () => {
   const match = createHistoryDependentLookup([
     { 基地: '甲', 产品编码: 'OLD' },
     { 基地: '甲', 产品编码: 'A', 老品编码: 'OLD' },
@@ -19,13 +19,13 @@ test('历史匹配保留自身、同基地替换和无基地映射，并去重',
     { target_base: '乙', material_code: 'B', replacement_material_code: 'OLD' },
     { 产品编码: '全国', 老品编码: 'OLD' },
   ]);
-  assert.deepEqual(match('OLD', '甲'), ['OLD', 'A', '全国']);
-  assert.deepEqual(match('OLD', '乙'), ['B', '全国']);
-  assert.deepEqual(match(' OLD '), ['OLD', 'A', 'B', '全国']);
+  assert.deepEqual(match('OLD', '甲'), ['OLD', 'A']);
+  assert.deepEqual(match('OLD', '乙'), []);
+  assert.deepEqual(match(' OLD '), ['OLD', 'A']);
   assert.deepEqual(match('其他'), []);
 });
 
-test('同一老品按实际基地唯一匹配，缺基地或同基地多义继续未知', () => {
+test('池外老品不映射入池产品，同物料只按已登记基地匹配', () => {
   const products = [
     {
       material_code: 'N1',
@@ -43,8 +43,8 @@ test('同一老品按实际基地唯一匹配，缺基地或同基地多义继�
     },
   ];
   const match = createSourceProductMatcher(products);
-  assert.equal(match('OLD', '甲').currentCode, 'N1');
-  assert.equal(match('OLD', '乙').currentCode, 'N2');
+  assert.equal(match('OLD', '甲').currentCode, '');
+  assert.equal(match('OLD', '乙').currentCode, '');
   assert.equal(match('OLD', '').currentCode, '');
   const conflict = createSourceProductMatcher([
     ...products,
@@ -61,10 +61,10 @@ test('同一老品按实际基地唯一匹配，缺基地或同基地多义继�
   projection[0]['大类'] = '人工分类';
   const mapped = sourceProductMappings(projection, products);
   const businessMatch = createSourceProductMatcher(mapped);
-  assert.equal(businessMatch('OLD', '甲').currentCode, 'N1');
-  assert.equal(businessMatch('OLD', '甲').category, '人工分类');
-  assert.equal(businessMatch('OLD', '乙').currentCode, 'N2');
-  assert.equal(projection[0]['基地'], '');
+  assert.equal(businessMatch('OLD', '甲').currentCode, '');
+  assert.equal(businessMatch('OLD', '甲').category, '');
+  assert.equal(businessMatch('OLD', '乙').currentCode, '');
+  assert.equal(projection[0]['基地'], '甲');
 });
 
 const row = (code, group = 'G') => ({
@@ -337,7 +337,7 @@ test('真实空计划量附带来源缺项说明时只过滤池外记录，池�
   assert.equal(sourceCheckRows(failed, [raw('A')]).excluded.length, 1);
 });
 
-test('当前编码优先且唯一老品只归属一个当前SKU，保留来源编码与原始数量', () => {
+test('当前编码优先，池外老品退出业务汇总并保留来源编码与原始数量', () => {
   const products = [
     raw('A', { responsible_item: '汤圆', replacement_material_code: 'OLD' }),
     raw('A', { responsible_item: '汤圆', replacement_material_code: 'OLD', belong_base: '乙' }),
@@ -349,13 +349,13 @@ test('当前编码优先且唯一老品只归属一个当前SKU，保留来源�
   );
   const before = structuredClone(input);
   const result = sourceCheckRows(input, products);
-  assert.equal(result.excluded.length, 0);
-  assert.equal(result.rows.find((row) => row.category === '汤圆').actual.quantity, 11);
-  assert.equal(result.rows.find((row) => row.category === '汤圆').plan.quantity, 10);
+  assert.equal(result.excluded.length, 2);
+  assert.equal(result.rows.find((row) => row.category === '汤圆').actual.quantity, 3);
+  assert.equal(result.rows.find((row) => row.category === '汤圆').plan.quantity, null);
   assert.equal(result.rows.find((row) => row.category === '水饺').actual.quantity, null);
   const old = result.details.find((row) => row['产品编码'] === 'OLD');
-  assert.equal(old['当前产品编码'], 'A');
-  assert.equal(old['大类'], '汤圆');
+  assert.equal(old['当前产品编码'], '');
+  assert.equal(old['大类'], '');
   assert.deepEqual(input, before);
 });
 
@@ -374,9 +374,9 @@ test('零数量的匹配冲突、源数量不完整与读取失败继续报告�
     raw('A', { replacement_material_code: 'SHARED' }),
     raw('B', { replacement_material_code: 'SHARED' }),
   ]);
-  assert.equal(result.excluded.length, 3);
-  assert.match(result.excluded[0]['原因'], /老品编码对应多个当前产品/);
-  assert.equal(result.excluded[2]['源计划数量'], 12);
+  assert.equal(result.excluded.length, 2);
+  assert.equal(result.excluded[0]['产品编码'], '');
+  assert.equal(result.excluded[1]['源计划数量'], 12);
   const failed = checks([history(0, { 产品编码: 'OUT' })], []);
   failed.periods[0].history.error = '当前账号暂无数据权限';
   const failure = sourceCheckRows(failed, [raw('A')]);

@@ -64,6 +64,7 @@ async function mount(t, initialShipment) {
                   unprepped: 10,
                   daily3: 10,
                   average: 10,
+                  raw_average: 10,
                   open: 100,
                   inbound: 210,
                   source_days: 22,
@@ -124,8 +125,8 @@ test(
     const { page, calls } = await mount(t);
 
     await expect
-      .poll(() => page.evaluate(() => window.snapshot?.sourceKind), { timeout: 3000 })
-      .toBe('business');
+      .poll(() => page.evaluate(() => window.snapshot), { timeout: 3000 })
+      .toMatchObject({ sourceKind: 'business', status: 'ok', error: null });
     const snapshot = await page.evaluate(() => window.snapshot);
     assert.equal(snapshot.status, 'ok');
     assert.deepEqual(snapshot.rows, [{ base: '郑州', code: 'A', fin: 341, end: 59 }]);

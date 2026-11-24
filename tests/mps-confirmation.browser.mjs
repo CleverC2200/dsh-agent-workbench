@@ -1,3 +1,4 @@
+import { openMpsProductDetails } from './helpers/mps-page.mjs';
 import { openCategoryCalculation } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -64,7 +65,7 @@ test('MPS product relationships stay in their local month draft and can be edite
   const { frame } = await confirmation(t);
   await createVersion(frame, '2026-12');
   await expect(frame.getByLabel('评估版本选择').locator('option:checked')).toContainText('2026-12');
-  const products = frame.getByRole('region', { name: '产品明细' });
+  const products = await openMpsProductDetails(frame);
   await products.getByLabel('每页产品条数').selectOption('25');
   await products.getByRole('button', { name: '新增产品', exact: true }).click();
   const editor = frame.getByRole('dialog', { name: '新增产品', exact: true });
@@ -114,7 +115,7 @@ test('MPS rejects reversed known replacement fields in edits and imports while p
       buffer: Buffer.from(header + '\n' + row),
     });
   await uploadProducts(',NEW1,新品甲,汤圆,系列甲,组甲,物料组甲,00123,老品甲');
-  const products = frame.getByRole('region', { name: '产品明细', exact: true });
+  const products = await openMpsProductDetails(frame);
   await products.getByRole('button', { name: '编辑 NEW1', exact: true }).click();
   const editor = frame.getByRole('dialog', { name: '修改产品', exact: true });
   await editor.getByLabel('替换物料编码', { exact: true }).fill('老品甲');
@@ -132,6 +133,8 @@ test('MPS rejects reversed known replacement fields in edits and imports while p
   await expect(editor).toHaveCount(0);
   await expect(products.getByRole('cell', { name: '000-UNKNOWN', exact: true })).toBeVisible();
 });
+const reportProductCsv =
+  '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,P1,产品一,汤圆,系列甲,组甲,,\n华东,P2,产品二,汤圆,系列甲,组乙,,';
 const reportCsv =
   headers +
   '\n2026-12,郑州,P1,产品一,汤圆,系列甲,组甲,10,12\n2026-12,郑州,P1,产品一,汤圆,系列甲,组甲,5,0\n2026-12,华东,P2,产品二,汤圆,系列甲,组乙,0,\n2026-11,华南,P3,其他月份,饺子,系列乙,组丙,999,999';
@@ -144,11 +147,7 @@ async function upload(frame, label, text) {
 test('MPS reads CSV atomically and uses the same selected-period rows for coverage, totals, preview and export', async (t) => {
   const { page, frame } = await confirmation(t);
   await createVersion(frame, '2026-12');
-  await upload(
-    frame,
-    '选择产品关系CSV或Excel',
-    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,P1,产品一,汤圆,系列甲,组甲,,\n华东,P2,产品二,汤圆,系列甲,组乙,,',
-  );
+  await upload(frame, '选择产品关系CSV或Excel', reportProductCsv);
   const source = frame.getByRole('region', { name: '计划提报数据' });
   await upload(frame, '选择计划提报CSV', reportCsv);
   await expect(source).toContainText('已读取4条');
@@ -180,6 +179,15 @@ test('MPS reads CSV atomically and uses the same selected-period rows for covera
 test('MPS forecast crosses the year and historical periods do not borrow other rows; XLSX export keeps formula-like names as text', async (t) => {
   const { page, frame } = await confirmation(t);
   await createVersion(frame, '2026-12');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称' +
+      '\n郑州,F1,预测品,汤圆,系列甲,组甲,,' +
+      '\n华东,F2,一月,饺子,系列乙,组乙,,' +
+      '\n郑州,H1,去年,汤圆,系列,组,,' +
+      '\n华东,H2,前年,饺子,系列,组,,',
+  );
   const columns = '月份,基地,产品编码,产品名称,大类,系列,物料组,数量';
   await upload(
     frame,
@@ -189,8 +197,8 @@ test('MPS forecast crosses the year and historical periods do not borrow other r
   const forecast = frame.getByRole('region', { name: '模型双期预测' });
   await openCategoryCalculation(frame);
   const monthly = frame.getByRole('region', { name: '逐月测算', exact: true });
-  await expect(monthly.getByRole('cell', { name: '2026-12（M+1）', exact: true })).toHaveCount(0);
-  await expect(monthly.getByRole('cell', { name: '2027-01（M+2）', exact: true })).toHaveCount(0);
+  await expect(monthly.getByRole('cell', { name: '2026-12（M+1）', exact: true })).toHaveCount(2);
+  await expect(monthly.getByRole('cell', { name: '2027-01（M+2）', exact: true })).toHaveCount(2);
   await expect(forecast).toContainText('当前期间1条，数量合计7件');
   const download = page.waitForEvent('download');
   await forecast.getByRole('button', { name: '导出当前明细', exact: true }).click();
@@ -251,7 +259,7 @@ test('MPS annual grid retains July to June and unresolved business calculations 
 
 test('MPS bounds large previews without silently dropping rows and rejects an oversized replacement as a whole', async (t) => {
   const { frame } = await confirmation(t);
-  const products = frame.getByRole('region', { name: '产品明细' });
+  const products = await openMpsProductDetails(frame);
   const columns = '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称';
   const rows = Array.from(
     { length: 26 },
@@ -276,32 +284,37 @@ test('MPS bounds large previews without silently dropping rows and rejects an ov
   await expect(products.getByRole('cell', { name: 'P25', exact: true })).toBeVisible();
 });
 
-test('MPS preserves missing dimensions and signed local quantities instead of inventing business coverage', async (t) => {
+test('MPS keeps signed local quantities and excludes records with an unassigned base', async (t) => {
   const { page, frame } = await confirmation(t);
   await createVersion(frame, '2026-12');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,P1,缺字段,汤圆,系列甲,组甲,,',
+  );
   await upload(
     frame,
     '选择计划提报CSV',
     headers + '\n2026-12,郑州,P1,缺字段,汤圆,,组甲,-2,\n2026-12,,P2,未定基地,汤圆,系列甲,,5,7',
   );
   const source = frame.getByRole('region', { name: '计划提报数据' });
-  await expect(source).toContainText('当前期间2条，数量合计3件，缺失数量0条');
+  await expect(source).toContainText('当前期间1条，数量合计-2件，缺失数量0条');
   await expect(source.getByRole('button', { name: '基地 1', exact: true })).toBeVisible();
-  await expect(source).toContainText('基地缺失1条');
-  await expect(source).toContainText('系列缺失2条');
+  await expect(source).toContainText('基地缺失0条');
+  await expect(source).toContainText('系列缺失0条');
   await source.getByRole('button', { name: '预览当前明细', exact: true }).click();
   await expect(source.getByRole('cell', { name: '-2', exact: true })).toBeVisible();
-  await expect(source.getByRole('cell', { name: '-', exact: true })).toHaveCount(7);
+  await expect(source.getByRole('cell', { name: 'P2', exact: true })).toHaveCount(0);
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await source.locator('summary').filter({ hasText: '口径与统计说明' }).click();
   const downloading = page.waitForEvent('download');
   await source.getByRole('button', { name: '导出全部已读明细', exact: true }).click();
   const csv = await mpsDownloadText(await (await downloading).path());
   assert.match(csv, /,-2,/);
-  assert.doesNotMatch(csv, /'-2/);
+  assert.doesNotMatch(csv, /'-2|P2/);
   await upload(frame, '选择计划提报CSV', csv);
   await expect(source.getByRole('alert')).toHaveCount(0);
-  await expect(source).toContainText('当前期间2条，数量合计3件');
+  await expect(source).toContainText('当前期间1条，数量合计-2件');
   await upload(frame, '选择计划提报CSV', headers + '\n2026-12,郑州,P1,无数量,汤圆,系列,组,,');
   await expect(source).toContainText('当前期间1条，数量合计未提供，缺失数量1条');
 });
@@ -310,7 +323,7 @@ test('MPS starts without sample products when no source is configured and still 
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
-  const products = frame.getByRole('region', { name: '产品明细' });
+  const products = await openMpsProductDetails(frame);
   await expect(products.getByRole('row')).toHaveCount(1);
   await products.getByLabel('每页产品条数').selectOption('25');
   await expect(products.getByRole('row')).toHaveCount(1);
@@ -394,6 +407,7 @@ test('MPS keeps source review in cards and opens current-period final results af
   const creation = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await creation.getByLabel('评估月份', { exact: true }).fill('2026-12');
   await creation.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await upload(frame, '选择产品关系CSV或Excel', reportProductCsv);
   await upload(frame, '选择计划提报CSV', reportCsv);
   await source.getByRole('button', { name: '基地 2', exact: true }).click();
   const review = frame.getByRole('dialog', { name: '计划提报 · 2026-12 · 基地核对', exact: true });
@@ -410,6 +424,12 @@ test('MPS keeps source review in cards and opens current-period final results af
 test('MPS preview keeps its title and close button visible while long content scrolls', async (t) => {
   const { page, frame } = await confirmation(t);
   await createVersion(frame, '2026-12');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n' +
+      Array.from({ length: 30 }, (_, i) => `郑州,P${i},产品${i},汤圆,系列,组,,`).join('\n'),
+  );
   await upload(
     frame,
     '选择计划提报CSV',

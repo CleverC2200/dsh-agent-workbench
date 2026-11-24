@@ -88,10 +88,8 @@ test('第三步完整月分类、财年补0与当前范围CSV贯通，并保留�
   await workflowStep(frame, '需求加工与收敛');
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   const report = view.getByRole('region', { name: '历史发货分类与补0', exact: true });
-  await expect(report).toBeVisible();
-  await expect(report.getByRole('table').first()).toContainText('疑似新品或重新上市');
-  await expect(report.getByRole('table').first()).toContainText('短期断档数据异常');
-  await expect(report.getByRole('table').first()).toContainText('来源异常或其他历史异常');
+  await expect(report).toHaveCount(0);
+  await expect(view.getByText('核对近24个月历史', { exact: true })).toHaveCount(0);
   assert.equal(
     new Set(
       calls.filter((call) => call.queryId === 'facts.history').map((call) => call.parameters.month),
@@ -101,19 +99,32 @@ test('第三步完整月分类、财年补0与当前范围CSV贯通，并保留�
   await view.getByLabel('基地筛选', { exact: true }).selectOption('甲');
   const history = await download(
     page,
-    report.getByRole('button', { name: '下载当前历史及异常明细', exact: true }),
+    view.getByRole('button', { name: '下载当前范围需求', exact: true }),
   );
-  const a = history.find((row) => row.粒度 === '财年历史' && row.产品编码 === 'A');
-  assert.equal(a.计算用历史数量, '30');
+  const annual = history.filter((row) => row.粒度 === '财年历史');
+  const a = annual.find((row) => row.产品编码 === 'A');
+  assert.equal(a.计算用历史数量, '0');
   assert.equal(a.自身原始数量, '');
-  assert.equal(a.替换品原始数量, '30');
+  assert.equal(a.替换品原始数量, '');
   assert.equal(a.补0状态, '缺失数量补0');
   assert.equal(a.历史分类, '疑似新品或重新上市');
+  assert.equal(annual.find((row) => row.产品编码 === 'B').历史分类, '短期断档数据异常');
+  assert.equal(annual.find((row) => row.产品编码 === 'C').历史分类, '来源异常或其他历史异常');
   assert.equal(
     history.filter((row) => row.粒度 === '完整历史月' && row.产品编码 === 'A').length,
     24,
   );
-  assert.ok(history.every((row) => row.基地 === '甲'));
+  assert.equal(
+    history.find(
+      (row) => row.粒度 === '完整历史月' && row.产品编码 === 'B' && row.历史期间 === '2026-10',
+    ).原始历史数量,
+    '0',
+  );
+  assert.ok(
+    history
+      .filter((row) => row.粒度 === '财年历史' || row.粒度 === '完整历史月')
+      .every((row) => row.基地 === '甲'),
+  );
   await view.getByLabel('月份筛选', { exact: true }).selectOption('2027-01');
   const demand = await download(
     page,
@@ -121,16 +132,16 @@ test('第三步完整月分类、财年补0与当前范围CSV贯通，并保留�
   );
   assert.equal(
     demand.find((row) => row.粒度 === '基地SKU' && row.产品编码 === 'A').计算用历史数量,
-    '30',
+    '0',
   );
-  assert.equal(demand.find((row) => row.粒度 === '当前范围合计').计算用历史数量, '120');
+  assert.equal(demand.find((row) => row.粒度 === '当前范围合计').计算用历史数量, '90');
   for (const level of ['基地汇总', '大类汇总', '物料组汇总'])
-    assert.equal(demand.find((row) => row.粒度 === level).计算用历史数量, '120');
+    assert.equal(demand.find((row) => row.粒度 === level).计算用历史数量, '90');
   if (process.env.MPS_HISTORY_SCREENSHOT)
     await page.screenshot({ path: process.env.MPS_HISTORY_SCREENSHOT, fullPage: true });
 });
 
-test('完整月读取拒绝时报告失败与原因，财年有效数量继续展示且不判新品', async (t) => {
+test('完整月读取拒绝时导出失败原因，财年有效数量继续保留且不判新品', async (t) => {
   const { page, frame } = await mpsPage(
     t,
     config,
@@ -175,24 +186,22 @@ test('完整月读取拒绝时报告失败与原因，财年有效数量继续�
   await frame.getByRole('button', { name: '读取去年发运占比源值', exact: true }).click();
   await expect(frame.getByText('全年历史读取中…')).toHaveCount(0);
   await workflowStep(frame, '需求加工与收敛');
-  const report = frame.getByRole('region', { name: '历史发货分类与补0', exact: true });
-  await expect(report.getByRole('table').first()).toContainText('来源异常或其他历史异常');
-  await expect(report.getByRole('table').first()).not.toContainText('疑似新品或重新上市');
-  await expect(report.getByRole('table').last()).toContainText('读取失败');
-  await expect(report.getByRole('table').last()).toContainText('数据读取失败');
-  await expect(report.getByRole('table').last()).toContainText('实际原因待核');
-  await expect(report.getByRole('table').last()).toContainText('部分发货来源字段未返回');
-  await expect(report).not.toContainText('[object Object]');
   const rows = await download(
     page,
-    report.getByRole('button', { name: '下载当前历史及异常明细', exact: true }),
+    frame.getByRole('button', { name: '下载当前范围需求', exact: true }),
   );
-  assert.equal(rows.find((row) => row.粒度 === '财年历史').计算用历史数量, '25');
-  assert.ok(
-    rows
-      .filter((row) => row.粒度 === '完整历史月' && row.历史期间 !== '2025-11')
-      .every((row) => row.来源状态 === '读取失败' && row.原始历史数量 === ''),
-  );
+  const annual = rows.find((row) => row.粒度 === '财年历史');
+  assert.equal(annual.计算用历史数量, '25');
+  assert.equal(annual.历史占比, '1');
+  assert.doesNotMatch(annual.历史占比处理, /归0/);
+  assert.equal(annual.历史分类, '来源异常或其他历史异常');
+  const failed = rows.filter((row) => row.粒度 === '完整历史月' && row.历史期间 !== '2025-11');
+  assert.equal(failed.length, 23);
+  for (const row of failed) {
+    assert.equal(row.来源状态, '读取失败');
+    assert.equal(row.原始历史数量, '');
+    assert.match(row.原因, /数据读取失败.*实际原因待核/);
+  }
   const warning = rows.find((row) => row.粒度 === '完整历史月' && row.历史期间 === '2025-11');
   assert.equal(warning.来源状态, '读取不完整');
   assert.equal(
@@ -201,7 +210,7 @@ test('完整月读取拒绝时报告失败与原因，财年有效数量继续�
   );
 });
 
-test('历史和需求缺项分页保留全部当前范围的下载记录', async (t) => {
+test('历史明细和需求缺项导出保留全部当前范围的记录', async (t) => {
   const { page, frame } = await mpsPage(
     t,
     config,
@@ -225,27 +234,14 @@ test('历史和需求缺项分页保留全部当前范围的下载记录', async
     ].join('\n'),
   );
   await workflowStep(frame, '需求加工与收敛');
-  const history = frame.getByRole('region', { name: '历史发货分类与补0', exact: true });
-  const annualRows = history
-    .getByRole('table', { name: '历史发货分类及财年数量' })
-    .locator('tbody tr');
-  await expect(annualRows).toHaveCount(25);
-  await history.getByRole('button', { name: '财年历史下一页' }).click();
-  await expect(annualRows).toHaveCount(2);
-  const historical = await download(
-    page,
-    history.getByRole('button', { name: '下载当前历史及异常明细' }),
-  );
+  const issues = frame.getByRole('region', { name: '加工需求缺项报告', exact: true });
+  await expect(issues).toHaveCount(0);
+  await expect(frame.getByText(/^数量调整与撤销记录/)).toHaveCount(0);
+  const demand = await download(page, frame.getByRole('button', { name: '下载当前范围需求' }));
   assert.deepEqual(
-    new Set(historical.filter((row) => row.粒度 === '财年历史').map((row) => row.产品编码)),
+    new Set(demand.filter((row) => row.粒度 === '财年历史').map((row) => row.产品编码)),
     new Set(codes),
   );
-  const issues = frame.getByRole('region', { name: '加工需求缺项报告', exact: true });
-  const issueRows = issues.getByRole('table').locator('tbody tr');
-  await expect(issueRows).toHaveCount(25);
-  await issues.getByRole('button', { name: '缺项报告下一页' }).click();
-  await expect(issues.getByRole('status')).toHaveText(/^第2\//);
-  const demand = await download(page, frame.getByRole('button', { name: '下载当前范围需求' }));
   assert.deepEqual(
     new Set(demand.filter((row) => row.粒度 === '缺项报告').map((row) => row.产品编码)),
     new Set(codes),

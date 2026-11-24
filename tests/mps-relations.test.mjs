@@ -119,8 +119,8 @@ test('relationship collection reads named sources completely and rejects incompl
   assert.deepEqual(
     calls.filter((call) => call.queryId === 'products.detail').map((call) => call.values),
     [
-      { page_size: 5000, offset: 0 },
-      { page_size: 5000, offset: 5000 },
+      { month: '2026-10', page_size: 5000, offset: 0 },
+      { month: '2026-10', page_size: 5000, offset: 5000 },
     ],
   );
   assert(
