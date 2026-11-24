@@ -103,9 +103,9 @@ test('第三步完整月分类、财年补0与当前范围CSV贯通，并保留�
   );
   const annual = history.filter((row) => row.粒度 === '财年历史');
   const a = annual.find((row) => row.产品编码 === 'A');
-  assert.equal(a.计算用历史数量, '30');
+  assert.equal(a.计算用历史数量, '0');
   assert.equal(a.自身原始数量, '');
-  assert.equal(a.替换品原始数量, '30');
+  assert.equal(a.替换品原始数量, '');
   assert.equal(a.补0状态, '缺失数量补0');
   assert.equal(a.历史分类, '疑似新品或重新上市');
   assert.equal(annual.find((row) => row.产品编码 === 'B').历史分类, '短期断档数据异常');
@@ -132,11 +132,11 @@ test('第三步完整月分类、财年补0与当前范围CSV贯通，并保留�
   );
   assert.equal(
     demand.find((row) => row.粒度 === '基地SKU' && row.产品编码 === 'A').计算用历史数量,
-    '30',
+    '0',
   );
-  assert.equal(demand.find((row) => row.粒度 === '当前范围合计').计算用历史数量, '120');
+  assert.equal(demand.find((row) => row.粒度 === '当前范围合计').计算用历史数量, '90');
   for (const level of ['基地汇总', '大类汇总', '物料组汇总'])
-    assert.equal(demand.find((row) => row.粒度 === level).计算用历史数量, '120');
+    assert.equal(demand.find((row) => row.粒度 === level).计算用历史数量, '90');
   if (process.env.MPS_HISTORY_SCREENSHOT)
     await page.screenshot({ path: process.env.MPS_HISTORY_SCREENSHOT, fullPage: true });
 });
@@ -192,6 +192,8 @@ test('完整月读取拒绝时导出失败原因，财年有效数量继续保�
   );
   const annual = rows.find((row) => row.粒度 === '财年历史');
   assert.equal(annual.计算用历史数量, '25');
+  assert.equal(annual.历史占比, '1');
+  assert.doesNotMatch(annual.历史占比处理, /归0/);
   assert.equal(annual.历史分类, '来源异常或其他历史异常');
   const failed = rows.filter((row) => row.粒度 === '完整历史月' && row.历史期间 !== '2025-11');
   assert.equal(failed.length, 23);
