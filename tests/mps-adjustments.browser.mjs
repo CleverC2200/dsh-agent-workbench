@@ -134,6 +134,13 @@ test('MPS shipment local overrides and remaining intake survive a business-sourc
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-10');
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '产品.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,物料组名称,老品编码,老品名称\n郑州,A,产品A,汤圆,系列,组,组名称,,',
+    ),
+  });
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await frame.getByLabel('数据截止日', { exact: true }).fill('2026-09-22');
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
