@@ -9,6 +9,7 @@ import {
   createSourceProductMatcher,
   sourceDimensions,
   sourceProductMappings,
+  createProductScopeMatcher,
 } from './source-projections.js';
 import { prototypeShipments } from './prototype-shipments.js';
 import {
@@ -133,6 +134,7 @@ function projectShipment(draft, cutoff, month, sourceKind, sourceRows, coefficie
   const products = ['loading', 'failed'].includes(draft.productsRead?.status)
     ? emptyRows
     : (draft.products ?? emptyRows);
+  const inScope = createProductScopeMatcher(sourceProductMappings(products, draft.productRaw));
   const dimensions =
     sourceKind === 'business'
       ? new Map(
@@ -172,7 +174,9 @@ function projectShipment(draft, cutoff, month, sourceKind, sourceRows, coefficie
   };
   const deriveRows = (currentState) => {
     return sourceRows
-      .filter((row) => row.month === month && bases.includes(row.base))
+      .filter(
+        (row) => row.month === month && bases.includes(row.base) && inScope(row.base, row.code),
+      )
       .map((row) => {
         const dimension = dimensions.get(keyOf(row));
         const category = sourceKind === 'business' ? (dimension?.['大类'] ?? '') : row.category;

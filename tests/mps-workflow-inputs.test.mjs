@@ -277,6 +277,12 @@ test('需求诊断保留第一处读取失败原因，模型变化不回填有�
 
 test('新版源老品与保留人工关系不一致时，历史参考系数未知而非一', () => {
   const source = draft();
+  source.products.push({
+    ...source.products[0],
+    基地: '甲',
+    产品编码: 'EDITED-OLD',
+    大类: '历史参考',
+  });
   source.products[0]['老品编码'] = 'EDITED-OLD';
   source.productRaw = [
     {
@@ -430,11 +436,12 @@ test('产品老品编码接入同基地历史参考，其他基地老品不扩�
   const result = buildMpsWorkflow(source);
   const row = result.rows.find((row) => row.base === '甲' && row.code === 'A');
   assert.equal(row.historyCode, 'OLD');
-  assert.equal(row.historyQuantity, 160);
+  assert.equal(row.historyQuantity, 60);
   assert.equal(
     result.rows.some((row) => row.base === '丙' && row.code === 'A'),
     false,
   );
+  assert.ok(result.poolExceptions.history.some((row) => row.base === '甲' && row.code === 'OLD'));
   assert.equal(result.poolExceptions.history.find((row) => row.base === '丙').quantity, 20);
   assert.deepEqual(source.historyAnnual, raw);
   const solved = buildMpsWorkflow(source, null, null, {
@@ -1376,6 +1383,10 @@ test('安全天数采用实际读取来源起月与版本，评估月保持独�
 
 test('最新产品源按基地应用替换系数，重复标签不倍增，零与未知分开', () => {
   const source = draft();
+  source.products.push(
+    { ...source.products[0], 基地: '甲', 产品编码: 'OLD', 大类: '历史参考' },
+    { ...source.products[0], 基地: '丙', 产品编码: 'OLD', 大类: '历史参考' },
+  );
   source.products[0]['基地'] = '';
   source.products[0]['老品编码'] = 'OLD';
   source.productRaw = [
@@ -1514,6 +1525,7 @@ test('产品净重同时进入实际排产和年度吨数报告，不依赖旧�
 test('新版产品源缺目标基地或只有另一基地系数时，不能落回旧版默认系数一', () => {
   for (const base of ['', '甲']) {
     const source = draft();
+    source.products.push({ ...source.products[0], 基地: '甲', 产品编码: 'OLD', 大类: '历史参考' });
     source.products[0]['基地'] = base;
     source.products[0]['老品编码'] = 'OLD';
     source.historyAnnual.periods[0].rows.push({ 基地: '甲', 产品编码: 'OLD', 数量: 100 });
@@ -1525,11 +1537,7 @@ test('新版产品源缺目标基地或只有另一基地系数时，不能落�
       const row = result.rows.find((row) => row.base === '甲' && row.code === 'A');
       if (!base) {
         assert.equal(row, undefined);
-        assert.ok(
-          result.poolExceptions.history.some(
-            (issue) => issue.base === '甲' && issue.code === 'OLD',
-          ),
-        );
+        assert.ok(result.rows.some((item) => item.base === '甲' && item.code === 'OLD'));
         continue;
       }
       assert.equal(row.historyReferenceQuantity, 100);
@@ -1706,15 +1714,18 @@ test('历史占比使用同基地的当前或替换编码，池外编码仅保�
   assert.deepEqual(
     currentRows.map((row) => [row.code, row.historyQuantity, row.historyShare]),
     [
-      ['A', 60, 60 / 120],
-      ['B', 40, 40 / 120],
-      ['NEW', 20, 20 / 120],
+      ['A', 60, 0.6],
+      ['B', 40, 0.4],
+      ['NEW', 0, 0],
     ],
   );
   assert.ok(currentRows.every((row) => row.demand !== null));
   assert.deepEqual(
     result.poolExceptions.history.map(({ code, quantity }) => [code, quantity]),
-    [['OUTSIDE', 999]],
+    [
+      ['OUTSIDE', 999],
+      ['OLD', 20],
+    ],
   );
   assert.equal(result.categoryComputation.bases[0].actual, 3300);
   assert.deepEqual({ source, snapshot }, before);
@@ -1749,6 +1760,7 @@ test('后月期初库存缺项追溯首月来源，不重复要求人工补后�
 
 test('原始完整月分类与财年补0分别传入计算，来源失败状态不被补0覆盖', () => {
   const source = draft();
+  source.products.push({ ...source.products[0], 基地: '甲', 产品编码: 'OLD', 大类: '历史参考' });
   source.products[0]['老品编码'] = 'OLD';
   source.historyAnnual.periods[0].rows = [
     { 基地: '甲', 产品编码: 'A', 数量: '' },

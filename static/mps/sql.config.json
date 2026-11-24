@@ -43,10 +43,17 @@
           "nullable": false,
           "minimum": 0,
           "maximum": 1000000
+        },
+        "gea_p1": {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
         }
       },
       "request": {
-        "sql": "SELECT stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, CAST(net_weight AS VARCHAR) AS net_weight, weight_unit, measure_unit, CAST(replace_num AS VARCHAR) AS replace_num, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_product_list_mi WHERE stat_period = (SELECT MAX(stat_period) FROM agents_dim_product_list_mi) GROUP BY stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, net_weight, weight_unit, measure_unit, replace_num ORDER BY stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, net_weight, weight_unit, measure_unit, replace_num LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, CAST(net_weight AS VARCHAR) AS net_weight, weight_unit, measure_unit, CAST(replace_num AS VARCHAR) AS replace_num, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_product_list_mi WHERE SUBSTRING(CAST(stat_period AS VARCHAR(32)), 1, 7) = :gea_p1 AND COALESCE(TRIM(responsible_item), '') <> '粽子' GROUP BY stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, net_weight, weight_unit, measure_unit, replace_num ORDER BY stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, net_weight, weight_unit, measure_unit, replace_num LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "products.count"
@@ -74,9 +81,17 @@
     },
     "products.count": {
       "priority": 3,
-      "parameterSpec": {},
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+        }
+      },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, CAST(net_weight AS VARCHAR) AS net_weight, weight_unit, measure_unit, CAST(replace_num AS VARCHAR) AS replace_num, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_product_list_mi WHERE stat_period = (SELECT MAX(stat_period) FROM agents_dim_product_list_mi) GROUP BY stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, net_weight, weight_unit, measure_unit, replace_num) AS mps_rows"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, CAST(net_weight AS VARCHAR) AS net_weight, weight_unit, measure_unit, CAST(replace_num AS VARCHAR) AS replace_num, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_product_list_mi WHERE SUBSTRING(CAST(stat_period AS VARCHAR(32)), 1, 7) = :gea_p1 AND COALESCE(TRIM(responsible_item), '') <> '粽子' GROUP BY stat_period, target_base, transfer_tag, sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, net_weight, weight_unit, measure_unit, replace_num) AS mps_rows"
       }
     },
     "annual.detail": {

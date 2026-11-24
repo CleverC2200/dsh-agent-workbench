@@ -25,6 +25,7 @@ import {
   productSourceRows,
   sourceDimensions,
   createSourceProductMatcher,
+  scopedProductRows,
 } from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
 import { productFileText, productReplacementErrors } from './product-file.js';
@@ -231,7 +232,7 @@ function forecastSourceRows(draft, rows = draft.forecast) {
   const productsReady = !['loading', 'failed'].includes(draft.productsRead?.status);
   return (
     draft.forecastSource === 'business' && productsReady
-      ? forecastDimensions(rows, draft.products)
+      ? forecastDimensions(scopedProductRows(rows, draft.products), draft.products)
       : rows
   ).map((row) => ({ ...row, 读取状态: draft.forecastRead?.status ?? 'unread' }));
 }
@@ -251,7 +252,7 @@ function sourceSelection(draft, type) {
       type === 'forecast'
         ? forecastSourceRows(draft, rows)
         : sourceDimensions(
-            rows,
+            scopedProductRows(rows, draft.products),
             ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : draft.products,
           ),
   };
@@ -465,7 +466,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       : [...sourceColumns, column];
     react.useEffect(() => setPage(0), [draft[type], selectedCategories]);
     const amountRead = type === 'report' ? reportAmountSource(draft, period) : null;
-    const amountRows = (amountRead?.status === 'ready' ? amountRead.rows : []).filter(
+    const amountRows = scopedProductRows(
+      amountRead?.status === 'ready' ? amountRead.rows : [],
+      draft.products,
+    ).filter(
       (row) =>
         !selectedCategories.length ||
         matchesCategories(matchProduct(row['产品编码'], row['基地']).category, selectedCategories),
@@ -738,7 +742,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   business ? detailColumns : definition.columns,
                   (type === 'forecast'
                     ? forecastSourceRows(draft)
-                    : sourceDimensions(draft[type], draft.products)
+                    : sourceDimensions(
+                        scopedProductRows(draft[type], draft.products),
+                        draft.products,
+                      )
                   ).filter((row) => matchesCategories(row['大类'], selectedCategories)),
                 ),
             },
@@ -1274,7 +1281,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         try {
           const result =
             type === 'products'
-              ? await readProducts(signal)
+              ? await readProducts(draft.month, signal)
               : type === 'annual'
                 ? await readAnnual(signal)
                 : sourceTable
@@ -1829,7 +1836,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             ? fullRows
             : fullRows.filter((row) => matchesCategories(row['大类'], selectedCategories));
           const amountRead = type === 'report' ? reportAmountSource(draft, period) : null;
-          const amountRows = (amountRead?.status === 'ready' ? amountRead.rows : []).filter(
+          const amountRows = scopedProductRows(
+            amountRead?.status === 'ready' ? amountRead.rows : [],
+            draft.products,
+          ).filter(
             (row) =>
               !selectedCategories.length ||
               matchesCategories(

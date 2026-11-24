@@ -1,6 +1,7 @@
 import { matchesCategories } from './category-filter.js';
 import { call, ready } from '../../../business/shared/channel.js';
 import { readRelations } from './relations.js';
+import { createProductScopeMatcher } from './source-projections.js';
 
 const groups = [
   { key: 'sku', name: '单品与候选产线', source: '产品清单、产线SKU产能' },
@@ -186,6 +187,7 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
         events.forEach((event) => window.removeEventListener(event, invalidate));
       };
     }, [scopeKey, attempt, enabled]);
+    const inScope = createProductScopeMatcher(products);
     const codes = new Set(
       products
         .filter((row) => matchesCategories(row['大类'], selectedCategories))
@@ -193,25 +195,29 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
     );
     const selectedSkus = (state.records?.sku ?? []).filter(
       (row) =>
-        matchesCategories(row.product?.responsible_item, selectedCategories) ||
-        codes.has(row.product?.material_code),
+        inScope(
+          row.capacity?.belong_base ?? row.product?.target_base,
+          row.product?.material_code ?? row.capacity?.material_code,
+        ) &&
+        (matchesCategories(row.product?.responsible_item, selectedCategories) ||
+          codes.has(row.product?.material_code)),
     );
     const lineKeys = new Set(
       selectedSkus.map((row) => row.tunnelMatch?.resourceKey).filter(Boolean),
     );
     const inCategory = (row, group) =>
-      !selectedCategories.length ||
-      (group === 'sku'
+      group === 'sku'
         ? selectedSkus.includes(row)
         : group === 'transfers'
-          ? codes.has(row.source?.material_code)
+          ? inScope(row.source?.target_base, row.source?.material_code) &&
+            codes.has(row.source?.material_code)
           : lineKeys.has(row.tunnelMatch?.resourceKey) ||
             selectedSkus.some(
               (sku) =>
                 sku.capacity?.belong_base === row.source?.belong_base &&
                 sku.capacity?.workshop === row.source?.production_unit &&
                 sku.capacity?.tunnel_no === row.source?.tunnel_no,
-            ));
+            );
     const records = (state.records?.[kind] ?? []).filter((row) => inCategory(row, kind));
     const filtered = react.useMemo(
       () =>
