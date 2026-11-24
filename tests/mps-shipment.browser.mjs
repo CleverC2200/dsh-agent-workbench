@@ -24,7 +24,57 @@ async function shipment(t, month = '2026-10') {
   await frame.getByLabel('数据截止日').fill(previous.toISOString().slice(0, 7) + '-22');
   return { page, frame, table: frame.getByRole('table', { name: '本月预估发货明细' }) };
 }
-async function upload(frame, rows) {
+async function upload(frame, rows, prepareProducts = true) {
+  const saved = await frame
+    .locator('body')
+    .page()
+    .evaluate(() => window.readView());
+  const draft = saved.localDrafts.drafts.find((row) => row.id === saved.localDrafts.selected);
+  if (!(await frame.locator('#agent-sql-config').count()) && prepareProducts) {
+    const products = new Map(
+      (draft.inputs.products?.rows ?? []).map((row) => [
+        JSON.stringify([row['基地'], row['产品编码']]),
+        row,
+      ]),
+    );
+    for (const row of rows) {
+      const [, base, code, name, category, series, group] = row.split(',');
+      if (!['西南', '郑州', '遂平', '华东', '华南'].includes(base)) continue;
+      products.set(JSON.stringify([base, code]), {
+        基地: base,
+        产品编码: code,
+        产品名称: name,
+        大类: category,
+        系列: series,
+        物料组: group,
+      });
+    }
+    const columns = [
+      '基地',
+      '产品编码',
+      '产品名称',
+      '大类',
+      '系列',
+      '物料组',
+      '物料组名称',
+      '老品编码',
+      '老品名称',
+    ];
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+    await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+      name: '本例产品范围.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(
+        [
+          columns.join(','),
+          ...[...products.values()].map((row) =>
+            columns.map((column) => row[column] ?? '').join(','),
+          ),
+        ].join('\n'),
+      ),
+    });
+    await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  }
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
     name: '发货核对.csv',
     mimeType: 'text/csv',
@@ -238,7 +288,7 @@ test('MPS shipment distinguishes missing input from zero, uses the recent30 fall
     '近三天日均不大于0，使用近30天日均：10',
   );
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
-  await upload(frame, ['2026-09,郑州,BAD,无效替换,汤圆,系列,组,NaN,0,0,1,0,0,0']);
+  await upload(frame, ['2026-09,郑州,BAD,无效替换,汤圆,系列,组,NaN,0,0,1,0,0,0'], false);
   await expect(frame.getByRole('alert')).toContainText('未替换原输入');
   await expectShipment(table, '郑州 F 整月预估发货', '300');
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
@@ -253,6 +303,7 @@ test('MPS shipment distinguishes missing input from zero, uses the recent30 fall
       { length: 10001 },
       (_, index) => `2026-09,郑州,P${index},产品,汤圆,系列,组,0,0,0,1,0,0,0`,
     ),
+    false,
   );
   await expect(frame.getByRole('alert')).toContainText('超过10000条');
   await expectShipment(table, '郑州 F 整月预估发货', '300');
@@ -339,8 +390,38 @@ function shipmentFacts(query) {
     hasMorePages: false,
   };
 }
-async function businessShipment(t, execute = shipmentFacts) {
-  const result = await mpsPage(t, sourceConfig, execute);
+async function businessShipment(t, execute = shipmentFacts, pool = ['A']) {
+  const products = pool.map((code) => ({
+    ...Object.fromEntries(
+      sourceConfig.queries['products.detail'].columns.map((key) => [key, null]),
+    ),
+    target_base: '郑州',
+    material_code: code,
+    material_name: `产品${code}`,
+    responsible_item: '汤圆',
+    series: '系列',
+    product_item: '汤圆',
+    source_rows: 1,
+  }));
+  const result = await mpsPage(
+    t,
+    sourceConfig,
+    async (query) => {
+      const response = await execute(query);
+      if (query.queryId === 'products.count' && response.rows[0].total === 0)
+        response.rows = [{ total: products.length }];
+      if (query.queryId === 'products.detail')
+        response.rows = (response.rows.length ? response.rows : products).map((row) => ({
+          ...row,
+          stat_period: query.parameters.month,
+          target_base: row.target_base ?? '郑州',
+        }));
+      if (query.queryId === 'facts.shipment')
+        response.rows = response.rows.map((row) => ({ raw_average: row.average, ...row }));
+      return response;
+    },
+    { time: '2026-09-30T12:00:00+08:00' },
+  );
   const { frame } = result;
   await result.page.clock.setFixedTime(new Date('2026-09-30T12:00:00+08:00'));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
@@ -364,7 +445,7 @@ test('第二步按上月BI日期分段应用大类系数，保留数量保底与
       const rows = [
         {
           belong_base: '郑州',
-          material_code: 'OLD_A',
+          material_code: 'A',
           act_dl_qty_total: isElapsed ? 210 : 200,
         },
         {
@@ -574,7 +655,7 @@ test('零三天及本月发货时用近30天日均估算，零日均取订单合
     await expectShipment(table, '郑州 A 已备未备预估发运天数', average === 0 ? '0' : '');
   }
 });
-test('V2发货回退、真实零及日期待核在页面和下载保持一致', async (t) => {
+test('V5发货回退、真实零、确认缺天与日期冲突在页面和下载保持一致', async (t) => {
   const cases = [
     { material_code: 'NEG', shipped: 100, prepped: 10, unprepped: 10, daily3: -3, average: 5 },
     { material_code: 'HOLD', shipped: 46, prepped: 0, unprepped: 24, daily3: 0, average: 0 },
@@ -583,13 +664,17 @@ test('V2发货回退、真实零及日期待核在页面和下载保持一致', 
     { material_code: 'DUP', duplicate_days: 1 },
     { material_code: 'MISSING', prepped: null },
   ];
-  const { page, frame, table } = await businessShipment(t, (query) => {
-    const result = shipmentFacts(query);
-    if (query.queryId === 'facts.shipment')
-      result.rows = cases.map((row) => ({ ...result.rows[0], ...row }));
-    if (query.queryId === 'facts.shipment.count') result.rows[0].total = cases.length;
-    return result;
-  });
+  const { page, frame, table } = await businessShipment(
+    t,
+    (query) => {
+      const result = shipmentFacts(query);
+      if (query.queryId === 'facts.shipment')
+        result.rows = cases.map((row) => ({ ...result.rows[0], ...row }));
+      if (query.queryId === 'facts.shipment.count') result.rows[0].total = cases.length;
+      return result;
+    },
+    cases.map((row) => row.material_code),
+  );
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
   await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
   await expandShipmentBase(frame, '郑州');
@@ -597,7 +682,7 @@ test('V2发货回退、真实零及日期待核在页面和下载保持一致', 
     ['NEG', '138'],
     ['HOLD', '70'],
     ['ZERO', '0'],
-    ['GAP', ''],
+    ['GAP', '300'],
     ['DUP', ''],
     ['MISSING', ''],
   ])
@@ -610,7 +695,8 @@ test('V2发货回退、真实零及日期待核在页面和下载保持一致', 
   const byCode = new Map(records.map((row) => [row['产品编码'], row]));
   assert.equal(byCode.get('ZERO')['本月预测量'], '0');
   assert.equal(byCode.get('HOLD')['本月预测量'], '70');
-  assert.match(byCode.get('GAP')['预估待补原因'], /2026-09-01.*2026-09-22.*缺2天/);
+  assert.equal(byCode.get('GAP')['预估待补原因'], '');
+  assert.equal(byCode.get('GAP')['发货来源日期异常'], '');
   assert.match(byCode.get('DUP')['预估待补原因'], /重复1条/);
   assert.match(byCode.get('MISSING')['预估待补原因'], /已备/);
   assert.equal(byCode.get('NEG')['发运速度来源'], '近30天日均');
@@ -620,7 +706,7 @@ test('V2发货回退、真实零及日期待核在页面和下载保持一致', 
       .Sheet1,
     { defval: '' },
   );
-  assert.equal(issues.length, 3);
+  assert.equal(issues.length, 2);
   for (const issue of issues) {
     assert.equal(issue['评估月份'], '2026-10');
     assert.equal(issue['统计基月'], '2026-09');
@@ -634,19 +720,23 @@ test('V2发货回退、真实零及日期待核在页面和下载保持一致', 
 });
 
 test('MPS cutoff average keeps four source decimal places in summaries, SKU details, formula and download', async (t) => {
-  const { page, frame, table } = await businessShipment(t, (query) => {
-    const result = shipmentFacts(query);
-    if (query.queryId === 'facts.shipment') {
-      result.rows = [12.3456, 0.1, 0.2].map((average, index) => ({
-        ...result.rows[0],
-        material_code: ['A', 'B', 'C'][index],
-        average,
-      }));
-      result.totalRowCount = 3;
-    }
-    if (query.queryId === 'facts.shipment.count') result.rows[0].total = 3;
-    return result;
-  });
+  const { page, frame, table } = await businessShipment(
+    t,
+    (query) => {
+      const result = shipmentFacts(query);
+      if (query.queryId === 'facts.shipment') {
+        result.rows = [12.3456, 0.1, 0.2].map((average, index) => ({
+          ...result.rows[0],
+          material_code: ['A', 'B', 'C'][index],
+          average,
+        }));
+        result.totalRowCount = 3;
+      }
+      if (query.queryId === 'facts.shipment.count') result.rows[0].total = 3;
+      return result;
+    },
+    ['A', 'B', 'C'],
+  );
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
   await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
   await expect(
@@ -712,10 +802,14 @@ test('MPS cutoff snapshots keep zero and missing averages distinct and do not in
 
 test('MPS actual shipment failure withdraws prior business output and switches explicitly between preserved CSV and current business rows', async (t) => {
   let denied = false;
-  const { frame, table } = await businessShipment(t, (query) => {
-    if (denied && query.queryId === 'facts.shipment') throw Error('AGENT_ACCESS_DENIED');
-    return shipmentFacts(query);
-  });
+  const { frame, table } = await businessShipment(
+    t,
+    (query) => {
+      if (denied && query.queryId === 'facts.shipment') throw Error('AGENT_ACCESS_DENIED');
+      return shipmentFacts(query);
+    },
+    ['A', 'CSV'],
+  );
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
   await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
   await expect(
@@ -764,43 +858,47 @@ test('MPS actual shipment failure withdraws prior business output and switches e
   ).toHaveText('22');
 });
 test('MPS stock inputs preserve paging, zero, NULL and incomplete source status', async (t) => {
-  const { frame, table, calls } = await businessShipment(t, (query) => {
-    if (query.queryId === 'facts.shipment.count')
-      return { ...shipmentFacts(query), rows: [{ total: 202 }] };
-    if (query.queryId !== 'facts.shipment') return shipmentFacts(query);
-    const records = Array.from({ length: 202 }, (_, i) => ({
-      belong_base: i === 201 ? null : '郑州',
-      material_code: String(i).padStart(5, '0'),
-      material_name: '真实产品' + i,
-      series: '系列',
-      product_item: '汤圆',
-      shipped: i === 200 ? null : 0,
-      prepped: 0,
-      unprepped: 0,
-      daily3: i === 200 ? null : 0,
-      average: i === 200 ? null : 0,
-      open: 0,
-      inbound: 0,
-      source_days: 22,
-      duplicate_days: 0,
-      transfer_date: '2026-09-22',
-      transfer_rows: 1,
-      transfer_in_plan_v1: null,
-      transfer_in_plan_adj: null,
-      transfer_out_plan_v1: null,
-      transfer_out_plan_adj: null,
-    }));
-    return {
-      ...shipmentFacts(query),
-      rows: records.slice(
-        query.parameters.offset,
-        query.parameters.offset + query.parameters.page_size,
-      ),
-      totalRowCount: records.length,
-      offset: query.parameters.offset,
-      hasMorePages: query.parameters.offset + query.parameters.page_size < records.length,
-    };
-  });
+  const { frame, table, calls } = await businessShipment(
+    t,
+    (query) => {
+      if (query.queryId === 'facts.shipment.count')
+        return { ...shipmentFacts(query), rows: [{ total: 202 }] };
+      if (query.queryId !== 'facts.shipment') return shipmentFacts(query);
+      const records = Array.from({ length: 202 }, (_, i) => ({
+        belong_base: i === 201 ? null : '郑州',
+        material_code: String(i).padStart(5, '0'),
+        material_name: '真实产品' + i,
+        series: '系列',
+        product_item: '汤圆',
+        shipped: i === 200 ? null : 0,
+        prepped: 0,
+        unprepped: 0,
+        daily3: i === 200 ? null : 0,
+        average: i === 200 ? null : 0,
+        open: 0,
+        inbound: 0,
+        source_days: 22,
+        duplicate_days: 0,
+        transfer_date: '2026-09-22',
+        transfer_rows: 1,
+        transfer_in_plan_v1: null,
+        transfer_in_plan_adj: null,
+        transfer_out_plan_v1: null,
+        transfer_out_plan_adj: null,
+      }));
+      return {
+        ...shipmentFacts(query),
+        rows: records.slice(
+          query.parameters.offset,
+          query.parameters.offset + query.parameters.page_size,
+        ),
+        totalRowCount: records.length,
+        offset: query.parameters.offset,
+        hasMorePages: query.parameters.offset + query.parameters.page_size < records.length,
+      };
+    },
+    Array.from({ length: 201 }, (_, index) => String(index).padStart(5, '0')),
+  );
   const region = frame.getByRole('region', { name: '发货本地核对' });
   await expect(region).toContainText('源数据1条缺基地或产品编码');
   await expect(region).toContainText('1个单品存在缺值或日记录不齐');
@@ -870,6 +968,16 @@ test('MPS cutoff changes invalidate a pending earlier read and incomplete pages 
 test('MPS stock input missing product dimensions retain quantities without inventing a category', async (t) => {
   const { page, frame, table } = await businessShipment(t, (query) => {
     const result = shipmentFacts(query);
+    if (query.queryId === 'products.detail')
+      result.rows = [
+        {
+          ...Object.fromEntries(
+            sourceConfig.queries['products.detail'].columns.map((key) => [key, null]),
+          ),
+          target_base: '郑州',
+          material_code: 'A',
+        },
+      ];
     if (query.queryId === 'facts.shipment') {
       result.rows[0].material_name = null;
       result.rows[0].product_item = null;
@@ -1011,7 +1119,7 @@ test('shipment exposes national and base category, material group and SKU levels
   await expect(frame.getByText('主表中没有匹配的单品', { exact: true })).toBeVisible();
 });
 
-test('shipment hierarchy uses current unique product categories and material codes with names while retaining unmatched and conflicting quantities', async (t) => {
+test('shipment hierarchy uses current product categories and material codes, retains conflicting in-pool quantities and excludes out-of-pool SKUs', async (t) => {
   const { page, frame, table } = await businessShipment(t, (query) => {
     const result = shipmentFacts(query);
     if (query.queryId === 'products.detail')
@@ -1072,25 +1180,25 @@ test('shipment hierarchy uses current unique product categories and material cod
   await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
   await table.getByRole('button', { name: '展开 全国合计', exact: true }).click();
   await expectShipment(table, '全国合计 汤圆 整月预估发货', '300');
-  await expectShipment(table, '全国合计 大类未提供 整月预估发货', '600');
-  await expectShipment(table, '全国合计 整月预估发货', '900');
+  await expectShipment(table, '全国合计 大类未提供 整月预估发货', '300');
+  await expectShipment(table, '全国合计 整月预估发货', '600');
   await table.getByRole('button', { name: '展开 全国合计 汤圆', exact: true }).click();
   await expectShipment(table, '全国合计 汤圆 G · 组 整月预估发货', '300');
   await expectShipment(table, '全国合计 A 整月预估发货', '300');
   await table.getByRole('button', { name: '展开 全国合计 大类未提供', exact: true }).focus();
   await table.getByRole('button', { name: '展开 全国合计 大类未提供', exact: true }).press('Enter');
-  await expectShipment(table, '全国合计 大类未提供 物料组未提供 整月预估发货', '600');
+  await expectShipment(table, '全国合计 大类未提供 物料组未提供 整月预估发货', '300');
   await expect(
     table.locator('tr.sp-sku').filter({ hasText: '产品B' }).getByText('分类待补', { exact: true }),
   ).toHaveAttribute('title', /物料组存在多个当前值/);
-  await expect(table.locator('tr.sp-sku').filter({ hasText: '产品C' })).toContainText('分类待补');
+  await expect(table.locator('tr.sp-sku').filter({ hasText: '产品C' })).toHaveCount(0);
   const csv = await exported(page, frame);
   const { read, utils } = await import('xlsx-republish');
   const records = utils.sheet_to_json(read(csv, { type: 'string', raw: true }).Sheets.Sheet1);
-  assert.equal(records.length, 3);
+  assert.equal(records.length, 2);
   assert.equal(
     records.reduce((sum, row) => sum + Number(row['整月预估发货']), 0),
-    900,
+    600,
   );
   assert.equal(records.find((row) => row['产品编码'] === 'A')['物料组'], 'G');
   assert.equal(records.find((row) => row['产品编码'] === 'A')['物料组名称'], '组');
@@ -1098,13 +1206,9 @@ test('shipment hierarchy uses current unique product categories and material cod
     records.find((row) => row['产品编码'] === 'B')['分类待补原因'],
     /物料组存在多个当前值/,
   );
-  assert.match(
-    records.find((row) => row['产品编码'] === 'C')['分类待补原因'],
-    /未匹配当前产品明细/,
-  );
   assert.match(csv, /郑州,A,产品A,汤圆,/);
   assert.match(csv, /郑州,B,产品B,,/);
-  assert.match(csv, /郑州,C,产品C,,/);
+  assert.doesNotMatch(csv, /郑州,C,产品C,,/);
 });
 
 test('shipment national SKU preserves base adjustment sources, aggregate days and leaf-only download across expanded hierarchy', async (t) => {
@@ -1217,34 +1321,38 @@ test('数仓调拨各方向独立回退并参与逐SKU结存，历史手填值�
 
 test('数仓调拨确认无计划取零，最新快照重复待核，已知调拨逐级汇总且失败不回填零', async (t) => {
   let fail = false;
-  const { page, frame, table } = await businessShipment(t, (query) => {
-    if (query.queryId === 'facts.shipment' && fail) throw Error('TRANSFER_SOURCE_UNAVAILABLE');
-    const result = shipmentFacts(query);
-    if (query.queryId === 'facts.shipment.count') result.rows = [{ total: 4 }];
-    if (query.queryId === 'facts.shipment') {
-      const base = result.rows[0];
-      result.rows = [
-        {
-          ...base,
-          material_code: 'A',
-          transfer_in_plan_v1: 50,
-          transfer_in_plan_adj: 0,
-          transfer_out_plan_v1: 20,
-        },
-        {
-          ...base,
-          material_code: 'B',
-          transfer_in_plan_v1: 30,
-          transfer_out_plan_v1: 40,
-          transfer_out_plan_adj: 5,
-        },
-        { ...base, material_code: 'C' },
-        { ...base, material_code: 'D', transfer_rows: 2 },
-      ];
-      result.totalRowCount = 4;
-    }
-    return result;
-  });
+  const { page, frame, table } = await businessShipment(
+    t,
+    (query) => {
+      if (query.queryId === 'facts.shipment' && fail) throw Error('TRANSFER_SOURCE_UNAVAILABLE');
+      const result = shipmentFacts(query);
+      if (query.queryId === 'facts.shipment.count') result.rows = [{ total: 4 }];
+      if (query.queryId === 'facts.shipment') {
+        const base = result.rows[0];
+        result.rows = [
+          {
+            ...base,
+            material_code: 'A',
+            transfer_in_plan_v1: 50,
+            transfer_in_plan_adj: 0,
+            transfer_out_plan_v1: 20,
+          },
+          {
+            ...base,
+            material_code: 'B',
+            transfer_in_plan_v1: 30,
+            transfer_out_plan_v1: 40,
+            transfer_out_plan_adj: 5,
+          },
+          { ...base, material_code: 'C' },
+          { ...base, material_code: 'D', transfer_rows: 2 },
+        ];
+        result.totalRowCount = 4;
+      }
+      return result;
+    },
+    ['A', 'B', 'C', 'D'],
+  );
   await expectShipment(table, '全国合计 调入计划', '30');
   await expectShipment(table, '全国合计 调出计划', '25');
   await expectShipment(table, '全国合计 预计月末结存', '233');
