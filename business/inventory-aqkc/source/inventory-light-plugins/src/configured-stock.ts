@@ -2,6 +2,7 @@ import { inventoryAverageAge } from '../../../../shared/inventory-age';
 import { unpackAtomicPage } from '../../../../shared/atomic-page';
 import sqlConfiguration from '../../../sql.config.json';
 import { createAgentQueries } from '../../../../shared/agent-query';
+import { readConfiguredTargetCalendar } from '../../../../shared/configured-target-scope';
 import { agentSqlConfig } from '../../../../shared/sql-config';
 import { readWorkspaceQuery } from '../../../../shared/workspace-query';
 import { knownNumber } from '../../../../shared/configured-overview';
@@ -46,23 +47,9 @@ export async function readConfiguredStock(
       ),
     );
   }
-  const versions = await client.readAll(
-    'calendar.target_versions',
-    { page_size: 200, offset: 0 },
-    {
-      signal: options.signal,
-      keyFields: ['month', 'inventory_version'],
-      requiredColumns: ['month', 'inventory_version'],
-      maxRows: 10000,
-      singlePageFirst: true,
-    },
-  );
-  const calendar = versions.rows.map((r: any) => ({
-    'safety_stock.target_month': r.month,
-    'safety_stock.inventory_version': r.inventory_version,
-  }));
-  const scope = resolveInitialSafetyStockScope(calendar, now);
-  if (query.name === 'workbench-scope') return calendar;
+  const versions = await readConfiguredTargetCalendar(client, end, options.signal);
+  const scope = resolveInitialSafetyStockScope(versions.rows, now);
+  if (query.name === 'workbench-scope') return versions.rows;
   if (!scope.published)
     throw Object.assign(Error('当前没有可用的目标月份/版本；不能伪造目标发布状态'), {
       code: 'SOURCE_NOT_AVAILABLE',
@@ -189,29 +176,12 @@ async function resolveStockContext(
     const readSignal = cycle?.signal ?? signal;
     const month = end.slice(0, 7) + '-01';
     const [versions, latest] = await Promise.all([
-      client.readAll(
-        'calendar.target_versions',
-        { page_size: 200, offset: 0 },
-        {
-          signal: readSignal,
-          keyFields: ['month', 'inventory_version'],
-          requiredColumns: ['month', 'inventory_version'],
-          maxRows: 10000,
-          singlePageFirst: true,
-        },
-      ),
-
+      readConfiguredTargetCalendar(client, end, readSignal),
       readBatchSnapshot(client, end, readSignal),
     ]);
     if (latest.configVersion !== versions.configVersion)
       throw Object.assign(Error('配置已变化，请刷新重读'), { code: 'QUERY_CONFIG_CHANGED' });
-    const scope = resolveInitialSafetyStockScope(
-      versions.rows.map((r: any) => ({
-        'safety_stock.target_month': r.month,
-        'safety_stock.inventory_version': r.inventory_version,
-      })),
-      now,
-    );
+    const scope = resolveInitialSafetyStockScope(versions.rows, now);
     if (!scope.published)
       throw Object.assign(Error('当前没有可用的目标月份/版本'), { code: 'SOURCE_NOT_AVAILABLE' });
     const day = latest.rows[0]?.day;
@@ -590,10 +560,58 @@ export async function readConfiguredStockSummary(
     await inventorySettled;
     throw error;
   });
-  if (result.configVersion !== context.configVersion)
-    throw Object.assign(Error('配置已变化，请刷新重读'), { code: 'QUERY_CONFIG_CHANGED' });
+  let groups: Record<string, unknown>[] = result.rows;
+  let reviewReadError: string | undefined;
+  if (groups.length && !groups.some((row) => knownNumber(row.review_turn_daily) !== null)) {
+    try {
+      const snapshot = await client.snapshot({ signal: options.signal });
+      if (
+        snapshot.kind === 'ready' &&
+        snapshot.stockDate === day &&
+        snapshot.targetMonth !== scope.targetMonth
+      ) {
+        const keyFields = options.structure ? ['level'] : ['base', 'category'];
+        const review = await client.readAll(
+          `snapshot.${id}`,
+          {
+            ...values,
+            month: snapshot.targetMonth,
+            inventory_version: snapshot.defaultInventoryVersion ?? '',
+            summary_batch_id: snapshot.batchId,
+          },
+          {
+            signal: options.signal,
+            keyFields,
+            requiredColumns: [...keyFields, 'review_turn_inventory', 'review_turn_daily'],
+            maxRows: 10000,
+            singlePageFirst: true,
+          },
+        );
+        if (review.configVersion !== context.configVersion)
+          throw Object.assign(Error('配置已变化，请刷新重读'), { code: 'QUERY_CONFIG_CHANGED' });
+        const key = (row: Record<string, unknown>) =>
+          JSON.stringify(keyFields.map((field) => row[field]));
+        const byGroup = new Map<string, Record<string, unknown>>(
+          review.rows.map((row: Record<string, unknown>) => [key(row), row]),
+        );
+        groups = groups.map((row) => {
+          const match = byGroup.get(key(row));
+          return match
+            ? {
+                ...row,
+                review_turn_inventory: match.review_turn_inventory,
+                review_turn_daily: match.review_turn_daily,
+              }
+            : row;
+        });
+      }
+    } catch (error) {
+      options.signal?.throwIfAborted();
+      reviewReadError = error instanceof Error ? error.message : '读取实际发货失败';
+    }
+  }
   return {
-    groups: result.rows.map((r: any) =>
+    groups: groups.map((r) =>
       Object.fromEntries(
         Object.entries(r).map(([k, v]) => [
           k,
@@ -603,6 +621,7 @@ export async function readConfiguredStockSummary(
     ),
     scope,
     day,
+    reviewReadError,
     over60Skus: await over60Skus,
   };
 }

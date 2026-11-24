@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   IconChevronLeftOutlineRegular,
   IconChevronRightOutlineRegular,
-  IconCloseOutlineRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives/src/icons/index.tsx';
+import { notificationsChangedEvent, readNotifications } from '../client/inbox.tsx';
 import { readAnnouncements, type AnnouncementPage } from '../client/message-center.tsx';
 import { NavIcon } from './formal-components.tsx';
 import type { CopyKey } from './locales.ts';
@@ -28,103 +28,108 @@ function readHistory(key: string): ReminderHistory | undefined {
   }
 }
 
-export function AnnouncementReminders({
+export function MessageCenterButton({
   scope,
+  disabled,
+  active,
   open,
   t,
 }: {
-  scope: string;
+  scope: string | null;
+  disabled: boolean;
+  active: boolean;
   open: () => void;
   t: (key: CopyKey) => string;
 }) {
-  const storageKey = 'gea.announcement-reminders.v1:' + scope;
-  const [history, setHistory] = useState(() => readHistory(storageKey));
+  const storageKey = scope ? 'gea.announcement-reminders.v1:' + scope : null;
+  const [history, setHistory] = useState(() => (storageKey ? readHistory(storageKey) : undefined));
   const [items, setItems] = useState<Announcement[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(false);
   useEffect(() => {
-    const controller = new AbortController();
-    let fetching = false;
-    const refresh = async () => {
-      if (fetching || document.visibilityState === 'hidden') return;
-      fetching = true;
-      try {
-        const page = await readAnnouncements<AnnouncementPage>(
-          { pageNo: 1, title: '' },
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
-        setItems(page.items);
-        setHistory(
-          (previous) =>
-            previous ?? {
-              since: Date.now(),
-              hidden: page.items.map(announcementKey),
-            },
-        );
-      } catch (error) {
-        if (!(error instanceof Error)) throw error;
-      } finally {
-        fetching = false;
-      }
+    if (!storageKey) return;
+    let current: AbortController | undefined;
+    const refresh = () => {
+      if (document.visibilityState === 'hidden') return;
+      current?.abort();
+      const controller = new AbortController();
+      current = controller;
+      const { signal } = controller;
+      void readAnnouncements<AnnouncementPage>({ pageNo: 1, title: '' }, signal).then(
+        (page) => {
+          if (signal.aborted) return;
+          setItems(page.items);
+          setHistory(
+            (previous) =>
+              previous ?? { since: Date.now(), hidden: page.items.map(announcementKey) },
+          );
+        },
+        () => {},
+      );
+      void readNotifications<{ value: { count: unknown } }>(
+        { operation: 'unread-count' },
+        signal,
+      ).then(
+        ({ value }) => {
+          const count = value?.count;
+          if (
+            !signal.aborted &&
+            typeof count === 'number' &&
+            Number.isSafeInteger(count) &&
+            count >= 0
+          )
+            setUnreadNotifications(count > 0);
+        },
+        () => {},
+      );
     };
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 60_000);
+    refresh();
+    const timer = window.setInterval(refresh, 60_000);
     document.addEventListener('visibilitychange', refresh);
+    window.addEventListener(notificationsChangedEvent, refresh);
     return () => {
-      controller.abort();
+      current?.abort();
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener(notificationsChangedEvent, refresh);
     };
-  }, []);
+  }, [storageKey]);
   useEffect(() => {
-    if (!history) return;
+    if (!history || !storageKey) return;
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(history));
     } catch (error) {
       if (!(error instanceof window.DOMException)) throw error;
     }
   }, [history, storageKey]);
-  if (!history) return null;
-  const dismiss = (id: string) =>
-    setHistory({
-      ...history,
-      hidden: [...history.hidden, id],
-    });
-  return items
-    .filter((item) => {
-      if (history.hidden.includes(announcementKey(item))) return false;
-      const published = Date.parse(item.publishTime ?? '');
-      return !Number.isFinite(published) || published >= history.since;
-    })
-    .map((item) => (
-      <article
-        className="gea-sidebar-reminder"
-        key={announcementKey(item)}
-        aria-label={t('announcements')}
-      >
-        <button
-          type="button"
-          className="gea-sidebar-message-open"
-          onClick={() => {
-            dismiss(announcementKey(item));
-            open();
-          }}
-        >
-          <NavIcon kind="bell" />
-          <span className="gea-sidebar-message-copy">
-            <strong>{t('announcements')}</strong>
-            <span>{item.title || t('announcementUntitled')}</span>
-          </span>
-        </button>
-        <button
-          className="gea-sidebar-reminder-close"
-          type="button"
-          aria-label={t('dismissAnnouncement')}
-          onClick={() => dismiss(announcementKey(item))}
-        >
-          <IconCloseOutlineRegular size={14} />
-        </button>
-      </article>
-    ));
+  const newAnnouncements = history
+    ? items
+        .filter((item) => {
+          if (history.hidden.includes(announcementKey(item))) return false;
+          const published = Date.parse(item.publishTime ?? '');
+          return !Number.isFinite(published) || published >= history.since;
+        })
+        .map(announcementKey)
+    : [];
+  const hasUnread = unreadNotifications || newAnnouncements.length > 0;
+  return (
+    <button
+      type="button"
+      className="gea-inbox-quick-action gea-sidebar-inbox"
+      aria-label={t('messageInbox')}
+      aria-description={hasUnread ? t('newInboxMessages') : undefined}
+      aria-current={active ? 'page' : undefined}
+      title={t('messageInbox')}
+      data-unread={hasUnread ? '' : undefined}
+      disabled={disabled}
+      onClick={() => {
+        if (history && newAnnouncements.length)
+          setHistory({ ...history, hidden: [...history.hidden, ...newAnnouncements] });
+        open();
+      }}
+    >
+      <NavIcon kind="bell" />
+    </button>
+  );
 }
 
 export function SidebarMessages({
@@ -182,7 +187,7 @@ export function SidebarMessages({
     });
   };
   return (
-    <section className="gea-sidebar-message-card" aria-label={t('messageInbox')}>
+    <section className="gea-sidebar-message-card" aria-label={t('sidebarUpdateReminders')}>
       <div
         className="gea-sidebar-message-track"
         ref={track}

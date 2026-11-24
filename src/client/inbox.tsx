@@ -3,6 +3,8 @@ import type { CopyKey } from './locales.ts';
 import type { NotificationItem } from '../shared/notifications.ts';
 import type { PageNavigation } from './desktop-navigation.tsx';
 
+export const notificationsChangedEvent = 'gea-notifications-changed';
+
 type Page = {
   coverage: 'complete' | 'partial';
   items: NotificationItem[];
@@ -76,6 +78,7 @@ export function Inbox({
     setMutationError(null);
     try {
       await readNotifications(payload);
+      window.dispatchEvent(new window.Event(notificationsChangedEvent));
       attempt.current = null;
       setRetryPending(false);
       setSelectedIds(new Set());

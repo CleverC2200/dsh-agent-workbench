@@ -1497,7 +1497,10 @@ test('AQKC overview fits five compact cards in a wide row and adapts without cli
   });
   const grid = frame.locator('[data-overview-cards="aqkc"]');
   await expect(grid.locator('article')).toHaveCount(5);
-  const basis = grid.locator('details');
+  const basis = grid
+    .locator('article')
+    .filter({ has: frame.getByText('当前库存', { exact: true }) })
+    .locator('details');
   await expect(basis.locator('p')).not.toBeVisible();
   await basis.locator('summary').click();
   await expect(basis.locator('p')).toBeVisible();
@@ -2582,6 +2585,144 @@ test('APS workspace tabs switch and align with the toolbar edge without a return
   assert.ok(difference <= 2, `selected tab does not meet toolbar: ${difference}`);
   await intelligent.click();
   await expect(intelligent).toHaveAttribute('aria-current', 'page');
+  assert.deepEqual(errors, []);
+});
+
+test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块', async (t) => {
+  const { frame, calls, errors } = await mount(
+    t,
+    'apsplan',
+    768,
+    ({ queryId, parameters }, result) => {
+      if (queryId === 'page.budget-performance')
+        Object.assign(result.rows[0], { month: '202610', actual: 80000, budget: 100000 });
+      if (queryId === 'lantern.accuracy')
+        Object.assign(result.rows[0], {
+          month: '2026-10-01',
+          initial_plan: 200,
+          initial_deviation: 50,
+          adjusted_plan: 100,
+          adjusted_deviation: 10,
+        });
+      if (queryId === 'lantern.production')
+        Object.assign(result.rows[0], {
+          planned: 200,
+          actual: parameters.start === '20261001' ? 180 : 170,
+          known_planned: 200,
+          known_actual: 180,
+          records: 1,
+          valid_records: 1,
+          invalid: 0,
+          source_date: '20261019',
+          source_basis: 'MES_QUANTITY',
+        });
+      if (queryId === 'lantern.fulfillment')
+        Object.assign(result.rows[0], {
+          sku: parameters.sku_detail ? 'sku-A-000' : null,
+          demand: 100,
+          shortage: 12,
+          shipped: 88,
+          records: 1,
+          invalid: 0,
+        });
+      if (queryId === 'lantern.stock-dates')
+        result.rows = [
+          { scope: 'base', day: '20261019' },
+          { scope: 'branch', day: '20261018' },
+          { scope: 'all', day: '20261018' },
+        ];
+      return result;
+    },
+  );
+  const workspace = frame.getByRole('navigation', { name: '产销工作区' });
+  const lantern = workspace.getByRole('button', { name: '汤圆订制看板', exact: true });
+  const dashboard = frame.locator('.lantern-dashboard');
+  const tabs = dashboard.getByRole('tablist', { name: '看板模块' });
+  const sales = tabs.getByRole('tab', { name: '销售', exact: true });
+  const production = tabs.getByRole('tab', { name: '生产供应链', exact: true });
+  await expect(lantern).toBeVisible();
+  assert.equal(
+    calls.some(({ queryId }) => queryId.startsWith('lantern.')),
+    false,
+  );
+  await lantern.click();
+  await expect(lantern).toHaveAttribute('aria-current', 'page');
+  await expect(dashboard.getByText('数据范围 2026-10-01 至 2026-10-19')).toBeVisible();
+  await expect(dashboard.locator('[data-metric="销售提报准确率"]')).toContainText('82.50');
+  await dashboard.getByRole('tab', { name: '销售预算达成率', exact: true }).click();
+  const budgetRow = dashboard.getByRole('row', { name: /公司合计/ });
+  await expect(budgetRow).toContainText('80.00%');
+  await sales.press('ArrowRight');
+  await expect(production).toBeFocused();
+  await expect(sales).toHaveAttribute('aria-selected', 'true');
+  assert.equal(
+    calls.some(({ queryId }) => queryId === 'lantern.production'),
+    false,
+  );
+  await production.press('Enter');
+  await expect(production).toHaveAttribute('aria-selected', 'true');
+  await expect(dashboard.locator('[data-metric="生产计划达成率"]')).toContainText('90.00');
+  assert.equal(
+    calls.find(({ queryId }) => queryId === 'lantern.production').parameters.end_exclusive,
+    '20261020',
+  );
+  const skuBox = dashboard.getByRole('searchbox', { name: 'SKU', exact: true });
+  await skuBox.fill('sku-A-000');
+  const skuRow = dashboard.getByRole('row', { name: /sku-A-000/ });
+  await expect(skuRow).toContainText('88.00%');
+  assert.ok(
+    calls.some(
+      ({ queryId, parameters }) =>
+        queryId === 'lantern.fulfillment' &&
+        parameters.sku_detail &&
+        parameters.sku_pattern === '%sku-a-000%',
+    ),
+  );
+  const inventory = tabs.getByRole('tab', { name: '库存', exact: true });
+  await inventory.click();
+  await expect(dashboard.locator('[data-metric="库存量"]')).toContainText('2.41');
+  for (const queryId of ['lantern.stock-base', 'lantern.stock-branch'])
+    assert.equal(calls.find((call) => call.queryId === queryId).parameters.stat_date, '2026-10-18');
+  const initialProductionCalls = () =>
+    calls.filter(
+      ({ queryId, parameters }) =>
+        queryId === 'lantern.production' &&
+        parameters.start === '20261001' &&
+        !parameters.sku_detail,
+    ).length;
+  await production.click();
+  await expect(dashboard.locator('[data-metric="生产计划达成率"]')).toContainText('90.00');
+  assert.equal(initialProductionCalls(), 1);
+  await dashboard.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect(dashboard.locator('[data-metric="生产计划达成率"]')).toContainText('90.00');
+  assert.equal(initialProductionCalls(), 2);
+  const meter = dashboard.locator('[data-metric="生产计划达成率"]');
+  await meter.getByRole('button').click();
+  const trend = dashboard.getByRole('region', { name: '生产计划达成率趋势', exact: true });
+  await expect(trend).toContainText('上月同期');
+  await expect(meter).toContainText('+5.00pp');
+  await trend.getByRole('button', { name: '关闭趋势' }).click();
+  await dashboard.getByRole('tab', { name: '日度视角', exact: true }).click();
+  await dashboard.getByRole('button', { name: '统计日期 2026年10月19日', exact: true }).click();
+  await dashboard.getByRole('button', { name: '2026年10月18日', exact: true }).click();
+  await expect(dashboard.getByText('数据范围 2026-10-18')).toBeVisible();
+  await expect(meter).toContainText('85.00');
+  assert.ok(
+    calls.some(
+      ({ queryId, parameters }) =>
+        queryId === 'lantern.production' &&
+        parameters.start === '20261018' &&
+        parameters.end_exclusive === '20261019',
+    ),
+  );
+  await workspace.getByRole('button', { name: '产销协同看板', exact: true }).click();
+  await expect(dashboard).toHaveCount(0);
+  await lantern.click();
+  await expect(dashboard).toBeVisible();
+  await dashboard.evaluate((element) => {
+    element.ownerDocument.defaultView.dispatchEvent(new Event('gea-identity-changed'));
+  });
+  await expect(dashboard).toHaveCount(0);
   assert.deepEqual(errors, []);
 });
 

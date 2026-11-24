@@ -8,17 +8,28 @@ import copy
 from pathlib import Path
 import sqlglot
 from sqlglot import exp
+from sqlglot.optimizer.pushdown_projections import pushdown_projections
 
 ROOT = Path(__file__).resolve().parents[1]
 PATH = ROOT / 'business/inventory-qll/sql.config.json'
+EXCLUDED_BRANCH_WAREHOUSES = "('N436', 'Y204', 'A221', 'A540')"
+
+def branch_warehouse(alias):
+    return f'({alias}.warehouseid IS NULL OR NOT {alias}.warehouseid IN {EXCLUDED_BRANCH_WAREHOUSES})'
 
 def expression(sql):
     return sqlglot.parse_one('SELECT ' + sql, read='postgres').expressions[0]
 
-def patch(sql):
+def compact_base_category_query(sql):
+    tree = sqlglot.parse_one(sql, read='postgres')
+    compact = pushdown_projections(tree).sql()
+    return min(sql, compact, key=len)
+
+def patch(sql, *, add_base_target_daily=True):
     tree = sqlglot.parse_one(sql, read='postgres')
     changed = False
     base_sources = set()
+    branch_sources = set()
     for cte in tree.find_all(exp.CTE):
         select = cte.this
         if not isinstance(select, exp.Select):
@@ -32,13 +43,15 @@ def patch(sql):
             if fields['daily'].this.sql() != 'r.daily_demand':
                 fields['daily'].replace(expression('r.daily_demand AS daily'))
                 changed = True
-            if 'target_daily' not in fields:
+            if add_base_target_daily and 'target_daily' not in fields:
                 select.select('r.daily_demand AS target_daily', append=True, copy=False)
                 changed = True
         elif isinstance(source, exp.Column) and source.table == 'r' and source.name == 'warehouseid':
+            branch_sources.add(cte.alias)
+            included = branch_warehouse('r')
             for name, value in {
-                'turnover_qty': 'CASE WHEN r.daily_movement > 0 AND r.available_qty >= 0 THEN r.available_qty ELSE NULL END',
-                'daily': 'CASE WHEN r.daily_movement > 0 AND r.available_qty >= 0 THEN r.daily_movement ELSE NULL END',
+                'turnover_qty': f'CASE WHEN {included} THEN r.total_qty ELSE NULL END',
+                'daily': f'CASE WHEN {included} AND r.daily_movement >= 0 THEN r.daily_movement ELSE NULL END',
             }.items():
                 replacement = expression(value + ' AS ' + name)
                 if fields[name] != replacement:
@@ -64,6 +77,15 @@ def patch(sql):
                     alias = source.this.alias_or_name
                     field = 'target' if value.alias_or_name == 'target_turnover_qty' else 'daily'
                     replacement = expression(f'SUM(CASE WHEN {alias}.inventory >= 0 AND {alias}.target >= 0 AND {alias}.daily >= 0 THEN {alias}.{field} ELSE NULL END) AS {value.alias_or_name}')
+                    if value != replacement:
+                        value.replace(replacement)
+                        changed = True
+        if source and isinstance(source.this, exp.Table) and source.this.name in branch_sources:
+            for value in select.expressions:
+                if value.alias_or_name in ['turnover_qty', 'daily']:
+                    alias = source.this.alias_or_name
+                    field = value.alias_or_name
+                    replacement = expression(f'SUM({alias}.{field}) AS {field}')
                     if value != replacement:
                         value.replace(replacement)
                         changed = True
@@ -115,15 +137,14 @@ def update(config):
     for query_id in ['category-tree.base','snapshot.category-tree.base','category-tree.customer',
                      'category-tree.branch','snapshot.category-tree.branch','summary.first-screen','summary.bootstrap']:
         query = config['queries'][query_id]
-        sql = patch(query['request']['sql'])
+        is_raw_base = query_id == 'category-tree.base'
+        sql = patch(query['request']['sql'], add_base_target_daily=not is_raw_base)
+        if is_raw_base:
+            sql = compact_base_category_query(sql)
         if query_id in ['summary.first-screen','summary.bootstrap']:
             sql = re.sub(r'\bCOUNT\s*\(\s*\*\s*\)', 'COUNT(1)', sql, flags=re.I)
         query['request']['sql'] = sql
     config['queries']['category-tree.branch']['summaryRoute']['kind'] = 'age-movement'
-    for member in config['dailySummary']['bundle']['members']:
-        if member['queryId'] == 'snapshot.category-tree.branch':
-            member['values']['batch_rolling_start'] = {'snapshotValue':'rollingStart','format':'YYYYMMDD'}
-            member['values']['batch_end_exclusive'] = {'snapshotValue':'nextDay','format':'YYYYMMDD'}
     branch_organization(config)
     return config
 
@@ -149,7 +170,8 @@ def branch_organization(config):
         groups = next(c.this for c in tree.ctes if c.alias == 'batch_groups')
         for field in groups.expressions:
             if field.alias_or_name == 'historical_turnover':
-                field.replace(expression('SUM(CASE WHEN b.daily_movement > 0 AND b.available_qty >= 0 THEN b.available_qty ELSE NULL END) * 1.0 / NULLIF(SUM(CASE WHEN b.daily_movement > 0 AND b.available_qty >= 0 THEN b.daily_movement ELSE NULL END), 0) AS historical_turnover'))
+                included = branch_warehouse('b')
+                field.replace(expression(f'SUM(CASE WHEN {included} THEN b.total_qty ELSE NULL END) * 1.0 / NULLIF(SUM(CASE WHEN {included} AND b.daily_movement >= 0 THEN b.daily_movement ELSE NULL END), 0) AS historical_turnover'))
         query['request']['sql'] = tree.sql()
         query['title'] = '分仓组织库存与回顾周转'
         if not prefix:

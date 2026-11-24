@@ -18,6 +18,8 @@ for (const agent of ['fc', 'qll', 'dealer'])
     const config = sourceDetailConfig(
       JSON.parse(await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8')),
     );
+    const versionQuery =
+      agent === 'qll' ? 'calendar.target_plan_versions' : 'calendar.target_versions';
     for (const id of config.overviewViewIds) {
       const view = config.sourceViews.views.find((v) => v.id === id),
         calls = [];
@@ -29,10 +31,10 @@ for (const agent of ['fc', 'qll', 'dealer'])
           summaryOnly: true,
           execute: async (_, o) => {
             calls.push(o.queryId);
-            if (o.queryId === 'calendar.target_versions')
+            if (o.queryId === versionQuery)
               return {
                 configVersion: 'v1',
-                rows: [{ month: '2026-10-01', inventory_version: '月初' }],
+                rows: [{ month: '2026-10-01', inventory_version: '月初', usable_plan_rows: 1 }],
               };
             const cols = config.queries[o.queryId].resultColumns;
             return {
@@ -52,10 +54,7 @@ for (const agent of ['fc', 'qll', 'dealer'])
       assert.equal(result.total, 42);
       assert.deepEqual(
         calls.filter(
-          (q) =>
-            q !== view.snapshotQuery &&
-            !q.startsWith('source.') &&
-            q !== 'calendar.target_versions',
+          (q) => q !== view.snapshotQuery && !q.startsWith('source.') && q !== versionQuery,
         ),
         [view.overviewSummaryId ?? view.summaryId],
       );

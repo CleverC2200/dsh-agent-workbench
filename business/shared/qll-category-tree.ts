@@ -1,7 +1,7 @@
 import { createAgentQueries, type ConfiguredExecution } from './agent-query';
 import type { AgentSqlConfig } from './sql-config';
 import { qllPublishedDate } from './qll-published-date';
-import { readConfiguredTargetScope } from './configured-target-scope';
+import { readConfiguredTargetScope, targetPlanVersionsQuery } from './configured-target-scope';
 
 export type ChainLayer = 'base' | 'branch' | 'customer';
 export type TreeRow = Record<string, any> & { node_key: string; node_name: string };
@@ -101,7 +101,8 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
     if (
       layer === 'base' &&
       config.dailySummary &&
-      (await client.snapshot({ signal })).kind === 'ready'
+      (client.config.queries[targetPlanVersionsQuery] ||
+        (await client.snapshot({ signal })).kind === 'ready')
     ) {
       const targetScope = await readConfiguredTargetScope(client, requestedDate, signal);
       values.month = targetScope.targetMonth;

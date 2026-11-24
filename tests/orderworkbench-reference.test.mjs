@@ -9,6 +9,7 @@ import {
   summarySupplement,
 } from '../prototypes/inventory-orderworkbench/import-content.mjs';
 import { createReportPersistence } from '../prototypes/inventory-orderworkbench/report-persistence.mjs';
+import { achievementWorkbook } from '../prototypes/inventory-orderworkbench/achievement-workbook.mjs';
 import { createFrameProgress } from '../business/shared/frame-progress.js';
 import { metricDetailsRequest } from '../prototypes/inventory-orderworkbench/metric-details.mjs';
 import { metricDefinition } from '../prototypes/inventory-orderworkbench/metric-definitions.mjs';
@@ -48,6 +49,21 @@ test('order workbench reference interactions', async () => {
   window.structuredClone = structuredClone;
   window.AbortController = AbortController;
   window.AbortSignal = AbortSignal;
+  window.achievementWorkbook = achievementWorkbook;
+  window.saveAchievementFile = async (file) => {
+    window.downloadedWorkbook = file;
+    return 'saved';
+  };
+  window.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+  };
+  window.eval(
+    readFileSync('prototypes/inventory-orderworkbench/frozen-columns.mjs', 'utf8').replace(
+      'export function',
+      'function',
+    ),
+  );
   Object.assign(window, {
     provinceAnalysis,
     provinceAnalysisContext,
@@ -195,6 +211,16 @@ test('order workbench reference interactions', async () => {
       document
         .getElementById(id)
         .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.ok(document.querySelector('#wbDimensionDownload svg[aria-hidden="true"]'));
+    assert.equal(document.getElementById('wbDimensionDownload').title, '导出 Excel');
+    click('#wbDimensionDownload');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(window.downloadedWorkbook.content instanceof Uint8Array);
+    assert.match(window.downloadedWorkbook.filename, /基地维度达成分析.*xlsx$/);
+    assert.equal(
+      window.downloadedWorkbook.rowCount,
+      document.querySelectorAll('#wbDimensionPanel .wb-performance-table tbody tr').length,
+    );
     click('.wb-kpi');
     click('.wb-kpi');
     await new Promise((resolve) => setTimeout(resolve, 0));

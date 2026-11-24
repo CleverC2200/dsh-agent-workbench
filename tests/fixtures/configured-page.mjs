@@ -117,6 +117,8 @@ export async function configuredWire(id) {
         { length: Math.max(0, Math.min(p.page_size ?? 10, total - offset)) },
         (_, i) => makeRow(offset + i),
       );
+    if (payload.queryId === 'calendar.target_plan_versions')
+      rows = [{ month: p.plan_months[0], inventory_version: '月初', usable_plan_rows: 1 }];
     if (payload.queryId.startsWith('category-tree.')) {
       const organization = payload.queryId.endsWith('customer')
         ? '河南省区'

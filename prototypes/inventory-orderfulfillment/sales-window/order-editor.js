@@ -355,12 +355,13 @@ window.OrderShortageEditor = (() => {
       }
       if (!selected().length) return '尚未选择商品，请先核对订单商品。';
       if (selected().some((line) => line.draftQuantity === null)) return '商品数量尚未完整提供。';
-      const invalidInput = root.querySelector('input[aria-invalid="true"]');
-      if (invalidInput) return invalidInput.validationMessage;
       const invalidQuantity = selected()
         .map((line) => line.inputError || quantityError(line, line.draftQuantity))
         .find(Boolean);
       if (invalidQuantity) return invalidQuantity;
+      const invalidInput = root.querySelector('input[aria-invalid="true"]');
+      if (invalidInput)
+        return invalidInput.validationMessage || '商品数量未通过校验，请核对后重试。';
       if (capabilities.omsModificationAvailable === true) {
         if (capabilities.canSubmit !== true) return capabilities.reason || '当前不能提交订单修改。';
         if (
@@ -389,7 +390,9 @@ window.OrderShortageEditor = (() => {
         if (inventoryEnabled && inventoryPhase === 'error') return inventoryError;
         if (
           inventoryEnabled &&
-          (inventoryPhase !== 'ready' || inventoryKey !== inventoryDraftKey())
+          (inventoryPhase !== 'ready' ||
+            inventoryKey !== inventoryDraftKey() ||
+            !/^[a-f0-9]{64}$/.test(inventoryResult?.inventoryHash || ''))
         )
           return '正在核算最新库存，请稍候。';
         if (priceRecalculationEnabled && inventoryResult?.pricesReady !== true)
@@ -430,6 +433,7 @@ window.OrderShortageEditor = (() => {
         originalNotice &&
         priceRecalculationEnabled &&
         inventoryPhase === 'ready' &&
+        inventoryResult &&
         snapshot.credit?.status !== 'insufficient'
       ) {
         originalNotice.textContent = inventoryResult.pricesReady
@@ -1199,18 +1203,40 @@ window.OrderShortageEditor = (() => {
             saving ? '保存中…' : '确认',
             async () => {
               if (state.previewOnly === true || reason() || saving) return;
+              const verifiedKey = inventoryDraftKey(),
+                verifiedInventory = inventoryResult;
+              if (
+                inventoryEnabled &&
+                (!verifiedInventory ||
+                  !/^[a-f0-9]{64}$/.test(verifiedInventory.inventoryHash || ''))
+              ) {
+                notice = '库存核验尚未完成，请重新核算后再提交。';
+                modal = false;
+                render();
+                return;
+              }
+              const draft = {
+                deliveryDate,
+                ...(vehicleType !== (snapshot.vehicleType || '') ? { vehicleType } : {}),
+                ...(inventoryEnabled ? { inventoryHash: verifiedInventory.inventoryHash } : {}),
+                lines: (capabilities.catalogAvailable === true
+                  ? lines.filter((line) => line.draftQuantity > 0)
+                  : lines
+                ).map((line) => ({ sku: line.sku, quantity: line.draftQuantity })),
+              };
               saving = true;
-              render();
+              notice = '';
               try {
-                await state.onConfirm({
-                  deliveryDate,
-                  ...(vehicleType !== (snapshot.vehicleType || '') ? { vehicleType } : {}),
-                  ...(inventoryEnabled ? { inventoryHash: inventoryResult.inventoryHash } : {}),
-                  lines: (capabilities.catalogAvailable === true
-                    ? lines.filter((line) => line.draftQuantity > 0)
-                    : lines
-                  ).map((line) => ({ sku: line.sku, quantity: line.draftQuantity })),
-                });
+                render();
+                if (
+                  verifiedKey !== inventoryDraftKey() ||
+                  (inventoryEnabled &&
+                    (inventoryPhase !== 'ready' ||
+                      inventoryKey !== verifiedKey ||
+                      inventoryResult !== verifiedInventory))
+                )
+                  throw Error('库存核验已变化，请等待重新核算后再提交。');
+                await state.onConfirm(draft);
                 modal = false;
               } catch (error) {
                 notice = error.message;

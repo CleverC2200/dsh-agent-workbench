@@ -41,6 +41,15 @@ test(
             configVersion: 'fixture',
           },
         });
+      if (queryId === 'calendar.target_plan_versions')
+        return route.fulfill({
+          json: {
+            rows: [{ month: p.plan_months[0], inventory_version: '滚动', usable_plan_rows: 1 }],
+            returnedColumns: config.queries[queryId].resultColumns,
+            rejectedColumns: [],
+            configVersion: 'fixture',
+          },
+        });
       calls.push({ queryId, ...p });
       if (queryId === 'category-tree.branch' && failBranch) {
         failBranch = false;
@@ -226,8 +235,8 @@ test('a later read date renders published company rows and retains zero and miss
         pack_unit_qty: 0,
         freeze_qty: 0,
       }));
-    else if (queryId === 'snapshot.calendar.target_versions')
-      rows = [{ month: '2026-11-01', inventory_version: '月初' }];
+    else if (queryId === 'calendar.target_plan_versions')
+      rows = [{ month: '2026-11-01', inventory_version: '月初', usable_plan_rows: 1 }];
     else if (queryId.startsWith('snapshot.category-tree.')) {
       const base = queryId.endsWith('.base');
       const row = (key, inventory, target, gap) => ({

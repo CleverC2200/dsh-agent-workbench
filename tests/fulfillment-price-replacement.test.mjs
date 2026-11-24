@@ -162,6 +162,42 @@ test('deleting the incomplete unpriced original and adding a priced product reva
     f.dom.window.close();
   }
 });
+
+for (const invalidation of ['date-change', 'stock-recheck'])
+  test(`inventory invalidation during the confirmation render (${invalidation}) never reads a cleared hash or sends a stale modification`, async () => {
+    const f = setup();
+    try {
+      await replace(f);
+      f.button('提交').click();
+      const root = f.document.getElementById('orderEditor');
+      const replaceChildren = root.replaceChildren;
+      root.replaceChildren = function (...children) {
+        root.replaceChildren = replaceChildren;
+        if (invalidation === 'date-change') {
+          const date = root.querySelector('[aria-label="预计交货日期"]');
+          date.value = '2026-11-27';
+          date.dispatchEvent(new f.dom.window.Event('change'));
+        } else root.querySelector('[data-editor-inventory-retry]').click();
+        return replaceChildren.apply(this, children);
+      };
+      f.document.querySelector('[data-editor-confirm]').click();
+      await tick();
+      assert.equal(f.calls.length, 0);
+      assert.doesNotMatch(root.textContent, /Cannot read|inventoryHash|undefined/);
+      assert.match(root.textContent, /重新核算|核验已变化/);
+      f.button('提交').click();
+      f.document.querySelector('[data-editor-confirm]').click();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(f.calls.length, 1);
+      assert.equal(
+        f.calls[0].deliveryDate,
+        invalidation === 'date-change' ? '2026-11-27' : f.state.snapshot.deliveryDate,
+      );
+      assert.equal(f.calls[0].inventoryHash, 'a'.repeat(64));
+    } finally {
+      f.dom.window.close();
+    }
+  });
 test('fresh price failure still blocks submission and updates the displayed cause instead of using the old price', async () => {
   const f = setup({ badPrice: true });
   try {
@@ -201,6 +237,40 @@ test('changing date after a preview triggers a new validation and whole-pallet q
     f.button('提交').click();
     assert.equal(f.document.querySelector('[data-editor-confirm]').disabled, true);
     assert.equal(f.calls.length, 0);
+  } finally {
+    f.dom.window.close();
+  }
+});
+test('disabled quantity inputs with missing pallet rules cannot bypass validation when their native validation message is empty', async () => {
+  const f = setup();
+  try {
+    const quantity = f.document.querySelector('[aria-label="BAD 数量"]');
+    assert.equal(quantity.disabled, true);
+    assert.equal(quantity.getAttribute('aria-invalid'), 'true');
+    assert.equal(quantity.validationMessage, '');
+    const date = f.document.querySelector('[aria-label="预计交货日期"]');
+    date.value = '2026-11-30';
+    date.dispatchEvent(new f.dom.window.Event('change'));
+    const vehicle = f.document.querySelector('[aria-label="选择车型"]');
+    vehicle.value = '6.8米';
+    vehicle.dispatchEvent(new f.dom.window.Event('change'));
+    await tick();
+    f.button('提交').click();
+    const confirm = f.document.querySelector('[data-editor-confirm]');
+    assert.equal(confirm.disabled, true);
+    assert.match(
+      f.document.querySelector('[data-editor-dialog-reason]').textContent,
+      /每托箱数未提供/,
+    );
+    confirm.disabled = false;
+    confirm.click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(f.calls.length, 0);
+    assert.equal(f.previews.length, 0);
+    assert.doesNotMatch(
+      f.document.getElementById('orderEditor').textContent,
+      /inventoryHash|undefined/,
+    );
   } finally {
     f.dom.window.close();
   }

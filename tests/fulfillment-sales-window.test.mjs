@@ -44,7 +44,9 @@ function component(state = fixture()) {
 
 test('preview uses normal confirmation labels but never invokes the business callback', async () => {
   const state = fixture();
-  state.snapshot.lines = [{ sku: 'A', name: '商品', quantity: 100 }];
+  state.snapshot.lines = [
+    { sku: 'A', name: '商品', quantity: 100, minimumOrderQuantity: 1, orderMultiple: 1 },
+  ];
   let calls = 0;
   state.onConfirm = async () => {
     calls++;
@@ -843,11 +845,15 @@ test('deferral date stays within the existing one-to-seven-day decision contract
   state.csrf = 'csrf';
   state.version = 'v';
   state.permissions = { canAct: true };
+  state.editor = { ...state.editor, deferOmsAvailable: true };
   const actions = [];
   dom.window.fetch = async (url, options = {}) => {
     if (url.endsWith('/action')) {
       actions.push(JSON.parse(options.body));
-      return { ok: true, json: async () => ({ status: 'accepted' }) };
+      return {
+        ok: true,
+        json: async () => ({ status: 'accepted', omsExecuted: true, orderModified: true }),
+      };
     }
     return { ok: true, json: async () => structuredClone(state) };
   };
@@ -865,7 +871,7 @@ test('deferral date stays within the existing one-to-seven-day decision contract
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(actions.length, 1);
     assert.equal(actions[0].actionId, 'defer_shipment');
-    assert.equal(actions[0].input.deferDays, 1);
+    assert.equal(actions[0].input.deliveryDate, date.min);
   } finally {
     dom.window.close();
   }

@@ -57,8 +57,10 @@ globalThis.baseSummaryHost = async (_, call) => {
     columns = config.queries[id].resultColumns;
   const row = (extra) => Object.fromEntries(columns.map((k) => [k, extra[k] ?? null]));
   let rows;
-  if (id === 'calendar.target_versions')
-    rows = [{ month: new Date().toISOString().slice(0, 7) + '-01', inventory_version: '滚动' }];
+  if (id === 'calendar.target_plan_versions')
+    rows = [
+      { month: call.parameters.plan_months[0], inventory_version: '滚动', usable_plan_rows: 1 },
+    ];
   else if (id === 'source.health-date') rows = [{ day: new Date().toISOString().slice(0, 10) }];
   else if (['page.inventory-groups', 'page.dashboard-groups'].includes(id)) {
     if (failStock) throw Error('STOCK_SOURCE_FAILED');
