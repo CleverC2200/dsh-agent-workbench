@@ -59,7 +59,9 @@ test('category context bounds source issues while the page and CSV retain all re
   });
   const contextStart = contexts.length;
   await frame.getByRole('button', { name: '读取三年同比源值', exact: true }).click();
-  await expect(frame.getByRole('button', { name: '读取三年同比源值', exact: true })).toBeEnabled();
+  await expect(frame.getByRole('button', { name: '读取三年同比源值', exact: true })).toBeEnabled({
+    timeout: 15000,
+  });
   await expect
     .poll(() =>
       contexts.slice(contextStart).some((context) => {

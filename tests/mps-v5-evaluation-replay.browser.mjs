@@ -161,6 +161,9 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
     },
     { time: '2026-11-24T12:00:00+08:00' },
   );
+  await expect
+    .poll(() => page.evaluate(() => window.readView().localDrafts?.drafts.length ?? 0))
+    .toBeGreaterThan(0);
   const original = await page.evaluate(() => structuredClone(window.readView().localDrafts));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-12');
@@ -291,6 +294,9 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
   );
   assert.ok(report.rows.every((row) => row.基地 === '郑州' && codes.includes(row.产品编码)));
   assert.equal(await frame.getByLabel('评估版本选择').inputValue(), selected);
+  await expect
+    .poll(() => page.evaluate(() => window.readView().localDrafts?.selected))
+    .toBe(selected);
   const final = await page.evaluate(() => structuredClone(window.readView().localDrafts));
   for (const old of original.drafts)
     assert.deepEqual(
