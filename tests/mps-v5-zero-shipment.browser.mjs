@@ -117,14 +117,15 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
         }));
       if (query.queryId.startsWith('category-history.'))
         rows = query.parameters.months.map((stat_month) => ({
-          dimension_type: '基地+大类',
+          dimension_type: '基地+产品',
           stat_month,
           belong_base: '郑州',
-          dimension_value: '水饺',
+          dimension_value: 'KNOWN',
           dimension_act_dl_qty: 100,
           last_year_dimension_act_dl_qty: 100,
           last_month_dimension_act_dl_qty: 100,
-          national_dimension_fiscal_act_dl_qty: 1000,
+          national_dimension_fiscal_act_dl_qty: 999999,
+          base_fiscal_act_dl_qty: 1000,
           fiscal_year: stat_month.slice(0, 4),
           source_rows: 1,
         }));

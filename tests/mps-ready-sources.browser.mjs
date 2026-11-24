@@ -44,7 +44,8 @@ const products = [
 ];
 function fixture({ queryId, parameters }) {
   let rows = [];
-  if (queryId.startsWith('products.')) rows = products;
+  if (queryId.startsWith('products.'))
+    rows = products.map((row) => ({ ...row, stat_period: parameters.month ?? '2026-11' }));
   if (queryId.startsWith('facts.report'))
     rows = ['A', 'B'].map((code, index) =>
       record('facts.report', {
@@ -84,7 +85,8 @@ function fixture({ queryId, parameters }) {
   if (queryId.startsWith('annual-pool.'))
     rows = ['2026-11', '2026-12', '2027-01'].map((stat_month, index) =>
       record('annual-pool.detail', {
-        belong_base: '全国',
+        belong_base: '郑州',
+        material_code: 'A',
         sub_category: '汤圆',
         stat_month,
         source_rows: 1,
@@ -111,14 +113,15 @@ function fixture({ queryId, parameters }) {
   if (queryId.startsWith('category-history.'))
     rows = parameters.months.map((month) =>
       record('category-history.detail', {
-        dimension_type: '基地+大类',
+        dimension_type: '基地+产品',
         stat_month: month,
         belong_base: '郑州',
-        dimension_value: '汤圆',
+        dimension_value: 'A',
         dimension_act_dl_qty: 100,
         last_year_dimension_act_dl_qty: 90,
         last_month_dimension_act_dl_qty: 80,
-        national_dimension_fiscal_act_dl_qty: 1000,
+        national_dimension_fiscal_act_dl_qty: 999999,
+        base_fiscal_act_dl_qty: 1000,
         fiscal_year: month.slice(0, 4),
         source_rows: 1,
       }),

@@ -20,7 +20,16 @@ export function categorySourceInputs(draft) {
       const code = history ? row['维度值'] : row['产品编码'];
       const product = match(code, base);
       if (base && base !== '全国' && code && (!history || row['维度类型'] === '基地+产品'))
-        return product.category ? [{ ...row, 基地: base, 大类: product.category }] : [];
+        return product.category
+          ? [
+              {
+                ...row,
+                基地: base,
+                大类: product.category,
+                原始来源数量: history ? row['月发货数量'] : row['数量'],
+              },
+            ]
+          : [];
       const categories =
         code && (!history || row['维度类型'] === '基地+产品')
           ? [
@@ -40,6 +49,7 @@ export function categorySourceInputs(draft) {
           ...row,
           基地: '',
           大类: category,
+          原始来源数量: history ? row['月发货数量'] : row['数量'],
           数量: null,
           月发货数量: null,
           上年同期发货数量: null,
@@ -117,6 +127,7 @@ export function categorySourceInputs(draft) {
       产品编码: row['维度值'],
       大类: row['大类'],
       数量: row['月发货数量'],
+      原始来源数量: row['原始来源数量'],
       财年: row['财年'],
       原始全国SKU财年量: row['全国维度财年发货数量'],
       基地SKU财年量: row['基地维度财年发货数量'],
@@ -125,7 +136,11 @@ export function categorySourceInputs(draft) {
       上年同期发货数量: row['上年同期发货数量'],
       上月发货数量: row['上月发货数量'],
       取数依据: '同基地SKU源财年12个月实际发货合计',
-      缺项原因: row['缺项原因'] ?? '',
+      缺项原因:
+        row['缺项原因'] ||
+        (number(row['基地维度财年发货数量']) === null
+          ? '基地SKU源财年未覆盖12个有效月份或有数量冲突'
+          : ''),
     })),
     ...annualDetails.map((row) => ({
       来源: '年度计划',
@@ -134,6 +149,7 @@ export function categorySourceInputs(draft) {
       产品编码: row['产品编码'],
       大类: row['大类'],
       数量: row['数量'],
+      原始来源数量: row['原始来源数量'],
       取数依据: '年度需求基地SKU源记录',
       缺项原因: row['缺项原因'] ?? '',
     })),
