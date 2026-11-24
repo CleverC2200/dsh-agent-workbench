@@ -946,7 +946,7 @@ export function mountCompanyUI(
                       )}
                       {(group.flat || sections[group.key] !== false) && (
                         <div className="gea-shell-nav-children">
-                          {group.entries.map(({ id, pageId, title, disabled, reason }) => (
+                          {group.entries.map(({ id, pageId, title, disabled, reason, nested }) => (
                             <button
                               key={id}
                               type="button"
@@ -958,6 +958,7 @@ export function mountCompanyUI(
                               }
                               className={
                                 'gea-shell-nav-child' +
+                                (nested ? ' is-nested' : '') +
                                 (!disabled && pageId && activePanel === pageId ? ' is-active' : '')
                               }
                               onClick={() => {

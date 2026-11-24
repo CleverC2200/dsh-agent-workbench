@@ -11,6 +11,8 @@ import {
   type ReadyNavigation,
 } from './client/desktop-navigation.tsx';
 import { ApiLogCenter } from './workbench/api-log-center.tsx';
+import { LanternDashboard } from './company/lantern-dashboard.tsx';
+import { LANTERN_DASHBOARD_ID } from './company/navigation.ts';
 import nativeCss from './client/native-pages.css';
 import apiLogCss from './workbench/api-log.css';
 const PANEL = 'gea-proof' as MainPanelId,
@@ -21,6 +23,15 @@ export function mountBusinessViews(ctx: Context) {
   const t = ctx.locale.bind('geaProof');
   ctx.inject(['businessAccount'], (scope) => {
     const ctx = scope;
+    ctx.slots.inject('main', () =>
+      ctx.agentWorkbench.registerFrame({
+        id: LANTERN_DASHBOARD_ID as MainPanelId,
+        label: () => ctx.locale.bind('companyWorkbench')('menuLanternDashboard'),
+        kind: 'local',
+        body: LanternDashboard,
+        chromeToolbar: true,
+      }),
+    );
     const identity = scope.businessAccount;
     const incoming = createNavigationSelection();
     const navigationObservation = { deadline: Date.now() + 5000, ended: false };
