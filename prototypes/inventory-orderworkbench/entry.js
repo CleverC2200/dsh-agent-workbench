@@ -1,5 +1,7 @@
 import { shippableReferenceVersion } from './historical-shippable-reference.mjs';
 import { freezePerformanceColumns } from './frozen-columns.mjs';
+import { achievementWorkbook } from './achievement-workbook.mjs';
+import { saveAchievementFile } from './achievement-export.mjs';
 import { encodeReportRequest } from './report-transfer.mjs';
 import { workbenchCellMissingReason } from './missing-reasons.mjs';
 import { createReportPersistence } from './report-persistence.mjs';
@@ -4021,6 +4023,25 @@ wbDetailOverlay.addEventListener('click', (event) => {
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !wbDetailOverlay.hidden) closeWorkbenchDetail();
+});
+document.getElementById('wbDimensionDownload').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    if (!liveConnected || !liveFacts?.complete) throw Error('当前统计周期数据尚未加载完成，请稍后重试。');
+    const label = workbenchView.querySelector('[data-wb-dimension-tab].active')?.textContent.trim() || '达成分析';
+    const dimension = workbenchPerformance[dimensionTab];
+    const tables = dimension ? [dimension.monthly, dimension.weekly] : workbenchDimensions[dimensionTab]?.tables ?? [];
+    const exportTables = tables.map(table => ({ ...table, groups: table.groups.map(group => dimension?.baseColumnIndex === 0 && group.label.startsWith('可发货天数') ? { ...group, label: `可发货天数 ${shippableDaysTarget}` } : group) }));
+    const file = achievementWorkbook({ dimension: label, period: selectedPeriodLabel(), tables: exportTables, frozenColumns: dimensionTab === 'director-performance' || dimensionTab === 'province-performance' ? 2 : 1 });
+    const result = await saveAchievementFile(file);
+    if (result !== 'cancelled') showWorkbenchToast(result === 'saved' ? `已保存 ${file.rowCount} 行表格数据。` : 'Excel 已交给客户端下载，请在保存窗口选择路径；浏览器预览按浏览器下载设置保存。');
+  } catch (error) {
+    showWorkbenchToast('下载失败：' + error.message);
+  } finally {
+    button.disabled = false;
+  }
 });
 function exportWorkbenchTasks() {
   const lines = [
