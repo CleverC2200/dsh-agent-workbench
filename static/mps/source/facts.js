@@ -483,6 +483,7 @@ export async function readShipmentInputs(cutoff, signal, priority) {
           quantities.inbound == null || passed <= 1
             ? null
             : Math.round((quantities.inbound / (passed - 1)) * (totalDays - passed)),
+        shipmentMissingAsZero: true,
         sourceDays: number(row.source_days),
         duplicateDays: number(row.duplicate_days),
       };

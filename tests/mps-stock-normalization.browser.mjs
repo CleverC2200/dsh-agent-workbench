@@ -57,6 +57,14 @@ async function mount(t, rows) {
       name: '库存验收',
       month: '2026-11',
       productSource: 'local-file',
+      products: rows.map((row) => ({
+        基地: row.base,
+        产品编码: row.code,
+        产品名称: row.name,
+        大类: row.category,
+        系列: row.series,
+        物料组: row.group,
+      })),
       shipment: {
         cutoff: '2026-10-22',
         activeSource: 'business',
