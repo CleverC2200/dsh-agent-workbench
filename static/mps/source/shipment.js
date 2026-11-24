@@ -157,6 +157,7 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
         unprepped: 0,
         daily3: 0,
         average: 0,
+        rawAverage: null,
         open: null,
         inbound: null,
         remaining: null,

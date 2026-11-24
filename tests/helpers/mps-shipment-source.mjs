@@ -35,6 +35,7 @@ export function shipmentSourceResponse(config, { queryId, parameters }, rows, cu
               duplicate_days: 0,
               transfer_date: parameters.cutoff,
               ...row,
+              raw_average: row.raw_average === undefined ? row.average : row.raw_average,
             })),
     returnedColumns: config.queries[queryId].columns,
     configVersion: 'shipment-warehouse-fixture',

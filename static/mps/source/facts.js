@@ -473,6 +473,7 @@ export async function readShipmentInputs(cutoff, signal, priority) {
         series: text(row.series),
         group: text(row.product_item),
         ...quantities,
+        rawAverage: row.raw_average === null ? null : number(row.raw_average),
         transferIn: transferIn.value,
         transferOut: transferOut.value,
         transferInSource: transferIn.source,
