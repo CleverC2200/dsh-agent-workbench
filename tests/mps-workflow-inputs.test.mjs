@@ -224,13 +224,24 @@ test('需求诊断逐类月区分大类缺输入、拆分缺依据与完整有�
   source.productRaw = [
     { material_code: 'A', target_base: '甲', replacement_material_code: 'OLD', replace_num: null },
   ];
+  const outsidePool = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(outsidePool.demandDiagnostics[0].status, 'complete');
+  assert.equal(outsidePool.demandDiagnostics[0].effectiveQuantity, 110);
+  source.products.push({ ...source.products[0], 产品编码: 'OLD', 老品编码: '' });
+  source.productRaw.push({ material_code: 'OLD', target_base: '甲' });
+  source.report.push({ 月份: source.month, 基地: '甲', 产品编码: 'OLD', 月初数量: 0 });
+  source.historyAnnual.periods[0].rows.push({ 基地: '甲', 产品编码: 'OLD', 数量: 0 });
+  snapshot.rows.push({ base: '甲', code: 'OLD', category: '点心', fin: 0, end: 0 });
   const noSplit = buildMpsWorkflow(source, null, snapshot);
   assert.equal(noSplit.demandDiagnostics[0].sourceQuantity, 110);
   assert.equal(noSplit.demandDiagnostics[0].status, 'split-basis-missing');
   assert.match(noSplit.demandDiagnostics[0].reason, /替换系数/);
   assert.deepEqual(
     noSplit.demandDiagnostics[0].firstMissing.map((row) => [row.base, row.code, row.month]),
-    [['甲', 'A', '2026-11']],
+    [
+      ['甲', 'A', '2026-11'],
+      ['甲', 'OLD', '2026-11'],
+    ],
   );
   source.categoryDemand = complete.months.map((month) => ({
     month,

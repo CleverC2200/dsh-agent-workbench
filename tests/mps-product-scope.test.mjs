@@ -157,8 +157,16 @@ test('范围对账能定位同基地替换系数冲突，不把待核的已参�
     replace_num,
   }));
   const result = buildMpsWorkflow(draft);
-  assert.equal(result.rows[0].historyQuantity, null);
+  assert.equal(result.rows[0].historyQuantity, 60);
   const row = result.productScope.rows.find((row) => row.base === '甲' && row.code === 'A');
   assert.equal(row.participating, true);
   assert.match(row.issues.join('；'), /替换系数.*冲突/);
+  draft.products.push({ ...draft.products[0], 产品编码: 'OLD', 老品编码: '' });
+  draft.productRaw.push({ target_base: '甲', material_code: 'OLD' });
+  const inPool = buildMpsWorkflow(draft);
+  assert.equal(inPool.rows.find((row) => row.code === 'A').historyQuantity, null);
+  assert.match(
+    inPool.productScope.rows.find((row) => row.base === '甲' && row.code === 'A').issues.join('；'),
+    /替换系数.*冲突/,
+  );
 });
