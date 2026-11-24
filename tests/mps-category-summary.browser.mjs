@@ -67,15 +67,16 @@ test('category monthly totals retain missing inputs and real zero, and filters m
       }));
     if (queryId.startsWith('category-history.'))
       rows = parameters.months.flatMap((stat_month) =>
-        products.map(([, dimension_value]) => ({
-          dimension_type: '基地+大类',
+        products.map(([dimension_value]) => ({
+          dimension_type: '基地+产品',
           stat_month,
           belong_base: '郑州',
           dimension_value,
           dimension_act_dl_qty: 100,
           last_year_dimension_act_dl_qty: 100,
           last_month_dimension_act_dl_qty: 100,
-          national_dimension_fiscal_act_dl_qty: 1000,
+          national_dimension_fiscal_act_dl_qty: 999999,
+          base_fiscal_act_dl_qty: 1000,
           fiscal_year: stat_month.slice(0, 4),
           source_rows: 1,
         })),
@@ -148,21 +149,11 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   const calendar = calculation.getByRole('radio', { name: '自然月', exact: true });
   await expect(calendar).toBeChecked();
   await calculation.getByRole('radio', { name: '节日推算', exact: true }).check();
-  const holiday = calculation.getByLabel('评估节日', { exact: true });
-  await expect(holiday).toHaveValue('');
+  await expect(calculation).toContainText('缺可追溯的基地SKU明细');
   await expect(
     calculation.getByRole('button', { name: '下载测算明细', exact: true }),
   ).toBeDisabled();
-  await holiday.selectOption({ label: '春节 · 2027-02-06' });
-  await expect(calculation).toContainText('预测沿用自然月：2027-03');
-  await expect(
-    matrix.getByRole('row').filter({ hasText: '甲类' }).locator('.dc-demand-amount'),
-  ).toHaveText(['150', '300', '500', '待补']);
-  const saved = await page.evaluate(() => {
-    const { localDrafts } = window.readView();
-    return localDrafts.drafts.find((entry) => entry.id === localDrafts.selected).festivalBasis;
-  });
-  assert.deepEqual(saved, { name: '春节', date: '2027-02-06' });
+  await calendar.check();
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   await expect(
     frame
@@ -171,12 +162,12 @@ test('category monthly totals retain missing inputs and real zero, and filters m
       .filter({ hasText: '甲类' })
       .getByRole('cell')
       .nth(2),
-  ).toHaveText('150');
+  ).toHaveText('100');
   await frame.getByText('有效需求计算核对', { exact: true }).click();
   const demandCheck = frame.getByRole('region', { name: '有效需求计算核对', exact: true });
   const checkRows = demandCheck.getByRole('table', { name: '逐类月需求核对', exact: true });
   const firstCheck = checkRows.getByRole('row').filter({ hasText: /^甲类2026-12/ });
-  await expect(firstCheck).toContainText('150');
+  await expect(firstCheck).toContainText('100');
   await expect(firstCheck).toContainText('完整可计算');
   const missingCheck = checkRows.getByRole('row').filter({ hasText: /^丙类2026-12/ });
   await expect(missingCheck).toContainText('大类总量未生成');
@@ -196,8 +187,8 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   const checkedFirst = checkRecords.find(
     (row) => row['大类'] === '甲类' && row['月份'] === '2026-12',
   );
-  assert.equal(Number(checkedFirst['拆分前大类需求']), 150);
-  assert.equal(Number(checkedFirst['有效大类需求']), 150);
+  assert.equal(Number(checkedFirst['拆分前大类需求']), 100);
+  assert.equal(Number(checkedFirst['有效大类需求']), 100);
   assert.equal(Number(checkedFirst['已算条数']), 1);
   assert.equal(Number(checkedFirst['待补条数']), 0);
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
@@ -207,8 +198,8 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   const reportDownload = page.waitForEvent('download');
   await frame.getByRole('button', { name: '下载产销存分层汇总及明细', exact: true }).click();
   const reportCsv = await mpsDownloadText(await (await reportDownload).path());
-  assert.match(reportCsv, /推算口径/);
-  assert.match(reportCsv, /春节/);
+  assert.match(reportCsv, /需求数量/);
+  assert.doesNotMatch(reportCsv, /春节/);
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await openCategoryCalculation(frame);
   await calendar.check();

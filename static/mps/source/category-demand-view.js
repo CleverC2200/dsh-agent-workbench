@@ -176,7 +176,7 @@ export function createCategoryDemand(
     const festivalMonths = new Set(festival?.months);
     const naturalActualMonths = result.recent.filter((month) => !festivalMonths.has(month));
     const option = festival?.selected ? festivalOptionValue(festival.selected) : '';
-    const waiting = ['loading', 'choose'].includes(festival?.status);
+    const waiting = ['loading', 'choose', 'failed'].includes(festival?.status);
     const chainColumn = festival ? '采用环比' : '年度环比';
     const calculationColumns = columns.map((name) => (name === '年度环比' ? chainColumn : name));
     const selectedRows = result.rows.filter((row) =>

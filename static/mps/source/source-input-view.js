@@ -1,6 +1,7 @@
 import { matchesCategories, createDimensionCategoryMatcher } from './category-filter.js';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { buildCategoryDemand } from './category-demand.js';
+import { categorySourceInputs } from './category-source-inputs.js';
 import { festivalDemandBasis } from './festival-demand.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createPlanRates } from './plan-rate-view.js';
@@ -62,6 +63,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
     selectedCategories = [],
   }) {
     const calculated = react.useMemo(() => buildCategoryDemand(draft), [draft]);
+    const categorySources = react.useMemo(() => categorySourceInputs(draft), [draft]);
     const endMonth = calculated.endMonth;
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = react.useState(0);
@@ -274,10 +276,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       ...basicAnomalies,
       ...checks.details.filter((row) => !row['原因'] && !row['缺项原因']),
     ];
-    const calendarHistorical =
-      current && kind === 'parameters'
-        ? draft.historicalIndicators.periods.flatMap((period) => period.rows)
-        : [];
+    const calendarHistorical = current && kind === 'parameters' ? categorySources.history : [];
     const historical =
       kind === 'parameters'
         ? festivalDemandBasis(draft, calendarHistorical).history
@@ -837,9 +836,41 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             ),
           ),
       );
+    const sourceRows = categorySources.sourceRows.filter((row) =>
+      matchesCategories(row['大类'], selectedCategories),
+    );
     return h(
       react.Fragment,
       {},
+      h(
+        'button',
+        {
+          disabled: !current || !sourceRows.length,
+          onClick: () =>
+            downloadCsv(
+              `${draft.month}-大类池内源明细.csv`,
+              [
+                '来源',
+                '月份',
+                '基地',
+                '产品编码',
+                '大类',
+                '数量',
+                '财年',
+                '原始全国SKU财年量',
+                '基地SKU财年量',
+                '财年源月份数',
+                '财年有效月份数',
+                '上年同期发货数量',
+                '上月发货数量',
+                '取数依据',
+                '缺项原因',
+              ],
+              sourceRows,
+            ),
+        },
+        '下载大类池内源明细',
+      ),
       h(
         'div',
         { className: 'dc-parameter-grid', role: 'region', 'aria-label': '系统派生口径参数' },

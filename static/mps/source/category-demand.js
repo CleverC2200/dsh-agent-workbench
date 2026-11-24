@@ -7,6 +7,7 @@ import {
 } from './source-projections.js';
 import { canonicalBaseName } from './relations.js';
 import { festivalDemandBasis } from './festival-demand.js';
+import { categorySourceInputs } from './category-source-inputs.js';
 
 const number = (value) =>
   value === '' || value == null || !Number.isFinite(Number(value)) ? null : Number(value);
@@ -248,20 +249,13 @@ export function buildCategoryDemand(draft, shipmentSnapshot, historicalFilter) {
     scopedChecks,
     ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : productMappings,
   );
-  const calendarHistory = ready(draft.historicalIndicatorsRead, draft.month)
-    ? draft.historicalIndicators.periods.flatMap((period) => (period.error ? [] : period.rows))
-    : [];
+  const categorySources = categorySourceInputs(draft);
   const {
     history: historical,
     actual: festivalActual,
     festival,
-  } = festivalDemandBasis(draft, calendarHistory);
-  const annual = ready(draft.historicalIndicatorsRead, draft.month)
-    ? (draft.historicalIndicators.annual?.rows ?? [])
-    : [];
-  const nationwide = annual.some((row) => row['基地'] === '全国')
-    ? annual.filter((row) => row['基地'] === '全国')
-    : annual;
+  } = festivalDemandBasis(draft, categorySources.history);
+  const nationwide = categorySources.annual;
   const annualGroups = new Map();
   for (const row of nationwide) {
     const key = JSON.stringify([row['月份'], row['大类']]);
@@ -384,7 +378,9 @@ export function buildCategoryDemand(draft, shipmentSnapshot, historicalFilter) {
   });
   const readIssues = (label, state) =>
     ready(state, draft.month)
-      ? []
+      ? state.error
+        ? [`${label}：${state.error}`]
+        : []
       : [
           `${label}${
             state?.month && state.month !== draft.month
@@ -417,7 +413,10 @@ export function buildCategoryDemand(draft, shipmentSnapshot, historicalFilter) {
     readIssues: {
       shipment: shipmentIssue,
       checks: readIssues('近三月实际与计划', draft.sourceChecksRead),
-      historical: readIssues('历史与年度计划', draft.historicalIndicatorsRead),
+      historical: [
+        ...readIssues('历史与年度计划', draft.historicalIndicatorsRead),
+        ...categorySources.issues,
+      ],
       submission: reportReady(draft.month)
         ? []
         : readIssues('本期销售提报', draft.reportRead?.periods?.[draft.month] ?? draft.reportRead),

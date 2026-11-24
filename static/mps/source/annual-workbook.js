@@ -1,6 +1,6 @@
 import { normalizedMonth } from './master-data.js';
 
-export function annualWorkbookTables(source, months, base, projectedSummary) {
+export function annualWorkbookTables(source, months, base, projectedSummary, sourceBases = [base]) {
   const dimensions = ['基地', '大类', '老大类', '物料组编码', '物料组名称', '物料编码', '物料名称'];
   const fields = [
     'belong_base',
@@ -14,7 +14,7 @@ export function annualWorkbookTables(source, months, base, projectedSummary) {
   const records = new Map();
   for (const row of source) {
     const month = normalizedMonth(row.stat_month);
-    if (row.belong_base !== base || !months.includes(month))
+    if (!sourceBases.includes(row.belong_base) || !months.includes(month))
       throw Error('年度明细超出当前基地或月份范围，请重新下载');
     const values = fields.map((field) => row[field] ?? '');
     const key = JSON.stringify(values);
