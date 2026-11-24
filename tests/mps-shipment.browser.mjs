@@ -24,13 +24,15 @@ async function shipment(t, month = '2026-10') {
   await frame.getByLabel('数据截止日').fill(previous.toISOString().slice(0, 7) + '-22');
   return { page, frame, table: frame.getByRole('table', { name: '本月预估发货明细' }) };
 }
-async function upload(frame, rows, prepareProducts = true) {
-  const saved = await frame
-    .locator('body')
-    .page()
-    .evaluate(() => window.readView());
-  const draft = saved.localDrafts.drafts.find((row) => row.id === saved.localDrafts.selected);
-  if (!(await frame.locator('#agent-sql-config').count()) && prepareProducts) {
+async function upload(frame, rows, valid = true) {
+  const page = frame.locator('body').page();
+  if (valid && !(await frame.locator('#agent-sql-config').count())) {
+    const draft = await page
+      .waitForFunction(() => {
+        const state = window.readView()?.localDrafts;
+        return state?.drafts.find((row) => row.id === state.selected);
+      })
+      .then((snapshot) => snapshot.jsonValue());
     const products = new Map(
       (draft.inputs.products?.rows ?? []).map((row) => [
         JSON.stringify([row['基地'], row['产品编码']]),
@@ -73,6 +75,16 @@ async function upload(frame, rows, prepareProducts = true) {
         ].join('\n'),
       ),
     });
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const state = window.readView()?.localDrafts;
+          return state?.drafts
+            .find((row) => row.id === state.selected)
+            ?.inputs.products?.rows.map((row) => JSON.stringify([row['基地'], row['产品编码']]));
+        }),
+      )
+      .toEqual([...products.keys()]);
     await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   }
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
@@ -84,6 +96,12 @@ async function upload(frame, rows, prepareProducts = true) {
         rows.map((row) => (row.split(',').length === 14 ? row + ',' : row)).join('\n'),
     ),
   });
+  if (valid)
+    await expect(
+      frame
+        .getByRole('region', { name: '发货本地核对' })
+        .getByText('本地CSV：发货核对.csv', { exact: true }),
+    ).toBeVisible();
 }
 
 test('MPS shipment totals corrected SKU forecasts and explains the SKU calculation separately', async (t) => {
@@ -230,7 +248,6 @@ test('MPS shipment keeps positive equal-weight residuals nonnegative and allocat
       (code) => `2026-09,郑州,${code},产品${code},汤圆,系列,组,22,0,0,1,0,0,1`,
     ),
   );
-  await expect(frame.getByLabel('发货数据来源', { exact: true })).toHaveValue('local-file');
   await expectShipment(table, '郑州 整月预估发货', '120');
   await expandShipmentBase(frame, '郑州');
   for (const code of ['A', 'B', 'C', 'D'])
