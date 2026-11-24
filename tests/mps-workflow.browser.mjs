@@ -195,7 +195,7 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
   const zhengzhou = detail
     .getByRole('row')
     .filter({ has: frame.getByRole('button', { name: '基地 · 郑州', exact: true }) });
-  await expect(zhengzhou.getByRole('cell').first()).toHaveText('80');
+  await expect(await columnCell(detail, zhengzhou, 'M+1 2026-12 计划提报')).toHaveText('80');
   const baseBranch = detail.getByRole('button', { name: '基地 · 郑州', exact: true });
   if ((await baseBranch.getAttribute('aria-expanded')) === 'false') await baseBranch.press('Enter');
   await detail.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).press('Enter');
@@ -236,7 +236,7 @@ test('Tab3 expands base then category, group and SKU with base-scoped totals and
   await detail.getByRole('button', { name: '基地 · 华东', exact: true }).press('Enter');
   await detail.getByRole('button', { name: '华东 大类 · 汤圆', exact: true }).press('Enter');
   const product = detail.getByRole('row').filter({ hasText: 'SKU · A 产品甲' });
-  await expect(product.getByRole('cell').first()).toHaveText('40');
+  await expect(await columnCell(detail, product, 'M+1 2026-12 计划提报')).toHaveText('40');
   const csv = await download(page, view, '下载需求拆分');
   const book = XLSX.read(csv, { type: 'string', raw: true });
   const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
@@ -315,9 +315,7 @@ test('MPS split export labels the participating shipment scope and restores full
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   const summary = view.getByRole('table', { name: '大类需求总表', exact: true });
   await expect(summary.locator('tbody tr td').nth(1)).toHaveText('300');
-  await expect(view.getByRole('region', { name: '待定单品异常', exact: true })).toContainText(
-    '参与1条，排除1条',
-  );
+  await expect(view.getByRole('region', { name: '待定单品异常', exact: true })).toHaveCount(0);
   const readExport = async () => {
     const csv = await download(page, view, '下载需求拆分');
     const book = XLSX.read(csv, { type: 'string', raw: true });
@@ -1745,14 +1743,14 @@ test('MPS processing compares both forecast months and persists fixed quantities
     processed.getByRole('columnheader', { name: '2026-11 本月预估发货（可调整）', exact: true }),
   ).toBeVisible();
   const categoryDetail = processed.locator('tbody tr').first();
-  await expect(categoryDetail.getByRole('cell').nth(0)).toHaveText('100');
-  await expect(categoryDetail.getByRole('cell').nth(1)).toHaveText('100');
+  await expect(await columnCell(processed, categoryDetail, 'M+1 2026-12 计划提报')).toHaveText(
+    '100',
+  );
   await expect(
     await columnCell(processed, categoryDetail, '2026-11 本月预估发货（可调整）'),
   ).toHaveText('300系统预估300');
   const demand = await columnCell(processed, categoryDetail, 'M+1 2026-12 需求（可调整）');
-  await expect(demand).toContainText('100');
-  await expect(demand).toContainText('已知小计');
+  await expect(demand).toHaveText('100模型预测0');
   for (const name of ['基地 · 郑州', '郑州 大类 · 汤圆', '郑州 物料组 · 组']) {
     const branch = view.getByRole('button', { name, exact: true });
     if ((await branch.getAttribute('aria-expanded')) === 'false') await branch.press('Enter');
@@ -2200,6 +2198,10 @@ test(
       await expect(cell).toContainText('15');
       await expect(cell).toContainText('已知小计 · 1项待补');
     }
+    await expect(demandTotal.locator('.wf-demand-reference')).toHaveText('模型预测15');
+    const summaryTable = view.getByRole('table', { name: '大类需求总表', exact: true });
+    const missingForecast = summaryTable.getByRole('row').filter({ hasText: '乙类' });
+    await expect(missingForecast.getByRole('cell').nth(3)).toBeEmpty();
     await expect(thirdMonthTotal).toContainText('待补');
     const subtotalCell = reportTotal;
     const valueBounds = await subtotalCell.evaluate((cell) => {
@@ -2230,14 +2232,9 @@ test(
         document.getElementById('root').style.width = '1720px';
       });
     }
-    const missing = view.getByRole('table', { name: '加工需求缺项报告', exact: true });
-    await expect(
-      missing.getByRole('row').filter({ hasText: '本期销售提报数量' }).first(),
-    ).toContainText('郑州');
-    await expect(
-      missing.getByRole('row').filter({ hasText: '本期销售提报数量' }).first(),
-    ).toContainText('B');
-    await expect(missing).toContainText('2026-12');
+    await expect(view.getByRole('region', { name: '加工需求缺项报告', exact: true })).toHaveCount(
+      0,
+    );
     await view.getByLabel('基地筛选').selectOption('华东');
     await expect(total.getByRole('rowheader')).toHaveText('当前范围合计');
     await expect(reportTotal).toHaveText('5');
@@ -2264,7 +2261,7 @@ test(
     await view.getByLabel('基地筛选').selectOption('');
     await view.getByLabel('搜索当前步骤').fill('B');
     await expect(reportTotal).toHaveText('待补');
-    await expect(demandTotal).toHaveText('待补模型预测待补');
+    await expect(demandTotal).toHaveText('待补');
     await expect(demandTotal).not.toContainText('0');
     if (process.env.MPS07_EVIDENCE_DIR) {
       await page.screenshot({ path: `${process.env.MPS07_EVIDENCE_DIR}/all-missing.png` });

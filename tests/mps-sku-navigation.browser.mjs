@@ -131,8 +131,11 @@ test('全国视角逐层汇总大类、物料组和SKU，不重复累计多月�
   await expect(frame.getByLabel('需求层级视角', { exact: true })).toBeVisible();
   await frame.getByLabel('需求层级视角', { exact: true }).selectOption('national');
   const total = table.locator('tbody tr').first();
+  const reportColumn = await table
+    .getByRole('columnheader', { name: /计划提报/ })
+    .evaluate((header) => header.cellIndex - 1);
   await expect(total.getByRole('rowheader')).toHaveText('全国合计');
-  await expect(total.getByRole('cell').nth(0)).toHaveText('120');
+  await expect(total.getByRole('cell').nth(reportColumn)).toHaveText('120');
   const category = table.getByRole('button', { name: '全国 大类 · 汤圆', exact: true });
   await expect(category).toHaveAttribute('aria-expanded', 'false');
   await category.press('Enter');
@@ -141,13 +144,13 @@ test('全国视角逐层汇总大类、物料组和SKU，不重复累计多月�
   await expect(table.getByText('SKU · A 产品甲', { exact: true })).toHaveCount(1);
   for (const name of ['大类 · 汤圆', '物料组 · G1 物料组甲', 'SKU · A 产品甲']) {
     const row = table.getByRole('row').filter({ has: frame.getByText(name, { exact: true }) });
-    await expect(row.getByRole('cell').nth(0)).toHaveText('100');
+    await expect(row.getByRole('cell').nth(reportColumn)).toHaveText('100');
   }
-  await expect(total.getByRole('cell').nth(0)).toHaveText('120');
+  await expect(total.getByRole('cell').nth(reportColumn)).toHaveText('120');
   const search = frame.getByLabel('搜索当前步骤', { exact: true });
   await search.fill('产品乙');
   await expect(table.getByText('SKU · B 产品乙', { exact: true })).toBeVisible();
-  await expect(total.getByRole('cell').nth(0)).toHaveText('20');
+  await expect(total.getByRole('cell').nth(reportColumn)).toHaveText('20');
   await search.fill('');
   await expect(category).toHaveAttribute('aria-expanded', 'true');
   await expect(group).toHaveAttribute('aria-expanded', 'true');
@@ -203,8 +206,8 @@ test('基地SKU修正后父级读取有效数量，全国汇总与明细下载�
     [40, 50],
   );
   assert.equal(skus.find((row) => row['产品编码'] === 'B')['需求数量'], '20');
-  await frame.getByText('数量调整与撤销记录（1）', { exact: true }).click();
-  await expect(frame.getByRole('table', { name: '数量调整记录', exact: true })).toContainText(
+  await frame.getByText('当前固定数量', { exact: true }).click();
+  await expect(frame.getByRole('table', { name: '当前固定数量', exact: true })).toContainText(
     '基地SKU数量复核',
   );
 });

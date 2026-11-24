@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPage, openMpsProductDetails } from './helpers/mps-page.mjs';
 import { authorPage } from './helpers/author-page.mjs';
 
 const columns =
@@ -1064,7 +1064,7 @@ test('shipment hierarchy uses current unique product categories and material cod
     return result;
   });
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
-  const products = frame.getByRole('region', { name: '产品明细', exact: true });
+  const products = await openMpsProductDetails(frame);
   await products.getByRole('button', { name: '同步产品', exact: true }).click();
   await expect(products).toContainText('3 个产品');
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();

@@ -6,7 +6,7 @@ import {
 } from './helpers/mps-shipment-source.mjs';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { mpsPage, openMpsCategoryFilter } from './helpers/mps-page.mjs';
+import { mpsPage, openMpsCategoryFilter, openMpsProductDetails } from './helpers/mps-page.mjs';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { authorPage } from './helpers/author-page.mjs';
@@ -349,14 +349,14 @@ test('产品下载遵循大类多选且不受独立文本搜索影响，清空�
     }),
     { time: '2026-11-18T12:00:00+08:00' },
   );
-  await frame.getByRole('button', { name: '同步产品', exact: true }).click();
+  const details = await openMpsProductDetails(frame);
+  await details.getByRole('button', { name: '同步产品', exact: true }).click();
   await expect(
     frame.getByRole('region', { name: '产品明细', exact: true }).locator('tbody tr'),
   ).toHaveCount(3);
   const filter = await openMpsCategoryFilter(frame);
   await filter.getByRole('checkbox', { name: '甲类', exact: true }).check();
   await filter.getByRole('checkbox', { name: '乙类', exact: true }).check();
-  const details = frame.getByRole('region', { name: '产品明细', exact: true });
   await details.getByLabel('搜索产品', { exact: true }).fill('产品A');
   await expect(details.locator('tbody tr')).toHaveCount(1);
   for (const name of ['下载', '下载产品源字段']) {

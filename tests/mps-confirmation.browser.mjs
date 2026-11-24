@@ -1,3 +1,4 @@
+import { openMpsProductDetails } from './helpers/mps-page.mjs';
 import { openCategoryCalculation } from './helpers/mps-edit.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -64,7 +65,7 @@ test('MPS product relationships stay in their local month draft and can be edite
   const { frame } = await confirmation(t);
   await createVersion(frame, '2026-12');
   await expect(frame.getByLabel('评估版本选择').locator('option:checked')).toContainText('2026-12');
-  const products = frame.getByRole('region', { name: '产品明细' });
+  const products = await openMpsProductDetails(frame);
   await products.getByLabel('每页产品条数').selectOption('25');
   await products.getByRole('button', { name: '新增产品', exact: true }).click();
   const editor = frame.getByRole('dialog', { name: '新增产品', exact: true });
@@ -114,7 +115,7 @@ test('MPS rejects reversed known replacement fields in edits and imports while p
       buffer: Buffer.from(header + '\n' + row),
     });
   await uploadProducts(',NEW1,新品甲,汤圆,系列甲,组甲,物料组甲,00123,老品甲');
-  const products = frame.getByRole('region', { name: '产品明细', exact: true });
+  const products = await openMpsProductDetails(frame);
   await products.getByRole('button', { name: '编辑 NEW1', exact: true }).click();
   const editor = frame.getByRole('dialog', { name: '修改产品', exact: true });
   await editor.getByLabel('替换物料编码', { exact: true }).fill('老品甲');
@@ -251,7 +252,7 @@ test('MPS annual grid retains July to June and unresolved business calculations 
 
 test('MPS bounds large previews without silently dropping rows and rejects an oversized replacement as a whole', async (t) => {
   const { frame } = await confirmation(t);
-  const products = frame.getByRole('region', { name: '产品明细' });
+  const products = await openMpsProductDetails(frame);
   const columns = '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称';
   const rows = Array.from(
     { length: 26 },
@@ -310,7 +311,7 @@ test('MPS starts without sample products when no source is configured and still 
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
-  const products = frame.getByRole('region', { name: '产品明细' });
+  const products = await openMpsProductDetails(frame);
   await expect(products.getByRole('row')).toHaveCount(1);
   await products.getByLabel('每页产品条数').selectOption('25');
   await expect(products.getByRole('row')).toHaveCount(1);

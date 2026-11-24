@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { expect } from '@playwright/test';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPage, openMpsProductDetails } from './helpers/mps-page.mjs';
 import * as XLSX from 'xlsx-republish';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
@@ -66,7 +66,7 @@ test('重复日报快照按SKU展示源单价并下载，缺价留空且不改�
       configVersion: 'price-snapshot-v1',
     };
   });
-  const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  const section = await openMpsProductDetails(frame);
   await expect(section).toContainText('2 个产品');
   await expect(
     section.getByRole('columnheader', { name: '未税到岸单价', exact: true }),

@@ -1601,12 +1601,13 @@ export function createWorkflow(
           },
           '产品池全国覆盖尚未取得实际证明，仅报告范围内结果',
         ),
-      h(ShipmentScopeNotice, {
-        scope: result.categoryComputation.shipmentScope,
-        month: draft.month,
-        selectedCategories: viewCategories,
-        cutoff: shipmentSnapshot?.cutoff,
-      }),
+      step !== 'process' &&
+        h(ShipmentScopeNotice, {
+          scope: result.categoryComputation.shipmentScope,
+          month: draft.month,
+          selectedCategories: viewCategories,
+          cutoff: shipmentSnapshot?.cutoff,
+        }),
       step === 'report' &&
         h(PoolExceptionReport, {
           draft,

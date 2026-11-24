@@ -1,3 +1,4 @@
+import { openMpsProductDetails } from './helpers/mps-page.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -121,7 +122,7 @@ test('MPS查询拒绝后结束加载，重试空集与读取失败分别显示',
       return denied ? 'DATA_PERMISSION_DENIED' : undefined;
     },
   });
-  const products = frame.getByRole('region', { name: '产品明细', exact: true });
+  const products = await openMpsProductDetails(frame);
   await expect(products.getByRole('button', { name: '同步中…', exact: true })).toBeDisabled();
   gate.resolve();
   await expect(products.getByRole('alert')).toHaveText('当前账号暂无数据权限');

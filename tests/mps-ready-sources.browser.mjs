@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFile, copyFile } from 'node:fs/promises';
 import * as XLSX from 'xlsx-republish';
 import { expect } from '@playwright/test';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPage, openMpsProductDetails } from './helpers/mps-page.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 import { shipmentSourceResponse, shipmentSourceRow } from './helpers/mps-shipment-source.mjs';
 
@@ -183,7 +183,7 @@ test('product replacement fields retain source columns and explain combined hist
       );
     return result;
   });
-  const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  const section = await openMpsProductDetails(frame);
   await expect(section.getByRole('columnheader', { name: '基地名称', exact: true })).toHaveCount(0);
   await expect(section).not.toContainText('源标签：汤圆');
   await expect(section.getByRole('button', { name: /^查看源字段/ })).toHaveCount(0);
@@ -569,7 +569,7 @@ test('历史窗口读取失败仍保留其他窗口已取到的月份，同一�
   await expect(dialog).toContainText('2025、2024（2年）');
 });
 
-test('同比环比异常报告保留原值、替代值及样本月份，下载与页面一致', async (t) => {
+test('大类测算展示同环比异常及替代值，基地发货源异常仅随指标下载', async (t) => {
   const { frame, page } = await mpsPage(t, config, (query) => {
     const result = fixture(query);
     if (query.queryId === 'category-history.detail')
@@ -598,9 +598,18 @@ test('同比环比异常报告保留原值、替代值及样本月份，下载�
   assert.match(csv, /2025-11.*历史环比.*99.*2025-10、2025-09、2025-08/);
   const delivery = frame.getByRole('region', { name: '基地多维发货指标', exact: true });
   await delivery.getByRole('button', { name: '展开基地多维发货指标' }).click();
-  await expect(delivery.getByRole('table').first()).toContainText('同比：基期为零或负数');
-  await delivery.getByText('同比环比异常报告（1条）', { exact: true }).click();
-  await expect(delivery).toContainText('-126.7778');
+  await expect(
+    delivery.getByRole('columnheader', { name: '同比增长率', exact: true }),
+  ).toBeVisible();
+  await expect(delivery.getByRole('columnheader', { name: '增幅异常', exact: true })).toHaveCount(
+    0,
+  );
+  await expect(delivery.locator('details[aria-label="同比环比异常报告"]')).toHaveCount(0);
+  const waitingDelivery = page.waitForEvent('download');
+  await delivery.getByRole('button', { name: '下载当前指标', exact: true }).click();
+  const deliveryCsv = await mpsDownloadText(await (await waitingDelivery).path());
+  assert.match(deliveryCsv, /同比增长率.*增幅异常/);
+  assert.match(deliveryCsv, /-126\.7778.*同比：基期为零或负数/);
 });
 
 test('identity reset cancels pending source checks even when the replacement draft reuses local-1', async (t) => {
@@ -1120,7 +1129,7 @@ test('missing current shipment keeps demand pending and exports the missing sour
   assert.doesNotMatch(csv, /NaN|Infinity/);
 });
 
-test('待定单品异常CSV和四个月部分需求沿公开页面传到后续拆分', async (t) => {
+test('需求确认导出待定单品异常，拆分页面隐藏提示且导出仍标注四个月部分需求', async (t) => {
   const { page, frame } = await mpsPage(t, config, (query) => {
     const result = fixture(query);
     if (query.queryId === 'annual-pool.detail') {
@@ -1170,9 +1179,7 @@ test('待定单品异常CSV和四个月部分需求沿公开页面传到后续�
   assert.match(csv, /产品B/);
   assert.match(csv, /已备/);
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
-  await expect(frame.getByRole('region', { name: '待定单品异常', exact: true })).toContainText(
-    '部分可计算',
-  );
+  await expect(notice).toHaveCount(0);
   const downstream = page.waitForEvent('download');
   await frame.getByRole('button', { name: '下载需求拆分', exact: true }).click();
   const workbook = XLSX.read(await readFile(await (await downstream).path()), { type: 'buffer' });
@@ -1418,6 +1425,7 @@ test('退出或切换归属时不把默认版本写回旧评估，重新归属�
     ),
   });
   const productCell = () => frame.getByRole('cell', { name: '原人工产品', exact: true });
+  await openMpsProductDetails(frame);
   await expect(productCell()).toBeVisible();
   const saved = await page.evaluate(() => window.readView().localDrafts);
   assert.equal(saved.drafts.length, 2);
@@ -1437,6 +1445,7 @@ test('退出或切换归属时不把默认版本写回旧评估，重新归属�
       event + ' must not overwrite old ownership',
     );
     await page.locator('iframe').evaluate((element) => element.setAttribute('src', element.src));
+    await openMpsProductDetails(frame);
     await expect(productCell()).toBeVisible();
     assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), saved);
   }

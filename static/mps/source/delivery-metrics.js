@@ -1,11 +1,10 @@
 import { createDimensionCategoryMatcher } from './category-filter.js';
 import { deliveryColumns } from './source-tables.js';
-import { createGrowthAnomalyReport, growthSourceAnomalies } from './growth-anomaly-report.js';
+import { growthSourceAnomalies } from './growth-anomaly-report.js';
 
 export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
-  const columns = ['月份', ...Object.values(deliveryColumns), '源记录数', '粒度状态', '增幅异常'];
-  const GrowthAnomalyReport = createGrowthAnomalyReport(react, { table, downloadCsv });
+  const columns = ['月份', ...Object.values(deliveryColumns), '源记录数', '粒度状态'];
   return function DeliveryMetrics({
     draft,
     update,
@@ -38,16 +37,6 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
         (!selectedBase || row['基地'] === selectedBase),
     );
     const read = draft.deliveryRead?.periods?.[month];
-    const flagged = rows.map((row) => {
-      const anomalies = growthSourceAnomalies([row]);
-      return {
-        anomalies,
-        row: {
-          ...row,
-          增幅异常: anomalies.map(({ metric, reason }) => `${metric}：${reason}`).join('；'),
-        },
-      };
-    });
     react.useEffect(
       () => setPage(0),
       [month, dimension, base, draft.delivery, pageSize, selectedCategories],
@@ -155,8 +144,14 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
               onClick: () =>
                 downloadCsv(
                   `基地多维发货-${month}.csv`,
-                  [...columns, '读取状态'],
-                  flagged.map(({ row }) => ({ ...row, 读取状态: read?.status ?? 'unread' })),
+                  [...columns, '增幅异常', '读取状态'],
+                  rows.map((row) => ({
+                    ...row,
+                    增幅异常: growthSourceAnomalies([row])
+                      .map(({ metric, reason }) => `${metric}：${reason}`)
+                      .join('；'),
+                    读取状态: read?.status ?? 'unread',
+                  })),
                 ),
             },
             '下载当前指标',
@@ -180,11 +175,7 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
           {},
           `当前筛选${rows.length}条，数量与比率不作跨行合计；重复键保留源记录数和粒度状态。`,
         ),
-        h(GrowthAnomalyReport, { draft, anomalies: flagged.flatMap(({ anomalies }) => anomalies) }),
-        table(
-          columns,
-          flagged.slice(page * pageSize, (page + 1) * pageSize).map(({ row }) => row),
-        ),
+        table(columns, rows.slice(page * pageSize, (page + 1) * pageSize)),
         h(
           'div',
           { className: 'dc-pagination' },

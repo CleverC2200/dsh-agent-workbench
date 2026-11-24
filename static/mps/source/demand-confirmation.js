@@ -1130,7 +1130,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [selectedCategories, setSelectedCategories] = react.useState([]);
     const [productPage, setProductPage] = react.useState(0);
     const [productPageSize, setProductPageSize] = react.useState(10);
-    const [productsExpanded, setProductsExpanded] = react.useState(true);
     const [productDetails, setProductDetails] = react.useState(null);
     const [masterOpen, setMasterOpen] = react.useState(false);
     const [errors, setErrors] = react.useState({});
@@ -2382,7 +2381,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           onEditingChange: setAdjusting,
         }),
       ),
-      ['process', 'masterdata'].includes(step) &&
+      step === 'masterdata' &&
         h(ProductScopeReport, { key: draft.id, result: workflowResult, selectedCategories }),
       h(
         'div',
@@ -2435,13 +2434,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         }),
         h(
           'section',
-          { 'aria-label': '产品明细', className: 'dc-card dc-products' },
+          { 'aria-label': '产品明细', className: 'dc-card' },
           h(
-            'div',
-            { className: 'dc-card-head dc-product-toolbar' },
+            'details',
+            { className: 'dc-products' },
             h(
-              'h3',
-              {},
+              'summary',
+              { className: 'dc-product-summary' },
               '产品明细',
               h(
                 'span',
@@ -2450,391 +2449,390 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               ),
             ),
             h(
-              'button',
-              {
-                'aria-label': `${productsExpanded ? '收起' : '展开'}产品明细`,
-                'aria-expanded': productsExpanded,
-                onClick: () => setProductsExpanded(!productsExpanded),
-              },
-              productsExpanded ? '收起' : '展开',
-            ),
-            hasMpsSource() &&
+              'div',
+              { className: 'dc-card-head dc-product-toolbar' },
+              hasMpsSource() &&
+                h(
+                  'button',
+                  { disabled: busy.products, onClick: () => sync('products') },
+                  busy.products ? '同步中…' : '同步产品',
+                ),
+              draft.productSource.startsWith('demo') &&
+                h('span', { className: 'dc-demo' }, '演示数据'),
+              h('input', {
+                className: 'dc-product-search',
+                value: search,
+                'aria-label': '搜索产品',
+                placeholder: '搜索编码 / 名称 / 基地 / 替换品',
+                onChange: (event) => {
+                  setSearch(event.target.value);
+                  setProductPage(0);
+                },
+              }),
               h(
                 'button',
-                { disabled: busy.products, onClick: () => sync('products') },
-                busy.products ? '同步中…' : '同步产品',
-              ),
-            draft.productSource.startsWith('demo') &&
-              h('span', { className: 'dc-demo' }, '演示数据'),
-            h('input', {
-              className: 'dc-product-search',
-              value: search,
-              'aria-label': '搜索产品',
-              placeholder: '搜索编码 / 名称 / 基地 / 替换品',
-              onChange: (event) => {
-                setSearch(event.target.value);
-                setProductPage(0);
-              },
-            }),
-            h(
-              'button',
-              {
-                disabled: !draft.products.length,
-                onClick: () =>
-                  downloadCsv(
-                    draft.productSource.startsWith('demo')
-                      ? '产品关系-演示数据.csv'
-                      : '产品关系.csv',
-                    [...productColumns, '未税到岸单价'],
-                    categoryProducts.map(({ display }) => display),
-                  ),
-              },
-              '下载',
-            ),
-            h(
-              'button',
-              {
-                disabled: !draft.productRaw?.length,
-                onClick: () =>
-                  downloadCsv(
-                    '产品源字段.csv',
-                    productSourceColumns,
-                    productSourceRows(draft.productRaw).filter((row) =>
-                      matchesCategories(row['大类'], selectedCategories),
+                {
+                  disabled: !draft.products.length,
+                  onClick: () =>
+                    downloadCsv(
+                      draft.productSource.startsWith('demo')
+                        ? '产品关系-演示数据.csv'
+                        : '产品关系.csv',
+                      [...productColumns, '未税到岸单价'],
+                      categoryProducts.map(({ display }) => display),
                     ),
-                  ),
-              },
-              '下载产品源字段',
-            ),
-            h(Upload, {
-              label: '选择产品关系CSV或Excel',
-              accept:
-                '.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-              read: (file) => read('products', file),
-            }),
-            h(
-              'button',
-              {
-                className: 'dc-primary',
-                onClick: () => {
-                  resetEditor();
-                  setEditorOpen(true);
                 },
-              },
-              '新增产品',
-            ),
-          ),
-          errors.products && h('p', { role: 'alert' }, errors.products),
-          draft.productPrices?.status === 'ready' &&
-            h(
-              'p',
-              { className: 'dc-muted' },
-              '单价来源 agents_scm_cust_jxc_ai_daliy_d.cif_price，按SKU关联源值；缺价留空。',
-            ),
-          draft.productPrices?.error &&
-            h('p', { role: 'alert' }, `单价读取失败：${draft.productPrices.error}`),
-          h(
-            'div',
-            { className: 'dc-table-scroll', hidden: !productsExpanded },
-            h(
-              'table',
-              { className: 'dc-product-table' },
-              h(
-                'colgroup',
-                {},
-                [9, 16, 7, 8, 8, 10, 9, 9, 9, 8, 10].map((width, index) =>
-                  h('col', { key: index, style: { width: width + '%' } }),
-                ),
+                '下载',
               ),
               h(
-                'thead',
-                {},
+                'button',
+                {
+                  disabled: !draft.productRaw?.length,
+                  onClick: () =>
+                    downloadCsv(
+                      '产品源字段.csv',
+                      productSourceColumns,
+                      productSourceRows(draft.productRaw).filter((row) =>
+                        matchesCategories(row['大类'], selectedCategories),
+                      ),
+                    ),
+                },
+                '下载产品源字段',
+              ),
+              h(Upload, {
+                label: '选择产品关系CSV或Excel',
+                accept:
+                  '.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                read: (file) => read('products', file),
+              }),
+              h(
+                'button',
+                {
+                  className: 'dc-primary',
+                  onClick: () => {
+                    resetEditor();
+                    setEditorOpen(true);
+                  },
+                },
+                '新增产品',
+              ),
+            ),
+            errors.products && h('p', { role: 'alert' }, errors.products),
+            draft.productPrices?.status === 'ready' &&
+              h(
+                'p',
+                { className: 'dc-muted' },
+                '单价来源 agents_scm_cust_jxc_ai_daliy_d.cif_price，按SKU关联源值；缺价留空。',
+              ),
+            draft.productPrices?.error &&
+              h('p', { role: 'alert' }, `单价读取失败：${draft.productPrices.error}`),
+            h(
+              'div',
+              { className: 'dc-table-scroll' },
+              h(
+                'table',
+                { className: 'dc-product-table' },
                 h(
-                  'tr',
+                  'colgroup',
                   {},
-                  [
-                    '物料编码',
-                    '物料名称',
-                    '大类',
-                    '系列',
-                    '物料组编码',
-                    '物料组名称',
-                    '替换物料编码',
-                    '替换品名称',
-                    '未税到岸单价',
-                    '新品标记',
-                    '操作',
-                  ].map((column) => h('th', { key: column }, column)),
+                  [9, 16, 7, 8, 8, 10, 9, 9, 9, 8, 10].map((width, index) =>
+                    h('col', { key: index, style: { width: width + '%' } }),
+                  ),
                 ),
-              ),
-              h(
-                'tbody',
-                {},
-                filteredProducts
-                  .slice(productPage * productPageSize, (productPage + 1) * productPageSize)
-                  .map(({ row, index, display, children, inherited }) =>
-                    h(
-                      'tr',
-                      { key: index },
-                      [
-                        ...productColumns.filter((column) => column !== '基地'),
-                        '未税到岸单价',
-                        '新品标记',
-                      ].map((column) =>
-                        h(
-                          'td',
-                          {
-                            key: column,
-                            'aria-label': ['产品名称', '产品编码'].includes(column)
-                              ? display[column] || '-'
-                              : undefined,
-                            title: inherited.includes(column)
-                              ? '同物料组SKU的唯一源值，仅用于展示'
-                              : row[column] || '',
-                          },
-                          column === '产品编码' && children.length
-                            ? h(
-                                'button',
-                                {
-                                  className: 'dc-link',
-                                  onClick: () => setProductDetails(index),
-                                  'aria-label': `查看物料组 ${row['物料组']} 的${children.length}个SKU`,
-                                },
-                                `物料组 · ${children.length} SKU`,
-                              )
-                            : column === '产品编码' && row['产品编码']
+                h(
+                  'thead',
+                  {},
+                  h(
+                    'tr',
+                    {},
+                    [
+                      '物料编码',
+                      '物料名称',
+                      '大类',
+                      '系列',
+                      '物料组编码',
+                      '物料组名称',
+                      '替换物料编码',
+                      '替换品名称',
+                      '未税到岸单价',
+                      '新品标记',
+                      '操作',
+                    ].map((column) => h('th', { key: column }, column)),
+                  ),
+                ),
+                h(
+                  'tbody',
+                  {},
+                  filteredProducts
+                    .slice(productPage * productPageSize, (productPage + 1) * productPageSize)
+                    .map(({ row, index, display, children, inherited }) =>
+                      h(
+                        'tr',
+                        { key: index },
+                        [
+                          ...productColumns.filter((column) => column !== '基地'),
+                          '未税到岸单价',
+                          '新品标记',
+                        ].map((column) =>
+                          h(
+                            'td',
+                            {
+                              key: column,
+                              'aria-label': ['产品名称', '产品编码'].includes(column)
+                                ? display[column] || '-'
+                                : undefined,
+                              title: inherited.includes(column)
+                                ? '同物料组SKU的唯一源值，仅用于展示'
+                                : row[column] || '',
+                            },
+                            column === '产品编码' && children.length
                               ? h(
                                   'button',
                                   {
                                     className: 'dc-link',
-                                    'aria-label': `查看产品 ${row['产品编码']} 的源字段`,
                                     onClick: () => setProductDetails(index),
+                                    'aria-label': `查看物料组 ${row['物料组']} 的${children.length}个SKU`,
                                   },
-                                  display[column],
+                                  `物料组 · ${children.length} SKU`,
                                 )
-                              : column === '新品标记'
-                                ? (display[column] ?? '')
-                                : display[column] || '-',
-                        ),
-                      ),
-                      h(
-                        'td',
-                        { className: 'dc-row-actions' },
-                        h(
-                          'button',
-                          {
-                            className: 'dc-link',
-                            'aria-label': `编辑 ${row['产品编码']}`,
-                            onClick: () => {
-                              setProduct({ ...row });
-                              setEditing(index);
-                              setError('');
-                              setEditorOpen(true);
-                            },
-                          },
-                          '编辑',
+                              : column === '产品编码' && row['产品编码']
+                                ? h(
+                                    'button',
+                                    {
+                                      className: 'dc-link',
+                                      'aria-label': `查看产品 ${row['产品编码']} 的源字段`,
+                                      onClick: () => setProductDetails(index),
+                                    },
+                                    display[column],
+                                  )
+                                : column === '新品标记'
+                                  ? (display[column] ?? '')
+                                  : display[column] || '-',
+                          ),
                         ),
                         h(
-                          'button',
-                          {
-                            className: 'dc-link dc-danger',
-                            'aria-label': `删除 ${row['产品编码']}`,
-                            onClick: () => {
-                              editProducts(
-                                draft.products.filter((_row, rowIndex) => rowIndex !== index),
-                              );
-                              resetEditor();
+                          'td',
+                          { className: 'dc-row-actions' },
+                          h(
+                            'button',
+                            {
+                              className: 'dc-link',
+                              'aria-label': `编辑 ${row['产品编码']}`,
+                              onClick: () => {
+                                setProduct({ ...row });
+                                setEditing(index);
+                                setError('');
+                                setEditorOpen(true);
+                              },
                             },
-                          },
-                          '删除',
+                            '编辑',
+                          ),
+                          h(
+                            'button',
+                            {
+                              className: 'dc-link dc-danger',
+                              'aria-label': `删除 ${row['产品编码']}`,
+                              onClick: () => {
+                                editProducts(
+                                  draft.products.filter((_row, rowIndex) => rowIndex !== index),
+                                );
+                                resetEditor();
+                              },
+                            },
+                            '删除',
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                ),
               ),
             ),
-          ),
-          productsExpanded &&
             !filteredProducts.length &&
-            h(
-              'p',
-              { className: 'dc-empty' },
-              search
-                ? `没有匹配“${search}”的产品`
-                : !hasMpsSource() && draft.productSource === 'business-unread'
-                  ? '月主计划数据源尚未装载，产品列表为空。可重新打开页面，或上传本地核对文件。'
-                  : '未提供产品关系。',
-            ),
-          h(
-            'div',
-            { className: 'dc-card-foot', hidden: !productsExpanded },
-            h(
-              'span',
-              {},
-              draft.productSource.startsWith('demo')
-                ? '产品关系起始于原型15条样例，包含2条新品。仅作演示与本地核对，不自动继承老品历史数量。'
-                : `${draft.files.products ?? '本地维护'} · 当前隔离版本的产品关系`,
-            ),
-            h(
-              'select',
-              {
-                'aria-label': '每页产品条数',
-                value: productPageSize,
-                onChange: (event) => setProductPageSize(Number(event.target.value)),
-              },
-              [10, 25, 50].map((size) => h('option', { key: size, value: size }, `每页${size}条`)),
-            ),
-            filteredProducts.length > productPageSize &&
               h(
-                react.Fragment,
+                'p',
+                { className: 'dc-empty' },
+                search
+                  ? `没有匹配“${search}”的产品`
+                  : !hasMpsSource() && draft.productSource === 'business-unread'
+                    ? '月主计划数据源尚未装载，产品列表为空。可重新打开页面，或上传本地核对文件。'
+                    : '未提供产品关系。',
+              ),
+            h(
+              'div',
+              { className: 'dc-card-foot' },
+              h(
+                'span',
                 {},
-                h(
-                  'span',
-                  {},
-                  `共${filteredProducts.length}条，每页${productPageSize}条，第${productPage + 1}页`,
-                ),
-                h(
-                  'button',
-                  { disabled: !productPage, onClick: () => setProductPage(productPage - 1) },
-                  '上一页',
-                ),
-                h(
-                  'button',
-                  {
-                    disabled: (productPage + 1) * productPageSize >= filteredProducts.length,
-                    onClick: () => setProductPage(productPage + 1),
-                  },
-                  '下一页',
+                draft.productSource.startsWith('demo')
+                  ? '产品关系起始于原型15条样例，包含2条新品。仅作演示与本地核对，不自动继承老品历史数量。'
+                  : `${draft.files.products ?? '本地维护'} · 当前隔离版本的产品关系`,
+              ),
+              h(
+                'select',
+                {
+                  'aria-label': '每页产品条数',
+                  value: productPageSize,
+                  onChange: (event) => setProductPageSize(Number(event.target.value)),
+                },
+                [10, 25, 50].map((size) =>
+                  h('option', { key: size, value: size }, `每页${size}条`),
                 ),
               ),
-          ),
-          editorOpen &&
-            h(
-              Dialog,
-              {
-                title: editing === null ? '新增产品' : '修改产品',
-                close: resetEditor,
-                footer: h(
+              filteredProducts.length > productPageSize &&
+                h(
                   react.Fragment,
                   {},
-                  h('button', { onClick: resetEditor }, '取消'),
+                  h(
+                    'span',
+                    {},
+                    `共${filteredProducts.length}条，每页${productPageSize}条，第${productPage + 1}页`,
+                  ),
                   h(
                     'button',
-                    { className: 'dc-primary', onClick: saveProduct },
-                    editing === null ? '新增' : '保存',
+                    { disabled: !productPage, onClick: () => setProductPage(productPage - 1) },
+                    '上一页',
+                  ),
+                  h(
+                    'button',
+                    {
+                      disabled: (productPage + 1) * productPageSize >= filteredProducts.length,
+                      onClick: () => setProductPage(productPage + 1),
+                    },
+                    '下一页',
                   ),
                 ),
-              },
+            ),
+            editorOpen &&
               h(
-                'div',
-                { className: 'dc-product-form' },
-                productColumns
-                  .filter((column) => editing !== null || column !== '基地')
-                  .map((column) =>
+                Dialog,
+                {
+                  title: editing === null ? '新增产品' : '修改产品',
+                  close: resetEditor,
+                  footer: h(
+                    react.Fragment,
+                    {},
+                    h('button', { onClick: resetEditor }, '取消'),
                     h(
-                      'label',
-                      { key: column },
-                      column === '基地'
-                        ? '基地名称'
-                        : column === '老品编码'
-                          ? '替换物料编码'
-                          : column === '老品名称'
-                            ? '替换品名称'
-                            : column,
-                      h('input', {
-                        'aria-label':
-                          column === '基地'
-                            ? '基地名称'
-                            : column === '老品编码'
-                              ? '替换物料编码'
-                              : column === '老品名称'
-                                ? '替换品名称'
-                                : column,
-                        value: product[column],
-                        onChange: (event) =>
-                          setProduct({ ...product, [column]: event.target.value }),
-                      }),
+                      'button',
+                      { className: 'dc-primary', onClick: saveProduct },
+                      editing === null ? '新增' : '保存',
                     ),
                   ),
-              ),
-              editing === null &&
+                },
+                h(
+                  'div',
+                  { className: 'dc-product-form' },
+                  productColumns
+                    .filter((column) => editing !== null || column !== '基地')
+                    .map((column) =>
+                      h(
+                        'label',
+                        { key: column },
+                        column === '基地'
+                          ? '基地名称'
+                          : column === '老品编码'
+                            ? '替换物料编码'
+                            : column === '老品名称'
+                              ? '替换品名称'
+                              : column,
+                        h('input', {
+                          'aria-label':
+                            column === '基地'
+                              ? '基地名称'
+                              : column === '老品编码'
+                                ? '替换物料编码'
+                                : column === '老品名称'
+                                  ? '替换品名称'
+                                  : column,
+                          value: product[column],
+                          onChange: (event) =>
+                            setProduct({ ...product, [column]: event.target.value }),
+                        }),
+                      ),
+                    ),
+                ),
+                editing === null &&
+                  h(
+                    'p',
+                    { className: 'dc-muted' },
+                    '默认适用五基地：郑州、遂平、华东、华南、西南。全国只保留一条产品关系，需求按现有基地数据分配。',
+                  ),
+                error && h('p', { role: 'alert' }, error),
                 h(
                   'p',
                   { className: 'dc-muted' },
-                  '默认适用五基地：郑州、遂平、华东、华南、西南。全国只保留一条产品关系，需求按现有基地数据分配。',
+                  '历史量为同基地同财年的当前SKU自身历史加替换品历史×替换系数。缺源行不覆盖另一品已有历史，同码只计一次、不递归；已有源行数量空值仍待补，原始记录保留。',
                 ),
-              error && h('p', { role: 'alert' }, error),
+              ),
+          ),
+          selectedProduct &&
+            h(
+              Dialog,
+              {
+                title: '产品源字段与物料组SKU',
+                className: 'dc-source-detail',
+                close: () => setProductDetails(null),
+                footer: h('button', { onClick: () => setProductDetails(null) }, '关闭'),
+              },
+              h(
+                'p',
+                {},
+                `${selectedProduct.row['产品名称']} · 物料组 ${selectedProduct.row['物料组'] || '-'}`,
+              ),
               h(
                 'p',
                 { className: 'dc-muted' },
-                '历史量为同基地同财年的当前SKU自身历史加替换品历史×替换系数。缺源行不覆盖另一品已有历史，同码只计一次、不递归；已有源行数量空值仍待补，原始记录保留。',
+                '替换物料编码、替换品名称分别读取源表的替换编码及替换品名称。物料组分类和系列只在子SKU源值唯一时展示，多值分别列出。',
               ),
+              table(
+                ['字段', '源值'],
+                [
+                  { 字段: '源产品标签', 源值: selectedProduct.labels.join(' / ') || '-' },
+                  {
+                    字段: '源替换物料编码',
+                    源值: selectedProduct.replacementCodes.join(' / ') || '-',
+                  },
+                  {
+                    字段: '源替换品名称',
+                    源值: selectedProduct.replacementNames.join(' / ') || '-',
+                  },
+                  { 字段: '子SKU源分类', 源值: selectedProduct.categoryValues.join(' / ') || '-' },
+                  { 字段: '子SKU源系列', 源值: selectedProduct.seriesValues.join(' / ') || '-' },
+                  { 字段: '事实候选基地', 源值: selectedProduct.candidateBases.join(' / ') || '-' },
+                ],
+              ),
+              selectedProduct.children.length > 0 &&
+                table(
+                  [
+                    '产品编码',
+                    '产品名称',
+                    '源分类',
+                    '源系列',
+                    '源产品标签',
+                    '源替换物料编码',
+                    '源替换品名称',
+                  ],
+                  selectedProduct.children.map((index) => {
+                    const child = productViews[index];
+                    return {
+                      产品编码: child.row['产品编码'],
+                      产品名称: child.row['产品名称'],
+                      源分类: child.row['大类'],
+                      源系列: child.row['系列'],
+                      源产品标签: child.labels.join(' / '),
+                      源替换物料编码: child.replacementCodes.join(' / '),
+                      源替换品名称: child.replacementNames.join(' / '),
+                    };
+                  }),
+                ),
+              h(
+                'p',
+                { className: 'dc-muted' },
+                '以下为最新统计月份的源记录。历史合计量＝同基地当前SKU自身历史量＋替换品历史量×替换系数；净重为每个计量单位的重量。缺值保留为空，不按0计算。',
+              ),
+              table(productSourceColumns, selectedProduct.sourceDetails),
             ),
         ),
-        selectedProduct &&
-          h(
-            Dialog,
-            {
-              title: '产品源字段与物料组SKU',
-              className: 'dc-source-detail',
-              close: () => setProductDetails(null),
-              footer: h('button', { onClick: () => setProductDetails(null) }, '关闭'),
-            },
-            h(
-              'p',
-              {},
-              `${selectedProduct.row['产品名称']} · 物料组 ${selectedProduct.row['物料组'] || '-'}`,
-            ),
-            h(
-              'p',
-              { className: 'dc-muted' },
-              '替换物料编码、替换品名称分别读取源表的替换编码及替换品名称。物料组分类和系列只在子SKU源值唯一时展示，多值分别列出。',
-            ),
-            table(
-              ['字段', '源值'],
-              [
-                { 字段: '源产品标签', 源值: selectedProduct.labels.join(' / ') || '-' },
-                {
-                  字段: '源替换物料编码',
-                  源值: selectedProduct.replacementCodes.join(' / ') || '-',
-                },
-                { 字段: '源替换品名称', 源值: selectedProduct.replacementNames.join(' / ') || '-' },
-                { 字段: '子SKU源分类', 源值: selectedProduct.categoryValues.join(' / ') || '-' },
-                { 字段: '子SKU源系列', 源值: selectedProduct.seriesValues.join(' / ') || '-' },
-                { 字段: '事实候选基地', 源值: selectedProduct.candidateBases.join(' / ') || '-' },
-              ],
-            ),
-            selectedProduct.children.length > 0 &&
-              table(
-                [
-                  '产品编码',
-                  '产品名称',
-                  '源分类',
-                  '源系列',
-                  '源产品标签',
-                  '源替换物料编码',
-                  '源替换品名称',
-                ],
-                selectedProduct.children.map((index) => {
-                  const child = productViews[index];
-                  return {
-                    产品编码: child.row['产品编码'],
-                    产品名称: child.row['产品名称'],
-                    源分类: child.row['大类'],
-                    源系列: child.row['系列'],
-                    源产品标签: child.labels.join(' / '),
-                    源替换物料编码: child.replacementCodes.join(' / '),
-                    源替换品名称: child.replacementNames.join(' / '),
-                  };
-                }),
-              ),
-            h(
-              'p',
-              { className: 'dc-muted' },
-              '以下为最新统计月份的源记录。历史合计量＝同基地当前SKU自身历史量＋替换品历史量×替换系数；净重为每个计量单位的重量。缺值保留为空，不按0计算。',
-            ),
-            table(productSourceColumns, selectedProduct.sourceDetails),
-          ),
         h(Annual, {
           selectedCategories,
           draft,

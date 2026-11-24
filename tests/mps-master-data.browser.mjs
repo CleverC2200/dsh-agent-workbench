@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPage, openMpsProductDetails } from './helpers/mps-page.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const product = Object.fromEntries(
@@ -48,7 +48,7 @@ function fixture({ queryId, parameters }) {
 }
 test('MPS reads governed products and annual demand, preserves missing dimensions and queries every source by name', async (t) => {
   const { frame, calls } = await livePage(t, fixture);
-  const products = frame.getByRole('region', { name: '产品明细', exact: true });
+  const products = await openMpsProductDetails(frame);
   await expect(products).toContainText('源产品甲');
   await expect(products.locator('.dc-demo')).toHaveCount(0);
   await expect(products.locator('tbody tr').first().locator('td').first()).toHaveText('-');
@@ -89,7 +89,7 @@ test('MPS product sync restores a locally deleted product and keeps edits when t
     }
     return fixture(query);
   });
-  const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  const section = await openMpsProductDetails(frame);
   await expect(section.getByRole('button', { name: '删除 001', exact: true })).toBeVisible();
   await section.getByRole('button', { name: '删除 001', exact: true }).click();
   await expect(section.locator('tbody tr')).toHaveCount(1);
@@ -130,7 +130,7 @@ test('MPS denies without falling back to samples and discards a late response af
     }
     return fixture(query);
   });
-  const products = frame.getByRole('region', { name: '产品明细', exact: true });
+  const products = await openMpsProductDetails(frame);
   await expect(products.getByRole('alert')).toBeVisible();
   await expect(products.locator('tbody tr')).toHaveCount(0);
   deny = false;
@@ -235,7 +235,7 @@ test('MPS keeps national and base annual quantities separate, preserves zero and
   await expect(section).not.toContainText('100');
 });
 
-test('MPS product details start with ten rows and keep pagination aligned with filters', async (t) => {
+test('MPS product details start collapsed, open with the keyboard and keep pagination aligned with filters', async (t) => {
   const records = Array.from({ length: 56 }, (_, index) => ({
     ...product,
     product_item: String(index).padStart(6, '0'),
@@ -249,6 +249,13 @@ test('MPS product details start with ten rows and keep pagination aligned with f
     return fixture(query);
   });
   const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  const toggle = section.locator(':scope > details > summary');
+  await expect(toggle).toBeVisible();
+  await expect(section.locator('table')).toBeHidden();
+  await expect(section.getByRole('button', { name: '同步产品', exact: true })).toHaveCount(0);
+  await expect(section.getByLabel('搜索产品')).toBeHidden();
+  await toggle.press('Enter');
+  await expect(section.locator('table')).toBeVisible();
   await expect(section.locator('tbody tr')).toHaveCount(10);
   await expect(section.getByLabel('每页产品条数')).toHaveValue('10');
   await section.getByRole('button', { name: '下一页', exact: true }).click();
@@ -263,10 +270,9 @@ test('MPS product details start with ten rows and keep pagination aligned with f
   await section.getByLabel('搜索产品').fill('产品55');
   await expect(section.locator('tbody tr')).toHaveCount(1);
   await expect(section.locator('tbody tr')).toContainText('产品55');
-  const toggle = section.getByRole('button', { name: '收起产品明细', exact: true });
   await toggle.click();
   await expect(section.locator('table')).toBeHidden();
-  await section.getByRole('button', { name: '展开产品明细', exact: true }).click();
+  await toggle.click();
   await expect(section.locator('tbody tr')).toBeVisible();
   await expect(section.getByLabel('产品数据来源', { exact: true })).toHaveCount(0);
   await expect(section.getByRole('button', { name: 'CSV模板', exact: true })).toHaveCount(0);
@@ -358,7 +364,7 @@ test('最新产品源按基地标签展示并导出原始小数，全国关系�
     if (query.queryId === 'products.detail') return { ...fixture(query), rows: records };
     return fixture(query);
   });
-  const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  const section = await openMpsProductDetails(frame);
   await expect(section.locator('tbody tr')).toHaveCount(1);
   await expect(section).toContainText('部分基地新品');
   await section.getByRole('button', { name: '查看产品 001 的源字段', exact: true }).click();

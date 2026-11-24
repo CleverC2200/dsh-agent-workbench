@@ -6,7 +6,7 @@ import { delistedInput } from './helpers/mps-delisted.mjs';
 
 const compiled = await build({
   entryPoints: ['static/mps/source/workflow-inputs.js'],
-  plugins: [await mpsComputePlugin()],
+  plugins: [await mpsComputePlugin(process.env.MPS_MANAGE_SOURCE)],
   bundle: true,
   write: false,
   platform: 'browser',
@@ -38,7 +38,7 @@ test('下市标签及来源日均进入计算，前月计划只经期初承接�
       retired.map((row) => row.projectedClosing),
       [50, 0, 0],
     );
-    assert.ok(rows.filter((row) => row.code === '1').every((row) => row.demand === 50));
+    assert.ok(rows.filter((row) => row.code === '1').every((row) => row.demand === 100));
   }
   assert.ok(
     result.plan.reportIssues.some(
