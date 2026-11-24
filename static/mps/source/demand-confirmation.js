@@ -333,7 +333,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h('h2', {}, title),
         h('button', { onClick: close, 'aria-label': '关闭弹窗' }, '关闭'),
       ),
-      h('div', { className: 'dc-dialog-body' }, children),
+      h(
+        'div',
+        { className: 'dc-dialog-body' },
+        h('div', { className: 'dc-dialog-content' }, children),
+      ),
       h('div', { className: 'dc-dialog-footer' }, footer),
     );
   }

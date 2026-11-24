@@ -724,6 +724,8 @@
 .dc-dialog-body {
   min-height: 0;
   overflow: auto;
+}
+.dc-dialog-content {
   padding: 20px;
 }
 .dc-dialog-body .dc-table-scroll {
