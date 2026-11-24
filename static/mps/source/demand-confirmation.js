@@ -185,6 +185,12 @@ async function downloadWorkbook(name, tables) {
   downloadFile(name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bytes);
 }
 export function downloadCsv(name, columns, rows) {
+  if (
+    rows.some((row) =>
+      columns.some((column) => typeof row[column] === 'string' && row[column].length > 32767),
+    )
+  )
+    return downloadCsvLegacy(name.replace(/\.xlsx$/i, '.csv'), columns, rows);
   return downloadWorkbook(name.replace(/\.csv$/i, '.xlsx'), [{ name: '数据', columns, rows }]);
 }
 const integer = new Intl.NumberFormat('zh-CN', {
