@@ -203,3 +203,51 @@ test('主数据弹窗嵌套表格保留吸顶、键盘横滚和固定下载操�
   await master.press('Escape');
   await expect(master).toHaveCount(0);
 });
+
+test('键盘打开弹窗后按Escape或关闭按钮，焦点回到仍存在的触发按钮', async (t) => {
+  const { frame } = await fixture(t);
+  for (const title of ['池外销售提报', '新建评估版本']) {
+    const trigger = frame.getByRole('button', {
+      name: title === '池外销售提报' ? '池外销售提报，45 条' : title,
+      exact: true,
+    });
+    const dialog = frame.getByRole('dialog', { name: title, exact: true });
+    for (const method of ['Escape', '关闭弹窗']) {
+      await trigger.focus();
+      await trigger.press('Enter');
+      await expect(dialog).toBeVisible();
+      if (title === '新建评估版本') await dialog.getByLabel('版本名称', { exact: true }).focus();
+      else await dialog.locator('.dc-table-scroll').focus();
+      if (method === 'Escape') await dialog.press('Escape');
+      else await dialog.getByRole('button', { name: method, exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+    }
+  }
+});
+
+test('弹窗卸载不抢走父窗口或后来打开弹窗的焦点', async (t) => {
+  const { page, frame } = await fixture(t);
+  const trigger = frame.getByRole('button', { name: '新建评估版本', exact: true });
+  const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
+  const close = dialog.getByRole('button', { name: '关闭弹窗', exact: true });
+  await trigger.focus();
+  await trigger.press('Enter');
+  const composer = page.getByRole('textbox', { name: 'Core草稿接口fixture', exact: true });
+  await composer.focus();
+  await close.dispatchEvent('click');
+  await expect(dialog).toHaveCount(0);
+  await expect(composer).toBeFocused();
+
+  await trigger.focus();
+  await trigger.press('Enter');
+  await frame.getByRole('button', { name: '页面说明', exact: true }).dispatchEvent('click');
+  const help = frame.getByRole('dialog', { name: '页面说明', exact: true });
+  const helpClose = help.getByRole('button', { name: '关闭弹窗', exact: true });
+  await expect(helpClose).toBeFocused();
+  await close.dispatchEvent('click');
+  await expect(dialog).toHaveCount(0);
+  await expect(helpClose).toBeFocused();
+  await help.press('Escape');
+  await expect(help).toHaveCount(0);
+});

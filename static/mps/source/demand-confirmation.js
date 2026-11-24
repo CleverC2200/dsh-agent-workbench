@@ -312,9 +312,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
   });
   function Dialog({ title, children, footer, close, className = '' }) {
     const element = react.useRef();
-    react.useEffect(() => {
-      element.current.showModal();
-      return () => element.current?.close();
+    react.useLayoutEffect(() => {
+      const dialog = element.current;
+      dialog.showModal();
+      return () => {
+        const owner = dialog.ownerDocument;
+        if (owner.hasFocus() && dialog.contains(owner.activeElement)) dialog.close();
+      };
     }, []);
     return h(
       'dialog',
