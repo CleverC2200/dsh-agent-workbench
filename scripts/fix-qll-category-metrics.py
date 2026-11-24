@@ -8,6 +8,7 @@ import copy
 from pathlib import Path
 import sqlglot
 from sqlglot import exp
+from sqlglot.optimizer.pushdown_projections import pushdown_projections
 
 ROOT = Path(__file__).resolve().parents[1]
 PATH = ROOT / 'business/inventory-qll/sql.config.json'
@@ -15,7 +16,12 @@ PATH = ROOT / 'business/inventory-qll/sql.config.json'
 def expression(sql):
     return sqlglot.parse_one('SELECT ' + sql, read='postgres').expressions[0]
 
-def patch(sql):
+def compact_base_category_query(sql):
+    tree = sqlglot.parse_one(sql, read='postgres')
+    compact = pushdown_projections(tree).sql()
+    return min(sql, compact, key=len)
+
+def patch(sql, *, add_base_target_daily=True):
     tree = sqlglot.parse_one(sql, read='postgres')
     changed = False
     base_sources = set()
@@ -32,7 +38,7 @@ def patch(sql):
             if fields['daily'].this.sql() != 'r.daily_demand':
                 fields['daily'].replace(expression('r.daily_demand AS daily'))
                 changed = True
-            if 'target_daily' not in fields:
+            if add_base_target_daily and 'target_daily' not in fields:
                 select.select('r.daily_demand AS target_daily', append=True, copy=False)
                 changed = True
         elif isinstance(source, exp.Column) and source.table == 'r' and source.name == 'warehouseid':
@@ -115,7 +121,10 @@ def update(config):
     for query_id in ['category-tree.base','snapshot.category-tree.base','category-tree.customer',
                      'category-tree.branch','snapshot.category-tree.branch','summary.first-screen','summary.bootstrap']:
         query = config['queries'][query_id]
-        sql = patch(query['request']['sql'])
+        is_raw_base = query_id == 'category-tree.base'
+        sql = patch(query['request']['sql'], add_base_target_daily=not is_raw_base)
+        if is_raw_base:
+            sql = compact_base_category_query(sql)
         if query_id in ['summary.first-screen','summary.bootstrap']:
             sql = re.sub(r'\bCOUNT\s*\(\s*\*\s*\)', 'COUNT(1)', sql, flags=re.I)
         query['request']['sql'] = sql

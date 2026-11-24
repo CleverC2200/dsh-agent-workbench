@@ -9,6 +9,29 @@ from sqlglot import exp
 ROOT = Path(__file__).resolve().parents[1]
 
 class QllCategoryMetrics(unittest.TestCase):
+    def test_plan_availability_keeps_zero_and_requires_consistent_values_per_key(self):
+        config = json.loads((ROOT / 'business/inventory-qll/sql.config.json').read_text())
+        query = config['queries']['calendar.target_plan_versions']['request']['sql']
+        db = sqlite3.connect(':memory:')
+        self.addCleanup(db.close)
+        db.execute("""CREATE TABLE agents_scm_goods_inventory_turnover_data_m (
+            year_month, inventory_version, belong_base, material_code, avg_daily_planned_demand,
+            main_sales_plan_v1, transfer_out_plan_v1, main_sales_plan_adj, transfer_out_plan_adj,
+            roll_sales_plan, transfer_out_plan_roll)""")
+        records = [
+            ('2026-12-01', '月初', '郑州', 'no-plan', None, None, None, None, None, None, None),
+            ('2026-12-01', '滚动', '郑州', 'zero', 0, None, None, None, None, None, None),
+            ('2026-12-01', '滚动', '郑州', 'zero', 0, None, None, None, None, None, None),
+            ('2026-12-01', '滚动', '郑州', 'conflict', 2, None, None, None, None, None, None),
+            ('2026-12-01', '滚动', '郑州', 'conflict', 3, None, None, None, None, 30, 0),
+            ('2026-12-01', '滚动', '郑州', 'from-component', None, None, None, None, None, 30, 0),
+            ('2026-12-01', '滚动', '郑州', 'incomplete', None, None, None, None, None, 30, None),
+            ('2026-11-01', '纠偏', '郑州', 'previous', 4, None, None, None, None, None, None),
+        ]
+        db.executemany('INSERT INTO agents_scm_goods_inventory_turnover_data_m VALUES (?,?,?,?,?,?,?,?,?,?,?)', records)
+        rows = db.execute(query, {'gea_p1': '2026-12-01'}).fetchall()
+        self.assertEqual(rows, [('2026-12-01', '月初', 0), ('2026-12-01', '滚动', 2)])
+
     def test_raw_branch_organization_keeps_ninety_day_risk_boundary(self):
         config = json.loads((ROOT / 'business/inventory-qll/sql.config.json').read_text())
         tree = sqlglot.parse_one(config['queries']['branch-structure.groups']['request']['sql'], read='postgres')
