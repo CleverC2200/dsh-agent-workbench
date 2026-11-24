@@ -5164,13 +5164,26 @@
       .wb-performance-table {
         width: 100%;
         min-width: 1120px;
-        border-collapse: collapse;
+        border-collapse: separate;
+        border-spacing: 0;
         table-layout: auto;
         text-align: left;
         font-size: 11px;
       }
       .wb-performance-table.wide {
         min-width: 1320px;
+      }
+      .wb-performance-table [data-frozen-column] {
+        position: sticky;
+        z-index: 1;
+      }
+      .wb-performance-table thead [data-frozen-column] {
+        z-index: 3;
+      }
+      .wb-province-table thead [data-frozen-column] {
+        width: 160px;
+        min-width: 160px;
+        max-width: 160px;
       }
       .wb-performance-table th,
       .wb-performance-table td {

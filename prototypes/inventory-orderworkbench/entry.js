@@ -1,4 +1,5 @@
 import { shippableReferenceVersion } from './historical-shippable-reference.mjs';
+import { freezePerformanceColumns } from './frozen-columns.mjs';
 import { encodeReportRequest } from './report-transfer.mjs';
 import { workbenchCellMissingReason } from './missing-reasons.mjs';
 import { createReportPersistence } from './report-persistence.mjs';
@@ -2691,12 +2692,14 @@ function renderWorkbenchRegionCustomerDetail(regionIndex) {
   return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>锁定期调整商品数量</th><th>有效商品数量</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户订单明细</td></tr>'}</tbody></table></div>`;
 }
 function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex, scrollRows = 0) {
+  const frozenCount = dimensionTab === 'director-performance' || dimensionTab === 'province-performance' ? 2 : 1;
+  const frozen = index => index < frozenCount ? ` data-frozen-column="${index}" style="left:var(--frozen-left-${index},0px)"` : '';
   const groups = table.groups.map(group => baseColumnIndex === 0 && group.label.startsWith('可发货天数')
     ? { ...group, label: `可发货天数 ${shippableDaysTarget}` } : group);
   const firstHeader = groups
-    .map((group) =>
+    .map((group, index) =>
       group.rowspan
-        ? `<th scope="col" rowspan="${groups.some((item) => !item.rowspan) ? 2 : 1}">${escapeHtml(group.label)}</th>`
+        ? `<th${frozen(index)} scope="col" rowspan="${groups.some((item) => !item.rowspan) ? 2 : 1}">${escapeHtml(group.label)}</th>`
         : `<th scope="colgroup" colspan="${group.columns.length}">${escapeHtml(group.label)}</th>`,
     )
     .join('');
@@ -2721,9 +2724,9 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex, s
               value.state && value.state !== 'good'
                 ? `<span class="wb-performance-marker ${escapeHtml(value.state)}" aria-label="${value.state === 'warning' ? '关注' : '超出参考线'}">${value.state === 'warning' ? '!' : '●'}</span>`
                 : '';
-            return `<td${title} class="${value.state ? `performance-${escapeHtml(value.state)}` : ''}">${marker}${escapeHtml(value.text)}</td>`;
+            return `<td${frozen(columnIndex)}${title} class="${value.state ? `performance-${escapeHtml(value.state)}` : ''}">${marker}${escapeHtml(value.text)}</td>`;
           }
-          return `<td${title}>${escapeHtml(unmapped?'归属待补全':String(value))}</td>`;
+          return `<td${frozen(columnIndex)}${title}>${escapeHtml(unmapped?'归属待补全':String(value))}</td>`;
         })
         .join('');
       return `<tr>${cells}</tr>`;
@@ -2732,7 +2735,7 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex, s
   const empty = rows.length
     ? ''
     : `<tr><td class="wb-performance-empty" colspan="${headings.length}">${escapeHtml(table.emptyText || (table.loading ? '加载中…' : '当前基地筛选下暂无数据'))}</td></tr>`;
-  const tableClass = `wb-performance-table ${table.groups.length > 5 ? 'wide' : ''}`;
+  const tableClass = `wb-performance-table ${table.groups.length > 5 ? 'wide' : ''}${dimensionTab === 'province-performance' ? ' wb-province-table' : ''}`;
   return `<div class="wb-performance-table-wrap${scrollRows ? ' wb-province-scroll' : ''}"${scrollRows ? ` data-scroll-rows="${scrollRows}"` : ''} role="region" aria-label="${escapeHtml(table.title)}表格，可${scrollRows ? '纵向及' : ''}横向滚动" tabindex="0"><table class="${tableClass}"><thead><tr>${firstHeader}</tr>${secondHeader ? `<tr>${secondHeader}</tr>` : ''}</thead><tbody>${body || empty}</tbody></table></div>`;
 }
 function renderWorkbenchUnmetCards(sectionTitle, items, emptyText) {
@@ -2857,6 +2860,7 @@ function renderWorkbenchPerformance(dimension) {
           ? renderWorkbenchUnmetCards('应责总监未达成项：原因分析与改善措施', getWorkbenchUnmetItems('director'), '当前暂无应责总监未达成事项。') + renderWorkbenchDirectorNotes()
           : '';
   panel.innerHTML = `<section class="wb-performance-period"><h3>${escapeHtml(dimension.monthly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.monthly, '', dimension.baseColumnIndex)}</section><section class="wb-performance-period"><h3>${escapeHtml(dimension.weekly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.weekly, '', dimension.baseColumnIndex)}</section>${bottomSection}<p class="wb-performance-note">当前授权范围；环比同比比较同长度已完成周期。*表示可判定样本或样本差，覆盖率见悬浮，不代表全量指标。“—”表示无有效计算依据。共同责任分别展示，不相加。</p>`;
+  freezePerformanceColumns(panel);
 }
 function renderWorkbenchDimensions() {
   const panel = document.getElementById('wbDimensionPanel');
@@ -2883,6 +2887,7 @@ function renderWorkbenchDimensions() {
   const dimension = workbenchDimensions[dimensionTab];
   if (dimensionTab === 'province-performance') {
     panel.innerHTML = dimension.tables.map((table) => `<section class="wb-performance-period"><h3>${escapeHtml(table.title)}</h3>${renderWorkbenchPerformanceTable(table)}</section>`).join('') + renderWorkbenchUnmetCards('省区未达成项：原因分析与改善措施', getWorkbenchUnmetItems('province'), '当前暂无省区未达成事项。') + `<p class="wb-performance-note">${escapeHtml(dimension.periodNote)}。本期为月累计，本周按所选周内已结束日期；环比、同比沿用同长度比较期。件数为商品数量，改单笔数为客户＋原订单去重数。综合排名按本期作废率＋改单率降序排列，两项分母不同时分别注明。${dimension.unrankedCount ? `另有${dimension.unrankedCount}个省区综合值不可计算，保留在末尾显示。` : ''}原因占比以该省区本期已确认作废件数为分母；空白、冲突或未配置分类归入未明确。*表示样本或暂算，详见悬浮说明。${dimension.reasonsStatus === 'error' ? '<button type="button" data-wb-province-reasons-retry>重新读取作废原因</button>' : ''}${dimension.ordersStatus === 'error' ? '<button type="button" data-wb-province-retry>重新读取改单笔数</button>' : ''}</p>`;
+    freezePerformanceColumns(panel);
     for (const wrap of panel.querySelectorAll('[data-scroll-rows]')) {
       const table = wrap.querySelector('table');
       const rows = [...table.tBodies[0].rows].slice(0, Number(wrap.dataset.scrollRows));
