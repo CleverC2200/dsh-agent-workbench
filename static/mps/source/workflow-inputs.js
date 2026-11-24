@@ -530,7 +530,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       ],
       rows: (period.rows ?? []).map((row) => ({
         month: period.month,
-        base: text(row['基地']),
+        base: canonicalBaseName(row['基地']),
         code: text(row['产品编码']),
         quantity: number(row['数量']),
       })),

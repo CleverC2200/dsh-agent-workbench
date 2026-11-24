@@ -10,6 +10,10 @@ export const historyColumns = [
   '计算用历史数量',
   '补0状态',
   '历史分类',
+  '历史占比',
+  '销售提报占比',
+  '历史占比处理',
+  '历史占比调整说明',
   '来源状态',
   '实际处理',
   '来源',
@@ -63,6 +67,17 @@ export function historyExportRows(rows, context, period, includeMonths = true) {
         计算用历史数量: row.historyQuantity,
         补0状态: row.historyAudit?.zeroFilled ? '缺失数量补0' : '原始有效数量',
         历史分类: row.historyAudit?.classification,
+        历史占比: row.historyShare,
+        销售提报占比: row.reportShare,
+        历史占比处理: row.historyAudit?.shareZeroed
+          ? '最近三个月确认零发货，历史占比归0'
+          : row.missing.historyShare.length
+            ? '历史占比待核'
+            : '按有效历史拆分',
+        历史占比调整说明: [
+          ...(row.coefficientFallback ?? []).filter((reason) => /^(历史SKU|最近三个)/.test(reason)),
+          ...row.missing.historyShare,
+        ].join('；'),
         来源状态: `${statusText(row.historyAudit.sourceStatus)}${row.historyAudit.zeroFilled ? '，缺失数量补0' : ''}`,
         实际处理:
           row.historyQuantity === null
