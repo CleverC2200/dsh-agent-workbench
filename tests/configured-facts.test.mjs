@@ -32,6 +32,9 @@ const planCountQuery =
 const input = { asOf: '2026-10-15', customer: '20141461' };
 function source(config, adapt = () => {}) {
   const calls = [];
+  const versionQuery = config.queries['calendar.target_plan_versions']
+    ? 'calendar.target_plan_versions'
+    : 'calendar.target_versions';
   const execute = async (_request, call) => {
     calls.push(call);
     const q = config.queries[call.queryId];
@@ -42,15 +45,15 @@ function source(config, adapt = () => {}) {
       configVersion: 'one',
     };
     if (q.resultColumns.includes('total')) result.rows = [{ total: 1 }];
-    if (call.queryId === 'calendar.target_versions')
-      result.rows = [{ month: '2026-10-01', inventory_version: '纠偏' }];
+    if (call.queryId === versionQuery)
+      result.rows = [{ month: '2026-10-01', inventory_version: '纠偏', usable_plan_rows: 1 }];
     if (call.queryId === 'source.stock-date') result.rows = [{ day: '2026-10-14' }];
     if (['source.health-date', 'source.branch-stock-date'].includes(call.queryId))
       result.rows = [{ day: '2026-10-15' }];
     await adapt(call, result, calls);
     return result;
   };
-  return { execute, calls };
+  return { execute, calls, versionQuery };
 }
 
 test('missing stock or age domains and unselected customer do not query a substitute source', async () => {
@@ -119,10 +122,10 @@ test('FC planned daily demand uses the selected calendar month length, including
 test('next-month targets keep the actual current-month inventory snapshot', async () => {
   for (const agent of ['fc', 'qll']) {
     const io = source(configs[agent], (call, result) => {
-      if (call.queryId === 'calendar.target_versions')
+      if (['calendar.target_versions', 'calendar.target_plan_versions'].includes(call.queryId))
         result.rows = [
-          { month: '2026-10-01', inventory_version: '纠偏' },
-          { month: '2026-11-01', inventory_version: '滚动' },
+          { month: '2026-10-01', inventory_version: '纠偏', usable_plan_rows: 1 },
+          { month: '2026-11-01', inventory_version: '滚动', usable_plan_rows: 1 },
         ];
     });
     await readConfiguredFacts(configs[agent], 'base', { asOf: '2026-10-30' }, io);
@@ -335,7 +338,7 @@ test('empty filters verify the count again without reading unnecessary detail or
     assert.deepEqual(result.rows, []);
     assert.deepEqual(
       io.calls.map((c) => c.queryId),
-      ['calendar.target_versions', 'source.stock-date', 'inventory.count', 'inventory.count'],
+      [io.versionQuery, 'source.stock-date', 'inventory.count', 'inventory.count'],
     );
   }
 });

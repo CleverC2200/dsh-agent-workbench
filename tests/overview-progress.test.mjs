@@ -110,10 +110,10 @@ for (const agent of ['qll', 'dealer'])
     const job = readConfiguredOverview(c, '2026-10-19', '', {
       onProgress: (p) => progress.push(p),
       execute: async (_, o) => {
-        if (o.queryId === 'calendar.target_versions')
+        if (['calendar.target_versions', 'calendar.target_plan_versions'].includes(o.queryId))
           return {
             configVersion: 'v1',
-            rows: [{ month: '2026-10-01', inventory_version: '月初' }],
+            rows: [{ month: '2026-10-01', inventory_version: '月初', usable_plan_rows: 1 }],
           };
         if (o.queryId === slow) await new Promise((r) => (finish = r));
         return overviewReply(c, o.queryId);
@@ -154,6 +154,11 @@ test('full-chain company view skips customer facts and coalesces identical healt
     viewIds,
     execute: async (_, options) => {
       calls.push(options.queryId);
+      if (options.queryId === 'calendar.target_plan_versions')
+        return {
+          configVersion: 'v1',
+          rows: [{ month: '2026-10-01', inventory_version: '月初', usable_plan_rows: 1 }],
+        };
       return {
         configVersion: 'v1',
         rows: [

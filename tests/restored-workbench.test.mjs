@@ -39,8 +39,8 @@ function source(c, adapt = () => {}) {
       if (/^source\.(?:stock|health|branch-stock)-date$/.test(call.queryId))
         r.rows = [{ day: '2026-10-14' }];
       if (call.queryId === 'source.dealer-stock-date') r.rows = [{ day: '2026-09-22' }];
-      if (call.queryId === 'calendar.target_versions')
-        r.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
+      if (['calendar.target_versions', 'calendar.target_plan_versions'].includes(call.queryId))
+        r.rows = [{ month: '2026-10-01', inventory_version: '月初', usable_plan_rows: 1 }];
       adapt(call, r);
       return r;
     },
@@ -52,7 +52,7 @@ test('overview uses whole-scope aggregates without count or detail round trips',
     await readConfiguredOverview(configs[a], '2026-10-15', '', io);
     assert.ok(
       io.calls.every((c) =>
-        /^calendar\.target_versions$|^overview\.(?:quick-stock|orders-by-pickup)$|summary|\.overview$|\.cards$|\.inventory$|source\.(?:(?:dealer-|branch-)?stock|health)-date/.test(
+        /^calendar\.target_(?:plan_)?versions$|^overview\.(?:quick-stock|orders-by-pickup)$|summary|\.overview$|\.cards$|\.inventory$|source\.(?:(?:dealer-|branch-)?stock|health)-date/.test(
           c.queryId,
         ),
       ),
