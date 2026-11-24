@@ -216,6 +216,8 @@ export function FcConfiguredList(
   const [targetMessage, setTargetMessage] = useState('');
   const [targetLoading, setTargetLoading] = useState(false);
   const [targetAddresses, setTargetAddresses] = useState<{ code: string; name: string }[]>([]);
+  const selectedAddressCode =
+    targetAddresses.find(({ code }) => code === dmsFields.addressCode)?.code ?? '';
   const targetRequest = useRef<AbortController | null>(null);
   const loadedTargetScope = useRef<string | null>(null);
   const readDmsTarget = async (warehouse: string, addressCode = '') => {
@@ -224,7 +226,6 @@ export function FcConfiguredList(
     targetRequest.current = task;
     setTargetLoading(true);
     setTargetMessage('正在读取收货信息…');
-    setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
     try {
       const target = z
         .object({
@@ -238,15 +239,15 @@ export function FcConfiguredList(
           message: z.string(),
         })
         .parse(
-          await call('branch-dms', {
-            operation: 'resolve-target',
-            warehouseCode: warehouse,
-            addressCode,
-          }),
+          await call(
+            'branch-dms',
+            { operation: 'resolve-target', warehouseCode: warehouse, addressCode },
+            { signal: task.signal },
+          ),
         );
       if (task.signal.aborted) return;
       if (target.warehouseCode !== warehouse) throw Error('主数据分仓范围不一致');
-      setDmsFields(target.fields);
+      if (Object.values(target.fields).some(Boolean)) setDmsFields(target.fields);
       setTargetAddresses(target.addresses);
       setTargetMessage(target.message);
       setConsumptionReviewed(false);
@@ -905,7 +906,9 @@ export function FcConfiguredList(
         Object.entries(dmsFields).map(([key, value]) => [key, value.trim()]),
       );
       if (Object.values(fields).some((value) => !value))
-        throw Error('请先选择有效收货地址，等待收货信息自动带入');
+        throw Error('请填写客户、收货地址和提货点编码');
+      if (Object.values(fields).some((value) => !/^[A-Za-z0-9_-]{1,64}$/.test(value)))
+        throw Error('编码可填写字母、数字、短横线或下划线，最长64位');
       const order = {
         ...fields,
         ...(remarks ? { orderRemarks: remarks } : {}),
@@ -1516,15 +1519,17 @@ export function FcConfiguredList(
                 </p>
               )}
               {dialog === 'export' && hasDmsItems && (
-                <fieldset className="fc-dms-fields" disabled={busy || Boolean(dmsReceipt)}>
+                <fieldset
+                  className="fc-dms-fields"
+                  disabled={busy || targetLoading || Boolean(dmsReceipt)}
+                >
                   <legend>DMS 暂存信息</legend>
                   {targetAddresses.length > 1 && (
                     <label className="fc-dms-address-choice">
                       收货地址
                       <select
                         aria-label="收货地址"
-                        value={dmsFields.addressCode}
-                        disabled={targetLoading}
+                        value={selectedAddressCode}
                         onChange={(event) => {
                           setConsumptionReviewed(false);
                           void readDmsTarget(exportWarehouse, event.target.value);
@@ -1548,19 +1553,35 @@ export function FcConfiguredList(
                   ).map(([field, label]) => (
                     <label key={field}>
                       {label}
-                      <input aria-label={label} value={dmsFields[field]} readOnly />
+                      <input
+                        aria-label={label}
+                        aria-describedby="fc-dms-codes-help"
+                        name={field}
+                        type="text"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        maxLength={64}
+                        required
+                        value={dmsFields[field]}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setDmsFields((current) => ({ ...current, [field]: value }));
+                          setConsumptionReviewed(false);
+                        }}
+                      />
                     </label>
                   ))}
                   <p role="status">{targetMessage}</p>
                   <button
                     type="button"
-                    disabled={targetLoading}
-                    onClick={() => void readDmsTarget(exportWarehouse, dmsFields.addressCode)}
+                    onClick={() => void readDmsTarget(exportWarehouse, selectedAddressCode)}
                   >
                     重新读取收货信息
                   </button>
-                  <p>
-                    数量单位：件；默认速冻、配送、不拼车、同意缺货分批到货。请核对提货点与所选分仓。
+                  <p id="fc-dms-codes-help">
+                    三项编码可修改，暂存前会核验所选分仓的登记组合。数量单位为件，默认速冻、配送、不拼车、同意缺货分批到货。
                   </p>
                 </fieldset>
               )}

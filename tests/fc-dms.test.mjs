@@ -229,7 +229,7 @@ test('branch confirmation sends documented order, retains draft on failure, and 
     ]) {
       const input = document.querySelector(`[aria-label="${label}"]`);
       assert.equal(input.value, value);
-      assert.equal(input.readOnly, true);
+      assert.equal(input.readOnly, false);
     }
     await click('确认暂存至DMS');
     assert.equal(calls.length, 0);
@@ -308,7 +308,7 @@ test('branch confirmation sends documented order, retains draft on failure, and 
     ]) {
       const input = document.querySelector(`[aria-label="${label}"]`);
       assert.equal(input.value, value);
-      assert.equal(input.readOnly, true);
+      assert.equal(input.readOnly, false);
     }
     let release;
     globalThis.dmsFixture.call = async (_method, payload) => {
@@ -429,18 +429,20 @@ test('confirmation opens before a slow read; cancellation, errors and retry neve
   }
 });
 
-test('named address choices fill readonly codes and stale identity results cannot overwrite them', async () => {
+test('named address choices fill editable codes and stale identity results cannot overwrite them', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let late;
   let masterRequests = 0;
+  let targetReadFails = false;
   globalThis.dmsFixture = {
     rows: [...rows, { ...rows[0], warehouse_code: 'W2' }],
     call: async (_method, p) => {
       masterRequests++;
       assert.equal(p.operation, 'resolve-target');
+      if (targetReadFails) throw Error('主数据读取超时');
       if (p.warehouseCode === 'W2')
         return new Promise((r) => {
           late = r;
@@ -484,7 +486,7 @@ test('named address choices fill readonly codes and stale identity results canno
       await tick();
     });
     for (const label of ['客户编码', '收货地址编码', '提货点编码'])
-      assert.equal(document.querySelector(`[aria-label="${label}"]`).readOnly, true);
+      assert.equal(document.querySelector(`[aria-label="${label}"]`).readOnly, false);
     const address = document.querySelector('[aria-label="收货地址"]');
     assert.equal(address.value, '');
     assert.equal(address.options[2].text, '收货地点二');
@@ -517,6 +519,25 @@ test('named address choices fill readonly codes and stale identity results canno
     await changeQuantity('3');
     assert.equal(masterRequests, loaded);
     assert.equal(document.querySelector('[aria-label="收货地址编码"]').value, 'A2');
+    const pickup = document.querySelector('[aria-label="提货点编码"]');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(
+        pickup,
+        '07',
+      );
+      pickup.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    targetReadFails = true;
+    await act(async () => {
+      [...document.querySelectorAll('button')]
+        .find((button) => button.textContent === '重新读取收货信息')
+        .click();
+      await tick();
+    });
+    assert.match(document.body.textContent, /主数据读取超时/);
+    assert.equal(pickup.value, '07');
+    assert.equal(document.querySelector('[aria-label="收货地址编码"]').value, 'A2');
+    targetReadFails = false;
     await act(async () => {
       warehouse.value = 'W2';
       warehouse.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
@@ -609,12 +630,20 @@ test('direct DMS preflight submits without GEA persistence and keeps feedback be
         };
       if (payload.operation === 'preflight') {
         preflightCalls++;
+        assert.deepEqual(
+          [payload.order.addressCode, payload.order.customerCode, payload.order.pupCode],
+          ['A2', 'C2', '02'],
+        );
         await new Promise((resolve) => {
           finishPreflight = resolve;
         });
         return { ready: true, scope: 'dms-direct' };
       }
       if (payload.operation === 'submit') {
+        assert.deepEqual(
+          [payload.order.addressCode, payload.order.customerCode, payload.order.pupCode],
+          ['A2', 'C2', '02'],
+        );
         sent.push(payload);
         if (!succeed) throw Error('DMS连接失败，未取得可确认回执');
         return { orderCode: 'DMS-DIRECT', aiPreOrderCode: payload.order.aiPreOrderCode };
@@ -647,6 +676,20 @@ test('direct DMS preflight submits without GEA persistence and keeps feedback be
     await act(async () => {
       button('提交').click();
       await new Promise((r) => setTimeout(r, 20));
+    });
+    await act(async () => {
+      for (const [label, value] of [
+        ['收货地址编码', 'A2'],
+        ['客户编码', 'C2'],
+        ['提货点编码', '02'],
+      ]) {
+        const input = document.querySelector(`[aria-label="${label}"]`);
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(
+          input,
+          value,
+        );
+        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      }
     });
     await act(async () => {
       const submit = button('确认暂存至DMS');
