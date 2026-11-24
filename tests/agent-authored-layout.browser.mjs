@@ -1497,7 +1497,7 @@ test('AQKC overview fits five compact cards in a wide row and adapts without cli
   });
   const grid = frame.locator('[data-overview-cards="aqkc"]');
   await expect(grid.locator('article')).toHaveCount(5);
-  const basis = grid.locator('details');
+  const basis = grid.locator('article').filter({ hasText: '当前库存' }).locator('details');
   await expect(basis.locator('p')).not.toBeVisible();
   await basis.locator('summary').click();
   await expect(basis.locator('p')).toBeVisible();
