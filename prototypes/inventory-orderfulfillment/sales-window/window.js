@@ -213,11 +213,14 @@ async function request(path, options = {}) {
 function status() {
   const pending = state?.status === 'pending' && state?.permissions?.canAct === true;
   deferDatePicker.sync(pending && !inflight && mode === 'defer');
+  if (mode === 'defer' && pending && state?.editor?.deferOmsAvailable !== true)
+    element('notice').textContent =
+      state?.editor?.reason || 'OMS暂缓改期尚未启用，请联系管理员核对';
   element('submit').hidden = mode !== 'defer' || !pending;
   element('submit').disabled =
     inflight ||
     !pending ||
-    (mode === 'defer' && deferDays() === null) ||
+    (mode === 'defer' && (deferDays() === null || state?.editor?.deferOmsAvailable !== true)) ||
     (mode === 'confirm' && !rateReady(state?.snapshot.satisfactionRate));
 
   if (state?.previewOnly === true) {
@@ -229,7 +232,10 @@ function status() {
     element('result').hidden = false;
     element('result').textContent =
       d?.action_id === 'defer_shipment'
-        ? '已保存暂缓决定，截止：' + d.deferred_until
+        ? (state?.editor?.modificationAction === 'defer_shipment' &&
+          state?.editor?.modificationState === 'succeeded'
+            ? 'OMS暂缓改期成功，交期：'
+            : '已保存暂缓决定，截止：') + d.deferred_until
         : d?.action_id === 'confirm_shipment'
           ? '已保存销售确认决定'
           : state?.status === 'processing'
@@ -517,7 +523,7 @@ element('submit').onclick = async () => {
     actionId: mode === 'confirm' ? 'confirm_shipment' : 'defer_shipment',
     expectedVersion: state.version,
     nonce,
-    input: mode === 'defer' ? { deferDays: deferDays() } : {},
+    input: mode === 'defer' ? { deliveryDate: element('days').value } : {},
   };
   try {
     const receipt = await request('/action', {
@@ -525,8 +531,11 @@ element('submit').onclick = async () => {
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf },
       body: JSON.stringify(submitted),
     });
-    if (!['accepted', 'already_resolved'].includes(receipt.status))
-      throw Error('处理状态：' + receipt.status + '，请重新核对订单后操作');
+    if (
+      !['accepted', 'already_resolved'].includes(receipt.status) ||
+      (mode === 'defer' && (receipt.omsExecuted !== true || receipt.orderModified !== true))
+    )
+      throw Error(receipt.message || 'OMS暂缓改期尚未确认成功，请核对处理结果，勿重复提交');
     element('notice').textContent = '';
     await load();
   } catch (error) {

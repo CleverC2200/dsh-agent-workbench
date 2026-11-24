@@ -8,7 +8,11 @@ const scripts =
   (await readFile(new URL('order-editor.js', source), 'utf8')) +
   '\n' +
   (await readFile(new URL('window.js', source), 'utf8'));
-async function setup(now = '2026-11-23T08:00:00Z') {
+async function setup(
+  now = '2026-11-23T08:00:00Z',
+  capability = true,
+  receipt = { status: 'accepted', omsExecuted: true, orderModified: true },
+) {
   const dom = new JSDOM(html, {
     runScripts: 'outside-only',
     url: 'https://fixture.invalid/window/test?view=defer',
@@ -25,6 +29,7 @@ async function setup(now = '2026-11-23T08:00:00Z') {
   const actions = [];
   const state = {
     status: 'pending',
+    editor: { deferOmsAvailable: capability },
     permissions: { canAct: true },
     version: 'v1',
     csrf: 'csrf',
@@ -40,7 +45,7 @@ async function setup(now = '2026-11-23T08:00:00Z') {
   dom.window.fetch = async (url, options = {}) => {
     if (url.endsWith('/action')) {
       actions.push(JSON.parse(options.body));
-      return { ok: true, json: async () => ({ status: 'accepted' }) };
+      return { ok: true, json: async () => receipt };
     }
     return { ok: true, json: async () => structuredClone(state) };
   };
@@ -84,7 +89,8 @@ test('choosing a day commits only on confirmation and does not save a deferral',
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(actions.length, 1);
     assert.equal(actions[0].actionId, 'defer_shipment');
-    assert.equal(actions[0].input.deferDays, 7);
+    assert.equal(actions[0].input.deliveryDate, input.max);
+    assert.equal(actions[0].input.deferDays, undefined);
   } finally {
     dom.window.close();
   }
@@ -139,3 +145,24 @@ for (const now of ['2026-11-28T08:00:00Z', '2026-12-28T08:00:00Z', '2028-02-27T0
       dom.window.close();
     }
   });
+
+test('deferral cannot report success from a GEA-only acceptance or missing OMS capability', async () => {
+  for (const capability of [false, true]) {
+    const { dom, document, actions } = await setup(undefined, capability, { status: 'accepted' });
+    try {
+      const input = document.getElementById('days');
+      input.value = input.max;
+      input.dispatchEvent(new dom.window.Event('change'));
+      assert.equal(document.getElementById('submit').disabled, !capability);
+      document.getElementById('submit').click();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(actions.length, capability ? 1 : 0);
+      assert.match(
+        document.getElementById('notice').textContent,
+        capability ? /尚未确认成功/ : /尚未启用/,
+      );
+    } finally {
+      dom.window.close();
+    }
+  }
+});
