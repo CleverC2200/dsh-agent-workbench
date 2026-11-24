@@ -13,6 +13,28 @@ const row = (kind, values) => ({
 function fixture(records, options = {}) {
   return ({ queryId, parameters }) => {
     const kind = queryId.split('.')[0];
+    if (kind === 'products' && options.forecastProducts) {
+      const products = options.forecastProducts.map((code) =>
+        row(kind, {
+          stat_period: parameters.month,
+          target_base: '基地甲',
+          material_code: code,
+          material_name: '产品甲',
+          responsible_item: '汤圆',
+          series: '系列甲',
+          product_item: '组甲',
+          product_item_name: '组名甲',
+        }),
+      );
+      return {
+        rows: queryId.endsWith('.count') ? [{ total: products.length }] : products,
+        returnedColumns: config.queries[queryId].columns,
+        configVersion: 'v1',
+        totalRowCount: products.length,
+        offset: parameters.offset ?? 0,
+        hasMorePages: false,
+      };
+    }
     if (!['forecast', 'delivery'].includes(kind))
       return {
         rows: queryId.endsWith('.count') ? [{ total: 0 }] : [],
@@ -84,7 +106,11 @@ const source = (kind, month) =>
         }),
       ];
 test('one forecast batch drives two selectable target months and delivery source ratios remain separate', async (t) => {
-  const { page, frame, calls, contexts } = await mpsPage(t, config, fixture(source));
+  const { page, frame, calls, contexts } = await mpsPage(
+    t,
+    config,
+    fixture(source, { forecastProducts: ['001'] }),
+  );
   await december(frame);
   const forecast = frame.getByRole('region', {
     name: '模型双期预测',
@@ -109,10 +135,10 @@ test('one forecast batch drives two selectable target months and delivery source
     csv,
     /预测批次,源批次月份,源当月预测数量,源下一月预测数量,源记录数,缺项原因,读取状态/,
   );
-  assert(csv.includes('2026-12,2026/12,0,12.5,1,物料编码未匹配当前产品明细，分类留空,ready'));
+  assert(csv.includes('2026-12,2026/12,0,12.5,1,,ready'));
   await expect
     .poll(() => contexts.at(-1)?.parts?.check?.sourceSummaries?.forecast?.missingReasons)
-    .toContain('物料编码未匹配当前产品明细，分类留空');
+    .toEqual([]);
   const [headers, ...records] = csv
     .trim()
     .split(/\r?\n/)
@@ -125,7 +151,7 @@ test('one forecast batch drives two selectable target months and delivery source
   const allDownload = page.waitForEvent('download');
   await forecast.getByRole('button', { name: '导出全部已读明细', exact: true }).click();
   const allCsv = await mpsDownloadText(await (await allDownload).path());
-  assert(allCsv.includes('物料编码未匹配当前产品明细，分类留空'));
+  assert(allCsv.includes('汤圆'));
   assert(allCsv.includes('2026-12,基地甲,001'));
   assert(allCsv.includes('2027-01,基地甲,001'));
   const delivery = frame.getByRole('region', {
@@ -188,7 +214,10 @@ test('all group forecast pages are loaded, grouped source counts retain valid qu
                 source_rows: i === 200 ? 2 : 1,
               }),
             ),
-      { deny: (kind) => deny && kind === 'forecast' },
+      {
+        forecastProducts: Array.from({ length: 201 }, (_, index) => String(index).padStart(4, '0')),
+        deny: (kind) => deny && kind === 'forecast',
+      },
     ),
   );
   const forecast = frame.getByRole('region', {
