@@ -37,7 +37,7 @@ async function assessment(frame, month = '2026-10', codes = ['001']) {
   });
 }
 
-test('reported plan details use current product mapping and retain source dimensions for audit', async (t) => {
+test('reported plan details use current product mapping, retain source dimensions and exclude unmatched SKUs', async (t) => {
   const records = [
     {
       region_name: '直营渠道销售',
@@ -81,8 +81,7 @@ test('reported plan details use current product mapping and retain source dimens
   await expect(matched).toContainText('直营渠道销售');
   await expect(matched).toContainText('小小汤圆组');
   await expect(matched).toContainText('3.9g汤圆');
-  const missing = preview.getByRole('row').filter({ hasText: 'UNMATCHED' });
-  await expect(missing).toContainText('UNMATCHED');
+  await expect(preview.getByRole('row').filter({ hasText: 'UNMATCHED' })).toHaveCount(0);
   await expect(preview.getByRole('columnheader', { name: '维度说明', exact: true })).toHaveCount(0);
   const pending = page.waitForEvent('download');
   await preview.getByRole('button', { name: '下载明细', exact: true }).click();
@@ -92,10 +91,32 @@ test('reported plan details use current product mapping and retain source dimens
     /月份,大区,基地,产品编码,产品名称,大类,系列,物料组,物料组名称,月初数量,纠偏数量/,
   );
   assert(!csv.includes('维度说明'));
+  assert(!csv.includes('UNMATCHED'));
   assert.match(csv, /直营渠道销售,华东,10000008,小小汤圆,汤圆,3.9g汤圆,102018,小小汤圆组/);
 });
 
-function fixture({ queryId, parameters }, records) {
+function fixture({ queryId, parameters }, records, productCodes = ['001']) {
+  if (queryId === 'products.detail' || queryId === 'products.count') {
+    const rows = productCodes.map((code) => ({
+      ...Object.fromEntries(config.queries['products.detail'].columns.map((key) => [key, null])),
+      stat_period: parameters.month,
+      target_base: '基地甲',
+      material_code: code,
+      material_name: '产品' + code,
+      responsible_item: '汤圆',
+      series: '系列甲',
+      product_item: '组甲',
+      product_item_name: '组甲',
+      source_rows: 1,
+    }));
+    return {
+      rows: queryId.endsWith('.count')
+        ? [{ total: rows.length }]
+        : rows.slice(parameters.offset, parameters.offset + parameters.page_size),
+      returnedColumns: config.queries[queryId].columns,
+      configVersion: 'v1',
+    };
+  }
   if (queryId.startsWith('plan-rate.')) {
     const supplied =
       records ??
@@ -238,14 +259,18 @@ test('full fact paging keeps zero and missing base distinct, without a failed sh
     [plan + 'plannum_total']: index === 200 ? null : 0,
     [plan + 'allnum_total']: index === 200 ? null : 2,
   }));
-  const { frame, calls } = await mpsPage(t, config, (query) => {
+  const { page, frame, calls } = await mpsPage(t, config, (query) => {
     if (query.queryId === 'facts.history') throw Error('AGENT_ACCESS_DENIED');
-    return fixture(query, query.queryId.startsWith('facts.report') ? records : undefined);
+    return fixture(
+      query,
+      query.queryId.startsWith('facts.report') ? records : undefined,
+      records.map((row) => row[plan + 'material_code']),
+    );
   });
   const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
   await expect(report.getByText('业务来源', { exact: true })).toBeVisible();
   await report.getByText('口径与统计说明', { exact: true }).click();
-  await expect(report).toContainText('当前期间201条，数量合计未提供，缺失数量1条');
+  await expect(report).toContainText('当前期间200条，数量合计0件，缺失数量0条');
   await expect(
     frame.getByRole('region', { name: '历史同期发货' }).getByRole('alert'),
   ).toContainText('当前账号暂无数据权限');
@@ -258,6 +283,11 @@ test('full fact paging keeps zero and missing base distinct, without a failed sh
   );
   await report.getByRole('button', { name: '预览当前明细' }).click();
   await expect(frame.getByRole('dialog').locator('tbody tr').first()).toContainText('0');
+  const pendingDownload = page.waitForEvent('download');
+  await frame.getByRole('dialog').getByRole('button', { name: '下载明细', exact: true }).click();
+  const csv = await mpsDownloadText(await (await pendingDownload).path());
+  assert(csv.includes('00000'));
+  assert(!csv.includes('00200'));
 });
 test('历史实绩大页碰到返回上限时缩小该页，从原偏移继续完整取数', async (t) => {
   const records = Array.from({ length: 740 }, (_, index) => ({
@@ -271,7 +301,11 @@ test('历史实绩大页碰到返回上限时缩小该页，从原偏移继续�
     config,
     (query) => {
       if (query.queryId !== 'facts.history' || query.parameters.month !== '2023-11-01')
-        return fixture(query);
+        return fixture(
+          query,
+          undefined,
+          records.map((row) => row[shipment + 'material_code']),
+        );
       const { offset, page_size: size } = query.parameters;
       pages.push([offset, size]);
       if (offset === 500 && size > 200) throw Error('AI_GATEWAY_MCP_RESULT_TOO_LARGE');
