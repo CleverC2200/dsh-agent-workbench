@@ -17,7 +17,9 @@ const normalize = (row) => ({
 
 export function buildProductScope(draft, products, result, exclusions) {
   const raw = draft.productRaw ?? [];
-  const source = (raw.length ? raw : (draft.products ?? [])).map(normalize);
+  const source = (raw.length ? raw : (draft.products ?? []))
+    .map(normalize)
+    .filter((row) => row.category !== '粽子' && row.base !== 'ODM');
   const adopted = products.map(normalize);
   const actual = [...new Map(result.rows.map((row) => [key(row), normalize(row)])).values()];
   const bySource = Map.groupBy(source, key);

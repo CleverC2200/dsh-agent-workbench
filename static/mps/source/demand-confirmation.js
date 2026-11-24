@@ -234,7 +234,7 @@ function forecastSourceRows(draft, rows = draft.forecast) {
   return (
     draft.forecastSource === 'business' && productsReady
       ? forecastDimensions(scopedProductRows(rows, draft.products), draft.products)
-      : rows
+      : scopedProductRows(rows, draft.products)
   ).map((row) => ({ ...row, 读取状态: draft.forecastRead?.status ?? 'unread' }));
 }
 function sourcePeriod(draft, type) {
