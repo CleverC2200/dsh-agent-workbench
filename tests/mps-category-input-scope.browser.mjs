@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { mpsPage } from './helpers/mps-page.mjs';
 import { openCategoryCalculation } from './helpers/mps-edit.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
@@ -147,6 +147,11 @@ for (const aggregateAnnual of [false, true])
     const sourceDownload = page.waitForEvent('download');
     await frame.getByRole('button', { name: '下载大类池内源明细', exact: true }).click();
     const sourceCsv = await mpsDownloadText(await (await sourceDownload).path());
+    if (process.env.MPS02_EVIDENCE_DIR)
+      await writeFile(
+        `${process.env.MPS02_EVIDENCE_DIR}/pool-sources-${aggregateAnnual}.csv`,
+        sourceCsv,
+      );
     assert.match(sourceCsv, /原始全国SKU财年量/);
     assert.match(sourceCsv, /999999/);
     assert.match(sourceCsv, /1200,12,12/);
@@ -156,6 +161,11 @@ for (const aggregateAnnual of [false, true])
     const downloading = page.waitForEvent('download');
     await calculation.getByRole('button', { name: '下载测算明细', exact: true }).click();
     const csv = await mpsDownloadText(await (await downloading).path());
+    if (process.env.MPS02_EVIDENCE_DIR)
+      await writeFile(
+        `${process.env.MPS02_EVIDENCE_DIR}/category-calculation-${aggregateAnnual}.csv`,
+        csv,
+      );
     assert.doesNotMatch(csv, /9000|8000|999999|粽子|旧分类/);
     const book = XLSX.read(csv, { type: 'string', raw: true });
     const records = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });

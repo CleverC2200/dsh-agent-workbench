@@ -1235,6 +1235,7 @@
       "grain": [
         "belong_base",
         "material_code",
+        "sub_category",
         "stat_month"
       ],
       "parameterSpec": {
@@ -1256,7 +1257,7 @@
         }
       },
       "request": {
-        "sql": "SELECT belong_base, material_code, MIN(sub_category) AS sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, CASE WHEN COUNT(*) > 1 THEN SUM(source_rows) ELSE 0 END AS duplicate_rows, MAX(demand_qty) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, TRIM(material_code) AS material_code, MIN(sub_category) AS sub_category, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi GROUP BY belong_base, TRIM(material_code), stat_month, demand_qty) AS source_values GROUP BY belong_base, material_code, stat_month ORDER BY belong_base, material_code, stat_month LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT belong_base, material_code, MIN(sub_category) AS sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, CASE WHEN COUNT(*) > 1 THEN SUM(source_rows) ELSE 0 END AS duplicate_rows, MAX(demand_qty) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, TRIM(material_code) AS material_code, MIN(sub_category) AS sub_category, CASE WHEN material_code IS NULL OR TRIM(material_code) = '' THEN sub_category ELSE NULL END AS summary_category, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi GROUP BY belong_base, TRIM(material_code), CASE WHEN material_code IS NULL OR TRIM(material_code) = '' THEN sub_category ELSE NULL END, stat_month, demand_qty) AS source_values GROUP BY belong_base, material_code, summary_category, stat_month ORDER BY belong_base, material_code, sub_category, stat_month LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "annual-pool.count"
@@ -1276,7 +1277,7 @@
     "annual-pool.count": {
       "priority": 3,
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code, MIN(sub_category) AS sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, CASE WHEN COUNT(*) > 1 THEN SUM(source_rows) ELSE 0 END AS duplicate_rows, MAX(demand_qty) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, TRIM(material_code) AS material_code, MIN(sub_category) AS sub_category, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi GROUP BY belong_base, TRIM(material_code), stat_month, demand_qty) AS source_values GROUP BY belong_base, material_code, stat_month) AS source_rows"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code, MIN(sub_category) AS sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, CASE WHEN COUNT(*) > 1 THEN SUM(source_rows) ELSE 0 END AS duplicate_rows, MAX(demand_qty) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, TRIM(material_code) AS material_code, MIN(sub_category) AS sub_category, CASE WHEN material_code IS NULL OR TRIM(material_code) = '' THEN sub_category ELSE NULL END AS summary_category, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi GROUP BY belong_base, TRIM(material_code), CASE WHEN material_code IS NULL OR TRIM(material_code) = '' THEN sub_category ELSE NULL END, stat_month, demand_qty) AS source_values GROUP BY belong_base, material_code, summary_category, stat_month) AS source_rows"
       },
       "parameterSpec": {}
     },

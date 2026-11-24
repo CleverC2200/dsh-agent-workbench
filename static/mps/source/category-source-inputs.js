@@ -40,7 +40,13 @@ export function categorySourceInputs(draft) {
               ),
             ]
           : [...new Set(products.map((product) => product['大类']))].filter(
-              (category) => category === (history ? row['维度值'] : row['大类']),
+              (category, _index, categories) => {
+                const sourceCategory = history ? row['维度值'] : row['大类'];
+                return (
+                  sourceCategory !== '粽子' &&
+                  (category === sourceCategory || !categories.includes(sourceCategory))
+                );
+              },
             );
       return categories.map((category) => {
         const reason = `${source} ${row['月份']} ${code || category} 缺可追溯的基地SKU明细，无法确定产品范围归属`;
