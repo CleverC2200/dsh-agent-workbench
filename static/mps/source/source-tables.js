@@ -259,7 +259,12 @@ export async function readSourceTable(kind, month, signal) {
           : kind === 'annual-pool'
             ? annualRows(result.rows)
             : kind === 'category-history'
-              ? result.rows.map((row) => deliveryRows([row], tableMonth(row.stat_month))[0])
+              ? result.rows.map((row) => ({
+                  ...deliveryRows([row], tableMonth(row.stat_month))[0],
+                  基地维度财年发货数量: decimal(row.base_fiscal_act_dl_qty ?? null),
+                  基地财年源月份数: decimal(row.base_fiscal_month_count ?? null),
+                  基地财年有效月份数: decimal(row.base_fiscal_quantity_month_count ?? null),
+                }))
               : kind === 'plan-rate'
                 ? planRateRows(result.rows, month)
                 : deliveryRows(result.rows, month),

@@ -1,6 +1,7 @@
 import { matchesCategories, createDimensionCategoryMatcher } from './category-filter.js';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { buildCategoryDemand } from './category-demand.js';
+import { categorySourceInputs } from './category-source-inputs.js';
 import { festivalDemandBasis } from './festival-demand.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createPlanRates } from './plan-rate-view.js';
@@ -62,6 +63,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
     selectedCategories = [],
   }) {
     const calculated = react.useMemo(() => buildCategoryDemand(draft), [draft]);
+    const categorySources = react.useMemo(() => categorySourceInputs(draft), [draft]);
     const endMonth = calculated.endMonth;
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = react.useState(0);
@@ -274,10 +276,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       ...basicAnomalies,
       ...checks.details.filter((row) => !row['原因'] && !row['缺项原因']),
     ];
-    const calendarHistorical =
-      current && kind === 'parameters'
-        ? draft.historicalIndicators.periods.flatMap((period) => period.rows)
-        : [];
+    const calendarHistorical = current && kind === 'parameters' ? categorySources.history : [];
     const historical =
       kind === 'parameters'
         ? festivalDemandBasis(draft, calendarHistorical).history
@@ -837,9 +836,42 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             ),
           ),
       );
+    const sourceRows = categorySources.sourceRows.filter((row) =>
+      matchesCategories(row['大类'], selectedCategories),
+    );
     return h(
       react.Fragment,
       {},
+      h(
+        'button',
+        {
+          disabled: !current || !sourceRows.length,
+          onClick: () =>
+            downloadCsv(
+              `${draft.month}-大类池内源明细.csv`,
+              [
+                '来源',
+                '月份',
+                '基地',
+                '产品编码',
+                '大类',
+                '数量',
+                '原始来源数量',
+                '财年',
+                '原始全国SKU财年量',
+                '基地SKU财年量',
+                '财年源月份数',
+                '财年有效月份数',
+                '上年同期发货数量',
+                '上月发货数量',
+                '取数依据',
+                '缺项原因',
+              ],
+              sourceRows,
+            ),
+        },
+        '下载大类池内源明细',
+      ),
       h(
         'div',
         { className: 'dc-parameter-grid', role: 'region', 'aria-label': '系统派生口径参数' },
@@ -890,7 +922,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                       ? '最近三年逐年汇总同大类数量后计算同比系数，按有效年份等权平均。缺年、零分母或无效年度跳过；全部不可用时留空，实际年份见预览。'
                       : index === 1
                         ? '逐年月发货数量÷上月发货数量，对三个完整年份的环比系数等权平均。异常环比的替代值和样本月份见异常报告。'
-                        : '逐年月发货数量÷对应财年全国维度发货数量，对三个完整年份的月占比等权平均。'
+                        : '逐年月发货数量÷同财年入池基地SKU完整月明细合计，对三个完整年份的月占比等权平均。'
                     : `${previousFiscalYear(draft.month).start}至${previousFiscalYear(draft.month).end}全年发货；按当前物料编码、物料组编码计算物料组占大类、产品占物料组、基地产品占范围内同SKU。`,
                 ),
               ),
@@ -944,7 +976,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                 ? '同比系数按最近三年中的有效年份等权平均，实际参与年份逐项列明。'
                 : metric.field === 'mom'
                   ? '三年环比系数为各年月发货数量÷上月发货数量，再对三个完整年份等权平均。分母无效或三年未齐备时留空。'
-                  : '三年月占比为各年月发货数量÷对应财年全国维度发货数量，再对三个完整年份等权平均。分母无效或三年未齐备时留空。',
+                  : '三年月占比为各年月发货数量÷同财年入池基地SKU完整月明细合计，再对三个完整年份等权平均。分母无效或三年未齐备时留空。',
           ),
           isShare &&
             h(

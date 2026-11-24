@@ -1,3 +1,4 @@
+import { categorySourceInputs } from './category-source-inputs.js';
 import { createCategoryFilter, matchesCategories } from './category-filter.js';
 import { canonicalBaseName } from './relations.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
@@ -25,6 +26,7 @@ import {
   productSourceColumns,
   productSourceRows,
   sourceDimensions,
+  sourceProductMappings,
   createSourceProductMatcher,
   scopedProductRows,
 } from './source-projections.js';
@@ -216,17 +218,36 @@ const makeDraft = (id, month) => ({
   historyYears: 1,
 });
 function annualSelection(draft) {
-  const bases = [...new Set(draft.annual.map((row) => row['基地']).filter(Boolean))];
+  const scoped =
+    draft.annualSource === 'business'
+      ? categorySourceInputs({
+          ...draft,
+          historicalIndicatorsRead: { status: 'ready', month: draft.month },
+          historicalIndicators: { periods: [], annual: { rows: draft.annual } },
+        }).annual
+      : draft.annual;
+  const nationwide =
+    draft.annualSource === 'business'
+      ? [...Map.groupBy(scoped, (row) => JSON.stringify([row['月份'], row['大类']])).values()].map(
+          (rows) => ({
+            月份: rows[0]['月份'],
+            大类: rows[0]['大类'],
+            基地: '全国',
+            数量: rows.every((row) => row['数量'] !== null)
+              ? rows.reduce((sum, row) => sum + row['数量'], 0)
+              : '',
+          }),
+        )
+      : [];
+  const rows = [...nationwide, ...scoped];
+  const bases = [...new Set(rows.map((row) => row['基地']).filter(Boolean))];
   const base =
     (bases.includes(draft.annualBase) ? draft.annualBase : undefined) ??
     (bases.includes('全国') ? '全国' : bases[0]);
   return {
     bases,
     base,
-    rows:
-      draft.annualSource === 'business'
-        ? draft.annual.filter((row) => row['基地'] === base)
-        : draft.annual,
+    rows: draft.annualSource === 'business' ? rows.filter((row) => row['基地'] === base) : rows,
   };
 }
 function forecastSourceRows(draft, rows = draft.forecast) {
@@ -1210,17 +1231,27 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const exportAnnual = async (months, base) => {
       const { signal, valid } = begin('annualExport');
       try {
-        const rows = await readAnnualDetails(months, base, signal);
-        const matchProduct = createSourceProductMatcher(
-          draft.productRaw?.length ? draft.productRaw : draft.products,
-        );
-        const projected = rows.map((row) => {
-          const { category } = matchProduct(row.material_code);
-          return {
-            ...row,
-            source_sub_category: row.sub_category,
-            sub_category: row.material_code ? category || '分类待核' : row.sub_category,
-          };
+        const products = sourceProductMappings(draft.products, draft.productRaw);
+        const bases =
+          base === '全国'
+            ? [...new Set(products.map((product) => product['基地']).filter(Boolean))]
+            : [base];
+        const rows = (
+          await Promise.all(
+            bases.map((sourceBase) => readAnnualDetails(months, sourceBase, signal)),
+          )
+        ).flat();
+        const matchProduct = createSourceProductMatcher(products);
+        const projected = rows.flatMap((row) => {
+          const { category } = matchProduct(row.material_code, row.belong_base);
+          if (!category) return [];
+          return [
+            {
+              ...row,
+              source_sub_category: row.sub_category,
+              sub_category: category,
+            },
+          ];
         });
         const tables = annualWorkbookTables(
           projected.filter((row) => matchesCategories(row.sub_category, selectedCategories)),
@@ -1229,6 +1260,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           annualSelection(draft).rows.filter((row) =>
             matchesCategories(row['大类'], selectedCategories),
           ),
+          bases,
         );
         const bytes = await workbookBytes(tables);
         if (valid())

@@ -128,16 +128,17 @@ test('annual SQL counts equal quantities once per full grain and retains conflic
   const current = new Map(
     annualRows(mapped)
       .filter((item) => item['基地'] === '全国')
-      .map((item) => [item['大类'], item]),
+      .map((item) => [item['产品编码'], item]),
   );
-  assert.equal(current.get('水饺')['数量'], 100);
-  assert.equal(current.get('火锅料')['数量'], 100);
-  assert.equal(current.get('预制食材')['数量'], '');
-  assert.equal(current.get('预制食材')['重复记录数'], 4);
-  assert(!current.has('未归属'));
+  assert.equal(current.get('A')['数量'], 100);
+  assert.equal(current.get('B')['数量'], 100);
+  assert.equal(current.get('C')['数量'], '');
+  assert.equal(current.get('C')['重复记录数'], 2);
+  assert.equal(current.get('G')['数量'], 11);
+  assert.equal(current.get('UNKNOWN')['数量'], 60);
 });
 
-test('product snapshot reads the latest month with base/tag source attributes but keeps one nationwide relationship', (t) => {
+test('product snapshot reads the selected month with base/tag source attributes but keeps one nationwide relationship', (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   db.exec(`CREATE TABLE agents_dim_product_list_mi (
@@ -173,24 +174,29 @@ test('product snapshot reads the latest month with base/tag source attributes bu
   insert.run(...entry);
   insert.run(...entry.map((v, i) => (i === 1 ? '华东' : i === 2 ? '自产' : v)));
   insert.run(...entry.map((v, i) => (i === 0 ? '2026-10' : i === 3 ? '旧分类' : v)));
-  const count = db.prepare(config.queries['products.count'].request.sql).get().total;
+  const count = db
+    .prepare(config.queries['products.count'].request.sql)
+    .get({ gea_p1: '2026-11' }).total;
   assert.equal(count, 2);
   const detail = db.prepare(config.queries['products.detail'].request.sql);
-  const rows = [0, 1].flatMap((offset) => detail.all({ gea_p98: 1, gea_p99: offset }));
+  const rows = [0, 1].flatMap((offset) =>
+    detail.all({ gea_p1: '2026-11', gea_p98: 1, gea_p99: offset }),
+  );
   assert(rows.every((row) => row.stat_period === '2026-11'));
   assert.deepEqual(new Set(rows.map((row) => row.target_base)), new Set(['郑州', '华东']));
   assert.deepEqual(new Set(rows.map((row) => row.transfer_tag)), new Set(['新品', '自产']));
   assert.equal(rows.find((row) => row.target_base === '郑州').source_rows, 2);
   assert.equal(rows[0].net_weight, '8.08000001');
   assert.equal(rows[0].replace_num, '0.00000000');
-  assert.equal(productRows(rows).length, 1);
-  assert.equal(productRows(rows)[0]['基地'], '');
+  assert.equal(productRows(rows).length, 2);
+  assert.deepEqual(new Set(productRows(rows).map((row) => row['基地'])), new Set(['郑州', '华东']));
   assert.equal(productRows(rows)[0]['大类'], '标签甲');
   for (const [id, query] of Object.entries(config.queries)) {
-    if (!query.request?.sql?.includes('agents_dim_product_list_mi')) continue;
+    if (!id.startsWith('products.') || !query.request?.sql?.includes('agents_dim_product_list_mi'))
+      continue;
     assert.match(
       query.request.sql,
-      /stat_period = \(SELECT MAX\(stat_period\) FROM agents_dim_product_list_mi\)/,
+      /SUBSTRING\(CAST\(stat_period AS VARCHAR\(32\)\), 1, 7\) = :gea_p1/,
       id,
     );
   }
