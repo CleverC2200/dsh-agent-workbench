@@ -976,7 +976,13 @@ test('零需求跳过缺失拆分依据，库存缺项逐行导出人工补数�
   await expandShipmentBase(frame, '郑州');
   await expect(
     frame.getByRole('button', { name: '郑州 B 整月预估发货 计算过程', exact: true }),
-  ).toHaveCount(0);
+  ).toHaveText('0');
+  await expect(
+    frame.getByRole('button', { name: '郑州 B 月初库存 计算过程', exact: true }),
+  ).toHaveText('待定');
+  await expect(
+    frame.getByRole('button', { name: '郑州 B 预计月末结存 计算过程', exact: true }),
+  ).toHaveText('待定');
   await beginAdjustment(frame);
   await frame.getByLabel('郑州 A 整月预估发货', { exact: true }).fill('5');
   await saveAdjustment(frame);
