@@ -34,6 +34,7 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
         if(scenario==='partial') sample.shipment.rows[0].end=null;
         if(scenario==='movement') {sample.draft.inventoryMovements[0].productionInbound=null;sample.draft.inventoryMovements[0].transferIn=null;}
         if(scenario==='demand') sample.draft.categoryDemand[0].quantity=null;
+        if(scenario==='upstream') {delete sample.draft.categoryDemand;sample.draft.historicalIndicatorsRead={status:'failed',month:sample.draft.month,error:'历史源读取拒绝-评估上游原因完整保留'};}
         if(scenario==='zero') sample.draft.categoryDemand.forEach(row=>row.quantity=0);
         const result=buildMpsWorkflow(sample.draft,sample.relations,sample.shipment,sample.evaluation);
         window.result=result;window.downloads=[];
@@ -203,6 +204,40 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
   assert.match(blocked.异常说明, /缺既有生产入库、既有调入/);
   assert.doesNotMatch(blocked.异常说明, /缺既有在途入库|缺既有调出/);
   assert.match(blocked.需人工补齐, /第五步约束与配置/);
+  await page.evaluate(() => window.runCapacity(2, false, 'upstream'));
+  await page.getByText('查看大类需求上游原因', { exact: false }).click();
+  await expect(page.getByRole('table', { name: '大类需求上游原因', exact: true })).toContainText(
+    '历史源读取拒绝-评估上游原因完整保留',
+  );
+  const causeGroup = await page
+    .getByLabel('上游原因组筛选', { exact: true })
+    .locator('option')
+    .nth(1)
+    .getAttribute('value');
+  await page.getByLabel('上游原因组筛选', { exact: true }).selectOption(causeGroup);
+  const issuesDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出分类问题清单', exact: true }).click();
+  const issuesFile = await issuesDownload;
+  const issuesPath = join(directory, issuesFile.suggestedFilename());
+  await issuesFile.saveAs(issuesPath);
+  const issuesBook = XLSX.read(await readFile(issuesPath), { type: 'buffer' });
+  const issueRecords = XLSX.utils.sheet_to_json(issuesBook.Sheets[issuesBook.SheetNames[0]], {
+    defval: '',
+  });
+  const demandIssues = issueRecords.filter((row) => row.问题分类 === '缺有效需求');
+  assert.equal(demandIssues.length, 2);
+  assert.ok(demandIssues.every((row) => row.上游原因组 === causeGroup));
+  const groupRecord = issueRecords.find((row) => row.粒度 === '大类需求上游组');
+  assert.equal(groupRecord.上游原因组, causeGroup);
+  const causes = issueRecords.filter((row) => row.粒度 === '大类需求上游原因');
+  assert.equal(
+    causes.filter((row) => row.源值与证据.includes('历史源读取拒绝-评估上游原因完整保留')).length,
+    1,
+  );
+  assert.equal(
+    causes.filter((row) => row.上游原因组.split('；').includes(causeGroup)).length,
+    groupRecord.上游原因数,
+  );
   for (const [scenario, quantity, missing, status] of [
     ['partial', 0, 1, '已知小计'],
     ['missing', null, 2, '未知'],

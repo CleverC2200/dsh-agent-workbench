@@ -302,6 +302,29 @@ test('大类上游缺项在序列化诊断中按类月保留，所有基地SKU�
   }
 });
 
+test('执行评估集中保留全部大类上游原因，逐SKU问题经序列化仍可追溯', () => {
+  const { draft: source, shipment, evaluation } = workflowPerformanceInput(20);
+  delete source.categoryDemand;
+  const reason = '历史源读取拒绝-评估报告回归';
+  source.historicalIndicatorsRead = { status: 'failed', month: source.month, error: reason };
+  const result = buildMpsWorkflow(source, null, shipment, evaluation);
+  const plan = structuredClone(result.plan);
+  const issues = plan.reportIssues.filter((row) => row.kind === '缺有效需求');
+  assert.equal(issues.length, 60);
+  assert.equal(JSON.stringify(plan).split(reason).length - 1, 1);
+  for (const issue of issues) {
+    assert.equal(issue.demand, null);
+    const group = plan.reportCauseGroups.find((group) => group.id === issue.causeGroupId);
+    assert.equal(group.month, issue.month);
+    assert.equal(group.category, issue.productCategory);
+    assert.ok(
+      group.causeIds.some((id) =>
+        plan.reportCauses.find((cause) => cause.id === id).reason.includes(reason),
+      ),
+    );
+  }
+});
+
 test('新版源老品与保留人工关系不一致时，历史参考系数未知而非一', () => {
   const source = draft();
   source.products.push({

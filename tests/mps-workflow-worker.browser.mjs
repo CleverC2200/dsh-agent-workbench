@@ -94,7 +94,29 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
         evaluation,
         new AbortController().signal,
       );
-      return { actual, expected, completed, aborted, ticks, created, terminated };
+      delete draft.categoryDemand;
+      draft.historicalIndicatorsRead = {
+        status: 'failed',
+        month: draft.month,
+        error: '上游原因经过真实Worker消息返回',
+      };
+      const upstream = await window.computeWorkflow(
+        draft,
+        relations,
+        shipment,
+        evaluation,
+        new AbortController().signal,
+      );
+      return {
+        actual,
+        expected,
+        completed,
+        upstream: upstream.plan,
+        aborted,
+        ticks,
+        created,
+        terminated,
+      };
     } finally {
       clearInterval(timer);
     }
@@ -114,6 +136,17 @@ test('opaque MPS page computes in a worker without blocking UI, preserves result
   assert.deepEqual(result.completed, result.expected);
   assert.equal(result.aborted, 'AbortError');
   assert.ok(result.ticks > 0, 'the UI event loop remains responsive during computation');
-  assert.equal(result.created, 3);
-  assert.equal(result.terminated, 3);
+  assert.equal(
+    JSON.stringify(result.upstream).split('上游原因经过真实Worker消息返回').length - 1,
+    1,
+  );
+  assert.ok(
+    result.upstream.reportIssues
+      .filter((row) => row.kind === '缺有效需求')
+      .every((issue) =>
+        result.upstream.reportCauseGroups.some((group) => group.id === issue.causeGroupId),
+      ),
+  );
+  assert.equal(result.created, 4);
+  assert.equal(result.terminated, 4);
 });
