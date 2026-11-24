@@ -40,8 +40,8 @@ function fixture(calendar) {
     const columns = config.queries[call.queryId].resultColumns;
     const row = Object.fromEntries(columns.map((c) => [c, null]));
     let rows;
-    if (call.queryId === 'calendar.target_versions.count') rows = [{ total: calendar.length }];
-    else if (call.queryId === 'calendar.target_versions') rows = calendar;
+    if (call.queryId === 'calendar.target_plan_versions')
+      rows = calendar.map((row) => ({ usable_plan_rows: 1, ...row }));
     else if (call.queryId === 'source.stock-date') rows = [{ day: '2026-10-14' }];
     else if (call.queryId === 'page.base-stock.count') rows = [{ total: 1 }];
     else
@@ -879,4 +879,34 @@ test('forecast, historical and target turnover use their own valid cohorts', asy
   assert.equal(w.workbench.cards[1].helpers[0].value, '5.0天');
   assert.equal(w.workbench.cards[1].helpers[1].value, '4.0天');
   assert.equal(w.workbench.cards[1].helpers[2].value, '1.0天');
+});
+
+test('forecast turnover stays visible when a few planned keys are missing', async (t) => {
+  install(t);
+  const read = globalThis.__stockSummary;
+  globalThis.__stockSummary = async (...args) => {
+    const result = await read(...args);
+    return {
+      ...result,
+      groups: [
+        {
+          ...result.groups[0],
+          row_count: 2,
+          forecast_stock_qty: 150,
+          forecast_stock_count: 2,
+          forecast_plan_count: 2,
+          sales_plan_count: 1,
+          transfer_plan_count: 1,
+          sales_stock_covered: 100,
+          sales_plan_covered: 310,
+          transfer_stock_covered: 100,
+          transfer_plan_covered: 620,
+        },
+      ],
+    };
+  };
+  const workspace = await cube.loadInitialDashboard();
+  assert.equal(workspace.workbench.cards[1].value, '10.0天（部分）');
+  assert.match(workspace.workbench.cards[1].coverage, /1\/2/);
+  assert.equal(workspace.table.rows[0].currentTurnover, '5.0天（部分）');
 });

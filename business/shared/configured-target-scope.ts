@@ -3,7 +3,7 @@ import { selectDefaultPublishedTargetInventory } from './target-inventory-policy
 
 export const targetPlanVersionsQuery = 'calendar.target_plan_versions';
 
-export async function readConfiguredTargetScope(
+export async function readConfiguredTargetCalendar(
   client: ReturnType<typeof createAgentQueries>,
   asOf: string,
   signal?: AbortSignal,
@@ -35,19 +35,34 @@ export async function readConfiguredTargetScope(
           singlePageFirst: true,
         },
       );
-  const versions = result.rows.map((row: Record<string, string | number | null | undefined>) => ({
+  type VersionRow = Record<string, string | number | null | undefined>;
+  const calendarRow = (row: VersionRow) => ({
     'safety_stock.target_month': row.month,
     'safety_stock.inventory_version': row.inventory_version,
-    usablePlanRows: Number(row.usable_plan_rows),
-  }));
-  const usableVersions = versions.filter((row) => row.usablePlanRows > 0);
+  });
+  const versions = result.rows.map(calendarRow);
+  const usableVersions = result.rows
+    .filter((row: VersionRow) => Number(row.usable_plan_rows) > 0)
+    .map(calendarRow);
   const usableScope = selectDefaultPublishedTargetInventory(usableVersions, now);
-  const scope = usableScope.published
-    ? usableScope
-    : selectDefaultPublishedTargetInventory(versions, now);
+  return {
+    rows: usableScope.published ? usableVersions : versions,
+    scope: usableScope.published
+      ? usableScope
+      : selectDefaultPublishedTargetInventory(versions, now),
+    configVersion: result.configVersion,
+  };
+}
+
+export async function readConfiguredTargetScope(
+  client: ReturnType<typeof createAgentQueries>,
+  asOf: string,
+  signal?: AbortSignal,
+) {
+  const { scope, configVersion } = await readConfiguredTargetCalendar(client, asOf, signal);
   if (!scope.published)
     throw Object.assign(Error('当前没有可用的已发布目标月份与版本'), {
       code: 'SOURCE_NOT_AVAILABLE',
     });
-  return { ...scope, configVersion: result.configVersion };
+  return { ...scope, configVersion };
 }

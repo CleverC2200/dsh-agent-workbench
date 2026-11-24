@@ -38,9 +38,8 @@ function source() {
     calls.push(call);
     const columns = config.queries[call.queryId].resultColumns;
     let rows;
-    if (call.queryId === 'calendar.target_versions.count') rows = [{ total: 1 }];
-    else if (call.queryId === 'calendar.target_versions')
-      rows = [{ month: '2026-10-01', inventory_version: '月初' }];
+    if (call.queryId === 'calendar.target_plan_versions')
+      rows = [{ month: '2026-10-01', inventory_version: '月初', usable_plan_rows: 1 }];
     else if (call.queryId === 'source.health-date') rows = [{ day: '2026-10-14' }];
     else if (call.queryId === 'page.dashboard-groups')
       rows = [
@@ -161,40 +160,31 @@ test('missing batch age facts cannot turn an age risk filter into an empty-succe
   assert.equal(io.calls.length, 0);
 });
 
-test('independent target calendar and stock date start in the same gateway wave', async () => {
+test('stock date lookup starts before the target calendar resolves', async () => {
   const io = source();
-  let wave = 0,
-    pending = [],
-    timer;
-  const seen = [];
-  await readConfiguredStockPage(
+  const calendar = Promise.withResolvers();
+  const seen = new Set();
+  const read = readConfiguredStockPage(
     { base: '郑州' },
     {
       now,
       execute: async (...args) => {
-        if (['summary.snapshot', 'summary.bootstrap'].includes(args[1].queryId))
-          return io.execute(...args);
-        seen.push([args[1].queryId, wave]);
-        await new Promise((resolve) => {
-          pending.push(resolve);
-          if (!timer)
-            timer = setImmediate(() => {
-              const batch = pending;
-              pending = [];
-              timer = undefined;
-              wave++;
-              batch.forEach((f) => f());
-            });
-        });
+        const { queryId } = args[1];
+        seen.add(queryId);
+        if (queryId === 'calendar.target_plan_versions') await calendar.promise;
         return io.execute(...args);
       },
     },
   );
-  assert.equal(
-    seen.find(([q]) => q === 'calendar.target_versions')[1],
-    seen.find(([q]) => q === 'source.health-date')[1],
-  );
-  assert.equal(wave, 2);
+  try {
+    await waitFor(
+      () => seen.has('calendar.target_plan_versions') && seen.has('source.health-date'),
+    );
+    assert.ok(!seen.has('page.sku-detail.atomic'));
+  } finally {
+    calendar.resolve();
+    await read;
+  }
 });
 
 test('base drill requests reuse only date/version metadata within one refresh cycle', async () => {
@@ -241,6 +231,59 @@ test('landing summary and a later SKU drill share metadata, never their business
   }
 });
 
+test('base cards, structure and SKU rows share the available rolling plan when month-start demand is missing', async () => {
+  const io = source();
+  const calls = [];
+  const execute = async (request, call) => {
+    calls.push(call);
+    const columns = config.queries[call.queryId].resultColumns;
+    if (call.queryId === 'calendar.target_plan_versions') {
+      assert.deepEqual(call.values.plan_months, ['2026-10-01', '2026-11-01']);
+      return {
+        configVersion: 'v1',
+        returnedColumns: columns,
+        rows: [
+          { month: '2026-11-01', inventory_version: '月初', usable_plan_rows: 0 },
+          { month: '2026-11-01', inventory_version: '滚动', usable_plan_rows: 2 },
+          { month: '2026-10-01', inventory_version: '纠偏', usable_plan_rows: 4 },
+        ],
+      };
+    }
+    if (call.queryId === 'page.structure-groups')
+      return {
+        configVersion: 'v1',
+        returnedColumns: columns,
+        rows: [Object.fromEntries(columns.map((key) => [key, key === 'level' ? '郑州' : 1]))],
+      };
+    return io.execute(request, call);
+  };
+  const options = { execute, now: new Date('2026-10-24T01:00:00Z') };
+  startConfiguredStockReadCycle(new AbortController().signal);
+  try {
+    const cards = await readConfiguredStockSummary(undefined, options);
+    const structure = await readConfiguredStockSummary(undefined, {
+      ...options,
+      structure: { groupBy: 'base' },
+    });
+    const page = await readConfiguredStockPage({ base: '郑州' }, options);
+    assert.deepEqual(cards.scope, structure.scope);
+    assert.equal(cards.scope.versionLabel, '滚动');
+    assert.equal(cards.scope.fallbackUsed, true);
+    assert.equal(page.readContext.version, '滚动');
+    assert.equal(
+      calls.filter((call) => call.queryId === 'calendar.target_plan_versions').length,
+      1,
+    );
+    for (const call of calls.filter((call) => call.queryId.startsWith('page.'))) {
+      assert.equal(call.values.inventory_version, '滚动');
+      assert.equal(call.values.month, '2026-11-01');
+      assert.equal(call.values.stock_month, '2026-10-01');
+    }
+  } finally {
+    startConfiguredStockReadCycle();
+  }
+});
+
 test('cancelling a drill does not cancel another consumer of the refresh metadata', async () => {
   const io = source(),
     cycle = new AbortController(),
@@ -248,7 +291,7 @@ test('cancelling a drill does not cancel another consumer of the refresh metadat
   startConfiguredStockReadCycle(cycle.signal);
   const release = [];
   const execute = async (...args) => {
-    if (['calendar.target_versions', 'source.health-date'].includes(args[1].queryId))
+    if (['calendar.target_plan_versions', 'source.health-date'].includes(args[1].queryId))
       await new Promise((r) => release.push(r));
     return io.execute(...args);
   };
