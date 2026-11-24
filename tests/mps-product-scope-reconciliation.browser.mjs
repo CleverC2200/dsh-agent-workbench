@@ -76,7 +76,7 @@ test('第3步隐藏产品范围对账，第4步展示和下载源清单覆盖、
   assert.ok(rows.every((row) => /全国基地范围/.test(row['缺少的覆盖证明'])));
 });
 
-test('三类池外异常页面和CSV保留双来源，总清单去重且唯一历史替换不列异常', async (t) => {
+test('三类池外异常页面和CSV保留双来源，按基地SKU去重并单列池外老品', async (t) => {
   const current = [product('A', '甲'), product('B', '乙')];
   current[0] = { ...current[0], replacement_material_code: 'OLD', replace_num: '2' };
   const prefix = 'agents_scm_cust_deliv_daily_di.';
@@ -164,7 +164,7 @@ test('三类池外异常页面和CSV保留双来源，总清单去重且唯一�
     report.getByRole('button', { name: '销售提报SKU（1条）', exact: true }),
   ).toBeVisible();
   await expect(
-    report.getByRole('button', { name: '总异常清单（3项）', exact: true }),
+    report.getByRole('button', { name: '总异常清单（4项）', exact: true }),
   ).toBeVisible();
   const download = async () => {
     const pending = page.waitForEvent('download');
@@ -178,12 +178,15 @@ test('三类池外异常页面和CSV保留双来源，总清单去重且唯一�
     return XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' });
   };
   const all = await download();
-  assert.equal(all.length, 3);
+  assert.equal(all.length, 4);
   assert.equal(all.find((row) => row.SKU === 'OUT')['来源'], '历史发货；销售提报');
   assert.match(all.find((row) => row.SKU === 'OUT')['原始值'], /历史发货：20；销售提报：8/);
-  assert.ok(!all.some((row) => row.SKU === 'OLD' && row['基地'] === '甲'));
+  assert.match(
+    all.find((row) => row.SKU === 'OLD' && row['基地'] === '甲')['原始值'],
+    /历史发货：3/,
+  );
   for (const [label, size, codes] of [
-    ['历史有发货SKU', 2, ['OUT', 'OLD']],
+    ['历史有发货SKU', 3, ['OLD', 'OUT', 'OLD']],
     ['销售提报SKU', 1, ['OUT']],
     ['其他', 1, ['ZERO']],
   ]) {
@@ -195,7 +198,9 @@ test('三类池外异常页面和CSV保留双来源，总清单去重且唯一�
       codes,
     );
     for (const row of rows)
-      await expect(report.getByRole('row').filter({ hasText: row.SKU })).toContainText(row['来源']);
+      await expect(
+        report.getByRole('row').filter({ hasText: row.SKU }).filter({ hasText: row['基地'] }),
+      ).toContainText(row['来源']);
   }
 });
 
