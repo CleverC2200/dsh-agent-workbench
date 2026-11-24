@@ -9468,9 +9468,7 @@
     },
     "calendar.target_plan_versions": {
       "title": "基地库存计划版本可用性",
-      "plugins": [
-        "aqkc"
-      ],
+      "plugins": ["aqkc"],
       "grain": "month/version",
       "notes": "同基地、SKU 和版本的日均计划必须完整一致；无直接日均时，仅接受一致且非负的本版主销与转出计划。真实零保留。",
       "parameterSpec": {
@@ -9484,17 +9482,11 @@
       "request": {
         "sql": "WITH plan_inputs AS (\n  SELECT t.year_month AS month, t.inventory_version AS inventory_version,\n    t.belong_base AS base, t.material_code AS sku, t.avg_daily_planned_demand AS daily_demand,\n    CASE WHEN t.inventory_version = '月初' THEN t.main_sales_plan_v1\n      WHEN t.inventory_version = '纠偏' THEN t.main_sales_plan_adj\n      WHEN t.inventory_version = '滚动' THEN t.roll_sales_plan ELSE NULL END AS sales_plan,\n    CASE WHEN t.inventory_version = '月初' THEN t.transfer_out_plan_v1\n      WHEN t.inventory_version = '纠偏' THEN t.transfer_out_plan_adj\n      WHEN t.inventory_version = '滚动' THEN t.transfer_out_plan_roll ELSE NULL END AS transfer_plan\n  FROM agents_scm_goods_inventory_turnover_data_m AS t\n  WHERE t.year_month IN (:gea_p1)\n), plan_keys AS (\n  SELECT p.month AS month, p.inventory_version AS inventory_version,\n    COUNT(1) AS source_rows, COUNT(p.daily_demand) AS daily_rows,\n    MIN(p.daily_demand) AS min_daily, MAX(p.daily_demand) AS max_daily,\n    COUNT(p.sales_plan) AS sales_rows,\n    MIN(p.sales_plan) AS min_sales, MAX(p.sales_plan) AS max_sales,\n    COUNT(p.transfer_plan) AS transfer_rows,\n    MIN(p.transfer_plan) AS min_transfer, MAX(p.transfer_plan) AS max_transfer\n  FROM plan_inputs AS p\n  GROUP BY p.month, p.inventory_version, p.base, p.sku\n)\nSELECT k.month AS month, k.inventory_version AS inventory_version,\n  COUNT(CASE\n    WHEN k.daily_rows = k.source_rows AND k.min_daily = k.max_daily AND k.min_daily >= 0 THEN 1\n    WHEN k.daily_rows = 0\n      AND k.sales_rows = k.source_rows AND k.min_sales = k.max_sales AND k.min_sales >= 0\n      AND k.transfer_rows = k.source_rows AND k.min_transfer = k.max_transfer AND k.min_transfer >= 0 THEN 1\n    ELSE NULL END) AS usable_plan_rows\nFROM plan_keys AS k\nGROUP BY k.month, k.inventory_version\nORDER BY k.month DESC, k.inventory_version",
         "parameters": {
-          "gea_p1": [
-            "2026-11-01"
-          ]
+          "gea_p1": ["2026-11-01"]
         },
         "includeTotal": false
       },
-      "resultColumns": [
-        "month",
-        "inventory_version",
-        "usable_plan_rows"
-      ]
+      "resultColumns": ["month", "inventory_version", "usable_plan_rows"]
     },
     "calendar.target_versions": {
       "title": "目标月份版本目录",
