@@ -1,3 +1,4 @@
+import { categoryHistoryMonths, historyComparisonMonths } from './category-history-periods.js';
 import { matchesCategories, createDimensionCategoryMatcher } from './category-filter.js';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { buildCategoryDemand } from './category-demand.js';
@@ -17,13 +18,13 @@ const monthOffset = (month, offset) => {
   date.setUTCMonth(date.getUTCMonth() + offset);
   return date.toISOString().slice(0, 7);
 };
-const distinctHistoryMonths = (periods) => {
-  const seen = new Set();
-  return periods.map((period) => {
-    const rows = period.rows.filter((row) => !seen.has(row['月份']));
-    for (const row of rows) seen.add(row['月份']);
-    return { ...period, rows };
-  });
+const cancelOnSourceReset = (cancel) => {
+  const events = ['gea-session-changing', 'gea-identity-changed', 'pagehide'];
+  for (const name of events) window.addEventListener(name, cancel);
+  return () => {
+    for (const name of events) window.removeEventListener(name, cancel);
+    cancel();
+  };
 };
 const demandSourcePriority = 3;
 const historyReadState = (month, entries) => ({
@@ -95,7 +96,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               : {}),
           });
       }
-      return () => controller.current?.abort();
+      return cancelOnSourceReset(() => controller.current?.abort());
     }, [active]);
     const load = async () => {
       controller.current?.abort();
@@ -136,21 +137,26 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               });
           });
       }
+      const readHistoryPeriod = async (year) => {
+        const month = monthOffset(draft.month, -12 * year);
+        const requestedMonths =
+          year === 4 ? historyComparisonMonths(month) : categoryHistoryMonths(month);
+        return {
+          month,
+          metadata: { requestedMonths },
+          ...(await read(() =>
+            readSourceTable('category-history', month, stop.signal, requestedMonths),
+          )),
+        };
+      };
       try {
+        const historyPeriods =
+          kind === 'parameters' ? await Promise.all([1, 2, 3].map(readHistoryPeriod)) : null;
+        if (historyPeriods) historyPeriods.push(await readHistoryPeriod(4));
         const result =
           kind === 'parameters'
             ? {
-                periods: await Promise.all(
-                  [1, 2, 3].map(async (year) => {
-                    const month = monthOffset(draft.month, -12 * year);
-                    return {
-                      month,
-                      ...(await read(() =>
-                        readSourceTable('category-history', month, stop.signal),
-                      )),
-                    };
-                  }),
-                ),
+                periods: historyPeriods,
                 annual: await read(() => readSourceTable('annual-pool', draft.month, stop.signal)),
               }
             : {
@@ -182,9 +188,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         if (!stop.signal.aborted)
           update({
             [type]:
-              kind === 'parameters'
-                ? { periods: distinctHistoryMonths(result.periods), annual: result.annual }
-                : result,
+              kind === 'parameters' ? { periods: result.periods, annual: result.annual } : result,
             [type + 'Read']: { status: 'ready', month: draft.month, error: errors.join('；') },
           });
       } catch (error) {
@@ -223,7 +227,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               historyWindowRead: { status: 'failed', month: draft.month, error: error.message },
             });
         });
-      return () => stop.abort();
+      return cancelOnSourceReset(() => stop.abort());
     }, [active, kind, draft.month, historyReadAttempt, recentDemandSettled]);
     const readParameterWorkflow = react.useMemo(() => {
       let result;
@@ -862,6 +866,9 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                 '基地SKU财年量',
                 '财年源月份数',
                 '财年有效月份数',
+                '池内大类财年量',
+                '财年缺失或冲突月份',
+                '财年核对异常',
                 '上年同期发货数量',
                 '上月发货数量',
                 '取数依据',

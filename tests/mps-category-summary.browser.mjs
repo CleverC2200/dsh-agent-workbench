@@ -77,7 +77,7 @@ test('category monthly totals retain missing inputs and real zero, and filters m
           last_month_dimension_act_dl_qty: 100,
           national_dimension_fiscal_act_dl_qty: 999999,
           base_fiscal_act_dl_qty: 1000,
-          fiscal_year: stat_month.slice(0, 4),
+          fiscal_year: `${Number(stat_month.slice(0, 4)) - (Number(stat_month.slice(4)) < 7 ? 1 : 0)}财年`,
           source_rows: 1,
         })),
       );

@@ -126,7 +126,7 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
           last_month_dimension_act_dl_qty: 100,
           national_dimension_fiscal_act_dl_qty: 999999,
           base_fiscal_act_dl_qty: 1000,
-          fiscal_year: stat_month.slice(0, 4),
+          fiscal_year: `${Number(stat_month.slice(0, 4)) - (Number(stat_month.slice(4)) < 7 ? 1 : 0)}财年`,
           source_rows: 1,
         }));
       if (!query.queryId.endsWith('.count'))

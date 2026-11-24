@@ -1,3 +1,4 @@
+import { categoryHistoryMonths } from '../static/mps/source/category-history-periods.js';
 import test from 'node:test';
 import {
   workflowDraft as draft,
@@ -67,19 +68,19 @@ function partialDemandFixture() {
   source.historicalIndicatorsRead = { status: 'ready', month: source.month };
   source.historicalIndicators = {
     periods: [2023, 2024, 2025].map((year) => ({
-      rows: [7, 8, 9, 10, 11, 12, 13, 14].map((month) => ({
+      rows: categoryHistoryMonths(`${year}-11`).map((month) => ({
         维度类型: '基地+产品',
         基地: '甲',
         大类: '点心',
         维度值: 'A',
         粒度状态: '唯一',
-        月份: `${year + Math.floor((month - 1) / 12)}-${String(((month - 1) % 12) + 1).padStart(2, '0')}`,
+        月份: month,
         月发货数量: 100,
         上年同期发货数量: 100,
         上月发货数量: 100,
         全国维度财年发货数量: 999999,
         基地维度财年发货数量: 1200,
-        财年: String(year),
+        财年: `${Number(month.slice(0, 4)) - (Number(month.slice(5)) < 7 ? 1 : 0)}财年`,
       })),
     })),
     annual: {

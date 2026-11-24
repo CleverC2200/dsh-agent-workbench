@@ -118,7 +118,7 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
             base_fiscal_month_count: 12,
             base_fiscal_quantity_month_count: 12,
             national_dimension_fiscal_act_dl_qty: 999999,
-            fiscal_year: stat_month.slice(0, 4),
+            fiscal_year: `${Number(stat_month.slice(0, 4)) - (Number(stat_month.slice(4)) < 7 ? 1 : 0)}财年`,
             source_rows: 1,
           })),
         );

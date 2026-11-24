@@ -20,10 +20,10 @@ test('category source SQL retains base SKU grain and rebuilds complete base fisc
     ['华东', 'A', 9000],
     ['郑州', 'Z', 8000],
   ])
-    for (let month = 1; month <= 12; month++)
+    for (let month = 7; month <= 18; month++)
       insert.run(
         '基地+产品',
-        `2025${String(month).padStart(2, '0')}`,
+        `${2025 + Math.floor((month - 1) / 12)}${String(((month - 1) % 12) + 1).padStart(2, '0')}`,
         base,
         code,
         '2025',
@@ -40,12 +40,21 @@ test('category source SQL retains base SKU grain and rebuilds complete base fisc
   assert.equal(current.base_fiscal_quantity_month_count, 12);
   assert.equal(current.national_dimension_fiscal_act_dl_qty, 999999);
   assert.equal(rows.find((row) => row.belong_base === '华东').base_fiscal_act_dl_qty, 108000);
-  assert.equal(rows.find((row) => row.dimension_value === 'B').base_fiscal_act_dl_qty, null);
+  assert.equal(rows.find((row) => row.dimension_value === 'B').base_fiscal_act_dl_qty, 40);
   assert.equal(
     db.prepare(config.queries['category-history.count'].request.sql).get({ gea_p1: '202512' })
       .total,
     rows.length,
   );
+  db.exec("DELETE FROM agents_scm_base_dimension_delivery_mi WHERE stat_month = '202606'");
+  assert.equal(
+    db
+      .prepare(detail)
+      .all({ gea_p1: '202512', gea_p98: 200, gea_p99: 0 })
+      .find((row) => row.dimension_value === 'B').base_fiscal_act_dl_qty,
+    null,
+  );
+  insert.run('基地+产品', '202606', '郑州', 'A', '2025', 100);
   insert.run('基地+产品', '202512', '郑州', 'A', '2025', 101);
   const conflicted = db
     .prepare(detail)

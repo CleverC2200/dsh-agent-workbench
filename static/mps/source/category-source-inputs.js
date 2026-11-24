@@ -1,3 +1,8 @@
+import {
+  categoryHistoryMonths,
+  historyFiscalMonths,
+  historyMonthOffset,
+} from './category-history-periods.js';
 import { createSourceProductMatcher, sourceProductMappings } from './source-projections.js';
 import { canonicalBaseName } from './relations.js';
 
@@ -14,6 +19,12 @@ export function categorySourceInputs(draft) {
   const products = sourceProductMappings(draft.products, draft.productRaw);
   const match = createSourceProductMatcher(products);
   const issues = [];
+  const categoriesByCode = new Map(
+    [...Map.groupBy(products, (row) => row['产品编码'])].map(([code, rows]) => [
+      code,
+      [...new Set(rows.map((row) => row['大类']))],
+    ]),
+  );
   const scope = (rows, source, history = false) =>
     rows.flatMap((row) => {
       const base = canonicalBaseName(row['基地']);
@@ -32,13 +43,7 @@ export function categorySourceInputs(draft) {
           : [];
       const categories =
         code && (!history || row['维度类型'] === '基地+产品')
-          ? [
-              ...new Set(
-                products
-                  .filter((product) => product['产品编码'] === code)
-                  .map((product) => product['大类']),
-              ),
-            ]
+          ? (categoriesByCode.get(code) ?? [])
           : [...new Set(products.map((product) => product['大类']))].filter(
               (category, _index, categories) => {
                 const sourceCategory = history ? row['维度值'] : row['大类'];
@@ -70,51 +75,144 @@ export function categorySourceInputs(draft) {
   const ready =
     draft.historicalIndicatorsRead?.status === 'ready' &&
     draft.historicalIndicatorsRead.month === draft.month;
-  const details = ready
-    ? scope(
-        input.periods.flatMap((period) => (period.error ? [] : period.rows)),
-        '历史发货',
-        true,
-      )
-    : [];
-  const groups = Map.groupBy(details, (row) => JSON.stringify([row['月份'], row['大类']]));
-  const history = [...groups.values()].flatMap((categoryRows) => {
-    const annual = total(categoryRows, '基地维度财年发货数量');
-    return [...Map.groupBy(categoryRows, (row) => row['基地']).values()].map((rows) => {
-      const fiscalYears = new Set(rows.map((row) => row['财年']));
-      const valid =
-        rows.every((row) => row['粒度状态'] === '唯一') &&
-        fiscalYears.size === 1 &&
-        new Set(rows.map((row) => row['维度值'])).size === rows.length;
-      const quantity = valid ? total(rows, '月发货数量') : null;
-      const previousYear = valid ? total(rows, '上年同期发货数量') : null;
-      const previousMonth = valid ? total(rows, '上月发货数量') : null;
+  const periods = ready ? input.periods : [];
+  const sourceMonths = new Map();
+  for (const period of periods) {
+    const groups = Map.groupBy(period.rows, (row) => row['月份']);
+    const requested =
+      period.metadata?.requestedMonths ??
+      (period.month ? categoryHistoryMonths(period.month) : [...groups.keys()]);
+    for (const month of requested) {
+      const rows = groups.get(month) ?? [];
+      const observations = sourceMonths.get(month) ?? [];
+      observations.push({ rows, complete: !period.error && !period.metadata?.partial });
+      sourceMonths.set(month, observations);
+    }
+  }
+  const completeMonths = new Map(
+    [...sourceMonths].map(([month, observations]) => {
+      const completed = observations.filter(({ complete }) => complete);
+      const complete = completed.length > 0 && completed.every(({ rows }) => rows.length > 0);
+      const values =
+        complete && completed.length > 1
+          ? completed.map(({ rows }) =>
+              JSON.stringify(rows.map((row) => JSON.stringify(row)).sort()),
+            )
+          : [];
+      return [month, complete && new Set(values).size <= 1];
+    }),
+  );
+  const raw = [
+    ...new Map(
+      [...sourceMonths.values()]
+        .flatMap((observations) => observations.flatMap(({ rows }) => rows))
+        .map((row) => [JSON.stringify(row), row]),
+    ).values(),
+  ];
+  const details = scope(raw, '历史发货', true);
+  const calculationRows = [...sourceMonths.values()].flatMap(
+    (observations) => observations.find(({ complete }) => complete)?.rows ?? [],
+  );
+  const scoped = scope(calculationRows, '历史发货', true);
+  const assigned = scoped.filter((row) => row['基地']);
+  const baseMonthly = Map.groupBy(assigned, (row) =>
+    JSON.stringify([row['月份'], row['大类'], row['基地']]),
+  );
+  const monthly = Map.groupBy(assigned, (row) => JSON.stringify([row['月份'], row['大类']]));
+  const unassigned = new Set(
+    scoped.filter((row) => !row['基地']).map((row) => JSON.stringify([row['月份'], row['大类']])),
+  );
+  const validRows = (rows) =>
+    rows.every((row) => row['粒度状态'] === '唯一') &&
+    new Set(rows.map((row) => JSON.stringify([row['月份'], row['基地'], row['维度值']]))).size ===
+      rows.length;
+  const sum = (rows) => (validRows(rows) ? (rows.length ? total(rows, '月发货数量') : 0) : null);
+  const categoryBases = [
+    ...Map.groupBy(products, (row) =>
+      JSON.stringify([canonicalBaseName(row['基地']), row['大类']]),
+    ).values(),
+  ]
+    .map(([row]) => ({ base: canonicalBaseName(row['基地']), category: row['大类'] }))
+    .filter(({ base, category }) => base && base !== '全国' && category);
+  const quantities = new Map();
+  for (const month of sourceMonths.keys()) {
+    for (const { base, category } of categoryBases) {
+      const categoryKey = JSON.stringify([month, category]);
+      const categoryRows = monthly.get(categoryKey) ?? [];
+      const rows = baseMonthly.get(JSON.stringify([month, category, base])) ?? [];
+      const complete =
+        completeMonths.get(month) && (categoryRows.length || !unassigned.has(categoryKey));
+      quantities.set(JSON.stringify([month, category, base]), {
+        rows,
+        quantity: complete ? sum(rows) : null,
+      });
+    }
+  }
+  const quantityAt = (month, category, base) =>
+    quantities.get(JSON.stringify([month, category, base]))?.quantity ?? null;
+  const fiscal = new Map();
+  const monthFiscal = new Map();
+  const history = [...sourceMonths.keys()].flatMap((month) => {
+    return categoryBases.map(({ base, category }) => {
+      const rows = quantities.get(JSON.stringify([month, category, base])).rows;
+      const months = historyFiscalMonths(month);
+      const fiscalKey = JSON.stringify([months[0], category]);
+      if (!fiscal.has(fiscalKey)) {
+        const fiscalRows = months.flatMap(
+          (period) => monthly.get(JSON.stringify([period, category])) ?? [],
+        );
+        const years = new Set(fiscalRows.map((row) => row['财年']));
+        const missing = months.filter((period) => {
+          const key = JSON.stringify([period, category]);
+          const rows = monthly.get(key) ?? [];
+          return (
+            !completeMonths.get(period) || (rows.length ? sum(rows) === null : unassigned.has(key))
+          );
+        });
+        const complete =
+          !missing.length && years.size === 1 && fiscalRows.every((row) => row['财年']);
+        fiscal.set(fiscalKey, {
+          quantity: complete ? sum(fiscalRows) : null,
+          year: years.size === 1 ? fiscalRows[0]['财年'] : '',
+          missing,
+          issue:
+            years.size > 1 ? '同财年源月份的财年标识不一致' : !years.size ? '缺可归属财年明细' : '',
+        });
+      }
+      const annual = fiscal.get(fiscalKey);
+      monthFiscal.set(JSON.stringify([month, category]), annual);
+      const quantity = quantityAt(month, category, base);
+      const previousYear = quantityAt(historyMonthOffset(month, -12), category, base);
+      const previousMonth = quantityAt(historyMonthOffset(month, -1), category, base);
       return {
-        月份: rows[0]['月份'],
-        基地: rows[0]['基地'],
-        大类: rows[0]['大类'],
+        月份: month,
+        基地: base,
+        大类: category,
         维度类型: '基地+大类',
-        维度值: rows[0]['大类'],
-        财年: rows[0]['财年'],
+        维度值: category,
+        财年: annual.year,
         月发货数量: quantity,
         上年同期发货数量: previousYear,
         上月发货数量: previousMonth,
-        全国维度财年发货数量: annual,
-        月发货占财年比例: quantity !== null && annual ? quantity / annual : null,
+        全国维度财年发货数量: annual.quantity,
+        月发货占财年比例: quantity !== null && annual.quantity ? quantity / annual.quantity : null,
         同比增长率: quantity !== null && previousYear ? quantity / previousYear - 1 : null,
         环比增长率: quantity !== null && previousMonth ? quantity / previousMonth - 1 : null,
-        源记录数: rows.reduce((sum, row) => sum + Number(row['源记录数'] || 0), 0),
-        粒度状态: valid ? '唯一' : '业务键重复，仅保留源值',
-        缺项原因: rows
-          .map((row) => row['缺项原因'])
-          .filter(Boolean)
-          .join('；'),
+        源记录数: rows.reduce((count, row) => count + Number(row['源记录数'] || 0), 0),
+        粒度状态: quantity !== null ? '唯一' : '源月份不完整或数量冲突',
+        缺项原因: quantity === null ? `${month} 源月份不完整或数量冲突` : '',
       };
     });
   });
   const annualDetails = ready ? scope(input.annual?.rows ?? [], '年度计划') : [];
+  const annualInputs = [
+    ...Map.groupBy(annualDetails, (row) => JSON.stringify([row['月份'], row['大类']])).values(),
+  ].flatMap((rows) => {
+    const assigned = rows.filter((row) => row['基地']);
+    return assigned.length ? assigned : rows;
+  });
   const annual = [
-    ...Map.groupBy(annualDetails, (row) =>
+    ...Map.groupBy(annualInputs, (row) =>
       JSON.stringify([row['月份'], row['基地'], row['大类']]),
     ).values(),
   ].map((rows) => ({
@@ -126,28 +224,34 @@ export function categorySourceInputs(draft) {
     源记录数: rows.reduce((sum, row) => sum + Number(row['源记录数'] || 0), 0),
   }));
   const sourceRows = [
-    ...details.map((row) => ({
-      来源: '历史发货',
-      月份: row['月份'],
-      基地: row['基地'],
-      产品编码: row['维度值'],
-      大类: row['大类'],
-      数量: row['月发货数量'],
-      原始来源数量: row['原始来源数量'],
-      财年: row['财年'],
-      原始全国SKU财年量: row['全国维度财年发货数量'],
-      基地SKU财年量: row['基地维度财年发货数量'],
-      财年源月份数: row['基地财年源月份数'],
-      财年有效月份数: row['基地财年有效月份数'],
-      上年同期发货数量: row['上年同期发货数量'],
-      上月发货数量: row['上月发货数量'],
-      取数依据: '同基地SKU源财年12个月实际发货合计',
-      缺项原因:
-        row['缺项原因'] ||
-        (number(row['基地维度财年发货数量']) === null
-          ? '基地SKU源财年未覆盖12个有效月份或有数量冲突'
-          : ''),
-    })),
+    ...details.map((row) => {
+      const annual = monthFiscal.get(JSON.stringify([row['月份'], row['大类']]));
+      return {
+        来源: '历史发货',
+        月份: row['月份'],
+        基地: row['基地'],
+        产品编码: row['维度值'],
+        大类: row['大类'],
+        数量: row['月发货数量'],
+        原始来源数量: row['原始来源数量'],
+        财年: row['财年'],
+        原始全国SKU财年量: row['全国维度财年发货数量'],
+        基地SKU财年量: row['基地维度财年发货数量'],
+        财年源月份数: row['基地财年源月份数'],
+        财年有效月份数: row['基地财年有效月份数'],
+        池内大类财年量: annual?.quantity ?? null,
+        财年缺失或冲突月份: annual?.missing.join('、') ?? '',
+        财年核对异常: annual?.issue ?? '',
+        上年同期发货数量: row['上年同期发货数量'],
+        上月发货数量: row['上月发货数量'],
+        取数依据: '自然月独立按产品池汇总；财年按7月至次年6月完整源月份的池内记录合计',
+        缺项原因:
+          row['缺项原因'] ||
+          (number(row['基地维度财年发货数量']) === null
+            ? '原基地SKU财年量不可用；大类财年量由完整源月份独立汇总'
+            : ''),
+      };
+    }),
     ...annualDetails.map((row) => ({
       来源: '年度计划',
       月份: row['月份'],
