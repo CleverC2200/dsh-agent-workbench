@@ -83,15 +83,19 @@ test('长表弹窗滚动后表头贴齐正文顶端，横向滚动和关闭保�
   });
   await capture(page, 'pool-scrolled');
   await headerAtScrollTop(dialog, body);
-  for (const width of [1920, 820]) {
+  for (const width of [1920, 520]) {
     await page.setViewportSize({ width, height: 720 });
     await page.evaluate(() => {
       document.querySelector('#root').style.cssText = 'width:100%;height:100%;margin-left:0';
     });
     await headerAtScrollTop(dialog, body);
-    await body.evaluate((element) => {
-      element.scrollLeft = element.scrollWidth;
-    });
+    if (width === 520) {
+      const horizontalOffset = await body.evaluate((element) => {
+        element.scrollLeft = element.scrollWidth;
+        return element.scrollLeft;
+      });
+      assert.ok(horizontalOffset > 0);
+    }
     const bounds = await dialog.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return { left: rect.left, right: rect.right, width: innerWidth };
