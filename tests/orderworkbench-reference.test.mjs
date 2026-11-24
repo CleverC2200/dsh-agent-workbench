@@ -48,6 +48,16 @@ test('order workbench reference interactions', async () => {
   window.structuredClone = structuredClone;
   window.AbortController = AbortController;
   window.AbortSignal = AbortSignal;
+  window.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+  };
+  window.eval(
+    readFileSync('prototypes/inventory-orderworkbench/frozen-columns.mjs', 'utf8').replace(
+      'export function',
+      'function',
+    ),
+  );
   Object.assign(window, {
     provinceAnalysis,
     provinceAnalysisContext,
