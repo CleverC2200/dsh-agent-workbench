@@ -46,19 +46,6 @@ html[data-platform='darwin'] .agent-workbench-document-chrome {
 .agent-workbench-document-chrome-tools {
   display: block;
 }
-.agent-workbench-document-chrome-custom {
-  position: relative;
-  z-index: 2;
-  min-height: 58px;
-  height: auto;
-}
-.agent-workbench-document-custom-toolbar {
-  position: relative;
-  container-type: inline-size;
-  min-width: 0;
-  align-self: center;
-  padding-inline-start: var(--dsh-frame-leading-clearance, 0px);
-}
 .agent-workbench-business {
   display: flex;
   flex-direction: column;

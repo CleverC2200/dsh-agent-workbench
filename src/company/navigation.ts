@@ -2,8 +2,6 @@ import type { BusinessEnvironment } from './account.ts';
 import type { BusinessNavigationCatalog } from './business-navigation.ts';
 import type { CopyKey } from './locales.ts';
 
-export const LANTERN_DASHBOARD_ID = 'inventory-apsplan-lantern';
-
 const DESKTOP_GROUPS = [
   { key: 'supply', title: 'menuSupply', icon: 'synergy' },
   { key: 'plan', title: 'menuPlan', icon: 'calendar' },
@@ -57,7 +55,6 @@ export type BusinessMenuEntry = {
   title: string;
   disabled: boolean;
   reason?: string;
-  nested?: boolean;
 };
 export type ResolvedBusinessMenuGroup = {
   key: string;
@@ -130,15 +127,6 @@ export function resolveBusinessMenu(
       disabled: reason !== undefined,
       reason,
     });
-    if (pageId === 'inventory-apsplan' && !reason && available.has(LANTERN_DASHBOARD_ID)) {
-      group.entries.push({
-        id: LANTERN_DASHBOARD_ID,
-        pageId: LANTERN_DASHBOARD_ID,
-        title: t('menuLanternDashboard'),
-        disabled: false,
-        nested: true,
-      });
-    }
   }
   return [...groups, ...byDomain.values(), other].filter((group) => group.entries.length > 0);
 }

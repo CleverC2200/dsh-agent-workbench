@@ -351,8 +351,6 @@ export function mountFramePresentation(
       () => pageViews.get(page.id) ?? 'split',
     );
     const titleless = inventoryAgentPages.has(page.id);
-    const customToolbar = page.kind === 'local' && page.chromeToolbar;
-    const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
     const [apsToolbarAvailable, setApsToolbarAvailable] = useState(false);
     const sharedToolbar =
       [
@@ -856,7 +854,6 @@ export function mountFramePresentation(
         className={
           'agent-workbench-document-chrome' +
           (titleless ? ' agent-workbench-document-chrome-tools' : '') +
-          (customToolbar ? ' agent-workbench-document-chrome-custom' : '') +
           (sharedToolbar ? ' agent-workbench-document-chrome-shared' : '')
         }
         data-workbench-view={view}
@@ -864,11 +861,7 @@ export function mountFramePresentation(
         data-window-drag
         aria-label={titleless ? '会话操作栏' : '工作台标题栏'}
       >
-        {customToolbar ? (
-          <div className="agent-workbench-document-custom-toolbar" ref={setToolbarHost} />
-        ) : (
-          !titleless && <span className="agent-workbench-document-title">{title}</span>
-        )}
+        {!titleless && <span className="agent-workbench-document-title">{title}</span>}
         {toolbar}
       </header>
     );
@@ -888,7 +881,7 @@ export function mountFramePresentation(
           <div className="agent-workbench-business" hidden={view === 'chat'}>
             {Body ? (
               <div className="agent-workbench-html">
-                <Body toolbarHost={toolbarHost} />
+                <Body />
               </div>
             ) : page.resourceId &&
               (identity.pagesReady === false || (identity.state === 'unknown' && loaded === 0)) ? (

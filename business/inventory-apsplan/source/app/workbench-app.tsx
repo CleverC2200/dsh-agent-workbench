@@ -9,6 +9,7 @@ import { DrillPage } from './drill-page';
 import { DrillBranchLoading } from './drill-branch-loading';
 import { QueryErrors } from '../../../shared/query-errors';
 import { BusinessToolbar } from '../../../shared/business-toolbar';
+import { LanternDashboard } from './lantern/lantern-dashboard';
 import { budgetPerformanceObservation } from 'dsh-agent-manage/aps-compute/budget-performance';
 import { productionOutputObservation } from 'dsh-agent-manage/aps-compute/production-output';
 import { action, reportElements, ask, call } from '../../../shared/channel.js';
@@ -229,6 +230,7 @@ type WorkspaceName =
   | 'sales-plan'
   | 'digital'
   | 'intelligent'
+  | 'lantern'
   | 'delivery';
 
 const HELP_CONTENT_REGISTRY_KEY = 'plan-help-content-registry:v1';
@@ -1948,6 +1950,11 @@ const workspaceMeta = {
     eyebrow: 'S&OP WORKBENCH',
     title: '产销协同看板',
     search: '搜索风险项',
+  },
+  lantern: {
+    title: '汤圆订制看板',
+    eyebrow: 'S&OP WORKBENCH',
+    search: '搜索指标',
   },
   'sales-plan': {
     eyebrow: 'SALES PLANNING',
@@ -5078,6 +5085,7 @@ export default function Home({
         'sales-plan',
         'digital',
         'intelligent',
+        'lantern',
         'delivery',
       ].includes(value as string)
         ? (value as WorkspaceName)
@@ -7849,7 +7857,7 @@ export default function Home({
       </aside>
 
       <main className="main-content" aria-busy={liveData && live.busy}>
-        {liveData && !['intelligent', 'plan'].includes(activeWorkspace) && (
+        {liveData && !['intelligent', 'plan', 'lantern'].includes(activeWorkspace) && (
           <p className="aps-data-state" role="status">
             原型预览
           </p>
@@ -7877,11 +7885,12 @@ export default function Home({
             </button>
           </div>
         )}
-        {embedMode && ['intelligent', 'plan'].includes(activeWorkspace) && (
+        {embedMode && ['intelligent', 'plan', 'lantern'].includes(activeWorkspace) && (
           <BusinessToolbar
             filters={
               <nav className="scope-tabs plugin-workspace-tabs" aria-label="产销工作区">
                 <button
+                  type="button"
                   className={activeWorkspace === 'intelligent' ? 'selected' : ''}
                   aria-current={activeWorkspace === 'intelligent' ? 'page' : undefined}
                   onClick={() => {
@@ -7892,6 +7901,7 @@ export default function Home({
                   智能工作台
                 </button>
                 <button
+                  type="button"
                   className={activeWorkspace === 'plan' ? 'selected' : ''}
                   aria-current={activeWorkspace === 'plan' ? 'page' : undefined}
                   onClick={() => {
@@ -7901,24 +7911,39 @@ export default function Home({
                 >
                   产销协同看板
                 </button>
+                <button
+                  type="button"
+                  className={activeWorkspace === 'lantern' ? 'selected' : ''}
+                  aria-current={activeWorkspace === 'lantern' ? 'page' : undefined}
+                  onClick={() => {
+                    setActiveWorkspace('lantern');
+                    closePeriodMenus();
+                  }}
+                >
+                  汤圆订制看板
+                </button>
               </nav>
             }
             actions={
-              <>
-                {periodDatePicker}
-                <button
-                  type="button"
-                  disabled={liveData && live.busy}
-                  onClick={() => window.dispatchEvent(new Event('gea-page-refresh'))}
-                >
-                  刷新
-                </button>
-              </>
+              activeWorkspace !== 'lantern' && (
+                <>
+                  {periodDatePicker}
+                  <button
+                    type="button"
+                    disabled={liveData && live.busy}
+                    onClick={() => window.dispatchEvent(new Event('gea-page-refresh'))}
+                  >
+                    刷新
+                  </button>
+                </>
+              )
             }
           />
         )}
 
-        {activeWorkspace === 'intelligent' ? (
+        {activeWorkspace === 'lantern' ? (
+          <LanternDashboard />
+        ) : activeWorkspace === 'intelligent' ? (
           <IntelligentWorkbenchPage
             live={liveData ? apsScopedLive : undefined}
             periodLabel={activeAnalysisPeriod}

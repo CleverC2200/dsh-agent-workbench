@@ -14,12 +14,7 @@ export type WorkbenchFramePage = WorkbenchPage & {
         readonly src: string | (() => string);
         readonly body?: never;
       }
-    | {
-        readonly kind: 'local';
-        readonly body: import('react').ComponentType<{ toolbarHost?: HTMLElement | null }>;
-        readonly chromeToolbar?: boolean;
-        readonly src?: never;
-      }
+    | { readonly kind: 'local'; readonly body: import('react').ComponentType; readonly src?: never }
   );
 export interface PageIdentitySnapshot {
   readonly state: string;

@@ -61,7 +61,6 @@ const copy = {
   menuCustomer: ['客户管理', 'Customers'],
   menuOrders: ['订单管理', 'Orders'],
   menuSupplyPage: ['产销协同工作台', 'Supply collaboration workbench'],
-  menuLanternDashboard: ['汤圆定制看板', 'Tangyuan dashboard'],
   menuCategoryPage: ['计划管理工作台', 'Planning management workbench'],
   menuSalesPage: ['销售计划', 'Sales plan'],
   menuMpsPage: ['主生产计划(MPS)(开发中)', 'Master production schedule (in development)'],

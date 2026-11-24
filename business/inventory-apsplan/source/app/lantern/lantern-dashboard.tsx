@@ -2,6 +2,7 @@ import React, {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -9,18 +10,39 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarDays, Check, ChevronDown, ChevronRight, Search, X } from 'lucide-react';
+import { refreshConfiguredQueries } from '../../../../shared/query-cache';
 import { baseProductHierarchy } from 'dsh-agent-manage/aps-compute/base-product-hierarchy';
 import {
   salesOrgHierarchy,
   type SalesOrgNode,
 } from 'dsh-agent-manage/aps-compute/sales-org-hierarchy';
-import styles from './lantern-dashboard.css';
+import {
+  comparisonPeriods,
+  latestBusinessDate,
+  observe,
+  productFacts,
+  productPath,
+  readLanternFacts,
+  sourceLabels,
+  type DashboardModule,
+  type DashboardPeriod,
+  type DateRange,
+  type InventoryScope,
+  type LanternFacts,
+  type MetricKey,
+  type Observation,
+  type PeriodView,
+  type ProductFilters,
+  type Scope,
+} from './lantern-data';
+import './lantern-dashboard.css';
 
 type Note = readonly [label: string, value: string];
 type Status = readonly [label: string, tone: 'success' | 'warning' | 'risk' | 'neutral'];
 type Comparison = { basis: string; reference?: string; change: Note };
 type Metric = {
   name: string;
+  key: MetricKey;
   value: string;
   unit?: string;
   status?: Status;
@@ -30,201 +52,244 @@ type Metric = {
   period?: 'monthly' | 'order';
   periodUnavailable?: boolean;
   target?: { operator: '>' | '<'; value: number };
+  amount?: number | null;
   comparisons?: readonly Comparison[];
 };
 
-function monthlyComparisons(previous = '—', change = '—'): readonly Comparison[] {
-  return [
-    { basis: '上月同期', reference: previous, change: ['环比变化', change] },
-    { basis: '去年同月同期', reference: '—', change: ['同比变化', '—'] },
-  ];
-}
+type MetricDefinition = Pick<Metric, 'key' | 'name' | 'target' | 'period'> & { unit: string };
 
-function orderComparisons(monthOnMonth: string, yearOnYear = '—'): readonly Comparison[] {
-  return [
-    { basis: '本期', change: ['环比', monthOnMonth] },
-    { basis: '本期', change: ['同比', yearOnYear] },
-  ];
-}
-
-const sales: readonly Metric[] = [
+const sales: readonly MetricDefinition[] = [
   {
+    key: 'budget',
     name: '销售预算达成率',
-    value: '72.61',
     unit: '%',
-    valueDetails: [
-      ['销售额', '—'],
-      ['月度预算', '—'],
-    ],
-    status: ['未达', 'risk'],
     period: 'monthly',
     target: { operator: '>', value: 95 },
-    comparisons: monthlyComparisons('75.30%', '−2.69pp'),
   },
   {
+    key: 'accuracy',
     name: '销售提报准确率',
-    value: '—',
-    status: ['数据不足', 'neutral'],
+    unit: '%',
     period: 'monthly',
     target: { operator: '>', value: 70 },
-    comparisons: monthlyComparisons(),
-    notes: [['统计范围', '11月1日–22日']],
   },
   {
+    key: 'cancellation',
     name: '作废率',
-    value: '4.07',
     unit: '%',
-    status: ['健康', 'success'],
     period: 'order',
     target: { operator: '<', value: 6 },
-    comparisons: orderComparisons('−1.77%*'),
   },
   {
+    key: 'amendment',
     name: '改单率',
-    value: '2.16',
     unit: '%',
-    status: ['预警', 'warning'],
     period: 'order',
     target: { operator: '<', value: 2 },
-    comparisons: orderComparisons('−1.18%', '+2.16%'),
   },
   {
+    key: 'ontime',
     name: '准交率',
-    value: '99.74',
     unit: '%',
-    status: ['健康', 'success'],
     period: 'order',
     target: { operator: '>', value: 98.5 },
-    comparisons: orderComparisons('+0.14%*'),
   },
 ];
-
-const production: readonly Metric[] = [
+const production: readonly MetricDefinition[] = [
   {
+    key: 'production',
     name: '生产计划达成率',
-    value: '99.95',
     unit: '%',
-    status: ['达标', 'success'],
     period: 'monthly',
     target: { operator: '>', value: 99 },
-    comparisons: monthlyComparisons(),
-    notes: [['源数据截至', '2026-11-22']],
   },
   {
+    key: 'fulfillment',
     name: '订单满足率',
-    value: '97.34',
     unit: '%',
-    status: ['达标', 'success'],
     period: 'monthly',
     target: { operator: '>', value: 95 },
-    comparisons: monthlyComparisons('95.76%', '+1.58pp'),
   },
 ];
-
-const inventoryMetricNames = [
-  '库存量',
-  '平均货龄',
-  '库存价值',
-  '库存新鲜度',
-  '大日期情况',
-] as const;
-
-type InventoryValues = Partial<Record<(typeof inventoryMetricNames)[number], Omit<Metric, 'name'>>>;
-type InventoryScope = 'all' | 'base' | 'branch' | 'customer';
-
+const inventoryDefinitions: readonly MetricDefinition[] = [
+  { key: 'inventory', name: '库存量', unit: '万件' },
+  { key: 'age', name: '平均货龄', unit: '天' },
+  { key: 'stockValue', name: '库存价值', unit: '万元' },
+  { key: 'freshness', name: '库存新鲜度', unit: '%' },
+  { key: 'largeDate', name: '大日期情况', unit: '万件' },
+];
+const inventoryMetricNames = inventoryDefinitions.map(({ name }) => name);
+const inventoryMetrics = (scope?: InventoryScope) =>
+  scope === 'customer'
+    ? inventoryDefinitions.map((definition) => ({
+        ...definition,
+        unit: definition.unit === '万件' ? '万箱' : definition.unit,
+      }))
+    : inventoryDefinitions;
+const inventoryViews: readonly { id: InventoryScope; title: string }[] = [
+  { id: 'all', title: '全量库存' },
+  { id: 'base', title: '基地库存' },
+  { id: 'branch', title: '分仓库存' },
+  { id: 'customer', title: '客户库存' },
+];
 const inventoryAgeThresholds = {
   base: { target: 30, severe: 60 },
   branch: { target: 60, severe: 90 },
 };
-
-const inventoryViews: readonly {
-  id: InventoryScope;
-  title: string;
-  values: InventoryValues;
-}[] = [
-  {
-    id: 'all',
-    title: '全量库存',
-    values: {
-      库存量: {
-        value: '453.06',
-        unit: '万件',
-        snapshot: { date: '2026-11-22', source: '产销协同工作台' },
-      },
-      平均货龄: { value: '18.51', unit: '天' },
-    },
-  },
-  {
-    id: 'base',
-    title: '基地库存',
-    values: {
-      库存量: {
-        value: '454.11',
-        unit: '万件',
-        snapshot: { date: '2026-11-23', source: '全链库存工作台' },
-      },
-      平均货龄: { value: '17.87', unit: '天' },
-    },
-  },
-  {
-    id: 'branch',
-    title: '分仓库存',
-    values: {
-      库存量: {
-        value: '14.75',
-        unit: '万件',
-        snapshot: { date: '2026-11-23', source: '全链库存工作台' },
-      },
-      平均货龄: { value: '38.83', unit: '天' },
-    },
-  },
-  {
-    id: 'customer',
-    title: '客户库存',
-    values: {
-      库存量: {
-        value: (5_879_429 / 10_000).toFixed(2),
-        unit: '万件',
-        snapshot: { date: '2026-11-23', source: '客户库存（总部角色）' },
-      },
-      库存价值: { value: '50,255.6', unit: '万', notes: [['数据覆盖', '2,816 / 2,877 客户']] },
-      库存新鲜度: {
-        value: '92.8',
-        unit: '%',
-        notes: [
-          ['数据覆盖', '1,502 / 2,877 客户'],
-          ['口径', '部分数据测算上限'],
-        ],
-      },
-      大日期情况: {
-        value: (389_708 / 10_000).toFixed(2),
-        unit: '万件',
-        status: ['大日期风险', 'warning'],
-        notes: [
-          ['数据覆盖', '1,503 / 2,877 客户'],
-          ['口径', '已知数量'],
-        ],
-      },
-    },
-  },
-];
-
-const missingInventoryValue: Omit<Metric, 'name'> = { value: '—', status: ['数据不足', 'neutral'] };
-
-const groups = [
-  {
-    id: 'sales',
-    title: '销售',
-    rows: [sales],
-  },
-  {
-    id: 'production',
-    title: '生产供应链',
-    rows: [production],
-  },
+const dashboardTabs = [
+  { id: 'sales', title: '销售', definitions: sales },
+  { id: 'production', title: '生产供应链', definitions: production },
+  { id: 'inventory', title: '库存', definitions: inventoryDefinitions },
 ] as const;
 
-const dashboardTabs = [...groups, { id: 'inventory', title: '库存' }] as const;
+const valueScale = (unit: string) => (unit.startsWith('万') ? 10_000 : 1);
+const displayNumber = (value: number) =>
+  value.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+function displayValue(value: number | null, unit: string) {
+  return value === null ? '-' : displayNumber(value / valueScale(unit)) + unit;
+}
+function metricValue(definition: MetricDefinition, observation: Observation): Metric {
+  const { value, date, details, note } = observation;
+  const met =
+    value !== null &&
+    definition.target &&
+    (definition.target.operator === '>'
+      ? value > definition.target.value
+      : value < definition.target.value);
+  return {
+    ...definition,
+    amount: value,
+    value: value === null ? '-' : displayNumber(value / valueScale(definition.unit)),
+    unit: value === null ? undefined : definition.unit,
+    status:
+      value === null
+        ? ['无数据', 'neutral']
+        : definition.target
+          ? [met ? '达标' : '未达', met ? 'success' : 'warning']
+          : undefined,
+    valueDetails:
+      definition.key === 'budget' && details
+        ? details.map(([label, amount]) => [label, displayValue(amount, '万元')])
+        : undefined,
+    notes: note ? [['口径', note]] : undefined,
+    snapshot: date
+      ? { date, source: definition.key === 'production' ? 'MES 实绩' : '受控数据' }
+      : undefined,
+    periodUnavailable: value === null,
+  };
+}
+
+const noFacts: LanternFacts = {};
+
+function useLanternFacts(
+  module: DashboardModule,
+  period: DashboardPeriod,
+  {
+    inventoryScope,
+    only,
+    product,
+    organization = false,
+    enabled = true,
+  }: {
+    inventoryScope?: InventoryScope;
+    only?: MetricKey;
+    product?: ProductFilters;
+    organization?: boolean;
+    enabled?: boolean;
+  } = {},
+) {
+  const [revision, setRevision] = useState(0);
+  const {
+    view,
+    range: { from, to },
+  } = period;
+  const category = product?.category,
+    group = product?.group,
+    sku = product?.sku,
+    level = product?.level;
+  const key = JSON.stringify([
+    module,
+    view,
+    from,
+    to,
+    inventoryScope,
+    only,
+    category,
+    group,
+    sku,
+    level,
+    organization,
+    revision,
+  ]);
+  const [state, setState] = useState<{ key: string; facts: LanternFacts; busy: boolean }>();
+  useEffect(() => {
+    if (!enabled) return;
+    const controller = new AbortController();
+    setState({ key, facts: {}, busy: true });
+    const load = () =>
+      void readLanternFacts({
+        module,
+        period: { view, range: { from, to } },
+        signal: controller.signal,
+        inventoryScope,
+        only,
+        organization,
+        product:
+          category === undefined
+            ? undefined
+            : { category, series: '', group: group ?? '', sku: sku ?? '', level: level ?? 0 },
+        onSource: (source, result) => {
+          setState((current) =>
+            current?.key === key
+              ? {
+                  ...current,
+                  facts: { ...current.facts, [source]: result },
+                }
+              : current,
+          );
+        },
+      }).then(
+        (facts) => {
+          if (!controller.signal.aborted) setState({ key, facts, busy: false });
+        },
+        () => {
+          if (!controller.signal.aborted)
+            setState((current) => (current?.key === key ? { ...current, busy: false } : current));
+        },
+      );
+    const timer = sku || group ? window.setTimeout(load, 220) : undefined;
+    if (timer === undefined) load();
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    module,
+    view,
+    from,
+    to,
+    key,
+    inventoryScope,
+    only,
+    category,
+    group,
+    sku,
+    level,
+    organization,
+    enabled,
+  ]);
+  return {
+    facts: enabled && state?.key === key ? state.facts : noFacts,
+    busy: enabled && (state?.key !== key || state.busy),
+    refresh: () => {
+      refreshConfiguredQueries();
+      setRevision((value) => value + 1);
+    },
+  };
+}
 
 const periodViews = [
   { id: 'year', label: '年度视角' },
@@ -233,11 +298,7 @@ const periodViews = [
   { id: 'day', label: '日度视角' },
 ] as const;
 
-type PeriodView = (typeof periodViews)[number]['id'];
-type DateRange = { from: string; to: string };
 type SelectedPeriod = { view: PeriodView; value: string; range: DateRange };
-
-const snapshotDate = '2026-11-23';
 
 const isoDate = (year: number, month: number, day: number) =>
   new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
@@ -275,28 +336,6 @@ function periodRange(view: PeriodView, value: string): DateRange {
   return { from: value, to: value };
 }
 
-function metricsForPeriod(metrics: readonly Metric[], { view, value, range }: SelectedPeriod) {
-  return metrics.map((metric) => {
-    const date = metric.snapshot?.date ?? snapshotDate;
-    const inRange = range.from <= date && date <= range.to;
-    const supported =
-      metric.period === 'monthly'
-        ? view === 'month' && value.startsWith('2026-11')
-        : metric.period === 'order'
-          ? (view === 'week' || view === 'month') && inRange
-          : inRange;
-    if (supported) return metric;
-    return {
-      name: metric.name,
-      target: metric.target,
-      period: metric.period,
-      valueDetails: metric.valueDetails?.map(([label]) => [label, '—'] as const),
-      periodUnavailable: true,
-      ...missingInventoryValue,
-    };
-  });
-}
-
 function MetricCard({
   metric,
   expanded,
@@ -310,9 +349,11 @@ function MetricCard({
 }) {
   const { snapshot, period, target, comparisons } = metric;
   const difference =
-    target && metric.value !== '—' ? Number(metric.value) - target.value : undefined;
+    target && metric.value !== '-'
+      ? Number(metric.value.replaceAll(',', '')) - target.value
+      : undefined;
   const gap =
-    difference === undefined ? '—' : `${difference > 0 ? '+' : ''}${difference.toFixed(2)}pp`;
+    difference === undefined ? '-' : `${difference > 0 ? '+' : ''}${difference.toFixed(2)}pp`;
   return (
     <article className="lantern-metric">
       {onToggle && (
@@ -342,10 +383,7 @@ function MetricCard({
         {snapshot ? (
           <time dateTime={snapshot.date}>截至 {snapshot.date}</time>
         ) : (
-          period &&
-          !metric.periodUnavailable && (
-            <small>{period === 'monthly' ? '本月累计' : '11月第五周'}</small>
-          )
+          period && !metric.periodUnavailable && <small>{'所选统计期间'}</small>
         )}
       </p>
       <div className="lantern-value-row">
@@ -389,8 +427,8 @@ function MetricCard({
           </dl>
         ) : (
           <p className="lantern-comparison-empty">
-            <span>暂无对比数据</span>
-            <span>—</span>
+            <span>{expanded ? '暂无对比数据' : '展开查看同期对比'}</span>
+            <span>-</span>
           </p>
         )}
         {snapshot && <p className="lantern-source">{snapshot.source}</p>}
@@ -415,57 +453,183 @@ function MetricCard({
   );
 }
 
+type TrendPoint = { label: string; value: number };
+type HistoryEntry = { label: string; period: DashboardPeriod; facts: LanternFacts };
+type History = { entries: HistoryEntry[]; busy: boolean };
+
+function useHistoricalFacts(
+  timing: SelectedPeriod,
+  module: DashboardModule,
+  key?: MetricKey,
+  inventoryScope?: InventoryScope,
+  product?: ProductFilters,
+  organization = false,
+): History {
+  const {
+    view,
+    range: { from, to },
+  } = timing;
+  const category = product?.category,
+    series = product?.series,
+    group = product?.group,
+    sku = product?.sku,
+    level = product?.level;
+  const queryKey = JSON.stringify([
+    module,
+    inventoryScope,
+    key,
+    organization,
+    view,
+    from,
+    to,
+    category,
+    series,
+    group,
+    sku,
+    level,
+  ]);
+  const [history, setHistory] = useState<History & { key: string }>();
+  useEffect(() => {
+    if (!key) return;
+    const controller = new AbortController();
+    const periods = comparisonPeriods({ view, range: { from, to } });
+    setHistory({ key: queryKey, entries: [], busy: true });
+    const finish = () => {
+      if (!controller.signal.aborted)
+        setHistory((current) =>
+          current?.key === queryKey ? { ...current, busy: false } : current,
+        );
+    };
+    void (async () => {
+      const entries: HistoryEntry[] = [];
+      for (const { label, period } of periods) {
+        if (controller.signal.aborted) return;
+        const facts = await readLanternFacts({
+          module,
+          period,
+          signal: controller.signal,
+          only: key,
+          inventoryScope,
+          organization,
+          product:
+            category === undefined
+              ? undefined
+              : {
+                  category,
+                  series: series ?? '',
+                  group: group ?? '',
+                  sku: sku ?? '',
+                  level: level ?? 0,
+                },
+        });
+        entries.push({ label, period, facts });
+        if (!controller.signal.aborted)
+          setHistory({ key: queryKey, entries: [...entries], busy: true });
+      }
+    })().then(finish, finish);
+    return () => controller.abort();
+  }, [
+    from,
+    to,
+    view,
+    module,
+    inventoryScope,
+    key,
+    queryKey,
+    organization,
+    category,
+    series,
+    group,
+    sku,
+    level,
+  ]);
+  return history?.key === queryKey && key ? history : { entries: [], busy: Boolean(key) };
+}
+
+function historyPoints(
+  key: MetricKey,
+  history: History,
+  scope?: Scope,
+  inventoryScope?: InventoryScope,
+): TrendPoint[] {
+  return history.entries.flatMap(({ label, facts, period }) => {
+    const { value } = observe(key, facts, period, scope, inventoryScope);
+    return value === null ? [] : [{ label, value }];
+  });
+}
+
+function metricComparisons(
+  amount: number | null | undefined,
+  unit: string,
+  view: PeriodView,
+  points: TrendPoint[],
+): Comparison[] | undefined {
+  if (amount == null || !points.length) return undefined;
+  const [previous, change, earlier, secondChange] = salesComparisonColumns[view];
+  return points.map(({ label, value }) => {
+    const delta = (amount - value) / valueScale(unit);
+    const prefix = delta >= 0.005 ? '+' : delta <= -0.005 ? '−' : '';
+    return {
+      basis: label,
+      reference: displayValue(value, unit),
+      change: [
+        label === previous ? change : label === earlier ? secondChange : '变化',
+        prefix + displayNumber(Math.abs(delta)) + (unit === '%' ? 'pp' : unit),
+      ],
+    };
+  });
+}
+
+function comparisonCells(comparisons: readonly Comparison[] | undefined) {
+  return (comparisons ?? []).flatMap(({ basis, reference, change }) => [
+    [basis, reference ?? '-'] as const,
+    change,
+  ]);
+}
+
 function MetricTrend({
   id,
   metric,
   period,
+  history,
   onClose,
 }: {
   id: string;
   metric: Metric;
   period: SelectedPeriod;
+  history: { points: TrendPoint[]; busy: boolean };
   onClose: () => void;
 }) {
   const periodLabel = periodViews.find(({ id }) => id === period.view)?.label;
-  const month = Number(snapshotDate.slice(5, 7));
-  const previous = metric.comparisons?.find(({ basis }) => basis === '上月同期')?.reference;
-  const points: { label: string; value: number }[] = [];
-  if (period.view === 'month' && previous && previous.endsWith('%')) {
+  const { busy } = history;
+  const points = history.points.map(({ label, value }) => ({
+    label,
+    value: value / valueScale(metric.unit ?? ''),
+  }));
+  if (metric.amount != null)
     points.push({
-      label: `${month === 1 ? 12 : month - 1}月同期`,
-      value: Number(previous.slice(0, -1)),
+      label: metric.snapshot?.date ?? '本期',
+      value: metric.amount / valueScale(metric.unit ?? ''),
     });
-  }
-  const current = Number(metric.value.replaceAll(',', ''));
-  if (Number.isFinite(current)) {
-    points.push({
-      label:
-        metric.period === 'order'
-          ? `${month}月第五周`
-          : metric.period === 'monthly'
-            ? `${month}月累计`
-            : (metric.snapshot?.date ?? snapshotDate),
-      value: current,
-    });
-  }
   const unit = metric.unit ?? '';
-  const maximum = Math.max(0, ...points.map(({ value }) => value));
-  const step = unit === '%' ? 10 : 10 ** Math.floor(Math.log10(Math.max(1, maximum)));
-  const scaleMin = points.length
-    ? Math.max(0, Math.floor(Math.min(...points.map(({ value }) => value)) / step) * step - step)
-    : 0;
+  const values = points.map(({ value }) => value);
+  const maximum = Math.max(0, ...values);
+  const magnitude = Math.max(1, ...values.map(Math.abs));
+  const step = unit === '%' ? 10 : 10 ** Math.floor(Math.log10(magnitude));
+  const lower = points.length ? Math.min(...values) : 0;
+  const scaleMin =
+    lower < 0
+      ? Math.floor(lower / step) * step - step
+      : Math.max(0, Math.floor(lower / step) * step - step);
+  const upper = Math.ceil(maximum / step) * step + step;
   const scaleMax = points.length
-    ? Math.max(
-        maximum,
-        Math.min(
-          unit === '%' && maximum <= 100 ? 100 : Infinity,
-          Math.ceil(maximum / step) * step + step,
-        ),
-      )
+    ? unit === '%' && maximum <= 100
+      ? Math.min(100, upper)
+      : upper
     : 100;
   const positions = points.map(({ value }, index) => ({
     x: (100 * (index + 0.5)) / points.length,
-    y: (100 * (scaleMax - value)) / (scaleMax - scaleMin),
+    y: (100 * (scaleMax - value)) / (scaleMax - scaleMin || 1),
   }));
   return (
     <section id={id} className="lantern-sales-trend" aria-labelledby={`${id}-title`}>
@@ -481,6 +645,11 @@ function MetricTrend({
           关闭趋势
         </button>
       </div>
+      {busy && (
+        <p className="lantern-trend-message" role="status">
+          正在读取同期数据…
+        </p>
+      )}
       {points.length > 0 ? (
         <figure className="lantern-trend-figure">
           <div className="lantern-trend-chart" aria-hidden="true">
@@ -544,12 +713,16 @@ function MetricCards({
   module,
   selected,
   onSelect,
+  inventoryScope = 'all',
+  externalHistory,
 }: {
   metrics: readonly Metric[];
   period: SelectedPeriod;
   module: DashboardModule;
   selected: string | null;
   onSelect: (name: string | null) => void;
+  inventoryScope?: InventoryScope;
+  externalHistory?: History;
 }) {
   const [side, setSide] = useState<'left' | 'right'>('left');
   const [expandedHeight, setExpandedHeight] = useState<number>();
@@ -559,6 +732,17 @@ function MetricCards({
   const restoreFocus = useRef(false);
   const active = metrics.find(({ name }) => name === selected);
   const trendId = `lantern-${module}-trend`;
+  const history = useHistoricalFacts(
+    period,
+    module,
+    externalHistory ? undefined : active?.key,
+    inventoryScope,
+  );
+  const trend = externalHistory ?? history;
+  const points = active ? historyPoints(active.key, trend, undefined, inventoryScope) : [];
+  const comparisons = active?.unit
+    ? metricComparisons(active.amount, active.unit, period.view, points)
+    : undefined;
 
   function findCard(name: string | null) {
     return Array.from(grid.current?.querySelectorAll<HTMLElement>('[data-metric]') ?? []).find(
@@ -625,7 +809,7 @@ function MetricCards({
           hidden={Boolean(active && active.name !== metric.name)}
         >
           <MetricCard
-            metric={metric}
+            metric={active?.name === metric.name ? { ...metric, comparisons } : metric}
             expanded={active?.name === metric.name}
             trendId={trendId}
             onToggle={() => toggle(metric.name)}
@@ -634,9 +818,11 @@ function MetricCards({
       ))}
       {active && (
         <MetricTrend
+          key={active.key + period.range.from + period.range.to}
           id={trendId}
           metric={active}
           period={period}
+          history={{ points, busy: trend.busy }}
           onClose={() => toggle(active.name, true)}
         />
       )}
@@ -645,16 +831,19 @@ function MetricCards({
 }
 
 const productLevels = ['品类', '系列', '物料组', 'SKU'];
-type DashboardModule = 'sales' | 'production' | 'inventory';
 
 function MetricResults({
   metrics,
   module,
   period,
+  facts,
+  busy,
 }: {
   metrics: readonly Metric[];
   module: 'sales' | 'production';
   period: SelectedPeriod;
+  facts: LanternFacts;
+  busy: boolean;
 }) {
   const [metric, setMetric] = useState<string | null>(null);
   return (
@@ -667,9 +856,9 @@ function MetricResults({
         onSelect={setMetric}
       />
       {module === 'sales' ? (
-        <SalesOrgList view={period.view} />
+        <SalesOrgList facts={facts} period={period} busy={busy} />
       ) : (
-        <ProductMetricList metrics={metrics} module={module} view={period.view} />
+        <ProductMetricList metrics={metrics} module={module} period={period} facts={facts} />
       )}
     </>
   );
@@ -698,17 +887,14 @@ const salesListTabs = [
 const salesComparisonColumns = {
   year: ['去年同期', '同比变化', '前年同期', '较前年'],
   month: ['上月同期', '环比变化', '去年同月同期', '同比变化'],
-  week: ['上周同期', '周环比', '去年同周同期', '同比变化'],
+  week: ['上周同期', '周环比', '去年同期', '同比变化'],
   day: ['前一日', '较前日', '去年同日', '同比变化'],
 } satisfies Record<PeriodView, readonly string[]>;
 const salesOrgLevels = ['大区', '省区', '区域', '销售组'];
 const noSalesData = <span className="lantern-sales-no-data">无数据</span>;
 
 type SalesRisk = '健康' | '预警' | '严重';
-type SalesOrganization = Omit<SalesOrgNode, 'children'> & {
-  children?: readonly SalesOrganization[];
-  metrics?: Readonly<Partial<Record<string, { value: string; risk?: SalesRisk }>>>;
-};
+type SalesOrganization = SalesOrgNode;
 
 type SalesColumn = { label: string; targetFor?: string };
 const salesTargets = new Map(
@@ -743,11 +929,81 @@ type ProductRow = { node: ProductNode; path: readonly string[] };
 const salesProductCategories: readonly ProductNode[] = baseProductHierarchy.map(({ name }) => ({
   name,
 }));
-const emptyProductFilters = { category: '', series: '', group: '', sku: '' };
+
+function buildProductTree(rows: ReturnType<typeof productFacts>): ProductNode[] {
+  type Branch = { name: string; code?: string; children: Map<string, Branch> };
+  const root = new Map<string, Branch>();
+  for (const row of rows) {
+    let children = root;
+    for (const [index, part] of productPath(row).entries()) {
+      let branch = children.get(part);
+      if (!branch) {
+        const name =
+          index === 3 && typeof row.material_name === 'string' ? row.material_name : part;
+        branch = { name, code: index === 3 ? part : undefined, children: new Map() };
+        children.set(part, branch);
+      }
+      children = branch.children;
+    }
+  }
+  const list = (nodes: Map<string, Branch>): ProductNode[] =>
+    [...nodes.values()]
+      .sort((a, b) => (a.code ?? a.name).localeCompare(b.code ?? b.name, 'zh-CN'))
+      .map(({ name, code, children }) => ({ name, code, children: list(children) }));
+  return list(root);
+}
+
+function rowCells(
+  definitions: readonly MetricDefinition[],
+  facts: LanternFacts,
+  period: DashboardPeriod,
+  scope: Scope,
+  inventoryScope?: InventoryScope,
+  history?: History,
+) {
+  const values = new Map<string, { value: string; risk?: SalesRisk }>();
+  for (const definition of definitions) {
+    const data = observe(definition.key, facts, period, scope, inventoryScope);
+    const metric = metricValue(definition, data);
+    if (history && data.value !== null) {
+      const comparisons = metricComparisons(
+        data.value,
+        definition.unit,
+        period.view,
+        historyPoints(definition.key, history, scope, inventoryScope),
+      );
+      for (const [label, value] of comparisonCells(comparisons)) values.set(label, { value });
+    }
+    const risk =
+      metric.status?.[0] === '达标' ? '健康' : metric.status?.[0] === '未达' ? '预警' : undefined;
+    values.set(definition.name, { value: displayValue(data.value, definition.unit), risk });
+    values.set('达成状态', { value: data.value === null ? '-' : (metric.status?.[0] ?? '无目标') });
+    values.set('风险状态', { value: risk ?? '-', risk });
+    if (definition.key === 'budget' && data.details) {
+      for (const [name, amount] of data.details)
+        values.set(name, { value: displayValue(amount, '万元') });
+      values.set('预算达成率', { value: displayValue(data.value, '%'), risk });
+    }
+    if (definition.key === 'accuracy' && data.details) {
+      for (const [name, rate] of data.details) values.set(name, { value: displayValue(rate, '%') });
+    }
+  }
+  return values;
+}
+const emptyProductFilters: ProductFilters = {
+  category: '',
+  series: '',
+  group: '',
+  sku: '',
+  level: 0,
+};
 
 function childProductRows(rows: readonly ProductRow[]): ProductRow[] {
   return rows.flatMap(({ node, path }) =>
-    (node.children ?? []).map((child) => ({ node: child, path: [...path, child.name] })),
+    (node.children ?? []).map((child) => ({
+      node: child,
+      path: [...path, child.code ?? child.name],
+    })),
   );
 }
 
@@ -762,6 +1018,7 @@ function ProductDetailTable({
   targets = salesTargets,
   summary,
   baseRows = false,
+  cells,
 }: {
   metric: string;
   columns: readonly SalesColumn[];
@@ -773,6 +1030,7 @@ function ProductDetailTable({
   targets?: ReadonlyMap<string, string>;
   summary?: ReadonlyMap<string, React.ReactNode>;
   baseRows?: boolean;
+  cells?: (path: readonly string[]) => ReturnType<typeof rowCells>;
 }) {
   const rowLevel = baseRows ? '基地' : productLevels[level];
   return (
@@ -788,50 +1046,49 @@ function ProductDetailTable({
           {summary && (
             <tr>
               <th scope="row">汇总</th>
-              <td>—</td>
+              <td>-</td>
               {columns.map(({ label, targetFor }) => (
                 <td key={targetFor ? `目标 ${targetFor}` : label}>
-                  {targetFor ? targets.get(targetFor) : (summary.get(label) ?? '—')}
+                  {targetFor ? targets.get(targetFor) : (summary.get(label) ?? '-')}
                 </td>
               ))}
             </tr>
           )}
           {rows.length ? (
-            rows.map(({ node, path }) => (
-              <tr key={JSON.stringify(path)}>
-                <th scope="row">
-                  <div className="lantern-sales-org">
-                    {level === 0 && (
-                      <button
-                        type="button"
-                        aria-label={`查看${node.name}${baseRows ? '品类' : '系列'}`}
-                        onClick={() => onDrill(node.name)}
-                      >
-                        <ChevronRight aria-hidden="true" />
-                      </button>
-                    )}
-                    <span title={path.join(' › ')}>
-                      {node.name}
-                      {node.code && ` · ${node.code}`}
+            rows.map(({ node, path }) => {
+              const values = cells?.(path);
+              return (
+                <tr key={JSON.stringify(path)}>
+                  <th scope="row">
+                    <div className="lantern-sales-org">
+                      {level === 0 && (
+                        <button
+                          type="button"
+                          aria-label={`查看${node.name}${baseRows ? '品类' : '系列'}`}
+                          onClick={() => onDrill(node.name)}
+                        >
+                          <ChevronRight aria-hidden="true" />
+                        </button>
+                      )}
+                      <span title={path.join(' › ')}>
+                        {node.name}
+                        {node.code && ` · ${node.code}`}
+                      </span>
+                    </div>
+                  </th>
+                  <td>
+                    <span className="lantern-sales-level" data-level="0">
+                      {rowLevel}
                     </span>
-                  </div>
-                </th>
-                <td>
-                  <span className="lantern-sales-level" data-level="0">
-                    {rowLevel}
-                  </span>
-                </td>
-                {columns.map(({ label, targetFor }) => (
-                  <td key={targetFor ? `目标 ${targetFor}` : label}>
-                    {targetFor
-                      ? targets.get(targetFor)
-                      : label === '达成状态' || label === '风险状态'
-                        ? noSalesData
-                        : '—'}
                   </td>
-                ))}
-              </tr>
-            ))
+                  {columns.map(({ label, targetFor }) => (
+                    <td key={targetFor ? `目标 ${targetFor}` : label}>
+                      {targetFor ? targets.get(targetFor) : (values?.get(label)?.value ?? '-')}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })
           ) : (
             <tr>
               <td colSpan={columns.length + 2}>
@@ -1053,6 +1310,7 @@ function useProductFilters(
   categories = salesProductCategories,
   categoryOptions = categories,
   onClearBase?: () => void,
+  onFilters?: (value: ProductFilters) => void,
 ) {
   const [productFilters, setProductFilters] = useState(emptyProductFilters);
   const [showSeries, setShowSeries] = useState(false);
@@ -1074,8 +1332,17 @@ function useProductFilters(
   const productLevel = skuQuery ? 3 : groupQuery ? 2 : series || showSeries ? 1 : 0;
   const productRows = [categoryRows, seriesRows, groupRows, skuRows][productLevel];
 
+  function applyFilters(next: ProductFilters, revealSeries = showSeries) {
+    const selection = {
+      ...next,
+      level: next.sku.trim() ? 3 : next.group.trim() ? 2 : next.series || revealSeries ? 1 : 0,
+    };
+    setProductFilters(selection);
+    onFilters?.(selection);
+  }
+
   function selectCategory(name: string, drill = false) {
-    setProductFilters({ ...emptyProductFilters, category: name });
+    applyFilters({ ...emptyProductFilters, category: name }, drill);
     setShowSeries(drill);
   }
 
@@ -1096,20 +1363,20 @@ function useProductFilters(
         emptyLabel={!category ? '请先选择品类' : allSeries.length === 0 ? '暂无系列' : undefined}
         options={allSeries.map(({ node }) => node)}
         onChange={(name) => {
-          setProductFilters({ ...emptyProductFilters, category, series: name });
+          applyFilters({ ...emptyProductFilters, category, series: name }, true);
           setShowSeries(true);
         }}
       />
       <SalesSearch
         label="物料组"
         value={group}
-        onChange={(value) => setProductFilters((filters) => ({ ...filters, group: value }))}
+        onChange={(value) => applyFilters({ ...productFilters, group: value })}
       />
       <SalesSearch
         label="SKU"
         value={sku}
         placeholder="搜索 SKU 名称或编码"
-        onChange={(value) => setProductFilters((filters) => ({ ...filters, sku: value }))}
+        onChange={(value) => applyFilters({ ...productFilters, sku: value })}
       />
       {(onClearBase || category || series || group || sku) && (
         <button
@@ -1144,26 +1411,62 @@ const emptyProductCategories: readonly ProductNode[] = [];
 function ProductMetricList({
   metrics,
   module,
-  view,
+  period,
+  facts,
   inventoryScope,
 }: {
   metrics: readonly Metric[];
   module: 'production' | 'inventory';
-  view: PeriodView;
+  period: SelectedPeriod;
+  facts: LanternFacts;
   inventoryScope?: InventoryScope;
 }) {
+  const { view } = period;
   const id = useId();
   const [selected, setSelected] = useState(0);
   const [dimension, setDimension] = useState(0);
   const [base, setBase] = useState('');
+  const [product, setProduct] = useState(emptyProductFilters);
   const byBase = module === 'production' && dimension === 1;
+  const keys: Parameters<typeof productFacts>[1] =
+    module === 'production'
+      ? ['production', 'fulfillment']
+      : !inventoryScope || inventoryScope === 'all'
+        ? ['base', 'branch']
+        : [inventoryScope];
+  const stockDetail =
+    module === 'inventory' &&
+    Boolean(product.category || product.group.trim() || product.sku.trim());
+  const detail = useLanternFacts('inventory', period, {
+    inventoryScope,
+    product,
+    enabled: stockDetail,
+  });
+  const tableFacts = stockDetail ? detail.facts : facts;
+  const categories = useMemo(
+    () => buildProductTree(productFacts(facts, keys, { base: base || undefined })),
+    [facts, module, inventoryScope, base],
+  );
   const products = useProductFilters(
-    byBase ? emptyProductCategories : salesProductCategories,
-    salesProductCategories,
+    stockDetail
+      ? buildProductTree(productFacts(tableFacts, keys))
+      : byBase && !base
+        ? emptyProductCategories
+        : categories,
+    byBase && !base ? emptyProductCategories : categories,
     byBase && base ? () => setBase('') : undefined,
+    setProduct,
   );
   const showBaseRows = byBase && !base && !products.filtering;
   const active = metrics[selected - 1];
+  const history = useHistoricalFacts(
+    period,
+    module,
+    active?.key,
+    inventoryScope,
+    stockDetail ? product : undefined,
+  );
+  const definitions = module === 'production' ? production : inventoryMetrics(inventoryScope);
   const labels = [
     module === 'production' ? '两指标总览' : '五指标总览',
     ...metrics.map(({ name }) => name),
@@ -1206,17 +1509,17 @@ function ProductMetricList({
       ? inventoryAgeThresholds[inventoryScope]
       : undefined;
   if (ageThresholds) targets.set('平均货龄', `< ${ageThresholds.target} 天`);
-  if (inventoryScope === 'customer') targets.set('平均货龄', '—');
+  if (inventoryScope === 'customer') targets.set('平均货龄', '-');
 
   if (active) {
     const status = active.status?.[0];
     summary.set(
       '达成状态',
-      active.value === '—' ? '无数据' : active.target ? (status ?? '—') : '无目标',
+      active.value === '-' ? '无数据' : active.target ? (status ?? '-') : '无目标',
     );
     summary.set(
       '风险状态',
-      status && ['健康', '预警', '严重', '大日期风险'].includes(status) ? status : '—',
+      status && ['健康', '预警', '严重', '大日期风险'].includes(status) ? status : '-',
     );
     if (active.name === '平均货龄' && ageThresholds && Number.isFinite(Number(active.value))) {
       const age = Number(active.value);
@@ -1236,15 +1539,14 @@ function ProductMetricList({
         </span>,
       );
     }
-    if (view === 'month') {
-      for (const {
-        basis,
-        reference,
-        change: [label, value],
-      } of active.comparisons ?? []) {
-        if (reference) summary.set(basis, reference);
-        summary.set(label, value);
-      }
+    if (active.unit) {
+      const comparisons = metricComparisons(
+        active.amount,
+        active.unit,
+        view,
+        historyPoints(active.key, history, undefined, inventoryScope),
+      );
+      for (const [label, value] of comparisonCells(comparisons)) summary.set(label, value);
     }
   }
 
@@ -1272,7 +1574,9 @@ function ProductMetricList({
           role="tablist"
           aria-label="清单指标"
           style={{ '--lantern-list-tabs': labels.length } as CSSProperties}
-          onKeyDown={(event) => selectTabWithKeyboard(event, selected, labels.length, setSelected)}
+          onKeyDown={(event) =>
+            selectTabWithKeyboard(event, selected, labels.length, setSelected, false)
+          }
         >
           {labels.map((label, index) => (
             <button
@@ -1302,7 +1606,9 @@ function ProductMetricList({
                     '--inventory-tab-count': 2,
                   } as CSSProperties
                 }
-                onKeyDown={(event) => selectTabWithKeyboard(event, dimension, 2, switchDimension)}
+                onKeyDown={(event) =>
+                  selectTabWithKeyboard(event, dimension, 2, switchDimension, false)
+                }
               >
                 {['品类维度', '基地维度'].map((label, index) => (
                   <button
@@ -1335,6 +1641,12 @@ function ProductMetricList({
             role={module === 'production' ? 'tabpanel' : undefined}
             aria-labelledby={module === 'production' ? `${id}-dimension-${dimension}` : undefined}
           >
+            {history.busy && <p role="status">正在读取清单同期数据…</p>}
+            {stockDetail && detail.busy && <p role="status">正在读取库存明细…</p>}
+            {stockDetail &&
+              Object.values(tableFacts).some((source) => source.status === 'failed') && (
+                <p role="status">部分库存明细查询失败</p>
+              )}
             <ProductDetailTable
               {...products.tableProps}
               metric={active?.name ?? labels[0]}
@@ -1345,6 +1657,18 @@ function ProductMetricList({
                 .filter(Boolean)
                 .join(' / ')}
               baseRows={showBaseRows}
+              cells={(path) =>
+                rowCells(
+                  active
+                    ? definitions.filter((definition) => definition.key === active.key)
+                    : definitions,
+                  tableFacts,
+                  period,
+                  showBaseRows ? { base: path[0] } : { base: base || undefined, product: path },
+                  inventoryScope,
+                  history,
+                )
+              }
               {...(showBaseRows
                 ? {
                     rows: productionBases.map((node) => ({ node, path: [node.name] })),
@@ -1359,10 +1683,19 @@ function ProductMetricList({
   );
 }
 
-function SalesOrgList({ view }: { view: PeriodView }) {
+function SalesOrgList({
+  period,
+  facts: primaryFacts,
+  busy,
+}: {
+  period: SelectedPeriod;
+  facts: LanternFacts;
+  busy: boolean;
+}) {
+  const { view } = period;
   const [selected, setSelected] = useState(0);
   const [dimension, setDimension] = useState(0);
-  const products = useProductFilters();
+  const [product, setProduct] = useState(emptyProductFilters);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [region, setRegion] = useState('');
   const [province, setProvince] = useState('');
@@ -1372,12 +1705,43 @@ function SalesOrgList({ view }: { view: PeriodView }) {
   );
   const keyword = search.trim().toLocaleLowerCase();
   const filtering = Boolean(region || province || keyword);
-  const provinces =
-    salesOrgHierarchy
-      .find(({ name }) => name === region)
-      ?.children?.filter(({ children }) => children?.length) ?? [];
   const tab = salesListTabs[selected];
   const isOverview = selected === 0;
+  const orgData = useLanternFacts('sales', period, {
+    organization: true,
+    enabled: !busy && dimension === 0 && (isOverview || tab.title === '准交率'),
+  });
+  const facts = useMemo(
+    () => ({ ...primaryFacts, ...orgData.facts }),
+    [primaryFacts, orgData.facts],
+  );
+  const organizations = useMemo(() => {
+    const roots = salesOrgHierarchy.map(({ name, children }) => ({
+      name,
+      children: [...(children ?? [])],
+    }));
+    for (const row of productFacts(facts, [
+      'accuracy',
+      'amendment',
+      'cancellation',
+      'ontimeOrganization',
+    ])) {
+      if (typeof row.region !== 'string' || !row.region.trim()) continue;
+      let root = roots.find(({ name }) => name === row.region);
+      if (!root) {
+        root = { name: row.region, children: [] };
+        roots.push(root);
+      }
+      if (
+        typeof row.province === 'string' &&
+        row.province.trim() &&
+        !root.children.some(({ name }) => name === row.province)
+      )
+        root.children.push({ name: row.province });
+    }
+    return roots;
+  }, [facts]);
+  const provinces = organizations.find(({ name }) => name === region)?.children ?? [];
   const columns: SalesColumn[] = isOverview
     ? tab.columns.flatMap((label) => [{ label: '目标', targetFor: label }, { label }])
     : [
@@ -1386,10 +1750,39 @@ function SalesOrgList({ view }: { view: PeriodView }) {
           label,
         })),
       ];
-  const hasProductDimension = sales.some(
-    ({ name, period }) => name === tab.title && period === 'order',
-  );
+  const orderMetric =
+    tab.title === '作废率'
+      ? 'cancellation'
+      : tab.title === '改单率'
+        ? 'amendment'
+        : tab.title === '准交率'
+          ? 'ontime'
+          : undefined;
+  const hasProductDimension = orderMetric !== undefined;
   const showProductList = hasProductDimension && dimension === 1;
+  const listMetric = isOverview ? undefined : sales.find(({ name }) => name === tab.title)?.key;
+  const orgComparison = listMetric === 'ontime' && !showProductList;
+  const history = useHistoricalFacts(
+    period,
+    'sales',
+    listMetric === 'budget' ? undefined : listMetric,
+    undefined,
+    showProductList ? product : undefined,
+    orgComparison,
+  );
+  const productData = useLanternFacts('sales', period, {
+    product,
+    only: orderMetric,
+    enabled: showProductList,
+  });
+  const productOptions = useMemo(
+    () =>
+      orderMetric
+        ? buildProductTree(productFacts(productData.facts, [orderMetric]))
+        : emptyProductCategories,
+    [productData.facts, orderMetric],
+  );
+  const products = useProductFilters(productOptions, salesProductCategories, undefined, setProduct);
   function switchMetric(index: number) {
     setSelected(index);
     setDimension(0);
@@ -1420,10 +1813,20 @@ function SalesOrgList({ view }: { view: PeriodView }) {
     nodes: readonly SalesOrganization[],
     parent = '',
     depth = 0,
+    ancestors: readonly string[] = [],
   ): React.ReactNode {
     return nodes.map((node, index) => {
       if (!matchesFilters(node, depth)) return null;
-      const { name, children, metrics } = node;
+      const { name, children } = node;
+      const path = [...ancestors, name];
+      const metrics = rowCells(
+        isOverview ? sales : sales.filter((definition) => definition.name === tab.title),
+        facts,
+        period,
+        { organization: path },
+        undefined,
+        history,
+      );
       const id = `${parent}/${index}`;
       const hasChildren = Boolean(children?.length);
       const isExpanded = filtering
@@ -1474,8 +1877,8 @@ function SalesOrgList({ view }: { view: PeriodView }) {
             {columns.map(({ label: column, targetFor }) => {
               if (targetFor)
                 return <td key={`目标 ${targetFor}`}>{salesTargets.get(targetFor)}</td>;
-              const metric = metrics?.[column];
-              const risk = column === '风险状态' ? metrics?.[tab.title]?.risk : metric?.risk;
+              const metric = metrics.get(column);
+              const risk = column === '风险状态' ? metrics.get(tab.title)?.risk : metric?.risk;
               return (
                 <td key={column}>
                   {risk && (isOverview || column === '风险状态') ? (
@@ -1490,13 +1893,13 @@ function SalesOrgList({ view }: { view: PeriodView }) {
                   ) : column === '达成状态' || column === '风险状态' ? (
                     noSalesData
                   ) : (
-                    (metric?.value ?? '—')
+                    (metric?.value ?? '-')
                   )}
                 </td>
               );
             })}
           </tr>
-          {isExpanded && children && renderRows(children, id, depth + 1)}
+          {isExpanded && children && renderRows(children, id, depth + 1, path)}
         </React.Fragment>
       );
     });
@@ -1510,13 +1913,22 @@ function SalesOrgList({ view }: { view: PeriodView }) {
           {(showProductList ? productLevels : salesOrgLevels).join(' › ')}
         </span>
       </div>
+      {orgData.busy && <p role="status">正在读取销售组织准交率…</p>}
+      {orgData.facts.ontimeOrganization?.status === 'failed' && (
+        <p role="status">
+          销售组织准交率 {orgData.facts.ontimeOrganization.reason}{' '}
+          <button type="button" onClick={orgData.refresh}>
+            重试
+          </button>
+        </p>
+      )}
       <div className="lantern-sales-panel">
         <div
           className="lantern-module-tabs lantern-sales-tabs"
           role="tablist"
           aria-label="销售清单指标"
           onKeyDown={(event) =>
-            selectTabWithKeyboard(event, selected, salesListTabs.length, switchMetric)
+            selectTabWithKeyboard(event, selected, salesListTabs.length, switchMetric, false)
           }
         >
           {salesListTabs.map(({ title }, index) => (
@@ -1551,7 +1963,9 @@ function SalesOrgList({ view }: { view: PeriodView }) {
                     '--inventory-tab-count': 2,
                   } as CSSProperties
                 }
-                onKeyDown={(event) => selectTabWithKeyboard(event, dimension, 2, switchDimension)}
+                onKeyDown={(event) =>
+                  selectTabWithKeyboard(event, dimension, 2, switchDimension, false)
+                }
               >
                 {['大区维度', '品类维度'].map((label, index) => (
                   <button
@@ -1576,7 +1990,7 @@ function SalesOrgList({ view }: { view: PeriodView }) {
                 <SalesFilterSelect
                   label="大区"
                   value={region}
-                  options={salesOrgHierarchy}
+                  options={organizations}
                   onChange={(value) => {
                     setRegion(value);
                     setProvince('');
@@ -1626,8 +2040,29 @@ function SalesOrgList({ view }: { view: PeriodView }) {
               hasProductDimension ? `lantern-sales-dimension-${dimension}` : undefined
             }
           >
+            {history.busy && <p role="status">正在读取清单同期数据…</p>}
             {showProductList ? (
-              <ProductDetailTable metric={tab.title} columns={columns} {...products.tableProps} />
+              <>
+                {productData.busy && <p role="status">正在读取商品指标…</p>}
+                {Object.values(productData.facts).some((source) => source.status === 'failed') && (
+                  <p role="status">商品指标查询失败</p>
+                )}
+                <ProductDetailTable
+                  metric={tab.title}
+                  columns={columns}
+                  {...products.tableProps}
+                  cells={(path) =>
+                    rowCells(
+                      sales.filter((item) => item.key === orderMetric),
+                      productData.facts,
+                      period,
+                      { product: path },
+                      undefined,
+                      history,
+                    )
+                  }
+                />
+              </>
             ) : (
               <div
                 className="lantern-table-scroll lantern-sales-detail-table"
@@ -1638,8 +2073,8 @@ function SalesOrgList({ view }: { view: PeriodView }) {
                 <table aria-label="销售组织明细">
                   <SalesTableHeader name="组织名称" columns={columns} />
                   <tbody>
-                    {salesOrgHierarchy.some((node) => matchesFilters(node, 0)) ? (
-                      renderRows(salesOrgHierarchy)
+                    {organizations.some((node) => matchesFilters(node, 0)) ? (
+                      renderRows(organizations)
                     ) : (
                       <tr>
                         <td colSpan={columns.length + 2}>
@@ -1663,14 +2098,18 @@ function selectTabWithKeyboard(
   selected: number,
   count: number,
   onSelect: (index: number) => void,
+  activate = true,
 ) {
+  const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+  const focused = tabs.findIndex((tab) => tab === document.activeElement);
+  const current = focused >= 0 ? focused : selected;
   let next;
   switch (event.key) {
     case 'ArrowLeft':
-      next = (selected + count - 1) % count;
+      next = (current + count - 1) % count;
       break;
     case 'ArrowRight':
-      next = (selected + 1) % count;
+      next = (current + 1) % count;
       break;
     case 'Home':
       next = 0;
@@ -1682,8 +2121,8 @@ function selectTabWithKeyboard(
       return;
   }
   event.preventDefault();
-  onSelect(next);
-  event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+  if (activate) onSelect(next);
+  tabs[next]?.focus();
 }
 
 function InventoryComparisonTable({
@@ -1742,10 +2181,10 @@ function InventoryComparisonTable({
                     >
                       <div
                         className="lantern-inventory-value"
-                        data-missing={value === '—' || undefined}
+                        data-missing={value === '-' || undefined}
                       >
                         <strong>{value}</strong>
-                        {value !== '—' && unit && (
+                        {value !== '-' && unit && (
                           <>
                             {' '}
                             <small>{unit}</small>
@@ -1757,10 +2196,10 @@ function InventoryComparisonTable({
                           <div key={label}>
                             <dt>{label}</dt>
                             <dd>
-                              {view === 'month' && value !== '—'
+                              {view === 'month' && value !== '-'
                                 ? (changes?.find(({ change }) => change[0] === source)?.change[1] ??
-                                  '—')
-                                : '—'}
+                                  '-')
+                                : '-'}
                             </dd>
                           </div>
                         ))}
@@ -1777,17 +2216,27 @@ function InventoryComparisonTable({
   );
 }
 
-function InventoryViews({ period }: { period: SelectedPeriod }) {
+function InventoryViews({ period, facts }: { period: SelectedPeriod; facts: LanternFacts }) {
   const [selected, setSelected] = useState(0);
   const [metric, setMetric] = useState<string | null>(null);
   const count = inventoryViews.length;
-  const rows = inventoryViews.map(({ id, title, values }) => ({
+  const activeKey = inventoryDefinitions.find(({ name }) => name === metric)?.key;
+  const history = useHistoricalFacts(period, 'inventory', activeKey);
+  const rows = inventoryViews.map(({ id, title }) => ({
     id,
     title,
-    metrics: metricsForPeriod(
-      inventoryMetricNames.map((name) => ({ name, ...(values[name] ?? missingInventoryValue) })),
-      period,
-    ),
+    metrics: inventoryMetrics(id).map((definition) => {
+      const observation = observe(definition.key, facts, period, {}, id);
+      const item = metricValue(definition, observation);
+      if (definition.key === activeKey)
+        item.comparisons = metricComparisons(
+          observation.value,
+          definition.unit,
+          period.view,
+          historyPoints(activeKey, history, undefined, id),
+        );
+      return item;
+    }),
   }));
 
   function selectScope(index: number) {
@@ -1843,6 +2292,8 @@ function InventoryViews({ period }: { period: SelectedPeriod }) {
                 metrics={metrics}
                 period={period}
                 module="inventory"
+                externalHistory={history}
+                inventoryScope={id}
                 selected={metric}
                 onSelect={setMetric}
               />
@@ -1855,7 +2306,8 @@ function InventoryViews({ period }: { period: SelectedPeriod }) {
               <ProductMetricList
                 metrics={metrics}
                 module="inventory"
-                view={period.view}
+                period={period}
+                facts={facts}
                 inventoryScope={id}
               />
             </>
@@ -1878,13 +2330,7 @@ function PeriodDatePicker({
   const trigger = useRef<HTMLButtonElement>(null);
   const { view, value } = period;
   const [year, month, day] = value.split('-').map(Number);
-  const today = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-  const latest = today > snapshotDate ? today : snapshotDate;
+  const latest = latestBusinessDate();
   const lastDay = daysInMonth(year, month);
   const weeks = view === 'week' ? naturalWeeks(year, month) : [];
   const shortDate = (date: string) => date.slice(5).replace('-', '.');
@@ -2042,13 +2488,21 @@ function PeriodDatePicker({
   );
 }
 
-export function LanternDashboard({ toolbarHost }: { toolbarHost?: HTMLElement | null }) {
+export function LanternDashboard() {
   const [selected, setSelected] = useState(0);
   const [periodIndex, setPeriodIndex] = useState(1);
-  const [value, setValue] = useState(snapshotDate);
+  const [value, setValue] = useState(latestBusinessDate);
   const { id: view } = periodViews[periodIndex];
-  const range = periodRange(view, value);
+  const rawRange = periodRange(view, value);
+  const latest = latestBusinessDate();
+  const range = { from: rawRange.from, to: rawRange.to < latest ? rawRange.to : latest };
   const period = { view, value, range };
+  const { facts, busy, refresh } = useLanternFacts(dashboardTabs[selected].id, period);
+  const failed = Object.entries(facts).flatMap(([source, result]) =>
+    result.status === 'failed'
+      ? [`${sourceLabels[source as keyof typeof sourceLabels]} ${result.reason}`]
+      : [],
+  );
   const timeToolbar = (
     <div className="agent-workbench-ui lantern-time-toolbar">
       <div
@@ -2062,7 +2516,7 @@ export function LanternDashboard({ toolbarHost }: { toolbarHost?: HTMLElement | 
           } as CSSProperties
         }
         onKeyDown={(event) =>
-          selectTabWithKeyboard(event, periodIndex, periodViews.length, setPeriodIndex)
+          selectTabWithKeyboard(event, periodIndex, periodViews.length, setPeriodIndex, false)
         }
       >
         {periodViews.map(({ id, label }, index) => (
@@ -2070,6 +2524,8 @@ export function LanternDashboard({ toolbarHost }: { toolbarHost?: HTMLElement | 
             key={id}
             type="button"
             role="tab"
+            id={`lantern-period-tab-${id}`}
+            aria-controls="lantern-period-panel"
             aria-selected={periodIndex === index}
             tabIndex={periodIndex === index ? 0 : -1}
             onClick={() => setPeriodIndex(index)}
@@ -2079,6 +2535,9 @@ export function LanternDashboard({ toolbarHost }: { toolbarHost?: HTMLElement | 
         ))}
       </div>
       <PeriodDatePicker key={view} period={period} onChange={setValue} />
+      <button type="button" className="lantern-date-button" disabled={busy} onClick={refresh}>
+        刷新
+      </button>
       <p className="lantern-selected-range" aria-live="polite">
         数据范围 {range.from}
         {range.from !== range.to && ` 至 ${range.to}`}
@@ -2086,61 +2545,67 @@ export function LanternDashboard({ toolbarHost }: { toolbarHost?: HTMLElement | 
     </div>
   );
   return (
-    <div className="agent-workbench-ui lantern-dashboard" aria-label="汤圆定制看板">
-      <style>{styles}</style>
-      {toolbarHost ? createPortal(timeToolbar, toolbarHost) : timeToolbar}
-      <div
-        className="lantern-module-tabs lantern-primary-tabs"
-        role="tablist"
-        aria-label="看板模块"
-        onKeyDown={(event) =>
-          selectTabWithKeyboard(event, selected, dashboardTabs.length, setSelected)
-        }
-      >
-        {dashboardTabs.map(({ id, title }, index) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            id={`lantern-module-tab-${id}`}
-            aria-controls={`lantern-module-panel-${id}`}
-            aria-selected={selected === index}
-            tabIndex={selected === index ? 0 : -1}
-            onClick={() => setSelected(index)}
-          >
-            {title}
-          </button>
-        ))}
-      </div>
-      <div className="lantern-content">
-        {dashboardTabs.map((tab, index) => (
-          <section
-            className="lantern-section"
-            key={tab.id}
-            role="tabpanel"
-            id={`lantern-module-panel-${tab.id}`}
-            data-module={tab.id}
-            aria-labelledby={`lantern-module-tab-${tab.id}`}
-            hidden={selected !== index}
-            tabIndex={0}
-          >
-            {tab.id === 'inventory' ? (
-              <InventoryViews period={period} />
-            ) : (
-              <>
-                <header>
-                  <h2 className="lantern-kpi-title">核心指标</h2>
-                </header>
-                <MetricResults
-                  module={tab.id}
-                  period={period}
-                  metrics={metricsForPeriod(tab.rows.flat(), period)}
-                />
-                {tab.id === 'sales' && <p className="lantern-note">* 沿用订单工作台截图标记。</p>}
-              </>
-            )}
-          </section>
-        ))}
+    <div className="agent-workbench-ui lantern-dashboard" aria-label="汤圆订制看板">
+      {timeToolbar}
+      <div id="lantern-period-panel" role="tabpanel" aria-labelledby={`lantern-period-tab-${view}`}>
+        <div
+          className="lantern-module-tabs lantern-primary-tabs"
+          role="tablist"
+          aria-label="看板模块"
+          onKeyDown={(event) =>
+            selectTabWithKeyboard(event, selected, dashboardTabs.length, setSelected, false)
+          }
+        >
+          {dashboardTabs.map(({ id, title }, index) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              id={`lantern-module-tab-${id}`}
+              aria-controls={`lantern-module-panel-${id}`}
+              aria-selected={selected === index}
+              tabIndex={selected === index ? 0 : -1}
+              onClick={() => setSelected(index)}
+            >
+              {title}
+            </button>
+          ))}
+        </div>
+        <div className="lantern-content" aria-busy={busy}>
+          {busy && <p role="status">正在读取指标…</p>}
+          {failed.length > 0 && <p role="status">{failed.join(' · ')}</p>}
+          {dashboardTabs.map((tab, index) => (
+            <section
+              className="lantern-section"
+              key={tab.id}
+              role="tabpanel"
+              id={`lantern-module-panel-${tab.id}`}
+              data-module={tab.id}
+              aria-labelledby={`lantern-module-tab-${tab.id}`}
+              hidden={selected !== index}
+              tabIndex={selected === index ? 0 : -1}
+            >
+              {selected !== index ? null : tab.id === 'inventory' ? (
+                <InventoryViews period={period} facts={facts} />
+              ) : (
+                <>
+                  <header>
+                    <h2 className="lantern-kpi-title">核心指标</h2>
+                  </header>
+                  <MetricResults
+                    module={tab.id}
+                    period={period}
+                    facts={facts}
+                    busy={busy}
+                    metrics={tab.definitions.map((definition) =>
+                      metricValue(definition, observe(definition.key, facts, period)),
+                    )}
+                  />
+                </>
+              )}
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   );
