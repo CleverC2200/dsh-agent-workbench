@@ -45,7 +45,7 @@ class QllCategoryMetrics(unittest.TestCase):
         value = db.execute('SELECT ' + risk.sql(dialect='sqlite') + ' FROM fixture AS a').fetchone()[0]
         self.assertEqual(value, 5)
 
-    def test_branch_organization_keeps_physical_stock_but_uses_available_movement_pool(self):
+    def test_branch_organization_uses_physical_stock_for_review_turnover(self):
         config = json.loads((ROOT / 'business/inventory-qll/sql.config.json').read_text())
         query = config['queries']['snapshot.branch-structure.groups']
         tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
@@ -69,7 +69,8 @@ class QllCategoryMetrics(unittest.TestCase):
                       gea_p12=None, gea_p13='key', gea_p14='asc', gea_p90001='batch')
         result = [dict(r) for r in db.execute(tree.sql(dialect='sqlite'), params)]
         self.assertEqual(sum(r['total_qty'] for r in result), 160)
-        self.assertEqual([r['historical_turnover'] for r in result], [6, None, None])
+        self.assertEqual([round(r['historical_turnover'], 2) if r['historical_turnover'] is not None else None
+                          for r in result], [10, None, 1])
 
     def read(self, layer, rows):
         config = json.loads((ROOT / 'business/inventory-qll/sql.config.json').read_text())
@@ -118,12 +119,14 @@ class QllCategoryMetrics(unittest.TestCase):
         self.assertEqual((result['turnover_qty'], result['daily']), (100, 20))
         self.assertEqual((result['target_turnover_qty'], result['target_daily']), (80, 20))
 
-    def test_branch_turnover_keeps_inventory_display_but_excludes_no_movement_or_negative_availability(self):
+    def test_branch_turnover_uses_branch_scope_and_physical_stock(self):
         result = self.read('branch', [dict(warehouseid='A', product_categ_name='汤圆', material_code='ok', total_qty=100, available_qty=60, daily_movement=10),
             dict(warehouseid='A', product_categ_name='汤圆', material_code='no-demand', total_qty=50, available_qty=40, daily_movement=0),
-            dict(warehouseid='A', product_categ_name='汤圆', material_code='invalid', total_qty=10, available_qty=-5, daily_movement=5)])[0]
-        self.assertEqual(result['inventory'], 160)
-        self.assertEqual((result['turnover_qty'], result['daily']), (60, 10))
+            dict(warehouseid='A', product_categ_name='汤圆', material_code='negative-available', total_qty=10, available_qty=-5, daily_movement=5),
+            dict(warehouseid='A', product_categ_name='汤圆', material_code='shipped-only', total_qty=None, available_qty=None, daily_movement=5),
+            dict(warehouseid='A221', product_categ_name='汤圆', material_code='base-warehouse', total_qty=100, available_qty=100, daily_movement=100)])[0]
+        self.assertEqual(result['inventory'], 260)
+        self.assertEqual((result['turnover_qty'], result['daily']), (160, 20))
 
     def test_snapshot_branch_movement_matches_the_same_batch_warehouse_and_sku(self):
         config = json.loads((ROOT / 'business/inventory-qll/sql.config.json').read_text())

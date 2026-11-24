@@ -27,8 +27,8 @@ function executor(c, calls) {
     assert.equal(request.sql.includes('%(gea_'), false);
     let rows;
     if (o.queryId.endsWith('.count')) rows = [{ total: 1 }];
-    else if (o.queryId === 'calendar.target_versions')
-      rows = [{ month: '2026-10-01', inventory_version: '纠偏' }];
+    else if (['calendar.target_versions', 'calendar.target_plan_versions'].includes(o.queryId))
+      rows = [{ month: '2026-10-01', inventory_version: '纠偏', usable_plan_rows: 1 }];
     else if (['source.stock-date', 'source.health-date'].includes(o.queryId))
       rows = [{ day: '2026-10-18' }];
     else

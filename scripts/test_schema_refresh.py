@@ -40,7 +40,7 @@ class SchemaRefreshTests(unittest.TestCase):
         self.assertEqual(len(rows),1)
         self.assertEqual(rows[0]['known_available'],110)
 
-    def test_branch_turnover_cards_preserve_scope_and_denominator(self):
+    def test_historical_branch_turnover_cards_match_category_inventory_and_daily_shipments(self):
         self.config=config_for('qll')
 
         self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='WH2',warehouse_classify='20',material_code='OTHER',belong_base='基地1',live_qty=0,available_qty=0)
@@ -48,11 +48,17 @@ class SchemaRefreshTests(unittest.TestCase):
         self.insert('agents_scm_execute_detail_d',cust_order_no='O3',material_code='S3',pickup_point='P2',belong_base='基地1',bizflowstatus='创建',adjust_order_qty=40,qtyallocated=5)
         for sku,qty in [('S3',30),('SHIP-ONLY',500)]:
             self.insert('agents_scm_cust_deliv_daily_di',warehouse='WH2',material_code=sku,warehouse_classify='20',act_ship_date='20261010',act_dl_qty=qty)
-        full=self.read('replenishment.summary')[0]
-        lean=self.read('branch-turnover.cards')[0]
-        self.assertEqual(lean['row_count'],full['row_count'])
-        self.assertAlmostEqual(lean['historical_turnover_days'],full['historical_turnover_days'])
-        self.assertEqual(lean['turnover_count'],full['turnover_count'])
+        self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='A540',warehouse_classify='20',material_code='VIRTUAL',live_qty=900,available_qty=900)
+        self.insert('agents_scm_cust_deliv_daily_di',warehouse='A540',material_code='VIRTUAL',warehouse_classify='20',act_ship_date='20261010',act_dl_qty=300)
+
+        card=self.read('branch-turnover.cards')[0]
+        categories=self.read('category-tree.branch',level='category',page_size=10,offset=0)
+        self.assertEqual(card['matched_turnover_inventory'],130)
+        self.assertEqual(card['matched_turnover_daily'],3)
+        self.assertAlmostEqual(card['historical_turnover_days'],130/3)
+        self.assertEqual(card['turnover_count'],2)
+        self.assertEqual(card['matched_turnover_inventory'],sum(row['turnover_qty'] or 0 for row in categories))
+        self.assertEqual(card['matched_turnover_daily'],sum(row['daily'] or 0 for row in categories))
 
 class ForecastCustomerSchemaTests(unittest.TestCase):
     def test_shipped_forecast_reads_use_new_physical_customer_column(self):

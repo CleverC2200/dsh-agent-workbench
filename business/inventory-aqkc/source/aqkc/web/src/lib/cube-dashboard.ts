@@ -40,11 +40,8 @@ const coveredComparison = (rows: CubeRow[]) =>
 const coveredDays = (days: number | null, partial: boolean) =>
   days === null ? '-' : partialTargetDisplay(`${days.toFixed(1)}天`, partial);
 
-function eligiblePlanMonth(scope: { targetMonth: string; requestedTargetMonth?: string }) {
-  return !scope.requestedTargetMonth || scope.targetMonth === scope.requestedTargetMonth
-    ? scope.targetMonth
-    : '';
-}
+const forecastTurnoverDisplay = (days: number | null, partial: boolean) =>
+  days === null ? '-' : `${days.toFixed(1)}天${partial ? '（部分）' : ''}`;
 
 function plannedTurnover(rows: Record<string, unknown>[], month: string, includeTransfer: boolean) {
   const sum = (field: string) => rows.reduce((total, row) => total + (numeric(row[field]) ?? 0), 0);
@@ -55,13 +52,17 @@ function plannedTurnover(rows: Record<string, unknown>[], month: string, include
   const planned = sum('forecast_plan_count');
   const salesCovered = sum('sales_plan_count');
   const transferCovered = sum('transfer_plan_count');
-  const planReady =
-    planned > 0 && salesCovered === planned && (!includeTransfer || transferCovered === planned);
+  const covered = includeTransfer ? Math.min(salesCovered, transferCovered) : salesCovered;
+  const complete = planned > 0 && covered === planned;
+  const partial = covered > 0 && !complete;
+  const forecastQuantity = complete
+    ? sum('sales_plan_qty') + (includeTransfer ? 0.5 * sum('transfer_out_plan_qty') : 0)
+    : sum(includeTransfer ? 'transfer_plan_covered' : 'sales_plan_covered');
   const demand =
-    planReady && days > 0
-      ? (sum('sales_plan_qty') + (includeTransfer ? 0.5 * sum('transfer_out_plan_qty') : 0)) / days
-      : null;
-  const inventory = sum('forecast_stock_qty');
+    covered > 0 && days > 0 && (complete || forecastQuantity > 0) ? forecastQuantity / days : null;
+  const inventory = complete
+    ? sum('forecast_stock_qty')
+    : sum(includeTransfer ? 'transfer_stock_covered' : 'sales_stock_covered');
   const targetPlan = sum('planned_target_quantity');
   return {
     demand,
@@ -70,8 +71,9 @@ function plannedTurnover(rows: Record<string, unknown>[], month: string, include
         ? inventory / demand
         : null,
     target: days > 0 && targetPlan > 0 ? sum('planned_target_stock') / (targetPlan / days) : null,
-    covered: includeTransfer ? Math.min(salesCovered, transferCovered) : salesCovered,
+    covered,
     planned,
+    partial,
   };
 }
 
@@ -1275,7 +1277,7 @@ export async function loadInventoryDashboardTabs(
           orders?.reduce((v, o) => v + numberOf(o['workbench.shortage_quantity']), 0) ?? 0;
         const show = (f: string) => (r[f + '_count'] > 0 ? displayNumber(r[f]) : '-');
         const risk = stockGroupRisk([r], currentShortageSum(pending, 'shortage'));
-        const plan = plannedTurnover([r], eligiblePlanMonth(scope), groupBy === 'base');
+        const plan = plannedTurnover([r], scope.targetMonth, groupBy === 'base');
         return {
           level: r.level,
           risk,
@@ -1283,7 +1285,7 @@ export async function loadInventoryDashboardTabs(
           current: show('inventory'),
           target: show('target'),
           gap: r.gap_count ? displayNumber(r.gap) : '-',
-          currentTurnover: coveredDays(plan.turn, false),
+          currentTurnover: forecastTurnoverDisplay(plan.turn, plan.partial),
           targetTurnover: coveredDays(plan.target, false),
           dailyDemand: plan.demand === null ? '-' : displayDailyMovement(plan.demand),
           last30d: r.review_turn_daily == null ? '-' : displayDailyMovement(r.review_turn_daily),
@@ -2553,7 +2555,7 @@ function configuredSummaryWorkspace(
     const sum = (key: string) => rs.reduce((n, r) => n + (numeric(r[key]) ?? 0), 0);
     const n = sum('row_count');
     const gapCount = sum('gap_count');
-    const plan = plannedTurnover(rs, eligiblePlanMonth(scope), includeTransfer);
+    const plan = plannedTurnover(rs, scope.targetMonth, includeTransfer);
     const reviewDaily = sum('review_turn_daily');
     const reviewInventory = sum('review_turn_inventory');
     const hasReviewInventory = rs.some((r) => numeric(r.review_turn_inventory) !== null);
@@ -2623,7 +2625,7 @@ function configuredSummaryWorkspace(
       current: show(s, 'inventory'),
       target: show(s, 'target'),
       gap: s.gap === null ? '-' : displayNumber(s.gap),
-      currentTurnover: days(s.turn),
+      currentTurnover: forecastTurnoverDisplay(s.turn, s.plan.partial),
       targetTurnover: days(s.targetTurn),
       dailyDemand: s.plan.demand === null ? '-' : displayDailyMovement(s.plan.demand),
       last30d: s.reviewDaily > 0 ? displayDailyMovement(s.reviewDaily) : '-',
@@ -2709,8 +2711,8 @@ function configuredSummaryWorkspace(
     },
     {
       title: '周转天数',
-      value: days(all.turn),
-      coverage: `展望按${selectedBases?.length === 1 ? '销售计划加50%调拨计划' : '销售计划'}计算，计划覆盖 ${all.plan.covered}/${all.plan.planned} 个基地SKU。天数差额按回顾周转减目标周转。`,
+      value: forecastTurnoverDisplay(all.turn, all.plan.partial),
+      coverage: `展望按${selectedBases?.length === 1 ? '销售计划加50%调拨计划' : '销售计划'}计算，计划覆盖 ${all.plan.covered}/${all.plan.planned} 个基地SKU。计划缺失时仅使用现库存与计划均有值的SKU。天数差额按回顾周转减目标周转。`,
       helpers: [
         { label: '回顾周转天数', value: days(all.reviewTurn) },
         { label: '目标周转天数', value: days(all.targetTurn) },

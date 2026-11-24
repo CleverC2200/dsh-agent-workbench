@@ -1089,7 +1089,10 @@ export function InventoryOperationsWorkbench() {
                       tone={card.tone}
                       helpers={card.helpers}
                       coverage={
-                        card.title === '当前库存' && 'coverage' in card ? card.coverage : undefined
+                        (card.title === '当前库存' || card.title === '周转天数') &&
+                        'coverage' in card
+                          ? card.coverage
+                          : undefined
                       }
                     />
                   ))}
