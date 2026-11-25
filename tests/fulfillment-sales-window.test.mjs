@@ -37,7 +37,7 @@ function component(state = fixture()) {
   dom.window.eval(editor);
   const view = dom.window.OrderShortageEditor.mount(dom.window.document, {
     ...state,
-    editor: { editable: true },
+    editor: { editable: true, ...state.editor },
   });
   return { dom, document: dom.window.document, view };
 }
@@ -563,7 +563,7 @@ test('execution and DMS identifiers remain distinct and absent source fields are
     assert.equal(document.querySelectorAll('#orderEditor input[type="number"]').length, 0);
     assert.match(
       document.querySelector('.editor-order-rules').textContent,
-      /起订量：—.*每托箱数：—/,
+      /起订量：1 箱.*每托1箱/,
     );
     assert.deepEqual(
       { ...dom.window.OrderShortageEditor.identifiers({ orderNo: 'LEGACY-DMS' }) },
@@ -693,23 +693,60 @@ test('whole-pallet labels, increments and manual input agree in order and shorta
   }
 });
 
-test('missing pallet size disables quantity edits instead of assuming one box per pallet', () => {
+test('missing order rules default to one and quantity controls use the same values', () => {
   const state = fixture();
   delete state.snapshot.lines[0].orderMultiple;
   state.snapshot.lines = [state.snapshot.lines[0]];
   const { dom, document, view } = component(state);
   try {
     const input = document.querySelector('[aria-label="A 数量"]');
-    assert.equal(input.disabled, true);
-    assert.equal(document.querySelector('[aria-label="A 增加"]').disabled, true);
-    assert.equal(document.querySelector('[aria-label="A 减少"]').disabled, true);
-    assert.match(document.querySelector('.editor-quantity-error').textContent, /每托箱数未提供/);
+    assert.equal(input.disabled, false);
+    assert.equal(input.step, '1');
+    assert.match(
+      document.querySelector('.editor-order-rules').textContent,
+      /起订量：1 箱.*每托1箱/,
+    );
+    document.querySelector('[aria-label="A 增加"]').click();
+    assert.equal(view.getDraft()[0].quantity, 11);
+    document.querySelector('[aria-label="A 减少"]').click();
+    assert.equal(view.getDraft()[0].quantity, 10);
     input.value = '11';
     input.dispatchEvent(new dom.window.Event('input'));
-    assert.equal(view.getDraft()[0].quantity, 10);
+    assert.equal(view.getDraft()[0].quantity, 11);
     assert.equal(state.snapshot.lines[0].quantity, 10);
   } finally {
     dom.window.close();
+  }
+});
+
+test('null and blank ordering rules default to one while failed queries and conflicts stay blocked', () => {
+  for (const value of [null, '', undefined]) {
+    const state = fixture();
+    state.snapshot.lines = [
+      { sku: 'A', name: '商品', quantity: 10, minimumOrderQuantity: value, orderMultiple: value },
+    ];
+    const { dom, document } = component(state);
+    try {
+      assert.equal(document.querySelector('[aria-label="A 数量"]').disabled, false);
+      assert.match(
+        document.querySelector('.editor-order-rules').textContent,
+        /起订量：1 箱.*每托1箱/,
+      );
+      assert.equal(state.snapshot.lines[0].orderMultiple, value);
+    } finally {
+      dom.window.close();
+    }
+  }
+  for (const failure of ['QUERY_UNAVAILABLE', 'CONFLICT', 'INVALID']) {
+    const state = fixture();
+    state.snapshot.lines = [{ sku: 'A', name: '商品', quantity: 10, orderingRulesStatus: failure }];
+    if (failure === 'QUERY_UNAVAILABLE') state.snapshot.pickupRulesStatus = failure;
+    const { dom, document } = component(state);
+    try {
+      assert.equal(document.querySelector('[aria-label="A 数量"]').disabled, true);
+    } finally {
+      dom.window.close();
+    }
   }
 });
 
@@ -762,7 +799,7 @@ test('recommendations stay empty without trusted data and only Use merges suppli
   try {
     dom.window.OrderShortageEditor.mount(document, { ...state, editor: { editable: true } });
     click('+ 商品');
-    click('推荐');
+    click('商品推荐');
     assert.match(document.querySelector('[aria-label="推荐商品"]').textContent, /暂无推荐商品/);
     const view = dom.window.OrderShortageEditor.mount(document, {
       ...state,
@@ -775,12 +812,12 @@ test('recommendations stay empty without trusted data and only Use merges suppli
       },
     });
     click('+ 商品');
-    click('推荐');
+    click('商品推荐');
     document.querySelector('[aria-label="REC-001 增加"]').click();
     assert.equal(view.getDraft().length, 1);
     click('返回');
     assert.equal(view.getDraft().length, 1);
-    click('推荐');
+    click('商品推荐');
     click('使用');
     assert.equal(view.getPage(), 'order');
     assert.equal(view.getDraft().find((line) => line.sku === 'REC-001').quantity, 20);
@@ -874,5 +911,138 @@ test('deferral date stays within the existing one-to-seven-day decision contract
     assert.equal(actions[0].input.deliveryDate, date.min);
   } finally {
     dom.window.close();
+  }
+});
+
+function catalogFixture(onLookupProducts, overrides = {}) {
+  return {
+    ...fixture(),
+    snapshot: {
+      ...fixture().snapshot,
+      satisfactionRate: 70,
+      lines: [{ sku: 'A', name: '原商品', quantity: 10, orderMultiple: 1 }],
+    },
+    editor: { editable: true, catalogAvailable: true },
+    onLookupProducts,
+    ...overrides,
+  };
+}
+const catalogTick = () => new Promise((resolve) => setImmediate(resolve));
+const editorButton = (document, text) =>
+  [...document.querySelectorAll('#orderEditor button')].find(
+    (button) => button.textContent === text,
+  );
+
+test('catalog automatically loads customer products once and preserves drafts on re-entry', async () => {
+  const calls = [];
+  let resolve;
+  const f = component(
+    catalogFixture((query) => {
+      calls.push(query);
+      return new Promise((done) => {
+        resolve = done;
+      });
+    }),
+  );
+  try {
+    assert.deepEqual(calls, ['']);
+    assert.equal(editorButton(f.document, '查询中…').disabled, true);
+    resolve([
+      { sku: 'NEW', name: '可售商品' },
+      { sku: 'A', name: '重复原商品' },
+    ]);
+    await catalogTick();
+    assert.ok(f.document.querySelector('[aria-label="NEW 增加"]'));
+    f.document.querySelector('[aria-label="NEW 增加"]').click();
+    assert.deepEqual(JSON.parse(JSON.stringify(f.view.getDraft())), [
+      { sku: 'A', quantity: 10 },
+      { sku: 'NEW', quantity: 1 },
+    ]);
+    editorButton(f.document, '完成选品').click();
+    editorButton(f.document, '+ 商品').click();
+    assert.equal(calls.length, 1);
+    assert.equal(f.document.querySelector('[aria-label="NEW 数量"]').value, '1');
+    assert.equal(f.document.querySelectorAll('article[data-sku="A"]').length, 1);
+  } finally {
+    f.dom.window.close();
+  }
+});
+
+test('catalog failures do not loop and explicit search retries with the entered query', async () => {
+  const calls = [];
+  const f = component(
+    catalogFixture(async (query) => {
+      calls.push(query);
+      if (calls.length === 1) throw Error('客户商品读取失败');
+      return [{ sku: 'NEW', name: '可售商品' }];
+    }),
+  );
+  try {
+    await catalogTick();
+    assert.match(f.document.getElementById('orderEditor').textContent, /客户商品读取失败/);
+    editorButton(f.document, '完成选品').click();
+    editorButton(f.document, '+ 商品').click();
+    assert.equal(calls.length, 1);
+    const input = f.document.querySelector('[aria-label="商品搜索"]');
+    input.value = 'NEW';
+    input.dispatchEvent(new f.dom.window.Event('input'));
+    editorButton(f.document, '查找商品').click();
+    await catalogTick();
+    assert.deepEqual(calls, ['', 'NEW']);
+    assert.ok(f.document.querySelector('[aria-label="NEW 增加"]'));
+    assert.doesNotMatch(f.document.getElementById('orderEditor').textContent, /客户商品读取失败/);
+  } finally {
+    f.dom.window.close();
+  }
+});
+
+test('catalog lookup is deferred until entry and unavailable to read-only viewers', async () => {
+  for (const readOnly of [false, true]) {
+    const calls = [];
+    const state = catalogFixture(async (query) => {
+      calls.push(query);
+      return [];
+    });
+    state.snapshot.satisfactionRate = 95;
+    if (readOnly) state.permissions = { canAct: false };
+    const f = component(state);
+    try {
+      assert.equal(calls.length, 0);
+      editorButton(f.document, '+ 商品').click();
+      await catalogTick();
+      assert.equal(calls.length, readOnly ? 0 : 1);
+      if (!readOnly)
+        assert.match(
+          f.document.getElementById('orderEditor').textContent,
+          /当前客户没有匹配的可售商品/,
+        );
+    } finally {
+      f.dom.window.close();
+    }
+  }
+});
+
+test('late catalog responses cannot alter a newly mounted order', async () => {
+  let resolve;
+  const f = component(
+    catalogFixture(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    ),
+  );
+  try {
+    const newView = f.dom.window.OrderShortageEditor.mount(f.document, {
+      ...fixture(),
+      editor: { editable: true },
+    });
+    resolve([{ sku: 'STALE', name: '旧客户商品' }]);
+    await catalogTick();
+    assert.equal(newView.getPage(), 'order');
+    assert.doesNotMatch(f.document.getElementById('orderEditor').textContent, /旧客户商品/);
+    assert.ok(!newView.getDraft().some((line) => line.sku === 'STALE'));
+  } finally {
+    f.dom.window.close();
   }
 });

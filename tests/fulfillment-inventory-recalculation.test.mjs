@@ -181,7 +181,6 @@ test('quantity changes, deletion and new SKUs recalculate the whole draft by qua
     const search = f.document.querySelector('[aria-label="商品搜索"]');
     search.value = 'C';
     search.dispatchEvent(new f.dom.window.Event('input'));
-    click(f, '查找商品');
     await settle();
     f.document.querySelector('[aria-label="C 增加"]').click();
     f.document.querySelector('[aria-label="C 增加"]').click();
