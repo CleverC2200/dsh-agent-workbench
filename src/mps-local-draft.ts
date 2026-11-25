@@ -138,6 +138,17 @@ export const mpsLocalDraftSchema = z.strictObject({
     forecast: input.optional(),
     history: input.optional(),
   }),
+  demandImports: list(
+    z.strictObject({
+      month,
+      base: text,
+      code: text,
+      category: text,
+      group: text,
+      quantity,
+      at: z.iso.datetime(),
+    }),
+  ).optional(),
   adjustments: z.strictObject({
     categoryDemand: list(categoryAdjustment),
     shares: list(shareAdjustment),
