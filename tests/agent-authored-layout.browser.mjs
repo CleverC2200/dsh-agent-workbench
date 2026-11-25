@@ -2726,7 +2726,14 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
           initial_deviation: 50,
           adjusted_plan: 100,
           adjusted_deviation: 10,
+          shipped_qty: 80,
+          submitted_plan_qty: 100,
+          missing_ship_plan: 0,
         });
+      if (queryId === 'lantern.open-orders')
+        Object.assign(result.rows[0], { open_qty: 12000, shortage_qty: 2000, invalid: 0 });
+      if (queryId === 'lantern.planning')
+        Object.assign(result.rows[0], { inbound_qty: 90, adjusted_plan_qty: 100, invalid: 0 });
       if (queryId === 'lantern.production')
         Object.assign(result.rows[0], {
           planned: 200,
@@ -2781,8 +2788,15 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
   await expect(dashboard.getByText('数据范围 2026-10-01 至 2026-10-19')).toBeVisible();
   await expect(dashboard.locator('[data-metric="销售提报准确率"]')).toContainText('82.50');
   await dashboard.getByRole('tab', { name: '销售预算达成率', exact: true }).click();
-  const budgetRow = dashboard.getByRole('row', { name: /汤圆合计/ });
+  const budgetRow = dashboard.getByRole('row', { name: /汤圆/ }).first();
   await expect(budgetRow).toContainText('80.00%');
+  await expect(dashboard.locator('[data-metric="销售提报达成率"]')).toContainText('80.00');
+  await expect(dashboard.locator('[data-metric="未开订单量"]')).toContainText('1.20');
+  await expect(dashboard.locator('[data-metric="未开订单缺货量"]')).toContainText('0.20');
+  assert.equal(
+    calls.some(({ queryId }) => queryId === 'lantern.ontime'),
+    false,
+  );
   await sales.press('ArrowRight');
   await expect(production).toBeFocused();
   await expect(sales).toHaveAttribute('aria-selected', 'true');
@@ -2793,6 +2807,7 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
   await production.press('Enter');
   await expect(production).toHaveAttribute('aria-selected', 'true');
   await expect(dashboard.locator('[data-metric="生产计划达成率"]')).toContainText('90.00');
+  await expect(dashboard.locator('[data-metric="生产规划达成率"]')).toContainText('90.00');
   assert.equal(
     calls.find(({ queryId }) => queryId === 'lantern.production').parameters.end_exclusive,
     '20261020',
@@ -2826,7 +2841,7 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
     'lantern.budget',
     'lantern.accuracy',
     'lantern.amendment',
-    'lantern.ontime',
+    'lantern.open-orders',
   ]) {
     assert.equal(
       calls.find((call) => call.queryId === queryId).parameters.product_category,
