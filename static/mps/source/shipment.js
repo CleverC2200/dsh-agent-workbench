@@ -958,11 +958,16 @@ export function createShipment(
         if (valid()) setBusy(false);
       }
     };
+    const shouldReadDate = active || autoReadDisplay;
     react.useEffect(() => {
-      if ((!active && !autoReadDisplay) || cutoff) return;
+      if (!shouldReadDate || cutoff || !hasCutoffRange) return;
       void readLatestDate();
-      return () => controller.current?.abort();
-    }, [active, autoReadDisplay, draft.id, minCutoff, maxCutoff, cutoff]);
+      const dateController = controller.current;
+      return () => {
+        dateController.abort();
+        if (controller.current === dateController) setBusy(false);
+      };
+    }, [shouldReadDate, hasCutoffRange, draft.id, minCutoff, maxCutoff, cutoff]);
     react.useEffect(() => {
       if (calculationRetry === appliedRetry.current) return;
       appliedRetry.current = calculationRetry;
