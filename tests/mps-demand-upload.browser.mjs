@@ -73,6 +73,78 @@ async function setup(t, delisted = false) {
   };
 }
 
+test('需求导入保留系统列和导入原值，最终预测立即采用并支持再导入后手调', async (t) => {
+  const { page, frame, month, view } = await setup(t);
+  const summary = view.getByRole('table', { name: '大类需求总表', exact: true });
+  const detail = view.getByRole('table', { name: '加工后的需求明细', exact: true });
+  await expect(
+    summary.getByRole('columnheader', { name: `M+1 ${month} 人工导入`, exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    detail.getByRole('columnheader', { name: `M+1 ${month} 最终预测（可调整）`, exact: true }),
+  ).toHaveCount(1);
+  await upload(frame, '选择需求修正CSV', `${columns}\n郑州,A,${month},130,销售变化,`);
+  await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
+  await expect.poll(async () => (await draft(page)).demandImports?.[0]?.quantity).toBe(130);
+  await expect(summary).toContainText('1/3项已导入');
+  const download = async () => {
+    const pending = page.waitForEvent('download');
+    await view.getByRole('button', { name: '下载当前范围需求', exact: true }).click();
+    const text = await mpsDownloadText(await (await pending).path());
+    const book = XLSX.read(text.replace(/^\uFEFF/, ''), { type: 'string', raw: true });
+    return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
+  };
+  let rows = await download();
+  let leaf = rows.find(
+    (row) =>
+      row['粒度'] === '基地SKU' &&
+      row['基地'] === '郑州' &&
+      row['产品编码'] === 'A' &&
+      row['月份'] === month,
+  );
+  assert.equal(Number(leaf['人工导入']), 130);
+  assert.equal(Number(leaf['最终预测']), 130);
+  assert.equal(
+    leaf['预测偏差'],
+    leaf['系统需求数量'] === '' ? '' : 130 - Number(leaf['系统需求数量']),
+  );
+  await upload(frame, '选择需求修正CSV', `${columns}\n郑州,A,${month},0,销售变化,`);
+  await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
+  await expect.poll(async () => (await draft(page)).demandImports?.[0]?.quantity).toBe(0);
+  await view.getByLabel('搜索当前步骤').fill('产品甲');
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
+  await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('140');
+  await frame.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
+  rows = await download();
+  leaf = rows.find(
+    (row) =>
+      row['粒度'] === '基地SKU' &&
+      row['基地'] === '郑州' &&
+      row['产品编码'] === 'A' &&
+      row['月份'] === month,
+  );
+  assert.equal(Number(leaf['人工导入']), 0);
+  assert.equal(Number(leaf['最终预测']), 140);
+  assert.equal((await draft(page)).demandImports[0].quantity, 0);
+  await upload(frame, '选择需求修正CSV', `${columns}\n郑州,A,${month},0,销售变化,`);
+  await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
+  await expect.poll(async () => (await draft(page)).adjustments.quantities[0]?.quantity).toBe(0);
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
+  await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('');
+  await frame.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
+  rows = await download();
+  leaf = rows.find(
+    (row) =>
+      row['粒度'] === '基地SKU' &&
+      row['基地'] === '郑州' &&
+      row['产品编码'] === 'A' &&
+      row['月份'] === month,
+  );
+  assert.equal(Number(leaf['最终预测']), 0);
+});
+
 test('CSV预览不写入，点击确认仅改变基地SKU并保留系统依据、历史和第四月参考', async (t) => {
   const { page, frame, month, view } = await setup(t);
   const original = await draft(page);
@@ -117,10 +189,10 @@ test('CSV预览不写入，点击确认仅改变基地SKU并保留系统依据�
     7,
   );
   await view.getByLabel('搜索当前步骤').fill('产品甲');
-  await view.getByRole('button', { name: '调整', exact: true }).click();
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
   await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('');
-  await view.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
-  await view.getByRole('button', { name: '保存调整', exact: true }).click();
+  await frame.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
   await expect.poll(async () => (await draft(page)).adjustments.quantities.length).toBe(1);
   const undone = await draft(page);
   assert.equal(undone.adjustments.quantities.length, 1);
@@ -172,12 +244,125 @@ test('无效文件不覆盖有效修正，后选文件不会被先选文件的�
   assert.deepEqual(await draft(page), original);
 });
 
+test('完整三个月导入与再导入保留旧调整、第四月和完整历史', async (t) => {
+  const { page, frame, month } = await setup(t);
+  await page.evaluate(async () => {
+    const seed = window.readView();
+    const current = seed.localDrafts.drafts.find((row) => row.id === seed.localDrafts.selected);
+    const product = current.inputs.products.rows[0];
+    current.inputs.products.rows = Array.from({ length: 5770 }, (_, index) => ({
+      ...product,
+      产品编码: `FULL${index}`,
+    }));
+    current.adjustments.quantities = [
+      {
+        kind: 'base-sku',
+        month: new Date(
+          Date.UTC(Number(current.month.slice(0, 4)), Number(current.month.slice(5)) + 2, 1),
+        )
+          .toISOString()
+          .slice(0, 7),
+        category: '汤圆',
+        group: 'G1',
+        base: '郑州',
+        code: 'FULL1',
+        quantity: 7,
+        systemValue: null,
+        reason: '旧调整保留',
+        at: '2026-11-01T00:00:00.000Z',
+      },
+    ];
+    current.adjustments.history = [
+      {
+        kind: 'quantities',
+        key: '旧记录',
+        action: 'set',
+        value: 7,
+        systemValue: null,
+        reason: '旧历史保留',
+        at: '2026-11-01T00:00:00.000Z',
+      },
+    ];
+    await window.openAuthor('mps', 1200, seed);
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const months = Array.from({ length: 4 }, (_, index) => {
+    const date = new Date(`${month}-01T00:00:00Z`);
+    date.setUTCMonth(date.getUTCMonth() + index);
+    return date.toISOString().slice(0, 7);
+  });
+  const imported = months
+    .slice(0, 3)
+    .flatMap((period) =>
+      Array.from(
+        { length: 5770 },
+        (_, index) => `郑州,FULL${index},${period},${index % 2 ? 0 : 13},销售变化,`,
+      ),
+    );
+  for (let iteration = 0; iteration < 2; iteration++) {
+    await upload(
+      frame,
+      '选择需求修正CSV',
+      `${columns}\n${imported.join('\n')}\n郑州,FULL0,${months[3]},7,库存调整,`,
+    );
+    const preview = frame.getByRole('dialog', { name: '确认需求修正上传', exact: true });
+    await expect(preview).toContainText('共17311条', { timeout: 30000 });
+    await preview
+      .getByRole('button', { name: '确认应用修正', exact: true })
+      .click({ timeout: 30000 });
+    await expect(preview)
+      .toHaveCount(0, { timeout: 30000 })
+      .catch(async (failure) => {
+        t.diagnostic(JSON.stringify(await frame.getByRole('alert').allTextContents()));
+        throw failure;
+      });
+    const saved = await draft(page);
+    assert.equal(saved.demandImports.length, 17310);
+    assert.equal(saved.adjustments.quantities.length, 17312);
+    assert.equal(saved.adjustments.history.length, 1 + (iteration + 1) * 17311);
+    assert.equal(
+      saved.adjustments.quantities.find((row) => row.code === 'FULL1' && row.month === months[3])
+        .quantity,
+      7,
+    );
+    assert.equal(saved.adjustments.quantities.find((row) => row.month === months[3]).quantity, 7);
+    assert.equal(saved.demandImports.find((row) => row.code === 'FULL1').quantity, 0);
+    assert.equal(saved.adjustments.history[0].reason, '旧历史保留');
+  }
+  const saved = await page.evaluate(() => window.readView());
+  await page.evaluate(async (seed) => window.openAuthor('mps', 1200, seed), saved);
+  assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), saved.localDrafts);
+});
+
+test('跨月参考保留原版人工导入且新版从系统值开始', async (t) => {
+  const { page, frame, month } = await setup(t);
+  const following = new Date(`${month}-01T00:00:00Z`);
+  following.setUTCMonth(following.getUTCMonth() + 1);
+  const nextMonth = following.toISOString().slice(0, 7);
+  await upload(frame, '选择需求修正CSV', `${columns}\n郑州,A,${nextMonth},333,销售变化,`);
+  await frame
+    .getByRole('dialog', { name: '确认需求修正上传', exact: true })
+    .getByRole('button', { name: '确认应用修正', exact: true })
+    .click();
+  await expect.poll(async () => (await draft(page)).demandImports?.length).toBe(1);
+  const base = await draft(page);
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  const creation = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
+  await creation.getByLabel('评估月份', { exact: true }).fill(nextMonth);
+  await creation.getByLabel('参考版本', { exact: true }).selectOption(base.id);
+  await creation.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await expect.poll(async () => (await draft(page)).month).toBe(nextMonth);
+  assert.deepEqual((await draft(page)).demandImports ?? [], []);
+  await frame.getByLabel('评估版本选择', { exact: true }).selectOption(base.id);
+  assert.deepEqual((await draft(page)).demandImports, base.demandImports);
+});
+
 test('上传不能使完整修正历史超出本地草稿可保存范围', async (t) => {
   const { page, frame, month } = await setup(t);
   await page.evaluate(async () => {
     const seed = window.readView();
     const draft = seed.localDrafts.drafts.find((row) => row.id === seed.localDrafts.selected);
-    draft.adjustments.history = Array.from({ length: 10000 }, () => ({
+    draft.adjustments.history = Array.from({ length: 90000 }, () => ({
       kind: 'quantities',
       key: '历史叶子',
       action: 'set',

@@ -213,7 +213,7 @@ test('product replacement fields retain source columns and explain combined hist
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   const child = section
     .locator('tbody tr')
-    .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) });
+    .filter({ has: frame.getByRole('cell', { name: /^(?:常规\s*)?A$/ }) });
   await expect(child.locator('td').nth(6)).toHaveText('REPLACE');
   await expect(child.locator('td').nth(7)).toHaveText('源替换品');
 });
@@ -988,8 +988,8 @@ test(
       available: table.parentElement.clientWidth,
       columns: table.querySelectorAll('thead th').length,
     }));
-    assert.equal(geometry.columns, 7);
-    assert.ok(geometry.width <= geometry.available + 1, JSON.stringify(geometry));
+    assert.equal(geometry.columns, 16);
+    assert.ok(geometry.width > geometry.available, JSON.stringify(geometry));
     if (process.env.MPS05_EVIDENCE_DIR) {
       await processed.scrollIntoViewIfNeeded();
       await page.screenshot({ path: `${process.env.MPS05_EVIDENCE_DIR}/processed-desktop.png` });
@@ -1024,7 +1024,8 @@ test(
     const summaryBook = XLSX.read(await readFile(summaryPath), { type: 'buffer' });
     const [summaryRow] = XLSX.utils.sheet_to_json(summaryBook.Sheets[summaryBook.SheetNames[0]]);
     assert.equal(summaryRow['M+1 2026-10 有效需求'], 275);
-    assert.equal(summaryRow['M+2 2026-11 有效需求'], 1116.5);
+    assert.equal(summaryRow['M+2 2026-11 有效需求'], 470);
+    assert.equal(summaryRow['M+2 2026-11 最终预测（可调整）'], 1116.5);
     assert.equal(summaryRow['M+3 2026-12 需求'], 695);
     if (process.env.MPS05_EVIDENCE_DIR)
       await copyFile(summaryPath, `${process.env.MPS05_EVIDENCE_DIR}/processed-demand.csv`);
@@ -1235,7 +1236,7 @@ test('历史占比读取上一完整财年，预览列出当前物料组和全�
   ).toBeVisible();
   const row = dialog
     .locator('tbody tr')
-    .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) });
+    .filter({ has: frame.getByRole('cell', { name: /^(?:常规\s*)?A$/ }) });
   await expect(dialog).toContainText('2025-07-01至2026-06-30');
   await expect(row.getByRole('cell', { name: 'G', exact: true })).toBeVisible();
   await expect(row).toContainText('50.00%');
@@ -1303,7 +1304,7 @@ test('模型双期预测沿用四项统计，明细保留物料组及零数量',
   const dialog = frame.getByRole('dialog');
   const row = dialog
     .locator('tbody tr')
-    .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) });
+    .filter({ has: frame.getByRole('cell', { name: /^(?:常规\s*)?A$/ }) });
   await expect(row).toContainText('汤圆');
   await expect(row).toContainText('系列甲');
   await expect(row.getByRole('cell', { name: 'G', exact: true })).toBeVisible();
@@ -1420,13 +1421,17 @@ test('basic source anomalies keep known BI quantities and export every row while
   await expect(dialog.locator('tbody tr')).toHaveCount(25);
   await expect(dialog).toContainText('2026-06至2026-08');
   await expect(dialog).toContainText('异常6条');
-  await expect(dialog.locator('tbody tr').nth(0)).toContainText('读取失败');
-  await expect(dialog.locator('tbody tr').nth(3)).toContainText('OUT-31');
-  await expect(dialog.locator('tbody tr').nth(3)).toContainText('不在当前产品池');
-  await expect(dialog.locator('tbody tr').nth(6).locator('td').nth(3)).toHaveText('A');
-  await expect(dialog.locator('tbody tr').nth(7).locator('td').nth(3)).toHaveText('IN-1');
-  await dialog.getByRole('button', { name: '下一页来源明细', exact: true }).click();
-  await expect(dialog.locator('tbody tr').nth(0).locator('td').nth(3)).toHaveText('IN-19');
+  const displayed = [];
+  while (true) {
+    displayed.push(...(await dialog.locator('tbody tr').allTextContents()));
+    const next = dialog.getByRole('button', { name: '下一页来源明细', exact: true });
+    if (await next.isDisabled()) break;
+    await next.click();
+  }
+  assert.equal(displayed.length, 99);
+  assert.ok(displayed.some((row) => row.includes('读取失败')));
+  assert.ok(displayed.some((row) => row.includes('OUT-31') && row.includes('不在当前产品池')));
+  assert.ok(displayed.some((row) => row.includes('IN-19')));
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   const pending = page.waitForEvent('download');
   await source.getByRole('button', { name: '下载完整来源明细', exact: true }).click();

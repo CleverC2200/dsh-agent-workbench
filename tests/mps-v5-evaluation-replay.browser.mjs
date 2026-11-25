@@ -72,6 +72,7 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
           material_name: `产品${code}`,
           series: '系列',
           product_item: code === 'STILL' ? '其他' : '包点',
+          month_order_qty: null,
           shipped: code === 'B' ? 1000 : 0,
           prepped: 0,
           unprepped: 0,
@@ -225,7 +226,7 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
   const leaf = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   for (const code of codes) {
     await leaf.getByLabel('搜索当前步骤', { exact: true }).fill(code);
-    await leaf.getByRole('button', { name: '调整', exact: true }).click();
+    await frame.locator('.dc-title-row').getByRole('button', { name: '调整', exact: true }).click();
     for (const month of [...months, '2027-03'])
       await leaf
         .getByLabel(`点心 ${code === 'STILL' ? '其他' : '包点'} ${code} 郑州 ${month} 需求数量`, {
@@ -233,7 +234,10 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
         })
         .fill(code === 'B' ? '30' : '0');
     await selectAdjustmentReason(leaf, '固定回放确认量');
-    await leaf.getByRole('button', { name: '保存调整', exact: true }).click();
+    await frame
+      .locator('.dc-title-row')
+      .getByRole('button', { name: '保存调整', exact: true })
+      .click();
   }
   await leaf.getByLabel('搜索当前步骤', { exact: true }).fill('');
   await workflowStep(frame, '主数据对应关系');

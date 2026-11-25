@@ -1,3 +1,12 @@
+import { createBatchEdit } from './batch-edit.js';
+import { createStepViewState, useStepViewField } from './step-view-state.js';
+import {
+  compareBusinessRows,
+  compareBusinessValues,
+  orderedTableEntries,
+  createTablePresentation,
+  isSkuColumn,
+} from './table-presentation.js';
 import { categorySourceInputs } from './category-source-inputs.js';
 import { createCategoryFilter, matchesCategories } from './category-filter.js';
 import { canonicalBaseName } from './relations.js';
@@ -66,7 +75,7 @@ const monthOffset = (month, offset) => {
   const date = new Date(year, number - 1 + offset, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 };
-function parseCsv(text, columns) {
+function parseCsv(text, columns, rowLimit = 10000) {
   const table = [];
   let row = [],
     cell = '',
@@ -122,7 +131,8 @@ function parseCsv(text, columns) {
   }
   if (!table.length || table[0].join('\u0000') !== columns.join('\u0000'))
     throw Error(`表头必须依模板排列：${columns.join('、')}。`);
-  if (table.length - 1 > 10000) throw Error('超过10000条上限，未读取任何行，请拆分文件后核对。');
+  if (table.length - 1 > rowLimit)
+    throw Error(`超过${rowLimit}条上限，未读取任何行，请拆分文件后核对。`);
   const errors = [];
   const rows = table.slice(1).map((values, index) => {
     if (values.length !== columns.length) errors.push(`第${index + 2}行列数不符`);
@@ -304,6 +314,7 @@ function reportAmountSource(draft, period) {
 
 export function createDemandConfirmation(react, useMpsPart, view) {
   const h = react.createElement;
+  const { Provider, Code } = createTablePresentation(react);
   const CategoryFilter = createCategoryFilter(react);
   const CategoryDemand = createCategoryDemand(react, {
     table: (...args) => table(...args),
@@ -387,7 +398,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'tbody',
           {},
-          rows.map((row, index) =>
+          orderedTableEntries(columns, rows).map(({ row, index }) =>
             h(
               react.Fragment,
               { key: index },
@@ -398,44 +409,46 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   h(
                     'td',
                     { key: column },
-                    row[column] === '' || row[column] == null
-                      ? column === '新品标记'
-                        ? ''
-                        : '-'
-                      : /收入|金额/.test(column) && Number.isFinite(Number(row[column]))
-                        ? amount(row[column])
-                        : (/数量|合计/.test(column) ||
-                              /^M\+\d$/.test(column) ||
-                              [
-                                '① 环比法',
-                                '② 占比法',
-                                '加权',
-                                '两法平均量',
-                                '销售提报量',
-                                '销售校正量',
-                                '系统值',
-                                '有效值',
-                                '组合标准日产/件',
-                                '组合标准日产/吨',
-                              ].includes(column)) &&
-                            Number.isFinite(Number(row[column]))
-                          ? integer(row[column])
-                          : [
-                                '历史平均环比',
-                                '年度环比',
-                                '近三月达成率',
-                                '同期平均占比',
-                                '三年月占比',
-                                '月发货占财年比例',
-                                '同比增长率',
-                                '环比增长率',
-                              ].includes(column) && Number.isFinite(Number(row[column]))
-                            ? new Intl.NumberFormat('zh-CN', {
-                                style: 'percent',
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              }).format(Number(row[column]))
-                            : row[column],
+                    isSkuColumn(column) && typeof row[column] === 'string' && row[column]
+                      ? h(Code, { row })
+                      : row[column] === '' || row[column] == null
+                        ? column === '新品标记'
+                          ? ''
+                          : '-'
+                        : /收入|金额/.test(column) && Number.isFinite(Number(row[column]))
+                          ? amount(row[column])
+                          : (/数量|合计/.test(column) ||
+                                /^M\+\d$/.test(column) ||
+                                [
+                                  '① 环比法',
+                                  '② 占比法',
+                                  '加权',
+                                  '两法平均量',
+                                  '销售提报量',
+                                  '销售校正量',
+                                  '系统值',
+                                  '有效值',
+                                  '组合标准日产/件',
+                                  '组合标准日产/吨',
+                                ].includes(column)) &&
+                              Number.isFinite(Number(row[column]))
+                            ? integer(row[column])
+                            : [
+                                  '历史平均环比',
+                                  '年度环比',
+                                  '近三月达成率',
+                                  '同期平均占比',
+                                  '三年月占比',
+                                  '月发货占财年比例',
+                                  '同比增长率',
+                                  '环比增长率',
+                                ].includes(column) && Number.isFinite(Number(row[column]))
+                              ? new Intl.NumberFormat('zh-CN', {
+                                  style: 'percent',
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                }).format(Number(row[column]))
+                              : row[column],
                   ),
                 ),
               ),
@@ -1089,6 +1102,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     downloadCsv: downloadCsvLegacy,
   });
   const DeliveryMetrics = createDeliveryMetrics(react, { table, downloadCsv, useMpsPart });
+  const { useBatchEdit, Actions } = createBatchEdit(react);
   const Workflow = createWorkflow(react, useMpsPart, {
     Dialog,
     Upload,
@@ -1171,7 +1185,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [submissionWarningOpen, setSubmissionWarningOpen] = react.useState(false);
     const [error, setError] = react.useState('');
     const [search, setSearch] = react.useState('');
-    const [selectedCategories, setSelectedCategories] = react.useState([]);
+    const [sharedCategories, setSharedCategories] = react.useState([]);
     const [productPage, setProductPage] = react.useState(0);
     const [productPageSize, setProductPageSize] = react.useState(10);
     const [productDetails, setProductDetails] = react.useState(null);
@@ -1548,6 +1562,28 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           }`;
     react.useEffect(() => setSubmissionWarningOpen(false), [draft.id, step]);
     const workflowScope = JSON.stringify([draft.id, draft.month, scopeGeneration]);
+    const workflowViews = react.useRef(new Map());
+    if (!workflowViews.current.has(workflowScope))
+      workflowViews.current.set(workflowScope, new Map());
+    const stepViews = workflowViews.current.get(workflowScope);
+    if (!stepViews.has('process')) stepViews.set('process', createStepViewState());
+    const [processCategories, setProcessCategories] = useStepViewField(
+      react,
+      stepViews.get('process'),
+      'selectedCategories',
+      () => [],
+    );
+    const processBatch = useBatchEdit({
+      scope: workflowScope,
+      view: stepViews.get('process'),
+      requireReason: true,
+      onStart: () => setProcessCategories(sharedCategories),
+    });
+    const processCategoryEditing = step === 'process' && processBatch.active;
+    const selectedCategories = processCategoryEditing ? processCategories : sharedCategories;
+    const setSelectedCategories = processCategoryEditing
+      ? setProcessCategories
+      : setSharedCategories;
     if (workflowStep.current.scope !== workflowScope)
       workflowStep.current = { scope: workflowScope, step: null };
     const workflowActive =
@@ -1850,8 +1886,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         canonicalBaseName(display['基地']) !== 'ODM' &&
         matchesCategories(display['大类'], selectedCategories),
     );
-    const filteredProducts = categoryProducts.filter(
-      ({ display, labels, replacementCodes, targetBases, sourcePeriods }) =>
+    const filteredProducts = [...categoryProducts]
+      .sort((left, right) => compareBusinessRows(left.display, right.display))
+      .filter(({ display, labels, replacementCodes, targetBases, sourcePeriods }) =>
         [
           ...Object.values(display),
           ...labels,
@@ -1859,7 +1896,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           ...targetBases,
           ...sourcePeriods,
         ].some((value) => value.includes(search)),
-    );
+      );
     const selectedProduct = productDetails === null ? null : productViews[productDetails];
     react.useEffect(
       () => setProductPage(0),
@@ -2044,13 +2081,16 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       checkActive,
     );
     const filterStep = ['check', 'ship', 'process', 'masterdata', 'constraints'].includes(step);
-    return h(
+    const content = h(
       'div',
       { className: 'dc-page', hidden: !active },
       retentionError && h('p', { role: 'alert' }, retentionError),
       h(
         'header',
-        { className: filterStep ? 'dc-page-head dc-page-head-sticky' : 'dc-page-head' },
+        {
+          className: filterStep ? 'dc-page-head dc-page-head-sticky' : 'dc-page-head',
+          onKeyDown: step === 'process' ? processBatch.keyDown : undefined,
+        },
         h(
           'div',
           { className: 'dc-title-row' },
@@ -2111,7 +2151,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                         ...(draft.shipment?.rows ?? []).map((row) => row.category),
                       ].filter(Boolean),
                     ),
-                  ].sort(),
+                  ].sort((left, right) => compareBusinessValues('category', left, right)),
                   selected: selectedCategories,
                   change: setSelectedCategories,
                   disabled: adjusting,
@@ -2203,6 +2243,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'div',
               { className: 'dc-version-actions' },
+              step === 'process' &&
+                h(Actions, {
+                  batch: processBatch,
+                  requireReason: true,
+                  hint: '留空恢复人工导入，无导入时恢复系统值',
+                }),
               h(
                 'button',
                 {
@@ -2305,6 +2351,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ...(base && base.month !== month
                         ? {
                             adjustments: undefined,
+                            demandImports: undefined,
                           }
                         : {}),
                       name: versionName.trim() || makeDraft(id, month).name,
@@ -2510,6 +2557,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         workflowStep.current.step &&
           h(Workflow, {
             selectedCategories,
+            stepViews,
+            processBatch,
             key: workflowScope,
             active: workflowActive,
             result: workflowResult,
@@ -2744,7 +2793,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                                       'aria-label': `查看产品 ${row['产品编码']} 的源字段`,
                                       onClick: () => setProductDetails(index),
                                     },
-                                    display[column],
+                                    h(Code, { row: display }),
                                   )
                                 : column === '新品标记'
                                   ? (display[column] ?? '')
@@ -3051,5 +3100,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       ),
       !helpOpen && assistant,
     );
+    return h(Provider, { draft }, content);
   };
 }

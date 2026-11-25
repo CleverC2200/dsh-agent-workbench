@@ -107,6 +107,11 @@ const sourceIssues = (draft, source, month) => {
 };
 
 export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation) {
+  const adjustedDemandKeys = new Set(
+    (draft.adjustments?.quantities ?? [])
+      .filter((entry) => entry.kind === 'base-sku')
+      .map((entry) => JSON.stringify([entry.month, entry.base, entry.code])),
+  );
   const categoryComputation = buildCategoryDemand(draft, shipmentSnapshot);
   const context = {
     id: draft.id,
@@ -549,17 +554,20 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       categoryDemand: (draft.adjustments?.categoryDemand ?? []).map(
         ({ month, category, quantity }) => ({ month, category, quantity }),
       ),
-      quantities: (draft.adjustments?.quantities ?? []).map(
-        ({ kind, month, category, group, code, base, quantity }) => ({
-          kind,
-          month,
-          category,
-          ...(group === undefined ? {} : { group }),
-          ...(code === undefined ? {} : { code }),
-          ...(base === undefined ? {} : { base }),
-          quantity,
-        }),
-      ),
+      quantities: [
+        ...(draft.demandImports ?? [])
+          .filter((row) => !adjustedDemandKeys.has(JSON.stringify([row.month, row.base, row.code])))
+          .map((row) => ({ ...row, kind: 'base-sku' })),
+        ...(draft.adjustments?.quantities ?? []),
+      ].map(({ kind, month, category, group, code, base, quantity }) => ({
+        kind,
+        month,
+        category,
+        ...(group === undefined ? {} : { group }),
+        ...(code === undefined ? {} : { code }),
+        ...(base === undefined ? {} : { base }),
+        quantity,
+      })),
       shares: (draft.adjustments?.shares ?? []).map(({ rowId, share }) => ({ rowId, share })),
     },
     productionDays: [
@@ -611,6 +619,10 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     },
   };
   const result = computeMpsWorkflow(workflowInput);
+  const imports = new Map(
+    (draft.demandImports ?? []).map((row) => [inventoryKey(row), row.quantity]),
+  );
+  for (const row of result.rows) row.importedDemand = imports.get(inventoryKey(row)) ?? null;
   result.productScope = buildProductScope(draft, products, result, excludedShipments);
   result.delistedIssues = delistedReportIssues(result.rows, result.context);
   result.categoryComputation = categoryComputation;

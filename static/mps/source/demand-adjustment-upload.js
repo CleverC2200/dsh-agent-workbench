@@ -25,7 +25,11 @@ export function createDemandAdjustmentUpload(react, { Upload, Dialog, parseCsv, 
       setError('');
       setNotice('');
       try {
-        const records = parseCsv(await file.text(), columns);
+        const records = parseCsv(
+          await file.text(),
+          columns,
+          result.rows.length + (result.referenceRows?.length ?? 0),
+        );
         if (current.current !== version || request.current !== token) return;
         if (!records.length) throw Error('文件没有需求修正行。');
         const available = new Map();
@@ -34,6 +38,8 @@ export function createDemandAdjustmentUpload(react, { Upload, Dialog, parseCsv, 
           if (!available.has(key)) available.set(key, []);
           available.get(key).push(row);
         }
+        if (records.length > available.size)
+          throw Error(`需求修正超过当前版本${available.size}条有效明细上限。`);
         const seen = new Set();
         const entries = records.map((record, index) => {
           const prefix = `第${index + 2}行`;
@@ -89,7 +95,7 @@ export function createDemandAdjustmentUpload(react, { Upload, Dialog, parseCsv, 
       try {
         if (preview.version !== draft.id || preview.draft !== draft || preview.result !== result)
           throw Error('评估版本或输入已变化，请重新上传核对。');
-        apply(preview.entries);
+        apply(preview.entries, undefined, true);
         setNotice(`已应用${preview.entries.length}条需求修正，原始输入和历史已保留。`);
         setPreview(null);
       } catch (failure) {

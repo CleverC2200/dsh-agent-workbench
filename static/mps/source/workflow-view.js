@@ -1,4 +1,11 @@
 import {
+  compareBusinessRows,
+  compareBusinessValues,
+  orderedTableEntries,
+  createTablePresentation,
+  isSkuColumn,
+} from './table-presentation.js';
+import {
   createDelistedReport,
   delistedDownloadColumns,
   delistedDownloadFields,
@@ -166,23 +173,26 @@ export function createWorkflow(
     onUndoShareAdjustment,
     onEditingChange,
     selectedCategories = [],
+    stepViews,
+    processBatch,
   }) {
     const viewScope = JSON.stringify([savedDraft.id, savedDraft.month, scopeGeneration]);
-    const stepViews = react.useRef({ scope: viewScope, views: new Map() });
-    if (stepViews.current.scope !== viewScope)
-      stepViews.current = { scope: viewScope, views: new Map() };
-    if (!stepViews.current.views.has(step))
-      stepViews.current.views.set(step, createStepViewState());
-    const view = stepViews.current.views.get(step);
+    const fallbackViews = react.useRef({ scope: viewScope, views: new Map() });
+    if (fallbackViews.current.scope !== viewScope)
+      fallbackViews.current = { scope: viewScope, views: new Map() };
+    stepViews ??= fallbackViews.current.views;
+    if (!stepViews.has(step)) stepViews.set(step, createStepViewState());
+    const view = stepViews.get(step);
     const [search, setSearch] = useStepViewField(react, view, 'search', '');
     const [configuration, setConfiguration] = react.useState({});
-    const batch = useBatchEdit({
+    const configurationBatch = useBatchEdit({
       scope: `${savedDraft.id}:${savedDraft.month}:${step}:${scopeGeneration}`,
-      onEditingChange,
+      onEditingChange: step === 'process' ? undefined : onEditingChange,
       requireReason: step === 'process',
       onStart: () => setConfiguration({}),
       onCancel: () => setConfiguration({}),
     });
+    const batch = step === 'process' && processBatch ? processBatch : configurationBatch;
     const draft =
       step === 'constraints' && batch.active ? { ...savedDraft, ...configuration } : savedDraft;
     const update = (changes) => {
@@ -427,10 +437,11 @@ export function createWorkflow(
     };
     const viewCategories = ['process', 'constraints'].includes(step) ? selectedCategories : [];
     const fields = step === 'process' ? processFields : planFields;
-    const scopedRows =
+    const scopedRows = (
       step === 'process'
         ? [...result.rows, ...(result.referenceRows ?? [])].filter((row) => row.base !== 'ODM')
-        : result.rows;
+        : result.rows
+    ).toSorted(compareBusinessRows);
     const scopedCategories = result.categoryRows;
     const products = sourceProductMappings(draft.products, draft.productRaw);
     const inScope = createProductScopeMatcher(products);
@@ -449,7 +460,7 @@ export function createWorkflow(
             })),
         ].map((row) => [JSON.stringify([row.base, row.code]), row]),
       ).values(),
-    ];
+    ].sort(compareBusinessRows);
     const bases = [
       ...new Set(
         [
@@ -464,8 +475,10 @@ export function createWorkflow(
               ]),
         ].filter((base) => admittedBases.has(base)),
       ),
-    ];
-    const categories = [...new Set(scopedCategories.map((row) => row.category))];
+    ].sort((left, right) => compareBusinessValues('base', left, right));
+    const categories = [...new Set(scopedCategories.map((row) => row.category))].sort(
+      (left, right) => compareBusinessValues('category', left, right),
+    );
     const filtered = scopedRows.filter(
       (row) =>
         (!base || row.base === base) &&
@@ -534,7 +547,23 @@ export function createWorkflow(
     const table = (name, columns, rows, renderDetail) =>
       h(
         'div',
-        { className: 'dc-table-scroll wf-table-scroll', tabIndex: 0 },
+        {
+          className: 'dc-table-scroll wf-table-scroll',
+          tabIndex: 0,
+          role: 'region',
+          'aria-label': `${name}滚动区`,
+          ref: (element) => {
+            if (element) {
+              element.scrollLeft = view.get()[`${name}.scrollLeft`] ?? 0;
+              element.scrollTop = view.get()[`${name}.scrollTop`] ?? 0;
+            }
+          },
+          onScroll: (event) =>
+            view.update({
+              [`${name}.scrollLeft`]: event.currentTarget.scrollLeft,
+              [`${name}.scrollTop`]: event.currentTarget.scrollTop,
+            }),
+        },
         h(
           'table',
           { 'aria-label': name },
@@ -551,14 +580,29 @@ export function createWorkflow(
             'tbody',
             null,
             rows.length
-              ? rows.map((cells, index) =>
+              ? orderedTableEntries(columns, rows).map(({ row: cells, index }) =>
                   h(
                     react.Fragment,
                     { key: index },
                     h(
                       'tr',
                       {},
-                      cells.map((cell, position) => h('td', { key: position }, cell)),
+                      cells.map((cell, position) =>
+                        h(
+                          'td',
+                          { key: position },
+                          isSkuColumn(columns[position]) && typeof cell === 'string' && cell
+                            ? h(createTablePresentation(react).Code, {
+                                row: {
+                                  base,
+                                  ...Object.fromEntries(
+                                    columns.map((column, index) => [column, cells[index]]),
+                                  ),
+                                },
+                              })
+                            : cell,
+                        ),
+                      ),
                     ),
                     renderDetail?.(cells, index),
                   ),
@@ -1599,7 +1643,7 @@ export function createWorkflow(
                 '下载需求拆分',
               ),
             ),
-          ['process', 'constraints'].includes(step) &&
+          step === 'constraints' &&
             h(Actions, {
               batch,
               requireReason: step === 'process',

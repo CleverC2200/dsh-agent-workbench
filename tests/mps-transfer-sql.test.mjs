@@ -12,10 +12,10 @@ test('调拨计划使用截止日前最新同月快照，各方向保留纠偏�
     material_name TEXT, series TEXT, product_item TEXT, total_sales_qty REAL,
     allocated_qty REAL, ordered_qty REAL, begin_stock REAL, produce_in_qty REAL,
     avg_30d_send REAL, transfer_in_plan_v1 REAL, transfer_in_plan_adj REAL,
-    transfer_out_plan_v1 REAL, transfer_out_plan_adj REAL
+    transfer_out_plan_v1 REAL, transfer_out_plan_adj REAL, month_order_qty REAL
   )`);
   const insert = db.prepare(`INSERT INTO agents_scm_stock_detail_d VALUES
-    ('2026-09-01','郑州',?,?, '产品','系列','物料组',0,0,0,100,0,0,?,?,?,?)`);
+    ('2026-09-01','郑州',?,?, '产品','系列','物料组',0,0,0,100,0,0,?,?,?,?,NULL)`);
   for (const row of [
     ['A', '2026-09-01', 99, 99, 99, 99],
     ['A', '2026-09-21', 10, 0, 20, null],

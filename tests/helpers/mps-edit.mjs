@@ -10,7 +10,10 @@ export async function openCategoryCalculation(frame) {
     await fold.locator('summary').first().click();
 }
 
+const adjustmentControls = (view) => view.locator('body').page().frameLocator('iframe');
+
 export async function selectAdjustmentReason(view, reason) {
+  view = adjustmentControls(view);
   const choices = ['销售变化', '促销活动', '库存调整', '供应变化', '数据纠错', '其他'];
   await view
     .getByLabel('批量调整原因', { exact: true })
@@ -33,10 +36,12 @@ export async function adjustLeaf(frame, { category, group, code, base, month }, 
 }
 
 export async function beginAdjustment(view) {
+  view = adjustmentControls(view);
   if (!(await view.getByRole('button', { name: '保存调整', exact: true }).count()))
     await view.getByRole('button', { name: '调整', exact: true }).click();
 }
 export async function saveAdjustment(view) {
+  view = adjustmentControls(view);
   const save = view.getByRole('button', { name: '保存调整', exact: true });
   if (await save.count()) await save.click();
 }

@@ -115,10 +115,10 @@ test('shipment SQL sums daily inbound including reversals, preserves missing flo
     data_month TEXT, belong_base TEXT, material_code TEXT, the_date TEXT,
     material_name TEXT, series TEXT, product_item TEXT,
     total_sales_qty REAL, allocated_qty REAL, ordered_qty REAL,
-    begin_stock REAL, produce_in_qty REAL, avg_30d_send REAL, avg_30d_sale REAL
+    begin_stock REAL, produce_in_qty REAL, avg_30d_send REAL, avg_30d_sale REAL, month_order_qty REAL
   )`);
   const insert = db.prepare(
-    'INSERT INTO agents_scm_stock_detail_d VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO agents_scm_stock_detail_d (data_month, belong_base, material_code, the_date, material_name, series, product_item, total_sales_qty, allocated_qty, ordered_qty, begin_stock, produce_in_qty, avg_30d_send, avg_30d_sale) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
   for (let day = 1; day <= 23; day++) {
     const date = `2026-09-${String(day).padStart(2, '0')}`;
@@ -397,4 +397,41 @@ test('同步提报表按月汇总两项源金额，产品资料重复不参与�
       ['B', null, '0'],
     ],
   );
+});
+
+test('月下单量读取同月同基地SKU截止快照，0保留且空值和缺记录待补', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec(
+    `CREATE TABLE agents_scm_stock_detail_d(data_month TEXT, belong_base TEXT, material_code TEXT,the_date TEXT,material_name TEXT,series TEXT,product_item TEXT,total_sales_qty REAL,allocated_qty REAL,ordered_qty REAL,begin_stock REAL,produce_in_qty REAL,avg_30d_send REAL,month_order_qty REAL,transfer_in_plan_v1 REAL,transfer_in_plan_adj REAL,transfer_out_plan_v1 REAL,transfer_out_plan_adj REAL)`,
+  );
+  const insert = db.prepare(
+    'INSERT INTO agents_scm_stock_detail_d(data_month,belong_base,material_code,the_date,month_order_qty,allocated_qty,ordered_qty) VALUES (?,?,?,?,?,?,?)',
+  );
+  for (const [code, date, qty] of [
+    ['A', '2026-11-23', 999],
+    ['A', '2026-11-24', 0],
+    ['B', '2026-11-24', null],
+    ['C', '2026-11-23', 123],
+    ['D', '2026-11-24', 12.3456],
+  ])
+    insert.run('2026-11-01', '西南', code, date, qty, 312, 792);
+  const rows = db.prepare(config.queries['facts.shipment'].request.sql).all({
+    month: '2026-11-01',
+    cutoff: '2026-11-24',
+    recent_start: '2026-11-22',
+    gea_p98: 100,
+    gea_p99: 0,
+  });
+  assert.deepEqual(
+    rows.map((r) => [r.material_code, r.month_order_qty]),
+    [
+      ['A', 0],
+      ['B', null],
+      ['C', null],
+      ['D', 12.3456],
+    ],
+  );
+  assert.equal(rows[0].prepped, 312);
+  assert.equal(rows[0].unprepped, 792);
 });

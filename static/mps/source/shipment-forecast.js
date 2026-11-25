@@ -43,7 +43,9 @@ export function applyShipmentCoefficient(forecast, coefficient) {
     shipmentFactor = 1;
     coefficientReason = forecast.usedQuantityFallback ? '已发已备未备合计' : '系统预测量待定';
   } else {
-    const adjusted = Math.round(basePrediction * shipmentFactor);
+    const adjusted = Math.round(
+      forecast.forecastAverage * shipmentFactor * forecast.rest + forecast.hold,
+    );
     if (finite(adjusted) == null) {
       shipmentFactor = 1;
       coefficientReason = '修正预测量超出有效范围';
