@@ -549,17 +549,29 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       categoryDemand: (draft.adjustments?.categoryDemand ?? []).map(
         ({ month, category, quantity }) => ({ month, category, quantity }),
       ),
-      quantities: (draft.adjustments?.quantities ?? []).map(
-        ({ kind, month, category, group, code, base, quantity }) => ({
-          kind,
-          month,
-          category,
-          ...(group === undefined ? {} : { group }),
-          ...(code === undefined ? {} : { code }),
-          ...(base === undefined ? {} : { base }),
-          quantity,
-        }),
-      ),
+      quantities: [
+        ...(draft.demandImports ?? [])
+          .filter(
+            (row) =>
+              !(draft.adjustments?.quantities ?? []).some(
+                (entry) =>
+                  entry.kind === 'base-sku' &&
+                  entry.month === row.month &&
+                  entry.base === row.base &&
+                  entry.code === row.code,
+              ),
+          )
+          .map((row) => ({ ...row, kind: 'base-sku' })),
+        ...(draft.adjustments?.quantities ?? []),
+      ].map(({ kind, month, category, group, code, base, quantity }) => ({
+        kind,
+        month,
+        category,
+        ...(group === undefined ? {} : { group }),
+        ...(code === undefined ? {} : { code }),
+        ...(base === undefined ? {} : { base }),
+        quantity,
+      })),
       shares: (draft.adjustments?.shares ?? []).map(({ rowId, share }) => ({ rowId, share })),
     },
     productionDays: [
@@ -611,6 +623,10 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
     },
   };
   const result = computeMpsWorkflow(workflowInput);
+  const imports = new Map(
+    (draft.demandImports ?? []).map((row) => [inventoryKey(row), row.quantity]),
+  );
+  for (const row of result.rows) row.importedDemand = imports.get(inventoryKey(row)) ?? null;
   result.productScope = buildProductScope(draft, products, result, excludedShipments);
   result.delistedIssues = delistedReportIssues(result.rows, result.context);
   result.categoryComputation = categoryComputation;
