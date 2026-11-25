@@ -2482,6 +2482,47 @@ test('base batch-only inventory reconciles and age drill keeps the same fields a
   assert.deepEqual(errors, []);
 });
 
+test('基地库存品类结构沿用产销存报表顺序和原品类下钻', async (t) => {
+  const reportOrder = ['汤圆', '饺子', '面点', '休闲', '馄饨', '预制食材', '火锅料', '粽子'];
+  const fixtureOrder = ['未分类', ...reportOrder.toReversed(), '调理肉制品'];
+  const { frame, calls, errors } = await mount(t, 'aqkc', 1280, (query, result) => {
+    if (query.queryId === 'calendar.target_versions')
+      result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
+    if (['source.stock-date', 'source.health-date'].includes(query.queryId))
+      result.rows[0].day = '2026-10-19';
+    if (query.queryId === 'page.structure-groups') {
+      const levels = query.parameters.group_level === 'category' ? fixtureOrder : ['郑州'];
+      result.rows = levels.map((level, index) => ({
+        ...result.rows[0],
+        level,
+        inventory: 100 - index,
+        inventory_count: 1,
+        target: 0,
+        target_count: 1,
+        row_count: 1,
+      }));
+    }
+    return result;
+  });
+  await frame.getByRole('tab', { name: '品类结构', exact: true }).click();
+  const tab = frame.getByRole('tabpanel', { name: '品类结构' });
+  const categoryButtons = tab.getByRole('button', { name: /，查看详情$/ });
+  await expect(categoryButtons).toHaveText([...reportOrder, '未分类', '调理肉制品']);
+  const dumplings = tab.getByRole('button', { name: '饺子，查看详情', exact: true });
+  await dumplings.focus();
+  await dumplings.press('Enter');
+  await expect(tab.getByRole('button', { name: '郑州，查看 SKU 详情', exact: true })).toBeVisible();
+  assert.ok(
+    calls.some(
+      ({ queryId, parameters }) =>
+        queryId === 'page.structure-groups' &&
+        parameters.group_level === 'base' &&
+        parameters.structure_category === '饺子',
+    ),
+  );
+  assert.deepEqual(errors, []);
+});
+
 test('base and category warnings lead with shortage; SKU risk menu closes outside without losing selections', async (t) => {
   const { frame, calls, errors } = await mount(t, 'aqkc', 1280, (query, result) => {
     if (query.queryId === 'calendar.target_versions')
