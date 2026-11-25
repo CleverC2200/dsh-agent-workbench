@@ -113,6 +113,15 @@ class AccuracyBaseSqlTests(unittest.TestCase):
                 params.update(zip(names, value))
         return [dict(row) for row in self.db.execute(sql, params)]
 
+    def test_lantern_accuracy_resolves_missing_categories_without_including_other_products(self):
+        self.db.execute("UPDATE agents_scm_demand_sales_f SET material_code = 'L1', product_categ_name = NULL WHERE source_flag = '销售口径' AND belong_name = '华东'")
+        self.db.execute("INSERT INTO agents_order_execute_isontime_mi VALUES ('L1', '汤圆', NULL, NULL)")
+        self.db.execute("INSERT INTO agents_order_execute_isontime_mi VALUES ('SKU1', '汤圆', NULL, NULL)")
+        values = dict(start_month='2026-10-01', end_month_exclusive='2026-11-01')
+        rows = self.read('lantern.accuracy', **values)
+        self.assertEqual([(r['initial_plan'], r['records']) for r in rows], [(100, 1)])
+        self.assertEqual(self.read('lantern.accuracy.count', **values), [{'total': 1}])
+
     def test_summary_and_drill_keep_base_without_changing_company_totals(self):
         for section in ['sales-accuracy', 'demand-accuracy']:
             for prefix in ['page.', 'overview.', 'drill.organization.', 'drill.product.']:
@@ -172,6 +181,20 @@ class BudgetPerformanceSqlTests(unittest.TestCase):
         self.db.execute('CREATE TABLE agents_scm_cust_deliv_daily_di (act_ship_date TEXT, cust_code TEXT, material_code TEXT, income_excl_tax_local REAL)')
         self.db.executemany('INSERT INTO agents_scm_cust_plan_order_analysis_d VALUES (?,?,?,?,?)', [('202610', '2026-10-19', ' A ', 'S1', 100), ('202610', '2026-10-20', 'A', 'S1', 200), ('202610', '2026-10-21', 'A', 'S1', 999)])
         self.db.executemany('INSERT INTO agents_scm_cust_deliv_daily_di VALUES (?,?,?,?)', [('20261018', 'A', 'S1', 30), ('20261019', 'A', 'S1', 50), ('20261021', 'A', 'S1', 999)])
+
+    def test_lantern_budget_excludes_other_products_from_budget_and_income(self):
+        self.db.execute('CREATE TABLE agents_order_execute_isontime_mi (new_material_code TEXT, product_categ_name TEXT)')
+        self.db.execute('CREATE TABLE agents_scm_material_in_out_summary_d (material_code TEXT, product_categ_name TEXT)')
+        self.db.executemany('INSERT INTO agents_order_execute_isontime_mi VALUES (?,?)',
+                            [('S1', '汤圆'), ('S1', '汤圆'), ('S2', '水饺')])
+        self.db.execute("INSERT INTO agents_scm_material_in_out_summary_d VALUES ('S1', '汤圆')")
+        self.db.execute("INSERT INTO agents_scm_cust_plan_order_analysis_d VALUES ('202610','2026-10-20','A','S2',400)")
+        self.db.execute("INSERT INTO agents_scm_cust_deliv_daily_di VALUES ('20261019','A','S2',500)")
+        row = self.read('lantern.budget')[0]
+        self.assertEqual((row['actual'], row['budget'], row['matched_keys']), (80, 200, 1))
+        self.assertEqual(self.read('lantern.budget.count'), [{'total': 1}])
+        company = self.read('page.budget-performance')[0]
+        self.assertEqual((company['actual'], company['budget']), (580, 600))
 
     def test_daily_income_does_not_multiply_budget_and_cutoff_excludes_future(self):
         row = self.read('page.budget-performance')[0]

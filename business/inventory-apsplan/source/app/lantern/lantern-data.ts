@@ -87,6 +87,7 @@ export const sourceLabels: Record<Source, string> = {
   branch: '分仓库存',
   customer: '客户库存',
 };
+const lanternCategory = '汤圆';
 const durationDay = 86_400_000;
 const compact = (day: string) => day.replaceAll('-', '');
 const monthStart = (day: string) => day.slice(0, 7) + '-01';
@@ -167,6 +168,7 @@ async function read(
   keyFields: string[] | undefined,
   cacheScope: { identity: number; freshness: number } | undefined,
   background: boolean,
+  categoryView: boolean,
 ): Promise<Row[]> {
   const { parameterSpec, request, resultColumns } = client.config.queries[id];
   const parameters: Record<string, unknown> = {};
@@ -180,7 +182,7 @@ async function read(
   }
   const requiredColumns = resultColumns.filter((column: string) => column !== 'material_name');
   const cancellation = id === 'lantern.cancellation' || id === 'lantern.product-cancellation';
-  const priority = cancellation && background ? -1 : undefined;
+  const priority = background ? -1 : categoryView ? 1 : undefined;
   const loadOnce = async (requestSignal: AbortSignal) => {
     if (!keyFields)
       return (
@@ -263,6 +265,7 @@ export async function readLanternFacts({
   only,
   inventoryScope,
   product,
+  categoryView = false,
   organization = false,
   background = false,
   execute,
@@ -274,6 +277,7 @@ export async function readLanternFacts({
   only?: MetricKey;
   inventoryScope?: InventoryScope;
   product?: ProductFilters;
+  categoryView?: boolean;
   organization?: boolean;
   background?: boolean;
   execute?: Parameters<typeof createAgentQueries>[1];
@@ -282,7 +286,7 @@ export async function readLanternFacts({
   const cacheScope = execute ? undefined : { identity: configuredQueryIdentity(), freshness };
   const client = createAgentQueries(config, execute, { freshAfter: freshness });
   const query = (id: string, overrides: Record<string, unknown>, keyFields?: string[]) =>
-    read(client, id, overrides, signal, keyFields, cacheScope, background);
+    read(client, id, overrides, signal, keyFields, cacheScope, background, categoryView);
   const { from, to } = period.range;
   const fromMonth = monthStart(from),
     nextMonth = shiftMonth(to, 1);
@@ -291,12 +295,13 @@ export async function readLanternFacts({
     const search = value.trim();
     return search ? '%' + search.toLowerCase().replace(/[\\%_]/g, '\\$&') + '%' : null;
   };
+  const category = categoryView ? product?.category || null : lanternCategory;
   const productDimensions = {
     sku_detail: Boolean(product?.sku.trim()),
     product_pattern: pattern(product?.sku || product?.group),
     group_detail: Boolean(product && product.level >= 1),
     material_detail: Boolean(product && product.level >= 2),
-    product_category: product?.category || null,
+    product_category: category,
   };
   const productionDimensions = {
     ...productDimensions,
@@ -324,13 +329,14 @@ export async function readLanternFacts({
       case 'budget':
         return ready(
           await query(
-            'page.budget-performance',
+            'lantern.budget',
             {
               start_month: compact(fromMonth).slice(0, 6),
               end_month_exclusive: compact(nextMonth).slice(0, 6),
               as_of: to,
               start: compact(from),
               end_exclusive: compact(end),
+              product_category: lanternCategory,
             },
             ['month'],
           ),
@@ -342,6 +348,7 @@ export async function readLanternFacts({
             {
               start_month: fromMonth,
               end_month_exclusive: nextMonth,
+              product_category: lanternCategory,
             },
             ['month', 'region', 'province'],
           ),
@@ -349,7 +356,7 @@ export async function readLanternFacts({
       case 'cancellation':
       case 'amendment':
       case 'ontime':
-        if (product)
+        if (categoryView)
           return ready(
             await query(
               'lantern.product-' + source,
@@ -369,6 +376,7 @@ export async function readLanternFacts({
               report_base: '',
               start: from,
               end_exclusive: end,
+              product_category: lanternCategory,
             },
             source === 'ontime' ? undefined : ['base', 'region', 'province', 'kind'],
           ),
@@ -381,6 +389,7 @@ export async function readLanternFacts({
               report_base: '',
               start: from,
               end_exclusive: end,
+              product_category: lanternCategory,
             },
             ['region', 'province'],
           ),
@@ -407,6 +416,8 @@ export async function readLanternFacts({
               start: from,
               end_exclusive: end,
               ...productionDimensions,
+              category_mode: category && category !== '未分类' ? 'equal' : 'all',
+              category,
             },
             ['base', 'category', 'item', 'material', 'sku'],
           ),
@@ -550,7 +561,7 @@ export function observe(
       ],
       note:
         (facts.budget?.status === 'ready' ? budget?.detail : undefined) ??
-        (supported('budget', period) ? '公司未税收入与月度预算' : '预算按月发布'),
+        (supported('budget', period) ? '汤圆未税收入与月度预算' : '预算按月发布'),
     };
   }
   if (key === 'accuracy') {
