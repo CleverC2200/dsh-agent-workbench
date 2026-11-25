@@ -1884,7 +1884,7 @@ export function createShipment(
               '重置',
             ),
         ),
-        (syncStatus !== 'failed' || activeSource !== 'business') &&
+        (busy || syncStatus !== 'failed' || activeSource !== 'business') &&
           h('p', { role: 'status' }, busy ? '正在读取或校验输入…' : source),
         h(
           'p',
@@ -2149,7 +2149,8 @@ export function createShipment(
         h(
           'div',
           { className: 'dc-card-foot' },
-          syncStatus === 'failed' &&
+          !busy &&
+            syncStatus === 'failed' &&
             activeSource === 'business' &&
             h('p', { role: 'status' }, '数仓输入同步失败，未采用旧业务结果'),
           error && h('p', { role: 'alert', className: 'sp-error' }, error),
