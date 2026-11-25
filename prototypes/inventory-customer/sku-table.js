@@ -12,11 +12,16 @@ export function CustomerSkuTable({
 }) {
   const h = React.createElement;
   const [read, setRead] = React.useState({ rows: [], loading: true });
-  const codes = customers.map((row) => row.code);
+  const previousScope = React.useRef();
+  const codes = customers.map((row) => row.code).sort();
+  const scopeKey = JSON.stringify(codes);
   const key = JSON.stringify([codes, page]);
   const current = read.key === key && read.owner === inventory ? read : { rows: [], loading: true };
   React.useEffect(() => {
     const controller = new AbortController();
+    const delay =
+      previousScope.current?.owner === inventory && previousScope.current.key !== scopeKey;
+    previousScope.current = { owner: inventory, key: scopeKey };
     setRead({ key, owner: inventory, rows: [], loading: true });
     onRead({ state: 'loading', rows: [], customerCount: codes.length, page });
     if (!codes.length) {
@@ -24,43 +29,49 @@ export function CustomerSkuTable({
       onRead({ state: 'empty', rows: [], total: 0, customerCount: codes.length, page });
       return () => controller.abort();
     }
-    readCustomerSkus(inventory, codes, { page }, { signal: controller.signal }).then(
-      (result) => {
-        if (controller.signal.aborted) return;
-        if (page > Math.max(1, Math.ceil(result.total / 10))) {
-          onPageChange(1);
-          return;
-        }
-        setRead({ ...result, key, owner: inventory, loading: false });
-        onRead({
-          state: 'ready',
-          rows: result.rows,
-          total: result.total,
-          page: result.page,
-          pageSize: result.pageSize,
-          snapshotDate: result.snapshotDate,
-          customerCount: codes.length,
-        });
-      },
-      (error) => {
-        if (controller.signal.aborted) return;
-        setRead({
-          key,
-          owner: inventory,
-          rows: [],
-          loading: false,
-          error: error.code ?? error.message,
-        });
-        onRead({
-          state: 'error',
-          rows: [],
-          customerCount: codes.length,
-          page,
-          error: error.code ?? error.message,
-        });
-      },
-    );
-    return () => controller.abort();
+    const load = () =>
+      readCustomerSkus(inventory, codes, { page }, { signal: controller.signal }).then(
+        (result) => {
+          if (controller.signal.aborted) return;
+          if (page > Math.max(1, Math.ceil(result.total / 10))) {
+            onPageChange(1);
+            return;
+          }
+          setRead({ ...result, key, owner: inventory, loading: false });
+          onRead({
+            state: 'ready',
+            rows: result.rows,
+            total: result.total,
+            page: result.page,
+            pageSize: result.pageSize,
+            snapshotDate: result.snapshotDate,
+            customerCount: codes.length,
+          });
+        },
+        (error) => {
+          if (controller.signal.aborted) return;
+          setRead({
+            key,
+            owner: inventory,
+            rows: [],
+            loading: false,
+            error: error.code ?? error.message,
+          });
+          onRead({
+            state: 'error',
+            rows: [],
+            customerCount: codes.length,
+            page,
+            error: error.code ?? error.message,
+          });
+        },
+      );
+    const timer = delay ? setTimeout(load, 200) : undefined;
+    if (!delay) void load();
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [inventory, key]);
   const columns = customerSkuPresentation.columns.map((column) => ({
     title: column.label,
