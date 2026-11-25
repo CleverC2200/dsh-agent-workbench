@@ -51,8 +51,27 @@ window.OrderShortageEditor = (() => {
       new Set(original.map((line) => String(line.sku))).size !== original.length
     )
       throw Error('订单商品数据不完整，无法打开处理页');
+    const ruleQueryFailed = [
+      'QUERY_UNAVAILABLE',
+      'QUERY_SCOPE_MISMATCH',
+      'PICKUP_POINT_NOT_MAPPED',
+      'LINES_UNAVAILABLE',
+    ].includes(snapshot.pickupRulesStatus);
+    function orderingRules(line) {
+      const allowDefault =
+        !ruleQueryFailed && !['CONFLICT', 'INVALID'].includes(line.orderingRulesStatus);
+      const value = (input) =>
+        allowDefault && (input == null || (typeof input === 'string' && input.trim() === ''))
+          ? 1
+          : input;
+      return {
+        minimumOrderQuantity: value(line.minimumOrderQuantity),
+        orderMultiple: value(line.orderMultiple),
+      };
+    }
     const lines = original.map((line) => ({
       ...line,
+      ...orderingRules(line),
       priceStatus:
         line.priceStatus || (snapshot.priceStatus !== 'READY' ? snapshot.priceStatus : undefined),
       sku: String(line.sku),
@@ -133,6 +152,7 @@ window.OrderShortageEditor = (() => {
     }
     const recommendationDrafts = recommendations.map((line) => ({
       ...line,
+      ...orderingRules(line),
       sku: String(line.sku),
       originalQuantity: 0,
       draftQuantity: 0,
@@ -145,6 +165,7 @@ window.OrderShortageEditor = (() => {
     let deliveryDate = snapshot.deliveryDate || '',
       vehicleType = snapshot.vehicleType || '',
       loadingProducts = false,
+      productsRequested = false,
       loadingVehicles = false,
       vehiclesLoaded = Array.isArray(capabilities.vehicleOptions),
       modal = false,
@@ -306,7 +327,14 @@ window.OrderShortageEditor = (() => {
       const minimum = number(line.minimumOrderQuantity),
         pallet = number(line.orderMultiple);
       if (quantity === null) return '请输入非负有效数量';
-      if (quantity > 0 && !(pallet > 0)) return '每托箱数未提供，暂时无法校验整托数量。';
+      if (quantity > 0 && ruleQueryFailed && line.originalQuantity > 0)
+        return '订购规则读取失败，请重试或核对读取权限。';
+      if (quantity > 0 && line.orderingRulesStatus === 'CONFLICT')
+        return '订购规则存在冲突，请核实后重试。';
+      if (quantity > 0 && line.orderingRulesStatus === 'INVALID')
+        return '订购规则数值无效，请核实后重试。';
+      if (quantity > 0 && !(pallet > 0)) return '每托箱数无效，暂时无法校验整托数量。';
+      if (quantity > 0 && !(minimum > 0)) return '起订量无效，请核实后重试。';
       if (quantity > 0 && minimum !== null && quantity < minimum)
         return `起订量为 ${display(minimum)} 箱`;
       if (
@@ -545,6 +573,7 @@ window.OrderShortageEditor = (() => {
           !editable ||
           line.originalQuantity === null ||
           !(number(line.orderMultiple) > 0) ||
+          !(number(line.minimumOrderQuantity) > 0) ||
           Boolean(packagingError(line));
         const multiple = number(line.orderMultiple),
           minimum = number(line.minimumOrderQuantity),
@@ -555,6 +584,7 @@ window.OrderShortageEditor = (() => {
             !editable ||
             line.originalQuantity === null ||
             !(multiple > 0) ||
+            !(minimum > 0) ||
             packagingError(line)
           )
             return;
@@ -688,6 +718,36 @@ window.OrderShortageEditor = (() => {
       }
       info.append(fields);
       return info;
+    }
+    async function lookupProducts(query) {
+      if (loadingProducts || !editable || root.__fulfillmentEditorOwner !== mountOwner) return;
+      productsRequested = true;
+      loadingProducts = true;
+      notice = '';
+      render();
+      try {
+        const found = await state.onLookupProducts(query);
+        if (root.__fulfillmentEditorOwner !== mountOwner) return;
+        if (!Array.isArray(found) || found.length > 20) throw Error('商品目录返回异常，请重试');
+        for (const item of found) {
+          if (!item?.sku || lines.some((line) => line.sku === String(item.sku))) continue;
+          if (lines.length >= 200) break;
+          lines.push({
+            ...item,
+            ...orderingRules(item),
+            sku: String(item.sku),
+            originalQuantity: 0,
+            draftQuantity: 0,
+          });
+        }
+        notice = found.length ? '' : '当前客户没有匹配的可售商品';
+      } catch (error) {
+        if (root.__fulfillmentEditorOwner !== mountOwner) return;
+        notice = error.message || '商品读取失败，请点击查找商品重试';
+      } finally {
+        loadingProducts = false;
+        if (root.__fulfillmentEditorOwner === mountOwner) render();
+      }
     }
     function render() {
       window.OrderDeliveryDatePicker?.close(false);
@@ -961,58 +1021,34 @@ window.OrderShortageEditor = (() => {
       }
       if (page === 'catalog') {
         const searchBar = node('div', undefined, 'editor-search-bar'),
+          searchField = node('div', undefined, 'editor-search-field'),
           input = node('input');
         input.type = 'search';
         input.className = 'editor-search';
         input.placeholder = '搜索商品名称或 SKU';
         input.setAttribute('aria-label', '商品搜索');
         input.value = search;
+        searchField.append(node('span', '⌕', 'editor-search-icon'), input);
         searchBar.append(
-          node('span', '⌕', 'editor-search-icon'),
-          input,
+          searchField,
           ...(capabilities.catalogAvailable === true && typeof state.onLookupProducts === 'function'
             ? [
                 button(
                   loadingProducts ? '查询中…' : '查找商品',
-                  async () => {
-                    if (loadingProducts || !editable) return;
-                    loadingProducts = true;
-                    render();
-                    try {
-                      const found = await state.onLookupProducts(search.trim());
-                      if (!Array.isArray(found) || found.length > 20)
-                        throw Error('商品目录返回异常，请重试');
-                      for (const item of found) {
-                        if (!item?.sku || lines.some((line) => line.sku === item.sku)) continue;
-                        if (lines.length >= 200) break;
-                        lines.push({
-                          ...item,
-                          sku: String(item.sku),
-                          originalQuantity: 0,
-                          draftQuantity: 0,
-                        });
-                      }
-                      notice = found.length ? '' : '当前提货点没有匹配的可用商品';
-                    } catch (error) {
-                      notice = error.message;
-                    } finally {
-                      loadingProducts = false;
-                      render();
-                    }
-                  },
+                  () => lookupProducts(search.trim()),
                   loadingProducts || !editable,
-                  'editor-add',
+                  'editor-catalog-action',
                 ),
               ]
             : []),
           button(
-            '推荐',
+            '商品推荐',
             () => {
               page = 'recommendations';
               render();
             },
             false,
-            'editor-add',
+            'editor-catalog-action',
           ),
         );
         body.append(searchBar);
@@ -1274,6 +1310,14 @@ window.OrderShortageEditor = (() => {
         overlay.append(dialog);
         root.append(overlay);
       }
+      if (
+        page === 'catalog' &&
+        editable &&
+        !productsRequested &&
+        capabilities.catalogAvailable === true &&
+        typeof state.onLookupProducts === 'function'
+      )
+        void lookupProducts('');
     }
     document.getElementById('confirmationMain').hidden = true;
     root.hidden = false;

@@ -6,7 +6,12 @@ const source = new URL('../prototypes/inventory-orderfulfillment/sales-window/',
 const html = await readFile(new URL('window.html', source), 'utf8'),
   editor = await readFile(new URL('order-editor.js', source), 'utf8');
 const tick = () => new Promise((resolve) => setTimeout(resolve, 350));
-function setup({ badPrice = false, canAct = true, missingRules = true } = {}) {
+function setup({
+  badPrice = false,
+  canAct = true,
+  missingRules = true,
+  invalidRules = false,
+} = {}) {
   const dom = new JSDOM(html, {
     runScripts: 'outside-only',
     url: 'https://fixture.invalid/window/test?view=process',
@@ -46,6 +51,7 @@ function setup({ badPrice = false, canAct = true, missingRules = true } = {}) {
           priceStatus: 'PRICE_MISSING',
           shortage: 0,
           ...(missingRules ? {} : { orderMultiple: 40, minimumOrderQuantity: 10 }),
+          ...(invalidRules ? { orderMultiple: 'invalid' } : {}),
         },
       ],
     },
@@ -95,7 +101,6 @@ function setup({ badPrice = false, canAct = true, missingRules = true } = {}) {
 async function replace(f) {
   f.document.querySelector('.editor-remove').click();
   f.button('+ 商品').click();
-  f.button('查找商品').click();
   await new Promise((resolve) => setImmediate(resolve));
   f.document.querySelector('[aria-label="NEW 增加"]').click();
   f.button('完成选品').click();
@@ -109,7 +114,7 @@ test('missing price shows a dash and a short red label, while deletion and date 
     const hint = row.querySelector('.editor-price-warning');
     assert.equal(hint.textContent, '暂无价格');
     assert.equal(f.dom.window.getComputedStyle(hint).color, 'rgb(237, 34, 50)');
-    assert.equal(f.document.querySelector('[aria-label="BAD 数量"]').disabled, true);
+    assert.equal(f.document.querySelector('[aria-label="BAD 数量"]').disabled, false);
     assert.equal(
       f.document.querySelector('#orderEditor [aria-label="预计交货日期"]').disabled,
       false,
@@ -241,8 +246,8 @@ test('changing date after a preview triggers a new validation and whole-pallet q
     f.dom.window.close();
   }
 });
-test('disabled quantity inputs with missing pallet rules cannot bypass validation when their native validation message is empty', async () => {
-  const f = setup();
+test('disabled quantity inputs with invalid pallet rules cannot bypass validation when their native validation message is empty', async () => {
+  const f = setup({ invalidRules: true });
   try {
     const quantity = f.document.querySelector('[aria-label="BAD 数量"]');
     assert.equal(quantity.disabled, true);
@@ -260,7 +265,7 @@ test('disabled quantity inputs with missing pallet rules cannot bypass validatio
     assert.equal(confirm.disabled, true);
     assert.match(
       f.document.querySelector('[data-editor-dialog-reason]').textContent,
-      /每托箱数未提供/,
+      /每托箱数无效/,
     );
     confirm.disabled = false;
     confirm.click();
