@@ -9,7 +9,10 @@ import assert from 'node:assert/strict';
 import { readFile, copyFile } from 'node:fs/promises';
 import * as XLSX from 'xlsx-republish';
 import { expect } from '@playwright/test';
-import { mpsPage, openMpsProductDetails } from './helpers/mps-page.mjs';
+import {
+  mpsPageWithExactProductPeriod as mpsPage,
+  openMpsProductDetails,
+} from './helpers/mps-page.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 import { shipmentSourceResponse, shipmentSourceRow } from './helpers/mps-shipment-source.mjs';
 

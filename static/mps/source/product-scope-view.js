@@ -15,6 +15,8 @@ const columns = [
 const exportColumns = [
   '评估月份',
   '产品统计期',
+  '目标产品统计期',
+  '实际采用月份',
   '覆盖声明',
   '实际参与基地',
   '清单来源',
@@ -44,6 +46,8 @@ export function createProductScopeReport(react, { table, downloadCsv }) {
     const rows = records.map((row) => ({
       评估月份: scope.month,
       产品统计期: scope.productMonth,
+      目标产品统计期: scope.productTargetMonth,
+      实际采用月份: scope.productMonth,
       覆盖声明: '实际参与范围',
       实际参与基地: scope.bases.join('；'),
       清单来源: scope.source,
@@ -86,7 +90,7 @@ export function createProductScopeReport(react, { table, downloadCsv }) {
       h(
         'p',
         { className: 'dc-card-note' },
-        `评估月${scope.month}，产品统计期${scope.productMonth}，源统计期${scope.periods.join('、') || '未提供'}。源清单${scope.sourceRows}条，有效基地SKU ${scope.expectedCount}项，实际参与${scope.participatingCount}项。已覆盖${scope.coveredCount}项，主动排除${scope.excludedCount}项，遗漏${scope.missingCount}项，额外组合${scope.extraCount}项，冲突${scope.conflictCount}项，主数据缺项${scope.invalidCount}项。`,
+        `评估月${scope.month}，目标产品统计期${scope.productTargetMonth}，实际采用${scope.productMonth ?? '无可用产品清单'}，源统计期${scope.periods.join('、') || '未提供'}。源清单${scope.sourceRows}条，有效基地SKU ${scope.expectedCount}项，实际参与${scope.participatingCount}项。已覆盖${scope.coveredCount}项，主动排除${scope.excludedCount}项，遗漏${scope.missingCount}项，额外组合${scope.extraCount}项，冲突${scope.conflictCount}项，主数据缺项${scope.invalidCount}项。`,
       ),
       h(
         'p',

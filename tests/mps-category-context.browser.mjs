@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
 import { assertPageRequestSize } from '../src/order-report-request-limit.ts';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
 import { openCategoryCalculation } from './helpers/mps-edit.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 

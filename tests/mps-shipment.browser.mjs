@@ -4,7 +4,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { mpsPage, openMpsProductDetails } from './helpers/mps-page.mjs';
+import {
+  mpsPageWithExactProductPeriod as mpsPage,
+  openMpsProductDetails,
+} from './helpers/mps-page.mjs';
 import { authorPage } from './helpers/author-page.mjs';
 
 const columns =

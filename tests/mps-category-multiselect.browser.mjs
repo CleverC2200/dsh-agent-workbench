@@ -6,7 +6,11 @@ import {
 } from './helpers/mps-shipment-source.mjs';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { mpsPage, openMpsCategoryFilter, openMpsProductDetails } from './helpers/mps-page.mjs';
+import {
+  mpsPageWithExactProductPeriod as mpsPage,
+  openMpsCategoryFilter,
+  openMpsProductDetails,
+} from './helpers/mps-page.mjs';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { authorPage } from './helpers/author-page.mjs';

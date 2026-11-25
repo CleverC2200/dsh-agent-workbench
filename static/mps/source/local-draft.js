@@ -44,7 +44,7 @@ export function encodeLocalDrafts(drafts, selected) {
       name: draft.name,
       month: draft.month,
       pull: draft.pull,
-      ...fields(draft, ['festivalBasis', 'productMonth']),
+      ...fields(draft, ['festivalBasis', 'productMonth', 'productPeriod']),
       inputs: Object.fromEntries(
         sources.flatMap((source) => {
           const local =

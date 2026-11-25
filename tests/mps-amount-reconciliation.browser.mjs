@@ -4,7 +4,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
-import { mpsPage, openMpsCategoryFilter } from './helpers/mps-page.mjs';
+import {
+  mpsPageWithExactProductPeriod as mpsPage,
+  openMpsCategoryFilter,
+} from './helpers/mps-page.mjs';
 import { adjustLeaf } from './helpers/mps-edit.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));

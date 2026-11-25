@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { authorPage } from './helpers/author-page.mjs';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
 import { readFile } from 'node:fs/promises';
 import { workflowExportRows } from './helpers/mps-workflow-export.mjs';
 

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import { authorPage } from './helpers/author-page.mjs';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
 import { workflowExportRows } from './helpers/mps-workflow-export.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 

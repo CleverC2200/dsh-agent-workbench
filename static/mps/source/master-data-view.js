@@ -1,4 +1,4 @@
-import { readMasterPage, sourceNames } from './master-data.js';
+import { readMasterPage, resolveProductPeriod, sourceNames } from './master-data.js';
 import { canonicalBaseName } from './relations.js';
 const labels = {
   belong_base: '基地',
@@ -32,18 +32,56 @@ const labels = {
 };
 export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
-  return function MasterData({ month, productMonth = month, close, demandOnly = false }) {
+  return function MasterData({
+    month,
+    productMonth = month,
+    productPeriod,
+    close,
+    demandOnly = false,
+  }) {
     const [kind, setKind] = react.useState('products');
     const [page, setPage] = react.useState(0);
     const [attempt, setAttempt] = react.useState(0);
-    const sourceMonth = kind === 'products' ? productMonth : month;
-    const scope = JSON.stringify([kind, sourceMonth, page]);
+    const preview = !productPeriod || productPeriod.targetMonth !== productMonth;
+    const productScope = JSON.stringify([productMonth, productPeriod]);
+    const pinned = react.useRef(null);
+    const scope = JSON.stringify([kind, kind === 'products' ? productScope : month, page]);
     const [loaded, setState] = react.useState({});
     const state = loaded.scope === scope ? loaded : { busy: true };
     react.useEffect(() => {
       const controller = new AbortController();
       setState({ scope, busy: true });
-      readMasterPage(kind, sourceMonth, page, controller.signal).then(
+      const load = async () => {
+        if (kind !== 'products')
+          return {
+            ...(await readMasterPage(kind, month, page, controller.signal)),
+            sourceMonth: month,
+          };
+        let period = pinned.current?.scope === productScope ? pinned.current.period : null;
+        if (!period) {
+          period = preview
+            ? await resolveProductPeriod(productMonth, controller.signal)
+            : productPeriod;
+          if (controller.signal.aborted) return;
+          pinned.current = { scope: productScope, period };
+        }
+        if (period.adoptedMonth === null)
+          return { rows: [], total: 0, columns: [], sourceMonth: null };
+        const result = await readMasterPage(
+          'products',
+          period.adoptedMonth,
+          page,
+          controller.signal,
+          { configVersion: period.configVersion },
+        );
+        if (!controller.signal.aborted)
+          pinned.current = {
+            scope: productScope,
+            period: { ...period, configVersion: result.configVersion },
+          };
+        return { ...result, sourceMonth: period.adoptedMonth };
+      };
+      load().then(
         (result) => {
           if (!controller.signal.aborted) setState({ ...result, scope });
         },
@@ -52,7 +90,8 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
         },
       );
       return () => controller.abort();
-    }, [kind, sourceMonth, page, attempt]);
+    }, [kind, productScope, month, page, attempt]);
+    const sourceMonth = kind === 'products' ? state.sourceMonth : month;
     const columnLabels =
       kind === 'products'
         ? { ...labels, sub_category: '源大类', responsible_item: '大类' }
@@ -73,6 +112,9 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
       {
         source: sourceNames[kind],
         month: sourceMonth,
+        ...(kind === 'products'
+          ? { targetMonth: productMonth, adoptedMonth: sourceMonth, preview }
+          : {}),
         page: page + 1,
         status: state.busy ? 'loading' : state.error ? 'failed' : 'loaded',
         error: state.error,
@@ -120,7 +162,22 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
             ),
           ),
       ),
-      ['products', 'annual', 'transfers'].includes(kind) && h('p', {}, `统计月 ${sourceMonth}`),
+      kind === 'products' &&
+        h(
+          'p',
+          {},
+          preview
+            ? `预览目标 ${productMonth}，评估已采用 ${productPeriod?.adoptedMonth ?? '未同步'}`
+            : `评估目标 ${productPeriod.targetMonth}，实际采用 ${productPeriod.adoptedMonth ?? '无可用产品清单'}`,
+        ),
+      ['products', 'annual', 'transfers'].includes(kind) &&
+        sourceMonth &&
+        h('p', {}, `统计月 ${sourceMonth}`),
+      kind === 'products' &&
+        !state.busy &&
+        !state.error &&
+        sourceMonth === null &&
+        h('p', { role: 'status' }, '无可用产品清单'),
       state.busy && h('p', { role: 'status' }, '正在读取…'),
       state.error && h('p', { role: 'alert' }, state.error),
       state.rows && table(columns, rows),

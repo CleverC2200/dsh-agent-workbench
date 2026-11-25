@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
 import { readFile } from 'node:fs/promises';
-import { mpsPage, openMpsCategoryFilter } from './helpers/mps-page.mjs';
+import {
+  mpsPageWithExactProductPeriod as mpsPage,
+  openMpsCategoryFilter,
+} from './helpers/mps-page.mjs';
 import { openCategoryCalculation, beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 
