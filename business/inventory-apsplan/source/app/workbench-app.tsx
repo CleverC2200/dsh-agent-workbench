@@ -85,11 +85,7 @@ import { useWorkspace } from './data/use-workspace';
 import { useDefaultProductionDate } from './data/use-default-production-date';
 import { usesConfiguredSql } from '../../../shared/sql-config';
 import { comparisonEvidence } from './data/comparison-evidence';
-import {
-  deriveMetrics,
-  sumMetricQuantity,
-  type MetricData,
-} from 'dsh-agent-manage/aps-compute/metrics';
+import { deriveMetrics, type MetricData } from 'dsh-agent-manage/aps-compute/metrics';
 import { budgetProgress } from 'dsh-agent-manage/aps-compute/budget-progress';
 import {
   metricValues as _metricValues,
@@ -238,27 +234,6 @@ type WorkspaceName =
   | 'delivery';
 
 const HELP_CONTENT_REGISTRY_KEY = 'plan-help-content-registry:v1';
-
-function annualBudgetMissingNote(data: MetricData | null | undefined) {
-  if (data?.granularity !== 'year') return '';
-  const budget = data.sections.find(({ id }) => id === 'sales-budget');
-  if (budget?.status !== 'ready' && budget?.status !== 'empty') return '';
-
-  const year = data.end.slice(0, 4);
-  const missing = [];
-  for (let month = 1; month <= Number(data.end.slice(5, 7)); month++) {
-    const period = year + String(month).padStart(2, '0');
-    const rows = budget.rows.filter(
-      (row) =>
-        String(row.month ?? '')
-          .replaceAll('-', '')
-          .slice(0, 6) === period,
-    );
-    const amount = sumMetricQuantity(rows, 'budget', data.missingValuePolicy);
-    if (amount === null || amount <= 0) missing.push(`${month}月`);
-  }
-  return missing.length ? `缺有效预算月份：${missing.join('、')}` : '';
-}
 
 function stockSnapshotIsPrevious(day: string, cutoff?: string) {
   return cutoff !== undefined && day !== '—' && day < cutoff;
@@ -612,7 +587,7 @@ function productionMetricClass(metric: OverviewMetricName): '经营指标' | '�
 
 const metricHelp: Record<OverviewMetricName, string> = {
   销售预算达成率:
-    '月度销售预算达成率 = 不含税销售额 ÷ 月度预算 × 100%；年度按已确认口径取月度达成率平均。月中与截止日已过天数÷当月自然天数比较时间进度，差额为预算达成率减时间进度；完整月份健康 >95%，预警为 90%<x≤95%，严重 ≤90%。',
+    '月度销售预算达成率 = 不含税销售额 ÷ 月度预算 × 100%；年度对有有效预算和实绩的月份取达成率平均。月中与截止日已过天数÷当月自然天数比较时间进度，差额为预算达成率减时间进度；完整月份健康 >95%，预警为 90%<x≤95%，严重 ≤90%。',
   销售提报准确率:
     '月度终值 = 初版准确率×50% + 月中纠偏准确率×50%；单阶段准确率 = 1 − Σ|单品偏差量| ÷ Σ单品计划量。年度取月度平均。健康 >70%，预警为 65%<x≤70%，严重 ≤65%。',
   销售提报达成率:
@@ -5599,7 +5574,7 @@ export default function Home({
       ? `上一快照 · 截至${day}`
       : `最新快照 · 截至${day}`;
   };
-  const budgetMissingNote = annualBudgetMissingNote(live.data);
+  const budgetMissingNote = liveMetricNotes['销售预算达成率']?.detail;
   const salesOrgMetrics = (path: string) => {
     if (!liveData) return demoSalesOrgMetrics(path);
     const [region, second, third] = path.split(' / ');

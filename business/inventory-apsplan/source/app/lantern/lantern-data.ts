@@ -526,7 +526,7 @@ export function observe(
       .filter(Boolean)
       .sort()
       .at(-1);
-  const metric = (name: string, id: string, rows: Row[]) =>
+  const derived = (name: string, id: string, rows: Row[]) =>
     deriveMetrics({
       start: period.range.from,
       end: period.range.to,
@@ -536,17 +536,21 @@ export function observe(
         { id, status: rows.length ? 'ready' : 'empty', rows },
         ...(id === 'finance' ? [{ id: 'sales-budget', status: 'ready', rows }] : []),
       ],
-    })[name]?.value ?? null;
+    })[name];
+  const metric = (name: string, id: string, rows: Row[]) => derived(name, id, rows)?.value ?? null;
   if (key === 'budget') {
     const rows = pick('budget');
+    const budget = derived('销售预算达成率', 'finance', rows);
     return {
-      value: metric('销售预算达成率', 'finance', rows),
+      value: budget?.value ?? null,
       date: cut(rows),
       details: [
         ['销售额', known(rows, 'actual')],
         ['月度预算', known(rows, 'budget')],
       ],
-      note: supported('budget', period) ? '公司未税收入与月度预算' : '预算按月发布',
+      note:
+        (facts.budget?.status === 'ready' ? budget?.detail : undefined) ??
+        (supported('budget', period) ? '公司未税收入与月度预算' : '预算按月发布'),
     };
   }
   if (key === 'accuracy') {

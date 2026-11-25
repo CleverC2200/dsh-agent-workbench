@@ -200,6 +200,15 @@ class BudgetPerformanceSqlTests(unittest.TestCase):
         self.assertEqual(row['actual'], 775)
         self.assertEqual(row['income_keys'], 3)
 
+    def test_missing_income_and_confirmed_zero_remain_distinct(self):
+        self.db.execute('UPDATE agents_scm_cust_deliv_daily_di SET income_excl_tax_local = NULL')
+        self.assertIsNone(self.read('page.budget-performance')[0]['actual'])
+        self.db.execute("UPDATE agents_scm_cust_deliv_daily_di SET income_excl_tax_local = 0 WHERE act_ship_date = '20261018'")
+        self.assertEqual(self.read('page.budget-performance')[0]['actual'], 0)
+        self.db.execute('DELETE FROM agents_scm_cust_deliv_daily_di')
+        self.assertIsNone(self.read('page.budget-performance')[0]['actual'])
+        self.assertEqual(self.read('page.budget-performance.count'), [{'total': 1}])
+
     def test_default_ten_month_rows_and_offset_requery(self):
         self.db.execute('DELETE FROM agents_scm_cust_plan_order_analysis_d')
         self.db.execute('DELETE FROM agents_scm_cust_deliv_daily_di')

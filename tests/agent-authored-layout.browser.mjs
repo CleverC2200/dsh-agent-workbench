@@ -1209,7 +1209,7 @@ test('APS cards and list share the fallback snapshot, latest monthly forecasts a
       result.rows = Array.from({ length: 10 }, (_, i) => ({
         ...result.rows[0],
         month: '2026' + String(i + 1).padStart(2, '0'),
-        actual: 100,
+        actual: i === 8 ? 0 : i === 9 ? null : 80,
         budget: i < 4 ? 0 : 100,
         source_basis: 'MONTHLY_BUDGET_UNTAXED_INCOME',
       }));
@@ -1253,8 +1253,10 @@ test('APS cards and list share the fallback snapshot, latest monthly forecasts a
   const gap = '缺有效预算月份：1月、2月、3月、4月';
   await expect(card('销售预算达成率')).toContainText(gap);
   await expect(row('销售预算达成率')).toContainText(gap);
-  await expect(card('销售预算达成率').locator('.kpi-value strong')).toHaveText('-');
-  const cardNote = card('销售预算达成率').getByText(gap, { exact: true });
+  await expect(card('销售预算达成率').locator('.kpi-value strong')).toHaveText('64.00');
+  await expect(row('销售预算达成率')).toContainText('64.00%');
+  await expect(row('销售预算达成率')).toContainText('缺销售实绩月份：10月');
+  const cardNote = card('销售预算达成率').getByText(gap);
   await expect(cardNote).toBeVisible();
   assert.ok(await cardNote.evaluate((element) => element.scrollWidth <= element.clientWidth + 1));
   assert.deepEqual(errors, []);
