@@ -89,7 +89,7 @@ export function createDemandAdjustmentUpload(react, { Upload, Dialog, parseCsv, 
       try {
         if (preview.version !== draft.id || preview.draft !== draft || preview.result !== result)
           throw Error('评估版本或输入已变化，请重新上传核对。');
-        apply(preview.entries);
+        apply(preview.entries, undefined, true);
         setNotice(`已应用${preview.entries.length}条需求修正，原始输入和历史已保留。`);
         setPreview(null);
       } catch (failure) {

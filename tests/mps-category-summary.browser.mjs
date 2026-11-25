@@ -165,9 +165,18 @@ test('category monthly totals retain missing inputs and real zero, and filters m
     'M+1 2026-12 销售提报总量',
     'M+1 2026-12 模型预测',
     'M+1 2026-12 有效需求',
+    'M+1 2026-12 人工导入',
+    'M+1 2026-12 预测偏差',
+    'M+1 2026-12 最终预测（可调整）',
     'M+2 2027-01 模型预测',
     'M+2 2027-01 有效需求',
+    'M+2 2027-01 人工导入',
+    'M+2 2027-01 预测偏差',
+    'M+2 2027-01 最终预测（可调整）',
     'M+3 2027-02 需求',
+    'M+3 2027-02 人工导入',
+    'M+3 2027-02 预测偏差',
+    'M+3 2027-02 最终预测（可调整）',
     'M+4 2027-03 库存参考',
   ]);
   const firstSummary = summary.getByRole('row').filter({ hasText: '甲类' });
@@ -184,7 +193,7 @@ test('category monthly totals retain missing inputs and real zero, and filters m
     { header: 1 },
   );
   assert.deepEqual(
-    summaryHeader.slice(1, 10),
+    summaryHeader.slice(1, 19),
     await summary.getByRole('columnheader').allTextContents(),
   );
   assert.equal(Number(summaryValues.find((row) => row[1] === '甲类')[3]), 100);
@@ -262,6 +271,55 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   await returnedFilter.getByRole('button', { name: '清空筛选', exact: true }).click();
   await expect(total().locator('.dc-demand-amount').first()).toHaveText('100');
   await expect(calculation.locator('tbody tr')).toHaveCount(12);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await frame.getByLabel('选择需求修正CSV', { exact: true }).setInputFiles({
+    name: '需求预测.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,SKU,月份,修正数量,调整原因,说明\n郑州,A,2026-12,130,销售变化,\n郑州,A,2027-01,140,销售变化,\n郑州,A,2027-02,150,销售变化,',
+    ),
+  });
+  await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
+  await expect(firstSummary.getByRole('cell').nth(4)).toHaveText('100');
+  await expect(firstSummary.getByRole('cell').nth(5)).toHaveText('130');
+  await expect(firstSummary.getByRole('cell').nth(6)).toHaveText('+30');
+  await expect(firstSummary.getByRole('cell').nth(7)).toHaveText('130');
+  await expect(firstSummary.getByRole('cell').nth(9)).toHaveText('100');
+  await expect(firstSummary.getByRole('cell').nth(10)).toHaveText('140');
+  await expect(firstSummary.getByRole('cell').nth(11)).toHaveText('+40');
+  await expect(firstSummary.getByRole('cell').nth(12)).toHaveText('140');
+  await expect(firstSummary.getByRole('cell').nth(14)).toHaveText('150');
+  await expect(firstSummary.getByRole('cell').nth(15)).toHaveText('');
+  await expect(firstSummary.getByRole('cell').nth(16)).toHaveText('150');
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  await frame.getByRole('button', { name: '读取三年同比源值', exact: true }).click();
+  await expect(frame.getByRole('button', { name: '读取三年同比源值', exact: true })).toBeEnabled();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await expect(firstSummary.getByRole('cell').nth(5)).toHaveText('130');
+  await expect(firstSummary.getByRole('cell').nth(7)).toHaveText('130');
+  await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
+  await frame.getByRole('button', { name: '重新评估', exact: true }).click();
+  await expect(frame.getByRole('button', { name: '重新评估', exact: true })).toBeEnabled();
+  await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  const adoptedDownload = page.waitForEvent('download');
+  await frame.getByRole('button', { name: '导出产销存结果', exact: true }).click();
+  const adoptedBook = XLSX.read(await mpsDownloadText(await (await adoptedDownload).path()), {
+    type: 'string',
+    raw: true,
+  });
+  const adoptedRows = XLSX.utils.sheet_to_json(adoptedBook.Sheets[adoptedBook.SheetNames[0]], {
+    defval: '',
+  });
+  for (const [month, quantity] of [
+    ['2026-12', 130],
+    ['2027-01', 140],
+    ['2027-02', 150],
+  ]) {
+    const leaf = adoptedRows.find(
+      (row) => row['产品编码'] === 'A' && row['基地'] === '郑州' && row['月份'] === month,
+    );
+    assert.equal(Number(leaf['需求数量']), quantity);
+  }
   if (process.env.MPS03_EVIDENCE_DIR)
     await page.screenshot({ path: `${process.env.MPS03_EVIDENCE_DIR}/category-summary.png` });
 });
