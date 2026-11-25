@@ -1,3 +1,4 @@
+import { compareBusinessRows, compareBusinessValues } from './table-presentation.js';
 import { matchesCategories } from './category-filter.js';
 import { useStepViewField } from './step-view-state.js';
 import {
@@ -135,9 +136,9 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
       'InventoryTargetPanel.supplementPage',
       0,
     );
-    const scopedRows = result.rows.filter((row) =>
-      matchesCategories(row.category, selectedCategories),
-    );
+    const scopedRows = result.rows
+      .filter((row) => matchesCategories(row.category, selectedCategories))
+      .sort(compareBusinessRows);
     const version = draft.constraints?.targetVersion ?? 'auto';
     const sourceMonth = selectedInventoryMonth(draft);
     const businessDate = selectedInventoryBusinessDate(draft);
@@ -152,7 +153,9 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
           .map((row) => row.turnoverPolicy.sourceVersion),
       ),
     ];
-    const bases = [...new Set(scopedRows.map((row) => row.base))].sort();
+    const bases = [...new Set(scopedRows.map((row) => row.base))].sort((left, right) =>
+      compareBusinessValues('base', left, right),
+    );
     const rows = scopedRows.filter(
       (row) =>
         row.month === month &&

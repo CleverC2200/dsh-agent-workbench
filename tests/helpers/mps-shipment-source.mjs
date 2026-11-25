@@ -6,6 +6,7 @@ export const shipmentSourceRow = (changes = {}) => ({
   material_name: '产品甲',
   series: '系列',
   product_item: '组',
+  month_order_qty: null,
   shipped: 0,
   prepped: 0,
   unprepped: 0,

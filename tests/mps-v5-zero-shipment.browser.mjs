@@ -21,6 +21,7 @@ const stock = (code, date, changes = {}) => ({
   total_sales_qty: 0,
   allocated_qty: 0,
   ordered_qty: 0,
+  month_order_qty: null,
   avg_30d_send: 0,
   begin_stock: 500,
   produce_in_qty: 0,
@@ -175,18 +176,18 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
   await expect(frame.getByRole('button', { name: '下载明细', exact: true })).toBeEnabled();
   const rows = await download(page, frame);
   const pace = rows.find((row) => row.产品编码 === 'PACE');
-  assert.equal(pace.近三天日均发货量, '10');
+  assert.equal(pace['近三日日均发货'], '10');
   assert.equal(pace.已备, '20');
   assert.equal(pace.未备, '10');
-  assert.equal(pace.月初库存, '500');
+  assert.equal(pace['月初 1 号库存'], '500');
   assert.equal(pace.调入计划, '7');
   const known = rows.find((row) => row.产品编码 === 'KNOWN');
   assert.equal(known.整月预估发货, '1000');
-  assert.equal(known.月初库存, '500');
+  assert.equal(known['月初 1 号库存'], '500');
   const missing = rows.find((row) => row.产品编码 === 'MISSING');
   assert.equal(missing.整月预估发货, '0');
   for (const field of [
-    '月初库存',
+    '月初 1 号库存',
     '本月生产入库',
     '剩余天数入库',
     '调入计划',

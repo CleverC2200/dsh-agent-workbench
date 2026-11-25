@@ -1,5 +1,12 @@
 import { createBatchEdit } from './batch-edit.js';
 import { createStepViewState, useStepViewField } from './step-view-state.js';
+import {
+  compareBusinessRows,
+  compareBusinessValues,
+  orderedTableEntries,
+  createTablePresentation,
+  isSkuColumn,
+} from './table-presentation.js';
 import { categorySourceInputs } from './category-source-inputs.js';
 import { createCategoryFilter, matchesCategories } from './category-filter.js';
 import { canonicalBaseName } from './relations.js';
@@ -306,6 +313,7 @@ function reportAmountSource(draft, period) {
 
 export function createDemandConfirmation(react, useMpsPart, view) {
   const h = react.createElement;
+  const { Provider, Code } = createTablePresentation(react);
   const CategoryFilter = createCategoryFilter(react);
   const CategoryDemand = createCategoryDemand(react, {
     table: (...args) => table(...args),
@@ -389,7 +397,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'tbody',
           {},
-          rows.map((row, index) =>
+          orderedTableEntries(columns, rows).map(({ row, index }) =>
             h(
               react.Fragment,
               { key: index },
@@ -400,44 +408,46 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   h(
                     'td',
                     { key: column },
-                    row[column] === '' || row[column] == null
-                      ? column === '新品标记'
-                        ? ''
-                        : '-'
-                      : /收入|金额/.test(column) && Number.isFinite(Number(row[column]))
-                        ? amount(row[column])
-                        : (/数量|合计/.test(column) ||
-                              /^M\+\d$/.test(column) ||
-                              [
-                                '① 环比法',
-                                '② 占比法',
-                                '加权',
-                                '两法平均量',
-                                '销售提报量',
-                                '销售校正量',
-                                '系统值',
-                                '有效值',
-                                '组合标准日产/件',
-                                '组合标准日产/吨',
-                              ].includes(column)) &&
-                            Number.isFinite(Number(row[column]))
-                          ? integer(row[column])
-                          : [
-                                '历史平均环比',
-                                '年度环比',
-                                '近三月达成率',
-                                '同期平均占比',
-                                '三年月占比',
-                                '月发货占财年比例',
-                                '同比增长率',
-                                '环比增长率',
-                              ].includes(column) && Number.isFinite(Number(row[column]))
-                            ? new Intl.NumberFormat('zh-CN', {
-                                style: 'percent',
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              }).format(Number(row[column]))
-                            : row[column],
+                    isSkuColumn(column) && typeof row[column] === 'string' && row[column]
+                      ? h(Code, { row })
+                      : row[column] === '' || row[column] == null
+                        ? column === '新品标记'
+                          ? ''
+                          : '-'
+                        : /收入|金额/.test(column) && Number.isFinite(Number(row[column]))
+                          ? amount(row[column])
+                          : (/数量|合计/.test(column) ||
+                                /^M\+\d$/.test(column) ||
+                                [
+                                  '① 环比法',
+                                  '② 占比法',
+                                  '加权',
+                                  '两法平均量',
+                                  '销售提报量',
+                                  '销售校正量',
+                                  '系统值',
+                                  '有效值',
+                                  '组合标准日产/件',
+                                  '组合标准日产/吨',
+                                ].includes(column)) &&
+                              Number.isFinite(Number(row[column]))
+                            ? integer(row[column])
+                            : [
+                                  '历史平均环比',
+                                  '年度环比',
+                                  '近三月达成率',
+                                  '同期平均占比',
+                                  '三年月占比',
+                                  '月发货占财年比例',
+                                  '同比增长率',
+                                  '环比增长率',
+                                ].includes(column) && Number.isFinite(Number(row[column]))
+                              ? new Intl.NumberFormat('zh-CN', {
+                                  style: 'percent',
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                }).format(Number(row[column]))
+                              : row[column],
                   ),
                 ),
               ),
@@ -1871,8 +1881,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         canonicalBaseName(display['基地']) !== 'ODM' &&
         matchesCategories(display['大类'], selectedCategories),
     );
-    const filteredProducts = categoryProducts.filter(
-      ({ display, labels, replacementCodes, targetBases, sourcePeriods }) =>
+    const filteredProducts = [...categoryProducts]
+      .sort((left, right) => compareBusinessRows(left.display, right.display))
+      .filter(({ display, labels, replacementCodes, targetBases, sourcePeriods }) =>
         [
           ...Object.values(display),
           ...labels,
@@ -1880,7 +1891,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           ...targetBases,
           ...sourcePeriods,
         ].some((value) => value.includes(search)),
-    );
+      );
     const selectedProduct = productDetails === null ? null : productViews[productDetails];
     react.useEffect(
       () => setProductPage(0),
@@ -2065,7 +2076,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       checkActive,
     );
     const filterStep = ['check', 'ship', 'process', 'masterdata', 'constraints'].includes(step);
-    return h(
+    const content = h(
       'div',
       { className: 'dc-page', hidden: !active },
       retentionError && h('p', { role: 'alert' }, retentionError),
@@ -2135,7 +2146,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                         ...(draft.shipment?.rows ?? []).map((row) => row.category),
                       ].filter(Boolean),
                     ),
-                  ].sort(),
+                  ].sort((left, right) => compareBusinessValues('category', left, right)),
                   selected: selectedCategories,
                   change: setSelectedCategories,
                   disabled: adjusting,
@@ -2776,7 +2787,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                                       'aria-label': `查看产品 ${row['产品编码']} 的源字段`,
                                       onClick: () => setProductDetails(index),
                                     },
-                                    display[column],
+                                    h(Code, { row: display }),
                                   )
                                 : column === '新品标记'
                                   ? (display[column] ?? '')
@@ -3083,5 +3094,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       ),
       !helpOpen && assistant,
     );
+    return h(Provider, { draft }, content);
   };
 }

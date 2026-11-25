@@ -48,7 +48,7 @@ test('未过日均除以上月已过日均，系数最小为1且数量保底直�
     assert.match(result.reason, reason);
   }
   for (const [changes, original, adjusted, factor] of [
-    [{}, 150, 300, 2],
+    [{}, 150, 180, 2],
     [{ average: 0 }, 120, 120, 1],
     [{ average: null }, null, null, 1],
   ]) {
@@ -180,4 +180,28 @@ test('月初不足三天时三数量确认是零且日期完整仍预估为零�
       assert.match(pending.forecastIssue, /缺|重复|待核/);
     }
   }
+});
+
+test('西南10006950只对未过天数预测日均应用发运系数，中间值不舍入', () => {
+  const result = applyShipmentCoefficient(
+    deriveShipmentForecast(
+      input({
+        shipped: 5624,
+        prepped: 312,
+        unprepped: 792,
+        daily3: 326.6666666666667,
+        average: 100,
+        sourceDays: 24,
+      }),
+      24,
+      30,
+    ),
+    { factor: 2.380614, reason: '' },
+  );
+  assert.equal(result.prediction, 8261);
+  const exhausted = applyShipmentCoefficient(deriveShipmentForecast(input({ daily3: 1 }), 20, 21), {
+    factor: 3,
+    reason: '',
+  });
+  assert.equal(exhausted.prediction, 120);
 });

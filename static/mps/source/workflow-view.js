@@ -1,4 +1,11 @@
 import {
+  compareBusinessRows,
+  compareBusinessValues,
+  orderedTableEntries,
+  createTablePresentation,
+  isSkuColumn,
+} from './table-presentation.js';
+import {
   createDelistedReport,
   delistedDownloadColumns,
   delistedDownloadFields,
@@ -430,10 +437,11 @@ export function createWorkflow(
     };
     const viewCategories = ['process', 'constraints'].includes(step) ? selectedCategories : [];
     const fields = step === 'process' ? processFields : planFields;
-    const scopedRows =
+    const scopedRows = (
       step === 'process'
         ? [...result.rows, ...(result.referenceRows ?? [])].filter((row) => row.base !== 'ODM')
-        : result.rows;
+        : result.rows
+    ).toSorted(compareBusinessRows);
     const scopedCategories = result.categoryRows;
     const products = sourceProductMappings(draft.products, draft.productRaw);
     const inScope = createProductScopeMatcher(products);
@@ -452,7 +460,7 @@ export function createWorkflow(
             })),
         ].map((row) => [JSON.stringify([row.base, row.code]), row]),
       ).values(),
-    ];
+    ].sort(compareBusinessRows);
     const bases = [
       ...new Set(
         [
@@ -467,8 +475,10 @@ export function createWorkflow(
               ]),
         ].filter((base) => admittedBases.has(base)),
       ),
-    ];
-    const categories = [...new Set(scopedCategories.map((row) => row.category))];
+    ].sort((left, right) => compareBusinessValues('base', left, right));
+    const categories = [...new Set(scopedCategories.map((row) => row.category))].sort(
+      (left, right) => compareBusinessValues('category', left, right),
+    );
     const filtered = scopedRows.filter(
       (row) =>
         (!base || row.base === base) &&
@@ -570,14 +580,29 @@ export function createWorkflow(
             'tbody',
             null,
             rows.length
-              ? rows.map((cells, index) =>
+              ? orderedTableEntries(columns, rows).map(({ row: cells, index }) =>
                   h(
                     react.Fragment,
                     { key: index },
                     h(
                       'tr',
                       {},
-                      cells.map((cell, position) => h('td', { key: position }, cell)),
+                      cells.map((cell, position) =>
+                        h(
+                          'td',
+                          { key: position },
+                          isSkuColumn(columns[position]) && typeof cell === 'string' && cell
+                            ? h(createTablePresentation(react).Code, {
+                                row: {
+                                  base,
+                                  ...Object.fromEntries(
+                                    columns.map((column, index) => [column, cells[index]]),
+                                  ),
+                                },
+                              })
+                            : cell,
+                        ),
+                      ),
                     ),
                     renderDetail?.(cells, index),
                   ),

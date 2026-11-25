@@ -38,6 +38,7 @@ test('同一评估6/7页及业务CSV逐列核库存，下市日均缺项保留�
           material_name: code,
           series: '系列',
           product_item: '组',
+          month_order_qty: null,
           shipped: 0,
           prepped: 0,
           unprepped: 0,
