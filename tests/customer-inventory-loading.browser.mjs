@@ -216,6 +216,11 @@ test('customer SKU tab has no extra toolbar and follows outer customer filters w
   });
   await frame.getByRole('tab', { name: /经销商总览/ }).click();
   await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
+  await expect(panel.getByText('商品B-0', { exact: true })).toBeVisible();
+  assert.equal(await page.evaluate(() => window.pendingSql.length), 0);
+  await frame.getByRole('tab', { name: /经销商总览/ }).click();
+  await frame.locator('body').evaluate(() => window.dispatchEvent(new Event('light-refresh')));
+  await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.pendingSql.length)).toBeGreaterThan(0);
   await frame.getByRole('tab', { name: /经销商总览/ }).click();
   await page.evaluate(() => {
@@ -229,6 +234,7 @@ test('customer SKU tab has no extra toolbar and follows outer customer filters w
     window.denySkus = true;
   });
   await frame.getByRole('tab', { name: /经销商总览/ }).click();
+  await frame.locator('body').evaluate(() => window.dispatchEvent(new Event('light-refresh')));
   await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
   await expect(panel.getByRole('alert')).toContainText('SKU库存读取失败');
   await expect(panel.getByText('商品B-0', { exact: true })).toHaveCount(0);

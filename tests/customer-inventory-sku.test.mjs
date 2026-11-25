@@ -7,13 +7,17 @@ const config = JSON.parse(
   await readFile(new URL('../business/inventory-dealer/sql.config.json', import.meta.url)),
 );
 const bundle = await build({
-  entryPoints: ['prototypes/inventory-customer/sku-source.js'],
+  stdin: {
+    contents:
+      "export * from './prototypes/inventory-customer/sku-source.js'; export { refreshConfiguredQueries } from './business/shared/query-cache.ts';",
+    resolveDir: process.cwd(),
+  },
   bundle: true,
   write: false,
   platform: 'node',
   format: 'esm',
 });
-const { readCustomerSkus, customerSkuPresentation } = await import(
+const { readCustomerSkus, customerSkuPresentation, refreshConfiguredQueries } = await import(
   'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
 );
 const inventory = { snapshot: '2026-10-30', rows: [{ code: 'A' }, { code: 'B' }] };
@@ -36,6 +40,170 @@ function source({ customer = 'A', total = 11, negative = false } = {}) {
   };
   return { execute, calls };
 }
+
+test('paging shares a successful scoped date read and reuses completed pages without mutable aliases', async () => {
+  const fixture = source();
+  const first = await readCustomerSkus(inventory, ['A'], { page: 1 }, fixture);
+  await readCustomerSkus(inventory, ['A'], { page: 2 }, fixture);
+  first.rows[0].inventory = 999;
+  const returned = await readCustomerSkus(inventory, ['A'], { page: 1 }, fixture);
+  assert.equal(returned.rows[0].inventory, 0);
+  assert.equal(fixture.calls.length, 3, 'one date read and two detail reads, instead of six');
+  assert.equal(
+    fixture.calls.filter((call) => call.options.queryId === 'source.dealer-stock-date').length,
+    1,
+  );
+  const controller = new AbortController();
+  controller.abort(Error('page closed'));
+  await assert.rejects(
+    readCustomerSkus(inventory, ['A'], { page: 1 }, { ...fixture, signal: controller.signal }),
+    /page closed/,
+  );
+});
+
+test('reordered scopes reuse pages and an aborted read cannot poison a newer filter request', async () => {
+  const fixture = source({ total: 1 });
+  await readCustomerSkus(inventory, ['A', 'B'], { page: 1 }, fixture);
+  await readCustomerSkus(inventory, ['B', 'A'], { page: 1 }, fixture);
+  assert.equal(fixture.calls.length, 2);
+  let finishOld,
+    dates = 0;
+  const retry = {
+    execute: (request, options) => {
+      if (options.queryId === 'source.dealer-stock-date' && dates++ === 0)
+        return new Promise((resolve) => {
+          finishOld = resolve;
+        });
+      return fixture.execute(request, options);
+    },
+  };
+  const controller = new AbortController();
+  const old = readCustomerSkus(
+    inventory,
+    ['A'],
+    { page: 1 },
+    { ...retry, signal: controller.signal },
+  );
+  const rejected = assert.rejects(old, /filter changed/);
+  while (!finishOld) await new Promise((resolve) => setImmediate(resolve));
+  controller.abort(Error('filter changed'));
+  const fresh = await readCustomerSkus(inventory, ['A'], { page: 1 }, retry);
+  finishOld({ rows: [{ day: '2026-10-29' }] });
+  await rejected;
+  const calls = fixture.calls.length;
+  assert.deepEqual(await readCustomerSkus(inventory, ['A'], { page: 1 }, retry), fresh);
+  assert.equal(fixture.calls.length, calls);
+});
+
+test('cached SKU pages remain separate for filters, customer scope, inventory owner and refresh', async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const fixture = source({ total: 1 });
+  await readCustomerSkus(inventory, ['A'], { page: 1 }, fixture);
+  await readCustomerSkus(inventory, ['A'], { page: 1, filters: { category: '水饺' } }, fixture);
+  assert.equal(
+    fixture.calls.length,
+    3,
+    'different filter reads detail but retains the same scoped date',
+  );
+  await readCustomerSkus(inventory, ['A', 'B'], { page: 1 }, fixture);
+  assert.equal(fixture.calls.length, 5, 'a changed customer scope resolves its own date');
+  await readCustomerSkus({ ...inventory }, ['A'], { page: 1 }, fixture);
+  assert.equal(fixture.calls.length, 7);
+  now++;
+  refreshConfiguredQueries();
+  await readCustomerSkus(inventory, ['A'], { page: 1 }, fixture);
+  assert.equal(fixture.calls.length, 9, 'manual refresh bypasses both cached date and page');
+  now += 20 * 60 * 1000;
+  await readCustomerSkus(inventory, ['A'], { page: 1 }, fixture);
+  assert.equal(fixture.calls.length, 11, 'expiry is fixed and is not extended by cache hits');
+});
+
+test('only six completed SKU pages are retained and failed date reads remain retryable', async () => {
+  const fixture = source({ total: 80 });
+  for (let page = 1; page <= 7; page++) await readCustomerSkus(inventory, ['A'], { page }, fixture);
+  await readCustomerSkus(inventory, ['A'], { page: 1 }, fixture);
+  assert.equal(fixture.calls.length, 9);
+  let failed = true;
+  const retry = {
+    execute: async (...args) => {
+      if (failed) throw Error('temporary read failure');
+      return fixture.execute(...args);
+    },
+  };
+  await assert.rejects(
+    readCustomerSkus(inventory, ['A'], { page: 1 }, retry),
+    /temporary read failure/,
+  );
+  failed = false;
+  const result = await readCustomerSkus(inventory, ['A'], { page: 1 }, retry);
+  assert.equal(result.rows.length, 10);
+});
+
+test('four concurrent cold SKU scopes reach the controlled transport without nesting the shared scheduler', async (t) => {
+  const bundled = await build({
+    entryPoints: ['prototypes/inventory-customer/sku-source.js'],
+    bundle: true,
+    write: false,
+    platform: 'node',
+    format: 'esm',
+    plugins: [
+      {
+        name: 'controlled-transport',
+        setup(api) {
+          api.onLoad({ filter: /[\\/]shared[\\/]channel\.js$/ }, () => ({
+            contents:
+              'export const call = (...args) => globalThis.customerSkuTransport(...args); export const ready = Promise.resolve();',
+            loader: 'js',
+          }));
+        },
+      },
+    ],
+  });
+  const module = await import(
+    'data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].text).toString('base64')
+  );
+  const codes = ['A', 'B', 'C', 'D'];
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(Error('SKU queue stalled')), 1000);
+  t.after(() => {
+    clearTimeout(deadline);
+    delete globalThis.customerSkuTransport;
+  });
+  let calls = 0;
+  globalThis.customerSkuTransport = async (method, request, { signal }) => {
+    signal.throwIfAborted();
+    assert.equal(method, 'sql');
+    assert.equal(request.pageNo, 1);
+    assert.equal(request.pageSize, 200);
+    calls++;
+    if (request.sql.startsWith('SELECT MAX')) return { rows: [{ day: '2026-10-29' }] };
+    return {
+      rows: [
+        {
+          ...Object.fromEntries(atomic.resultColumns.map((column) => [column, null])),
+          customer: request.parameters.list_1_0,
+          sku: 'SKU',
+          inventory: 1,
+          page_scope_total: 1,
+          page_row_present: 1,
+        },
+      ],
+      returnedColumns: atomic.resultColumns,
+    };
+  };
+  const owner = { snapshot: inventory.snapshot, rows: codes.map((code) => ({ code })) };
+  const results = await Promise.all(
+    codes.map((code) =>
+      module.readCustomerSkus(owner, [code], { page: 1 }, { signal: controller.signal }),
+    ),
+  );
+  assert.deepEqual(
+    results.map((result) => result.rows[0].customer),
+    codes,
+  );
+  assert.equal(calls, 8);
+});
 
 test('SKU page reuses dealer presentation and server paging with bound customer and filters', async () => {
   const { execute, calls } = source();
