@@ -244,12 +244,102 @@ test('无效文件不覆盖有效修正，后选文件不会被先选文件的�
   assert.deepEqual(await draft(page), original);
 });
 
+test('完整三个月导入与再导入保留旧调整、第四月和完整历史', async (t) => {
+  const { page, frame, month } = await setup(t);
+  await page.evaluate(async () => {
+    const seed = window.readView();
+    const current = seed.localDrafts.drafts.find((row) => row.id === seed.localDrafts.selected);
+    const product = current.inputs.products.rows[0];
+    current.inputs.products.rows = Array.from({ length: 5770 }, (_, index) => ({
+      ...product,
+      产品编码: `FULL${index}`,
+    }));
+    current.adjustments.quantities = [
+      {
+        kind: 'base-sku',
+        month: new Date(
+          Date.UTC(Number(current.month.slice(0, 4)), Number(current.month.slice(5)) + 2, 1),
+        )
+          .toISOString()
+          .slice(0, 7),
+        category: '汤圆',
+        group: 'G1',
+        base: '郑州',
+        code: 'FULL1',
+        quantity: 7,
+        systemValue: null,
+        reason: '旧调整保留',
+        at: '2026-11-01T00:00:00.000Z',
+      },
+    ];
+    current.adjustments.history = [
+      {
+        kind: 'quantities',
+        key: '旧记录',
+        action: 'set',
+        value: 7,
+        systemValue: null,
+        reason: '旧历史保留',
+        at: '2026-11-01T00:00:00.000Z',
+      },
+    ];
+    await window.openAuthor('mps', 1200, seed);
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const months = Array.from({ length: 4 }, (_, index) => {
+    const date = new Date(`${month}-01T00:00:00Z`);
+    date.setUTCMonth(date.getUTCMonth() + index);
+    return date.toISOString().slice(0, 7);
+  });
+  const imported = months
+    .slice(0, 3)
+    .flatMap((period) =>
+      Array.from(
+        { length: 5770 },
+        (_, index) => `郑州,FULL${index},${period},${index % 2 ? 0 : 13},销售变化,`,
+      ),
+    );
+  for (let iteration = 0; iteration < 2; iteration++) {
+    await upload(
+      frame,
+      '选择需求修正CSV',
+      `${columns}\n${imported.join('\n')}\n郑州,FULL0,${months[3]},7,库存调整,`,
+    );
+    const preview = frame.getByRole('dialog', { name: '确认需求修正上传', exact: true });
+    await expect(preview).toContainText('共17311条', { timeout: 30000 });
+    await preview
+      .getByRole('button', { name: '确认应用修正', exact: true })
+      .click({ timeout: 30000 });
+    await expect(preview)
+      .toHaveCount(0, { timeout: 30000 })
+      .catch(async (failure) => {
+        t.diagnostic(JSON.stringify(await frame.getByRole('alert').allTextContents()));
+        throw failure;
+      });
+    const saved = await draft(page);
+    assert.equal(saved.demandImports.length, 17310);
+    assert.equal(saved.adjustments.quantities.length, 17312);
+    assert.equal(saved.adjustments.history.length, 1 + (iteration + 1) * 17311);
+    assert.equal(
+      saved.adjustments.quantities.find((row) => row.code === 'FULL1' && row.month === months[3])
+        .quantity,
+      7,
+    );
+    assert.equal(saved.adjustments.quantities.find((row) => row.month === months[3]).quantity, 7);
+    assert.equal(saved.demandImports.find((row) => row.code === 'FULL1').quantity, 0);
+    assert.equal(saved.adjustments.history[0].reason, '旧历史保留');
+  }
+  const saved = await page.evaluate(() => window.readView());
+  await page.evaluate(async (seed) => window.openAuthor('mps', 1200, seed), saved);
+  assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), saved.localDrafts);
+});
+
 test('上传不能使完整修正历史超出本地草稿可保存范围', async (t) => {
   const { page, frame, month } = await setup(t);
   await page.evaluate(async () => {
     const seed = window.readView();
     const draft = seed.localDrafts.drafts.find((row) => row.id === seed.localDrafts.selected);
-    draft.adjustments.history = Array.from({ length: 10000 }, () => ({
+    draft.adjustments.history = Array.from({ length: 90000 }, () => ({
       kind: 'quantities',
       key: '历史叶子',
       action: 'set',

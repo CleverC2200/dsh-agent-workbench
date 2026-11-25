@@ -75,7 +75,7 @@ const monthOffset = (month, offset) => {
   const date = new Date(year, number - 1 + offset, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 };
-function parseCsv(text, columns) {
+function parseCsv(text, columns, rowLimit = 10000) {
   const table = [];
   let row = [],
     cell = '',
@@ -131,7 +131,8 @@ function parseCsv(text, columns) {
   }
   if (!table.length || table[0].join('\u0000') !== columns.join('\u0000'))
     throw Error(`表头必须依模板排列：${columns.join('、')}。`);
-  if (table.length - 1 > 10000) throw Error('超过10000条上限，未读取任何行，请拆分文件后核对。');
+  if (table.length - 1 > rowLimit)
+    throw Error(`超过${rowLimit}条上限，未读取任何行，请拆分文件后核对。`);
   const errors = [];
   const rows = table.slice(1).map((values, index) => {
     if (values.length !== columns.length) errors.push(`第${index + 2}行列数不符`);
@@ -1572,13 +1573,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       'selectedCategories',
       () => [],
     );
-    const selectedCategories = step === 'process' ? processCategories : sharedCategories;
-    const setSelectedCategories = step === 'process' ? setProcessCategories : setSharedCategories;
     const processBatch = useBatchEdit({
       scope: workflowScope,
       view: stepViews.get('process'),
       requireReason: true,
+      onStart: () => setProcessCategories(sharedCategories),
     });
+    const processCategoryEditing = step === 'process' && processBatch.active;
+    const selectedCategories = processCategoryEditing ? processCategories : sharedCategories;
+    const setSelectedCategories = processCategoryEditing
+      ? setProcessCategories
+      : setSharedCategories;
     if (workflowStep.current.scope !== workflowScope)
       workflowStep.current = { scope: workflowScope, step: null };
     const workflowActive =

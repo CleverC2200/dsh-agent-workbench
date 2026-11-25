@@ -9,7 +9,7 @@ import { createProcessedDemandEvidence } from './processed-demand-evidence-view.
 import { createDemandDiagnostics } from './demand-diagnostics-view.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import {
-  changeAdjustment,
+  changeAdjustments,
   matchesQuantityAdjustment,
   quantityAdjustmentKey,
 } from './local-draft.js';
@@ -122,8 +122,8 @@ export function createProcessedDemand(
           ),
       ),
     ];
-    const saved = (entry) =>
-      quantities.find((item) => quantityAdjustmentKey(item) === quantityAdjustmentKey(entry));
+    const savedQuantities = new Map(quantities.map((item) => [quantityAdjustmentKey(item), item]));
+    const saved = (entry) => savedQuantities.get(quantityAdjustmentKey(entry));
     const effective = (computed, entry) =>
       sum(
         [...computed.rows, ...(computed.referenceRows ?? [])].filter((row) =>
@@ -155,7 +155,6 @@ export function createProcessedDemand(
         : null;
       const snapshot = shipping ? { ...shipmentSnapshot, rows: shipping.rows } : shipmentSnapshot;
       let adjustments = draft.adjustments;
-      const undos = new Map();
       const quantities = entries
         .filter((entry) => !['shipment', 'category-remark'].includes(entry.meta.kind))
         .sort(
@@ -164,17 +163,16 @@ export function createProcessedDemand(
             Number(Boolean(a.meta.base)) -
             (adjustmentDepth[b.meta.kind] + Number(Boolean(b.meta.base))),
         );
+      const pendingKeys = new Set(quantities.map((entry) => quantityAdjustmentKey(entry.meta)));
       for (const item of draft.adjustments?.quantities ?? []) {
         if (
           item.kind === 'category-total' &&
           remarks.has(item.category) &&
-          !quantities.some(
-            (entry) => quantityAdjustmentKey(entry.meta) === quantityAdjustmentKey(item),
-          )
+          !pendingKeys.has(quantityAdjustmentKey(item))
         )
           quantities.push({ meta: item, value: item.quantity });
       }
-      for (const entry of quantities) {
+      const changes = quantities.map((entry) => {
         const { editorRow: _editorRow, ...fields } = entry.meta;
         const input = {
           ...fields,
@@ -188,44 +186,57 @@ export function createProcessedDemand(
               }
             : {}),
         };
-        const before = adjustments?.history?.length ?? 0;
-        adjustments = changeAdjustment(adjustments, 'quantities', input, entry.value === null);
-        if (entry.value === null && adjustments.history.length > before)
-          undos.set(before, entry.meta);
-      }
+        return { input, undo: entry.value === null };
+      });
+      const historyStart = adjustments?.history?.length ?? 0;
+      adjustments = changeAdjustments(adjustments, 'quantities', changes);
       const candidate = buildMpsWorkflow({ ...draft, adjustments }, relations, snapshot);
       const introduced = (candidate.adjustmentIssues ?? []).filter(
         (issue) => !(result.adjustmentIssues ?? []).includes(issue),
       );
       if (introduced.length) throw Error(introduced.join('；'));
+      const candidateRows = [...candidate.rows, ...(candidate.referenceRows ?? [])];
+      const adjustedLeaves = new Set(
+        candidateRows
+          .filter((row) => row.quantityAdjusted)
+          .map((row) => quantityAdjustmentKey({ ...row, kind: 'base-sku' })),
+      );
       for (const entry of quantities) {
         if (
           entry.value !== null &&
-          ![...candidate.rows, ...(candidate.referenceRows ?? [])].some(
-            (row) => matchesQuantityAdjustment(row, entry.meta) && row.quantityAdjusted,
-          )
+          !(entry.meta.kind === 'base-sku'
+            ? adjustedLeaves.has(quantityAdjustmentKey(entry.meta))
+            : candidateRows.some(
+                (row) => matchesQuantityAdjustment(row, entry.meta) && row.quantityAdjusted,
+              ))
         )
           throw Error('当前需求调整未生效，请核对月份、产品范围和拆分依据。');
       }
+      const undos = new Map(
+        quantities
+          .filter((entry) => entry.value === null)
+          .map((entry) => [quantityAdjustmentKey(entry.meta), entry.meta]),
+      );
       if (undos.size)
         adjustments = {
           ...adjustments,
           history: adjustments.history.map((item, index) =>
-            undos.has(index) ? { ...item, value: effective(candidate, undos.get(index)) } : item,
+            index >= historyStart && item.action === 'undo' && undos.has(item.key)
+              ? { ...item, value: effective(candidate, undos.get(item.key)) }
+              : item,
           ),
         };
       if (!mpsLocalDraftSchema.shape.adjustments.safeParse(adjustments).success)
         throw Error('修正及完整历史超出本地草稿可保存范围。请先导出核对，未应用本次修正。');
+      const importedKeys = new Set(
+        quantities.map((entry) =>
+          JSON.stringify([entry.meta.month, entry.meta.base, entry.meta.code]),
+        ),
+      );
       const demandImports = imported
         ? [
             ...(draft.demandImports ?? []).filter(
-              (row) =>
-                !quantities.some(
-                  (entry) =>
-                    entry.meta.month === row.month &&
-                    entry.meta.base === row.base &&
-                    entry.meta.code === row.code,
-                ),
+              (row) => !importedKeys.has(JSON.stringify([row.month, row.base, row.code])),
             ),
             ...quantities
               .filter((entry) => months.slice(0, 3).includes(entry.meta.month))
@@ -1127,31 +1138,32 @@ export function createProcessedDemand(
             },
           },
           h('summary', null, '当前固定数量'),
-          table(
-            '当前固定数量',
-            ['对象', '固定数量', '原因', '时间', '操作'],
-            fixedQuantities.map((item) => [
-              label(item),
-              number(item.quantity),
-              item.reason,
-              item.at,
-              h(
-                'button',
-                {
-                  'aria-label': `撤销固定数量 ${label(item)}`,
-                  disabled: !batch.active,
-                  onClick: () =>
-                    batch.stage(fieldKey(item), {
-                      label: label(item),
-                      text: '',
-                      meta: item,
-                      min: 0,
-                    }),
-                },
-                '撤销',
-              ),
-            ]),
-          ),
+          fixedQuantitiesOpen &&
+            table(
+              '当前固定数量',
+              ['对象', '固定数量', '原因', '时间', '操作'],
+              fixedQuantities.map((item) => [
+                label(item),
+                number(item.quantity),
+                item.reason,
+                item.at,
+                h(
+                  'button',
+                  {
+                    'aria-label': `撤销固定数量 ${label(item)}`,
+                    disabled: !batch.active,
+                    onClick: () =>
+                      batch.stage(fieldKey(item), {
+                        label: label(item),
+                        text: '',
+                        meta: item,
+                        min: 0,
+                      }),
+                  },
+                  '撤销',
+                ),
+              ]),
+            ),
         ),
     );
   };

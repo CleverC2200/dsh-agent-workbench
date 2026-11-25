@@ -1135,7 +1135,7 @@ test('shipment exposes national and base category, material group and SKU levels
   const hierarchy = await exported(page, frame, '下载汇总及明细');
   assert.match(
     hierarchy,
-    /全国合计,合计[\s\S]*全国合计,大类,汤圆[\s\S]*全国合计,大类,水饺[\s\S]*全国合计,物料组,汤圆[\s\S]*全国合计,SKU,汤圆/,
+    /全国合计,合计[\s\S]*全国合计,大类,水饺[\s\S]*全国合计,大类,汤圆[\s\S]*全国合计,物料组,汤圆[\s\S]*全国合计,SKU,汤圆/,
   );
   const search = frame.getByLabel('搜索发货单品', { exact: true });
   await table.getByRole('button', { name: '收起 郑州', exact: true }).click();

@@ -107,6 +107,11 @@ const sourceIssues = (draft, source, month) => {
 };
 
 export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation) {
+  const adjustedDemandKeys = new Set(
+    (draft.adjustments?.quantities ?? [])
+      .filter((entry) => entry.kind === 'base-sku')
+      .map((entry) => JSON.stringify([entry.month, entry.base, entry.code])),
+  );
   const categoryComputation = buildCategoryDemand(draft, shipmentSnapshot);
   const context = {
     id: draft.id,
@@ -551,16 +556,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation)
       ),
       quantities: [
         ...(draft.demandImports ?? [])
-          .filter(
-            (row) =>
-              !(draft.adjustments?.quantities ?? []).some(
-                (entry) =>
-                  entry.kind === 'base-sku' &&
-                  entry.month === row.month &&
-                  entry.base === row.base &&
-                  entry.code === row.code,
-              ),
-          )
+          .filter((row) => !adjustedDemandKeys.has(JSON.stringify([row.month, row.base, row.code])))
           .map((row) => ({ ...row, kind: 'base-sku' })),
         ...(draft.adjustments?.quantities ?? []),
       ].map(({ kind, month, category, group, code, base, quantity }) => ({
