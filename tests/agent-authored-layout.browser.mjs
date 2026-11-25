@@ -1180,6 +1180,86 @@ for (const deniedBudget of [false, true])
     assert.deepEqual(errors, []);
   });
 
+test('APS cards and list share the fallback snapshot, latest monthly forecasts and annual budget gaps', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'apsplan', 760, (query, result) => {
+    const { queryId, parameters } = query;
+    if (queryId === 'source.stock-date')
+      result.rows = [{ day: parameters.as_of === '2026-10-19' ? null : parameters.as_of }];
+    if (queryId === 'source.previous-stock-date') result.rows = [{ day: '2026-09-30' }];
+    if (/^(overview|page)\.(stock|inventory|stock-overview)$/.test(queryId))
+      Object.assign(result.rows[0], {
+        inventory: 123400,
+        source_date: parameters.stock_date,
+      });
+    if (/^overview\.(sales|demand)-accuracy$/.test(queryId)) {
+      result.rows = [
+        {
+          ...result.rows[0],
+          month: '202610',
+          base: '华东',
+          initial_plan: 100,
+          adjusted_plan: 100,
+          initial_deviation: 25,
+          adjusted_deviation: 25,
+          actual: queryId.includes('sales') ? 75 : 60,
+        },
+      ];
+    }
+    if (queryId === 'page.budget-performance' && parameters.start_month === '202601')
+      result.rows = Array.from({ length: 10 }, (_, i) => ({
+        ...result.rows[0],
+        month: '2026' + String(i + 1).padStart(2, '0'),
+        actual: 100,
+        budget: i < 4 ? 0 : 100,
+        source_basis: 'MONTHLY_BUDGET_UNTAXED_INCOME',
+      }));
+    return result;
+  });
+  const intelligentStock = frame.locator('[data-context-id="intelligent-metric-库存量"]');
+  await expect(intelligentStock).toContainText('上一快照 · 截至2026-09-30');
+  await expect(intelligentStock.locator('.kpi-value strong')).toHaveText('12.34');
+  await expect(frame.locator('[data-context-id="intelligent-daily-briefing"]')).toContainText(
+    '沿用 2026-09-30 快照',
+  );
+  await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+  await frame.getByRole('tab', { name: '月度视角', exact: true }).click();
+  const card = (name) =>
+    frame.locator('article.period-kpi-card').filter({
+      has: frame.locator('.kpi-name > span').filter({ hasText: new RegExp(`^${name}$`) }),
+    });
+  const row = (name) =>
+    frame.locator('#overview-detail-list .overview-list-row').filter({
+      has: frame.locator('strong').filter({ hasText: new RegExp(`^${name}$`) }),
+    });
+  for (const [name, amount, unit] of [
+    ['库存量', '12.34', '万箱'],
+    ['销售提报达成率', '75.00', '%'],
+    ['需求预测达成率', '60.00', '%'],
+  ]) {
+    await expect(card(name).locator('.kpi-value strong')).toHaveText(amount);
+    await expect(row(name)).toContainText(amount + unit);
+  }
+  await expect(card('库存量')).toContainText('上一快照 · 截至2026-09-30');
+  await expect(row('库存量')).toContainText('上一快照 · 截至2026-09-30');
+  assert.ok(
+    calls.some(
+      ({ queryId, parameters }) =>
+        queryId === 'overview.stock' &&
+        parameters.stock_date === '2026-09-30' &&
+        parameters.stock_month === '2026-09-01',
+    ),
+  );
+  await frame.getByRole('tab', { name: '年度视角', exact: true }).click();
+  const gap = '缺有效预算月份：1月、2月、3月、4月';
+  await expect(card('销售预算达成率')).toContainText(gap);
+  await expect(row('销售预算达成率')).toContainText(gap);
+  await expect(card('销售预算达成率').locator('.kpi-value strong')).toHaveText('-');
+  const cardNote = card('销售预算达成率').getByText(gap, { exact: true });
+  await expect(cardNote).toBeVisible();
+  assert.ok(await cardNote.evaluate((element) => element.scrollWidth <= element.clientWidth + 1));
+  assert.deepEqual(errors, []);
+});
+
 test('dealer original customer menu applies the new query scope and closes after selection', async (t) => {
   const { frame, calls, errors } = await mount(t, 'dealer', 1280);
   const menu = frame.locator('header details').first();

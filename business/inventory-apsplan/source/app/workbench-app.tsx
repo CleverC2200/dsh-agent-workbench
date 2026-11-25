@@ -85,7 +85,11 @@ import { useWorkspace } from './data/use-workspace';
 import { useDefaultProductionDate } from './data/use-default-production-date';
 import { usesConfiguredSql } from '../../../shared/sql-config';
 import { comparisonEvidence } from './data/comparison-evidence';
-import { deriveMetrics, type MetricData } from 'dsh-agent-manage/aps-compute/metrics';
+import {
+  deriveMetrics,
+  sumMetricQuantity,
+  type MetricData,
+} from 'dsh-agent-manage/aps-compute/metrics';
 import { budgetProgress } from 'dsh-agent-manage/aps-compute/budget-progress';
 import {
   metricValues as _metricValues,
@@ -234,6 +238,31 @@ type WorkspaceName =
   | 'delivery';
 
 const HELP_CONTENT_REGISTRY_KEY = 'plan-help-content-registry:v1';
+
+function annualBudgetMissingNote(data: MetricData | null | undefined) {
+  if (data?.granularity !== 'year') return '';
+  const budget = data.sections.find(({ id }) => id === 'sales-budget');
+  if (budget?.status !== 'ready' && budget?.status !== 'empty') return '';
+
+  const year = data.end.slice(0, 4);
+  const missing = [];
+  for (let month = 1; month <= Number(data.end.slice(5, 7)); month++) {
+    const period = year + String(month).padStart(2, '0');
+    const rows = budget.rows.filter(
+      (row) =>
+        String(row.month ?? '')
+          .replaceAll('-', '')
+          .slice(0, 6) === period,
+    );
+    const amount = sumMetricQuantity(rows, 'budget', data.missingValuePolicy);
+    if (amount === null || amount <= 0) missing.push(`${month}月`);
+  }
+  return missing.length ? `缺有效预算月份：${missing.join('、')}` : '';
+}
+
+function stockSnapshotIsPrevious(day: string, cutoff?: string) {
+  return cutoff !== undefined && day !== '—' && day < cutoff;
+}
 
 function taskScopeDisplay(scopeType: TaskScope, scope: string) {
   if (scopeType === '交叉分析') return `${scope}组合`;
@@ -2929,6 +2958,10 @@ function IntelligentWorkbenchPage({
   );
   const sourceDateLabel = (id: string) => readSourceDateLabel(live?.data, id);
   const stockSnapshotLabel = sourceDateLabel('stock');
+  const previousStockSnapshot = stockSnapshotIsPrevious(stockSnapshotLabel, live?.data?.end);
+  const briefingCopy = previousStockSnapshot
+    ? `${pageBriefing.copy} 库存沿用 ${stockSnapshotLabel} 快照。`
+    : pageBriefing.copy;
   const productionSection = live?.data?.sections.find((section) => section.id === 'production');
   const productionObservation =
     live?.data?.missingValuePolicy !== 'zero' && productionSection?.status === 'ready'
@@ -3036,7 +3069,7 @@ function IntelligentWorkbenchPage({
       tone: hasTarget && present ? (met ? 'good' : progress ? 'warning' : 'critical') : 'neutral',
       period:
         item.statistic === '快照指标'
-          ? `最新快照 · 截至${stockSnapshotLabel}`
+          ? `${previousStockSnapshot ? '上一快照' : '最新快照'} · 截至${stockSnapshotLabel}`
           : `本期累计 · 截至${live?.data?.end ?? '-'}`,
       deltaDirection: Number.isFinite(datum.change) ? (datum.change < 0 ? 'down' : 'up') : 'none',
       yoyDirection: datum.yoy === null ? 'none' : datum.yoy < 0 ? 'down' : 'up',
@@ -3500,7 +3533,7 @@ function IntelligentWorkbenchPage({
           data-context-label="AI今日经营简报"
           data-context-summary={
             live
-              ? `${pageBriefing.title}。${pageBriefing.copy}`
+              ? `${pageBriefing.title}。${briefingCopy}`
               : '2项指标进入预警区间，3项AI方案等待决策。'
           }
         >
@@ -3511,7 +3544,7 @@ function IntelligentWorkbenchPage({
           <h2>{live ? pageBriefing.title : '2项指标进入预警区间，3项AI方案等待决策'}</h2>
           <p>
             {live
-              ? pageBriefing.copy
+              ? briefingCopy
               : '预警事项用于提前关注；严重指标、业务事件和例行日历触发的事项由AI生成分析与方案。你也可以进入V0.2看板核查明细并直接派发任务。'}
           </p>
         </div>
@@ -5560,6 +5593,13 @@ export default function Home({
     liveData && ['库存量', '可发货天数'].includes(name)
       ? readSourceDateLabel(live.data, 'stock')
       : dataCutoff;
+  const stockSnapshotPeriod = (name: string) => {
+    const day = snapshotDateLabel(name);
+    return stockSnapshotIsPrevious(day, live.data?.end)
+      ? `上一快照 · 截至${day}`
+      : `最新快照 · 截至${day}`;
+  };
+  const budgetMissingNote = annualBudgetMissingNote(live.data);
   const salesOrgMetrics = (path: string) => {
     if (!liveData) return demoSalesOrgMetrics(path);
     const [region, second, third] = path.split(' / ');
@@ -6112,13 +6152,16 @@ export default function Home({
         >
           <span>{drillStatisticType(kpi.name)}</span>
           {drillStatisticType(kpi.name) === '快照指标'
-            ? `最新快照 · 截至${snapshotDateLabel(kpi.name)}`
+            ? stockSnapshotPeriod(kpi.name)
             : periodMeta.current}
         </div>
         <div className="kpi-value">
           <strong>{Number.isFinite(displayValue) ? formatNumber(displayValue, 2) : '-'}</strong>
           {Number.isFinite(displayValue) && <span>{kpi.unit}</span>}
         </div>
+        {kpi.name === '销售预算达成率' && budgetMissingNote && (
+          <p className="kpi-source-note">{budgetMissingNote}</p>
+        )}
         {liveData &&
           ['需求预测准确率', '可发货天数'].includes(kpi.name) &&
           !readFailed &&
@@ -8301,7 +8344,7 @@ export default function Home({
                             {drillStatisticType(meta.name)}
                             <small>
                               {drillStatisticType(meta.name) === '快照指标'
-                                ? `截至${snapshotDateLabel(meta.name)}`
+                                ? stockSnapshotPeriod(meta.name)
                                 : periodMeta.current}
                             </small>
                           </span>
@@ -8325,6 +8368,19 @@ export default function Home({
                           {Number.isFinite(datum.current)
                             ? `${formatNumber(datum.current, 2)}${meta.unit}`
                             : '—'}
+                          {analysisScope === 'production' &&
+                            ['库存量', '可发货天数'].includes(meta.name) &&
+                            stockSnapshotIsPrevious(
+                              snapshotDateLabel(meta.name),
+                              live.data?.end,
+                            ) && (
+                              <small className="kpi-source-note">
+                                {stockSnapshotPeriod(meta.name)}
+                              </small>
+                            )}
+                          {meta.name === '销售预算达成率' && budgetMissingNote && (
+                            <small className="kpi-source-note">{budgetMissingNote}</small>
+                          )}
                         </b>
                         <span>
                           {Number.isFinite(datum.previous)
