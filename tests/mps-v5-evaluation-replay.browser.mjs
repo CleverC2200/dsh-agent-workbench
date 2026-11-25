@@ -164,12 +164,10 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
     },
     { time: '2026-11-24T12:00:00+08:00' },
   );
-  const original = await page
-    .waitForFunction(() => {
-      const state = window.readView()?.localDrafts;
-      return state?.drafts.length ? state : null;
-    })
-    .then((snapshot) => snapshot.jsonValue());
+  await expect
+    .poll(() => page.evaluate(() => window.readView()?.localDrafts?.drafts[0]?.productPeriod))
+    .toEqual({ targetMonth: '2026-11', adoptedMonth: '2026-11' });
+  const original = await page.evaluate(() => window.readView().localDrafts);
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-12');
   await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
