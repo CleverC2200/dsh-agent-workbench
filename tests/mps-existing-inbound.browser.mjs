@@ -21,6 +21,7 @@ async function open(t) {
                   material_name: '产品A',
                   series: '系列',
                   product_item: '组',
+                  month_order_qty: null,
                   shipped: 1,
                   prepped: 0,
                   unprepped: 0,

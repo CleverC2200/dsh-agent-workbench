@@ -1258,3 +1258,20 @@
   display: block;
   margin-inline-start: 22px;
 }
+
+.ap-app[data-step='ship'] .sp-table tbody tr[data-deviation='yellow'] > *,
+.ap-app[data-step='ship']
+  .sp-table
+  tbody
+  tr[data-deviation='yellow']
+  > :is(:first-child, :last-child) {
+  background: #fff8d6;
+}
+.ap-app[data-step='ship'] .sp-table tbody tr[data-deviation='red'] > *,
+.ap-app[data-step='ship']
+  .sp-table
+  tbody
+  tr[data-deviation='red']
+  > :is(:first-child, :last-child) {
+  background: #ffe5e5;
+}

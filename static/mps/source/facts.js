@@ -476,6 +476,7 @@ export async function readShipmentInputs(cutoff, signal, priority) {
         series: text(row.series),
         group: text(row.product_item),
         ...quantities,
+        monthOrder: row.month_order_qty == null ? null : number(row.month_order_qty),
         rawAverage: row.raw_average === null ? null : number(row.raw_average),
         transferIn: transferIn.value,
         transferOut: transferOut.value,

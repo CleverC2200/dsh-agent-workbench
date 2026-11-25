@@ -59,6 +59,7 @@ async function mount(t, initialShipment) {
                   material_name: '产品A',
                   series: '系列',
                   product_item: '组',
+                  month_order_qty: null,
                   shipped: 220,
                   prepped: 10,
                   unprepped: 10,
@@ -129,7 +130,7 @@ test(
       .toMatchObject({ sourceKind: 'business', status: 'ok', error: null });
     const snapshot = await page.evaluate(() => window.snapshot);
     assert.equal(snapshot.status, 'ok');
-    assert.deepEqual(snapshot.rows, [{ base: '郑州', code: 'A', fin: 341, end: 59 }]);
+    assert.deepEqual(snapshot.rows, [{ base: '郑州', code: 'A', fin: 317, end: 83 }]);
     assert.deepEqual(
       calls.filter((id) => id !== 'facts.shipment-history'),
       ['facts.shipment.count', 'facts.shipment', 'facts.shipment.count'],
