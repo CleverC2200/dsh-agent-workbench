@@ -126,7 +126,6 @@ test('catalog and recommended products with unavailable packaging cannot be sele
       );
     try {
       button('+ 商品').click();
-      button('查找商品').click();
       await flush();
       await flush();
       assert.equal(f.document.querySelector('[aria-label="NEW 增加"]').disabled, true);
@@ -135,7 +134,7 @@ test('catalog and recommended products with unavailable packaging cannot be sele
       input.value = '40';
       input.dispatchEvent(new f.dom.window.Event('change'));
       assert.match(f.document.getElementById('orderEditor').textContent, /包装资料未核实/);
-      button('推荐').click();
+      button('商品推荐').click();
       assert.equal(f.document.querySelector('[aria-label="REC 增加"]').disabled, true);
       assert.equal(f.sent.length, 0);
     } finally {
@@ -160,7 +159,6 @@ test('verified non-case packaging keeps browser draft quantities in cases for se
     );
   try {
     button('+ 商品').click();
-    button('查找商品').click();
     await flush();
     await flush();
     const plus = f.document.querySelector('[aria-label="NEW 增加"]');
@@ -227,7 +225,6 @@ test('catalog additions, original SKU removal and vehicle change form one final 
     const search = f.document.querySelector('[aria-label="商品搜索"]');
     search.value = 'NEW';
     search.dispatchEvent(new f.dom.window.Event('input'));
-    click('查找商品');
     await flush();
     await flush();
     f.document.querySelector('[aria-label="NEW 增加"]').click();
@@ -364,7 +361,7 @@ test('unsupported vehicle, new catalog and credit operations are not presented a
   try {
     assert.equal(f.document.querySelector('[aria-label="选择车型"]').disabled, true);
     button('+ 商品').click();
-    button('推荐').click();
+    button('商品推荐').click();
     assert.match(f.document.getElementById('orderEditor').textContent, /暂无推荐商品/);
     assert.equal(f.sent.length, 0);
   } finally {
