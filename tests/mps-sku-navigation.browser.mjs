@@ -183,7 +183,7 @@ test('基地SKU修正后父级读取有效数量，全国汇总与明细下载�
       .filter({ has: frame.getByText(name, { exact: true }) })
       .first();
     const headers = await table.getByRole('columnheader').allTextContents();
-    const index = headers.findIndex((header) => header.startsWith(`M+1 ${month} 需求`));
+    const index = headers.findIndex((header) => header.startsWith(`M+1 ${month} 最终预测`));
     await expect(row.getByRole('cell').nth(index - 1)).toContainText(expected);
   };
   await demandCell('SKU · A 产品甲', '50');

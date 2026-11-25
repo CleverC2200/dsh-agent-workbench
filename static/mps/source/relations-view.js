@@ -1,3 +1,4 @@
+import { compareBusinessRows, createTablePresentation, isSkuColumn } from './table-presentation.js';
 import { matchesCategories } from './category-filter.js';
 import { call, ready } from '../../../business/shared/channel.js';
 import { readRelations } from './relations.js';
@@ -218,7 +219,18 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
                 sku.capacity?.workshop === row.source?.production_unit &&
                 sku.capacity?.tunnel_no === row.source?.tunnel_no,
             );
-    const records = (state.records?.[kind] ?? []).filter((row) => inCategory(row, kind));
+    const identity = (row) => ({
+      ...row.product,
+      base:
+        row.capacity?.belong_base ??
+        row.product?.target_base ??
+        row.source?.target_base ??
+        row.source?.belong_base,
+      code: row.product?.material_code ?? row.capacity?.material_code ?? row.source?.material_code,
+    });
+    const records = (state.records?.[kind] ?? [])
+      .filter((row) => inCategory(row, kind))
+      .sort((left, right) => compareBusinessRows(identity(left), identity(right)));
     const filtered = react.useMemo(
       () =>
         records.filter(
@@ -357,7 +369,12 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
                 null,
                 h(
                   'div',
-                  { className: 'ap-table-wrap' },
+                  {
+                    className: 'ap-table-wrap',
+                    tabIndex: 0,
+                    role: 'region',
+                    'aria-label': `${selected.name}滚动区域`,
+                  },
                   h(
                     'table',
                     { className: 'ap-table mps-relations-table' },
@@ -383,14 +400,16 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
                             h(
                               'td',
                               { key: cell },
-                              columns[kind][cell].startsWith('组合标准日产') &&
-                                value !== '' &&
-                                value != null &&
-                                Number.isFinite(Number(value))
-                                ? new Intl.NumberFormat('zh-CN', {
-                                    maximumFractionDigits: 0,
-                                  }).format(value)
-                                : display(value),
+                              isSkuColumn(columns[kind][cell]) && value
+                                ? h(createTablePresentation(react).Code, { row: identity(row) })
+                                : columns[kind][cell].startsWith('组合标准日产') &&
+                                    value !== '' &&
+                                    value != null &&
+                                    Number.isFinite(Number(value))
+                                  ? new Intl.NumberFormat('zh-CN', {
+                                      maximumFractionDigits: 0,
+                                    }).format(value)
+                                  : display(value),
                             ),
                           ),
                         ),

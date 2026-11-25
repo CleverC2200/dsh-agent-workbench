@@ -1259,6 +1259,59 @@
   margin-inline-start: 22px;
 }
 
+.mps-sku-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.mps-sku-tag {
+  display: inline-block;
+  flex: 0 0 auto;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #f2f3f5;
+  color: #4e5969;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.mps-sku-tag[data-label='新品'] {
+  background: #e8f7ef;
+  color: #16794c;
+}
+.mps-sku-tag[data-label='下市'] {
+  background: #fff0f0;
+  color: #ad303c;
+}
+.mps-sku-tag[data-label='定制'] {
+  background: #eaf1ff;
+  color: #2656a8;
+}
+.ap-app .dc-table-scroll > table,
+.ap-app .ap-table-wrap > table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.ap-app .dc-table-scroll > table > thead,
+.ap-app .ap-table-wrap > table > thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 4;
+}
+.ap-app .wf-page .wf-table-scroll > table > thead th {
+  position: static;
+}
+.ap-app .wf-page .wf-processed-table > thead th:first-child,
+.ap-app .wf-page .wf-plan-balances > table > thead th:is(:first-child, :nth-child(2), :last-child) {
+  position: sticky;
+}
+.ap-app .ap-table-wrap {
+  overflow: auto;
+  max-block-size: min(62vh, 620px);
+}
+
 .ap-app[data-step='ship'] .sp-table tbody tr[data-deviation='yellow'] > *,
 .ap-app[data-step='ship']
   .sp-table

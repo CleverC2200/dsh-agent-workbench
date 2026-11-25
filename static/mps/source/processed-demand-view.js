@@ -1,3 +1,4 @@
+import { compareBusinessRows, createTablePresentation } from './table-presentation.js';
 import { mpsLocalDraftSchema } from '../../../src/mps-local-draft.ts';
 import { createDemandAdjustmentUpload } from './demand-adjustment-upload.js';
 import { historyColumns, historyExportRows } from './history-report-view.js';
@@ -513,16 +514,16 @@ export function createProcessedDemand(
     ];
     const isExpanded = (key) => Boolean(filters.search) || expanded.has(key);
     const orderedEntries = (showAll) => {
-      const roots = [...indexed.roots.values()];
+      const roots = [...indexed.roots.values()].sort(compareBusinessRows);
       const collect = (entries) => {
         const ordered = [];
-        let level = entries;
+        let level = entries.sort(compareBusinessRows);
         for (let depth = 0; level.length; depth++) {
           ordered.push(...level.map((entry) => ({ entry, depth })));
           level = level.flatMap((entry) => {
             const key = nodeKey(entry);
             return showAll || isExpanded(key)
-              ? [...(indexed.children.get(key)?.values() ?? [])]
+              ? [...(indexed.children.get(key)?.values() ?? [])].sort(compareBusinessRows)
               : [];
           });
         }
@@ -571,7 +572,12 @@ export function createProcessedDemand(
                   ),
                   h('span', null, name),
                 )
-              : h('span', { className: 'wf-demand-leaf' }, name),
+              : h(
+                  'span',
+                  { className: 'wf-demand-leaf' },
+                  h(createTablePresentation(react).Tag, { row: entry, participants: data.full }),
+                  h('span', null, name),
+                ),
             entry.kind === 'base-sku' && processRow?.historyCode
               ? h(
                   'small',
@@ -893,7 +899,11 @@ export function createProcessedDemand(
       },
       h(
         'table',
-        { className: 'wf-processed-table', 'aria-label': '加工后的需求明细' },
+        {
+          className: 'wf-processed-table',
+          'aria-label': '加工后的需求明细',
+          style: { minWidth: `${230 + (detailColumns.length - 1) * 128}px` },
+        },
         h(
           'thead',
           null,
