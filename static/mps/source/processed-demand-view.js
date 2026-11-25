@@ -213,39 +213,6 @@ export function createProcessedDemand(
         fixed && h('small', null, '已调整'),
       );
     };
-    const summaryColumns = [
-      '大类',
-      `${result.shipmentMonth} 本月预估发货`,
-      ...months
-        .slice(0, 2)
-        .flatMap((month, index) => [
-          `M+${index + 1} ${month} 有效需求`,
-          `M+${index + 1} ${month} 模型预测`,
-        ]),
-      `M+3 ${months[2]} 需求`,
-      `M+4 ${result.months[3]} 库存参考`,
-    ];
-    const summaryRows = categories.map((category) => {
-      const compare = result.categoryComparisons?.find((row) => row.category === category);
-      const demand = (month) => {
-        const row = categoryValue(category, month);
-        return controls(
-          { kind: 'category-total', category, month, editorRow: `summary:${category}` },
-          row?.systemQuantity,
-          row?.quantity,
-        );
-      };
-      return [
-        category,
-        comparison(compare?.shipment),
-        ...months.slice(0, 2).flatMap((month) => {
-          const quantity = forecastQuantity(compare?.forecast[month]);
-          return [demand(month), quantity === null ? '' : number(quantity)];
-        }),
-        demand(months[2]),
-        demand(result.months[3]),
-      ];
-    });
     const nodeKey = (entry) =>
       JSON.stringify([entry.kind, entry.category, entry.group, entry.code, entry.base]);
     const productKey = (base, code) => JSON.stringify([base, code]);
@@ -351,6 +318,55 @@ export function createProcessedDemand(
           sourceStatus(value) &&
           h('small', null, sourceStatus(value)),
       );
+    const summaryColumns = [
+      '大类',
+      `${result.shipmentMonth} 本月预估发货`,
+      `M+1 ${months[0]} 销售提报总量`,
+      ...months
+        .slice(0, 2)
+        .flatMap((month, index) => [
+          `M+${index + 1} ${month} 模型预测`,
+          `M+${index + 1} ${month} 有效需求`,
+        ]),
+      `M+3 ${months[2]} 需求`,
+      `M+4 ${result.months[3]} 库存参考`,
+    ];
+    const firstMonthByCategory = react.useMemo(
+      () =>
+        Map.groupBy(
+          result.rows.filter((row) => row.month === months[0]),
+          (row) => row.category,
+        ),
+      [result.rows, months[0]],
+    );
+    const categorySummaries = categories.map((category) => ({
+      category,
+      compare: result.categoryComparisons?.find((row) => row.category === category),
+      report: sourceSummary(
+        (firstMonthByCategory.get(category) ?? []).map((row) => row.reportQuantity),
+      ),
+    }));
+    const summaryRows = categorySummaries.map(({ category, compare, report }) => {
+      const demand = (month) => {
+        const row = categoryValue(category, month);
+        return controls(
+          { kind: 'category-total', category, month, editorRow: `summary:${category}` },
+          row?.systemQuantity,
+          row?.quantity,
+        );
+      };
+      return [
+        category,
+        comparison(compare?.shipment),
+        sourceCell(report),
+        ...months.slice(0, 2).flatMap((month) => {
+          const quantity = forecastQuantity(compare?.forecast[month]);
+          return [quantity === null ? '' : number(quantity), demand(month)];
+        }),
+        demand(months[2]),
+        demand(result.months[3]),
+      ];
+    });
     const forecastReference = (value) => {
       const quantity = forecastQuantity(value);
       return quantity === null
@@ -776,22 +792,23 @@ export function createProcessedDemand(
         '评估版本',
         ...summaryColumns,
         '本月预估发货完整性',
+        'M+1销售提报完整性',
         'M+1模型完整性',
         'M+2模型完整性',
       ];
       downloadCsv(
         `${draft.month}-大类需求总表.csv`,
         columns,
-        categories.map((category) => {
-          const compare = result.categoryComparisons?.find((row) => row.category === category);
+        categorySummaries.map(({ category, compare, report }) => {
           const values = [
             category,
             compare?.shipment.quantity ?? compare?.shipment.knownQuantity,
+            report.quantity ?? report.knownQuantity,
             ...months
               .slice(0, 2)
               .flatMap((month) => [
-                categoryValue(category, month)?.quantity,
                 forecastQuantity(compare?.forecast[month]),
+                categoryValue(category, month)?.quantity,
               ]),
             categoryValue(category, months[2])?.quantity,
             categoryValue(category, result.months[3])?.quantity,
@@ -804,6 +821,7 @@ export function createProcessedDemand(
                 : compare?.shipment.knownQuantity != null
                   ? '已知小计'
                   : '缺项',
+            'M+1销售提报完整性': report.quantity != null ? '完整' : sourceStatus(report) || '缺项',
             'M+1模型完整性':
               compare?.forecast[months[0]]?.quantity != null ? '完整' : '缺项或已知小计',
             'M+2模型完整性':

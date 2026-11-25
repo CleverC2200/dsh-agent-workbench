@@ -334,7 +334,8 @@ test('未到数的当日保持待补，未来评估月不读取未来实际发�
   await cutoff.fill('2026-11-19');
   await expect(cutoff).toHaveValue('');
   await cutoff.fill('2026-11-18');
-  await expect(view).toContainText('该取数区间没有实际发货记录，预估待补');
+  await view.getByText('发货与库存异常报告', { exact: true }).click();
+  await expect(view).toContainText('该取数区间没有库存日报记录');
   await expect(view).toContainText('2026-11-01 至 2026-11-18');
   const count = calls.filter((row) => row.queryId === 'facts.shipment-latest').length;
   await create(frame, '2027-01');

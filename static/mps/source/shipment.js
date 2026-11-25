@@ -158,11 +158,13 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
         daily3: 0,
         average: 0,
         rawAverage: null,
-        open: null,
-        inbound: null,
-        remaining: null,
-        transferIn: null,
-        transferOut: null,
+        open: 0,
+        inbound: 0,
+        remaining: passed > 1 ? 0 : null,
+        transferIn: 0,
+        transferOut: 0,
+        transferInSource: '完整库存日报无该基地SKU记录，按0',
+        transferOutSource: '完整库存日报无该基地SKU记录，按0',
         sourceDays: 0,
         duplicateDays: 0,
         shipmentMissingAsZero: true,
@@ -258,7 +260,7 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
         ];
         return {
           ...derived,
-          rawOpen: row.open,
+          rawOpen: sourceKind === 'business' && row.sourceDays === 0 ? null : row.open,
           open,
           rawEnd,
           inventoryIssues,
@@ -471,6 +473,7 @@ export function createShipment(
       !searchTerm ||
       [row.code, row.name].some((value) => value?.toLocaleLowerCase().includes(searchTerm));
     const visibleRows = categoryRows.filter(matchesSku);
+    const sourceName = sourceKind === 'business' ? 'ai_db.agents_scm_stock_detail_d' : '本地输入';
     const issueColumns = [
       '评估版本',
       '评估月份',
@@ -487,69 +490,110 @@ export function createShipment(
       '来源',
       '原因',
     ];
-    const stockIssues = visibleRows
-      .flatMap((row) => [
-        ...(row.transferIssue
-          ? [
-              {
-                月份: month,
-                基地: row.base,
-                产品编码: row.code,
-                异常类别: '调拨来源异常',
-                指标: '调入计划、调出计划',
-                原始值: row.transferDate ?? '',
-                计算用值: '待补',
-                实际处理: '保留待补，未按无计划置0',
-                来源: 'ai_db.agents_scm_stock_detail_d',
-                原因: row.transferIssue,
-              },
-            ]
-          : []),
-        ...row.inventoryIssues.map((issue) => ({
-          月份: month,
-          基地: row.base,
-          产品编码: row.code,
-          异常类别: '负库存',
-          指标: issue.metric === 'openingInventory' ? '月初库存' : '预测期末库存',
-          原始值: issue.rawValue,
-          计算用值: issue.calculationValue,
-          实际处理: '逐SKU归0后承接汇总，原始值和不足保留',
-          来源:
-            sourceKind === 'business'
-              ? 'ai_db.agents_scm_stock_detail_d / 库存收支'
-              : '本地输入 / 库存收支',
-          原因: issue.reason,
-        })),
-        ...(row.prediction == null
-          ? [
-              {
-                月份: month,
-                基地: row.base,
-                产品编码: row.code,
-                异常类别: '发货输入待补',
-                指标: '本月预估发货',
-                原始值: JSON.stringify({
-                  shipped: row.shipped,
-                  prepped: row.prepped,
-                  unprepped: row.unprepped,
-                  daily3: row.daily3,
-                  average: row.average,
-                  sourceDays: row.sourceDays,
-                  duplicateDays: row.duplicateDays,
-                }),
-                计算用值: row.fin ?? '待补',
-                实际处理:
-                  row.fin == null
-                    ? '保留待补，未按无发货置0'
-                    : '保留人工有效修正，系统预测依据仍待补',
-                来源: sourceKind === 'business' ? 'ai_db.agents_scm_stock_detail_d' : '本地输入',
-                原因:
-                  row.forecastIssue ||
-                  `缺失或无效发货依据：${row.missingFields.map((field) => names[fields.indexOf(field)]).join('、') || '原因待核'}`,
-              },
-            ]
-          : []),
-      ])
+    const stockIssues = (issuesOpen ? visibleRows : emptyRows)
+      .flatMap((row) => {
+        const missing = row.missingFields
+          .filter((field) => field !== 'transferIn' && field !== 'transferOut')
+          .filter(
+            (field) => row.prediction != null || ['open', 'inbound', 'remaining'].includes(field),
+          );
+        return [
+          ...(row.dimensionIssue
+            ? [
+                {
+                  月份: month,
+                  基地: row.base,
+                  产品编码: row.code,
+                  异常类别: '分类异常',
+                  指标: '产品分类',
+                  实际处理: '保留已有数量',
+                  来源: '当前产品清单',
+                  原因: row.dimensionIssue,
+                },
+              ]
+            : []),
+          ...(missing.length
+            ? [
+                {
+                  月份: month,
+                  基地: row.base,
+                  产品编码: row.code,
+                  异常类别: '输入缺项',
+                  指标: missing.map((field) => names[fields.indexOf(field)]).join('、'),
+                  计算用值: '待补',
+                  实际处理: '缺失输入保留待定',
+                  来源: sourceName,
+                  原因: '未取得有效输入值',
+                },
+              ]
+            : []),
+          ...(row.transferIssue
+            ? [
+                {
+                  月份: month,
+                  基地: row.base,
+                  产品编码: row.code,
+                  异常类别: '调拨来源异常',
+                  指标: [
+                    row.transferIn == null ? '调入计划' : '',
+                    row.transferOut == null ? '调出计划' : '',
+                  ]
+                    .filter(Boolean)
+                    .join('、'),
+                  原始值: row.transferDate ?? '',
+                  计算用值: '待补',
+                  实际处理: '保留待补，未按无计划置0',
+                  来源: 'ai_db.agents_scm_stock_detail_d',
+                  原因: row.transferIssue,
+                },
+              ]
+            : []),
+          ...row.inventoryIssues.map((issue) => ({
+            月份: month,
+            基地: row.base,
+            产品编码: row.code,
+            异常类别: '负库存',
+            指标: issue.metric === 'openingInventory' ? '月初库存' : '预测期末库存',
+            原始值: issue.rawValue,
+            计算用值: issue.calculationValue,
+            实际处理: '逐SKU归0后承接汇总，原始值和不足保留',
+            来源:
+              sourceKind === 'business'
+                ? 'ai_db.agents_scm_stock_detail_d / 库存收支'
+                : '本地输入 / 库存收支',
+            原因: issue.reason,
+          })),
+          ...(row.prediction == null
+            ? [
+                {
+                  月份: month,
+                  基地: row.base,
+                  产品编码: row.code,
+                  异常类别: '发货输入待补',
+                  指标: '本月预估发货',
+                  原始值: JSON.stringify({
+                    shipped: row.shipped,
+                    prepped: row.prepped,
+                    unprepped: row.unprepped,
+                    daily3: row.daily3,
+                    average: row.average,
+                    sourceDays: row.sourceDays,
+                    duplicateDays: row.duplicateDays,
+                  }),
+                  计算用值: row.fin ?? '待补',
+                  实际处理:
+                    row.fin == null
+                      ? '保留待补，未按无发货置0'
+                      : '保留人工有效修正，系统预测依据仍待补',
+                  来源: sourceName,
+                  原因:
+                    row.forecastIssue ||
+                    `缺失或无效发货依据：${row.missingFields.map((field) => names[fields.indexOf(field)]).join('、') || '原因待核'}`,
+                },
+              ]
+            : []),
+        ];
+      })
       .map((issue) => ({
         评估版本: draft.name,
         评估月份: draft.month,
@@ -1287,9 +1331,6 @@ export function createShipment(
         {
           key: field,
           className: row[field] < 0 ? 'sp-negative' : undefined,
-          title: row.missingCounts?.[field]
-            ? `仅汇总已有数据，${row.missingCounts[field]}个单品待定`
-            : undefined,
         },
         editable
           ? h(Field, {
@@ -1327,26 +1368,7 @@ export function createShipment(
       h(
         'tr',
         { key: JSON.stringify([className, who, row.category, row.group]), className },
-        h(
-          'th',
-          { scope: 'row' },
-          label,
-          row.children
-            ? Object.values(row.missingCounts).some((count) => count > 0) &&
-                h('span', { className: 'sp-warning sp-coverage' }, '部分汇总')
-            : row.missingFields.length > 0 &&
-                h(
-                  'span',
-                  {
-                    className: 'sp-warning sp-coverage',
-                    title: `缺失：${row.missingFields.map((field) => names[fields.indexOf(field)]).join('、')}`,
-                  },
-                  '缺项',
-                ),
-          row.dimensionIssue &&
-            h('span', { className: 'sp-warning', title: row.dimensionIssue }, '分类待补'),
-          row.inventoryIssues?.length > 0 && h('span', { className: 'sp-warning' }, '负库存已归0'),
-        ),
+        h('th', { scope: 'row' }, label),
         ...fields.map((field) => numberCell(row, field, who)),
       );
     const toggleLabel = (id, who, label, count, descendants = []) =>
@@ -1478,9 +1500,6 @@ export function createShipment(
                 ]),
               ),
               ...aggregate(children, `${scope} ${code}`),
-              dimensionIssue: [
-                ...new Set(children.map((row) => row.dimensionIssue).filter(Boolean)),
-              ].join('；'),
               readOnly: true,
             }))
           : parent.children;
@@ -1597,11 +1616,11 @@ export function createShipment(
                   : '本地CSV输入，BI排产未核齐'),
           ],
           transferIn: [
-            '调入计划 = 相同统计月、基地及SKU截止日前最新库存日报快照；纠偏优先于初版，确认无计划取0',
+            '调入计划 = 相同统计月、基地及SKU截止日前最新库存日报快照；纠偏优先于初版，完整读取后无该组合记录取0，字段为空待定',
             `${raw('transferIn')} 件；${row.transferInSource ?? '逐SKU来源汇总；未同步来源的单品保留待定'}`,
           ],
           transferOut: [
-            '调出计划 = 相同统计月、基地及SKU截止日前最新库存日报快照；纠偏优先于初版，确认无计划取0',
+            '调出计划 = 相同统计月、基地及SKU截止日前最新库存日报快照；纠偏优先于初版，完整读取后无该组合记录取0，字段为空待定',
             `${raw('transferOut')} 件；${row.transferOutSource ?? '逐SKU来源汇总；未同步来源的单品保留待定'}`,
           ],
           end: [
@@ -1865,46 +1884,13 @@ export function createShipment(
               '重置',
             ),
         ),
-        h(
-          'p',
-          { role: 'status' },
-          busy
-            ? '正在读取或校验输入…'
-            : syncStatus === 'failed' && activeSource === 'business'
-              ? '数仓输入同步失败，未采用旧业务结果'
-              : source,
-        ),
+        (syncStatus !== 'failed' || activeSource !== 'business') &&
+          h('p', { role: 'status' }, busy ? '正在读取或校验输入…' : source),
         h(
           'p',
           { className: 'dc-card-note' },
-          `${month}调拨计划取库存日报截止日前最新适用快照，调入和调出分别按纠偏、初版、确认无计划时的0取值；重复或失败保留待核。汇总包含全部明细，下载按当前单品搜索范围提供明细。`,
+          `${month}调拨计划取库存日报截止日前最新适用快照，优先用纠偏计划，再用初版计划。完整读取后确认无该基地SKU记录时按0。汇总包含全部明细，下载按当前单品搜索范围提供明细。`,
         ),
-        sourceKind === 'business' &&
-          !(business.sourceRecords ?? business.rows).length &&
-          h('p', { role: 'status' }, '该取数区间没有实际发货记录，预估待补'),
-        business?.metadata.omittedRows > 0 &&
-          h(
-            'p',
-            {},
-            `源数据${business.metadata.omittedRows}条缺基地或产品编码，或基地不在本表范围，未并入明细`,
-          ),
-        business?.metadata.missingDimensions > 0 &&
-          h(
-            'p',
-            {},
-            `源数据${business.metadata.missingDimensions}条产品名称、系列或品项缺失或冲突，保留数量与源状态`,
-          ),
-        business?.metadata.incompleteRows > 0 &&
-          h(
-            'p',
-            {},
-            `源数据${business.metadata.incompleteRows}个单品存在缺值或日记录不齐，缺值保留待定`,
-          ),
-        business?.metadata.duplicateRows > 0 &&
-          h('p', {}, `源数据${business.metadata.duplicateRows}个单品有重复日期，相关输入未采用`),
-        business?.metadata.recentStatus === 'insufficient-days' &&
-          h('p', {}, '截止日前本月不足三天，近三天日均未提供'),
-        error && h('p', { role: 'alert', className: 'sp-error' }, error),
         searchTerm && !visibleRows.length && h('p', { role: 'status' }, '主表中没有匹配的单品'),
         coefficientCategories.length > 0 &&
           h(
@@ -2068,6 +2054,35 @@ export function createShipment(
             h(
               react.Fragment,
               null,
+              sourceKind === 'business' &&
+                !(business.sourceRecords ?? business.rows).length &&
+                h('p', {}, '该取数区间没有库存日报记录'),
+              business?.metadata.omittedRows > 0 &&
+                h(
+                  'p',
+                  {},
+                  `源数据${business.metadata.omittedRows}条缺基地或产品编码，或基地不在本表范围，未并入明细`,
+                ),
+              business?.metadata.missingDimensions > 0 &&
+                h(
+                  'p',
+                  {},
+                  `源数据${business.metadata.missingDimensions}条产品名称、系列或品项缺失或冲突，保留数量与源状态`,
+                ),
+              business?.metadata.incompleteRows > 0 &&
+                h(
+                  'p',
+                  {},
+                  `源数据${business.metadata.incompleteRows}个单品存在缺值或日记录不齐，缺值保留待定`,
+                ),
+              business?.metadata.duplicateRows > 0 &&
+                h(
+                  'p',
+                  {},
+                  `源数据${business.metadata.duplicateRows}个单品有重复日期，相关输入未采用`,
+                ),
+              business?.metadata.recentStatus === 'insufficient-days' &&
+                h('p', {}, '截止日前本月不足三天，近三天日均未提供'),
               h(
                 'button',
                 {
@@ -2134,6 +2149,10 @@ export function createShipment(
         h(
           'div',
           { className: 'dc-card-foot' },
+          syncStatus === 'failed' &&
+            activeSource === 'business' &&
+            h('p', { role: 'status' }, '数仓输入同步失败，未采用旧业务结果'),
+          error && h('p', { role: 'alert', className: 'sp-error' }, error),
           h(
             'button',
             { onClick: sync, disabled: busy || batch.active || !cutoff || !hasMpsSource() },
