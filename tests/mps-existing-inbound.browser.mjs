@@ -33,9 +33,9 @@ async function open(t) {
                   duplicate_days: 0,
                   transfer_date: '2026-11-30',
                   transfer_rows: 1,
-                  transfer_in_plan_v1: null,
+                  transfer_in_plan_v1: 0,
                   transfer_in_plan_adj: null,
-                  transfer_out_plan_v1: null,
+                  transfer_out_plan_v1: 0,
                   transfer_out_plan_adj: null,
                 },
               ]
