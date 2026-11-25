@@ -334,6 +334,29 @@ test('完整三个月导入与再导入保留旧调整、第四月和完整历�
   assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), saved.localDrafts);
 });
 
+test('跨月参考保留原版人工导入且新版从系统值开始', async (t) => {
+  const { page, frame, month } = await setup(t);
+  const following = new Date(`${month}-01T00:00:00Z`);
+  following.setUTCMonth(following.getUTCMonth() + 1);
+  const nextMonth = following.toISOString().slice(0, 7);
+  await upload(frame, '选择需求修正CSV', `${columns}\n郑州,A,${nextMonth},333,销售变化,`);
+  await frame
+    .getByRole('dialog', { name: '确认需求修正上传', exact: true })
+    .getByRole('button', { name: '确认应用修正', exact: true })
+    .click();
+  await expect.poll(async () => (await draft(page)).demandImports?.length).toBe(1);
+  const base = await draft(page);
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  const creation = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
+  await creation.getByLabel('评估月份', { exact: true }).fill(nextMonth);
+  await creation.getByLabel('参考版本', { exact: true }).selectOption(base.id);
+  await creation.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await expect.poll(async () => (await draft(page)).month).toBe(nextMonth);
+  assert.deepEqual((await draft(page)).demandImports ?? [], []);
+  await frame.getByLabel('评估版本选择', { exact: true }).selectOption(base.id);
+  assert.deepEqual((await draft(page)).demandImports, base.demandImports);
+});
+
 test('上传不能使完整修正历史超出本地草稿可保存范围', async (t) => {
   const { page, frame, month } = await setup(t);
   await page.evaluate(async () => {

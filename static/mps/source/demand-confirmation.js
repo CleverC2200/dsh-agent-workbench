@@ -2351,6 +2351,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ...(base && base.month !== month
                         ? {
                             adjustments: undefined,
+                            demandImports: undefined,
                           }
                         : {}),
                       name: versionName.trim() || makeDraft(id, month).name,
