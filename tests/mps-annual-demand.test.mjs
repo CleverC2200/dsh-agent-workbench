@@ -192,8 +192,7 @@ test('product snapshot reads the selected month with base/tag source attributes 
   assert.deepEqual(new Set(productRows(rows).map((row) => row['基地'])), new Set(['郑州', '华东']));
   assert.equal(productRows(rows)[0]['大类'], '标签甲');
   for (const [id, query] of Object.entries(config.queries)) {
-    if (!id.startsWith('products.') || !query.request?.sql?.includes('agents_dim_product_list_mi'))
-      continue;
+    if (!['products.detail', 'products.count'].includes(id)) continue;
     assert.match(
       query.request.sql,
       /SUBSTRING\(CAST\(stat_period AS VARCHAR\(32\)\), 1, 7\) = :gea_p1/,

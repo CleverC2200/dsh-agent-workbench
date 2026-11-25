@@ -88,14 +88,16 @@ export function annualRows(rows) {
     counts.get(keys[index]) > 1 ? { ...row, 数量: '', 重复记录数: row['源记录数'] } : row,
   );
 }
-export async function readMasterPage(kind, month, page, signal) {
+export async function readMasterPage(kind, month, page, signal, { configVersion } = {}) {
+  if (kind === 'products') requireProductMonth(month);
   const { config, query } = client();
   const id = kind + '.detail';
   const scope =
     kind === 'annual' ? { months: sourceMonthValues(month) } : kind === 'products' ? { month } : {};
   const count = await query.read(kind + '.count', scope, { signal, requiredColumns: ['total'] });
   const total = number(count.rows[0]?.total);
-  if (!Number.isSafeInteger(total) || total < 0) throw Error('数据源返回了无效行数');
+  if (count.rows.length !== 1 || !Number.isSafeInteger(total) || total < 0)
+    throw Error('数据源返回了无效行数');
   const result = await query.read(
     id,
     { ...scope, page_size: 25, offset: page * 25 },
@@ -109,10 +111,70 @@ export async function readMasterPage(kind, month, page, signal) {
     result.rows.length !== Math.min(25, Math.max(0, total - page * 25))
   )
     throw Error('数据源在读取期间变化，请重新同步');
-  return { rows: result.rows, total, columns: config.queries[id].columns, page };
+  if (kind === 'products') requireProductSnapshot(result, month, configVersion);
+  return {
+    rows: result.rows,
+    total,
+    columns: config.queries[id].columns,
+    page,
+    configVersion: result.configVersion,
+  };
 }
-export async function readProducts(month, signal) {
+function requireProductMonth(month) {
+  if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+    throw Error('产品统计期无效');
+}
+function productPeriod(targetMonth, adoptedMonth, configVersion) {
+  requireProductMonth(targetMonth);
+  if (adoptedMonth !== null) {
+    if (
+      typeof adoptedMonth !== 'string' ||
+      !/^\d{4}-(0[1-9]|1[0-2])$/.test(adoptedMonth) ||
+      adoptedMonth > targetMonth
+    )
+      throw Error('产品清单返回了无效采用月份');
+  }
+  if (configVersion !== undefined) requireProductVersion(configVersion);
+  return { targetMonth, adoptedMonth, configVersion };
+}
+function requireProductVersion(configVersion) {
+  if (typeof configVersion !== 'string' || !configVersion.trim())
+    throw Error('产品清单缺少查询配置版本，请重新同步');
+}
+function requireProductSnapshot(result, month, configVersion) {
+  requireProductVersion(result.configVersion);
+  if (configVersion !== undefined && result.configVersion !== configVersion)
+    throw Error('产品清单查询配置在读取期间发生变化，请重新同步');
+  if (
+    result.rows.some(
+      (row) => typeof row.stat_period !== 'string' || row.stat_period.slice(0, 7) !== month,
+    )
+  )
+    throw Error('产品清单统计月份与采用产品统计期不一致，请重新同步');
+}
+export async function resolveProductPeriod(targetMonth, signal) {
+  requireProductMonth(targetMonth);
+  const { query } = client();
+  const result = await query.read(
+    'products.period',
+    { month: targetMonth },
+    {
+      signal,
+      requiredColumns: ['month'],
+    },
+  );
+  if (result.rows.length !== 1) throw Error('产品清单采用月份须返回唯一汇总行');
+  requireProductVersion(result.configVersion);
+  return productPeriod(targetMonth, result.rows[0].month, result.configVersion);
+}
+export async function readProducts(targetMonth, signal) {
+  return readProductSnapshot(await resolveProductPeriod(targetMonth, signal), signal);
+}
+export async function readProductSnapshot(period, signal) {
+  period = productPeriod(period.targetMonth, period.adoptedMonth, period.configVersion);
   const { config, query } = client();
+  const month = period.adoptedMonth;
+  if (month === null) return { rows: [], raw: [], period, metadata: period };
   const definition = config.queries['products.detail'];
   const result = await query.readAll(
     'products.detail',
@@ -124,8 +186,8 @@ export async function readProducts(month, signal) {
       maxRows: 10000,
     },
   );
-  if (result.rows.some((row) => String(row.stat_period).slice(0, 7) !== month))
-    throw Error('产品清单统计月份与所选产品统计期不一致，请重新同步');
+  requireProductSnapshot(result, month, period.configVersion);
+  period = productPeriod(period.targetMonth, month, result.configVersion);
   let prices;
   try {
     const definition = config.queries['products.prices'];
@@ -158,7 +220,7 @@ export async function readProducts(month, signal) {
     };
   }
   const raw = result.rows.filter((row) => row.responsible_item?.trim() !== '粽子');
-  return { rows: productRows(raw), raw, prices };
+  return { rows: productRows(raw), raw, prices, period, metadata: period };
 }
 export async function readAnnual(signal) {
   const { config, query } = client();
