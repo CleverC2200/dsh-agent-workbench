@@ -48758,9 +48758,7 @@
     },
     "lantern.budget": {
       "title": "汤圆销售预算与未税收入",
-      "grain": [
-        "month"
-      ],
+      "grain": ["month"],
       "notes": "按汤圆 SKU 汇总月度销售预算和未税收入，沿用销售预算的有效快照和缺失月份处理。",
       "parameterSpec": {
         "gea_p1": {
@@ -48856,9 +48854,7 @@
     },
     "lantern.budget.count": {
       "title": "汤圆销售预算与未税收入月份数",
-      "grain": [
-        "month"
-      ],
+      "grain": ["month"],
       "notes": "按汤圆 SKU 汇总月度销售预算和未税收入，沿用销售预算的有效快照和缺失月份处理。",
       "parameterSpec": {
         "gea_p1": {
@@ -48911,9 +48907,7 @@
         },
         "includeTotal": false
       },
-      "resultColumns": [
-        "total"
-      ]
+      "resultColumns": ["total"]
     },
     "lantern.cancellation.count": {
       "title": "订单工作台：changes.cancellation",
@@ -49151,10 +49145,7 @@
       "metricContract": {
         "version": "execution-arrival-18-12-complete-v1",
         "source": "agents_scm_order_trace_final_di",
-        "executionSources": [
-          "agents_scm_execute_detail_d",
-          "agents_scm_execute_detail_hourly_d"
-        ],
+        "executionSources": ["agents_scm_execute_detail_d", "agents_scm_execute_detail_hourly_d"],
         "dateField": "COALESCE(gpsisinraildate_to,arriveconfirm_time)",
         "dateBasis": "按TMS实际到货时间归属周期；优先目的地GPS围栏，其次到货确认",
         "grain": "执行单号去重，单位张；不按SKU、来源单或执行记录行计率",
