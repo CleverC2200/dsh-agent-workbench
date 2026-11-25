@@ -170,6 +170,7 @@ export function DesktopNavigation({
   const actionEpoch = useRef(0);
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
+  const resumePoll = useRef<() => void>();
   useEffect(() => {
     const controller = new AbortController();
     owner.current = controller;
@@ -282,8 +283,15 @@ export function DesktopNavigation({
         });
     };
     const poll = async () => {
+      resumePoll.current = undefined;
       try {
-        if (observed.pagesReady === false && !startup.ended) return;
+        if (identity.getSnapshot().pagesReady === false && !startup.ended) {
+          resumePoll.current = () => {
+            clearTimeout(timer);
+            void poll();
+          };
+          return;
+        }
         consume(await request('poll', {}, controller.signal));
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -324,6 +332,7 @@ export function DesktopNavigation({
     void poll();
     return () => {
       controller.abort();
+      resumePoll.current = undefined;
       clearTimeout(timer);
       clearTimeout(startupTimer);
       active.current?.controller.abort();
@@ -333,13 +342,15 @@ export function DesktopNavigation({
     open,
     revision,
     observed.state,
-    observed.pagesReady,
     observed.scope,
     observed.subject,
     observed.error,
     observed.status?.authenticated,
     startup,
   ]);
+  useEffect(() => {
+    if (observed.pagesReady !== false) resumePoll.current?.();
+  }, [observed.pagesReady]);
   const action = async (dismiss: boolean) => {
     if (busy || !owner.current || owner.current.signal.aborted) return;
     const controller = owner.current;

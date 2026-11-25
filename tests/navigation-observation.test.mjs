@@ -394,3 +394,79 @@ test('a first real navigation failure after identity recovery uses the original 
     'NAVIGATION_HTTP_503',
   );
 });
+
+test('page readiness preserves a claimed message opening after the startup deadline', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  const opening = Promise.withResolvers();
+  const opened = [],
+    aborted = [];
+  let finished = 0;
+  const ui = await mount(
+    t,
+    async (path) => {
+      if (path.endsWith('/finish')) {
+        finished++;
+        return idle();
+      }
+      return Response.json({
+        ok: true,
+        value: { state: 'ready', receipt: 'one-message', panel: 'gea-inbox' },
+      });
+    },
+    { ...confirmed, pagesReady: false },
+    (target, signal) => {
+      opened.push(target.receipt);
+      signal.addEventListener('abort', () => aborted.push(target.receipt), { once: true });
+      return opening.promise;
+    },
+  );
+  await tick(t, 20_000);
+  await tick(t, 1500);
+  assert.deepEqual(opened, ['one-message']);
+  await ui.update({ ...confirmed, pagesReady: true });
+  assert.deepEqual(opened, ['one-message']);
+  assert.deepEqual(aborted, []);
+  await React.act(async () => opening.resolve());
+  assert.equal(finished, 1);
+});
+
+for (const action of ['finish', 'retry'])
+  test(`page readiness preserves an in-flight navigation ${action}`, async (t) => {
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+    const response = Promise.withResolvers();
+    let signal,
+      polls = 0,
+      actions = 0,
+      completed = false;
+    const ui = await mount(
+      t,
+      async (path, options) => {
+        if (path.endsWith('/' + action)) {
+          actions++;
+          signal = options.signal;
+          return response.promise;
+        }
+        polls++;
+        if (completed) return idle();
+        return action === 'retry'
+          ? Response.json({}, { status: 503 })
+          : Response.json({
+              ok: true,
+              value: { state: 'ready', receipt: 'one-message', panel: 'gea-inbox' },
+            });
+      },
+      { ...confirmed, pagesReady: false },
+    );
+    await tick(t, 20_000);
+    await tick(t, 1500);
+    if (action === 'retry') await React.act(async () => document.querySelector('button').click());
+    assert.equal(actions, 1);
+    const startedPolls = polls;
+    await ui.update({ ...confirmed, pagesReady: true });
+    assert.equal(signal.aborted, false);
+    assert.equal(actions, 1);
+    assert.equal(polls, startedPolls);
+    completed = true;
+    await React.act(async () => response.resolve(idle()));
+    assert.equal(document.querySelector('[role="alert"]'), null);
+  });
