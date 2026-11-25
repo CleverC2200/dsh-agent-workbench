@@ -285,9 +285,11 @@ test('完整三个月导入与再导入保留旧调整、第四月和完整历�
     ];
     await window.openAuthor('mps', 1200, seed);
   });
-  await expect(
-    frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }),
-  ).toHaveAttribute('data-active', 'true', { timeout: 30000 });
+  await expect(frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' })).toHaveAttribute(
+    'data-active',
+    'true',
+    { timeout: 30000 },
+  );
   const months = Array.from({ length: 4 }, (_, index) => {
     const date = new Date(`${month}-01T00:00:00Z`);
     date.setUTCMonth(date.getUTCMonth() + index);
