@@ -131,6 +131,8 @@ test('catalog and recommended products with unavailable packaging cannot be sele
       assert.equal(f.document.querySelector('[aria-label="NEW 增加"]').disabled, true);
       const input = f.document.querySelector('[aria-label="NEW 数量"]');
       assert.equal(input.disabled, true);
+      const candidate = input.closest('article');
+      assert.doesNotMatch(candidate.textContent, /缺货数据未完整提供/);
       input.value = '40';
       input.dispatchEvent(new f.dom.window.Event('change'));
       assert.match(f.document.getElementById('orderEditor').textContent, /包装资料未核实/);
