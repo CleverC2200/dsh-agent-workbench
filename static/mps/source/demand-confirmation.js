@@ -1248,7 +1248,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     );
     const { drafts, selected } = localState;
     const localRef = react.useRef(localState);
-    localRef.current = localState;
     const [adjusting, setAdjusting] = react.useState(false);
     react.useEffect(() => {
       onEditingChange?.(adjusting);
@@ -1471,12 +1470,20 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           : fact
             ? sourcePeriod(draft, type)
             : undefined;
-      const periods =
-        requestedPeriods ??
-        (type === 'report' ? [period, monthOffset(period, 1), monthOffset(period, 2)] : [period]);
+      const periods = requestedPeriods
+        ? [...requestedPeriods]
+        : type === 'report'
+          ? [period, monthOffset(period, 1), monthOffset(period, 2)]
+          : [period];
+      if (type === 'report' && requestedPeriods) {
+        const current = localRef.current.drafts.find((entry) => entry.id === id);
+        for (const [month, read] of Object.entries(current?.reportRead?.periods ?? {})) {
+          if (read.status === 'loading' && !periods.includes(month)) periods.push(month);
+        }
+      }
       const { signal, valid } = begin(
         type,
-        requestedPeriods ?? (type === 'report' ? periods : period),
+        type === 'report' ? periods : (requestedPeriods ?? period),
       );
       const syncAmounts = async (month) => {
         let amounts;
