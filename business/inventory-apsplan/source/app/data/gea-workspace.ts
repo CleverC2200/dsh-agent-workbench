@@ -127,13 +127,23 @@ export function period(end: string, kind: string): [string, string] {
     end,
   ];
 }
-export function snapshotMatchesDate(rows: Record<string, unknown>[], end: string) {
+export function snapshotMatchesDate(
+  rows: Record<string, unknown>[],
+  end: string,
+  allowPrevious = false,
+) {
+  let snapshot: string | undefined;
   return rows.every((row) => {
     if (!Object.hasOwn(row, 'source_date')) return true;
     const day = String(row.source_date ?? '')
       .replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3')
       .slice(0, 10);
-    return day === end;
+    snapshot ??= day;
+    return (
+      /^\d{4}-\d{2}-\d{2}$/.test(day) &&
+      day === snapshot &&
+      (day === end || (allowPrevious && day < end))
+    );
   });
 }
 const today = () =>
@@ -146,7 +156,7 @@ const today = () =>
 const monthly = (start: string, end: string, kind: string) =>
   ['month', 'year'].includes(kind) &&
   start.endsWith('-01') &&
-  (end === today() || date(shiftDays(end, 1)).getUTCDate() === 1);
+  (end === today() || end === shiftDays(today(), -1) || date(shiftDays(end, 1)).getUTCDate() === 1);
 
 export function createGeaWorkspace(transport: SqlTransport) {
   const configuredReads = new Map<string, Row[]>();
@@ -173,6 +183,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
   ) {
     const [start, end] = bounds,
       kind = input.granularity;
+    const allowPreviousStock = !input.comparison;
 
     const directReads = new Map<string, Promise<Row[]>>();
     const primary = usesConfiguredSql()
@@ -261,6 +272,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
           values.end,
           values.version,
           values.order_type,
+          allowPreviousStock,
           grouped ? values.productScope : null,
         ]);
         const permissionKey = 'configured:' + key;
@@ -274,6 +286,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
             if (completed) return completed;
             const rows = await readWorkspaceQuery(sqlConfiguration, name, values, {
               signal: input.signal,
+              allowPreviousStock,
               onInventory:
                 name === 'stock' && input.summary && !selected
                   ? (rows) => publishInventory?.(normalize(rows))
@@ -449,13 +462,13 @@ export function createGeaWorkspace(transport: SqlTransport) {
         if (
           usesConfiguredSql() &&
           ['stock', 'shippable'].includes(key) &&
-          !snapshotMatchesDate(rows, end)
+          !snapshotMatchesDate(rows, end, allowPreviousStock)
         )
           return {
             ...result,
             status: 'unavailable',
             rows: [],
-            note: `${end} 库存快照不完整，未用其他日期替代。`,
+            note: `${end} 库存快照未通过日期一致性校验。`,
           };
         return { ...result, status: rows.length ? 'ready' : 'empty', rows };
       } catch (e) {
@@ -549,11 +562,11 @@ export function createGeaWorkspace(transport: SqlTransport) {
     });
     publishInventory = (rows) => {
       input.signal?.throwIfAborted();
-      if (!snapshotMatchesDate(rows, end)) {
+      if (!snapshotMatchesDate(rows, end, allowPreviousStock)) {
         byId.set('stock', {
           id: 'stock',
           label: labels.stock,
-          note: `${end} 库存快照不完整，未用其他日期替代。`,
+          note: `${end} 库存快照未通过日期一致性校验。`,
           status: 'unavailable',
           rows: [],
         });
