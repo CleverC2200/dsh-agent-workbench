@@ -106,7 +106,7 @@
     <p>正在读取订单信息，请稍候。</p>
   </main>
   <main id="confirmationMain" hidden>
-    <h1 id="title"></h1>
+    <p id="title" hidden></p>
     <p id="summary"></p>
     <section id="items" hidden></section>
     <div id="defer" hidden>
@@ -169,10 +169,10 @@
   <style>
     #orderEditor {
       width: min(760px, calc(100% - 32px));
-      height: calc(100dvh - 32px);
+      height: calc(100dvh - 16px);
       max-height: 1000px;
       max-width: 760px;
-      margin: 16px auto;
+      margin: 8px auto;
       padding: 0;
       display: flex;
       flex-direction: column;
@@ -184,10 +184,10 @@
     }
     #orderEditor header {
       display: grid;
-      grid-template-columns: 110px 1fr 110px;
+      grid-template-columns: 36px minmax(0, 1fr) auto;
       align-items: center;
-      min-height: 56px;
-      padding: 0 20px;
+      min-height: 40px;
+      padding: 0 12px;
       background: #f4f4f5;
       border-bottom: 1px solid #eceef0;
       flex-shrink: 0;
@@ -228,6 +228,31 @@
       text-align: right;
       font-size: 12px;
     }
+    #orderEditor .editor-back {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+    }
+    #orderEditor .editor-back svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    #orderEditor .editor-visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
     #orderEditor .editor-body {
       flex: 1;
       min-height: 0;
@@ -260,6 +285,9 @@
       font-size: 13px;
     }
     #orderEditor .editor-remove {
+      position: absolute;
+      top: 12px;
+      right: 16px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -268,7 +296,7 @@
       padding: 8px;
       border: 0;
       background: transparent;
-      color: #f52238;
+      color: #858b93;
       cursor: pointer;
     }
     #orderEditor .editor-remove svg {
@@ -298,6 +326,7 @@
       min-width: 0;
     }
     #orderEditor article {
+      position: relative;
       display: grid;
       grid-template-columns: 108px minmax(0, 1fr);
       gap: 20px;
@@ -357,6 +386,9 @@
       line-height: 1.6;
       font-weight: 650;
       overflow-wrap: anywhere;
+    }
+    #orderEditor .editor-has-remove .editor-product-name {
+      padding-right: 44px;
     }
     #orderEditor article .editor-spec {
       margin: 4px 0 0;
@@ -668,6 +700,12 @@
       color: #626772;
       overflow-wrap: anywhere;
     }
+    #orderEditor .editor-subcategory-label {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+    }
     #orderEditor .editor-subcategories button[aria-pressed='true'] {
       background: white;
       color: #ed2232;
@@ -701,9 +739,13 @@
         border-radius: 0;
       }
       #orderEditor header {
-        grid-template-columns: 90px 1fr 90px;
-        padding: 0 14px;
-        min-height: 50px;
+        grid-template-columns: 44px minmax(0, 1fr) auto;
+        padding: 0 8px;
+        min-height: 44px;
+      }
+      #orderEditor .editor-back {
+        width: 44px;
+        height: 44px;
       }
       #orderEditor h1 {
         font-size: 18px;

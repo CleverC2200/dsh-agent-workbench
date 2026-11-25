@@ -11,6 +11,8 @@ function setup({
   canAct = true,
   missingRules = true,
   invalidRules = false,
+  initialPrice = null,
+  previewError = null,
 } = {}) {
   const dom = new JSDOM(html, {
     runScripts: 'outside-only',
@@ -40,15 +42,15 @@ function setup({
       executionOrderNo: 'E1',
       vehicleType: '8.6米',
       deliveryDate: '2026-11-25',
-      priceStatus: 'PRICE_MISSING',
+      priceStatus: initialPrice === null ? 'PRICE_MISSING' : 'READY',
       satisfactionRate: 100,
       lines: [
         {
           sku: 'BAD',
           name: '原商品',
           quantity: 40,
-          unitPrice: null,
-          priceStatus: 'PRICE_MISSING',
+          unitPrice: initialPrice,
+          priceStatus: initialPrice === null ? 'PRICE_MISSING' : 'READY',
           shortage: 0,
           ...(missingRules ? {} : { orderMultiple: 40, minimumOrderQuantity: 10 }),
           ...(invalidRules ? { orderMultiple: 'invalid' } : {}),
@@ -72,6 +74,7 @@ function setup({
     ],
     onInventoryRecalculate: async (draft) => {
       previews.push(structuredClone(draft));
+      if (previewError) throw Error(previewError);
       return {
         satisfactionRate: 100,
         inventoryHash: 'a'.repeat(64),
@@ -100,12 +103,43 @@ function setup({
 }
 async function replace(f) {
   f.document.querySelector('.editor-remove').click();
+  [...f.document.querySelectorAll('[aria-label="确认删除商品"] button')]
+    .find((button) => button.textContent === '确认删除')
+    .click();
   f.button('+ 商品').click();
   await new Promise((resolve) => setImmediate(resolve));
   f.document.querySelector('[aria-label="NEW 增加"]').click();
   f.button('完成选品').click();
   await tick();
 }
+
+test('trash sits outside quantity controls and deletion changes the draft only after explicit confirmation', async () => {
+  const f = setup();
+  try {
+    const trash = f.document.querySelector('.editor-remove');
+    assert.equal(trash.parentElement.tagName, 'ARTICLE');
+    assert.equal(trash.closest('.editor-product-trading'), null);
+    assert.equal(f.dom.window.getComputedStyle(trash).position, 'absolute');
+    assert.ok(trash.querySelector('svg'));
+    trash.click();
+    assert.equal(f.document.querySelector('[aria-label="BAD 数量"]').value, '40');
+    let dialog = f.document.querySelector('[aria-label="确认删除商品"]');
+    assert.match(dialog.textContent, /原商品.*SKU：BAD/);
+    [...dialog.querySelectorAll('button')].find((button) => button.textContent === '取消').click();
+    assert.equal(f.document.querySelector('[aria-label="BAD 数量"]').value, '40');
+    f.document.querySelector('.editor-remove').click();
+    dialog = f.document.querySelector('[aria-label="确认删除商品"]');
+    const confirm = dialog.querySelector('button');
+    confirm.click();
+    confirm.click();
+    assert.equal(f.document.querySelector('article[data-sku="BAD"]'), null);
+    assert.equal(f.document.querySelector('[aria-label="确认删除商品"]'), null);
+    assert.equal(f.calls.length, 0);
+    assert.equal(f.state.snapshot.lines[0].quantity, 40);
+  } finally {
+    f.dom.window.close();
+  }
+});
 test('missing price shows a dash and a short red label, while deletion and date editing remain available', () => {
   const f = setup();
   try {
@@ -210,6 +244,63 @@ test('fresh price failure still blocks submission and updates the displayed caus
     assert.equal(f.document.querySelector('[data-editor-price="NEW"]').textContent, '¥ —');
     assert.equal(
       f.document.querySelector('[data-editor-price-reason="NEW"]').textContent,
+      '暂无价格',
+    );
+    f.button('提交').click();
+    assert.equal(f.document.querySelector('[data-editor-confirm]').disabled, true);
+    assert.equal(f.calls.length, 0);
+  } finally {
+    f.dom.window.close();
+  }
+});
+
+test('failed combined preview preserves the verified price but blocks submit until a successful retry', async () => {
+  const f = setup({ initialPrice: 159, previewError: '库存查询超时，请重新核算' });
+  try {
+    await tick();
+    assert.equal(f.document.querySelector('[data-editor-price="BAD"]').textContent, '¥ 159');
+    assert.equal(f.document.querySelector('[data-editor-price-reason="BAD"]').textContent, '');
+    assert.equal(f.document.querySelector('[data-editor-amount]').textContent, '¥ 6,360');
+    assert.match(f.document.getElementById('orderEditor').textContent, /库存查询超时/);
+    f.button('提交').click();
+    assert.equal(f.document.querySelector('[data-editor-confirm]').disabled, true);
+    assert.equal(f.calls.length, 0);
+    [...f.document.querySelectorAll('.editor-confirm-dialog button')]
+      .find((button) => button.textContent === '返回')
+      .click();
+    f.state.onInventoryRecalculate = async (draft) => ({
+      satisfactionRate: 100,
+      inventoryHash: 'b'.repeat(64),
+      pricesReady: true,
+      lines: draft.lines.map((line) => ({
+        ...line,
+        availableQuantity: 1000,
+        shortage: 0,
+        priceStatus: 'READY',
+        unitPrice: 160,
+      })),
+    });
+    f.document.querySelector('[data-editor-inventory-retry]').click();
+    await tick();
+    assert.equal(f.document.querySelector('[data-editor-price="BAD"]').textContent, '¥ 160');
+    f.button('提交').click();
+    assert.equal(f.document.querySelector('[data-editor-confirm]').disabled, false);
+    f.document.querySelector('[data-editor-confirm]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls[0].inventoryHash, 'b'.repeat(64));
+  } finally {
+    f.dom.window.close();
+  }
+});
+
+test('a failed preview cannot invent a price for an originally unpriced product', async () => {
+  const f = setup({ previewError: '网络中断' });
+  try {
+    await tick();
+    assert.equal(f.document.querySelector('[data-editor-price="BAD"]').textContent, '¥ —');
+    assert.equal(
+      f.document.querySelector('[data-editor-price-reason="BAD"]').textContent,
       '暂无价格',
     );
     f.button('提交').click();

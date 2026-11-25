@@ -89,7 +89,7 @@ const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><met
 if (Buffer.byteLength(html) > 5000000) throw Error('HTML_TOO_LARGE');
 await mkdir(out, { recursive: true });
 await writeFile(join(out, 'index.html'), html);
-for (const file of ['plugin.json', 'page.json', 'sql.config.json'])
+for (const file of ['plugin.json', 'page.json', 'sql.config.json', 'insight-prompt.md'])
   await cp(join(resource, file), join(out, file));
 const agent = join(root, '../dsh-agent-manage/business-resources/inventory-apsplan');
 await syncAgentResources(agent, out);
@@ -117,7 +117,7 @@ for (const path of Object.keys(result.metafile.inputs)) {
   else if (file.startsWith(join(root, 'business/shared') + '/'))
     inputs['../shared/' + file.split('/shared/')[1]] = hash(await readFile(file));
 }
-for (const file of ['plugin.json', 'page.json', 'sql.config.json'])
+for (const file of ['plugin.json', 'page.json', 'sql.config.json', 'insight-prompt.md'])
   inputs[file] = hash(await readFile(join(resource, file)));
 
 async function resourceFiles(directory, prefix = '') {

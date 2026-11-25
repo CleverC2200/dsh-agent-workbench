@@ -28007,7 +28007,9 @@
       },
       "request": {
         "sql": "SELECT MAX(s.the_date) AS day FROM agents_scm_stock_detail_d AS s WHERE s.the_date <= :gea_p1",
-        "parameters": { "gea_p1": "2026-11-24" },
+        "parameters": {
+          "gea_p1": "2026-11-24"
+        },
         "includeTotal": false
       },
       "resultColumns": ["day"]
@@ -49205,7 +49207,7 @@
       "resultColumns": ["numerator", "denominator", "known", "pending", "late"]
     },
     "lantern.accuracy": {
-      "title": "销售提报准确率月度组织分组",
+      "title": "汤圆销售提报准确率和达成率",
       "parameterSpec": {
         "gea_p1": {
           "name": "start_month",
@@ -49220,6 +49222,13 @@
           "type": "string",
           "format": "YYYY-MM-01",
           "example": "2026-12-01",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p350": {
+          "name": "product_category",
+          "type": "string",
+          "example": "汤圆",
           "required": true,
           "nullable": false
         },
@@ -49239,23 +49248,16 @@
           "example": 0,
           "required": true,
           "nullable": false
-        },
-        "gea_p350": {
-          "name": "product_category",
-          "type": "string",
-          "example": "汤圆",
-          "required": true,
-          "nullable": false
         }
       },
       "request": {
-        "sql": "WITH order_categories AS (\n  SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_order_execute_isontime_mi AS t WHERE t.new_material_code IS NOT NULL GROUP BY t.new_material_code\n), movement_categories AS (\n  SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_scm_material_in_out_summary_d AS t WHERE t.material_code IS NOT NULL GROUP BY t.material_code\n), material_categories AS (\n  SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category\n  FROM (\n    SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category FROM order_categories AS o\n    UNION ALL\n    SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category FROM movement_categories AS m\n  ) AS u GROUP BY u.sku\n)\nSELECT s.stat_month AS month, NULLIF(TRIM(s.region_name), '') AS region,\n    NULLIF(TRIM(s.province_region_name), '') AS province,\n    SUM(COALESCE(s.plan_qty_initial, 0)) AS initial_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_initial, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_initial, 0))) AS initial_deviation, SUM(COALESCE(s.plan_qty_adjusted, 0)) AS adjusted_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_adjusted, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_adjusted, 0))) AS adjusted_deviation, COUNT(1) AS records\n  FROM agents_scm_demand_sales_f AS s LEFT JOIN material_categories AS md ON md.sku = s.material_code\n  WHERE s.source_flag = '销售口径' AND COALESCE(NULLIF(s.product_categ_name, ''), md.category) = :gea_p350 AND s.stat_month >= CAST(:gea_p1 AS DATE) AND s.stat_month < CAST(:gea_p2 AS DATE)\n  GROUP BY s.stat_month, NULLIF(TRIM(s.region_name), ''), NULLIF(TRIM(s.province_region_name), '') ORDER BY month, region, province LIMIT :gea_p1001 OFFSET :gea_p1002",
+        "sql": "WITH order_categories AS (\n  SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_order_execute_isontime_mi AS t WHERE t.new_material_code IS NOT NULL GROUP BY t.new_material_code\n), movement_categories AS (\n  SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_scm_material_in_out_summary_d AS t WHERE t.material_code IS NOT NULL GROUP BY t.material_code\n), material_categories AS (\n  SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category\n  FROM (\n    SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category FROM order_categories AS o\n    UNION ALL\n    SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category FROM movement_categories AS m\n  ) AS u GROUP BY u.sku\n)\nSELECT s.stat_month AS month, NULLIF(TRIM(s.region_name), '') AS region,\n    NULLIF(TRIM(s.province_region_name), '') AS province,\n    SUM(COALESCE(s.plan_qty_initial, 0)) AS initial_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_initial, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_initial, 0))) AS initial_deviation, SUM(COALESCE(s.plan_qty_adjusted, 0)) AS adjusted_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_adjusted, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_adjusted, 0))) AS adjusted_deviation, SUM(s.act_dl_qty) AS shipped_qty, SUM(COALESCE(s.plan_qty_adjusted, s.plan_qty_initial)) AS submitted_plan_qty, SUM(CASE WHEN s.act_dl_qty IS NULL OR COALESCE(s.plan_qty_adjusted, s.plan_qty_initial) IS NULL THEN 1 ELSE 0 END) AS missing_ship_plan, COUNT(1) AS records\n  FROM agents_scm_demand_sales_f AS s LEFT JOIN material_categories AS md ON md.sku = s.material_code\n  WHERE s.source_flag = '销售口径' AND COALESCE(NULLIF(s.product_categ_name, ''), md.category) = :gea_p350 AND s.stat_month >= CAST(:gea_p1 AS DATE) AND s.stat_month < CAST(:gea_p2 AS DATE)\n  GROUP BY s.stat_month, NULLIF(TRIM(s.region_name), ''), NULLIF(TRIM(s.province_region_name), '')\nORDER BY month, region, province LIMIT :gea_p1001 OFFSET :gea_p1002",
         "parameters": {
           "gea_p1": "2026-11-01",
           "gea_p2": "2026-12-01",
-          "gea_p1001": 10,
-          "gea_p1002": 0,
-          "gea_p350": "汤圆"
+          "gea_p350": "汤圆",
+          "gea_p1001": 20,
+          "gea_p1002": 0
         },
         "includeTotal": false
       },
@@ -49267,14 +49269,17 @@
         "initial_deviation",
         "adjusted_plan",
         "adjusted_deviation",
-        "records"
+        "records",
+        "shipped_qty",
+        "submitted_plan_qty",
+        "missing_ship_plan"
       ],
       "pagination": {
         "countQuery": "lantern.accuracy.count"
       }
     },
     "lantern.accuracy.count": {
-      "title": "销售提报准确率月度组织分组",
+      "title": "汤圆销售提报准确率和达成率计数",
       "parameterSpec": {
         "gea_p1": {
           "name": "start_month",
@@ -49301,7 +49306,7 @@
         }
       },
       "request": {
-        "sql": "WITH order_categories AS (\n  SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_order_execute_isontime_mi AS t WHERE t.new_material_code IS NOT NULL GROUP BY t.new_material_code\n), movement_categories AS (\n  SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_scm_material_in_out_summary_d AS t WHERE t.material_code IS NOT NULL GROUP BY t.material_code\n), material_categories AS (\n  SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category\n  FROM (\n    SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category FROM order_categories AS o\n    UNION ALL\n    SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category FROM movement_categories AS m\n  ) AS u GROUP BY u.sku\n)\nSELECT COUNT(1) AS total FROM (SELECT s.stat_month AS month, NULLIF(TRIM(s.region_name), '') AS region,\n    NULLIF(TRIM(s.province_region_name), '') AS province,\n    SUM(COALESCE(s.plan_qty_initial, 0)) AS initial_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_initial, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_initial, 0))) AS initial_deviation, SUM(COALESCE(s.plan_qty_adjusted, 0)) AS adjusted_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_adjusted, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_adjusted, 0))) AS adjusted_deviation, COUNT(1) AS records\n  FROM agents_scm_demand_sales_f AS s LEFT JOIN material_categories AS md ON md.sku = s.material_code\n  WHERE s.source_flag = '销售口径' AND COALESCE(NULLIF(s.product_categ_name, ''), md.category) = :gea_p350 AND s.stat_month >= CAST(:gea_p1 AS DATE) AND s.stat_month < CAST(:gea_p2 AS DATE)\n  GROUP BY s.stat_month, NULLIF(TRIM(s.region_name), ''), NULLIF(TRIM(s.province_region_name), '')) AS groups",
+        "sql": "SELECT COUNT(*) AS total FROM (WITH order_categories AS (\n  SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_order_execute_isontime_mi AS t WHERE t.new_material_code IS NOT NULL GROUP BY t.new_material_code\n), movement_categories AS (\n  SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_scm_material_in_out_summary_d AS t WHERE t.material_code IS NOT NULL GROUP BY t.material_code\n), material_categories AS (\n  SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category\n  FROM (\n    SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category FROM order_categories AS o\n    UNION ALL\n    SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category FROM movement_categories AS m\n  ) AS u GROUP BY u.sku\n)\nSELECT s.stat_month AS month, NULLIF(TRIM(s.region_name), '') AS region,\n    NULLIF(TRIM(s.province_region_name), '') AS province,\n    SUM(COALESCE(s.plan_qty_initial, 0)) AS initial_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_initial, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_initial, 0))) AS initial_deviation, SUM(COALESCE(s.plan_qty_adjusted, 0)) AS adjusted_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_adjusted, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_adjusted, 0))) AS adjusted_deviation, SUM(s.act_dl_qty) AS shipped_qty, SUM(COALESCE(s.plan_qty_adjusted, s.plan_qty_initial)) AS submitted_plan_qty, SUM(CASE WHEN s.act_dl_qty IS NULL OR COALESCE(s.plan_qty_adjusted, s.plan_qty_initial) IS NULL THEN 1 ELSE 0 END) AS missing_ship_plan, COUNT(1) AS records\n  FROM agents_scm_demand_sales_f AS s LEFT JOIN material_categories AS md ON md.sku = s.material_code\n  WHERE s.source_flag = '销售口径' AND COALESCE(NULLIF(s.product_categ_name, ''), md.category) = :gea_p350 AND s.stat_month >= CAST(:gea_p1 AS DATE) AND s.stat_month < CAST(:gea_p2 AS DATE)\n  GROUP BY s.stat_month, NULLIF(TRIM(s.region_name), ''), NULLIF(TRIM(s.province_region_name), '')) AS grouped_rows",
         "parameters": {
           "gea_p1": "2026-11-01",
           "gea_p2": "2026-12-01",
@@ -49593,19 +49598,20 @@
         }
       },
       "request": {
-        "sql": "WITH inventory_batch_dates AS (SELECT b.warehouseid AS warehouseid, b.material_code AS material_code, b.month_date AS month_date, b.live_qty AS live_qty, b.available_qty AS available_qty, b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty, CAST(SUBSTRING(b.month_date, 1, 4) AS INT) AS snapshot_year, CAST(SUBSTRING(b.month_date, 5, 2) AS INT) AS snapshot_month, CAST(SUBSTRING(b.month_date, 7, 2) AS INT) AS snapshot_day, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 1, 4) AS INT) ELSE NULL END AS production_year, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 6, 2) AS INT) ELSE NULL END AS production_month, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 9, 2) AS INT) ELSE NULL END AS production_day FROM (SELECT SUM(b.available_qty) AS available_qty, SUM(b.freeze_qty) AS freeze_qty, SUM(b.live_qty) AS live_qty, b.material_code AS material_code, b.month_date AS month_date, SUM(b.pack_unit_qty) AS pack_unit_qty, b.prod_date AS prod_date, b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid FROM agents_scm_inventory_sku_data_d AS b WHERE b.warehouse_classify IN ('01', '02') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '') GROUP BY b.material_code, b.month_date, b.prod_date, b.warehouse_classify, b.warehouseid) AS b WHERE b.warehouse_classify IN ('01', '02') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')), inventory_batch_ordinals AS (SELECT d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, d.production_year AS production_year, d.production_month AS production_month, d.production_day AS production_day, (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) AS snapshot_ordinal, (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) AS production_ordinal FROM inventory_batch_dates AS d), inventory_batch_ages AS (SELECT d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, CASE WHEN d.live_qty > 0 AND d.production_year > 0 AND d.production_month BETWEEN 1 AND 12 AND d.production_day >= 1 AND d.production_day <= CASE WHEN d.production_month = 2 THEN CASE WHEN (d.production_year - 4 * FLOOR(d.production_year / 4.0) = 0 AND (d.production_year - 100 * FLOOR(d.production_year / 100.0) <> 0 OR d.production_year - 400 * FLOOR(d.production_year / 400.0) = 0)) THEN 29 ELSE 28 END WHEN d.production_month IN (4, 6, 9, 11) THEN 30 ELSE 31 END AND d.snapshot_ordinal >= d.production_ordinal THEN d.snapshot_ordinal - d.production_ordinal ELSE NULL END AS age_days FROM inventory_batch_ordinals AS d), order_material_dictionary AS (SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.pinxiang) = 1 AND COUNT(NULLIF(t.pinxiang, '')) = COUNT(*) THEN MAX(t.pinxiang) ELSE NULL END AS item, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_order_execute_isontime_mi AS t WHERE NOT t.new_material_code IS NULL GROUP BY t.new_material_code), movement_material_dictionary AS (SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_scm_material_in_out_summary_d AS t WHERE NOT t.material_code IS NULL GROUP BY t.material_code), material_dictionary AS (SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category, MAX(u.item) AS item, COALESCE(MAX(u.order_group), MAX(u.movement_group)) AS material_group FROM (SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category, o.item AS item, o.material_group AS order_group, CAST(NULL AS TEXT) AS movement_group FROM order_material_dictionary AS o UNION ALL SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category, CAST(NULL AS TEXT) AS item, CAST(NULL AS TEXT) AS order_group, m.material_group AS movement_group FROM movement_material_dictionary AS m) AS u GROUP BY u.sku), catalog AS (SELECT c.material_code AS sku,\n  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(c.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(c.material_name), '')) ELSE NULL END AS name\n  FROM agents_dim_product_list_mi AS c GROUP BY c.material_code)\n    SELECT CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END AS sku,\n      CASE WHEN :gea_p40 THEN MAX(c.name) ELSE NULL END AS material_name, d.category AS category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END AS item, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END AS material,\n      SUM(a.live_qty) AS inventory,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty ELSE 0 END) AS age_qty,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty * a.age_days ELSE 0 END) AS age_sum,\n      SUM(CASE WHEN a.age_days > 60 THEN a.live_qty ELSE 0 END) AS older_qty,\n      SUM(CASE WHEN a.live_qty > 0 AND a.age_days IS NULL THEN a.live_qty ELSE 0 END) AS unknown_age_qty\n    FROM inventory_batch_ages AS a LEFT JOIN material_dictionary AS d ON d.sku = a.material_code\n    LEFT JOIN catalog AS c ON c.sku = a.material_code\n    WHERE (:gea_p43 IS NULL OR COALESCE(d.category, '未分类') = :gea_p43) AND (:gea_p41 IS NULL OR LOWER(a.material_code) LIKE :gea_p41 OR LOWER(c.name) LIKE :gea_p41 OR LOWER(d.item) LIKE :gea_p41\n      OR LOWER(d.material_group) LIKE :gea_p41)\n    GROUP BY CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END, d.category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END ORDER BY category, item, material, sku LIMIT :gea_p1001 OFFSET :gea_p1002",
+        "sql": "WITH inventory_batch_dates AS (SELECT b.belong_base AS belong_base, b.warehouseid AS warehouseid, b.material_code AS material_code, b.month_date AS month_date, b.live_qty AS live_qty, b.available_qty AS available_qty, b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty, CAST(SUBSTRING(b.month_date, 1, 4) AS INT) AS snapshot_year, CAST(SUBSTRING(b.month_date, 5, 2) AS INT) AS snapshot_month, CAST(SUBSTRING(b.month_date, 7, 2) AS INT) AS snapshot_day, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 1, 4) AS INT) ELSE NULL END AS production_year, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 6, 2) AS INT) ELSE NULL END AS production_month, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 9, 2) AS INT) ELSE NULL END AS production_day FROM (SELECT b.belong_base AS belong_base, SUM(b.available_qty) AS available_qty, SUM(b.freeze_qty) AS freeze_qty, SUM(b.live_qty) AS live_qty, b.material_code AS material_code, b.month_date AS month_date, SUM(b.pack_unit_qty) AS pack_unit_qty, b.prod_date AS prod_date, b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid FROM agents_scm_inventory_sku_data_d AS b WHERE b.warehouse_classify IN ('01', '02') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '') GROUP BY b.belong_base, b.material_code, b.month_date, b.prod_date, b.warehouse_classify, b.warehouseid) AS b WHERE b.warehouse_classify IN ('01', '02') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')), inventory_batch_ordinals AS (SELECT d.belong_base AS belong_base, d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, d.production_year AS production_year, d.production_month AS production_month, d.production_day AS production_day, (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) AS snapshot_ordinal, (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) AS production_ordinal FROM inventory_batch_dates AS d), inventory_batch_ages AS (SELECT d.belong_base AS belong_base, d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, CASE WHEN d.live_qty > 0 AND d.production_year > 0 AND d.production_month BETWEEN 1 AND 12 AND d.production_day >= 1 AND d.production_day <= CASE WHEN d.production_month = 2 THEN CASE WHEN (d.production_year - 4 * FLOOR(d.production_year / 4.0) = 0 AND (d.production_year - 100 * FLOOR(d.production_year / 100.0) <> 0 OR d.production_year - 400 * FLOOR(d.production_year / 400.0) = 0)) THEN 29 ELSE 28 END WHEN d.production_month IN (4, 6, 9, 11) THEN 30 ELSE 31 END AND d.snapshot_ordinal >= d.production_ordinal THEN d.snapshot_ordinal - d.production_ordinal ELSE NULL END AS age_days FROM inventory_batch_ordinals AS d), order_material_dictionary AS (SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.pinxiang) = 1 AND COUNT(NULLIF(t.pinxiang, '')) = COUNT(*) THEN MAX(t.pinxiang) ELSE NULL END AS item, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_order_execute_isontime_mi AS t WHERE NOT t.new_material_code IS NULL GROUP BY t.new_material_code), movement_material_dictionary AS (SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_scm_material_in_out_summary_d AS t WHERE NOT t.material_code IS NULL GROUP BY t.material_code), material_dictionary AS (SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category, MAX(u.item) AS item, COALESCE(MAX(u.order_group), MAX(u.movement_group)) AS material_group FROM (SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category, o.item AS item, o.material_group AS order_group, CAST(NULL AS TEXT) AS movement_group FROM order_material_dictionary AS o UNION ALL SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category, CAST(NULL AS TEXT) AS item, CAST(NULL AS TEXT) AS order_group, m.material_group AS movement_group FROM movement_material_dictionary AS m) AS u GROUP BY u.sku), catalog AS (SELECT c.material_code AS sku,\n  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(c.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(c.material_name), '')) ELSE NULL END AS name\n  FROM agents_dim_product_list_mi AS c GROUP BY c.material_code)\n    SELECT a.belong_base AS base, CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END AS sku,\n      CASE WHEN :gea_p40 THEN MAX(c.name) ELSE NULL END AS material_name, d.category AS category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END AS item, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END AS material,\n      SUM(a.live_qty) AS inventory,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty ELSE 0 END) AS age_qty,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty * a.age_days ELSE 0 END) AS age_sum,\n      SUM(CASE WHEN a.age_days > 60 THEN a.live_qty ELSE 0 END) AS older_qty,\n      SUM(CASE WHEN a.live_qty > 0 AND a.age_days IS NULL THEN a.live_qty ELSE 0 END) AS unknown_age_qty\n    FROM inventory_batch_ages AS a LEFT JOIN material_dictionary AS d ON d.sku = a.material_code\n    LEFT JOIN catalog AS c ON c.sku = a.material_code\n    WHERE (:gea_p43 IS NULL OR COALESCE(d.category, '未分类') = :gea_p43) AND (:gea_p41 IS NULL OR LOWER(a.material_code) LIKE :gea_p41 OR LOWER(c.name) LIKE :gea_p41 OR LOWER(d.item) LIKE :gea_p41\n      OR LOWER(d.material_group) LIKE :gea_p41)\n    GROUP BY a.belong_base, CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END, d.category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END\nORDER BY base, category, item, material, sku LIMIT :gea_p1001 OFFSET :gea_p1002",
         "parameters": {
           "gea_p1": "2026-10-14",
           "gea_p40": false,
           "gea_p41": null,
           "gea_p42": false,
           "gea_p43": null,
-          "gea_p1001": 10,
+          "gea_p1001": 20,
           "gea_p1002": 0
         },
         "includeTotal": false
       },
       "resultColumns": [
+        "base",
         "sku",
         "material_name",
         "category",
@@ -49622,7 +49628,7 @@
       }
     },
     "lantern.stock-base.count": {
-      "title": "公司库存及货龄按SKU",
+      "title": "公司库存及货龄按SKU计数",
       "parameterSpec": {
         "gea_p1": {
           "name": "stat_date",
@@ -49662,7 +49668,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(1) AS total FROM (WITH inventory_batch_dates AS (SELECT b.warehouseid AS warehouseid, b.material_code AS material_code, b.month_date AS month_date, b.live_qty AS live_qty, b.available_qty AS available_qty, b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty, CAST(SUBSTRING(b.month_date, 1, 4) AS INT) AS snapshot_year, CAST(SUBSTRING(b.month_date, 5, 2) AS INT) AS snapshot_month, CAST(SUBSTRING(b.month_date, 7, 2) AS INT) AS snapshot_day, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 1, 4) AS INT) ELSE NULL END AS production_year, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 6, 2) AS INT) ELSE NULL END AS production_month, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 9, 2) AS INT) ELSE NULL END AS production_day FROM (SELECT SUM(b.available_qty) AS available_qty, SUM(b.freeze_qty) AS freeze_qty, SUM(b.live_qty) AS live_qty, b.material_code AS material_code, b.month_date AS month_date, SUM(b.pack_unit_qty) AS pack_unit_qty, b.prod_date AS prod_date, b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid FROM agents_scm_inventory_sku_data_d AS b WHERE b.warehouse_classify IN ('01', '02') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '') GROUP BY b.material_code, b.month_date, b.prod_date, b.warehouse_classify, b.warehouseid) AS b WHERE b.warehouse_classify IN ('01', '02') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')), inventory_batch_ordinals AS (SELECT d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, d.production_year AS production_year, d.production_month AS production_month, d.production_day AS production_day, (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) AS snapshot_ordinal, (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) AS production_ordinal FROM inventory_batch_dates AS d), inventory_batch_ages AS (SELECT d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, CASE WHEN d.live_qty > 0 AND d.production_year > 0 AND d.production_month BETWEEN 1 AND 12 AND d.production_day >= 1 AND d.production_day <= CASE WHEN d.production_month = 2 THEN CASE WHEN (d.production_year - 4 * FLOOR(d.production_year / 4.0) = 0 AND (d.production_year - 100 * FLOOR(d.production_year / 100.0) <> 0 OR d.production_year - 400 * FLOOR(d.production_year / 400.0) = 0)) THEN 29 ELSE 28 END WHEN d.production_month IN (4, 6, 9, 11) THEN 30 ELSE 31 END AND d.snapshot_ordinal >= d.production_ordinal THEN d.snapshot_ordinal - d.production_ordinal ELSE NULL END AS age_days FROM inventory_batch_ordinals AS d), order_material_dictionary AS (SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.pinxiang) = 1 AND COUNT(NULLIF(t.pinxiang, '')) = COUNT(*) THEN MAX(t.pinxiang) ELSE NULL END AS item, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_order_execute_isontime_mi AS t WHERE NOT t.new_material_code IS NULL GROUP BY t.new_material_code), movement_material_dictionary AS (SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_scm_material_in_out_summary_d AS t WHERE NOT t.material_code IS NULL GROUP BY t.material_code), material_dictionary AS (SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category, MAX(u.item) AS item, COALESCE(MAX(u.order_group), MAX(u.movement_group)) AS material_group FROM (SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category, o.item AS item, o.material_group AS order_group, CAST(NULL AS TEXT) AS movement_group FROM order_material_dictionary AS o UNION ALL SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category, CAST(NULL AS TEXT) AS item, CAST(NULL AS TEXT) AS order_group, m.material_group AS movement_group FROM movement_material_dictionary AS m) AS u GROUP BY u.sku), catalog AS (SELECT c.material_code AS sku,\n  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(c.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(c.material_name), '')) ELSE NULL END AS name\n  FROM agents_dim_product_list_mi AS c GROUP BY c.material_code)\n    SELECT CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END AS sku,\n      CASE WHEN :gea_p40 THEN MAX(c.name) ELSE NULL END AS material_name, d.category AS category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END AS item, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END AS material,\n      SUM(a.live_qty) AS inventory,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty ELSE 0 END) AS age_qty,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty * a.age_days ELSE 0 END) AS age_sum,\n      SUM(CASE WHEN a.age_days > 60 THEN a.live_qty ELSE 0 END) AS older_qty,\n      SUM(CASE WHEN a.live_qty > 0 AND a.age_days IS NULL THEN a.live_qty ELSE 0 END) AS unknown_age_qty\n    FROM inventory_batch_ages AS a LEFT JOIN material_dictionary AS d ON d.sku = a.material_code\n    LEFT JOIN catalog AS c ON c.sku = a.material_code\n    WHERE (:gea_p43 IS NULL OR COALESCE(d.category, '未分类') = :gea_p43) AND (:gea_p41 IS NULL OR LOWER(a.material_code) LIKE :gea_p41 OR LOWER(c.name) LIKE :gea_p41 OR LOWER(d.item) LIKE :gea_p41\n      OR LOWER(d.material_group) LIKE :gea_p41)\n    GROUP BY CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END, d.category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END) AS groups",
+        "sql": "SELECT COUNT(*) AS total FROM (WITH inventory_batch_dates AS (SELECT b.belong_base AS belong_base, b.warehouseid AS warehouseid, b.material_code AS material_code, b.month_date AS month_date, b.live_qty AS live_qty, b.available_qty AS available_qty, b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty, CAST(SUBSTRING(b.month_date, 1, 4) AS INT) AS snapshot_year, CAST(SUBSTRING(b.month_date, 5, 2) AS INT) AS snapshot_month, CAST(SUBSTRING(b.month_date, 7, 2) AS INT) AS snapshot_day, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 1, 4) AS INT) ELSE NULL END AS production_year, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 6, 2) AS INT) ELSE NULL END AS production_month, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 9, 2) AS INT) ELSE NULL END AS production_day FROM (SELECT b.belong_base AS belong_base, SUM(b.available_qty) AS available_qty, SUM(b.freeze_qty) AS freeze_qty, SUM(b.live_qty) AS live_qty, b.material_code AS material_code, b.month_date AS month_date, SUM(b.pack_unit_qty) AS pack_unit_qty, b.prod_date AS prod_date, b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid FROM agents_scm_inventory_sku_data_d AS b WHERE b.warehouse_classify IN ('01', '02') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '') GROUP BY b.belong_base, b.material_code, b.month_date, b.prod_date, b.warehouse_classify, b.warehouseid) AS b WHERE b.warehouse_classify IN ('01', '02') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')), inventory_batch_ordinals AS (SELECT d.belong_base AS belong_base, d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, d.production_year AS production_year, d.production_month AS production_month, d.production_day AS production_day, (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) AS snapshot_ordinal, (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) AS production_ordinal FROM inventory_batch_dates AS d), inventory_batch_ages AS (SELECT d.belong_base AS belong_base, d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, CASE WHEN d.live_qty > 0 AND d.production_year > 0 AND d.production_month BETWEEN 1 AND 12 AND d.production_day >= 1 AND d.production_day <= CASE WHEN d.production_month = 2 THEN CASE WHEN (d.production_year - 4 * FLOOR(d.production_year / 4.0) = 0 AND (d.production_year - 100 * FLOOR(d.production_year / 100.0) <> 0 OR d.production_year - 400 * FLOOR(d.production_year / 400.0) = 0)) THEN 29 ELSE 28 END WHEN d.production_month IN (4, 6, 9, 11) THEN 30 ELSE 31 END AND d.snapshot_ordinal >= d.production_ordinal THEN d.snapshot_ordinal - d.production_ordinal ELSE NULL END AS age_days FROM inventory_batch_ordinals AS d), order_material_dictionary AS (SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.pinxiang) = 1 AND COUNT(NULLIF(t.pinxiang, '')) = COUNT(*) THEN MAX(t.pinxiang) ELSE NULL END AS item, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_order_execute_isontime_mi AS t WHERE NOT t.new_material_code IS NULL GROUP BY t.new_material_code), movement_material_dictionary AS (SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_scm_material_in_out_summary_d AS t WHERE NOT t.material_code IS NULL GROUP BY t.material_code), material_dictionary AS (SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category, MAX(u.item) AS item, COALESCE(MAX(u.order_group), MAX(u.movement_group)) AS material_group FROM (SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category, o.item AS item, o.material_group AS order_group, CAST(NULL AS TEXT) AS movement_group FROM order_material_dictionary AS o UNION ALL SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category, CAST(NULL AS TEXT) AS item, CAST(NULL AS TEXT) AS order_group, m.material_group AS movement_group FROM movement_material_dictionary AS m) AS u GROUP BY u.sku), catalog AS (SELECT c.material_code AS sku,\n  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(c.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(c.material_name), '')) ELSE NULL END AS name\n  FROM agents_dim_product_list_mi AS c GROUP BY c.material_code)\n    SELECT a.belong_base AS base, CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END AS sku,\n      CASE WHEN :gea_p40 THEN MAX(c.name) ELSE NULL END AS material_name, d.category AS category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END AS item, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END AS material,\n      SUM(a.live_qty) AS inventory,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty ELSE 0 END) AS age_qty,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty * a.age_days ELSE 0 END) AS age_sum,\n      SUM(CASE WHEN a.age_days > 60 THEN a.live_qty ELSE 0 END) AS older_qty,\n      SUM(CASE WHEN a.live_qty > 0 AND a.age_days IS NULL THEN a.live_qty ELSE 0 END) AS unknown_age_qty\n    FROM inventory_batch_ages AS a LEFT JOIN material_dictionary AS d ON d.sku = a.material_code\n    LEFT JOIN catalog AS c ON c.sku = a.material_code\n    WHERE (:gea_p43 IS NULL OR COALESCE(d.category, '未分类') = :gea_p43) AND (:gea_p41 IS NULL OR LOWER(a.material_code) LIKE :gea_p41 OR LOWER(c.name) LIKE :gea_p41 OR LOWER(d.item) LIKE :gea_p41\n      OR LOWER(d.material_group) LIKE :gea_p41)\n    GROUP BY a.belong_base, CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END, d.category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END) AS grouped_rows",
         "parameters": {
           "gea_p1": "2026-10-14",
           "gea_p40": false,
@@ -49739,7 +49745,7 @@
         }
       },
       "request": {
-        "sql": "WITH inventory_batch_dates AS (SELECT b.warehouseid AS warehouseid, b.material_code AS material_code, b.month_date AS month_date, b.live_qty AS live_qty, b.available_qty AS available_qty, b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty, CAST(SUBSTRING(b.month_date, 1, 4) AS INT) AS snapshot_year, CAST(SUBSTRING(b.month_date, 5, 2) AS INT) AS snapshot_month, CAST(SUBSTRING(b.month_date, 7, 2) AS INT) AS snapshot_day, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 1, 4) AS INT) ELSE NULL END AS production_year, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 6, 2) AS INT) ELSE NULL END AS production_month, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 9, 2) AS INT) ELSE NULL END AS production_day FROM (SELECT SUM(b.available_qty) AS available_qty, SUM(b.freeze_qty) AS freeze_qty, SUM(b.live_qty) AS live_qty, b.material_code AS material_code, b.month_date AS month_date, SUM(b.pack_unit_qty) AS pack_unit_qty, b.prod_date AS prod_date, b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid FROM agents_scm_inventory_sku_data_d AS b WHERE ((b.warehouse_classify = '20' OR b.warehouseid = 'N436') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')) AND (:gea_p2 IS NULL OR :gea_p2 = '' OR b.warehouseid = :gea_p2) GROUP BY b.material_code, b.month_date, b.prod_date, b.warehouse_classify, b.warehouseid) AS b WHERE ((b.warehouse_classify = '20' OR b.warehouseid = 'N436') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')) AND (:gea_p2 IS NULL OR :gea_p2 = '' OR b.warehouseid = :gea_p2)), inventory_batch_ordinals AS (SELECT d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, d.production_year AS production_year, d.production_month AS production_month, d.production_day AS production_day, (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) AS snapshot_ordinal, (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) AS production_ordinal FROM inventory_batch_dates AS d), inventory_batch_ages AS (SELECT d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, CASE WHEN d.live_qty > 0 AND d.production_year > 0 AND d.production_month BETWEEN 1 AND 12 AND d.production_day >= 1 AND d.production_day <= CASE WHEN d.production_month = 2 THEN CASE WHEN (d.production_year - 4 * FLOOR(d.production_year / 4.0) = 0 AND (d.production_year - 100 * FLOOR(d.production_year / 100.0) <> 0 OR d.production_year - 400 * FLOOR(d.production_year / 400.0) = 0)) THEN 29 ELSE 28 END WHEN d.production_month IN (4, 6, 9, 11) THEN 30 ELSE 31 END AND d.snapshot_ordinal >= d.production_ordinal THEN d.snapshot_ordinal - d.production_ordinal ELSE NULL END AS age_days FROM inventory_batch_ordinals AS d), order_material_dictionary AS (SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.pinxiang) = 1 AND COUNT(NULLIF(t.pinxiang, '')) = COUNT(*) THEN MAX(t.pinxiang) ELSE NULL END AS item, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_order_execute_isontime_mi AS t WHERE NOT t.new_material_code IS NULL GROUP BY t.new_material_code), movement_material_dictionary AS (SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_scm_material_in_out_summary_d AS t WHERE NOT t.material_code IS NULL GROUP BY t.material_code), material_dictionary AS (SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category, MAX(u.item) AS item, COALESCE(MAX(u.order_group), MAX(u.movement_group)) AS material_group FROM (SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category, o.item AS item, o.material_group AS order_group, CAST(NULL AS TEXT) AS movement_group FROM order_material_dictionary AS o UNION ALL SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category, CAST(NULL AS TEXT) AS item, CAST(NULL AS TEXT) AS order_group, m.material_group AS movement_group FROM movement_material_dictionary AS m) AS u GROUP BY u.sku), catalog AS (SELECT c.material_code AS sku,\n  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(c.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(c.material_name), '')) ELSE NULL END AS name\n  FROM agents_dim_product_list_mi AS c GROUP BY c.material_code)\n    SELECT CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END AS sku,\n      CASE WHEN :gea_p40 THEN MAX(c.name) ELSE NULL END AS material_name, d.category AS category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END AS item, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END AS material,\n      SUM(a.live_qty) AS inventory,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty ELSE 0 END) AS age_qty,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty * a.age_days ELSE 0 END) AS age_sum,\n      SUM(CASE WHEN a.age_days > 90 THEN a.live_qty ELSE 0 END) AS older_qty,\n      SUM(CASE WHEN a.live_qty > 0 AND a.age_days IS NULL THEN a.live_qty ELSE 0 END) AS unknown_age_qty\n    FROM inventory_batch_ages AS a LEFT JOIN material_dictionary AS d ON d.sku = a.material_code\n    LEFT JOIN catalog AS c ON c.sku = a.material_code\n    WHERE (:gea_p43 IS NULL OR COALESCE(d.category, '未分类') = :gea_p43) AND (:gea_p41 IS NULL OR LOWER(a.material_code) LIKE :gea_p41 OR LOWER(c.name) LIKE :gea_p41 OR LOWER(d.item) LIKE :gea_p41\n      OR LOWER(d.material_group) LIKE :gea_p41)\n    GROUP BY CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END, d.category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END ORDER BY category, item, material, sku LIMIT :gea_p1001 OFFSET :gea_p1002",
+        "sql": "WITH inventory_batch_dates AS (SELECT b.belong_base AS belong_base, b.warehouseid AS warehouseid, b.material_code AS material_code, b.month_date AS month_date, b.live_qty AS live_qty, b.available_qty AS available_qty, b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty, CAST(SUBSTRING(b.month_date, 1, 4) AS INT) AS snapshot_year, CAST(SUBSTRING(b.month_date, 5, 2) AS INT) AS snapshot_month, CAST(SUBSTRING(b.month_date, 7, 2) AS INT) AS snapshot_day, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 1, 4) AS INT) ELSE NULL END AS production_year, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 6, 2) AS INT) ELSE NULL END AS production_month, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 9, 2) AS INT) ELSE NULL END AS production_day FROM (SELECT b.belong_base AS belong_base, SUM(b.available_qty) AS available_qty, SUM(b.freeze_qty) AS freeze_qty, SUM(b.live_qty) AS live_qty, b.material_code AS material_code, b.month_date AS month_date, SUM(b.pack_unit_qty) AS pack_unit_qty, b.prod_date AS prod_date, b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid FROM agents_scm_inventory_sku_data_d AS b WHERE ((b.warehouse_classify = '20' OR b.warehouseid = 'N436') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')) AND (:gea_p2 IS NULL OR :gea_p2 = '' OR b.warehouseid = :gea_p2) GROUP BY b.belong_base, b.material_code, b.month_date, b.prod_date, b.warehouse_classify, b.warehouseid) AS b WHERE ((b.warehouse_classify = '20' OR b.warehouseid = 'N436') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')) AND (:gea_p2 IS NULL OR :gea_p2 = '' OR b.warehouseid = :gea_p2)), inventory_batch_ordinals AS (SELECT d.belong_base AS belong_base, d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, d.production_year AS production_year, d.production_month AS production_month, d.production_day AS production_day, (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) AS snapshot_ordinal, (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) AS production_ordinal FROM inventory_batch_dates AS d), inventory_batch_ages AS (SELECT d.belong_base AS belong_base, d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, CASE WHEN d.live_qty > 0 AND d.production_year > 0 AND d.production_month BETWEEN 1 AND 12 AND d.production_day >= 1 AND d.production_day <= CASE WHEN d.production_month = 2 THEN CASE WHEN (d.production_year - 4 * FLOOR(d.production_year / 4.0) = 0 AND (d.production_year - 100 * FLOOR(d.production_year / 100.0) <> 0 OR d.production_year - 400 * FLOOR(d.production_year / 400.0) = 0)) THEN 29 ELSE 28 END WHEN d.production_month IN (4, 6, 9, 11) THEN 30 ELSE 31 END AND d.snapshot_ordinal >= d.production_ordinal THEN d.snapshot_ordinal - d.production_ordinal ELSE NULL END AS age_days FROM inventory_batch_ordinals AS d), order_material_dictionary AS (SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.pinxiang) = 1 AND COUNT(NULLIF(t.pinxiang, '')) = COUNT(*) THEN MAX(t.pinxiang) ELSE NULL END AS item, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_order_execute_isontime_mi AS t WHERE NOT t.new_material_code IS NULL GROUP BY t.new_material_code), movement_material_dictionary AS (SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_scm_material_in_out_summary_d AS t WHERE NOT t.material_code IS NULL GROUP BY t.material_code), material_dictionary AS (SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category, MAX(u.item) AS item, COALESCE(MAX(u.order_group), MAX(u.movement_group)) AS material_group FROM (SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category, o.item AS item, o.material_group AS order_group, CAST(NULL AS TEXT) AS movement_group FROM order_material_dictionary AS o UNION ALL SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category, CAST(NULL AS TEXT) AS item, CAST(NULL AS TEXT) AS order_group, m.material_group AS movement_group FROM movement_material_dictionary AS m) AS u GROUP BY u.sku), catalog AS (SELECT c.material_code AS sku,\n  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(c.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(c.material_name), '')) ELSE NULL END AS name\n  FROM agents_dim_product_list_mi AS c GROUP BY c.material_code)\n    SELECT a.belong_base AS base, CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END AS sku,\n      CASE WHEN :gea_p40 THEN MAX(c.name) ELSE NULL END AS material_name, d.category AS category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END AS item, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END AS material,\n      SUM(a.live_qty) AS inventory,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty ELSE 0 END) AS age_qty,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty * a.age_days ELSE 0 END) AS age_sum,\n      SUM(CASE WHEN a.age_days > 90 THEN a.live_qty ELSE 0 END) AS older_qty,\n      SUM(CASE WHEN a.live_qty > 0 AND a.age_days IS NULL THEN a.live_qty ELSE 0 END) AS unknown_age_qty\n    FROM inventory_batch_ages AS a LEFT JOIN material_dictionary AS d ON d.sku = a.material_code\n    LEFT JOIN catalog AS c ON c.sku = a.material_code\n    WHERE (:gea_p43 IS NULL OR COALESCE(d.category, '未分类') = :gea_p43) AND (:gea_p41 IS NULL OR LOWER(a.material_code) LIKE :gea_p41 OR LOWER(c.name) LIKE :gea_p41 OR LOWER(d.item) LIKE :gea_p41\n      OR LOWER(d.material_group) LIKE :gea_p41)\n    GROUP BY a.belong_base, CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END, d.category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END\nORDER BY base, category, item, material, sku LIMIT :gea_p1001 OFFSET :gea_p1002",
         "parameters": {
           "gea_p1": "2026-10-14",
           "gea_p2": null,
@@ -49747,12 +49753,13 @@
           "gea_p41": null,
           "gea_p42": false,
           "gea_p43": null,
-          "gea_p1001": 10,
+          "gea_p1001": 20,
           "gea_p1002": 0
         },
         "includeTotal": false
       },
       "resultColumns": [
+        "base",
         "sku",
         "material_name",
         "category",
@@ -49769,7 +49776,7 @@
       }
     },
     "lantern.stock-branch.count": {
-      "title": "公司库存及货龄按SKU",
+      "title": "公司库存及货龄按SKU计数",
       "parameterSpec": {
         "gea_p1": {
           "name": "stat_date",
@@ -49816,7 +49823,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(1) AS total FROM (WITH inventory_batch_dates AS (SELECT b.warehouseid AS warehouseid, b.material_code AS material_code, b.month_date AS month_date, b.live_qty AS live_qty, b.available_qty AS available_qty, b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty, CAST(SUBSTRING(b.month_date, 1, 4) AS INT) AS snapshot_year, CAST(SUBSTRING(b.month_date, 5, 2) AS INT) AS snapshot_month, CAST(SUBSTRING(b.month_date, 7, 2) AS INT) AS snapshot_day, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 1, 4) AS INT) ELSE NULL END AS production_year, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 6, 2) AS INT) ELSE NULL END AS production_month, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 9, 2) AS INT) ELSE NULL END AS production_day FROM (SELECT SUM(b.available_qty) AS available_qty, SUM(b.freeze_qty) AS freeze_qty, SUM(b.live_qty) AS live_qty, b.material_code AS material_code, b.month_date AS month_date, SUM(b.pack_unit_qty) AS pack_unit_qty, b.prod_date AS prod_date, b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid FROM agents_scm_inventory_sku_data_d AS b WHERE ((b.warehouse_classify = '20' OR b.warehouseid = 'N436') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')) AND (:gea_p2 IS NULL OR :gea_p2 = '' OR b.warehouseid = :gea_p2) GROUP BY b.material_code, b.month_date, b.prod_date, b.warehouse_classify, b.warehouseid) AS b WHERE ((b.warehouse_classify = '20' OR b.warehouseid = 'N436') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')) AND (:gea_p2 IS NULL OR :gea_p2 = '' OR b.warehouseid = :gea_p2)), inventory_batch_ordinals AS (SELECT d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, d.production_year AS production_year, d.production_month AS production_month, d.production_day AS production_day, (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) AS snapshot_ordinal, (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) AS production_ordinal FROM inventory_batch_dates AS d), inventory_batch_ages AS (SELECT d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, CASE WHEN d.live_qty > 0 AND d.production_year > 0 AND d.production_month BETWEEN 1 AND 12 AND d.production_day >= 1 AND d.production_day <= CASE WHEN d.production_month = 2 THEN CASE WHEN (d.production_year - 4 * FLOOR(d.production_year / 4.0) = 0 AND (d.production_year - 100 * FLOOR(d.production_year / 100.0) <> 0 OR d.production_year - 400 * FLOOR(d.production_year / 400.0) = 0)) THEN 29 ELSE 28 END WHEN d.production_month IN (4, 6, 9, 11) THEN 30 ELSE 31 END AND d.snapshot_ordinal >= d.production_ordinal THEN d.snapshot_ordinal - d.production_ordinal ELSE NULL END AS age_days FROM inventory_batch_ordinals AS d), order_material_dictionary AS (SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.pinxiang) = 1 AND COUNT(NULLIF(t.pinxiang, '')) = COUNT(*) THEN MAX(t.pinxiang) ELSE NULL END AS item, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_order_execute_isontime_mi AS t WHERE NOT t.new_material_code IS NULL GROUP BY t.new_material_code), movement_material_dictionary AS (SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_scm_material_in_out_summary_d AS t WHERE NOT t.material_code IS NULL GROUP BY t.material_code), material_dictionary AS (SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category, MAX(u.item) AS item, COALESCE(MAX(u.order_group), MAX(u.movement_group)) AS material_group FROM (SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category, o.item AS item, o.material_group AS order_group, CAST(NULL AS TEXT) AS movement_group FROM order_material_dictionary AS o UNION ALL SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category, CAST(NULL AS TEXT) AS item, CAST(NULL AS TEXT) AS order_group, m.material_group AS movement_group FROM movement_material_dictionary AS m) AS u GROUP BY u.sku), catalog AS (SELECT c.material_code AS sku,\n  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(c.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(c.material_name), '')) ELSE NULL END AS name\n  FROM agents_dim_product_list_mi AS c GROUP BY c.material_code)\n    SELECT CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END AS sku,\n      CASE WHEN :gea_p40 THEN MAX(c.name) ELSE NULL END AS material_name, d.category AS category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END AS item, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END AS material,\n      SUM(a.live_qty) AS inventory,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty ELSE 0 END) AS age_qty,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty * a.age_days ELSE 0 END) AS age_sum,\n      SUM(CASE WHEN a.age_days > 90 THEN a.live_qty ELSE 0 END) AS older_qty,\n      SUM(CASE WHEN a.live_qty > 0 AND a.age_days IS NULL THEN a.live_qty ELSE 0 END) AS unknown_age_qty\n    FROM inventory_batch_ages AS a LEFT JOIN material_dictionary AS d ON d.sku = a.material_code\n    LEFT JOIN catalog AS c ON c.sku = a.material_code\n    WHERE (:gea_p43 IS NULL OR COALESCE(d.category, '未分类') = :gea_p43) AND (:gea_p41 IS NULL OR LOWER(a.material_code) LIKE :gea_p41 OR LOWER(c.name) LIKE :gea_p41 OR LOWER(d.item) LIKE :gea_p41\n      OR LOWER(d.material_group) LIKE :gea_p41)\n    GROUP BY CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END, d.category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END) AS groups",
+        "sql": "SELECT COUNT(*) AS total FROM (WITH inventory_batch_dates AS (SELECT b.belong_base AS belong_base, b.warehouseid AS warehouseid, b.material_code AS material_code, b.month_date AS month_date, b.live_qty AS live_qty, b.available_qty AS available_qty, b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty, CAST(SUBSTRING(b.month_date, 1, 4) AS INT) AS snapshot_year, CAST(SUBSTRING(b.month_date, 5, 2) AS INT) AS snapshot_month, CAST(SUBSTRING(b.month_date, 7, 2) AS INT) AS snapshot_day, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 1, 4) AS INT) ELSE NULL END AS production_year, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 6, 2) AS INT) ELSE NULL END AS production_month, CASE WHEN LENGTH(b.prod_date) >= 10 AND SUBSTRING(b.prod_date, 5, 1) = '-' AND SUBSTRING(b.prod_date, 8, 1) = '-' AND SUBSTRING(b.prod_date, 1, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 2, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 3, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 4, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 6, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 7, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 9, 1) BETWEEN '0' AND '9' AND SUBSTRING(b.prod_date, 10, 1) BETWEEN '0' AND '9' THEN CAST(SUBSTRING(b.prod_date, 9, 2) AS INT) ELSE NULL END AS production_day FROM (SELECT b.belong_base AS belong_base, SUM(b.available_qty) AS available_qty, SUM(b.freeze_qty) AS freeze_qty, SUM(b.live_qty) AS live_qty, b.material_code AS material_code, b.month_date AS month_date, SUM(b.pack_unit_qty) AS pack_unit_qty, b.prod_date AS prod_date, b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid FROM agents_scm_inventory_sku_data_d AS b WHERE ((b.warehouse_classify = '20' OR b.warehouseid = 'N436') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')) AND (:gea_p2 IS NULL OR :gea_p2 = '' OR b.warehouseid = :gea_p2) GROUP BY b.belong_base, b.material_code, b.month_date, b.prod_date, b.warehouse_classify, b.warehouseid) AS b WHERE ((b.warehouse_classify = '20' OR b.warehouseid = 'N436') AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '')) AND (:gea_p2 IS NULL OR :gea_p2 = '' OR b.warehouseid = :gea_p2)), inventory_batch_ordinals AS (SELECT d.belong_base AS belong_base, d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, d.production_year AS production_year, d.production_month AS production_month, d.production_day AS production_day, (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) AS snapshot_ordinal, (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) AS production_ordinal FROM inventory_batch_dates AS d), inventory_batch_ages AS (SELECT d.belong_base AS belong_base, d.warehouseid AS warehouseid, d.material_code AS material_code, d.month_date AS month_date, d.live_qty AS live_qty, d.available_qty AS available_qty, d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty, CASE WHEN d.live_qty > 0 AND d.production_year > 0 AND d.production_month BETWEEN 1 AND 12 AND d.production_day >= 1 AND d.production_day <= CASE WHEN d.production_month = 2 THEN CASE WHEN (d.production_year - 4 * FLOOR(d.production_year / 4.0) = 0 AND (d.production_year - 100 * FLOOR(d.production_year / 100.0) <> 0 OR d.production_year - 400 * FLOOR(d.production_year / 400.0) = 0)) THEN 29 ELSE 28 END WHEN d.production_month IN (4, 6, 9, 11) THEN 30 ELSE 31 END AND d.snapshot_ordinal >= d.production_ordinal THEN d.snapshot_ordinal - d.production_ordinal ELSE NULL END AS age_days FROM inventory_batch_ordinals AS d), order_material_dictionary AS (SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.pinxiang) = 1 AND COUNT(NULLIF(t.pinxiang, '')) = COUNT(*) THEN MAX(t.pinxiang) ELSE NULL END AS item, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_order_execute_isontime_mi AS t WHERE NOT t.new_material_code IS NULL GROUP BY t.new_material_code), movement_material_dictionary AS (SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(DISTINCT t.material_group_name) = 1 AND COUNT(NULLIF(t.material_group_name, '')) = COUNT(*) THEN MAX(t.material_group_name) ELSE NULL END AS material_group FROM agents_scm_material_in_out_summary_d AS t WHERE NOT t.material_code IS NULL GROUP BY t.material_code), material_dictionary AS (SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category, MAX(u.item) AS item, COALESCE(MAX(u.order_group), MAX(u.movement_group)) AS material_group FROM (SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category, o.item AS item, o.material_group AS order_group, CAST(NULL AS TEXT) AS movement_group FROM order_material_dictionary AS o UNION ALL SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category, CAST(NULL AS TEXT) AS item, CAST(NULL AS TEXT) AS order_group, m.material_group AS movement_group FROM movement_material_dictionary AS m) AS u GROUP BY u.sku), catalog AS (SELECT c.material_code AS sku,\n  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(c.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(c.material_name), '')) ELSE NULL END AS name\n  FROM agents_dim_product_list_mi AS c GROUP BY c.material_code)\n    SELECT a.belong_base AS base, CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END AS sku,\n      CASE WHEN :gea_p40 THEN MAX(c.name) ELSE NULL END AS material_name, d.category AS category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END AS item, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END AS material,\n      SUM(a.live_qty) AS inventory,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty ELSE 0 END) AS age_qty,\n      SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty * a.age_days ELSE 0 END) AS age_sum,\n      SUM(CASE WHEN a.age_days > 90 THEN a.live_qty ELSE 0 END) AS older_qty,\n      SUM(CASE WHEN a.live_qty > 0 AND a.age_days IS NULL THEN a.live_qty ELSE 0 END) AS unknown_age_qty\n    FROM inventory_batch_ages AS a LEFT JOIN material_dictionary AS d ON d.sku = a.material_code\n    LEFT JOIN catalog AS c ON c.sku = a.material_code\n    WHERE (:gea_p43 IS NULL OR COALESCE(d.category, '未分类') = :gea_p43) AND (:gea_p41 IS NULL OR LOWER(a.material_code) LIKE :gea_p41 OR LOWER(c.name) LIKE :gea_p41 OR LOWER(d.item) LIKE :gea_p41\n      OR LOWER(d.material_group) LIKE :gea_p41)\n    GROUP BY a.belong_base, CASE WHEN :gea_p40 THEN a.material_code ELSE NULL END, d.category, CASE WHEN :gea_p42 THEN d.item ELSE NULL END, CASE WHEN :gea_p42 THEN d.material_group ELSE NULL END) AS grouped_rows",
         "parameters": {
           "gea_p1": "2026-10-14",
           "gea_p2": null,
@@ -51351,6 +51358,786 @@
         "includeTotal": false
       },
       "resultColumns": ["total"]
+    },
+    "lantern.product-accuracy.count": {
+      "title": "汤圆销售提报商品明细计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start_month",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "example": "2026-11-01",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "end_month_exclusive",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "example": "2026-12-01",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p350": {
+          "name": "product_category",
+          "type": "string",
+          "example": "汤圆",
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (WITH order_categories AS (\n  SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_order_execute_isontime_mi AS t WHERE t.new_material_code IS NOT NULL GROUP BY t.new_material_code\n), movement_categories AS (\n  SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_scm_material_in_out_summary_d AS t WHERE t.material_code IS NOT NULL GROUP BY t.material_code\n), material_categories AS (\n  SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category\n  FROM (\n    SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category FROM order_categories AS o\n    UNION ALL\n    SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category FROM movement_categories AS m\n  ) AS u GROUP BY u.sku\n)\nSELECT s.stat_month AS month, COALESCE(NULLIF(s.product_categ_name, ''), md.category) AS category, s.material_code AS sku,\n    SUM(COALESCE(s.plan_qty_initial, 0)) AS initial_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_initial, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_initial, 0))) AS initial_deviation, SUM(COALESCE(s.plan_qty_adjusted, 0)) AS adjusted_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_adjusted, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_adjusted, 0))) AS adjusted_deviation, SUM(s.act_dl_qty) AS shipped_qty, SUM(COALESCE(s.plan_qty_adjusted, s.plan_qty_initial)) AS submitted_plan_qty, SUM(CASE WHEN s.act_dl_qty IS NULL OR COALESCE(s.plan_qty_adjusted, s.plan_qty_initial) IS NULL THEN 1 ELSE 0 END) AS missing_ship_plan, COUNT(1) AS records\n  FROM agents_scm_demand_sales_f AS s LEFT JOIN material_categories AS md ON md.sku = s.material_code\n  WHERE s.source_flag = '销售口径' AND COALESCE(NULLIF(s.product_categ_name, ''), md.category) = :gea_p350 AND s.stat_month >= CAST(:gea_p1 AS DATE) AND s.stat_month < CAST(:gea_p2 AS DATE)\n  GROUP BY s.stat_month, COALESCE(NULLIF(s.product_categ_name, ''), md.category), s.material_code) AS grouped_rows",
+        "parameters": {
+          "gea_p1": "2026-11-01",
+          "gea_p2": "2026-12-01",
+          "gea_p350": "汤圆"
+        },
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "lantern.product-accuracy": {
+      "title": "汤圆销售提报商品明细",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start_month",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "example": "2026-11-01",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "end_month_exclusive",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "example": "2026-12-01",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p350": {
+          "name": "product_category",
+          "type": "string",
+          "example": "汤圆",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p1001": {
+          "name": "page_size",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "example": 10,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p1002": {
+          "name": "offset",
+          "type": "integer",
+          "minimum": 0,
+          "example": 0,
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "WITH order_categories AS (\n  SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_order_execute_isontime_mi AS t WHERE t.new_material_code IS NOT NULL GROUP BY t.new_material_code\n), movement_categories AS (\n  SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_scm_material_in_out_summary_d AS t WHERE t.material_code IS NOT NULL GROUP BY t.material_code\n), material_categories AS (\n  SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category\n  FROM (\n    SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category FROM order_categories AS o\n    UNION ALL\n    SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category FROM movement_categories AS m\n  ) AS u GROUP BY u.sku\n)\nSELECT s.stat_month AS month, COALESCE(NULLIF(s.product_categ_name, ''), md.category) AS category, s.material_code AS sku,\n    SUM(COALESCE(s.plan_qty_initial, 0)) AS initial_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_initial, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_initial, 0))) AS initial_deviation, SUM(COALESCE(s.plan_qty_adjusted, 0)) AS adjusted_plan, SUM(ABS((CASE WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.plan_qty_adjusted, 0) THEN COALESCE(s.act_dl_qty, 0) WHEN COALESCE(s.order_qty_origin, 0) > COALESCE(s.act_dl_qty, 0) THEN COALESCE(s.order_qty_origin, 0) ELSE COALESCE(s.act_dl_qty, 0) END) - COALESCE(s.plan_qty_adjusted, 0))) AS adjusted_deviation, SUM(s.act_dl_qty) AS shipped_qty, SUM(COALESCE(s.plan_qty_adjusted, s.plan_qty_initial)) AS submitted_plan_qty, SUM(CASE WHEN s.act_dl_qty IS NULL OR COALESCE(s.plan_qty_adjusted, s.plan_qty_initial) IS NULL THEN 1 ELSE 0 END) AS missing_ship_plan, COUNT(1) AS records\n  FROM agents_scm_demand_sales_f AS s LEFT JOIN material_categories AS md ON md.sku = s.material_code\n  WHERE s.source_flag = '销售口径' AND COALESCE(NULLIF(s.product_categ_name, ''), md.category) = :gea_p350 AND s.stat_month >= CAST(:gea_p1 AS DATE) AND s.stat_month < CAST(:gea_p2 AS DATE)\n  GROUP BY s.stat_month, COALESCE(NULLIF(s.product_categ_name, ''), md.category), s.material_code\nORDER BY month, category, sku LIMIT :gea_p1001 OFFSET :gea_p1002",
+        "parameters": {
+          "gea_p1": "2026-11-01",
+          "gea_p2": "2026-12-01",
+          "gea_p350": "汤圆",
+          "gea_p1001": 20,
+          "gea_p1002": 0
+        },
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "category",
+        "sku",
+        "month",
+        "initial_plan",
+        "initial_deviation",
+        "adjusted_plan",
+        "adjusted_deviation",
+        "records",
+        "shipped_qty",
+        "submitted_plan_qty",
+        "missing_ship_plan"
+      ],
+      "pagination": {
+        "countQuery": "lantern.product-accuracy.count"
+      }
+    },
+    "lantern.product-budget.count": {
+      "title": "汤圆销售预算商品明细计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start_month",
+          "type": "string",
+          "format": "YYYYMM",
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "end_month_exclusive",
+          "type": "string",
+          "format": "YYYYMM",
+          "nullable": false
+        },
+        "gea_p3": {
+          "name": "as_of",
+          "type": "string",
+          "format": "YYYY-MM-DD",
+          "nullable": false
+        },
+        "gea_p4": {
+          "name": "start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "nullable": false
+        },
+        "gea_p5": {
+          "name": "end_exclusive",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "nullable": false
+        },
+        "gea_p350": {
+          "name": "product_category",
+          "type": "string",
+          "example": "汤圆",
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (WITH order_categories AS (\n  SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_order_execute_isontime_mi AS t WHERE t.new_material_code IS NOT NULL GROUP BY t.new_material_code\n), movement_categories AS (\n  SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_scm_material_in_out_summary_d AS t WHERE t.material_code IS NOT NULL GROUP BY t.material_code\n), material_categories AS (\n  SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category\n  FROM (\n    SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category FROM order_categories AS o\n    UNION ALL\n    SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category FROM movement_categories AS m\n  ) AS u GROUP BY u.sku\n), selected_materials AS (\n  SELECT d.sku AS sku FROM material_categories AS d WHERE d.category = :gea_p350\n), budget_dates AS (SELECT t.month AS month, MAX(t.create_date) AS snapshot_date FROM agents_scm_cust_plan_order_analysis_d AS t WHERE t.month >= :gea_p1 AND t.month < :gea_p2 AND t.create_date <= :gea_p3 AND REPLACE(SUBSTRING(t.create_date, 1, 7), '-', '') = t.month GROUP BY t.month), budget_keys AS (SELECT t.month AS month, NULLIF(TRIM(t.cust_code), '') AS customer, NULLIF(TRIM(t.material_code), '') AS sku, MAX(d.snapshot_date) AS budget_date, CASE WHEN COUNT(*) = 1 THEN MAX(t.simulation_need_mny) ELSE NULL END AS budget FROM agents_scm_cust_plan_order_analysis_d AS t INNER JOIN budget_dates AS d ON t.month = d.month AND t.create_date = d.snapshot_date INNER JOIN selected_materials AS c ON c.sku = TRIM(t.material_code) GROUP BY t.month, NULLIF(TRIM(t.cust_code), ''), NULLIF(TRIM(t.material_code), '')), income_keys AS (SELECT SUBSTRING(t.act_ship_date, 1, 6) AS month, NULLIF(TRIM(t.cust_code), '') AS customer, NULLIF(TRIM(t.material_code), '') AS sku, COALESCE(SUM(t.income_excl_tax_local), 0) AS income, COUNT(t.income_excl_tax_local) AS known_income, COUNT(*) - COUNT(t.income_excl_tax_local) AS missing_income, MAX(t.act_ship_date) AS income_date FROM agents_scm_cust_deliv_daily_di AS t INNER JOIN selected_materials AS c ON c.sku = TRIM(t.material_code) WHERE t.act_ship_date >= :gea_p4 AND t.act_ship_date < :gea_p5 GROUP BY SUBSTRING(t.act_ship_date, 1, 6), NULLIF(TRIM(t.cust_code), ''), NULLIF(TRIM(t.material_code), '')), budget_totals AS (SELECT b.month AS month, b.sku AS sku, COUNT(*) AS budget_keys, COALESCE(SUM(b.budget), 0) AS budget, SUM(CASE WHEN b.budget IS NULL OR b.budget < 0 THEN 1 ELSE 0 END) AS missing_budget_keys, MAX(b.budget_date) AS budget_date FROM budget_keys AS b GROUP BY b.month, b.sku), income_totals AS (SELECT i.month AS month, i.sku AS sku, COUNT(*) AS income_keys, SUM(CASE WHEN i.known_income > 0 THEN i.income ELSE NULL END) AS actual, SUM(i.missing_income) AS missing_income_records, MAX(i.income_date) AS source_date FROM income_keys AS i GROUP BY i.month, i.sku), matched_totals AS (SELECT b.month AS month, b.sku AS sku, COUNT(*) AS matched_keys, SUM(b.budget) AS matched_budget, SUM(i.income) AS matched_income FROM budget_keys AS b INNER JOIN income_keys AS i ON b.month = i.month AND b.customer = i.customer AND b.sku = i.sku WHERE b.budget >= 0 AND i.income IS NOT NULL GROUP BY b.month, b.sku), months AS (SELECT u.month AS month, u.sku AS sku FROM (SELECT b.month AS month, b.sku AS sku FROM budget_totals AS b UNION ALL SELECT i.month AS month, i.sku AS sku FROM income_totals AS i) AS u GROUP BY u.month, u.sku) SELECT 'MONTHLY_BUDGET_UNTAXED_INCOME' AS source_basis, m.month AS month, m.sku AS sku, i.actual AS actual, COALESCE(b.budget, 0) AS budget, COALESCE(b.budget_keys, 0) + COALESCE(i.income_keys, 0) AS records, COALESCE(b.missing_budget_keys, 0) + COALESCE(i.missing_income_records, 0) AS invalid, COALESCE(b.budget_keys, 0) AS budget_keys, COALESCE(i.income_keys, 0) AS income_keys, COALESCE(b.missing_budget_keys, 0) AS missing_budget_keys, COALESCE(i.missing_income_records, 0) AS missing_income_records, COALESCE(s.matched_keys, 0) AS matched_keys, s.matched_budget AS matched_budget, s.matched_income AS matched_income, b.budget_date AS budget_date, i.source_date AS source_date, CAST(NULL AS TEXT) AS base, :gea_p350 AS category, CAST(NULL AS TEXT) AS region, CAST(NULL AS TEXT) AS province, CAST(NULL AS TEXT) AS sales_group FROM months AS m LEFT JOIN budget_totals AS b ON b.month = m.month AND b.sku = m.sku LEFT JOIN income_totals AS i ON i.month = m.month AND i.sku = m.sku LEFT JOIN matched_totals AS s ON s.month = m.month AND s.sku = m.sku) AS grouped_rows",
+        "parameters": {
+          "gea_p1": "202610",
+          "gea_p2": "202611",
+          "gea_p3": "2026-10-20",
+          "gea_p4": "20261001",
+          "gea_p5": "20261021",
+          "gea_p350": "汤圆"
+        },
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "lantern.product-budget": {
+      "title": "汤圆销售预算商品明细",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start_month",
+          "type": "string",
+          "format": "YYYYMM",
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "end_month_exclusive",
+          "type": "string",
+          "format": "YYYYMM",
+          "nullable": false
+        },
+        "gea_p3": {
+          "name": "as_of",
+          "type": "string",
+          "format": "YYYY-MM-DD",
+          "nullable": false
+        },
+        "gea_p4": {
+          "name": "start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "nullable": false
+        },
+        "gea_p5": {
+          "name": "end_exclusive",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "nullable": false
+        },
+        "gea_p350": {
+          "name": "product_category",
+          "type": "string",
+          "example": "汤圆",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p1001": {
+          "name": "page_size",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "example": 10,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p1002": {
+          "name": "offset",
+          "type": "integer",
+          "minimum": 0,
+          "example": 0,
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "WITH order_categories AS (\n  SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_order_execute_isontime_mi AS t WHERE t.new_material_code IS NOT NULL GROUP BY t.new_material_code\n), movement_categories AS (\n  SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_scm_material_in_out_summary_d AS t WHERE t.material_code IS NOT NULL GROUP BY t.material_code\n), material_categories AS (\n  SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category\n  FROM (\n    SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category FROM order_categories AS o\n    UNION ALL\n    SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category FROM movement_categories AS m\n  ) AS u GROUP BY u.sku\n), selected_materials AS (\n  SELECT d.sku AS sku FROM material_categories AS d WHERE d.category = :gea_p350\n), budget_dates AS (SELECT t.month AS month, MAX(t.create_date) AS snapshot_date FROM agents_scm_cust_plan_order_analysis_d AS t WHERE t.month >= :gea_p1 AND t.month < :gea_p2 AND t.create_date <= :gea_p3 AND REPLACE(SUBSTRING(t.create_date, 1, 7), '-', '') = t.month GROUP BY t.month), budget_keys AS (SELECT t.month AS month, NULLIF(TRIM(t.cust_code), '') AS customer, NULLIF(TRIM(t.material_code), '') AS sku, MAX(d.snapshot_date) AS budget_date, CASE WHEN COUNT(*) = 1 THEN MAX(t.simulation_need_mny) ELSE NULL END AS budget FROM agents_scm_cust_plan_order_analysis_d AS t INNER JOIN budget_dates AS d ON t.month = d.month AND t.create_date = d.snapshot_date INNER JOIN selected_materials AS c ON c.sku = TRIM(t.material_code) GROUP BY t.month, NULLIF(TRIM(t.cust_code), ''), NULLIF(TRIM(t.material_code), '')), income_keys AS (SELECT SUBSTRING(t.act_ship_date, 1, 6) AS month, NULLIF(TRIM(t.cust_code), '') AS customer, NULLIF(TRIM(t.material_code), '') AS sku, COALESCE(SUM(t.income_excl_tax_local), 0) AS income, COUNT(t.income_excl_tax_local) AS known_income, COUNT(*) - COUNT(t.income_excl_tax_local) AS missing_income, MAX(t.act_ship_date) AS income_date FROM agents_scm_cust_deliv_daily_di AS t INNER JOIN selected_materials AS c ON c.sku = TRIM(t.material_code) WHERE t.act_ship_date >= :gea_p4 AND t.act_ship_date < :gea_p5 GROUP BY SUBSTRING(t.act_ship_date, 1, 6), NULLIF(TRIM(t.cust_code), ''), NULLIF(TRIM(t.material_code), '')), budget_totals AS (SELECT b.month AS month, b.sku AS sku, COUNT(*) AS budget_keys, COALESCE(SUM(b.budget), 0) AS budget, SUM(CASE WHEN b.budget IS NULL OR b.budget < 0 THEN 1 ELSE 0 END) AS missing_budget_keys, MAX(b.budget_date) AS budget_date FROM budget_keys AS b GROUP BY b.month, b.sku), income_totals AS (SELECT i.month AS month, i.sku AS sku, COUNT(*) AS income_keys, SUM(CASE WHEN i.known_income > 0 THEN i.income ELSE NULL END) AS actual, SUM(i.missing_income) AS missing_income_records, MAX(i.income_date) AS source_date FROM income_keys AS i GROUP BY i.month, i.sku), matched_totals AS (SELECT b.month AS month, b.sku AS sku, COUNT(*) AS matched_keys, SUM(b.budget) AS matched_budget, SUM(i.income) AS matched_income FROM budget_keys AS b INNER JOIN income_keys AS i ON b.month = i.month AND b.customer = i.customer AND b.sku = i.sku WHERE b.budget >= 0 AND i.income IS NOT NULL GROUP BY b.month, b.sku), months AS (SELECT u.month AS month, u.sku AS sku FROM (SELECT b.month AS month, b.sku AS sku FROM budget_totals AS b UNION ALL SELECT i.month AS month, i.sku AS sku FROM income_totals AS i) AS u GROUP BY u.month, u.sku) SELECT 'MONTHLY_BUDGET_UNTAXED_INCOME' AS source_basis, m.month AS month, m.sku AS sku, i.actual AS actual, COALESCE(b.budget, 0) AS budget, COALESCE(b.budget_keys, 0) + COALESCE(i.income_keys, 0) AS records, COALESCE(b.missing_budget_keys, 0) + COALESCE(i.missing_income_records, 0) AS invalid, COALESCE(b.budget_keys, 0) AS budget_keys, COALESCE(i.income_keys, 0) AS income_keys, COALESCE(b.missing_budget_keys, 0) AS missing_budget_keys, COALESCE(i.missing_income_records, 0) AS missing_income_records, COALESCE(s.matched_keys, 0) AS matched_keys, s.matched_budget AS matched_budget, s.matched_income AS matched_income, b.budget_date AS budget_date, i.source_date AS source_date, CAST(NULL AS TEXT) AS base, :gea_p350 AS category, CAST(NULL AS TEXT) AS region, CAST(NULL AS TEXT) AS province, CAST(NULL AS TEXT) AS sales_group FROM months AS m LEFT JOIN budget_totals AS b ON b.month = m.month AND b.sku = m.sku LEFT JOIN income_totals AS i ON i.month = m.month AND i.sku = m.sku LEFT JOIN matched_totals AS s ON s.month = m.month AND s.sku = m.sku\nORDER BY m.month, m.sku LIMIT :gea_p1001 OFFSET :gea_p1002",
+        "parameters": {
+          "gea_p1": "202610",
+          "gea_p2": "202611",
+          "gea_p3": "2026-10-20",
+          "gea_p4": "20261001",
+          "gea_p5": "20261021",
+          "gea_p350": "汤圆",
+          "gea_p1001": 20,
+          "gea_p1002": 0
+        },
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "source_basis",
+        "month",
+        "actual",
+        "budget",
+        "records",
+        "invalid",
+        "budget_keys",
+        "income_keys",
+        "missing_budget_keys",
+        "missing_income_records",
+        "matched_keys",
+        "matched_budget",
+        "matched_income",
+        "budget_date",
+        "source_date",
+        "base",
+        "category",
+        "region",
+        "province",
+        "sales_group",
+        "sku"
+      ],
+      "pagination": {
+        "countQuery": "lantern.product-budget.count"
+      }
+    },
+    "lantern.province-budget.count": {
+      "title": "汤圆销售预算省区归属计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start_month",
+          "type": "string",
+          "format": "YYYYMM",
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "end_month_exclusive",
+          "type": "string",
+          "format": "YYYYMM",
+          "nullable": false
+        },
+        "gea_p3": {
+          "name": "as_of",
+          "type": "string",
+          "format": "YYYY-MM-DD",
+          "nullable": false
+        },
+        "gea_p4": {
+          "name": "start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "nullable": false
+        },
+        "gea_p5": {
+          "name": "end_exclusive",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "nullable": false
+        },
+        "gea_p350": {
+          "name": "product_category",
+          "type": "string",
+          "example": "汤圆",
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (WITH order_categories AS (\n  SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_order_execute_isontime_mi AS t WHERE t.new_material_code IS NOT NULL GROUP BY t.new_material_code\n), movement_categories AS (\n  SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_scm_material_in_out_summary_d AS t WHERE t.material_code IS NOT NULL GROUP BY t.material_code\n), material_categories AS (\n  SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category\n  FROM (\n    SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category FROM order_categories AS o\n    UNION ALL\n    SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category FROM movement_categories AS m\n  ) AS u GROUP BY u.sku\n), selected_materials AS (\n  SELECT d.sku AS sku FROM material_categories AS d WHERE d.category = :gea_p350\n), budget_dates AS (SELECT t.month AS month, MAX(t.create_date) AS snapshot_date FROM agents_scm_cust_plan_order_analysis_d AS t WHERE t.month >= :gea_p1 AND t.month < :gea_p2 AND t.create_date <= :gea_p3 AND REPLACE(SUBSTRING(t.create_date, 1, 7), '-', '') = t.month GROUP BY t.month), budget_keys AS (SELECT t.month AS month, NULLIF(TRIM(t.province_region_name), '') AS province, NULLIF(TRIM(t.cust_code), '') AS customer, NULLIF(TRIM(t.material_code), '') AS sku, MAX(d.snapshot_date) AS budget_date, CASE WHEN COUNT(*) = 1 THEN MAX(t.simulation_need_mny) ELSE NULL END AS budget FROM agents_scm_cust_plan_order_analysis_d AS t INNER JOIN budget_dates AS d ON t.month = d.month AND t.create_date = d.snapshot_date INNER JOIN selected_materials AS c ON c.sku = TRIM(t.material_code) GROUP BY t.month, NULLIF(TRIM(t.province_region_name), ''), NULLIF(TRIM(t.cust_code), ''), NULLIF(TRIM(t.material_code), '')), income_keys AS (SELECT SUBSTRING(t.act_ship_date, 1, 6) AS month, NULLIF(TRIM(t.province_region_name), '') AS province, NULLIF(TRIM(t.cust_code), '') AS customer, NULLIF(TRIM(t.material_code), '') AS sku, COALESCE(SUM(t.income_excl_tax_local), 0) AS income, COUNT(t.income_excl_tax_local) AS known_income, COUNT(*) - COUNT(t.income_excl_tax_local) AS missing_income, MAX(t.act_ship_date) AS income_date FROM agents_scm_cust_deliv_daily_di AS t INNER JOIN selected_materials AS c ON c.sku = TRIM(t.material_code) WHERE t.act_ship_date >= :gea_p4 AND t.act_ship_date < :gea_p5 GROUP BY SUBSTRING(t.act_ship_date, 1, 6), NULLIF(TRIM(t.province_region_name), ''), NULLIF(TRIM(t.cust_code), ''), NULLIF(TRIM(t.material_code), '')), budget_totals AS (SELECT b.month AS month, b.province AS province, COUNT(*) AS budget_keys, COALESCE(SUM(b.budget), 0) AS budget, SUM(CASE WHEN b.budget IS NULL OR b.budget < 0 THEN 1 ELSE 0 END) AS missing_budget_keys, MAX(b.budget_date) AS budget_date FROM budget_keys AS b GROUP BY b.month, b.province), income_totals AS (SELECT i.month AS month, i.province AS province, COUNT(*) AS income_keys, SUM(CASE WHEN i.known_income > 0 THEN i.income ELSE NULL END) AS actual, SUM(i.missing_income) AS missing_income_records, MAX(i.income_date) AS source_date FROM income_keys AS i GROUP BY i.month, i.province), matched_totals AS (SELECT b.month AS month, b.province AS province, COUNT(*) AS matched_keys, SUM(b.budget) AS matched_budget, SUM(i.income) AS matched_income FROM budget_keys AS b INNER JOIN income_keys AS i ON b.month = i.month AND b.customer = i.customer AND b.sku = i.sku AND b.province = i.province WHERE b.budget >= 0 AND i.income IS NOT NULL GROUP BY b.month, b.province), months AS (SELECT u.month AS month, u.province AS province FROM (SELECT b.month AS month, b.province AS province FROM budget_totals AS b UNION ALL SELECT i.month AS month, i.province AS province FROM income_totals AS i) AS u WHERE u.province IS NOT NULL GROUP BY u.month, u.province) SELECT 'MONTHLY_BUDGET_UNTAXED_INCOME' AS source_basis, m.month AS month, i.actual AS actual, COALESCE(b.budget, 0) AS budget, COALESCE(b.budget_keys, 0) + COALESCE(i.income_keys, 0) AS records, COALESCE(b.missing_budget_keys, 0) + COALESCE(i.missing_income_records, 0) AS invalid, COALESCE(b.budget_keys, 0) AS budget_keys, COALESCE(i.income_keys, 0) AS income_keys, COALESCE(b.missing_budget_keys, 0) AS missing_budget_keys, COALESCE(i.missing_income_records, 0) AS missing_income_records, COALESCE(s.matched_keys, 0) AS matched_keys, s.matched_budget AS matched_budget, s.matched_income AS matched_income, b.budget_date AS budget_date, i.source_date AS source_date, CAST(NULL AS TEXT) AS base, CAST(NULL AS TEXT) AS category, CAST(NULL AS TEXT) AS region, m.province AS province, CAST(NULL AS TEXT) AS sales_group FROM months AS m LEFT JOIN budget_totals AS b ON b.month = m.month AND b.province = m.province LEFT JOIN income_totals AS i ON i.month = m.month AND i.province = m.province LEFT JOIN matched_totals AS s ON s.month = m.month AND s.province = m.province) AS grouped_rows",
+        "parameters": {
+          "gea_p1": "202610",
+          "gea_p2": "202611",
+          "gea_p3": "2026-10-20",
+          "gea_p4": "20261001",
+          "gea_p5": "20261021",
+          "gea_p350": "汤圆"
+        },
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "lantern.province-budget": {
+      "title": "汤圆销售预算省区归属",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start_month",
+          "type": "string",
+          "format": "YYYYMM",
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "end_month_exclusive",
+          "type": "string",
+          "format": "YYYYMM",
+          "nullable": false
+        },
+        "gea_p3": {
+          "name": "as_of",
+          "type": "string",
+          "format": "YYYY-MM-DD",
+          "nullable": false
+        },
+        "gea_p4": {
+          "name": "start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "nullable": false
+        },
+        "gea_p5": {
+          "name": "end_exclusive",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "nullable": false
+        },
+        "gea_p350": {
+          "name": "product_category",
+          "type": "string",
+          "example": "汤圆",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p1001": {
+          "name": "page_size",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "example": 10,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p1002": {
+          "name": "offset",
+          "type": "integer",
+          "minimum": 0,
+          "example": 0,
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "WITH order_categories AS (\n  SELECT t.new_material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_order_execute_isontime_mi AS t WHERE t.new_material_code IS NOT NULL GROUP BY t.new_material_code\n), movement_categories AS (\n  SELECT t.material_code AS sku, CASE WHEN COUNT(DISTINCT t.product_categ_name) = 1 AND COUNT(NULLIF(t.product_categ_name, '')) = COUNT(*) THEN MAX(t.product_categ_name) END AS category\n  FROM agents_scm_material_in_out_summary_d AS t WHERE t.material_code IS NOT NULL GROUP BY t.material_code\n), material_categories AS (\n  SELECT u.sku AS sku, COALESCE(MAX(u.order_category), MAX(u.movement_category)) AS category\n  FROM (\n    SELECT o.sku AS sku, o.category AS order_category, CAST(NULL AS TEXT) AS movement_category FROM order_categories AS o\n    UNION ALL\n    SELECT m.sku AS sku, CAST(NULL AS TEXT) AS order_category, m.category AS movement_category FROM movement_categories AS m\n  ) AS u GROUP BY u.sku\n), selected_materials AS (\n  SELECT d.sku AS sku FROM material_categories AS d WHERE d.category = :gea_p350\n), budget_dates AS (SELECT t.month AS month, MAX(t.create_date) AS snapshot_date FROM agents_scm_cust_plan_order_analysis_d AS t WHERE t.month >= :gea_p1 AND t.month < :gea_p2 AND t.create_date <= :gea_p3 AND REPLACE(SUBSTRING(t.create_date, 1, 7), '-', '') = t.month GROUP BY t.month), budget_keys AS (SELECT t.month AS month, NULLIF(TRIM(t.province_region_name), '') AS province, NULLIF(TRIM(t.cust_code), '') AS customer, NULLIF(TRIM(t.material_code), '') AS sku, MAX(d.snapshot_date) AS budget_date, CASE WHEN COUNT(*) = 1 THEN MAX(t.simulation_need_mny) ELSE NULL END AS budget FROM agents_scm_cust_plan_order_analysis_d AS t INNER JOIN budget_dates AS d ON t.month = d.month AND t.create_date = d.snapshot_date INNER JOIN selected_materials AS c ON c.sku = TRIM(t.material_code) GROUP BY t.month, NULLIF(TRIM(t.province_region_name), ''), NULLIF(TRIM(t.cust_code), ''), NULLIF(TRIM(t.material_code), '')), income_keys AS (SELECT SUBSTRING(t.act_ship_date, 1, 6) AS month, NULLIF(TRIM(t.province_region_name), '') AS province, NULLIF(TRIM(t.cust_code), '') AS customer, NULLIF(TRIM(t.material_code), '') AS sku, COALESCE(SUM(t.income_excl_tax_local), 0) AS income, COUNT(t.income_excl_tax_local) AS known_income, COUNT(*) - COUNT(t.income_excl_tax_local) AS missing_income, MAX(t.act_ship_date) AS income_date FROM agents_scm_cust_deliv_daily_di AS t INNER JOIN selected_materials AS c ON c.sku = TRIM(t.material_code) WHERE t.act_ship_date >= :gea_p4 AND t.act_ship_date < :gea_p5 GROUP BY SUBSTRING(t.act_ship_date, 1, 6), NULLIF(TRIM(t.province_region_name), ''), NULLIF(TRIM(t.cust_code), ''), NULLIF(TRIM(t.material_code), '')), budget_totals AS (SELECT b.month AS month, b.province AS province, COUNT(*) AS budget_keys, COALESCE(SUM(b.budget), 0) AS budget, SUM(CASE WHEN b.budget IS NULL OR b.budget < 0 THEN 1 ELSE 0 END) AS missing_budget_keys, MAX(b.budget_date) AS budget_date FROM budget_keys AS b GROUP BY b.month, b.province), income_totals AS (SELECT i.month AS month, i.province AS province, COUNT(*) AS income_keys, SUM(CASE WHEN i.known_income > 0 THEN i.income ELSE NULL END) AS actual, SUM(i.missing_income) AS missing_income_records, MAX(i.income_date) AS source_date FROM income_keys AS i GROUP BY i.month, i.province), matched_totals AS (SELECT b.month AS month, b.province AS province, COUNT(*) AS matched_keys, SUM(b.budget) AS matched_budget, SUM(i.income) AS matched_income FROM budget_keys AS b INNER JOIN income_keys AS i ON b.month = i.month AND b.customer = i.customer AND b.sku = i.sku AND b.province = i.province WHERE b.budget >= 0 AND i.income IS NOT NULL GROUP BY b.month, b.province), months AS (SELECT u.month AS month, u.province AS province FROM (SELECT b.month AS month, b.province AS province FROM budget_totals AS b UNION ALL SELECT i.month AS month, i.province AS province FROM income_totals AS i) AS u WHERE u.province IS NOT NULL GROUP BY u.month, u.province) SELECT 'MONTHLY_BUDGET_UNTAXED_INCOME' AS source_basis, m.month AS month, i.actual AS actual, COALESCE(b.budget, 0) AS budget, COALESCE(b.budget_keys, 0) + COALESCE(i.income_keys, 0) AS records, COALESCE(b.missing_budget_keys, 0) + COALESCE(i.missing_income_records, 0) AS invalid, COALESCE(b.budget_keys, 0) AS budget_keys, COALESCE(i.income_keys, 0) AS income_keys, COALESCE(b.missing_budget_keys, 0) AS missing_budget_keys, COALESCE(i.missing_income_records, 0) AS missing_income_records, COALESCE(s.matched_keys, 0) AS matched_keys, s.matched_budget AS matched_budget, s.matched_income AS matched_income, b.budget_date AS budget_date, i.source_date AS source_date, CAST(NULL AS TEXT) AS base, CAST(NULL AS TEXT) AS category, CAST(NULL AS TEXT) AS region, m.province AS province, CAST(NULL AS TEXT) AS sales_group FROM months AS m LEFT JOIN budget_totals AS b ON b.month = m.month AND b.province = m.province LEFT JOIN income_totals AS i ON i.month = m.month AND i.province = m.province LEFT JOIN matched_totals AS s ON s.month = m.month AND s.province = m.province\nORDER BY m.month, m.province LIMIT :gea_p1001 OFFSET :gea_p1002",
+        "parameters": {
+          "gea_p1": "202610",
+          "gea_p2": "202611",
+          "gea_p3": "2026-10-20",
+          "gea_p4": "20261001",
+          "gea_p5": "20261021",
+          "gea_p350": "汤圆",
+          "gea_p1001": 20,
+          "gea_p1002": 0
+        },
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "source_basis",
+        "month",
+        "actual",
+        "budget",
+        "records",
+        "invalid",
+        "budget_keys",
+        "income_keys",
+        "missing_budget_keys",
+        "missing_income_records",
+        "matched_keys",
+        "matched_budget",
+        "matched_income",
+        "budget_date",
+        "source_date",
+        "base",
+        "category",
+        "region",
+        "province",
+        "sales_group"
+      ],
+      "pagination": {
+        "countQuery": "lantern.province-budget.count"
+      }
+    },
+    "lantern.product-directory.count": {
+      "title": "汤圆商品层级目录计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "example": "20261101",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "example": "20261124",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p312": {
+          "name": "product_category",
+          "type": "string",
+          "example": "汤圆",
+          "required": true,
+          "nullable": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (WITH master_rows AS (\n  SELECT p.material_code AS sku, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.sub_category), '')) = 1 THEN MAX(NULLIF(TRIM(p.sub_category), '')) END AS category,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.series), '')) = 1 THEN MAX(NULLIF(TRIM(p.series), '')) END AS item,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.product_item_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.product_item_name), '')) END AS material,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.material_name), '')) END AS material_name\n  FROM agents_dim_product_list_mi AS p WHERE p.material_code IS NOT NULL GROUP BY p.material_code\n), grade_rows AS (\n  SELECT g.material_code AS sku,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(g.product_grade_name), '')) = 1\n      THEN MAX(NULLIF(TRIM(g.product_grade_name), '')) END AS product_class\n  FROM agents_scm_cust_deliv_daily_di AS g\n  WHERE g.act_ship_date >= :gea_p1 AND g.act_ship_date < :gea_p2 AND g.product_categ_name = '汤圆'\n  GROUP BY g.material_code\n), directory_keys AS (\n  SELECT u.sku AS sku FROM (\n    SELECT p.sku AS sku FROM master_rows AS p WHERE (:gea_p312 IS NULL OR p.category = :gea_p312)\n    UNION ALL\n    SELECT g.sku AS sku FROM grade_rows AS g WHERE (:gea_p312 IS NULL OR :gea_p312 = '汤圆') AND g.sku IS NOT NULL\n  ) AS u GROUP BY u.sku\n)\nSELECT k.sku AS sku, COALESCE(p.category, CASE WHEN g.sku IS NOT NULL THEN '汤圆' END) AS category,\n  p.item AS item, p.material AS material, p.material_name AS material_name, g.product_class AS product_class\nFROM directory_keys AS k LEFT JOIN master_rows AS p ON p.sku = k.sku LEFT JOIN grade_rows AS g ON g.sku = k.sku) AS grouped_rows",
+        "parameters": {
+          "gea_p1": "20261101",
+          "gea_p2": "20261124",
+          "gea_p312": "汤圆"
+        },
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "lantern.product-directory": {
+      "title": "汤圆商品层级目录",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "example": "20261101",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "example": "20261124",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p312": {
+          "name": "product_category",
+          "type": "string",
+          "example": "汤圆",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p1001": {
+          "name": "page_size",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "example": 10,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p1002": {
+          "name": "offset",
+          "type": "integer",
+          "minimum": 0,
+          "example": 0,
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "WITH master_rows AS (\n  SELECT p.material_code AS sku, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.sub_category), '')) = 1 THEN MAX(NULLIF(TRIM(p.sub_category), '')) END AS category,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.series), '')) = 1 THEN MAX(NULLIF(TRIM(p.series), '')) END AS item,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.product_item_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.product_item_name), '')) END AS material,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.material_name), '')) END AS material_name\n  FROM agents_dim_product_list_mi AS p WHERE p.material_code IS NOT NULL GROUP BY p.material_code\n), grade_rows AS (\n  SELECT g.material_code AS sku,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(g.product_grade_name), '')) = 1\n      THEN MAX(NULLIF(TRIM(g.product_grade_name), '')) END AS product_class\n  FROM agents_scm_cust_deliv_daily_di AS g\n  WHERE g.act_ship_date >= :gea_p1 AND g.act_ship_date < :gea_p2 AND g.product_categ_name = '汤圆'\n  GROUP BY g.material_code\n), directory_keys AS (\n  SELECT u.sku AS sku FROM (\n    SELECT p.sku AS sku FROM master_rows AS p WHERE (:gea_p312 IS NULL OR p.category = :gea_p312)\n    UNION ALL\n    SELECT g.sku AS sku FROM grade_rows AS g WHERE (:gea_p312 IS NULL OR :gea_p312 = '汤圆') AND g.sku IS NOT NULL\n  ) AS u GROUP BY u.sku\n)\nSELECT k.sku AS sku, COALESCE(p.category, CASE WHEN g.sku IS NOT NULL THEN '汤圆' END) AS category,\n  p.item AS item, p.material AS material, p.material_name AS material_name, g.product_class AS product_class\nFROM directory_keys AS k LEFT JOIN master_rows AS p ON p.sku = k.sku LEFT JOIN grade_rows AS g ON g.sku = k.sku\nORDER BY sku LIMIT :gea_p1001 OFFSET :gea_p1002",
+        "parameters": {
+          "gea_p1": "20261101",
+          "gea_p2": "20261124",
+          "gea_p312": "汤圆",
+          "gea_p1001": 20,
+          "gea_p1002": 0
+        },
+        "includeTotal": false
+      },
+      "resultColumns": ["sku", "category", "item", "material", "material_name", "product_class"],
+      "pagination": {
+        "countQuery": "lantern.product-directory.count"
+      }
+    },
+    "lantern.planning.count": {
+      "title": "生产入库量和纠偏生产计划计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start_month",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "example": "2026-11-01",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "end_month_exclusive",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "example": "2026-12-01",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p3": {
+          "name": "end_exclusive",
+          "type": "string",
+          "example": "2026-11-25",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p310": {
+          "name": "material_detail",
+          "type": "boolean",
+          "example": false,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p311": {
+          "name": "sku_detail",
+          "type": "boolean",
+          "example": false,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p312": {
+          "name": "product_category",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (WITH master_rows AS (\n  SELECT p.material_code AS sku, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.sub_category), '')) = 1 THEN MAX(NULLIF(TRIM(p.sub_category), '')) END AS category,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.series), '')) = 1 THEN MAX(NULLIF(TRIM(p.series), '')) END AS item,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.product_item_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.product_item_name), '')) END AS material,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.material_name), '')) END AS material_name\n  FROM agents_dim_product_list_mi AS p WHERE p.material_code IS NOT NULL GROUP BY p.material_code\n), production_days AS (\n  SELECT p.data_month AS month, NULLIF(TRIM(p.belong_base), '') AS base, p.material_code AS sku,\n    p.channel_name AS channel, CAST(p.the_date AS DATE) AS day,\n    CASE WHEN COUNT(*) = 1 THEN MAX(p.produce_in_qty) END AS inbound,\n    CASE WHEN COUNT(*) = 1 THEN MAX(p.produce_plan_adj) END AS adjusted_plan,\n    COUNT(*) AS source_rows\n  FROM agents_scm_stock_detail_d AS p\n  WHERE p.data_month >= CAST(:gea_p1 AS DATE) AND p.data_month < CAST(:gea_p2 AS DATE)\n    AND CAST(p.the_date AS DATE) < CAST(:gea_p3 AS DATE)\n  GROUP BY p.data_month, NULLIF(TRIM(p.belong_base), ''), p.material_code, p.channel_name, CAST(p.the_date AS DATE)\n), production_cutoffs AS (\n  SELECT d.month AS month, MAX(d.day) AS day FROM production_days AS d GROUP BY d.month\n), production_channels AS (\n  SELECT d.month AS month, d.base AS base, d.sku AS sku, d.channel AS channel,\n    SUM(d.inbound) AS inbound, MAX(ABS(d.adjusted_plan)) AS any_plan_seen,\n    SUM(CASE WHEN d.inbound IS NULL OR d.source_rows <> 1 THEN 1 ELSE 0 END) AS invalid\n  FROM production_days AS d GROUP BY d.month, d.base, d.sku, d.channel\n)\nSELECT k.month AS month, k.base AS base, c.category AS category, c.item AS item,\n  CASE WHEN :gea_p310 THEN c.material ELSE NULL END AS material,\n  CASE WHEN :gea_p311 THEN k.sku ELSE NULL END AS sku,\n  CASE WHEN :gea_p311 THEN MAX(c.material_name) ELSE NULL END AS material_name,\n  SUM(k.inbound) AS inbound_qty, SUM(d.adjusted_plan) AS adjusted_plan_qty,\n  SUM(k.invalid + CASE WHEN d.source_rows > 1 OR d.adjusted_plan < 0 OR\n    (d.adjusted_plan IS NULL AND (d.source_rows IS NOT NULL OR COALESCE(k.inbound, 0) <> 0 OR COALESCE(k.any_plan_seen, 0) <> 0))\n    THEN 1 ELSE 0 END) AS invalid,\n  MAX(f.day) AS source_date\nFROM production_channels AS k\nINNER JOIN production_cutoffs AS f ON f.month = k.month\nLEFT JOIN production_days AS d ON d.month = k.month AND d.sku = k.sku AND d.day = f.day\n  AND (d.base = k.base OR (d.base IS NULL AND k.base IS NULL))\n  AND (d.channel = k.channel OR (d.channel IS NULL AND k.channel IS NULL))\nLEFT JOIN master_rows AS c ON c.sku = k.sku\nWHERE (:gea_p312 IS NULL OR COALESCE(c.category, '未分类') = :gea_p312)\nGROUP BY k.month, k.base, c.category, c.item, CASE WHEN :gea_p310 THEN c.material ELSE NULL END, CASE WHEN :gea_p311 THEN k.sku ELSE NULL END) AS grouped_rows",
+        "parameters": {
+          "gea_p1": "2026-11-01",
+          "gea_p2": "2026-12-01",
+          "gea_p3": "2026-11-25",
+          "gea_p310": false,
+          "gea_p311": false,
+          "gea_p312": "汤圆"
+        },
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "lantern.planning": {
+      "title": "生产入库量和纠偏生产计划",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start_month",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "example": "2026-11-01",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "end_month_exclusive",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "example": "2026-12-01",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p3": {
+          "name": "end_exclusive",
+          "type": "string",
+          "example": "2026-11-25",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p310": {
+          "name": "material_detail",
+          "type": "boolean",
+          "example": false,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p311": {
+          "name": "sku_detail",
+          "type": "boolean",
+          "example": false,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p312": {
+          "name": "product_category",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p1001": {
+          "name": "page_size",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "example": 10,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p1002": {
+          "name": "offset",
+          "type": "integer",
+          "minimum": 0,
+          "example": 0,
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "WITH master_rows AS (\n  SELECT p.material_code AS sku, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.sub_category), '')) = 1 THEN MAX(NULLIF(TRIM(p.sub_category), '')) END AS category,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.series), '')) = 1 THEN MAX(NULLIF(TRIM(p.series), '')) END AS item,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.product_item_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.product_item_name), '')) END AS material,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.material_name), '')) END AS material_name\n  FROM agents_dim_product_list_mi AS p WHERE p.material_code IS NOT NULL GROUP BY p.material_code\n), production_days AS (\n  SELECT p.data_month AS month, NULLIF(TRIM(p.belong_base), '') AS base, p.material_code AS sku,\n    p.channel_name AS channel, CAST(p.the_date AS DATE) AS day,\n    CASE WHEN COUNT(*) = 1 THEN MAX(p.produce_in_qty) END AS inbound,\n    CASE WHEN COUNT(*) = 1 THEN MAX(p.produce_plan_adj) END AS adjusted_plan,\n    COUNT(*) AS source_rows\n  FROM agents_scm_stock_detail_d AS p\n  WHERE p.data_month >= CAST(:gea_p1 AS DATE) AND p.data_month < CAST(:gea_p2 AS DATE)\n    AND CAST(p.the_date AS DATE) < CAST(:gea_p3 AS DATE)\n  GROUP BY p.data_month, NULLIF(TRIM(p.belong_base), ''), p.material_code, p.channel_name, CAST(p.the_date AS DATE)\n), production_cutoffs AS (\n  SELECT d.month AS month, MAX(d.day) AS day FROM production_days AS d GROUP BY d.month\n), production_channels AS (\n  SELECT d.month AS month, d.base AS base, d.sku AS sku, d.channel AS channel,\n    SUM(d.inbound) AS inbound, MAX(ABS(d.adjusted_plan)) AS any_plan_seen,\n    SUM(CASE WHEN d.inbound IS NULL OR d.source_rows <> 1 THEN 1 ELSE 0 END) AS invalid\n  FROM production_days AS d GROUP BY d.month, d.base, d.sku, d.channel\n)\nSELECT k.month AS month, k.base AS base, c.category AS category, c.item AS item,\n  CASE WHEN :gea_p310 THEN c.material ELSE NULL END AS material,\n  CASE WHEN :gea_p311 THEN k.sku ELSE NULL END AS sku,\n  CASE WHEN :gea_p311 THEN MAX(c.material_name) ELSE NULL END AS material_name,\n  SUM(k.inbound) AS inbound_qty, SUM(d.adjusted_plan) AS adjusted_plan_qty,\n  SUM(k.invalid + CASE WHEN d.source_rows > 1 OR d.adjusted_plan < 0 OR\n    (d.adjusted_plan IS NULL AND (d.source_rows IS NOT NULL OR COALESCE(k.inbound, 0) <> 0 OR COALESCE(k.any_plan_seen, 0) <> 0))\n    THEN 1 ELSE 0 END) AS invalid,\n  MAX(f.day) AS source_date\nFROM production_channels AS k\nINNER JOIN production_cutoffs AS f ON f.month = k.month\nLEFT JOIN production_days AS d ON d.month = k.month AND d.sku = k.sku AND d.day = f.day\n  AND (d.base = k.base OR (d.base IS NULL AND k.base IS NULL))\n  AND (d.channel = k.channel OR (d.channel IS NULL AND k.channel IS NULL))\nLEFT JOIN master_rows AS c ON c.sku = k.sku\nWHERE (:gea_p312 IS NULL OR COALESCE(c.category, '未分类') = :gea_p312)\nGROUP BY k.month, k.base, c.category, c.item, CASE WHEN :gea_p310 THEN c.material ELSE NULL END, CASE WHEN :gea_p311 THEN k.sku ELSE NULL END\nORDER BY month, base, category, item, material, sku LIMIT :gea_p1001 OFFSET :gea_p1002",
+        "parameters": {
+          "gea_p1": "2026-11-01",
+          "gea_p2": "2026-12-01",
+          "gea_p3": "2026-11-25",
+          "gea_p310": false,
+          "gea_p311": false,
+          "gea_p312": "汤圆",
+          "gea_p1001": 20,
+          "gea_p1002": 0
+        },
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "month",
+        "base",
+        "category",
+        "item",
+        "material",
+        "sku",
+        "material_name",
+        "inbound_qty",
+        "adjusted_plan_qty",
+        "invalid",
+        "source_date"
+      ],
+      "pagination": {
+        "countQuery": "lantern.planning.count"
+      }
+    },
+    "lantern.open-orders.count": {
+      "title": "当前未开订单量和未开订单缺货量计数",
+      "parameterSpec": {
+        "gea_p310": {
+          "name": "material_detail",
+          "type": "boolean",
+          "example": false,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p311": {
+          "name": "sku_detail",
+          "type": "boolean",
+          "example": false,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p312": {
+          "name": "product_category",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (WITH latest_inventory AS (SELECT MAX(agents_scm_inventory_sku_data_d.month_date) AS month_date FROM agents_scm_inventory_sku_data_d AS agents_scm_inventory_sku_data_d WHERE agents_scm_inventory_sku_data_d.warehouse_classify IN ('01', '02', '20')), warehouse_points AS (SELECT agents_scm_material_in_out_summary_d.warehouseid AS warehouseid, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(agents_scm_material_in_out_summary_d.pickup_point), '')) = 1 THEN MAX(NULLIF(TRIM(agents_scm_material_in_out_summary_d.pickup_point), '')) END AS pickup_point FROM agents_scm_material_in_out_summary_d AS agents_scm_material_in_out_summary_d GROUP BY agents_scm_material_in_out_summary_d.warehouseid), inventory_rows AS (SELECT i.month_date AS month_date, i.warehouseid AS warehouseid, i.warehouse_name AS warehouse_name, i.belong_base AS belong_base, i.material_code AS material_code, i.material_name AS material_name, i.prod_date AS prod_date, i.sap_warehouseid AS sap_warehouseid, i.plant AS plant, i.quality_batch AS quality_batch, i.is_good_prod AS is_good_prod, i.warehouse_classify AS warehouse_classify, i.available_qty AS available_qty, w.pickup_point AS pickup_point, CASE WHEN i.warehouse_classify = '20' THEN '分仓' ELSE '基地' END AS location_type, CASE WHEN i.warehouse_classify = '20' THEN i.warehouseid ELSE i.belong_base END AS location_code, CASE WHEN i.warehouse_classify = '20' THEN i.warehouse_name ELSE i.belong_base END AS location_name FROM agents_scm_inventory_sku_data_d AS i INNER JOIN latest_inventory AS s ON i.month_date = s.month_date LEFT JOIN warehouse_points AS w ON i.warehouseid = w.warehouseid WHERE i.warehouse_classify IN ('01', '02', '20')), point_location_candidates AS (SELECT inventory_rows.pickup_point AS pickup_point, inventory_rows.location_type AS location_type, inventory_rows.location_code AS location_code, MAX(inventory_rows.location_name) AS location_name, MAX(inventory_rows.belong_base) AS belong_base, CASE WHEN inventory_rows.location_type = '分仓' THEN MAX(inventory_rows.warehouseid) END AS warehouseid, COUNT(DISTINCT inventory_rows.location_name) AS name_count, COUNT(DISTINCT inventory_rows.belong_base) AS base_count FROM inventory_rows AS inventory_rows WHERE NOT inventory_rows.pickup_point IS NULL AND NOT NULLIF(TRIM(inventory_rows.location_code), '') IS NULL GROUP BY inventory_rows.pickup_point, inventory_rows.location_type, inventory_rows.location_code), point_locations AS (SELECT point_location_candidates.pickup_point AS pickup_point, MAX(point_location_candidates.location_type) AS location_type, MAX(point_location_candidates.location_code) AS location_code, MAX(point_location_candidates.location_name) AS location_name, MAX(point_location_candidates.belong_base) AS belong_base, MAX(point_location_candidates.warehouseid) AS warehouseid FROM point_location_candidates AS point_location_candidates GROUP BY point_location_candidates.pickup_point HAVING COUNT(*) = 1 AND MAX(point_location_candidates.name_count) = 1 AND MAX(point_location_candidates.base_count) = 1), eligible_order_sku AS (SELECT o.cust_order_no AS cust_order_no, o.material_code AS material_code, CASE WHEN m.pickup_point IS NULL THEN '待映射' ELSE m.location_type END AS location_type, CASE WHEN m.pickup_point IS NULL THEN CONCAT('unmapped:', COALESCE(o.pickup_point, 'NULL')) ELSE m.location_code END AS location_code, MAX(COALESCE(m.location_name, o.pickup_point_name)) AS location_name, MAX(COALESCE(m.belong_base, o.belong_base)) AS belong_base, MAX(m.warehouseid) AS warehouseid, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(o.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(o.material_name), '')) END AS material_name, CASE WHEN COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) = COUNT(*) AND MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) >= 0 THEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) END AS demand_qty, CASE WHEN COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) = COUNT(*) AND MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) >= 0 THEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) END AS allocated_qty, CASE WHEN COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) <> COUNT(*) OR COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) <> COUNT(*) OR MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) < 0 OR MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) < 0 THEN NULL WHEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) - SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) > 0 THEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) - SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) ELSE 0 END AS remaining_qty, COUNT(*) AS source_row_count, MAX(CASE WHEN m.pickup_point IS NULL OR NULLIF(TRIM(o.cust_order_no), '') IS NULL OR NULLIF(TRIM(o.material_code), '') IS NULL OR o.bizunitconvertrate IS NULL OR o.bizunitconvertrate <= 0 OR o.qtyordered IS NULL OR o.qtyallocated IS NULL OR o.qtyordered < 0 OR o.qtyallocated < 0 THEN 1 ELSE 0 END) AS input_invalid FROM agents_scm_execute_detail_d AS o LEFT JOIN point_locations AS m ON o.pickup_point = m.pickup_point WHERE o.bizflowstatus IN ('等待组波', '组波中', '组波完成', '组波失败', '提交成功', '提交中', '提交失败', '上传验证', '人工释放占用', '撤回待改单', '创建') AND (NOT m.pickup_point IS NULL OR NOT NULLIF(TRIM(o.belong_base), '') IS NULL) GROUP BY o.cust_order_no, o.material_code, CASE WHEN m.pickup_point IS NULL THEN '待映射' ELSE m.location_type END, CASE WHEN m.pickup_point IS NULL THEN CONCAT('unmapped:', COALESCE(o.pickup_point, 'NULL')) ELSE m.location_code END), location_sku_demand AS (SELECT eligible_order_sku.location_type AS location_type, eligible_order_sku.location_code AS location_code, eligible_order_sku.material_code AS material_code, MAX(eligible_order_sku.location_name) AS location_name, MAX(eligible_order_sku.belong_base) AS belong_base, MAX(eligible_order_sku.warehouseid) AS warehouseid, CASE WHEN COUNT(DISTINCT eligible_order_sku.material_name) = 1 THEN MAX(eligible_order_sku.material_name) END AS material_name, CASE WHEN COUNT(eligible_order_sku.demand_qty) = COUNT(*) THEN SUM(eligible_order_sku.demand_qty) END AS demand_qty, CASE WHEN COUNT(eligible_order_sku.allocated_qty) = COUNT(*) THEN SUM(eligible_order_sku.allocated_qty) END AS allocated_qty, CASE WHEN COUNT(eligible_order_sku.remaining_qty) = COUNT(*) THEN SUM(eligible_order_sku.remaining_qty) END AS remaining_qty, SUM(eligible_order_sku.source_row_count) AS source_row_count, COUNT(*) AS order_sku_count, MAX(eligible_order_sku.input_invalid) AS input_invalid FROM eligible_order_sku AS eligible_order_sku GROUP BY eligible_order_sku.location_type, eligible_order_sku.location_code, eligible_order_sku.material_code), complete_demand AS (SELECT location_sku_demand.location_type AS location_type, location_sku_demand.location_code AS location_code, location_sku_demand.material_code AS material_code, location_sku_demand.location_name AS location_name, location_sku_demand.belong_base AS belong_base, location_sku_demand.warehouseid AS warehouseid, location_sku_demand.material_name AS material_name, location_sku_demand.demand_qty AS demand_qty, location_sku_demand.allocated_qty AS allocated_qty, location_sku_demand.remaining_qty AS remaining_qty, location_sku_demand.source_row_count AS source_row_count, location_sku_demand.order_sku_count AS order_sku_count, location_sku_demand.input_invalid AS input_invalid FROM location_sku_demand AS location_sku_demand UNION ALL SELECT l.location_type AS location_type, l.location_code AS location_code, CAST(NULL AS VARCHAR(255)) AS material_code, MAX(l.location_name) AS location_name, MAX(l.belong_base) AS belong_base, CASE WHEN l.location_type = '分仓' THEN MAX(l.warehouseid) END AS warehouseid, CAST(NULL AS VARCHAR(255)) AS material_name, 0 AS demand_qty, 0 AS allocated_qty, 0 AS remaining_qty, 0 AS source_row_count, 0 AS order_sku_count, 0 AS input_invalid FROM inventory_rows AS l LEFT JOIN (SELECT location_sku_demand.location_type AS location_type, location_sku_demand.location_code AS location_code FROM location_sku_demand AS location_sku_demand GROUP BY location_sku_demand.location_type, location_sku_demand.location_code) AS d ON l.location_type = d.location_type AND l.location_code = d.location_code WHERE d.location_code IS NULL AND NOT NULLIF(TRIM(l.location_code), '') IS NULL GROUP BY l.location_type, l.location_code), inventory_batch AS (SELECT inventory_rows.location_type AS location_type, inventory_rows.location_code AS location_code, inventory_rows.material_code AS material_code, inventory_rows.warehouseid AS warehouseid, inventory_rows.prod_date AS prod_date, inventory_rows.sap_warehouseid AS sap_warehouseid, inventory_rows.plant AS plant, inventory_rows.quality_batch AS quality_batch, inventory_rows.is_good_prod AS is_good_prod, inventory_rows.warehouse_classify AS warehouse_classify, SUM(COALESCE(inventory_rows.available_qty, 0)) AS available_qty, CASE WHEN COUNT(CASE WHEN COALESCE(inventory_rows.available_qty, 0) <> 0 THEN 1 END) > 1 THEN 1 ELSE 0 END AS duplicate_batch FROM inventory_rows AS inventory_rows GROUP BY inventory_rows.location_type, inventory_rows.location_code, inventory_rows.material_code, inventory_rows.warehouseid, inventory_rows.prod_date, inventory_rows.sap_warehouseid, inventory_rows.plant, inventory_rows.quality_batch, inventory_rows.is_good_prod, inventory_rows.warehouse_classify), material_attributes AS (SELECT agents_scm_material_in_out_summary_d.material_code AS material_code, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(agents_scm_material_in_out_summary_d.product_categ_name), '')) = 1 THEN MAX(NULLIF(TRIM(agents_scm_material_in_out_summary_d.product_categ_name), '')) END AS product_categ_name, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(agents_scm_material_in_out_summary_d.material_group_name), '')) = 1 THEN MAX(NULLIF(TRIM(agents_scm_material_in_out_summary_d.material_group_name), '')) END AS material_group_name FROM agents_scm_material_in_out_summary_d AS agents_scm_material_in_out_summary_d GROUP BY agents_scm_material_in_out_summary_d.material_code), inventory_sku AS (SELECT inventory_batch.location_type AS location_type, inventory_batch.location_code AS location_code, inventory_batch.material_code AS material_code, SUM(inventory_batch.available_qty) AS available_qty, SUM(inventory_batch.duplicate_batch) AS duplicate_batch FROM inventory_batch AS inventory_batch GROUP BY inventory_batch.location_type, inventory_batch.location_code, inventory_batch.material_code), shortage_source AS (SELECT CAST(CONCAT(SUBSTRING(s.month_date, 1, 4), '-', SUBSTRING(s.month_date, 5, 2), '-', SUBSTRING(s.month_date, 7, 2)) AS DATE) AS stat_date, d.location_type AS location_type, d.location_code AS location_code, d.location_name AS location_name, d.belong_base AS belong_base, d.warehouseid AS warehouseid, d.material_code AS material_code, d.material_name AS material_name, a.product_categ_name AS product_categ_name, a.material_group_name AS material_group_name, d.demand_qty AS demand_qty, d.allocated_qty AS allocated_qty, d.remaining_qty AS remaining_qty, CASE WHEN d.input_invalid = 0 AND COALESCE(i.duplicate_batch, 0) = 0 AND NOT s.month_date IS NULL THEN COALESCE(i.available_qty, 0) END AS available_qty, CASE WHEN d.input_invalid = 0 AND COALESCE(i.duplicate_batch, 0) = 0 AND NOT s.month_date IS NULL THEN CASE WHEN d.remaining_qty - COALESCE(i.available_qty, 0) > 0 THEN d.remaining_qty - COALESCE(i.available_qty, 0) ELSE 0 END END AS shortage_qty, d.source_row_count AS source_row_count, d.order_sku_count AS order_sku_count, CASE WHEN d.input_invalid <> 0 OR COALESCE(i.duplicate_batch, 0) <> 0 OR s.month_date IS NULL THEN 1 ELSE 0 END AS invalid_sku, CASE WHEN d.order_sku_count > 0 AND i.material_code IS NULL AND d.input_invalid = 0 AND NOT s.month_date IS NULL THEN 1 ELSE 0 END AS absent_inventory_sku FROM complete_demand AS d CROSS JOIN latest_inventory AS s LEFT JOIN inventory_sku AS i ON d.location_type = i.location_type AND d.location_code = i.location_code AND d.material_code = i.material_code LEFT JOIN material_attributes AS a ON d.material_code = a.material_code), master_rows AS (\n  SELECT p.material_code AS sku, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.sub_category), '')) = 1 THEN MAX(NULLIF(TRIM(p.sub_category), '')) END AS category,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.series), '')) = 1 THEN MAX(NULLIF(TRIM(p.series), '')) END AS item,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.product_item_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.product_item_name), '')) END AS material,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.material_name), '')) END AS material_name\n  FROM agents_dim_product_list_mi AS p WHERE p.material_code IS NOT NULL GROUP BY p.material_code\n)\nSELECT r.stat_date AS source_date, r.belong_base AS base, COALESCE(r.product_categ_name, c.category) AS category,\n  CASE WHEN :gea_p310 THEN c.item ELSE NULL END AS item,\n  CASE WHEN :gea_p310 THEN c.material ELSE NULL END AS material,\n  CASE WHEN :gea_p311 THEN r.material_code ELSE NULL END AS sku,\n  CASE WHEN :gea_p311 THEN MAX(COALESCE(c.material_name, r.material_name)) ELSE NULL END AS material_name,\n  SUM(r.demand_qty) AS open_qty, SUM(r.shortage_qty) AS shortage_qty, SUM(r.invalid_sku) AS invalid\nFROM shortage_source AS r LEFT JOIN master_rows AS c ON c.sku = r.material_code\nWHERE r.material_code IS NOT NULL AND (:gea_p312 IS NULL OR COALESCE(r.product_categ_name, c.category, '未分类') = :gea_p312)\nGROUP BY r.stat_date, r.belong_base, COALESCE(r.product_categ_name, c.category), CASE WHEN :gea_p310 THEN c.item ELSE NULL END,\n  CASE WHEN :gea_p310 THEN c.material ELSE NULL END, CASE WHEN :gea_p311 THEN r.material_code ELSE NULL END) AS grouped_rows",
+        "parameters": {
+          "gea_p310": false,
+          "gea_p311": false,
+          "gea_p312": "汤圆"
+        },
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "lantern.open-orders": {
+      "title": "当前未开订单量和未开订单缺货量",
+      "parameterSpec": {
+        "gea_p310": {
+          "name": "material_detail",
+          "type": "boolean",
+          "example": false,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p311": {
+          "name": "sku_detail",
+          "type": "boolean",
+          "example": false,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p312": {
+          "name": "product_category",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p1001": {
+          "name": "page_size",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "example": 10,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p1002": {
+          "name": "offset",
+          "type": "integer",
+          "minimum": 0,
+          "example": 0,
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "WITH latest_inventory AS (SELECT MAX(agents_scm_inventory_sku_data_d.month_date) AS month_date FROM agents_scm_inventory_sku_data_d AS agents_scm_inventory_sku_data_d WHERE agents_scm_inventory_sku_data_d.warehouse_classify IN ('01', '02', '20')), warehouse_points AS (SELECT agents_scm_material_in_out_summary_d.warehouseid AS warehouseid, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(agents_scm_material_in_out_summary_d.pickup_point), '')) = 1 THEN MAX(NULLIF(TRIM(agents_scm_material_in_out_summary_d.pickup_point), '')) END AS pickup_point FROM agents_scm_material_in_out_summary_d AS agents_scm_material_in_out_summary_d GROUP BY agents_scm_material_in_out_summary_d.warehouseid), inventory_rows AS (SELECT i.month_date AS month_date, i.warehouseid AS warehouseid, i.warehouse_name AS warehouse_name, i.belong_base AS belong_base, i.material_code AS material_code, i.material_name AS material_name, i.prod_date AS prod_date, i.sap_warehouseid AS sap_warehouseid, i.plant AS plant, i.quality_batch AS quality_batch, i.is_good_prod AS is_good_prod, i.warehouse_classify AS warehouse_classify, i.available_qty AS available_qty, w.pickup_point AS pickup_point, CASE WHEN i.warehouse_classify = '20' THEN '分仓' ELSE '基地' END AS location_type, CASE WHEN i.warehouse_classify = '20' THEN i.warehouseid ELSE i.belong_base END AS location_code, CASE WHEN i.warehouse_classify = '20' THEN i.warehouse_name ELSE i.belong_base END AS location_name FROM agents_scm_inventory_sku_data_d AS i INNER JOIN latest_inventory AS s ON i.month_date = s.month_date LEFT JOIN warehouse_points AS w ON i.warehouseid = w.warehouseid WHERE i.warehouse_classify IN ('01', '02', '20')), point_location_candidates AS (SELECT inventory_rows.pickup_point AS pickup_point, inventory_rows.location_type AS location_type, inventory_rows.location_code AS location_code, MAX(inventory_rows.location_name) AS location_name, MAX(inventory_rows.belong_base) AS belong_base, CASE WHEN inventory_rows.location_type = '分仓' THEN MAX(inventory_rows.warehouseid) END AS warehouseid, COUNT(DISTINCT inventory_rows.location_name) AS name_count, COUNT(DISTINCT inventory_rows.belong_base) AS base_count FROM inventory_rows AS inventory_rows WHERE NOT inventory_rows.pickup_point IS NULL AND NOT NULLIF(TRIM(inventory_rows.location_code), '') IS NULL GROUP BY inventory_rows.pickup_point, inventory_rows.location_type, inventory_rows.location_code), point_locations AS (SELECT point_location_candidates.pickup_point AS pickup_point, MAX(point_location_candidates.location_type) AS location_type, MAX(point_location_candidates.location_code) AS location_code, MAX(point_location_candidates.location_name) AS location_name, MAX(point_location_candidates.belong_base) AS belong_base, MAX(point_location_candidates.warehouseid) AS warehouseid FROM point_location_candidates AS point_location_candidates GROUP BY point_location_candidates.pickup_point HAVING COUNT(*) = 1 AND MAX(point_location_candidates.name_count) = 1 AND MAX(point_location_candidates.base_count) = 1), eligible_order_sku AS (SELECT o.cust_order_no AS cust_order_no, o.material_code AS material_code, CASE WHEN m.pickup_point IS NULL THEN '待映射' ELSE m.location_type END AS location_type, CASE WHEN m.pickup_point IS NULL THEN CONCAT('unmapped:', COALESCE(o.pickup_point, 'NULL')) ELSE m.location_code END AS location_code, MAX(COALESCE(m.location_name, o.pickup_point_name)) AS location_name, MAX(COALESCE(m.belong_base, o.belong_base)) AS belong_base, MAX(m.warehouseid) AS warehouseid, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(o.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(o.material_name), '')) END AS material_name, CASE WHEN COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) = COUNT(*) AND MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) >= 0 THEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) END AS demand_qty, CASE WHEN COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) = COUNT(*) AND MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) >= 0 THEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) END AS allocated_qty, CASE WHEN COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) <> COUNT(*) OR COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) <> COUNT(*) OR MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) < 0 OR MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) < 0 THEN NULL WHEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) - SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) > 0 THEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) - SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) ELSE 0 END AS remaining_qty, COUNT(*) AS source_row_count, MAX(CASE WHEN m.pickup_point IS NULL OR NULLIF(TRIM(o.cust_order_no), '') IS NULL OR NULLIF(TRIM(o.material_code), '') IS NULL OR o.bizunitconvertrate IS NULL OR o.bizunitconvertrate <= 0 OR o.qtyordered IS NULL OR o.qtyallocated IS NULL OR o.qtyordered < 0 OR o.qtyallocated < 0 THEN 1 ELSE 0 END) AS input_invalid FROM agents_scm_execute_detail_d AS o LEFT JOIN point_locations AS m ON o.pickup_point = m.pickup_point WHERE o.bizflowstatus IN ('等待组波', '组波中', '组波完成', '组波失败', '提交成功', '提交中', '提交失败', '上传验证', '人工释放占用', '撤回待改单', '创建') AND (NOT m.pickup_point IS NULL OR NOT NULLIF(TRIM(o.belong_base), '') IS NULL) GROUP BY o.cust_order_no, o.material_code, CASE WHEN m.pickup_point IS NULL THEN '待映射' ELSE m.location_type END, CASE WHEN m.pickup_point IS NULL THEN CONCAT('unmapped:', COALESCE(o.pickup_point, 'NULL')) ELSE m.location_code END), location_sku_demand AS (SELECT eligible_order_sku.location_type AS location_type, eligible_order_sku.location_code AS location_code, eligible_order_sku.material_code AS material_code, MAX(eligible_order_sku.location_name) AS location_name, MAX(eligible_order_sku.belong_base) AS belong_base, MAX(eligible_order_sku.warehouseid) AS warehouseid, CASE WHEN COUNT(DISTINCT eligible_order_sku.material_name) = 1 THEN MAX(eligible_order_sku.material_name) END AS material_name, CASE WHEN COUNT(eligible_order_sku.demand_qty) = COUNT(*) THEN SUM(eligible_order_sku.demand_qty) END AS demand_qty, CASE WHEN COUNT(eligible_order_sku.allocated_qty) = COUNT(*) THEN SUM(eligible_order_sku.allocated_qty) END AS allocated_qty, CASE WHEN COUNT(eligible_order_sku.remaining_qty) = COUNT(*) THEN SUM(eligible_order_sku.remaining_qty) END AS remaining_qty, SUM(eligible_order_sku.source_row_count) AS source_row_count, COUNT(*) AS order_sku_count, MAX(eligible_order_sku.input_invalid) AS input_invalid FROM eligible_order_sku AS eligible_order_sku GROUP BY eligible_order_sku.location_type, eligible_order_sku.location_code, eligible_order_sku.material_code), complete_demand AS (SELECT location_sku_demand.location_type AS location_type, location_sku_demand.location_code AS location_code, location_sku_demand.material_code AS material_code, location_sku_demand.location_name AS location_name, location_sku_demand.belong_base AS belong_base, location_sku_demand.warehouseid AS warehouseid, location_sku_demand.material_name AS material_name, location_sku_demand.demand_qty AS demand_qty, location_sku_demand.allocated_qty AS allocated_qty, location_sku_demand.remaining_qty AS remaining_qty, location_sku_demand.source_row_count AS source_row_count, location_sku_demand.order_sku_count AS order_sku_count, location_sku_demand.input_invalid AS input_invalid FROM location_sku_demand AS location_sku_demand UNION ALL SELECT l.location_type AS location_type, l.location_code AS location_code, CAST(NULL AS VARCHAR(255)) AS material_code, MAX(l.location_name) AS location_name, MAX(l.belong_base) AS belong_base, CASE WHEN l.location_type = '分仓' THEN MAX(l.warehouseid) END AS warehouseid, CAST(NULL AS VARCHAR(255)) AS material_name, 0 AS demand_qty, 0 AS allocated_qty, 0 AS remaining_qty, 0 AS source_row_count, 0 AS order_sku_count, 0 AS input_invalid FROM inventory_rows AS l LEFT JOIN (SELECT location_sku_demand.location_type AS location_type, location_sku_demand.location_code AS location_code FROM location_sku_demand AS location_sku_demand GROUP BY location_sku_demand.location_type, location_sku_demand.location_code) AS d ON l.location_type = d.location_type AND l.location_code = d.location_code WHERE d.location_code IS NULL AND NOT NULLIF(TRIM(l.location_code), '') IS NULL GROUP BY l.location_type, l.location_code), inventory_batch AS (SELECT inventory_rows.location_type AS location_type, inventory_rows.location_code AS location_code, inventory_rows.material_code AS material_code, inventory_rows.warehouseid AS warehouseid, inventory_rows.prod_date AS prod_date, inventory_rows.sap_warehouseid AS sap_warehouseid, inventory_rows.plant AS plant, inventory_rows.quality_batch AS quality_batch, inventory_rows.is_good_prod AS is_good_prod, inventory_rows.warehouse_classify AS warehouse_classify, SUM(COALESCE(inventory_rows.available_qty, 0)) AS available_qty, CASE WHEN COUNT(CASE WHEN COALESCE(inventory_rows.available_qty, 0) <> 0 THEN 1 END) > 1 THEN 1 ELSE 0 END AS duplicate_batch FROM inventory_rows AS inventory_rows GROUP BY inventory_rows.location_type, inventory_rows.location_code, inventory_rows.material_code, inventory_rows.warehouseid, inventory_rows.prod_date, inventory_rows.sap_warehouseid, inventory_rows.plant, inventory_rows.quality_batch, inventory_rows.is_good_prod, inventory_rows.warehouse_classify), material_attributes AS (SELECT agents_scm_material_in_out_summary_d.material_code AS material_code, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(agents_scm_material_in_out_summary_d.product_categ_name), '')) = 1 THEN MAX(NULLIF(TRIM(agents_scm_material_in_out_summary_d.product_categ_name), '')) END AS product_categ_name, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(agents_scm_material_in_out_summary_d.material_group_name), '')) = 1 THEN MAX(NULLIF(TRIM(agents_scm_material_in_out_summary_d.material_group_name), '')) END AS material_group_name FROM agents_scm_material_in_out_summary_d AS agents_scm_material_in_out_summary_d GROUP BY agents_scm_material_in_out_summary_d.material_code), inventory_sku AS (SELECT inventory_batch.location_type AS location_type, inventory_batch.location_code AS location_code, inventory_batch.material_code AS material_code, SUM(inventory_batch.available_qty) AS available_qty, SUM(inventory_batch.duplicate_batch) AS duplicate_batch FROM inventory_batch AS inventory_batch GROUP BY inventory_batch.location_type, inventory_batch.location_code, inventory_batch.material_code), shortage_source AS (SELECT CAST(CONCAT(SUBSTRING(s.month_date, 1, 4), '-', SUBSTRING(s.month_date, 5, 2), '-', SUBSTRING(s.month_date, 7, 2)) AS DATE) AS stat_date, d.location_type AS location_type, d.location_code AS location_code, d.location_name AS location_name, d.belong_base AS belong_base, d.warehouseid AS warehouseid, d.material_code AS material_code, d.material_name AS material_name, a.product_categ_name AS product_categ_name, a.material_group_name AS material_group_name, d.demand_qty AS demand_qty, d.allocated_qty AS allocated_qty, d.remaining_qty AS remaining_qty, CASE WHEN d.input_invalid = 0 AND COALESCE(i.duplicate_batch, 0) = 0 AND NOT s.month_date IS NULL THEN COALESCE(i.available_qty, 0) END AS available_qty, CASE WHEN d.input_invalid = 0 AND COALESCE(i.duplicate_batch, 0) = 0 AND NOT s.month_date IS NULL THEN CASE WHEN d.remaining_qty - COALESCE(i.available_qty, 0) > 0 THEN d.remaining_qty - COALESCE(i.available_qty, 0) ELSE 0 END END AS shortage_qty, d.source_row_count AS source_row_count, d.order_sku_count AS order_sku_count, CASE WHEN d.input_invalid <> 0 OR COALESCE(i.duplicate_batch, 0) <> 0 OR s.month_date IS NULL THEN 1 ELSE 0 END AS invalid_sku, CASE WHEN d.order_sku_count > 0 AND i.material_code IS NULL AND d.input_invalid = 0 AND NOT s.month_date IS NULL THEN 1 ELSE 0 END AS absent_inventory_sku FROM complete_demand AS d CROSS JOIN latest_inventory AS s LEFT JOIN inventory_sku AS i ON d.location_type = i.location_type AND d.location_code = i.location_code AND d.material_code = i.material_code LEFT JOIN material_attributes AS a ON d.material_code = a.material_code), master_rows AS (\n  SELECT p.material_code AS sku, CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.sub_category), '')) = 1 THEN MAX(NULLIF(TRIM(p.sub_category), '')) END AS category,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.series), '')) = 1 THEN MAX(NULLIF(TRIM(p.series), '')) END AS item,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.product_item_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.product_item_name), '')) END AS material,\n    CASE WHEN COUNT(DISTINCT NULLIF(TRIM(p.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(p.material_name), '')) END AS material_name\n  FROM agents_dim_product_list_mi AS p WHERE p.material_code IS NOT NULL GROUP BY p.material_code\n)\nSELECT r.stat_date AS source_date, r.belong_base AS base, COALESCE(r.product_categ_name, c.category) AS category,\n  CASE WHEN :gea_p310 THEN c.item ELSE NULL END AS item,\n  CASE WHEN :gea_p310 THEN c.material ELSE NULL END AS material,\n  CASE WHEN :gea_p311 THEN r.material_code ELSE NULL END AS sku,\n  CASE WHEN :gea_p311 THEN MAX(COALESCE(c.material_name, r.material_name)) ELSE NULL END AS material_name,\n  SUM(r.demand_qty) AS open_qty, SUM(r.shortage_qty) AS shortage_qty, SUM(r.invalid_sku) AS invalid\nFROM shortage_source AS r LEFT JOIN master_rows AS c ON c.sku = r.material_code\nWHERE r.material_code IS NOT NULL AND (:gea_p312 IS NULL OR COALESCE(r.product_categ_name, c.category, '未分类') = :gea_p312)\nGROUP BY r.stat_date, r.belong_base, COALESCE(r.product_categ_name, c.category), CASE WHEN :gea_p310 THEN c.item ELSE NULL END,\n  CASE WHEN :gea_p310 THEN c.material ELSE NULL END, CASE WHEN :gea_p311 THEN r.material_code ELSE NULL END\nORDER BY source_date, base, category, item, material, sku LIMIT :gea_p1001 OFFSET :gea_p1002",
+        "parameters": {
+          "gea_p310": false,
+          "gea_p311": false,
+          "gea_p312": "汤圆",
+          "gea_p1001": 20,
+          "gea_p1002": 0
+        },
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "source_date",
+        "base",
+        "category",
+        "item",
+        "material",
+        "sku",
+        "material_name",
+        "open_qty",
+        "shortage_qty",
+        "invalid"
+      ],
+      "pagination": {
+        "countQuery": "lantern.open-orders.count"
+      }
     }
   },
   "templates": {},
