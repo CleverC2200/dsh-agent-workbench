@@ -204,6 +204,11 @@ async function readFacts(id, parameters, signal, type, month, priority, largerPa
       Math.min(preferred, standardFactPageSize),
     ]),
   ];
+  const rows = [],
+    warnings = [];
+  const seen = new Set();
+  let total, version, signature;
+  let partial = false;
   const readPages = async (pageSize) => {
     const stop = new AbortController();
     const pageSignal = signal ? AbortSignal.any([signal, stop.signal]) : stop.signal;
@@ -217,16 +222,6 @@ async function readFacts(id, parameters, signal, type, month, priority, largerPa
           requiredColumns: definition.columns,
         },
       );
-    const first = await readPage(0);
-    const total = first.totalRowCount;
-    const version = first.configVersion;
-    const signature = JSON.stringify(first.returnedColumns);
-    if (!Number.isSafeInteger(total) || total < 0 || total > 100000)
-      throw Error('事实读取范围超过上限或缺少完整计数');
-    const rows = [],
-      warnings = [];
-    const seen = new Set();
-    let partial = false;
     const acceptPage = (result, offset) => {
       if (
         result.totalRowCount !== total ||
@@ -246,9 +241,17 @@ async function readFacts(id, parameters, signal, type, month, priority, largerPa
       partial ||= result.dataStatus === 'partial';
       warnings.push(...(result.warnings ?? []));
     };
-    acceptPage(first, 0);
+    if (total === undefined) {
+      const first = await readPage(0);
+      total = first.totalRowCount;
+      version = first.configVersion;
+      signature = JSON.stringify(first.returnedColumns);
+      if (!Number.isSafeInteger(total) || total < 0 || total > 100000)
+        throw Error('事实读取范围超过上限或缺少完整计数');
+      acceptPage(first, 0);
+    }
     if (type === 'shipmentHistory') {
-      let next = pageSize;
+      let next = rows.length;
       let failure;
       const pages = new Map();
       const readRemaining = async () => {
@@ -264,27 +267,24 @@ async function readFacts(id, parameters, signal, type, month, priority, largerPa
         }
       };
       await Promise.all([readRemaining(), readRemaining()]);
+      signal?.throwIfAborted();
+      while (pages.has(rows.length)) acceptPage(pages.get(rows.length), rows.length);
       if (failure) throw failure.error;
       pageSignal.throwIfAborted();
-      for (const [offset, result] of [...pages].sort((a, b) => a[0] - b[0]))
-        acceptPage(result, offset);
     } else {
-      for (let offset = pageSize; offset < total; offset += pageSize)
+      for (let offset = rows.length; offset < total; offset += pageSize)
         acceptPage(await readPage(offset), offset);
     }
-    return { rows, warnings, total, version, partial };
   };
-  let collected;
   for (const [index, size] of sizes.entries()) {
     try {
-      collected = await readPages(size);
+      await readPages(size);
       break;
     } catch (error) {
       if (signal?.aborted || index === sizes.length - 1 || !exceedsReadSizeLimit(error))
         throw error;
     }
   }
-  const { rows, warnings, total, version, partial } = collected;
   const prefix = 'agents_scm_cust_deliv_daily_di.';
   const records = rows.map((row) => {
     const value = (name) => row[prefix + name];

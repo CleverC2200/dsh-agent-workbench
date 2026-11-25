@@ -242,7 +242,6 @@ test('confirmed monthly versions and shipment measures populate independently wh
       .getByRole('region', { name: '模型双期预测' })
       .getByRole('button', { name: '同步', exact: true }),
   ).toBeEnabled();
-  assert(calls.some((call) => call.queryId === 'inventory-targets.count'));
   assert(
     calls
       .filter((call) => /stock|inventory/.test(call.queryId))
@@ -250,6 +249,8 @@ test('confirmed monthly versions and shipment measures populate independently wh
         ['inventory-targets.detail', 'inventory-targets.count'].includes(call.queryId),
       ),
   );
+  await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  await expect.poll(() => calls.some((call) => call.queryId === 'inventory-targets.count')).toBe(true);
 });
 test('full fact paging keeps zero and missing base distinct, without a failed shipment blocking plans', async (t) => {
   const records = Array.from({ length: 201 }, (_, index) => ({

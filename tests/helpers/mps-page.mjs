@@ -3,7 +3,7 @@ import { expect } from '@playwright/test';
 import { authorPage } from './author-page.mjs';
 export async function mpsPage(t, config, execute, options = {}) {
   const queryFixture = options.optimizedPaging ? config : structuredClone(config);
-  if (!options.optimizedPaging)
+  if (!options.optimizedPaging && queryFixture)
     for (const id of Object.keys(queryFixture.queries)) {
       if (id.includes('.calculation.')) delete queryFixture.queries[id];
       if (id === 'facts.history') queryFixture.queries[id].parameterSpec.page_size.maximum = 500;
