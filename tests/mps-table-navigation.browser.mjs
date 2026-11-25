@@ -211,7 +211,7 @@ test('第2步宽窗表格铺满，长物料组不盖数量且正常与窄窗滚�
   const table = await shipmentTable(frame);
   await table.getByRole('button', { name: '展开 郑州', exact: true }).press('Enter');
   await table.getByRole('button', { name: '展开 郑州 汤圆', exact: true }).press('Enter');
-  for (const width of [1830, 1200, 600]) {
+  for (const width of [2300, 1200, 600]) {
     await page.evaluate((width) => {
       document.getElementById('root').style.width = `${width + 300}px`;
     }, width);
@@ -219,7 +219,7 @@ test('第2步宽窗表格铺满，长物料组不盖数量且正常与窄窗滚�
       element.scrollLeft = 0;
       element.scrollTop = 0;
     });
-    if (width === 1830) {
+    if (width === 2300) {
       const edges = await table.evaluate((element) => ({
         table: element.getBoundingClientRect().right,
         wrapper: element.parentElement.getBoundingClientRect().right,
@@ -249,7 +249,7 @@ test('第2步宽窗表格铺满，长物料组不盖数量且正常与窄窗滚�
       '完整物料组名称在首列内换行可读',
     );
     const quantity = group.getByRole('button', {
-      name: `郑州 汤圆 ${longGroup} 本月已发货 计算过程`,
+      name: `郑州 汤圆 ${longGroup} 月初 1 号库存 计算过程`,
       exact: true,
     });
     await expect(quantity).toHaveText('300');
