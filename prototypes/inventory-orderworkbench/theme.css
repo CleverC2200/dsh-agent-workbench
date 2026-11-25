@@ -51,6 +51,11 @@ table[class^='wb-'] :is(th, td) {
   text-align: center !important;
   vertical-align: middle;
 }
+
+.wb-improvement-table:not(.long-term) td:not(.actions) {
+  text-align: left !important;
+  vertical-align: top;
+}
 table[class^='wb-'] :is(.wb-region-order-count, .category-toggle, .region-change-toggle) {
   text-align: center;
 }

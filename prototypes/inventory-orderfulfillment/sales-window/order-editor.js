@@ -683,7 +683,7 @@ window.OrderShortageEditor = (() => {
         'p',
         number(line.shortage) > 0
           ? `库存不足：原订单缺货 ${display(line.shortage)} 箱`
-          : number(line.shortage) === null
+          : number(line.shortage) === null && line.draftQuantity > 0
             ? '缺货数据未完整提供'
             : '',
         'editor-stock-warning',
