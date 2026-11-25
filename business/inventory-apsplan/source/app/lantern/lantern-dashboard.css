@@ -1284,3 +1284,23 @@
     animation: none;
   }
 }
+
+.lantern-list-trend {
+  margin: 12px;
+  padding: 12px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 10px;
+  background: var(--workbench-surface);
+}
+
+.lantern-list-trend button {
+  padding: 6px 10px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 6px;
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+}
+
+.lantern-list-trend li + li {
+  margin-top: 4px;
+}

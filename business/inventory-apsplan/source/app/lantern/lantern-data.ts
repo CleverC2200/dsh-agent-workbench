@@ -20,8 +20,11 @@ export type MetricKey =
   | 'accuracy'
   | 'cancellation'
   | 'amendment'
-  | 'ontime'
+  | 'salesPlan'
+  | 'openQuantity'
+  | 'openShortage'
   | 'production'
+  | 'planning'
   | 'fulfillment'
   | 'inventory'
   | 'age'
@@ -33,9 +36,10 @@ type Source =
   | 'accuracy'
   | 'cancellation'
   | 'amendment'
-  | 'ontime'
-  | 'ontimeOrganization'
+  | 'budgetProvince'
+  | 'openOrders'
   | 'production'
+  | 'planning'
   | 'fulfillment'
   | 'base'
   | 'branch'
@@ -49,11 +53,13 @@ type SourceResult =
 export type LanternFacts = Partial<Record<Source, SourceResult>>;
 export type Scope = {
   base?: string;
+  province?: string;
   organization?: readonly string[];
   product?: readonly string[];
 };
 export type ProductFilters = {
   category: string;
+  classification: string;
   series: string;
   group: string;
   sku: string;
@@ -65,12 +71,13 @@ export type Observation = {
   details?: readonly (readonly [string, number | null])[];
   note?: string;
   failed?: boolean;
+  progress?: number;
 };
 
 const config = agentSqlConfig(configuredSql);
 const sources = {
-  sales: ['accuracy', 'budget', 'amendment', 'ontime', 'cancellation', 'ontimeOrganization'],
-  production: ['production', 'fulfillment'],
+  sales: ['accuracy', 'budget', 'amendment', 'openOrders', 'cancellation', 'budgetProvince'],
+  production: ['production', 'fulfillment', 'planning'],
   inventory: ['base', 'branch', 'customer'],
 } satisfies Record<DashboardModule, readonly Source[]>;
 
@@ -79,9 +86,10 @@ export const sourceLabels: Record<Source, string> = {
   accuracy: '销售提报准确率',
   cancellation: '作废率',
   amendment: '改单率',
-  ontime: '准交率',
-  ontimeOrganization: '销售组织准交率',
+  budgetProvince: '省区销售预算',
+  openOrders: '未开订单量与缺货量',
   production: '生产计划与实绩',
+  planning: '生产规划达成率',
   fulfillment: '订单满足率',
   base: '基地库存',
   branch: '分仓库存',
@@ -95,7 +103,7 @@ export function shiftDay(day: string, count: number) {
   return new Date(Date.parse(day + 'T00:00:00Z') + count * durationDay).toISOString().slice(0, 10);
 }
 export const latestBusinessDate = () => shiftDay(businessDay(), -1);
-const shiftMonth = (day: string, count: number) => {
+export const shiftMonth = (day: string, count: number) => {
   const date = new Date(monthStart(day) + 'T00:00:00Z');
   date.setUTCMonth(date.getUTCMonth() + count);
   return shiftDay(date.toISOString().slice(0, 10), 0);
@@ -246,13 +254,16 @@ async function read(
 }
 
 function supported(source: Source, period: DashboardPeriod) {
-  if (source === 'budget') return period.view === 'month' || period.view === 'year';
+  if (source === 'budget' || source === 'budgetProvince')
+    return period.view === 'month' || period.view === 'year';
+  if (source === 'planning') return period.view === 'month';
+  if (source === 'openOrders') return period.range.to === latestBusinessDate();
   if (source === 'accuracy')
     return (
       (period.view === 'month' || period.view === 'year') &&
       (period.range.to === latestBusinessDate() || shiftDay(period.range.to, 1).endsWith('-01'))
     );
-  if (['cancellation', 'amendment', 'ontime', 'ontimeOrganization'].includes(source))
+  if (['cancellation', 'amendment'].includes(source))
     return ['day', 'week', 'month'].includes(period.view);
   return true;
 }
@@ -296,20 +307,53 @@ export async function readLanternFacts({
     return search ? '%' + search.toLowerCase().replace(/[\\%_]/g, '\\$&') + '%' : null;
   };
   const category = categoryView ? product?.category || null : lanternCategory;
+  const detail = Boolean(product && (product.level > 0 || product.group || product.sku));
   const productDimensions = {
-    sku_detail: Boolean(product?.sku.trim()),
-    product_pattern: pattern(product?.sku || product?.group),
+    sku_detail: detail,
+    product_pattern: pattern(product?.sku),
     group_detail: Boolean(product && product.level >= 1),
-    material_detail: Boolean(product && product.level >= 2),
+    material_detail: detail,
     product_category: category,
   };
   const productionDimensions = {
     ...productDimensions,
-    product_series: product?.series || null,
-    group_pattern: pattern(product?.group),
+    product_series: null,
+    group_pattern: null,
     sku_pattern: pattern(product?.sku),
   };
   const results: LanternFacts = {};
+  let directory: Promise<Map<string, Row>> | undefined;
+  const enrich = async (result: Promise<Row[]>, directoryCategory = category) => {
+    const rows = await result;
+    if (!rows.some((row) => text(row.sku))) return rows;
+    const directoryDate = latestBusinessDate();
+    directory ??= query(
+      'lantern.product-directory',
+      {
+        start: compact(shiftMonth(directoryDate, -6)),
+        end_exclusive: compact(shiftDay(directoryDate, 1)),
+        product_category: directoryCategory,
+      },
+      ['sku'],
+    )
+      .then((items) => new Map(items.map((row) => [text(row.sku), row])))
+      .catch((error) => {
+        signal.throwIfAborted();
+        if (!restrictedQuery.test(queryFailureText(error))) throw error;
+        return new Map<string, Row>();
+      });
+    const names = await directory;
+    return rows.map((row) => {
+      const item = names.get(text(row.sku));
+      return {
+        ...row,
+        product_class: item?.product_class,
+        item: item?.item ?? row.item,
+        material: item?.material ?? row.material,
+        material_name: item?.material_name ?? row.material_name,
+      };
+    });
+  };
   let dates: Promise<Row[]> | undefined;
   const dateFor = async (source: 'base' | 'branch' | 'customer') => {
     if (source === 'customer') {
@@ -327,46 +371,65 @@ export async function readLanternFacts({
     const ready = (rows: Row[], date?: string): SourceResult => ({ status: 'ready', rows, date });
     switch (source) {
       case 'budget':
-        return ready(
-          await query(
-            'lantern.budget',
-            {
-              start_month: compact(fromMonth).slice(0, 6),
-              end_month_exclusive: compact(nextMonth).slice(0, 6),
-              as_of: to,
-              start: compact(from),
-              end_exclusive: compact(end),
-              product_category: lanternCategory,
-            },
-            ['month'],
-          ),
+      case 'budgetProvince': {
+        const byProduct = source === 'budget' && categoryView && detail;
+        const byProvince = source === 'budgetProvince';
+        const rows = query(
+          byProduct
+            ? 'lantern.product-budget'
+            : byProvince
+              ? 'lantern.province-budget'
+              : 'lantern.budget',
+          {
+            start_month: compact(fromMonth).slice(0, 6),
+            end_month_exclusive: compact(nextMonth).slice(0, 6),
+            as_of: to,
+            start: compact(from),
+            end_exclusive: compact(end),
+            product_category: lanternCategory,
+          },
+          byProduct ? ['month', 'sku'] : byProvince ? ['month', 'province'] : ['month'],
         );
-      case 'accuracy':
+        const facts = byProduct ? await enrich(rows, lanternCategory) : await rows;
         return ready(
-          await query(
-            'lantern.accuracy',
-            {
-              start_month: fromMonth,
-              end_month_exclusive: nextMonth,
-              product_category: lanternCategory,
-            },
-            ['month', 'region', 'province'],
-          ),
+          categoryView && !byProduct
+            ? facts.map((row) => ({ ...row, category: lanternCategory }))
+            : facts,
         );
+      }
+      case 'accuracy': {
+        const byProduct = categoryView && detail;
+        const rows = query(
+          byProduct ? 'lantern.product-accuracy' : 'lantern.accuracy',
+          {
+            start_month: fromMonth,
+            end_month_exclusive: nextMonth,
+            product_category: lanternCategory,
+          },
+          byProduct ? ['month', 'category', 'sku'] : ['month', 'region', 'province'],
+        );
+        const facts = byProduct ? await enrich(rows, lanternCategory) : await rows;
+        return ready(
+          categoryView && !byProduct
+            ? facts.map((row) => ({ ...row, category: lanternCategory }))
+            : facts,
+        );
+      }
       case 'cancellation':
       case 'amendment':
-      case 'ontime':
         if (categoryView)
           return ready(
-            await query(
-              'lantern.product-' + source,
-              {
-                report_base: '',
-                start: from,
-                end_exclusive: end,
-                ...productDimensions,
-              },
-              ['category', 'item', 'material', 'sku'],
+            await enrich(
+              query(
+                'lantern.product-' + source,
+                {
+                  report_base: '',
+                  start: from,
+                  end_exclusive: end,
+                  ...productDimensions,
+                },
+                ['category', 'item', 'material', 'sku'],
+              ),
             ),
           );
         return ready(
@@ -378,48 +441,67 @@ export async function readLanternFacts({
               end_exclusive: end,
               product_category: lanternCategory,
             },
-            source === 'ontime' ? undefined : ['base', 'region', 'province', 'kind'],
+            ['base', 'region', 'province', 'kind'],
           ),
         );
-      case 'ontimeOrganization':
+      case 'openOrders':
         return ready(
-          await query(
-            'lantern.ontime-organization',
-            {
-              report_base: '',
-              start: from,
-              end_exclusive: end,
-              product_category: lanternCategory,
-            },
-            ['region', 'province'],
+          await enrich(
+            query('lantern.open-orders', productDimensions, [
+              'source_date',
+              'base',
+              'category',
+              'item',
+              'material',
+              'sku',
+            ]),
+          ),
+        );
+      case 'planning':
+        return ready(
+          await enrich(
+            query(
+              'lantern.planning',
+              {
+                ...productionDimensions,
+                start_month: fromMonth,
+                end_month_exclusive: nextMonth,
+                end_exclusive: end,
+              },
+              ['month', 'base', 'category', 'item', 'material', 'sku'],
+            ),
           ),
         );
       case 'production':
         return ready(
-          await query(
-            'lantern.production',
-            {
-              start: compact(from),
-              end_exclusive: compact(end),
-              ...productionDimensions,
-            },
-            ['base', 'category', 'item', 'material', 'sku'],
+          await enrich(
+            query(
+              'lantern.production',
+              {
+                start: compact(from),
+                end_exclusive: compact(end),
+                ...productionDimensions,
+              },
+              ['base', 'category', 'item', 'material', 'sku'],
+            ),
           ),
         );
       case 'fulfillment': {
         const monthly = period.view === 'month';
         return ready(
-          await query(
-            'lantern.fulfillment',
-            {
-              date_basis: monthly ? 'order_month' : 'created',
-              start: from,
-              end_exclusive: end,
-              ...productionDimensions,
-              category_mode: category && category !== '未分类' ? 'equal' : 'all',
-              category,
-            },
-            ['base', 'category', 'item', 'material', 'sku'],
+          await enrich(
+            query(
+              'lantern.fulfillment',
+              {
+                date_basis: monthly ? 'order_month' : 'created',
+                start: from,
+                end_exclusive: end,
+                ...productionDimensions,
+                category_mode: category && category !== '未分类' ? 'equal' : 'all',
+                category,
+              },
+              ['base', 'category', 'item', 'material', 'sku'],
+            ),
           ),
         );
       }
@@ -431,28 +513,30 @@ export async function readLanternFacts({
         if (date < from || date > to) throw Error('库存快照日期超出所选范围');
         const id = source === 'customer' ? 'lantern.customer-stock' : 'lantern.stock-' + source;
         return ready(
-          await query(
-            id,
-            {
-              stat_date: date,
-              ...productDimensions,
-              group_detail: Boolean(product),
-            },
-            ['category', 'item', 'material', 'sku'],
+          await enrich(
+            query(
+              id,
+              {
+                stat_date: date,
+                ...productDimensions,
+                group_detail: Boolean(product),
+              },
+              source === 'customer'
+                ? ['category', 'item', 'material', 'sku']
+                : ['base', 'category', 'item', 'material', 'sku'],
+            ),
           ),
           date,
         );
       }
     }
   };
+  const metricSource = only ? sourceForMetric(only, organization) : undefined;
   const names = sources[module].filter(
     (source) =>
       supported(source, period) &&
-      (organization ? source === 'ontimeOrganization' : source !== 'ontimeOrganization') &&
-      (!only ||
-        source === only ||
-        inventorySources.includes(source) ||
-        (only === 'ontime' && organization)) &&
+      (organization ? source === 'budgetProvince' : source !== 'budgetProvince') &&
+      (!only || source === metricSource || inventorySources.includes(source)) &&
       (module !== 'inventory' ||
         !inventoryScope ||
         inventoryScope === source ||
@@ -486,9 +570,27 @@ export async function readLanternFacts({
 }
 
 const inventorySources: readonly Source[] = ['base', 'branch', 'customer'];
+export function sourceForMetric(key: MetricKey, organization = false): Source {
+  if (key === 'budget' && organization) return 'budgetProvince';
+  if (key === 'salesPlan') return 'accuracy';
+  if (key === 'openQuantity' || key === 'openShortage') return 'openOrders';
+  if (
+    key === 'inventory' ||
+    key === 'age' ||
+    key === 'freshness' ||
+    key === 'largeDate' ||
+    key === 'stockValue'
+  )
+    return 'base';
+  return key;
+}
+export const unknownProductClass = '未归属分类';
+
 export function productPath(row: Row) {
+  const category = text(row.category) || '未分类';
   const parts = [
-    text(row.category) || '未分类',
+    category,
+    category === lanternCategory ? text(row.product_class) || unknownProductClass : '其他品类',
     text(row.item) || '未归属系列',
     text(row.material) || '未归属物料组',
   ];
@@ -500,6 +602,7 @@ export function productPath(row: Row) {
 function scoped(rows: Row[], scope: Scope) {
   return rows.filter((row) => {
     if (scope.base && row.base !== scope.base) return false;
+    if (scope.province && text(row.province) !== scope.province) return false;
     if (
       scope.product &&
       ((!Object.hasOwn(row, 'category') && !Object.hasOwn(row, 'sku')) ||
@@ -550,7 +653,7 @@ export function observe(
     })[name];
   const metric = (name: string, id: string, rows: Row[]) => derived(name, id, rows)?.value ?? null;
   if (key === 'budget') {
-    const rows = pick('budget');
+    const rows = pick(scope.province ? 'budgetProvince' : 'budget');
     const budget = derived('销售预算达成率', 'finance', rows);
     return {
       value: budget?.value ?? null,
@@ -562,6 +665,55 @@ export function observe(
       note:
         (facts.budget?.status === 'ready' ? budget?.detail : undefined) ??
         (supported('budget', period) ? '汤圆未税收入与月度预算' : '预算按月发布'),
+    };
+  }
+  if (key === 'salesPlan') {
+    const rows = pick('accuracy');
+    const shipped = known(rows, 'shipped_qty');
+    const planned = known(rows, 'submitted_plan_qty');
+    const monthly = period.view === 'month';
+    const { to } = period.range;
+    const monthDays = new Date(
+      Date.parse(shiftMonth(to, 1) + 'T00:00:00Z') - durationDay,
+    ).getUTCDate();
+    const progress = monthly ? (Number(to.slice(-2)) * 100) / monthDays : undefined;
+    return {
+      value:
+        monthly && (known(rows, 'missing_ship_plan') ?? 0) === 0 ? ratio(shipped, planned) : null,
+      progress,
+      details: [
+        ['实际发货量', shipped],
+        ['销售提报计划量', planned],
+      ],
+      note: monthly ? '纠偏计划优先，缺纠偏取月初计划' : '销售提报达成率按月统计',
+    };
+  }
+  if (key === 'planning') {
+    const rows = pick(key);
+    const inbound = known(rows, 'inbound_qty');
+    const planned = known(rows, 'adjusted_plan_qty');
+    return {
+      value: (known(rows, 'invalid') ?? 0) === 0 ? ratio(inbound, planned) : null,
+      date: cut(rows),
+      details: [
+        ['实际入库量', inbound],
+        ['纠偏生产计划量', planned],
+      ],
+      note: period.view === 'month' ? '按期间入库累计与月纠偏计划计算' : '生产规划达成率按月统计',
+    };
+  }
+  if (key === 'openQuantity' || key === 'openShortage') {
+    const rows = pick('openOrders');
+    const value = key === 'openQuantity' ? known(rows, 'open_qty') : known(rows, 'shortage_qty');
+    return {
+      value,
+      date: cut(rows),
+      note:
+        period.range.to !== latestBusinessDate()
+          ? '当前未开订单来源未提供历史快照'
+          : key === 'openShortage' && (known(rows, 'invalid') ?? 0) > 0
+            ? '仅含可判定的交付范围'
+            : undefined,
     };
   }
   if (key === 'accuracy') {
@@ -600,14 +752,6 @@ export function observe(
     return partial
       ? { value: sample, note: sample === null ? undefined : '可判定样本' }
       : { value: all };
-  }
-  if (key === 'ontime') {
-    const rows = pick(scope.organization ? 'ontimeOrganization' : key);
-    const partial = (known(rows, 'pending') ?? 0) > 0;
-    return {
-      value: ratio(complete(rows, 'numerator'), complete(rows, 'denominator')),
-      note: partial ? '待判定执行单保留在分母' : undefined,
-    };
   }
   const date =
     inventoryScope === 'all'
