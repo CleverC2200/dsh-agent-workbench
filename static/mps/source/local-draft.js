@@ -98,6 +98,7 @@ export function encodeLocalDrafts(drafts, selected) {
                 'values',
                 'remaining',
                 'transferPlans',
+                'forecasts',
                 'editsByCutoff',
               ]),
               ...(draft.shipment.sourceEdits

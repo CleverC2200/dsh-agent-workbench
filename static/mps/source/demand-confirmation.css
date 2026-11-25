@@ -1258,3 +1258,10 @@
   display: block;
   margin-inline-start: 22px;
 }
+
+.sp-table tr[data-deviation='yellow'] > * {
+  background: #fff8d6;
+}
+.sp-table tr[data-deviation='red'] > * {
+  background: #ffe5e5;
+}
