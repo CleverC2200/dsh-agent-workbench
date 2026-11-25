@@ -198,6 +198,7 @@ export function changeAdjustment(adjustments, kind, input, undo = false) {
         systemValue: entry.systemValue ?? null,
         value: undo ? (input.effectiveValue ?? null) : value,
         reason: entry.reason,
+        ...(entry.remark !== undefined ? { remark: entry.remark } : {}),
         at: new Date().toISOString(),
       },
     ],

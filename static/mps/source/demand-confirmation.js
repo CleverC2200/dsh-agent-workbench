@@ -1,3 +1,5 @@
+import { createBatchEdit } from './batch-edit.js';
+import { createStepViewState, useStepViewField } from './step-view-state.js';
 import { categorySourceInputs } from './category-source-inputs.js';
 import { createCategoryFilter, matchesCategories } from './category-filter.js';
 import { canonicalBaseName } from './relations.js';
@@ -1089,6 +1091,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     downloadCsv: downloadCsvLegacy,
   });
   const DeliveryMetrics = createDeliveryMetrics(react, { table, downloadCsv, useMpsPart });
+  const { useBatchEdit, Actions } = createBatchEdit(react);
   const Workflow = createWorkflow(react, useMpsPart, {
     Dialog,
     Upload,
@@ -1171,7 +1174,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [submissionWarningOpen, setSubmissionWarningOpen] = react.useState(false);
     const [error, setError] = react.useState('');
     const [search, setSearch] = react.useState('');
-    const [selectedCategories, setSelectedCategories] = react.useState([]);
+    const [sharedCategories, setSharedCategories] = react.useState([]);
     const [productPage, setProductPage] = react.useState(0);
     const [productPageSize, setProductPageSize] = react.useState(10);
     const [productDetails, setProductDetails] = react.useState(null);
@@ -1548,6 +1551,24 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           }`;
     react.useEffect(() => setSubmissionWarningOpen(false), [draft.id, step]);
     const workflowScope = JSON.stringify([draft.id, draft.month, scopeGeneration]);
+    const workflowViews = react.useRef(new Map());
+    if (!workflowViews.current.has(workflowScope))
+      workflowViews.current.set(workflowScope, new Map());
+    const stepViews = workflowViews.current.get(workflowScope);
+    if (!stepViews.has('process')) stepViews.set('process', createStepViewState());
+    const [processCategories, setProcessCategories] = useStepViewField(
+      react,
+      stepViews.get('process'),
+      'selectedCategories',
+      () => [],
+    );
+    const selectedCategories = step === 'process' ? processCategories : sharedCategories;
+    const setSelectedCategories = step === 'process' ? setProcessCategories : setSharedCategories;
+    const processBatch = useBatchEdit({
+      scope: workflowScope,
+      view: stepViews.get('process'),
+      requireReason: true,
+    });
     if (workflowStep.current.scope !== workflowScope)
       workflowStep.current = { scope: workflowScope, step: null };
     const workflowActive =
@@ -2050,7 +2071,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       retentionError && h('p', { role: 'alert' }, retentionError),
       h(
         'header',
-        { className: filterStep ? 'dc-page-head dc-page-head-sticky' : 'dc-page-head' },
+        {
+          className: filterStep ? 'dc-page-head dc-page-head-sticky' : 'dc-page-head',
+          onKeyDown: step === 'process' ? processBatch.keyDown : undefined,
+        },
         h(
           'div',
           { className: 'dc-title-row' },
@@ -2203,6 +2227,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'div',
               { className: 'dc-version-actions' },
+              step === 'process' &&
+                h(Actions, {
+                  batch: processBatch,
+                  requireReason: true,
+                  hint: '留空恢复人工导入，无导入时恢复系统值',
+                }),
               h(
                 'button',
                 {
@@ -2510,6 +2540,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         workflowStep.current.step &&
           h(Workflow, {
             selectedCategories,
+            stepViews,
+            processBatch,
             key: workflowScope,
             active: workflowActive,
             result: workflowResult,
