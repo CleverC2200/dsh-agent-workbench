@@ -235,6 +235,10 @@ type WorkspaceName =
 
 const HELP_CONTENT_REGISTRY_KEY = 'plan-help-content-registry:v1';
 
+function stockSnapshotIsPrevious(day: string, cutoff?: string) {
+  return cutoff !== undefined && day !== '—' && day < cutoff;
+}
+
 function taskScopeDisplay(scopeType: TaskScope, scope: string) {
   if (scopeType === '交叉分析') return `${scope}组合`;
   if (scopeType === '销售组织') return `${scope}销售组织`;
@@ -583,7 +587,7 @@ function productionMetricClass(metric: OverviewMetricName): '经营指标' | '�
 
 const metricHelp: Record<OverviewMetricName, string> = {
   销售预算达成率:
-    '月度销售预算达成率 = 不含税销售额 ÷ 月度预算 × 100%；年度按已确认口径取月度达成率平均。月中与截止日已过天数÷当月自然天数比较时间进度，差额为预算达成率减时间进度；完整月份健康 >95%，预警为 90%<x≤95%，严重 ≤90%。',
+    '月度销售预算达成率 = 不含税销售额 ÷ 月度预算 × 100%；年度对有有效预算和实绩的月份取达成率平均。月中与截止日已过天数÷当月自然天数比较时间进度，差额为预算达成率减时间进度；完整月份健康 >95%，预警为 90%<x≤95%，严重 ≤90%。',
   销售提报准确率:
     '月度终值 = 初版准确率×50% + 月中纠偏准确率×50%；单阶段准确率 = 1 − Σ|单品偏差量| ÷ Σ单品计划量。年度取月度平均。健康 >70%，预警为 65%<x≤70%，严重 ≤65%。',
   销售提报达成率:
@@ -2929,6 +2933,10 @@ function IntelligentWorkbenchPage({
   );
   const sourceDateLabel = (id: string) => readSourceDateLabel(live?.data, id);
   const stockSnapshotLabel = sourceDateLabel('stock');
+  const previousStockSnapshot = stockSnapshotIsPrevious(stockSnapshotLabel, live?.data?.end);
+  const briefingCopy = previousStockSnapshot
+    ? `${pageBriefing.copy} 库存沿用 ${stockSnapshotLabel} 快照。`
+    : pageBriefing.copy;
   const productionSection = live?.data?.sections.find((section) => section.id === 'production');
   const productionObservation =
     live?.data?.missingValuePolicy !== 'zero' && productionSection?.status === 'ready'
@@ -3036,7 +3044,7 @@ function IntelligentWorkbenchPage({
       tone: hasTarget && present ? (met ? 'good' : progress ? 'warning' : 'critical') : 'neutral',
       period:
         item.statistic === '快照指标'
-          ? `最新快照 · 截至${stockSnapshotLabel}`
+          ? `${previousStockSnapshot ? '上一快照' : '最新快照'} · 截至${stockSnapshotLabel}`
           : `本期累计 · 截至${live?.data?.end ?? '-'}`,
       deltaDirection: Number.isFinite(datum.change) ? (datum.change < 0 ? 'down' : 'up') : 'none',
       yoyDirection: datum.yoy === null ? 'none' : datum.yoy < 0 ? 'down' : 'up',
@@ -3500,7 +3508,7 @@ function IntelligentWorkbenchPage({
           data-context-label="AI今日经营简报"
           data-context-summary={
             live
-              ? `${pageBriefing.title}。${pageBriefing.copy}`
+              ? `${pageBriefing.title}。${briefingCopy}`
               : '2项指标进入预警区间，3项AI方案等待决策。'
           }
         >
@@ -3511,7 +3519,7 @@ function IntelligentWorkbenchPage({
           <h2>{live ? pageBriefing.title : '2项指标进入预警区间，3项AI方案等待决策'}</h2>
           <p>
             {live
-              ? pageBriefing.copy
+              ? briefingCopy
               : '预警事项用于提前关注；严重指标、业务事件和例行日历触发的事项由AI生成分析与方案。你也可以进入V0.2看板核查明细并直接派发任务。'}
           </p>
         </div>
@@ -5560,6 +5568,13 @@ export default function Home({
     liveData && ['库存量', '可发货天数'].includes(name)
       ? readSourceDateLabel(live.data, 'stock')
       : dataCutoff;
+  const stockSnapshotPeriod = (name: string) => {
+    const day = snapshotDateLabel(name);
+    return stockSnapshotIsPrevious(day, live.data?.end)
+      ? `上一快照 · 截至${day}`
+      : `最新快照 · 截至${day}`;
+  };
+  const budgetMissingNote = liveMetricNotes['销售预算达成率']?.detail;
   const salesOrgMetrics = (path: string) => {
     if (!liveData) return demoSalesOrgMetrics(path);
     const [region, second, third] = path.split(' / ');
@@ -6112,13 +6127,16 @@ export default function Home({
         >
           <span>{drillStatisticType(kpi.name)}</span>
           {drillStatisticType(kpi.name) === '快照指标'
-            ? `最新快照 · 截至${snapshotDateLabel(kpi.name)}`
+            ? stockSnapshotPeriod(kpi.name)
             : periodMeta.current}
         </div>
         <div className="kpi-value">
           <strong>{Number.isFinite(displayValue) ? formatNumber(displayValue, 2) : '-'}</strong>
           {Number.isFinite(displayValue) && <span>{kpi.unit}</span>}
         </div>
+        {kpi.name === '销售预算达成率' && budgetMissingNote && (
+          <p className="kpi-source-note">{budgetMissingNote}</p>
+        )}
         {liveData &&
           ['需求预测准确率', '可发货天数'].includes(kpi.name) &&
           !readFailed &&
@@ -8301,7 +8319,7 @@ export default function Home({
                             {drillStatisticType(meta.name)}
                             <small>
                               {drillStatisticType(meta.name) === '快照指标'
-                                ? `截至${snapshotDateLabel(meta.name)}`
+                                ? stockSnapshotPeriod(meta.name)
                                 : periodMeta.current}
                             </small>
                           </span>
@@ -8325,6 +8343,19 @@ export default function Home({
                           {Number.isFinite(datum.current)
                             ? `${formatNumber(datum.current, 2)}${meta.unit}`
                             : '—'}
+                          {analysisScope === 'production' &&
+                            ['库存量', '可发货天数'].includes(meta.name) &&
+                            stockSnapshotIsPrevious(
+                              snapshotDateLabel(meta.name),
+                              live.data?.end,
+                            ) && (
+                              <small className="kpi-source-note">
+                                {stockSnapshotPeriod(meta.name)}
+                              </small>
+                            )}
+                          {meta.name === '销售预算达成率' && budgetMissingNote && (
+                            <small className="kpi-source-note">{budgetMissingNote}</small>
+                          )}
                         </b>
                         <span>
                           {Number.isFinite(datum.previous)

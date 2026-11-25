@@ -64,6 +64,7 @@ export type Observation = {
   date?: string;
   details?: readonly (readonly [string, number | null])[];
   note?: string;
+  failed?: boolean;
 };
 
 const config = agentSqlConfig(configuredSql);
@@ -86,6 +87,7 @@ export const sourceLabels: Record<Source, string> = {
   branch: '分仓库存',
   customer: '客户库存',
 };
+const lanternCategory = '汤圆';
 const durationDay = 86_400_000;
 const compact = (day: string) => day.replaceAll('-', '');
 const monthStart = (day: string) => day.slice(0, 7) + '-01';
@@ -129,13 +131,44 @@ const recentReads = new Map<string, { expires: number; rows: Row[] }>();
 const pendingReads = inFlightQueries<Row[]>();
 subscribeQueryIdentity(() => recentReads.clear());
 
+function queryFailureText(error: unknown): string {
+  const parts: string[] = [];
+  for (let cause = error; cause instanceof Error; cause = cause.cause) {
+    if ('code' in cause) parts.push(String(cause.code));
+    parts.push(cause.message);
+  }
+  return parts.join(' ');
+}
+
+const restrictedQuery = /PERMISSION|DENIED|NOT_PUBLISHED|NOT_IN_DATASET|RETURN_COLUMN/;
+const queryTimeout = /\bGEA_SQL_QUERY_TIMEOUT\b|GEA SQL 查询超时|业务请求超时/;
+const temporaryQueryUnavailable =
+  /\b(?:GEA_SQL_UNAVAILABLE|PAGE_CHANNEL_UNAVAILABLE)\b|GEA SQL 查询服务暂时不可用/;
+
+function waitForCancellationRetry(signal: AbortSignal) {
+  signal.throwIfAborted();
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, 350);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 async function read(
   client: ReturnType<typeof createAgentQueries>,
   id: string,
   overrides: Record<string, unknown>,
   signal: AbortSignal,
-  keyFields?: string[],
-  cacheScope?: { identity: number; freshness: number },
+  keyFields: string[] | undefined,
+  cacheScope: { identity: number; freshness: number } | undefined,
+  background: boolean,
+  categoryView: boolean,
 ): Promise<Row[]> {
   const { parameterSpec, request, resultColumns } = client.config.queries[id];
   const parameters: Record<string, unknown> = {};
@@ -148,9 +181,13 @@ async function read(
     if (Object.hasOwn(parameters, key)) parameters[key] = value;
   }
   const requiredColumns = resultColumns.filter((column: string) => column !== 'material_name');
-  const load = async (requestSignal: AbortSignal) => {
+  const cancellation = id === 'lantern.cancellation' || id === 'lantern.product-cancellation';
+  const priority = background ? -1 : categoryView ? 1 : undefined;
+  const loadOnce = async (requestSignal: AbortSignal) => {
     if (!keyFields)
-      return (await client.read(id, parameters, { requiredColumns, signal: requestSignal })).rows;
+      return (
+        await client.read(id, parameters, { requiredColumns, signal: requestSignal, priority })
+      ).rows;
     return (
       await client.readAll(
         id,
@@ -161,9 +198,27 @@ async function read(
           requiredColumns,
           maxRows: 12_000,
           singlePageFirst: true,
+          priority,
         },
       )
     ).rows;
+  };
+  const load = async (requestSignal: AbortSignal) => {
+    try {
+      return await loadOnce(requestSignal);
+    } catch (error) {
+      requestSignal.throwIfAborted();
+      const failure = queryFailureText(error);
+      if (
+        !cancellation ||
+        background ||
+        restrictedQuery.test(failure) ||
+        !(queryTimeout.test(failure) || temporaryQueryUnavailable.test(failure))
+      )
+        throw error;
+      await waitForCancellationRetry(requestSignal);
+      return loadOnce(requestSignal);
+    }
   };
   if (!cacheScope) return load(signal);
   signal.throwIfAborted();
@@ -210,7 +265,9 @@ export async function readLanternFacts({
   only,
   inventoryScope,
   product,
+  categoryView = false,
   organization = false,
+  background = false,
   execute,
 }: {
   module: DashboardModule;
@@ -220,14 +277,16 @@ export async function readLanternFacts({
   only?: MetricKey;
   inventoryScope?: InventoryScope;
   product?: ProductFilters;
+  categoryView?: boolean;
   organization?: boolean;
+  background?: boolean;
   execute?: Parameters<typeof createAgentQueries>[1];
 }): Promise<LanternFacts> {
   const freshness = configuredQueryFreshAfter();
   const cacheScope = execute ? undefined : { identity: configuredQueryIdentity(), freshness };
   const client = createAgentQueries(config, execute, { freshAfter: freshness });
   const query = (id: string, overrides: Record<string, unknown>, keyFields?: string[]) =>
-    read(client, id, overrides, signal, keyFields, cacheScope);
+    read(client, id, overrides, signal, keyFields, cacheScope, background, categoryView);
   const { from, to } = period.range;
   const fromMonth = monthStart(from),
     nextMonth = shiftMonth(to, 1);
@@ -236,12 +295,13 @@ export async function readLanternFacts({
     const search = value.trim();
     return search ? '%' + search.toLowerCase().replace(/[\\%_]/g, '\\$&') + '%' : null;
   };
+  const category = categoryView ? product?.category || null : lanternCategory;
   const productDimensions = {
     sku_detail: Boolean(product?.sku.trim()),
     product_pattern: pattern(product?.sku || product?.group),
     group_detail: Boolean(product && product.level >= 1),
     material_detail: Boolean(product && product.level >= 2),
-    product_category: product?.category || null,
+    product_category: category,
   };
   const productionDimensions = {
     ...productDimensions,
@@ -269,13 +329,14 @@ export async function readLanternFacts({
       case 'budget':
         return ready(
           await query(
-            'page.budget-performance',
+            'lantern.budget',
             {
               start_month: compact(fromMonth).slice(0, 6),
               end_month_exclusive: compact(nextMonth).slice(0, 6),
               as_of: to,
               start: compact(from),
               end_exclusive: compact(end),
+              product_category: lanternCategory,
             },
             ['month'],
           ),
@@ -287,6 +348,7 @@ export async function readLanternFacts({
             {
               start_month: fromMonth,
               end_month_exclusive: nextMonth,
+              product_category: lanternCategory,
             },
             ['month', 'region', 'province'],
           ),
@@ -294,7 +356,7 @@ export async function readLanternFacts({
       case 'cancellation':
       case 'amendment':
       case 'ontime':
-        if (product)
+        if (categoryView)
           return ready(
             await query(
               'lantern.product-' + source,
@@ -314,6 +376,7 @@ export async function readLanternFacts({
               report_base: '',
               start: from,
               end_exclusive: end,
+              product_category: lanternCategory,
             },
             source === 'ontime' ? undefined : ['base', 'region', 'province', 'kind'],
           ),
@@ -326,6 +389,7 @@ export async function readLanternFacts({
               report_base: '',
               start: from,
               end_exclusive: end,
+              product_category: lanternCategory,
             },
             ['region', 'province'],
           ),
@@ -352,6 +416,8 @@ export async function readLanternFacts({
               start: from,
               end_exclusive: end,
               ...productionDimensions,
+              category_mode: category && category !== '未分类' ? 'equal' : 'all',
+              category,
             },
             ['base', 'category', 'item', 'material', 'sku'],
           ),
@@ -401,16 +467,12 @@ export async function readLanternFacts({
         result = await get(next);
       } catch (error) {
         signal.throwIfAborted();
-        const code =
-          error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
-        const restricted = /PERMISSION|DENIED|NOT_PUBLISHED|NOT_IN_DATASET|RETURN_COLUMN/.test(
-          code,
-        );
+        const failure = queryFailureText(error);
         result = {
           status: 'failed',
-          reason: restricted
+          reason: restrictedQuery.test(failure)
             ? '当前账号或指标来源未开放所需数据'
-            : /TIMEOUT/.test(code)
+            : queryTimeout.test(failure)
               ? '查询超时，可刷新重试'
               : '查询失败',
         };
@@ -475,7 +537,7 @@ export function observe(
       .filter(Boolean)
       .sort()
       .at(-1);
-  const metric = (name: string, id: string, rows: Row[]) =>
+  const derived = (name: string, id: string, rows: Row[]) =>
     deriveMetrics({
       start: period.range.from,
       end: period.range.to,
@@ -485,17 +547,21 @@ export function observe(
         { id, status: rows.length ? 'ready' : 'empty', rows },
         ...(id === 'finance' ? [{ id: 'sales-budget', status: 'ready', rows }] : []),
       ],
-    })[name]?.value ?? null;
+    })[name];
+  const metric = (name: string, id: string, rows: Row[]) => derived(name, id, rows)?.value ?? null;
   if (key === 'budget') {
     const rows = pick('budget');
+    const budget = derived('销售预算达成率', 'finance', rows);
     return {
-      value: metric('销售预算达成率', 'finance', rows),
+      value: budget?.value ?? null,
       date: cut(rows),
       details: [
         ['销售额', known(rows, 'actual')],
         ['月度预算', known(rows, 'budget')],
       ],
-      note: supported('budget', period) ? '公司未税收入与月度预算' : '预算按月发布',
+      note:
+        (facts.budget?.status === 'ready' ? budget?.detail : undefined) ??
+        (supported('budget', period) ? '汤圆未税收入与月度预算' : '预算按月发布'),
     };
   }
   if (key === 'accuracy') {
@@ -521,6 +587,9 @@ export function observe(
   }
   if (key === 'fulfillment') return { value: metric('订单满足率', 'orders', pick(key)) };
   if (key === 'cancellation' || key === 'amendment') {
+    const result = facts[key];
+    if (key === 'cancellation' && result?.status === 'failed')
+      return { value: null, failed: true, note: result.reason };
     const rows = pick(key);
     const all = ratio(complete(rows, 'numerator'), complete(rows, 'denominator'));
     const sample = ratio(known(rows, 'sample_numerator'), known(rows, 'sample_denominator'));

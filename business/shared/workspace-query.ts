@@ -20,18 +20,29 @@ export async function readWorkspaceQuery(
     signal?: AbortSignal;
     execute?: any;
     onInventory?: (rows: Record<string, unknown>[]) => void;
+    allowPreviousStock?: boolean;
     stockSnapshot?: Promise<{ rows: Record<string, unknown>[]; configVersion: unknown }>;
   } = {},
 ) {
   const config = agentSqlConfig(fallback);
+  const client = createAgentQueries(config, options.execute);
+  const end = input.end;
+  const snapshotOptions = { signal: options.signal, requiredColumns: ['day'] };
+  const readSnapshot = async (month: unknown) => {
+    const current = await client.read('source.stock-date', { month, as_of: end }, snapshotOptions);
+    if (options.allowPreviousStock && current.rows[0]?.day == null)
+      return client.read('source.previous-stock-date', { as_of: end }, snapshotOptions);
+    return current;
+  };
   if (options.onInventory && input.summary && config.workspaceQuickBindings?.[name]) {
     let fullReady = false;
-    const stockSnapshot = createAgentQueries(config, options.execute).read(
-      'source.stock-date',
-      { month: input.end.slice(0, 7) + '-01', as_of: input.end },
-      { signal: options.signal, requiredColumns: ['day'] },
-    );
-    const readOptions = { signal: options.signal, execute: options.execute, stockSnapshot };
+    const stockSnapshot = readSnapshot(end.slice(0, 7) + '-01');
+    const readOptions = {
+      signal: options.signal,
+      execute: options.execute,
+      allowPreviousStock: options.allowPreviousStock,
+      stockSnapshot,
+    };
     const quick = readWorkspaceQuery(fallback, name, { ...input, inventoryOnly: true }, readOptions)
       .then((rows) => {
         options.signal?.throwIfAborted();
@@ -61,10 +72,8 @@ export async function readWorkspaceQuery(
       Error(config.workspaceUnavailable?.[name] || '新库尚无该页面数据的等价来源：' + name),
       { code: 'SOURCE_NOT_AVAILABLE' },
     );
-  const client = createAgentQueries(config, options.execute);
   const query = config.queries[binding.queryId];
-  const start = input.start,
-    end = input.end;
+  const start = input.start;
   const values: Record<string, unknown> = {};
   let dateConfigVersion: unknown;
   let hasSnapshotDate = false;
@@ -115,17 +124,19 @@ export async function readWorkspaceQuery(
   if ('stock_date' in values) {
     values.month = end.slice(0, 7) + '-01';
     const result = await (options.stockSnapshot ??
-      client.read(
-        'source.stock-date',
-        { month: values.stock_month ?? values.month, as_of: end },
-        { signal: options.signal, requiredColumns: ['day'] },
-      ));
+      readSnapshot(values.stock_month ?? values.month));
     const day = result.rows[0]?.day;
     dateConfigVersion = result.configVersion;
     hasSnapshotDate = true;
-    if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day))
-      throw Object.assign(Error('所选月份没有可用库存快照'), { code: 'SOURCE_NOT_AVAILABLE' });
+    if (
+      typeof day !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(day) ||
+      (options.allowPreviousStock && day > end)
+    )
+      throw Object.assign(Error('截止日前没有可用库存快照'), { code: 'SOURCE_NOT_AVAILABLE' });
     values.stock_date = day;
+    if (options.allowPreviousStock && 'stock_month' in values)
+      values.stock_month = day.slice(0, 7) + '-01';
   }
 
   const expandedProductStock =
