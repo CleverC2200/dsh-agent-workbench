@@ -7,6 +7,7 @@ import type { InboxViewState } from './client/inbox.tsx';
 import { MessageCenter } from './client/message-center.tsx';
 import {
   DesktopNavigation,
+  createNavigationObservation,
   createNavigationSelection,
   type ReadyNavigation,
 } from './client/desktop-navigation.tsx';
@@ -23,7 +24,7 @@ export function mountBusinessViews(ctx: Context) {
     const ctx = scope;
     const identity = scope.businessAccount;
     const incoming = createNavigationSelection();
-    const navigationObservation = { deadline: Date.now() + 5000, ended: false };
+    const navigationObservation = createNavigationObservation();
     const inboxViews = new Map<string | null, InboxViewState>();
     const inboxViewListeners = new Set<() => void>();
     const initialInboxView: InboxViewState = { pageNo: 1, readState: '' };
