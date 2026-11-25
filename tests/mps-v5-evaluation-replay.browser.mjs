@@ -72,6 +72,7 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
           material_name: `产品${code}`,
           series: '系列',
           product_item: code === 'STILL' ? '其他' : '包点',
+          month_order_qty: null,
           shipped: code === 'B' ? 1000 : 0,
           prepped: 0,
           unprepped: 0,

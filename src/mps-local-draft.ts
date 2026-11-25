@@ -75,6 +75,7 @@ const shipmentSourceEdits = z.strictObject({
   business: shipmentEdits.optional(),
 });
 const shipment = z.strictObject({
+  forecasts: z.record(text, quantity.max(Number.MAX_SAFE_INTEGER)).optional(),
   transferPlans: list(
     z.strictObject({
       month,
@@ -106,6 +107,7 @@ const shipment = z.strictObject({
       category: text,
       series: text,
       group: text,
+      monthOrder: numeric.nullable().optional(),
       shipped: numeric.nullable(),
       prepped: numeric.nullable(),
       unprepped: numeric.nullable(),

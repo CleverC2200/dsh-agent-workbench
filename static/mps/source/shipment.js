@@ -32,6 +32,11 @@ const emptyRows = [];
 const calculationShipmentPriority = 4;
 const bases = businessBases;
 const fields = [
+  'open',
+  'transferIn',
+  'transferOut',
+  'inbound',
+  'monthOrder',
   'shipped',
   'prepped',
   'unprepped',
@@ -39,31 +44,42 @@ const fields = [
   'average',
   'shipDays',
   'prediction',
+  'manualPrediction',
+  'deviation',
   'fin',
-  'open',
-  'inbound',
   'remaining',
-  'transferIn',
-  'transferOut',
   'end',
 ];
 const names = [
+  '月初 1 号库存',
+  '调入计划',
+  '调出计划',
+  '本月生产入库',
+  '月下单量',
   '本月已发货',
   '已备',
   '未备',
-  '近三天日均发货量',
-  '近30天日均发货',
+  '近三日日均发货',
+  '近 30 天日均发货',
   '已备未备预估发运天数',
   '本月预测量',
+  '人工预测',
+  '预测偏差',
   '整月预估发货',
-  '月初库存',
-  '本月生产入库',
   '剩余天数入库',
-  '调入计划',
-  '调出计划',
   '预计月末结存',
 ];
 const inputFields = ['shipped', 'prepped', 'unprepped', 'daily3', 'open', 'inbound', 'remaining'];
+const inputNames = {
+  shipped: '本月已发货',
+  prepped: '已备',
+  unprepped: '未备',
+  daily3: '近三天日均发货量',
+  open: '月初库存',
+  inbound: '本月生产入库',
+  remaining: '剩余天数入库',
+  average: '近30天日均发货',
+};
 const columns = [
   '月份',
   '基地',
@@ -72,14 +88,34 @@ const columns = [
   '大类',
   '系列',
   '物料组',
-  ...inputFields.map((field) => names[fields.indexOf(field)]),
+  ...inputFields.map((field) => inputNames[field]),
 ];
+const forecastColumns = ['月份', '基地', '产品编码', '人工预测'];
+const forecastKey = (row) => JSON.stringify([row.month, row.base, row.code]);
+const deviationBand = (prediction, manual) => {
+  if (prediction == null || manual == null) return '';
+  if (prediction === 0) return 'zero';
+  const difference = Math.abs(manual - prediction);
+  return difference >= Math.abs(prediction) * 0.5
+    ? 'red'
+    : difference >= Math.abs(prediction) * 0.3
+      ? 'yellow'
+      : '';
+};
 const keyOf = (row) => JSON.stringify([row.base, row.code]);
 const display = (value, field) =>
   value == null
     ? '待定'
     : (Object.is(value, -0) ? 0 : value).toLocaleString('zh-CN', {
-        maximumFractionDigits: field === 'average' ? 4 : 0,
+        maximumFractionDigits: [
+          'average',
+          'monthOrder',
+          'manualPrediction',
+          'deviation',
+          'fin',
+        ].includes(field)
+          ? 4
+          : 0,
       });
 const knownSum = (rows, field) => {
   const known = rows.filter((row) => row[field] != null);
@@ -231,7 +267,12 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
         const remainingEdit = currentState.remaining?.[row.base];
         const remainingValue = remainingEdit?.values[keyOf(row)];
         const remaining = remainingValue ?? row.remaining;
-        const fin = adjustment ? adjustment.value : derived.prediction;
+        const manualPrediction = draft.shipment?.forecasts?.[forecastKey(row)] ?? null;
+        const fin = adjustment ? adjustment.value : (manualPrediction ?? derived.prediction);
+        const deviation =
+          manualPrediction == null || derived.prediction == null
+            ? null
+            : finite(manualPrediction - derived.prediction);
         const transferIn = sourceKind === 'business' ? (row.transferIn ?? null) : null;
         const transferOut = sourceKind === 'business' ? (row.transferOut ?? null) : null;
         const open = row.open == null ? null : Math.max(0, row.open);
@@ -266,6 +307,15 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
         ];
         return {
           ...derived,
+          monthOrder: row.monthOrder ?? null,
+          manualPrediction,
+          deviation,
+          deviationRate: derived.prediction
+            ? deviation == null
+              ? null
+              : deviation / derived.prediction
+            : null,
+          deviationBand: deviationBand(derived.prediction, manualPrediction),
           rawOpen: sourceKind === 'business' && row.sourceDays === 0 ? null : row.open,
           open,
           rawEnd,
@@ -430,9 +480,11 @@ export function createShipment(
     snapshotCallback.current = onSnapshot;
     const controller = react.useRef(null);
     const calculationController = react.useRef(null);
+    const forecastRequest = react.useRef(0);
     const [automaticBasis, setAutomaticBasis] = react.useState(null);
     const [syncStatus, setSyncStatus] = react.useState('unread');
     const [expanded, setExpanded] = react.useState([]);
+    const [deviationFilter, setDeviationFilter] = react.useState('all');
     const [skuSearch, setSkuSearch] = react.useState('');
     const [issuesOpen, setIssuesOpen] = react.useState(false);
     const [formula, setFormula] = react.useState(null);
@@ -445,6 +497,7 @@ export function createShipment(
       setFormula(null);
       setError('');
       setExpanded([]);
+      setDeviationFilter('all');
       setBusy(false);
       setSyncStatus('unread');
       return () => {
@@ -459,6 +512,7 @@ export function createShipment(
         draft.products,
         draft.productsRead,
         draft.productRaw,
+        draft.shipment?.forecasts,
         cutoff,
         month,
         sourceKind,
@@ -470,7 +524,14 @@ export function createShipment(
       () => deriveRows(state),
       [deriveRows, state.values, state.remaining],
     );
-    const categoryRows = rows.filter((row) => matchesCategories(row.category, selectedCategories));
+    const categoryRows = rows.filter(
+      (row) =>
+        matchesCategories(row.category, selectedCategories) &&
+        (deviationFilter === 'all' ||
+          (deviationFilter === 'zero'
+            ? row.prediction === 0
+            : row.deviationBand === deviationFilter)),
+    );
     const coefficientCategories = [
       ...new Set(categoryRows.map((row) => row.category).filter(Boolean)),
     ];
@@ -619,10 +680,21 @@ export function createShipment(
         passed,
         totalDays,
       );
+      const comparable = children.filter(
+        (row) => row.prediction != null && row.manualPrediction != null,
+      );
+      const comparableSystem = knownSum(comparable, 'prediction');
+      const deviation = knownSum(comparable, 'deviation');
       return {
         ...calculation,
         ...inputs,
         prediction: knownSum(children, 'prediction'),
+        monthOrder: knownSum(children, 'monthOrder'),
+        manualPrediction: knownSum(children, 'manualPrediction'),
+        importedCount: children.filter((row) => row.manualPrediction != null).length,
+        deviation,
+        deviationBand: deviationBand(comparableSystem, knownSum(comparable, 'manualPrediction')),
+        deviationRate: comparableSystem ? deviation / comparableSystem : null,
         average: knownSum(children, 'average'),
         transferIn: knownSum(children, 'transferIn'),
         transferOut: knownSum(children, 'transferOut'),
@@ -755,6 +827,7 @@ export function createShipment(
         draft.products,
         draft.productsRead,
         draft.productRaw,
+        draft.shipment?.forecasts,
         calculationCutoff,
         calculationMonth,
         backgroundBasis,
@@ -1162,10 +1235,10 @@ export function createShipment(
           if (seen.has(key)) throw Error(`第${index + 2}行同月同基地产品重复，未替换原输入。`);
           seen.add(key);
           [...inputFields, 'average'].forEach((field) => {
-            const value = record[names[fields.indexOf(field)]] ?? '';
+            const value = record[inputNames[field]] ?? '';
             if (value !== '' && (!/^\d+(\.\d+)?$/.test(value) || finite(Number(value)) == null))
               throw Error(
-                `第${index + 2}行${names[fields.indexOf(field)]}须为非负有限数或留空，未替换原输入。`,
+                `第${index + 2}行${inputNames[field]}须为非负有限数或留空，未替换原输入。`,
               );
             row[field] = value === '' ? null : Number(value);
           });
@@ -1191,6 +1264,75 @@ export function createShipment(
         if (valid()) setBusy(false);
       }
     };
+    const readForecast = async (file) => {
+      const requestScope = scopeGeneration.current;
+      const request = ++forecastRequest.current;
+      const inputGeneration = generation.current;
+      const valid = () =>
+        request === forecastRequest.current &&
+        requestScope === scopeGeneration.current &&
+        inputGeneration === generation.current;
+      try {
+        if (file.size > 5 * 1024 * 1024) throw Error('文件超过5 MiB上限，未导入。');
+        const records = parseCsv(await file.text(), forecastColumns);
+        if (!records.length) throw Error('文件没有预测明细，未导入。');
+        const scope = createProductScopeMatcher(
+          sourceProductMappings(draft.products ?? [], draft.productRaw),
+        );
+        const seen = new Set();
+        const imported = {};
+        const covered = new Set();
+        for (const [index, record] of records.entries()) {
+          const row = {
+            month: record['月份'],
+            base: canonicalBaseName(record['基地']),
+            code: record['产品编码'],
+          };
+          if (row.month !== calculationMonth)
+            throw Error(`第${index + 2}行月份须为发货基月 ${calculationMonth}，未导入。`);
+          if (!bases.includes(row.base) || !row.code || !scope(row.base, row.code))
+            throw Error(`第${index + 2}行基地或产品不在当前评估范围，未导入。`);
+          const key = forecastKey(row);
+          if (seen.has(key)) throw Error(`第${index + 2}行同月同基地产品重复，未导入。`);
+          seen.add(key);
+          const value = record['人工预测'];
+          if (!/^\d+(\.\d+)?$/.test(value) || finite(Number(value)) == null)
+            throw Error(`第${index + 2}行人工预测须为非负有限数，未导入。`);
+          imported[key] = Number(value);
+          covered.add(keyOf(row));
+        }
+        if (finite(Object.values(imported).reduce((sum, value) => sum + value, 0)) == null)
+          throw Error('导入合计超出安全范围，未导入。');
+        if (!valid()) return;
+        const current = stateRef.current;
+        const clearEdits = (edits) => ({
+          ...edits,
+          values: Object.fromEntries(
+            Object.entries(edits?.values ?? {}).filter(([key]) => !covered.has(key)),
+          ),
+        });
+        const clearSources = (sources) =>
+          Object.fromEntries(
+            Object.entries(sources ?? {}).map(([key, edits]) => [key, clearEdits(edits)]),
+          );
+        updateState({
+          forecasts: { ...current.forecasts, ...imported },
+          ...(month === calculationMonth
+            ? { values: clearEdits(current).values, sourceEdits: clearSources(current.sourceEdits) }
+            : {}),
+          editsByCutoff: Object.fromEntries(
+            Object.entries(current.editsByCutoff ?? {}).map(([date, sources]) => [
+              date,
+              date.startsWith(calculationMonth + '-') ? clearSources(sources) : sources,
+            ]),
+          ),
+        });
+        setError('');
+        setFormula(null);
+      } catch (failure) {
+        if (valid()) setError(failure.message);
+      }
+    };
     const download = () => {
       const outputColumns = [
         '评估版本',
@@ -1198,17 +1340,19 @@ export function createShipment(
         '截止日',
         '已过天数',
         '本月天数',
-        ...columns,
-        '近30天日均发货',
+        '月份',
+        '基地',
+        '产品编码',
+        '产品名称',
+        '大类',
+        '系列',
+        '物料组',
+        ...names,
+        '预测偏差率',
         '应用系数前预测量',
         '实际应用发运系数',
         '发运系数说明',
-        '本月预测量',
-        '整月预估发货',
-        '调入计划',
-        '调出计划',
         '调拨计划来源',
-        '预计月末结存',
         '原始月初库存',
         '原始预计月末结存',
         '库存归零处理',
@@ -1239,19 +1383,12 @@ export function createShipment(
           大类: row.category,
           系列: row.series,
           物料组: row.group,
-          ...Object.fromEntries(
-            inputFields.map((field) => [names[fields.indexOf(field)], row[field] ?? '']),
-          ),
-          近30天日均发货: row.average ?? '',
+          ...Object.fromEntries(fields.map((field, index) => [names[index], row[field] ?? ''])),
+          预测偏差率: row.deviationRate ?? '',
           应用系数前预测量: row.basePrediction ?? '',
           实际应用发运系数: row.basePrediction == null ? '' : row.shipmentFactor,
           发运系数说明: row.coefficientReason,
-          本月预测量: row.prediction ?? '',
-          整月预估发货: row.fin ?? '',
-          调入计划: row.transferIn ?? '',
-          调出计划: row.transferOut ?? '',
           调拨计划来源: `ai_db.agents_scm_stock_detail_d；纠偏优先，初版回退；调入：${row.transferInSource ?? '来源未同步'}；调出：${row.transferOutSource ?? '来源未同步'}`,
-          预计月末结存: row.end ?? '',
           原始月初库存: row.rawOpen ?? '',
           原始预计月末结存: row.rawEnd ?? '',
           库存归零处理: row.inventoryIssues.map((issue) => issue.reason).join('；'),
@@ -1286,6 +1423,10 @@ export function createShipment(
       'forecastIssue',
       'sourceDateIssue',
       'prediction',
+      'monthOrder',
+      'manualPrediction',
+      'deviation',
+      'deviationRate',
       'fin',
       'transferIn',
       'transferOut',
@@ -1366,14 +1507,28 @@ export function createShipment(
                 'aria-label': `${who} ${names[fields.indexOf(field)]} 计算过程`,
                 onClick: () => explain(row, field, who),
               },
-              display(row[field], field),
+              field === 'manualPrediction'
+                ? row[field] == null
+                  ? ''
+                  : `${display(row[field], field)}${row.children ? `（覆盖 ${row.importedCount}/${row.children.length}）` : ''}`
+                : field === 'deviation'
+                  ? row.deviation == null
+                    ? ''
+                    : `${row.deviation > 0 ? '+' : ''}${display(row.deviation)}${row.deviationRate == null ? '' : `（${row.deviationRate > 0 ? '+' : ''}${(row.deviationRate * 100).toFixed(1)}%）`}`
+                  : field === 'monthOrder' && row[field] == null
+                    ? '待补'
+                    : display(row[field], field),
             ),
       );
     };
     const renderRow = (row, who, label, className) =>
       h(
         'tr',
-        { key: JSON.stringify([className, who, row.category, row.group]), className },
+        {
+          key: JSON.stringify([className, who, row.category, row.group]),
+          className,
+          'data-deviation': row.deviationBand || undefined,
+        },
         h('th', { scope: 'row' }, label),
         ...fields.map((field) => numberCell(row, field, who)),
       );
@@ -1543,6 +1698,8 @@ export function createShipment(
           '产品编码',
           '产品名称',
           ...names,
+          '人工预测覆盖',
+          '预测偏差率',
         ],
         [national, ...groups].flatMap((group) => {
           const scope = group.who;
@@ -1560,6 +1717,12 @@ export function createShipment(
             产品编码: row.code,
             产品名称: row.name,
             ...Object.fromEntries(fields.map((field, index) => [names[index], row[field]])),
+            人工预测覆盖: row.children
+              ? `${row.importedCount}/${row.children.length}`
+              : row.manualPrediction == null
+                ? '0/1'
+                : '1/1',
+            预测偏差率: row.deviationRate ?? '',
           }));
         }),
       );
@@ -1599,11 +1762,23 @@ export function createShipment(
                   `${raw('shipped')} + ${raw('prepped')} + ${raw('unprepped')} = ${raw('prediction')} 件。`,
                 ]
               : [
-                  '原预测量 = 预测日均 × max(0,总天数 − 已过天数 − 发运天数) + 已发货 + 已备 + 未备，四舍五入为件',
-                  `(${calculation.hold ?? '待定'} ÷ (${passed} + ${calculation.shipDays ?? '待定'})) × max(0, ${totalDays} − ${passed} − ${calculation.shipDays ?? '待定'}) + ${calculation.hold ?? '待定'}；预测日均${raw('forecastAverage')}，中间值不舍入。${fallback}`,
+                  '本月预测量 = 预测日均 × 发运系数 × max(0,总天数 − 已过天数 − 发运天数) + 已发货 + 已备 + 未备，四舍五入为件',
+                  `(${calculation.hold ?? '待定'} ÷ (${passed} + ${calculation.shipDays ?? '待定'})) × ${calculation.shipmentFactor} × max(0, ${totalDays} − ${passed} − ${calculation.shipDays ?? '待定'}) + ${calculation.hold ?? '待定'}；预测日均${raw('forecastAverage')}，中间值不舍入。${fallback}`,
                 ],
+          monthOrder: [
+            '月下单量 = 同发货基月、截止日、基地和SKU库存日报的 month_order_qty；0保留，空值或缺截止日记录待补',
+            `${cutoff}；表内取值 ${raw('monthOrder')}`,
+          ],
+          manualPrediction: [
+            '人工预测 = 当前评估最近一次导入的发货预测，后续手工调整不改变此列',
+            `表内取值 ${raw('manualPrediction')}`,
+          ],
+          deviation: [
+            '预测偏差 = 人工预测 − 本月预测量；汇总只包含两者均有效的明细',
+            `偏差 ${raw('deviation')} 件；偏差率 ${row.deviationRate == null ? '留空' : `${row.deviationRate * 100}%`}`,
+          ],
           fin: [
-            '整月预估发货 = 单品有效值之和；单品默认预测值，人工覆盖按当前有效权重重摊并补偿残差',
+            '整月预估发货 = 单品有效值之和；单品先取人工预测，无导入时取系统预测，人工覆盖按当前有效权重重摊并补偿残差',
             row.adjustment
               ? JSON.stringify(row.adjustment)
               : row.children
@@ -1697,7 +1872,7 @@ export function createShipment(
             h(
               'p',
               {},
-              `原预测 ${display(row.basePrediction)} 件 × 发运系数 ${displayFactor(row.shipmentFactor)}，四舍五入为 ${display(row.prediction)} 件。${row.coefficientReason ? `${row.coefficientReason}。` : ''}`,
+              `预测日均 ${row.forecastAverage} × 发运系数 ${displayFactor(row.shipmentFactor)} × 预测剩余天数 ${row.rest} + 已发已备未备 ${row.hold}，四舍五入为 ${display(row.prediction)} 件。${row.coefficientReason ? `${row.coefficientReason}。` : ''}`,
             ),
           h(
             'div',
@@ -1836,6 +2011,25 @@ export function createShipment(
               setSkuSearch(event.target.value);
             },
           }),
+          h(
+            'label',
+            {},
+            '预测偏差',
+            h(
+              'select',
+              {
+                'aria-label': '发货预测偏差筛选',
+                value: deviationFilter,
+                onChange: (event) => setDeviationFilter(event.target.value),
+              },
+              ...[
+                ['all', '全部'],
+                ['yellow', '浅黄（30% 至 50%）'],
+                ['red', '浅红（50% 及以上）'],
+                ['zero', '系统预测为 0'],
+              ].map(([value, label]) => h('option', { key: value, value }, label)),
+            ),
+          ),
           sourceKind === 'demo' && h('span', { className: 'dc-status' }, '演示数据'),
           h(
             'span',
@@ -1978,7 +2172,7 @@ export function createShipment(
             h(
               'colgroup',
               {},
-              ...[260, 72, 62, 62, 82, 82, 94, 88, 96, 68, 72, 98, 80, 80, 94].map((width, index) =>
+              ...[260, ...fields.map(() => 100)].map((width, index) =>
                 h('col', { key: index, style: { width } }),
               ),
             ),
@@ -1990,11 +2184,10 @@ export function createShipment(
                 {},
                 h('th', { rowSpan: 2, scope: 'col' }, '全国 / 基地 / 大类 / 物料组 / 单品'),
                 ...[
-                  ['输入（数仓）', 5],
-                  ['派生', 1],
-                  ['本月结果', 1],
-                  ['人工覆盖', 1],
-                  ['当月结存', 6],
+                  ['库存与发货输入', 10],
+                  ['系统预测', 2],
+                  ['人工预测与采用值', 3],
+                  ['当月结存', 2],
                 ].map(([label, span]) =>
                   h('th', { key: label, colSpan: span, scope: 'colgroup' }, label),
                 ),
@@ -2006,7 +2199,7 @@ export function createShipment(
                   h(
                     'th',
                     { key: name, scope: 'col' },
-                    index === 7 || index === 10
+                    ['fin', 'remaining'].includes(fields[index])
                       ? h(
                           'button',
                           {
@@ -2015,10 +2208,10 @@ export function createShipment(
                           },
                           name,
                         )
-                      : index === 8
-                        ? '月初1号库存'
-                        : name,
-                    index === 7 || index === 10 ? h('small', {}, '（可改）') : null,
+                      : name,
+                    ['fin', 'remaining'].includes(fields[index])
+                      ? h('small', {}, '（可改）')
+                      : null,
                   ),
                 ),
               ),
@@ -2155,7 +2348,7 @@ export function createShipment(
           h(
             'p',
             {},
-            '发运天数=(已备+未备)÷发运速度；近三天日均不大于0时使用正的截止日avg_30d_send；两项日均确认均不大于0时，本月预估取已发货+已备+未备，发运天数为0。三数量均确认是0时预估为0；来源日期缺失、重复或冲突时保留待核。预测日均=(已发货+已备+未备)÷(已过天数+发运天数)。原预测量=预测日均×max(0,总天数−已过天数−发运天数)+已发货+已备+未备，四舍五入。常规预测再乘大类发运系数并四舍五入，数量合计直接使用。本月预测量汇总取各基地、各SKU修正后的系统预测量之和。近30天日均发货直接读取截止日avg_30d_send。累计生产入库为月初至截止日produce_in_qty逐日合计，保留负数冲销；重复日或缺值时待定；入库日均=累计生产入库÷(截止日日号−1)，剩余自然天数保持原算法。',
+            '发运天数=(已备+未备)÷发运速度；近三天日均不大于0时使用正的截止日avg_30d_send；两项日均确认均不大于0时，本月预估取已发货+已备+未备，发运天数为0。三数量均确认是0时预估为0；来源日期缺失、重复或冲突时保留待核。预测日均=(已发货+已备+未备)÷(已过天数+发运天数)。本月预测量=预测日均×大类发运系数×max(0,总天数−已过天数−发运天数)+已发货+已备+未备，仅最终结果四舍五入，数量合计直接使用。本月预测量汇总取各基地、各SKU修正后的系统预测量之和。近30天日均发货直接读取截止日avg_30d_send。累计生产入库为月初至截止日produce_in_qty逐日合计，保留负数冲销；重复日或缺值时待定；入库日均=累计生产入库÷(截止日日号−1)，剩余自然天数保持原算法。',
           ),
         ),
         h(
@@ -2172,6 +2365,16 @@ export function createShipment(
             '同步实际发货',
           ),
           !batch.active && h(Upload, { label: '选择发货输入CSV', text: '上传输入', read }),
+          !batch.active &&
+            h(Upload, { label: '选择发货人工预测CSV', text: '导入人工预测', read: readForecast }),
+          h(
+            'button',
+            {
+              onClick: () =>
+                downloadCsv(`发货人工预测-${calculationMonth}-模板.csv`, forecastColumns, []),
+            },
+            '人工预测模板',
+          ),
           h(
             'button',
             { onClick: () => downloadCsv('发货输入-模板.csv', [...columns, '近30天日均发货'], []) },
