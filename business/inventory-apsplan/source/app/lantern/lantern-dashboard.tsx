@@ -156,7 +156,7 @@ function displayValue(value: number | null, unit: string) {
   return value === null ? '-' : displayNumber(value / valueScale(unit)) + unit;
 }
 function metricValue(definition: MetricDefinition, observation: Observation): Metric {
-  const { value, date, details, note } = observation;
+  const { value, date, details, note, failed } = observation;
   const met =
     value !== null &&
     definition.target &&
@@ -170,7 +170,9 @@ function metricValue(definition: MetricDefinition, observation: Observation): Me
     unit: value === null ? undefined : definition.unit,
     status:
       value === null
-        ? ['无数据', 'neutral']
+        ? failed
+          ? ['查询失败', 'warning']
+          : ['无数据', 'neutral']
         : definition.target
           ? [met ? '达标' : '未达', met ? 'success' : 'warning']
           : undefined,
@@ -178,7 +180,7 @@ function metricValue(definition: MetricDefinition, observation: Observation): Me
       definition.key === 'budget' && details
         ? details.map(([label, amount]) => [label, displayValue(amount, '万元')])
         : undefined,
-    notes: note ? [['口径', note]] : undefined,
+    notes: note ? [[failed ? '取数状态' : '口径', note]] : undefined,
     snapshot: date
       ? { date, source: definition.key === 'production' ? 'MES 实绩' : '受控数据' }
       : undefined,
@@ -529,6 +531,7 @@ function useHistoricalFacts(
           module,
           period,
           signal: controller.signal,
+          background: true,
           only: key,
           inventoryScope,
           organization,

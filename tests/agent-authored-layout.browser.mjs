@@ -2806,6 +2806,44 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
   assert.deepEqual(errors, []);
 });
 
+test('APS 汤圆订制作废率临时失败后恢复卡片与清单，字段未发布时停止重试', async (t) => {
+  let attempts = 0;
+  let published = true;
+  const { frame, errors } = await mount(t, 'apsplan', 1280, ({ queryId, parameters }, result) => {
+    if (queryId !== 'lantern.cancellation' || parameters.start !== '2026-10-01') return result;
+    attempts++;
+    if (!published)
+      return { failure: { reasonCode: 'FIELD_NOT_PUBLISHED', message: '字段未发布' } };
+    if (attempts === 1) throw Error('GEA SQL 查询超时');
+    Object.assign(result.rows[0], {
+      region: '华东经销大区',
+      province: '上海',
+      kind: '1',
+      numerator: 42,
+      denominator: 1000,
+      sample_numerator: 42,
+      sample_denominator: 1000,
+      invalid: 0,
+    });
+    return result;
+  });
+  await frame.getByRole('button', { name: '汤圆订制看板', exact: true }).click();
+  const dashboard = frame.locator('.lantern-dashboard');
+  const card = dashboard.locator('[data-metric="作废率"]');
+  await expect(card).toContainText('4.20');
+  await dashboard.getByRole('tab', { name: '作废率', exact: true }).click();
+  const row = dashboard.getByRole('row', { name: /华东经销大区/ }).first();
+  await expect(row).toContainText('4.20%');
+  assert.equal(attempts, 2);
+
+  published = false;
+  await dashboard.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect(card).toContainText('查询失败');
+  await expect(card).toContainText('当前账号或指标来源未开放所需数据');
+  assert.equal(attempts, 3);
+  assert.deepEqual(errors, []);
+});
+
 for (const width of [1280, 390])
   test(`APS board sticky rows remain usable at ${width}px`, async (t) => {
     const { frame, errors } = await mount(t, 'apsplan', width);

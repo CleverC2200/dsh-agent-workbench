@@ -64,6 +64,7 @@ export type Observation = {
   date?: string;
   details?: readonly (readonly [string, number | null])[];
   note?: string;
+  failed?: boolean;
 };
 
 const config = agentSqlConfig(configuredSql);
@@ -129,13 +130,43 @@ const recentReads = new Map<string, { expires: number; rows: Row[] }>();
 const pendingReads = inFlightQueries<Row[]>();
 subscribeQueryIdentity(() => recentReads.clear());
 
+function queryFailureText(error: unknown): string {
+  const parts: string[] = [];
+  for (let cause = error; cause instanceof Error; cause = cause.cause) {
+    if ('code' in cause) parts.push(String(cause.code));
+    parts.push(cause.message);
+  }
+  return parts.join(' ');
+}
+
+const restrictedQuery = /PERMISSION|DENIED|NOT_PUBLISHED|NOT_IN_DATASET|RETURN_COLUMN/;
+const queryTimeout = /\bGEA_SQL_QUERY_TIMEOUT\b|GEA SQL 查询超时|业务请求超时/;
+const temporaryQueryUnavailable =
+  /\b(?:GEA_SQL_UNAVAILABLE|PAGE_CHANNEL_UNAVAILABLE)\b|GEA SQL 查询服务暂时不可用/;
+
+function waitForCancellationRetry(signal: AbortSignal) {
+  signal.throwIfAborted();
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, 350);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 async function read(
   client: ReturnType<typeof createAgentQueries>,
   id: string,
   overrides: Record<string, unknown>,
   signal: AbortSignal,
-  keyFields?: string[],
-  cacheScope?: { identity: number; freshness: number },
+  keyFields: string[] | undefined,
+  cacheScope: { identity: number; freshness: number } | undefined,
+  background: boolean,
 ): Promise<Row[]> {
   const { parameterSpec, request, resultColumns } = client.config.queries[id];
   const parameters: Record<string, unknown> = {};
@@ -148,9 +179,13 @@ async function read(
     if (Object.hasOwn(parameters, key)) parameters[key] = value;
   }
   const requiredColumns = resultColumns.filter((column: string) => column !== 'material_name');
-  const load = async (requestSignal: AbortSignal) => {
+  const cancellation = id === 'lantern.cancellation' || id === 'lantern.product-cancellation';
+  const priority = cancellation && background ? -1 : undefined;
+  const loadOnce = async (requestSignal: AbortSignal) => {
     if (!keyFields)
-      return (await client.read(id, parameters, { requiredColumns, signal: requestSignal })).rows;
+      return (
+        await client.read(id, parameters, { requiredColumns, signal: requestSignal, priority })
+      ).rows;
     return (
       await client.readAll(
         id,
@@ -161,9 +196,27 @@ async function read(
           requiredColumns,
           maxRows: 12_000,
           singlePageFirst: true,
+          priority,
         },
       )
     ).rows;
+  };
+  const load = async (requestSignal: AbortSignal) => {
+    try {
+      return await loadOnce(requestSignal);
+    } catch (error) {
+      requestSignal.throwIfAborted();
+      const failure = queryFailureText(error);
+      if (
+        !cancellation ||
+        background ||
+        restrictedQuery.test(failure) ||
+        !(queryTimeout.test(failure) || temporaryQueryUnavailable.test(failure))
+      )
+        throw error;
+      await waitForCancellationRetry(requestSignal);
+      return loadOnce(requestSignal);
+    }
   };
   if (!cacheScope) return load(signal);
   signal.throwIfAborted();
@@ -211,6 +264,7 @@ export async function readLanternFacts({
   inventoryScope,
   product,
   organization = false,
+  background = false,
   execute,
 }: {
   module: DashboardModule;
@@ -221,13 +275,14 @@ export async function readLanternFacts({
   inventoryScope?: InventoryScope;
   product?: ProductFilters;
   organization?: boolean;
+  background?: boolean;
   execute?: Parameters<typeof createAgentQueries>[1];
 }): Promise<LanternFacts> {
   const freshness = configuredQueryFreshAfter();
   const cacheScope = execute ? undefined : { identity: configuredQueryIdentity(), freshness };
   const client = createAgentQueries(config, execute, { freshAfter: freshness });
   const query = (id: string, overrides: Record<string, unknown>, keyFields?: string[]) =>
-    read(client, id, overrides, signal, keyFields, cacheScope);
+    read(client, id, overrides, signal, keyFields, cacheScope, background);
   const { from, to } = period.range;
   const fromMonth = monthStart(from),
     nextMonth = shiftMonth(to, 1);
@@ -401,16 +456,12 @@ export async function readLanternFacts({
         result = await get(next);
       } catch (error) {
         signal.throwIfAborted();
-        const code =
-          error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
-        const restricted = /PERMISSION|DENIED|NOT_PUBLISHED|NOT_IN_DATASET|RETURN_COLUMN/.test(
-          code,
-        );
+        const failure = queryFailureText(error);
         result = {
           status: 'failed',
-          reason: restricted
+          reason: restrictedQuery.test(failure)
             ? '当前账号或指标来源未开放所需数据'
-            : /TIMEOUT/.test(code)
+            : queryTimeout.test(failure)
               ? '查询超时，可刷新重试'
               : '查询失败',
         };
@@ -521,6 +572,9 @@ export function observe(
   }
   if (key === 'fulfillment') return { value: metric('订单满足率', 'orders', pick(key)) };
   if (key === 'cancellation' || key === 'amendment') {
+    const result = facts[key];
+    if (key === 'cancellation' && result?.status === 'failed')
+      return { value: null, failed: true, note: result.reason };
     const rows = pick(key);
     const all = ratio(complete(rows, 'numerator'), complete(rows, 'denominator'));
     const sample = ratio(known(rows, 'sample_numerator'), known(rows, 'sample_denominator'));
