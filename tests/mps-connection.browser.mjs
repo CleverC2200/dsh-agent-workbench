@@ -34,7 +34,12 @@ async function fixture(t, { failEvents = false, sql } = {}) {
     if (input.operation === 'sql')
       return route.fulfill({
         json: {
-          rows: input.parameters.queryId.endsWith('.count') ? [{ total: 0 }] : [],
+          rows:
+            input.parameters.queryId === 'products.period'
+              ? [{ month: null }]
+              : input.parameters.queryId.endsWith('.count')
+                ? [{ total: 0 }]
+                : [],
           returnedColumns: config.queries[input.parameters.queryId].columns,
           configVersion: 'v1',
         },
@@ -117,7 +122,7 @@ test('MPS查询拒绝后结束加载，重试空集与读取失败分别显示',
   let denied = true;
   const { frame } = await fixture(t, {
     sql: async ({ queryId }) => {
-      if (queryId !== 'products.count') return;
+      if (queryId !== 'products.period') return;
       await gate.promise;
       return denied ? 'DATA_PERMISSION_DENIED' : undefined;
     },

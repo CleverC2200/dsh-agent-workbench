@@ -1,4 +1,4 @@
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
 import {
   shipmentSourceRow,
   shipmentSourceResponse,

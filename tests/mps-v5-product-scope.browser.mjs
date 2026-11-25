@@ -4,7 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
-import { mpsPage, openMpsProductDetails } from './helpers/mps-page.mjs';
+import {
+  mpsPageWithExactProductPeriod as mpsPage,
+  openMpsProductDetails,
+} from './helpers/mps-page.mjs';
 import { workflowStep } from './helpers/mps-edit.mjs';
 import { workflowExportRows } from './helpers/mps-workflow-export.mjs';
 
@@ -197,12 +200,14 @@ test('V5十二月评估独立选择十一月产品，范围贯通业务下载和
   await copy.getByLabel('参考版本', { exact: true }).selectOption('local-2');
   await copy.getByRole('button', { name: '创建本地版本', exact: true }).click();
   await expect(products.getByLabel('产品统计期', { exact: true })).toHaveValue('2026-11');
-  assert.equal(
-    await page.evaluate(
-      () => window.readView().localDrafts.drafts.find((row) => row.id === 'local-3').productMonth,
-    ),
-    '2026-11',
-  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.readView().localDrafts.drafts.find((row) => row.id === 'local-3')?.productMonth,
+      ),
+    )
+    .toBe('2026-11');
   await frame.getByLabel('评估版本选择').selectOption('local-2');
   await openMpsProductDetails(frame);
   await products.getByRole('button', { name: '删除 A', exact: true }).click();
@@ -226,6 +231,6 @@ test('V5十二月评估独立选择十一月产品，范围贯通业务下载和
   );
   await workflowStep(frame, '主数据对应关系');
   await expect(frame.getByRole('region', { name: '产品范围对账', exact: true })).toContainText(
-    '与所选产品统计期2026-10未证明同期间',
+    '产品清单读取状态为failed',
   );
 });

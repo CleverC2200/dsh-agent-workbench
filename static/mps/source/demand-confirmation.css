@@ -986,17 +986,6 @@
 .sp-error {
   color: #b42318;
 }
-.sp-warning {
-  display: inline-block;
-  margin-left: 6px;
-  font-size: 10px;
-  color: #a64900;
-  font-weight: 400;
-}
-.sp-coverage {
-  display: block;
-  margin-left: 0;
-}
 .sp-method {
   padding: 12px 16px;
   border-top: 1px solid var(--dc-border);

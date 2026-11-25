@@ -21,7 +21,10 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
-import { mpsPage, openMpsCategoryFilter } from './helpers/mps-page.mjs';
+import {
+  mpsPageWithExactProductPeriod as mpsPage,
+  openMpsCategoryFilter,
+} from './helpers/mps-page.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const emptySource = ({ queryId }) => ({
@@ -971,7 +974,10 @@ test('零需求跳过缺失拆分依据，库存缺项逐行导出人工补数�
     ),
   );
   await workflowStep(frame, '本月预估发货');
-  annualFixtures.get(frame).shipmentRows = [shipmentSourceRow()];
+  annualFixtures.get(frame).shipmentRows = [
+    shipmentSourceRow(),
+    shipmentSourceRow({ material_code: 'B', material_name: '产品乙', open: null }),
+  ];
   await syncShipmentSource(frame, '2026-11-17');
   await expandShipmentBase(frame, '郑州');
   await expect(

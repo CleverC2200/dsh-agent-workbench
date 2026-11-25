@@ -77,13 +77,16 @@ function fixture({ queryId, parameters, sourcePeriod = '2026-10' }) {
           },
         ]
       : (rows[kind] ?? []);
-  const result = queryId.endsWith('.count')
-    ? [{ total: records.length }]
-    : records.slice(parameters.offset, parameters.offset + parameters.page_size).map((row) => ({
-        ...Object.fromEntries(config.queries[queryId].columns.map((column) => [column, null])),
-        ...row,
-        ...(kind === 'products' ? { stat_period: parameters.month } : {}),
-      }));
+  const result =
+    queryId === 'products.period'
+      ? [{ month: parameters.month }]
+      : queryId.endsWith('.count')
+        ? [{ total: records.length }]
+        : records.slice(parameters.offset, parameters.offset + parameters.page_size).map((row) => ({
+            ...Object.fromEntries(config.queries[queryId].columns.map((column) => [column, null])),
+            ...row,
+            ...(kind === 'products' ? { stat_period: parameters.month } : {}),
+          }));
   return {
     rows: result,
     returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,

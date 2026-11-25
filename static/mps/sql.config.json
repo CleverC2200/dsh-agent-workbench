@@ -6,6 +6,23 @@
   "dialect": "GEA PostgreSQL subset",
   "templates": {},
   "queries": {
+    "products.period": {
+      "priority": 3,
+      "title": "产品清单最近有数月份",
+      "columns": ["month"],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+        }
+      },
+      "request": {
+        "sql": "SELECT MAX(SUBSTRING(CAST(stat_period AS VARCHAR(32)), 1, 7)) AS month FROM agents_dim_product_list_mi WHERE SUBSTRING(CAST(stat_period AS VARCHAR(32)), 1, 7) <= :gea_p1"
+      }
+    },
     "products.detail": {
       "priority": 3,
       "title": "products",

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
 import { readFile } from 'node:fs/promises';
 import { workflowExportRows } from './helpers/mps-workflow-export.mjs';
 
@@ -33,9 +33,9 @@ async function open(t) {
                   duplicate_days: 0,
                   transfer_date: '2026-11-30',
                   transfer_rows: 1,
-                  transfer_in_plan_v1: null,
+                  transfer_in_plan_v1: 0,
                   transfer_in_plan_adj: null,
-                  transfer_out_plan_v1: null,
+                  transfer_out_plan_v1: 0,
                   transfer_out_plan_adj: null,
                 },
               ]

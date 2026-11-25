@@ -14,9 +14,9 @@ export const shipmentSourceRow = (changes = {}) => ({
   open: 0,
   inbound: 0,
   transfer_rows: 1,
-  transfer_in_plan_v1: null,
+  transfer_in_plan_v1: 0,
   transfer_in_plan_adj: null,
-  transfer_out_plan_v1: null,
+  transfer_out_plan_v1: 0,
   transfer_out_plan_adj: null,
   ...changes,
 });

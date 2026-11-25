@@ -12,6 +12,7 @@ import { defaultInventoryMonth } from './inventory-selection.js';
 import {
   hasMpsSource,
   readProducts,
+  readProductSnapshot,
   readAnnual,
   readAnnualDetails,
   productRows,
@@ -1120,7 +1121,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const canPersistLocal = react.useRef(true);
     const active = requestedActive && canPersistLocal.current;
     const initialDrafts = () => ({
-      drafts: [makeDraft('local-1', currentMonth())],
+      drafts: [{ ...makeDraft('local-1', currentMonth()), productPeriod: null }],
       selected: 'local-1',
     });
     const [localState, setLocalState] = react.useState(() =>
@@ -1289,7 +1290,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         if (valid()) setBusy((state) => ({ ...state, annualExport: false }));
       }
     };
-    const sync = async (type, requestedPeriods) => {
+    const sync = async (
+      type,
+      requestedPeriods,
+      { restoreProducts = false, retainPeriod = true } = {},
+    ) => {
       const id = draft.id;
       const fact = ['report', 'history', 'delivery'].includes(type);
       const sourceTable = type === 'forecast' || type === 'delivery';
@@ -1328,7 +1333,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         try {
           const result =
             type === 'products'
-              ? await readProducts(draft.productMonth ?? draft.month, signal)
+              ? restoreProducts && (draft.productReadPeriod ?? draft.productPeriod)
+                ? await readProductSnapshot(draft.productReadPeriod ?? draft.productPeriod, signal)
+                : await readProducts(draft.productMonth ?? draft.month, signal)
               : type === 'annual'
                 ? await readAnnual(signal)
                 : sourceTable
@@ -1374,6 +1381,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ? {
                           productSource: 'business',
                           productRaw: result.raw,
+                          productReadPeriod: result.period,
+                          ...(retainPeriod
+                            ? {
+                                productPeriod: {
+                                  targetMonth: result.period.targetMonth,
+                                  adoptedMonth: result.period.adoptedMonth,
+                                },
+                              }
+                            : {}),
                           productPrices: result.prices,
                         }
                       : type === 'annual'
@@ -1484,7 +1500,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   ...entry,
                   [type]: rows,
                   ...(type === 'products'
-                    ? { productSource: 'local-file', productRaw: [] }
+                    ? {
+                        productSource: 'local-file',
+                        productRaw: [],
+                        productPeriod: undefined,
+                        productReadPeriod: undefined,
+                      }
                     : type === 'annual'
                       ? { annualSource: 'local-file' }
                       : { [type + 'Source']: 'local-file', [type + 'Metadata']: null }),
@@ -1512,6 +1533,19 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       }
     };
     const draft = drafts.find((entry) => entry.id === selected) ?? drafts[0];
+    const activeProductPeriod = draft.productReadPeriod ?? draft.productPeriod;
+    const firstMissingProductMonth = activeProductPeriod?.adoptedMonth
+      ? monthOffset(activeProductPeriod.adoptedMonth, 1)
+      : null;
+    const productPeriodNote = !activeProductPeriod
+      ? null
+      : activeProductPeriod.adoptedMonth === null
+        ? `目标 ${activeProductPeriod.targetMonth}，无可用产品清单`
+        : `目标 ${activeProductPeriod.targetMonth}，实际采用 ${activeProductPeriod.adoptedMonth}${
+            activeProductPeriod.adoptedMonth < activeProductPeriod.targetMonth
+              ? `，${firstMissingProductMonth === activeProductPeriod.targetMonth ? activeProductPeriod.targetMonth : `${firstMissingProductMonth} 至 ${activeProductPeriod.targetMonth}`} 无产品清单`
+              : ''
+          }`;
     react.useEffect(() => setSubmissionWarningOpen(false), [draft.id, step]);
     const workflowScope = JSON.stringify([draft.id, draft.month, scopeGeneration]);
     if (workflowStep.current.scope !== workflowScope)
@@ -1614,7 +1648,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       ) {
         ready.then(() => {
           if (current && canPersistLocal.current) {
-            void sync('products');
+            void sync('products', undefined, {
+              restoreProducts: true,
+              retainPeriod: Object.hasOwn(draft, 'productPeriod'),
+            });
           }
         });
       }
@@ -1996,6 +2033,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         draft: { id: draft.id, name: draft.name, month: draft.month },
         productCount: draft.products.length,
         productSource: draft.productSource,
+        productTargetMonth: draft.productMonth ?? draft.month,
+        productPeriod: activeProductPeriod,
         sourceSummaries,
         calculation,
         businessSave: 'not-connected',
@@ -2123,7 +2162,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     )
                       return;
                     const existing = current.drafts.find((entry) => entry.month === month);
-                    const next = existing ?? makeDraft(`local-${current.drafts.length + 1}`, month);
+                    const next = existing ?? {
+                      ...makeDraft(`local-${current.drafts.length + 1}`, month),
+                      productPeriod: null,
+                    };
                     clearFiles();
                     saveLocal({
                       drafts: existing ? current.drafts : [...current.drafts, next],
@@ -2237,6 +2279,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ...(base ? structuredClone(base) : makeDraft(id, month)),
                       id,
                       month,
+                      productPeriod: null,
+                      ...(base?.productSource.startsWith('business')
+                        ? {
+                            productSource: 'business-unread',
+                            productReadPeriod: undefined,
+                            products: [],
+                            productRaw: [],
+                            productPrices: undefined,
+                            productsRead: undefined,
+                          }
+                        : {}),
                       ...(base
                         ? {
                             shipment: base.shipment?.rows
@@ -2420,6 +2473,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           key: draft.id,
           month: draft.month,
           productMonth: draft.productMonth ?? draft.month,
+          productPeriod: activeProductPeriod,
           demandOnly: ['check', 'ship', 'process'].includes(step),
           close: () => setMasterOpen(false),
         }),
@@ -2595,6 +2649,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 '新增产品',
               ),
             ),
+            activeProductPeriod &&
+              (draft.productMonth ?? draft.month) !== activeProductPeriod.targetMonth &&
+              h(
+                'p',
+                { className: 'dc-card-note' },
+                `待同步目标 ${draft.productMonth ?? draft.month}，以下为上次同步清单`,
+              ),
+            productPeriodNote &&
+              h('p', { role: 'status', className: 'dc-card-note' }, productPeriodNote),
             errors.products && h('p', { role: 'alert' }, errors.products),
             draft.productPrices?.status === 'ready' &&
               h(

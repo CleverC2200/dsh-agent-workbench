@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
 import { workflowStep, commitNumber } from './helpers/mps-edit.mjs';
 import { seedLeafQuantities } from './helpers/mps-fixtures.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';

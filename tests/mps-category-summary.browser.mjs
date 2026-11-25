@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
 import { readFile } from 'node:fs/promises';
-import { mpsPage, openMpsCategoryFilter } from './helpers/mps-page.mjs';
+import {
+  mpsPageWithExactProductPeriod as mpsPage,
+  openMpsCategoryFilter,
+} from './helpers/mps-page.mjs';
 import { openCategoryCalculation, beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 
@@ -155,14 +158,36 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   ).toBeDisabled();
   await calendar.check();
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
-  await expect(
-    frame
-      .getByRole('table', { name: '大类需求总表', exact: true })
-      .getByRole('row')
-      .filter({ hasText: '甲类' })
-      .getByRole('cell')
-      .nth(2),
-  ).toHaveText('100');
+  const summary = frame.getByRole('table', { name: '大类需求总表', exact: true });
+  await expect(summary.getByRole('columnheader')).toHaveText([
+    '大类',
+    '2026-11 本月预估发货',
+    'M+1 2026-12 销售提报总量',
+    'M+1 2026-12 模型预测',
+    'M+1 2026-12 有效需求',
+    'M+2 2027-01 模型预测',
+    'M+2 2027-01 有效需求',
+    'M+3 2027-02 需求',
+    'M+4 2027-03 库存参考',
+  ]);
+  const firstSummary = summary.getByRole('row').filter({ hasText: '甲类' });
+  await expect(firstSummary.getByRole('cell').nth(2)).toHaveText('100');
+  await expect(firstSummary.getByRole('cell').nth(4)).toHaveText('100');
+  const summaryDownload = page.waitForEvent('download');
+  await frame.getByRole('button', { name: '下载大类需求总表', exact: true }).click();
+  const summaryBook = XLSX.read(await mpsDownloadText(await (await summaryDownload).path()), {
+    type: 'string',
+    raw: true,
+  });
+  const [summaryHeader, ...summaryValues] = XLSX.utils.sheet_to_json(
+    summaryBook.Sheets[summaryBook.SheetNames[0]],
+    { header: 1 },
+  );
+  assert.deepEqual(
+    summaryHeader.slice(1, 10),
+    await summary.getByRole('columnheader').allTextContents(),
+  );
+  assert.equal(Number(summaryValues.find((row) => row[1] === '甲类')[3]), 100);
   await frame.getByText('有效需求计算核对', { exact: true }).click();
   const demandCheck = frame.getByRole('region', { name: '有效需求计算核对', exact: true });
   const checkRows = demandCheck.getByRole('table', { name: '逐类月需求核对', exact: true });

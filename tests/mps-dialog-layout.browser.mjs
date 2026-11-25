@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { expect } from '@playwright/test';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
 import { authorPage } from './helpers/author-page.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
@@ -13,7 +13,12 @@ async function fixture(t) {
     config,
     ({ queryId, parameters }) => {
       const fields = queryId.startsWith('products.')
-        ? { material_name: '测试产品', responsible_item: '点心', product_item: '包点' }
+        ? {
+            stat_period: parameters.month,
+            material_name: '测试产品',
+            responsible_item: '点心',
+            product_item: '包点',
+          }
         : { sub_category: '点心', plannum_total: 8, allnum_total: 9 };
       const detail = queryId === 'products.detail' || queryId === 'facts.report';
       const rows = queryId.endsWith('.count')

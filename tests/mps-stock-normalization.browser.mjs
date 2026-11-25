@@ -64,6 +64,7 @@ async function mount(t, rows) {
         大类: row.category,
         系列: row.series,
         物料组: row.group,
+        物料组名称: row.group,
       })),
       shipment: {
         cutoff: '2026-10-22',

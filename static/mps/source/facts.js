@@ -446,21 +446,24 @@ export async function readShipmentInputs(cutoff, signal, priority) {
       );
       const transferDate = row.transfer_date;
       const transferRows = number(row.transfer_rows);
-      const transferIssue =
+      const transferSnapshotIssue =
         !isBusinessDate(transferDate) || transferDate.slice(0, 7) !== month || transferDate > cutoff
           ? '调拨计划缺少适用快照日期，来源待核'
           : transferRows !== 1
             ? '调拨计划最新快照重复或冲突，未采用计划数量'
             : '';
       const transfer = (direction) => {
-        if (transferIssue) return { value: null, source: transferIssue };
+        if (transferSnapshotIssue) return { value: null, source: transferSnapshotIssue };
         const adjusted = row[`transfer_${direction}_plan_adj`];
         const initial = row[`transfer_${direction}_plan_v1`];
         return adjusted !== null
           ? { value: number(adjusted), source: `${transferDate} 纠偏计划` }
           : initial !== null
             ? { value: number(initial), source: `${transferDate} 初版计划` }
-            : { value: 0, source: `${transferDate} 确认无计划` };
+            : {
+                value: null,
+                source: `${transferDate} ${direction === 'in' ? '调入' : '调出'}计划字段为空`,
+              };
       };
       const transferIn = transfer('in');
       const transferOut = transfer('out');
@@ -479,7 +482,13 @@ export async function readShipmentInputs(cutoff, signal, priority) {
         transferInSource: transferIn.source,
         transferOutSource: transferOut.source,
         transferDate,
-        transferIssue,
+        transferIssue: [
+          ...new Set(
+            [transferIn, transferOut]
+              .filter(({ value }) => value === null)
+              .map(({ source }) => source),
+          ),
+        ].join('；'),
         remaining:
           quantities.inbound == null || passed <= 1
             ? null

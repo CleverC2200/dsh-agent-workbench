@@ -69,3 +69,27 @@ export async function openMpsProductDetails(frame) {
     await details.locator(':scope > summary').click();
   return section;
 }
+
+export async function mpsPageWithExactProductPeriod(t, config, execute, options = {}) {
+  return mpsPage(
+    t,
+    config,
+    async (request) => {
+      if (request.queryId !== 'products.period') return execute(request);
+      const result = await execute({
+        ...request,
+        queryId: 'products.count',
+        parameters: { month: request.parameters.month },
+      });
+      return {
+        ...result,
+        rows: [{ month: Number(result.rows[0]?.total) > 0 ? request.parameters.month : null }],
+        returnedColumns: ['month'],
+        totalRowCount: 1,
+        offset: 0,
+        hasMorePages: false,
+      };
+    },
+    options,
+  );
+}

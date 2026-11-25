@@ -7,7 +7,7 @@ import { authorPage } from './helpers/author-page.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 import * as XLSX from 'xlsx-republish';
 import { readFile } from 'node:fs/promises';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
 import { beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
 import { workflowExportRows } from './helpers/mps-workflow-export.mjs';
 

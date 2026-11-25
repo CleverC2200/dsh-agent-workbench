@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { expect } from '@playwright/test';
 import * as XLSX from 'xlsx-republish';
-import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 import { openCategoryCalculation, workflowStep } from './helpers/mps-edit.mjs';
 import { workflowExportRows } from './helpers/mps-workflow-export.mjs';
@@ -185,9 +185,15 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
   assert.equal(known.月初库存, '500');
   const missing = rows.find((row) => row.产品编码 === 'MISSING');
   assert.equal(missing.整月预估发货, '0');
-  assert.equal(missing.月初库存, '');
-  assert.equal(missing.本月生产入库, '');
-  assert.equal(missing.调入计划, '');
+  for (const field of [
+    '月初库存',
+    '本月生产入库',
+    '剩余天数入库',
+    '调入计划',
+    '调出计划',
+    '预计月末结存',
+  ])
+    assert.equal(missing[field], '0', field);
   const duplicate = rows.find((row) => row.产品编码 === 'DUP');
   assert.equal(duplicate.整月预估发货, '');
   assert.match(duplicate.预估待补原因, /重复/);
