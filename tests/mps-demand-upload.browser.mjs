@@ -73,6 +73,78 @@ async function setup(t, delisted = false) {
   };
 }
 
+test('需求导入保留系统列和导入原值，最终预测立即采用并支持再导入后手调', async (t) => {
+  const { page, frame, month, view } = await setup(t);
+  const summary = view.getByRole('table', { name: '大类需求总表', exact: true });
+  const detail = view.getByRole('table', { name: '加工后的需求明细', exact: true });
+  await expect(
+    summary.getByRole('columnheader', { name: `M+1 ${month} 人工导入`, exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    detail.getByRole('columnheader', { name: `M+1 ${month} 最终预测（可调整）`, exact: true }),
+  ).toHaveCount(1);
+  await upload(frame, '选择需求修正CSV', `${columns}\n郑州,A,${month},130,销售变化,`);
+  await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
+  await expect.poll(async () => (await draft(page)).demandImports?.[0]?.quantity).toBe(130);
+  await expect(summary).toContainText('1/3项已导入');
+  const download = async () => {
+    const pending = page.waitForEvent('download');
+    await view.getByRole('button', { name: '下载当前范围需求', exact: true }).click();
+    const text = await mpsDownloadText(await (await pending).path());
+    const book = XLSX.read(text.replace(/^\uFEFF/, ''), { type: 'string', raw: true });
+    return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
+  };
+  let rows = await download();
+  let leaf = rows.find(
+    (row) =>
+      row['粒度'] === '基地SKU' &&
+      row['基地'] === '郑州' &&
+      row['产品编码'] === 'A' &&
+      row['月份'] === month,
+  );
+  assert.equal(Number(leaf['人工导入']), 130);
+  assert.equal(Number(leaf['最终预测']), 130);
+  assert.equal(
+    leaf['预测偏差'],
+    leaf['系统需求数量'] === '' ? '' : 130 - Number(leaf['系统需求数量']),
+  );
+  await upload(frame, '选择需求修正CSV', `${columns}\n郑州,A,${month},0,销售变化,`);
+  await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
+  await expect.poll(async () => (await draft(page)).demandImports?.[0]?.quantity).toBe(0);
+  await view.getByLabel('搜索当前步骤').fill('产品甲');
+  await view.getByRole('button', { name: '调整', exact: true }).click();
+  await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('140');
+  await view.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
+  await view.getByRole('button', { name: '保存调整', exact: true }).click();
+  rows = await download();
+  leaf = rows.find(
+    (row) =>
+      row['粒度'] === '基地SKU' &&
+      row['基地'] === '郑州' &&
+      row['产品编码'] === 'A' &&
+      row['月份'] === month,
+  );
+  assert.equal(Number(leaf['人工导入']), 0);
+  assert.equal(Number(leaf['最终预测']), 140);
+  assert.equal((await draft(page)).demandImports[0].quantity, 0);
+  await upload(frame, '选择需求修正CSV', `${columns}\n郑州,A,${month},0,销售变化,`);
+  await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
+  await expect.poll(async () => (await draft(page)).adjustments.quantities[0]?.quantity).toBe(0);
+  await view.getByRole('button', { name: '调整', exact: true }).click();
+  await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('');
+  await view.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
+  await view.getByRole('button', { name: '保存调整', exact: true }).click();
+  rows = await download();
+  leaf = rows.find(
+    (row) =>
+      row['粒度'] === '基地SKU' &&
+      row['基地'] === '郑州' &&
+      row['产品编码'] === 'A' &&
+      row['月份'] === month,
+  );
+  assert.equal(Number(leaf['最终预测']), 0);
+});
+
 test('CSV预览不写入，点击确认仅改变基地SKU并保留系统依据、历史和第四月参考', async (t) => {
   const { page, frame, month, view } = await setup(t);
   const original = await draft(page);
