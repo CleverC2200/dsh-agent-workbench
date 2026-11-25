@@ -763,7 +763,10 @@ export function createShipment(
       });
       setFormula(null);
     };
-    const publishCalculationRead = (status, failure = null, waitingForCoefficients = false) =>
+    const publishCalculationRead = (
+      status,
+      { error: failure = null, waitingForCoefficients = false, requestId } = {},
+    ) =>
       snapshotCallback.current?.({
         draftId: draft.id,
         month: draft.month,
@@ -772,6 +775,7 @@ export function createShipment(
         source: '库存日报统计基月读取',
         sourceKind: 'business',
         status,
+        requestId,
         waitingForCoefficients,
         error: failure,
         rows: [],
@@ -805,10 +809,11 @@ export function createShipment(
       )
         return;
       const stop = new AbortController();
+      const requestId = Symbol();
       calculationController.current = stop;
       const scope = scopeGeneration.current;
       const current = () => !stop.signal.aborted && scope === scopeGeneration.current;
-      publishCalculationRead('loading');
+      publishCalculationRead('loading', { requestId });
       const load = async () => {
         const date =
           calculationCutoff && calculationCutoff <= calculationThrough
@@ -827,7 +832,8 @@ export function createShipment(
           stop.signal,
           calculationShipmentPriority,
           () => {
-            if (current()) publishCalculationRead('loading', null, true);
+            if (current())
+              publishCalculationRead('loading', { requestId, waitingForCoefficients: true });
           },
         );
         if (!current()) return;
@@ -835,9 +841,12 @@ export function createShipment(
         if (date !== stateRef.current.calculationCutoff) updateState({ calculationCutoff: date });
       };
       void load().catch((failure) => {
-        if (current()) publishCalculationRead('failed', readFailureText(failure));
+        if (current()) publishCalculationRead('failed', { error: readFailureText(failure) });
       });
-      return () => stop.abort();
+      return () => {
+        stop.abort();
+        publishCalculationRead('cancelled', { requestId });
+      };
     }, [
       canLoadCalculation,
       draft.id,
@@ -934,7 +943,7 @@ export function createShipment(
         if (result.date === null) {
           setSyncStatus('failed');
           setError('该统计月份暂无可用发货日期，请补齐来源或手动选择截止日');
-          if (synchronize) publishCalculationRead('failed', '统计基月暂无可用发货日期');
+          if (synchronize) publishCalculationRead('failed', { error: '统计基月暂无可用发货日期' });
           return;
         }
         if (result.date !== cutoff) changeCutoff(result.date, result.metadata);
@@ -943,7 +952,7 @@ export function createShipment(
         if (valid()) {
           setSyncStatus('failed');
           setError('读取最新发货日期失败：' + readFailureText(failure));
-          if (synchronize) publishCalculationRead('failed', readFailureText(failure));
+          if (synchronize) publishCalculationRead('failed', { error: readFailureText(failure) });
         }
       } finally {
         if (valid()) setBusy(false);

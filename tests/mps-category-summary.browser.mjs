@@ -45,7 +45,11 @@ const holidayRows = (categories) =>
   );
 
 test('category monthly totals retain missing inputs and real zero, and filters match calculations and downloads', async (t) => {
-  const { page, frame } = await mpsPage(t, config, ({ queryId, parameters }) => {
+  const shipmentRead = Promise.withResolvers();
+  t.after(shipmentRead.resolve);
+  const { page, frame } = await mpsPage(t, config, async ({ queryId, parameters }) => {
+    if (queryId === 'facts.shipment-latest' && parameters.month === '2026-11-01')
+      await shipmentRead.promise;
     const products = [
       ['A', '甲类', 100],
       ['B', '乙类', 0],
@@ -107,6 +111,11 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   const creation = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await creation.getByLabel('评估月份', { exact: true }).fill('2026-12');
   await creation.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  const shipmentProgress = frame
+    .getByRole('region', { name: '数据加载进度' })
+    .getByRole('listitem')
+    .filter({ hasText: '发货快照' });
+  await expect(shipmentProgress).toContainText('读取中');
   await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
     name: '大类.csv',
     mimeType: 'text/csv',
@@ -119,6 +128,8 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   await expect(total().locator('.dc-demand-amount')).toHaveText(['待补', '待补', '待补', '待补'], {
     timeout: 15000,
   });
+  await expect(shipmentProgress).toContainText('缺少输入');
+  shipmentRead.resolve();
   await expect(matrix.getByRole('button', { name: '调整', exact: true })).toHaveCount(0);
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: '计划.csv',

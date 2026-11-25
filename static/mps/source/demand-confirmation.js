@@ -1315,8 +1315,16 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const workflowStep = react.useRef({ scope: '', step: null });
     const receiveShipment = react.useCallback(
       (snapshot) => {
-        if (snapshot.shipmentMonth === monthOffset(snapshot.month, -1))
-          setShipmentSnapshot({ ...snapshot, scopeGeneration });
+        if (snapshot.shipmentMonth !== monthOffset(snapshot.month, -1)) return;
+        if (snapshot.status === 'cancelled') {
+          setShipmentSnapshot((current) =>
+            current?.requestId === snapshot.requestId && current.scopeGeneration === scopeGeneration
+              ? null
+              : current,
+          );
+          return;
+        }
+        setShipmentSnapshot({ ...snapshot, scopeGeneration });
       },
       [scopeGeneration],
     );
