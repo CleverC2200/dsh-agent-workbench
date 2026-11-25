@@ -250,7 +250,9 @@ test('confirmed monthly versions and shipment measures populate independently wh
       ),
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
-  await expect.poll(() => calls.some((call) => call.queryId === 'inventory-targets.count')).toBe(true);
+  await expect
+    .poll(() => calls.some((call) => call.queryId === 'inventory-targets.count'))
+    .toBe(true);
 });
 test('full fact paging keeps zero and missing base distinct, without a failed shipment blocking plans', async (t) => {
   const records = Array.from({ length: 201 }, (_, index) => ({

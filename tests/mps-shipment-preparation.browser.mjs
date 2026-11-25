@@ -154,7 +154,7 @@ test('没有可用截止日时发布失败状态，不永久停在输入准备�
   assert.match(await page.evaluate(() => window.snapshot.error), /暂无可用发货日期/);
   assert.deepEqual(calls, ['facts.shipment-latest']);
 });
-test('发运系数后续大页超限时从小页第一页重读，不重复累计', async (t) => {
+test('发运系数后续大页超限时切换小页，从原偏移继续读取', async (t) => {
   const requests = [];
   const { page } = await mount(
     t,
@@ -181,18 +181,11 @@ test('发运系数后续大页超限时从小页第一页重读，不重复累�
   assert.deepEqual((await page.evaluate(() => window.snapshot)).rows, [
     { base: '郑州', code: 'A', fin: 317, end: 83 },
   ]);
-  assert.deepEqual(requests.slice(0, 3), [
+  assert.deepEqual(requests, [
     [2500, 0],
     [2500, 2500],
-    [200, 0],
+    [200, 2500],
   ]);
-  assert.deepEqual(
-    requests
-      .slice(2)
-      .map(([, offset]) => offset)
-      .sort((a, b) => a - b),
-    Array.from({ length: 13 }, (_, index) => index * 200),
-  );
 });
 test('背景准备保留本地CSV和人工发货调整，不覆盖为业务来源', { timeout: 20000 }, async (t) => {
   const { page, calls } = await mount(t, {
