@@ -396,6 +396,7 @@ async function load() {
 
   if (mode === 'list') {
     element('title').textContent = '最近 8 天的订单确认记录';
+    element('title').hidden = false;
     element('summary').textContent = '仅展示分派给你的订单';
     element('quantity').textContent = '';
     element('defer').hidden = true;
@@ -455,6 +456,8 @@ async function load() {
     state.permissions?.canAct === false
       ? '订单明细'
       : { confirm: '确认开单？', defer: '暂缓发货', details: '订单明细' }[mode];
+  element('title').hidden = true;
+  element('confirmationMain').setAttribute('aria-label', element('title').textContent);
   element('summary').textContent =
     '执行单号：' +
     (p.executionOrderNo || '—') +
@@ -550,6 +553,7 @@ load().catch((error) => {
   element('orderEditor').hidden = true;
   element('confirmationMain').hidden = false;
   element('title').textContent = '订单加载失败';
+  element('title').hidden = false;
   document.title = '订单加载失败';
   element('submit').hidden = true;
   element('process').hidden = true;

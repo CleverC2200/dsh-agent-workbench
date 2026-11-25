@@ -67,7 +67,8 @@ test('order paints while vehicle lookup is still pending and keeps edited quanti
   try {
     await flush();
     assert.equal(f.document.getElementById('windowLoading').hidden, true);
-    assert.equal(f.document.querySelector('#orderEditor h1').textContent, '订单提交');
+    assert.equal(f.document.querySelector('#orderEditor h1'), null);
+    assert.equal(f.document.title, '订单提交');
     assert.equal(f.calls.filter((x) => x.includes('kind=vehicles')).length, 1);
     const qty = f.document.querySelector('[aria-label="A 数量"]');
     qty.value = '80';
@@ -169,7 +170,8 @@ test('late vehicle results cannot alter a replacement read-only view', async () 
     f.resolveVehicles({ vehicles: [{ value: '6.8米', label: '6.8米' }] });
     await flush();
     assert.equal(f.document.querySelector('[aria-label="选择车型"]'), null);
-    assert.equal(f.document.querySelector('#orderEditor h1').textContent, '订单明细');
+    assert.equal(f.document.querySelector('#orderEditor h1'), null);
+    assert.equal(f.document.title, '订单明细');
   } finally {
     f.dom.window.close();
   }

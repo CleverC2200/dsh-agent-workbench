@@ -169,6 +169,7 @@ window.OrderShortageEditor = (() => {
       loadingVehicles = false,
       vehiclesLoaded = Array.isArray(capabilities.vehicleOptions),
       modal = false,
+      pendingDelete = null,
       saving = false,
       notice = '';
     const ids = identifiers(snapshot);
@@ -309,12 +310,6 @@ window.OrderShortageEditor = (() => {
           inventoryPhase = 'error';
           inventoryResult = undefined;
           inventoryError = error.message || '库存查询失败，请重新核算';
-          if (priceRecalculationEnabled)
-            for (const line of lines.filter((item) => item.draftQuantity > 0)) {
-              line.unitPrice = null;
-              line.priceStatus = 'PRICE_VERIFICATION_UNAVAILABLE';
-              line.priceMessage = '价格与库存核验未完成，请重试。';
-            }
         }
         updateTotals();
       }, 300);
@@ -650,8 +645,7 @@ window.OrderShortageEditor = (() => {
           const remove = button(
             '',
             () => {
-              line.draftQuantity = 0;
-              line.inputError = '';
+              pendingDelete = line.sku;
               render();
             },
             false,
@@ -672,7 +666,8 @@ window.OrderShortageEditor = (() => {
           path.setAttribute('stroke-linejoin', 'round');
           icon.append(path);
           remove.append(icon);
-          trading.append(remove);
+          article.classList.add('editor-has-remove');
+          article.append(remove);
         }
         info.append(error);
       }
@@ -730,7 +725,14 @@ window.OrderShortageEditor = (() => {
         if (root.__fulfillmentEditorOwner !== mountOwner) return;
         if (!Array.isArray(found) || found.length > 20) throw Error('商品目录返回异常，请重试');
         for (const item of found) {
-          if (!item?.sku || lines.some((line) => line.sku === String(item.sku))) continue;
+          if (!item?.sku) continue;
+          const existing = lines.find((line) => line.sku === String(item.sku));
+          if (existing) {
+            for (const field of ['category', 'subCategory'])
+              if (typeof item[field] === 'string' && item[field].trim())
+                existing[field] = item[field].trim();
+            continue;
+          }
           if (lines.length >= 200) break;
           lines.push({
             ...item,
@@ -740,7 +742,11 @@ window.OrderShortageEditor = (() => {
             draftQuantity: 0,
           });
         }
-        notice = found.length ? '' : '当前客户没有匹配的可售商品';
+        notice = found.length
+          ? ''
+          : query.trim()
+            ? '当前可读取范围内未找到匹配商品，请调整关键词或核对客户读取范围。'
+            : '未读取到当前客户的可售商品，请核对当前人员的客户读取范围及商品配置。';
       } catch (error) {
         if (root.__fulfillmentEditorOwner !== mountOwner) return;
         notice = error.message || '商品读取失败，请点击查找商品重试';
@@ -763,25 +769,34 @@ window.OrderShortageEditor = (() => {
         price: '确认',
       }[page];
       document.title = title;
+      root.setAttribute('aria-label', title);
       const header = node('header');
-      header.append(
-        button(
-          '返回',
-          () => {
-            if (page === 'recommendations') page = 'catalog';
-            else if (page === 'catalog') page = 'order';
-            else {
-              window.close();
-              return;
-            }
-            render();
-          },
-          false,
-          'editor-back',
-        ),
-        node('h1', title),
-        node('span'),
+      const back = button(
+        '返回',
+        () => {
+          if (page === 'recommendations') page = 'catalog';
+          else if (page === 'catalog') page = 'order';
+          else {
+            window.close();
+            return;
+          }
+          render();
+        },
+        false,
+        'editor-back',
       );
+      back.setAttribute('aria-label', '返回');
+      back.title = '返回';
+      const backLabel = node('span', '返回', 'editor-visually-hidden');
+      const backIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      backIcon.setAttribute('viewBox', '0 0 24 24');
+      backIcon.setAttribute('aria-hidden', 'true');
+      backIcon.setAttribute('focusable', 'false');
+      const backPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      backPath.setAttribute('d', 'M15 5l-7 7 7 7');
+      backIcon.append(backPath);
+      back.replaceChildren(backIcon, backLabel);
+      header.append(back, node('span'), node('span'));
       const body = node('section', undefined, 'editor-body');
       if (state.orderRefresh && state.permissions?.canAct === true) {
         const panel = node('section', undefined, 'editor-refresh-panel');
@@ -1059,9 +1074,14 @@ window.OrderShortageEditor = (() => {
           ...new Set(lines.map((line) => line.category).filter(Boolean)),
         ]) {
           const tab = button(name, () => {
+            if (category === name) return;
             category = name;
             subCategory = '全部';
-            render();
+            for (const button of tabs.querySelectorAll('button'))
+              button.setAttribute('aria-pressed', String(button === tab));
+            renderSubcategories();
+            renderProducts();
+            products.scrollTop = 0;
           });
           tab.setAttribute('aria-pressed', String(category === name));
           tabs.append(tab);
@@ -1077,9 +1097,17 @@ window.OrderShortageEditor = (() => {
         undefined,
         page === 'catalog' ? 'editor-catalog' : 'editor-order-products',
       );
+      let sidebar;
       if (page === 'catalog') {
-        const sidebar = node('nav', undefined, 'editor-subcategories');
+        sidebar = node('nav', undefined, 'editor-subcategories');
         sidebar.setAttribute('aria-label', '商品二级分类');
+        renderSubcategories();
+        catalog.append(sidebar);
+      }
+      function renderSubcategories() {
+        if (!sidebar) return;
+        sidebar.replaceChildren();
+        sidebar.scrollTop = 0;
         for (const name of [
           '全部',
           ...new Set(
@@ -1089,14 +1117,19 @@ window.OrderShortageEditor = (() => {
               .filter(Boolean),
           ),
         ]) {
-          const tab = button(name === '全部' ? '全部商品' : name, () => {
+          const tab = button('', () => {
+            if (subCategory === name) return;
             subCategory = name;
-            render();
+            for (const button of sidebar.querySelectorAll('button'))
+              button.setAttribute('aria-pressed', String(button === tab));
+            renderProducts();
+            products.scrollTop = 0;
           });
+          tab.append(node('span', name === '全部' ? '全部商品' : name, 'editor-subcategory-label'));
           tab.setAttribute('aria-pressed', String(subCategory === name));
+          tab.title = name === '全部' ? '全部商品' : name;
           sidebar.append(tab);
         }
-        catalog.append(sidebar);
       }
       const products = node('section', undefined, 'editor-products');
       products.setAttribute(
@@ -1126,7 +1159,7 @@ window.OrderShortageEditor = (() => {
           products.append(
             node(
               'p',
-              page === 'recommendations' ? '暂无推荐商品' : '没有匹配的商品',
+              page === 'recommendations' ? '暂无推荐商品' : '当前可读取范围内未找到匹配商品',
               'editor-empty',
             ),
           );
@@ -1223,6 +1256,54 @@ window.OrderShortageEditor = (() => {
       root.append(header, body, footer);
       updateTotals();
       if (notice) body.prepend(node('p', notice, 'editor-warning'));
+      if (pendingDelete !== null) {
+        const target = (page === 'recommendations' ? recommendationDrafts : lines).find(
+          (line) => line.sku === pendingDelete,
+        );
+        if (target && editable && !saving) {
+          const overlay = node('div', undefined, 'editor-modal-overlay'),
+            dialog = node('section', undefined, 'editor-confirm-dialog');
+          dialog.setAttribute('role', 'dialog');
+          dialog.setAttribute('aria-modal', 'true');
+          dialog.setAttribute('aria-label', '确认删除商品');
+          const cancelDeletion = () => {
+            pendingDelete = null;
+            render();
+            [...root.querySelectorAll('.editor-remove')]
+              .find((button) => button.closest('article')?.dataset.sku === target.sku)
+              ?.focus();
+          };
+          dialog.append(
+            node('h2', '确认删除商品？'),
+            node('p', `${target.name || target.sku}（SKU：${target.sku}）`),
+            button(
+              '确认删除',
+              () => {
+                if (pendingDelete !== target.sku || !editable || saving) return;
+                pendingDelete = null;
+                target.draftQuantity = 0;
+                target.inputError = '';
+                render();
+              },
+              false,
+              'editor-primary',
+            ),
+            button('取消', cancelDeletion),
+          );
+          dialog.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') cancelDeletion();
+            if (event.key === 'Tab') {
+              event.preventDefault();
+              const buttons = [...dialog.querySelectorAll('button')];
+              buttons[document.activeElement === buttons[0] ? 1 : 0].focus();
+            }
+          });
+          for (const child of root.children) child.inert = true;
+          overlay.append(dialog);
+          root.append(overlay);
+          dialog.querySelector('button:last-child').focus();
+        }
+      }
       if (modal) {
         const overlay = node('div', undefined, 'editor-modal-overlay'),
           dialog = node('section', undefined, 'editor-confirm-dialog');
