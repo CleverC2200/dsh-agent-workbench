@@ -1,4 +1,7 @@
-import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
+import {
+  mpsPageWithExactProductPeriod as mpsPage,
+  openMpsCategoryFilter,
+} from './helpers/mps-page.mjs';
 import {
   shipmentSourceRow,
   shipmentSourceResponse,
@@ -304,6 +307,11 @@ test('Step3 preserves unsaved category forecasts and remarks across steps and ve
   await quantity.fill('600');
   await summary.getByLabel('汤圆 调整备注', { exact: true }).fill('促销备货核对');
   await selectAdjustmentReason(frame, '促销活动');
+  await (
+    await openMpsCategoryFilter(frame)
+  )
+    .getByRole('checkbox', { name: '汤圆', exact: true })
+    .check();
   await process.getByLabel('需求层级视角').selectOption('base');
   await process.getByLabel('月份筛选', { exact: true }).selectOption(month);
   await process.getByRole('button', { name: '基地 · 郑州', exact: true }).click();
@@ -319,8 +327,23 @@ test('Step3 preserves unsaved category forecasts and remarks across steps and ve
     scroll.evaluate((e) => [e.scrollLeft, e.scrollTop]),
     frame.locator('.ap-board-body').evaluate((e) => e.scrollTop),
   ]);
-  await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  await (
+    await openMpsCategoryFilter(frame)
+  )
+    .getByRole('checkbox', { name: '汤圆', exact: true })
+    .check();
+  await (
+    await openMpsCategoryFilter(frame)
+  )
+    .getByRole('button', { name: '清空筛选', exact: true })
+    .click();
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await expect(
+    frame
+      .getByRole('group', { name: '大类筛选', exact: true, includeHidden: true })
+      .getByRole('checkbox', { name: '汤圆', exact: true, includeHidden: true }),
+  ).toBeChecked();
   await expect(quantity).toHaveValue('600');
   await expect(summary.getByLabel('汤圆 调整备注', { exact: true })).toHaveValue('促销备货核对');
   await expect(frame.getByLabel('批量调整原因', { exact: true })).toHaveValue('促销活动');

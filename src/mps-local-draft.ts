@@ -22,7 +22,11 @@ const sourceRow = z.partialRecord(
   ]),
   z.union([text, numeric]),
 );
-const input = z.strictObject({ file: text, rows: z.array(sourceRow).max(10000) });
+export const mpsProductRowLimit = 10000;
+export const mpsDemandImportLimit = mpsProductRowLimit * 3;
+export const mpsQuantityAdjustmentLimit = 10000 + mpsProductRowLimit * 4;
+export const mpsAdjustmentHistoryLimit = 10000 + mpsProductRowLimit * 4 * 2;
+const input = z.strictObject({ file: text, rows: z.array(sourceRow).max(mpsProductRowLimit) });
 const audit = {
   systemValue: numeric.nullable(),
   reason: z.string().trim().min(1).max(1000),
@@ -142,22 +146,25 @@ export const mpsLocalDraftSchema = z.strictObject({
     forecast: input.optional(),
     history: input.optional(),
   }),
-  demandImports: list(
-    z.strictObject({
-      month,
-      base: text,
-      code: text,
-      category: text,
-      group: text,
-      quantity,
-      at: z.iso.datetime(),
-    }),
-  ).optional(),
+  demandImports: z
+    .array(
+      z.strictObject({
+        month,
+        base: text,
+        code: text,
+        category: text,
+        group: text,
+        quantity,
+        at: z.iso.datetime(),
+      }),
+    )
+    .max(mpsDemandImportLimit)
+    .optional(),
   adjustments: z.strictObject({
     categoryDemand: list(categoryAdjustment),
     shares: list(shareAdjustment),
-    quantities: list(quantityAdjustment).default([]),
-    history: list(adjustmentHistory),
+    quantities: z.array(quantityAdjustment).max(mpsQuantityAdjustmentLimit).default([]),
+    history: z.array(adjustmentHistory).max(mpsAdjustmentHistoryLimit),
   }),
   constraints: z
     .strictObject({

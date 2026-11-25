@@ -178,6 +178,7 @@ test('category monthly totals retain missing inputs and real zero, and filters m
     'M+3 2027-02 预测偏差',
     'M+3 2027-02 最终预测（可调整）',
     'M+4 2027-03 库存参考',
+    '调整备注',
   ]);
   const firstSummary = summary.getByRole('row').filter({ hasText: '甲类' });
   await expect(firstSummary.getByRole('cell').nth(2)).toHaveText('100');
@@ -193,7 +194,7 @@ test('category monthly totals retain missing inputs and real zero, and filters m
     { header: 1 },
   );
   assert.deepEqual(
-    summaryHeader.slice(1, 19),
+    summaryHeader.slice(1, 20),
     await summary.getByRole('columnheader').allTextContents(),
   );
   assert.equal(Number(summaryValues.find((row) => row[1] === '甲类')[3]), 100);

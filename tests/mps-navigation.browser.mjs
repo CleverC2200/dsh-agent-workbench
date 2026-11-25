@@ -49,9 +49,12 @@ test('窄屏加工表切步返回恢复横向位置，新版本从起点浏览',
     '全国 / 基地 / 大类 / 物料组 / SKU',
     /本月预估发货（可调整）/,
     /计划提报/,
-    /M\+1 .*需求（可调整）/,
-    /M\+2 .*需求（可调整）/,
-    /M\+3 .*需求（可调整）/,
+    ...[1, 2, 3].flatMap((index) => [
+      new RegExp(`M\\+${index} .*需求$`),
+      new RegExp(`M\\+${index} .*人工导入$`),
+      new RegExp(`M\\+${index} .*预测偏差$`),
+      new RegExp(`M\\+${index} .*最终预测（可调整）$`),
+    ]),
     /M\+4 .*库存参考（可调整）/,
   ]);
   const total = area.getByRole('row').filter({ hasText: '全国合计' });

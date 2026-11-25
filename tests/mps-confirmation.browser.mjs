@@ -271,7 +271,9 @@ test('MPS bounds large previews without silently dropping rows and rejects an ov
   await expect(products.getByRole('row')).toHaveCount(26);
   await expect(products).toContainText('共26条，每页25条，第1页');
   await products.getByRole('button', { name: '下一页', exact: true }).click();
-  await expect(products.getByRole('cell', { name: 'P25', exact: true })).toBeVisible();
+  await expect(
+    products.getByRole('button', { name: '查看产品 P9 的源字段', exact: true }),
+  ).toBeVisible();
   await expect(products.getByRole('row')).toHaveCount(2);
   await upload(
     frame,
@@ -281,7 +283,9 @@ test('MPS bounds large previews without silently dropping rows and rejects an ov
       Array.from({ length: 10001 }, (_, index) => `郑州,Q${index},产品,汤圆,系列,组,,`).join('\n'),
   );
   await expect(products.getByRole('alert')).toContainText('超过10000条上限');
-  await expect(products.getByRole('cell', { name: 'P25', exact: true })).toBeVisible();
+  await expect(
+    products.getByRole('button', { name: '查看产品 P9 的源字段', exact: true }),
+  ).toBeVisible();
 });
 
 test('MPS keeps signed local quantities and excludes records with an unassigned base', async (t) => {
