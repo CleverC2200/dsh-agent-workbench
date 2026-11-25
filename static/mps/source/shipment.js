@@ -24,6 +24,7 @@ import {
   readShipmentInputs,
 } from './facts.js';
 import { hasMpsSource } from './master-data.js';
+import { readFailureText } from './mps-read.js';
 import { createBatchEdit } from './batch-edit.js';
 import { createReportPage } from './report-page.js';
 import { mpsBusinessDate } from './business-date.js';
@@ -348,13 +349,22 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
   return { deriveRows, coefficients, defaultCoefficient, coefficientPeriods: periods };
 }
 
-async function readShipmentBusiness(cutoff, signal, priority) {
+async function readShipmentBusiness(cutoff, signal, priority, onCoefficients) {
   const month = cutoff.slice(0, 7);
   const passed = Number(cutoff.slice(8));
   const totalDays = shipmentMonthDays(month);
+  let coefficientsPending = true;
   const [result, coefficientFacts] = await Promise.all([
-    readShipmentInputs(cutoff, signal, priority),
-    readShipmentCoefficientFacts(shipmentCoefficientPeriods(cutoff), signal),
+    readShipmentInputs(cutoff, signal, priority).then((result) => {
+      if (coefficientsPending) onCoefficients();
+      return result;
+    }),
+    readShipmentCoefficientFacts(shipmentCoefficientPeriods(cutoff), signal, priority).then(
+      (facts) => {
+        coefficientsPending = false;
+        return facts;
+      },
+    ),
   ]);
   const rows = result.rows.filter((row) => row.base && row.code && bases.includes(row.base));
   const omitted = result.rows.length - rows.length;
@@ -378,7 +388,9 @@ async function readShipmentBusiness(cutoff, signal, priority) {
       ...result.metadata,
       partial:
         result.metadata.partial ||
+        Boolean(coefficientFacts.error) ||
         Boolean(!rows.length || omitted || missingDimensions || incompleteRows || duplicateRows),
+      coefficientError: coefficientFacts.error,
       recentStatus: passed < 3 ? 'insufficient-days' : 'ok',
       omittedRows: omitted,
       missingDimensions,
@@ -428,12 +440,15 @@ export function createShipment(
     active,
     autoRead = false,
     autoReadCalculation = false,
+    calculationRetry = 0,
     scopeGeneration,
     onSnapshot,
     calculationSnapshot,
     onEditingChange,
     selectedCategories = [],
   }) {
+    const appliedRetry = react.useRef(calculationRetry);
+    const appliedBackgroundRetry = react.useRef(calculationRetry);
     const batch = useBatchEdit({
       scope: `${draft.id}:${draft.month}:${scopeGeneration.current}`,
       onEditingChange,
@@ -479,6 +494,7 @@ export function createShipment(
     const snapshotCallback = react.useRef(onSnapshot);
     snapshotCallback.current = onSnapshot;
     const controller = react.useRef(null);
+    const pendingShipment = react.useRef(null);
     const calculationController = react.useRef(null);
     const forecastRequest = react.useRef(0);
     const [automaticBasis, setAutomaticBasis] = react.useState(null);
@@ -490,6 +506,7 @@ export function createShipment(
     const [formula, setFormula] = react.useState(null);
     const [error, setError] = react.useState('');
     const [busy, setBusy] = react.useState(false);
+    const [waitingForCoefficients, setWaitingForCoefficients] = react.useState(false);
     const [pendingCalculationRead, setPendingCalculationRead] = react.useState(null);
     const generation = react.useRef(0);
     react.useEffect(() => {
@@ -746,7 +763,7 @@ export function createShipment(
       });
       setFormula(null);
     };
-    const publishCalculationRead = (status, failure = null) =>
+    const publishCalculationRead = (status, failure = null, waitingForCoefficients = false) =>
       snapshotCallback.current?.({
         draftId: draft.id,
         month: draft.month,
@@ -755,6 +772,7 @@ export function createShipment(
         source: '库存日报统计基月读取',
         sourceKind: 'business',
         status,
+        waitingForCoefficients,
         error: failure,
         rows: [],
       });
@@ -763,7 +781,10 @@ export function createShipment(
       : cutoff.startsWith(calculationMonth + '-')
         ? cutoff
         : '';
+    const productInputsLoading =
+      draft.productSource === 'business-unread' || draft.productsRead?.status === 'loading';
     const usableCalculationSnapshot =
+      !productInputsLoading &&
       calculationSnapshot?.draftId === draft.id &&
       calculationSnapshot.month === draft.month &&
       calculationSnapshot.shipmentMonth === calculationMonth &&
@@ -776,10 +797,11 @@ export function createShipment(
     const canLoadCalculation =
       autoReadCalculation && separateCalculation && hasCutoffRange && hasMpsSource();
     react.useEffect(() => {
+      const retry = appliedBackgroundRetry.current !== calculationRetry;
+      appliedBackgroundRetry.current = calculationRetry;
       if (
         !canLoadCalculation ||
-        usableCalculationSnapshot ||
-        automaticBasis?.cutoff === calculationCutoff
+        (!retry && (usableCalculationSnapshot || automaticBasis?.cutoff === calculationCutoff))
       )
         return;
       const stop = new AbortController();
@@ -800,16 +822,30 @@ export function createShipment(
               ).date;
         if (!current()) return;
         if (!date) throw Error('统计基月暂无可用发货日期');
-        const basis = await readShipmentBusiness(date, stop.signal, calculationShipmentPriority);
+        const basis = await readShipmentBusiness(
+          date,
+          stop.signal,
+          calculationShipmentPriority,
+          () => {
+            if (current()) publishCalculationRead('loading', null, true);
+          },
+        );
         if (!current()) return;
         setAutomaticBasis(basis);
         if (date !== stateRef.current.calculationCutoff) updateState({ calculationCutoff: date });
       };
       void load().catch((failure) => {
-        if (current()) publishCalculationRead('failed', failure.message);
+        if (current()) publishCalculationRead('failed', readFailureText(failure));
       });
       return () => stop.abort();
-    }, [canLoadCalculation, draft.id, draft.month, calculationThrough, calculationCutoff]);
+    }, [
+      canLoadCalculation,
+      draft.id,
+      draft.month,
+      calculationThrough,
+      calculationCutoff,
+      calculationRetry,
+    ]);
     const backgroundBasis =
       separateCalculation && automaticBasis?.cutoff === calculationCutoff ? automaticBasis : null;
     const basisProjection = react.useMemo(
@@ -845,7 +881,7 @@ export function createShipment(
         source: `业务来源：ai_db.agents_scm_stock_detail_d，${calculationMonth}-01 至 ${calculationCutoff}`,
         sourceKind: 'business',
         status: backgroundBasis.metadata.partial ? 'partial' : 'ok',
-        error: null,
+        error: backgroundBasis.metadata.coefficientError ?? null,
         sourceRows: backgroundBasis.rows,
         sourceRecords: backgroundBasis.sourceRecords,
         rows: deriveRows(basisEdits ?? {}),
@@ -906,8 +942,8 @@ export function createShipment(
       } catch (failure) {
         if (valid()) {
           setSyncStatus('failed');
-          setError('读取最新发货日期失败：' + failure.message);
-          if (synchronize) publishCalculationRead('failed', failure.message);
+          setError('读取最新发货日期失败：' + readFailureText(failure));
+          if (synchronize) publishCalculationRead('failed', readFailureText(failure));
         }
       } finally {
         if (valid()) setBusy(false);
@@ -918,6 +954,11 @@ export function createShipment(
       void readLatestDate();
       return () => controller.current?.abort();
     }, [active, autoReadDisplay, draft.id, minCutoff, maxCutoff, cutoff]);
+    react.useEffect(() => {
+      if (calculationRetry === appliedRetry.current) return;
+      appliedRetry.current = calculationRetry;
+      if (!separateCalculation) void readLatestDate(calculationThrough, true);
+    }, [calculationRetry]);
     const selectSource = (next) => {
       updateState({
         activeSource: next,
@@ -947,7 +988,10 @@ export function createShipment(
         cutoff,
         source,
         sourceKind,
-        error: cutoffIssue ?? (syncStatus === 'failed' ? error : null),
+        error:
+          cutoffIssue ??
+          (syncStatus === 'failed' ? error : (business?.metadata.coefficientError ?? null)),
+        waitingForCoefficients: busy && waitingForCoefficients,
         status: busy
           ? 'loading'
           : cutoffIssue || syncStatus === 'failed'
@@ -975,6 +1019,7 @@ export function createShipment(
       business,
       batch.active,
       busy,
+      waitingForCoefficients,
       syncStatus,
       error,
       cutoffIssue,
@@ -988,7 +1033,9 @@ export function createShipment(
       const scope = scopeGeneration.current;
       const valid = () =>
         !stop.signal.aborted && request === generation.current && scope === scopeGeneration.current;
+      pendingShipment.current = { cutoff, stop };
       setBusy(true);
+      setWaitingForCoefficients(false);
       setSyncStatus('loading');
       setError('');
       updateState({
@@ -1011,6 +1058,9 @@ export function createShipment(
           cutoff,
           stop.signal,
           month === calculationMonth ? calculationShipmentPriority : undefined,
+          () => {
+            if (valid()) setWaitingForCoefficients(true);
+          },
         );
         if (!valid()) return;
         updateState({
@@ -1024,9 +1074,10 @@ export function createShipment(
         setError(
           /AGENT_ACCESS_DENIED|PERMISSION_DENIED|RESOURCE_NOT_IN_DATASET/.test(failure.message)
             ? '当前账号暂无库存日计划数据权限'
-            : failure.message,
+            : readFailureText(failure),
         );
       } finally {
+        if (pendingShipment.current?.stop === stop) pendingShipment.current = null;
         if (valid()) setBusy(false);
       }
     };
@@ -1043,6 +1094,8 @@ export function createShipment(
         !cutoff ||
         activeSource !== 'business' ||
         business ||
+        (pendingShipment.current?.cutoff === cutoff &&
+          !pendingShipment.current.stop.signal.aborted) ||
         !hasMpsSource()
       )
         return;
@@ -1928,7 +1981,13 @@ export function createShipment(
         { role: 'status', 'aria-label': '计算快照状态' },
         usableCalculationSnapshot
           ? `${calculationSnapshot.cutoff} 快照已进入评估。${calculationSnapshot.rows.length} 条基地 SKU；发货待补 ${calculationSnapshot.rows.filter((row) => row.fin == null).length} 条，预计月末结存待补 ${calculationSnapshot.rows.filter((row) => row.end == null).length} 条。`
-          : `${calculationMonth} 计算快照尚未取得或已失效。${calculationSnapshot?.shipmentMonth === calculationMonth ? (calculationSnapshot.error ?? '') : ''}`,
+          : calculationSnapshot?.status === 'loading'
+            ? calculationSnapshot.waitingForCoefficients
+              ? '正在读取上月发运系数'
+              : `正在读取 ${calculationMonth} 发货快照`
+            : productInputsLoading && (business || backgroundBasis)
+              ? '发货来源已读取，正在等待产品清单'
+              : `${calculationMonth} 计算快照尚未取得或已失效。${calculationSnapshot?.shipmentMonth === calculationMonth ? (calculationSnapshot.error ?? '') : ''}`,
       ),
       h(
         'button',

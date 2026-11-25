@@ -3,6 +3,7 @@ import { categoryDemandMissing } from './category-demand.js';
 import { demandBasisLabel, festivalOptionValue } from './festival-demand.js';
 import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
 import { workflowContextPreview } from './evaluation-view.js';
+import { readFailure } from './mps-read.js';
 
 export function createShipmentScopeNotice(react, { downloadCsv }) {
   const h = react.createElement;
@@ -169,6 +170,9 @@ export function createCategoryDemand(
     shipmentSnapshot,
     result,
     retryFestivalHistory,
+    loading = false,
+    blocked = false,
+    showLoadingProgress = false,
     basisDisabled,
   }) {
     const basisRadioId = react.useId();
@@ -177,7 +181,13 @@ export function createCategoryDemand(
     const festivalMonths = new Set(festival?.months);
     const naturalActualMonths = result.recent.filter((month) => !festivalMonths.has(month));
     const option = festival?.selected ? festivalOptionValue(festival.selected) : '';
-    const waiting = ['loading', 'choose', 'failed'].includes(festival?.status);
+    const waiting =
+      loading ||
+      blocked ||
+      ['loading', 'choose', 'failed', 'unavailable'].includes(festival?.status);
+    const festivalIssue = festival?.status === 'failed' ? readFailure(festival.error) : null;
+    const useNaturalMonth = () =>
+      update({ festivalBasis: undefined, festivalHistoryRead: undefined });
     const chainColumn = festival ? '采用环比' : '年度环比';
     const calculationColumns = columns.map((name) => (name === '年度环比' ? chainColumn : name));
     const selectedRows = result.rows.filter((row) =>
@@ -353,18 +363,49 @@ export function createCategoryDemand(
           { className: 'dc-card-note' },
           '合计、逐月测算和明细下载均按当前大类筛选；缺项不补零。',
         ),
-        table(
-          ['大类', 'M+1', 'M+2', 'M+3', 'M+4'],
-          summary,
-          Object.fromEntries(
-            result.rows
-              .slice(0, 4)
-              .map((row, index) => [
-                `M+${index + 1}`,
-                `M+${index + 1} · ${row.month}${index === 3 ? ' 库存参考' : ''}`,
-              ]),
+        !showLoadingProgress &&
+          shipmentSnapshot?.status === 'loading' &&
+          h(
+            'p',
+            { role: 'status', className: 'dc-card-note' },
+            shipmentSnapshot.waitingForCoefficients
+              ? '库存日报已读取，正在读取上月发运系数。'
+              : `正在读取 ${shipmentSnapshot.shipmentMonth} 发货快照。`,
           ),
-        ),
+        !showLoadingProgress &&
+          draft.productsRead?.status === 'loading' &&
+          h('p', { role: 'status', className: 'dc-card-note' }, '正在读取产品清单。'),
+        !showLoadingProgress &&
+          shipmentSnapshot?.status === 'failed' &&
+          h(
+            'p',
+            { role: 'alert', className: 'dc-card-note' },
+            shipmentSnapshot.error || '发货快照读取失败。',
+          ),
+        waiting
+          ? h(
+              'p',
+              { className: 'dc-result-pending' },
+              loading
+                ? '主要数据就绪后显示需求结果。'
+                : blocked
+                  ? '需求暂不可计算。请处理数据加载进度中标出的来源。'
+                  : festival?.status === 'unavailable'
+                    ? '节日推算缺少可用来源。可在逐月测算依据中改用自然月。'
+                    : '节日推算就绪后显示需求结果。',
+            )
+          : table(
+              ['大类', 'M+1', 'M+2', 'M+3', 'M+4'],
+              summary,
+              Object.fromEntries(
+                result.rows
+                  .slice(0, 4)
+                  .map((row, index) => [
+                    `M+${index + 1}`,
+                    `M+${index + 1} · ${row.month}${index === 3 ? ' 库存参考' : ''}`,
+                  ]),
+              ),
+            ),
       ),
       h(
         'details',
@@ -380,7 +421,11 @@ export function createCategoryDemand(
             h(
               'span',
               { className: 'dc-card-note' },
-              `${selectedRows.filter((row) => row.quantity !== null).length} / ${visibleRows.length} 项可计算 · 单位：件`,
+              waiting
+                ? blocked
+                  ? '所需来源未就绪'
+                  : '等待推算所需数据'
+                : `${selectedRows.filter((row) => row.quantity !== null).length} / ${visibleRows.length} 项可计算 · 单位：件`,
             ),
             h(
               'fieldset',
@@ -462,6 +507,7 @@ export function createCategoryDemand(
               'div',
               {
                 className: 'dc-festival-status',
+                'data-state': festival.status,
                 role: festival.status === 'failed' ? 'alert' : 'status',
               },
               festival.status === 'loading'
@@ -469,25 +515,38 @@ export function createCategoryDemand(
                 : festival.status === 'choose'
                   ? '请选择本评估使用的节日。整份评估使用同一套节日映射。'
                   : festival.status === 'failed'
-                    ? `节日发货读取失败。 ${festival.error}`
-                    : festival.status === 'outside'
-                      ? '本期没有节日映射，逐月测算采用自然月。'
-                      : [
-                          `${festival.selected.name}（${festival.selected.date}）`,
-                          festival.naturalMonths.length
-                            ? `预测沿用自然月：${festival.naturalMonths.join('、')}`
-                            : '',
-                          naturalActualMonths.length
-                            ? `近三月实绩沿用自然月：${naturalActualMonths.join('、')}`
-                            : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' · '),
-              festival.status === 'failed' &&
+                    ? `节日发货读取失败。${festivalIssue.text}`
+                    : festival.status === 'unavailable'
+                      ? '当前节日来源缺可追溯的基地SKU明细，暂无法按节日推算。'
+                      : festival.status === 'outside'
+                        ? '本期没有节日映射，逐月测算采用自然月。'
+                        : [
+                            `${festival.selected.name}（${festival.selected.date}）`,
+                            festival.naturalMonths.length
+                              ? `预测沿用自然月：${festival.naturalMonths.join('、')}`
+                              : '',
+                            naturalActualMonths.length
+                              ? `近三月实绩沿用自然月：${naturalActualMonths.join('、')}`
+                              : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' · '),
+              festivalIssue &&
+                ['offline', 'network', 'failed'].includes(festivalIssue.kind) &&
                 h(
                   'button',
                   { type: 'button', onClick: retryFestivalHistory, disabled: basisDisabled },
-                  '重试',
+                  '重试节日发货',
+                ),
+              (festival.status === 'unavailable' || festivalIssue) &&
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    onClick: useNaturalMonth,
+                    disabled: basisDisabled,
+                  },
+                  '改用自然月',
                 ),
             ),
           h(
@@ -497,26 +556,27 @@ export function createCategoryDemand(
           ),
           result.adjustmentIssues.length > 0 &&
             h('p', { role: 'alert' }, `以下调整未生效：${result.adjustmentIssues.join('；')}`),
-          h(
-            'div',
-            { className: 'dc-category-demand-main' },
-            table(
-              calculationColumns,
-              visibleRows,
-              Object.fromEntries(
-                [
-                  ['① 环比法', '本月预估发货*环比'],
-                  ['② 占比法', '全年预估 × 占比'],
-                  ['两法平均量', '①②各占一半'],
-                  ['销售校正量', '销售提报量×达成率'],
-                  ['加权', '仅M+1：两法平均量与销售校正量各占一半'],
-                ].map(([name, formula]) => [
-                  name,
-                  h(react.Fragment, {}, name, h('small', {}, formula)),
-                ]),
+          !waiting &&
+            h(
+              'div',
+              { className: 'dc-category-demand-main' },
+              table(
+                calculationColumns,
+                visibleRows,
+                Object.fromEntries(
+                  [
+                    ['① 环比法', '本月预估发货*环比'],
+                    ['② 占比法', '全年预估 × 占比'],
+                    ['两法平均量', '①②各占一半'],
+                    ['销售校正量', '销售提报量×达成率'],
+                    ['加权', '仅M+1：两法平均量与销售校正量各占一半'],
+                  ].map(([name, formula]) => [
+                    name,
+                    h(react.Fragment, {}, name, h('small', {}, formula)),
+                  ]),
+                ),
               ),
             ),
-          ),
         ),
       ),
       h(UpperAdjustmentConflicts, { draft, update }),

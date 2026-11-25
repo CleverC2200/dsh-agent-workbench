@@ -2,7 +2,16 @@ import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { authorPage } from './author-page.mjs';
 export async function mpsPage(t, config, execute, options = {}) {
-  const page = await authorPage(t, { ...options, mpsConfig: config });
+  const queryFixture = options.optimizedPaging ? config : structuredClone(config);
+  if (!options.optimizedPaging)
+    for (const id of Object.keys(queryFixture.queries)) {
+      if (id.includes('.calculation.')) delete queryFixture.queries[id];
+      if (id === 'facts.history') queryFixture.queries[id].parameterSpec.page_size.maximum = 500;
+      if (id === 'facts.shipment-history')
+        queryFixture.queries[id].parameterSpec.page_size.maximum = 200;
+    }
+  const page = await authorPage(t, { ...options, mpsConfig: queryFixture });
+  await options.beforeOpen?.(page);
   const calls = [];
   const contexts = [];
   await page.exposeFunction('mpsQuery', async (message) => {

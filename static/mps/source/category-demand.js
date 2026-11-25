@@ -62,7 +62,12 @@ export function categoryDemandMissing(result, row) {
   }
   return [...new Set(missing)];
 }
-export function buildCategoryDemand(draft, shipmentSnapshot, historicalFilter) {
+export function buildCategoryDemand(
+  draft,
+  shipmentSnapshot,
+  historicalFilter,
+  categorySources = categorySourceInputs(draft),
+) {
   const baseDate = new Date(`${draft.month}-01T00:00:00Z`);
   baseDate.setUTCMonth(baseDate.getUTCMonth() - 1);
   const baseMonth = baseDate.toISOString().slice(0, 7);
@@ -249,7 +254,6 @@ export function buildCategoryDemand(draft, shipmentSnapshot, historicalFilter) {
     scopedChecks,
     ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : productMappings,
   );
-  const categorySources = categorySourceInputs(draft);
   const {
     history: historical,
     actual: festivalActual,

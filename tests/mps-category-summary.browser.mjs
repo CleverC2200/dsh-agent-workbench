@@ -116,7 +116,9 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   });
   const matrix = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
   const total = () => matrix.getByRole('row').filter({ hasText: /^(合计|当前范围合计)/ });
-  await expect(total().locator('.dc-demand-amount')).toHaveText(['待补', '待补', '待补', '待补']);
+  await expect(total().locator('.dc-demand-amount')).toHaveText(['待补', '待补', '待补', '待补'], {
+    timeout: 15000,
+  });
   await expect(matrix.getByRole('button', { name: '调整', exact: true })).toHaveCount(0);
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: '计划.csv',
@@ -153,10 +155,12 @@ test('category monthly totals retain missing inputs and real zero, and filters m
   await expect(calendar).toBeChecked();
   await calculation.getByRole('radio', { name: '节日推算', exact: true }).check();
   await expect(calculation).toContainText('缺可追溯的基地SKU明细');
+  await expect(calculation.getByRole('button', { name: '重试节日发货' })).toHaveCount(0);
   await expect(
     calculation.getByRole('button', { name: '下载测算明细', exact: true }),
   ).toBeDisabled();
-  await calendar.check();
+  await calculation.getByRole('button', { name: '改用自然月', exact: true }).click();
+  await expect(calendar).toBeChecked();
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   const summary = frame.getByRole('table', { name: '大类需求总表', exact: true });
   await expect(summary.getByRole('columnheader')).toHaveText([

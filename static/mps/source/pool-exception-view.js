@@ -29,12 +29,12 @@ const columns = [
 ];
 const value = (quantity) => (quantity === null ? '缺失或无效' : quantity);
 
-export function poolSubmissionRows(result, products, relations, categories) {
+export function poolSubmissionRows(exceptions, products, relations, categories) {
   const tags = Map.groupBy(
     [...(products ?? []), ...latestTransferSnapshot(relations?.sources?.transfers ?? []).rows],
     (row) => JSON.stringify([canonicalBaseName(row.target_base), row.material_code?.trim()]),
   );
-  return (result.poolExceptions?.report ?? [])
+  return (exceptions?.report ?? [])
     .filter(
       (row) =>
         matchesCategories(row.category || row.sourceCategory, categories) &&

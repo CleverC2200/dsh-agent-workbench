@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
+import * as XLSX from 'xlsx-republish';
 import {
   mpsPageWithExactProductPeriod as mpsPage,
   openMpsProductDetails,
@@ -331,6 +332,66 @@ test('annual plan starts collapsed and keeps sync beside its detail title and th
   await section.getByRole('button', { name: '展开年度销售计划' }).click();
   await expect(section.locator('table')).toBeVisible();
   await expect(section.getByRole('button', { name: '下载年度SKU模板', exact: true })).toBeVisible();
+});
+
+test('年度计算大页回退，全年预览和工作簿保留计算窗口外月份', async (t) => {
+  const june = { ...annual, stat_month: '2027-06', demand_qty: 987 };
+  const sql = 'annual-pool.calculation.detail';
+  const { page, frame, calls } = await mpsPage(
+    t,
+    config,
+    (query) => {
+      const { queryId, parameters } = query;
+      if (queryId === sql && parameters.page_size === 10000)
+        throw Error('GEA_SQL_RESULT_TOO_LARGE');
+      if (queryId === sql) return { ...fixture(query), rows: [annual] };
+      if (['annual-pool.count', 'annual.export.count'].includes(queryId))
+        return { ...fixture(query), rows: [{ total: 2 }] };
+      if (queryId === 'annual-pool.detail') return { ...fixture(query), rows: [annual, june] };
+      if (queryId === 'annual.export') {
+        const rows = [annual, june].map(({ stat_month, demand_qty }) => ({
+          ...Object.fromEntries(config.queries[queryId].columns.map((key) => [key, null])),
+          belong_base: '郑州',
+          material_code: '001',
+          sub_category: '汤圆',
+          stat_month,
+          demand_qty,
+        }));
+        rows[0].stat_month = '2026-10';
+        return {
+          rows,
+          returnedColumns: config.queries[queryId].columns,
+          configVersion: 'fixture-v1',
+        };
+      }
+      return fixture(query);
+    },
+    { time: '2026-11-15T12:00:00+08:00', optimizedPaging: true },
+  );
+  const section = frame.getByRole('region', { name: '年度销售计划', exact: true });
+  const exportButton = section.getByRole('button', { name: '下载年度SKU模板' });
+  await expect(exportButton).toBeEnabled();
+  assert.deepEqual(
+    calls
+      .filter(({ queryId }) => queryId === sql)
+      .map(({ parameters }) => [parameters.page_size, parameters.offset]),
+    [
+      [10000, 0],
+      [5000, 0],
+    ],
+  );
+  assert(!calls.some(({ queryId }) => queryId === 'annual-pool.detail'));
+  await section.getByRole('button', { name: '展开年度销售计划' }).click();
+  await expect(section.getByRole('columnheader', { name: '2027-06' })).toBeVisible();
+  await expect(section.getByText('987', { exact: true }).first()).toBeVisible();
+  const pending = page.waitForEvent('download');
+  await exportButton.click();
+  const book = XLSX.read(await readFile(await (await pending).path()));
+  for (const sheet of ['SKU明细', '大类汇总（仅SKU）']) {
+    const rows = XLSX.utils.sheet_to_json(book.Sheets[sheet]);
+    assert.equal(rows.find((row) => row['大类'] === '汤圆')['2027-06'], 987);
+  }
+  assert.equal(calls.filter(({ queryId }) => queryId === 'annual-pool.detail').length, 1);
 });
 
 test('annual explanations show rounded results without numeric substitution and preserve source decimals', async (t) => {

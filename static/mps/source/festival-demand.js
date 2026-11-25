@@ -7,7 +7,8 @@ const anchorId = (name, date) => JSON.stringify([name, date]);
 export const festivalOptionValue = (option) => anchorId(option.name, option.date);
 export function demandBasisLabel(festival, month) {
   if (!festival) return '自然月';
-  if (['loading', 'choose', 'failed'].includes(festival.status)) return '节日推算待就绪';
+  if (['loading', 'choose', 'failed', 'unavailable'].includes(festival.status))
+    return '节日推算待就绪';
   return festival.months.includes(month) ? festival.selected.name : '自然月';
 }
 
@@ -27,7 +28,7 @@ export function festivalDemandBasis(draft, calendarHistory) {
       history: [],
       festival: {
         ...preview,
-        status: 'failed',
+        status: 'unavailable',
         error: '节日来源仅有基地大类汇总，缺可追溯的基地SKU明细，无法确定产品范围归属',
       },
     };
