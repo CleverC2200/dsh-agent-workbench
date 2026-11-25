@@ -1,8 +1,9 @@
-import { call } from '../../../business/shared/channel.js';
-import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
+import { createMpsQueryClient } from './mps-read.js';
 import { sourceDecimal } from './source-money.js';
 import { productRows } from './source-projections.js';
 export { productRows };
+
+const productSnapshotPriority = 4;
 
 export const sourceNames = {
   products: '产品清单',
@@ -41,13 +42,7 @@ function client() {
   const config = JSON.parse(element.textContent);
   return {
     config,
-    query: createQueryClient(config, (_request, options) =>
-      call(
-        'sql',
-        { queryId: options.queryId, parameters: options.values },
-        { signal: options.signal },
-      ),
-    ),
+    query: createMpsQueryClient(config),
   };
 }
 const number = (value) => {
@@ -161,6 +156,7 @@ export async function resolveProductPeriod(targetMonth, signal) {
     {
       signal,
       requiredColumns: ['month'],
+      priority: productSnapshotPriority,
     },
   );
   if (result.rows.length !== 1) throw Error('产品清单采用月份须返回唯一汇总行');
@@ -184,12 +180,17 @@ export async function readProductSnapshot(period, signal) {
       keyFields: definition.grain,
       requiredColumns: definition.columns,
       maxRows: 10000,
+      priority: productSnapshotPriority,
     },
   );
   requireProductSnapshot(result, month, period.configVersion);
   period = productPeriod(period.targetMonth, month, result.configVersion);
-  let prices;
+  const raw = result.rows.filter((row) => row.responsible_item?.trim() !== '粽子');
+  return { rows: productRows(raw), raw, period, metadata: period };
+}
+export async function readProductPrices(signal) {
   try {
+    const { config, query } = client();
     const definition = config.queries['products.prices'];
     const source = await query.readAll(
       'products.prices',
@@ -199,9 +200,10 @@ export async function readProductSnapshot(period, signal) {
         keyFields: definition.grain,
         requiredColumns: definition.columns,
         maxRows: 100000,
+        priority: -1,
       },
     );
-    prices = {
+    return {
       status: 'ready',
       sourceTable: 'agents_scm_cust_jxc_ai_daliy_d',
       configVersion: source.configVersion,
@@ -212,31 +214,13 @@ export async function readProductSnapshot(period, signal) {
     };
   } catch (error) {
     if (signal?.aborted) throw error;
-    prices = {
+    return {
       status: 'failed',
       sourceTable: 'agents_scm_cust_jxc_ai_daliy_d',
       rows: [],
       error: error.message,
     };
   }
-  const raw = result.rows.filter((row) => row.responsible_item?.trim() !== '粽子');
-  return { rows: productRows(raw), raw, prices, period, metadata: period };
-}
-export async function readAnnual(signal) {
-  const { config, query } = client();
-  const id = 'annual-pool.detail';
-  const definition = config.queries[id];
-  const result = await query.readAll(
-    id,
-    { page_size: 5000, offset: 0 },
-    {
-      signal,
-      keyFields: definition.grain,
-      requiredColumns: definition.columns,
-      maxRows: 100000,
-    },
-  );
-  return annualRows(result.rows);
 }
 export async function readCapacityAnnual(months, signal) {
   const { config, query } = client();

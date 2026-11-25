@@ -8,10 +8,11 @@ import { ready } from '../../../business/shared/channel.js';
 import { createPlanRates } from './plan-rate-view.js';
 import { hasMpsSource } from './master-data.js';
 import { readFactMonth, readHistoryAnnual, readHistoryWindow } from './facts.js';
-import { readSourceTable } from './source-tables.js';
+import { hasSourceCalculation, readSourceTable } from './source-tables.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { sourceCheckRows, sourceProductMappings } from './source-projections.js';
 import { createGrowthAnomalyReport, growthSourceAnomalies } from './growth-anomaly-report.js';
+import { readFailureText } from './mps-read.js';
 
 const monthOffset = (month, offset) => {
   const date = new Date(month + '-01T00:00:00Z');
@@ -27,6 +28,29 @@ const cancelOnSourceReset = (cancel) => {
   };
 };
 const demandSourcePriority = 3;
+const shareInputs = [
+  'id',
+  'name',
+  'month',
+  'pull',
+  'products',
+  'productsRead',
+  'productsError',
+  'productSource',
+  'productRaw',
+  'report',
+  'reportRead',
+  'reportSource',
+  'reportError',
+  'planRates',
+  'planRatesRead',
+  'planRatesSource',
+  'planRatesError',
+  'historyAnnual',
+  'historyAnnualRead',
+  'historyAnnualSource',
+  'historyAnnualError',
+];
 const historyReadState = (month, entries) => ({
   status: entries.some((entry) => entry.error)
     ? 'failed'
@@ -59,12 +83,18 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
     draft,
     update,
     relations,
+    categorySources,
+    readAnnualPool,
     active,
     contextActive = active,
+    onProgress,
+    retry = 0,
     selectedCategories = [],
   }) {
-    const calculated = react.useMemo(() => buildCategoryDemand(draft), [draft]);
-    const categorySources = react.useMemo(() => categorySourceInputs(draft), [draft]);
+    const calculated = react.useMemo(
+      () => buildCategoryDemand(draft, undefined, undefined, categorySources),
+      [draft, categorySources],
+    );
     const endMonth = calculated.endMonth;
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = react.useState(0);
@@ -73,6 +103,10 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
     const [dimension, setDimension] = react.useState('基地+大类');
     const [base, setBase] = react.useState('');
     const controller = react.useRef(null);
+    const appliedRetry = react.useRef(retry);
+    const exportController = react.useRef(null);
+    const [sourceExport, setSourceExport] = react.useState(null);
+    react.useEffect(() => cancelOnSourceReset(() => exportController.current?.abort()), []);
     const [historyReadAttempt, retryHistoryDetails] = react.useReducer((attempt) => attempt + 1, 0);
     const recentDemandRead = draft.sourceChecksRead;
     const recentDemandSettled =
@@ -98,13 +132,17 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       }
       return cancelOnSourceReset(() => controller.current?.abort());
     }, [active]);
-    const load = async () => {
+    const load = async (refresh = false, retryFailed = false) => {
       controller.current?.abort();
       const stop = new AbortController();
       controller.current = stop;
+      const previous = retryFailed && state?.month === draft.month ? draft[type] : null;
+      const progressTotal = kind === 'parameters' ? 4 : calculated.recent.length * 2;
+      let progressDone = 0;
+      onProgress?.({ total: progressTotal, done: progressDone });
       update({
         [type + 'Read']: { status: 'loading', month: draft.month },
-        ...(kind === 'parameters'
+        ...(kind === 'parameters' && !previous
           ? {
               historyAnnualRead: { status: 'loading', month: draft.month },
               historyWindowRead: { status: 'loading', month: draft.month },
@@ -116,10 +154,24 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           return await operation();
         } catch (error) {
           if (stop.signal.aborted) throw error;
-          return { rows: [], error: error.message };
+          return { rows: [], error: readFailureText(error) };
         }
       };
-      if (kind === 'parameters') {
+      const readPart = async (label, operation, cached) => {
+        const result = cached && !cached.error ? cached : await read(operation);
+        if (!stop.signal.aborted) {
+          const suffix = result.error
+            ? '读取失败'
+            : result.rows.length.toLocaleString('zh-CN') + ' 条';
+          onProgress?.({
+            total: progressTotal,
+            done: ++progressDone,
+            last: `${label} · ${suffix}`,
+          });
+        }
+        return result;
+      };
+      if (kind === 'parameters' && !previous) {
         retryHistoryDetails();
         void read(() => readHistoryAnnual(draft.month, stop.signal))
           .then((annual) => {
@@ -133,41 +185,60 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           .catch((error) => {
             if (!stop.signal.aborted)
               update({
-                historyAnnualRead: { status: 'failed', month: draft.month, error: error.message },
+                historyAnnualRead: {
+                  status: 'failed',
+                  month: draft.month,
+                  error: readFailureText(error),
+                },
               });
           });
       }
       const readHistoryPeriod = async (year) => {
+        stop.signal.throwIfAborted();
         const month = monthOffset(draft.month, -12 * year);
         const requestedMonths =
           year === 4 ? historyComparisonMonths(month) : categoryHistoryMonths(month);
         return {
           month,
           metadata: { requestedMonths },
-          ...(await read(() =>
-            readSourceTable('category-history', month, stop.signal, requestedMonths),
+          ...(await readPart(
+            `${month} 历史窗口`,
+            () => readSourceTable('category-history', month, stop.signal, requestedMonths),
+            previous?.periods?.find((entry) => entry.month === month),
           )),
         };
       };
+      const readHistoryIndicators = async () => {
+        const [periods, annual] = await Promise.all([
+          Promise.all([1, 2, 3, 4].map(readHistoryPeriod)),
+          previous?.annual && !previous.annual.error
+            ? previous.annual
+            : read(() => readAnnualPool(refresh)),
+        ]);
+        return { periods, annual };
+      };
       try {
-        const historyPeriods =
-          kind === 'parameters' ? await Promise.all([1, 2, 3].map(readHistoryPeriod)) : null;
-        if (historyPeriods) historyPeriods.push(await readHistoryPeriod(4));
         const result =
           kind === 'parameters'
-            ? {
-                periods: historyPeriods,
-                annual: await read(() => readSourceTable('annual-pool', draft.month, stop.signal)),
-              }
+            ? await readHistoryIndicators()
             : {
                 periods: await Promise.all(
                   calculated.recent.map(async (month) => {
+                    const cached = previous?.periods?.find((entry) => entry.month === month);
                     const [history, report] = await Promise.all([
-                      read(() =>
-                        readFactMonth('history', month, stop.signal, demandSourcePriority),
+                      readPart(
+                        `${month} 实绩`,
+                        () =>
+                          readFactMonth('history', month, stop.signal, demandSourcePriority, {
+                            largerPages: true,
+                          }),
+                        cached?.history,
                       ),
-                      read(() =>
-                        readFactMonth('plan-quantity', month, stop.signal, demandSourcePriority),
+                      readPart(
+                        `${month} 计划量`,
+                        () =>
+                          readFactMonth('plan-quantity', month, stop.signal, demandSourcePriority),
+                        cached?.report,
                       ),
                     ]);
                     return { month, history, report };
@@ -194,7 +265,11 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       } catch (error) {
         if (!stop.signal.aborted)
           update({
-            [type + 'Read']: { status: 'failed', month: draft.month, error: error.message },
+            [type + 'Read']: {
+              status: 'failed',
+              month: draft.month,
+              error: readFailureText(error),
+            },
           });
       }
     };
@@ -202,13 +277,17 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       let current = true;
       if (active && hasMpsSource())
         ready.then(() => {
-          if (current) void load();
+          if (current) {
+            const retryFailed = appliedRetry.current !== retry;
+            appliedRetry.current = retry;
+            void load(false, retryFailed);
+          }
         });
       return () => {
         current = false;
         controller.current?.abort();
       };
-    }, [active, draft.month]);
+    }, [active, draft.month, retry]);
     react.useEffect(() => {
       if (!active || kind !== 'parameters' || !historyReadAttempt || !recentDemandSettled) return;
       const stop = new AbortController();
@@ -229,11 +308,17 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         });
       return cancelOnSourceReset(() => stop.abort());
     }, [active, kind, draft.month, historyReadAttempt, recentDemandSettled]);
-    const readParameterWorkflow = react.useMemo(() => {
-      let result;
-      return () => (result ??= buildMpsWorkflow(draft, relations, null));
-    }, [draft, relations]);
-    const workflow = kind === 'parameters' && contextActive ? readParameterWorkflow() : null;
+    const workflow = react.useMemo(
+      () =>
+        kind === 'parameters' && contextActive
+          ? buildMpsWorkflow(
+              Object.fromEntries(shareInputs.map((field) => [field, draft[field]])),
+              relations,
+              null,
+            )
+          : null,
+      [kind, contextActive, relations, ...shareInputs.map((field) => draft[field])],
+    );
     const shares =
       workflow?.rows.filter(
         (row) =>
@@ -339,9 +424,10 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               undefined,
               (row) =>
                 (!dimension || row['维度类型'] === dimension) && (!base || row['基地'] === base),
+              categorySources,
             )
           : calculated,
-      [draft, calculated, dimension, base],
+      [draft, calculated, dimension, base, categorySources],
     );
     const comparisonColumns = [
       '大类',
@@ -840,45 +926,91 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             ),
           ),
       );
-    const sourceRows = categorySources.sourceRows.filter((row) =>
-      matchesCategories(row['大类'], selectedCategories),
+    const hasSourceRows = [...categorySources.sourceCategories].some((category) =>
+      matchesCategories(category, selectedCategories),
     );
+    const exportSourceDetails = async () => {
+      const stop = new AbortController();
+      exportController.current = stop;
+      setSourceExport({ loading: true });
+      try {
+        const { periods, annual } = draft.historicalIndicators;
+        const [fullPeriods, fullAnnual] = await Promise.all([
+          Promise.all(
+            periods.map(async (entry) =>
+              entry.metadata?.projection === 'calculation' ||
+              (entry.error && hasSourceCalculation('category-history'))
+                ? {
+                    month: entry.month,
+                    ...(await readSourceTable(
+                      'category-history',
+                      entry.month,
+                      stop.signal,
+                      entry.metadata?.requestedMonths,
+                      -1,
+                      { full: true },
+                    )),
+                  }
+                : entry,
+            ),
+          ),
+          annual.metadata?.projection === 'calculation' ||
+          (annual.error && hasSourceCalculation('annual-pool'))
+            ? readAnnualPool(false, { full: true })
+            : annual,
+        ]);
+        stop.signal.throwIfAborted();
+        const rows = categorySourceInputs({
+          ...draft,
+          historicalIndicators: { periods: fullPeriods, annual: fullAnnual },
+        })
+          .readSourceRows()
+          .filter((row) => matchesCategories(row['大类'], selectedCategories));
+        downloadCsv(
+          `${draft.month}-大类池内源明细.csv`,
+          [
+            '来源',
+            '月份',
+            '基地',
+            '产品编码',
+            '大类',
+            '数量',
+            '原始来源数量',
+            '财年',
+            '原始全国SKU财年量',
+            '基地SKU财年量',
+            '财年源月份数',
+            '财年有效月份数',
+            '池内大类财年量',
+            '财年缺失或冲突月份',
+            '财年核对异常',
+            '上年同期发货数量',
+            '上月发货数量',
+            '取数依据',
+            '缺项原因',
+          ],
+          rows,
+        );
+        setSourceExport(null);
+      } catch (error) {
+        if (!stop.signal.aborted) {
+          stop.abort();
+          setSourceExport({ error: error.message });
+        }
+      }
+    };
     return h(
       react.Fragment,
       {},
       h(
         'button',
         {
-          disabled: !current || !sourceRows.length,
-          onClick: () =>
-            downloadCsv(
-              `${draft.month}-大类池内源明细.csv`,
-              [
-                '来源',
-                '月份',
-                '基地',
-                '产品编码',
-                '大类',
-                '数量',
-                '原始来源数量',
-                '财年',
-                '原始全国SKU财年量',
-                '基地SKU财年量',
-                '财年源月份数',
-                '财年有效月份数',
-                '池内大类财年量',
-                '财年缺失或冲突月份',
-                '财年核对异常',
-                '上年同期发货数量',
-                '上月发货数量',
-                '取数依据',
-                '缺项原因',
-              ],
-              sourceRows,
-            ),
+          disabled: !current || !hasSourceRows || sourceExport?.loading,
+          onClick: exportSourceDetails,
         },
-        '下载大类池内源明细',
+        sourceExport?.loading ? '正在导出大类池内源明细…' : '下载大类池内源明细',
       ),
+      sourceExport?.error && h('p', { role: 'alert' }, sourceExport.error),
       h(
         'div',
         { className: 'dc-parameter-grid', role: 'region', 'aria-label': '系统派生口径参数' },
@@ -940,7 +1072,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   'button',
                   {
                     disabled: !active || !hasMpsSource() || busy,
-                    onClick: load,
+                    onClick: () => load(true),
                     'aria-label': `读取${name}源值`,
                   },
                   busy ? '读取中…' : index < 3 ? '同步历史源值' : '同步全年历史占比',

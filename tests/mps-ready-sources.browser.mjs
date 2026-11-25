@@ -178,6 +178,58 @@ async function version(frame, month = '2026-10') {
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
 }
 
+for (const saveData of [false, true]) {
+  test(`目标库存只在主要数据读齐后低优先级预加载，节流模式为 ${saveData}`, async (t) => {
+    const history = Promise.withResolvers();
+    t.after(() => history.resolve());
+    const { frame, calls } = await mpsPage(
+      t,
+      config,
+      async (query) => {
+        if (query.queryId === 'category-history.detail') await history.promise;
+        return (
+          shipmentSourceResponse(
+            config,
+            query,
+            ['A', 'B'].map((material_code) => shipmentSourceRow({ material_code, shipped: 160 })),
+            query.parameters.month === '2026-10-01' ? '2026-10-31' : '2026-11-14',
+          ) ?? fixture(query)
+        );
+      },
+      {
+        time: '2026-11-15T12:00:00+08:00',
+        beforeOpen: (page) =>
+          page.addInitScript((saveData) => {
+            Object.defineProperties(navigator, {
+              hardwareConcurrency: { value: 8 },
+              deviceMemory: { value: 8 },
+              connection: { value: { saveData, effectiveType: '4g', rtt: 40, downlink: 20 } },
+            });
+          }, saveData),
+      },
+    );
+    const attempts = () =>
+      calls.filter((call) => call.queryId === 'inventory-targets.count').length;
+    const progress = frame.getByRole('region', { name: '数据加载进度' });
+    await expect(progress.getByRole('progressbar')).toBeVisible();
+    await expect
+      .poll(() => calls.some((call) => call.queryId === 'category-history.detail'))
+      .toBe(true);
+    assert.equal(attempts(), 0);
+    history.resolve();
+    await expect(progress.getByRole('status').filter({ hasText: '主要数据已核对' })).toBeVisible();
+    if (!saveData) await expect.poll(attempts).toBe(2);
+    else {
+      await frame
+        .locator('body')
+        .evaluate(() => new Promise((resolve) => requestIdleCallback(resolve)));
+      assert.equal(attempts(), 0);
+    }
+    await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+    await expect.poll(attempts).toBe(2);
+  });
+}
+
 test('product replacement fields retain source columns and explain combined history without base names', async (t) => {
   const { frame } = await mpsPage(t, config, (query) => {
     const result = fixture(query);
@@ -573,9 +625,14 @@ test('failed source-check refresh retracts old comparisons instead of leaving an
   await expect(row.locator('td').nth(3)).toHaveText('-');
 });
 
-test('历史窗口读取失败仍保留其他窗口已取到的月份，同一源月份只算一次', async (t) => {
-  const { frame } = await mpsPage(t, config, (query) => {
-    if (query.queryId.startsWith('category-history.') && query.parameters.months.includes('202310'))
+test('历史窗口读取失败时保留已读窗口，页首重试只重读失败窗口', async (t) => {
+  let unavailable = true;
+  const { frame, calls } = await mpsPage(t, config, (query) => {
+    if (
+      unavailable &&
+      query.queryId.startsWith('category-history.') &&
+      query.parameters.months.includes('202310')
+    )
       throw Error('HISTORICAL_YEAR_UNAVAILABLE');
     return fixture(query);
   });
@@ -592,6 +649,17 @@ test('历史窗口读取失败仍保留其他窗口已取到的月份，同一�
   await expect(dialog).toContainText('2025-10');
   await expect(dialog).toContainText('共24条');
   await expect(dialog).toContainText('2025（1年）');
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  const readAfter = calls.length;
+  unavailable = false;
+  await frame.getByRole('button', { name: '重试大类历史', exact: true }).click();
+  await expect(card).toContainText(/\d+ \/ \d+ 项可计算/);
+  await expect(card).not.toContainText('部分原值已读取');
+  const historyRequests = calls
+    .slice(readAfter)
+    .filter(({ queryId }) => queryId.startsWith('category-history.'));
+  assert(historyRequests.length > 0);
+  assert(historyRequests.every(({ parameters }) => parameters.months.includes('202310')));
 });
 
 test('大类测算展示同环比异常及替代值，基地发货源异常仅随指标下载', async (t) => {
@@ -1252,16 +1320,25 @@ test('历史占比读取上一完整财年，预览列出当前物料组和全�
   await expect(dialog.getByRole('columnheader', { name: '未对应原因', exact: true })).toBeVisible();
 });
 
-test('三年指标请求未结束时，上一财年占比仍可独立完成读取', async (t) => {
+test('较长历史窗口未结束时，比较窗已经发出，上一财年占比仍可独立完成读取', async (t) => {
   let release;
   const blocked = new Promise((resolve) => {
     release = resolve;
   });
-  const { frame } = await mpsPage(t, config, async (query) => {
-    if (query.queryId.startsWith('category-history.')) await blocked;
+  const { frame, calls } = await mpsPage(t, config, async (query) => {
+    if (query.queryId.startsWith('category-history.') && query.parameters.months.length > 8)
+      await blocked;
     return fixture(query);
   });
   try {
+    await expect
+      .poll(() =>
+        calls.some(
+          ({ queryId, parameters }) =>
+            queryId === 'category-history.count' && parameters.months.length === 8,
+        ),
+      )
+      .toBe(true);
     const card = frame
       .locator('section.dc-parameter')
       .filter({ has: frame.getByRole('heading', { name: '去年发运占比', exact: true }) });
