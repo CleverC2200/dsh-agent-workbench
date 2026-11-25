@@ -899,7 +899,11 @@ export function createProcessedDemand(
       },
       h(
         'table',
-        { className: 'wf-processed-table', 'aria-label': '加工后的需求明细' },
+        {
+          className: 'wf-processed-table',
+          'aria-label': '加工后的需求明细',
+          style: { minWidth: `${230 + (detailColumns.length - 1) * 128}px` },
+        },
         h(
           'thead',
           null,
