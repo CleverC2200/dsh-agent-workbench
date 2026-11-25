@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
+import {
+  openMpsProductDetails,
+  mpsPageWithExactProductPeriod as mpsPage,
+} from './helpers/mps-page.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 
@@ -155,6 +158,16 @@ async function checkScrolledTable(table, frame) {
       scrollLeft: wrapper.scrollLeft,
       horizontalOverflow: wrapper.scrollWidth > wrapper.clientWidth,
       headers: [...element.tHead.rows].map((row) => box(row)),
+      alignedColumns: [...element.tHead.rows[element.tHead.rows.length - 1].cells].map(
+        (cell, index, headers) => ({
+          header: box(cell),
+          body: box(
+            element.tBodies[0].rows[0].cells[
+              element.tBodies[0].rows[0].cells.length - headers.length + index
+            ],
+          ),
+        }),
+      ),
     };
   });
   assert.ok(geometry.scrollTop > 100, '长表必须实际发生纵向滚动');
@@ -165,6 +178,12 @@ async function checkScrolledTable(table, frame) {
       geometry.headers[index].top >= geometry.headers[index - 1].bottom - 2,
       '双层表头不互相覆盖',
     );
+  for (const { header, body } of geometry.alignedColumns) {
+    assert.ok(
+      Math.abs(header.left - body.left) < 3 && Math.abs(header.right - body.right) < 3,
+      '横向滚动后表头与对应数据列对齐',
+    );
+  }
   const board = frame.locator('.ap-board-body');
   const before = await board.evaluate((element) => element.scrollTop);
   await board.evaluate((element) => {
@@ -278,12 +297,12 @@ test('第7步点击大类展开全部物料组和超过一页的SKU，旁支独�
   const table = frame.getByRole('table', { name: '求解单品明细', exact: true });
   const category = table.getByRole('button', { name: '产销存 大类 · 汤圆', exact: true });
   await category.press('Enter');
-  await expect(table.getByRole('cell', { name: 'P60', exact: true })).toHaveCount(1);
-  await expect(table.getByRole('cell', { name: 'P61', exact: true })).toHaveCount(0);
+  await expect(table.getByText('P60', { exact: true })).toHaveCount(1);
+  await expect(table.getByText('P61', { exact: true })).toHaveCount(0);
   const group = table.getByRole('button', { name: '产销存 汤圆 物料组 · G2', exact: true });
   await group.press('Enter');
-  await expect(table.getByRole('cell', { name: 'P60', exact: true })).toHaveCount(0);
-  await expect(table.getByRole('cell', { name: 'P01', exact: true })).toHaveCount(1);
+  await expect(table.getByText('P60', { exact: true })).toHaveCount(0);
+  await expect(table.getByText('P01', { exact: true })).toHaveCount(1);
   await group.press('Enter');
   for (const width of [1200, 600]) {
     await page.evaluate((width) => {
@@ -292,8 +311,8 @@ test('第7步点击大类展开全部物料组和超过一页的SKU，旁支独�
     await checkScrolledTable(table, frame);
   }
   await frame.getByLabel('单品明细大类', { exact: true }).selectOption('水饺');
-  await expect(table.getByRole('cell', { name: 'P61', exact: true })).toHaveCount(1);
-  await expect(table.getByRole('cell', { name: 'P01', exact: true })).toHaveCount(0);
+  await expect(table.getByText('P61', { exact: true })).toHaveCount(1);
+  await expect(table.getByText('P01', { exact: true })).toHaveCount(0);
 });
 
 test('第3步正常和窄窗滚动后表头与首列保持可辨', async (t) => {
@@ -320,4 +339,204 @@ test('第3步正常和窄窗滚动后表头与首列保持可辨', async (t) => 
       });
     assert.ok(readable, '数量列仍有独立的可见区域');
   }
+});
+
+test('七步按业务层级排序，SKU编码顺序独立于同版标签优先级', async (t) => {
+  const source = [
+    ['遂平', '003', '汤圆', 'G2', '常规', '普通'],
+    ['华南', '002', '水饺', 'G1', '下市品', '定制'],
+    ['华东', '002', '水饺', 'G1', '新品', '定制'],
+    ['西南', '001', '水饺', 'G1', '常规', '定制'],
+    ['郑州', '004', '水饺', 'G2', '常规', '普通'],
+  ];
+  const { frame } = await mpsPage(
+    t,
+    config,
+    ({ queryId, parameters }) => {
+      const raw = source.map(([base, code, category, group, tag, name]) => ({
+        ...Object.fromEntries(
+          config.queries['products.detail'].columns.map((column) => [column, null]),
+        ),
+        stat_period: parameters.month,
+        target_base: base,
+        material_code: code,
+        material_name: name,
+        responsible_item: category,
+        product_item: group,
+        product_item_name: group,
+        series: '系列',
+        transfer_tag: tag,
+        source_rows: 1,
+      }));
+      const rows = queryId.startsWith('products.') ? raw : [];
+      return {
+        rows: queryId.endsWith('.count') ? [{ total: rows.length }] : rows,
+        returnedColumns: config.queries[queryId].columns,
+        configVersion: 'business-table-fixture',
+        totalRowCount: rows.length,
+        offset: 0,
+        hasMorePages: false,
+      };
+    },
+    { time: '2026-11-15T12:00:00+08:00' },
+  );
+  const stickyHead = async (table) => {
+    await expect(table).toBeVisible();
+    assert.equal(
+      await table.locator('thead').evaluate((element) => getComputedStyle(element).position),
+      'sticky',
+    );
+  };
+  const products = await openMpsProductDetails(frame);
+  await expect(products.getByRole('table').locator('tbody tr')).toHaveCount(5);
+  await expect(products.locator('.mps-sku-tag')).toHaveText([
+    '常规',
+    '定制',
+    '新品',
+    '下市',
+    '常规',
+  ]);
+  await stickyHead(products.getByRole('table'));
+  const month = (
+    await frame.getByLabel('评估版本选择').locator('option:checked').textContent()
+  ).match(/\d{4}-\d{2}/)[0];
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: '业务排序.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n' +
+        source
+          .map(([base, code, category, group, , name]) =>
+            [month, base, code, name, category, '系列', group, 10, 10].join(','),
+          )
+          .join('\n'),
+    ),
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const table = frame.getByRole('table', { name: '加工后的需求明细', exact: true });
+  await frame.getByLabel('需求层级视角', { exact: true }).selectOption('base');
+  assert.deepEqual(
+    await table
+      .locator('.wf-demand-level-0 th .wf-demand-toggle')
+      .allTextContents()
+      .then((rows) => rows.map((row) => row.match(/基地 · (\S+)/)[1])),
+    ['郑州', '西南', '华东', '华南', '遂平'],
+  );
+  await frame.getByLabel('需求层级视角', { exact: true }).selectOption('national');
+  const categories = table.locator('.wf-demand-level-0 button');
+  await expect(categories).toHaveText(['大类 · 水饺', '大类 · 汤圆']);
+  await categories.first().click();
+  await expect(table.locator('.wf-demand-level-1 button')).toHaveText([
+    '物料组 · G1 G1',
+    '物料组 · G2 G2',
+  ]);
+  await expect(table.locator('.mps-sku-tag')).toHaveText(['定制', '新品', '常规']);
+  await frame.getByLabel('基地筛选', { exact: true }).selectOption('华南');
+  await expect(table.locator('.mps-sku-tag')).toHaveText(['下市']);
+
+  await stickyHead(table);
+  await frame.getByLabel('基地筛选', { exact: true }).selectOption('');
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  const shipmentMonth = new Date(`${month}-01T00:00:00Z`);
+  shipmentMonth.setUTCMonth(shipmentMonth.getUTCMonth() - 1);
+  const shipmentPeriod = shipmentMonth.toISOString().slice(0, 7);
+  await frame.getByLabel('数据截止日').fill(`${shipmentPeriod}-22`);
+  await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
+    name: '排序发货.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库,近30天日均发货\n' +
+        source
+          .map(([base, code, category, group, , name]) =>
+            [
+              shipmentPeriod,
+              base,
+              code,
+              name,
+              category,
+              '系列',
+              group,
+              10,
+              0,
+              0,
+              1,
+              10,
+              0,
+              0,
+              1,
+            ].join(','),
+          )
+          .join('\n'),
+    ),
+  });
+  const shipment = frame.getByRole('table', { name: '本月预估发货明细', exact: true });
+  await expect(shipment.locator('.sp-base .sp-hierarchy-name')).toHaveText([
+    '郑州',
+    '西南',
+    '华东',
+    '华南',
+    '遂平',
+  ]);
+  await shipment.getByRole('button', { name: '展开 全国合计', exact: true }).click();
+  await expect(shipment.locator('.sp-level-1 .sp-hierarchy-name')).toHaveText(['水饺', '汤圆']);
+  await shipment.getByRole('button', { name: '展开 全国合计 水饺', exact: true }).click();
+  await expect(shipment.locator('.sp-sku .mps-sku-tag')).toHaveText(['定制', '新品', '常规']);
+  await stickyHead(shipment);
+  await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
+  const relations = frame.locator('.mps-relations-table');
+  await expect(relations.locator('.mps-sku-tag')).toHaveText([
+    '常规',
+    '定制',
+    '新品',
+    '下市',
+    '常规',
+  ]);
+  await stickyHead(relations);
+  await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  await frame.getByText('高级配置：生产日历、件吨系数与资源分配', { exact: true }).click();
+  const days = frame.getByRole('table', { name: '可用生产天数', exact: true });
+  await expect(days.locator('tbody tr td:first-child')).toHaveText([
+    '郑州',
+    '郑州',
+    '郑州',
+    '西南',
+    '西南',
+    '西南',
+    '华东',
+    '华东',
+    '华东',
+    '华南',
+    '华南',
+    '华南',
+    '遂平',
+    '遂平',
+    '遂平',
+  ]);
+  await expect(
+    frame.getByRole('table', { name: '既有库存变动确认', exact: true }).locator('.mps-sku-tag'),
+  ).toHaveCount(15);
+  await stickyHead(days);
+  await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
+  await frame.getByRole('button', { name: '执行评估', exact: true }).click();
+  await expect(frame.getByRole('status').filter({ hasText: '单品月份' })).toContainText(
+    '满足排产条件',
+  );
+  const capacity = frame.getByRole('table', { name: '基地需求与月总产能', exact: true });
+  await expect(capacity.locator('tbody tr td:first-child')).toHaveText([
+    '郑州',
+    '西南',
+    '华东',
+    '华南',
+    '遂平',
+    '全国',
+  ]);
+  await stickyHead(capacity);
+  await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  await frame.getByRole('button', { name: `展开全国 ${month}`, exact: true }).click();
+  const report = frame.getByRole('table', { name: '求解单品明细', exact: true });
+  await expect(report.locator('tbody tr td:first-child')).toHaveText(['大类', '大类']);
+  await expect(report.getByRole('button', { name: /^产销存 大类/ })).toHaveText(['水饺', '汤圆']);
+  await report.getByRole('button', { name: '产销存 大类 · 水饺', exact: true }).click();
+  await expect(report.locator('.mps-sku-tag')).toHaveText(['定制', '新品', '常规']);
+  await stickyHead(report);
 });

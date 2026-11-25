@@ -1,4 +1,10 @@
 import {
+  businessBases,
+  compareBusinessRows,
+  compareBusinessValues,
+  createTablePresentation,
+} from './table-presentation.js';
+import {
   applyShipmentCoefficient,
   deriveShipmentCoefficient,
   deriveShipmentForecast as derive,
@@ -24,7 +30,7 @@ import { mpsBusinessDate } from './business-date.js';
 import { canonicalBaseName } from './relations.js';
 const emptyRows = [];
 const calculationShipmentPriority = 4;
-const bases = ['西南', '郑州', '遂平', '华东', '华南'];
+const bases = businessBases;
 const fields = [
   'shipped',
   'prepped',
@@ -1412,7 +1418,11 @@ export function createShipment(
       h(
         react.Fragment,
         {},
-        h('span', { className: 'sp-code' }, row.code),
+        h(
+          'span',
+          { className: 'sp-code' },
+          h(createTablePresentation(react).Code, { row, participants: row.children }),
+        ),
         h(
           'span',
           {
@@ -1447,7 +1457,9 @@ export function createShipment(
           if (!partition.has(name)) partition.set(name, []);
           partition.get(name).push(row);
         }
-        for (const [value, children] of partition) {
+        for (const [value, children] of [...partition].sort(([left], [right]) =>
+          compareBusinessValues(dimension, left, right),
+        )) {
           const name = dimension === 'group' ? groupLabel(value, children) : value;
           const nextPath = [...path, name];
           const who = [scope, ...nextPath].join(' ');
@@ -1503,7 +1515,7 @@ export function createShipment(
               readOnly: true,
             }))
           : parent.children;
-      const children = skus.filter(matchesSku);
+      const children = skus.filter(matchesSku).sort(compareBusinessRows);
       if (showAll) {
         levels[2].push(...children.map((row) => ({ ...row, base: scope, level: 'SKU' })));
         return;
