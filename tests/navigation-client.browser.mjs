@@ -263,7 +263,8 @@ test(
       write: false,
       platform: 'browser',
     });
-    let polls = 0;
+    let polls = 0,
+      controlReady = false;
     const server = createServer((req, res) => {
       if (req.url === '/app.js') {
         res.setHeader('Content-Type', 'text/javascript');
@@ -273,7 +274,7 @@ test(
       if (req.url?.endsWith('/poll')) {
         polls++;
         res.setHeader('Content-Type', 'application/json');
-        if (polls === 1) {
+        if (!controlReady) {
           res.statusCode = 503;
           res.end('{}');
         } else res.end(JSON.stringify({ ok: true, value: { state: 'idle' } }));
@@ -293,6 +294,7 @@ test(
     });
     t.after(() => browser.close());
     const page = await browser.newPage();
+    await page.clock.install();
     await page.addInitScript(() => {
       window.alerts = [];
       new MutationObserver(() => {
@@ -307,6 +309,10 @@ test(
     await page.goto('http://127.0.0.1:' + server.address().port);
     await expect.poll(() => polls).toBe(1);
     await expect(page.getByRole('alert')).toHaveCount(0);
+    await page.clock.runFor(6500);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    controlReady = true;
+    await page.clock.runFor(1500);
     await expect.poll(() => polls).toBeGreaterThanOrEqual(2);
     await expect(page.getByRole('alert')).toHaveCount(0);
     assert.equal(await page.evaluate(() => window.opens || 0), 0);

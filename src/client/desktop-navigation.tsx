@@ -26,6 +26,10 @@ export type NavigationView = z.infer<typeof navigationView>;
 type NavigationStage = z.infer<typeof navigationStage>;
 type NavigationObservation = { deadline: number; ended: boolean };
 
+export function createNavigationObservation(): NavigationObservation {
+  return { deadline: Date.now() + 20_000, ended: false };
+}
+
 export type ReadyNavigation = Extract<NavigationView, { state: 'ready' }>;
 export type PageNavigation = ReadyNavigation & {
   visible(): void;
@@ -153,7 +157,7 @@ export function DesktopNavigation({
   observation?: NavigationObservation;
 }) {
   const observed = useSyncExternalStore(identity.subscribe, identity.getSnapshot);
-  const lifetime = useRef({ deadline: Date.now() + 5000, ended: false });
+  const lifetime = useRef(createNavigationObservation());
   const startup = observation ?? lifetime.current;
   const [view, setView] = useState<NavigationView>({ state: 'idle' });
   const active = useRef<{
@@ -279,6 +283,7 @@ export function DesktopNavigation({
     };
     const poll = async () => {
       try {
+        if (observed.pagesReady === false && !startup.ended) return;
         consume(await request('poll', {}, controller.signal));
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -328,6 +333,7 @@ export function DesktopNavigation({
     open,
     revision,
     observed.state,
+    observed.pagesReady,
     observed.scope,
     observed.subject,
     observed.error,
@@ -382,12 +388,12 @@ export function DesktopNavigation({
       ? 'navigationLogin'
       : view.state === 'ready'
         ? 'navigationOpening'
-        : view.state === 'error' && !view.receipt
-          ? 'navigationServiceUnavailable'
-          : /EXPIRED|REVOKED/.test(code)
-            ? 'navigationExpired'
-            : /FORBIDDEN/.test(code)
-              ? 'navigationForbidden'
+        : /EXPIRED|REVOKED/.test(code)
+          ? 'navigationExpired'
+          : /FORBIDDEN/.test(code)
+            ? 'navigationForbidden'
+            : view.state === 'error' && !view.receipt
+              ? 'navigationServiceUnavailable'
               : /UNSUPPORTED|UNAVAILABLE|INCOMPLETE/.test(code)
                 ? 'navigationUnavailable'
                 : 'navigationFailed';

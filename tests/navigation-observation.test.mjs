@@ -99,6 +99,39 @@ const tick = (t, ms) =>
     t.mock.timers.tick(ms);
   });
 
+test('navigation waits for page capabilities during slow startup then opens the pending message', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  let polls = 0,
+    opens = 0,
+    finished = 0;
+  const ui = await mount(
+    t,
+    async (path) => {
+      if (path.endsWith('/finish')) {
+        finished++;
+        return idle();
+      }
+      polls++;
+      return Response.json({
+        ok: true,
+        value: { state: 'ready', receipt: 'receipt-startup', panel: 'gea-inbox' },
+      });
+    },
+    { ...confirmed, pagesReady: false },
+    async () => {
+      opens++;
+    },
+  );
+  await tick(t, 6500);
+  assert.equal(polls, 0);
+  assert.equal(opens, 0);
+  assert.equal(document.querySelector('[role="alert"]'), null);
+  await ui.update({ ...confirmed, pagesReady: true });
+  assert.equal(opens, 1);
+  assert.equal(finished, 1);
+  assert.equal(document.querySelector('[role="alert"]'), null);
+});
+
 test('navigation waits for the shared initial identity and does not duplicate its observation errors', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
   const reader = createBusinessIdentityReader();
@@ -155,7 +188,7 @@ test('navigation waits for the shared initial identity and does not duplicate it
   assert.equal(polls, 1, 'identity observation failure pauses navigation without its own error');
 });
 
-test('navigation startup budget expires at five seconds and valid recovery ends it permanently', async (t) => {
+test('navigation startup observation stays bounded and valid recovery ends it permanently', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
   let mode = 'offline',
     opens = 0;
@@ -168,7 +201,7 @@ test('navigation startup budget expires at five seconds and valid recovery ends 
     },
   );
   assert.equal(document.querySelector('[role="alert"]'), null);
-  await tick(t, 4999);
+  await tick(t, 19999);
   assert.equal(document.querySelector('[role="alert"]'), null);
   await tick(t, 1);
   assert.match(document.querySelector('[role="alert"]').textContent, /消息服务暂不可用/);
@@ -183,6 +216,58 @@ test('navigation startup budget expires at five seconds and valid recovery ends 
   await tick(t, 1500);
   assert.match(document.querySelector('[role="alert"]').textContent, /消息服务暂不可用/);
   assert.equal(opens, 0);
+});
+
+test('slow message control recovery passes the old startup window without an error flash', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  let recovering = true;
+  await mount(
+    t,
+    async () =>
+      recovering
+        ? Response.json({
+            ok: true,
+            value: { state: 'error', code: 'NAVIGATION_CONTROL_UNAVAILABLE', stage: 'poll' },
+          })
+        : idle(),
+    { ...confirmed, pagesReady: true },
+  );
+  await tick(t, 6500);
+  assert.equal(document.querySelector('[role="alert"]'), null);
+  recovering = false;
+  await tick(t, 1500);
+  assert.equal(document.querySelector('[role="alert"]'), null);
+  await tick(t, 12000);
+  assert.equal(document.querySelector('[role="alert"]'), null);
+});
+
+test('page readiness cannot suppress a persistent navigation failure indefinitely and manual retry stays immediate', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  let requests = 0,
+    recovered = false;
+  await mount(
+    t,
+    async (path) => {
+      requests++;
+      if (path.endsWith('/retry')) return Response.json({}, { status: 503 });
+      return recovered ? idle() : Response.json({}, { status: 503 });
+    },
+    { ...confirmed, pagesReady: false },
+  );
+  await tick(t, 19999);
+  assert.equal(requests, 0);
+  assert.equal(document.querySelector('[role="alert"]'), null);
+  await tick(t, 1501);
+  assert.equal(document.querySelector('[role="alert"]').dataset.navigationStage, 'poll');
+  await React.act(async () => document.querySelector('[role="alert"] button').click());
+  assert.equal(document.querySelector('[role="alert"]').dataset.navigationStage, 'retry');
+  assert.equal(
+    document.querySelector('[role="alert"]').dataset.navigationCode,
+    'NAVIGATION_HTTP_503',
+  );
+  recovered = true;
+  await tick(t, 1500);
+  assert.equal(document.querySelector('[role="alert"]'), null);
 });
 
 test('a real open failure stays immediate and identity changes cancel a late operation without an error', async (t) => {
@@ -250,6 +335,7 @@ test('invalid navigation responses and explicit business denial remain immediate
     document.querySelector('[role="alert"]').dataset.navigationCode,
     'NAVIGATION_FORBIDDEN',
   );
+  assert.match(document.querySelector('[role="alert"]').textContent, /无权/);
   response = Response.json({}, { status: 401 });
   await tick(t, 1500);
   assert.equal(
@@ -276,6 +362,8 @@ test('a genuinely pending navigation request times out after five seconds and re
   await tick(t, 4999);
   assert.equal(document.querySelector('[role="alert"]'), null);
   await tick(t, 1);
+  assert.equal(document.querySelector('[role="alert"]'), null);
+  await tick(t, 15000);
   assert.equal(
     document.querySelector('[role="alert"]').dataset.navigationCode,
     'NAVIGATION_TIMEOUT',
@@ -285,7 +373,7 @@ test('a genuinely pending navigation request times out after five seconds and re
   assert.equal(requests, 2);
 });
 
-test('a first real navigation failure after identity recovery uses the original startup deadline', async (t) => {
+test('a first real navigation failure after identity recovery uses the original bounded observation', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
   let polls = 0;
   const ui = await mount(
@@ -296,7 +384,7 @@ test('a first real navigation failure after identity recovery uses the original 
     },
     { state: 'unknown', scope: null, subject: null, status: null },
   );
-  await tick(t, 5500);
+  await tick(t, 20500);
   assert.equal(polls, 0);
   assert.equal(document.querySelector('[role="alert"]'), null);
   await ui.update(confirmed);
