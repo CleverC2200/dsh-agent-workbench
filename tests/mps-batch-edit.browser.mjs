@@ -76,10 +76,20 @@ async function draft(page) {
   });
 }
 async function begin(view) {
-  await view.getByRole('button', { name: '调整', exact: true }).click();
+  await view
+    .locator('body')
+    .page()
+    .frameLocator('iframe')
+    .getByRole('button', { name: '调整', exact: true })
+    .click();
 }
 async function save(view) {
-  await view.getByRole('button', { name: '保存调整', exact: true }).click();
+  await view
+    .locator('body')
+    .page()
+    .frameLocator('iframe')
+    .getByRole('button', { name: '保存调整', exact: true })
+    .click();
 }
 
 test('shipment stages multiple hierarchy edits atomically, cancels across pages and preserves source precision', async (t) => {
@@ -171,11 +181,11 @@ test('processing saves multiple base SKU months atomically and keeps other bases
   await first.fill('50.75');
   await second.fill('220');
   await save(view);
-  await expect(view.getByRole('alert')).toContainText('调整原因');
+  await expect(frame.getByRole('alert')).toContainText('调整原因');
   assert.deepEqual((await draft(page)).adjustments, original);
   await selectAdjustmentReason(view, '同批调整两处');
   await save(view);
-  await expect(view.getByRole('alert')).toHaveCount(0);
+  await expect(frame.getByRole('alert')).toHaveCount(0);
   await expect
     .poll(
       async () =>
@@ -201,7 +211,7 @@ test('processing saves multiple base SKU months atomically and keeps other bases
   assert.ok(changed.history.every((row) => row.reason === '其他：同批调整两处'));
   await begin(view);
   await first.fill('999');
-  await view.getByRole('button', { name: '取消', exact: true }).click();
+  await frame.getByRole('button', { name: '取消', exact: true }).click();
   assert.deepEqual((await draft(page)).adjustments, changed);
 });
 
@@ -296,7 +306,7 @@ test('seven pages retain readable compact headers and contained toolbars at desk
           await page.screenshot({
             path: `${process.env.MPS_BATCH_SCREENSHOTS}/${width}-editing.png`,
           });
-        await view.getByRole('button', { name: '取消', exact: true }).click();
+        await frame.getByRole('button', { name: '取消', exact: true }).click();
       }
       if (process.env.MPS_BATCH_SCREENSHOTS)
         await page.screenshot({

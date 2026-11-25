@@ -112,10 +112,10 @@ test('需求导入保留系统列和导入原值，最终预测立即采用并�
   await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
   await expect.poll(async () => (await draft(page)).demandImports?.[0]?.quantity).toBe(0);
   await view.getByLabel('搜索当前步骤').fill('产品甲');
-  await view.getByRole('button', { name: '调整', exact: true }).click();
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
   await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('140');
-  await view.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
-  await view.getByRole('button', { name: '保存调整', exact: true }).click();
+  await frame.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
   rows = await download();
   leaf = rows.find(
     (row) =>
@@ -130,10 +130,10 @@ test('需求导入保留系统列和导入原值，最终预测立即采用并�
   await upload(frame, '选择需求修正CSV', `${columns}\n郑州,A,${month},0,销售变化,`);
   await frame.getByRole('button', { name: '确认应用修正', exact: true }).click();
   await expect.poll(async () => (await draft(page)).adjustments.quantities[0]?.quantity).toBe(0);
-  await view.getByRole('button', { name: '调整', exact: true }).click();
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
   await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('');
-  await view.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
-  await view.getByRole('button', { name: '保存调整', exact: true }).click();
+  await frame.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
   rows = await download();
   leaf = rows.find(
     (row) =>
@@ -189,10 +189,10 @@ test('CSV预览不写入，点击确认仅改变基地SKU并保留系统依据�
     7,
   );
   await view.getByLabel('搜索当前步骤').fill('产品甲');
-  await view.getByRole('button', { name: '调整', exact: true }).click();
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
   await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('');
-  await view.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
-  await view.getByRole('button', { name: '保存调整', exact: true }).click();
+  await frame.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
   await expect.poll(async () => (await draft(page)).adjustments.quantities.length).toBe(1);
   const undone = await draft(page);
   assert.equal(undone.adjustments.quantities.length, 1);

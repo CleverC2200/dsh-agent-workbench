@@ -89,11 +89,11 @@ test('MPS base SKU override records a reason and time, survives reload and undo 
   assert.equal(edit.reason, '其他：客户已确认增量');
   assert.match(edit.at, /^\d{4}-\d{2}-\d{2}T/);
   await matrix.getByLabel('搜索当前步骤', { exact: true }).fill('A');
-  await matrix.getByRole('button', { name: '调整', exact: true }).click();
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
   await expect(matrix.getByLabel(`汤圆 组 A 郑州 ${period} 需求数量`, { exact: true })).toHaveValue(
     '120',
   );
-  await matrix.getByRole('button', { name: '保存调整', exact: true }).click();
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
   assert.equal(
     await page.evaluate(
       () => window.readView().localDrafts.drafts[0].adjustments.quantities[0].quantity,

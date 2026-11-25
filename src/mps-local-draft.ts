@@ -34,6 +34,7 @@ const quantityIdentity = { month, category: text, group: text, quantity, ...audi
 const quantityAdjustment = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('category-total'),
+    remark: text.optional(),
     month,
     category: text,
     base: text.optional(),
@@ -50,6 +51,7 @@ const adjustmentHistory = z.strictObject({
   key: text,
   action: z.enum(['set', 'undo', 'archive']),
   archivedAt: z.iso.datetime().optional(),
+  remark: text.optional(),
   value: numeric.nullable(),
   ...audit,
 });

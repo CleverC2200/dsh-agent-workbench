@@ -84,9 +84,18 @@ export function createProcessedDemand(
     );
     const restoreTableScroll = react.useCallback(
       (element) => {
-        if (element) element.scrollLeft = view.get()['ProcessedDemand.scrollLeft'] ?? 0;
+        if (element) {
+          element.scrollLeft = view.get()['ProcessedDemand.scrollLeft'] ?? 0;
+          element.scrollTop = view.get()['ProcessedDemand.scrollTop'] ?? 0;
+        }
       },
       [view],
+    );
+    const [historyOpen, setHistoryOpen] = useStepViewField(
+      react,
+      view,
+      'ProcessedDemand.historyOpen',
+      false,
     );
     const quantities = draft.adjustments?.quantities ?? [];
     const fixedQuantities = quantities.filter((item) => item.kind === 'base-sku');
@@ -125,6 +134,11 @@ export function createProcessedDemand(
     const fieldKey = quantityAdjustmentKey;
     const applyBatch = (entries, reason, imported = false) => {
       if (!entries.length) return;
+      const remarks = new Map(
+        entries
+          .filter((entry) => entry.meta.kind === 'category-remark')
+          .map((entry) => [entry.meta.category, entry.value]),
+      );
       const shipments = entries.filter((entry) => entry.meta.kind === 'shipment');
       if (shipments.length && !shipmentSnapshot?.prepareForecast)
         throw Error('第二步同版预估发货尚未就绪。');
@@ -143,16 +157,37 @@ export function createProcessedDemand(
       let adjustments = draft.adjustments;
       const undos = new Map();
       const quantities = entries
-        .filter((entry) => entry.meta.kind !== 'shipment')
+        .filter((entry) => !['shipment', 'category-remark'].includes(entry.meta.kind))
         .sort(
           (a, b) =>
             adjustmentDepth[a.meta.kind] +
             Number(Boolean(a.meta.base)) -
             (adjustmentDepth[b.meta.kind] + Number(Boolean(b.meta.base))),
         );
+      for (const item of draft.adjustments?.quantities ?? []) {
+        if (
+          item.kind === 'category-total' &&
+          remarks.has(item.category) &&
+          !quantities.some(
+            (entry) => quantityAdjustmentKey(entry.meta) === quantityAdjustmentKey(item),
+          )
+        )
+          quantities.push({ meta: item, value: item.quantity });
+      }
       for (const entry of quantities) {
         const { editorRow: _editorRow, ...fields } = entry.meta;
-        const input = { ...fields, quantity: entry.value, reason: entry.reason ?? reason };
+        const input = {
+          ...fields,
+          quantity: entry.value,
+          reason: entry.reason ?? reason,
+          ...(fields.kind === 'category-total'
+            ? {
+                remark: remarks.has(fields.category)
+                  ? remarks.get(fields.category)
+                  : saved(fields)?.remark,
+              }
+            : {}),
+        };
         const before = adjustments?.history?.length ?? 0;
         adjustments = changeAdjustment(adjustments, 'quantities', input, entry.value === null);
         if (entry.value === null && adjustments.history.length > before)
@@ -398,6 +433,7 @@ export function createProcessedDemand(
       `M+3 ${months[2]} 需求`,
       ...predictionColumns(months[2], 2),
       `M+4 ${result.months[3]} 库存参考`,
+      '调整备注',
     ];
     const firstMonthByCategory = react.useMemo(
       () =>
@@ -441,6 +477,19 @@ export function createProcessedDemand(
           ];
         }),
         demand(result.months[3]),
+        h(Field, {
+          batch,
+          id: `category-remark:${category}`,
+          label: `${category} 调整备注`,
+          value:
+            [...quantities]
+              .reverse()
+              .find((item) => item.kind === 'category-total' && item.category === category)
+              ?.remark ?? '',
+          meta: { kind: 'category-remark', category },
+          textual: true,
+          placeholder: '未填写',
+        }),
       ];
     });
     const forecastReference = (value) => {
@@ -895,7 +944,10 @@ export function createProcessedDemand(
         'aria-label': '加工后的需求横向滚动区',
         ref: restoreTableScroll,
         onScroll: (event) =>
-          view.update({ 'ProcessedDemand.scrollLeft': event.currentTarget.scrollLeft }),
+          view.update({
+            'ProcessedDemand.scrollLeft': event.currentTarget.scrollLeft,
+            'ProcessedDemand.scrollTop': event.currentTarget.scrollTop,
+          }),
       },
       h(
         'table',
@@ -945,6 +997,10 @@ export function createProcessedDemand(
               ];
             }),
             sum(selectedMonthRows(category, result.months[3]), 'demand'),
+            [...quantities]
+              .reverse()
+              .find((item) => item.kind === 'category-total' && item.category === category)
+              ?.remark ?? '',
           ];
           return {
             评估版本: draft.name,
@@ -1011,7 +1067,6 @@ export function createProcessedDemand(
             {
               id: hierarchyId,
               value: hierarchy,
-              disabled: batch.active,
               onChange: (event) => setHierarchy(event.target.value),
             },
             h('option', { value: 'all' }, '全国和基地'),
@@ -1021,6 +1076,43 @@ export function createProcessedDemand(
           h('button', { onClick: exportScope }, '下载当前范围需求'),
         ),
       ),
+      (draft.adjustments?.history?.length ?? 0) > 0 &&
+        h(
+          'details',
+          {
+            className: 'wf-disclosure',
+            open: historyOpen,
+            onToggle: (event) => {
+              if (event.target === event.currentTarget) setHistoryOpen(event.currentTarget.open);
+            },
+          },
+          h('summary', null, `需求调整记录（${draft.adjustments.history.length}条）`),
+          historyOpen &&
+            card(
+              '需求调整记录',
+              table(
+                '需求调整记录',
+                ['对象', '操作', '数量', '原因', '备注', '时间'],
+                [...draft.adjustments.history].reverse().map((item) => {
+                  let identity = item.key;
+                  if (item.kind === 'quantities') {
+                    try {
+                      const [month, category, group, , code, base] = JSON.parse(item.key);
+                      identity = label({ month, category, group, code, base });
+                    } catch {}
+                  }
+                  return [
+                    identity,
+                    { set: '调整', undo: '撤销', archive: '归档' }[item.action],
+                    number(item.value),
+                    item.reason,
+                    item.remark ?? '',
+                    item.at,
+                  ];
+                }),
+              ),
+            ),
+        ),
       h(UpperAdjustmentConflicts, { draft, update }),
       h(AmountReconciliation, { draft, result, rows, filters, card, table }),
       fixedQuantities.length > 0 &&

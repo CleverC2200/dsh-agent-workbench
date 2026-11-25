@@ -120,17 +120,17 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   await frame.getByLabel('搜索当前步骤', { exact: true }).fill('产品甲');
-  await view.getByRole('button', { name: '调整', exact: true }).click();
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
   const field = view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true });
   await field.fill('55');
-  await view.getByRole('button', { name: '保存调整', exact: true }).click();
-  await expect(view.getByRole('alert')).toContainText('请选择');
-  await view.getByLabel('批量调整原因', { exact: true }).selectOption('其他');
-  await view.getByRole('button', { name: '保存调整', exact: true }).click();
-  await expect(view.getByRole('alert')).toContainText('说明');
-  await view.getByLabel('其他原因说明', { exact: true }).fill('合同调整复核');
-  await view.getByRole('button', { name: '保存调整', exact: true }).click();
-  await expect(view.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect(frame.getByRole('alert')).toContainText('请选择');
+  await frame.getByLabel('批量调整原因', { exact: true }).selectOption('其他');
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect(frame.getByRole('alert')).toContainText('说明');
+  await frame.getByLabel('其他原因说明', { exact: true }).fill('合同调整复核');
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
   const rows = await workflowExportRows(frame);
   assert.equal(
     Number(
@@ -157,11 +157,11 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   const fourth = new Date(`${month}-01T00:00:00Z`);
   fourth.setUTCMonth(fourth.getUTCMonth() + 3);
   const referenceMonth = fourth.toISOString().slice(0, 7);
-  await view.getByRole('button', { name: '调整', exact: true }).click();
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
   await view.getByLabel(`汤圆 G1 A 郑州 ${referenceMonth} 需求数量`, { exact: true }).fill('7');
-  await view.getByLabel('批量调整原因', { exact: true }).selectOption('销售变化');
-  await view.getByRole('button', { name: '保存调整', exact: true }).click();
-  await expect(view.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
+  await frame.getByLabel('批量调整原因', { exact: true }).selectOption('销售变化');
+  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
   const reference = await workflowExportRows(frame);
   assert.equal(
     Number(
@@ -173,9 +173,9 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
     7,
   );
   const table = frame.getByRole('table', { name: '加工后的需求明细', exact: true });
-  await view.getByRole('button', { name: '调整', exact: true }).click();
+  await frame.getByRole('button', { name: '调整', exact: true }).click();
   await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('999');
-  await view.getByRole('button', { name: '取消', exact: true }).click();
+  await frame.getByRole('button', { name: '取消', exact: true }).click();
   assert.equal(
     Number(
       (await workflowExportRows(frame)).find(
@@ -195,7 +195,12 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   const width = await table
     .locator('..')
     .evaluate((element) => ({ viewport: element.clientWidth, content: element.scrollWidth }));
-  assert.ok(width.content <= width.viewport + 1, JSON.stringify(width));
+  assert.ok(width.content > width.viewport, JSON.stringify(width));
+  const pageWidth = await frame.locator('body').evaluate((element) => ({
+    viewport: element.clientWidth,
+    content: element.scrollWidth,
+  }));
+  assert.ok(pageWidth.content <= pageWidth.viewport + 1, JSON.stringify(pageWidth));
   if (process.env.MPS06_EVIDENCE_DIR)
     await page.screenshot({ path: `${process.env.MPS06_EVIDENCE_DIR}/leaf-national.png` });
   const saved = await page.evaluate(() => window.readView());
