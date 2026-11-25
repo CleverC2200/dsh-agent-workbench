@@ -1446,6 +1446,14 @@ test('V6 发货人工导入独立于原始输入，采用导入、偏差分档�
   });
   const sku = table.locator('tr.sp-sku').filter({ hasText: 'V6' }).last();
   await expect(sku).toHaveAttribute('data-deviation', 'red');
+  assert.deepEqual(
+    await sku
+      .locator(':scope > *')
+      .evaluateAll((cells) => [
+        ...new Set(cells.map((cell) => getComputedStyle(cell).backgroundColor)),
+      ]),
+    ['rgb(255, 229, 229)'],
+  );
   await expect(
     sku.getByRole('button', { name: '西南 V6 人工预测 计算过程', exact: true }),
   ).toHaveText('204');
