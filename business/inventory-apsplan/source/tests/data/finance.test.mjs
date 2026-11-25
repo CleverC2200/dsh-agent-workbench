@@ -68,6 +68,44 @@ test('年度预算达成率按各月达成率平均，不用年度金额直接�
   };
   assert.equal(metricValues(annual)['销售预算达成率'], 75);
 });
+test('年度预算只平均有有效预算和实绩的月份，保留来源明确的零实绩', () => {
+  const annual = {
+    start: '2026-01-01',
+    end: '2026-05-31',
+    granularity: 'year',
+    missingValuePolicy: 'zero',
+    sections: [
+      {
+        id: 'finance',
+        status: 'ready',
+        rows: [
+          { month: '202601', actual: 80 },
+          { month: '202602', actual: 100 },
+          { month: '202603', actual: 0 },
+          { month: '202604', actual: null },
+          { month: '202512', actual: 500 },
+        ],
+      },
+      {
+        id: 'sales-budget',
+        status: 'ready',
+        rows: [
+          { month: '202601', budget: 100 },
+          { month: '202603', budget: 200 },
+          { month: '202604', budget: 300 },
+          { month: '202605', budget: 400 },
+          { month: '202512', budget: 100 },
+        ],
+      },
+    ],
+  };
+  assert.equal(metricValues(annual)['销售预算达成率'], 40);
+  annual.sections[0].rows = [{ month: '202604', actual: null }];
+  assert.ok(Number.isNaN(metricValues(annual)['销售预算达成率']));
+  annual.sections[0].status = 'error';
+  assert.ok(Number.isNaN(metricValues(annual)['销售预算达成率']));
+});
+
 test('缺失、失败、零预算、多月份不全不输出率', () => {
   for (const transform of [
     (d) => d.sections[1].rows.forEach((r) => (r.budget = 0)),

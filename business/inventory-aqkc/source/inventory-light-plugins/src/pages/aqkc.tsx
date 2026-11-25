@@ -140,6 +140,16 @@ function moveTabFocus<T extends string>(
 
 const boardTabs: BoardTabName[] = ['基地结构', '品类结构', '货龄结构'];
 
+const reportCategoryOrder = ['汤圆', '水饺', '面点', '休闲', '馄饨', '预制食材', '火锅料', '粽子'];
+const reportCategoryRanks = new Map(reportCategoryOrder.map((name, index) => [name, index]));
+
+function reportCategoryRank(level: DashboardTabTable['rows'][number]['level']) {
+  const category = String(level ?? '').trim();
+  return (
+    reportCategoryRanks.get(category === '饺子' ? '水饺' : category) ?? reportCategoryOrder.length
+  );
+}
+
 const FEATURED_INVENTORY_REPORT_PROMPT = '生成全国库存分析报告';
 function readFailureText(value: unknown) {
   return (
@@ -292,7 +302,12 @@ export function InventoryOperationsWorkbench() {
       : activeTabTable
         ? {
             headers: activeTabTable.columns.map((column) => column.label),
-            rows: activeTabTable.rows.map((row, index) => ({
+            rows: (activeBoardTab === '品类结构'
+              ? activeTabTable.rows
+                  .slice()
+                  .sort((a, b) => reportCategoryRank(a.level) - reportCategoryRank(b.level))
+              : activeTabTable.rows
+            ).map((row, index) => ({
               id: String(row.level ?? index),
               cells: activeTabTable.columns.map((column) => String(row[column.key] ?? '-')),
               tone: 'neutral',
