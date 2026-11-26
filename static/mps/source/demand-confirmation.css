@@ -571,9 +571,9 @@
   border-bottom-color: var(--dc-border);
   background: #fbfbfd;
   color: #687487;
-  font-size: 11.5px;
+  font-size: var(--workbench-list-font-size, 12px);
   line-height: 18px;
-  font-weight: 500;
+  font-weight: 700;
   white-space: nowrap;
 }
 .dc-page td {
@@ -586,7 +586,8 @@
 .dc-page td p {
   white-space: normal;
   overflow-wrap: anywhere;
-  font-size: 11.5px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .dc-page summary {
   cursor: pointer;
@@ -942,9 +943,10 @@
 }
 .dc-page .sp-table thead th {
   background: #fbfbfd;
-  font-weight: 600;
+  font-weight: 700;
   color: #687487;
   line-height: 1.3;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .dc-page .sp-table thead tr:first-child th {
   text-align: left;
@@ -1007,8 +1009,9 @@
 .dc-page .sp-table tbody th {
   background: transparent;
   color: var(--dc-text);
-  font-size: 12.6px;
+  font-size: var(--workbench-list-font-size, 12px);
   white-space: nowrap;
+  font-weight: 700;
 }
 .sp-count {
   margin-left: 6px;

@@ -42,8 +42,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--workbench-filter-font-size, 12px);
+  font-weight: 700;
 }
 .page input,
 .page select,
@@ -116,14 +116,15 @@
   border: 0;
   border-radius: 0;
   border-bottom: 2px solid transparent;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .tabs button[aria-current='page'] {
   background: var(--ui-surface);
   color: var(--ui-accent);
   border-bottom-color: var(--ui-accent);
-  font-weight: 800;
+  font-weight: 700;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .panel {
   padding: 16px;
@@ -169,18 +170,21 @@
   padding: 16px;
 }
 .metrics h3 {
-  font-size: 11px;
+  font-size: var(--workbench-kpi-title-font-size, 12px);
   margin: 0 0 8px;
+  font-weight: 700;
 }
 .metrics strong {
   color: var(--ui-ink);
-  font-size: 23px;
-  line-height: 1.15;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  line-height: 1.1;
+  font-weight: 700;
 }
 .metrics p {
   color: var(--ui-muted);
   font-size: 10px;
   margin: 8px 0 0;
+  font-weight: 400;
 }
 .tableWrap {
   overflow-x: auto;
@@ -203,20 +207,21 @@
   color: var(--ui-text);
   height: 38px;
   background: var(--ui-soft);
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   text-align: left;
   padding: 8px 16px;
 }
 .page td {
   height: 44px;
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
   padding: 8px 16px;
   border-top: 1px solid var(--ui-divider);
   max-width: 420px;
   overflow-wrap: anywhere;
   white-space: nowrap;
   min-width: 100px;
+  font-weight: 400;
 }
 .page tr:hover td {
   background: var(--ui-hover);

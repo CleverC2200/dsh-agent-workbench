@@ -581,8 +581,9 @@ button {
   background: var(--ui-soft);
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
-  font-weight: 650;
+  font-weight: 700;
   cursor: pointer;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .data-table td {
   height: 42px;
@@ -590,6 +591,8 @@ button {
   border-bottom: 1px solid #edf0f3;
   white-space: nowrap;
   background: #fff;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .data-table tr:hover > td {
   background: #fafcff;
@@ -1749,8 +1752,8 @@ textarea:focus-visible {
   background: transparent;
   text-align: center;
   color: var(--text);
-  font-size: 19px;
-  font-weight: 850;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  font-weight: 700;
   line-height: 1.1;
   letter-spacing: 0.01em;
 }
@@ -1758,8 +1761,9 @@ textarea:focus-visible {
   opacity: 0.72;
 }
 .kpi-value small {
-  font-size: 12px;
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
   margin-left: 2px;
+  font-weight: 400;
 }
 .kpi-card .blue {
   color: var(--blue);
@@ -1991,18 +1995,23 @@ textarea:focus-visible {
   color: #53647a;
   background: linear-gradient(var(--ui-soft), #f2f5f9);
   border-color: var(--line);
-  font-weight: 850;
+  font-weight: 700;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .data-table th {
   position: sticky;
   top: 0;
   z-index: 5;
   height: 34px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .data-table td {
   height: 38px;
   padding-block: 4px;
   border-color: #edf1f6;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .data-table tr:hover > td {
   background: #fbfdff;
@@ -2898,17 +2907,17 @@ body {
   margin: 4px 0 6px;
   text-align: left;
   color: var(--text);
-  font-size: 22px;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.1;
   letter-spacing: -0.04em;
   cursor: pointer;
 }
 .safety-stock-kpis .kpi-value small {
   margin-left: 0;
   color: inherit;
-  font-size: inherit;
-  font-weight: inherit;
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
+  font-weight: 400;
 }
 .safety-stock-kpis .kpi-card dl {
   display: grid;
@@ -2983,7 +2992,9 @@ body {
     font-size: 9px;
   }
   .safety-stock-kpis .kpi-card .kpi-value {
-    font-size: 20px;
+    font-size: var(--workbench-kpi-value-font-size, 30px);
+    font-weight: 700;
+    line-height: 1.1;
   }
   .safety-stock-kpis .kpi-card dl > div {
     font-size: 9px;
@@ -3199,11 +3210,15 @@ body {
   background: var(--soft);
   color: var(--muted);
   border-bottom-color: var(--line);
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .data-table td {
   color: var(--body);
   border-bottom-color: var(--line);
   background: var(--surface);
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .data-table tr:hover > td {
   background: var(--ui-accent-soft);
@@ -3864,6 +3879,8 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
 .data-table th {
   background: var(--ui-soft);
   color: var(--ui-secondary);
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .data-table tr:hover > td {
   background: var(--ui-accent-soft);
@@ -4031,13 +4048,13 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
   font-weight: 600;
 }
 .safety-stock-kpis .kpi-card .kpi-value {
-  font-size: 23px;
-  line-height: 1.15;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  line-height: 1.1;
   font-weight: 700;
 }
 .safety-stock-kpis .kpi-value small {
   margin-left: 3px;
-  font-size: 11px;
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
   font-weight: 400;
 }
 .safety-stock-kpis .kpi-title .kpi-status-pill {
@@ -4101,14 +4118,15 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
 }
 .data-table th {
   height: 38px;
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   background: var(--ui-soft);
 }
 .data-table td {
   height: 44px;
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
   border-color: var(--ui-divider);
+  font-weight: 400;
 }
 .data-table tr:hover > td {
   background: var(--ui-hover);
@@ -4720,8 +4738,9 @@ body,
   flex-wrap: wrap;
   margin: 4px 0 6px;
   padding: 0;
-  font-size: 20px;
-  line-height: 1.15;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  line-height: 1.1;
+  font-weight: 700;
 }
 .agent-root .fc-compact-kpis .kpi-card dl {
   margin-top: auto;

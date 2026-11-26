@@ -95,7 +95,8 @@
 .am-table th {
   background: #f5f6f8;
   color: #858d98;
-  font-size: 11px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .am-table td,
 .am-table th {
@@ -298,10 +299,12 @@
   font-size: 10px;
 }
 .am-table th {
-  font-size: 9px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .am-table td {
-  font-size: 12px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .am-table tr:hover {
   background: #fffafb;
@@ -579,15 +582,16 @@
 }
 .am-panel th {
   background: #f7f8fa;
-  font-weight: 500;
+  font-weight: 700;
   color: #858c96;
-  font-size: 12px;
+  font-size: var(--workbench-list-font-size, 12px);
   padding: 14px 12px;
 }
 .am-panel td {
   padding: 18px 12px;
-  font-size: 13px;
+  font-size: var(--workbench-list-font-size, 12px);
   border-bottom: 1px solid #f0f1f3;
+  font-weight: 400;
 }
 .am-panel tbody tr:last-child td {
   border-bottom: 0;
@@ -2156,8 +2160,8 @@
   z-index: 2;
   background: #f5f6f8;
   color: #858c96;
-  font-size: 10px;
-  font-weight: 500;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   padding: 11px 12px;
   border-bottom: 1px solid #e8ebef;
 }
@@ -2193,6 +2197,7 @@
   overflow-wrap: anywhere;
   font-weight: 400;
   background: #fff;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .am-panel .am-task-table td.am-actions {
   display: table-cell;
@@ -2411,6 +2416,8 @@
   padding: 8px 12px;
   vertical-align: middle;
   line-height: 1.5;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .intelligent-lifecycle .warning-object-cell {
   display: flex;

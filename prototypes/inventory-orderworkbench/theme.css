@@ -39,6 +39,61 @@ html body {
   background: #fff4df;
   color: #9a5a00;
 }
+
+body .shell :is(.orders, .item-coordination-table, .dimension-table, .delivery-order-table,
+  .delivery-order-sku-table, .wb-improvement-table, .wb-region-customer-table, .wb-task-table,
+  .wb-changed-order-table, .wb-table, .wb-dimension-table, .confirmation-log-table,
+  .wb-performance-table) :is(th, td) {
+  font-size: var(--workbench-list-font-size, 12px);
+}
+
+body .shell :is(.orders, .item-coordination-table, .dimension-table, .delivery-order-table,
+  .delivery-order-sku-table, .wb-improvement-table, .wb-region-customer-table, .wb-task-table,
+  .wb-changed-order-table, .wb-table, .wb-dimension-table, .confirmation-log-table,
+  .wb-performance-table) th {
+  font-weight: 700;
+}
+
+body .shell :is(.wb-province-scroll, .wb-performance-table) thead > tr > th {
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
+}
+
+.wb-kpi .wb-kpi-title {
+  font-size: var(--workbench-kpi-title-font-size, 12px);
+  font-weight: 700;
+}
+
+.wb-kpi .wb-kpi-value strong {
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.wb-kpi .wb-kpi-value em {
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
+  font-weight: 400;
+}
+
+.wb-kpi .wb-kpi-target {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+body .wb-dimension-tabs button {
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
+}
+
+body .item-coordination-filters :is(select, input) {
+  font-size: var(--workbench-filter-font-size, 12px);
+  font-weight: 700;
+  line-height: var(--workbench-filter-line-height, 18px);
+}
+
+body .item-coordination-filters input::placeholder {
+  font-weight: 600;
+}
 .wb-kpi-counts {
   display: block;
   margin: 3px 2px;

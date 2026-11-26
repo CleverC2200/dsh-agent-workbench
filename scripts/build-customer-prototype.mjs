@@ -11,7 +11,7 @@ const root = resolve(import.meta.dirname, '..'),
 const theme = (await readFile(resolve(root, 'theme/tokens.css'), 'utf8')).replace(/\r\n/g, '\n');
 if (
   createHash('sha256').update(theme).digest('hex') !==
-  '51d07dd91c4e2851301c046556a9c34aded00c5fa94525420b949badce9a5497'
+  'c273a8d8666d1da96d83d4842810d05de5ec8f9de489e95933fdf3aa907a1e18'
 )
   throw Error('PROTOTYPE_THEME_RESOURCE_MISMATCH');
 const result = await build({

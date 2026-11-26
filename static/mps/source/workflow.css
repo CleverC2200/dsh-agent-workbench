@@ -446,7 +446,13 @@
 }
 .wf-page[data-planning='true'] th,
 .wf-page[data-planning='true'] td {
-  font-size: 12px;
+  font-size: var(--workbench-list-font-size, 12px);
+}
+.wf-page[data-planning='true'] thead th {
+  font-weight: 700;
+}
+.wf-page[data-planning='true'] td {
+  font-weight: 400;
 }
 .wf-page .wf-plan-balances td:last-child {
   min-width: 140px;
