@@ -619,7 +619,7 @@ export function createShipment(
     const issueRows = visibleRows.filter(
       (row) =>
         row.dimensionIssue ||
-        row.transferIssue ||
+        row.transferIssues?.length ||
         row.inventoryIssues.length ||
         row.prediction == null ||
         row.missingFields.some((field) => missingShipmentInput(row, field)),

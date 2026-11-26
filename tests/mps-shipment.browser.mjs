@@ -147,8 +147,10 @@ async function edit(table, label, value) {
   await saveAdjustment(frame);
 }
 async function exported(page, frame, name = '下载发货与结存', sheet) {
+  const button = frame.getByRole('button', { name, exact: true });
+  await expect(button).toBeEnabled();
   const waiting = page.waitForEvent('download');
-  await frame.getByRole('button', { name, exact: true }).press('Enter');
+  await button.press('Enter');
   return mpsDownloadText(await (await waiting).path(), sheet);
 }
 test('MPS shipment summarizes available values and marks missing SKUs without filling unknown inputs with zero', async (t) => {

@@ -176,7 +176,7 @@ test('累计生产入库和剩余入库缺值仅在结存公式按零，保留�
   await table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('未取得的累计生产入库或剩余入库按0计');
   await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click();
-  const [detail] = await download(page, '下载明细');
+  const [detail] = await download(page, '下载发货与结存');
   assert.equal(detail.本月生产入库, '');
   assert.equal(detail.剩余天数入库, '');
   assert.equal(detail.预计月末结存, 95);
