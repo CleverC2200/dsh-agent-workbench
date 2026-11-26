@@ -35,7 +35,7 @@ const emptyRows = [];
 const calculationShipmentPriority = 4;
 const shipmentPlanSource = 'ai_db.agents_ads_scm_base_sku_daily_plan_detail_d';
 const shipmentSourceTables = `ai_db.agents_scm_stock_detail_d / ${shipmentPlanSource}`;
-const missingShipmentPlan = '该基地SKU没有日度计划明细';
+const noShipmentPlan = '该基地SKU当月截至统计日无日度计划，按0计算';
 const bases = businessBases;
 const shipmentColumnGroups = [
   [
@@ -197,7 +197,7 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
   const shipmentsWithoutStock = new Map();
   const sourceRows = inputRows.filter((row) => {
     if (sourceKind !== 'business' || row.sourceDays !== 0) return true;
-    shipmentsWithoutStock.set(forecastKey(row), row.shipped);
+    shipmentsWithoutStock.set(forecastKey(row), row);
     return false;
   });
   if (sourceKind === 'business') {
@@ -208,7 +208,7 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
       const key = keyOf({ base, code });
       if (!bases.includes(base) || !code || present.has(key)) continue;
       present.add(key);
-      const shipped = shipmentsWithoutStock.get(forecastKey({ month, base, code }));
+      const planRow = shipmentsWithoutStock.get(forecastKey({ month, base, code }));
       sourceRows.push({
         month,
         base,
@@ -216,7 +216,7 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
         name: product['产品名称'],
         series: product['系列'],
         group: product['物料组'],
-        shipped: shipped === undefined ? 0 : shipped,
+        shipped: planRow?.shipped === undefined ? 0 : planRow.shipped,
         prepped: 0,
         unprepped: 0,
         daily3: 0,
@@ -225,11 +225,13 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
         open: 0,
         inbound: null,
         remaining: null,
-        transferIn: null,
-        transferOut: null,
-        transferInSource: missingShipmentPlan,
-        transferOutSource: missingShipmentPlan,
-        transferIssue: missingShipmentPlan,
+        transferIn: planRow?.transferIn ?? 0,
+        transferOut: planRow?.transferOut ?? 0,
+        transferInDate: planRow?.transferInDate ?? null,
+        transferOutDate: planRow?.transferOutDate ?? null,
+        transferInSource: planRow?.transferInSource ?? noShipmentPlan,
+        transferOutSource: planRow?.transferOutSource ?? noShipmentPlan,
+        transferIssues: planRow?.transferIssues ?? [],
         sourceDays: 0,
         duplicateDays: 0,
         shipmentMissingAsZero: true,
@@ -296,14 +298,12 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
           manualPrediction == null || derived.prediction == null
             ? null
             : finite(manualPrediction - derived.prediction);
-        const transferIn = sourceKind === 'business' ? (row.transferIn ?? null) : null;
-        const transferOut = sourceKind === 'business' ? (row.transferOut ?? null) : null;
+        const transferIn = sourceKind === 'business' ? (row.transferIn ?? 0) : null;
+        const transferOut = sourceKind === 'business' ? (row.transferOut ?? 0) : null;
         const open = row.open == null ? null : Math.max(0, row.open);
-        const inputs = { ...row, transferIn, transferOut };
-        const rawEnd = [open, row.inbound, remaining, fin, transferIn, transferOut].every(
-          (value) => value != null,
-        )
-          ? finite(open + row.inbound + remaining + transferIn - transferOut - fin)
+        const inputs = { ...row, remaining, transferIn, transferOut };
+        const rawEnd = [open, fin, transferIn, transferOut].every((value) => value != null)
+          ? finite(open + (row.inbound ?? 0) + (remaining ?? 0) + transferIn - transferOut - fin)
           : null;
         const end = rawEnd == null ? null : Math.max(0, rawEnd);
         const inventoryIssues = [
@@ -659,6 +659,8 @@ export function createShipment(
     const stockIssues = (issuesOpen ? issueRows : emptyRows)
       .flatMap((row) => {
         const missing = row.missingFields.filter((field) => missingShipmentInput(row, field));
+        const closingUsesMissingInbound =
+          row.end != null && (missing.includes('inbound') || missing.includes('remaining'));
         return [
           ...(row.dimensionIssue
             ? [
@@ -683,7 +685,9 @@ export function createShipment(
                   异常类别: '输入缺项',
                   指标: missing.map((field) => names[fields.indexOf(field)]).join('、'),
                   计算用值: '待补',
-                  实际处理: '缺失输入保留待定',
+                  实际处理: closingUsesMissingInbound
+                    ? '未取得的入库量按0计算结存'
+                    : '缺失输入保留待定',
                   来源:
                     sourceKind === 'business' && missing.includes('inbound')
                       ? shipmentSourceTables
@@ -692,27 +696,17 @@ export function createShipment(
                 },
               ]
             : []),
-          ...(row.transferIssue
-            ? [
-                {
-                  月份: month,
-                  基地: row.base,
-                  产品编码: row.code,
-                  异常类别: '调拨来源异常',
-                  指标: [
-                    row.transferIn == null ? '调入计划' : '',
-                    row.transferOut == null ? '调出计划' : '',
-                  ]
-                    .filter(Boolean)
-                    .join('、'),
-                  原始值: row.transferDate ?? '',
-                  计算用值: '待补',
-                  实际处理: '保留待补，未按无计划置0',
-                  来源: shipmentPlanSource,
-                  原因: row.transferIssue,
-                },
-              ]
-            : []),
+          ...(row.transferIssues ?? []).map((plan) => ({
+            月份: month,
+            基地: row.base,
+            产品编码: row.code,
+            异常类别: '调拨来源异常',
+            指标: plan.label,
+            计算用值: plan.value,
+            实际处理: plan.date ? '取最近有效计划量' : '无有效计划量，按0计算结存',
+            来源: shipmentPlanSource,
+            原因: `当月有${plan.conflictingDays}天的同方向计划量冲突，已跳过。采用来源：${plan.source}`,
+          })),
           ...row.inventoryIssues.map((issue) => ({
             月份: month,
             基地: row.base,
@@ -1507,6 +1501,7 @@ export function createShipment(
         '发运系数说明',
         '调拨计划来源',
         '原始月初库存',
+        '月初库存取数日期',
         '原始预计月末结存',
         '库存归零处理',
         '输入来源',
@@ -1543,6 +1538,7 @@ export function createShipment(
           发运系数说明: row.coefficientReason,
           调拨计划来源: `调入：${row.transferInSource ?? '来源未同步'}；调出：${row.transferOutSource ?? '来源未同步'}`,
           原始月初库存: row.rawOpen ?? '',
+          月初库存取数日期: row.openingStockDate ?? '',
           原始预计月末结存: row.rawEnd ?? '',
           库存归零处理: row.inventoryIssues.map((issue) => issue.reason).join('；'),
           输入来源: source,
@@ -1960,20 +1956,21 @@ export function createShipment(
                   : '本地CSV输入，BI排产未核齐'),
           ],
           transferIn: [
-            '调入计划取日度计划明细截至截止日的最新快照，纠偏优先于初版。无快照或字段为空时待补。',
-            `${raw('transferIn')} 件；${row.transferInSource ?? '逐SKU来源汇总；未同步来源的单品保留待定'}`,
+            '调入计划取当月截至统计日最近的有效值。同一天优先用纠偏计划，整月无有效值按0。',
+            `${raw('transferIn')} 件。${row.transferInSource ?? '按单品汇总。'}`,
           ],
           transferOut: [
-            '调出计划取日度计划明细截至截止日的最新快照，纠偏优先于初版。无快照或字段为空时待补。',
-            `${raw('transferOut')} 件；${row.transferOutSource ?? '逐SKU来源汇总；未同步来源的单品保留待定'}`,
+            '调出计划取当月截至统计日最近的有效值。同一天优先用纠偏计划，整月无有效值按0。',
+            `${raw('transferOut')} 件。${row.transferOutSource ?? '按单品汇总。'}`,
           ],
           end: [
-            row.children
-              ? '预计月末结存 = 已有单品结存之和；缺项单品保留待定'
-              : '预计月末结存 = max(0, 计算用月初库存 + 本月生产入库 + 剩余天数入库 + 调入计划 − 调出计划 − 整月预估发货)；负月初库存先归0',
+            (row.children
+              ? '预计月末结存 = 已有单品结存之和。'
+              : '预计月末结存 = max(0, 计算用月初库存 + 本月生产入库 + 剩余天数入库 + 调入计划 − 调出计划 − 整月预估发货)。负月初库存先归0。') +
+              '月初库存取同月截至统计日最近有效日报。未取得的累计生产入库或剩余入库按0计。调入和调出分别取当月最近有效计划量，无值的方向按0。',
             row.children
               ? `${row.children.length - row.missingCounts.end}个可计算单品结存求和 = ${raw('end')}`
-              : `${raw('open')} + ${raw('inbound')} + ${raw('remaining')} + ${raw('transferIn')} − ${raw('transferOut')} − ${raw('fin')}；原始月初库存${raw('rawOpen')}；归零前结存${raw('rawEnd')}；计算用结存${raw('end')}`,
+              : `${raw('open')} + ${row.inbound ?? 0} + ${row.remaining ?? 0} + ${raw('transferIn')} − ${raw('transferOut')} − ${raw('fin')}。原始月初库存${raw('rawOpen')}${row.openingStockDate ? `，取数日${row.openingStockDate}` : ''}，归零前结存${raw('rawEnd')}，计算用结存${raw('end')}`,
           ],
         };
         const [expression, substitution] = expressions[field] ?? [

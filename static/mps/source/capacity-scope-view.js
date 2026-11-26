@@ -2,9 +2,11 @@ import { downloadWorkbook } from './workbook.js';
 import { renderTablePagination } from './report-page.js';
 import { selectCapacityScope } from 'dsh-agent-manage/mps-compute/capacity-report';
 import { useStepViewField } from './step-view-state.js';
+import { createCalculationHelp } from './calculation-help.js';
 
 export function createCapacityScopeView(react) {
   const h = react.createElement;
+  const CalculationHelp = createCalculationHelp(react);
   return function CapacityScopeView({
     plan,
     month,
@@ -351,6 +353,17 @@ export function createCapacityScopeView(react) {
         h(
           'div',
           { className: 'dc-toolbar dc-report-filters mps-table-controls' },
+          h('span', { className: 'dc-card-note' }, `设备数据月份 ${month}`),
+          h(
+            CalculationHelp,
+            { title: '设备范围 · 口径说明' },
+            h('p', null, '关联需求按当前设备范围去重。隧道利用率为关联需求吨数除以月产能。'),
+            h(
+              'p',
+              null,
+              '实际占用包含调拨供给，按本轮排产分配统计。产品占比采用范围内去重后的总产能。',
+            ),
+          ),
           selector(
             '设备基地',
             base,

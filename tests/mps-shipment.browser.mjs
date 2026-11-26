@@ -1356,23 +1356,23 @@ test('shipment national SKU preserves base adjustment sources, aggregate days an
   }
 });
 
-test('日度计划调拨纠偏零优先，空方向待补，历史手填值保留但不生效', async (t) => {
+test('日度调拨分别呈现最近有效日期，纠偏零优先，并用于月末结存', async (t) => {
   const { page, frame, table, calls } = await businessShipment(t, (query) => {
     const result = shipmentFacts(query);
     if (query.queryId === 'facts.shipment')
       Object.assign(result.rows[0], {
-        transfer_date: '2026-09-22',
-        transfer_rows: 1,
-        transfer_in_plan_v1: 50,
-        transfer_in_plan_adj: 0,
-        transfer_out_plan_v1: null,
-        transfer_out_plan_adj: null,
+        transfer_in_date: '2026-09-22',
+        transfer_in_qty: 0,
+        transfer_in_adjusted: 1,
+        transfer_out_date: '2026-09-21',
+        transfer_out_qty: 5,
+        transfer_out_adjusted: 0,
       });
     return result;
   });
   await expectShipment(table, '全国合计 调入计划', '0');
-  await expectShipment(table, '全国合计 调出计划', '待定');
-  await expectShipment(table, '全国合计 预计月末结存', '待定');
+  await expectShipment(table, '全国合计 调出计划', '5');
+  await expectShipment(table, '全国合计 预计月末结存', '71');
   await expandShipmentBase(frame, '郑州');
   await beginAdjustment(frame);
   await expect(table.getByLabel('郑州 A 调入计划', { exact: true })).toHaveCount(0);
@@ -1392,8 +1392,8 @@ test('日度计划调拨纠偏零优先，空方向待补，历史手填值保�
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await expect.poll(shipmentReads).toBeGreaterThan(before);
   await expectShipment(table, '全国合计 调入计划', '0');
-  await expectShipment(table, '全国合计 调出计划', '待定');
-  await expectShipment(table, '全国合计 预计月末结存', '待定');
+  await expectShipment(table, '全国合计 调出计划', '5');
+  await expectShipment(table, '全国合计 预计月末结存', '71');
   const restored = await page.evaluate(() => window.readView());
   assert.deepEqual(
     restored.localDrafts.drafts.find((row) => row.id === restored.localDrafts.selected).shipment
@@ -1403,11 +1403,11 @@ test('日度计划调拨纠偏零优先，空方向待补，历史手填值保�
   assert.doesNotMatch(await exported(page, frame), /纠偏优先，初版回退/);
   assert.match(
     await exported(page, frame),
-    /2026-09-22 日度计划明细纠偏计划.*2026-09-22 日度计划明细调出计划字段为空/,
+    /2026-09-22 日度计划明细纠偏计划.*2026-09-21 日度计划明细初版计划/,
   );
 });
 
-test('日度计划无记录、字段为空或重复时待定，失败不回填零', async (t) => {
+test('无有效调拨量按0计算结存，报告保留冲突日和读取失败', async (t) => {
   let fail = false;
   const { page, frame, table } = await businessShipment(
     t,
@@ -1443,24 +1443,23 @@ test('日度计划无记录、字段为空或重复时待定，失败不回填�
   );
   await expectShipment(table, '全国合计 调入计划', '30');
   await expectShipment(table, '全国合计 调出计划', '25');
-  await expectShipment(table, '全国合计 预计月末结存', '157');
+  await expectShipment(table, '全国合计 预计月末结存', '309');
   await expandShipmentBase(frame, '郑州');
-  await expectShipment(table, '郑州 C 调入计划', '待定');
-  await expectShipment(table, '郑州 C 调出计划', '待定');
+  await expectShipment(table, '郑州 C 调入计划', '0');
+  await expectShipment(table, '郑州 C 调出计划', '0');
   await expectShipment(table, '郑州 E 本月生产入库', '');
-  await expectShipment(table, '郑州 E 调入计划', '待定');
-  await expectShipment(table, '郑州 E 调出计划', '待定');
-  await expectShipment(table, '郑州 E 预计月末结存', '待定');
-  await expectShipment(table, '郑州 D 调入计划', '待定');
-  await expectShipment(table, '郑州 D 预计月末结存', '待定');
+  await expectShipment(table, '郑州 E 调入计划', '0');
+  await expectShipment(table, '郑州 E 调出计划', '0');
+  await expectShipment(table, '郑州 E 预计月末结存', '0');
+  await expectShipment(table, '郑州 D 调入计划', '0');
+  await expectShipment(table, '郑州 D 预计月末结存', '76');
   await frame.getByText('发货与库存异常报告', { exact: true }).click();
   await expect(frame.getByRole('table', { name: '发货与库存异常报告' })).toContainText(
-    '调拨计划最新快照重复或冲突',
+    '当月有1天的同方向计划量冲突',
   );
   const csv = await exported(page, frame);
-  assert.match(csv, /该基地SKU没有日度计划明细/);
-  assert.match(csv, /计划字段为空/);
-  assert.match(csv, /重复或冲突/);
+  assert.match(csv, /该基地SKU当月截至统计日无日度计划，按0计算/);
+  assert.match(csv, /无有效调入计划数量，按0计算/);
   fail = true;
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
   await expect(frame.getByRole('alert')).toContainText('数据读取失败');

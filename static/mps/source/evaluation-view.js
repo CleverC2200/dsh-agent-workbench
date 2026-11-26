@@ -945,7 +945,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     const capacityScope = () =>
       h(CapacityScopeView, {
         plan,
-        month: filters.month || plan.capacityReport?.referenceMonth,
+        month: filters.month || draft.month,
         filters,
         view,
         active,

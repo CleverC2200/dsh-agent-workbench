@@ -176,7 +176,7 @@ test('库存来源未读与源行发运条件不足分别说明，不把未同�
     },
   });
   assert.match(pending.reportIssues[0].reason, /缺有效预估发货.*三种发运速度均为0/);
-  assert.doesNotMatch(pending.reportIssues[0].reason, /缺截止日库存/);
+  assert.doesNotMatch(pending.reportIssues[0].reason, /缺当月有效月初库存/);
 });
 
 test('补数问题清单列明替换系数和产品净重字段，零需求的系数缺项不阻断', () => {

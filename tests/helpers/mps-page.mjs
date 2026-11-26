@@ -1,6 +1,23 @@
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { authorPage } from './author-page.mjs';
+
+function shipmentFixtureRow(row, cutoff) {
+  const dates = { open_date: row.open == null ? null : cutoff };
+  for (const direction of ['in', 'out']) {
+    const adjusted = row[`transfer_${direction}_plan_adj`];
+    const quantity =
+      Number(row.transfer_rows) === 1 ? (adjusted ?? row[`transfer_${direction}_plan_v1`]) : null;
+    Object.assign(dates, {
+      [`transfer_${direction}_qty`]: quantity ?? 0,
+      [`transfer_${direction}_date`]: quantity == null ? null : row.transfer_date,
+      [`transfer_${direction}_adjusted`]: quantity == null ? null : Number(adjusted != null),
+      [`transfer_${direction}_conflicts`]: Number(Number(row.transfer_rows) > 1),
+    });
+  }
+  return { ...dates, ...row };
+}
+
 export async function mpsPage(t, config, execute, options = {}) {
   const queryFixture = options.optimizedPaging ? config : structuredClone(config);
   if (!options.optimizedPaging && queryFixture)
@@ -19,7 +36,13 @@ export async function mpsPage(t, config, execute, options = {}) {
     if (message.method !== 'sql') return {};
     assert.deepEqual(Object.keys(message.parameters).sort(), ['parameters', 'queryId']);
     calls.push(message.parameters);
-    return execute(message.parameters);
+    const result = await execute(message.parameters);
+    const { queryId, parameters } = message.parameters;
+    if (queryId !== 'facts.shipment' || !result?.rows) return result;
+    return {
+      ...result,
+      rows: result.rows.map((row) => shipmentFixtureRow(row, parameters.cutoff)),
+    };
   });
   await page.evaluate(() => {
     window.addEventListener('message', (event) => {

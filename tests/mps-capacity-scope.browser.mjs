@@ -34,6 +34,7 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
         if(scenario==='missing') sample.shipment.rows.forEach(row=>row.end=null);
         if(scenario==='partial') sample.shipment.rows[0].end=null;
         if(scenario==='movement') {sample.draft.inventoryMovements[0].productionInbound=null;sample.draft.inventoryMovements[0].transferIn=null;}
+        if(scenario==='reference') sample.evaluation.annual={referenceMonth:'2026-11',rows:[]};
         if(scenario==='demand') sample.draft.categoryDemand[0].quantity=null;
         if(scenario==='upstream') {delete sample.draft.categoryDemand;sample.draft.historicalIndicatorsRead={status:'failed',month:sample.draft.month,error:'历史源读取拒绝-评估上游原因完整保留'};}
         if(scenario==='zero') sample.draft.categoryDemand.forEach(row=>row.quantity=0);
@@ -44,7 +45,7 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
         const card=(title,body,actions)=>h('section',{className:'dc-card','aria-label':title},h('div',{className:'dc-card-head'},h('h2',null,title),actions),body);
         const table=(name,columns,rows)=>h('div',{className:'dc-table-scroll wf-table-scroll'},h('table',{'aria-label':name},h('thead',null,h('tr',null,...columns.map((c,i)=>h('th',{key:i,scope:'col'},c)))),h('tbody',null,...rows.map((r,i)=>h('tr',{key:i},...r.map((v,j)=>h('td',{key:j},v?.content??v)))))));
         const view=createStepViewState();
-        window.showStep=(step,filters={month:'2026-12'})=>root.render(h(View,{view,step,draft:sample.draft,currentEvaluation:{at:'验收时间',result},filters,table,card,numberText:value=>value===null?'待补':new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(value),onExecute(){}}));
+        window.showStep=(step,filters={month:scenario==='reference'?'':'2026-12'})=>root.render(h(View,{view,step,draft:sample.draft,currentEvaluation:{at:'验收时间',result},filters,table,card,numberText:value=>value===null?'待补':new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(value),onExecute(){}}));
         window.showStep('capacity');};window.runCapacity(2,localStorage.getItem('capacityDraft')!==null);`,
     },
     plugins: [await mpsComputePlugin()],
@@ -210,17 +211,20 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
     ).toBeVisible();
   }
 
-  await page.evaluate(() => {
-    window.runCapacity(2, false, 'movement');
-  });
-  const problems = page.getByRole('region', { name: '问题分类与补充清单', exact: true });
-  await expect(problems).toContainText('既有入库或调拨计划缺项');
+  await page.evaluate(() => window.runCapacity(2, false, 'movement'));
+  await expect(summary).toContainText('本轮排产已计算');
+  const movements = await page.evaluate(() =>
+    window.result.plan.rows.find((row) => row.month === '2026-12' && row.code === '0'),
+  );
+  assert.equal(movements.existingProductionInbound, 0);
+  assert.equal(movements.existingTransferIn, 0);
   exported = await downloadSheet('导出求解结果', '求解结果');
-  const blocked = exported.rows.find((row) => row.产品编码 === '0');
-  assert.match(blocked.问题分类, /既有入库或调拨计划缺项/);
-  assert.match(blocked.异常说明, /缺既有生产入库、既有调入/);
-  assert.doesNotMatch(blocked.异常说明, /缺既有在途入库|缺既有调出/);
-  assert.match(blocked.需人工补齐, /第五步约束与配置/);
+  const scheduled = exported.rows.find((row) => row.产品编码 === '0');
+  assert.ok(scheduled.内部实际排产量 > 0);
+  assert.doesNotMatch(scheduled.问题分类, /既有入库或调拨计划缺项/);
+  await page.evaluate(() => window.runCapacity(2, false, 'reference'));
+  await expect(page.getByText(/设备数据月份 2026-12/)).toBeVisible();
+  await expect(summary).toContainText('本轮排产已计算');
   await page.evaluate(() => window.runCapacity(2, false, 'upstream'));
   await page.getByText('查看大类需求上游原因', { exact: false }).click();
   await expect(page.getByRole('table', { name: '大类需求上游原因', exact: true })).toContainText(

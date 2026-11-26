@@ -199,10 +199,9 @@ test('页头版本跟随月份并显示短名，可新建月份跨年顺延', as
   await newVersion.getByRole('button', { name: '创建本地版本', exact: true }).click();
   await expect(versions.locator('option')).toHaveText(['第2版', 'DEV 下市品验收']);
   assert.ok((await versions.boundingBox()).width <= 136);
-  assert.equal(
-    await page.evaluate(() => window.readView().localDrafts.drafts.at(-1).name),
-    fullName,
-  );
+  await expect
+    .poll(() => page.evaluate(() => window.readView()?.localDrafts?.drafts.at(-1)?.name))
+    .toBe(fullName);
   await versions.selectOption('local-2');
   await expect(month).toHaveValue('2027-01');
   for (const [date, expected] of [

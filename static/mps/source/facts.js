@@ -21,6 +21,12 @@ const text = (value) => {
   if (typeof value !== 'string') throw Error('事实来源返回了无效维度');
   return value;
 };
+const optionalQuantity = (value) =>
+  (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) &&
+  Number.isFinite(Number(value)) &&
+  Math.abs(Number(value)) <= Number.MAX_SAFE_INTEGER
+    ? Number(value)
+    : null;
 const reportQuantityPriority = 2;
 const reportAmountPriority = -1;
 const standardFactPageSize = 200;
@@ -110,12 +116,14 @@ async function readFacts(id, parameters, signal, type, month, priority, largerPa
   const client = createMpsQueryClient(config);
   if (type === 'shipmentDate')
     return client.read(id, parameters, { signal, priority, requiredColumns: definition.columns });
+  const evaluationMovement = type === 'evaluationMovement';
   if (
     type === 'report' ||
     type === 'plan-quantity' ||
     type === 'shipment' ||
     type === 'inventoryTargets' ||
-    type === 'evaluationInventory'
+    type === 'evaluationInventory' ||
+    evaluationMovement
   ) {
     const result = await client.readAll(
       id,
@@ -123,16 +131,22 @@ async function readFacts(id, parameters, signal, type, month, priority, largerPa
       {
         signal,
         keyFields: definition.grain,
-        requiredColumns: definition.columns,
+        requiredColumns: evaluationMovement ? definition.grain : definition.columns,
+        allowPartial: evaluationMovement,
         maxRows: 100000,
         priority: priority ?? (type === 'report' ? reportQuantityPriority : undefined),
       },
     );
-    if (type === 'shipment' || type === 'inventoryTargets' || type === 'evaluationInventory')
+    if (
+      type === 'shipment' ||
+      type === 'inventoryTargets' ||
+      type === 'evaluationInventory' ||
+      evaluationMovement
+    )
       return {
         rows: result.rows,
         metadata: {
-          partial: false,
+          partial: result.partial ?? false,
           warnings: [],
           total: result.total,
           configVersion: result.configVersion,
@@ -326,65 +340,45 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
     isBusinessDate(viewDate) && viewDate >= draft.month + '-01' && viewDate < today
       ? viewDate
       : today;
-  const read = (id, parameters, project) =>
-    readFacts(id, parameters, signal, 'evaluationInventory')
+  const cutoffMonth = cutoff.slice(0, 7);
+  const lastMonth = months.at(-1);
+  const read = (id, parameters, project, type = 'evaluationMovement') =>
+    readFacts(id, parameters, signal, type)
       .then((result) => ({ ...result, rows: project(result.rows) }))
       .catch((error) => {
         signal.throwIfAborted();
         return { rows: [], error: error.message };
       });
   const [monthly, physical, transit] = await Promise.all([
-    cutoff >= draft.month + '-01'
+    cutoffMonth >= draft.month
       ? read(
           'facts.inventory-movements',
-          { start_month: draft.month + '-01', end_month: months.at(-1) + '-01', cutoff },
+          {
+            start_month: draft.month + '-01',
+            end_month: (lastMonth < cutoffMonth ? lastMonth : cutoffMonth) + '-01',
+            cutoff,
+          },
           (rows) =>
             rows.flatMap((row) => {
               const month = row.stock_month?.slice(0, 7);
               const sourceDate = row.source_date;
               if (
-                number(row.source_rows) !== 1 ||
                 !months.includes(month) ||
                 !isBusinessDate(sourceDate) ||
                 sourceDate.slice(0, 7) !== month ||
                 sourceDate > cutoff
               )
                 return [];
-              const chosenPlan = row.produce_plan_adj ?? row.produce_plan;
-              const actual = row.production_actual === null ? null : number(row.production_actual);
-              const plan = chosenPlan === null ? null : number(chosenPlan);
-              const monthClosed = isCalendarMonthEnd(sourceDate);
-              const actualAlreadyCoversPlan =
-                plan === 0 || (actual !== null && plan !== null && plan > 0 && actual > plan);
-              const transfer = (direction) => {
-                const value =
-                  row[`transfer_${direction}_plan_adj`] ?? row[`transfer_${direction}_plan_v1`];
-                return value === null ? null : number(value);
-              };
               return [
                 {
                   month,
-                  base: text(row.belong_base),
-                  code: text(row.material_code),
+                  base: text(row.belong_base ?? null),
+                  code: text(row.material_code ?? null),
                   sourceDate,
-                  opening: row.begin_stock === null ? null : number(row.begin_stock),
-                  productionInbound:
-                    actual === null
-                      ? null
-                      : monthClosed || actualAlreadyCoversPlan
-                        ? actual
-                        : plan !== null && plan > 0
-                          ? plan
-                          : null,
-                  productionBasis: monthClosed
-                    ? '月末实绩'
-                    : actualAlreadyCoversPlan && actual !== 0
-                      ? '已入库净实绩，含冲销'
-                      : row.produce_plan_adj !== null
-                        ? '纠偏生产计划'
-                        : '初版生产计划',
-                  transferIn: transfer('in'),
-                  transferOut: transfer('out'),
+                  opening: optionalQuantity(row.begin_stock),
+                  productionInbound: optionalQuantity(row.production_actual),
+                  transferIn: optionalQuantity(row.transfer_in_actual),
+                  transferOut: optionalQuantity(row.transfer_out_actual),
                 },
               ];
             }),
@@ -394,15 +388,19 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
     basis.draftId === draft.id &&
     ['ok', 'partial'].includes(basis.status) &&
     isCalendarMonthEnd(basis.cutoff)
-      ? read('facts.opening-physical', { cutoff: basis.cutoff }, (rows) =>
-          rows.map((row) => ({
-            base: text(row.belong_base),
-            code: text(row.material_code),
-            opening: row.quantity === null ? null : number(row.quantity),
-          })),
+      ? read(
+          'facts.opening-physical',
+          { cutoff: basis.cutoff },
+          (rows) =>
+            rows.map((row) => ({
+              base: text(row.belong_base),
+              code: text(row.material_code),
+              opening: row.quantity === null ? null : number(row.quantity),
+            })),
+          'evaluationInventory',
         ).then((result) => ({ ...result, cutoff: basis.cutoff }))
       : null,
-    cutoff >= draft.month + '-01'
+    cutoffMonth >= draft.month
       ? read(
           'facts.inventory-transit',
           {
@@ -415,9 +413,10 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
           (rows) =>
             rows.flatMap((row) => {
               const month = row.arrival_month;
-              const quantity = number(row.quantity);
-              const sourceOrders = number(row.source_orders);
+              const quantity = optionalQuantity(row.quantity);
+              const sourceOrders = optionalQuantity(row.source_orders);
               return months.includes(month) &&
+                month <= cutoffMonth &&
                 quantity > 0 &&
                 Number.isSafeInteger(sourceOrders) &&
                 sourceOrders > 0
@@ -435,7 +434,7 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
         )
       : null,
   ]);
-  return { monthly, physical, transit };
+  return { cutoff, monthly, physical, transit };
 }
 
 export async function readLatestShipmentDate(through, signal, priority) {
@@ -466,6 +465,8 @@ export async function readShipmentInputs(cutoff, signal, priority) {
   const [year, monthNumber] = month.split('-').map(Number);
   const totalDays = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
   const recentStart = `${month}-${String(Math.max(1, passed - 2)).padStart(2, '0')}`;
+  const sourceDate = (date) =>
+    isBusinessDate(date) && date.startsWith(month + '-') && date <= cutoff ? date : null;
   const result = await readFacts(
     'facts.shipment',
     { month: month + '-01', cutoff, recent_start: recentStart },
@@ -484,28 +485,21 @@ export async function readShipmentInputs(cutoff, signal, priority) {
           row[field] === null ? null : number(row[field]),
         ]),
       );
-      const transferDate = row.transfer_date;
-      const transferRows = number(row.transfer_rows);
-      const transferSnapshotIssue =
-        !isBusinessDate(transferDate) || transferDate.slice(0, 7) !== month || transferDate > cutoff
-          ? '日度计划明细缺少适用的调拨快照'
-          : transferRows !== 1
-            ? '调拨计划最新快照重复或冲突，未采用计划数量'
-            : '';
-      const transfer = (direction) => {
-        if (transferSnapshotIssue) return { value: null, source: transferSnapshotIssue };
-        const adjusted = row[`transfer_${direction}_plan_adj`];
-        const value = adjusted ?? row[`transfer_${direction}_plan_v1`];
+      const transfer = (direction, label) => {
+        const date = sourceDate(row[`transfer_${direction}_date`]);
+        const value = number(row[`transfer_${direction}_qty`]);
         return {
-          value: value === null ? null : number(value),
-          source:
-            value === null
-              ? `${transferDate} 日度计划明细${direction === 'in' ? '调入' : '调出'}计划字段为空`
-              : `${transferDate} 日度计划明细${adjusted === null ? '初版计划' : '纠偏计划'}`,
+          label,
+          date,
+          value,
+          source: date
+            ? `${date} 日度计划明细${number(row[`transfer_${direction}_adjusted`]) === 1 ? '纠偏计划' : '初版计划'}`
+            : `当月截至${cutoff}无有效${label}数量，按0计算`,
+          conflictingDays: number(row[`transfer_${direction}_conflicts`]),
         };
       };
-      const transferIn = transfer('in');
-      const transferOut = transfer('out');
+      const transferIn = transfer('in', '调入计划');
+      const transferOut = transfer('out', '调出计划');
       return {
         month,
         base: text(row.belong_base),
@@ -515,20 +509,16 @@ export async function readShipmentInputs(cutoff, signal, priority) {
         series: text(row.series),
         group: text(row.product_item),
         ...quantities,
+        openingStockDate: sourceDate(row.open_date),
         monthOrder: row.month_order_qty == null ? null : number(row.month_order_qty),
         rawAverage: row.raw_average === null ? null : number(row.raw_average),
         transferIn: transferIn.value,
         transferOut: transferOut.value,
         transferInSource: transferIn.source,
         transferOutSource: transferOut.source,
-        transferDate,
-        transferIssue: [
-          ...new Set(
-            [transferIn, transferOut]
-              .filter(({ value }) => value === null)
-              .map(({ source }) => source),
-          ),
-        ].join('；'),
+        transferInDate: transferIn.date,
+        transferOutDate: transferOut.date,
+        transferIssues: [transferIn, transferOut].filter((plan) => plan.conflictingDays > 0),
         remaining:
           quantities.inbound == null || passed <= 1
             ? null

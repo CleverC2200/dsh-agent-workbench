@@ -1875,6 +1875,15 @@ export function createWorkflow(
                       ),
                   ),
                 ),
+                h(
+                  CalculationHelp,
+                  { title: '既有库存变动 · 口径说明' },
+                  h(
+                    'p',
+                    null,
+                    '按评估月份采用已取得的生产入库、在途和调拨数量，未取得的变动量按 0 计。前月变动通过月末结存转入下月期初。',
+                  ),
+                ),
               ),
               card(
                 '可用生产天数',
