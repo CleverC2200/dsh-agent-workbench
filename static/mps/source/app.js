@@ -2,6 +2,7 @@ import { createDemandConfirmation, downloadCsv } from './demand-confirmation.js'
 import { createRelations } from './relations-view.js';
 import { mpsView, useMpsPart, useMpsNavigation } from './context.js';
 import { usePageViewField } from '../../../business/shared/view-state.js';
+import { AuthorQuestions, useAuthorQuote } from '../../../business/shared/author-questions.js';
 
 const mpsSteps = [
   ['check', '需求确认'],
@@ -28,6 +29,8 @@ function Mps() {
     (value) => (mpsSteps.some((item) => item.key === value) ? value : 'check'),
   );
   const bodyRef = y.useRef(null);
+  const [assistantDraft, setAssistantDraft] = usePageViewField(y, mpsView, 'assistantDraft', '');
+  const actions = useAuthorQuote(y);
   const stepListRef = y.useRef(null);
   y.useLayoutEffect(() => {
     const list = stepListRef.current;
@@ -172,6 +175,16 @@ function Mps() {
             enabled: !['check', 'ship'].includes(step) || Boolean(relations?.sources),
           }),
         }),
+        (assistantDraft.trim() || actions.status) &&
+          y.createElement(AuthorQuestions, {
+            react: y,
+            jsx: c,
+            Button: Ke,
+            questions: [],
+            draft: assistantDraft,
+            onClearDraft: () => setAssistantDraft(''),
+            actions,
+          }),
       ),
     ),
   );

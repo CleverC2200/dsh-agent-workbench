@@ -226,7 +226,7 @@ test('Tab1 is read only and leaf edits cancel or save atomically at either width
       width,
     );
     await actions.getByRole('button', { name: '调整', exact: true }).click();
-    await expect(leafView.locator('tbody input:not([aria-label$=\"调整备注\"])')).toHaveCount(8);
+    await expect(leafView.locator('tbody input:not([aria-label$="调整备注"])')).toHaveCount(8);
     await expect(leafView.locator('tbody input').first()).toBeFocused();
     await expect(frame.getByLabel('评估版本选择')).toBeEnabled();
     await expect(frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' })).toBeEnabled();

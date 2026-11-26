@@ -9,7 +9,7 @@ import { ready } from '../../../business/shared/channel.js';
 import { createPlanRates } from './plan-rate-view.js';
 import { hasMpsSource } from './master-data.js';
 import { readFactMonth, readHistoryAnnual, readHistoryWindow } from './facts.js';
-import { hasSourceCalculation, readSourceTable } from './source-tables.js';
+import { readSourceTable } from './source-tables.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { sourceCheckRows, sourceProductMappings } from './source-projections.js';
 import { createGrowthAnomalyReport, growthSourceAnomalies } from './growth-anomaly-report.js';
