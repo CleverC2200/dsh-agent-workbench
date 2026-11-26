@@ -323,8 +323,11 @@ test('published base plan scope keeps the same-month alternative for cards and s
         })),
       };
     }
-    if (queryId === 'snapshot.base-over60-sku-count')
+    if (queryId === 'snapshot.base-over60-sku-count') {
+      assert.equal(values.month, '2026-12-01');
+      assert.equal(values.stock_month, '2026-11-01');
       return { configVersion: 'v1', returnedColumns: columns, rows: [{ over60_sku_count: 1 }] };
+    }
     assert.ok(queryId.startsWith('snapshot.'), queryId);
     assert.equal(values.summary_batch_id, 'batch-selected-plan');
     assert.equal(values.month, '2026-12-01');
@@ -356,6 +359,7 @@ test('published base plan scope keeps the same-month alternative for cards and s
     assert.equal(result.scope.versionLabel, '纠偏');
     assert.equal(result.scope.fallbackUsed, true);
     assert.equal(result.groups[0].inventory, 100);
+    assert.equal(result.over60Skus, structure ? null : 1);
   }
   assert.ok(!calls.includes('calendar.target_plan_versions'));
   assert.ok(calls.includes('snapshot.page.dashboard-groups'));

@@ -590,6 +590,7 @@ export async function readConfiguredStockSummary(
         month: snapshot.targetMonth,
         inventory_version: snapshot.defaultInventoryVersion,
         stock_date: day,
+        stock_month: stockMonth,
         bases_enabled: true,
         bases: selectedBases?.length
           ? selectedBases

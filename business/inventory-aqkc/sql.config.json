@@ -13730,6 +13730,14 @@
           "items": "string",
           "minItems": 1
         },
+        "gea_p6": {
+          "name": "stock_month",
+          "type": "string",
+          "example": "2026-10-01",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        },
         "gea_p90001": {
           "name": "summary_batch_id",
           "type": "string",
@@ -13737,7 +13745,7 @@
         }
       },
       "request": {
-        "sql": "SELECT CASE WHEN COUNT(m.over60) > 0 THEN COUNT(DISTINCT CASE WHEN m.over60 > 0 THEN m.sku END)\n                  END AS over60_sku_count\nFROM agents_inv_base_sku_day AS m\nWHERE m.inv_batch_id = :gea_p90001\n  AND m.inv_variant_id = CONCAT('BASE_STOCK:', :gea_p2)\n  AND m.month = :gea_p1 AND m.stock_date = :gea_p3\n  AND (:gea_p4 = FALSE OR m.belong_base IN (:gea_p5))",
+        "sql": "SELECT CASE WHEN COUNT(m.over60) > 0 THEN COUNT(DISTINCT CASE WHEN m.over60 > 0 THEN m.sku END)\n                  END AS over60_sku_count\nFROM agents_inv_base_sku_day AS m\nWHERE m.inv_batch_id = :gea_p90001\n  AND m.inv_variant_id = CONCAT('BASE_STOCK:', :gea_p2)\n  AND m.month = :gea_p1 AND m.stock_date = :gea_p3 AND m.stock_date >= :gea_p6\n  AND (:gea_p4 = FALSE OR m.belong_base IN (:gea_p5))",
         "includeTotal": false,
         "parameters": {
           "gea_p1": "2026-10-01",
@@ -13745,6 +13753,7 @@
           "gea_p3": "2026-10-13",
           "gea_p4": false,
           "gea_p5": ["郑州"],
+          "gea_p6": "2026-10-01",
           "gea_p90001": "UNPUBLISHED_BATCH"
         }
       },
