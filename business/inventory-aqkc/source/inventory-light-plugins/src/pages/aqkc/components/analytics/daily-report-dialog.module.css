@@ -145,8 +145,9 @@
   padding: 10px 12px;
   background: var(--ui-canvas);
   color: #536074;
-  font-weight: 500;
+  font-weight: 700;
   white-space: nowrap;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .tableScroll td {
   padding: 11px 12px;
@@ -378,7 +379,8 @@
 }
 .tableScroll td p {
   margin: 5px 0 0;
-  font-size: 12px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .baseGroup {
   margin: 16px 0;

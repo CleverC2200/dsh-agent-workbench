@@ -83,7 +83,8 @@
 }
 .modal th {
   white-space: nowrap;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .modal section {
   overflow-x: auto;

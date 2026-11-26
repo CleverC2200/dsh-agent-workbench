@@ -1923,7 +1923,7 @@ test('FC overview fits five compact cards in a wide row and adapts without clipp
     );
     assert.ok(
       layout.cards.every((card) => card.height <= 145),
-      `FC cards too tall at ${width}`,
+      `FC cards too tall at ${width}: ${layout.cards.map((card) => card.height).join(', ')}`,
     );
     if (columns === 5)
       assert.equal(new Set(layout.cards.map((card) => Math.round(card.top))).size, 1);

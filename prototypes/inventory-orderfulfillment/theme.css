@@ -207,6 +207,8 @@ body {
 }
 .fulfillment-table-scroll > table > thead th {
   background: #f5f7fb;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .fulfillment-table-scroll > table > tbody > tr > td:first-child:not([colspan]),
 .fulfillment-table-scroll > table > thead > tr > th:first-child {
@@ -277,6 +279,8 @@ body {
 }
 #itemCoordinationTable > thead th {
   position: static;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 #itemCoordinationTable > tbody > tr > td:nth-child(1),
 #itemCoordinationTable > thead > tr:nth-child(2) > th:nth-child(1) {

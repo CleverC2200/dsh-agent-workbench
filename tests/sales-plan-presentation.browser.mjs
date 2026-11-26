@@ -911,9 +911,9 @@ test('table headers are bold without a darker background', { timeout: 30000 }, a
   for (const table of [queue, detail]) {
     for (const cell of table.head) {
       if (!cell.text) continue;
-      assert.equal(cell.weight, 800, `表头「${cell.text}」字重`);
-      assert.equal(cell.fontSize, '9px', `表头「${cell.text}」字号`);
-      assert.ok(Math.abs(parseFloat(cell.lineHeight) - 12.15) < 0.1, `表头「${cell.text}」行高`);
+      assert.equal(cell.weight, 700, `表头「${cell.text}」字重`);
+      assert.equal(cell.fontSize, '12px', `表头「${cell.text}」字号`);
+      assert.ok(Math.abs(parseFloat(cell.lineHeight) - 16.2) < 0.1, `表头「${cell.text}」行高`);
       assert.equal(cell.height, 38, `表头「${cell.text}」高度`);
       assert.equal(
         cell.bg,
