@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
-test('调拨计划使用截止日前最新同月快照，各方向保留纠偏零、初版和确认无计划', (t) => {
+test('调拨只读取日度计划明细截止日前的最新同月快照', (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   db.exec(`CREATE TABLE agents_scm_stock_detail_d (
@@ -21,12 +21,30 @@ test('调拨计划使用截止日前最新同月快照，各方向保留纠偏�
     ['A', '2026-09-21', 10, 0, 20, null],
     ['A', '2026-09-23', 999, 999, 999, 999],
     ['B', '2026-09-22', 30, null, 40, 5],
-    ['C', '2026-09-22', null, null, null, null],
+    ['C', '2026-09-22', 10, 20, 30, 40],
     ['D', '2026-09-21', 50, null, 50, null],
     ['D', '2026-09-22', 10, 20, 30, 40],
     ['D', '2026-09-22', 10, 20, 30, 40],
   ])
     insert.run(...row);
+  db.exec(`CREATE TABLE agents_ads_scm_base_sku_daily_plan_detail_d (
+    belong_base TEXT, material_code TEXT, the_date TEXT, in_qty REAL,
+    transfer_in_plan_v1 REAL, transfer_in_plan_adj REAL, transfer_out_plan_v1 REAL, transfer_out_plan_adj REAL
+  )`);
+  const daily = db.prepare(
+    "INSERT INTO agents_ads_scm_base_sku_daily_plan_detail_d VALUES ('郑州',?,?,0,?,?,?,?)",
+  );
+  for (const row of [
+    ['A', '2026-09-20', 99, 99, 99, 99],
+    ['A', '2026-09-22', 50, 0, null, null],
+    ['A', '2026-09-23', 999, 999, 999, 999],
+    ['B', '2026-09-21', 75, null, 10, 15],
+    ['C', '2026-08-31', 999, 999, 999, 999],
+    ['D', '2026-09-22', 10, 20, 30, 40],
+    ['D', '2026-09-22', 10, 20, 30, 40],
+    ['NEW', '2026-09-22', 999, 999, 999, 999],
+  ])
+    daily.run(...row);
   const { columns, request } = config.queries['facts.shipment'];
   assert.doesNotMatch(request.sql, /\bSELECT\s+(?:\w+\.)?\*/i);
   const query = db.prepare(request.sql);
@@ -52,9 +70,9 @@ test('调拨计划使用截止日前最新同月快照，各方向保留纠偏�
       row.transfer_out_plan_adj,
     ]),
     [
-      ['A', '2026-09-21', 1, 10, 0, 20, null],
-      ['B', '2026-09-22', 1, 30, null, 40, 5],
-      ['C', '2026-09-22', 1, null, null, null, null],
+      ['A', '2026-09-22', 1, 50, 0, null, null],
+      ['B', '2026-09-21', 1, 75, null, 10, 15],
+      ['C', null, null, null, null, null, null],
       ['D', '2026-09-22', 2, null, null, null, null],
     ],
   );

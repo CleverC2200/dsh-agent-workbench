@@ -629,14 +629,8 @@ test('MPS capacity and report keep missing formula dependencies empty and export
   );
   await workflowStep(frame, '产能评估与缺口');
   const capacity = frame.getByRole('region', { name: '产能评估与缺口', exact: true });
-  for (const field of [
-    '目标库存',
-    '所需生产量',
-    '参考期末库存',
-    '所需生产吨数',
-    '可执行主计划',
-    '调拨',
-  ])
+  await expectWorkflowExportValue(frame, '郑州 A 2026-10 目标库存 计算过程', '0');
+  for (const field of ['所需生产量', '参考期末库存', '所需生产吨数', '可执行主计划', '调拨'])
     await expectWorkflowExportValue(frame, `郑州 A 2026-10 ${field} 计算过程`, '—');
   await capacity.getByLabel('月份筛选', { exact: true }).selectOption('2026-10');
   const capacityCsv = await download(page, capacity, '下载需求推导参考');
@@ -685,7 +679,7 @@ test('MPS configuration keeps accepted production days, explicit weight and assi
   await beginAdjustment(frame);
   const view = frame.getByRole('region', { name: '约束与配置', exact: true });
   await view.locator('summary').filter({ hasText: '高级配置：' }).click();
-  await expect(view).toContainText('缺源且无有效人工补充时保留待补');
+  await expect(view).toContainText('来源无记录或天数为空时，可人工补充，未补充则按0天计算。');
   await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toHaveValue('25');
   await commitNumber(view.getByLabel('郑州 2026-12 生产天数', { exact: true }), '15');
   await view.getByRole('button', { name: '郑州 2026-12 恢复默认生产天数', exact: true }).click();
@@ -1608,7 +1602,7 @@ test('MPS Tab5 reuses explicit SKU turnover supplements across three months whil
   await beginAdjustment(view);
   await expect(view.getByLabel('郑州 A 补充目标周转天数', { exact: true })).toBeVisible();
   let csv = await download(page, view, '下载目标库存明细');
-  assert.match(csv, /2026-12,郑州,A,产品甲,月初,500,10,50,,缺输入/);
+  assert.match(csv, /2026-12,郑州,A,产品甲,月初,500,10,50,0,缺输入，默认0天,0,/);
   await fillTurnoverDays(view, '郑州', '10');
   csv = await download(page, view, '下载目标库存明细');
   assert.match(csv, /2026-12,郑州,A,产品甲,月初,500,10,50,10,人工补充目标周转天数/);
@@ -2001,11 +1995,15 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
         }[row['月份']],
       );
       assert.equal(row['下月有效需求'], '');
-      const zero = label === 'zero' && row['产品编码'] === 'B';
+      const zero = row['产品编码'] === 'B';
       assert.equal(row['推导状态'], zero ? '可计算' : '缺推导依赖');
       assert.equal(
         row['需求依赖说明'],
-        zero ? '有效安全天数为0，无需下月需求' : `${row['依赖需求月']}有效需求`,
+        zero
+          ? label === 'zero'
+            ? '有效安全天数为0，无需下月需求'
+            : '缺周转天数按0天计算，无需下月需求'
+          : `${row['依赖需求月']}有效需求`,
       );
       if (zero) assert.equal(row['目标库存'], '0');
     }
@@ -2057,7 +2055,14 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
       ),
   );
   assert.ok(
-    rows.filter((row) => row['产品编码'] === 'B').every((row) => row['有效安全天数'] === undefined),
+    rows
+      .filter((row) => row['产品编码'] === 'B')
+      .every(
+        (row) =>
+          row['有效安全天数'] === '0' &&
+          row['推导目标库存'] === '0' &&
+          row['源最终目标周转天数'] === undefined,
+      ),
   );
   const sourceBook = XLSX.read(await download(page, view, '下载完整目标源记录'), {
     type: 'string',

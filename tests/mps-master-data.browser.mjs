@@ -73,7 +73,7 @@ test('MPS reads governed products and annual demand, preserves missing dimension
     products: '产品清单',
     annual: '年度需求',
     tunnels: '隧道产能',
-    sku_capacity: '产线SKU产能',
+    sku_capacity: 'SKU隧道产能',
     transfers: '调拨方向',
   })) {
     await dialog.getByRole('tab', { name, exact: true }).click();

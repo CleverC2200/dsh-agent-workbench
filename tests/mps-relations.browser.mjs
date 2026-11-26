@@ -44,6 +44,18 @@ const rows = {
       production_category: '产线生产品类',
       standard_daily_output_pc: 50,
     },
+    {
+      material_code: 'P001',
+      material_name: '已匹配候选隧道',
+      belong_base: '四川',
+      workshop: '生产单位甲',
+      tunnel_no: '1#',
+      series: '源系列甲',
+      combined_series: '组合甲乙',
+      production_category: '源品类',
+      standard_daily_output_pc: 80,
+      source_rows: 1,
+    },
     { material_code: null, material_name: '同名空码' },
   ],
   tunnels: [
@@ -167,6 +179,15 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
   await expect(view.locator('tbody tr').nth(0)).toContainText('12.5');
   await expect(view.locator('tbody tr').nth(0)).toContainText('双螺旋');
   await expect(view.locator('tbody tr').nth(0).locator('td').nth(14)).toHaveText('0');
+  await expect(view.getByRole('tab', { name: /单品与候选隧道/ })).toContainText(
+    '缺项或待确认 26条',
+  );
+  const matched = view.locator('tbody tr').filter({ hasText: '已匹配候选隧道' });
+  await expect(matched).toContainText('无缺项');
+  const onlyMissing = view.getByRole('checkbox', { name: '仅缺项或待确认' });
+  await onlyMissing.check();
+  await expect(matched).toHaveCount(0);
+  await onlyMissing.uncheck();
   const waiting = page.waitForEvent('download', { timeout: 10000 });
   await view.getByRole('button', { name: '下载完整关系明细', exact: true }).click();
   const chunks = [];
@@ -179,19 +200,21 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
   assert.equal(candidate['隧道类型'], '双螺旋');
   assert.equal(candidate['组合标准日产/件'], 50);
   assert.equal(candidate['组合标准日产/吨'], 0);
-  assert.match(candidate['核对状态'], /产线归属待补.*当前读取字段未提供独立产线/);
-  await expect(view.locator('tbody tr').nth(0)).toContainText('产线归属待补');
+  assert.match(candidate['核对状态'], /标准日产件数冲突/);
+  assert.doesNotMatch(candidate['核对状态'], /独立产线|产线归属/);
+  assert.equal(exported.find((row) => row['产品编码'] === 'P001')['核对状态'], '无缺项');
   await view.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(view.locator('tbody tr')).toHaveCount(2);
   await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('同名空码');
   await expect(view.getByText('同名空码', { exact: true })).toHaveCount(0);
   await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('');
-  await view.getByRole('tab', { name: /产线与源系列/ }).click();
+  await view.getByRole('tab', { name: /隧道与源系列/ }).click();
   await expect(view.locator('tbody tr')).toContainText('生产单位甲');
   await expect(view.getByRole('columnheader', { name: '源记录数', exact: true })).toBeVisible();
   await expect(view.locator('tbody tr').locator('td').nth(9)).toHaveText('39');
   await expect(view.locator('tbody tr')).toContainText('四川');
-  await expect(view.locator('tbody tr')).toContainText('产线归属待补');
+  await expect(view.locator('tbody tr')).toContainText('来源业务字段重复');
+  await expect(view.locator('tbody tr')).not.toContainText('产线归属待补');
   await expect(view.locator('tbody tr')).not.toContainText('西南');
   await view.getByRole('tab', { name: /基地与调拨/ }).click();
   await expect(view.locator('tbody tr')).toContainText('2026-10');
@@ -208,7 +231,7 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
       .filter((context) => context.parts?.masterdata)
       .every((context) => context.parts.masterdata.rows.length <= 25),
   );
-  await view.getByRole('tab', { name: /单品与候选产线/ }).click();
+  await view.getByRole('tab', { name: /单品与候选隧道/ }).click();
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   const filter = await openMpsCategoryFilter(frame);
   await filter.getByRole('checkbox', { name: '汤圆', exact: true }).check();
@@ -280,10 +303,10 @@ test('source series and category gaps stay visible and filterable with a complet
   await expect(view.getByRole('columnheader', { name: '源生产品类', exact: true })).toBeVisible();
   await view.getByRole('checkbox', { name: '仅缺项或待确认' }).check();
   await expect(view.locator('tbody tr')).toHaveCount(2);
-  const candidate = view.locator('tbody tr').filter({ hasText: '缺产线源系列' });
+  const candidate = view.locator('tbody tr').filter({ hasText: '缺候选隧道源系列' });
   await expect(candidate).toContainText('产品系列');
   await expect(candidate).toContainText('汤圆');
-  await expect(candidate).toContainText('缺产线源系列、缺组合系列、缺产线生产品类');
+  await expect(candidate).toContainText('缺候选隧道源系列、缺组合系列、缺候选隧道生产品类');
   await expect(candidate.locator('td').nth(13)).toHaveText('0');
   await view.getByRole('tab', { name: /基地与调拨/ }).click();
   await expect(view.locator('tbody tr')).toHaveCount(1);

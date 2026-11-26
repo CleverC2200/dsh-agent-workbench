@@ -14,6 +14,7 @@ const number = (value, decimals = 4) =>
 export const turnoverDaysSources = {
   'target-turnover-days': '源最终目标周转天数',
   'manual-turnover-days': '人工补充目标周转天数',
+  'missing-turnover-days-zero': '缺输入，默认0天',
   'base-policy': '基地安全天数策略',
   rule: '库存下限规则',
   missing: '缺输入',
@@ -43,6 +44,7 @@ export const turnoverReportColumns = [
 ];
 export function inventoryTurnoverReport(row) {
   const manual = row.safetyDaysSource === 'manual-turnover-days';
+  const defaulted = row.safetyDaysSource === 'missing-turnover-days-zero';
   const missing = row.safetyDays === null;
   const zero = row.safetyDays === 0;
   const sourceIssue = row.turnoverPolicy.missing.join('；');
@@ -51,15 +53,16 @@ export function inventoryTurnoverReport(row) {
     基地: row.base,
     产品编码: row.code,
     产品名称: row.name,
-    异常类别: missing
-      ? '周转天数待补'
-      : zero
-        ? '有效零周转天数'
-        : manual
-          ? '周转天数人工补充'
-          : row.turnoverPolicy.fallbackReason
-            ? '周转天数版本回退'
-            : '有效周转天数',
+    异常类别:
+      missing || defaulted
+        ? '周转天数待补'
+        : zero
+          ? '有效零周转天数'
+          : manual
+            ? '周转天数人工补充'
+            : row.turnoverPolicy.fallbackReason
+              ? '周转天数版本回退'
+              : '有效周转天数',
     原始周转天数: row.turnoverPolicy.sourceDays,
     原始状态: sourceIssue || (row.turnoverPolicy.sourceDays === 0 ? '有效零值' : '有效值'),
     计算用周转天数: row.safetyDays,
@@ -77,11 +80,13 @@ export function inventoryTurnoverReport(row) {
       sourceIssue ||
       row.turnoverPolicy.fallbackReason ||
       (zero ? '最终周转天数有效为0' : '最终周转天数有效'),
-    实际处理: missing
-      ? '目标库存待补，允许人工补充周转天数'
-      : `${manual ? '人工补充已生效；' : ''}${zero ? '目标库存为0，预测结存按库存收支计算' : row.targetInventory === null ? '有效天数已采用，目标库存仍待补推导依据' : '已按有效天数重新计算目标库存'}`,
+    实际处理: defaulted
+      ? '缺周转天数时默认按0天计算，可人工补充'
+      : missing
+        ? '目标库存待补，允许人工补充周转天数'
+        : `${manual ? '人工补充已生效；' : ''}${zero ? '目标库存为0，预测结存按库存收支计算' : row.targetInventory === null ? '有效天数已采用，目标库存仍待补推导依据' : '已按有效天数重新计算目标库存'}`,
     计算依据: zero
-      ? '有效周转天数0天，目标库存为0；预测期末库存独立按库存收支计算'
+      ? `${defaulted ? '缺周转天数按0天计算' : '有效周转天数0天'}，目标库存为0；预测期末库存独立按库存收支计算`
       : missing
         ? '缺有效周转天数，不能计算目标库存'
         : `${row.safetyDays}天×${row.nextMonth}有效需求${row.nextMonthDemand ?? '待补'}÷${row.nextMonthDays}个自然日`,
@@ -105,7 +110,9 @@ export function inventoryDependencyFields(row) {
     下月有效需求: row.nextMonthDemand,
     推导状态: row.targetInventory === null ? '缺推导依赖' : '可计算',
     需求依赖说明:
-      row.safetyDays === 0 ? '有效安全天数为0，无需下月需求' : `${row.nextMonth}有效需求`,
+      row.safetyDays === 0
+        ? `${row.safetyDaysSource === 'missing-turnover-days-zero' ? '缺周转天数按0天计算' : '有效安全天数为0'}，无需下月需求`
+        : `${row.nextMonth}有效需求`,
   };
 }
 export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) {
@@ -169,6 +176,9 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
     const reportRows = rows.map(inventoryTurnoverReport).filter(Boolean);
     const read = draft.inventoryTargetsRead;
     const missing = scopedRows.filter((row) => row.safetyDays === null).length;
+    const defaulted = scopedRows.filter(
+      (row) => row.safetyDaysSource === 'missing-turnover-days-zero',
+    ).length;
     const supplementKey = (row) => JSON.stringify([row.base, row.code]);
     const supplements = new Map(
       (draft.constraints?.turnoverDays ?? []).map((row) => [supplementKey(row), row]),
@@ -282,7 +292,11 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
         row.turnoverPolicy.sourceMonths.join('、'),
         row.turnoverPolicy.sourceVersion,
         row.turnoverPolicy.fallbackReason,
-        row.safetyDays === null ? '目标库存待补，补充后重新评估' : '天数已齐，其他依赖另行核对',
+        row.safetyDaysSource === 'missing-turnover-days-zero'
+          ? '缺周转天数，默认按0天计算'
+          : row.safetyDays === null
+            ? '目标库存待补，补充后重新评估'
+            : '天数已齐，其他依赖另行核对',
         report?.异常类别,
         report?.原因,
         report?.实际处理,
@@ -355,19 +369,19 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
             ? '正在读取目标库存…'
             : missing
               ? `${missing}个单品月份缺有效天数，目标库存待补。`
-              : '全部单品月份已有有效周转天数，其他推导依赖另行核对。',
+              : '全部单品月份已有计算用天数。',
         ),
         h(
           'p',
           { className: 'wf-note', role: 'status' },
-          `当前范围${policyByProduct.size}个基地SKU、${scopedRows.length}个单品月份；缺有效天数${missing}项，缺下月有效需求${scopedRows.filter((row) => row.nextMonthDemand === null).length}项，目标库存待补${scopedRows.filter((row) => row.targetInventory === null).length}项。有效0天不因缺下月需求阻断目标库存。`,
+          `当前范围${policyByProduct.size}个基地SKU、${scopedRows.length}个单品月份；默认0天${defaulted}项，天数待核${missing}项，缺下月有效需求${scopedRows.filter((row) => row.nextMonthDemand === null).length}项，目标库存待补${scopedRows.filter((row) => row.targetInventory === null).length}项。0天无需下月需求即可计算目标库存。`,
         ),
         read?.status === 'failed' &&
           h('p', { role: 'alert' }, read.error || '目标库存读取失败，请重试'),
         h(
           'p',
           { className: 'wf-note' },
-          `业务日期${businessDate}，安全天数来源月${sourceMonth}；逐基地SKU按${version === 'auto' ? versionOrder.join('、') : version}选择，实际采用${sourceVersions.join('、') || '暂无有效版本'}。同一基地SKU的天数供本次三个评估月共用。目标库存使用各评估月的下月有效需求；0天无需下月需求。缺源且无有效人工补充时保留待补，不按0天计算。`,
+          `业务日期${businessDate}，安全天数来源月${sourceMonth}；逐基地SKU按${version === 'auto' ? versionOrder.join('、') : version}选择，实际采用${sourceVersions.join('、') || '暂无有效版本'}。同一基地SKU的天数供本次三个评估月共用。来源无记录或天数为空时，可人工补充，未补充则按0天计算。`,
         ),
         h(
           'div',
@@ -407,7 +421,7 @@ export function createInventoryTargetPanel(react, { downloadCsv, NumberInput }) 
         h(
           'p',
           { className: 'wf-note' },
-          `当前筛选有${reportRows.length}项报告，预览前25项；下载保留当前月份、基地及搜索范围的完整明细。有效0天只将目标库存设为0，预测结存按库存收支计算。`,
+          `当前筛选有${reportRows.length}项报告，预览前25项；下载保留当前月份、基地及搜索范围的完整明细。0天对应目标库存为0，预测结存按库存收支计算。`,
         ),
         h(
           'button',

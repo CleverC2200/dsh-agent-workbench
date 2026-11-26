@@ -26,7 +26,7 @@ const reportStatus = (row) => {
   const supply =
     row.supplyMode === 'odm' ? `${result}；ODM按净缺口默认估算，供方能力及实际到货未验证` : result;
   return row.safetyDaysSource === 'missing-turnover-days-zero'
-    ? `${supply}；源周转天数待补，临时按0天`
+    ? `${supply}；源周转天数待补，默认按0天`
     : supply;
 };
 const fields = [
@@ -961,7 +961,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         ? h(
             'p',
             { className: 'wf-note', role: 'status' },
-            `本轮${plan.rows.filter((row) => row.safetyDaysSource === 'missing-turnover-days-zero').length}个单品月份缺源目标周转天数，临时按0天计算目标库存，源缺项保留在第五步待补清单，补齐后重新评估。`,
+            `本轮${plan.rows.filter((row) => row.safetyDaysSource === 'missing-turnover-days-zero').length}个单品月份缺源目标周转天数，默认按0天计算目标库存。源缺项可在第五步待补清单核对和补充。`,
           )
         : null,
       !plan

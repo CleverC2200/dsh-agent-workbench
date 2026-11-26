@@ -88,7 +88,7 @@ test('前三步数据源详情与下载不提供供给字段，后续步骤保�
     const dialog = frame.getByRole('dialog', { name: '月主计划数据源', exact: true });
     await expect(dialog.getByRole('cell', { name: '郑州', exact: true })).toBeVisible();
     await expect(dialog.getByRole('tab', { name: '调拨方向', exact: true })).toHaveCount(0);
-    await expect(dialog.getByRole('tab', { name: '产线SKU产能', exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole('tab', { name: 'SKU隧道产能', exact: true })).toHaveCount(0);
     await expect(dialog).not.toContainText('ODM');
     const pending = page.waitForEvent('download');
     await dialog.getByRole('button', { name: '下载当前页', exact: true }).click();

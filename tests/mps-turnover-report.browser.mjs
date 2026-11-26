@@ -70,7 +70,7 @@ async function downloadRows(page, view, name) {
   return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
 }
 
-test('周转报告区分有效零、缺失待补和人工补充，筛选后下载与目标库存同步', async (t) => {
+test('周转报告区分有效零、缺失默认零和人工补充，筛选后下载与目标库存同步', async (t) => {
   const { page, frame, calls } = await mpsPage(t, config, ({ queryId }) => ({
     rows: queryId.endsWith('.count')
       ? [{ total: queryId.startsWith('inventory-targets.') ? 2 : 0 }]
@@ -135,7 +135,7 @@ test('周转报告区分有效零、缺失待补和人工补充，筛选后下�
           call.parameters.start_month === '2026-12' && call.parameters.end_month === '2026-12',
       ),
   );
-  await expect(view).not.toContainText('临时按0天');
+  await expect(report).toContainText('默认按0天计算');
   await expect(view.getByRole('table', { name: '基地安全天数策略', exact: true })).toHaveCount(0);
   let rows = await downloadRows(page, view, '下载周转天数报告');
   assert.equal(rows.length, 3);
@@ -161,7 +161,11 @@ test('周转报告区分有效零、缺失待补和人工补充，筛选后下�
   assert.equal(rows[0]['产品编码'], 'B');
   assert.equal(rows[0]['月份'], '2026-12');
   assert.equal(rows[0]['异常类别'], '周转天数待补');
-  assert.equal(rows[0]['目标期末库存'], '');
+  assert.equal(rows[0]['原始周转天数'], '');
+  assert.equal(rows[0]['计算用周转天数'], '0');
+  assert.equal(rows[0]['目标期末库存'], '0');
+  await expect(report.locator('tbody tr').first().getByRole('cell').nth(4)).toHaveText('0');
+  assert.match(rows[0]['实际处理'], /默认按0天计算/);
   await commitNumber(view.getByLabel('甲 B 补充目标周转天数', { exact: true }), '15');
   await expect(report).toContainText('周转天数人工补充');
   rows = await downloadRows(page, view, '下载周转天数报告');
