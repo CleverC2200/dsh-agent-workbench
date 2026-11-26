@@ -511,6 +511,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation,
       selectedInventoryBusinessDate(draft),
     ),
     requireSourceTurnoverDays: true,
+    missingTurnoverDaysAsZero: true,
     inventoryTargetIssues:
       draft.inventoryTargetsRead?.status === 'ready'
         ? []

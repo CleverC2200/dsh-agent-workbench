@@ -44,6 +44,16 @@ const records = [
   stock('DUP', '2026-11-23'),
   stock('DUP', '2026-11-23', { total_sales_qty: 9 }),
 ];
+const dailyPlans = records.map(({ belong_base, material_code, the_date }) => ({
+  belong_base,
+  material_code,
+  the_date,
+  in_qty: 0,
+  transfer_in_plan_v1: 7,
+  transfer_in_plan_adj: null,
+  transfer_out_plan_v1: 2,
+  transfer_out_plan_adj: null,
+}));
 function shipmentSql(query) {
   return JSON.parse(
     execFileSync(
@@ -54,14 +64,18 @@ function shipmentSql(query) {
 x=json.load(sys.stdin)
 db=sqlite3.connect(':memory:')
 db.row_factory=sqlite3.Row
-cols=list(x['rows'][0])
-db.execute('CREATE TABLE agents_scm_stock_detail_d ('+','.join(cols)+')')
-db.executemany('INSERT INTO agents_scm_stock_detail_d VALUES ('+','.join('?' for _ in cols)+')',[[r[c] for c in cols] for r in x['rows']])
+for table,rows in x['tables'].items():
+  cols=list(rows[0])
+  db.execute('CREATE TABLE '+table+' ('+','.join(cols)+')')
+  db.executemany('INSERT INTO '+table+' VALUES ('+','.join('?' for _ in cols)+')',[[r[c] for c in cols] for r in rows])
 print(json.dumps([dict(r) for r in db.execute(x['sql'],x['parameters'])]))`,
       ],
       {
         input: JSON.stringify({
-          rows: records,
+          tables: {
+            agents_scm_stock_detail_d: records,
+            agents_ads_scm_base_sku_daily_plan_detail_d: dailyPlans,
+          },
           sql: config.queries[query.queryId].request.sql,
           parameters: {
             ...query.parameters,
@@ -186,15 +200,9 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
   assert.equal(known['月初 1 号库存'], '500');
   const missing = rows.find((row) => row.产品编码 === 'MISSING');
   assert.equal(missing.整月预估发货, '0');
-  for (const field of [
-    '月初 1 号库存',
-    '本月生产入库',
-    '剩余天数入库',
-    '调入计划',
-    '调出计划',
-    '预计月末结存',
-  ])
-    assert.equal(missing[field], '0', field);
+  assert.equal(missing['月初 1 号库存'], '0');
+  for (const field of ['本月生产入库', '剩余天数入库', '调入计划', '调出计划', '预计月末结存'])
+    assert.equal(missing[field], '', field);
   const duplicate = rows.find((row) => row.产品编码 === 'DUP');
   assert.equal(duplicate.整月预估发货, '');
   assert.match(duplicate.预估待补原因, /重复/);

@@ -488,22 +488,21 @@ export async function readShipmentInputs(cutoff, signal, priority) {
       const transferRows = number(row.transfer_rows);
       const transferSnapshotIssue =
         !isBusinessDate(transferDate) || transferDate.slice(0, 7) !== month || transferDate > cutoff
-          ? '调拨计划缺少适用快照日期，来源待核'
+          ? '日度计划明细缺少适用的调拨快照'
           : transferRows !== 1
             ? '调拨计划最新快照重复或冲突，未采用计划数量'
             : '';
       const transfer = (direction) => {
         if (transferSnapshotIssue) return { value: null, source: transferSnapshotIssue };
         const adjusted = row[`transfer_${direction}_plan_adj`];
-        const initial = row[`transfer_${direction}_plan_v1`];
-        return adjusted !== null
-          ? { value: number(adjusted), source: `${transferDate} 纠偏计划` }
-          : initial !== null
-            ? { value: number(initial), source: `${transferDate} 初版计划` }
-            : {
-                value: null,
-                source: `${transferDate} ${direction === 'in' ? '调入' : '调出'}计划字段为空`,
-              };
+        const value = adjusted ?? row[`transfer_${direction}_plan_v1`];
+        return {
+          value: value === null ? null : number(value),
+          source:
+            value === null
+              ? `${transferDate} 日度计划明细${direction === 'in' ? '调入' : '调出'}计划字段为空`
+              : `${transferDate} 日度计划明细${adjusted === null ? '初版计划' : '纠偏计划'}`,
+        };
       };
       const transferIn = transfer('in');
       const transferOut = transfer('out');

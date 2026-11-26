@@ -718,7 +718,7 @@ export function createWorkflow(
       if (field === 'targetInventory' && row.safetyDays === 0)
         expression =
           row.safetyDaysSource === 'missing-turnover-days-zero'
-            ? '源目标周转天数待补，本轮临时按0天计算，目标库存为0；源缺项保留，补齐后重新评估'
+            ? '源目标周转天数待补，默认按0天计算，目标库存为0；补齐后重新评估'
             : '安全天数明确为0，目标库存为0，无需下一月需求';
       if (field === 'requiredProduction')
         expression = `需求${value(row.demand)}件，期初库存${value(row.openingInventory)}件，需保留目标库存${value(row.targetInventory)}件。本期需补充生产${value(row.requiredProduction)}件，库存已能覆盖需求和目标库存时无需补充生产，仅供需求推导参考`;

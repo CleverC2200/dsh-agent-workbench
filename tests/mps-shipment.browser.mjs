@@ -1309,23 +1309,23 @@ test('shipment national SKU preserves base adjustment sources, aggregate days an
   }
 });
 
-test('数仓调拨各方向独立回退并参与逐SKU结存，历史手填值保留但不生效', async (t) => {
-  const { page, frame, table } = await businessShipment(t, (query) => {
+test('日度计划调拨纠偏零优先，空方向待补，历史手填值保留但不生效', async (t) => {
+  const { page, frame, table, calls } = await businessShipment(t, (query) => {
     const result = shipmentFacts(query);
     if (query.queryId === 'facts.shipment')
       Object.assign(result.rows[0], {
-        transfer_date: '2026-09-21',
+        transfer_date: '2026-09-22',
         transfer_rows: 1,
         transfer_in_plan_v1: 50,
         transfer_in_plan_adj: 0,
-        transfer_out_plan_v1: 20,
+        transfer_out_plan_v1: null,
         transfer_out_plan_adj: null,
       });
     return result;
   });
   await expectShipment(table, '全国合计 调入计划', '0');
-  await expectShipment(table, '全国合计 调出计划', '20');
-  await expectShipment(table, '全国合计 预计月末结存', '56');
+  await expectShipment(table, '全国合计 调出计划', '待定');
+  await expectShipment(table, '全国合计 预计月末结存', '待定');
   await expandShipmentBase(frame, '郑州');
   await beginAdjustment(frame);
   await expect(table.getByLabel('郑州 A 调入计划', { exact: true })).toHaveCount(0);
@@ -1335,23 +1335,31 @@ test('数仓调拨各方向独立回退并参与逐SKU结存，历史手填值�
   await frame.getByRole('button', { name: '取消', exact: true }).click();
   const saved = await page.evaluate(() => window.readView());
   const selected = saved.localDrafts.drafts.find((row) => row.id === saved.localDrafts.selected);
+  assert.equal(Object.hasOwn(selected.shipment, 'business'), false);
   selected.shipment.transferPlans = [
     { month: '2026-09', base: '郑州', code: 'A', inbound: 999, outbound: 999 },
   ];
+  const shipmentReads = () => calls.filter((call) => call.queryId === 'facts.shipment').length;
+  const before = shipmentReads();
   await page.evaluate((seed) => window.openAuthor('mps', 1200, seed), saved);
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await expect.poll(shipmentReads).toBeGreaterThan(before);
   await expectShipment(table, '全国合计 调入计划', '0');
-  await expectShipment(table, '全国合计 预计月末结存', '56');
+  await expectShipment(table, '全国合计 调出计划', '待定');
+  await expectShipment(table, '全国合计 预计月末结存', '待定');
   const restored = await page.evaluate(() => window.readView());
   assert.deepEqual(
     restored.localDrafts.drafts.find((row) => row.id === restored.localDrafts.selected).shipment
       .transferPlans,
     selected.shipment.transferPlans,
   );
-  assert.match(await exported(page, frame), /纠偏.*初版/);
+  assert.match(
+    await exported(page, frame),
+    /2026-09-22 日度计划明细纠偏计划.*2026-09-22 日度计划明细调出计划字段为空/,
+  );
 });
 
-test('完整快照无库存记录取零，字段为空或重复时待定，失败不回填零', async (t) => {
+test('日度计划无记录、字段为空或重复时待定，失败不回填零', async (t) => {
   let fail = false;
   const { page, frame, table } = await businessShipment(
     t,
@@ -1391,9 +1399,10 @@ test('完整快照无库存记录取零，字段为空或重复时待定，失�
   await expandShipmentBase(frame, '郑州');
   await expectShipment(table, '郑州 C 调入计划', '待定');
   await expectShipment(table, '郑州 C 调出计划', '待定');
-  await expectShipment(table, '郑州 E 调入计划', '0');
-  await expectShipment(table, '郑州 E 调出计划', '0');
-  await expectShipment(table, '郑州 E 预计月末结存', '0');
+  await expectShipment(table, '郑州 E 本月生产入库', '');
+  await expectShipment(table, '郑州 E 调入计划', '待定');
+  await expectShipment(table, '郑州 E 调出计划', '待定');
+  await expectShipment(table, '郑州 E 预计月末结存', '待定');
   await expectShipment(table, '郑州 D 调入计划', '待定');
   await expectShipment(table, '郑州 D 预计月末结存', '待定');
   await frame.getByText('发货与库存异常报告', { exact: true }).click();
@@ -1401,7 +1410,7 @@ test('完整快照无库存记录取零，字段为空或重复时待定，失�
     '调拨计划最新快照重复或冲突',
   );
   const csv = await exported(page, frame);
-  assert.match(csv, /完整库存日报无该基地SKU记录/);
+  assert.match(csv, /该基地SKU没有日度计划明细/);
   assert.match(csv, /计划字段为空/);
   assert.match(csv, /重复或冲突/);
   fail = true;

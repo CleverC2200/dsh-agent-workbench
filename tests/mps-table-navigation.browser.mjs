@@ -282,7 +282,7 @@ test('第7步点击大类展开全部物料组和超过一页的SKU，旁支独�
   const { page, frame, month } = await navigationPage(t);
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   await frame.getByRole('button', { name: '执行评估', exact: true }).click();
-  const status = frame.getByRole('status').filter({ hasText: '单品月份' });
+  const status = frame.locator('.wf-plan-status[role="status"]');
   await expect(status).toContainText('暂无单品月份满足排产条件，缺项待补');
   await expect(status).toContainText('满足排产条件 0/186 个单品月份');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
@@ -518,9 +518,7 @@ test('七步按业务层级排序，SKU编码顺序独立于同版标签优先�
   await stickyHead(days);
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   await frame.getByRole('button', { name: '执行评估', exact: true }).click();
-  await expect(frame.getByRole('status').filter({ hasText: '单品月份' })).toContainText(
-    '满足排产条件',
-  );
+  await expect(frame.locator('.wf-plan-status[role="status"]')).toContainText('满足排产条件');
   const capacity = frame.getByRole('table', { name: '基地需求与月总产能', exact: true });
   await expect(capacity.locator('tbody tr td:first-child')).toHaveText([
     '郑州',
