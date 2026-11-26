@@ -1,17 +1,22 @@
 import { compareBusinessRows, createTablePresentation, isSkuColumn } from './table-presentation.js';
 import { matchesCategories } from './category-filter.js';
 import { call, ready } from '../../../business/shared/channel.js';
+import { sourceNames } from './master-data.js';
 import { readRelations } from './relations.js';
 import { createProductScopeMatcher } from './source-projections.js';
 
 const groups = [
-  { key: 'sku', name: '单品与候选产线', source: '产品清单、产线SKU产能' },
-  { key: 'lines', name: '产线与源系列', source: '隧道产能' },
+  {
+    key: 'sku',
+    name: '单品与候选隧道',
+    source: `${sourceNames.products}、${sourceNames.sku_capacity}`,
+  },
+  { key: 'lines', name: '隧道与源系列', source: sourceNames.tunnels },
   { key: 'transfers', name: '基地与调拨', source: '调拨方向、产品清单' },
 ];
 const display = (value) =>
   value === null || value === undefined || value === '' ? '—' : String(value);
-const status = (row) => [...row.missing, ...(row.pending ?? [])].join('、') || '待核对';
+const status = (row) => [...row.missing, ...(row.pending ?? [])].join('、') || '无缺项';
 const columns = {
   sku: [
     '产品编码',
