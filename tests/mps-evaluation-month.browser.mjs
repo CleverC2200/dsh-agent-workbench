@@ -240,8 +240,9 @@ test('页头版本跟随月份并显示短名，可新建月份跨年顺延', as
 });
 
 test('月份切换贯通取数、需求计算和下载，保留历史版本、修正历史与Core草稿', async (t) => {
-  const { page, frame, calls } = await mpsPage(t, config, source);
-  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
+  const { page, frame, calls } = await mpsPage(t, config, source, {
+    time: '2026-11-17T12:00:00+08:00',
+  });
   await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-11');
   const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
   await expect(report).toContainText('数量合计11件');

@@ -131,13 +131,14 @@ for (const name of ['category', 'mps'])
       );
       assert.equal(await page.evaluate(() => window.persisted), 2);
       const questions = frame.locator('.author-questions details');
-      if (!(await questions.evaluate((element) => element.open)))
-        await questions.locator('summary').click();
-      await frame.locator('.author-question-list button').first().click();
-      if (name === 'category')
+      if (name === 'category') {
+        if (!(await questions.evaluate((element) => element.open)))
+          await questions.locator('summary').click();
+        await frame.locator('.author-question-list button').first().click();
         await expect.poll(() => page.evaluate(() => window.persisted)).toBe(3);
-      else {
-        await expect(frame.locator('.author-quote-status')).toContainText('页面能力尚未连接');
+      } else {
+        await expect(questions).toHaveCount(0);
+        await expect(frame.locator('.author-quote-status')).toContainText('已转入当前对话草稿');
         assert.equal(await page.evaluate(() => window.persisted), 2);
       }
       assert.match(await page.evaluate(() => window.peerDraft), /^历史草稿，请保留。/);
