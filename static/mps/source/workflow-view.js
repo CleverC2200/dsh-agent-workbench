@@ -29,7 +29,12 @@ import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createPoolExceptionReport } from './pool-exception-view.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
 import { call } from '../../../business/shared/channel.js';
-import { readUnitWeights, unitWeightCandidate, productWeightCandidate } from './unit-weights.js';
+import {
+  hasUnitWeightOverride,
+  readUnitWeights,
+  unitWeightCandidate,
+  productWeightCandidate,
+} from './unit-weights.js';
 import {
   createEvaluationOverview,
   planContext,
@@ -133,14 +138,14 @@ export function createWorkflow(
   const h = react.createElement;
   const ShipmentScopeNotice = createShipmentScopeNotice(react, { downloadCsv });
   const { useBatchEdit, Actions, Field } = createBatchEdit(react);
-  const NumberInput = ({ batch, label, value, commit, max }) =>
+  const NumberInput = ({ batch, label, value, commit, max, placeholder = '未填写' }) =>
     h(Field, {
       batch,
       id: label,
       label,
       value,
       max,
-      placeholder: '未填写',
+      placeholder,
       onStage: commit,
     });
   const ProcessedDemand = createProcessedDemand(react, {
@@ -1164,13 +1169,14 @@ export function createWorkflow(
         return rowId;
       }
     };
-    const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER) =>
+    const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER, placeholder) =>
       h(NumberInput, {
         batch,
         key: `${draft.id}-${label}`,
         label,
         value,
         max,
+        placeholder,
         commit: (text) => change(text === '' ? null : text),
       });
     const productionDays = draft.productionDays ?? [];
@@ -1231,7 +1237,10 @@ export function createWorkflow(
           ]),
       );
     const renderWeightRow = (row) => {
-      const current = weights.find((item) => item.base === row.base && item.code === row.code);
+      const isRow = (item) => item.base === row.base && item.code === row.code;
+      const matching = weights.filter(isRow);
+      const override = matching.find((item) => hasUnitWeightOverride(item.tonsPerPiece));
+      const current = override ?? matching[0];
       const productWeight = productWeightCandidate(
         (draft.productRaw ?? []).filter((product) => product.material_code === row.code),
         row.base,
@@ -1242,25 +1251,46 @@ export function createWorkflow(
         row.code,
         current?.channels ?? '',
       );
-      const setWeight = (patch) =>
+      const automaticWeight = override ? null : (productWeight?.tonsPerPiece ?? null);
+      let weightStatus =
+        candidate.missing.join('；') || '适用渠道已填写，尚未采用来源值；可按确认净重手工维护';
+      if (override?.source)
+        weightStatus = `已按适用渠道采用；读取配置 ${override.source.configVersion}；${override.source.readAt}`;
+      else if (productWeight)
+        weightStatus = override
+          ? '已填写人工系数'
+          : productWeight.missing.join('；') || '自动采用产品清单';
+      const setWeight = (patch) => {
+        const next = {
+          base: row.base,
+          code: row.code,
+          tonsPerPiece: override?.tonsPerPiece ?? null,
+          channels: current?.channels ?? '',
+          ...patch,
+        };
         update({
           unitWeights: [
-            ...weights.filter((item) => item.base !== row.base || item.code !== row.code),
-            {
-              base: row.base,
-              code: row.code,
-              tonsPerPiece: current?.tonsPerPiece ?? null,
-              channels: current?.channels ?? '',
-              ...patch,
-            },
+            ...weights.filter((item) => !isRow(item)),
+            ...(hasUnitWeightOverride(next.tonsPerPiece) || next.channels.trim() ? [next] : []),
           ],
         });
+      };
       return [
         row.base,
         row.code,
         row.name,
-        numberInput(`${row.base} ${row.code} 件吨系数`, current?.tonsPerPiece, (tonsPerPiece) =>
-          setWeight({ tonsPerPiece }),
+        h(
+          'div',
+          null,
+          numberInput(
+            `${row.base} ${row.code} 件吨系数`,
+            override?.tonsPerPiece ?? (batch.active ? null : automaticWeight),
+            (tonsPerPiece) => setWeight({ tonsPerPiece }),
+            undefined,
+            automaticWeight === null ? undefined : '可填人工值',
+          ),
+          automaticWeight !== null &&
+            h('div', null, batch.active ? `自动采用 ${automaticWeight}` : '自动采用'),
         ),
         h('input', {
           'aria-label': `${row.base} ${row.code} 适用渠道`,
@@ -1270,7 +1300,7 @@ export function createWorkflow(
           onChange: (event) =>
             setWeight({
               channels: event.target.value,
-              tonsPerPiece: current?.source ? null : (current?.tonsPerPiece ?? null),
+              tonsPerPiece: override?.source ? null : (override?.tonsPerPiece ?? null),
             }),
         }),
         h(
@@ -1303,14 +1333,7 @@ export function createWorkflow(
           },
           '使用来源系数',
         ),
-        h(
-          'span',
-          null,
-          current?.source
-            ? `已按适用渠道采用；读取配置 ${current.source.configVersion}；${current.source.readAt}`
-            : candidate.missing.join('；') ||
-                '适用渠道已填写，尚未采用来源值；可按确认净重手工维护',
-        ),
+        h('span', null, weightStatus),
       ];
     };
     const inputGaps = [

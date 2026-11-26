@@ -182,7 +182,12 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
     : (draft.products ?? emptyRows);
   const productMappings = sourceProductMappings(products, draft.productRaw);
   const inScope = createProductScopeMatcher(productMappings);
-  const sourceRows = [...inputRows];
+  const shipmentsWithoutStock = new Map();
+  const sourceRows = inputRows.filter((row) => {
+    if (sourceKind !== 'business' || row.sourceDays !== 0) return true;
+    shipmentsWithoutStock.set(forecastKey(row), row.shipped);
+    return false;
+  });
   if (sourceKind === 'business') {
     const present = new Set(sourceRows.filter((row) => row.month === month).map(keyOf));
     for (const product of productMappings) {
@@ -191,6 +196,7 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
       const key = keyOf({ base, code });
       if (!bases.includes(base) || !code || present.has(key)) continue;
       present.add(key);
+      const shipped = shipmentsWithoutStock.get(forecastKey({ month, base, code }));
       sourceRows.push({
         month,
         base,
@@ -198,7 +204,7 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
         name: product['产品名称'],
         series: product['系列'],
         group: product['物料组'],
-        shipped: 0,
+        shipped: shipped === undefined ? 0 : shipped,
         prepped: 0,
         unprepped: 0,
         daily3: 0,
@@ -1842,6 +1848,12 @@ export function createShipment(
           monthOrder: [
             '月下单量 = 同发货基月、截止日、基地和SKU库存日报的 month_order_qty；0保留，空值或缺截止日记录待补',
             `${cutoff}；表内取值 ${raw('monthOrder')}`,
+          ],
+          shipped: [
+            sourceKind === 'business'
+              ? '本月已发货取日度计划明细的 ship_qty，按月初至截止日合计。无记录按0，重复日或数量为空时待定。'
+              : `本月已发货 = ${row.children ? '下级同字段已有数据之和' : '当前月份输入原值'}`,
+            `表内取值 ${raw('shipped')}`,
           ],
           manualPrediction: [
             '人工预测 = 当前评估最近一次导入的发货预测，后续手工调整不改变此列',

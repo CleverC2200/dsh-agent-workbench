@@ -44,16 +44,28 @@ const records = [
   stock('DUP', '2026-11-23'),
   stock('DUP', '2026-11-23', { total_sales_qty: 9 }),
 ];
-const dailyPlans = records.map(({ belong_base, material_code, the_date }) => ({
-  belong_base,
+const dailyPlan = (material_code, the_date, ship_qty) => ({
+  belong_base: '郑州',
   material_code,
   the_date,
   in_qty: 0,
+  ship_qty,
   transfer_in_plan_v1: 7,
   transfer_in_plan_adj: null,
   transfer_out_plan_v1: 2,
   transfer_out_plan_adj: null,
-}));
+});
+const dailyPlans = [
+  ...records.map(({ material_code, the_date, total_sales_qty }) =>
+    dailyPlan(
+      material_code,
+      the_date,
+      material_code === 'PACE' && total_sales_qty ? 35 : (total_sales_qty ?? 0),
+    ),
+  ),
+  dailyPlan('PLAN_ONLY', '2026-11-23', 450),
+  dailyPlan('OUTSIDE_POOL', '2026-11-23', 900),
+];
 function shipmentSql(query) {
   return JSON.parse(
     execFileSync(
@@ -173,10 +185,10 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
     mimeType: 'text/csv',
     buffer: Buffer.from(
       '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n' +
-        ['PACE', 'KNOWN', 'MISSING', 'DUP']
+        ['PACE', 'KNOWN', 'MISSING', 'DUP', 'PLAN_ONLY']
           .map(
             (code) =>
-              `郑州,${code},产品${code},${code === 'PACE' || code === 'DUP' ? '点心' : '水饺'},系列,组,,`,
+              `郑州,${code},产品${code},${['PACE', 'DUP', 'PLAN_ONLY'].includes(code) ? '点心' : '水饺'},系列,组,,`,
           )
           .join('\n'),
     ),
@@ -190,6 +202,7 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
   await expect(frame.getByRole('button', { name: '下载明细', exact: true })).toBeEnabled();
   const rows = await download(page, frame);
   const pace = rows.find((row) => row.产品编码 === 'PACE');
+  assert.equal(pace.本月已发货, '35');
   assert.equal(pace['近三日日均发货'], '10');
   assert.equal(pace.已备, '20');
   assert.equal(pace.未备, '10');
@@ -206,6 +219,14 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
   const duplicate = rows.find((row) => row.产品编码 === 'DUP');
   assert.equal(duplicate.整月预估发货, '');
   assert.match(duplicate.预估待补原因, /重复/);
+  const planOnly = rows.find((row) => row.产品编码 === 'PLAN_ONLY');
+  assert.equal(planOnly.产品名称, '产品PLAN_ONLY');
+  assert.equal(planOnly.本月已发货, '450');
+  assert.equal(planOnly.已备, '0');
+  assert.equal(planOnly['月初 1 号库存'], '0');
+  for (const field of ['本月生产入库', '调入计划', '调出计划'])
+    assert.equal(planOnly[field], '', field);
+  assert.ok(!rows.some((row) => row.产品编码 === 'OUTSIDE_POOL'));
   if (process.env.MPS03_EVIDENCE_DIR)
     await writeFile(
       `${process.env.MPS03_EVIDENCE_DIR}/shipment-result.json`,

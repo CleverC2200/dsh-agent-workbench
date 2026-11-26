@@ -1,4 +1,8 @@
-import { productWeightCandidate, unitWeightCandidate } from './unit-weights.js';
+import {
+  hasUnitWeightOverride,
+  productWeightCandidate,
+  unitWeightCandidate,
+} from './unit-weights.js';
 import { productionCalendarDays, productionCalendarRule } from './production-calendar.js';
 import {
   canonicalBaseName,
@@ -27,7 +31,9 @@ const number = (value) => {
 };
 
 export function resolveWeightPairs(manual, pairs, weightRead, productRaw = []) {
-  const weights = manual.map((row) => ({ ...row, tonsPerPiece: number(row.tonsPerPiece) }));
+  const weights = manual
+    .filter((row) => hasUnitWeightOverride(row.tonsPerPiece))
+    .map((row) => ({ ...row, tonsPerPiece: number(row.tonsPerPiece) }));
   const manualIndex = new Set(weights.map((row) => JSON.stringify([row.base, row.code])));
   const source = new Map();
   const issues = [];
@@ -50,7 +56,7 @@ export function resolveWeightPairs(manual, pairs, weightRead, productRaw = []) {
       if (selected.length !== 1 || !(selected[0].tonsPerPiece > 0))
         issues.push({
           ...pair,
-          reason: '人工件吨系数重复、未维护或无效',
+          reason: '人工件吨系数重复或无效',
           sourceTable: '当前评估版本人工参数',
         });
       continue;
