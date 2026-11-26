@@ -63,10 +63,7 @@ export function mountPushSettings(document, request) {
         dialog.querySelector('h2 + p').textContent =
           '测试模式：针对当前账号获授权的当天订单，发给当前测试发起人；不执行 OMS。正式模式按订单对应确认人推送。';
       busy(false);
-      status.textContent =
-        value.workerEnabled === true
-          ? '后台调度已启用，按保存的开关执行；关闭页面仍运行，满足率未知时不推送。'
-          : '后台调度尚未启用；可查看设置，开启推送前需启用测试后端调度。';
+      status.textContent = pushExecutionMessage(value);
     } catch (error) {
       if (own === generation) status.textContent = '设置读取失败，未启用推送：' + error.message;
     }
@@ -102,12 +99,7 @@ export function mountPushSettings(document, request) {
         fields[name].checked = saved[name];
       for (const name of ['thresholdPercent', 'reminderHours'])
         fields[name].value = String(saved[name]);
-      status.textContent =
-        !saved.thresholdEnabled && !saved.reminderEnabled
-          ? '设置已保存；达标推送和定时提醒均已关闭。'
-          : result.workerEnabled === true
-            ? '设置已保存，后台按新规则执行。'
-            : '设置已保存，后台调度尚未启用。';
+      status.textContent = pushExecutionMessage(result, true);
       busy(false);
     } catch (error) {
       if (own === generation) {
@@ -119,6 +111,27 @@ export function mountPushSettings(document, request) {
   for (const event of ['gea-session-changing', 'gea-identity-changed', 'pagehide'])
     document.defaultView.addEventListener(event, reset);
   return { clear: reset };
+}
+
+export function pushExecutionMessage(value, saved = false) {
+  const prefix = saved ? '设置已保存；' : '';
+  const enabled = value.settings?.thresholdEnabled || value.settings?.reminderEnabled;
+  const rules = enabled ? '' : '达标推送和定时提醒均已关闭。';
+  if (value.workerEnabled !== true) return prefix + '后台调度未启用，开启的规则暂不执行。' + rules;
+  if (value.workerRunning === false)
+    return prefix + '后台调度已配置但未运行，开启的规则暂不执行。' + rules;
+  if (value.workerRunning !== true)
+    return prefix + '后台调度已配置，后端尚未返回线程运行状态，暂不能确认自动执行。' + rules;
+  if (value.lastCycleResult === 'REJECTED')
+    return prefix + '后台线程运行中，但最近一次调度被拒绝，请核对后台准备状态。' + rules;
+  if (value.lastCycleResult !== 'COMPLETED')
+    return prefix + '后台线程已启动，等待首次调度。' + rules;
+  return (
+    prefix +
+    (enabled
+      ? '后台调度运行中，按已开启的规则检查；是否投递以订单处理记录为准，关闭页面不影响执行。'
+      : '后台调度运行中；' + rules)
+  );
 }
 
 export function validatePushSettings(value) {

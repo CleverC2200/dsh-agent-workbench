@@ -33,7 +33,13 @@ test('settings are loaded from backend, explicitly saved and reopened from the p
       version = '11111111-1111-1111-1111-111111111111';
       writes++;
     }
-    return { settings: { ...saved }, version, workerEnabled: true };
+    return {
+      settings: { ...saved },
+      version,
+      workerEnabled: true,
+      workerRunning: true,
+      lastCycleResult: 'COMPLETED',
+    };
   });
   const d = dom.window.document;
   d.querySelector('button').click();
@@ -49,7 +55,23 @@ test('settings are loaded from backend, explicitly saved and reopened from the p
   d.querySelector('button').click();
   await tick();
   assert.equal(d.querySelector('[name=thresholdPercent]').value, '97.5');
-  assert.match(d.querySelector('[role=status]').textContent, /调度已启用/);
+  assert.match(d.querySelector('[role=status]').textContent, /后台调度运行中/);
+  dom.window.close();
+});
+test('a saved rule never claims execution merely because the startup switch is enabled', async () => {
+  const dom = fixture(async () => ({
+    settings: { ...settings, thresholdEnabled: true },
+    version: '0',
+    workerEnabled: true,
+    workerRunning: false,
+  }));
+  const d = dom.window.document;
+  d.querySelector('button').click();
+  await tick();
+  assert.match(d.querySelector('[role=status]').textContent, /已配置但未运行/);
+  d.querySelector('form').dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
+  await tick();
+  assert.match(d.querySelector('[role=status]').textContent, /设置已保存；后台调度已配置但未运行/);
   dom.window.close();
 });
 test('failed reads and late identity results cannot enable controls or restore old user settings', async () => {
