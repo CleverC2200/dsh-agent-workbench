@@ -69,6 +69,68 @@ test('latest shipment date is scoped to the statistical month and excludes misda
   assert.equal(query.get({ month: '2026-12-01', month_end: '2026-12-31' }).latest_date, null);
 });
 
+test('评估库存变动按截止日累计实绩，保留缺天和缺字段时的已知量', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec(`CREATE TABLE agents_scm_stock_detail_d (
+    data_month TEXT, belong_base TEXT, material_code TEXT, the_date TEXT, begin_stock REAL,
+    produce_in_qty REAL, transfer_in_qty_no_direct REAL, transfer_out_qty REAL
+  )`);
+  const insert = db.prepare(
+    'INSERT INTO agents_scm_stock_detail_d VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+  );
+  for (const row of [
+    ['2026-11-01', '郑州', 'A', '2026-11-01', 20, 10, 4, null],
+    ['2026-11-01', '郑州', 'A', '2026-11-03', 20, -3, null, 5],
+    ['2026-11-01', '郑州', 'A', '2026-11-04', 20, 90, 90, 90],
+    ['2026-11-01', '郑州', 'A', '2026-11-04', 20, 90, 90, 90],
+    ['2026-11-01', '郑州', 'A', '2026-11-05', 20, 500, 500, 500],
+    ['2026-11-01', '郑州', 'B', '2026-11-04', 0, null, 0, 0],
+    ['2026-11-01', '郑州', 'C', '2026-12-01', 50, 8, 9, 10],
+    ['2026-12-01', '郑州', 'A', '2026-12-01', 50, 8, 9, 10],
+  ])
+    insert.run(...row);
+  const scope = { start_month: '2026-11-01', end_month: '2026-12-01', cutoff: '2026-11-04' };
+  const sql = (id) => db.prepare(config.queries[id].request.sql);
+  assert.equal(sql('facts.inventory-movements.count').get(scope).total, 2);
+  const read = (offset) =>
+    sql('facts.inventory-movements').get({
+      ...scope,
+      gea_p98: 1,
+      gea_p99: offset,
+    });
+  assert.deepEqual(
+    { ...read(0) },
+    {
+      stock_month: '2026-11-01',
+      belong_base: '郑州',
+      material_code: 'A',
+      source_date: '2026-11-03',
+      begin_stock: null,
+      production_actual: 7,
+      transfer_in_actual: 4,
+      transfer_out_actual: 5,
+    },
+  );
+  assert.deepEqual(
+    { ...read(1) },
+    {
+      stock_month: '2026-11-01',
+      belong_base: '郑州',
+      material_code: 'B',
+      source_date: '2026-11-04',
+      begin_stock: 0,
+      production_actual: null,
+      transfer_in_actual: 0,
+      transfer_out_actual: 0,
+    },
+  );
+  assert.equal(
+    sql('facts.inventory-movements.count').get({ ...scope, cutoff: '2026-12-01' }).total,
+    3,
+  );
+});
+
 test('计划量按实证月份和六维来源键读取 allnum，缺量和重复分开，日期跨自然月不丢量', (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
@@ -112,7 +174,7 @@ test('计划量按实证月份和六维来源键读取 allnum，缺量和重复�
   );
 });
 
-test('发货和入库累计日度计划明细，库存日报仍提供原截止日快照和近三天日均', (t) => {
+test('发货和入库累计日度计划明细，库存日报提供月初库存和截止日发货指标', (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   db.exec(dailyPlanTable);
@@ -241,7 +303,7 @@ test('发货和入库累计日度计划明细，库存日报仍提供原截止�
     [
       ['A', 0, 10, 30, 40 / 3, 7.25, 100, null, 0],
       ['B', 0, 0, 0, 0, 0, 0, null, 0],
-      ['C', 0, null, null, null, null, null, null, 1],
+      ['C', 0, null, null, null, null, 10, null, 1],
     ],
   );
   assert.equal(rows[2].material_name, null);
@@ -289,7 +351,8 @@ test('发货和入库累计日度计划明细，库存日报仍提供原截止�
   assert.equal(withoutStock.shipped, 450);
   assert.equal(withoutStock.source_days, 0);
   assert.equal(withoutStock.inbound, null);
-  assert.equal(withoutStock.transfer_date, null);
+  assert.equal(withoutStock.transfer_in_date, null);
+  assert.equal(withoutStock.transfer_out_date, null);
   assert.equal(query.all({ ...parameters, gea_p99: 4 }).length, 0);
   db.exec(
     "UPDATE agents_scm_stock_detail_d SET total_sales_qty = NULL WHERE material_code = 'A' AND the_date = '2026-09-20'",
@@ -432,6 +495,51 @@ test('同步提报表按月汇总两项源金额，产品资料重复不参与�
       ['B', null, '0'],
     ],
   );
+});
+
+test('月初库存取截止日前同月最近有效日，只有一天、真实零和同日一致值均可用', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec(dailyPlanTable);
+  db.exec(`CREATE TABLE agents_scm_stock_detail_d (
+    data_month TEXT, belong_base TEXT, material_code TEXT, the_date TEXT,
+    material_name TEXT, series TEXT, product_item TEXT, total_sales_qty REAL, allocated_qty REAL,
+    ordered_qty REAL, begin_stock REAL, avg_30d_send REAL, month_order_qty REAL
+  )`);
+  const insert = db.prepare(
+    'INSERT INTO agents_scm_stock_detail_d(data_month, belong_base, material_code, the_date, begin_stock) VALUES (?, ?, ?, ?, ?)',
+  );
+  for (const [base, code, date, open, month = '2026-11-01'] of [
+    ['郑州', 'A', '2026-11-07', 40],
+    ['郑州', 'A', '2026-11-17', 20],
+    ['郑州', 'A', '2026-11-17', 30],
+    ['郑州', 'A', '2026-11-25', null],
+    ['郑州', 'A', '2026-11-26', 999],
+    ['郑州', 'A', '2026-11-24', 999, '2026-10-01'],
+    ['郑州', 'B', '2026-11-22', 0],
+    ['郑州', 'C', '2026-11-04', 50],
+    ['郑州', 'C', '2026-11-25', 60],
+    ['郑州', 'C', '2026-11-25', 60],
+    ['郑州', 'D', '2026-11-25', null],
+    ['西南', 'A', '2026-11-25', 80],
+  ])
+    insert.run(month, base, code, date, open);
+  const rows = db.prepare(config.queries['facts.shipment'].request.sql).all({
+    month: '2026-11-01',
+    cutoff: '2026-11-25',
+    recent_start: '2026-11-23',
+    gea_p98: 100,
+    gea_p99: 0,
+  });
+  const read = (base, code) => {
+    const row = rows.find((r) => r.belong_base === base && r.material_code === code);
+    return [row.open, row.open_date];
+  };
+  assert.deepEqual(read('郑州', 'A'), [40, '2026-11-07']);
+  assert.deepEqual(read('郑州', 'B'), [0, '2026-11-22']);
+  assert.deepEqual(read('郑州', 'C'), [60, '2026-11-25']);
+  assert.deepEqual(read('郑州', 'D'), [null, null]);
+  assert.deepEqual(read('西南', 'A'), [80, '2026-11-25']);
 });
 
 test('月下单量读取同月同基地SKU截止快照，0保留且空值和缺记录待补', (t) => {

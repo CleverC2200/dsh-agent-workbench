@@ -954,7 +954,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         ? h(
             'p',
             { className: 'wf-note' },
-            '输入齐备的单品继续排产并汇总已知结果；缺项保留在对应基地、SKU和月份，未取得的数据不计为0。请按问题清单补齐后重新评估。',
+            '既有库存变动按评估月份已取得的实际数量计算，未取得的变动量按0计。其他排产缺项按基地、SKU和月份列入问题清单，输入齐备的单品继续排产。',
           )
         : null,
       plan?.rows.some((row) => row.safetyDaysSource === 'missing-turnover-days-zero')
@@ -979,7 +979,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             null,
             h(CapacityScopeView, {
               plan,
-              month: filters.month || plan.capacityReport?.referenceMonth,
+              month: filters.month || draft.month,
               filters,
               view,
               active,

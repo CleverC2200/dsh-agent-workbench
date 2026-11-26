@@ -214,8 +214,10 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
   const missing = rows.find((row) => row.产品编码 === 'MISSING');
   assert.equal(missing.整月预估发货, '0');
   assert.equal(missing['月初 1 号库存'], '0');
-  for (const field of ['本月生产入库', '剩余天数入库', '调入计划', '调出计划', '预计月末结存'])
-    assert.equal(missing[field], '', field);
+  for (const field of ['本月生产入库', '剩余天数入库']) assert.equal(missing[field], '', field);
+  assert.equal(missing.调入计划, '0');
+  assert.equal(missing.调出计划, '0');
+  assert.equal(missing.预计月末结存, '0');
   const duplicate = rows.find((row) => row.产品编码 === 'DUP');
   assert.equal(duplicate.整月预估发货, '');
   assert.match(duplicate.预估待补原因, /重复/);
@@ -224,8 +226,9 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
   assert.equal(planOnly.本月已发货, '450');
   assert.equal(planOnly.已备, '0');
   assert.equal(planOnly['月初 1 号库存'], '0');
-  for (const field of ['本月生产入库', '调入计划', '调出计划'])
-    assert.equal(planOnly[field], '', field);
+  assert.equal(planOnly.本月生产入库, '');
+  assert.equal(planOnly.调入计划, '7');
+  assert.equal(planOnly.调出计划, '2');
   assert.ok(!rows.some((row) => row.产品编码 === 'OUTSIDE_POOL'));
   if (process.env.MPS03_EVIDENCE_DIR)
     await writeFile(
