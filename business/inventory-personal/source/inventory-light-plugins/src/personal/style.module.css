@@ -187,8 +187,8 @@
 }
 .scroll th {
   height: 38px;
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   background: var(--ui-soft);
   color: var(--ui-muted);
   padding: 8px 14px;
@@ -196,10 +196,11 @@
 .scroll td {
   height: 44px;
   padding: 8px 14px;
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
   color: var(--ui-secondary);
   border-bottom: 1px solid var(--ui-divider);
   max-width: 260px;
+  font-weight: 400;
 }
 .scroll td small {
   display: block;
@@ -514,6 +515,8 @@
 .scroll th {
   padding: 0 14px;
   white-space: nowrap;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .rowActions {
   gap: 4px;

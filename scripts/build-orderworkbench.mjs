@@ -61,7 +61,7 @@ sqlConfig.metricRuntime = {
   sha256: digest(runtime.outputFiles[0].contents),
   cubeRuntime: { file: 'cube-runtime.mjs', sha256: digest(cubeRuntime.outputFiles[0].contents) },
 };
-if (digest(theme) !== '51d07dd91c4e2851301c046556a9c34aded00c5fa94525420b949badce9a5497')
+if (digest(theme) !== 'c273a8d8666d1da96d83d4842810d05de5ec8f9de489e95933fdf3aa907a1e18')
   throw Error('ORDER_THEME_RESOURCE_MISMATCH');
 const bundled = await build({
   entryPoints: [resolve(source, 'entry.js')],

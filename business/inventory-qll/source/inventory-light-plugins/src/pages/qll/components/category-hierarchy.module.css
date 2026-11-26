@@ -19,14 +19,17 @@
   padding: 12px;
   background: var(--ui-muted-surface, #f5f6f8);
   color: #747b86;
-  font-size: 11px;
+  font-size: var(--workbench-list-font-size, 12px);
   text-align: left;
   white-space: nowrap;
+  font-weight: 700;
 }
 .scroll td {
   padding: 12px;
   border-bottom: 1px solid #eceef1;
   text-align: right;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .scroll td:first-child {
   min-width: 190px;

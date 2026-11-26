@@ -1,4 +1,4 @@
-import { formatChainValue } from '../../../../../shared/full-chain-display';
+import { formatChainValueParts } from '../../../../../shared/full-chain-display';
 import { scopeDescription } from './qll/components/structure-evidence';
 import { ReferenceStructure, rowStatus } from './qll/components/reference-structure';
 import { customerMetrics } from 'dsh-agent-manage/inventory-compute/full-chain-customer-metrics';
@@ -95,11 +95,16 @@ const KPI_COPY: Record<
   },
 };
 
+function formatMetricParts(value: number | null, unit: MetricValue['unit']) {
+  if (value != null && (unit === '%' || unit === '天')) {
+    return { value: value.toFixed(2), unit: unit === '天' ? ' 天' : unit };
+  }
+  return formatChainValueParts(value, unit);
+}
+
 function formatMetric(value: number | null, unit: MetricValue['unit'], _compact = false) {
-  if (value == null) return '-';
-  if (unit === '%') return `${value.toFixed(2)}%`;
-  if (unit === '天') return `${value.toFixed(2)} 天`;
-  return formatChainValue(value, unit);
+  const parts = formatMetricParts(value, unit);
+  return parts.value + parts.unit;
 }
 
 export function KpiCard({
@@ -228,7 +233,7 @@ export function KpiCard({
         </div>
       ) : null
     ) : null;
-  const valueText = cardValue(primaryValue, metric.unit);
+  const valueParts = formatMetricParts(primaryValue, metric.unit);
   const unavailable = primaryValue == null;
   const statusClass = metric.state === 'risk' ? styles.kpiStatusRisk : styles.kpiStatusCurrent;
   const layerSummary = (
@@ -325,15 +330,18 @@ export function KpiCard({
               </>
             }
           >
-            {splitValues ? (
-              <strong className={styles.kpiValue}>{valueText}</strong>
-            ) : (
-              <strong
-                className={`${styles.kpiValue} ${unavailable ? styles.kpiUnavailable : metric.state === 'risk' ? styles.kpiValueRisk : ''}`}
-              >
-                {valueText}
-              </strong>
-            )}
+            <strong
+              className={
+                splitValues
+                  ? styles.kpiValue
+                  : `${styles.kpiValue} ${unavailable ? styles.kpiUnavailable : metric.state === 'risk' ? styles.kpiValueRisk : ''}`
+              }
+            >
+              {valueParts.value}
+              {valueParts.unit && (
+                <small className={styles.kpiUnit}>{valueParts.unit.trimStart()}</small>
+              )}
+            </strong>
           </Tooltip>
           {splitValues && (
             <dl className={styles.kpiHelpers}>

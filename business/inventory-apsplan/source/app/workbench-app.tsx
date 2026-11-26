@@ -8272,20 +8272,29 @@ export default function Home({
                     {periodMeta.range}
                   </p>
                 </div>
-                <div className="panel overview-list-table">
+                <div
+                  className="panel overview-list-table"
+                  role="table"
+                  aria-labelledby="overview-list-title"
+                >
                   <div
                     className={`overview-list-row overview-list-head active-period-list ${activeMetricListVariant}`}
+                    role="row"
                   >
-                    <span>{'指标'}</span>
-                    {analysisScope === 'overview' && <span>{'统计口径'}</span>}
-                    {analysisScope === 'production' && <span>{'指标分类'}</span>}
-                    <span>{'目标'}</span>
-                    <span>{'达成状态'}</span>
-                    <span>{analysisScope === 'overview' ? '当前值' : periodMeta.current}</span>
-                    <span>{periodMeta.previous}</span>
-                    <span>{periodMeta.change}</span>
-                    <span>{periodMeta.same}</span>
-                    <span>{periodMeta.yoy}</span>
+                    <span role="columnheader">{'指标'}</span>
+                    {analysisScope === 'overview' && <span role="columnheader">{'统计口径'}</span>}
+                    {analysisScope === 'production' && (
+                      <span role="columnheader">{'指标分类'}</span>
+                    )}
+                    <span role="columnheader">{'目标'}</span>
+                    <span role="columnheader">{'达成状态'}</span>
+                    <span role="columnheader">
+                      {analysisScope === 'overview' ? '当前值' : periodMeta.current}
+                    </span>
+                    <span role="columnheader">{periodMeta.previous}</span>
+                    <span role="columnheader">{periodMeta.change}</span>
+                    <span role="columnheader">{periodMeta.same}</span>
+                    <span role="columnheader">{periodMeta.yoy}</span>
                   </div>
                   {scopedOverviewMetricMeta.map((meta) => {
                     const datum = activeComparison[meta.name];
@@ -8309,11 +8318,13 @@ export default function Home({
                     return (
                       <div
                         className={`overview-list-row active-period-list ${activeMetricListVariant} ${selectedMetric === meta.name ? 'selected' : ''}`}
+                        role="row"
                         key={meta.name}
                       >
-                        <strong>{meta.name}</strong>
+                        <strong role="rowheader">{meta.name}</strong>
                         {analysisScope === 'overview' && (
                           <span
+                            role="cell"
                             className={`statistic-type-cell ${drillStatisticType(meta.name) === '快照指标' ? 'snapshot' : 'cumulative'}`}
                           >
                             {drillStatisticType(meta.name)}
@@ -8326,20 +8337,25 @@ export default function Home({
                         )}
                         {analysisScope === 'production' && (
                           <span
+                            role="cell"
                             className={`metric-classification-cell ${metricClass === '经营指标' ? 'business' : 'operational'}`}
                           >
                             {metricClass}
                           </span>
                         )}
-                        <span>{meta.targetText.replace('目标 ', '')}</span>
+                        <span role="cell">{meta.targetText.replace('目标 ', '')}</span>
                         <em
+                          role="cell"
                           className={`achievement-status ${periodOk === null ? 'status-neutral' : periodOk ? 'status-ok' : meta.name === '销售预算达成率' && budgetTimeProgress ? 'level-watch' : 'status-bad'}`}
                         >
                           {!Number.isFinite(datum.current)
                             ? metricMissingText(meta.name, live.data)
                             : metricStatus(meta.name, datum.current, live.data)}
                         </em>
-                        <b className={metricValueState(meta.name, datum.current, live.data)}>
+                        <b
+                          role="cell"
+                          className={metricValueState(meta.name, datum.current, live.data)}
+                        >
                           {Number.isFinite(datum.current)
                             ? `${formatNumber(datum.current, 2)}${meta.unit}`
                             : '—'}
@@ -8357,20 +8373,25 @@ export default function Home({
                             <small className="kpi-source-note">{budgetMissingNote}</small>
                           )}
                         </b>
-                        <span>
+                        <span role="cell">
                           {Number.isFinite(datum.previous)
                             ? `${formatNumber(datum.previous, 2)}${meta.unit}`
                             : metricMissingText(meta.name, live.previous, true)}
                         </span>
-                        <span className={improved === null ? 'neutral' : improved ? 'good' : 'bad'}>
+                        <span
+                          role="cell"
+                          className={improved === null ? 'neutral' : improved ? 'good' : 'bad'}
+                        >
                           {formatDelta(datum.change, meta.unit)}
                         </span>
-                        <span>
+                        <span role="cell">
                           {Number.isFinite(datum.same)
                             ? `${formatNumber(datum.same!, 2)}${meta.unit}`
                             : metricMissingText(meta.name, live.annual, true)}
                         </span>
-                        <span>{datum.yoy === null ? '—' : formatDelta(datum.yoy, meta.unit)}</span>
+                        <span role="cell">
+                          {datum.yoy === null ? '—' : formatDelta(datum.yoy, meta.unit)}
+                        </span>
                       </div>
                     );
                   })}

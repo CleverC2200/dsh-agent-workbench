@@ -1330,6 +1330,8 @@
 }
 .organizationTable :global(.arco-table-td) {
   padding-block: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .organizationTable :global(.arco-table-content-inner) {
   scrollbar-width: thin;
@@ -1341,6 +1343,8 @@
   top: 0;
   z-index: 3;
   background: var(--bg-2);
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .organizationTable
   :global(.arco-table-content-inner > table > thead > tr > th.arco-table-col-fixed-left),
@@ -1876,6 +1880,7 @@
   background: var(--bg-2);
   color: var(--text-primary);
   font-weight: 700;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 @container (max-width: 620px) {
   .queueMetrics > span:nth-child(2) {
@@ -2204,8 +2209,8 @@
   background: var(--workbench-muted-surface);
   color: var(--workbench-muted);
   border-bottom: 1px solid var(--workbench-border);
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   line-height: 1.35;
 }
 .organizationTable :global(.arco-table-tr > .arco-table-td) {

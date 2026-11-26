@@ -114,17 +114,17 @@
   justify-content: space-between;
   gap: 4px;
   min-height: 24px;
-  font-size: 11px;
+  font-size: var(--workbench-kpi-title-font-size, 12px);
   line-height: 1.4;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ui-muted);
 }
 .metric > strong {
   display: block;
   margin: 8px 0;
-  font-size: 20px;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.1;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -133,9 +133,9 @@
   flex: none;
   padding: 3px 6px;
   border-radius: 999px;
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1.25;
-  font-weight: 700;
+  font-weight: 600;
 }
 .metricCurrent {
   color: var(--ui-success);
@@ -148,7 +148,7 @@
 .metricUnit {
   margin-left: 3px;
   color: var(--ui-ink);
-  font-size: 11px;
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
   font-weight: 400;
   letter-spacing: normal;
 }
@@ -337,15 +337,15 @@
   padding: 8px 14px;
   background: var(--ui-soft);
   color: #747b86;
-  font-size: 9px;
+  font-size: var(--workbench-list-font-size, 12px);
   line-height: 1.35;
-  font-weight: 800;
+  font-weight: 700;
 }
 .shell td {
   height: 44px;
   padding: 5px 14px;
   color: var(--ui-secondary);
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
   line-height: 1.4;
   font-weight: 400;
   border-bottom: 1px solid var(--ui-divider);

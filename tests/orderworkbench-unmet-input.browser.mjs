@@ -57,8 +57,11 @@ test('unmet form input and lifecycle regression on the complete page', async (t)
                export const ask = async()=>{}; export const draft = async()=>{};
                export const currentSessionId = ()=> 'unmet-input-test';
                export const reportElements = ()=>()=>{};`
-                : `export const loadWorkbenchFacts = async()=>{throw Error('Unexpected live query')};
-               export const loadWorkbenchSkuPage = async()=>{throw Error('Unexpected live query')};`,
+                : `const unexpectedQuery = async()=>{throw Error('Unexpected live query')};
+               export const loadWorkbenchFacts = unexpectedQuery;
+               export const loadWorkbenchSkuPage = unexpectedQuery;
+               export const loadWorkbenchProvinceOrderCounts = unexpectedQuery;
+               export const loadWorkbenchProvinceCancellationReasons = unexpectedQuery;`,
             loader: 'js',
           }));
         },

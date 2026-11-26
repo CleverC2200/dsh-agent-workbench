@@ -459,15 +459,18 @@
   justify-content: space-between;
   gap: 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--workbench-kpi-title-font-size, 12px);
+  font-weight: 700;
 }
 .kpiValue {
   display: block;
   min-height: 30px;
   margin: 4px 0 6px;
   color: var(--ink);
-  font-size: 24px;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
   letter-spacing: -0.04em;
+  font-weight: 700;
+  line-height: 1.1;
 }
 .toneRed {
   color: var(--red-deep);
@@ -542,9 +545,9 @@
   background: transparent;
   box-shadow: none;
   color: #6b7280;
-  font-size: 14px;
+  font-size: var(--workbench-list-font-size, 12px);
   line-height: 22px;
-  font-weight: 500;
+  font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -556,8 +559,9 @@
   color: #ff2838;
   border-bottom-color: #ff2838;
   background: transparent;
-  font-weight: 600;
+  font-weight: 700;
   box-shadow: none;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .boardTabs button:focus-visible {
   outline: 2px solid #ff2838;
@@ -583,6 +587,7 @@
   font-weight: 700;
   text-align: left;
   white-space: nowrap;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .tableCard td {
   padding: 10px;
@@ -1074,7 +1079,7 @@
 }
 .kpiUnit {
   margin-left: 3px;
-  font-size: 12px;
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
   font-weight: 400;
   letter-spacing: 0;
 }
@@ -1201,6 +1206,8 @@
   top: 0;
   z-index: 2;
   background: var(--surface);
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 
 .boardPanel {
@@ -1243,16 +1250,16 @@
   transform: translateY(-1px);
 }
 .kpiValue {
-  font-size: 20px;
-  line-height: 1.15;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  line-height: 1.1;
   font-weight: 700;
 }
 
 .kpiCard > div {
   min-height: 18px;
   flex-wrap: wrap;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--workbench-kpi-title-font-size, 12px);
+  font-weight: 700;
 }
 .kpiCard dl {
   margin-top: auto;
@@ -1266,8 +1273,9 @@
   line-height: 1.4;
 }
 .kpiUnit {
-  font-size: 11px;
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
   margin-left: 3px;
+  font-weight: 400;
 }
 .summaryBox {
   padding: 16px;
@@ -1339,8 +1347,8 @@
   height: 46px;
   min-height: 46px;
   padding: 0 14px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   color: var(--ui-secondary);
 }
 .boardTabs button:hover {
@@ -1351,7 +1359,8 @@
   color: var(--ui-accent);
   border-color: var(--ui-accent);
   background: var(--ui-surface);
-  font-weight: 800;
+  font-weight: 700;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .tableCard th,
 .inlineDetailTable th,
@@ -1359,15 +1368,16 @@
   height: 38px;
   padding-inline: 14px;
   background: var(--ui-soft);
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .tableCard td,
 .inlineDetailTable td {
   height: 44px;
   padding-inline: 14px;
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
   border-color: var(--ui-divider);
+  font-weight: 400;
 }
 .tableCard tbody tr:hover > td,
 .inlineDetailTable tbody tr:hover > td {

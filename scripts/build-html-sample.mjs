@@ -4,8 +4,8 @@ import { compileHtmlAuthor } from './html-author.mjs';
 import { fileURLToPath } from 'node:url';
 
 const resource = await readFile(new URL('../theme/tokens.css', import.meta.url), 'utf8');
-const sha256 = createHash('sha256').update(resource).digest('hex');
-if (sha256 !== '51d07dd91c4e2851301c046556a9c34aded00c5fa94525420b949badce9a5497') {
+const sha256 = createHash('sha256').update(resource.replace(/\r\n/g, '\n')).digest('hex');
+if (sha256 !== 'c273a8d8666d1da96d83d4842810d05de5ec8f9de489e95933fdf3aa907a1e18') {
   throw new Error('HTML_SAMPLE_THEME_RESOURCE_MISMATCH: expected shared theme 1.1.1');
 }
 const source = await readFile(new URL('../samples/html-table.html', import.meta.url), 'utf8');
