@@ -31,6 +31,9 @@ import { mpsBusinessDate } from './business-date.js';
 import { canonicalBaseName } from './relations.js';
 const emptyRows = [];
 const calculationShipmentPriority = 4;
+const shipmentPlanSource = 'ai_db.agents_ads_scm_base_sku_daily_plan_detail_d';
+const shipmentSourceTables = `ai_db.agents_scm_stock_detail_d / ${shipmentPlanSource}`;
+const missingShipmentPlan = '该基地SKU没有日度计划明细';
 const bases = businessBases;
 const fields = [
   'open',
@@ -202,12 +205,13 @@ function projectShipment(draft, cutoff, month, sourceKind, inputRows, coefficien
         average: 0,
         rawAverage: null,
         open: 0,
-        inbound: 0,
-        remaining: passed > 1 ? 0 : null,
-        transferIn: 0,
-        transferOut: 0,
-        transferInSource: '完整库存日报无该基地SKU记录，按0',
-        transferOutSource: '完整库存日报无该基地SKU记录，按0',
+        inbound: null,
+        remaining: null,
+        transferIn: null,
+        transferOut: null,
+        transferInSource: missingShipmentPlan,
+        transferOutSource: missingShipmentPlan,
+        transferIssue: missingShipmentPlan,
         sourceDays: 0,
         duplicateDays: 0,
         shipmentMissingAsZero: true,
@@ -606,7 +610,10 @@ export function createShipment(
                   指标: missing.map((field) => names[fields.indexOf(field)]).join('、'),
                   计算用值: '待补',
                   实际处理: '缺失输入保留待定',
-                  来源: sourceName,
+                  来源:
+                    sourceKind === 'business' && missing.includes('inbound')
+                      ? shipmentSourceTables
+                      : sourceName,
                   原因: '未取得有效输入值',
                 },
               ]
@@ -627,7 +634,7 @@ export function createShipment(
                   原始值: row.transferDate ?? '',
                   计算用值: '待补',
                   实际处理: '保留待补，未按无计划置0',
-                  来源: 'ai_db.agents_scm_stock_detail_d',
+                  来源: shipmentPlanSource,
                   原因: row.transferIssue,
                 },
               ]
@@ -887,7 +894,7 @@ export function createShipment(
         month: draft.month,
         shipmentMonth: calculationMonth,
         cutoff: calculationCutoff,
-        source: `业务来源：ai_db.agents_scm_stock_detail_d，${calculationMonth}-01 至 ${calculationCutoff}`,
+        source: `业务来源：${shipmentSourceTables}，${calculationMonth}-01 至 ${calculationCutoff}`,
         sourceKind: 'business',
         status: backgroundBasis.metadata.partial ? 'partial' : 'ok',
         error: backgroundBasis.metadata.coefficientError ?? null,
@@ -991,7 +998,7 @@ export function createShipment(
         : sourceKind === 'local-file'
           ? `本地CSV：${state.file}`
           : business
-            ? `业务来源：ai_db.agents_scm_stock_detail_d，${month}-01 至 ${cutoff}`
+            ? `业务来源：${shipmentSourceTables}，${month}-01 至 ${cutoff}`
             : '数仓输入尚未同步';
     react.useEffect(() => {
       if (batch.active) return;
@@ -1455,7 +1462,7 @@ export function createShipment(
           应用系数前预测量: row.basePrediction ?? '',
           实际应用发运系数: row.basePrediction == null ? '' : row.shipmentFactor,
           发运系数说明: row.coefficientReason,
-          调拨计划来源: `ai_db.agents_scm_stock_detail_d；纠偏优先，初版回退；调入：${row.transferInSource ?? '来源未同步'}；调出：${row.transferOutSource ?? '来源未同步'}`,
+          调拨计划来源: `调入：${row.transferInSource ?? '来源未同步'}；调出：${row.transferOutSource ?? '来源未同步'}`,
           原始月初库存: row.rawOpen ?? '',
           原始预计月末结存: row.rawEnd ?? '',
           库存归零处理: row.inventoryIssues.map((issue) => issue.reason).join('；'),
@@ -1854,7 +1861,7 @@ export function createShipment(
           ],
           inbound: [
             sourceKind === 'business'
-              ? '本月生产入库 = 月初至截止日库存日报的 produce_in_qty 逐日合计，保留负数冲销；重复日或缺值时待定'
+              ? '本月生产入库取日度计划明细的 in_qty，按月初至截止日逐日合计。保留负数冲销，无记录、重复日或缺值时待定。'
               : '本月生产入库 = 当前输入原值',
             `${cutoff}；表内取值 ${raw('inbound')}`,
           ],
@@ -1870,11 +1877,11 @@ export function createShipment(
                   : '本地CSV输入，BI排产未核齐'),
           ],
           transferIn: [
-            '调入计划 = 相同统计月、基地及SKU截止日前最新库存日报快照；纠偏优先于初版，完整读取后无该组合记录取0，字段为空待定',
+            '调入计划取日度计划明细截至截止日的最新快照，纠偏优先于初版。无快照或字段为空时待补。',
             `${raw('transferIn')} 件；${row.transferInSource ?? '逐SKU来源汇总；未同步来源的单品保留待定'}`,
           ],
           transferOut: [
-            '调出计划 = 相同统计月、基地及SKU截止日前最新库存日报快照；纠偏优先于初版，完整读取后无该组合记录取0，字段为空待定',
+            '调出计划取日度计划明细截至截止日的最新快照，纠偏优先于初版。无快照或字段为空时待补。',
             `${raw('transferOut')} 件；${row.transferOutSource ?? '逐SKU来源汇总；未同步来源的单品保留待定'}`,
           ],
           end: [
@@ -2168,7 +2175,7 @@ export function createShipment(
         h(
           'p',
           { className: 'dc-card-note' },
-          `${month}调拨计划取库存日报截止日前最新适用快照，优先用纠偏计划，再用初版计划。完整读取后确认无该基地SKU记录时按0。汇总包含全部明细，下载按当前单品搜索范围提供明细。`,
+          `${month}调拨计划取日度计划明细截至截止日的最新快照，纠偏优先于初版。无快照或字段为空时待补。汇总包含全部明细，下载按当前单品搜索范围提供明细。`,
         ),
         searchTerm && !visibleRows.length && h('p', { role: 'status' }, '主表中没有匹配的单品'),
         coefficientCategories.length > 0 &&
@@ -2421,7 +2428,7 @@ export function createShipment(
           h(
             'p',
             {},
-            '发运天数=(已备+未备)÷发运速度；近三天日均不大于0时使用正的截止日avg_30d_send；两项日均确认均不大于0时，本月预估取已发货+已备+未备，发运天数为0。三数量均确认是0时预估为0；来源日期缺失、重复或冲突时保留待核。预测日均=(已发货+已备+未备)÷(已过天数+发运天数)。本月预测量=预测日均×大类发运系数×max(0,总天数−已过天数−发运天数)+已发货+已备+未备，仅最终结果四舍五入，数量合计直接使用。本月预测量汇总取各基地、各SKU修正后的系统预测量之和。近30天日均发货直接读取截止日avg_30d_send。累计生产入库为月初至截止日produce_in_qty逐日合计，保留负数冲销；重复日或缺值时待定；入库日均=累计生产入库÷(截止日日号−1)，剩余自然天数保持原算法。',
+            '发运天数=(已备+未备)÷发运速度；近三天日均不大于0时使用正的截止日avg_30d_send；两项日均确认均不大于0时，本月预估取已发货+已备+未备，发运天数为0。三数量均确认是0时预估为0；来源日期缺失、重复或冲突时保留待核。预测日均=(已发货+已备+未备)÷(已过天数+发运天数)。本月预测量=预测日均×大类发运系数×max(0,总天数−已过天数−发运天数)+已发货+已备+未备，仅最终结果四舍五入，数量合计直接使用。本月预测量汇总取各基地、各SKU修正后的系统预测量之和。近30天日均发货直接读取截止日avg_30d_send。累计生产入库取日度计划明细 in_qty，按月初至截止日逐日合计。保留负数冲销，无记录、重复日或缺值时待定。入库日均=累计生产入库÷(截止日日号−1)，剩余自然天数保持原算法。',
           ),
         ),
         h(
