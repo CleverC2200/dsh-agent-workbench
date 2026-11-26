@@ -175,6 +175,48 @@ async function resolveStockContext(
   const load = async () => {
     const readSignal = cycle?.signal ?? signal;
     const month = end.slice(0, 7) + '-01';
+    if (client.config.dailySummary) {
+      const summary = await client.snapshot({ signal: readSignal });
+      if (
+        summary.kind === 'ready' &&
+        summary.planScopeLocked &&
+        summary.businessDate <= end &&
+        summary.defaultInventoryVersion
+      ) {
+        const version = summary.defaultInventoryVersion;
+        const targetMonth = summary.targetMonth;
+        const latest = await readBatchSnapshot(client, end, readSignal);
+        if (latest.rows[0]?.day !== summary.stockDate)
+          throw Object.assign(Error('汇总批次与库存快照日期不一致，请刷新重读'), {
+            code: 'SUMMARY_DATE_MISMATCH',
+          });
+        const [targetYear, targetMonthNumber] = targetMonth.split('-');
+        const targetMonthLabel = `${targetYear}年${Number(targetMonthNumber)}月`;
+        const scope: SafetyStockScope = {
+          targetMonth,
+          targetMonthLabel,
+          requestedTargetMonth: targetMonth,
+          requestedTargetMonthLabel: targetMonthLabel,
+          versions: [version],
+          versionLabel: version,
+          selectionRule: `本批次按${targetMonthLabel}有效计划选定${version}版`,
+          missingVersions: [],
+          published: true,
+          fallbackUsed: version !== (targetMonth === month ? '纠偏' : '月初'),
+        };
+        return {
+          scope,
+          context: {
+            asOf: end,
+            targetMonth,
+            version,
+            stockMonth: summary.stockDate.slice(0, 7) + '-01',
+            stockDate: summary.stockDate,
+            configVersion: latest.configVersion,
+          },
+        };
+      }
+    }
     const [versions, latest] = await Promise.all([
       readConfiguredTargetCalendar(client, end, readSignal),
       readBatchSnapshot(client, end, readSignal),
@@ -288,8 +330,7 @@ export async function readConfiguredStockPage(
     typeof day !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}$/.test(day) ||
     day > end ||
-    !day.startsWith(end.slice(0, 7)) ||
-    month !== end.slice(0, 7) + '-01'
+    month !== day.slice(0, 7) + '-01'
   )
     throw Object.assign(Error('无有效库存快照'), { code: 'SOURCE_NOT_AVAILABLE' });
   const read = async (id: string, values: Record<string, any>) => {
@@ -340,7 +381,7 @@ export async function readConfiguredStockPage(
     offset: (page - 1) * size,
     rolling_start: rollingStart.toISOString().slice(0, 10).replaceAll('-', ''),
     shipment_end_exclusive: next.toISOString().slice(0, 10).replaceAll('-', ''),
-    order_start: month,
+    order_start: end.slice(0, 7) + '-01',
     order_end_exclusive: next.toISOString().slice(0, 10),
 
     order_bases_enabled: false,
@@ -534,15 +575,20 @@ export async function readConfiguredStockSummary(
       fullReady = true;
       return result;
     });
-  const over60Skus = (async () => {
+  const over60 = (async () => {
     if (options.structure || !config.dailySummary) return null;
     const snapshot = await client.snapshot({ signal: options.signal });
-    if (snapshot.kind !== 'ready' || snapshot.stockDate !== day) return null;
+    if (
+      snapshot.kind !== 'ready' ||
+      snapshot.stockDate !== day ||
+      !snapshot.defaultInventoryVersion
+    )
+      return null;
     const count = await client.read(
       'snapshot.base-over60-sku-count',
       {
-        month: scope.targetMonth,
-        inventory_version: scope.versions[0],
+        month: snapshot.targetMonth,
+        inventory_version: snapshot.defaultInventoryVersion,
         stock_date: day,
         bases_enabled: true,
         bases: selectedBases?.length
@@ -552,9 +598,16 @@ export async function readConfiguredStockSummary(
       },
       { signal: options.signal, requiredColumns: ['over60_sku_count'] },
     );
-    if (count.configVersion !== context.configVersion) return null;
+    if (count.configVersion !== context.configVersion)
+      throw Object.assign(Error('配置已变化，请刷新重读'), { code: 'QUERY_CONFIG_CHANGED' });
     return knownNumber(count.rows[0]?.over60_sku_count);
-  })().catch(() => null);
+  })().then(
+    (over60Skus) => ({ over60Skus }),
+    (error: unknown) => ({
+      over60Skus: null,
+      over60ReadError: error instanceof Error ? error.message : '读取超龄 SKU 失败',
+    }),
+  );
   const result = await complete.catch(async (error) => {
     options.signal?.throwIfAborted();
     await inventorySettled;
@@ -568,7 +621,9 @@ export async function readConfiguredStockSummary(
       if (
         snapshot.kind === 'ready' &&
         snapshot.stockDate === day &&
-        snapshot.targetMonth !== scope.targetMonth
+        snapshot.defaultInventoryVersion &&
+        (snapshot.targetMonth !== scope.targetMonth ||
+          snapshot.defaultInventoryVersion !== scope.versions[0])
       ) {
         const keyFields = options.structure ? ['level'] : ['base', 'category'];
         const review = await client.readAll(
@@ -576,7 +631,7 @@ export async function readConfiguredStockSummary(
           {
             ...values,
             month: snapshot.targetMonth,
-            inventory_version: snapshot.defaultInventoryVersion ?? '',
+            inventory_version: snapshot.defaultInventoryVersion,
             summary_batch_id: snapshot.batchId,
           },
           {
@@ -610,6 +665,8 @@ export async function readConfiguredStockSummary(
       reviewReadError = error instanceof Error ? error.message : '读取实际发货失败';
     }
   }
+  const over60Result = await over60;
+  options.signal?.throwIfAborted();
   return {
     groups: groups.map((r) =>
       Object.fromEntries(
@@ -622,6 +679,6 @@ export async function readConfiguredStockSummary(
     scope,
     day,
     reviewReadError,
-    over60Skus: await over60Skus,
+    ...over60Result,
   };
 }

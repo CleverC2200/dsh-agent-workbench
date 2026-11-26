@@ -248,6 +248,7 @@ test('base cards and structure use actual shipments from the same stock day when
           stock_date: '2026-11-24',
           target_month: '2026-11-01',
           default_inventory_version: '纠偏',
+          plan_scope_locked: 0,
           bundle_part: member.part,
           bundle_scope_total: members.length,
           bundle_total: member.part === 'scalar' ? 1 : 0,
@@ -263,7 +264,6 @@ test('base cards and structure use actual shipments from the same stock day when
       ],
       'source.health-date': [{ day: '2026-11-24' }],
       'snapshot.source.health-date': [{ day: '2026-11-24' }],
-      'snapshot.base-over60-sku-count': [{ over60_sku_count: 2 }],
     }[queryId];
     if (rows) return { configVersion: 'v1', returnedColumns: columns, rows };
 
@@ -273,6 +273,8 @@ test('base cards and structure use actual shipments from the same stock day when
     assert.equal(values.inventory_version, snapshot ? '纠偏' : '滚动');
     if (snapshot) assert.equal(values.summary_batch_id, 'batch-stock-day');
     assert.deepEqual(values.bases, ['郑州']);
+    if (queryId === 'snapshot.base-over60-sku-count')
+      return { configVersion: 'v1', returnedColumns: columns, rows: [{ over60_sku_count: 2 }] };
     const row = {
       ...Object.fromEntries(columns.map((key) => [key, null])),
       ...(queryId.includes('structure') ? { level: '汤圆' } : { base: '郑州', category: '汤圆' }),
@@ -290,9 +292,74 @@ test('base cards and structure use actual shipments from the same stock day when
     assert.equal(result.groups[0].sales_plan_qty, 310);
     assert.equal(result.groups[0].review_turn_inventory, 120);
     assert.equal(result.groups[0].review_turn_daily, 0);
+    assert.equal(result.over60Skus, structure ? null : 2);
   }
   assert.ok(calls.some(({ queryId }) => queryId === 'snapshot.page.dashboard-groups'));
   assert.ok(calls.some(({ queryId }) => queryId === 'snapshot.page.structure-groups'));
+});
+
+test('published base plan scope keeps the same-month alternative for cards and structure', async () => {
+  const calls = [];
+  const execute = async (_request, call) => {
+    const { queryId, values } = call;
+    calls.push(queryId);
+    const columns = config.queries[queryId].resultColumns;
+    if (queryId === 'summary.bootstrap') {
+      return {
+        configVersion: 'v1',
+        returnedColumns: columns,
+        rows: config.dailySummary.bundle.members.map((member) => ({
+          batch_id: 'batch-selected-plan',
+          business_date: '2026-11-26',
+          stock_date: '2026-11-25',
+          target_month: '2026-12-01',
+          default_inventory_version: '纠偏',
+          plan_scope_locked: 1,
+          bundle_part: member.part,
+          bundle_scope_total: config.dailySummary.bundle.members.length,
+          bundle_total: member.part === 'scalar' ? 1 : 0,
+          bundle_present: member.part === 'scalar' ? 1 : null,
+          [member.columns.day ?? 'v6']: '2026-11-25',
+        })),
+      };
+    }
+    if (queryId === 'snapshot.base-over60-sku-count')
+      return { configVersion: 'v1', returnedColumns: columns, rows: [{ over60_sku_count: 1 }] };
+    assert.ok(queryId.startsWith('snapshot.'), queryId);
+    assert.equal(values.summary_batch_id, 'batch-selected-plan');
+    assert.equal(values.month, '2026-12-01');
+    assert.equal(values.inventory_version, '纠偏');
+    assert.equal(values.stock_date, '2026-11-25');
+    return {
+      configVersion: 'v1',
+      returnedColumns: columns,
+      rows: [
+        {
+          ...Object.fromEntries(columns.map((key) => [key, null])),
+          ...(queryId.includes('structure')
+            ? { level: '汤圆' }
+            : { base: '郑州', category: '汤圆' }),
+          inventory: 100,
+          sales_plan_qty: 310,
+          review_turn_daily: 10,
+        },
+      ],
+    };
+  };
+  for (const structure of [undefined, { groupBy: 'category' }]) {
+    const result = await readConfiguredStockSummary(['郑州'], {
+      execute,
+      now: new Date('2026-11-26T07:00:00Z'),
+      structure,
+    });
+    assert.equal(result.scope.targetMonth, '2026-12-01');
+    assert.equal(result.scope.versionLabel, '纠偏');
+    assert.equal(result.scope.fallbackUsed, true);
+    assert.equal(result.groups[0].inventory, 100);
+  }
+  assert.ok(!calls.includes('calendar.target_plan_versions'));
+  assert.ok(calls.includes('snapshot.page.dashboard-groups'));
+  assert.ok(calls.includes('snapshot.page.structure-groups'));
 });
 
 test('base cards, structure and SKU rows share the available rolling plan when month-start demand is missing', async () => {
