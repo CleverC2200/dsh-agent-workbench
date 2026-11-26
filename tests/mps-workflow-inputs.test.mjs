@@ -517,7 +517,7 @@ test('产品老品编码接入同基地历史参考，其他基地老品不扩�
   );
 });
 
-test('业务版本缺源周转天数保留待补，人工补充后重新计算', () => {
+test('源周转天数读取成功但无值时默认按0天，人工补充后重新计算', () => {
   const source = draft();
   source.constraints.safetyDays = [{ base: '甲', days: 99 }];
   const local = buildMpsWorkflow(source, null);
@@ -535,9 +535,9 @@ test('业务版本缺源周转天数保留待补，人工补充后重新计算',
   assert.ok(
     result.rows.every(
       (row) =>
-        row.safetyDays === null &&
-        row.targetInventory === null &&
-        row.safetyDaysSource === 'missing',
+        row.safetyDays === 0 &&
+        row.targetInventory === 0 &&
+        row.safetyDaysSource === 'missing-turnover-days-zero',
     ),
   );
   assert.ok(
