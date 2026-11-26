@@ -518,9 +518,7 @@ test('七步按业务层级排序，SKU编码顺序独立于同版标签优先�
   await stickyHead(days);
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   await frame.getByRole('button', { name: '执行评估', exact: true }).click();
-  await expect(frame.locator('.wf-plan-status[role="status"]')).toContainText(
-    '满足排产条件',
-  );
+  await expect(frame.locator('.wf-plan-status[role="status"]')).toContainText('满足排产条件');
   const capacity = frame.getByRole('table', { name: '基地需求与月总产能', exact: true });
   await expect(capacity.locator('tbody tr td:first-child')).toHaveText([
     '郑州',
