@@ -658,6 +658,10 @@ test('MPS capacity and report keep missing formula dependencies empty and export
     '选择计划提报CSV',
     '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,=1+1,汤圆,系列甲,组甲,10,10',
   );
+  await workflowStep(frame, '约束与配置');
+  await expect(
+    frame.getByRole('table', { name: '周转天数与库存目标报告', exact: true }),
+  ).toContainText('默认按0天计算');
   await workflowStep(frame, '产能评估与缺口');
   const capacity = frame.getByRole('region', { name: '产能评估与缺口', exact: true });
   await expectWorkflowExportValue(frame, '郑州 A 2026-10 目标库存 计算过程', '0');
