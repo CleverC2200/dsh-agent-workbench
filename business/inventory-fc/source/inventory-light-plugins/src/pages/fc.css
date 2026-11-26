@@ -4736,7 +4736,7 @@ body,
   min-height: 30px;
   align-items: baseline;
   flex-wrap: wrap;
-  margin: 4px 0 6px;
+  margin: 3px 0 5px;
   padding: 0;
   font-size: var(--workbench-kpi-value-font-size, 30px);
   line-height: 1.1;
@@ -4744,7 +4744,7 @@ body,
 }
 .agent-root .fc-compact-kpis .kpi-card dl {
   margin-top: auto;
-  padding-top: 8px;
+  padding-top: 6px;
 }
 .agent-root .fc-compact-kpis .kpi-card dl > div {
   display: grid;
