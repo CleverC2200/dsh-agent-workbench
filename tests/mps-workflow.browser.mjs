@@ -1013,7 +1013,7 @@ test('零需求跳过缺失拆分依据，库存缺项逐行导出人工补数�
     ),
     JSON.stringify(pending),
   );
-  assert.match(pending[0]['需人工补齐'], /人工补齐第二步/);
+  assert.match(pending[0]['需人工补齐'], /核对第二步.*当月有效月初库存.*有效月末结存/);
   assert.ok(pending.slice(1).every((row) => row['需人工补齐'].includes('先处理根因月份和来源')));
   const issuesCsv = await download(page, capacity, '导出分类问题清单');
   assert.match(issuesCsv, /期初库存原始值-5，计算用值0/);
