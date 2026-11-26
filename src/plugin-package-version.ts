@@ -1,4 +1,4 @@
 export const pluginPackageVersion = Object.freeze({
   name: '@cleverc2200/dsh-agent-workbench',
-  version: '0.1.181',
+  version: '0.1.182',
 } as const);

@@ -227,6 +227,22 @@ test('short intermediate pages reject the collection instead of silently skippin
   );
 });
 
+test('opt-in partial collections keep validated rows across a failed and a short page', async () => {
+  const client = createQueryClient(registry, async (_, { queryId, values }) => {
+    if (queryId === 'count') return { rows: [{ total: 601 }] };
+    if (values.offset === 200) throw Error('page unavailable');
+    const rows = pageRows(values.offset, 601);
+    return { rows: values.offset === 400 ? rows.slice(0, 1) : rows };
+  });
+  const result = await client.readAll(
+    'list',
+    { page_size: 200, offset: 0 },
+    { keyFields: ['value'], allowPartial: true },
+  );
+  assert.equal(result.partial, true);
+  assert.deepEqual(result.rows, [...pageRows(0, 601), { value: 400 }, { value: 600 }]);
+});
+
 for (const [agentId, slots] of [
   [undefined, 4],
   ['inventory-orderworkbench', 6],

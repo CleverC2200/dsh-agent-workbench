@@ -465,37 +465,56 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot, evaluation,
   const confirmedMovements = new Map(
     (draft.inventoryMovements ?? []).map(inventoryIdentity).map((row) => [inventoryKey(row), row]),
   );
-  const inventoryMovements = [
-    ...new Set([...confirmedMovements.keys(), ...monthlyInventory.keys()]),
-  ]
-    .map((key) => {
+  const movementIdentities = new Map();
+  if (evaluation) {
+    for (const product of productMonths.values()) {
+      for (const month of months) {
+        const identity = { ...product, month };
+        movementIdentities.set(inventoryKey(identity), identity);
+      }
+    }
+  }
+  for (const row of [
+    ...[...monthlyInventory.values()].map(([row]) => row),
+    ...[...transitInventory.values()].map(([row]) => row),
+    ...confirmedMovements.values(),
+  ]) {
+    movementIdentities.set(inventoryKey(row), { month: row.month, base: row.base, code: row.code });
+  }
+  const evaluationCutoff = evaluation?.inventory?.cutoff;
+  const inventoryMovements = [...movementIdentities]
+    .map(([key, identity]) => {
+      if (!months.includes(identity.month)) return null;
+      const future = evaluationCutoff && evaluationCutoff < identity.month + '-01';
+      if (future)
+        return {
+          ...identity,
+          productionInbound: 0,
+          inTransitInbound: 0,
+          transferIn: 0,
+          transferOut: 0,
+          source: '评估月份尚未开始',
+        };
       const confirmed = confirmedMovements.get(key);
       const matches = monthlyInventory.get(key) ?? [];
       const published = matches.length === 1 ? matches[0] : undefined;
-      const identity = confirmed ?? published;
-      if (!identity || identity.month < draft.month || identity.month > months.at(-1)) return null;
       const quantities = {};
       const sources = [];
       const arrivals = transitInventory.get(key) ?? [];
-      const transit =
-        arrivals.length === 1 &&
-        published?.transferIn === 0 &&
-        (number(confirmed?.transferIn) ?? 0) === 0
-          ? arrivals[0]
-          : null;
+      const transit = arrivals.length === 1 ? arrivals[0] : null;
       for (const field of movementFields) {
         const explicit = number(confirmed?.[field]);
         const automatic =
           field === 'inTransitInbound' ? number(transit?.quantity) : number(published?.[field]);
-        quantities[field] = explicit ?? automatic;
+        quantities[field] = explicit ?? automatic ?? (evaluation ? 0 : null);
         if (explicit !== null && confirmed.source) sources.push(confirmed.source);
         else if (automatic !== null)
           sources.push(
             field === 'productionInbound'
-              ? `库存日报 ${published.sourceDate} ${published.productionBasis}`
+              ? `库存日报截至 ${published.sourceDate} 实际生产入库`
               : field === 'inTransitInbound'
-                ? `WMS 发运和收货 / TMS 到货 / ASN ${transit.sourceOrders} 单，月度调入计划明确为0`
-                : `库存日报 ${published.sourceDate} 月度调拨计划`,
+                ? `WMS 发运和收货 / TMS 到货 / ASN ${transit.sourceOrders} 单尚未收货`
+                : `库存日报截至 ${published.sourceDate} 实际调拨`,
           );
       }
       return { ...identity, ...quantities, source: [...new Set(sources)].join('；') };

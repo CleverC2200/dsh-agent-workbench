@@ -154,6 +154,34 @@ test('负期初和负预测结存逐明细归0，正库存不抵消，页面及�
   );
 });
 
+test('累计生产入库和剩余入库缺值仅在结存公式按零，保留有效入库和必需输入的缺项', async (t) => {
+  const page = await mount(t, [
+    row('NO-INBOUND', { inbound: null, remaining: null }),
+    row('KNOWN-REMAINING', { inbound: null }),
+    row('KNOWN-INBOUND', { inbound: 15, remaining: null }),
+    row('NO-STOCK', { open: null, inbound: null, remaining: null }),
+  ]);
+  const rows = await page.evaluate(() => window.snapshot);
+  assert.deepEqual(
+    rows.map(({ inbound, remaining, end }) => [inbound, remaining, end]),
+    [
+      [null, null, 95],
+      [null, 20, 115],
+      [15, null, 110],
+      [null, null, null],
+    ],
+  );
+  await page.getByLabel('搜索发货单品').fill('NO-INBOUND');
+  const table = page.getByRole('table', { name: '本月预估发货明细' });
+  await table.getByRole('button', { name: '郑州 预计月末结存 计算过程', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('未取得的累计生产入库或剩余入库按0计');
+  await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click();
+  const [detail] = await download(page, '下载明细');
+  assert.equal(detail.本月生产入库, '');
+  assert.equal(detail.剩余天数入库, '');
+  assert.equal(detail.预计月末结存, 95);
+});
+
 test('来源历史不完整或冲突不能把零数量认定为真实无发货', async (t) => {
   const page = await mount(t, [
     row('INCOMPLETE', { sourceDays: 21, duplicateDays: 0 }),
