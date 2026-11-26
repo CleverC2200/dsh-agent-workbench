@@ -1556,11 +1556,24 @@ test('产品净重按基地及计量单位换算吨数，冲突不退回旧系�
     manual.weights.map((row) => row.tonsPerPiece),
     [0.2, 0.1],
   );
+  for (const tonsPerPiece of [undefined, null, '', '  ']) {
+    const saved = resolveWeightPairs(
+      [{ ...pairs[0], tonsPerPiece, channels: '经销商' }],
+      pairs,
+      old,
+      [raw()],
+    );
+    assert.deepEqual(saved, resolved);
+  }
+  for (const tonsPerPiece of [0, '无效']) {
+    const saved = resolveWeightPairs([{ ...pairs[0], tonsPerPiece }], pairs, old, [raw()]);
+    assert.equal(saved.issues[0].sourceTable, '当前评估版本人工参数');
+  }
 });
 
-test('产品净重同时进入实际排产和年度吨数报告，不依赖旧渠道取数成功', () => {
+test('产品净重在留有空白人工配置时仍进入实际排产和年度吨数报告', () => {
   const sample = workflowPerformanceInput(2);
-  sample.draft.unitWeights = [];
+  sample.draft.unitWeights = [{ base: '甲', code: '0', tonsPerPiece: null, channels: '经销商' }];
   sample.draft.productRaw = ['0', '1'].map((code) => ({
     material_code: code,
     target_base: '甲',

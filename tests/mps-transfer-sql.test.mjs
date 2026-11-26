@@ -28,11 +28,11 @@ test('调拨只读取日度计划明细截止日前的最新同月快照', (t) =
   ])
     insert.run(...row);
   db.exec(`CREATE TABLE agents_ads_scm_base_sku_daily_plan_detail_d (
-    belong_base TEXT, material_code TEXT, the_date TEXT, in_qty REAL,
+    belong_base TEXT, material_code TEXT, the_date TEXT, in_qty REAL, ship_qty REAL,
     transfer_in_plan_v1 REAL, transfer_in_plan_adj REAL, transfer_out_plan_v1 REAL, transfer_out_plan_adj REAL
   )`);
   const daily = db.prepare(
-    "INSERT INTO agents_ads_scm_base_sku_daily_plan_detail_d VALUES ('郑州',?,?,0,?,?,?,?)",
+    "INSERT INTO agents_ads_scm_base_sku_daily_plan_detail_d VALUES ('郑州',?,?,0,9,?,?,?,?)",
   );
   for (const row of [
     ['A', '2026-09-20', 99, 99, 99, 99],
@@ -74,6 +74,8 @@ test('调拨只读取日度计划明细截止日前的最新同月快照', (t) =
       ['B', '2026-09-21', 1, 75, null, 10, 15],
       ['C', null, null, null, null, null, null],
       ['D', '2026-09-22', 2, null, null, null, null],
+      ['NEW', null, null, null, null, null, null],
     ],
   );
+  assert.equal(rows.find((row) => row.material_code === 'D').shipped, null);
 });
