@@ -401,16 +401,12 @@ export async function installDetection(ctx) {
     return p;
   };
   async function currentOwner() {
-    const response = await ctx.connection.createSharedFetchHandler('/api').fetch(
-      new Request('http://host/api/gea-proof/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      }),
-    );
+    const response = await ctx.connection
+      .createSharedFetchHandler('/api')
+      .fetch(new Request('http://host/api/gea-html/identity'));
+    if (!response.ok) throw Error('无法读取 GEA 登录身份');
     const result = await response.json();
-    if (!response.ok || !result.ok) throw Error('无法读取 GEA 登录身份');
-    return warningOwner(result.value);
+    return warningOwner(result?.status);
   }
   async function scheduler(input) {
     const response = await ctx.connection.createSharedFetchHandler('/api').fetch(

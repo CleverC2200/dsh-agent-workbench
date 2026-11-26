@@ -14,7 +14,15 @@ const owners = [
 ];
 async function setup(
   t,
-  { directoryError = false, answerGate, answer, enabled = true, runs = [], beforeSave } = {},
+  {
+    directoryError = false,
+    answerGate,
+    answer,
+    enabled = true,
+    runs = [],
+    beforeSave,
+    approvalDenied = false,
+  } = {},
 ) {
   let state = {
     tasks: [
@@ -35,8 +43,15 @@ async function setup(
     runs: structuredClone(runs),
     events: [],
   };
+  if (approvalDenied)
+    state.tasks.push({
+      ...state.tasks[0],
+      id: 'other-user-task',
+      owner: warningOwner({ ...status, user: { ...status.user, id: 'other-user' } }),
+    });
   const calls = [],
     cleanups = [];
+  const register = new Map();
   const finished = Promise.withResolvers();
   let revision = 0;
   const rows = ['汤圆', '饺子'].map((objectName) => ({
@@ -93,13 +108,30 @@ async function setup(
       },
     },
     connection: {
-      fetch: { register: () => () => {} },
+      fetch: {
+        register(route) {
+          register.set(route.path, route);
+          return () => register.delete(route.path);
+        },
+      },
       createSharedFetchHandler: () => ({
         fetch: async (request) => {
-          const path = new URL(request.url).pathname,
-            body = await request.json();
+          const path = new URL(request.url).pathname;
+          if (path === '/api/gea-html/identity') {
+            calls.push({ path, method: request.method, body: {} });
+            assert.equal(request.method, 'GET');
+            return Response.json({ status });
+          }
+          if (path === '/api/gea-proof/status' && approvalDenied) {
+            calls.push({
+              path: '/ai/gateway/agent/session',
+              agentCode: 'sales_forecast',
+              body: {},
+            });
+            return Response.json({ ok: true, value: status });
+          }
+          const body = await request.json();
           calls.push({ path, body });
-          if (path.endsWith('/status')) return Response.json({ ok: true, value: status });
           if (path.endsWith('/warning/storage')) {
             if (body.operation === 'load')
               return Response.json({
@@ -159,9 +191,40 @@ async function setup(
     },
   });
   t.after(() => cleanups.reverse().forEach((cleanup) => cleanup()));
-  await service.api({ op: 'list' });
-  return { service, calls, state: () => state, finished: finished.promise };
+  if (!approvalDenied) await service.api({ op: 'list' });
+  return {
+    service,
+    calls,
+    state: () => state,
+    finished: finished.promise,
+    route: register.get('/api/agent-workbench/detection'),
+  };
 }
+test('warning list polling keeps a signed-in account scoped when sales approval is denied', async (t) => {
+  const { calls, route } = await setup(t, { approvalDenied: true });
+  for (let i = 0; i < 2; i++) {
+    const response = await route.fetch(
+      new Request('http://host/api/agent-workbench/detection', {
+        method: 'POST',
+        body: JSON.stringify({ op: 'list' }),
+      }),
+    );
+    assert.equal(response.status, 200);
+    const { tasks } = await response.json();
+    assert.deepEqual(
+      tasks.map(({ id }) => id),
+      ['task'],
+    );
+  }
+  assert.deepEqual(
+    calls.filter(({ agentCode }) => agentCode === 'sales_forecast'),
+    [],
+  );
+  assert.deepEqual(
+    calls.filter(({ path }) => path === '/api/gea-html/identity').map(({ method }) => method),
+    ['GET', 'GET'],
+  );
+});
 test('manual retry reuses one original failed recipient batch and leaves other receipts untouched', async (t) => {
   const f = await setup(t);
   const run = await f.service.runTask('task', 'retry-batch');
