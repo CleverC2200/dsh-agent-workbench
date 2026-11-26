@@ -473,6 +473,122 @@ test('order list asks for authorized related data and keeps its page links in Wo
   }
 });
 
+test('each pending order shows its actual reason without changing links or completed rows', async () => {
+  const dom = new JSDOM(html, {
+    runScripts: 'outside-only',
+    url: 'https://fixture.invalid/window/test?view=list',
+  });
+  const entries = [
+    { reason: 'SAP查价提示客户冻结，请联系业务核实', status: 'pending' },
+    { reason: '信用额度校验未通过，缺口 200 元。\n部分商品缺货，请核对。', status: 'pending' },
+    { reason: '订单满足率 70.0%，未达到90%，请核对库存及商品数量。', status: 'pending' },
+    { reason: '请核对订单信息后处理。', status: 'pending' },
+    { reason: '服务返回 <img src=x onerror=alert(1)>，待核实。', status: 'pending' },
+    { reason: '旧异常不应继续显示', status: 'resolved' },
+  ];
+  try {
+    dom.window.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        ...fixture(),
+        related: {
+          items: entries.map((entry, index) => ({
+            ...entry,
+            snapshot: { ...fixture().snapshot, orderNo: `ORDER-${index}` },
+            entryUrl: `https://fixture.invalid/entry?reference=order-${index}`,
+          })),
+          total: entries.length,
+        },
+      }),
+    });
+    dom.window.eval(editor + '\n' + controller);
+    await new Promise((resolve) => setImmediate(resolve));
+    const articles = [...dom.window.document.querySelectorAll('#items article')];
+    assert.equal(articles.length, entries.length);
+    for (let index = 0; index < entries.length; index++) {
+      const article = articles[index],
+        entry = entries[index];
+      if (entry.status === 'pending') {
+        assert.equal(
+          article.querySelector('.order-list-reason').textContent,
+          `待处理原因：${entry.reason}`,
+        );
+        for (const [label, view] of [
+          ['订单处理', 'process'],
+          ['暂缓发货', 'defer'],
+        ]) {
+          const link = [...article.querySelectorAll('a')].find(
+            (item) => item.textContent === label,
+          );
+          assert.equal(new URL(link.href).searchParams.get('view'), view);
+          assert.equal(new URL(link.href).searchParams.get('reference'), `order-${index}`);
+        }
+      } else {
+        assert.equal(article.querySelector('.order-list-reason'), null);
+        assert.equal(article.textContent.includes(entry.reason), false);
+        assert.equal(article.querySelectorAll('a').length, 1);
+      }
+    }
+    assert.equal(dom.window.document.querySelector('#items img'), null);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('older list data uses explicit known checks and never invents a shortage from an invalid rate', async () => {
+  for (const [snapshot, expected, excluded] of [
+    [
+      { satisfactionRate: 99, priceStatus: 'PRICE_MISSING', lines: [{ shortage: 0 }] },
+      '价格校验未通过',
+      '库存不足',
+    ],
+    [
+      { satisfactionRate: 99, credit: { status: 'insufficient' }, lines: [{ shortage: 0 }] },
+      '信用额度校验未通过',
+      '库存不足',
+    ],
+    [{ satisfactionRate: 70, lines: [{ shortage: 5 }] }, '库存不足', '价格校验未通过'],
+    [{ satisfactionRate: -1, lines: [{ shortage: 0 }] }, '满足率尚未明确', '库存不足'],
+    [{ satisfactionRate: 100, lines: [{ shortage: 2 }] }, '满足率与缺货明细不一致', '库存不足'],
+    [{ satisfactionRate: 95, lines: [{}] }, '缺货信息未完整提供', '库存不足'],
+    [
+      { satisfactionRate: 100, lines: [{ shortage: 0 }] },
+      '待销售核对订单信息并提交',
+      '价格校验未通过',
+    ],
+  ]) {
+    const dom = new JSDOM(html, {
+      runScripts: 'outside-only',
+      url: 'https://fixture.invalid/window/test?view=list',
+    });
+    try {
+      dom.window.fetch = async () => ({
+        ok: true,
+        json: async () => ({
+          ...fixture(),
+          related: {
+            items: [
+              {
+                snapshot: { orderNo: 'ORDER', customer: '客户', ...snapshot },
+                status: 'pending',
+                entryUrl: 'https://fixture.invalid/entry?reference=one',
+              },
+            ],
+            total: 1,
+          },
+        }),
+      });
+      dom.window.eval(editor + '\n' + controller);
+      await new Promise((resolve) => setImmediate(resolve));
+      const reason = dom.window.document.querySelector('.order-list-reason').textContent;
+      assert.ok(reason.includes(expected), reason);
+      assert.equal(reason.includes(excluded), false, reason);
+    } finally {
+      dom.window.close();
+    }
+  }
+});
+
 test('authorization denial never renders order data', async () => {
   const dom = new JSDOM(html, {
     runScripts: 'outside-only',
