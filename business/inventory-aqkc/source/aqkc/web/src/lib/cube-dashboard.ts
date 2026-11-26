@@ -2464,6 +2464,8 @@ async function loadConfiguredSummaryDashboard(
     })
       .then((value) => {
         stock = value;
+        if (value.reviewReadError) readErrors.push(`回顾周转和日均动销：${value.reviewReadError}`);
+        if (value.over60ReadError) readErrors.push(`超龄 SKU：${value.over60ReadError}`);
       })
       .catch((e) => {
         if (signal?.aborted) throw e;
