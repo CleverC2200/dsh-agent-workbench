@@ -722,7 +722,7 @@ test('received MPS context covers the seven current steps and preserves unassess
       )
       .toEqual([
         ...(key === 'check'
-          ? ['step:category-demand', 'step:source-inputs-parameters', 'step:source-inputs-basic']
+          ? ['step:category-demand', 'step:source-inputs-basic', 'step:source-inputs-parameters']
           : []),
         'step:' + key,
       ]);
@@ -1441,7 +1441,7 @@ for (const boundary of ['Session', 'identity']) {
         name: '',
         exact: true,
       }),
-    ).toContainText('正在读取或校验输入');
+    ).toContainText('正在读取发货数据');
     if (boundary === 'Session')
       await page.evaluate(() =>
         window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),

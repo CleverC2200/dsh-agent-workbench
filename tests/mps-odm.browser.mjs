@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
+import * as XLSX from 'xlsx-republish';
 import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
 
-test('ODM页面与CSV同一结果：默认到货90，内部排产0，收货只记录一次并带估算说明', async (t) => {
+test('ODM页面与导出结果一致：默认到货90，内部排产0，收货只记录一次并带估算说明', async (t) => {
   const output = await build({
     stdin: {
       resolveDir: process.cwd(),
@@ -48,19 +50,20 @@ test('ODM页面与CSV同一结果：默认到货90，内部排产0，收货只�
   ).toBeVisible();
   const schedules = page.getByRole('table', { name: 'ODM供方SKU月度默认计划' });
   await expect(schedules.getByRole('cell', { name: '90', exact: true }).first()).toBeVisible();
+  const download = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出求解结果', exact: true }).click();
   await page.getByRole('button', { name: '导出ODM默认计划到货', exact: true }).click();
   const downloads = await page.evaluate(() => window.downloads);
-  const solve = downloads.find((item) => item.name.endsWith('求解结果.csv'));
-  assert.ok(solve.columns.includes('ODM默认计划到货量'));
-  const row = solve.rows.find((item) => item.月份 === '2026-12');
+  const workbook = XLSX.read(await readFile(await (await download).path()), { type: 'buffer' });
+  const solve = XLSX.utils.sheet_to_json(workbook.Sheets['求解结果'], { defval: '' });
+  const row = solve.find((item) => item.月份 === '2026-12');
   assert.equal(row.内部实际排产量, 0);
   assert.equal(row.ODM默认计划到货量, 90);
   assert.equal(row.实际期末库存, 20);
   assert.equal(row.历史源数量, 1);
   assert.equal(row.替换系数, '');
   assert.equal(row.历史合计数量, 1);
-  assert.match(row.历史参考口径, /自身历史/);
+  assert.equal(row.自身历史源数量, 1);
   assert.match(row.ODM估算说明, /默认估算/);
   const arrivals = downloads.find((item) => item.name.endsWith('ODM默认计划到货.csv'));
   assert.equal(arrivals.rows.filter((item) => item.月份 === '2026-12').length, 1);

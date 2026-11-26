@@ -61,7 +61,7 @@ test('单价仍在读取时已显示产品清单，单价回来后补齐显示',
   await expect(section).toContainText('2 个产品');
   await expect(section.locator('tbody tr')).toHaveCount(2);
   await expect(section.getByText('正在读取未税到岸单价。', { exact: true })).toBeVisible();
-  const download = section.getByRole('button', { name: '下载', exact: true });
+  const download = section.getByRole('button', { name: '下载产品明细', exact: true });
   await expect(download).toBeDisabled();
   pricesPending.resolve();
   await expect(section.locator('tbody tr').first()).toContainText('2.00');

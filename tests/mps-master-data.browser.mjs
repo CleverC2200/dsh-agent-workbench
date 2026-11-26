@@ -399,20 +399,21 @@ test('年度计算大页回退，全年预览和工作簿保留计算窗口外�
   );
   const section = frame.getByRole('region', { name: '年度销售计划', exact: true });
   const exportButton = section.getByRole('button', { name: '下载年度SKU模板' });
-  await expect(exportButton).toBeEnabled();
-  assert.deepEqual(
-    calls
-      .filter(({ queryId }) => queryId === sql)
-      .map(({ parameters }) => [parameters.page_size, parameters.offset]),
-    [
+  await expect
+    .poll(() =>
+      calls
+        .filter(({ queryId }) => queryId === sql)
+        .map(({ parameters }) => [parameters.page_size, parameters.offset]),
+    )
+    .toEqual([
       [10000, 0],
       [5000, 0],
-    ],
-  );
+    ]);
   assert(!calls.some(({ queryId }) => queryId === 'annual-pool.detail'));
-  await section.getByRole('button', { name: '展开年度销售计划' }).click();
+  await section.getByText('年度销售计划（分月）', { exact: true }).click();
   await expect(section.getByRole('columnheader', { name: '2027-06' })).toBeVisible();
   await expect(section.getByText('987', { exact: true }).first()).toBeVisible();
+  await expect(exportButton).toBeEnabled();
   const pending = page.waitForEvent('download');
   await exportButton.click();
   const book = XLSX.read(await readFile(await (await pending).path()));

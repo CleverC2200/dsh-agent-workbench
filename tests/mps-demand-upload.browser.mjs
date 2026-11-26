@@ -358,7 +358,9 @@ test('跨月参考保留原版人工导入且新版从系统值开始', async (t
   await creation.getByRole('button', { name: '创建本地版本', exact: true }).click();
   await expect.poll(async () => (await draft(page)).month).toBe(nextMonth);
   assert.deepEqual((await draft(page)).demandImports ?? [], []);
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption(month);
   await frame.getByLabel('评估版本选择', { exact: true }).selectOption(base.id);
+  await expect.poll(async () => (await draft(page)).id).toBe(base.id);
   assert.deepEqual((await draft(page)).demandImports, base.demandImports);
 });
 

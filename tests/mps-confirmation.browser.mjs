@@ -36,7 +36,7 @@ test('MPS keeps confirmed sources awaiting a Host, including forecast awaiting a
   await helpToggle.press('Enter');
   await expect(helpToggle).toHaveAttribute('aria-expanded', 'true');
   await expect(helpToggle).toBeFocused();
-  await expect(help).toContainText('通过工作台草稿恢复');
+  await expect(help).toContainText('评估版本、导入数据、约束与调整自动保存在本机');
   await expect(frame.locator('dialog[open]')).toHaveCount(0);
   await helpToggle.click();
   await expect(help).toBeHidden();
@@ -389,7 +389,7 @@ test('MPS starts without sample products when no source is configured and still 
   await expect(products.getByRole('cell', { name: '编辑后产品', exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
   await products.getByRole('button', { name: '下载产品明细', exact: true }).click();
-  assert.equal((await download).suggestedFilename(), '产品关系.xlsx');
+  assert.equal((await download).suggestedFilename(), '产品明细.xlsx');
 });
 
 test('MPS creates and compares local evaluation versions in dialogs without displacing the primary demand matrix', async (t) => {
@@ -428,7 +428,7 @@ test('MPS creates and compares local evaluation versions in dialogs without disp
   await compare.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await expect(frame.getByRole('region', { name: '页面说明', exact: true })).toContainText(
-    '按身份、租户、对话和版本隔离',
+    '同一账号新建对话后，可以继续使用这些版本',
   );
 });
 
