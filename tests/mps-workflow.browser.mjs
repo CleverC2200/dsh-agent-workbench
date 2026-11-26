@@ -2170,10 +2170,8 @@ test('Tab5 uses one source final turnover day per base-SKU and persists manual s
       .every((row) => row['有效周转天数'] === '25' && row['天数来源'] === '人工补充目标周转天数'),
   );
   await commitNumber(field, '0');
-  rows = await targetsAcrossMonths();
-  assert.ok(
-    rows.filter((row) => row['产品编码'] === 'B').every((row) => row['目标期末库存'] === '0'),
-  );
+  rows = await workflowExportRowsForTarget(page, view);
+  assert.equal(rows.find((row) => row['产品编码'] === 'B')['目标期末库存'], '0');
   await referenceRows('zero');
   await commitNumber(field, '');
   await expect(pending).toContainText('缺输入');

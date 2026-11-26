@@ -644,7 +644,7 @@ test('历史窗口读取失败时保留已读窗口，页首重试只重读失�
   await expect(dialog).toContainText('2025-10');
   await expect(dialog).toContainText('共24条');
   await expect(dialog).toContainText('2025（1年）');
-  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   const readAfter = calls.length;
   unavailable = false;
   await frame.getByRole('button', { name: '重试大类历史', exact: true }).click();
@@ -946,7 +946,13 @@ test(
     await expect(calculation.locator('td').nth(6)).toHaveText('40');
     await expect(calculation.locator('td').nth(7)).toHaveText('245');
     await expect(main).toContainText('年度环比');
-    await expect(main).toContainText('本月预估发货*环比');
+    const calculationSection = frame.getByRole('region', { name: '逐月测算', exact: true });
+    const calculationHelp = calculationSection.getByRole('region', { name: '逐月测算口径' });
+    await expect(calculationHelp).toBeHidden();
+    const help = calculationSection.getByRole('button', { name: '口径说明', exact: true });
+    await help.click();
+    await expect(calculationHelp).toContainText('本月预估发货 × 环比');
+    await help.press('Escape');
     const waiting = page.waitForEvent('download');
     await frame.getByRole('button', { name: '下载测算明细', exact: true }).click();
     const downloadPath = await (await waiting).path();
@@ -1048,7 +1054,10 @@ test(
     );
     await preview.getByLabel('计算月份').selectOption('2026-11');
     const traceWaiting = page.waitForEvent('download');
-    await preview.getByRole('button', { name: '下载当前计算过程', exact: true }).click();
+    await preview
+      .locator('..')
+      .getByRole('button', { name: '下载当前计算过程', exact: true })
+      .click();
     const tracePath = await (await traceWaiting).path();
     const traceBook = XLSX.read(await readFile(tracePath), { type: 'buffer', raw: true });
     const trace = XLSX.utils.sheet_to_json(traceBook.Sheets[traceBook.SheetNames[0]]);

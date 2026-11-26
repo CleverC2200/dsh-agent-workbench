@@ -439,9 +439,7 @@ test('七步按业务层级排序，SKU编码顺序独立于同版标签优先�
     '常规',
   ]);
   await stickyHead(products.getByRole('table'));
-  const month = (
-    await frame.getByLabel('评估版本选择').locator('option:checked').textContent()
-  ).match(/\d{4}-\d{2}/)[0];
+  const month = await frame.getByLabel('评估月份选择', { exact: true }).inputValue();
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: '业务排序.csv',
     mimeType: 'text/csv',

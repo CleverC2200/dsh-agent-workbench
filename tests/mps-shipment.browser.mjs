@@ -1524,9 +1524,7 @@ test('V6 发货人工导入独立于原始输入，采用导入、偏差分档�
   await expect(table.locator('tr.sp-sku')).toHaveCount(0);
   await frame.getByLabel('发货预测偏差筛选').selectOption('red');
   await expect(sku).toBeVisible();
-  const pending = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载明细', exact: true }).click();
-  const csv = await readFile(await (await pending).path(), 'utf8');
+  const csv = await exported(page, frame);
   assert.match(csv, /人工预测,预测偏差,整月预估发货/);
   assert.match(csv, /204/);
   await forecast.setInputFiles({

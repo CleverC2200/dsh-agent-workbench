@@ -14,7 +14,7 @@ const compiled = await build({
     import {createShipment} from './static/mps/source/shipment.js';
     import {downloadCsv} from './static/mps/source/demand-confirmation.js';
     const Dialog=({title,children,close})=>React.createElement('section',{role:'dialog','aria-label':title},children,React.createElement('button',{onClick:close},'关闭'));
-    const Shipment=createShipment(React,()=>{},{Dialog,Upload:()=>null,downloadCsv,monthOffset:()=> '2026-10'});
+    const Shipment=createShipment(React,()=>{},{Button:'button',Dialog,Upload:()=>null,downloadCsv,monthOffset:()=> '2026-10'});
     function Page(){const [draft,setDraft]=React.useState(window.initialDraft);const generation=React.useRef(0);
       return React.createElement(Shipment,{draft,scopeGeneration:generation,active:true,update:changes=>setDraft(d=>({...d,...changes})),onSnapshot:snapshot=>{window.snapshot=snapshot.rows;}});}
     createRoot(document.getElementById('root')).render(React.createElement(Page));`,

@@ -300,9 +300,7 @@ test('Step3 preserves unsaved category forecasts and remarks across steps and ve
       '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,\n郑州,B,产品乙,汤圆,系列,组,,',
     ),
   });
-  const month = (
-    await frame.getByLabel('评估版本选择').locator('option:checked').textContent()
-  ).match(/\d{4}-\d{2}/)[0];
+  const month = await frame.getByLabel('评估月份选择', { exact: true }).inputValue();
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: '提报.csv',
     mimeType: 'text/csv',
