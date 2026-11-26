@@ -346,7 +346,11 @@ test('base changes and closed details cannot retain or publish obsolete query re
     );
     await React.act(async () => scoped.onProgress(workspace(['华东'])));
     await settle();
-    assert.equal(page.pageContext().parts.stockOverview.rows[0].level, '华东');
+    const cards = container.querySelector('[data-overview-cards="aqkc"]');
+    assert.equal(cards.getAttribute('aria-busy'), 'true');
+    assert.match(cards.textContent, /100件/);
+    assert.equal(page.pageContext().parts.queryState.state, 'loading');
+    assert.equal(page.pageContext().parts.stockOverview.rows, undefined);
     const insightCount = stockRangeTest.insightCalls.length;
     await React.act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 600));
@@ -371,7 +375,9 @@ test('base changes and closed details cannot retain or publish obsolete query re
       'national progress must not restart selected-base queries',
     );
     assert.equal(scoped.signal.aborted, false);
-    assert.equal(page.pageContext().parts.stockOverview.rows[0].level, '华东');
+    assert.equal(cards.getAttribute('aria-busy'), 'true');
+    assert.match(cards.textContent, /100件/);
+    assert.equal(page.pageContext().parts.stockOverview.rows, undefined);
     await filter({ bases: ['华南基地'], tab: '基地结构' });
     assert.equal(scoped.signal.aborted, true);
     await React.act(async () => {

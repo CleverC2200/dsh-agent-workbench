@@ -1,17 +1,30 @@
+import { useStepViewField } from './step-view-state.js';
 import { adjustmentReasons } from './local-draft.js';
 
 export function createBatchEdit(react, createPortal) {
   const h = react.createElement;
   const reasons = adjustmentReasons;
-  function useBatchEdit({ scope, onEditingChange, requireReason = false, onStart, onCancel }) {
-    const [active, setActive] = react.useState(false);
-    const [pending, setPending] = react.useState({});
-    const [reason, setReason] = react.useState('');
-    const [reasonDetail, setReasonDetail] = react.useState('');
+  function useBatchEdit({
+    scope,
+    view,
+    onEditingChange,
+    requireReason = false,
+    onStart,
+    onCancel,
+  }) {
+    const [active, setActive] = useStepViewField(react, view, 'BatchEdit.active', () => false);
+    const [pending, setPending] = useStepViewField(react, view, 'BatchEdit.pending', () => ({}));
+    const [reason, setReason] = useStepViewField(react, view, 'BatchEdit.reason', () => '');
+    const [reasonDetail, setReasonDetail] = useStepViewField(
+      react,
+      view,
+      'BatchEdit.reasonDetail',
+      () => '',
+    );
     const detailRef = react.useRef(null);
     const errorId = react.useId();
-    const [error, setError] = react.useState('');
-    const [notice, setNotice] = react.useState('');
+    const [error, setError] = useStepViewField(react, view, 'BatchEdit.error', () => '');
+    const [notice, setNotice] = useStepViewField(react, view, 'BatchEdit.notice', () => '');
     const commit = react.useRef(null);
     const fields = react.useRef(new Map());
     const trigger = react.useRef(null);
@@ -24,9 +37,11 @@ export function createBatchEdit(react, createPortal) {
       setError('');
     };
     react.useEffect(() => {
-      reset();
-      setNotice('');
-    }, [scope]);
+      if (!view) {
+        reset();
+        setNotice('');
+      }
+    }, [scope, view]);
     react.useEffect(() => {
       onEditingChange?.(active);
       return () => onEditingChange?.(false);

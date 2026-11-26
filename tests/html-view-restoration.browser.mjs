@@ -1264,7 +1264,9 @@ test('received MPS keeps saved versions and local files in new Sessions and reje
     };
   });
   await upload(csv.replace(',8,9', ',88,99'));
-  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('正在读取…');
+  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText(
+    '正在读取 2026-12 的计划提报。',
+  );
   await page.evaluate(() =>
     window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),
   );

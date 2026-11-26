@@ -361,7 +361,7 @@ body {
 .kpi-name {
   flex: 1;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--workbench-kpi-title-font-size, 12px);
   font-weight: 700;
   color: var(--text-strong);
 }
@@ -377,16 +377,16 @@ body {
 }
 .kpi-value {
   display: block;
-  font-size: 23px;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
   font-weight: 700;
   color: var(--text-strong);
   letter-spacing: -0.04em;
-  line-height: 1.15;
+  line-height: 1.1;
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
 }
 .kpi-value small {
-  font-size: 11px;
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
   font-weight: 400;
   letter-spacing: 0;
   color: var(--text-muted);
@@ -394,15 +394,16 @@ body {
 }
 .kpi-sub {
   display: block;
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-muted);
   margin-top: 4px;
   line-height: 1.5;
+  font-weight: 400;
 }
 .kpi-state {
   flex: none;
-  font-size: 9px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 600;
   padding: 2px 7px;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -840,18 +841,19 @@ body {
 .mini-table th {
   background: var(--surface-muted);
   color: #747b86;
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   text-align: left;
   padding: 7px 9px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 .mini-table td {
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
   color: var(--text-body);
   padding: 8px 9px;
   border-bottom: 1px solid var(--divider);
+  font-weight: 400;
 }
 .mini-table tr:last-child td {
   border-bottom: 0;
@@ -946,12 +948,13 @@ body {
   --primary-10: #6d0816;
 }
 .arco-table .arco-table-th {
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   color: #747b86;
 }
 .arco-table .arco-table-td {
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .arco-tag {
   font-size: 9px;

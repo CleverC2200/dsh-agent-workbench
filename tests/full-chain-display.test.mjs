@@ -154,4 +154,20 @@ test('base KPI quantities share units while preserving missing and partial data'
   assert.equal(show('超龄SKU', '679'), '679');
   assert.equal(show('平均货龄', '18.8天'), '18.8天');
   assert.equal(show('订单满足率', '96.0%'), '96.0%');
+  assert.deepEqual(formatInventoryMetricTextParts('平均货龄', '18.8天'), {
+    value: '18.8',
+    unit: '天',
+  });
+  assert.deepEqual(formatInventoryMetricTextParts('周转天数', '11.6 天'), {
+    value: '11.6',
+    unit: ' 天',
+  });
+  assert.deepEqual(formatInventoryMetricTextParts('订单满足率', '96.0%'), {
+    value: '96.0',
+    unit: '%',
+  });
+  assert.deepEqual(formatInventoryMetricTextParts('当前库存', '439.96万件'), {
+    value: '439.96',
+    unit: '万件',
+  });
 });

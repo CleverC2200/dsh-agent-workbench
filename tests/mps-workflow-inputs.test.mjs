@@ -517,7 +517,7 @@ test('产品老品编码接入同基地历史参考，其他基地老品不扩�
   );
 });
 
-test('业务版本缺源周转天数保留待补，人工补充后重新计算', () => {
+test('源周转天数读取成功但无值时默认按0天，人工补充后重新计算', () => {
   const source = draft();
   source.constraints.safetyDays = [{ base: '甲', days: 99 }];
   const local = buildMpsWorkflow(source, null);
@@ -535,9 +535,9 @@ test('业务版本缺源周转天数保留待补，人工补充后重新计算',
   assert.ok(
     result.rows.every(
       (row) =>
-        row.safetyDays === null &&
-        row.targetInventory === null &&
-        row.safetyDaysSource === 'missing',
+        row.safetyDays === 0 &&
+        row.targetInventory === 0 &&
+        row.safetyDaysSource === 'missing-turnover-days-zero',
     ),
   );
   assert.ok(
@@ -1556,11 +1556,24 @@ test('产品净重按基地及计量单位换算吨数，冲突不退回旧系�
     manual.weights.map((row) => row.tonsPerPiece),
     [0.2, 0.1],
   );
+  for (const tonsPerPiece of [undefined, null, '', '  ']) {
+    const saved = resolveWeightPairs(
+      [{ ...pairs[0], tonsPerPiece, channels: '经销商' }],
+      pairs,
+      old,
+      [raw()],
+    );
+    assert.deepEqual(saved, resolved);
+  }
+  for (const tonsPerPiece of [0, '无效']) {
+    const saved = resolveWeightPairs([{ ...pairs[0], tonsPerPiece }], pairs, old, [raw()]);
+    assert.equal(saved.issues[0].sourceTable, '当前评估版本人工参数');
+  }
 });
 
-test('产品净重同时进入实际排产和年度吨数报告，不依赖旧渠道取数成功', () => {
+test('产品净重在留有空白人工配置时仍进入实际排产和年度吨数报告', () => {
   const sample = workflowPerformanceInput(2);
-  sample.draft.unitWeights = [];
+  sample.draft.unitWeights = [{ base: '甲', code: '0', tonsPerPiece: null, channels: '经销商' }];
   sample.draft.productRaw = ['0', '1'].map((code) => ({
     material_code: code,
     target_base: '甲',

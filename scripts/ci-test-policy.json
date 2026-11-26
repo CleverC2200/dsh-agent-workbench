@@ -266,6 +266,14 @@
     },
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^src/workbench/original/workbenches/regionalApproval/(?:InlineSkuDetails|RegionalApprovalLiveAdjustmentDialog|RegionalApprovalWorkbench|RegionalSkuReview)\\.module\\.css$",
+      "tests": [
+        "tests/sales-plan-presentation.browser.mjs",
+        "tests/regional-state-restore.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^src/workbench/original/workbenches/regionalApproval/(?:RegionalApproval(?:ActionDialog|LiveAdjustmentDialog)\\.tsx|RegionalApprovalPlanDetail\\.(?:tsx|module\\.css)|regionalApproval(?:ActionModel|DetailFixture|DetailModel|Fixture|Model)\\.ts|models/salesPlanAdjustmentModel\\.ts|hooks/useSalesPlanDetail\\.ts)$",
       "tests": [
         "tests/sales-plan-presentation.browser.mjs",

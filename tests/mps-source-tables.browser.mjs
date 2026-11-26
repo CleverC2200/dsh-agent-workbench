@@ -120,7 +120,9 @@ test('one forecast batch drives two selectable target months and delivery source
   await forecast.getByRole('button', { name: '口径说明', exact: true }).click();
   await expect(forecast).toContainText('数量合计0（单位待确认）');
   await forecast.getByLabel('预测期间').selectOption('2');
-  await expect(forecast.getByLabel('预测期间').locator('option:checked')).toHaveText('M+2 · 2027-01');
+  await expect(forecast.getByLabel('预测期间').locator('option:checked')).toHaveText(
+    'M+2 · 2027-01',
+  );
   await expect(forecast).toContainText('数量合计13（单位待确认）');
   await forecast.getByRole('button', { name: '基地 1', exact: true }).click();
   const preview = frame.getByRole('dialog');
@@ -133,10 +135,7 @@ test('one forecast batch drives two selectable target months and delivery source
     .getByRole('button', { name: /^下载(计划提报数据|模型双期预测|历史同期发货)$/ })
     .click();
   const csv = await mpsDownloadText(await (await download).path());
-  assert.match(
-    csv,
-    /预测批次,源批次月份,源当月预测数量,源下一月预测数量,源记录数,读取状态/,
-  );
+  assert.match(csv, /预测批次,源批次月份,源当月预测数量,源下一月预测数量,源记录数,读取状态/);
   assert(csv.includes('2026-12,2026/12,0,12.5,1,ready'));
   await expect
     .poll(() => contexts.at(-1)?.parts?.check?.sourceSummaries?.forecast?.missingReasons)

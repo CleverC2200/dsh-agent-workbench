@@ -573,6 +573,7 @@ test('MPS local and business shipment edits recover through the codec and Host w
     pull: 'monthly',
     files: {},
     shipment: {
+      forecasts: { '["2026-09","郑州","A"]': 0 },
       activeSource: 'business',
       values: business.values,
       remaining: business.remaining,
@@ -602,6 +603,7 @@ test('MPS local and business shipment edits recover through the codec and Host w
   );
   assert.deepEqual(recovered.drafts[0].shipment.sourceEdits, { 'local-file': local, business });
   assert.equal(recovered.drafts[0].shipment.business, undefined);
+  assert.deepEqual(recovered.drafts[0].shipment.forecasts, draft.shipment.forecasts);
   assert.equal(owner.readHtmlViewState(page, 'another-tenant/user/session'), undefined);
   const invalid = structuredClone(encoded);
   invalid.drafts[0].shipment.sourceEdits.business.credentials = 'CREDENTIAL';

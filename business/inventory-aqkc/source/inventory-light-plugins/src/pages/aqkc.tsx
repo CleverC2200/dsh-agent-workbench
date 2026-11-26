@@ -823,6 +823,13 @@ export function InventoryOperationsWorkbench() {
   const overviewError =
     !allBasesSelected && scopedOverview?.key === overviewKey ? scopedOverview.error : null;
   const overviewLoading = paths.length > 0 && !overviewWorkspace && !overviewError;
+  const overviewPending = allBasesSelected
+    ? dashboardReadPending
+    : scopedPendingKey === overviewKey;
+  const overviewReadErrors = overviewWorkspace?.workbench?.readErrors;
+  const overviewReadFailure = overviewReadErrors?.length
+    ? `${[...new Set(overviewReadErrors.map((error) => error.split('：', 1)[0]))].join('、')}读取失败，请点击「刷新数据」重试。`
+    : null;
   const modelInsight = useDashboardInsight(
     {
       scope: overviewKey,
@@ -839,11 +846,11 @@ export function InventoryOperationsWorkbench() {
     !!overviewWorkspace &&
       paths.length > 0 &&
       !dashboardLoading &&
-      !dashboardReadPending &&
-      scopedPendingKey !== overviewKey &&
+      !overviewPending &&
       !overviewLoading &&
       !overviewError &&
-      !dashboardError,
+      !dashboardError &&
+      !overviewReadFailure,
   );
   useEffect(() => {
     updateContext('dashboardAIInsight', {
@@ -861,9 +868,9 @@ export function InventoryOperationsWorkbench() {
       (!activeTabTable || activeTabLoading) &&
       !tabError;
     const state =
-      dashboardLoading || overviewLoading || tabPending
+      dashboardLoading || overviewLoading || overviewPending || tabPending
         ? 'loading'
-        : dashboardError || overviewError || tabError
+        : dashboardError || overviewError || overviewReadFailure || tabError
           ? 'error'
           : overviewWorkspace
             ? 'ready'
@@ -874,6 +881,7 @@ export function InventoryOperationsWorkbench() {
       message:
         dashboardError ??
         overviewError ??
+        overviewReadFailure ??
         tabError ??
         (state === 'loading'
           ? '正在查询基地库存'
@@ -921,7 +929,9 @@ export function InventoryOperationsWorkbench() {
     overviewKey,
     overviewWorkspace,
     overviewLoading,
+    overviewPending,
     overviewError,
+    overviewReadFailure,
     activeBoardTab,
     activeTabTable,
     activeTabLoading,
@@ -1080,14 +1090,30 @@ export function InventoryOperationsWorkbench() {
             {dashboardLoading || overviewLoading ? (
               <DashboardOverviewSkeleton compact />
             ) : dashboardError || overviewError ? (
-              <DataState>{readFailureText(dashboardError ?? overviewError)}</DataState>
+              <DataState>
+                <QueryErrors
+                  errors={[queryErrorText(dashboardError ?? overviewError)]}
+                  scope="inventory-aqkc-overview"
+                />
+                基地库存读取失败，请点击「刷新数据」重试。
+              </DataState>
             ) : !paths.length ? (
               <DataState>
                 {basePaths.length ? '请选择基地查看指标。' : '暂无可见基地指标。'}
               </DataState>
             ) : overviewWorkspace ? (
               <>
-                <div className={styles.kpiGrid} data-overview-cards="aqkc">
+                {overviewPending ? (
+                  <div className={styles.loadingStatus}>
+                    <progress aria-label="正在加载基地库存指标" />
+                    <span>正在加载基地库存指标…</span>
+                  </div>
+                ) : null}
+                <div
+                  className={styles.kpiGrid}
+                  data-overview-cards="aqkc"
+                  aria-busy={overviewPending}
+                >
                   {(
                     overviewWorkspace.workbench?.cards ??
                     overviewWorkspace.kpis.map((item) => ({
@@ -1100,9 +1126,12 @@ export function InventoryOperationsWorkbench() {
                     <Kpi
                       key={card.title}
                       title={card.title}
-                      value={card.value}
+                      value={overviewPending && card.value === '-' ? '加载中' : card.value}
                       tone={card.tone}
-                      helpers={card.helpers}
+                      helpers={card.helpers.map((item) => ({
+                        ...item,
+                        value: overviewPending && item.value === '-' ? '加载中' : item.value,
+                      }))}
                       coverage={
                         (card.title === '当前库存' || card.title === '周转天数') &&
                         'coverage' in card
@@ -1112,10 +1141,10 @@ export function InventoryOperationsWorkbench() {
                     />
                   ))}
                 </div>
-                <QueryErrors
-                  errors={overviewWorkspace.workbench?.readErrors ?? []}
-                  scope="inventory-aqkc-overview"
-                />
+                <QueryErrors errors={overviewReadErrors ?? []} scope="inventory-aqkc-overview" />
+                {overviewReadFailure && !overviewPending ? (
+                  <p role="status">{overviewReadFailure}</p>
+                ) : null}
                 <section className={styles.summaryBox} aria-label="AI 洞察">
                   <div className={styles.insightHeading}>
                     <span aria-hidden="true">✦</span>
@@ -1127,7 +1156,11 @@ export function InventoryOperationsWorkbench() {
                     aria-live="polite"
                     aria-busy={modelInsight.status === 'loading'}
                   >
-                    {modelInsight.status === 'loading' ? (
+                    {overviewPending ? (
+                      <p>库存指标加载完成后生成洞察。</p>
+                    ) : overviewReadFailure ? (
+                      <p>请刷新数据后查看洞察。</p>
+                    ) : modelInsight.status === 'loading' ? (
                       <p>正在生成 AI 洞察…</p>
                     ) : modelInsight.status === 'error' ? (
                       <p>-</p>
@@ -1191,7 +1224,9 @@ export function InventoryOperationsWorkbench() {
               id="inventory-table-content"
               role="tabpanel"
               aria-labelledby={`inventory-tab-${activeBoardTab}`}
-              aria-busy={activeTabLoading}
+              aria-busy={
+                activeTabLoading || (activeBoardTab === '基地结构' && dashboardReadPending)
+              }
             >
               {activeTable && (activeBoardTab === '基地结构' || activeTable.rows.length > 0) ? (
                 <div className={styles.tableCard}>
@@ -1216,7 +1251,11 @@ export function InventoryOperationsWorkbench() {
                         .map((row) => (
                           <Fragment key={row.id}>
                             <BoardRow
-                              row={row.cells}
+                              row={
+                                activeBoardTab === '基地结构' && dashboardReadPending
+                                  ? row.cells.map((value) => (value === '-' ? '加载中' : value))
+                                  : row.cells
+                              }
                               tone={row.tone}
                               onSelect={
                                 activeBoardTab === '基地结构'

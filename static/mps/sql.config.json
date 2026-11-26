@@ -615,7 +615,7 @@
           "type": "integer",
           "nullable": false,
           "minimum": 1,
-          "maximum": 500
+          "maximum": 2500
         },
         "offset": {
           "name": "offset",
@@ -695,6 +695,7 @@
         "series",
         "product_item",
         "shipped",
+        "month_order_qty",
         "prepped",
         "unprepped",
         "daily3",
@@ -746,7 +747,7 @@
         }
       },
       "request": {
-        "sql": "WITH shipment_rows AS (SELECT belong_base, material_code, CASE WHEN COUNT(NULLIF(TRIM(material_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(material_name), '')) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(NULLIF(TRIM(series), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(series), '')) = 1 THEN MAX(series) ELSE NULL END AS series, CASE WHEN COUNT(NULLIF(TRIM(product_item), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item), '')) = 1 THEN MAX(product_item) ELSE NULL END AS product_item, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) THEN SUM(COALESCE(total_sales_qty, 0)) ELSE NULL END AS shipped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) THEN COALESCE(MAX(CASE WHEN the_date = :cutoff THEN allocated_qty END), 0) ELSE NULL END AS prepped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) THEN COALESCE(MAX(CASE WHEN the_date = :cutoff THEN ordered_qty END), 0) ELSE NULL END AS unprepped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) THEN SUM(CASE WHEN the_date >= :recent_start THEN COALESCE(total_sales_qty, 0) ELSE 0 END) / 3.0 ELSE NULL END AS daily3, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) THEN COALESCE(MAX(CASE WHEN the_date = :cutoff THEN avg_30d_send END), 0) ELSE NULL END AS average, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) THEN MAX(CASE WHEN the_date = :cutoff THEN avg_30d_send END) ELSE NULL END AS raw_average, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN begin_stock END) ELSE NULL END AS open, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(produce_in_qty) = COUNT(*) THEN SUM(produce_in_qty) ELSE NULL END AS inbound, COUNT(DISTINCT the_date) AS source_days, COUNT(*) - COUNT(DISTINCT the_date) AS duplicate_days FROM agents_scm_stock_detail_d WHERE data_month = :month AND the_date >= :month AND the_date <= :cutoff GROUP BY belong_base, material_code), transfer_dates AS (SELECT belong_base, material_code, MAX(the_date) AS transfer_date FROM agents_scm_stock_detail_d WHERE data_month = :month AND the_date >= :month AND the_date <= :cutoff GROUP BY belong_base, material_code), transfer_snapshot AS (SELECT t.belong_base, t.material_code, MAX(t.the_date) AS transfer_date, COUNT(*) AS transfer_rows, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_in_plan_v1) ELSE NULL END AS transfer_in_plan_v1, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_in_plan_adj) ELSE NULL END AS transfer_in_plan_adj, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_out_plan_v1) ELSE NULL END AS transfer_out_plan_v1, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_out_plan_adj) ELSE NULL END AS transfer_out_plan_adj FROM agents_scm_stock_detail_d t JOIN transfer_dates d ON t.belong_base = d.belong_base AND t.material_code = d.material_code AND t.the_date = d.transfer_date WHERE t.data_month = :month GROUP BY t.belong_base, t.material_code) SELECT s.belong_base, s.material_code, s.material_name, s.series, s.product_item, s.shipped, s.prepped, s.unprepped, s.daily3, s.average, s.raw_average, s.open, s.inbound, s.source_days, s.duplicate_days, t.transfer_date, t.transfer_rows, t.transfer_in_plan_v1, t.transfer_in_plan_adj, t.transfer_out_plan_v1, t.transfer_out_plan_adj FROM shipment_rows s LEFT JOIN transfer_snapshot t ON s.belong_base = t.belong_base AND s.material_code = t.material_code ORDER BY s.belong_base, s.material_code LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "WITH daily_plan AS (SELECT belong_base, material_code, CAST(the_date AS VARCHAR) AS the_date, ship_qty, in_qty, transfer_in_plan_v1, transfer_in_plan_adj, transfer_out_plan_v1, transfer_out_plan_adj FROM agents_ads_scm_base_sku_daily_plan_detail_d WHERE the_date >= :month AND the_date <= :cutoff), daily_totals AS (SELECT belong_base, material_code, MAX(the_date) AS transfer_date, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(ship_qty) = COUNT(*) THEN SUM(ship_qty) ELSE NULL END AS shipped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(in_qty) = COUNT(*) THEN SUM(in_qty) ELSE NULL END AS inbound FROM daily_plan GROUP BY belong_base, material_code), shipment_rows AS (SELECT belong_base, material_code, CASE WHEN COUNT(NULLIF(TRIM(material_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(material_name), '')) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(NULLIF(TRIM(series), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(series), '')) = 1 THEN MAX(series) ELSE NULL END AS series, CASE WHEN COUNT(NULLIF(TRIM(product_item), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item), '')) = 1 THEN MAX(product_item) ELSE NULL END AS product_item, CASE WHEN COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN month_order_qty END) ELSE NULL END AS month_order_qty, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) THEN COALESCE(MAX(CASE WHEN the_date = :cutoff THEN allocated_qty END), 0) ELSE NULL END AS prepped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) THEN COALESCE(MAX(CASE WHEN the_date = :cutoff THEN ordered_qty END), 0) ELSE NULL END AS unprepped, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) THEN SUM(CASE WHEN the_date >= :recent_start THEN COALESCE(total_sales_qty, 0) ELSE 0 END) / 3.0 ELSE NULL END AS daily3, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) THEN COALESCE(MAX(CASE WHEN the_date = :cutoff THEN avg_30d_send END), 0) ELSE NULL END AS average, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) THEN MAX(CASE WHEN the_date = :cutoff THEN avg_30d_send END) ELSE NULL END AS raw_average, CASE WHEN COUNT(*) = COUNT(DISTINCT the_date) AND COUNT(CASE WHEN the_date = :cutoff THEN 1 END) = 1 THEN MAX(CASE WHEN the_date = :cutoff THEN begin_stock END) ELSE NULL END AS open, COUNT(DISTINCT the_date) AS source_days, COUNT(*) - COUNT(DISTINCT the_date) AS duplicate_days FROM agents_scm_stock_detail_d WHERE data_month = :month AND the_date >= :month AND the_date <= :cutoff GROUP BY belong_base, material_code), transfer_snapshot AS (SELECT t.belong_base, t.material_code, d.transfer_date, d.inbound, COUNT(*) AS transfer_rows, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_in_plan_v1) ELSE NULL END AS transfer_in_plan_v1, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_in_plan_adj) ELSE NULL END AS transfer_in_plan_adj, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_out_plan_v1) ELSE NULL END AS transfer_out_plan_v1, CASE WHEN COUNT(*) = 1 THEN MAX(t.transfer_out_plan_adj) ELSE NULL END AS transfer_out_plan_adj FROM daily_plan t JOIN daily_totals d ON t.belong_base = d.belong_base AND t.material_code = d.material_code AND t.the_date = d.transfer_date GROUP BY t.belong_base, t.material_code, d.transfer_date, d.inbound), shipment_keys AS (SELECT belong_base, material_code FROM shipment_rows UNION SELECT belong_base, material_code FROM daily_totals) SELECT k.belong_base, k.material_code, s.material_name, s.series, s.product_item, CASE WHEN d.transfer_date IS NULL THEN 0 ELSE d.shipped END AS shipped, s.month_order_qty, s.prepped, s.unprepped, s.daily3, s.average, s.raw_average, s.open, t.inbound, COALESCE(s.source_days, 0) AS source_days, COALESCE(s.duplicate_days, 0) AS duplicate_days, t.transfer_date, t.transfer_rows, t.transfer_in_plan_v1, t.transfer_in_plan_adj, t.transfer_out_plan_v1, t.transfer_out_plan_adj FROM shipment_keys k LEFT JOIN shipment_rows s ON k.belong_base = s.belong_base AND k.material_code = s.material_code LEFT JOIN daily_totals d ON k.belong_base = d.belong_base AND k.material_code = d.material_code LEFT JOIN transfer_snapshot t ON s.belong_base = t.belong_base AND s.material_code = t.material_code ORDER BY k.belong_base, k.material_code LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "facts.shipment.count"
@@ -1290,6 +1291,155 @@
       },
       "parameterSpec": {}
     },
+    "annual-pool.calculation.detail": {
+      "priority": 3,
+      "title": "基地SKU年度需求明细",
+      "grain": ["belong_base", "material_code", "sub_category", "stat_month"],
+      "parameterSpec": {
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 40
+        }
+      },
+      "request": {
+        "sql": "SELECT belong_base,\n       TRIM(material_code) AS material_code,\n       MIN(sub_category) AS sub_category,\n       stat_month,\n       COUNT(*) AS source_rows,\n       COUNT(*) - COUNT(demand_qty) AS missing_qty,\n       CASE\n           WHEN COUNT(DISTINCT demand_qty)\n                + CASE WHEN COUNT(demand_qty) < COUNT(*) THEN 1 ELSE 0 END > 1\n           THEN COUNT(*) ELSE 0\n       END AS duplicate_rows,\n       MAX(demand_qty) AS demand_qty\nFROM agents_dim_demand_annual_mi\nWHERE stat_month IN (:gea_p1)\nGROUP BY belong_base, TRIM(material_code), stat_month,\n         CASE WHEN material_code IS NULL OR TRIM(material_code) = '' THEN sub_category END\nORDER BY belong_base, material_code, sub_category, stat_month\nLIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "annual-pool.calculation.count"
+      },
+      "columns": [
+        "belong_base",
+        "sub_category",
+        "stat_month",
+        "source_rows",
+        "missing_qty",
+        "duplicate_rows",
+        "demand_qty",
+        "material_code"
+      ]
+    },
+    "annual-pool.calculation.count": {
+      "priority": 3,
+      "request": {
+        "sql": "SELECT COUNT(*) AS total\nFROM (\n    SELECT belong_base, TRIM(material_code) AS material_code, stat_month,\n           CASE WHEN material_code IS NULL OR TRIM(material_code) = '' THEN sub_category END\n               AS summary_category\n    FROM agents_dim_demand_annual_mi\n    WHERE stat_month IN (:gea_p1)\n    GROUP BY belong_base, TRIM(material_code), stat_month,\n             CASE WHEN material_code IS NULL OR TRIM(material_code) = '' THEN sub_category END\n) AS scoped"
+      },
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 40
+        }
+      }
+    },
+    "category-history.calculation.detail": {
+      "priority": 3,
+      "title": "基地SKU三年发货明细",
+      "grain": ["stat_month", "belong_base", "dimension_value"],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 26
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "sql": "WITH source_values AS (\n    SELECT DISTINCT stat_month, belong_base, TRIM(dimension_value) AS material_code,\n           fiscal_year, dimension_act_dl_qty AS quantity,\n           national_dimension_fiscal_act_dl_qty AS source_annual_quantity\n    FROM agents_scm_base_dimension_delivery_mi\n    WHERE dimension_type = '基地+产品' AND stat_month IN (:gea_p1)\n), scoped AS (\n    SELECT stat_month, belong_base, material_code AS dimension_value,\n           MIN(fiscal_year) AS fiscal_year,\n           CASE WHEN COUNT(*) = 1 THEN MAX(quantity) END AS dimension_act_dl_qty,\n           CASE WHEN COUNT(*) = 1 THEN MAX(source_annual_quantity) END\n               AS national_dimension_fiscal_act_dl_qty\n    FROM source_values\n    GROUP BY stat_month, belong_base, material_code\n) SELECT stat_month, belong_base, dimension_value, fiscal_year, dimension_act_dl_qty, national_dimension_fiscal_act_dl_qty FROM scoped ORDER BY stat_month, belong_base, dimension_value LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "category-history.count",
+        "atomicQuery": "category-history.calculation.atomic"
+      },
+      "columns": [
+        "stat_month",
+        "belong_base",
+        "dimension_value",
+        "fiscal_year",
+        "dimension_act_dl_qty",
+        "national_dimension_fiscal_act_dl_qty"
+      ]
+    },
+    "category-history.calculation.atomic": {
+      "priority": 3,
+      "title": "基地SKU三年发货明细",
+      "grain": ["stat_month", "belong_base", "dimension_value"],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 26
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "sql": "WITH source_values AS (\n    SELECT DISTINCT stat_month, belong_base, TRIM(dimension_value) AS material_code,\n           fiscal_year, dimension_act_dl_qty AS quantity,\n           national_dimension_fiscal_act_dl_qty AS source_annual_quantity\n    FROM agents_scm_base_dimension_delivery_mi\n    WHERE dimension_type = '基地+产品' AND stat_month IN (:gea_p1)\n), scoped AS (\n    SELECT stat_month, belong_base, material_code AS dimension_value,\n           MIN(fiscal_year) AS fiscal_year,\n           CASE WHEN COUNT(*) = 1 THEN MAX(quantity) END AS dimension_act_dl_qty,\n           CASE WHEN COUNT(*) = 1 THEN MAX(source_annual_quantity) END\n               AS national_dimension_fiscal_act_dl_qty\n    FROM source_values\n    GROUP BY stat_month, belong_base, material_code\n) SELECT stat_month, belong_base, dimension_value, fiscal_year, dimension_act_dl_qty, national_dimension_fiscal_act_dl_qty, COUNT(*) OVER() AS page_scope_total, 1 AS page_row_present FROM scoped ORDER BY stat_month, belong_base, dimension_value LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "columns": [
+        "stat_month",
+        "belong_base",
+        "dimension_value",
+        "fiscal_year",
+        "dimension_act_dl_qty",
+        "national_dimension_fiscal_act_dl_qty",
+        "page_scope_total",
+        "page_row_present"
+      ]
+    },
     "unit-weights.detail": {
       "title": "物料渠道件吨系数",
       "grain": ["material_code", "channel_name", "ton_per_piece"],
@@ -1449,7 +1599,7 @@
           "type": "integer",
           "nullable": false,
           "minimum": 1,
-          "maximum": 200
+          "maximum": 2500
         },
         "offset": {
           "name": "offset",
@@ -1718,7 +1868,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code FROM agents_scm_stock_detail_d WHERE data_month = :month AND the_date >= :month AND the_date <= :cutoff GROUP BY belong_base, material_code) shipment_rows"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, material_code FROM agents_scm_stock_detail_d WHERE data_month = :month AND the_date >= :month AND the_date <= :cutoff UNION SELECT belong_base, material_code FROM agents_ads_scm_base_sku_daily_plan_detail_d WHERE the_date >= :month AND the_date <= :cutoff) shipment_keys"
       }
     },
     "inventory-targets.detail": {

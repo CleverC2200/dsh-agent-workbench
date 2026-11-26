@@ -7489,7 +7489,7 @@ nav {
 .kpi-name {
   justify-content: space-between;
   align-items: center;
-  font-size: 12px;
+  font-size: var(--workbench-kpi-title-font-size, 12px);
   font-weight: 700;
   display: flex;
 }
@@ -7512,18 +7512,22 @@ nav {
 }
 .kpi-value strong {
   letter-spacing: -0.04em;
-  font-size: 30px;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  font-weight: 700;
+  line-height: 1.1;
 }
 .kpi-value span {
   color: #69707d;
   margin-left: 3px;
-  font-size: 12px;
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
+  font-weight: 400;
 }
 .kpi-target {
   color: #9297a1;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 11px;
   display: flex;
+  font-weight: 700;
 }
 .kpi-target span:last-child {
   align-items: center;
@@ -8082,11 +8086,14 @@ html {
   background: #f6f7f8;
   height: 38px;
   padding: 0 12px;
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .table-panel td {
   height: 50px;
   padding: 0 12px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .cell-good {
   color: #178d58;
@@ -8613,7 +8620,8 @@ html {
   border-top: 1px solid var(--border);
 }
 .overview-kpi-group .kpi-name {
-  font-size: 11px;
+  font-size: var(--workbench-kpi-title-font-size, 12px);
+  font-weight: 700;
 }
 .overview-kpi-group .kpi-name i {
   padding: 2px 5px;
@@ -8623,7 +8631,9 @@ html {
   margin: 7px 0 2px;
 }
 .overview-kpi-group .kpi-value strong {
-  font-size: 23px;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  font-weight: 700;
+  line-height: 1.1;
 }
 .overview-kpi-group .kpi-comparison-head {
   margin-top: 5px;
@@ -8668,8 +8678,9 @@ html {
     gap: 3px;
     min-height: 40px;
     padding-right: 21px;
-    font-size: 8px;
+    font-size: var(--workbench-kpi-title-font-size, 12px);
     display: grid;
+    font-weight: 700;
   }
   .overview-kpi-group .kpi-name > span {
     white-space: normal;
@@ -8686,10 +8697,13 @@ html {
     font-size: 7px;
   }
   .overview-kpi-group .kpi-value strong {
-    font-size: 20px;
+    font-size: var(--workbench-kpi-value-font-size, 30px);
+    font-weight: 700;
+    line-height: 1.1;
   }
   .overview-kpi-group .kpi-value span {
-    font-size: 8px;
+    font-size: var(--workbench-kpi-unit-font-size, 12px);
+    font-weight: 400;
   }
   .overview-kpi-group .kpi-comparison-head {
     font-size: 7px;
@@ -8932,7 +8946,9 @@ html {
   padding-right: 14px;
 }
 .kpi-value strong {
-  font-size: 27px;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  font-weight: 700;
+  line-height: 1.1;
 }
 .ai-chat {
   border-left: 1px solid var(--border);
@@ -10740,6 +10756,8 @@ html {
 .category-metric-tabs button {
   flex: none;
   min-width: 88px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .category-list-visible {
   animation: 0.2s ease-out list-reveal;
@@ -10783,6 +10801,8 @@ html {
   }
   .category-metric-tabs button {
     min-width: 82px;
+    font-size: var(--workbench-list-font-size, 12px);
+    font-weight: 700;
   }
 }
 #overview > .analysis-workspace {
@@ -11270,11 +11290,11 @@ html {
   padding: 0 0 8px;
   display: flex;
 }
-.category-card-title strong {
-  font-size: 12px;
+.category-health-card .category-card-title strong {
+  font-size: 14px;
 }
-.category-card-title em {
-  font-size: 8px;
+.category-health-card .category-card-title em {
+  font-size: 10px;
   font-style: normal;
 }
 .category-card-metric {
@@ -11293,7 +11313,7 @@ html {
 }
 .category-card-metric > span {
   color: #717883;
-  font-size: 9px;
+  font-size: 11px;
   display: flex;
 }
 .category-card-label {
@@ -11308,7 +11328,7 @@ html {
 }
 .category-card-metric small {
   color: #a1a6ae;
-  font-size: 7px;
+  font-size: 9px;
 }
 .category-card-result small.good {
   color: #168e58;
@@ -11317,7 +11337,7 @@ html {
   color: #df1732;
 }
 .category-card-metric b {
-  font-size: 10px;
+  font-size: 12px;
 }
 .category-table-tabs {
   background: #f7f8fa;
@@ -11398,7 +11418,7 @@ html {
   font-size: 9px;
   font-weight: 600;
 }
-.overview-list-head > *,
+.overview-list-head:not(.active-period-list) > *,
 .overview-list-group > *,
 .category-detail-head > *,
 .base-comparison-head > *,
@@ -11525,13 +11545,6 @@ html {
     grid-template-columns: 1fr;
   }
 }
-.analysis-workspace .category-table-tabs-scroll {
-  overflow-x: auto;
-}
-.analysis-workspace .category-table-tabs {
-  grid-template-columns: repeat(7, minmax(128px, 1fr));
-  min-width: 896px;
-}
 .category-drill-table {
   overflow-x: auto;
 }
@@ -11544,8 +11557,9 @@ html {
   min-width: 1160px;
   min-height: 44px;
   padding: 0 14px;
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
   display: grid;
+  font-weight: 400;
 }
 .category-drill-row:first-child {
   border-top: 0;
@@ -11562,6 +11576,8 @@ html {
   color: #59616d;
   background: #f5f6f8;
   min-height: 40px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .category-drill-head > strong,
 .category-drill-head > span {
@@ -12891,6 +12907,22 @@ body {
 .overview-list-row.active-period-list {
   grid-template-columns: 1.25fr 1fr 0.9fr repeat(5, 1fr);
   min-width: 940px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
+}
+.overview-list-row.active-period-list.overview-list-head {
+  color: #343a44;
+  font-weight: 700;
+}
+.overview-list-row.active-period-list > b {
+  font-weight: 400;
+}
+.overview-list-row.active-period-list .achievement-status,
+.overview-list-row.active-period-list .kpi-source-note {
+  font-size: var(--workbench-table-badge-font-size, 11px);
+}
+.overview-list-row.active-period-list .kpi-source-note {
+  font-weight: 400;
 }
 .overview-list-row.active-period-list.with-statistic-type {
   grid-template-columns: 1.2fr 1.1fr 0.9fr 0.85fr repeat(5, 1fr);
@@ -12905,7 +12937,7 @@ body {
   border-radius: 999px;
   justify-self: start;
   padding: 3px 7px;
-  font-size: 8px;
+  font-size: var(--workbench-table-badge-font-size, 11px);
   font-weight: 700;
 }
 .metric-classification-cell.business {
@@ -12921,8 +12953,8 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--workbench-table-badge-font-size, 11px);
+  font-weight: 700;
   display: flex;
 }
 .statistic-type-cell.snapshot {
@@ -12930,8 +12962,8 @@ body {
 }
 .statistic-type-cell small {
   color: #9299a4;
-  font-size: 7px;
-  font-weight: 600;
+  font-size: var(--workbench-table-badge-font-size, 11px);
+  font-weight: 400;
 }
 .dashboard-module-toolbar + .page {
   padding-top: 18px;
@@ -13891,7 +13923,9 @@ body {
   min-width: 88px;
   height: 27px;
   padding: 0 22px 0 7px;
-  font-size: 8px;
+  font-size: var(--workbench-filter-font-size, 12px);
+  font-weight: 700;
+  line-height: var(--workbench-filter-line-height, 18px);
 }
 .task-filter-controls select:hover {
   border-color: #c7cdd5;
@@ -17310,7 +17344,9 @@ body {
   border: 0;
   outline: 0;
   flex: 1;
-  font-size: 11px;
+  font-size: var(--workbench-filter-font-size, 12px);
+  font-weight: 700;
+  line-height: var(--workbench-filter-line-height, 18px);
 }
 .sales-plan-table-wrap {
   scrollbar-color: #c5c8ce transparent;
@@ -19038,14 +19074,17 @@ body {
   display: none;
 }
 .analysis-workspace .category-table-tabs-scroll {
-  overflow: visible;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
 }
 .analysis-workspace .category-table-tabs {
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  grid-template-columns: repeat(var(--production-tab-count, 7), minmax(128px, 1fr));
-  width: 100%;
-  min-width: 0;
-  min-width: calc(var(--production-tab-count, 7) * 128px);
+  --production-tab-min-width: 104px;
+  grid-template-columns: repeat(
+    var(--production-tab-count, 7),
+    minmax(var(--production-tab-min-width), 1fr)
+  );
+  min-width: calc(var(--production-tab-count, 7) * var(--production-tab-min-width));
 }
 .analysis-workspace .category-drill-row:not(.period-metric) {
   grid-template-columns: minmax(220px, 1.5fr) 70px repeat(
@@ -19068,11 +19107,12 @@ body {
   font-weight: 500;
   display: block;
 }
-.analysis-workspace .category-table-tabs button {
+.analysis-workspace .category-table-tabs button[role='tab'] {
   white-space: nowrap;
   min-width: 0;
   padding: 0 4px;
-  font-size: 9px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .category-table-tabs button,
 .cross-tabs button {
@@ -19335,8 +19375,8 @@ body {
   color: var(--v02-text);
   cursor: pointer;
   border: 0;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   position: relative;
 }
 .production-dimension-tabs button:hover {
@@ -19345,7 +19385,6 @@ body {
 }
 .production-dimension-tabs button.selected {
   color: var(--v02-primary);
-  font-weight: 800;
 }
 .production-dimension-tabs button.selected:after {
   content: '';
@@ -19477,8 +19516,8 @@ body {
   cursor: pointer;
   background: 0 0;
   border: 0;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   position: relative;
 }
 .sales-metric-tabs button:hover {
@@ -19487,7 +19526,8 @@ body {
 }
 .sales-metric-tabs button.selected {
   color: var(--v02-primary);
-  font-weight: 800;
+  font-weight: 700;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .sales-metric-tabs button.selected:after {
   background: var(--v02-primary);
@@ -19509,8 +19549,9 @@ body {
   color: var(--v02-text);
   align-items: center;
   padding: 0 14px;
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
   display: grid;
+  font-weight: 400;
 }
 .sales-org-row.overview {
   grid-template-columns: minmax(220px, 1.45fr) 70px minmax(96px, 0.65fr) repeat(
@@ -19531,8 +19572,8 @@ body {
   min-height: 38px;
   color: var(--v02-text-muted);
   border-top: 0;
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .sales-org-row > span,
 .sales-org-row > b,
@@ -19553,9 +19594,9 @@ body {
   background: #f0f2f5;
   border-radius: 999px;
   padding: 3px 7px;
-  font-size: 8px;
+  font-size: var(--workbench-table-badge-font-size, 11px);
   font-style: normal;
-  font-weight: 800;
+  font-weight: 400;
   display: inline-flex;
 }
 .sales-org-toggle {
@@ -19568,8 +19609,9 @@ body {
   border: 0;
   align-items: center;
   gap: 8px;
-  font-weight: 800;
+  font-weight: 700;
   display: flex;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .sales-org-toggle svg {
   flex: none;

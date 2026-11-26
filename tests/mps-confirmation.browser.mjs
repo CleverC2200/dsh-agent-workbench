@@ -163,7 +163,9 @@ test('MPS reads CSV atomically and uses the same selected-period rows for covera
   const source = frame.getByRole('region', { name: '计划提报数据', exact: true });
   await upload(frame, '选择计划提报CSV', reportCsv);
   await source.getByRole('button', { name: '口径说明', exact: true }).click();
-  await expect(source.getByRole('region', { name: '计划提报数据 · 口径说明' })).toContainText('核对.csv · 4条');
+  await expect(source.getByRole('region', { name: '计划提报数据 · 口径说明' })).toContainText(
+    '核对.csv · 4条',
+  );
   await expect(source.getByRole('button', { name: '基地 2', exact: true })).toBeVisible();
   await expect(source.getByRole('button', { name: '大类 1', exact: true })).toBeVisible();
   await expect(source.getByRole('button', { name: '系列 1', exact: true })).toBeVisible();
@@ -224,7 +226,9 @@ test('MPS forecast crosses the year and historical periods do not borrow other r
   assert.equal(cell?.t, 's');
   assert.equal(cell?.f, undefined);
   await forecast.getByLabel('预测期间').selectOption('2');
-  await expect(forecast.getByLabel('预测期间').locator('option:checked')).toHaveText('M+2 · 2027-01');
+  await expect(forecast.getByLabel('预测期间').locator('option:checked')).toHaveText(
+    'M+2 · 2027-01',
+  );
   await expect(forecast).toContainText('当前期间1条，数量合计9件');
   await upload(
     frame,
@@ -293,7 +297,9 @@ test('MPS bounds large previews without silently dropping rows and rejects an ov
   await expect(products.getByRole('row')).toHaveCount(26);
   await expect(products).toContainText('第1/2页 · 共26条');
   await products.getByRole('button', { name: '下一页', exact: true }).click();
-  await expect(products.getByRole('cell', { name: 'P25', exact: true })).toBeVisible();
+  await expect(
+    products.getByRole('button', { name: '查看产品 P9 的源字段', exact: true }),
+  ).toBeVisible();
   await expect(products.getByRole('row')).toHaveCount(2);
   await upload(
     frame,
@@ -303,7 +309,9 @@ test('MPS bounds large previews without silently dropping rows and rejects an ov
       Array.from({ length: 10001 }, (_, index) => `郑州,Q${index},产品,汤圆,系列,组,,`).join('\n'),
   );
   await expect(products.getByRole('alert')).toContainText('超过10000条上限');
-  await expect(products.getByRole('cell', { name: 'P25', exact: true })).toBeVisible();
+  await expect(
+    products.getByRole('button', { name: '查看产品 P9 的源字段', exact: true }),
+  ).toBeVisible();
 });
 
 test('MPS keeps signed local quantities and excludes records with an unassigned base', async (t) => {

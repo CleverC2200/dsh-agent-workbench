@@ -1,5 +1,12 @@
 import { createCalculationHelp } from './calculation-help.js';
 import {
+  compareBusinessRows,
+  compareBusinessValues,
+  orderedTableEntries,
+  createTablePresentation,
+  isSkuColumn,
+} from './table-presentation.js';
+import {
   createDelistedReport,
   delistedDownloadColumns,
   delistedDownloadFields,
@@ -23,7 +30,12 @@ import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createPoolExceptionReport } from './pool-exception-view.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
 import { call } from '../../../business/shared/channel.js';
-import { readUnitWeights, unitWeightCandidate, productWeightCandidate } from './unit-weights.js';
+import {
+  hasUnitWeightOverride,
+  readUnitWeights,
+  unitWeightCandidate,
+  productWeightCandidate,
+} from './unit-weights.js';
 import {
   createEvaluationOverview,
   planContext,
@@ -129,14 +141,14 @@ export function createWorkflow(
   const CalculationHelp = createCalculationHelp(react);
   const ShipmentScopeNotice = createShipmentScopeNotice(react, { downloadCsv });
   const { useBatchEdit, Actions, Field } = createBatchEdit(react, createPortal);
-  const NumberInput = ({ batch, label, value, commit, max }) =>
+  const NumberInput = ({ batch, label, value, commit, max, placeholder = '未填写' }) =>
     h(Field, {
       batch,
       id: label,
       label,
       value,
       max,
-      placeholder: '未填写',
+      placeholder,
       onStage: commit,
     });
   const ProcessedDemand = createProcessedDemand(react, {
@@ -172,23 +184,26 @@ export function createWorkflow(
     onEditingChange,
     adjustmentActionsTarget,
     selectedCategories = [],
+    stepViews,
+    processBatch,
   }) {
     const viewScope = JSON.stringify([savedDraft.id, savedDraft.month, scopeGeneration]);
-    const stepViews = react.useRef({ scope: viewScope, views: new Map() });
-    if (stepViews.current.scope !== viewScope)
-      stepViews.current = { scope: viewScope, views: new Map() };
-    if (!stepViews.current.views.has(step))
-      stepViews.current.views.set(step, createStepViewState());
-    const view = stepViews.current.views.get(step);
+    const fallbackViews = react.useRef({ scope: viewScope, views: new Map() });
+    if (fallbackViews.current.scope !== viewScope)
+      fallbackViews.current = { scope: viewScope, views: new Map() };
+    stepViews ??= fallbackViews.current.views;
+    if (!stepViews.has(step)) stepViews.set(step, createStepViewState());
+    const view = stepViews.get(step);
     const [search, setSearch] = useStepViewField(react, view, 'search', '');
     const [configuration, setConfiguration] = react.useState({});
-    const batch = useBatchEdit({
+    const configurationBatch = useBatchEdit({
       scope: `${savedDraft.id}:${savedDraft.month}:${step}:${scopeGeneration}`,
-      onEditingChange,
+      onEditingChange: step === 'process' ? undefined : onEditingChange,
       requireReason: step === 'process',
       onStart: () => setConfiguration({}),
       onCancel: () => setConfiguration({}),
     });
+    const batch = step === 'process' && processBatch ? processBatch : configurationBatch;
     const draft =
       step === 'constraints' && batch.active ? { ...savedDraft, ...configuration } : savedDraft;
     const update = (changes) => {
@@ -439,10 +454,11 @@ export function createWorkflow(
     };
     const viewCategories = ['process', 'constraints'].includes(step) ? selectedCategories : [];
     const fields = step === 'process' ? processFields : planFields;
-    const scopedRows =
+    const scopedRows = (
       step === 'process'
         ? [...result.rows, ...(result.referenceRows ?? [])].filter((row) => row.base !== 'ODM')
-        : result.rows;
+        : result.rows
+    ).toSorted(compareBusinessRows);
     const scopedCategories = result.categoryRows;
     const products = sourceProductMappings(draft.products, draft.productRaw);
     const inScope = createProductScopeMatcher(products);
@@ -461,7 +477,7 @@ export function createWorkflow(
             })),
         ].map((row) => [JSON.stringify([row.base, row.code]), row]),
       ).values(),
-    ];
+    ].sort(compareBusinessRows);
     const bases = [
       ...new Set(
         [
@@ -476,8 +492,10 @@ export function createWorkflow(
               ]),
         ].filter((base) => admittedBases.has(base)),
       ),
-    ];
-    const categories = [...new Set(scopedCategories.map((row) => row.category))];
+    ].sort((left, right) => compareBusinessValues('base', left, right));
+    const categories = [...new Set(scopedCategories.map((row) => row.category))].sort(
+      (left, right) => compareBusinessValues('category', left, right),
+    );
     const filtered = scopedRows.filter(
       (row) =>
         (!base || row.base === base) &&
@@ -546,7 +564,23 @@ export function createWorkflow(
     const table = (name, columns, rows, renderDetail) =>
       h(
         'div',
-        { className: 'dc-table-scroll wf-table-scroll', tabIndex: 0 },
+        {
+          className: 'dc-table-scroll wf-table-scroll',
+          tabIndex: 0,
+          role: 'region',
+          'aria-label': `${name}滚动区`,
+          ref: (element) => {
+            if (element) {
+              element.scrollLeft = view.get()[`${name}.scrollLeft`] ?? 0;
+              element.scrollTop = view.get()[`${name}.scrollTop`] ?? 0;
+            }
+          },
+          onScroll: (event) =>
+            view.update({
+              [`${name}.scrollLeft`]: event.currentTarget.scrollLeft,
+              [`${name}.scrollTop`]: event.currentTarget.scrollTop,
+            }),
+        },
         h(
           'table',
           { 'aria-label': name },
@@ -563,14 +597,29 @@ export function createWorkflow(
             'tbody',
             null,
             rows.length
-              ? rows.map((cells, index) =>
+              ? orderedTableEntries(columns, rows).map(({ row: cells, index }) =>
                   h(
                     react.Fragment,
                     { key: index },
                     h(
                       'tr',
                       {},
-                      cells.map((cell, position) => h('td', { key: position }, cell)),
+                      cells.map((cell, position) =>
+                        h(
+                          'td',
+                          { key: position },
+                          isSkuColumn(columns[position]) && typeof cell === 'string' && cell
+                            ? h(createTablePresentation(react).Code, {
+                                row: {
+                                  base,
+                                  ...Object.fromEntries(
+                                    columns.map((column, index) => [column, cells[index]]),
+                                  ),
+                                },
+                              })
+                            : cell,
+                        ),
+                      ),
                     ),
                     renderDetail?.(cells, index),
                   ),
@@ -688,7 +737,7 @@ export function createWorkflow(
       if (field === 'targetInventory' && row.safetyDays === 0)
         expression =
           row.safetyDaysSource === 'missing-turnover-days-zero'
-            ? '源目标周转天数待补，本轮临时按0天计算，目标库存为0；源缺项保留，补齐后重新评估'
+            ? '源目标周转天数待补，默认按0天计算，目标库存为0；补齐后重新评估'
             : '安全天数明确为0，目标库存为0，无需下一月需求';
       if (field === 'requiredProduction')
         expression = `需求${value(row.demand)}件，期初库存${value(row.openingInventory)}件，需保留目标库存${value(row.targetInventory)}件。本期需补充生产${value(row.requiredProduction)}件，库存已能覆盖需求和目标库存时无需补充生产，仅供需求推导参考`;
@@ -1132,13 +1181,14 @@ export function createWorkflow(
         return rowId;
       }
     };
-    const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER) =>
+    const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER, placeholder) =>
       h(NumberInput, {
         batch,
         key: `${draft.id}-${label}`,
         label,
         value,
         max,
+        placeholder,
         commit: (text) => change(text === '' ? null : text),
       });
     const productionDays = draft.productionDays ?? [];
@@ -1199,7 +1249,10 @@ export function createWorkflow(
           ]),
       );
     const renderWeightRow = (row) => {
-      const current = weights.find((item) => item.base === row.base && item.code === row.code);
+      const isRow = (item) => item.base === row.base && item.code === row.code;
+      const matching = weights.filter(isRow);
+      const override = matching.find((item) => hasUnitWeightOverride(item.tonsPerPiece));
+      const current = override ?? matching[0];
       const productWeight = productWeightCandidate(
         (draft.productRaw ?? []).filter((product) => product.material_code === row.code),
         row.base,
@@ -1210,25 +1263,46 @@ export function createWorkflow(
         row.code,
         current?.channels ?? '',
       );
-      const setWeight = (patch) =>
+      const automaticWeight = override ? null : (productWeight?.tonsPerPiece ?? null);
+      let weightStatus =
+        candidate.missing.join('；') || '适用渠道已填写，尚未采用来源值；可按确认净重手工维护';
+      if (override?.source)
+        weightStatus = `已按适用渠道采用；读取配置 ${override.source.configVersion}；${override.source.readAt}`;
+      else if (productWeight)
+        weightStatus = override
+          ? '已填写人工系数'
+          : productWeight.missing.join('；') || '自动采用产品清单';
+      const setWeight = (patch) => {
+        const next = {
+          base: row.base,
+          code: row.code,
+          tonsPerPiece: override?.tonsPerPiece ?? null,
+          channels: current?.channels ?? '',
+          ...patch,
+        };
         update({
           unitWeights: [
-            ...weights.filter((item) => item.base !== row.base || item.code !== row.code),
-            {
-              base: row.base,
-              code: row.code,
-              tonsPerPiece: current?.tonsPerPiece ?? null,
-              channels: current?.channels ?? '',
-              ...patch,
-            },
+            ...weights.filter((item) => !isRow(item)),
+            ...(hasUnitWeightOverride(next.tonsPerPiece) || next.channels.trim() ? [next] : []),
           ],
         });
+      };
       return [
         row.base,
         row.code,
         row.name,
-        numberInput(`${row.base} ${row.code} 件吨系数`, current?.tonsPerPiece, (tonsPerPiece) =>
-          setWeight({ tonsPerPiece }),
+        h(
+          'div',
+          null,
+          numberInput(
+            `${row.base} ${row.code} 件吨系数`,
+            override?.tonsPerPiece ?? (batch.active ? null : automaticWeight),
+            (tonsPerPiece) => setWeight({ tonsPerPiece }),
+            undefined,
+            automaticWeight === null ? undefined : '可填人工值',
+          ),
+          automaticWeight !== null &&
+            h('div', null, batch.active ? `自动采用 ${automaticWeight}` : '自动采用'),
         ),
         h('input', {
           'aria-label': `${row.base} ${row.code} 适用渠道`,
@@ -1238,7 +1312,7 @@ export function createWorkflow(
           onChange: (event) =>
             setWeight({
               channels: event.target.value,
-              tonsPerPiece: current?.source ? null : (current?.tonsPerPiece ?? null),
+              tonsPerPiece: override?.source ? null : (override?.tonsPerPiece ?? null),
             }),
         }),
         h(
@@ -1271,14 +1345,7 @@ export function createWorkflow(
           },
           '使用来源系数',
         ),
-        h(
-          'span',
-          null,
-          current?.source
-            ? `已按适用渠道采用；读取配置 ${current.source.configVersion}；${current.source.readAt}`
-            : candidate.missing.join('；') ||
-                '适用渠道已填写，尚未采用来源值；可按确认净重手工维护',
-        ),
+        h('span', null, weightStatus),
       ];
     };
     const inputGaps = [
@@ -1617,11 +1684,6 @@ export function createWorkflow(
                   },
                   '下载需求拆分',
                 ),
-                h(Actions, {
-                  container: adjustmentActionsTarget,
-                  batch,
-                  requireReason: true,
-                }),
               ),
           ),
       step !== 'constraints' &&

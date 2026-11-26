@@ -43,6 +43,31 @@ const products = ['A', 'B'].map((code) => ({
   source_rows: 1,
 }));
 
+test('单价仍在读取时已显示产品清单，单价回来后补齐显示', async (t) => {
+  const pricesPending = Promise.withResolvers();
+  t.after(pricesPending.resolve);
+  const respond = execute({
+    'products.detail': products,
+    'products.prices': [{ material_code: 'A', cif_price: '2.00' }],
+  });
+  const { frame, calls } = await mpsPage(t, config, async (query) => {
+    if (query.queryId === 'products.prices.count') await pricesPending.promise;
+    return respond(query);
+  });
+  const section = await openMpsProductDetails(frame);
+  await expect
+    .poll(() => calls.some((call) => call.queryId === 'products.prices.count'))
+    .toBe(true);
+  await expect(section).toContainText('2 个产品');
+  await expect(section.locator('tbody tr')).toHaveCount(2);
+  await expect(section.getByText('正在读取未税到岸单价。', { exact: true })).toBeVisible();
+  const download = section.getByRole('button', { name: '下载', exact: true });
+  await expect(download).toBeDisabled();
+  pricesPending.resolve();
+  await expect(section.locator('tbody tr').first()).toContainText('2.00');
+  await expect(download).toBeEnabled();
+});
+
 test('重复日报快照按SKU展示源单价并下载，缺价留空且不改变产品行数', async (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());

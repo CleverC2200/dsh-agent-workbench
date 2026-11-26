@@ -1285,8 +1285,8 @@
 }
 
 .gea-inbox th {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 
 .gea-inbox th:nth-child(1) {

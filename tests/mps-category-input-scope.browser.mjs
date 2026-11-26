@@ -146,7 +146,9 @@ for (const aggregateAnnual of [false, true])
     ).toHaveText(aggregateAnnual ? ['100', '100', '待补', '待补'] : ['100', '100', '100', '100']);
     const sourceDownload = page.waitForEvent('download');
     await matrix.getByRole('button', { name: '下载大类池内源明细', exact: true }).click();
-    await expect(frame.getByRole('button', { name: '下载大类池内源明细', exact: true })).toHaveCount(1);
+    await expect(
+      frame.getByRole('button', { name: '下载大类池内源明细', exact: true }),
+    ).toHaveCount(1);
     const sourceCsv = await mpsDownloadText(await (await sourceDownload).path());
     if (process.env.MPS02_EVIDENCE_DIR)
       await writeFile(

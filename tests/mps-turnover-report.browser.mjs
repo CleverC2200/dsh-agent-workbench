@@ -71,7 +71,7 @@ async function downloadRows(page, view, sheet) {
   return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
 }
 
-test('周转报告区分有效零、缺失待补和人工补充，筛选后下载与目标库存同步', async (t) => {
+test('周转报告区分有效零、缺失默认零和人工补充，筛选后下载与目标库存同步', async (t) => {
   let holdTargets;
   const { page, frame, calls } = await mpsPage(t, config, async ({ queryId }) => {
     if (queryId.startsWith('inventory-targets.')) await holdTargets;
@@ -162,7 +162,7 @@ test('周转报告区分有效零、缺失待补和人工补充，筛选后下�
           call.parameters.start_month === '2026-12' && call.parameters.end_month === '2026-12',
       ),
   );
-  await expect(view).not.toContainText('临时按0天');
+  await expect(report).toContainText('默认按0天计算');
   await expect(view.getByRole('table', { name: '基地安全天数策略', exact: true })).toHaveCount(0);
   let rows = await downloadRows(page, view, '当前筛选');
   assert.equal(rows.length, 3);
@@ -196,7 +196,7 @@ test('周转报告区分有效零、缺失待补和人工补充，筛选后下�
   assert.equal(summary.length, 6);
   const firstMonth = summary.find((row) => row['基地'] === '甲' && row['月份'] === '2026-12');
   assert.equal(firstMonth['目标库存已知小计（件）'], '0');
-  assert.equal(firstMonth['待补目标库存SKU数'], '1');
+  assert.equal(firstMonth['待补目标库存SKU数'], '0');
   await view.getByLabel('目标明细基地', { exact: true }).selectOption('甲');
   await view.getByLabel('搜索目标单品', { exact: true }).fill('B');
   rows = await downloadRows(page, view, '当前筛选');
@@ -206,7 +206,9 @@ test('周转报告区分有效零、缺失待补和人工补充，筛选后下�
   assert.equal(rows[0]['月份'], '2026-12');
   assert.match(rows[0]['核对事项'], /缺目标记录/);
   assert.doesNotMatch(rows[0]['核对事项'], /请核对或人工补充/);
-  assert.equal(rows[0]['目标期末库存'], '');
+  assert.equal(rows[0]['有效周转天数'], '0');
+  assert.equal(rows[0]['目标期末库存'], '0');
+  assert.equal(rows[0]['天数来源'], '缺输入，默认0天');
   await commitNumber(view.getByLabel('甲 B 补充目标周转天数', { exact: true }), '15');
   await expect(report).toContainText('周转天数人工补充');
   await expect(pendingStatus).toBeEmpty();

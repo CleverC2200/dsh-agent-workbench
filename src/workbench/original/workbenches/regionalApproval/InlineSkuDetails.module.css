@@ -44,8 +44,8 @@
   z-index: 1;
   background: var(--bg-2);
   text-align: right;
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   line-height: 1.35;
   white-space: nowrap;
 }
@@ -56,6 +56,8 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .table td:first-child {
   text-align: left;

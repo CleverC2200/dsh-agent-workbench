@@ -19,6 +19,57 @@ const records = [
   { material_code: 'C', channel_name: '思念', ton_per_piece: 0.003 },
   { material_code: 'C', channel_name: '思念', ton_per_piece: 0.004 },
 ];
+
+test('MPS shows the product coefficient and restores it after clearing a manual override', async (t) => {
+  const { frame } = await mpsPage(t, config, ({ queryId, parameters }) => {
+    const rows = queryId.startsWith('products.')
+      ? [
+          {
+            ...Object.fromEntries(
+              config.queries['products.detail'].columns.map((key) => [key, null]),
+            ),
+            stat_period: parameters.month,
+            material_code: '10002234',
+            material_name: '产品',
+            target_base: '郑州',
+            responsible_item: '水饺',
+            source_rows: 1,
+            net_weight: '7.68000000',
+            weight_unit: 'KG',
+            measure_unit: 'ST',
+          },
+        ]
+      : [];
+    const count = queryId.endsWith('.count');
+    return {
+      rows: count ? [{ total: rows.length }] : rows,
+      returnedColumns: config.queries[queryId].columns,
+      rejectedColumns: [],
+      configVersion: 'product-weight',
+      totalRowCount: rows.length,
+      offset: parameters.offset ?? 0,
+      hasMorePages: false,
+    };
+  });
+  await workflowStep(frame, '约束与配置');
+  const view = frame.getByRole('region', { name: '约束与配置', exact: true });
+  await showAdvanced(view);
+  const weight = view.getByLabel('郑州 10002234 件吨系数', { exact: true });
+  const channel = view.getByLabel('郑州 10002234 适用渠道', { exact: true });
+  await expect(weight).toHaveValue('');
+  await expect(view.getByText('自动采用 0.00768', { exact: true })).toBeVisible();
+  await channel.fill('经销商');
+  await weight.fill('0.009');
+  await saveAdjustment(view);
+  await expect(weight).toHaveText('0.009');
+  await beginAdjustment(view);
+  await weight.fill('');
+  await saveAdjustment(view);
+  await expect(weight).toHaveText('0.00768');
+  await expect(channel).toHaveValue('经销商');
+  await expect(view.getByText('自动采用产品清单', { exact: true })).toBeVisible();
+});
+
 test('MPS coefficient candidates expire on same-draft restore and Session reconnection', async (t) => {
   const { page, frame } = await mpsPage(t, config, ({ queryId }) => {
     const rows = queryId.startsWith('unit-weights.') ? [records[0]] : [];

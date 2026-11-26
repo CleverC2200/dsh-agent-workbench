@@ -66,7 +66,24 @@ class BaseSummaryPermissions(unittest.TestCase):
         self.add('complete','__BASE_READY__','郑州')
         self.add('newer','BASE_STOCK:月初','郑州')
         self.add('unauthorized','__BASE_READY__','华东')
-        self.assertEqual(self.read(),[{'batch_id':'complete','business_date':'2026-11-03','stock_date':'2026-11-02','target_month':'2026-11-01','default_inventory_version':'月初'}])
+        self.assertEqual(self.read(), [{
+            'batch_id': 'complete',
+            'business_date': '2026-11-03',
+            'stock_date': '2026-11-02',
+            'target_month': '2026-11-01',
+            'default_inventory_version': '月初',
+            'plan_scope_locked': 0,
+        }])
+
+    def test_selected_plan_applies_only_to_a_visible_batch(self):
+        self.add('202611031200','__BASE_READY__','郑州')
+        self.add('202611031200','__AQKC_PLAN_READY__','郑州','滚动')
+        self.add('202611031300','__AQKC_PLAN_READY__','华东','纠偏')
+        rows = self.read()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['batch_id'], '202611031200')
+        self.assertEqual(rows[0]['default_inventory_version'], '滚动')
+        self.assertEqual(rows[0]['plan_scope_locked'], 1)
 
     def test_data_rows_or_missing_version_do_not_complete_a_base_batch(self):
         self.add('unfinished','BASE_STOCK:月初','郑州')

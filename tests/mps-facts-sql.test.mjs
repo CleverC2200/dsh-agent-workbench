@@ -4,6 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
+const dailyPlanTable = `CREATE TABLE agents_ads_scm_base_sku_daily_plan_detail_d (
+  belong_base TEXT, material_code TEXT, the_date TEXT, in_qty REAL, ship_qty REAL,
+  transfer_in_plan_v1 REAL, transfer_in_plan_adj REAL, transfer_out_plan_v1 REAL, transfer_out_plan_adj REAL
+)`;
 
 test('SKU单价按唯一原价分页，重复日报快照不增加count且真实两价和NULL保留', (t) => {
   const db = new DatabaseSync(':memory:');
@@ -108,17 +112,18 @@ test('计划量按实证月份和六维来源键读取 allnum，缺量和重复�
   );
 });
 
-test('shipment SQL sums daily inbound including reversals, preserves missing flows and reads cutoff snapshots', (t) => {
+test('发货和入库累计日度计划明细，库存日报仍提供原截止日快照和近三天日均', (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
+  db.exec(dailyPlanTable);
   db.exec(`CREATE TABLE agents_scm_stock_detail_d (
     data_month TEXT, belong_base TEXT, material_code TEXT, the_date TEXT,
     material_name TEXT, series TEXT, product_item TEXT,
     total_sales_qty REAL, allocated_qty REAL, ordered_qty REAL,
-    begin_stock REAL, produce_in_qty REAL, avg_30d_send REAL, avg_30d_sale REAL
+    begin_stock REAL, produce_in_qty REAL, avg_30d_send REAL, avg_30d_sale REAL, month_order_qty REAL
   )`);
   const insert = db.prepare(
-    'INSERT INTO agents_scm_stock_detail_d VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO agents_scm_stock_detail_d (data_month, belong_base, material_code, the_date, material_name, series, product_item, total_sales_qty, allocated_qty, ordered_qty, begin_stock, produce_in_qty, avg_30d_send, avg_30d_sale) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
   for (let day = 1; day <= 23; day++) {
     const date = `2026-09-${String(day).padStart(2, '0')}`;
@@ -234,9 +239,9 @@ test('shipment SQL sums daily inbound including reversals, preserves missing flo
       ],
     ),
     [
-      ['A', 230, 10, 30, 40 / 3, 7.25, 100, 245, 0],
+      ['A', 0, 10, 30, 40 / 3, 7.25, 100, null, 0],
       ['B', 0, 0, 0, 0, 0, 0, null, 0],
-      ['C', null, null, null, null, null, null, null, 1],
+      ['C', 0, null, null, null, null, null, null, 1],
     ],
   );
   assert.equal(rows[2].material_name, null);
@@ -252,14 +257,44 @@ test('shipment SQL sums daily inbound including reversals, preserves missing flo
   assert.equal(missingAverage.raw_average, null);
   const early = query.all({ ...parameters, cutoff: '2026-09-02', recent_start: '2026-09-01' });
   assert.equal(early[0].daily3, 20 / 3);
-  assert.equal(early[0].inbound, 4);
+  assert.equal(early[0].inbound, null);
   assert.equal(early[1].inbound, null);
   db.exec("UPDATE agents_scm_stock_detail_d SET produce_in_qty = 0 WHERE material_code = 'B'");
-  assert.equal(query.all(parameters)[1].inbound, 0);
+  assert.equal(query.all(parameters)[1].inbound, null);
+  const daily = db.prepare(
+    'INSERT INTO agents_ads_scm_base_sku_daily_plan_detail_d (belong_base, material_code, the_date, in_qty, ship_qty) VALUES (?,?,?,?,?)',
+  );
+  for (let day = 1; day <= 23; day++) {
+    const date = `2026-09-${String(day).padStart(2, '0')}`;
+    const shipped = { 3: -7, 22: 40, 23: 999 }[day] ?? 3;
+    daily.run('郑州', 'A', date, day === 22 ? 220 : day === 3 ? -10 : 2, shipped);
+    daily.run('郑州', 'B', date, day === 2 ? null : 10, day === 2 ? null : 0);
+  }
+  daily.run('郑州', 'A', '2026-08-31', 100, 999);
+  daily.run('郑州', 'C', '2026-09-01', 10, 15);
+  daily.run('郑州', 'NEW', '2026-09-22', 999, 450);
+  assert.equal(
+    db
+      .prepare(config.queries['facts.shipment.count'].request.sql)
+      .get({ month: parameters.month, cutoff: parameters.cutoff }).total,
+    4,
+  );
+  assert.equal(query.all(parameters)[0].inbound, 250);
+  assert.equal(query.all(parameters)[0].shipped, 93);
+  assert.equal(query.all(parameters)[1].inbound, null);
+  assert.equal(query.all(parameters)[1].shipped, null);
+  const [duplicateStock, withoutStock] = query.all({ ...parameters, gea_p99: 2 });
+  assert.equal(duplicateStock.inbound, 10);
+  assert.equal(duplicateStock.shipped, 15);
+  assert.equal(withoutStock.shipped, 450);
+  assert.equal(withoutStock.source_days, 0);
+  assert.equal(withoutStock.inbound, null);
+  assert.equal(withoutStock.transfer_date, null);
+  assert.equal(query.all({ ...parameters, gea_p99: 4 }).length, 0);
   db.exec(
     "UPDATE agents_scm_stock_detail_d SET total_sales_qty = NULL WHERE material_code = 'A' AND the_date = '2026-09-20'",
   );
-  assert.equal(query.all(parameters)[0].shipped, 220);
+  assert.equal(query.all(parameters)[0].shipped, 93);
   assert.equal(query.all(parameters)[0].daily3, 10);
 });
 
@@ -397,4 +432,42 @@ test('同步提报表按月汇总两项源金额，产品资料重复不参与�
       ['B', null, '0'],
     ],
   );
+});
+
+test('月下单量读取同月同基地SKU截止快照，0保留且空值和缺记录待补', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec(dailyPlanTable);
+  db.exec(
+    `CREATE TABLE agents_scm_stock_detail_d(data_month TEXT, belong_base TEXT, material_code TEXT,the_date TEXT,material_name TEXT,series TEXT,product_item TEXT,total_sales_qty REAL,allocated_qty REAL,ordered_qty REAL,begin_stock REAL,produce_in_qty REAL,avg_30d_send REAL,month_order_qty REAL,transfer_in_plan_v1 REAL,transfer_in_plan_adj REAL,transfer_out_plan_v1 REAL,transfer_out_plan_adj REAL)`,
+  );
+  const insert = db.prepare(
+    'INSERT INTO agents_scm_stock_detail_d(data_month,belong_base,material_code,the_date,month_order_qty,allocated_qty,ordered_qty) VALUES (?,?,?,?,?,?,?)',
+  );
+  for (const [code, date, qty] of [
+    ['A', '2026-11-23', 999],
+    ['A', '2026-11-24', 0],
+    ['B', '2026-11-24', null],
+    ['C', '2026-11-23', 123],
+    ['D', '2026-11-24', 12.3456],
+  ])
+    insert.run('2026-11-01', '西南', code, date, qty, 312, 792);
+  const rows = db.prepare(config.queries['facts.shipment'].request.sql).all({
+    month: '2026-11-01',
+    cutoff: '2026-11-24',
+    recent_start: '2026-11-22',
+    gea_p98: 100,
+    gea_p99: 0,
+  });
+  assert.deepEqual(
+    rows.map((r) => [r.material_code, r.month_order_qty]),
+    [
+      ['A', 0],
+      ['B', null],
+      ['C', null],
+      ['D', 12.3456],
+    ],
+  );
+  assert.equal(rows[0].prepped, 312);
+  assert.equal(rows[0].unprepped, 792);
 });

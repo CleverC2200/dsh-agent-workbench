@@ -176,11 +176,19 @@ test('页头版本跟随月份并显示短名，可新建月份跨年顺延', as
   const frame = page.frameLocator('iframe');
   const month = frame.getByRole('combobox', { name: '评估月份选择', exact: true });
   await expect(month).toBeVisible();
-  await expect(month.locator(':scope > option:enabled')).toHaveText(['2026-11', '2026-12', '2027-01']);
+  await expect(month.locator(':scope > option:enabled')).toHaveText([
+    '2026-11',
+    '2026-12',
+    '2027-01',
+  ]);
   await expect(month).toHaveValue('2026-11');
   await month.selectOption('2027-01');
   await expect(month).toHaveValue('2027-01');
-  await expect(month.locator(':scope > option:enabled')).toHaveText(['2026-11', '2026-12', '2027-01']);
+  await expect(month.locator(':scope > option:enabled')).toHaveText([
+    '2026-11',
+    '2026-12',
+    '2027-01',
+  ]);
   const versions = frame.getByRole('combobox', { name: '评估版本选择', exact: true });
   await expect(versions.locator('option')).toHaveText(['第2版']);
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
@@ -214,9 +222,12 @@ test('页头版本跟随月份并显示短名，可新建月份跨年顺延', as
     await dialog.getByRole('button', { name: '打开月份选择', exact: true }).click();
     const panel = dialog.locator('.mps-month-panel');
     for (const year of new Set(expected.map((period) => period.slice(0, 4)))) {
-      if (year !== expected[0].slice(0, 4)) await panel.getByRole('button', { name: '下一年' }).click();
+      if (year !== expected[0].slice(0, 4))
+        await panel.getByRole('button', { name: '下一年' }).click();
       await expect(panel.locator('.mps-month-options > button:enabled')).toHaveText(
-        expected.filter((period) => period.startsWith(year)).map((period) => `${Number(period.slice(5))}月`),
+        expected
+          .filter((period) => period.startsWith(year))
+          .map((period) => `${Number(period.slice(5))}月`),
       );
     }
     await input.press('Escape');

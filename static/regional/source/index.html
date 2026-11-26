@@ -1323,9 +1323,9 @@
         font-size: 10px;
       }
       th {
-        font-size: 9px;
+        font-size: var(--workbench-list-font-size, 12px);
         line-height: 1.35;
-        font-weight: 800;
+        font-weight: 700;
         color: #747b86;
         text-align: left;
         height: 38px;
@@ -1336,7 +1336,8 @@
       }
       td {
         padding: 14px 15px;
-        font-size: 10px;
+        font-size: var(--workbench-list-font-size, 12px);
+        font-weight: 400;
         line-height: 1.65;
         color: var(--sub);
         border-bottom: 1px solid var(--line-2);

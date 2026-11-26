@@ -168,7 +168,7 @@ test('V5十二月评估独立选择十一月产品，范围贯通业务下载和
     scopeRows.every((row) => row.评估月份 === '2026-12' && row.产品统计期 === '2026-11'),
     JSON.stringify(scopeRows),
   );
-  const relations = frame.getByRole('region', { name: '单品与候选产线', exact: true });
+  const relations = frame.getByRole('region', { name: '单品与候选隧道', exact: true });
   await expect(relations.locator('tbody tr')).toHaveCount(1);
   await expect(relations.locator('tbody')).toContainText('西南');
   await expect(relations.locator('tbody')).not.toContainText('郑州');

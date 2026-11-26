@@ -20,3 +20,15 @@ html body {
 html body[data-ds-dark-theme] {
   --dsw-alias-label-primary-foreground: #301019;
 }
+
+:where(th, td, [role='columnheader'], [role='rowheader'], [role='cell']) {
+  font-size: var(--workbench-list-font-size);
+}
+
+:where(th, [role='columnheader'], [role='rowheader']) {
+  font-weight: 700;
+}
+
+:where(td, [role='cell']) {
+  font-weight: 400;
+}

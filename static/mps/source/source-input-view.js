@@ -9,25 +9,41 @@ import { ready } from '../../../business/shared/channel.js';
 import { createPlanRates } from './plan-rate-view.js';
 import { hasMpsSource } from './master-data.js';
 import { readFactMonth, readHistoryAnnual, readHistoryWindow } from './facts.js';
-import { readSourceTable } from './source-tables.js';
+import { hasSourceCalculation, readSourceTable } from './source-tables.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { sourceCheckRows, sourceProductMappings } from './source-projections.js';
 import { createGrowthAnomalyReport, growthSourceAnomalies } from './growth-anomaly-report.js';
+import { cancelOnSourceReset, readFailureText } from './mps-read.js';
 
 const monthOffset = (month, offset) => {
   const date = new Date(month + '-01T00:00:00Z');
   date.setUTCMonth(date.getUTCMonth() + offset);
   return date.toISOString().slice(0, 7);
 };
-const cancelOnSourceReset = (cancel) => {
-  const events = ['gea-session-changing', 'gea-identity-changed', 'pagehide'];
-  for (const name of events) window.addEventListener(name, cancel);
-  return () => {
-    for (const name of events) window.removeEventListener(name, cancel);
-    cancel();
-  };
-};
 const demandSourcePriority = 3;
+const shareInputs = [
+  'id',
+  'name',
+  'month',
+  'pull',
+  'products',
+  'productsRead',
+  'productsError',
+  'productSource',
+  'productRaw',
+  'report',
+  'reportRead',
+  'reportSource',
+  'reportError',
+  'planRates',
+  'planRatesRead',
+  'planRatesSource',
+  'planRatesError',
+  'historyAnnual',
+  'historyAnnualRead',
+  'historyAnnualSource',
+  'historyAnnualError',
+];
 const historyReadState = (month, entries) => ({
   status: entries.some((entry) => entry.error)
     ? 'failed'
@@ -60,13 +76,18 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
     draft,
     update,
     relations,
+    categorySources,
+    readAnnualPool,
     active,
     contextActive = active,
-    refresh = 0,
+    onProgress,
+    retry = 0,
     selectedCategories = [],
-    categoryHistory,
   }) {
-    const calculated = react.useMemo(() => buildCategoryDemand(draft), [draft]);
+    const calculated = react.useMemo(
+      () => buildCategoryDemand(draft, undefined, undefined, categorySources),
+      [draft, categorySources],
+    );
     const endMonth = calculated.endMonth;
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = react.useState(0);
@@ -75,6 +96,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
     const [dimension, setDimension] = react.useState('基地+大类');
     const [base, setBase] = react.useState('');
     const controller = react.useRef(null);
+    const appliedRetry = react.useRef(retry);
     const [historyReadAttempt, retryHistoryDetails] = react.useReducer((attempt) => attempt + 1, 0);
     const recentDemandRead = draft.sourceChecksRead;
     const recentDemandSettled =
@@ -100,13 +122,17 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       }
       return cancelOnSourceReset(() => controller.current?.abort());
     }, [active]);
-    const load = async () => {
+    const load = async (refresh = false, retryFailed = false) => {
       controller.current?.abort();
       const stop = new AbortController();
       controller.current = stop;
+      const previous = retryFailed && state?.month === draft.month ? draft[type] : null;
+      const progressTotal = kind === 'parameters' ? 4 : calculated.recent.length * 2;
+      let progressDone = 0;
+      onProgress?.({ total: progressTotal, done: progressDone });
       update({
         [type + 'Read']: { status: 'loading', month: draft.month },
-        ...(kind === 'parameters'
+        ...(kind === 'parameters' && !previous
           ? {
               historyAnnualRead: { status: 'loading', month: draft.month },
               historyWindowRead: { status: 'loading', month: draft.month },
@@ -118,10 +144,24 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           return await operation();
         } catch (error) {
           if (stop.signal.aborted) throw error;
-          return { rows: [], error: error.message };
+          return { rows: [], error: readFailureText(error) };
         }
       };
-      if (kind === 'parameters') {
+      const readPart = async (label, operation, cached) => {
+        const result = cached && !cached.error ? cached : await read(operation);
+        if (!stop.signal.aborted) {
+          const suffix = result.error
+            ? '读取失败'
+            : result.rows.length.toLocaleString('zh-CN') + ' 条';
+          onProgress?.({
+            total: progressTotal,
+            done: ++progressDone,
+            last: `${label} · ${suffix}`,
+          });
+        }
+        return result;
+      };
+      if (kind === 'parameters' && !previous) {
         retryHistoryDetails();
         void read(() => readHistoryAnnual(draft.month, stop.signal))
           .then((annual) => {
@@ -135,41 +175,60 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           .catch((error) => {
             if (!stop.signal.aborted)
               update({
-                historyAnnualRead: { status: 'failed', month: draft.month, error: error.message },
+                historyAnnualRead: {
+                  status: 'failed',
+                  month: draft.month,
+                  error: readFailureText(error),
+                },
               });
           });
       }
       const readHistoryPeriod = async (year) => {
+        stop.signal.throwIfAborted();
         const month = monthOffset(draft.month, -12 * year);
         const requestedMonths =
           year === 4 ? historyComparisonMonths(month) : categoryHistoryMonths(month);
         return {
           month,
           metadata: { requestedMonths },
-          ...(await read(() =>
-            readSourceTable('category-history', month, stop.signal, requestedMonths),
+          ...(await readPart(
+            `${month} 历史窗口`,
+            () => readSourceTable('category-history', month, stop.signal, requestedMonths),
+            previous?.periods?.find((entry) => entry.month === month),
           )),
         };
       };
+      const readHistoryIndicators = async () => {
+        const [periods, annual] = await Promise.all([
+          Promise.all([1, 2, 3, 4].map(readHistoryPeriod)),
+          previous?.annual && !previous.annual.error
+            ? previous.annual
+            : read(() => readAnnualPool(refresh)),
+        ]);
+        return { periods, annual };
+      };
       try {
-        const historyPeriods =
-          kind === 'parameters' ? await Promise.all([1, 2, 3].map(readHistoryPeriod)) : null;
-        if (historyPeriods) historyPeriods.push(await readHistoryPeriod(4));
         const result =
           kind === 'parameters'
-            ? {
-                periods: historyPeriods,
-                annual: await read(() => readSourceTable('annual-pool', draft.month, stop.signal)),
-              }
+            ? await readHistoryIndicators()
             : {
                 periods: await Promise.all(
                   calculated.recent.map(async (month) => {
+                    const cached = previous?.periods?.find((entry) => entry.month === month);
                     const [history, report] = await Promise.all([
-                      read(() =>
-                        readFactMonth('history', month, stop.signal, demandSourcePriority),
+                      readPart(
+                        `${month} 实绩`,
+                        () =>
+                          readFactMonth('history', month, stop.signal, demandSourcePriority, {
+                            largerPages: true,
+                          }),
+                        cached?.history,
                       ),
-                      read(() =>
-                        readFactMonth('plan-quantity', month, stop.signal, demandSourcePriority),
+                      readPart(
+                        `${month} 计划量`,
+                        () =>
+                          readFactMonth('plan-quantity', month, stop.signal, demandSourcePriority),
+                        cached?.report,
                       ),
                     ]);
                     return { month, history, report };
@@ -196,7 +255,11 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       } catch (error) {
         if (!stop.signal.aborted)
           update({
-            [type + 'Read']: { status: 'failed', month: draft.month, error: error.message },
+            [type + 'Read']: {
+              status: 'failed',
+              month: draft.month,
+              error: readFailureText(error),
+            },
           });
       }
     };
@@ -204,13 +267,17 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       let current = true;
       if (active && hasMpsSource())
         ready.then(() => {
-          if (current) void load();
+          if (current) {
+            const retryFailed = appliedRetry.current !== retry;
+            appliedRetry.current = retry;
+            void load(false, retryFailed);
+          }
         });
       return () => {
         current = false;
         controller.current?.abort();
       };
-    }, [active, draft.month, refresh]);
+    }, [active, draft.month, retry]);
     react.useEffect(() => {
       if (!active || kind !== 'parameters' || !historyReadAttempt || !recentDemandSettled) return;
       const stop = new AbortController();
@@ -231,11 +298,17 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         });
       return cancelOnSourceReset(() => stop.abort());
     }, [active, kind, draft.month, historyReadAttempt, recentDemandSettled]);
-    const readParameterWorkflow = react.useMemo(() => {
-      let result;
-      return () => (result ??= buildMpsWorkflow(draft, relations, null));
-    }, [draft, relations]);
-    const workflow = kind === 'parameters' && contextActive ? readParameterWorkflow() : null;
+    const workflow = react.useMemo(
+      () =>
+        kind === 'parameters' && contextActive
+          ? buildMpsWorkflow(
+              Object.fromEntries(shareInputs.map((field) => [field, draft[field]])),
+              relations,
+              null,
+            )
+          : null,
+      [kind, contextActive, relations, ...shareInputs.map((field) => draft[field])],
+    );
     const shares =
       workflow?.rows.filter(
         (row) =>
@@ -282,7 +355,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       ...basicAnomalies,
       ...checks.details.filter((row) => !row['原因'] && !row['缺项原因']),
     ];
-    const calendarHistorical = current && kind === 'parameters' ? categoryHistory : [];
+    const calendarHistorical = current && kind === 'parameters' ? categorySources.history : [];
     const historical =
       kind === 'parameters'
         ? festivalDemandBasis(draft, calendarHistorical).history
@@ -341,9 +414,10 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               undefined,
               (row) =>
                 (!dimension || row['维度类型'] === dimension) && (!base || row['基地'] === base),
+              categorySources,
             )
           : calculated,
-      [draft, calculated, dimension, base],
+      [draft, calculated, dimension, base, categorySources],
     );
     const comparisonColumns = [
       '大类',
@@ -866,7 +940,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   'button',
                   {
                     disabled: !active || !hasMpsSource() || busy,
-                    onClick: load,
+                    onClick: () => load(true),
                     'aria-label': `读取${name}源值`,
                   },
                   busy ? '读取中…' : index < 3 ? '同步历史源值' : '同步全年历史占比',

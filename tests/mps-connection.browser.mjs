@@ -121,6 +121,63 @@ test('MPS查询拒绝后结束加载，重试空集与读取失败分别显示',
   await expect(products.getByText('0 个产品', { exact: true })).toBeVisible();
 });
 
+test('需求确认等待真实来源，网络波动时只自动重试失败的查询', async (t) => {
+  const firstProduct = Promise.withResolvers();
+  const recoveredProduct = Promise.withResolvers();
+  t.after(() => {
+    firstProduct.resolve();
+    recoveredProduct.resolve();
+  });
+  let productAttempts = 0;
+  const { frame } = await fixture(t, {
+    sql: async ({ queryId }) => {
+      if (queryId !== 'products.period') return;
+      if (++productAttempts === 1) {
+        await firstProduct.promise;
+        return 'GEA_SQL_QUERY_TIMEOUT';
+      }
+      await recoveredProduct.promise;
+    },
+  });
+  const progress = frame.getByRole('region', { name: '数据加载进度' });
+  await expect(progress.getByRole('progressbar')).toBeVisible({ timeout: 2000 });
+  await expect(progress.getByText('产品清单', { exact: true })).toBeVisible();
+  await expect(
+    frame.getByRole('region', { name: '大类预估需求数量' }).getByRole('table'),
+  ).toHaveCount(0);
+  await expect.poll(() => productAttempts).toBe(1);
+  await frame
+    .getByLabel('评估版本选择')
+    .evaluate((element) => element.dispatchEvent(new Event('change', { bubbles: true })));
+  firstProduct.resolve();
+  await expect(progress.getByText('连接暂时不稳定，正在重试。')).toBeVisible();
+  await expect.poll(() => productAttempts).toBe(2);
+  recoveredProduct.resolve();
+  await expect(progress.getByText('未返回记录', { exact: false }).first()).toBeVisible();
+  await expect(progress.getByText('连接暂时不稳定，正在重试。')).toHaveCount(0);
+  assert.equal(productAttempts, 2);
+});
+
+test('两次超时后停止自动重试，用户可单独恢复产品清单', async (t) => {
+  let attempts = 0;
+  const { frame } = await fixture(t, {
+    sql: async ({ queryId }) => {
+      if (queryId === 'products.period' && ++attempts <= 2) return 'GEA_SQL_QUERY_TIMEOUT';
+    },
+  });
+  const progress = frame.getByRole('region', { name: '数据加载进度' });
+  const retry = progress.getByRole('button', { name: '重试产品清单', exact: true });
+  await expect(retry).toBeVisible();
+  assert.equal(attempts, 2);
+  await expect(frame.getByRole('region', { name: '大类预估需求数量' })).toContainText(
+    '需求暂不可计算',
+  );
+  await retry.click();
+  await expect(retry).toHaveCount(0);
+  await expect.poll(() => attempts).toBe(3);
+  await expect(frame.getByRole('region', { name: '产品明细' })).toContainText('0 个产品');
+});
+
 test('其他业务页的快捷问题继续转入草稿', { timeout: 30000 }, async (t) => {
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('category', 1200));

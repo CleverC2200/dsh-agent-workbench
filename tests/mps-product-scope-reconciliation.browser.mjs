@@ -74,7 +74,10 @@ test('第3步隐藏产品范围对账，第4步展示和下载源清单覆盖、
   );
   assert.ok(rows.every((row) => /全国基地范围/.test(row['缺少的覆盖证明'])));
   await section.getByLabel('对账基地', { exact: true }).selectOption('乙');
-  assert.deepEqual((await downloadRows(page, section)).map((row) => row.SKU), ['B']);
+  assert.deepEqual(
+    (await downloadRows(page, section)).map((row) => row.SKU),
+    ['B'],
+  );
   await section.getByLabel('搜索对账基地或SKU', { exact: true }).fill('无匹配SKU');
   await expect(
     section.getByRole('button', { name: '下载产品范围对账CSV', exact: true }),

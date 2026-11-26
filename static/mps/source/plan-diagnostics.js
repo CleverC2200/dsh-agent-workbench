@@ -176,10 +176,10 @@ export function attachPlanReport(
           ...details,
         ].join('；'),
         row.month === plan.context.month
-          ? 'ai_db.agents_scm_stock_detail_d / 本月预估发货'
+          ? '本月预估发货 / ai_db.agents_scm_stock_detail_d / ai_db.agents_ads_scm_base_sku_daily_plan_detail_d'
           : '上月求解结果',
         row.month === plan.context.month
-          ? 'begin_stock / produce_in_qty / 预估发货 / 剩余入库'
+          ? 'begin_stock / in_qty / 预估发货 / 剩余入库'
           : '上月实际期末结存',
         row.month === plan.context.month
           ? ['unread', 'loading', 'failed', 'error', 'denied'].includes(shipmentSnapshot?.status)

@@ -102,7 +102,8 @@ export function createMonthPicker(react) {
                     type: 'button',
                     className: direction < 0 ? 'mps-month-prev' : 'mps-month-next',
                     'aria-label': direction < 0 ? '上一年' : '下一年',
-                    disabled: disabled || year + direction < firstYear || year + direction > lastYear,
+                    disabled:
+                      disabled || year + direction < firstYear || year + direction > lastYear,
                     onClick: () => setYear(year + direction),
                   }),
                 ),

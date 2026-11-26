@@ -22,7 +22,11 @@ const sourceRow = z.partialRecord(
   ]),
   z.union([text, numeric]),
 );
-const input = z.strictObject({ file: text, rows: z.array(sourceRow).max(10000) });
+export const mpsProductRowLimit = 10000;
+export const mpsDemandImportLimit = mpsProductRowLimit * 3;
+export const mpsQuantityAdjustmentLimit = 10000 + mpsProductRowLimit * 4;
+export const mpsAdjustmentHistoryLimit = 10000 + mpsProductRowLimit * 4 * 2;
+const input = z.strictObject({ file: text, rows: z.array(sourceRow).max(mpsProductRowLimit) });
 const audit = {
   systemValue: numeric.nullable(),
   reason: z.string().trim().min(1).max(1000),
@@ -34,6 +38,7 @@ const quantityIdentity = { month, category: text, group: text, quantity, ...audi
 const quantityAdjustment = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('category-total'),
+    remark: text.optional(),
     month,
     category: text,
     base: text.optional(),
@@ -50,6 +55,7 @@ const adjustmentHistory = z.strictObject({
   key: text,
   action: z.enum(['set', 'undo', 'archive']),
   archivedAt: z.iso.datetime().optional(),
+  remark: text.optional(),
   value: numeric.nullable(),
   ...audit,
 });
@@ -75,6 +81,7 @@ const shipmentSourceEdits = z.strictObject({
   business: shipmentEdits.optional(),
 });
 const shipment = z.strictObject({
+  forecasts: z.record(text, quantity.max(Number.MAX_SAFE_INTEGER)).optional(),
   transferPlans: list(
     z.strictObject({
       month,
@@ -106,6 +113,7 @@ const shipment = z.strictObject({
       category: text,
       series: text,
       group: text,
+      monthOrder: numeric.nullable().optional(),
       shipped: numeric.nullable(),
       prepped: numeric.nullable(),
       unprepped: numeric.nullable(),
@@ -150,13 +158,13 @@ export const mpsLocalDraftSchema = z.strictObject({
         at: z.iso.datetime(),
       }),
     )
-    .max(30000)
+    .max(mpsDemandImportLimit)
     .optional(),
   adjustments: z.strictObject({
     categoryDemand: list(categoryAdjustment),
     shares: list(shareAdjustment),
-    quantities: list(quantityAdjustment).default([]),
-    history: list(adjustmentHistory),
+    quantities: z.array(quantityAdjustment).max(mpsQuantityAdjustmentLimit).default([]),
+    history: z.array(adjustmentHistory).max(mpsAdjustmentHistoryLimit),
   }),
   constraints: z
     .strictObject({

@@ -217,7 +217,12 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   const width = await table
     .locator('..')
     .evaluate((element) => ({ viewport: element.clientWidth, content: element.scrollWidth }));
-  assert.ok(width.content <= width.viewport + 1, JSON.stringify(width));
+  assert.ok(width.content > width.viewport, JSON.stringify(width));
+  const pageWidth = await frame.locator('body').evaluate((element) => ({
+    viewport: element.clientWidth,
+    content: element.scrollWidth,
+  }));
+  assert.ok(pageWidth.content <= pageWidth.viewport + 1, JSON.stringify(pageWidth));
   if (process.env.MPS06_EVIDENCE_DIR)
     await page.screenshot({ path: `${process.env.MPS06_EVIDENCE_DIR}/leaf-national.png` });
   const saved = await page.evaluate(() => window.readView());

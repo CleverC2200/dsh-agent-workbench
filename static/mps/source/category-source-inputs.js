@@ -25,6 +25,7 @@ export function categorySourceInputs(draft) {
       [...new Set(rows.map((row) => row['大类']))],
     ]),
   );
+  const productCategories = [...new Set(products.map((row) => row['大类']))];
   const scope = (rows, source, history = false) =>
     rows.flatMap((row) => {
       const base = canonicalBaseName(row['基地']);
@@ -44,15 +45,13 @@ export function categorySourceInputs(draft) {
       const categories =
         code && (!history || row['维度类型'] === '基地+产品')
           ? (categoriesByCode.get(code) ?? [])
-          : [...new Set(products.map((product) => product['大类']))].filter(
-              (category, _index, categories) => {
-                const sourceCategory = history ? row['维度值'] : row['大类'];
-                return (
-                  sourceCategory !== '粽子' &&
-                  (category === sourceCategory || !categories.includes(sourceCategory))
-                );
-              },
-            );
+          : productCategories.filter((category, _index, categories) => {
+              const sourceCategory = history ? row['维度值'] : row['大类'];
+              return (
+                sourceCategory !== '粽子' &&
+                (category === sourceCategory || !categories.includes(sourceCategory))
+              );
+            });
       return categories.map((category) => {
         const reason = `${source} ${row['月份']} ${code || category} 缺可追溯的基地SKU明细，无法确定产品范围归属`;
         issues.push(reason);
@@ -248,7 +247,8 @@ export function categorySourceInputs(draft) {
       new Set(rows.map((row) => row['产品编码'])).size === rows.length ? total(rows, '数量') : null,
     源记录数: rows.reduce((sum, row) => sum + Number(row['源记录数'] || 0), 0),
   }));
-  const sourceRows = [
+  const sourceCategories = new Set([...details, ...annualDetails].map((row) => row['大类']));
+  const readSourceRows = () => [
     ...details.map((row) => {
       const annual = monthFiscal.get(JSON.stringify([row['月份'], row['大类']]));
       return {
@@ -289,5 +289,5 @@ export function categorySourceInputs(draft) {
       缺项原因: row['缺项原因'] ?? '',
     })),
   ];
-  return { history, annual, sourceRows, issues: [...new Set(issues)] };
+  return { history, annual, sourceCategories, readSourceRows, issues: [...new Set(issues)] };
 }

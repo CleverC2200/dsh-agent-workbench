@@ -26,7 +26,7 @@ const compiled = await build({
   format: 'iife',
 });
 
-async function mount(t, initialShipment) {
+async function mount(t, initialShipment, shipmentHistory) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
@@ -37,8 +37,12 @@ async function mount(t, initialShipment) {
     if (queryId === 'facts.shipment-history') {
       const values = ['郑州', 'A', parameters.start.endsWith('-01') ? 210 : 99];
       const returnedColumns = config.queries[queryId].columns;
+      const row = Object.fromEntries(
+        returnedColumns.map((column, index) => [column, values[index]]),
+      );
+      if (shipmentHistory) return shipmentHistory(parameters, returnedColumns, row);
       return {
-        rows: [Object.fromEntries(returnedColumns.map((column, index) => [column, values[index]]))],
+        rows: [row],
         returnedColumns,
         configVersion: 'v1',
         totalRowCount: 1,
@@ -59,6 +63,7 @@ async function mount(t, initialShipment) {
                   material_name: '产品A',
                   series: '系列',
                   product_item: '组',
+                  month_order_qty: null,
                   shipped: 220,
                   prepped: 10,
                   unprepped: 10,
@@ -93,12 +98,16 @@ async function mount(t, initialShipment) {
       if (event.data?.type !== 'ready') return;
       const pair = new MessageChannel();
       pair.port1.onmessage = async ({ data }) => {
-        if (data.type === 'request')
+        if (data.type !== 'request') return;
+        try {
           pair.port1.postMessage({
             type: 'response',
             id: data.id,
             result: await window.query(data.parameters),
           });
+        } catch (error) {
+          pair.port1.postMessage({ type: 'response', id: data.id, error: error.message });
+        }
       };
       window.postMessage(
         {
@@ -129,7 +138,7 @@ test(
       .toMatchObject({ sourceKind: 'business', status: 'ok', error: null });
     const snapshot = await page.evaluate(() => window.snapshot);
     assert.equal(snapshot.status, 'ok');
-    assert.deepEqual(snapshot.rows, [{ base: '郑州', code: 'A', fin: 341, end: 59 }]);
+    assert.deepEqual(snapshot.rows, [{ base: '郑州', code: 'A', fin: 317, end: 83 }]);
     assert.deepEqual(
       calls.filter((id) => id !== 'facts.shipment-history'),
       ['facts.shipment.count', 'facts.shipment', 'facts.shipment.count'],
@@ -144,6 +153,39 @@ test('没有可用截止日时发布失败状态，不永久停在输入准备�
     .toBe('failed');
   assert.match(await page.evaluate(() => window.snapshot.error), /暂无可用发货日期/);
   assert.deepEqual(calls, ['facts.shipment-latest']);
+});
+test('发运系数后续大页超限时切换小页，从原偏移继续读取', async (t) => {
+  const requests = [];
+  const { page } = await mount(
+    t,
+    undefined,
+    ({ start, offset, page_size }, returnedColumns, row) => {
+      const elapsed = start.endsWith('-01');
+      if (elapsed) requests.push([page_size, offset]);
+      if (elapsed && page_size === 2500 && offset > 0) throw Error('GEA_MCP_RESPONSE_TOO_LARGE');
+      const total = elapsed ? 2501 : 1;
+      const rows = Array.from({ length: Math.min(total - offset, page_size) }, (_, index) =>
+        offset + index === 0 ? row : { ...row, [returnedColumns[1]]: `其他产品-${offset + index}` },
+      );
+      return {
+        rows,
+        returnedColumns,
+        totalRowCount: total,
+        configVersion: 'v1',
+        offset,
+        hasMorePages: offset + rows.length < total,
+      };
+    },
+  );
+  await expect.poll(() => page.evaluate(() => window.snapshot?.status)).toBe('ok');
+  assert.deepEqual((await page.evaluate(() => window.snapshot)).rows, [
+    { base: '郑州', code: 'A', fin: 317, end: 83 },
+  ]);
+  assert.deepEqual(requests, [
+    [2500, 0],
+    [2500, 2500],
+    [200, 2500],
+  ]);
 });
 test('背景准备保留本地CSV和人工发货调整，不覆盖为业务来源', { timeout: 20000 }, async (t) => {
   const { page, calls } = await mount(t, {

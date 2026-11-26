@@ -47,13 +47,15 @@
 .compactAging table[data-resizable] th {
   height: 38px;
   padding-block: 0;
-  font-size: 9px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .compactAging table[data-resizable] td {
   height: 40px;
   padding-block: 4px;
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
   line-height: 1.4;
+  font-weight: 400;
 }
 .compactAging .fcToolbar.toolbar {
   min-height: 52px;

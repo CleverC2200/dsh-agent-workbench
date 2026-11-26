@@ -119,7 +119,9 @@ test('产品清单回退贯通新建评估、锁月浏览、恢复与主动重�
   const monthPanel = products.locator('.mps-month-panel');
   await monthField.press('ArrowDown');
   await expect(monthPanel).toBeVisible();
-  await expect(monthPanel.getByRole('button', { name: '1月', exact: true, pressed: true })).toBeVisible();
+  await expect(
+    monthPanel.getByRole('button', { name: '1月', exact: true, pressed: true }),
+  ).toBeVisible();
   await expect(monthPanel).toContainText('2027年');
   await monthPanel.getByRole('button', { name: '上一年', exact: true }).click();
   await monthPanel.getByRole('button', { name: '12月', exact: true }).click();

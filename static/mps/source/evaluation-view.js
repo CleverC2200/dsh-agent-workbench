@@ -1,5 +1,10 @@
 import { downloadWorkbook } from './workbook.js';
 import { renderTablePagination } from './report-page.js';
+import {
+  compareBusinessRows,
+  compareBusinessValues,
+  createTablePresentation,
+} from './table-presentation.js';
 import { createCapacityScopeView } from './capacity-scope-view.js';
 import { delistedDownloadColumns, delistedDownloadFields } from './delisted-report.js';
 import { useStepViewField } from './step-view-state.js';
@@ -25,7 +30,7 @@ const reportStatus = (row) => {
   const supply =
     row.supplyMode === 'odm' ? `${result}；ODM按净缺口默认估算，供方能力及实际到货未验证` : result;
   return row.safetyDaysSource === 'missing-turnover-days-zero'
-    ? `${supply}；源周转天数待补，临时按0天`
+    ? `${supply}；源周转天数待补，默认按0天`
     : supply;
 };
 const fields = [
@@ -76,7 +81,7 @@ export function summarizeEvaluation(rows) {
     }
   }
   return [...groups.values()].sort(
-    (a, b) => a.month.localeCompare(b.month) || a.base.localeCompare(b.base, 'zh-CN'),
+    (a, b) => a.month.localeCompare(b.month) || compareBusinessValues('base', a.base, b.base),
   );
 }
 
@@ -301,8 +306,8 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         row.planMissing.length ||
         row.unfulfilled > 0 ||
         row.reportIssueKinds?.length);
-    const reportRows = physicalRows.filter(matches);
-    const demandRows = (plan?.rows ?? []).filter(matches);
+    const reportRows = physicalRows.filter(matches).sort(compareBusinessRows);
+    const demandRows = (plan?.rows ?? []).filter(matches).sort(compareBusinessRows);
     const visibleKeys = new Set(
       demandRows.map((row) => JSON.stringify([row.month, row.base, row.code])),
     );
@@ -352,33 +357,38 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         })),
       ),
     ];
-    const detailLevels = (rows, national) => [
-      ...[...Map.groupBy(rows, (row) => row.category).values()].map((items) => ({
-        level: '大类',
-        category: items[0].category,
-        rows: items,
-      })),
-      ...[...Map.groupBy(rows, (row) => JSON.stringify([row.category, row.group])).values()].map(
-        (items) => ({
-          level: '物料组',
+    const detailLevels = (inputRows, national) => {
+      const rows = inputRows.toSorted((left, right) =>
+        compareBusinessRows(left, right, ['category', 'group', 'code', 'base', 'month']),
+      );
+      return [
+        ...[...Map.groupBy(rows, (row) => row.category).values()].map((items) => ({
+          level: '大类',
+          category: items[0].category,
+          rows: items,
+        })),
+        ...[...Map.groupBy(rows, (row) => JSON.stringify([row.category, row.group])).values()].map(
+          (items) => ({
+            level: '物料组',
+            category: items[0].category,
+            group: items[0].group,
+            rows: items,
+          }),
+        ),
+        ...[
+          ...Map.groupBy(rows, (row) =>
+            JSON.stringify([row.category, row.group, row.code, national ? '' : row.base]),
+          ).values(),
+        ].map((items) => ({
+          level: 'SKU',
           category: items[0].category,
           group: items[0].group,
+          code: items[0].code,
+          name: items[0].name,
           rows: items,
-        }),
-      ),
-      ...[
-        ...Map.groupBy(rows, (row) =>
-          JSON.stringify([row.category, row.group, row.code, national ? '' : row.base]),
-        ).values(),
-      ].map((items) => ({
-        level: 'SKU',
-        category: items[0].category,
-        group: items[0].group,
-        code: items[0].code,
-        name: items[0].name,
-        rows: items,
-      })),
-    ];
+        })),
+      ];
+    };
     const downloadBalanceLevels = () =>
       downloadCsv(
         `${draft.month}-产销存分层汇总及明细.csv`,
@@ -639,12 +649,16 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         : name;
     const detail = (rows, key, national) => {
       const selection = detailSelection[key] ?? {};
-      const categories = [...new Set(rows.map((row) => row.category || '分类待补'))];
+      const categories = [...new Set(rows.map((row) => row.category || '分类待补'))].sort(
+        (left, right) => compareBusinessValues('category', left, right),
+      );
       const category = categories.includes(selection.category) ? selection.category : '';
       const categoryRows = rows.filter(
         (row) => !category || (row.category || '分类待补') === category,
       );
-      const groups = [...new Set(categoryRows.map((row) => row.group || '物料组待补'))];
+      const groups = [...new Set(categoryRows.map((row) => row.group || '物料组待补'))].sort(
+        (left, right) => compareBusinessValues('group', left, right),
+      );
       const group = groups.includes(selection.group) ? selection.group : '';
       const levels = detailLevels(
         categoryRows.filter((row) => !group || (row.group || '物料组待补') === group),
@@ -772,7 +786,9 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             entry.level,
             entry.level === '大类' ? disclosure(entry, entry.category) : entry.category,
             entry.level === '物料组' ? disclosure(entry, entry.group) : entry.group,
-            entry.code,
+            entry.code
+              ? h(createTablePresentation(react).Code, { row: entry, participants: entry.rows })
+              : entry.code,
             entry.name,
             ...plannedFields.map((field) =>
               entry.level === 'SKU' && !national

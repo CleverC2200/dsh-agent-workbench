@@ -20,6 +20,7 @@ function fixture({ queryId, parameters }, latest = '2026-10-31') {
               material_name: '产品A',
               series: '系列',
               product_item: '汤圆',
+              month_order_qty: null,
               shipped: 310,
               prepped: 0,
               unprepped: 0,

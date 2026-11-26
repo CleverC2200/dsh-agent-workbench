@@ -823,9 +823,9 @@ body {
 }
 .ap-table th {
   text-align: right;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ap-ink-3);
-  font-size: 11.5px;
+  font-size: var(--workbench-list-font-size, 12px);
   padding: 9px 12px;
   border-bottom: 1px solid var(--ap-line);
   white-space: nowrap;
@@ -841,6 +841,8 @@ body {
   border-bottom: 1px solid var(--ap-line-2);
   color: var(--ap-ink);
   white-space: nowrap;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .ap-table tbody tr:last-child td {
   border-bottom: none;

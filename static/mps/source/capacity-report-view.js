@@ -1,4 +1,5 @@
 import { createCalculationHelp } from './calculation-help.js';
+import { compareBusinessRows } from './table-presentation.js';
 import { useStepViewField } from './step-view-state.js';
 import { createReportPage, renderTablePagination } from './report-page.js';
 import { defaultProductionCalendar, productionCalendarRule } from './production-calendar.js';
@@ -92,12 +93,14 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
     const month = filters.month || report.referenceMonth;
     const next = offset(month, 1);
     const byBase = (row) => !filters.base || row.base === filters.base;
-    const groups = report.rccp.filter(
-      (row) =>
-        row.month === month &&
-        byBase(row) &&
-        (!filters.category || row.category === filters.category),
-    );
+    const groups = report.rccp
+      .filter(
+        (row) =>
+          row.month === month &&
+          byBase(row) &&
+          (!filters.category || row.category === filters.category),
+      )
+      .sort(compareBusinessRows);
     const nextGroups = new Map(
       report.rccp
         .filter((row) => row.month === next)
@@ -391,7 +394,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                                 '无归属需求（吨）',
                               ],
                               [
-                                ...row.series.map((item) => {
+                                ...row.series.toSorted(compareBusinessRows).map((item) => {
                                   const future = later?.series.find(
                                     (other) => other.group === item.group,
                                   );

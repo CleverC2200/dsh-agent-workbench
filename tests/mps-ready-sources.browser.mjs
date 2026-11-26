@@ -178,6 +178,58 @@ async function version(frame, month = '2026-10') {
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
 }
 
+for (const saveData of [false, true]) {
+  test(`目标库存只在主要数据读齐后低优先级预加载，节流模式为 ${saveData}`, async (t) => {
+    const history = Promise.withResolvers();
+    t.after(() => history.resolve());
+    const { frame, calls } = await mpsPage(
+      t,
+      config,
+      async (query) => {
+        if (query.queryId === 'category-history.detail') await history.promise;
+        return (
+          shipmentSourceResponse(
+            config,
+            query,
+            ['A', 'B'].map((material_code) => shipmentSourceRow({ material_code, shipped: 160 })),
+            query.parameters.month === '2026-10-01' ? '2026-10-31' : '2026-11-14',
+          ) ?? fixture(query)
+        );
+      },
+      {
+        time: '2026-11-15T12:00:00+08:00',
+        beforeOpen: (page) =>
+          page.addInitScript((saveData) => {
+            Object.defineProperties(navigator, {
+              hardwareConcurrency: { value: 8 },
+              deviceMemory: { value: 8 },
+              connection: { value: { saveData, effectiveType: '4g', rtt: 40, downlink: 20 } },
+            });
+          }, saveData),
+      },
+    );
+    const attempts = () =>
+      calls.filter((call) => call.queryId === 'inventory-targets.count').length;
+    const progress = frame.getByRole('region', { name: '数据加载进度' });
+    await expect(progress.getByRole('progressbar')).toBeVisible();
+    await expect
+      .poll(() => calls.some((call) => call.queryId === 'category-history.detail'))
+      .toBe(true);
+    assert.equal(attempts(), 0);
+    history.resolve();
+    await expect(progress.getByRole('status').filter({ hasText: '主要数据已核对' })).toBeVisible();
+    if (!saveData) await expect.poll(attempts).toBe(2);
+    else {
+      await frame
+        .locator('body')
+        .evaluate(() => new Promise((resolve) => requestIdleCallback(resolve)));
+      assert.equal(attempts(), 0);
+    }
+    await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+    await expect.poll(attempts).toBe(2);
+  });
+}
+
 test('product replacement fields retain source columns and explain combined history without base names', async (t) => {
   const { frame } = await mpsPage(t, config, (query) => {
     const result = fixture(query);
@@ -213,7 +265,7 @@ test('product replacement fields retain source columns and explain combined hist
   await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   const child = section
     .locator('tbody tr')
-    .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) });
+    .filter({ has: frame.getByRole('cell', { name: /^(?:常规\s*)?A$/ }) });
   await expect(child.locator('td').nth(6)).toHaveText('REPLACE');
   await expect(child.locator('td').nth(7)).toHaveText('源替换品');
 });
@@ -568,9 +620,14 @@ test('failed source-check refresh retracts old comparisons instead of leaving an
   await expect(row.locator('td').nth(3)).toHaveText('-');
 });
 
-test('历史窗口读取失败仍保留其他窗口已取到的月份，同一源月份只算一次', async (t) => {
-  const { frame } = await mpsPage(t, config, (query) => {
-    if (query.queryId.startsWith('category-history.') && query.parameters.months.includes('202310'))
+test('历史窗口读取失败时保留已读窗口，页首重试只重读失败窗口', async (t) => {
+  let unavailable = true;
+  const { frame, calls } = await mpsPage(t, config, (query) => {
+    if (
+      unavailable &&
+      query.queryId.startsWith('category-history.') &&
+      query.parameters.months.includes('202310')
+    )
       throw Error('HISTORICAL_YEAR_UNAVAILABLE');
     return fixture(query);
   });
@@ -587,6 +644,17 @@ test('历史窗口读取失败仍保留其他窗口已取到的月份，同一�
   await expect(dialog).toContainText('2025-10');
   await expect(dialog).toContainText('共24条');
   await expect(dialog).toContainText('2025（1年）');
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  const readAfter = calls.length;
+  unavailable = false;
+  await frame.getByRole('button', { name: '重试大类历史', exact: true }).click();
+  await expect(card).toContainText(/\d+ \/ \d+ 项可计算/);
+  await expect(card).not.toContainText('部分原值已读取');
+  const historyRequests = calls
+    .slice(readAfter)
+    .filter(({ queryId }) => queryId.startsWith('category-history.'));
+  assert(historyRequests.length > 0);
+  assert(historyRequests.every(({ parameters }) => parameters.months.includes('202310')));
 });
 
 test('大类测算展示同环比异常及替代值，基地发货源异常仅随指标下载', async (t) => {
@@ -997,8 +1065,8 @@ test(
       available: table.parentElement.clientWidth,
       columns: table.querySelectorAll('thead th').length,
     }));
-    assert.equal(geometry.columns, 7);
-    assert.ok(geometry.width <= geometry.available + 1, JSON.stringify(geometry));
+    assert.equal(geometry.columns, 16);
+    assert.ok(geometry.width > geometry.available, JSON.stringify(geometry));
     if (process.env.MPS05_EVIDENCE_DIR) {
       await processed.scrollIntoViewIfNeeded();
       await page.screenshot({ path: `${process.env.MPS05_EVIDENCE_DIR}/processed-desktop.png` });
@@ -1033,7 +1101,8 @@ test(
     const summaryBook = XLSX.read(await readFile(summaryPath), { type: 'buffer' });
     const [summaryRow] = XLSX.utils.sheet_to_json(summaryBook.Sheets[summaryBook.SheetNames[0]]);
     assert.equal(summaryRow['M+1 2026-10 有效需求'], 275);
-    assert.equal(summaryRow['M+2 2026-11 有效需求'], 1116.5);
+    assert.equal(summaryRow['M+2 2026-11 有效需求'], 470);
+    assert.equal(summaryRow['M+2 2026-11 最终预测（可调整）'], 1116.5);
     assert.equal(summaryRow['M+3 2026-12 需求'], 695);
     if (process.env.MPS05_EVIDENCE_DIR)
       await copyFile(summaryPath, `${process.env.MPS05_EVIDENCE_DIR}/processed-demand.csv`);
@@ -1244,7 +1313,7 @@ test('历史占比读取上一完整财年，预览列出当前物料组和全�
   ).toBeVisible();
   const row = dialog
     .locator('tbody tr')
-    .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) });
+    .filter({ has: frame.getByRole('cell', { name: /^(?:常规\s*)?A$/ }) });
   await expect(dialog).toContainText('2025-07-01至2026-06-30');
   await expect(row.getByRole('cell', { name: 'G', exact: true })).toBeVisible();
   await expect(row).toContainText('50.00%');
@@ -1260,16 +1329,25 @@ test('历史占比读取上一完整财年，预览列出当前物料组和全�
   await expect(dialog.getByRole('columnheader', { name: '未对应原因', exact: true })).toBeVisible();
 });
 
-test('三年指标请求未结束时，上一财年占比仍可独立完成读取', async (t) => {
+test('较长历史窗口未结束时，比较窗已经发出，上一财年占比仍可独立完成读取', async (t) => {
   let release;
   const blocked = new Promise((resolve) => {
     release = resolve;
   });
-  const { frame } = await mpsPage(t, config, async (query) => {
-    if (query.queryId.startsWith('category-history.')) await blocked;
+  const { frame, calls } = await mpsPage(t, config, async (query) => {
+    if (query.queryId.startsWith('category-history.') && query.parameters.months.length > 8)
+      await blocked;
     return fixture(query);
   });
   try {
+    await expect
+      .poll(() =>
+        calls.some(
+          ({ queryId, parameters }) =>
+            queryId === 'category-history.count' && parameters.months.length === 8,
+        ),
+      )
+      .toBe(true);
     const card = frame
       .locator('section.dc-parameter')
       .filter({ has: frame.getByRole('heading', { name: '去年发运占比', exact: true }) });
@@ -1312,7 +1390,7 @@ test('模型双期预测沿用四项统计，明细保留物料组及零数量',
   const dialog = frame.getByRole('dialog');
   const row = dialog
     .locator('tbody tr')
-    .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) });
+    .filter({ has: frame.getByRole('cell', { name: /^(?:常规\s*)?A$/ }) });
   await expect(row).toContainText('汤圆');
   await expect(row).toContainText('系列甲');
   await expect(row.getByRole('cell', { name: 'G', exact: true })).toBeVisible();
@@ -1429,13 +1507,17 @@ test('basic source anomalies keep known BI quantities and export every row while
   await expect(dialog.locator('tbody tr')).toHaveCount(25);
   await expect(dialog).toContainText('2026-06至2026-08');
   await expect(dialog).toContainText('异常6条');
-  await expect(dialog.locator('tbody tr').nth(0)).toContainText('读取失败');
-  await expect(dialog.locator('tbody tr').nth(3)).toContainText('OUT-31');
-  await expect(dialog.locator('tbody tr').nth(3)).toContainText('不在当前产品池');
-  await expect(dialog.locator('tbody tr').nth(6).locator('td').nth(3)).toHaveText('A');
-  await expect(dialog.locator('tbody tr').nth(7).locator('td').nth(3)).toHaveText('IN-1');
-  await dialog.getByRole('button', { name: '下一页来源明细', exact: true }).click();
-  await expect(dialog.locator('tbody tr').nth(0).locator('td').nth(3)).toHaveText('IN-19');
+  const displayed = [];
+  while (true) {
+    displayed.push(...(await dialog.locator('tbody tr').allTextContents()));
+    const next = dialog.getByRole('button', { name: '下一页来源明细', exact: true });
+    if (await next.isDisabled()) break;
+    await next.click();
+  }
+  assert.equal(displayed.length, 99);
+  assert.ok(displayed.some((row) => row.includes('读取失败')));
+  assert.ok(displayed.some((row) => row.includes('OUT-31') && row.includes('不在当前产品池')));
+  assert.ok(displayed.some((row) => row.includes('IN-19')));
   await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   const pending = page.waitForEvent('download');
   await source.getByRole('button', { name: '下载源值核对', exact: true }).click();

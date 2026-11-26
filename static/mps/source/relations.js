@@ -63,9 +63,9 @@ export async function readPlanRelations(config, execute, months, signal) {
 
 const emptySourceField = (value) => value == null || (typeof value === 'string' && !value.trim());
 const capacityMissing = (source) => [
-  ...(emptySourceField(source.series) ? ['缺产线源系列'] : []),
+  ...(emptySourceField(source.series) ? ['缺候选隧道源系列'] : []),
   ...(emptySourceField(source.combined_series) ? ['缺组合系列'] : []),
-  ...(emptySourceField(source.production_category) ? ['缺产线生产品类'] : []),
+  ...(emptySourceField(source.production_category) ? ['缺候选隧道生产品类'] : []),
 ];
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
@@ -158,7 +158,7 @@ export function relationRecords(sources, month) {
     if (!text(product.responsible_item)) missing.push('缺产品分类');
     const matches = byCode.get(product.material_code) ?? [];
     if (!matches.length) {
-      sku.push({ month, product, capacity: null, missing: [...missing, '无候选产线'] });
+      sku.push({ month, product, capacity: null, missing: [...missing, '无候选隧道记录'] });
       continue;
     }
     for (const capacity of matches) {
@@ -169,7 +169,6 @@ export function relationRecords(sources, month) {
         product,
         capacity,
         tunnelMatch,
-        pending: ['产线归属待补：当前读取字段未提供独立产线'],
         missing: [
           ...missing,
           ...capacityMissing(capacity),
@@ -188,9 +187,8 @@ export function relationRecords(sources, month) {
       product: null,
       capacity,
       tunnelMatch,
-      pending: ['产线归属待补：当前读取字段未提供独立产线'],
       missing: [
-        ...(!capacity.material_code?.trim() ? ['缺产线物料编码'] : []),
+        ...(!capacity.material_code?.trim() ? ['缺候选隧道物料编码'] : []),
         '无产品记录',
         ...capacityMissing(capacity),
         ...repeated(capacity),
@@ -205,8 +203,10 @@ export function relationRecords(sources, month) {
   const lines = sources.tunnels.map((source) => ({
     month,
     source,
-    pending: ['产线归属待补：当前读取字段未提供独立产线'],
     missing: [
+      ...([source.belong_base, source.production_unit, source.tunnel_no].some(emptySourceField)
+        ? ['缺基地、生产单位或隧道号']
+        : []),
       ...(!source.series?.trim() ? ['缺源系列'] : []),
       ...(!source.production_category?.trim() ? ['缺生产品类'] : []),
       ...repeated(source),
