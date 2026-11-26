@@ -170,8 +170,7 @@ function completeSystemSource(query) {
 }
 
 test('页头版本跟随月份并显示短名，可新建月份跨年顺延', async (t) => {
-  const page = await authorPage(t);
-  await page.clock.install({ time: new Date('2026-11-30T12:00:00+08:00') });
+  const page = await authorPage(t, { time: '2026-11-30T12:00:00+08:00' });
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
   const month = frame.getByRole('combobox', { name: '评估月份选择', exact: true });
@@ -209,7 +208,7 @@ test('页头版本跟随月份并显示短名，可新建月份跨年顺延', as
     ['2027-01-01', ['2027-01', '2027-02', '2027-03']],
   ]) {
     await month.focus();
-    await page.clock.setSystemTime(new Date(`${date}T12:00:00+08:00`));
+    await page.clock.setFixedTime(new Date(`${date}T12:00:00+08:00`));
     await month.press('Escape');
     await expect(month.locator(':scope > option:enabled')).toHaveText(expected);
     await month.focus();
@@ -380,8 +379,9 @@ test('月份切换贯通取数、需求计算和下载，保留历史版本、�
 });
 
 test('两个评估月的完整来源驱动系统有效需求，期间切换与回切不复用结果', async (t) => {
-  const { page, frame, calls } = await mpsPage(t, config, completeSystemSource);
-  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
+  const { page, frame, calls } = await mpsPage(t, config, completeSystemSource, {
+    time: '2026-11-17T12:00:00+08:00',
+  });
   const results = [];
   for (const [month, previous, cutoff, expected] of [
     ['2026-11', '2026-10', '2026-10-31', 110],
